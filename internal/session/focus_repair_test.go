@@ -224,6 +224,9 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 			if err := sess.mutateState(func(state *SessionState) error {
 				state.Windows = nil
 				state.WorkspaceFocus = make(map[int]string)
+				// The repair rule alone: a workspace that empties stays on
+				// screen. See empty_workspace.go for the switch.
+				state.Options = map[string]string{optionReturnWhenEmpty: "false"}
 				for _, w := range tc.windows {
 					state.Windows = append(state.Windows, WindowState{
 						ID:        w.id,

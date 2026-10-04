@@ -960,6 +960,20 @@ waits for each pane of the group before it types.
 | --- | --- | --- | --- |
 | A slow scratch open | `createScratch`: sleep 1.5 s before `scratchOpener`; run the test as it was | `TestScratchGroupSurvivesADaemonRestart` ("the group hidden before the restart: [PANEONE-2 PANETWO-5] still on screen"), the same message as CI. With the waits: passes with the sleep, and 10 of 10 without it | **caught** |
 
+## Back from an empty workspace (discussion #273)
+
+The tests are in `empty_workspace_test.go`. Each control built the binary and
+ran the five `TestEmptyWorkspace` tests or the one named.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (c35d2942) and point `TUIOS_E2E_BIN` at it | `TestEmptyWorkspaceReturnsAfterXpanesSuperSpeedy`, `TestEmptyWorkspaceReturnsAfterXpanesSpeedy` and `TestEmptyWorkspaceReturnsWhereXpanesRan` ("the session shows workspace 2, want 1"), `TestEmptyWorkspaceWalksBackAChain` ("the session shows workspace 3, want 2") | **caught** |
+| The xpanes origin | `runXpanes`: `params["return_to"] = origin` cut | `TestEmptyWorkspaceReturnsWhereXpanesRan` ("the session shows workspace 3, want 1") | **caught** |
+| The setting | `returnsWhenEmptyLocked` returns true first | `TestEmptyWorkspaceStaysWhenTheSettingIsOff` ("the session went to workspace 1 with return_when_empty off, want 2") | **caught** |
+
+`TestEmptyWorkspaceStaysWhenTheSettingIsOff` passes on origin/main, because
+it holds the old behaviour.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

@@ -49,6 +49,9 @@ type UserConfig struct {
 	// Launcher is the [launcher] table: how the app launcher starts a
 	// graphical program. See launcher.go.
 	Launcher LauncherConfig `toml:"launcher"`
+	// Workspaces is the [workspaces] table: what happens when the workspace
+	// on screen loses its last pane. See workspaces.go.
+	Workspaces WorkspacesConfig `toml:"workspaces"`
 
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is

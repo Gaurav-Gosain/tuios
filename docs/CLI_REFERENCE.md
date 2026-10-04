@@ -1188,6 +1188,15 @@ The layout and multifocus need a client attached to the session. The layout
 also needs tiling on and the `bsp` layout. When tuios cannot do one of them,
 it opens the panes and tells you what it did not do.
 
+**When the panes close:**
+
+tuios remembers the workspace where you ran `tuios xpanes`. From inside a
+pane, it is the workspace of that pane. From outside, it is the workspace on
+screen. When the last pane of the xpanes workspace closes, tuios shows that
+workspace again, if it still has panes. Set `workspaces.return_when_empty` to
+`false` to stay on the empty workspace. See
+[CONFIGURATION.md](CONFIGURATION.md#when-a-workspace-becomes-empty).
+
 `tuios xpanes` uses the verbs `list-workspaces`, `select-workspace`,
 `new-window`, `send-text` and `run-command`. The two client commands `ArrangePanes` and
 `SetMultifocus` also work alone with

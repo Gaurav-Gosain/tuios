@@ -41,6 +41,9 @@ type Manager struct {
 	// reaches the next pane of a session that already exists. It is atomic so
 	// a spawn never needs m.mu.
 	preferredShell atomic.Pointer[string]
+	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
+	// is the default, on. Every session reads it through ReturnWhenEmpty.
+	stayOnEmpty atomic.Bool
 	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
 	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
 	// spawn time through HerdrEnv. See herdr_compat.go.
@@ -140,6 +143,16 @@ func (m *Manager) SetNewWindowInheritCwd(v bool) {
 // Empty means $SHELL and then the platform default.
 func (m *Manager) SetPreferredShell(shell string) {
 	m.preferredShell.Store(&shell)
+}
+
+// SetReturnWhenEmpty sets workspaces.return_when_empty for every session.
+func (m *Manager) SetReturnWhenEmpty(on bool) {
+	m.stayOnEmpty.Store(!on)
+}
+
+// ReturnWhenEmpty is what SetReturnWhenEmpty last set, true when nothing did.
+func (m *Manager) ReturnWhenEmpty() bool {
+	return !m.stayOnEmpty.Load()
 }
 
 // PreferredShell is what SetPreferredShell last set, or "".
@@ -274,6 +287,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.PaneToken == nil {
 		cfg.PaneToken = m.PaneToken
+	}
+	if cfg.ReturnWhenEmpty == nil {
+		cfg.ReturnWhenEmpty = m.ReturnWhenEmpty
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv

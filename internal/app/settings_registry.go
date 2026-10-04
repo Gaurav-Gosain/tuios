@@ -100,6 +100,7 @@ var settingLabels = map[string]string{
 	"pip.corner":                        "Picture-in-picture corner",
 	"scratch.height":                    "Scratch height",
 	"launcher.gui_command":              "Launcher GUI command",
+	"workspaces.return_when_empty":      "Go back from an empty workspace",
 
 	"appearance.sidebar.sections":             "Sections",
 	"appearance.sidebar.file_icons":           "File icons",

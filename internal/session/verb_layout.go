@@ -207,6 +207,7 @@ func (d *Daemon) verbSelectWorkspace(_ *connState, params json.RawMessage) (any,
 	var p struct {
 		Session   string `json:"session"`
 		Workspace int    `json:"workspace"`
+		ReturnTo  int    `json:"return_to"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -218,8 +219,14 @@ func (d *Daemon) verbSelectWorkspace(_ *connState, params json.RawMessage) (any,
 	if verr != nil {
 		return nil, verr
 	}
+	if p.ReturnTo != 0 && !sess.GetState().workspaceAccepts(p.ReturnTo) {
+		return nil, invalidParam("return_to", fmt.Sprintf("workspace %d does not exist", p.ReturnTo))
+	}
 	if err := sess.SwitchDaemonWorkspace(p.Workspace); err != nil {
 		return nil, moveErr(err, sess, p.Workspace)
+	}
+	if p.ReturnTo != 0 {
+		sess.SetReturnTo(p.Workspace, p.ReturnTo)
 	}
 
 	state := sess.GetState()

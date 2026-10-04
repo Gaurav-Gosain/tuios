@@ -648,6 +648,10 @@ type DaemonConfig struct {
 	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
 	// the herdr protocol socket. See Manager.HerdrEnv.
 	HerdrProtocol string
+	// StayOnEmptyWorkspace is workspaces.return_when_empty turned off: the
+	// session stays on a workspace that loses its last pane. The zero value
+	// is the default, which returns. See empty_workspace.go.
+	StayOnEmptyWorkspace bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -776,6 +780,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
+	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
 	d.loadHooks(cfg)

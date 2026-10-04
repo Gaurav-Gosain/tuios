@@ -68,6 +68,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon spawns every pane, so the shell the user asked for has to
 	// reach it: only standalone panes used to honour it.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
+	// The daemon owns the window set, so it sees the workspace on screen
+	// lose its last pane, with or without a client attached.
+	cfg.StayOnEmptyWorkspace = !uc.Workspaces.ReturnsWhenEmpty()
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.

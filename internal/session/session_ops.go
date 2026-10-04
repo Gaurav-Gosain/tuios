@@ -498,6 +498,9 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 				}
 			}
 		}
+		// The last pane on the workspace on screen takes the person back
+		// to where they came from. See empty_workspace.go.
+		s.returnFromEmptyLocked(state, workspace)
 		return nil
 	})
 	if err != nil {

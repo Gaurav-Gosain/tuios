@@ -1081,6 +1081,15 @@ type Session struct {
 	// Version, so a move by one client is invisible to focusMovedVersion, and a
 	// stale push from another client built at that version may predate it.
 	clientFocusMoved map[string]int
+	// workspaceTrail is the workspaces the session has shown, oldest first,
+	// each at most once, guarded by stateMu. When the workspace on screen
+	// loses its last pane the session goes back along it. See
+	// empty_workspace.go.
+	workspaceTrail []int
+	// returnTo is, by workspace, the workspace to show first when that one
+	// loses its last pane, guarded by stateMu. tuios xpanes sets it to the
+	// workspace that ran it.
+	returnTo map[int]int
 	// treeOps holds the recent Versions that were tree ops, with the client
 	// connection that sent each, at its version modulo the length, guarded by
 	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
@@ -1345,6 +1354,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// ReturnWhenEmpty reports workspaces.return_when_empty. The manager
+	// stamps it with its own getter, so a config reload reaches every
+	// session. Nil means on.
+	ReturnWhenEmpty func() bool
 	// HerdrEnv returns the herdr protocol variables a pane with the given
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.

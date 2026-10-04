@@ -1040,6 +1040,7 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to show."},
+				{Name: "return_to", Type: "int", Description: "Workspace to show when this workspace loses its last pane, before any other. tuios xpanes sets it to the workspace that ran it.", Default: "0"},
 			},
 			returns: []verbParam{
 				{Name: "current_workspace", Type: "int", Description: "Workspace now showing."},

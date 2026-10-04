@@ -317,6 +317,37 @@ command that joins its arguments into a shell line, such as `swaymsg exec --`
 or `hyprctl dispatch exec`. With such a command, the text of a desktop entry
 becomes shell code. Any installed package can write a desktop entry.
 
+## When a workspace becomes empty
+
+When the last pane on the workspace on screen closes, tuios shows the
+workspace you came from. This happens when the pane's program stops, when you
+close the pane, when `tuios xpanes -ss` closes it, and with
+`tuios close-workspace`.
+
+tuios goes back in this order:
+
+1. For a workspace that `tuios xpanes` opened, the workspace where you ran
+   `tuios xpanes`.
+2. The workspace you showed last that still has panes. After a chain of
+   empty workspaces, tuios goes back past each one.
+3. The workspace with the lowest number that has panes.
+
+When no workspace has panes, tuios shows the splash screen. The workspace on
+screen is the same for every client of the session, so every client goes
+back. Moving a pane to another workspace does not close it, so tuios does not
+go back.
+
+To stay on the empty workspace, turn the setting off:
+
+```toml
+[workspaces]
+return_when_empty = false
+```
+
+The daemon reads the setting when it starts and when the file changes.
+`tuios set-config workspaces.return_when_empty false` changes it while tuios
+runs.
+
 ## Master-stack layout
 
 These options shape the master-stack layout. Each workspace starts with them.

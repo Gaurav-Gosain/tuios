@@ -3,9 +3,11 @@ package session
 import "time"
 
 // noteStateChangeLocked records a change to the session's state: the
-// resurrection saver writes it, and every WaitState wakes to look at it. The
-// caller holds stateMu for writing.
+// resurrection saver writes it, every WaitState wakes to look at it, and the
+// workspace trail notes the workspace on screen. The caller holds stateMu for
+// writing.
 func (s *Session) noteStateChangeLocked() {
+	s.noteWorkspaceLocked()
 	s.stateDirty.Store(true)
 	s.wakeStateWaiters()
 }

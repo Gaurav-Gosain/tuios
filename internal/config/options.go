@@ -1239,6 +1239,13 @@ var optionSpecs = []Option{
 		Description: "Command that starts a graphical desktop entry instead of a pane. The entry's argv is added to it. Use a command that takes an argv, such as \"tuios-wayland launch --\" or \"niri msg action spawn --\". Do not use one that joins its arguments into a shell line, such as \"swaymsg exec --\" or \"hyprctl dispatch exec\".",
 		Default:     "",
 	},
+	// [workspaces]. The daemon reads it when it starts and when the file
+	// changes.
+	{
+		Path: "workspaces.return_when_empty", Type: OptionBool, Section: "workspaces",
+		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
+		Default:     "true",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

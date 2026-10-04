@@ -428,24 +428,36 @@ func runXpanes(o xpanesOptions, items []string) error {
 	defer t.Close()
 
 	res := xpanesResult{Layout: kind}
-	ws, name, err := 0, "", error(nil)
+	ws, name, current, err := 0, "", 0, error(nil)
 	// Run from a pane of a scratch group, the panes join that group: the
 	// group is a workspace of its own, on the screen already.
+	paneWS, inScratch := xpanesPaneWorkspace(t, os.Getenv("TUIOS_PANE_ID"))
 	scratchWS := 0
-	if o.workspace == 0 {
-		scratchWS = xpanesScratchWorkspace(t, os.Getenv("TUIOS_PANE_ID"))
+	if o.workspace == 0 && inScratch {
+		scratchWS = paneWS
 	}
 	if scratchWS != 0 {
 		ws, name = scratchWS, t.session
 	} else {
-		ws, name, err = xpanesWorkspace(t, o.workspace)
+		ws, name, current, err = xpanesWorkspace(t, o.workspace)
 		if err != nil {
 			return reportVerbError(err, o.jsonOutput)
 		}
 	}
 	res.Session, res.Workspace = name, ws
 	if scratchWS == 0 {
-		if _, err := t.client.Call("select-workspace", t.params(map[string]any{"workspace": ws})); err != nil {
+		params := map[string]any{"workspace": ws}
+		// When the panes are gone, the session shows the workspace that ran
+		// xpanes: the pane's own from inside the session, else the one
+		// showing. See internal/session/empty_workspace.go.
+		origin := current
+		if paneWS != 0 && !inScratch {
+			origin = paneWS
+		}
+		if origin != 0 && origin != ws {
+			params["return_to"] = origin
+		}
+		if _, err := t.client.Call("select-workspace", t.params(params)); err != nil {
 			return reportVerbError(t.explain("select-workspace", err), o.jsonOutput)
 		}
 	}
@@ -526,11 +538,12 @@ func runXpanes(o xpanesOptions, items []string) error {
 }
 
 // xpanesWorkspace picks the workspace: the one asked for, which must be
-// empty, or the first empty one. It also returns the session's name.
-func xpanesWorkspace(t *verbTarget, asked int) (int, string, error) {
+// empty, or the first empty one. It also returns the session's name and the
+// workspace showing.
+func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 	raw, err := t.client.Call("list-workspaces", t.params(nil))
 	if err != nil {
-		return 0, "", t.explain("list-workspaces", err)
+		return 0, "", 0, t.explain("list-workspaces", err)
 	}
 	var list struct {
 		Workspaces []struct {
@@ -538,10 +551,12 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, error) {
 			WindowCount int  `json:"window_count"`
 			Current     bool `json:"current"`
 		} `json:"workspaces"`
+		CurrentWorkspace int `json:"current_workspace"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return 0, "", fmt.Errorf("could not read the workspaces: %w", err)
+		return 0, "", 0, fmt.Errorf("could not read the workspaces: %w", err)
 	}
+	current := list.CurrentWorkspace
 	name := t.session
 	if info, err := t.client.Call("session-info", t.params(nil)); err == nil {
 		var s struct {
@@ -557,18 +572,18 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, error) {
 				continue
 			}
 			if w.WindowCount > 0 {
-				return 0, "", fmt.Errorf("workspace %d has %d windows. Use an empty workspace, or leave out --workspace", asked, w.WindowCount)
+				return 0, "", 0, fmt.Errorf("workspace %d has %d windows. Use an empty workspace, or leave out --workspace", asked, w.WindowCount)
 			}
-			return asked, name, nil
+			return asked, name, current, nil
 		}
-		return 0, "", fmt.Errorf("workspace %d does not exist. Use a number from 1 to %d", asked, len(list.Workspaces))
+		return 0, "", 0, fmt.Errorf("workspace %d does not exist. Use a number from 1 to %d", asked, len(list.Workspaces))
 	}
 	for _, w := range list.Workspaces {
 		if w.WindowCount == 0 && !w.Current {
-			return w.Workspace, name, nil
+			return w.Workspace, name, current, nil
 		}
 	}
-	return 0, "", errors.New("every workspace has windows. Close the windows on one workspace, then try again")
+	return 0, "", 0, errors.New("every workspace has windows. Close the windows on one workspace, then try again")
 }
 
 // xpanesClientCommand runs a client command through run-command. A window the
@@ -616,16 +631,16 @@ func xpanesSummary(r xpanesResult) string {
 	return b.String()
 }
 
-// xpanesScratchWorkspace is the workspace of the scratch group the pane id
-// belongs to, or 0 for any other pane, an empty id, or a session tuios cannot
-// read.
-func xpanesScratchWorkspace(t *verbTarget, paneID string) int {
+// xpanesPaneWorkspace is the workspace of the pane id, and whether it is a
+// scratch group's. It is 0 for an empty id, a pane of another session, or a
+// session tuios cannot read.
+func xpanesPaneWorkspace(t *verbTarget, paneID string) (int, bool) {
 	if paneID == "" {
-		return 0
+		return 0, false
 	}
 	raw, err := t.client.Call("list-windows", t.params(nil))
 	if err != nil {
-		return 0
+		return 0, false
 	}
 	var list struct {
 		Windows []struct {
@@ -635,12 +650,12 @@ func xpanesScratchWorkspace(t *verbTarget, paneID string) int {
 		} `json:"windows"`
 	}
 	if json.Unmarshal(raw, &list) != nil {
-		return 0
+		return 0, false
 	}
 	for _, w := range list.Windows {
-		if w.ID == paneID && w.Scratch && session.IsScratchWorkspace(w.Workspace) {
-			return w.Workspace
+		if w.ID == paneID {
+			return w.Workspace, w.Scratch && session.IsScratchWorkspace(w.Workspace)
 		}
 	}
-	return 0
+	return 0, false
 }
