@@ -384,7 +384,7 @@ func (t *GhosttyTerminal) handleClipboardOSC(payload []byte) {
 				content = q(selection)
 			}
 			encoded := base64.StdEncoding.EncodeToString([]byte(content))
-			_, _ = t.pipe.Write([]byte("\x1b]52;" + selection + ";" + encoded + "\x1b\\"))
+			_, _ = t.pipe.Write([]byte("\x1b]52;" + selection + ";" + encoded + oscReplyEnd(t.scanner.oscBEL)))
 		})
 		return
 	}

@@ -75,6 +75,11 @@ type seqParser struct {
 
 	// state is the current state of the parser.
 	state byte
+
+	// oscBEL records whether the OSC being dispatched was ended by BEL rather
+	// than ST. A reply to an OSC query is ended the same way, as xterm does:
+	// a guest that reads up to the terminator it sent stalls on the other one.
+	oscBEL bool
 }
 
 // newSeqParser returns a parser with [parser.MaxParamsSize] parameters and a
@@ -447,6 +452,7 @@ func (p *seqParser) performAction(action parser.Action, state parser.State, b by
 				p.handler.HandleDcs(ansi.Cmd(p.cmd), p.Params(), data)
 			}
 		case parser.OscStringState:
+			p.oscBEL = b == ansi.BEL
 			if p.handler.HandleOsc != nil {
 				p.handler.HandleOsc(p.cmd, data)
 			}

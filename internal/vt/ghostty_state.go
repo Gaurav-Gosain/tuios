@@ -294,7 +294,7 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 			}
 			var xrgb ansi.XRGBColor
 			xrgb.Color = c
-			_, _ = t.pipe.Write([]byte("\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + "\x1b\\"))
+			_, _ = t.pipe.Write([]byte("\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + oscReplyEnd(t.scanner.oscBEL)))
 			return
 		}
 		if c := ansi.XParseColor(arg); c != nil {
@@ -321,9 +321,10 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 
 // handleDefaultColorOSC mirrors the pure emulator's OSC 10/11/12 family:
 // guest-set colors override the theme defaults, "?" queries answer with
-// whichever is in force.
+// whichever is in force, each item after the first applies to the next
+// colour, and a reply ends the way the query did.
 func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
-	set := func(c color.Color) {
+	set := func(number int, c color.Color) {
 		switch number {
 		case 10, 110:
 			t.guestFg = c
@@ -333,32 +334,30 @@ func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 			t.guestCur = c
 		}
 	}
-	switch len(parts) {
-	case 1:
-		set(nil)
-	case 2:
-		arg := string(parts[1])
-		if arg == "?" {
-			var c color.Color
-			switch number {
-			case 10:
-				c = firstColor(t.guestFg, t.reportFg, t.defaultFg, color.White)
-			case 11:
-				c = firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
-			case 12:
-				c = firstColor(t.guestCur, t.defaultCur, color.White)
-			default:
-				return
+	if number >= 110 || len(parts) < 2 {
+		set(number, nil)
+		return
+	}
+	dynamicColorItems(number, parts, func(number int, arg string) {
+		if arg != "?" {
+			if c := ansi.XParseColor(arg); c != nil {
+				set(number, c)
 			}
-			var xrgb ansi.XRGBColor
-			xrgb.Color = c
-			_, _ = t.pipe.Write([]byte("\x1b]" + itoa(number) + ";" + xrgb.String() + "\x1b\\"))
 			return
 		}
-		if c := ansi.XParseColor(arg); c != nil {
-			set(c)
+		var c color.Color
+		switch number {
+		case 10:
+			c = firstColor(t.guestFg, t.reportFg, t.defaultFg, color.White)
+		case 11:
+			c = firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
+		case 12:
+			c = firstColor(t.guestCur, t.defaultCur, color.White)
 		}
-	}
+		var xrgb ansi.XRGBColor
+		xrgb.Color = c
+		_, _ = t.pipe.Write([]byte("\x1b]" + itoa(number) + ";" + xrgb.String() + oscReplyEnd(t.scanner.oscBEL)))
+	})
 }
 
 func firstColor(cs ...color.Color) color.Color {

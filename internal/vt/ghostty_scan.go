@@ -88,6 +88,9 @@ type ghosttyScanner struct {
 	// dcsParams holds DCS parameter and intermediate bytes until the final
 	// byte decides whether the body is sixel.
 	dcsParams []byte
+	// oscBEL says the OSC handed to the hook ended with BEL rather than ST,
+	// so a reply can end the same way.
+	oscBEL bool
 }
 
 func newGhosttyScanner(hooks ghosttyScanHooks) *ghosttyScanner {
@@ -332,6 +335,7 @@ func (s *ghosttyScanner) Scan(p []byte) {
 // re-emitted verbatim with its original terminator.
 func (s *ghosttyScanner) endOsc(term byte) {
 	forward := true
+	s.oscBEL = term == 0x07
 	if s.hooks.OSC != nil && !s.overflow {
 		s.flushOut()
 		forward = s.hooks.OSC(oscNumber(s.seq), s.seq)

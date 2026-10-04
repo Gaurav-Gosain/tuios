@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"image/color"
 	"io"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -79,6 +80,30 @@ func (e *Emulator) handleTitle(cmd int, data []byte) {
 	}
 }
 
+// oscReplyEnd is the terminator for a reply to an OSC query: BEL when the
+// query ended with BEL and ST otherwise. xterm answers in the form it was
+// asked, and a guest that reads up to the terminator it sent waits out its
+// timeout on the other one.
+func oscReplyEnd(bel bool) string {
+	if bel {
+		return "\x07"
+	}
+	return "\x1b\\"
+}
+
+// dynamicColorItems walks the items of an OSC 10, 11 or 12. Each item after
+// the first applies to the next colour in the sequence, as in xterm: OSC 10 ;
+// ? ; ? asks for the foreground and then the background. Colours past 12 are
+// not implemented here, so items that would reach them are dropped.
+func dynamicColorItems(cmd int, parts [][]byte, f func(cmd int, arg string)) {
+	for i, p := range parts[1:] {
+		if cmd+i > 12 {
+			return
+		}
+		f(cmd+i, string(p))
+	}
+}
+
 func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 	if cmd != 10 && cmd != 11 && cmd != 12 &&
 		cmd != 110 && cmd != 111 && cmd != 112 {
@@ -86,13 +111,7 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 		return
 	}
 
-	parts := bytes.Split(data, []byte{';'})
-	if len(parts) == 0 {
-		// Invalid, ignore
-		return
-	}
-
-	cb := func(c color.Color) {
+	set := func(cmd int, c color.Color) {
 		switch cmd {
 		case 10, 110: // Foreground color
 			e.guestFg = c != nil
@@ -105,34 +124,33 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 		}
 	}
 
-	switch len(parts) {
-	case 1: // Reset color
-		cb(nil)
-	case 2: // Set/Query color
-		arg := string(parts[1])
-		if arg == "?" {
-			var xrgb ansi.XRGBColor
-			switch cmd {
-			case 10: // Query foreground color
-				xrgb.Color = e.reportedForeground()
-				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pipe, ansi.SetForegroundColor(xrgb.String()))
-				}
-			case 11: // Query background color
-				xrgb.Color = e.reportedBackground()
-				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pipe, ansi.SetBackgroundColor(xrgb.String()))
-				}
-			case 12: // Query cursor color
-				xrgb.Color = e.CursorColor()
-				if xrgb.Color != nil {
-					_, _ = io.WriteString(e.pipe, ansi.SetCursorColor(xrgb.String()))
-				}
-			}
-		} else if c := ansi.XParseColor(arg); c != nil {
-			cb(c)
-		}
+	parts := bytes.Split(data, []byte{';'})
+	if cmd >= 110 || len(parts) < 2 {
+		// Reset color
+		set(cmd, nil)
+		return
 	}
+
+	dynamicColorItems(cmd, parts, func(cmd int, arg string) {
+		if arg != "?" {
+			if c := ansi.XParseColor(arg); c != nil {
+				set(cmd, c)
+			}
+			return
+		}
+		var xrgb ansi.XRGBColor
+		switch cmd {
+		case 10: // Query foreground color
+			xrgb.Color = e.reportedForeground()
+		case 11: // Query background color
+			xrgb.Color = e.reportedBackground()
+		case 12: // Query cursor color
+			xrgb.Color = e.CursorColor()
+		}
+		if xrgb.Color != nil {
+			_, _ = io.WriteString(e.pipe, "\x1b]"+strconv.Itoa(cmd)+";"+xrgb.String()+oscReplyEnd(e.parser.oscBEL))
+		}
+	})
 }
 
 func (e *Emulator) handleWorkingDirectory(cmd int, data []byte) {
@@ -291,7 +309,7 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 		if c != nil {
 			var xrgb ansi.XRGBColor
 			xrgb.Color = c
-			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + "\x1b\\"
+			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + oscReplyEnd(e.parser.oscBEL)
 			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else if c := ansi.XParseColor(arg); c != nil {
@@ -358,11 +376,11 @@ func (e *Emulator) handleClipboard(data []byte) {
 		if e.cb.ClipboardQuery != nil {
 			content := e.cb.ClipboardQuery(selection)
 			encoded := base64.StdEncoding.EncodeToString([]byte(content))
-			response := "\x1b]52;" + selection + ";" + encoded + "\x1b\\"
+			response := "\x1b]52;" + selection + ";" + encoded + oscReplyEnd(e.parser.oscBEL)
 			_, _ = io.WriteString(e.pipe, response)
 		} else {
 			// No callback: respond empty
-			response := "\x1b]52;" + selection + ";\x1b\\"
+			response := "\x1b]52;" + selection + ";" + oscReplyEnd(e.parser.oscBEL)
 			_, _ = io.WriteString(e.pipe, response)
 		}
 	} else {
