@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -138,7 +140,7 @@ func shipVerbs() map[string]verbEntry {
 				{Name: "branch", Type: "string", Description: "The branch pushed."},
 				{Name: "commit", Type: "string", Description: "The commit pushed."},
 				{Name: "remote", Type: "string", Description: "The remote pushed to."},
-				{Name: "url", Type: "string", Description: "The remote's push URL."},
+				{Name: "url", Type: "string", Description: "Where the push went: the push URL's host and path, without user name, password or token."},
 				{Name: "approved_by", Type: "string", Description: "human when the person allowed it in the Inbox, omitted when the caller is the person."},
 			},
 			examples: []string{
@@ -601,7 +603,7 @@ func (d *Daemon) shipResolveOutbound(cs *connState, p shipPushParams) (shipOutbo
 
 // shipConfirmLines describe an outbound call for the person, one line each.
 func shipConfirmLines(ctx context.Context, verb string, o shipOutbound, p shipPushParams) []string {
-	lines := []string{"push " + o.branch + " at " + shortCommit(o.commit) + " to " + o.push.Remote + " (" + o.push.URL + ")"}
+	lines := []string{"push " + o.branch + " at " + shortCommit(o.commit) + " to " + o.push.Remote + " (" + pushDestination(o.push.URL) + ")"}
 	base := o.push.Remote + "/" + o.branch
 	if worktree.RemoteBranchCommit(ctx, o.repo.root, o.push) == "" {
 		base = ""
@@ -835,16 +837,89 @@ func (d *Daemon) shipAskOutcome(verb, requestID string, out askOutcome) (string,
 	})
 }
 
-// shipQuestion is the one-line question the Inbox shows.
+// shipQuestion is the one-line question the Inbox shows. It names where the
+// push goes, the remote and its address, since a remote's name says nothing
+// about where it points: an agent can point origin anywhere. A long address
+// keeps its start, which holds the host, and the end of its path.
 func shipQuestion(verb string, o shipOutbound) string {
-	what := "Push " + o.branch + " (" + shortCommit(o.commit) + ") to " + o.push.Remote + "?"
-	if verb == "ship-pr" {
-		what = "Push " + o.branch + " (" + shortCommit(o.commit) + ") to " + o.push.Remote + " and open a pull request?"
+	dest := pushDestination(o.push.URL)
+	ask := func(dest string) string {
+		where := o.push.Remote + " (" + dest + ")"
+		if verb == "ship-pr" {
+			return "Push " + o.branch + " (" + shortCommit(o.commit) + ") to " + where + " and open a pull request?"
+		}
+		return "Push " + o.branch + " (" + shortCommit(o.commit) + ") to " + where + "?"
+	}
+	what := ask(dest)
+	if over := len(what) - attentionMaxSummary; over > 0 {
+		what = ask(shortenDestination(dest, len(dest)-over))
+	}
+	if !askLineShown(what, attentionMaxSummary) {
+		what = "Push branch at " + shortCommit(o.commit) + " to " + shortenDestination(dest, 80) + "?"
 	}
 	if !askLineShown(what, attentionMaxSummary) {
 		what = "Push branch at " + shortCommit(o.commit) + " to a remote?"
 	}
 	return what
+}
+
+// pushDestination is a push URL as a person is shown it: its host and path,
+// with no user name, password or token, and no query or fragment. A local
+// path is shown as it is, and an scp-like address (user@host:path) loses the
+// user.
+func pushDestination(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if i := strings.Index(raw, "://"); i >= 0 {
+		if u, err := url.Parse(raw); err == nil && u.Host != "" {
+			return oneLineOf(u.Host+u.Path, 512)
+		} else if err == nil && u.Scheme == "file" {
+			return oneLineOf(u.Path, 512)
+		}
+		// Unreadable as a URL: keep what follows the last @ of the
+		// authority, so no credential is shown.
+		authority, path, _ := strings.Cut(raw[i+3:], "/")
+		if at := strings.LastIndex(authority, "@"); at >= 0 {
+			authority = authority[at+1:]
+		}
+		path, _, _ = strings.Cut(path, "?")
+		path, _, _ = strings.Cut(path, "#")
+		return oneLineOf(authority+"/"+path, 512)
+	}
+	// scp-like: [user@]host:path, with a colon before the first slash once
+	// the user is gone. A local path has none. The user is cut at the last @
+	// before the first slash, since it may itself hold a colon.
+	rest := raw
+	before, _, _ := strings.Cut(raw, "/")
+	if at := strings.LastIndex(before, "@"); at >= 0 {
+		rest = raw[at+1:]
+	}
+	if colon := strings.Index(rest, ":"); colon > 0 && !strings.Contains(rest[:colon], "/") {
+		return oneLineOf(rest, 512)
+	}
+	return oneLineOf(raw, 512)
+}
+
+// shortenDestination fits dest in about limit bytes, keeping its start and
+// its end, cut on rune boundaries.
+func shortenDestination(dest string, limit int) string {
+	const gap = "..."
+	limit = max(limit, 24)
+	if len(dest) <= limit {
+		return dest
+	}
+	head := (limit - len(gap)) / 2
+	tail := limit - len(gap) - head
+	for head > 0 && !utf8.RuneStart(dest[head]) {
+		head--
+	}
+	start := len(dest) - tail
+	for start < len(dest) && !utf8.RuneStart(dest[start]) {
+		start++
+	}
+	return dest[:head] + gap + dest[start:]
 }
 
 // verbShipPush answers ship-push.
@@ -875,7 +950,7 @@ func (d *Daemon) verbShipPush(cs *connState, params json.RawMessage) (any, *verb
 		"branch":   o.branch,
 		"commit":   o.commit,
 		"remote":   o.push.Remote,
-		"url":      o.push.URL,
+		"url":      pushDestination(o.push.URL),
 	}
 	if approvedBy != "" {
 		res["approved_by"] = approvedBy

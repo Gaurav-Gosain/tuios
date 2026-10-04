@@ -802,6 +802,7 @@ current tree, built a binary, and ran the named test against it.
 | A commit that is not the person's | `CommitAll`: the commit run with the checkpoint identity and `--no-gpg-sign` | `TestShipFromWorktreeToPullRequest` (the commit is by `tuios`, and has no `gpgsig`) | **caught** |
 | A push from a pane with no question | `shipCallerIsPerson`: answers true for every caller | `TestShipPushFromAPaneAsksThePerson` (the wait for the Inbox question times out, and the push has already gone out) | **caught** |
 | A push sends the branch as it is after the question | `worktree.Push`: pushes `refs/heads/<branch>` instead of the resolved commit (the tree before the fix) | `TestShipPushSendsTheCommitThePersonAllowed` (the origin gets the commit made after the question was put) | **caught** |
+| The question names only the remote | `shipQuestion`: asks "to origin?" with no address (the tree before the change) | `TestShipPushQuestionNamesWhereThePushGoes` (the wait for `elsewhere.example/someone/else.git` in the question times out) | **caught** |
 | `fan keep --merge` that does not merge | `verbKeepFan`: the `if p.Merge` block made false | `TestFanKeepMergesTheKeptAttempt` (the keep into a dirty main checkout is not refused) | **caught** |
 
 The positive halves are in the same tests: the commit refused while the

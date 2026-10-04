@@ -404,7 +404,7 @@ func TestShipPushFromAPaneAsksThePerson(t *testing.T) {
 	line := fmt.Sprintf("%s ship push --yes --wait 60s > %s 2>&1\n", tuiosBin, filepath.Join(f.fakes, "pane-push.txt"))
 	f.tr.ok("send-text", "-s", f.session, "-w", "0", line)
 
-	question := "Push feat/ship (" + tip[:7] + ") to origin?"
+	question := "Push feat/ship (" + tip[:7] + ") to origin"
 	waitText(t, term, "the push question in the Inbox", question)
 	saveFrame(t, term, "ship-push-question")
 	if refs := testutil.Git(t, f.remote, "for-each-ref", "--format=%(refname)", "refs/heads/feat/"); refs != "" {
@@ -483,6 +483,61 @@ func TestShipPushSendsTheCommitThePersonAllowed(t *testing.T) {
 		t.Errorf("the branch's upstream is %q after the push, want origin/feat/ship", up)
 	}
 	f.tr.log("the push sent %s, the commit the person allowed, and not %s, which the branch moved to while the question waited", tip[:7], later[:7])
+}
+
+// TestShipPushQuestionNamesWhereThePushGoes points origin's push URL at
+// another server, with a user name and token in it, the way an agent can
+// without the remote's name changing. The Inbox question names that server
+// and path, so the person can see the push leaves for somewhere else, and
+// shows neither the user name nor the token. The person denies it, and
+// nothing is pushed.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with shipQuestion asking "to
+// origin?" again, the wait for the host in the question times out.
+func TestShipPushQuestionNamesWhereThePushGoes(t *testing.T) {
+	f := newShipFixture(t)
+	f.write("note.txt", "a note\n")
+	f.tr.ok("ship", "commit", "-s", f.session, "-m", "Add a note")
+	tip := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
+	const token = "test-token-not-a-secret"
+	testutil.Git(t, f.repo, "config", "remote.origin.pushurl", "https://agent-user:"+token+"@elsewhere.example/someone/else.git?key="+token)
+
+	term := startIn(t, f.base, startOpts{args: []string{"attach", f.session}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	out := filepath.Join(f.fakes, "pane-push.txt")
+	f.tr.ok("send-text", "-s", f.session, "-w", "0", fmt.Sprintf("%s ship push --yes --wait 60s > %s 2>&1\n", tuiosBin, out))
+
+	// The Inbox wraps the question, so its two halves are looked for apart.
+	question := "Push feat/ship (" + tip[:7] + ") to origin (elsewhere.example/someone/else.git)?"
+	waitText(t, term, "the push question naming the push URL's host and path",
+		"Push feat/ship ("+tip[:7]+") to origin", "(elsewhere.example/someone/else.git)?")
+	saveFrame(t, term, "ship-push-destination")
+	for _, secret := range []string{token, "agent-user"} {
+		if strings.Contains(term.Snapshot(), secret) {
+			t.Errorf("the Inbox shows %q from the push URL", secret)
+		}
+	}
+	time.Sleep(answerSettle)
+	if err := term.SendKeys("2"); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		data, _ := os.ReadFile(out)
+		if strings.Contains(string(data), "refused") {
+			if strings.Contains(string(data), token) {
+				t.Errorf("the pane's command printed the token:\n%s", data)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the denied push never ended. The pane's command printed:\n%s\n%s", data, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	f.tr.log("the push question named %q and showed no credential", question)
 }
 
 // TestFanKeepMergesTheKeptAttempt keeps one attempt of a fan with --merge:
