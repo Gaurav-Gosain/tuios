@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -362,6 +363,25 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 				"source": "config", "default": config.EffectiveDefault(opt), "option_type": opt.Type,
 			}, nil
 		}
+	}
+	if path == optionAgentsEnabled {
+		// The switch is the daemon's, read from config.toml at start and on
+		// every reload, and not a session's. Reading the session's overrides
+		// and then the built-in default reported true with source default
+		// while [agents] enabled = false had every agent verb refused. A value
+		// the session holds counts only when the daemon agrees with it: one it
+		// does not agree with has not been applied.
+		value := strconv.FormatBool(d.agentsEnabled())
+		source := "default"
+		if held, ok := sess.GetOption(path); ok && held == value {
+			source = "session"
+		} else if value != config.EffectiveDefault(opt) {
+			source = "config"
+		}
+		return map[string]any{
+			"type": "option", "key": path, "value": value,
+			"source": source, "default": config.EffectiveDefault(opt), "option_type": opt.Type,
+		}, nil
 	}
 	if value, ok := sess.GetOption(path); ok {
 		out := map[string]any{"type": "option", "key": path, "value": value, "source": "session"}

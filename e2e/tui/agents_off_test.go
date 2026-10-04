@@ -750,3 +750,50 @@ func TestAgentsOffHidesAnotherMachinesAgentMarks(t *testing.T) {
 	}
 	alive(t, term, "after the remote mark went")
 }
+
+// TestAgentsOffGetConfigSaysOff reads the switch back the way a person and a
+// script do. With [agents] enabled = false in config.toml, get-config
+// agents.enabled prints false, and --json says the value came from the
+// config. After the file turns the switch on and the daemon applies it, the
+// same call prints true with source default.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the agents.enabled branch cut
+// from verbGetOption, the off run prints true with source default while the
+// daemon refuses every agent verb.
+func TestAgentsOffGetConfigSaysOff(t *testing.T) {
+	base := agentsOffFixture(t, true)
+	waitAgentsSwitch(t, base, true)
+
+	type option struct {
+		Value  string `json:"value"`
+		Source string `json:"source"`
+	}
+	read := func() (string, option) {
+		t.Helper()
+		plain, err := tuiosCLI(t, base, "get-config", "agents.enabled", "-s", "rail")
+		if err != nil {
+			t.Fatalf("get-config agents.enabled: %v\n%s", err, plain)
+		}
+		out, err := tuiosCLI(t, base, "get-config", "agents.enabled", "-s", "rail", "--json")
+		if err != nil {
+			t.Fatalf("get-config agents.enabled --json: %v\n%s", err, out)
+		}
+		var o option
+		if err := json.Unmarshal([]byte(out), &o); err != nil {
+			t.Fatalf("get-config --json is not JSON: %v\n%s", err, out)
+		}
+		return strings.TrimSpace(plain), o
+	}
+
+	plain, o := read()
+	if plain != "false" || o.Value != "false" || o.Source != "config" {
+		t.Errorf("ASSERTION: with [agents] enabled = false, get-config agents.enabled printed %q and --json %+v, want false from config", plain, o)
+	}
+
+	writeAgentsConfig(t, base, false)
+	waitAgentsSwitch(t, base, false)
+	plain, o = read()
+	if plain != "true" || o.Value != "true" || o.Source != "default" {
+		t.Errorf("ASSERTION: with the switch on again, get-config agents.enabled printed %q and --json %+v, want true from default", plain, o)
+	}
+}

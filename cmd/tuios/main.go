@@ -1109,7 +1109,9 @@ attached.
 
 An option with no session override reads as its default, so a path that exists
 always reads. --json also reports where the value came from: "session" for an
-override set here, "default" for the built-in.
+override set here, "config" for a value the daemon read from config.toml, and
+"default" for the built-in. agents.enabled is the daemon's switch, so it reads
+as the value in effect for every session.
 
 Run 'tuios list-options' to see every path.`,
 		Example: `  # Read the border style
