@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/base64"
+	"maps"
 	"regexp"
 	"strconv"
 	"strings"
@@ -203,12 +204,27 @@ func FuzzKittyPassthrough(f *testing.F) {
 		// when it sits in the pane's id map. The map alone is not enough: a
 		// transmission under the auto-assign id 0 gets a fresh host id that
 		// is never mapped, and a delete removes the mapping it names.
+		//
+		// A closed pane's ids below lowHostIDs go back to a free list and the
+		// next allocation takes one from there instead of counting a new id
+		// out. So a close gives up ownership of the ids it freed, and an id
+		// that left the free list during a step belongs to that step's pane.
 		owner := map[uint64]string{}
-		claim := func(win string, from uint32) {
+		freeIDs := func() map[uint32]struct{} {
+			kp.mu.Lock()
+			defer kp.mu.Unlock()
+			return maps.Clone(kp.freeLowIDs)
+		}
+		claim := func(win string, from uint32, freeBefore map[uint32]struct{}) {
 			kp.mu.Lock()
 			defer kp.mu.Unlock()
 			for id := from; id != kp.nextHostID; id++ {
 				owner[uint64(id)] = win
+			}
+			for id := range freeBefore {
+				if _, still := kp.freeLowIDs[id]; !still {
+					owner[uint64(id)] = win
+				}
 			}
 			for _, h := range kp.imageIDMap[win] {
 				if _, taken := owner[uint64(h)]; !taken {
@@ -236,6 +252,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 			kp.mu.Lock()
 			firstNew := kp.nextHostID
 			kp.mu.Unlock()
+			freeBefore := freeIDs()
 			if st.op != "" {
 				switch st.op {
 				case "close":
@@ -265,6 +282,9 @@ func FuzzKittyPassthrough(f *testing.F) {
 							n, st.op, win[:6], hostID, got, body)
 					}
 				}
+				for id := range freeIDs() {
+					delete(owner, uint64(id))
+				}
 				continue
 			}
 			cmd, err := vt.ParseKittyCommand([]byte(st.body))
@@ -277,7 +297,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 				func(b []byte) { replies = append(replies, append([]byte(nil), b...)) })
 
 			out := append(kp.FlushPending(), host.take()...)
-			claim(win, firstNew)
+			claim(win, firstNew, freeBefore)
 			apcs, bad := hostTokens(out)
 			if bad != "" {
 				t.Fatalf("step %d (%s %q): host got %s", n, win[:6], st.body, bad)
