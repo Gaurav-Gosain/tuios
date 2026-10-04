@@ -33,7 +33,9 @@ import (
 // and disable, tuios config apply, or a restart. A change to config.toml
 // that some other process writes applies at once only where it narrows: a
 // plugin taken off the list stops, a plugin put on it waits for the person.
-// That is how [hosts] and the pane grants behave too (daemon_hosts.go).
+// A folder put on [plugins] dirs waits for the person too, because it can
+// hold a plugin with the id of an enabled one. That is how [hosts] and the
+// pane grants behave too (daemon_hosts.go).
 // Every trust change through the herdr socket (plugin.enable, plugin.disable,
 // plugin.link, plugin.unlink) is refused from a pane and from a process the
 // daemon started, a plugin's own included (mayActAsHuman).
@@ -162,11 +164,21 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 			}
 		}
 		next = slices.DeleteFunc(next, func(id string) bool { return !slices.Contains(old, id) })
-		// A new folder only lists more plugins, none of them enabled, so it
-		// applies at once.
+	}
+	// A new folder waits for the person too. Plugins are enabled by id, and
+	// the folders are read first, so a plugin in a new folder with the id of
+	// an enabled plugin would run in its place.
+	dirs := slices.Clone(cfg.Dirs)
+	if !byPerson {
+		for _, dir := range dirs {
+			if !slices.Contains(h.dirs, dir) {
+				waits = true
+			}
+		}
+		dirs = slices.DeleteFunc(dirs, func(dir string) bool { return !slices.Contains(h.dirs, dir) })
 	}
 	h.enabled = next
-	h.dirs = slices.Clone(cfg.Dirs)
+	h.dirs = dirs
 	h.cache = nil
 	running := h.running
 	var stopped []string
