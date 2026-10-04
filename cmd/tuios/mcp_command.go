@@ -35,8 +35,13 @@ table. Every call opens its own connection and restricts it with
 restrict-connection before anything else, so the daemon holds the call to
 what this server was started with:
 
-  default        read-only, and only the session of the pane the server runs
-                 in, its fan group and the sessions a fan from it started
+  default        tools that read panes and wait on them, and four that
+                 change state: set_agent_state and set_agent_meta change the
+                 caller's own record, send_agent_message sends mail, and
+                 read_agent_messages marks the mail it returns as read. No
+                 default tool types into a pane. The server reaches only the
+                 session of the pane it runs in, its fan group and the
+                 sessions a fan from it started.
   --write        also list send_text, send_keys, ask_agent, respond and fan,
                  still inside that session and fan group
   --scope all    reach every session, for a harness that runs outside tuios

@@ -11,8 +11,10 @@
 // restrict-connection before anything else, so the daemon, not this process,
 // holds the call to what the server was started with:
 //
-//   - by default the connection is read-only and reaches only the caller's own
+//   - by default the connection is read_only and reaches only the caller's own
 //     session and fan group. The tools that type into a pane are not listed.
+//     read_only still lets the caller set its own agent state and meta and
+//     send and read mail, so the server as a whole is not read-only.
 //   - --write lists the tools that type into a pane (send_text, send_keys,
 //     ask_agent, respond, fan) and lifts read_only. The connection still
 //     reaches only the caller's own session and fan group.
@@ -444,7 +446,7 @@ func (s *Server) instructions() string {
 	if s.opts.ScopeAll {
 		scope = "Calls may reach every session on the daemon. A session you leave out is the most recently active one."
 	}
-	write := "This server is read-only: it can read panes, wait on them, report your own agent state and meta, and send mail, and it cannot type into any pane."
+	write := "This server cannot type into any pane. It can read panes, wait on them, report your own agent state and meta, and send and read mail."
 	if s.opts.Write {
 		write = "This server can type into panes (send_text, send_keys, ask_agent, fan). Prefer mail (tuios_send_agent_message) to typing, and never type into a pane on needs_input without reading its prompt first."
 	}

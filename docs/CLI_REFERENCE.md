@@ -3126,7 +3126,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi, omp and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
-| `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
+| `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. By default it cannot type into a pane, and it is held to the session of the pane it runs in. Its default tools still set your own agent state and meta and send and read mail. `--write` adds the tools that type into panes. `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. Claude Code's `SubagentStart` and `SubagentStop` report no state: they send the subagent with `report-agent-activity`, which moves the pane's `subagents` count, and a `SessionStart` sends a `session_start` there after its state report, which clears it. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, including an `ExitPlanMode` plan unless `hold_plans = false`, Qwen Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
@@ -3370,7 +3370,11 @@ tuios mcp [--write] [--scope own|all]
 **Tools, by default:** `tuios_list_agents`, `tuios_list_windows`,
 `tuios_get_agent_state`, `tuios_capture_pane`, `tuios_peek_prompt`,
 `tuios_wait_for`, `tuios_read_agent_messages`, `tuios_send_agent_message`,
-`tuios_set_agent_state`, `tuios_set_agent_meta` and `tuios_events`. Each is a
+`tuios_set_agent_state`, `tuios_set_agent_meta` and `tuios_events`. Four of
+them change state. `tuios_set_agent_state` and `tuios_set_agent_meta` change
+the caller's own record. `tuios_send_agent_message` sends mail.
+`tuios_read_agent_messages` marks the mail it returns as read. No default tool
+types into a pane. Each is a
 daemon verb, and its input schema is generated from the verb table, so it takes
 the verb's own parameters. `tuios_events` follows the event stream: it returns
 what happened since `after_seq`, or waits up to `wait_ms` for the next events,
@@ -3396,7 +3400,7 @@ The daemon's socket is `TUIOS_SOCKET` when the harness passes it, else the one
 **Registering it:**
 
 ```bash
-# Hooks and the read-only MCP server
+# Hooks and the MCP server without the tools that type into panes
 tuios integration install claude-code --mcp
 
 # With the tools that type into panes

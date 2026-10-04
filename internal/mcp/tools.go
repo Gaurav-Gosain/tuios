@@ -532,3 +532,15 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 	})
 	return s.success(s.byNm["tuios_events"], out)
 }
+
+// ChangingTools lists the tools this server offers that change something,
+// the ones whose readOnlyHint is false, in the order tools/list gives them.
+func (s *Server) ChangingTools() []string {
+	var out []string
+	for _, t := range s.tools {
+		if t.spec.hints != nil {
+			out = append(out, t.name)
+		}
+	}
+	return out
+}
