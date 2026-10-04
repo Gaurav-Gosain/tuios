@@ -60,8 +60,8 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"colour scheme", "\x1b[?996n", ""},
 		// No sixel (4) until the host is known to show it. See
 		// TestSixelAdvertisedFollowsHost.
-		{"DA1", "\x1b[c", "\x1b[?62;1;6;9;15;18;22c"},
-		{"DA1 with 0", "\x1b[0c", "\x1b[?62;1;6;9;15;18;22c"},
+		{"DA1", "\x1b[c", "\x1b[?62;22c"},
+		{"DA1 with 0", "\x1b[0c", "\x1b[?62;22c"},
 		{"DA2", "\x1b[>c", pick("\x1b[>1;10;0c", "\x1b[>0;0;0c")},
 		{"DA3", "\x1b[=c", pick("", "\x1bP!|00000000\x1b\\")},
 		{"XTVERSION", "\x1b[>0q", pick("", "\x1bP>|tuios\x1b\\")},

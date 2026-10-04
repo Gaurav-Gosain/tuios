@@ -135,6 +135,23 @@ func TestConform_DeviceAttributes(t *testing.T) {
 			t.Errorf("DA1 replied %q, which does not contain %q", da1, want)
 		}
 	}
+	// The class has to stay VT220 or later: vim, neovim, notcurses and a tmux
+	// inside a pane read it before anything else. And every attribute after it
+	// has to be one this emulator implements, because a guest acts on each.
+	// The answer used to claim 132 columns (1), selective erase (6), national
+	// replacement sets (9), technical characters (15) and user windows (18).
+	fields := strings.Split(strings.TrimSuffix(strings.TrimPrefix(da1, "\x1b[?"), "c"), ";")
+	switch fields[0] {
+	case "62", "63", "64", "65":
+	default:
+		t.Errorf("DA1 replied %q, whose class %q is not VT220 or later", da1, fields[0])
+	}
+	implemented := map[string]bool{"4": true, "22": true}
+	for _, f := range fields[1:] {
+		if !implemented[f] {
+			t.Errorf("DA1 replied %q, which claims attribute %s that this emulator does not implement", da1, f)
+		}
+	}
 
 	da2 := reply(t, 80, 24, "\x1b[>c")
 	if !strings.HasPrefix(da2, "\x1b[>") || !strings.HasSuffix(da2, "c") {
