@@ -144,9 +144,13 @@ tuios --standalone
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
 - `--cpuprofile <file>`: Write CPU profile to file
-- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served; take two and compare them with `go tool pprof -diff_base`
+- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`
 - `-h, --help`: Show help for tuios
 - `-v, --version`: Show version information
+
+The interface flags, from `--theme` to `--shared-borders`, are also flags of
+`attach`, `new`, `ssh` and `tape play`, the commands that draw the interface.
+`--debug`, `--cpuprofile` and `--pprof` work on every command.
 
 **Examples:**
 ```bash
@@ -763,8 +767,12 @@ and write the model, context use and cost to the pane's agent metadata.
 
 **Usage:**
 ```bash
-tuios agent-statusline claude-code|opencode|kilo [--then CMD] [--turn-end] [--explain]
+tuios agent-statusline claude-code|opencode|kilo [-s SESSION] [-w PANE] [--then CMD] [--turn-end] [--explain] [--timeout D]
 ```
+
+`-s, --session` names the session of the pane (default: `TUIOS_SESSION`), and
+`-w, --window` the pane (default: `TUIOS_PANE_ID`, then the controlling
+terminal, then the parent processes).
 
 | Payload field | Metadata key |
 | --- | --- |
@@ -776,7 +784,7 @@ Every field is optional, and one that is missing, null or of another type is
 not written. The keys go under the source `statusline`, with no TTL: they
 clear when the agent leaves the pane. It prints nothing of its own. `--then`
 runs your own status line command through `sh -c` with the same stdin and
-prints its output unchanged, and the command exits with its status; that is
+prints its output unchanged, and the command exits with its status. That is
 how a status line of your own is kept.
 
 The pane is found from `-w`, then `TUIOS_PANE_ID`, then the process's terminal
@@ -974,6 +982,7 @@ tuios send-text <text> [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
+- `--json`: Output the result as JSON. Without it the command prints nothing, and a failure exits `1`
 
 **Examples:**
 ```bash
@@ -1399,6 +1408,14 @@ tuios set-config <path> <value> [flags]
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output the result as JSON: `key`, `value`, `applied`, and `reason` when `applied` is false
+
+With a client attached, the client applies the value and writes it to
+`config.toml`. With no client attached, the daemon keeps the value for the
+session and does not write the file, and the client applies it when it
+attaches. The command still prints `Set PATH = VALUE` on stdout, and says on
+stderr that the value is not applied yet. `agents.enabled` is the person's
+switch: a process in a pane cannot set it.
 
 **Paths:** every option `tuios list-options` prints can be set, by its full
 path (`appearance.dockbar_position`) or, for an `[appearance]` option, by its
@@ -2959,6 +2976,7 @@ tuios capture-pane [flags]
   defaults.
 - `--palette <#rrggbb,...>`: The 16 hex colours a client's theme paints ANSI
   indices 0-15 with, used by `--resolved`. Must have exactly 16 entries.
+- `--json`: Output the result as JSON. A capture from another machine carries `host` and `"untrusted": true`
 - `--last-command`: Capture only what the last finished command printed, as
   plain text, read between the shell's OSC 133 marks. Fails with
   `no_shell_integration` when no command has finished under them.
@@ -3016,6 +3034,7 @@ tuios screenshot [flags]
 - `-S, --scrollback`: Put the pane's history above the screen
 - `--lines <N>`: Bound the history to the last N rows
 - `--cursor`: Draw the cursor cell
+- `--copy`: Try to copy the image to the clipboard (the default)
 - `--no-copy`: Do not try to copy the image to the clipboard
 - `--json`: Output the result as JSON
 
@@ -3084,7 +3103,7 @@ them.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios resurrect [session-name]` | List the sessions saved on disk, or restore one and attach (also `tuios restore`) |
+| `tuios resurrect [session-name]` | List the sessions saved on disk, or restore one and attach (also `tuios restore`). `--json` lists them for a script: `name`, `windows`, `status` (`restorable` or `live`) and `saved_at` |
 
 Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 `ls` to `list-sessions`, `resurrect` to `restore`, `hosts remove` to `rm`, and
@@ -3100,7 +3119,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
 | `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |
 | `tuios split-window <horizontal\|vertical>` | Divide a pane and open a new one beside it. Needs an attached client and tiling on |
-| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset split ratios (`--equalize`), flip the focused split (`--rotate`), or shape the master-stack layout of the current workspace (`--master-position left\|right\|top\|bottom\|center`, `--masters N`). See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout) |
+| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset the splits (`--equalize`: every split to half in BSP, and in master-stack the configured master ratio with even shares for the other panes), flip the focused split (`--rotate`), or shape the master-stack layout of the current workspace (`--master-position left\|right\|top\|bottom\|center`, `--masters N`). See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout) |
 
 **Agents:**
 
@@ -3123,7 +3142,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi, omp and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, copilot, cursor-agent, gemini-cli, opencode, kilo, amp, kimi, pi, omp and qwen report state; antigravity, crush, devin, droid, grok, hermes and qoder report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode, without the tools that type into panes. `--mcp-write` registers it with `--write`. `--statusline` points Claude Code's status line at `tuios agent-statusline`, which feeds the model, context use and cost to the rail; a status line of your own is never replaced, and `--then CMD` (which implies `--statusline`) chains to it. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, the MCP server entry it wrote and the Claude Code status line it wrote (putting back the command it chained to), and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, for the four harnesses with an MCP registration whether `tuios mcp` is registered, and for Claude Code whether the status line feed is installed (`--json`, with `reports`, `mcp` and `status_line`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. By default it cannot type into a pane, and it is held to the session of the pane it runs in. Its default tools still set your own agent state and meta and send and read mail. `--write` adds the tools that type into panes. `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
@@ -3176,7 +3195,7 @@ there.
 | `tuios tape play <file.tape>` | Run a tape file in interactive mode |
 | `tuios tape exec <file.tape>` | Execute a tape file in a running session |
 | `tuios tape validate <file.tape>` | Validate a tape file without running it |
-| `tuios tape list` | List all saved tape recordings |
+| `tuios tape list` | List all saved tape recordings (`--json` for a script: `dir`, and `tapes` with `name`, `path`, `size` and `modified`) |
 | `tuios tape show <name>` | Display the contents of a tape file |
 | `tuios tape delete <name>` | Delete a tape recording |
 | `tuios tape dir` | Show the tape recordings directory path |
@@ -3708,6 +3727,23 @@ Manage TUIOS configuration file.
 - `tuios config path`: Print configuration file path
 - `tuios config edit`: Edit configuration in $EDITOR
 - `tuios config reset`: Reset configuration to defaults
+- `tuios config apply`: Apply `config.toml` to the running daemon now
+
+#### `tuios config apply`
+
+Apply `config.toml` to the running daemon now, including the changes that give
+panes or other machines more than they had.
+
+A process in a pane can write `config.toml`, so the daemon applies a change to
+the bounds of panes and links at once only when the change gives less: a
+narrower `[agents.permissions]` default or `[hosts]` link policy. A wider
+policy, a new host to dial and a new `[notify]` destination wait for this
+command or for a daemon restart. Run it from a terminal outside tuios. From
+inside a pane it is refused.
+
+```bash
+tuios config apply
+```
 
 #### `tuios config path`
 
@@ -3932,7 +3968,7 @@ redirects to.
 Manage saved layout templates.
 
 **Subcommands:**
-- `tuios layout list`: List all saved layout templates
+- `tuios layout list`: List all saved layout templates (`--json` for a script: `name`, `windows`, `tiled`, `created_at`)
 - `tuios layout delete <name>`: Delete a saved layout template
 - `tuios layout dir`: Print the layout templates directory path
 - `tuios layout export <name>`: Print a layout template as a tape script
@@ -4434,6 +4470,22 @@ Session "work" was terminated while you were attached.
 
 The same applies when the daemon itself goes away, which reports a lost
 connection instead.
+
+### Agent features are off
+
+With `[agents] enabled = false` in `config.toml`, tuios keeps only the
+multiplexer. Every agent command (`list-agents`, `start-agent`, `fan`, mail,
+the Inbox, `respond`, `queue` and the agent conditions of `wait-for`) prints
+one line and exits `1`:
+
+```
+Agent features are off. Set agents.enabled = true in the config to use this command.
+```
+
+With `--json` the error carries `"code": "agents_disabled"`, so a script can
+tell it from a failure worth a retry. A call to another machine whose agent
+features are off names that machine. Turn the features on from the settings
+page or in `config.toml`. A process in a pane cannot set `agents.enabled`.
 
 ### Discovering the control protocol
 
