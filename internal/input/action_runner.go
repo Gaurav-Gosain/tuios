@@ -1,15 +1,23 @@
 package input
 
 import (
+	"maps"
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
 // The tape executor and run-command run actions by name through this, since
 // the handlers are here and the executor is in internal/app.
 func init() {
 	app.SetActionRunner(RunActionByName)
+	// Every name the dispatcher knows is one a tape can name, including the
+	// ones with no description.
+	tape.RegisterActions(slices.Collect(maps.Keys(GetDispatcher().handlers))...)
+	tape.RegisterActions(slices.Collect(maps.Keys(app.PrefixWorkActions))...)
 }
 
 // RunActionByName runs a keybinding action the way the key bound to it would,

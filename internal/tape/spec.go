@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -132,13 +133,32 @@ func checkAction(name string) error {
 	return fmt.Errorf("%q is not an action. Run 'tuios keybinds list' for the action names", name)
 }
 
-// IsActionName reports whether name is a keybinding action a tape may run.
+// IsActionName reports whether name is a keybinding action a tape may run:
+// one with a description, one the key handling registered (see
+// RegisterActions), or a [[keybindings.command]] entry.
 func IsActionName(name string) bool {
 	if strings.HasPrefix(name, config.CommandActionPrefix) && len(name) > len(config.CommandActionPrefix) {
 		return true
 	}
-	_, ok := config.ActionDescriptions[name]
+	if _, ok := config.ActionDescriptions[name]; ok {
+		return true
+	}
+	_, ok := registeredActions.Load(name)
 	return ok
+}
+
+// registeredActions are the action names the key handling dispatches. Some
+// have no description (the scrolling layout's scroll_*, next_workspace, the
+// prefix copies of window actions), and a key bound to one in config.toml
+// runs it, so a tape may too.
+var registeredActions sync.Map
+
+// RegisterActions adds names to the actions a tape may run. internal/input
+// registers its dispatcher's names when it loads.
+func RegisterActions(names ...string) {
+	for _, n := range names {
+		registeredActions.Store(n, struct{}{})
+	}
 }
 
 func checkCondition(ct CommandType) func([]string) (int, error) {
