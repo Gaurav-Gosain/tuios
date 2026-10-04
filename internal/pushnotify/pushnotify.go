@@ -12,15 +12,11 @@ package pushnotify
 
 import (
 	"net/url"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
-
-// isWindows picks the null device curl writes the answer to.
-const isWindows = runtime.GOOS == "windows"
 
 // SendTimeout bounds one request to one provider.
 const SendTimeout = 10 * time.Second

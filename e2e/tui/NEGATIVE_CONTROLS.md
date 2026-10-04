@@ -752,7 +752,7 @@ for the history save are unit tests in `internal/input` and
 ## Push notifications for the Inbox, `[notify]`
 
 Each control cut one call site from the current tree, built the binary, and
-ran `TestNotify` (the three tests in `notify_test.go`). The fake provider is
+ran `TestNotify` (the four tests in `notify_test.go`). The fake provider is
 an HTTP server in the test process that stands in for ntfy, Pushover and a
 webhook. Each test has its positive half in the same fixture: the first test
 proves the line changed (`list-attention` shows the new line) before it counts
@@ -773,6 +773,7 @@ per-item check is the only thing in the way, and the control fails.
 | A key typed into a pane counts as activity | `cs.lastInput.Store(...)` in `Daemon.handleInput` (`internal/session/daemon_handlers.go`) | `TestNotifyHoldsWhileAPersonTypesAtAClient`: 3 requests while the client was active, want 0 | **caught** |
 | A held item is sent when the person stays away | `n.armLocked(...)` in `pushNotifier.considerLocked` | `TestNotifySendsAHeldItemWhenThePersonStaysAway`: no request after the quiet time | **caught** |
 | A notification's link opens the Inbox in tuios-web | `daemonOpts.OpenInboxItem = sessionInboxItem(...)` in `createTUIOSHandler` (`cmd/tuios-web/main.go`) | `TestNotificationLinkOpensTheInboxOnItsItem` in `cmd/tuios-web` (main module, run with `go test`): the browser with the cookie never shows the Inbox. Its positive half is the browser with no cookie, which shows no Inbox | **caught** |
+| Notifications need no curl | whole change: build the tree with the curl `internal/pushnotify/send.go` and `pushnotify.go` and point `TUIOS_E2E_BIN` at it | `TestNotifyNeedsNoCurl` ("after the approval, with no curl: want 1 request per provider, got ntfy 0, pushover 0, webhook 0"). The other three `TestNotify` tests pass on that build, since curl is on PATH for them. Positive half: the same test passes on the net/http build | **caught** |
 
 The test of a secret in the daemon log reads `daemon.log` at
 `TUIOS_LOG_LEVEL=trace` and first checks that the log records the ntfy send,

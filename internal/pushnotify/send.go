@@ -3,28 +3,29 @@ package pushnotify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"net/url"
-	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The requests go through curl rather than net/http, for the reason
-// internal/release does: net/http and crypto/tls are over 2 MB of the binary,
-// and nothing else in tuios makes an HTTPS request. curl honours HTTPS_PROXY,
-// NO_PROXY and the system certificate store.
-//
-// Everything that varies goes in a curl config on stdin, never in an
-// argument, so another user's ps cannot read a token, an address or the
-// message. The body goes as data-raw, which unlike data never reads a file
-// for a value that starts with @.
+// Every request goes through one dedicated http.Client, never
+// http.DefaultClient. It reads HTTP_PROXY, HTTPS_PROXY and NO_PROXY, and uses
+// the system certificate store. The token travels in a header and is never
+// logged. This package logs nothing, and an error names no address beyond the
+// host.
 
 // Provider is one place a notification goes.
 type Provider struct {
@@ -89,18 +90,37 @@ func hostOf(raw string) string {
 
 // Client is how every provider sends.
 type Client struct {
-	// allowHTTP lets a redirect go to a plain http address.
-	allowHTTP bool
+	http *http.Client
 }
+
+// errRedirectHTTP and errRedirectLimit are what CheckRedirect gives, so post
+// can tell them from a transport failure.
+var (
+	errRedirectHTTP  = errors.New("redirect to plain http")
+	errRedirectLimit = errors.New("too many redirects")
+)
+
+// maxResponseBody bounds how much of an answer is read. The body is not shown,
+// since a provider may echo what it was sent.
+const maxResponseBody = 4 << 10
 
 // NewClient is the client every provider sends with. It follows at most
 // three redirects, and only to https unless allowHTTP, so a redirect cannot
 // send the message and its token on in plain text.
-func NewClient(allowHTTP bool) *Client { return &Client{allowHTTP: allowHTTP} }
-
-// configQuote is a value as a quoted string of a curl config file, which
-// takes \\, \", \n, \r and \t as escapes.
-var configQuote = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+func NewClient(allowHTTP bool) *Client {
+	return &Client{http: &http.Client{
+		Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) > maxRedirects {
+				return errRedirectLimit
+			}
+			if req.URL.Scheme != "https" && !allowHTTP {
+				return errRedirectHTTP
+			}
+			return nil
+		},
+	}}
+}
 
 // post sends one request and turns any failure into an error that says what
 // happened and what to do, with no address beyond the host.
@@ -108,79 +128,58 @@ func (c *Client) post(ctx context.Context, rawURL, contentType string, body []by
 	if u, err := url.Parse(rawURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return errors.New("the url is not an http or https address. Check it in config.toml")
 	}
-	curl, err := exec.LookPath("curl")
+	ctx, cancel := context.WithTimeout(ctx, SendTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
-		return errors.New("tuios sends notifications with curl, which is not on PATH. Install curl")
+		return errors.New("the url is not an http or https address. Check it in config.toml")
 	}
-	var cfg strings.Builder
-	line := func(key, val string) { fmt.Fprintf(&cfg, "%s = \"%s\"\n", key, configQuote.Replace(val)) }
-	line("url", rawURL)
-	line("user-agent", "tuios-notify")
-	line("header", "Content-Type: "+contentType)
+	req.Header.Set("User-Agent", "tuios-notify")
+	req.Header.Set("Content-Type", contentType)
 	for _, h := range headers {
-		line("header", h)
-	}
-	line("data-raw", string(body))
-	redir := "=https"
-	if c.allowHTTP {
-		redir = "=http,https"
-	}
-	cmd := exec.CommandContext(ctx, curl,
-		"--config", "-",
-		"--silent", "--show-error",
-		"--location", "--max-redirs", strconv.Itoa(maxRedirects), "--proto-redir", redir,
-		"--max-time", strconv.Itoa(int(SendTimeout/time.Second)),
-		"--output", nullDevice(),
-		"--write-out", "%{http_code}",
-	)
-	var out, stderr bytes.Buffer
-	cmd.Stdin = strings.NewReader(cfg.String())
-	cmd.Stdout, cmd.Stderr = &out, &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf("no answer in %s. Check that the server is up and this machine can reach it", SendTimeout)
+		if name, value, ok := strings.Cut(h, ": "); ok {
+			req.Header.Set(name, value)
 		}
-		code := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			code = exitErr.ExitCode()
-		}
-		return describeCurlExit(code)
 	}
-	status, _ := strconv.Atoi(strings.TrimSpace(out.String()))
-	if status >= 200 && status < 300 {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return describeTransport(ctx, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBody))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
-	return describeStatus(status)
+	return describeStatus(resp.StatusCode)
 }
 
-// nullDevice is where curl writes the answer's body, which is not shown: a
-// provider may echo what it was sent.
-func nullDevice() string {
-	if isWindows {
-		return "NUL"
-	}
-	return "/dev/null"
-}
-
-// describeCurlExit says what a curl exit status means. curl's own message is
-// not shown, since it can name the address.
-func describeCurlExit(code int) error {
-	switch code {
-	case 6:
-		return errors.New("the host name does not resolve. Check the url")
-	case 7:
-		return errors.New("the connection was refused. Check that the server is up")
-	case 28:
-		return fmt.Errorf("no answer in %s. Check that the server is up and this machine can reach it", SendTimeout)
-	case 1:
+// describeTransport says what a failed request means. The error from net/http
+// is not shown, since it names the full address.
+func describeTransport(ctx context.Context, err error) error {
+	var dnsErr *net.DNSError
+	var netErr net.Error
+	var certErr *tls.CertificateVerificationError
+	var alertErr tls.AlertError
+	var recordErr tls.RecordHeaderError
+	var unknownAuth x509.UnknownAuthorityError
+	var hostErr x509.HostnameError
+	var invalidErr x509.CertificateInvalidError
+	switch {
+	case errors.Is(err, errRedirectHTTP):
 		return errors.New("the server redirected to a plain http address. Set notify.allow_http_redirects = true to allow it")
-	case 47:
+	case errors.Is(err, errRedirectLimit):
 		return fmt.Errorf("the server redirected more than %d times. Check the url", maxRedirects)
-	case 35, 51, 53, 54, 58, 59, 60, 77, 80, 83, 90, 91:
+	case ctx.Err() != nil, errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		return fmt.Errorf("no answer in %s. Check that the server is up and this machine can reach it", SendTimeout)
+	case errors.As(err, &dnsErr):
+		return errors.New("the host name does not resolve. Check the url")
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return errors.New("the connection was refused. Check that the server is up")
+	case errors.As(err, &certErr), errors.As(err, &alertErr), errors.As(err, &recordErr),
+		errors.As(err, &unknownAuth), errors.As(err, &hostErr), errors.As(err, &invalidErr):
 		return errors.New("the TLS connection failed. Check the certificate of the server")
 	}
-	return fmt.Errorf("the request failed: curl exited with status %d", code)
+	return errors.New("the request failed. Check the url and that this machine can reach the server")
 }
 
 // statusText names the status codes a provider is likely to answer.

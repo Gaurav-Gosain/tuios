@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -437,4 +438,73 @@ func TestNotifySendsAHeldItemWhenThePersonStaysAway(t *testing.T) {
 	}
 	fake.save(t, "notify-received.json")
 	alive(t, term, "after the held notification")
+}
+
+// pathWithout makes a directory that links every program on PATH except the
+// named ones, and returns it as the whole PATH.
+func pathWithout(t *testing.T, skip ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	skipped := map[string]bool{}
+	for _, s := range skip {
+		skipped[s] = true
+	}
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			link := filepath.Join(dir, e.Name())
+			if skipped[e.Name()] {
+				continue
+			}
+			if _, err := os.Lstat(link); err == nil {
+				continue
+			}
+			_ = os.Symlink(filepath.Join(p, e.Name()), link)
+		}
+	}
+	return dir
+}
+
+// TestNotifyNeedsNoCurl runs the daemon and the CLI with no curl on PATH. The
+// daemon sends the approval and tuios notify test reaches every provider, so
+// sending depends on nothing outside the binary.
+//
+// Negative control: with the curl implementation of internal/pushnotify
+// (git show of send.go before the net/http change) the daemon sends nothing
+// and notify test says curl is not on PATH.
+func TestNotifyNeedsNoCurl(t *testing.T) {
+	t.Setenv("PATH", pathWithout(t, "curl"))
+	if p, err := exec.LookPath("curl"); err == nil {
+		t.Fatalf("curl is still on PATH at %s", p)
+	}
+	t.Setenv(pushEnvName, pushEnvToken)
+	fake := newFakePush(t)
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeNotifyConfig(t, base, fake, 120, 0)
+
+	if out, err := tuiosCLI(t, base, "new", "e2e-nocurl", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-nocurl", "needs_input",
+		"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: make test"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	fake.waitCounts(t, 1, "after the approval, with no curl")
+
+	out, err := tuiosCLI(t, base, "notify", "test")
+	if err != nil {
+		t.Fatalf("notify test with no curl: %v\n%s", err, out)
+	}
+	host := strings.TrimPrefix(fake.srv.URL, "http://")
+	for _, name := range []string{"ntfy", "pushover", "webhook"} {
+		if !strings.Contains(out, name+" ("+host+"): sent.") {
+			t.Errorf("notify test does not report %s as sent:\n%s", name, out)
+		}
+	}
+	fake.waitCounts(t, 2, "after notify test, with no curl")
+	fake.save(t, "notify-nocurl-received.json")
 }
