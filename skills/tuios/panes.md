@@ -375,16 +375,44 @@ other window-manager verbs. Do not pin a pane the person did not ask about.
 
 ### The escape hatch
 
-A keybinding with no verb of its own is reachable by name:
+A keybinding with no verb of its own is reachable by name. Every action
+`tuios keybinds list` prints runs this way:
 
 ```sh
 tuios run-command -s work ToggleZoom
+tuios run-command -s work toggle_spotlight
+tuios run-command -s work Press "ctrl+b ?"
 tuios run-command --list
 ```
 
-A name that is not a command is an error. `run-command` reports that the command
-ran and nothing about what it changed, and from a pane it needs `admin`. Prefer
-a verb where one exists.
+`Press` sends keys through the window manager, as the person would: the
+leader, a prefix, copy mode or an open dialog gets them. An action and
+`Press` need a client attached.
+
+A name that is not a command or an action is an error. `run-command` reports
+that the command ran and nothing about what it changed, and from a pane it
+needs `admin`. Prefer a verb where one exists.
+
+### A tape of steps
+
+For several steps in a row, write them in a tape and run it with
+`tuios tape exec`. It returns when the tape ends, and exits non-zero at the
+first step that fails, with the line:
+
+```sh
+cat > steps.tape <<'TAPE'
+Run "make build"
+WaitFor text "BUILD (OK|FAILED)" 120s
+Expect text "BUILD OK"
+Action equalize_splits
+TAPE
+tuios tape exec -s work steps.tape
+```
+
+`WaitFor` holds until a condition holds: `text "re"`, `pane "name"`,
+`gone "name"`, `focus "name"`, `panes N`, `agent "state"`, `workspace N` or
+`mode window`. Add `in "pane"` to read a pane other than the focused one.
+`Expect` checks once. Prefer these to `Sleep`.
 
 ## Naming things for the person watching
 
