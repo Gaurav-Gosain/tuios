@@ -436,3 +436,72 @@ func TestHerdrPluginPanes(t *testing.T) {
 		t.Fatalf("plugin.pane.close left the pane\n%s", term.Snapshot())
 	}
 }
+
+// TestHerdrPluginPalette runs an enabled plugin's action and opens its popup
+// from the command palette, as the person does. A plugin that is not enabled
+// has no row: its action is not offered, and nothing of it runs.
+//
+// Negative controls (NEGATIVE_CONTROLS.md, "herdr plugins"): with the
+// pluginPaletteItems call cut from rebuildPaletteItems, the palette never
+// lists "Say hello"; with the Runnable check cut from pluginPaletteItems,
+// the palette offers the hidden plugin's action.
+func TestHerdrPluginPalette(t *testing.T) {
+	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", "e2e.panes"}, "actions", "panes", "hidden"))
+	const id = "e2e.actions"
+
+	openPaletteQuery := func(query string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
+			t.Fatalf("open palette: %v", err)
+		}
+		waitPaletteOpen(t, term, "for "+query)
+		if err := term.SendKeys(query); err != nil {
+			t.Fatalf("type palette query: %v", err)
+		}
+	}
+
+	// The hidden plugin is off: its action is not in the palette.
+	openPaletteQuery("Never offered")
+	time.Sleep(500 * time.Millisecond)
+	if screenHas(term.Screen(), "E2E hidden") {
+		t.Fatalf("the palette offers an action of a plugin that is off\n%s", term.Snapshot())
+	}
+	closePalette(t, term, "after the hidden query")
+
+	// The enabled action runs from the palette, with the palette as its
+	// source.
+	openPaletteQuery("Say hello")
+	if err := term.WaitForText("E2E actions: Say hello", uiTimeout); err != nil {
+		t.Fatalf("the palette never listed the plugin action: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "herdr-plugin-palette")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("activate the plugin action: %v", err)
+	}
+	waitPaletteClosed(t, term, "after the plugin action")
+	run := waitPluginFile(t, base, id, "run-0.env", "herdr=")
+	var ctx map[string]any
+	if err := json.Unmarshal([]byte(envValue(run, "context")), &ctx); err != nil || ctx["invocation_source"] != "palette" {
+		t.Fatalf("the palette's action saw context %q (%v), want invocation_source palette", envValue(run, "context"), err)
+	}
+	if envValue(run, "herdr") != "ok" {
+		t.Fatalf("the palette's action could not reach herdr's CLI:\n%s", run)
+	}
+	savePluginArtifact(t, base, id, "run-0.env")
+
+	// The enabled pane opens from the palette as a popup.
+	openPaletteQuery("E2E popup")
+	if err := term.WaitForText("E2E panes: E2E popup", uiTimeout); err != nil {
+		t.Fatalf("the palette never listed the plugin pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("activate the plugin pane: %v", err)
+	}
+	if err := term.WaitForText("PLUGIN-PANE-READY pop", uiTimeout); err != nil {
+		t.Fatalf("the palette's popup never showed its marker: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "herdr-plugin-palette-popup")
+	if _, err := os.Stat(filepath.Join(pluginState(base, "e2e.hidden"), "ran")); err == nil {
+		t.Fatalf("an action of a plugin that is off ran")
+	}
+}

@@ -1,0 +1,9 @@
+id = "e2e.hidden"
+name = "E2E hidden"
+version = "1.0.0"
+min_herdr_version = "0.9.3"
+
+[[actions]]
+id = "never"
+title = "Never offered"
+command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/ran\""]
