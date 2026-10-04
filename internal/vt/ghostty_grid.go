@@ -339,6 +339,13 @@ func (t *GhosttyTerminal) styleFor(styleID uint16, x int) uv.Style {
 // overrides first and the user's theme second, and pass through as indices
 // when nothing claimed them.
 func (t *GhosttyTerminal) convertStyle(gs *gh.Style) uv.Style {
+	return t.convertStyleIn(gs, nil)
+}
+
+// convertStyleIn is convertStyle with the palette taken from pal, a copy made
+// under the lock, so a reader that holds no lock can convert. A nil pal reads
+// the terminal's own palette, which needs the lock.
+func (t *GhosttyTerminal) convertStyleIn(gs *gh.Style, pal *ghosttyPalette) uv.Style {
 	var s uv.Style
 	if gs.Bold() {
 		s.Attrs |= uv.AttrBold
@@ -373,20 +380,26 @@ func (t *GhosttyTerminal) convertStyle(gs *gh.Style) uv.Style {
 	case gh.UnderlineDashed:
 		s.Underline = ansi.UnderlineDashed
 	}
-	s.Fg = t.resolveStyleColor(gs.FgColor())
-	s.Bg = t.resolveStyleColor(gs.BgColor())
-	s.UnderlineColor = t.resolveStyleColor(gs.UnderlineColor())
+	s.Fg = t.resolveStyleColor(gs.FgColor(), pal)
+	s.Bg = t.resolveStyleColor(gs.BgColor(), pal)
+	s.UnderlineColor = t.resolveStyleColor(gs.UnderlineColor(), pal)
 	return s
 }
 
 // resolveStyleColor applies the pure emulator's paletteEntry rule.
-func (t *GhosttyTerminal) resolveStyleColor(sc gh.StyleColor) color.Color {
+func (t *GhosttyTerminal) resolveStyleColor(sc gh.StyleColor, pal *ghosttyPalette) color.Color {
 	switch sc.Tag {
 	case gh.StyleColorRGB:
 		return color.RGBA{R: sc.RGB.R, G: sc.RGB.G, B: sc.RGB.B, A: 0xff}
 	case gh.StyleColorPalette:
 		i := int(sc.Palette)
-		if c := t.paletteEntryLocked(i); c != nil {
+		var c color.Color
+		if pal != nil {
+			c = pal[i]
+		} else {
+			c = t.paletteEntryLocked(i)
+		}
+		if c != nil {
 			return c
 		}
 		if i < 16 {
@@ -414,6 +427,19 @@ func (t *GhosttyTerminal) paletteEntryLocked(i int) color.Color {
 		return t.themePal[i]
 	}
 	return nil
+}
+
+// ghosttyPalette is a copy of every paletteEntryLocked answer.
+type ghosttyPalette [256]color.Color
+
+// paletteLocked copies the palette, for a reader that converts styles after
+// it lets go of the lock.
+func (t *GhosttyTerminal) paletteLocked() *ghosttyPalette {
+	var pal ghosttyPalette
+	for i := range pal {
+		pal[i] = t.paletteEntryLocked(i)
+	}
+	return &pal
 }
 
 // hyperlinkAt fetches the hyperlink URI for an active-screen cell.

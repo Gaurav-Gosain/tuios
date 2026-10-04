@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"sync"
 	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -148,8 +149,30 @@ func readContentBytes(data []byte, i int) ([]byte, int, bool) {
 // reader copies the lines while it holds the terminal's lock and decodes them
 // after releasing it, so the terminal is held for a copy of the encoded bytes
 // and not for the decode.
+//
+// A backend that cannot copy its lines cheaply copies something else under the
+// lock and makes the lines from it on first use: see build.
 type ScrollbackCopy struct {
 	sb *Scrollback
+	// build, when set, makes sb. It runs once, on the first call that reads
+	// the copy, which is after the reader let go of the terminal's lock.
+	build func() *Scrollback
+	once  sync.Once
+}
+
+// lazyScrollbackCopy is a copy whose lines build makes on first use.
+//
+//nolint:unused // Only the ghostty backend calls it (ghostty_scrollback_iter.go).
+func lazyScrollbackCopy(build func() *Scrollback) *ScrollbackCopy {
+	return &ScrollbackCopy{build: build}
+}
+
+// lines is the copy's ring, made now if the copy is lazy.
+func (c *ScrollbackCopy) lines() *Scrollback {
+	if c.build != nil {
+		c.once.Do(func() { c.sb = c.build() })
+	}
+	return c.sb
 }
 
 // copyLines copies the lines from index from to end-1, with their row flags,
@@ -187,7 +210,7 @@ func (sb *Scrollback) copyLines(from, end int) *ScrollbackCopy {
 
 // Len is the number of lines in the copy.
 func (c *ScrollbackCopy) Len() int {
-	if c == nil || c.sb == nil {
+	if c == nil || c.lines() == nil {
 		return 0
 	}
 	return c.sb.Len()

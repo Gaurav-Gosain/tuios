@@ -86,15 +86,49 @@ func (t *GhosttyTerminal) ScrollbackText(from, end int, fn func(index, width int
 	}
 }
 
-// CopyScrollback implements Terminal.CopyScrollback. The lines are read and
-// encoded into a ring of their own, which costs what the reads cost, so here
-// the copy does not shorten the time the lock is held; it keeps the reader's
-// code the same for both backends.
+// CopyScrollback implements Terminal.CopyScrollback. The library has no copy
+// of its lines that is cheap to take, and reading them one cell at a time
+// cost about 50 ms and 40 MB for 1000 rows of 200 columns, all under the
+// lock. So under the lock the library writes a snapshot of the terminal, a
+// few hundred bytes a row, and the palette is copied. The lines are read out
+// of the decoded snapshot on first use of the copy, after the caller let go
+// of the lock.
 func (t *GhosttyTerminal) CopyScrollback(from, end int) *ScrollbackCopy {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.flushRestoreLocked()
-	src, from, end := t.historyRangeLocked(from, end)
+	if t.closed.Load() {
+		return &ScrollbackCopy{}
+	}
+	from, end = max(from, 0), min(end, t.scrollbackLenLocked())
+	if from >= end {
+		return &ScrollbackCopy{}
+	}
+	data, err := t.term.Snapshot()
+	if err != nil || len(data) == 0 {
+		return t.copyScrollbackLocked(from, end)
+	}
+	alt := t.activeAltLiveLocked()
+	width, pal := t.width, t.paletteLocked()
+	return lazyScrollbackCopy(func() *Scrollback {
+		src := decodeHistorySnapshot(data, alt)
+		if src == nil {
+			return nil
+		}
+		defer src.Close()
+		c := &ScrollbackCopy{}
+		for i := from; i < end; i++ {
+			c.push(t.readHistoryLine(src, i, width, pal),
+				wrapFlag(ghosttyRowWrap(src, gh.Point{Tag: gh.PointTagHistory, Y: uint32(i)})), end-from)
+		}
+		return c.sb
+	})
+}
+
+// copyScrollbackLocked reads the lines one by one under the lock, for when the
+// library writes no snapshot.
+func (t *GhosttyTerminal) copyScrollbackLocked(from, end int) *ScrollbackCopy {
+	src := t.historySourceLocked()
 	if src == nil {
 		return &ScrollbackCopy{}
 	}
@@ -104,6 +138,26 @@ func (t *GhosttyTerminal) CopyScrollback(from, end int) *ScrollbackCopy {
 			wrapFlag(ghosttyRowWrap(src, gh.Point{Tag: gh.PointTagHistory, Y: uint32(i)})), end-from)
 	}
 	return c
+}
+
+// decodeHistorySnapshot makes a terminal of its own from a snapshot. When the
+// alternate screen was active, the copy is switched back to the main screen,
+// whose history is the one every reader wants (see altHistoryLocked). It
+// returns nil when the snapshot does not decode. The caller closes it.
+func decodeHistorySnapshot(data []byte, alt bool) *gh.Terminal {
+	dec, err := gh.NewSnapshotDecoderBytes(data)
+	if err != nil {
+		return nil
+	}
+	defer dec.Close()
+	src, err := dec.Decode()
+	if err != nil || src == nil {
+		return nil
+	}
+	if alt {
+		src.VTWrite([]byte("\x1b[?1049l\x1b[?1047l"))
+	}
+	return src
 }
 
 // ScrollbackGeneration is a number that changes whenever the history may
