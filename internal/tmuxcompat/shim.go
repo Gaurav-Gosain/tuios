@@ -70,6 +70,10 @@ type Shim struct {
 	// created is the session new-session made last, for control mode to
 	// attach to.
 	created string
+	// daemonPID is the daemon's pid, read once (pidRead) when a format
+	// asks for #{pid}.
+	daemonPID int
+	pidRead   bool
 }
 
 // handler runs one command. It returns the outcome to log, detail for the
@@ -363,8 +367,8 @@ func (s *Shim) callerPane(v *view) *pane {
 }
 
 // expand expands a format and turns missing variables into log detail.
-func expand(format string, vars map[string]string) (string, []string) {
-	out, missing := Expand(format, vars)
+func (s *Shim) expand(format string, vars map[string]string) (string, []string) {
+	out, missing := expandWith(format, vars, s.serverVar)
 	var detail []string
 	for _, m := range missing {
 		detail = append(detail, "format: no value for "+m)
@@ -450,7 +454,7 @@ func (s *Shim) printNew(id, format, cwd string) []string {
 	if vars["pane_current_path"] == "" {
 		vars["pane_current_path"] = cmpOr(cwd, s.Cwd)
 	}
-	out, detail := expand(format, vars)
+	out, detail := s.expand(format, vars)
 	s.println(out)
 	return detail
 }
@@ -732,7 +736,7 @@ func (s *Shim) displayMessage(name string, args []string) (string, []string, err
 	}
 	out, detail := format, []string(nil)
 	if !p.Has('l') {
-		out, detail = expand(format, vars)
+		out, detail = s.expand(format, vars)
 	}
 	if !p.Has('p') {
 		return OutcomeIgnored, detail, nil
@@ -785,7 +789,7 @@ func (s *Shim) listPanes(name string, args []string) (string, []string, error) {
 	}
 	var detail []string
 	for _, pn := range list {
-		out, d := expand(format, s.paneVars(pn))
+		out, d := s.expand(format, s.paneVars(pn))
 		detail = mergeDetail(detail, d)
 		s.println(out)
 	}
@@ -836,7 +840,7 @@ func (s *Shim) listWindows(name string, args []string) (string, []string, error)
 			if a := sv.active(ws); a != nil {
 				vars = s.paneVars(a)
 			}
-			out, d := expand(format, vars)
+			out, d := s.expand(format, vars)
 			detail = mergeDetail(detail, d)
 			s.println(out)
 		}
@@ -860,7 +864,7 @@ func (s *Shim) listSessions(name string, args []string) (string, []string, error
 	}
 	var detail []string
 	for _, sv := range v.sessions {
-		out, d := expand(format, s.sessionVars(sv))
+		out, d := s.expand(format, s.sessionVars(sv))
 		detail = mergeDetail(detail, d)
 		s.println(out)
 	}

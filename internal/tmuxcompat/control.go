@@ -556,31 +556,76 @@ func windowName(sv *sessionView, ws int) string {
 	return vars["window_name"]
 }
 
-// layoutOf is a tmux layout string for panes: the checksum, then the
-// bounding box with each pane's size, offset and number. tuios places panes
-// freely, so the one container lists every pane rather than a split tree.
+// layoutOf is a tmux layout string for panes (window_layout): the checksum,
+// then a tree of cells, each its size and offset, a leaf ending in its pane's
+// number. Tiled panes are cut into the split tree tmux would hold: columns
+// ({...}) where a vertical line crosses no pane, else rows ([...]). Panes no
+// straight line separates, such as overlapping floating windows, are listed
+// in one container at their own positions, which is the closest a tmux
+// layout can say.
 func layoutOf(panes []*pane) string {
 	if len(panes) == 0 {
 		return ""
 	}
+	body := layoutCell(panes)
+	return fmt.Sprintf("%04x,%s", layoutChecksum(body), body)
+}
+
+func layoutCell(panes []*pane) string {
 	cell := func(w, h, x, y int) string {
 		return strconv.Itoa(w) + "x" + strconv.Itoa(h) + "," + strconv.Itoa(x) + "," + strconv.Itoa(y)
 	}
-	var body string
 	if len(panes) == 1 {
 		p := panes[0]
-		body = cell(p.Width, p.Height, p.X, p.Y) + "," + strconv.FormatUint(uint64(p.Num), 10)
-	} else {
-		minX, minY, maxX, maxY := panes[0].X, panes[0].Y, 0, 0
-		var kids []string
-		for _, p := range panes {
-			minX, minY = min(minX, p.X), min(minY, p.Y)
-			maxX, maxY = max(maxX, p.X+p.Width), max(maxY, p.Y+p.Height)
-			kids = append(kids, cell(p.Width, p.Height, p.X, p.Y)+","+strconv.FormatUint(uint64(p.Num), 10))
-		}
-		body = cell(maxX-minX, maxY-minY, minX, minY) + "{" + strings.Join(kids, ",") + "}"
+		return cell(p.Width, p.Height, p.X, p.Y) + "," + strconv.FormatUint(uint64(p.Num), 10)
 	}
-	return fmt.Sprintf("%04x,%s", layoutChecksum(body), body)
+	minX, minY, maxX, maxY := bounds(panes)
+	head := cell(maxX-minX, maxY-minY, minX, minY)
+	join := func(groups [][]*pane, open, close string) string {
+		kids := make([]string, len(groups))
+		for i, g := range groups {
+			kids[i] = layoutCell(g)
+		}
+		return head + open + strings.Join(kids, ",") + close
+	}
+	if cols := cutPanes(panes, func(p *pane) (int, int) { return p.X, p.X + p.Width }); len(cols) > 1 {
+		return join(cols, "{", "}")
+	}
+	if rows := cutPanes(panes, func(p *pane) (int, int) { return p.Y, p.Y + p.Height }); len(rows) > 1 {
+		return join(rows, "[", "]")
+	}
+	leaves := make([][]*pane, len(panes))
+	for i, p := range panes {
+		leaves[i] = []*pane{p}
+	}
+	return join(leaves, "{", "}")
+}
+
+// cutPanes splits panes into the groups that lines across one axis separate:
+// span gives a pane's start and end on that axis. One group means no line
+// separates them.
+func cutPanes(panes []*pane, span func(*pane) (int, int)) [][]*pane {
+	sorted := slices.Clone(panes)
+	slices.SortStableFunc(sorted, func(a, b *pane) int {
+		sa, _ := span(a)
+		sb, _ := span(b)
+		return sa - sb
+	})
+	var groups [][]*pane
+	end := 0
+	for _, p := range sorted {
+		s, e := span(p)
+		if len(groups) == 0 || s < end {
+			if len(groups) == 0 {
+				groups = append(groups, nil)
+			}
+			groups[len(groups)-1] = append(groups[len(groups)-1], p)
+		} else {
+			groups = append(groups, []*pane{p})
+		}
+		end = max(end, e)
+	}
+	return groups
 }
 
 // layoutChecksum is tmux's layout checksum (layout_checksum in layout.c).

@@ -55,7 +55,7 @@ func (s *Shim) listClients(name string, args []string) (string, []string, error)
 		vars["client_height"] = strconv.Itoa(sv.height)
 		vars["client_termname"] = "tuios"
 		vars["client_flags"] = "attached,focused"
-		out, d := expand(format, vars)
+		out, d := s.expand(format, vars)
 		detail = mergeDetail(detail, d)
 		s.println(out)
 	}

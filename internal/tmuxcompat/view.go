@@ -28,7 +28,13 @@ type pane struct {
 	// History is how many lines of scrollback the pane holds above its
 	// screen, -1 when the daemon does not say (history_rows).
 	History int
-	sess    *sessionView
+	// PID is the process the pane started and TTY its terminal device, 0
+	// and "" when the daemon does not say (pid, tty): a pane on another
+	// machine, or a daemon from before they were listed.
+	PID    int
+	TTY    string
+	Zoomed bool
+	sess   *sessionView
 }
 
 // sessionView is one tuios session: a tmux session. Its windows are the
@@ -39,19 +45,21 @@ type sessionView struct {
 	id string
 	// num is the number in the session's tmux id: 0 when the shim serves one
 	// session, and sessionNumber(id) when it serves them all.
-	num       uint32
-	server    bool
-	activity  int64
-	created   int64
-	attached  bool
-	width     int
-	height    int
-	panes     []pane
-	current   int
-	focused   string
-	wsFocus   map[int]string
-	wsName    map[int]string
-	wsCount   map[int]int
+	num      uint32
+	server   bool
+	activity int64
+	created  int64
+	attached bool
+	width    int
+	height   int
+	panes    []pane
+	current  int
+	focused  string
+	wsFocus  map[int]string
+	wsName   map[int]string
+	wsCount  map[int]int
+	// wsHistory is each workspace's focus history, newest first.
+	wsHistory map[int][]string
 	workspace []int // every workspace number the session has
 }
 
@@ -190,6 +198,9 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 			Foreground  string `json:"foreground_cmd"`
 			History     *int   `json:"history_rows"`
 			Scratch     bool   `json:"scratch"`
+			PID         int    `json:"pid"`
+			TTY         string `json:"tty"`
+			Zoomed      bool   `json:"zoomed"`
 		} `json:"windows"`
 		Focused string `json:"focused_window_id"`
 		Current int    `json:"current_workspace"`
@@ -198,19 +209,20 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 		return nil, fmt.Errorf("read list-windows: %w", err)
 	}
 	sv := &sessionView{
-		name:     info.Name,
-		id:       info.ID,
-		server:   server,
-		activity: info.LastActive,
-		created:  info.Created,
-		attached: info.Attached,
-		width:    info.Width,
-		height:   info.Height,
-		current:  wl.Current,
-		focused:  wl.Focused,
-		wsFocus:  map[int]string{},
-		wsName:   map[int]string{},
-		wsCount:  map[int]int{},
+		name:      info.Name,
+		id:        info.ID,
+		server:    server,
+		activity:  info.LastActive,
+		created:   info.Created,
+		attached:  info.Attached,
+		width:     info.Width,
+		height:    info.Height,
+		current:   wl.Current,
+		focused:   wl.Focused,
+		wsFocus:   map[int]string{},
+		wsName:    map[int]string{},
+		wsCount:   map[int]int{},
+		wsHistory: map[int][]string{},
 	}
 	if server {
 		sv.num = sessionNumber(cmpOr(info.ID, info.Name))
@@ -235,6 +247,9 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 			Height:    w.Height,
 			Command:   w.Foreground,
 			History:   -1,
+			PID:       w.PID,
+			TTY:       w.TTY,
+			Zoomed:    w.Zoomed,
 		}
 		if w.History != nil {
 			p.History = *w.History
@@ -252,9 +267,10 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 	}
 	var ws struct {
 		Workspaces []struct {
-			Workspace int    `json:"workspace"`
-			Name      string `json:"name"`
-			Focused   string `json:"focused_window_id"`
+			Workspace int      `json:"workspace"`
+			Name      string   `json:"name"`
+			Focused   string   `json:"focused_window_id"`
+			History   []string `json:"focus_history"`
 		} `json:"workspaces"`
 	}
 	if err := json.Unmarshal(raw, &ws); err != nil {
@@ -270,6 +286,9 @@ func (s *Shim) loadSession(info listedSession, server bool) (*sessionView, error
 		}
 		if w.Focused != "" {
 			sv.wsFocus[w.Workspace] = w.Focused
+		}
+		if len(w.History) > 0 {
+			sv.wsHistory[w.Workspace] = w.History
 		}
 	}
 	return sv, nil
@@ -683,7 +702,6 @@ func (s *Shim) sessionVars(sv *sessionView) map[string]string {
 		"host":       host,
 		"host_short": short,
 		"version":    Version,
-		"pid":        strconv.Itoa(s.ServerPID),
 	}
 	if s.Dir != "" {
 		vars["socket_path"] = SocketPath(s.Dir)
@@ -717,8 +735,37 @@ func (s *Shim) windowVars(sv *sessionView, ws int, vars map[string]string) {
 			name = strconv.Itoa(ws)
 		}
 	}
-	minX, minY, maxX, maxY := 0, 0, 0, 0
-	for i, p := range on {
+	minX, minY, maxX, maxY := bounds(on)
+	zoomed := false
+	for _, p := range on {
+		zoomed = zoomed || p.Zoomed
+	}
+	flags := ""
+	if ws == sv.current {
+		flags = "*"
+	}
+	if zoomed {
+		flags += "Z"
+	}
+	vars["window_id"] = sv.windowID(ws)
+	vars["window_index"] = strconv.Itoa(ws)
+	vars["window_name"] = name
+	vars["window_active"] = boolString(ws == sv.current)
+	vars["window_panes"] = strconv.Itoa(len(on))
+	vars["window_flags"] = flags
+	vars["window_width"] = strconv.Itoa(maxX - minX)
+	vars["window_height"] = strconv.Itoa(maxY - minY)
+	vars["automatic-rename"] = boolString(auto)
+	vars["window_zoomed_flag"] = boolString(zoomed)
+	layout := layoutOf(on)
+	vars["window_layout"] = layout
+	vars["window_visible_layout"] = layout
+}
+
+// bounds is the box around panes: the least left and top, and the greatest
+// right and bottom edge (exclusive).
+func bounds(panes []*pane) (minX, minY, maxX, maxY int) {
+	for i, p := range panes {
 		if i == 0 || p.X < minX {
 			minX = p.X
 		}
@@ -732,19 +779,37 @@ func (s *Shim) windowVars(sv *sessionView, ws int, vars map[string]string) {
 			maxY = p.Y + p.Height
 		}
 	}
-	flags := ""
-	if ws == sv.current {
-		flags = "*"
+	return
+}
+
+// serverVar answers the format variables that cost a daemon call, so they
+// are read only when a format names one. pid is the daemon's, the process
+// that is the shim's tmux server. It falls back to the pid TMUX names when
+// the daemon does not say.
+func (s *Shim) serverVar(name string) (string, bool) {
+	if name != "pid" {
+		return "", false
 	}
-	vars["window_id"] = sv.windowID(ws)
-	vars["window_index"] = strconv.Itoa(ws)
-	vars["window_name"] = name
-	vars["window_active"] = boolString(ws == sv.current)
-	vars["window_panes"] = strconv.Itoa(len(on))
-	vars["window_flags"] = flags
-	vars["window_width"] = strconv.Itoa(maxX - minX)
-	vars["window_height"] = strconv.Itoa(maxY - minY)
-	vars["automatic-rename"] = boolString(auto)
+	if !s.pidRead {
+		s.pidRead = true
+		if s.Caller != nil {
+			if raw, err := s.Caller.Call("hello", map[string]any{}); err == nil {
+				var h struct {
+					PID int `json:"pid"`
+				}
+				if json.Unmarshal(raw, &h) == nil {
+					s.daemonPID = h.PID
+				}
+			}
+		}
+	}
+	if s.daemonPID > 0 {
+		return strconv.Itoa(s.daemonPID), true
+	}
+	if s.ServerPID > 0 {
+		return strconv.Itoa(s.ServerPID), true
+	}
+	return "", false
 }
 
 // paneVars is the whole context for one pane.
@@ -766,6 +831,19 @@ func (s *Shim) paneVars(p *pane) map[string]string {
 	vars["pane_in_mode"] = "0"
 	vars["pane_marked"] = "0"
 	vars["pane_synchronized"] = "0"
+	// A pane touches an edge of its window when it is on the edge of the
+	// box around the workspace's panes.
+	minX, minY, maxX, maxY := bounds(p.sess.panesOn(p.Workspace))
+	vars["pane_at_left"] = boolString(p.X <= minX)
+	vars["pane_at_top"] = boolString(p.Y <= minY)
+	vars["pane_at_right"] = boolString(p.X+p.Width >= maxX)
+	vars["pane_at_bottom"] = boolString(p.Y+p.Height >= maxY)
+	if p.PID > 0 {
+		vars["pane_pid"] = strconv.Itoa(p.PID)
+	}
+	if p.TTY != "" {
+		vars["pane_tty"] = p.TTY
+	}
 	// tmux names the foreground process. tuios names it only when it is not
 	// the pane's shell, so an empty one is the shell.
 	shell := ""

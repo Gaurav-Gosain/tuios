@@ -131,7 +131,8 @@ func TestExpand(t *testing.T) {
 		{"#{!=:#{window_index},2}", "0", nil},
 		{"#[fg=red]#{pane_id}#[default]", "#[fg=red]%3#[default]", nil},
 		{"#{nope}-#{pane_id}", "-%3", []string{"nope"}},
-		{"#{t:window_activity}", "", []string{"t:window_activity"}},
+		{"#{t:window_activity}", "", []string{"window_activity"}},
+		{"#{S:#{session_name}}", "", []string{"modifier S"}},
 		{"#{unclosed", "#{unclosed", nil},
 	}
 	for _, c := range cases {
