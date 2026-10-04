@@ -330,14 +330,28 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 	return t, nil
 }
 
-// Push sends branch to the target's remote under the same name and sets it as
-// the branch's upstream. It never forces: a remote branch that moved on is
-// refused by git, and the error says so.
-func Push(ctx context.Context, dir string, t PushTarget) error {
-	if strings.HasPrefix(t.Remote, "-") || strings.HasPrefix(t.Branch, "-") {
+// Push sends commit to the target's remote as the branch of the same name and
+// sets that as the branch's upstream. It pushes the commit, not whatever the
+// branch points at by then, so what goes out is what the caller resolved and
+// was allowed to send, even when the branch moved on in between. It never
+// forces: a remote branch that moved on is refused by git, and the error says
+// so.
+func Push(ctx context.Context, dir string, t PushTarget, commit string) error {
+	if strings.HasPrefix(t.Remote, "-") || strings.HasPrefix(t.Branch, "-") || strings.HasPrefix(commit, "-") {
 		return fmt.Errorf("push of %q to %q: not a branch", t.Branch, t.Remote)
 	}
-	_, err := runCtx(ctx, dir, nil, "push", "--porcelain", "--set-upstream", t.Remote, "refs/heads/"+t.Branch+":refs/heads/"+t.Branch)
+	if commit == "" {
+		return fmt.Errorf("push of %q to %q: no commit to push", t.Branch, t.Remote)
+	}
+	if _, err := runCtx(ctx, dir, nil, "push", "--porcelain", t.Remote, commit+":refs/heads/"+t.Branch); err != nil {
+		return err
+	}
+	// git push --set-upstream sets nothing for a source that is a commit
+	// rather than a branch, so the upstream is set the way it would have.
+	if _, err := runCtx(ctx, dir, nil, "config", "branch."+t.Branch+".remote", t.Remote); err != nil {
+		return err
+	}
+	_, err := runCtx(ctx, dir, nil, "config", "branch."+t.Branch+".merge", "refs/heads/"+t.Branch)
 	return err
 }
 

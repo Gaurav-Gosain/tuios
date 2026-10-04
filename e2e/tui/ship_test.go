@@ -429,6 +429,62 @@ func TestShipPushFromAPaneAsksThePerson(t *testing.T) {
 	f.tr.log("the push from the pane waited on the Inbox question %q and went out after the person allowed it", question)
 }
 
+// TestShipPushSendsTheCommitThePersonAllowed moves the branch on while the
+// push question waits in the Inbox. The person allowed the commit the
+// question names, so that commit is what reaches the origin, not the one the
+// agent made after the question was put.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with worktree.Push pushing
+// refs/heads/<branch> again instead of the resolved commit, the origin gets
+// the later commit and the check fails.
+func TestShipPushSendsTheCommitThePersonAllowed(t *testing.T) {
+	f := newShipFixture(t)
+	f.write("note.txt", "a note\n")
+	f.tr.ok("ship", "commit", "-s", f.session, "-m", "Add a note")
+	tip := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
+
+	term := startIn(t, f.base, startOpts{args: []string{"attach", f.session}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	line := fmt.Sprintf("%s ship push --yes --wait 60s > %s 2>&1\n", tuiosBin, filepath.Join(f.fakes, "pane-push.txt"))
+	f.tr.ok("send-text", "-s", f.session, "-w", "0", line)
+	question := "Push feat/ship (" + tip[:7] + ") to origin"
+	waitText(t, term, "the push question in the Inbox", question)
+
+	// The agent commits again while the person reads the question.
+	f.write("later.txt", "not what the person was asked about\n")
+	f.tr.ok("ship", "commit", "-s", f.session, "-m", "Add a later file", "--force")
+	later := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
+	if later == tip {
+		t.Fatal("the second commit did not move the branch")
+	}
+
+	time.Sleep(answerSettle)
+	if err := term.SendKeys("1"); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		got, err := exec.Command("git", "--git-dir", f.remote, "rev-parse", "-q", "--verify", "refs/heads/feat/ship").Output()
+		if err == nil {
+			if pushed := strings.TrimSpace(string(got)); pushed != tip {
+				t.Fatalf("the origin got %s, and the person allowed %s (the branch had moved on to %s)", pushed[:7], tip[:7], later[:7])
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			data, _ := os.ReadFile(filepath.Join(f.fakes, "pane-push.txt"))
+			t.Fatalf("the allowed push never reached the origin. The pane's command printed:\n%s\n%s", data, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if up := testutil.Git(t, f.worktree, "rev-parse", "--abbrev-ref", "feat/ship@{upstream}"); up != "origin/feat/ship" {
+		t.Errorf("the branch's upstream is %q after the push, want origin/feat/ship", up)
+	}
+	f.tr.log("the push sent %s, the commit the person allowed, and not %s, which the branch moved to while the question waited", tip[:7], later[:7])
+}
+
 // TestFanKeepMergesTheKeptAttempt keeps one attempt of a fan with --merge:
 // its commit lands on main in the main checkout, and the other attempt is
 // removed. With the main checkout dirty, the keep is refused before any

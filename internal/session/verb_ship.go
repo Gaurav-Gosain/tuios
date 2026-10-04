@@ -889,7 +889,7 @@ func (d *Daemon) shipPush(o shipOutbound) *verbError {
 	defer cancel()
 	d.shipMu.Lock()
 	defer d.shipMu.Unlock()
-	if err := worktree.Push(ctx, o.repo.root, o.push); err != nil {
+	if err := worktree.Push(ctx, o.repo.root, o.push, o.commit); err != nil {
 		verr := shipGitFailed(ctx, err)
 		verr.Hint.Detail = "Nothing was pushed. When the remote branch moved on, pull or rebase in the worktree first. tuios never force-pushes."
 		return verr
