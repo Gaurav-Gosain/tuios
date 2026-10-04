@@ -1018,10 +1018,9 @@ func (s *Shim) selectPane(name string, args []string) (string, []string, error) 
 	if _, ok := p.Value('P'); ok {
 		return OutcomeIgnored, nil, nil
 	}
-	dirs := map[byte]string{'L': "left", 'R': "right", 'U': "up", 'D': "down"}
 	for _, c := range []byte("LRUD") {
 		if p.Has(c) {
-			if _, err := s.Caller.Call("focus-window", map[string]any{"session": sess, "direction": dirs[c]}); err != nil {
+			if err := s.selectDirection(target, c); err != nil {
 				return OutcomeError, nil, err
 			}
 			return OutcomeOK, nil, nil

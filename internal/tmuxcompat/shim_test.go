@@ -331,7 +331,9 @@ func TestSelectPaneAndWindow(t *testing.T) {
 		t.Errorf("focus-window = %v", fw)
 	}
 	h.run("select-pane", "-L")
-	if fw := h.fake.last("focus-window"); fw["direction"] != "left" {
+	// The neighbour is found from the panes' positions, so the daemon is
+	// asked to focus a window, not a direction it answers only with a client.
+	if fw := h.fake.last("focus-window"); fw["direction"] != nil || fw["window"] == nil {
 		t.Errorf("select-pane -L sent %v", fw)
 	}
 	h.run("rename-window", "-t", "@1", "team")

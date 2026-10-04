@@ -12,6 +12,79 @@ import (
 // move-pane, and rename-session. Each maps onto a verb the CLI already has
 // (focus-window, select-workspace, move-window, rename-session), so the
 // daemon holds it to the caller's pane grants as it holds the CLI.
+
+// neighbour is the pane next to p in direction dir (L, R, U or D), found as
+// tmux's window_pane_find_left and the others find it: a pane whose far edge
+// meets p's near edge and that overlaps p on the other axis. Past the edge of
+// the window it wraps to the other side. Of several, the one focused most
+// recently wins. It returns nil when no pane is there.
+func neighbour(p *pane, dir byte) *pane {
+	on := p.sess.panesOn(p.Workspace)
+	minX, minY, maxX, maxY := bounds(on)
+	// near is p's edge on the side it moves to, and far(q) the edge of q
+	// that must meet it. over says whether q overlaps p on the other axis.
+	var near, wrap int
+	var far func(q *pane) int
+	var over func(q *pane) bool
+	overX := func(q *pane) bool { return q.X < p.X+p.Width && p.X < q.X+q.Width }
+	overY := func(q *pane) bool { return q.Y < p.Y+p.Height && p.Y < q.Y+q.Height }
+	switch dir {
+	case 'L':
+		near, wrap, far, over = p.X, maxX, func(q *pane) int { return q.X + q.Width }, overY
+		if near <= minX {
+			near = wrap
+		}
+	case 'R':
+		near, wrap, far, over = p.X+p.Width, minX, func(q *pane) int { return q.X }, overY
+		if near >= maxX {
+			near = wrap
+		}
+	case 'U':
+		near, wrap, far, over = p.Y, maxY, func(q *pane) int { return q.Y + q.Height }, overX
+		if near <= minY {
+			near = wrap
+		}
+	default:
+		near, wrap, far, over = p.Y+p.Height, minY, func(q *pane) int { return q.Y }, overX
+		if near >= maxY {
+			near = wrap
+		}
+	}
+	var found []*pane
+	for _, q := range on {
+		// Panes meet edge to edge, or share the border cell between them.
+		if q != p && abs(far(q)-near) <= 1 && over(q) {
+			found = append(found, q)
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	for _, id := range p.sess.wsHistory[p.Workspace] {
+		for _, q := range found {
+			if q.ID == id {
+				return q
+			}
+		}
+	}
+	return found[0]
+}
+
+// selectDirection focuses the pane next to target, as select-pane -L, -R, -U
+// and -D do. The neighbour is worked out here from the panes' positions, so
+// it is the target's neighbour, not the focused pane's, and a session with no
+// client attached answers too. With no pane there, nothing changes, as in
+// tmux.
+func (s *Shim) selectDirection(target *pane, dir byte) error {
+	next := neighbour(target, dir)
+	if next == nil {
+		return nil
+	}
+	_, err := s.Caller.Call("focus-window", map[string]any{"session": next.sess.name, "window": next.ID})
+	return err
+}
+
+// lastPane focuses the pane that was active in the window before the
 // current one, read from the workspace's focus history.
 func (s *Shim) lastPane(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
