@@ -99,6 +99,7 @@ func (e *Emulator) restoreCursor() {
 	e.modesMu.Lock()
 	e.modes[ansi.ModeOrigin] = setting
 	e.modesMu.Unlock()
+	e.cachedOrigin.Store(e.scr.savedExtra.origin)
 
 	e.scr.RestoreCursor()
 	e.restoreCharsets()
@@ -110,6 +111,11 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	e.modesMu.Lock()
 	e.modes[mode] = setting
 	e.modesMu.Unlock()
+	// Before the side effects below: setting DECOM homes the cursor through
+	// setCursorPosition, which has to see the new value.
+	if mode == ansi.ModeOrigin {
+		e.cachedOrigin.Store(setting.IsSet())
+	}
 	switch mode {
 	case ansi.ModeTextCursorEnable:
 		e.scr.setCursorHidden(!setting.IsSet())
@@ -212,6 +218,12 @@ func (e *Emulator) autoWrapMode() bool {
 // same reason autoWrapMode exists: the print path asks once per character.
 func (e *Emulator) insertMode() bool {
 	return e.cachedInsertMode.Load()
+}
+
+// originMode reports DECOM (?6) without touching the modes map, for the same
+// reason autoWrapMode exists: every carriage return asks.
+func (e *Emulator) originMode() bool {
+	return e.cachedOrigin.Load()
 }
 
 // isModeSet returns true if the mode is set.

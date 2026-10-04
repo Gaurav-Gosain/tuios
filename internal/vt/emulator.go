@@ -101,6 +101,12 @@ type Emulator struct {
 	// Thread-safe cached LNM flag (ANSI mode 20, updated on set/reset). Read
 	// once per line feed, for the same reason as cachedAutoWrap.
 	cachedLineFeedNewLine atomic.Bool
+	// Thread-safe cached origin-mode flag (DECOM ?6). Read on every carriage
+	// return and cursor address, for the same reason as cachedAutoWrap: the
+	// map read profiled at 13% of the daemon in a `yes` flood. It is kept in
+	// step by setMode, restoreCursor and RestoreModes, the three writers of
+	// that entry.
+	cachedOrigin atomic.Bool
 	// Unix-nanos timestamp of the last sync begin, for the present-anyway timeout
 	syncSetAtNanos atomic.Int64
 	// syncOpens counts the synchronized updates the guest has opened: it
@@ -986,8 +992,11 @@ func (e *Emulator) RestoreModes(modes map[int]bool) {
 		}
 		// This is the one write path that bypasses setMode, so the read-side
 		// caches it maintains have to be refreshed here or they go stale.
-		if mode == ansi.ModeAutoWrap {
+		switch mode {
+		case ansi.ModeAutoWrap:
 			e.cachedAutoWrap.Store(enabled)
+		case ansi.ModeOrigin:
+			e.cachedOrigin.Store(enabled)
 		}
 	}
 	e.modesMu.Unlock()

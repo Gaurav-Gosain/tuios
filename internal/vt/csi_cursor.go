@@ -2,7 +2,6 @@ package vt
 
 import (
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // reportedCursorPosition returns the one-based line and column a cursor
@@ -16,7 +15,7 @@ import (
 // (charproc.c, CASE_DSR).
 func (e *Emulator) reportedCursorPosition() (line, col int) {
 	x, y := e.scr.CursorPosition()
-	if e.isModeSet(ansi.DECOM) {
+	if e.originMode() {
 		r := e.scr.ScrollRegion()
 		x, y = x-r.Min.X, y-r.Min.Y
 	}
@@ -56,7 +55,7 @@ func (e *Emulator) prevTab(n int) {
 	x, _ := e.scr.CursorPosition()
 	leftmargin := 0
 	scroll := e.scr.ScrollRegion()
-	if e.isModeSet(ansi.DECOM) {
+	if e.originMode() {
 		leftmargin = scroll.Min.X
 	}
 
@@ -96,7 +95,7 @@ func (e *Emulator) setCursor(x, y int) {
 // setCursorPosition sets the cursor position. This respects [ansi.DECOM],
 // Origin Mode. This performs the same function as [ansi.CUP].
 func (e *Emulator) setCursorPosition(x, y int) {
-	margins := e.isModeSet(ansi.DECOM)
+	margins := e.originMode()
 	e.scr.setCursor(x, y, margins)
 	e.atPhantom = false
 }
@@ -107,7 +106,7 @@ func (e *Emulator) setCursorPosition(x, y int) {
 // Otherwise, the cursor is set to the leftmost column of the screen.
 // This performs the same function as [ansi.CR].
 func (e *Emulator) carriageReturn() {
-	margins := e.isModeSet(ansi.DECOM)
+	margins := e.originMode()
 	x, y := e.scr.CursorPosition()
 	if margins {
 		// y is the current absolute row; keep it absolute and only move X to
