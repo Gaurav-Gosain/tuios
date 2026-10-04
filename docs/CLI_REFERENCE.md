@@ -3783,43 +3783,70 @@ tuios config reset
 
 ### `tuios keybinds`
 
-View and inspect keybinding configuration.
+List the keybindings, check them for conflicts, and change them in
+`config.toml`.
 
 **Aliases:** `keys`, `kb`
 
 **Subcommands:**
-- `tuios keybinds list`: List all configured keybindings
-- `tuios keybinds list-custom`: List only customized keybindings
-- `tuios keybinds doctor`: Report every key claimed twice and every key tuios takes from the pane
+- `tuios keybinds list`: List every keybinding and the action it runs
+- `tuios keybinds list-custom`: List the keybindings that differ from the defaults
+- `tuios keybinds doctor`: Report each key that two actions claim, and each key tuios takes from the pane
 - `tuios keybinds explain <key>`: Say what tuios does with one key
 - `tuios keybinds unbind <action> [key]`: Take a key off one action
 - `tuios keybinds free <key>`: Hand a key back to the program in the pane
 
 #### `tuios keybinds list`
 
-Display the common keybindings, as configured, in formatted tables organized
-by category. `tuios keybinds doctor` lists every scope.
+List every action and the keys that run it, as your `config.toml` sets them.
+
+**Flags:**
+- `--json`: Print the rows as a JSON array
 
 **Example:**
 ```bash
 tuios keybinds list
+
+# The keys of one action
+tuios keybinds list --json | jq -r '.[] | select(.action == "toggle_tiling") | .keys[]'
 ```
 
-**Output:** One table per category, and a category with nothing bound is left
-out:
-- Global
-- Window Management
-- Workspaces
-- Layout
-- Modes
-- Selection
-- System
+**Output:** One table for each scope, in this order. Each table has the
+columns Keys, Action and Description.
+- The scopes: Global, Window mode, Terminal mode, Sidebar, Sidebar files,
+  Sidebar agents, Inbox, Inbox prompt, Mailbox, Prefix, each prefix menu with
+  its chord (Window, Minimize, Workspace, Debug, Tape and Layout), and Script
+  playback. A key in a prefix menu shows with its chord, such as `ctrl+b L 5`.
 - Commands: the `[[keybindings.command]]` entries, by description. See
   [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
+- The fixed keys, which tuios reads itself and you cannot rebind: Copy mode
+  (with the `[[keybindings.copy_pipe]]` entries), Hints mode, Message view,
+  Spotlight, Lists and panels, Mouse and Sidebar mouse. The help overlay shows
+  the same rows.
+- No key: the actions that have no key. Bind one in `config.toml`, or run it
+  from the command palette.
+
+An action that a config leaves with no key shows `(none)` in its scope.
+
+**JSON output:** An array of rows. Each row has these fields:
+- `scope`: where the keys act, such as `window`, `prefix.layout`,
+  `sidebar.files`, `copy_mode`, `mouse`, or `unbound`
+- `scope_name`: the title of the table
+- `chord`: what you press to reach the scope, such as `ctrl+b L`. Empty for a
+  mode
+- `section`: the `config.toml` table, `command`, `copy_pipe`, or empty for a
+  fixed key
+- `action`: the action name. Empty for a fixed key with no action
+- `keys`: the keys that run the action, with the chord
+- `description`: what the keys do
+- `fixed`: true for a key that no table binds
+- `unbound`: true for an action with no key
+- `shadowed`: keys that the config gives the action, which a different action
+  in the scope takes first
 
 #### `tuios keybinds list-custom`
 
-Show only keybindings that differ from defaults, with a comparison view.
+List only the keybindings that your `config.toml` changes.
 
 **Example:**
 ```bash

@@ -98,7 +98,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 				"enter_terminal_mode", "enter_window_mode",
 				"terminal_exit_mode",
 				"toggle_help", "quit",
-			}), generateSpotlightOffBindings(registry, s)...), generateListBindings()...),
+			}), generateSpotlightOffBindings(registry, s)...), append(messageViewKeys(), generateListBindings()...)...),
 		},
 		{
 			Name:     "Debug",
@@ -382,6 +382,8 @@ func generateMouseBindings() []HelpBinding {
 		// carries more than it can hold, and losing the shift half would read as
 		// if ctrl were the only way in.
 		{Keys: []string{"ctrl/shift + right-click"}, Description: "Pane menu, even if the program uses the mouse", Category: cat},
+		{Keys: []string{"ctrl+click a link"}, Description: "Open the link. See appearance.link_click", Category: cat},
+		{Keys: []string{"hover a link"}, Description: "Show where the link goes", Category: cat},
 		{Keys: []string{"wheel"}, Description: "Scroll the scrollback, or the program", Category: cat},
 		{Keys: []string{"drag right edge"}, Description: "Drag the scrollbar, if there is one", Category: cat},
 		{Keys: []string{"right-click desktop"}, Description: "Desktop menu", Category: cat},
@@ -398,11 +400,13 @@ func generateMouseBindings() []HelpBinding {
 // deliberately does not carry, so they are read through GetSidebarKeys.
 func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = "Sidebar"
-	row := func(action, desc string) HelpBinding {
+	// The descriptions are read from config.ScopedDescription, which `tuios
+	// keybinds list` reads too, so the two say the same thing.
+	row := func(action string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
 			Keys:        registry.GetSidebarKeys(action),
-			Description: desc,
+			Description: config.ScopedDescription(config.ScopeSidebar, action),
 			Category:    cat,
 		}
 	}
@@ -424,14 +428,14 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	}
 
 	bindings = append(bindings,
-		row("exit", "Leave the rail, back to the panes"),
-		row("cursor_down", "Move the cursor down a row"),
-		row("cursor_up", "Move the cursor up a row"),
-		row("first", "Jump to the first row"),
-		row("last", "Jump to the last row"),
-		row("collapse", "Step up to the previous section"),
-		row("expand", "Step down to the next section"),
-		row("activate", "Activate the row: attach, or focus the pane"),
+		row("exit"),
+		row("cursor_down"),
+		row("cursor_up"),
+		row("first"),
+		row("last"),
+		row("collapse"),
+		row("expand"),
+		row("activate"),
 	)
 	if first, last := registry.GetSidebarKeys("jump_1"), registry.GetSidebarKeys("jump_9"); len(first) > 0 && len(last) > 0 {
 		bindings = append(bindings, HelpBinding{
@@ -441,23 +445,23 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		})
 	}
 	bindings = append(bindings,
-		row("reorder_down", "Move the session or machine down the rail"),
-		row("reorder_up", "Move the session or machine up the rail"),
-		row("section", "Cycle the sessions, terminals and agents sections"),
-		row("agents_filter", "Agents: all sessions, or this one"),
-		row("agents_sort", "Agents: needs you, priority, or recency"),
-		row("file_search", "Files: search below the folder the sidebar shows"),
-		row("mail", "Open the mailbox, for the pane under the cursor"),
-		row("palette", "Find a pane in any session, or filter by @state"),
-		row("narrow", "Collapse the rail. On the divider: split down"),
-		row("widen", "Expand the rail. On the divider: split up"),
-		row("new_session", "New session, the sessions header's +"),
-		row("new_window", "New terminal, the terminals header's +"),
-		row("menu", "Open the menu for the row under the cursor"),
-		row("kill", "Open that row's menu on its Close or Kill row"),
-		row("rename", "Rename the window under the cursor"),
-		row("accent", "Recolor the window under the cursor"),
-		row("help", "Show this list of the rail's keys"),
+		row("reorder_down"),
+		row("reorder_up"),
+		row("section"),
+		row("agents_filter"),
+		row("agents_sort"),
+		row("file_search"),
+		row("mail"),
+		row("palette"),
+		row("narrow"),
+		row("widen"),
+		row("new_session"),
+		row("new_window"),
+		row("menu"),
+		row("kill"),
+		row("rename"),
+		row("accent"),
+		row("help"),
 	)
 
 	// The files section's own keys, which act only on a row of the listing.
@@ -494,17 +498,23 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	}
 	bindings = bound
 
-	return append(bindings,
-		HelpBinding{Keys: []string{"click a row"}, Description: "Attach to that session, or focus that pane", Category: cat},
-		HelpBinding{Keys: []string{"hover a session"}, Description: "Preview its panes in the terminals section", Category: cat},
-		HelpBinding{Keys: []string{"drag a session"}, Description: "Reorder the sessions", Category: cat},
-		HelpBinding{Keys: []string{"right-click a row"}, Description: "Open that row's menu", Category: cat},
-		HelpBinding{Keys: []string{"click a header's +"}, Description: "New session, or new terminal in the one shown", Category: cat},
-		HelpBinding{Keys: []string{"click blank rail"}, Description: "Give the rail the keyboard", Category: cat},
-		HelpBinding{Keys: []string{"drag the rail edge"}, Description: "Resize the rail", Category: cat},
-		HelpBinding{Keys: []string{"hover a clipped row"}, Description: "Scroll its text past the edge to read the rest", Category: cat},
-		HelpBinding{Keys: []string{"wheel"}, Description: "Scroll the rail", Category: cat},
-	)
+	return append(bindings, sidebarGestures()...)
+}
+
+// sidebarGestures are the rail's pointer gestures. They are not bindings.
+func sidebarGestures() []HelpBinding {
+	const cat = "Sidebar"
+	return []HelpBinding{
+		{Keys: []string{"click a row"}, Description: "Attach to that session, or focus that pane", Category: cat},
+		{Keys: []string{"hover a session"}, Description: "Preview its panes in the terminals section", Category: cat},
+		{Keys: []string{"drag a session"}, Description: "Reorder the sessions", Category: cat},
+		{Keys: []string{"right-click a row"}, Description: "Open that row's menu", Category: cat},
+		{Keys: []string{"click a header's +"}, Description: "New session, or new terminal in the one shown", Category: cat},
+		{Keys: []string{"click blank rail"}, Description: "Give the rail the keyboard", Category: cat},
+		{Keys: []string{"drag the rail edge"}, Description: "Resize the rail", Category: cat},
+		{Keys: []string{"hover a clipped row"}, Description: "Scroll its text past the edge to read the rest", Category: cat},
+		{Keys: []string{"wheel"}, Description: "Scroll the rail", Category: cat},
+	}
 }
 
 // generateListBindings is the keys every list and panel shares (see
@@ -514,10 +524,10 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 func generateListBindings() []HelpBinding {
 	const cat = "Modes"
 	return []HelpBinding{
-		{Keys: []string{"up", "down"}, Description: "Lists: move; at either end, wrap round", Category: cat},
+		{Keys: []string{"up", "down", "ctrl+p", "ctrl+n"}, Description: "Lists: move; at either end, wrap round", Category: cat},
 		{Keys: []string{"home", "end"}, Description: "Lists: first / last row", Category: cat},
 		{Keys: []string{"pgup", "pgdown"}, Description: "Lists: a page, stopping at the ends", Category: cat},
-		{Keys: []string{"g", "G"}, Description: "Lists: first / last row, with no filter", Category: cat},
+		{Keys: []string{"k", "j", "g", "G"}, Description: "Lists: up, down, first, last, with no filter", Category: cat},
 		{Keys: []string{"ctrl+u"}, Description: "Lists: clear a typed filter", Category: cat},
 		{Keys: []string{"wheel"}, Description: "Lists: scroll the list under the pointer", Category: cat},
 		{Keys: []string{"/"}, Description: "Settings: search every tab", Category: cat},
@@ -530,10 +540,18 @@ func generateListBindings() []HelpBinding {
 
 // generateCopyModeBindings generates copy mode keybindings
 func generateCopyModeBindings(s *config.Settings) []HelpBinding {
+	return copyModeKeys(s.LeaderKey)
+}
+
+// copyModeKeys are copy mode's keys. They are not bindings: copy mode reads
+// them itself (see internal/input/copymode_handlers.go).
+func copyModeKeys(leader string) []HelpBinding {
 	return []HelpBinding{
-		{Keys: []string{s.LeaderKey + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
+		{Keys: []string{leader + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
 		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
+		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
+		{Keys: []string{"%"}, Description: "Matching bracket", Category: "Copy Mode"},
 		{Keys: []string{"0, ^, $"}, Description: "Line start/first/end", Category: "Copy Mode"},
 		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+u, ctrl+d"}, Description: "Half page up/down", Category: "Copy Mode"},
@@ -569,14 +587,21 @@ func generateHintsBindings(registry *config.KeybindRegistry, s *config.Settings)
 			bindings = append(bindings, HelpBinding{Action: open.action, Keys: keys, Description: open.desc, Category: cat})
 		}
 	}
-	return append(bindings,
-		HelpBinding{Keys: []string{"label"}, Description: helpHintsPrefix + "copy the text the label is on", Category: cat},
-		HelpBinding{Keys: []string{"shift+label"}, Description: helpHintsPrefix + "copy the text and type it into the pane", Category: cat},
-		HelpBinding{Keys: []string{"ctrl+label"}, Description: helpHintsPrefix + "open the link or the file, or copy other text", Category: cat},
-		HelpBinding{Keys: []string{"backspace"}, Description: helpHintsPrefix + "remove the last letter you typed", Category: cat},
-		HelpBinding{Keys: []string{hintsHelpKey}, Description: helpHintsPrefix + "close hints and show these keys", Category: cat},
-		HelpBinding{Keys: []string{"esc", "q", s.LeaderKey}, Description: helpHintsPrefix + "close hints. q closes only when no label uses q", Category: cat},
-	)
+	return append(bindings, hintsModeKeys(s.LeaderKey)...)
+}
+
+// hintsModeKeys are the keys inside hints mode. They are not bindings (see
+// handleHintsKey in internal/input).
+func hintsModeKeys(leader string) []HelpBinding {
+	const cat = HelpCategoryCopyMode
+	return []HelpBinding{
+		{Keys: []string{"label"}, Description: helpHintsPrefix + "copy the text the label is on", Category: cat},
+		{Keys: []string{"shift+label"}, Description: helpHintsPrefix + "copy the text and type it into the pane", Category: cat},
+		{Keys: []string{"ctrl+label"}, Description: helpHintsPrefix + "open the link or the file, or copy other text", Category: cat},
+		{Keys: []string{"backspace"}, Description: helpHintsPrefix + "remove the last letter you typed", Category: cat},
+		{Keys: []string{hintsHelpKey}, Description: helpHintsPrefix + "close hints and show these keys", Category: cat},
+		{Keys: []string{"esc", "q", leader}, Description: helpHintsPrefix + "close hints. q closes only when no label uses q", Category: cat},
+	}
 }
 
 // generateDebugBindings generates debug keybindings
@@ -617,14 +642,11 @@ func generateTapeBindings(s *config.Settings) []HelpBinding {
 }
 
 // generateSpotlightOffBindings lists the ways out of the spotlight: esc in
-// window mode, and the leader chord in either mode. See spotlight_exit.go.
+// window mode, the leader chord in either mode, and a click on the dock's
+// chip. See spotlight_exit.go.
 func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
-	out := []HelpBinding{{
-		Action:      "spotlight_off",
-		Keys:        []string{"esc"},
-		Description: "Turn off spotlight, in window mode",
-		Category:    "Modes",
-	}}
+	fixed := spotlightOffKeys()
+	out := []HelpBinding{fixed[0]}
 	if keys := registry.GetKeys("prefix_toggle_spotlight"); len(keys) > 0 {
 		out = append(out, HelpBinding{
 			Action:      "spotlight_off",
@@ -633,7 +655,57 @@ func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Se
 			Category:    "Modes",
 		})
 	}
-	return out
+	return append(out, fixed[1:]...)
+}
+
+// spotlightOffKeys are the ways out of the spotlight that are not bindings.
+func spotlightOffKeys() []HelpBinding {
+	return []HelpBinding{
+		{Action: "spotlight_off", Keys: []string{"esc"}, Description: "Turn off spotlight, in window mode", Category: "Modes"},
+		{Action: "spotlight_off", Keys: []string{"click the Spotlight chip"}, Description: "Turn off spotlight, in any mode", Category: "Modes"},
+	}
+}
+
+// messageViewKeys are the message view's keys (ctrl+b N, or a click on a long
+// message). They are not bindings: see handleMessageViewKey in internal/input.
+func messageViewKeys() []HelpBinding {
+	const cat = "Modes"
+	return []HelpBinding{
+		{Keys: []string{"j", "k", "up", "down"}, Description: "Message view: scroll one line", Category: cat},
+		{Keys: []string{"ctrl+d", "ctrl+u", "space", "pgdown", "pgup"}, Description: "Message view: scroll half a page", Category: cat},
+		{Keys: []string{"g", "G", "home", "end"}, Description: "Message view: first or last line", Category: cat},
+		{Keys: []string{"y"}, Description: "Message view: copy the message", Category: cat},
+		{Keys: []string{"enter"}, Description: "Message view: go to the pane the message came from", Category: cat},
+		{Keys: []string{"esc", "q"}, Description: "Message view: close", Category: cat},
+	}
+}
+
+// FixedKeyGroup is one context's keys that are not registry bindings: copy
+// mode's motions, hints mode's labels, the message view, the list keys, and
+// the pointer gestures. ID is stable, for JSON.
+type FixedKeyGroup struct {
+	ID       string
+	Name     string
+	Bindings []HelpBinding
+}
+
+// FixedKeyGroups is every key the help overlay lists that no config section
+// binds, grouped by the context it acts in. `tuios keybinds list` prints them
+// after the registry's bindings, so the list and the overlay read the same
+// rows. leader is spelled into the rows that name it.
+func FixedKeyGroups(leader string) []FixedKeyGroup {
+	if leader == "" {
+		leader = config.DefaultLeaderKey
+	}
+	return []FixedKeyGroup{
+		{ID: "copy_mode", Name: "Copy mode", Bindings: copyModeKeys(leader)},
+		{ID: "hints_mode", Name: "Hints mode", Bindings: hintsModeKeys(leader)},
+		{ID: "message_view", Name: "Message view", Bindings: messageViewKeys()},
+		{ID: "spotlight", Name: "Spotlight", Bindings: spotlightOffKeys()},
+		{ID: "lists", Name: "Lists and panels", Bindings: generateListBindings()},
+		{ID: "mouse", Name: "Mouse", Bindings: generateMouseBindings()},
+		{ID: "mouse.sidebar", Name: "Sidebar mouse", Bindings: sidebarGestures()},
+	}
 }
 
 // generatePrefixBindings generates prefix command bindings

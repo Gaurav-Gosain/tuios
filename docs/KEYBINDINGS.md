@@ -11,6 +11,30 @@ protocol, legacy bytes otherwise. A leader with no legacy encoding is dropped.
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## The full list
+
+`tuios keybinds list` shows every action and the keys that run it, as your
+`config.toml` sets them. It has one table for each scope: global, window mode,
+terminal mode, the sidebar and its files and agent rows, the Inbox, its prompt,
+the mailbox, the prefix and each prefix menu, and tape playback. A key in a
+prefix menu shows with its chord, such as `ctrl+b L 5`. The command keys have a
+table of their own.
+
+After the scopes, the list shows the fixed keys. tuios reads these keys itself,
+and you cannot rebind them: copy mode, hints mode, the message view, the ways
+out of the spotlight, the list keys and the mouse. The help overlay
+(`Ctrl+B ?`) shows the same rows. The last table shows the actions that have no
+default key. Bind one in `config.toml`, or run it from the command palette.
+
+`tuios keybinds list --json` prints the same rows as a JSON array. Each row has
+`scope`, `scope_name`, `chord`, `section`, `action`, `keys` and `description`.
+A fixed key has `fixed: true`. An action with no key has `unbound: true`. A key
+that a different action takes first is in `shadowed`.
+
+```sh
+tuios keybinds list --json | jq -r '.[] | select(.action == "toggle_tiling") | .keys[]'
+```
+
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, then select a file.
@@ -471,6 +495,7 @@ on the workspace on screen.
 | `Ctrl+B L m` | `focus_master` | Focus the master pane |
 | `Ctrl+B L i` | `add_master` | Make one more pane a master pane |
 | `Ctrl+B L d` | `remove_master` | Make one pane fewer a master pane |
+| `Ctrl+B =`, or `=` in window mode | `prefix_equalize_splits`, `equalize_splits` | Give the master panes and the stack their default sizes again |
 
 The resize keys move the divider between the master panes and the stack. With
 the master on the left, the right or in the center, the width keys move it,

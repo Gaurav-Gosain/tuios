@@ -330,26 +330,46 @@ The daemon applies a change to the file at once only where it gives less. A chan
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",
 		Aliases: []string{"keys", "kb"},
-		Short:   "View keybinding configuration",
-		Long:    `View and inspect TUIOS keybinding configuration`,
+		Short:   "List, check and change keybindings",
+		Long: `List the keybindings, check them for conflicts, and change them in config.toml.
+
+Start with "tuios keybinds list". Use "tuios keybinds explain <key>" to see
+what one key does.`,
 	}
 
+	var keybindsListJSON bool
 	keybindsListCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List the common keybindings",
-		Long: `Display the common keybindings, as configured, in formatted tables.
-tuios keybinds doctor lists every scope.`,
+		Short: "List every keybinding and the action it runs",
+		Long: `List every action and the keys that run it, as your config.toml sets them.
+
+The list has one table for each scope. A scope is where the keys act: window
+mode, terminal mode, the sidebar, the Inbox, or a prefix menu such as ctrl+b L.
+Each key in a prefix menu shows with its chord.
+
+After the scopes, the list shows the fixed keys. tuios reads these keys itself,
+and you cannot rebind them: copy mode, hints mode, the message view, the list
+keys and the mouse. The last table shows the actions that have no key.
+
+Use --json to get the same rows as a JSON array.`,
+		Example: `  # Show every keybinding
+  tuios keybinds list
+
+  # Find the keys of one action
+  tuios keybinds list --json | jq '.[] | select(.action == "toggle_tiling")'`,
+		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return listKeybindings()
+			return listKeybindings(keybindsListJSON)
 		},
 	}
+	keybindsListCmd.Flags().BoolVar(&keybindsListJSON, "json", false, "print the rows as a JSON array")
 
 	keybindsCustomCmd := &cobra.Command{
 		Use:   "list-custom",
-		Short: "List customized keybindings",
-		Long: `Display only keybindings that differ from defaults
+		Short: "List the keybindings that differ from the defaults",
+		Long: `List only the keybindings that your config.toml changes.
 
-Shows a comparison of default and custom keybindings.`,
+Each row shows the default keys and your keys.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return listCustomKeybindings()
 		},
@@ -362,13 +382,14 @@ Shows a comparison of default and custom keybindings.`,
 
 	keybindsDoctorCmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Report keybind conflicts",
-		Long: `Report every key claimed twice, every key tuios takes from the pane,
-and every one of those a common program wants.
+		Short: "Report keybinding conflicts",
+		Long: `Report each key that two actions claim, each key that tuios takes from the
+pane, and each of those keys that a common program uses.
 
-Each finding carries the evidence it rests on: certain (tuios's own routing),
-observed (read from a pane), or reference (a list of common program defaults,
-not detection). --json emits the same analysis the keybind overlay draws.`,
+Each finding names its evidence. "certain" comes from the tuios key routing.
+"observed" comes from a pane. "reference" comes from a list of common program
+defaults, and is not detection. --json prints the same report that the keybind
+manager shows.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return keybindsDoctor(keybindsJSON, keybindsGuest)
 		},
@@ -379,9 +400,10 @@ not detection). --json emits the same analysis the keybind overlay draws.`,
 	keybindsExplainCmd := &cobra.Command{
 		Use:   "explain <key>",
 		Short: "Say what tuios does with one key",
-		Long: `Print every scope the key acts in, whether the pane's program would
-receive it, the terminal-level pair it belongs to, and which common programs
-bind it. This prints the same answer the overlay's key recorder shows.`,
+		Long: `Show each scope that the key acts in, and whether the program in the pane
+gets the key. Also show the key that the terminal sends the same way, and the
+common programs that use the key. The key recorder in the keybind manager
+shows the same answer.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return keybindsExplain(args[0], keybindsJSON, keybindsGuest)

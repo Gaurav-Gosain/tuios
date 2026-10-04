@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,37 +11,65 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-func listKeybindings() error {
+func listKeybindings(asJSON bool) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		fmt.Fprintln(os.Stderr, "Using default keybindings...")
 		userConfig = config.DefaultConfig()
 	}
-
-	registry := config.NewKeybindRegistry(userConfig)
-
-	printKeybindingsTable(registry)
+	rows := keybindRows(userConfig)
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
+	}
+	leader := userConfig.Keybindings.LeaderKey
+	if leader == "" {
+		leader = config.DefaultLeaderKey
+	}
+	printKeybindingsTable(rows, leader)
 	return nil
 }
 
-func generateWorkspaceActions() []string {
-	actions := []string{}
-	for i := 1; i <= 9; i++ {
-		actions = append(actions, fmt.Sprintf("switch_workspace_%d", i))
-	}
-	for i := 1; i <= 9; i++ {
-		actions = append(actions, fmt.Sprintf("move_and_follow_%d", i))
-	}
-	return actions
+// keybindGroup is the rows of one table of `tuios keybinds list`.
+type keybindGroup struct {
+	title string
+	rows  []keybindRow
 }
 
-func printKeybindingsTable(registry *config.KeybindRegistry) {
-	leader := registry.GetConfig().Keybindings.LeaderKey
-	if leader == "" {
-		leader = config.Global.LeaderKey
+// groupKeybindRows splits rows into the list's tables, in the order the rows
+// come: one per scope, with the command entries in a table of their own.
+func groupKeybindRows(rows []keybindRow) []keybindGroup {
+	var groups []keybindGroup
+	at := map[string]int{}
+	add := func(id, title string, r keybindRow) {
+		i, ok := at[id]
+		if !ok {
+			i = len(groups)
+			at[id] = i
+			groups = append(groups, keybindGroup{title: title})
+		}
+		groups[i].rows = append(groups[i].rows, r)
 	}
+	for _, r := range rows {
+		switch {
+		case r.Section == config.SectionCommand:
+			add("\x00command", "Commands ([[keybindings.command]])", r)
+		case r.Scope == keybindScopeUnbound:
+			add(r.Scope, "No key (bind one in config.toml, or run it from the command palette)", r)
+		case r.Chord != "":
+			add(r.Scope, r.ScopeName+" ("+r.Chord+")", r)
+		case r.Fixed || r.Section == "copy_pipe":
+			add(r.Scope, r.ScopeName+" (fixed keys)", r)
+		default:
+			add(r.Scope, r.ScopeName, r)
+		}
+	}
+	return groups
+}
 
+func printKeybindingsTable(rows []keybindRow, leader string) {
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("12")).
@@ -49,81 +78,16 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 	cellStyle := lipgloss.NewStyle().
 		Padding(0, 1)
 
-	sections := []struct {
-		Title   string
-		Actions []string
-	}{
-		{
-			Title: "Global",
-			Actions: []string{
-				"command_palette", "launcher",
-			},
-		},
-		{
-			Title: "Window Management",
-			Actions: []string{
-				"new_window", "close_window", "rename_window",
-				"minimize_window", "restore_all",
-				"next_window", "prev_window",
-				"toggle_multifocus_active", "toggle_multifocus_all", "close_workspace",
-				"toggle_scratch", "toggle_pip",
-			},
-		},
-		{
-			Title:   "Workspaces",
-			Actions: generateWorkspaceActions(),
-		},
-		{
-			Title: "Layout",
-			Actions: []string{
-				"snap_left", "snap_right", "focus_up", "focus_down",
-				"snap_fullscreen", "unsnap",
-				"toggle_tiling", "swap_left", "swap_right", "swap_up", "swap_down",
-			},
-		},
-		{
-			Title: "Modes",
-			Actions: []string{
-				"enter_terminal_mode", "enter_window_mode",
-				"toggle_help", "quit",
-			},
-		},
-		{
-			Title: "Selection",
-			Actions: []string{
-				"copy_selection", "paste_clipboard", "paste_image", "clear_selection", "hints", "hints_all_panes",
-			},
-		},
-		{
-			Title: "System",
-			Actions: []string{
-				"toggle_logs", "toggle_cache_stats",
-			},
-		},
-	}
-
 	fmt.Println()
 	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")).Render("TUIOS Keybindings"))
 	fmt.Println()
 
-	// The whole press, chord included, from every section that binds the
-	// action. GetKeys gave the bare key of the first section only, which
-	// listed launcher as "a" (its key after the leader) and not alt+space.
-	presses := config.PressesByAction(registry)
-	for _, section := range append(sections, struct {
-		Title   string
-		Actions []string
-	}{Title: "Commands", Actions: commandActions(registry)}) {
-		rows := keybindListRows(presses, section.Actions)
-		if len(rows) == 0 {
-			continue
-		}
-
+	for _, g := range groupKeybindRows(rows) {
 		t := table.New().
 			Border(lipgloss.RoundedBorder()).
 			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-			Headers("Keys", "Action").
-			Rows(rows...).
+			Headers("Keys", "Action", "Description").
+			Rows(keybindTableRows(g.rows)...).
 			StyleFunc(func(row, _ int) lipgloss.Style {
 				if row == -1 {
 					return headerStyle
@@ -131,7 +95,7 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 				return cellStyle
 			})
 
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render(section.Title))
+		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render(g.title))
 		fmt.Println(t.Render())
 		fmt.Println()
 	}
@@ -139,34 +103,35 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 	note := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
 		Italic(true).
-		Render("Note: " + leader + " is the leader key. Press it followed by another key for prefix commands.\n" +
+		Render("Note: " + leader + " is the leader key. Press it, then the next key in the list.\n" +
 			"Set keybindings.leader_key to move it.\n" +
+			"`tuios keybinds list --json` prints these rows as JSON.\n" +
 			"`tuios keybinds unbind <action>` takes a key off one action.\n" +
 			"`tuios keybinds free <key>` hands a key back to the program in the pane.\n" +
-			"Run `tuios keybinds doctor` for every scope, including the ones not listed here.")
+			"`tuios keybinds doctor` reports keys that two actions claim.")
 	fmt.Println(note)
 	fmt.Println()
 }
 
-// keybindListRows is the Keys and Action columns for one section of
-// 'tuios keybinds list'. An action with nothing to press is left out.
-func keybindListRows(presses map[string][]string, actions []string) [][]string {
-	var rows [][]string
-	for _, action := range actions {
-		keys := presses[action]
-		if len(keys) == 0 {
-			continue
+// keybindTableRows is the Keys, Action and Description columns of one table
+// of 'tuios keybinds list'.
+func keybindTableRows(rows []keybindRow) [][]string {
+	out := make([][]string, 0, len(rows))
+	for _, r := range rows {
+		keys := strings.Join(r.Keys, ", ")
+		if keys == "" {
+			keys = "(none)"
 		}
-		desc := config.ActionDescriptions[action]
-		if desc == "" {
-			desc = commandLabel(action)
+		action := r.Action
+		switch {
+		case r.Section == "copy_pipe":
+			action = "copy_pipe"
+		case r.Fixed && action == "":
+			action = "-"
 		}
-		if desc == "" {
-			desc = action
-		}
-		rows = append(rows, []string{strings.Join(keys, ", "), desc})
+		out = append(out, []string{keys, action, r.Description})
 	}
-	return rows
+	return out
 }
 
 func listCustomKeybindings() error {
@@ -319,24 +284,4 @@ func layoutSaveHint(cfg *config.UserConfig) string {
 	}
 	return fmt.Sprintf("No saved layouts. To save one, open a session and press %s %s %s, or %s.",
 		leader, layoutKeys[0], saveKeys[0], palette)
-}
-
-// commandActions lists the [[keybindings.command]] entries' actions, in the
-// order the config file has them.
-func commandActions(registry *config.KeybindRegistry) []string {
-	var out []string
-	for _, c := range registry.GetConfig().Keybindings.Commands() {
-		out = append(out, c.Action())
-	}
-	return out
-}
-
-// commandLabel is the label of a command entry's action, read from the
-// user's config, or "".
-func commandLabel(action string) string {
-	c, ok := loadKeybindConfig().Keybindings.CommandFor(action)
-	if !ok {
-		return ""
-	}
-	return c.Label()
 }
