@@ -124,13 +124,6 @@ func (h *pluginHost) entries(fresh bool) []herdrplugin.Entry {
 	return out
 }
 
-// isEnabled reports whether the daemon runs plugin id.
-func (h *pluginHost) isEnabled(id string) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return slices.Contains(h.enabled, id)
-}
-
 // applied is the [plugins] table the daemon runs.
 func (h *pluginHost) applied() config.PluginsConfig {
 	h.mu.Lock()
