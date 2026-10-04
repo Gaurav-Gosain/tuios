@@ -1158,6 +1158,24 @@ picked the top. `paste-buffer` with no `-b` then typed the older buffer.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A buffer keeps the mtime the kernel gave it | `internal/tmuxcompat/buffers.go` from origin/main | `TestPasteBufferAcrossCalls` ("the newest buffer typed \"one\\rtwo\\r\", want b2"), 19 of 30 runs. With the fix: 30 of 30 pass | **caught in `internal/tmuxcompat`** |
+## tuios hosts sync
+
+`TestHostsSync` syncs four fake hosts: one with no tuios, one with the new
+version, one with the old version and a daemon that runs `sleep` in a pane,
+and one with no machine behind its address. `TestHostsSyncRestartWithYes`
+restarts the daemon of an old host. Each control changed one line, built the
+binary, and ran the named test.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The install | `runHostsSync`: the `applySyncTarget` call cut | `TestHostsSync` (fresh is not installed, old does not run the new version) | **caught** |
+| No restart by default | `planSyncTarget`: `if opts.restart` made `if true` | `TestHostsSync` (the default run asks to restart and prints no result) | **caught** |
+| The question before a restart | `runHostsSync`: the `confirmSyncRestarts` call cut | `TestHostsSync` (the refusal is gone and a binary changed) | **caught** |
+| The dry run | `runHostsSync`: the `!opts.dryRun` gate on the apply step made `true` | `TestHostsSync` ("the dry run changed a binary on a host") | **caught** |
+| A matching version is left alone | `planSyncTarget`: `t.install` made always true | `TestHostsSync` (same plans "would update" and is installed again) | **caught** |
+| One failed host does not stop the rest | injected: return an error after the probe when one host failed | `TestHostsSync` (no result for any host) | **caught** |
+| The restart | `planSyncTarget`: `t.restart = true` made `false` | `TestHostsSyncRestartWithYes` (the daemon still runs the old version) | **caught** |
+| The busy panes | `readDaemonSessions`: the `parsePaneProcs` call cut | `TestHostsSync` (no busy pane, and the refusal does not name `sleep`) | **caught** |
 
 ## What this harness structurally cannot observe
 
