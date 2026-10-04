@@ -24,7 +24,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 			green + "tuios list-agents" + reset + ", " + green + "tuios list-verbs" + reset + ", " + green + "tuios list-hooks" + reset + "\r\n")
 		return 0
 	case "version", "--version", "-v":
-		t.Print("tuios (browser demo, the real thing compiled to WebAssembly)\r\n")
+		t.Print(text("tuios (browser demo, the real thing compiled to WebAssembly)") + "\r\n")
 		return 0
 	case "tape":
 		return tuiosTape(s, args[2:])

@@ -850,6 +850,10 @@ type OS struct {
 	// OnNotification, when set, hears every message shown in the dock, with
 	// its level. The browser build reports it to the page. Nil everywhere else.
 	OnNotification func(message, level string)
+	// LearnNotes, when set, replaces Learn mode's notes by their default
+	// text. The notes talk about a browser tab; the SSH tour
+	// (cmd/tuios-learn) has none. An empty replacement shows no note.
+	LearnNotes map[string]string
 	// configReadOnlyTold keeps the "this will not be saved" notice to once per
 	// session, since it would otherwise fire on every keypress in the settings
 	// page.

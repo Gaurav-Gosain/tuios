@@ -1,0 +1,72 @@
+# systemd unit for tuios-learn, the server behind `ssh learn.tuios.dev`.
+#
+# Install:
+#   install -m 0755 tuios-learn /usr/local/bin/tuios-learn
+#   install -m 0644 tuios-learn.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now tuios-learn
+#
+# It listens on port 22, so the machine's own sshd must move first. See the
+# deployment plan. State (host key, best times, board, counters) lives in
+# /var/lib/tuios-learn, which systemd creates for the dynamic user.
+
+[Unit]
+Description=tuios learn, the public SSH tour of tuios
+Documentation=https://github.com/Gaurav-Gosain/tuios/tree/main/cmd/tuios-learn
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/tuios-learn --listen :22 --health 127.0.0.1:9022
+Restart=always
+RestartSec=2
+Environment=GOMAXPROCS=2
+
+# A user that exists only while the service runs, and owns nothing else.
+DynamicUser=yes
+StateDirectory=tuios-learn
+StateDirectoryMode=0700
+UMask=0077
+
+# Port 22 without root, and no other privilege.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+
+# The filesystem is read-only except the state directory.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+# The session processes lock themselves down with Landlock and setrlimit, so
+# those calls must stay allowed.
+SystemCallFilter=@system-service landlock_create_ruleset landlock_add_rule landlock_restrict_self
+SystemCallFilter=~@privileged @mount @swap @reboot @module @raw-io @clock @debug @cpu-emulation @obsolete
+SystemCallErrorNumber=EPERM
+
+# Resource limits for the whole service: the server and every session.
+# Measured: a session uses about 36 MiB RSS (18 MiB PSS), and 57 MiB with 40
+# windows open. 50 sessions fit in 3 GiB with room to spare.
+MemoryHigh=2560M
+MemoryMax=3G
+TasksMax=1024
+LimitNOFILE=8192
+CPUQuota=180%
+
+[Install]
+WantedBy=multi-user.target

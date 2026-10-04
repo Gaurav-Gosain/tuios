@@ -162,7 +162,7 @@ func init() {
 		"cowsay":    fromTTY(cmdCowsay),
 		"whoami":    say("guest"),
 		"hostname":  say("tuios"),
-		"uname":     say("tuios js/wasm"),
+		"uname":     func(s *shell, _ []string, _ string) int { s.t.Print("tuios " + text("js/wasm") + "\r\n"); return 0 },
 		"date": func(s *shell, _ []string, _ string) int {
 			s.t.Print(time.Now().Format(time.UnixDate) + "\r\n")
 			return 0

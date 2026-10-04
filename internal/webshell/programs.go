@@ -26,8 +26,8 @@ func cmdNeofetch(t *TTY, _ []string) int {
 	info := []string{
 		bold + "guest" + reset + "@" + bold + "tuios" + reset,
 		dim + "───────────" + reset,
-		cyan + "OS" + reset + "      your browser",
-		cyan + "Kernel" + reset + "  WebAssembly",
+		cyan + "OS" + reset + "      " + text("your browser"),
+		cyan + "Kernel" + reset + "  " + text("WebAssembly"),
 		cyan + "Uptime" + reset + "  " + time.Since(started).Round(time.Second).String(),
 		cyan + "Shell" + reset + "   webshell",
 		cyan + "WM" + reset + "      tuios",
@@ -238,7 +238,7 @@ var fortunes = []string{
 }
 
 func cmdFortune(t *TTY, _ []string) int {
-	t.Print(fortunes[rand.IntN(len(fortunes))] + "\r\n")
+	t.Print(text(fortunes[rand.IntN(len(fortunes))]) + "\r\n")
 	return 0
 }
 
@@ -306,7 +306,7 @@ func cmdTree(s *shell, args []string, _ string) int {
 func cmdGo(s *shell, args []string, _ string) int {
 	sub := argOr(args, 1, "")
 	if sub == "version" {
-		s.t.Print("go version go1.25 js/wasm\r\n")
+		s.t.Print("go version go1.25 " + text("js/wasm") + "\r\n")
 		return 0
 	}
 	if sub == "" || sub == "help" {
