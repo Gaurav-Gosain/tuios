@@ -13,7 +13,7 @@ import "testing"
 func TestDockLinesStripsControlSequences(t *testing.T) {
 	for _, tc := range []struct{ out, want string }{
 		{"\x1b[31mRED\x1b[0m \x1b[2J\x1b]0;TITLE\x07PLAIN\n\x1b]52;c;eA==\x07two\n", "\x1b[31mRED\x1b[0m PLAIN\ntwo"},
-		{"ab‮cd\u009b2Jef​gh\n", "abcd2Jefgh"},
+		{"ab\u202ecd\u009b2Jef\u200bgh\n", "abcd2Jefgh"},
 	} {
 		if got := dockLines([]byte(tc.out)); got != tc.want {
 			t.Errorf("dockLines = %q, want %q", got, tc.want)
