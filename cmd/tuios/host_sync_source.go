@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"debug/buildinfo"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -38,30 +38,20 @@ func (s *syncSource) loadBinary(p string) error {
 		return err
 	}
 	s.binPath = abs
-	info, err := buildinfo.ReadFile(abs)
-	if err != nil {
-		return fmt.Errorf("%s is not a Go binary that sync can read: %w", p, err)
-	}
-	var goos, goarch string
-	for _, st := range info.Settings {
-		switch st.Key {
-		case "GOOS":
-			goos = st.Value
-		case "GOARCH":
-			goarch = st.Value
-		}
-	}
-	if goos == "" || goarch == "" {
-		return fmt.Errorf("%s does not say which system it is for", p)
-	}
-	if !strings.HasSuffix(info.Path, "/cmd/tuios") {
-		return fmt.Errorf("%s is %s, not tuios", p, info.Path)
-	}
-	s.platform = goos + "/" + goarch
 	data, err := os.ReadFile(abs)
 	if err != nil {
 		return err
 	}
+	goos, goarch, err := binaryPlatform(data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", p, err)
+	}
+	// The module path is in every Go binary built from the tuios main
+	// package, stripped or not.
+	if !bytes.Contains(data, []byte("github.com/"+release.Repo+"/cmd/tuios")) {
+		return fmt.Errorf("%s is not a tuios binary", p)
+	}
+	s.platform = goos + "/" + goarch
 	// The version is read by running it, which only works for this
 	// machine's own system.
 	if goos == runtime.GOOS && goarch == runtime.GOARCH {
@@ -210,4 +200,45 @@ func (s *syncSource) fetchRelease(platform string) (*syncBinary, error) {
 		return nil, fmt.Errorf("%s did not hold tuios: %w", name, err)
 	}
 	return newSyncBinary(data, s.version), nil
+}
+
+// binaryPlatform reads the system and architecture an executable is for from
+// its header. It knows the ELF and Mach-O builds that sync can install, and
+// is kept to a few header fields: debug/elf and debug/macho would add their
+// whole parsers to the binary for two numbers.
+func binaryPlatform(data []byte) (goos, goarch string, err error) {
+	switch {
+	case len(data) >= 20 && bytes.HasPrefix(data, []byte("\x7fELF")):
+		if data[5] != 1 {
+			return "", "", errors.New("the binary is a big-endian ELF file, which sync does not install")
+		}
+		goos = "linux"
+		if data[7] == 9 { // ELFOSABI_FREEBSD
+			goos = "freebsd"
+		}
+		switch binary.LittleEndian.Uint16(data[18:20]) {
+		case 0x3e:
+			goarch = "amd64"
+		case 0xb7:
+			goarch = "arm64"
+		case 0x03:
+			goarch = "386"
+		case 0xf3:
+			goarch = "riscv64"
+		}
+	case len(data) >= 8 && binary.LittleEndian.Uint32(data[0:4]) == 0xfeedfacf:
+		goos = "darwin"
+		switch binary.LittleEndian.Uint32(data[4:8]) {
+		case 0x01000007:
+			goarch = "amd64"
+		case 0x0100000c:
+			goarch = "arm64"
+		}
+	default:
+		return "", "", errors.New("the file is not a Linux, macOS or FreeBSD executable")
+	}
+	if goarch == "" {
+		return "", "", errors.New("the binary is for an architecture sync does not install")
+	}
+	return goos, goarch, nil
 }
