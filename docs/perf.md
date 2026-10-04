@@ -2159,13 +2159,14 @@ request and push to main. It builds tuios the way the release does
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over its budget.
 
-| target | size at 62ec9c0c (Go 1.26.6) | budget | before the size cuts (e632e021) |
-|---|---|---|---|
-| linux/amd64 | 25,182,370 | 28,320,000 (raised for #391) | 26,681,504 |
-| darwin/arm64 | 23,834,594 | 26,725,000 (raised for #391) | 25,265,154 |
+| target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
+|---|---|---|---|---|
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,051,938 | 31,092,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 29,257,058 | 29,297,000 |
 
-The budgets are about 3% above the size they were set at and below the size
-before the size cuts, so undoing those cuts fails the job.
+The first budgets were about 3% above the size they were set at and below the
+size before the size cuts, so undoing those cuts failed the job. Each raise
+since then is recorded below, oldest first.
 
 The linux/amd64 budget went from 26,000,000 to 26,400,000 when hints mode,
 mail compose, the host fence and multi copy mode brought the build to
@@ -2278,6 +2279,40 @@ for the client list (#391): the `list-clients` verb and command, the peer pid
 read on each platform, and the `client-session-changed` event. On Go 1.26.6
 the build measured 28,283,042 and 26,688,242 bytes, 28,042 and 23,242 over
 the old budgets.
+
+The budgets went to 31,092,000 (linux/amd64) and 29,297,000 (darwin/arm64)
+for the October 2026 work, which landed as one series. On Go 1.26.6 main
+(a640011) measured 28,283,042 and 26,688,242 bytes, and the series brings the
+build to 31,051,938 and 29,257,058 bytes: 2,768,896 and 2,568,816 bytes more.
+Each row below is what one change adds to the rows above it, measured with the
+release flags after applying the changes to main in this order. A linux/amd64
+build grows in whole 4 KB pages, so a row of 8 KB or less there is mostly
+rounding. The rows add up to 12,288 and 32 bytes less than the totals,
+because the measurement left out one conflicting line of the notifications
+change and the fixes made in the final review.
+
+| change | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| Stream races, MCP annotations and protocol versions, ACP cancel | +16,384 | +16,960 |
+| A pane TERM with a terminfo entry, the kitty query, DECRQM and DA1 | +8,192 | +64 |
+| Hot paths: wait-for coalescing, capture presize, DECOM cache, marker trim | +8,192 | +16,688 |
+| Request ids on the wire | +8,192 | +432 |
+| tmux shim: command prefixes, tmux 3.4 formats, wait-for, popups, run-shell, if-shell, moves, buffers, environment | +172,032 | +151,872 |
+| Terminal protocol: XTVERSION, DA3, XTGETTCAP, DECRQSS, OSC reply terminators, a kitty stack per screen, mouse encodings, modifyOtherKeys, the title stack | +36,864 | +33,520 |
+| Turn checkpoints | +147,456 | +134,768 |
+| Bulk history readers | +28,672 | +17,648 |
+| Inbox push notifications, the web deep link and `tuios notify test`, as first written with curl | +122,880 | +118,480 |
+| net/http for notifications and `tuios update`, in place of curl | +1,941,504 | +1,841,440 |
+| `tuios ship`, `fan keep --merge` and the pull request badge | +208,896 | +186,016 |
+| Mode legends in the dock | +8,192 | -48 |
+| Emulator allocations, the scroll window, the idle ticker and memtrim | +12,288 | +17,104 |
+| Opening links and OSC 8 in the frame | +28,672 | +17,120 |
+| Review fixes: the pushed commit, ignored files on restore, the push address, notification redirects, large untracked files, key state on reattach | +8,192 | +16,720 |
+
+The net/http row is 70% of the growth. tuios linked neither net/http nor
+crypto/tls before it. The maintainer accepted the 1.9 MB so that tuios needs
+no curl at run time: notifications and `tuios update` used to run curl from
+PATH, and a machine without it could not send either.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
