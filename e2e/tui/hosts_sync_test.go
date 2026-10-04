@@ -208,6 +208,17 @@ func (f *syncFleet) syncJSON(t *testing.T, args ...string) (map[string]syncResul
 	return rows, out, err
 }
 
+// busyPrograms lists the programs a row says a restart would end.
+func busyPrograms(r syncResultRow) []string {
+	var busy []string
+	for _, s := range r.Daemon.Sessions {
+		for _, b := range s.Busy {
+			busy = append(busy, b.Program)
+		}
+	}
+	return busy
+}
+
 // saveSyncArtifact keeps one run's output for a person to read.
 func saveSyncArtifact(t *testing.T, name, out string) {
 	t.Helper()
@@ -235,7 +246,7 @@ func startSyncFleet(t *testing.T) (*syncFleet, string) {
 	if out, err := old.run(t, "new", "work", "--detach"); err != nil {
 		t.Fatalf("start the daemon on old: %v\n%s", err, out)
 	}
-	if out, err := old.run(t, "new-window", "sleeper", "-s", "work", "--", "/bin/sh", "-c", "sleep 600"); err != nil {
+	if out, err := old.run(t, "new-window", "sleeper", "-s", "work", "--", "sleep", "600"); err != nil {
 		t.Fatalf("start a program on old: %v\n%s", err, out)
 	}
 	return f, next
@@ -250,8 +261,19 @@ func TestHostsSync(t *testing.T) {
 	fresh, same, old := f.hosts["fresh"], f.hosts["same"], f.hosts["old"]
 	sameSHA, oldSHA := same.sha(t), old.sha(t)
 
-	// The dry run: the plan, and no change anywhere.
-	plan, out, err := f.syncJSON(t, "--binary", next, "--dry-run")
+	// The dry run: the plan, and no change anywhere. The pane that runs
+	// sleep is read from ps, and a pane just made can still be between fork
+	// and exec, so the plan is read again until it settles.
+	var plan map[string]syncResultRow
+	var out string
+	var err error
+	for deadline := time.Now().Add(20 * time.Second); ; {
+		plan, out, err = f.syncJSON(t, "--binary", next, "--dry-run")
+		if slices.Equal(busyPrograms(plan["old"]), []string{"sleep"}) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 	saveSyncArtifact(t, "dry-run.json", out)
 	if err == nil {
 		t.Errorf("ASSERTION: the dry run exited 0 with a host that cannot be reached:\n%s", out)
@@ -275,12 +297,7 @@ func TestHostsSync(t *testing.T) {
 	if oldPID == 0 || plan["old"].Daemon.SessionCount != 1 {
 		t.Fatalf("ASSERTION: the daemon on old was not read: %+v\n%s", plan["old"].Daemon, out)
 	}
-	var busy []string
-	for _, s := range plan["old"].Daemon.Sessions {
-		for _, b := range s.Busy {
-			busy = append(busy, b.Program)
-		}
-	}
+	busy := busyPrograms(plan["old"])
 	if !slices.Equal(busy, []string{"sleep"}) {
 		t.Errorf("ASSERTION: the busy panes on old are %v, want only the pane that runs sleep\n%s", busy, out)
 	}

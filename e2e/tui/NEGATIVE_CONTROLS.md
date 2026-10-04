@@ -1177,6 +1177,11 @@ binary, and ran the named test.
 | The restart | `planSyncTarget`: `t.restart = true` made `false` | `TestHostsSyncRestartWithYes` (the daemon still runs the old version) | **caught** |
 | The busy panes | `readDaemonSessions`: the `parsePaneProcs` call cut | `TestHostsSync` (no busy pane, and the refusal does not name `sleep`) | **caught** |
 
+The first CI run of `TestHostsSync` read the plan right after it made the pane
+that runs `sleep`, and found no busy pane (run 37232323815). The pane was not
+yet running `sleep`. The test now reads the plan again, for up to 20 seconds,
+until the pane shows. The busy-pane control still fails after that wait.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
