@@ -476,31 +476,33 @@ func (s *Stream) Read(p []byte) (int, error) {
 
 	select {
 	case chunk := <-s.incoming:
-		s.mu.Lock()
-		n := copy(p, chunk)
-		if n < len(chunk) {
-			s.buf = chunk[n:]
-		}
-		s.mu.Unlock()
-		return n, nil
+		return s.take(p, chunk), nil
 	case <-s.closed:
-		// Drain anything already buffered before reporting the end, so a peer
-		// that answered and then hung up does not lose its answer.
-		select {
-		case chunk := <-s.incoming:
-			s.mu.Lock()
-			n := copy(p, chunk)
-			if n < len(chunk) {
-				s.buf = chunk[n:]
-			}
-			s.mu.Unlock()
-			return n, nil
-		default:
-		}
-		return 0, s.readErr()
 	case <-s.m.done:
-		return 0, s.readErr()
 	}
+	// The stream or the whole link has ended. Drain anything already
+	// delivered before reporting the end, so a peer that answered and then
+	// hung up does not lose its answer. Both arms drain: select picks among
+	// ready arms at random, so a link that closed with chunks still queued
+	// used to drop them about half the time.
+	select {
+	case chunk := <-s.incoming:
+		return s.take(p, chunk), nil
+	default:
+	}
+	return 0, s.readErr()
+}
+
+// take copies a chunk off the stream into p and keeps what does not fit for
+// the next Read.
+func (s *Stream) take(p, chunk []byte) int {
+	s.mu.Lock()
+	n := copy(p, chunk)
+	if n < len(chunk) {
+		s.buf = chunk[n:]
+	}
+	s.mu.Unlock()
+	return n
 }
 
 // readErr reports the end of a stream. A clean close reads as io.EOF, which is
