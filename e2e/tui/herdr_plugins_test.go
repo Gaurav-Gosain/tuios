@@ -287,7 +287,9 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 //
 // Negative controls (NEGATIVE_CONTROLS.md, "herdr plugins"): with the
 // herdrPluginCall branch cut from herdrAPICall, both runs fail as
-// unsupported; with cmd.Dir cut from Runner.Start, the cwd check fails.
+// unsupported; with cmd.Dir cut from Runner.Start, the cwd check fails;
+// with the grant check cut from herdrPluginLogList, the read-only pane
+// reads the log.
 func TestHerdrPluginActions(t *testing.T) {
 	_, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions"}, "actions"))
 	const id = "e2e.actions"
@@ -349,6 +351,20 @@ func TestHerdrPluginActions(t *testing.T) {
 			t.Fatalf("plugin.log.list holds %d finished runs, want 2: %v", done, logs)
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// A read-only pane may neither run an action nor read the log, which
+	// holds what the commands printed.
+	crushPanes(t, base, "held")
+	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", crushSession, "-w", windowID(t, base, crushSession, "held"), "--grants", "read"); err != nil {
+		t.Fatalf("set-pane-grants: %v\n%s", err, out)
+	}
+	held := runHerdrSteps(t, base, "held", "held", "step invoke \"$H\" plugin action invoke hello --plugin e2e.actions\nstep log \"$H\" plugin log list --plugin e2e.actions\n")
+	for _, name := range []string{"invoke", "log"} {
+		st := held[name]
+		if st.code != 1 || !strings.Contains(st.err, "forbidden") || strings.Contains(st.out, "hello from e2e.actions") {
+			t.Errorf("plugin %s from a read-only pane: exit %d, stdout %q, stderr %q; want herdr's forbidden error", name, st.code, st.out, st.err)
+		}
 	}
 }
 
