@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -92,6 +93,10 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		if tk.Text = session.SubagentsText(e.Subagents); tk.Text != "" {
 			tk.Number, tk.HasNumber = float64(e.Subagents), true
 		}
+	case "pr":
+		// "PR #12 open pass": the pull request of the session's branch, as
+		// the daemon last read it from gh.
+		tk.Text = printableTitle(e.PR)
 	default:
 		if key, ok := config.SidebarMetaTokenKey(name); ok {
 			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, key))
@@ -232,11 +237,23 @@ func sidebarContextPercent(v string) (float64, bool) {
 }
 
 // sidebarTokenDefaultLook is the look a token has before its table says
-// anything: the context warning is in the warning ink, and every other token
-// starts from the rail's own style.
-func sidebarTokenDefaultLook(name string) config.SidebarTokenLook {
-	if name == "context" {
+// anything: the context warning is in the warning ink, a pull request's
+// failing checks in the error ink, pending ones in the warning ink, passing
+// ones and a merge in the success ink, and every other token starts from the
+// rail's own style.
+func sidebarTokenDefaultLook(tk sidebarAgentToken) config.SidebarTokenLook {
+	switch tk.Name {
+	case "context":
 		return config.SidebarTokenLook{Fg: "warning"}
+	case "pr":
+		switch {
+		case strings.HasSuffix(tk.Text, " "+ghpr.ChecksFail):
+			return config.SidebarTokenLook{Fg: "error"}
+		case strings.HasSuffix(tk.Text, " "+ghpr.ChecksPending):
+			return config.SidebarTokenLook{Fg: "warning"}
+		case strings.HasSuffix(tk.Text, " "+ghpr.ChecksPass), strings.HasSuffix(tk.Text, " "+ghpr.StateMerged):
+			return config.SidebarTokenLook{Fg: "success"}
+		}
 	}
 	return config.SidebarTokenLook{}
 }
@@ -270,7 +287,7 @@ func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Tim
 // name's.
 func sidebarNoteToken(name string) bool {
 	switch name {
-	case "message", "need", "now", "prompt", "context", "subagents":
+	case "message", "need", "now", "prompt", "context", "subagents", "pr":
 		return true
 	}
 	_, ok := config.SidebarMetaTokenKey(name)
@@ -386,7 +403,7 @@ func sidebarTokenColor(name string, pal overlay.Palette) color.Color {
 // look written over it: fg replaces the colour, bold and dim replace the
 // rail's choice when they are set at all.
 func (m *OS) sidebarTokenStyle(base lipgloss.Style, tk sidebarAgentToken, pal overlay.Palette) lipgloss.Style {
-	look := sidebarTokenDefaultLook(tk.Name).Overlay(m.Settings.SidebarAgentRow.Style(tk.Name).Resolve(tk.Text, tk.Number, tk.HasNumber))
+	look := sidebarTokenDefaultLook(tk).Overlay(m.Settings.SidebarAgentRow.Style(tk.Name).Resolve(tk.Text, tk.Number, tk.HasNumber))
 	if c := sidebarTokenColor(look.Fg, pal); c != nil {
 		base = base.Foreground(c)
 	}

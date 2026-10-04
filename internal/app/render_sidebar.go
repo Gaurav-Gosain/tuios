@@ -441,6 +441,9 @@ type sidebarAgentEntry struct {
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
+	// PR is the pull request of the session's worktree branch, in short form,
+	// which the pr row token draws. Empty when there is none.
+	PR string
 	// SessionLabel is what to print for SessionID: the session's display name
 	// when it has one. Identity keys the row, the label only fronts it.
 	SessionLabel string
@@ -2071,6 +2074,10 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 	}
 	var agents []sidebarAgentEntry
 	for _, s := range sessions {
+		pr := ""
+		if s.Worktree != nil {
+			pr = s.Worktree.PR
+		}
 		for _, win := range s.Children {
 			if win.AgentState == "" {
 				continue
@@ -2093,6 +2100,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Meta:         win.Meta,
 				Queued:       win.Queued,
 				Subagents:    win.Subagents,
+				PR:           pr,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,

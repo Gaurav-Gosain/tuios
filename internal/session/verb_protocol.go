@@ -511,7 +511,7 @@ func init() {
 				{Name: "changes", Type: "bool", Description: "Run git status in every worktree and report the count of uncommitted changes, and the commits ahead of base. Off by default because it runs git.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), and with changes: changes and ahead."},
+				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), pr (the branch's pull request as ship-status reports it, only when tuios knows of one), and with changes: changes and ahead."},
 				{Name: "total", Type: "int", Description: "How many entries."},
 			},
 			examples: []string{

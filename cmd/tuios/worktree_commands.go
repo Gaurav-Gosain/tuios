@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -26,25 +27,26 @@ import (
 
 // worktreeRow is one entry of list-worktrees as the CLI reads it.
 type worktreeRow struct {
-	Session      string `json:"session"`
-	Repo         string `json:"repo"`
-	RepoRoot     string `json:"repo_root"`
-	Branch       string `json:"branch"`
-	Path         string `json:"path"`
-	Base         string `json:"base"`
-	Group        string `json:"group"`
-	Managed      bool   `json:"managed"`
-	Gone         bool   `json:"gone"`
-	State        string `json:"state"`
-	Harness      string `json:"harness"`
-	Windows      int    `json:"windows"`
-	Attached     bool   `json:"attached"`
-	PromptStatus string `json:"prompt_status"`
-	PromptNote   string `json:"prompt_note"`
-	ReadyBy      string `json:"prompt_ready_by"`
-	Agent        string `json:"agent"`
-	Changes      *int   `json:"changes"`
-	Ahead        *int   `json:"ahead"`
+	Session      string   `json:"session"`
+	Repo         string   `json:"repo"`
+	RepoRoot     string   `json:"repo_root"`
+	Branch       string   `json:"branch"`
+	Path         string   `json:"path"`
+	Base         string   `json:"base"`
+	Group        string   `json:"group"`
+	Managed      bool     `json:"managed"`
+	Gone         bool     `json:"gone"`
+	State        string   `json:"state"`
+	Harness      string   `json:"harness"`
+	Windows      int      `json:"windows"`
+	Attached     bool     `json:"attached"`
+	PromptStatus string   `json:"prompt_status"`
+	PromptNote   string   `json:"prompt_note"`
+	ReadyBy      string   `json:"prompt_ready_by"`
+	Agent        string   `json:"agent"`
+	Changes      *int     `json:"changes"`
+	Ahead        *int     `json:"ahead"`
+	PR           *ghpr.PR `json:"pr,omitempty"`
 }
 
 // newWorktreeCommand builds `tuios worktree` and its subcommands.
@@ -575,9 +577,13 @@ func renderWorktreeTable(rows []worktreeRow) string {
 		case session.PromptHeld:
 			prompt = "held: look at the pane"
 		}
-		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, prompt, status})
+		pr := "-"
+		if badge := r.PR.Badge(); badge != "" {
+			pr = plainLine(strings.TrimPrefix(badge, "PR "))
+		}
+		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, prompt, pr, status})
 	}
-	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "PROMPT", "STATUS"}, cells)
+	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "PROMPT", "PR", "STATUS"}, cells)
 }
 
 // renderTable draws a listing with the border and colours of the session

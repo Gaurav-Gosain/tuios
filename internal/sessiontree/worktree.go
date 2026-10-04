@@ -26,6 +26,10 @@ type WorktreeRef struct {
 	// Gone says the worktree directory no longer exists. The session is still
 	// listed, because a shell whose directory was removed under it still runs.
 	Gone bool
+	// PR is the short form of the branch's pull request ("PR #12 open
+	// pass"), empty when there is none. The agent rows of the session draw
+	// it as their pr token.
+	PR string
 }
 
 // GroupByRepo returns the session list with every worktree session gathered

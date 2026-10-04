@@ -38,6 +38,7 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 		Branch: info.Branch,
 		Group:  info.Group,
 		Gone:   info.Gone,
+		PR:     info.PR.Badge(),
 	}
 }
 

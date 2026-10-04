@@ -18,7 +18,7 @@ import (
 // ordered text and numeric rules:
 //
 //	[appearance.sidebar.agent_row]
-//	tokens = ["session", "need", "harness", "name", "elapsed", "context", "subagents", "meta", "now", "message"]
+//	tokens = ["session", "need", "harness", "name", "elapsed", "context", "subagents", "pr", "meta", "now", "message"]
 //
 //	[appearance.sidebar.agent_row.name]
 //	fg = "text"
@@ -56,9 +56,11 @@ import (
 // context draws "ctx 84%" only once the context is SidebarContextWarnAt
 // percent full or more, in the warning ink unless its table says otherwise,
 // and subagents says how many subagents the agent is running ("2 subagents")
-// on any row, and nothing while there are none. $now, $prompt and $context
-// draw the raw value on any row.
-var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "subagents", "meta", "message", "session", "host"}
+// on any row, and nothing while there are none. pr is the pull request of the
+// session's worktree branch ("PR #12 open pass"), which the daemon reads from
+// gh, and nothing when there is none. $now, $prompt and $context draw the raw
+// value on any row.
+var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "subagents", "pr", "meta", "message", "session", "host"}
 
 // SidebarAgentRowDefaultTokens is the row as it ships. state and host are left
 // out because both have a value on every row and the glyph already says the
@@ -66,12 +68,13 @@ var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "nee
 // need says what a row wants from you ("approval", "question", "errored",
 // "finished"), context how full the agent's context is once that is worth a
 // look, subagents how many subagents the agent still has at work, which on a
-// row at rest is the one sign that work goes on, meta whatever else the pane
+// row at rest is the one sign that work goes on, pr the pull request of the
+// session's branch and its checks, meta whatever else the pane
 // reported through set-agent-meta, which is nothing unless a hook or
 // statusline feed writes it, and now what a working agent is doing ("Bash: go
 // test ./..."). now comes last because the line cuts its last token first,
 // and a long command is what can best lose its tail.
-var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "context", "subagents", "meta", "now", "message"}
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "context", "subagents", "pr", "meta", "now", "message"}
 
 // SidebarContextWarnAt is the percent of its context window an agent must be
 // using before the context token draws. Below it the figure is noise on a

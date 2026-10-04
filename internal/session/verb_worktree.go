@@ -286,6 +286,9 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		if wt.LaunchedFrom != "" {
 			row["launched_from"] = wt.LaunchedFrom
 		}
+		if wt.PR != nil {
+			row["pr"] = wt.PR
+		}
 		if p.Changes && !wt.Gone {
 			// A git status per worktree, only when asked for: the rail never
 			// asks, and a listing an agent polls should not run git it did not
