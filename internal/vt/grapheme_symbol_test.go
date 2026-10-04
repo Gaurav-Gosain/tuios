@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -19,19 +20,23 @@ func TestStyledSymbolCellsAllocateNothing(t *testing.T) {
 	}
 }
 
-// TestGraphemeStringServesEverySymbolWhole checks the static table behind
+// TestClusterStringServesEverySymbolWhole checks the static table behind
 // the symbol fast path: every rune in its range comes back as exactly its own
 // UTF-8, and text outside the range or longer than one rune still comes back
 // as the buffer.
-func TestGraphemeStringServesEverySymbolWhole(t *testing.T) {
+func TestClusterStringServesEverySymbolWhole(t *testing.T) {
 	e := NewEmulator(10, 2)
+	whole := func() string {
+		var run clusterRun
+		return run.str(e, e.grapheme, len(e.grapheme))
+	}
 	for r := rune(symbolFirst - 1); r <= symbolEnd; r++ {
 		e.grapheme = utf8.AppendRune(e.grapheme[:0], r)
-		if got, want := e.graphemeString(), string(r); got != want {
+		if got, want := whole(), string(r); got != want {
 			t.Fatalf("U+%04X: got %q, want %q", r, got, want)
 		}
 		e.grapheme = utf8.AppendRune(e.grapheme, 0x301)
-		if got, want := e.graphemeString(), string(r)+"́"; got != want {
+		if got, want := whole(), string(r)+"́"; got != want {
 			t.Fatalf("U+%04X with a mark: got %q, want %q", r, got, want)
 		}
 	}
@@ -56,6 +61,54 @@ func TestSymbolClusterExtendsAcrossWrites(t *testing.T) {
 			if (w == nil) != (s == nil) || (w != nil && (w.Content != s.Content || w.Width != s.Width)) {
 				t.Errorf("%q + %q: cell %d is %+v split, %+v whole", tc.first, tc.second, x, s, w)
 			}
+		}
+	}
+}
+
+// TestRepeatedClustersAllocateNothing pins the cost of text outside ASCII and
+// the symbol block that repeats, as CJK text, a redrawn status line and emoji
+// lists do. Each run of such text used to cost a string allocation for the
+// cells drawn from it; a cluster seen recently now comes from the table.
+func TestRepeatedClustersAllocateNothing(t *testing.T) {
+	e := NewEmulator(80, 4)
+	seq := "\x1b[H日本語のテキスト 中文字符 한국어 émoji 😀🎉👍🏽 👨‍👩‍👧 é\x1b[31mä\x1b[m"
+	e.WriteString(seq)
+	if got := testing.AllocsPerRun(200, func() { e.WriteString(seq) }); got > 0 {
+		t.Errorf("repeated clusters allocate %.1f times per write, want 0", got)
+	}
+}
+
+// TestNovelClusterRunAllocatesBoundedly checks the other side: a long run of
+// clusters the table has never seen costs a bounded number of allocations, not
+// one per character, and every cell still holds its own character.
+func TestNovelClusterRunAllocatesBoundedly(t *testing.T) {
+	e := NewEmulator(200, 4)
+	next := rune(0x4E00)
+	run := func() string {
+		var b strings.Builder
+		b.WriteString("\x1b[H")
+		for range 100 {
+			b.WriteRune(next)
+			next++
+		}
+		return b.String()
+	}
+	runs := make([]string, 101)
+	for i := range runs {
+		runs[i] = run()
+	}
+	i := 0
+	got := testing.AllocsPerRun(100, func() {
+		e.WriteString(runs[i])
+		i++
+	})
+	if got > maxRunMisses+1 {
+		t.Errorf("a run of 100 new clusters allocates %.1f times, want at most %d", got, maxRunMisses+1)
+	}
+	for x := range 100 {
+		want := string(rune(0x4E00 + 100*100 + x))
+		if c := e.CellAt(2*x, 0); c == nil || c.Content != want {
+			t.Fatalf("cell %d holds %+v, want %q", 2*x, c, want)
 		}
 	}
 }

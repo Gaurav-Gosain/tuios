@@ -129,6 +129,12 @@ type Emulator struct {
 	// rgbCache holds recently used truecolor SGR colours, made on the first
 	// one. See rgbColor.
 	rgbCache *[256]rgbSlot
+	// rgbSlab is the unused rest of the slab rgbColor boxes a missed colour
+	// into. See boxRGB.
+	rgbSlab []color.RGBA
+	// clusters holds recently drawn clusters, made on the first one outside
+	// ASCII and the symbol block. See clusterRun.
+	clusters *[clusterTableLen]string
 	// The cell handleGrapheme last drew into, and the line edges it was drawn
 	// under. A pending wrap makes the target differ from the cursor position
 	// observed beforehand, and the margins are read before the wrap is

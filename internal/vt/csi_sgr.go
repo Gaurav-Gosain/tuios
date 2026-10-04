@@ -2,6 +2,7 @@ package vt
 
 import (
 	"image/color"
+	"unsafe"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -14,12 +15,20 @@ type rgbSlot struct {
 	c   color.Color
 }
 
+// rgbSlabLen is how many colours one rgbSlab allocation holds. A colour still
+// in use keeps its whole slab alive, so the slab stays small: 64 colours are
+// 256 bytes.
+const rgbSlabLen = 64
+
 // rgbColor returns the colour an SGR 38/48/58 with type 2 sets for r, g, b:
 // the color.RGBA ansi.ReadStyleColor builds. Putting that value in a
 // color.Color allocates, and a truecolor repaint sets a colour or two for
 // every cell, so the boxed value is kept in a small direct-mapped cache and
-// handed out again. The value is the same either way; only the allocation is
-// shared.
+// handed out again. A gradient (lolcat, a truecolor prompt, a heat map) gives
+// nearly every cell a colour of its own and misses that cache on each one, so
+// a miss boxes into a slab of colours made once for every rgbSlabLen misses
+// instead of allocating per cell. The value is the same either way; only the
+// allocation is shared.
 func (e *Emulator) rgbColor(r, g, b uint8) color.Color {
 	if e.rgbCache == nil {
 		e.rgbCache = new([256]rgbSlot)
@@ -28,9 +37,38 @@ func (e *Emulator) rgbColor(r, g, b uint8) color.Color {
 	slot := &e.rgbCache[(uint32(r)*7+uint32(g)*13+uint32(b)*31)&0xff]
 	if slot.key != key {
 		slot.key = key
-		slot.c = color.RGBA{R: r, G: g, B: b, A: 0xff}
+		slot.c = e.boxRGB(color.RGBA{R: r, G: g, B: b, A: 0xff})
 	}
 	return slot.c
+}
+
+// rgbaType is a color.Color holding a color.RGBA, kept for its type word.
+var rgbaType color.Color = color.RGBA{}
+
+// ifaceWords is the layout of a non-empty interface value: its itab, and a
+// pointer to the value, since color.RGBA is not pointer shaped.
+type ifaceWords struct {
+	tab  unsafe.Pointer
+	data unsafe.Pointer
+}
+
+// boxRGB returns c as a color.Color whose value lives in the emulator's slab
+// rather than in an allocation of its own. The result is exactly what the
+// conversion color.Color(c) gives: the same dynamic type, so a type switch on
+// color.RGBA, ==, and RGBA() all behave the same. The slab element is never
+// written again once handed out, as an interface's value must not be.
+func (e *Emulator) boxRGB(c color.RGBA) color.Color {
+	if len(e.rgbSlab) == 0 {
+		e.rgbSlab = make([]color.RGBA, rgbSlabLen)
+	}
+	v := &e.rgbSlab[0]
+	*v = c
+	e.rgbSlab = e.rgbSlab[1:]
+	out := rgbaType
+	// #nosec G103 - replaces only the value pointer of an interface whose
+	// dynamic type is color.RGBA with a pointer to another color.RGBA.
+	(*ifaceWords)(unsafe.Pointer(&out)).data = unsafe.Pointer(v)
+	return out
 }
 
 // rgbParams reports whether params starts with a direct RGB colour in one of

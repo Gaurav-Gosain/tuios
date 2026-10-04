@@ -23,7 +23,7 @@ const maxClusterBytes = 64
 var asciiStr [128]string
 
 // symbolStr holds the UTF-8 of every rune from symbolFirst up to symbolEnd
-// back to back, three bytes each, so graphemeString can hand any of them out
+// back to back, three bytes each, so clusterRun can hand any of them out
 // as a substring. The range is general punctuation, arrows, maths, box
 // drawing, blocks, shapes, dingbats and braille: what a TUI draws its borders,
 // meters and graphs with, often one styled cell at a time.
@@ -172,25 +172,94 @@ func (e *Emulator) renderGraphemeBuffer() {
 	// and it's up to the caller to decide how to handle Unicode vs non-Unicode
 	// modes.
 	method := ansi.GraphemeWidth
-	graphemes := e.graphemeString()
-	for len(graphemes) > 0 {
-		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
-		e.handleGrapheme(cluster, width)
-		graphemes = graphemes[len(cluster):]
+	buf := e.grapheme
+	var run clusterRun
+	for len(buf) > 0 {
+		cluster, width := ansi.FirstGraphemeCluster(buf, method)
+		e.handleGrapheme(run.str(e, buf, len(cluster)), width)
+		buf = buf[len(cluster):]
 	}
 }
 
-// graphemeString returns the grapheme buffer as a string, which the cells
-// drawn from it keep. When a style change follows every character, as in a
-// TUI's borders, meters and graphs, the buffer holds a single rune each time,
-// and a symbol then comes from symbolStr instead of costing an allocation
-// per cell.
-func (e *Emulator) graphemeString() string {
-	if r, n := utf8.DecodeRune(e.grapheme); n == len(e.grapheme) && r >= symbolFirst && r < symbolEnd {
-		i := int(r-symbolFirst) * 3
-		return symbolStr[i : i+3]
+// clusterTableLen is the number of slots in Emulator.clusters, a power of
+// two. 1024 slots are 16 KiB, made only for an emulator that prints text
+// outside ASCII and the symbol block.
+const clusterTableLen = 1024
+
+// maxInternBytes is the longest cluster the table keeps. Every CJK
+// character, accented letter and most emoji fit; a longer ZWJ sequence is
+// rare enough to allocate.
+const maxInternBytes = 32
+
+// maxRunMisses is how many clusters of one buffered run may each get a
+// string of their own before the rest of the run shares one allocation.
+const maxRunMisses = 4
+
+// clusterRun turns the clusters of one buffered run into the strings the
+// cells drawn from them keep, allocating as little as it safely can.
+//
+// The buffer is reused, so a cell cannot keep a view of it. Text repeats (a
+// CJK document, a status line redrawn every second, the same emoji in a list)
+// so a cluster seen recently comes out of a small direct-mapped table at no
+// cost. A cluster the table lacks gets a string of its own, which goes into
+// the table. Novel text would then pay an allocation per character, more than
+// the one string per run this replaced, so after maxRunMisses misses the rest
+// of the run is copied once and later misses are substrings of that copy.
+// Those are not put in the table: an entry would keep the whole copy alive.
+type clusterRun struct {
+	misses int
+	// rest is the copy of the run from the cluster where it was made to the
+	// run's end, and restLen is its length.
+	rest    string
+	restLen int
+}
+
+// str returns the first n bytes of buf, a cluster at the head of the
+// unconsumed run, as a string a cell can keep.
+func (run *clusterRun) str(e *Emulator, buf []byte, n int) string {
+	b := buf[:n]
+	if r, size := utf8.DecodeRune(b); size == n {
+		if r < utf8.RuneSelf {
+			return asciiStr[r]
+		}
+		if r >= symbolFirst && r < symbolEnd {
+			i := int(r-symbolFirst) * 3
+			return symbolStr[i : i+3]
+		}
 	}
-	return string(e.grapheme)
+	if run.rest != "" {
+		// Inside the copied tail: buf is a suffix of the run, as is rest.
+		off := run.restLen - len(buf)
+		return run.rest[off : off+n]
+	}
+	if n > maxInternBytes {
+		return string(b)
+	}
+	if e.clusters == nil {
+		e.clusters = new([clusterTableLen]string)
+	}
+	slot := &e.clusters[clusterHash(b)&(clusterTableLen-1)]
+	if *slot == string(b) {
+		return *slot
+	}
+	if run.misses >= maxRunMisses {
+		run.rest = string(buf)
+		run.restLen = len(buf)
+		return run.rest[:n]
+	}
+	run.misses++
+	*slot = string(b)
+	return *slot
+}
+
+// clusterHash is FNV-1a over a cluster's bytes.
+func clusterHash(b []byte) uint32 {
+	h := uint32(2166136261)
+	for _, c := range b {
+		h ^= uint32(c)
+		h *= 16777619
+	}
+	return h
 }
 
 // flushGraphemeAtWriteEnd draws the buffered clusters when a Write runs out of
@@ -209,13 +278,15 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 	}
 
 	method := ansi.GraphemeWidth
-	graphemes := e.graphemeString()
+	buf := e.grapheme
+	var run clusterRun
 	var open string
-	for len(graphemes) > 0 {
-		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
+	for len(buf) > 0 {
+		raw, width := ansi.FirstGraphemeCluster(buf, method)
+		cluster := run.str(e, buf, len(raw))
 		res := e.handleGrapheme(cluster, width)
-		graphemes = graphemes[len(cluster):]
-		if len(graphemes) > 0 {
+		buf = buf[len(raw):]
+		if len(buf) > 0 {
 			continue
 		}
 		switch res {
