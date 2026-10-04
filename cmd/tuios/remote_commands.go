@@ -1154,19 +1154,9 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 // runSetConfig sets a session option over the verb protocol. The value is
 // recorded in daemon-owned state and, when a TUI is attached, applied live.
 func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
-	client, err := dialVerb()
+	raw, err := setConfigOption(sessionName, path, value)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = client.Close() }()
-
-	raw, err := client.Call("set-option", map[string]any{
-		"session": sessionName,
-		"key":     path,
-		"value":   value,
-	})
-	if err != nil {
-		return explainVerbError("set-option", err)
 	}
 	if jsonOutput {
 		var pretty any
@@ -1179,20 +1169,53 @@ func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
 	// about a value it only recorded goes to stderr, so a person sees why the
 	// screen did not change.
 	fmt.Printf("Set %s = %s\n", path, value)
+	if note := setConfigNote(raw); note != "" {
+		fmt.Fprintln(os.Stderr, note)
+	}
+	return nil
+}
+
+// setConfigNote is what set-config says on stderr about the daemon's answer:
+// a value only recorded, and a deprecated path. It is empty when there is
+// nothing to say.
+func setConfigNote(raw json.RawMessage) string {
 	var res struct {
 		Applied    bool   `json:"applied"`
 		Reason     string `json:"reason"`
 		Deprecated string `json:"deprecated"`
 	}
-	if json.Unmarshal(raw, &res) == nil {
-		if !res.Applied && res.Reason != "" {
-			fmt.Fprintf(os.Stderr, "Not applied: %s.\n", strings.TrimSuffix(res.Reason, "."))
-		}
-		if res.Deprecated != "" {
-			fmt.Fprintf(os.Stderr, "Deprecated: %s\n", res.Deprecated)
-		}
+	if json.Unmarshal(raw, &res) != nil {
+		return ""
 	}
-	return nil
+	var lines []string
+	if !res.Applied && res.Reason != "" {
+		lines = append(lines, "Not applied: "+strings.TrimSuffix(res.Reason, ".")+".")
+	}
+	if res.Deprecated != "" {
+		lines = append(lines, "Deprecated: "+res.Deprecated)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// setConfigOption is the set-option call behind set-config, and returns the
+// daemon's answer. tuios config browse sets a value through it too, so the
+// explorer has the same refusals as the command.
+func setConfigOption(sessionName, path, value string) (json.RawMessage, error) {
+	client, err := dialVerb()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("set-option", map[string]any{
+		"session": sessionName,
+		"key":     path,
+		"value":   value,
+	})
+	if err != nil {
+		return nil, explainVerbError("set-option", err)
+	}
+	return raw, nil
 }
 
 // runGetConfig reads a session option over the verb protocol.

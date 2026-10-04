@@ -3045,6 +3045,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 	rootCmd.AddCommand(newPluginsCommand())
 
+	addExplorers(rootCmd)
 	return rootCmd
 }
 
