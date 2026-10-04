@@ -81,8 +81,10 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 	// The cache is emptied when the pane writes, and also when it grows past
 	// a few screens of rows: a capture of the whole history is 10000 decoded
 	// lines of 112-byte cells, and a pane that is then idle would have kept
-	// them for as long as it stayed idle.
-	if t.scrollCacheGen != t.scrollGeneration || len(t.scrollCache) >= ghosttyScrollCacheCap {
+	// them for as long as it stayed idle. Every line is the pane's width, so
+	// the pure ring's bound on cells is a bound on lines here.
+	limit := min(ghosttyScrollCacheCap, max(1, cacheCellCap/max(t.width, 1)))
+	if t.scrollCacheGen != t.scrollGeneration || len(t.scrollCache) >= limit {
 		clear(t.scrollCache)
 		t.scrollCacheGen = t.scrollGeneration
 	}

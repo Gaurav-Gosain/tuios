@@ -126,6 +126,23 @@ func TestScrollbackCacheIsBounded(t *testing.T) {
 	if n := len(sb.cache); n > cacheCap {
 		t.Fatalf("cache holds %d decoded lines after a walk of the ring, want at most %d", n, cacheCap)
 	}
+
+	// Lines of a wide pane are bounded by their cells, 112 bytes each, and
+	// not only by their count.
+	wide := NewScrollback(cacheCap * 2)
+	for range cacheCap * 2 {
+		wide.PushBlankLine(400)
+	}
+	for i := range cacheCap * 2 {
+		_ = wide.Line(i)
+	}
+	cells := 0
+	for _, line := range wide.cache {
+		cells += len(line)
+	}
+	if cells > cacheCellCap {
+		t.Fatalf("cache holds %d decoded cells after a walk of a 400-column ring, want at most %d", cells, cacheCellCap)
+	}
 }
 
 func TestScrollbackFullRingReusesEvictedStorage(t *testing.T) {

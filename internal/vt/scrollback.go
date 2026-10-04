@@ -92,7 +92,10 @@ type Scrollback struct {
 	cacheMu  sync.Mutex
 	cache    map[int]uv.Line
 	cacheGen uint64
-	gen      uint64
+	// cacheCells is the number of cells the cache holds, which cacheCellCap
+	// bounds alongside the line count.
+	cacheCells int
+	gen        uint64
 }
 
 // internCap bounds the colour intern table. Past it, the packer degrades the
@@ -111,6 +114,13 @@ const (
 
 // cacheCap bounds the decoded-line cache: a few screens of rows.
 const cacheCap = 256
+
+// cacheCellCap bounds the decoded-line cache by its cells as well, since a
+// cell is 112 bytes and a line is as many cells as the pane was wide: 256
+// lines of a 207-column pane are 5.9 MB. 1<<16 cells, about 7 MB, is more than
+// the scrolled screen of any pane holds, which is what the cache is for, while
+// a narrow pane keeps the full count of lines.
+const cacheCellCap = 1 << 16
 
 // sbLineSlack is the room a line's buffer gets beyond one byte per cell: the
 // width header and a style change or two.
@@ -604,19 +614,29 @@ func (sb *Scrollback) Line(index int) uv.Line {
 	}
 	sb.cacheMu.Lock()
 	defer sb.cacheMu.Unlock()
-	if sb.cacheGen != sb.gen || len(sb.cache) >= cacheCap {
-		clear(sb.cache)
-		sb.cacheGen = sb.gen
+	if sb.cacheGen != sb.gen {
+		sb.clearCacheLocked()
 	}
 	if line, ok := sb.cache[index]; ok {
 		return line
 	}
 	line := sb.decodeLine(sb.lines[sb.slot(index)])
+	if len(sb.cache) >= cacheCap || sb.cacheCells+len(line) > cacheCellCap {
+		sb.clearCacheLocked()
+	}
 	if sb.cache == nil {
 		sb.cache = make(map[int]uv.Line)
 	}
 	sb.cache[index] = line
+	sb.cacheCells += len(line)
 	return line
+}
+
+// clearCacheLocked empties the decoded-line cache. The caller holds cacheMu.
+func (sb *Scrollback) clearCacheLocked() {
+	clear(sb.cache)
+	sb.cacheCells = 0
+	sb.cacheGen = sb.gen
 }
 
 // decodeLine decodes one stored line into a fresh uv.Line of its width. The

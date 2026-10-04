@@ -101,6 +101,27 @@ type Terminal interface {
 	// Scrollback.
 	ScrollbackLen() int
 	ScrollbackLine(index int) uv.Line
+	// ScrollbackRows, ScrollbackText and CopyScrollback are for a reader of
+	// many history lines at once. ScrollbackLine decodes each line into a
+	// fresh line of 112-byte cells and keeps the newest in a cache for the
+	// renderer, which a walk of the whole history churns and then pins.
+	// These go round the cache.
+	//
+	// ScrollbackRows calls fn with each history line from index from to
+	// end-1, oldest first, decoded to its full width into a buffer reused
+	// from line to line: fn must copy what it keeps. It stops when fn
+	// returns false. fn must not call the terminal, which may hold its own
+	// lock while fn runs.
+	ScrollbackRows(from, end int, fn func(index int, line uv.Line) bool)
+	// ScrollbackText is ScrollbackRows for a reader that wants only the
+	// text: each line is its cells' content and width, with no style and no
+	// cell built. cells runs up to the line's last stored cell, and the
+	// columns from len(cells) to width are spaces.
+	ScrollbackText(from, end int, fn func(index, width int, cells []TextCell) bool)
+	// CopyScrollback copies history lines from index from to end-1, with
+	// their wrap and padding flags, into a form a reader decodes after it
+	// releases the terminal.
+	CopyScrollback(from, end int) *ScrollbackCopy
 	PushScrollbackLine(line uv.Line)
 	ClearScrollback()
 	SetScrollbackMaxLines(maxLines int)

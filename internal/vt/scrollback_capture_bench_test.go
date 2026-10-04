@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // scrollbackTexter is the optional interface the daemon's plain capture looks
@@ -60,8 +62,7 @@ func BenchmarkCaptureScrollback(b *testing.B) {
 }
 
 // BenchmarkScrollbackLineString decodes every scrollback line into cells and
-// back to text, the path the client's scrollback browser and the ANSI capture
-// still take.
+// back to text, the path the client's scrollback browser still takes.
 func BenchmarkScrollbackLineString(b *testing.B) {
 	for _, width := range []int{80, 207} {
 		b.Run(fmt.Sprintf("w%d", width), func(b *testing.B) {
@@ -72,6 +73,48 @@ func BenchmarkScrollbackLineString(b *testing.B) {
 				for i := range e.ScrollbackLen() {
 					n += len(e.ScrollbackLine(i).String())
 				}
+				if n == 0 {
+					b.Fatal("empty scrollback")
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkScrollbackRows is BenchmarkScrollbackLineString through the row
+// reader, which decodes every line into one reused buffer and keeps nothing.
+func BenchmarkScrollbackRows(b *testing.B) {
+	for _, width := range []int{80, 207} {
+		b.Run(fmt.Sprintf("w%d", width), func(b *testing.B) {
+			e := filledEmulator(width)
+			b.ReportAllocs()
+			for b.Loop() {
+				n := 0
+				e.ScrollbackRows(0, e.ScrollbackLen(), func(_ int, line uv.Line) bool {
+					n += len(line.String())
+					return true
+				})
+				if n == 0 {
+					b.Fatal("empty scrollback")
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkScrollbackText walks every scrollback line through the text
+// reader, which builds no cell: what copy-mode search and the image sweep do.
+func BenchmarkScrollbackText(b *testing.B) {
+	for _, width := range []int{80, 207} {
+		b.Run(fmt.Sprintf("w%d", width), func(b *testing.B) {
+			e := filledEmulator(width)
+			b.ReportAllocs()
+			for b.Loop() {
+				n := 0
+				e.ScrollbackText(0, e.ScrollbackLen(), func(_, _ int, cells []TextCell) bool {
+					n += len(cells)
+					return true
+				})
 				if n == 0 {
 					b.Fatal("empty scrollback")
 				}

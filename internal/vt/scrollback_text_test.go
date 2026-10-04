@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -47,6 +48,82 @@ func ringByText(sb *Scrollback) string {
 		out.WriteByte('\n')
 	}
 	return out.String()
+}
+
+// sameTextCells reports how the text reader's cells differ from a decoded
+// line, or "" when they agree: each cell's content and width, and past the
+// last text cell only the blank padding the decoder adds.
+func sameTextCells(line uv.Line, cells []TextCell) string {
+	if len(cells) > len(line) {
+		return fmt.Sprintf("%d text cells for a line of %d", len(cells), len(line))
+	}
+	for x, c := range cells {
+		if string(c.Content) != line[x].Content || c.Width != line[x].Width {
+			return fmt.Sprintf("column %d: text cell %q width %d, decoded %q width %d", x, c.Content, c.Width, line[x].Content, line[x].Width)
+		}
+	}
+	for x := len(cells); x < len(line); x++ {
+		if line[x] != uv.EmptyCell {
+			return fmt.Sprintf("column %d past the text cells is %#v, not blank", x, line[x])
+		}
+	}
+	return ""
+}
+
+// checkBulkReaders holds the bulk readers to Line on every line of a ring:
+// the row reader, the text reader, and both again on a copy of the ring.
+func checkBulkReaders(t *testing.T, sb *Scrollback) {
+	t.Helper()
+	n := sb.Len()
+	want := make([]uv.Line, n)
+	for i := range n {
+		want[i] = sb.decodeLine(sb.lines[sb.slot(i)])
+	}
+	cp := sb.copyLines(0, n)
+	if cp.Len() != n {
+		t.Fatalf("copy holds %d lines of %d", cp.Len(), n)
+	}
+	rows := func(name string, each func(int, int, func(int, uv.Line) bool)) {
+		seen := 0
+		each(0, n, func(i int, line uv.Line) bool {
+			if i != seen {
+				t.Fatalf("%s: line %d came after %d", name, i, seen-1)
+			}
+			seen++
+			if !reflect.DeepEqual(line, want[i]) {
+				t.Fatalf("%s: line %d is\n %#v\nwant\n %#v", name, i, line, want[i])
+			}
+			return true
+		})
+		if seen != n {
+			t.Fatalf("%s: read %d lines of %d", name, seen, n)
+		}
+	}
+	text := func(name string, each func(int, int, func(int, int, []TextCell) bool)) {
+		seen := 0
+		each(0, n, func(i, width int, cells []TextCell) bool {
+			seen++
+			if width != len(want[i]) {
+				t.Fatalf("%s: line %d width %d, want %d", name, i, width, len(want[i]))
+			}
+			if d := sameTextCells(want[i], cells); d != "" {
+				t.Fatalf("%s: line %d: %s", name, i, d)
+			}
+			return true
+		})
+		if seen != n {
+			t.Fatalf("%s: read %d lines of %d", name, seen, n)
+		}
+	}
+	rows("rows", sb.eachRow)
+	rows("copied rows", cp.Rows)
+	text("text", sb.eachText)
+	text("copied text", cp.Text)
+	for i := range n {
+		if cp.Wrapped(i) != sb.LineWrapped(i) || cp.Padded(i) != (sb.lineFlags(i)&rowPadded != 0) {
+			t.Fatalf("copy line %d flags differ", i)
+		}
+	}
 }
 
 // firstDifference describes where two captures part, for a failure message a
@@ -321,11 +398,17 @@ func TestScrollbackTextOfRandomLines(t *testing.T) {
 			if got.String() != want {
 				t.Fatalf("record %x cut at %d of %d: by cells %q, by text %q", data, cut, len(data), want, got.String())
 			}
+			if w, n := lineWidth(data[:cut]); n > 0 {
+				if d := sameTextCells(sb.decodeLine(data[:cut]), appendTextCells(nil, data[n:cut], w)); d != "" {
+					t.Fatalf("record %x cut at %d of %d: %s", data, cut, len(data), d)
+				}
+			}
 		}
 	}
 	if want, got := ringByCells(sb), ringByText(sb); want != got {
 		t.Fatal(firstDifference(want, got))
 	}
+	checkBulkReaders(t, sb)
 }
 
 // TestScrollbackTextUnderGeneratedInput drives the emulator with generated
@@ -350,6 +433,7 @@ func TestScrollbackTextUnderGeneratedInput(t *testing.T) {
 		if want, got := scrollbackByCells(e), scrollbackByText(e); want != got {
 			t.Fatalf("seed %d: %s", seed, firstDifference(want, got))
 		}
+		checkBulkReaders(t, e.Scrollback())
 	}
 }
 
