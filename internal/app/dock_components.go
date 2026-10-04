@@ -291,6 +291,9 @@ type DockComponentInfo struct {
 	LastRun  string `json:"last_run,omitempty"`
 	LastErr  string `json:"last_error,omitempty"`
 	Stopped  bool   `json:"stopped"`
+	// Off names the setting that keeps a placed built-in off the bar, such as
+	// "show_cpu = false". Empty when nothing does.
+	Off string `json:"off,omitempty"`
 }
 
 // DockComponentsData is the listing shaped for the wire: plain maps rather than
@@ -320,6 +323,7 @@ func (m *OS) DockComponentsData() []map[string]any {
 			"last_run":   c.LastRun,
 			"last_error": c.LastErr,
 			"stopped":    c.Stopped,
+			"off":        c.Off,
 		})
 	}
 	return out
@@ -373,6 +377,13 @@ func (m *OS) DockComponents() []DockComponentInfo {
 			// condition holds, which is not knowable here; a refreshable one is
 			// visible exactly when it has text.
 			info.Visible = info.Refresh == "render" || info.Text != ""
+			// The meters and the clock keep their own switch: the plan says
+			// where they go, the switch says whether they draw at all. A
+			// component a switch turns off says so, and names the switch.
+			if off := m.dockSwitchedOff(name); off != "" {
+				info.Visible = false
+				info.Off = off
+			}
 			out = append(out, info)
 		}
 	}
@@ -487,4 +498,27 @@ func lastSegmentMatching(n int, pred func(int) bool) int {
 		}
 	}
 	return -1
+}
+
+// dockSwitchedOff names the setting that keeps a placed built-in off the bar,
+// or returns "" when nothing does.
+func (m *OS) dockSwitchedOff(name string) string {
+	switch name {
+	case config.DockComponentCPU:
+		if !m.Settings.ShowCPU {
+			return "show_cpu = false"
+		}
+	case config.DockComponentRAM:
+		if !m.Settings.ShowRAM {
+			return "show_ram = false"
+		}
+	case config.DockComponentClock:
+		if m.Settings.HideClock {
+			return "hide_clock = true"
+		}
+		if !m.Settings.ShowClock {
+			return "show_clock = false"
+		}
+	}
+	return ""
 }

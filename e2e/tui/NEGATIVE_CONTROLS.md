@@ -1004,6 +1004,15 @@ The unit test `TestKeybindsListCoversEveryActionAndDefault` in `cmd/tuios`
 checks every action and default key on Linux and on macOS. It catches the
 same two cuts.
 
+## A dock component a switch turns off
+
+`list-dock-components` listed the clock and the meters as drawn when
+`show_clock`, `show_cpu` or `show_ram` kept them off the bar.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No switch check | `dockSwitchedOff` returns `""` | `TestDockListSaysWhichSwitchTurnsAComponentOff` ("cpu: off = \"\", want \"show_cpu = false\"", then the same for clock) | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

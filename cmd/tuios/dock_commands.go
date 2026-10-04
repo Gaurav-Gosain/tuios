@@ -27,6 +27,7 @@ type dockComponentRow struct {
 	Command  string `json:"command"`
 	Text     string `json:"text"`
 	Visible  bool   `json:"visible"`
+	Off      string `json:"off"`
 	LastExit int    `json:"last_exit"`
 	LastRun  string `json:"last_run"`
 	LastErr  string `json:"last_error"`
@@ -113,10 +114,15 @@ func printDockComponentList(raw json.RawMessage) error {
 			state, broken = "gave up", broken+1
 		case c.LastErr != "":
 			state, broken = "failed", broken+1
+		case c.Off != "":
+			state = "off"
 		case !c.Visible:
 			state = "hidden"
 		}
 		detail := c.Text
+		if c.Off != "" {
+			detail = c.Off
+		}
 		if c.LastErr != "" {
 			detail = c.LastErr
 			if c.LastExit != 0 {
