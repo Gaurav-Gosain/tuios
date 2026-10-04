@@ -2161,7 +2161,7 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 31,092,898 | 31,130,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,133,858 | 31,170,000 |
 | darwin/arm64 | 23,834,594 | 25,265,154 | 29,307,394 | 29,345,000 |
 
 The first budgets were about 3% above the size they were set at and below the
@@ -2319,6 +2319,12 @@ for the rail's custom section (#399): the `[appearance.sidebar.custom]` table,
 its parser and validator, the section in the renderer, and the rail context
 and re-run in the dock engine. On Go 1.26.6 the build measured 31,092,898 and
 29,307,394 bytes, 898 and 10,394 over the old budgets.
+
+The linux/amd64 budget went to 31,170,000 for the CLI help audit (#430): the
+`--json` output of `tape list`, `layout list`, `resurrect`, `set-config` and
+`send-text`, and the longer help and error text. On Go 1.26.6 the build
+measured 31,133,858 bytes, 3,858 over the old budget. darwin/arm64 stayed
+under its budget at 29,341,282 bytes.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
