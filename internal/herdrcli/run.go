@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -73,8 +74,11 @@ func Main(args []string, o Options) int {
 		}
 		path = p
 	}
-	if c.Output == OutStatus {
+	switch c.Output {
+	case OutStatus:
 		return printStatus(o, path, c)
+	case OutSessions:
+		return printSessions(o, path, c)
 	}
 	resp, err := request(path, c)
 	if err != nil {
@@ -293,5 +297,29 @@ func printStatus(o Options, path string, c *Call) int {
 		serverLines("  ")
 		fmt.Fprintln(o.Stdout, "\nupdate:\n  restart_needed: no\n  server_binary_stale: no")
 	}
+	return 0
+}
+
+// printSessions answers herdr session list: one session, default, at the
+// socket the front talks to, running when it answers a ping.
+func printSessions(o Options, path string, c *Call) int {
+	running := false
+	if resp, err := send(path, c.ID, "ping", map[string]any{}, requestTimeout); err == nil {
+		r, _ := resp["result"].(map[string]any)
+		running = r["type"] == "pong"
+	}
+	dir := filepath.Dir(path)
+	if asJSON, _ := c.Params["json"].(bool); asJSON {
+		printJSON(o.Stdout, map[string]any{"sessions": []map[string]any{{
+			"name": "default", "default": true, "running": running, "socket_path": path, "session_dir": dir,
+		}}})
+		return 0
+	}
+	status := "stopped"
+	if running {
+		status = "running"
+	}
+	fmt.Fprintf(o.Stdout, "%-20s %-8s %-48s socket\n", "name", "status", "directory")
+	fmt.Fprintf(o.Stdout, "%-20s %-8s %-48s %s\n", "default", status, dir, path)
 	return 0
 }

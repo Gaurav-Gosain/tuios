@@ -39,6 +39,9 @@ const (
 	// OutStatus pings the socket and prints herdr's status report. Text is
 	// the scope: "", "server" or "client". Params["json"] asks for JSON.
 	OutStatus
+	// OutSessions pings the socket and prints herdr's session list: the one
+	// tuios daemon behind the socket. Params["json"] asks for JSON.
+	OutSessions
 )
 
 // Call is one parsed herdr command: the request it sends and how its answer
@@ -142,6 +145,7 @@ var groups = map[string]groupParser{
 	"server":       parseServer,
 	"terminal":     parseTerminal,
 	"status":       parseStatus,
+	"session":      parseSession,
 }
 
 // localGroups are herdr's commands that do their work on herdr's own
@@ -152,7 +156,6 @@ var localGroups = map[string]string{
 	"config":      "herdr config edits herdr's own config.toml. tuios does not read it",
 	"channel":     "herdr channel picks herdr's update channel. tuios does not update herdr",
 	"machine":     "herdr machine manages herdr's SSH machines. Use tuios hosts",
-	"session":     "herdr session manages herdr's named servers. Use tuios ls and tuios attach",
 	"update":      "herdr update installs herdr. tuios does not update herdr",
 	"plugin":      "tuios does not host herdr plugins. Run the plugin's command in a tuios pane: its herdr calls reach tuios",
 	"integration": "herdr integration installs herdr's agent hooks. Use tuios integration",

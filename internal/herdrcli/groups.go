@@ -668,3 +668,23 @@ func statusCall(all []string) (*Call, *UsageError) {
 	}
 	return &Call{ID: "cli:status", Method: "ping", Params: map[string]any{"json": json}, Output: OutStatus, Text: scope}, nil
 }
+
+// parseSession is herdr's session command. Tools run `herdr session list
+// --json` to find the socket of each herdr server. tuios has one daemon, so
+// the list holds one session, default, at the socket the front talks to.
+// The other subcommands start, stop or delete herdr's own servers.
+func parseSession(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
+	switch sub {
+	case "list":
+		switch {
+		case len(args) == 0:
+			return &Call{ID: "cli:session:list", Method: "ping", Params: map[string]any{"json": false}, Output: OutSessions}, nil
+		case len(args) == 1 && args[0] == "--json":
+			return &Call{ID: "cli:session:list", Method: "ping", Params: map[string]any{"json": true}, Output: OutSessions}, nil
+		}
+		return nil, usage("usage: herdr session list [--json]")
+	case "attach", "stop", "delete":
+		return local("cli:session:"+sub, "herdr session "+sub+" acts on herdr's own servers. tuios runs one daemon: use tuios attach, tuios kill-server and tuios kill-session"), nil
+	}
+	return nil, &UsageError{Msg: groupHelp["session"], Code: 2}
+}

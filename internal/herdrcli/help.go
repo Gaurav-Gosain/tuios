@@ -28,6 +28,9 @@ Commands that act on herdr's own machine answer error unsupported.`
 
 var groupHelp = map[string]string{
 	"status": statusUsage,
+	"session": `herdr session commands:
+  herdr session list [--json]
+  herdr session attach, stop and delete act on herdr's own servers, which tuios does not run`,
 	"pane": `herdr pane commands:
   herdr pane list [--workspace <workspace_id>]
   herdr pane current [--pane ID|--current]

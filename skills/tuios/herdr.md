@@ -34,10 +34,10 @@ run` and the report commands print nothing when they succeed.
 
 It answers `pane`, `tab`, `workspace`, `agent`, `worktree`,
 `notification show`, `api snapshot`, `server reload-config`, `terminal
-title` and `status`. A method that tuios does not answer, such as
-`layout.apply` or `workspace.move`, fails with code `unsupported`. A command
-that acts on herdr's own machine (`session`, `plugin`, `server stop` and the
-rest) fails with code `unsupported` and does nothing.
+title`, `status` and `session list`. A method that tuios does not answer,
+such as `layout.apply` or `workspace.move`, fails with code `unsupported`. A
+command that acts on herdr's own machine (`session stop`, `plugin`, `server
+stop` and the rest) fails with code `unsupported` and does nothing.
 
 ## What it may do
 
