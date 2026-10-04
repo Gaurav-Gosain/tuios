@@ -225,6 +225,43 @@ func TestSessionPermissionPaneOnly(t *testing.T) {
 	}
 }
 
+// TestSessionCtrlCCancelsEveryPendingPermission: ACP says a cancel answers
+// every pending permission request with cancelled, not only the one on screen.
+func TestSessionCtrlCCancelsEveryPendingPermission(t *testing.T) {
+	h := ready(t)
+	runningTurn(t, h)
+	chosen := make(chan string, 3)
+	perm := func(name string) *Permission {
+		return NewPermission(Tool{ID: name, Title: "Run " + name, Kind: "execute"},
+			[]Option{{Label: "Allow", Decision: DecisionOnce}},
+			func(int) { chosen <- name + ":chosen" }, func() { chosen <- name + ":cancelled" })
+	}
+	h.s.Emit(perm("a"))
+	h.s.Emit(perm("b"))
+	h.s.Emit(perm("c"))
+	h.screen.waitFor(t, "Run a")
+	h.type_(t, "\x03")
+	got := map[string]bool{}
+	for range 3 {
+		select {
+		case v := <-chosen:
+			got[v] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %v answered after Ctrl+C, want all three cancelled", got)
+		}
+	}
+	for _, n := range []string{"a", "b", "c"} {
+		if !got[n+":cancelled"] {
+			t.Errorf("permission %s was not answered cancelled: %v", n, got)
+		}
+	}
+	select {
+	case <-h.agent.cancels:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the turn was not cancelled")
+	}
+}
+
 // TestSessionEchoesNoTypedEscape: a paste with escape sequences in it, which
 // anything that can type into the pane could send, is echoed on the prompt
 // line and in the transcript without them, so typing into the pane cannot

@@ -410,7 +410,17 @@ func (s *Session) onKey(ctx context.Context, k key, turns chan turnResult) bool 
 func (s *Session) permissionKey(k key) bool {
 	switch k.kind {
 	case keyCtrlC:
+		// ACP: when the client cancels a turn it must answer every pending
+		// session/request_permission with outcome cancelled, not only the one
+		// on screen. The queued ones are answered first, so the agent sees no
+		// permission left open when the cancel arrives.
+		queued := s.perms[1:]
+		s.perms = s.perms[:1]
 		s.answer(-1, "in the pane, which cancels the turn")
+		for _, p := range queued {
+			p.Cancel()
+			s.write(s.r.answered(p, -1, "in the pane, which cancels the turn"))
+		}
 		s.Agent.Cancel()
 		return false
 	case keyRune:
