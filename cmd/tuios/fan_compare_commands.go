@@ -315,11 +315,11 @@ after -- is a shell line, so it can hold && and pipes. Several are one
 command and its arguments, each quoted for the shell as you gave it. It is always
 the command you give: tuios never reads one from the repository. The window
 holds no grants, so the check cannot drive tuios. A window whose check passed
-closes; one whose check failed stays open so you can read the output, until
+closes. A window whose check failed stays open so you can read the output, until
 you press enter in it or the next check starts. A check still running in an attempt is stopped first.
 
 The command waits for every check and exits 1 when any failed. --no-wait
-returns once they are started; 'tuios fan compare' shows how they end.`,
+returns once they are started. 'tuios fan compare' shows how they end.`,
 		Example: `  tuios fan verify api-fan-retry -- go test ./...
   tuios fan verify api-fan-retry --timeout 10m -- 'make lint && make test'
   tuios fan verify api-fan-retry --no-wait -- go vet ./...`,

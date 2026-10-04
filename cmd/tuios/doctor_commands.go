@@ -19,7 +19,7 @@ func newDoctorCommand() *cobra.Command {
 		Short: "Check that parts of tuios are set up and working",
 		Long: `Check that parts of tuios are set up and working.
 
-tuios keybinds doctor checks the keybindings; the checks here cover the rest.`,
+'tuios keybinds doctor' checks the keybindings. The checks here cover the rest.`,
 	}
 	cmd.AddCommand(newDoctorAgentsCommand(), newDoctorShellCommand())
 	return cmd

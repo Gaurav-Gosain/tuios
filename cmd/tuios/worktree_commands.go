@@ -261,7 +261,7 @@ is looked up on your PATH, which the command sends, and --env passes more of
 your environment (--env NAME for your value, --env NAME=VALUE to set one).
 
 --prompt, given once per session, gives each session its own prompt instead
-of one for all; the count is then how many there are.
+of one for all. The count is then how many there are.
 
 An agent that has not shown it is at its prompt after 30 seconds is marked
 held, and the Inbox asks you to look at its pane: most often it shows a
@@ -273,7 +273,7 @@ and the first words of the prompt, or --name.
 
 --grants says what every agent may do through tuios: read, write, fan,
 respond, admin, or none. Without it they hold the default of
-[agents.permissions]; a fan run from a pane without admin gives them that
+[agents.permissions]. A fan run from a pane without admin gives them that
 pane's own grants.
 
 'tuios fan compare <session>' shows the attempts side by side, with what each

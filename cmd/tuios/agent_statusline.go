@@ -92,7 +92,7 @@ the assistant message's model and cost.
 
 It prints nothing of its own, so a Claude Code status line of only this is
 empty. --then runs your own status line command with the same stdin and
-prints its output unchanged, exiting with its status; that is how a status
+prints its output unchanged, exiting with its status. That is how a status
 line of your own is kept.
 
 Every field is optional: a field the payload does not have is not written.
@@ -151,7 +151,7 @@ goes wrong on the tuios side.`,
 	cmd.Flags().BoolVar(&o.explain, "explain", false, "Print what was decided and why to stderr")
 	cmd.Flags().BoolVar(&o.turnEnd, "turn-end", false, "The turn just ended: send changed values now, whatever the interval")
 	cmd.Flags().DurationVar(&o.timeout, "timeout", agentStatusLineDeadline, "Give up on the daemon after this long")
-	cmd.Flags().IntVar(&o.integration, "integration", 0, "Version marker of a managed entry; ignored")
+	cmd.Flags().IntVar(&o.integration, "integration", 0, "Version marker of a managed entry. tuios ignores it")
 	_ = cmd.Flags().MarkHidden("integration")
 	return cmd
 }

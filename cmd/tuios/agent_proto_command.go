@@ -42,15 +42,15 @@ This is what start-agent --protocol runs in the pane it opens. The agent is
 started with pipes, not a terminal: its turns, tool calls, plans and diffs
 arrive as messages and are written to the pane as plain text, with every
 escape sequence the agent sends removed. Type a prompt and press Enter to send
-it; ask-agent and send-text type into the same line. Ctrl+C cancels a turn,
+it. ask-agent and send-text type into the same line. Ctrl+C cancels a turn,
 and Ctrl+D on an empty line quits.
 
 Inside a tuios pane it reports the agent's state for its own pane, the way a
 hook does: idle once the conversation is open, working during a turn, done or
 errored when it ends, and needs_input when the agent asks permission. A
 permission is answered in the pane with a number key, or from the Inbox when
-the Inbox can show the whole request on one line (a command, not a diff);
-whichever answers first wins. Outside tuios it reports nothing and works the
+the Inbox can show the whole request on one line (a command, not a diff).
+The first answer wins. Outside tuios it reports nothing and works the
 same.
 
 The agent is offered no file system and no terminal: it reads, writes and runs
@@ -58,7 +58,7 @@ things itself, under its own sandbox and approval settings, as it would in its
 own TUI.
 
 --protocol acp speaks ACP version 1 to any agent that implements it, for
-example "opencode acp". --protocol codex speaks the Codex app-server protocol;
+example "opencode acp". --protocol codex speaks the Codex app-server protocol.
 start-agent adds the app-server subcommand for you.`,
 		Example: `  # Through start-agent, which is how it is meant to be run
   tuios start-agent --protocol acp 'opencode acp' --name helper

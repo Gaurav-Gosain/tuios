@@ -37,7 +37,7 @@ exist. It starts in --cwd, or the main checkout of the repository --repo
 names, or else the focused pane's directory.
 
 -s HOST:SESSION starts it on another machine from the [hosts] table. PATH is
-not sent then, and the agent is looked up on that machine's PATH; --env there
+not sent then, and the agent is looked up on that machine's PATH. --env there
 is refused, since env does not cross machines. The agent starts in that
 machine's checkout of the repository the current directory is in, found by
 its origin URL under [hosts.NAME] repos_root, and --clone clones it there when
@@ -48,7 +48,7 @@ list-agents shows and -w takes, so you can address it as 'reviewer'.
 
 --grants says what the agent may do through tuios: read, write, fan,
 respond, admin, or none. Without it the pane holds the default of
-[agents.permissions]; started from a pane without admin, it holds that
+[agents.permissions]. Started from a pane without admin, it holds that
 pane's own grants. A pane can never give more than it holds.
 
 An agent that stops on a question of its own, such as whether to trust the
@@ -58,7 +58,7 @@ before --ready-timeout.
 
 --protocol runs the agent headless over a structured protocol instead of in
 its own TUI: acp (the Agent Client Protocol) for an agent command that speaks
-it, such as "opencode acp", or codex (the Codex app-server; app-server is
+it, such as "opencode acp", or codex (the Codex app-server, with app-server
 added to the codex command). The pane shows the conversation as a transcript
 you type prompts into, and reports the agent's state itself. A permission the
 agent asks for is answered in the pane with a number key, or from the Inbox

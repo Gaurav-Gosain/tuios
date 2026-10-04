@@ -207,11 +207,12 @@ answer wins. Pass the prompt id peek-prompt printed, so an answer never lands
 on a prompt you have not read. Then it waits up to --timeout for the pane to
 move on and prints its state.
 
-Answering an agent's prompt is acting as you, so the daemon takes it only from
-you: from the Inbox of an attached client (prefix i, then space on an item), or
-from a shell outside every pane when the daemon runs with
-[daemon] respond_from_shell = true. An agent in a pane is refused with
-not_human either way.`,
+An answer to an agent's prompt acts as you, so the daemon takes it from three
+places only. The first is the Inbox of an attached client (prefix i, then space
+on an item). The second is a shell outside every pane, when the daemon runs
+with [daemon] respond_from_shell = true. The third is a pane that you gave the
+respond grant (see 'tuios pane-grants'). Every other caller is refused with
+not_human.`,
 		Example: `  # Read the prompt, then approve exactly that prompt
   tuios peek-prompt -w review
   tuios respond -w review --prompt-id 75f8b9fadb5b5dfc approve
@@ -229,7 +230,7 @@ not_human either way.`,
 	}
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Target session (default: most recently active)")
 	cmd.Flags().StringVarP(&window, "window", "w", "", "The blocked pane, by name or ID, or HOST:SESSION:WINDOW")
-	cmd.Flags().StringVar(&promptID, "prompt-id", "", "The prompt id peek-prompt printed; a prompt that changed since is refused")
+	cmd.Flags().StringVar(&promptID, "prompt-id", "", "The prompt id peek-prompt printed. A prompt that changed since is refused")
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Milliseconds to wait for the pane to move on (default 5000, at most 30000)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)

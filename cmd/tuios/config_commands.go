@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -106,13 +107,16 @@ func resetConfigToDefaults() error {
 }
 
 func previewThemeColors(themeName string) error {
+	if !slices.Contains(theme.AvailableThemes(), themeName) {
+		return fmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
+	}
 	if err := theme.Initialize(themeName); err != nil {
 		return fmt.Errorf("failed to initialize theme: %w", err)
 	}
 
 	currentTheme := theme.Current()
 	if currentTheme == nil {
-		return fmt.Errorf("theme '%s' not found", themeName)
+		return fmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)
 	}
 
 	fmt.Printf("Theme: %s\n\n", themeName)

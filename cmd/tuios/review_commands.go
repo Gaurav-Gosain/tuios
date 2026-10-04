@@ -351,18 +351,18 @@ func newReviewNoteCommand() *cobra.Command {
 		Short: "Leave a review note on a line of a pane's changes",
 		Long: `Leave a note on a line of what the agent in a pane changed, for 'tuios review
 send' to pass to the agent. FILE is relative to the repository root and LINE
-is the line on the new side; --side old puts it on a removed line, numbered as
+is the line on the new side. --side old puts it on a removed line, numbered as
 in the base. With --hunk, name the file alone and the hunk by its header
 ("@@ -88,4 +100,6 @@") for a note on the whole hunk.
 
-The note keeps the line's text, so it follows the line when the file changes;
-one whose line is gone is marked outdated. A note is at most 1000 bytes. A
+The note keeps the line's text, so it follows the line when the file changes.
+A note whose line is gone is marked outdated. A note is at most 1000 bytes. A
 worktree holds at most 200 notes.
 
 'tuios review note --edit ID TEXT...' replaces a note's text and 'tuios
 review note --remove ID' drops one. From inside a pane only the notes that
-pane wrote can be changed; from a shell, any but the ones left from the
-attached client.`,
+pane wrote can be changed. From a shell, every note can be changed except
+the ones left from the attached client.`,
 		Example: `  tuios review note api/retry.go:42 'log the attempt number here too'
   tuios review note -w build --hunk '@@ -88,4 +100,6 @@' api/retry.go 'wrap with context'
   tuios review note --edit n3 'wrap it with the attempt number'
@@ -544,7 +544,7 @@ one. It says "from the person" only when sent from the attached client.`,
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
 	cmd.Flags().StringVarP(&window, "window", "w", "", "The agent's pane, by name or id (default: the focused pane)")
 	cmd.Flags().StringArrayVar(&ids, "id", nil, "Send only this note. Repeatable")
-	cmd.Flags().BoolVar(&now, "now", false, "Send only if the agent is at rest now; never queue")
+	cmd.Flags().BoolVar(&now, "now", false, "Send only if the agent is at rest now. Never queue")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	return cmd

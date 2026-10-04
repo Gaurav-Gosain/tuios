@@ -69,7 +69,7 @@ change only its own grants unless it holds admin, and never give more than it
 holds, so a script can drop its own pane's grants before it starts an agent,
 and no agent can raise its own. Nor can it by typing into a pane that holds
 more: a pane without admin types only into panes that hold nothing it does
-not. The change applies to the pane's next call; the
+not. The change applies to the pane's next call. The
 TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 		Example: `  # Let the reviewer pane only read
   tuios set-pane-grants -w reviewer --grants read

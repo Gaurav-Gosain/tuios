@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -27,7 +28,7 @@ func runTapeInteractive(tapeFile string) error {
 		for _, err := range parseErrors {
 			fmt.Fprintf(os.Stderr, "  %s\n", err)
 		}
-		return fmt.Errorf("failed to parse tape file")
+		return fmt.Errorf("the tape file has errors, listed above. Fix them, then run it again")
 	}
 
 	fmt.Printf("Preparing tape script: %s\n", tapeFile)
@@ -121,7 +122,7 @@ func validateTapeFile(tapeFile string) error {
 		for _, err := range parseErrors {
 			fmt.Fprintf(os.Stderr, "  ✗ %s\n", err)
 		}
-		return fmt.Errorf("tape file has parsing errors")
+		return fmt.Errorf("the tape file has errors, listed above. Fix them, then validate it again")
 	}
 
 	checkmark := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓")
@@ -165,13 +166,26 @@ func validateTapeFile(tapeFile string) error {
 	return nil
 }
 
-func listTapeFiles() error {
+func listTapeFiles(asJSON bool) error {
 	files, err := app.LoadTapeFiles()
 	if err != nil {
 		return fmt.Errorf("failed to load tape files: %w", err)
 	}
 
 	tapeDir, _ := app.GetTapeDirectory()
+	if asJSON {
+		type tapeRow struct {
+			Name     string    `json:"name"`
+			Path     string    `json:"path"`
+			Size     int64     `json:"size"`
+			Modified time.Time `json:"modified"`
+		}
+		rows := make([]tapeRow, 0, len(files))
+		for _, f := range files {
+			rows = append(rows, tapeRow{Name: f.Name, Path: f.Path, Size: f.Size, Modified: f.Modified})
+		}
+		return printJSON(map[string]any{"dir": tapeDir, "tapes": rows})
+	}
 
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
 	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
@@ -226,7 +240,7 @@ func deleteTapeFile(name string) error {
 	}
 
 	if targetFile == nil {
-		return fmt.Errorf("tape file '%s' not found", name)
+		return fmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
 	}
 
 	fmt.Printf("Delete '%s'? (yes/no): ", targetFile.Name)
@@ -263,7 +277,7 @@ func showTapeFile(name string) error {
 	}
 
 	if targetFile == nil {
-		return fmt.Errorf("tape file '%s' not found", name)
+		return fmt.Errorf("no tape file named %q. Run 'tuios tape list' to see the tape files", name)
 	}
 
 	content, err := os.ReadFile(targetFile.Path)

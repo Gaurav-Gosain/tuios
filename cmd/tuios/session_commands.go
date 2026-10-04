@@ -815,9 +815,12 @@ func runKillSession(sessionName string) error {
 
 // runResurrect lists resurrectable sessions (no name) or restores one on demand
 // and attaches to it (name given).
-func runResurrect(sessionName string) error {
+func runResurrect(sessionName string, asJSON bool) error {
 	if sessionName == "" {
-		return listResurrectableSessions()
+		return listResurrectableSessions(asJSON)
+	}
+	if asJSON {
+		return errors.New("--json lists the saved sessions. Run 'tuios resurrect --json' with no session name")
 	}
 
 	// Ensure the daemon is running so it can hold the restored session.
@@ -905,7 +908,7 @@ func explainResurrectFailure(sessionName string, err error) error {
 
 // listResurrectableSessions prints the sessions that can be restored from saved
 // state on disk.
-func listResurrectableSessions() error {
+func listResurrectableSessions(asJSON bool) error {
 	infos, err := session.ListResurrectableInfos()
 	if err != nil {
 		return err
@@ -924,6 +927,24 @@ func listResurrectableSessions() error {
 			}
 			_ = client.Close()
 		}
+	}
+
+	if asJSON {
+		type savedRow struct {
+			Name    string `json:"name"`
+			Windows int    `json:"windows"`
+			Status  string `json:"status"`
+			SavedAt int64  `json:"saved_at"`
+		}
+		rows := make([]savedRow, 0, len(infos))
+		for _, info := range infos {
+			status := "restorable"
+			if liveNames[info.Name] {
+				status = "live"
+			}
+			rows = append(rows, savedRow{Name: info.Name, Windows: info.WindowCount, Status: status, SavedAt: savedUnix(info.SavedAt)})
+		}
+		return printJSON(rows)
 	}
 
 	if len(infos) == 0 {
@@ -986,9 +1007,9 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	if session.IsDaemonRunning() {
 		pid := session.GetDaemonPID()
 		if pid > 0 {
-			return fmt.Errorf("daemon already running (PID %d)", pid)
+			return fmt.Errorf("a daemon is already running (PID %d). Stop it with 'tuios kill-server' first, or use it as it is", pid)
 		}
-		return fmt.Errorf("daemon already running")
+		return fmt.Errorf("a daemon is already running. Stop it with 'tuios kill-server' first, or use it as it is")
 	}
 
 	if !foreground {

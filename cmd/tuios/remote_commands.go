@@ -610,19 +610,27 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 // runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
 // nothing, so a trailing newline in the argument is the Enter that submits the
 // line, and one call is enough to type and run a command.
-func runSendText(sessionName, windowTarget, text string) error {
+func runSendText(sessionName, windowTarget, text string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	if _, err := t.client.Call("send-text", t.params(map[string]any{
+	raw, err := t.client.Call("send-text", t.params(map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"text":    text,
-	})); err != nil {
+	}))
+	if err != nil {
 		return t.explain("send-text", err)
+	}
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		return printJSON(pretty)
 	}
 	return nil
 }
@@ -1145,21 +1153,45 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 
 // runSetConfig sets a session option over the verb protocol. The value is
 // recorded in daemon-owned state and, when a TUI is attached, applied live.
-func runSetConfig(sessionName, path, value string) error {
+func runSetConfig(sessionName, path, value string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	if _, err := client.Call("set-option", map[string]any{
+	raw, err := client.Call("set-option", map[string]any{
 		"session": sessionName,
 		"key":     path,
 		"value":   value,
-	}); err != nil {
+	})
+	if err != nil {
 		return explainVerbError("set-option", err)
 	}
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		return printJSON(pretty)
+	}
+	// The line on stdout stays as it was, for scripts. What the daemon says
+	// about a value it only recorded goes to stderr, so a person sees why the
+	// screen did not change.
 	fmt.Printf("Set %s = %s\n", path, value)
+	var res struct {
+		Applied    bool   `json:"applied"`
+		Reason     string `json:"reason"`
+		Deprecated string `json:"deprecated"`
+	}
+	if json.Unmarshal(raw, &res) == nil {
+		if !res.Applied && res.Reason != "" {
+			fmt.Fprintf(os.Stderr, "Not applied: %s.\n", strings.TrimSuffix(res.Reason, "."))
+		}
+		if res.Deprecated != "" {
+			fmt.Fprintf(os.Stderr, "Deprecated: %s\n", res.Deprecated)
+		}
+	}
 	return nil
 }
 
@@ -2133,7 +2165,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 				})
 				return nil
 			}
-			return fmt.Errorf("command failed with unknown error")
+			return fmt.Errorf("the command failed, and the daemon did not say why. Run 'tuios logs' to read what it logged")
 		}
 		if jsonOutput {
 			outputJSON(map[string]any{

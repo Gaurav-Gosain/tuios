@@ -97,11 +97,11 @@ func newRunCommand() *cobra.Command {
 		Long: `Type one command line at a pane's shell prompt, wait for it to finish, print
 what it printed, and exit with its exit status.
 
-It reads where the command starts and ends from the shell's own OSC 133 marks,
-so it needs a shell with prompt integration: fish and zsh with it turned on,
-bash with a setup, or any shell a terminal injects its integration script into.
-A pane whose shell sends no marks is refused with no_shell_integration, and
-nothing is typed.
+It reads where the command starts and ends from the shell's own OSC 133 marks.
+fish 4 and newer send them by themselves. zsh, and bash 4.4 or newer, need a
+few lines in their startup file. 'tuios doctor shell' prints those lines for
+your shell. A pane whose shell sends no marks is refused with
+no_shell_integration, and nothing is typed.
 
 It types only at a prompt. A pane already running a command is refused with
 not_at_prompt, and nothing is typed. The words after -- are joined with spaces

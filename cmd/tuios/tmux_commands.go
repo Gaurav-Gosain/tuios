@@ -232,14 +232,18 @@ Supported: split-window, new-window, send-keys, capture-pane -p,
 display-message, display-popup, list-panes, list-windows, list-sessions,
 list-clients, has-session, kill-pane, kill-window, select-pane, last-pane,
 select-window, next-window, previous-window, rename-window, rename-session,
-break-pane, join-pane, move-pane, respawn-pane -k, load-buffer, set-buffer,
-show-buffer, save-buffer, list-buffers, paste-buffer, delete-buffer,
-show-options, show-environment, set-environment, run-shell, if-shell,
-wait-for, new-session -d (outside a pane only), -V, and control mode (-C
-and -CC). A command name can be shortened to any prefix that names one
-command. set-option, set-window-option, set-hook, refresh-client,
-select-layout, resize-pane and start-server succeed and do nothing.
-Anything else fails and is recorded in the shim log.`,
+break-pane, join-pane, move-pane, swap-pane, respawn-pane -k, load-buffer,
+set-buffer, show-buffer, save-buffer, list-buffers, paste-buffer,
+delete-buffer, show-options, show-window-options, show-environment,
+set-environment, run-shell, if-shell, wait-for, new-session -d (outside a
+pane only), -V, and control mode (-C and -CC). A command name can be shortened
+to any prefix that names one command.
+
+set-option, set-window-option, set-hook, refresh-client, select-layout,
+resize-pane and start-server succeed and do nothing. kill-session,
+kill-server, attach-session, switch-client and detach-client are refused,
+because the shim never ends or replaces a tuios session. Any other command
+fails and is recorded in the shim log.`,
 		Example: `  tuios tmux display-message -p '#{pane_id} #{window_id}'
   tuios tmux split-window -d -P -F '#{pane_id}'
   tuios tmux list-panes -F '#{pane_id} #{pane_title}'
@@ -310,7 +314,7 @@ available on Windows.`,
 			}
 			exe := selfExe()
 			if exe == "" {
-				return errors.New("cannot find the tuios binary to link as tmux")
+				return errors.New("cannot find the tuios binary to link as tmux. Run tuios tmux-shim by its full path")
 			}
 			if err := tmuxcompat.InstallLink(dir, exe); err != nil {
 				return fmt.Errorf("install the tmux link: %w", err)

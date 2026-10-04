@@ -86,7 +86,7 @@ hands its hook payload on stdin (or, for the Codex notify command, as the last
 argument). The event comes from the payload, or from the event argument when
 the payload does not name it. Supported harnesses: claude-code, codex,
 copilot, cursor-agent, gemini-cli, opencode, amp, kilo, kimi, omp, pi and qwen,
-which report the pane's state; and antigravity, crush, devin, droid, grok,
+which report the pane's state. antigravity, crush, devin, droid, grok,
 hermes and qoder, which report only the conversation id (set-agent-session)
 and leave the state to the pane's screen rules.
 
@@ -168,7 +168,7 @@ given.`,
 	cmd.Flags().StringVarP(&o.window, "window", "w", "", "Pane to report for, by window id or name (default: TUIOS_PANE_ID, then the controlling terminal, then the parent processes)")
 	cmd.Flags().BoolVar(&o.explain, "explain", false, "Print what was decided and why to stderr")
 	cmd.Flags().DurationVar(&o.timeout, "timeout", agentHookDeadline, "Give up after this long")
-	cmd.Flags().IntVar(&o.integration, "integration", 0, "Version marker of a managed hook entry; ignored")
+	cmd.Flags().IntVar(&o.integration, "integration", 0, "Version marker of a managed hook entry. tuios ignores it")
 	_ = cmd.Flags().MarkHidden("integration")
 	return cmd
 }

@@ -183,7 +183,7 @@ comprehensive keyboard/mouse interactions.`,
 	// skillArgs turns "--skill TOPIC" into "--skill=TOPIC" before cobra sees
 	// it, because an optional value only binds with "=", and a topic such as
 	// mcp or hosts is also the name of a subcommand.
-	rootCmd.Flags().StringVar(&skillTopic, "skill", "", "Print the agent skill for driving tuios from a pane and exit; --skill TOPIC prints one topic, --skill all prints every topic")
+	rootCmd.Flags().StringVar(&skillTopic, "skill", "", "Print the agent skill for driving tuios from a pane and exit. --skill TOPIC prints one topic, --skill all prints every topic")
 	rootCmd.Flags().Lookup("skill").NoOptDefVal = "core"
 	// The way out of startup.daemon for one run. It is on the root command
 	// because that is the only command the setting changes.
@@ -484,14 +484,17 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		},
 	}
 
+	var tapeListJSON bool
 	tapeListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all saved tape recordings",
-		Long:  `Display all tape files in the TUIOS data directory`,
+		Long: `List the tape files in the tape recordings directory, with the size and the
+time each one last changed. 'tuios tape dir' prints the directory.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return listTapeFiles()
+			return listTapeFiles(tapeListJSON)
 		},
 	}
+	tapeListCmd.Flags().BoolVar(&tapeListJSON, "json", false, "Output as JSON")
 
 	tapeDirCmd := &cobra.Command{
 		Use:   "dir",
@@ -661,7 +664,7 @@ marked "saved", and the command exits 3. Exit 3 lets a script tell a
 stopped daemon from a running daemon with no sessions, which exits 0
 with an empty list.
 
-Use --json for machine-readable output; saved rows carry "saved": true.
+Use --json for machine-readable output. Saved rows carry "saved": true.
 
 With --all-hosts the listing also covers every machine in the [hosts] config
 table. Local comes first. A host that does not answer gets a row saying so,
@@ -706,19 +709,19 @@ This will close all windows in the session and disconnect any attached clients.`
 		},
 	}
 
+	var resurrectJSON bool
 	resurrectCmd := &cobra.Command{
 		Use:   "resurrect [session-name]",
 		Short: "Restore a previously saved session",
-		Long: `Restore a session that was saved before a daemon restart, crash, or reboot.
+		Long: `Restore a session that was saved before a daemon restart, a crash or a reboot.
 
-With no arguments, lists the sessions that can be resurrected (from saved
-state on disk). With a session name, restores that session in the daemon
-(respawning fresh shells in each window's saved working directory) and
-attaches to it.
+With no argument, the command lists the sessions saved on disk. A session that
+the daemon holds now is marked live. With a session name, the daemon restores
+that session and the command attaches to it. Each window gets a new shell in
+its saved working directory.
 
-Sessions are normally auto-restored when the daemon starts; this command is
-useful when the daemon was started with --no-restore, or to bring back a
-specific session on demand.`,
+The daemon restores every saved session when it starts. Use this command when
+the daemon was started with --no-restore, or to bring back one session.`,
 		Example: `  # List resurrectable sessions
   tuios resurrect
 
@@ -731,9 +734,10 @@ specific session on demand.`,
 			if len(args) > 0 {
 				name = args[0]
 			}
-			return runResurrect(name)
+			return runResurrect(name, resurrectJSON)
 		},
 	}
+	resurrectCmd.Flags().BoolVar(&resurrectJSON, "json", false, "List the saved sessions as JSON")
 
 	startDaemonCmd := &cobra.Command{
 		Use:   "start-server",
@@ -814,12 +818,12 @@ as it returns. It fails if the daemon has not finished within 10 seconds.`,
 With -w the keys go to that window's terminal, whether or not a client is
 attached and whichever window has the focus. Without -w they go to the attached
 client as if the person pressed them, which drives the window manager or the
-focused window; with no client attached they go to the focused window.
+focused window. With no client attached they go to the focused window.
 
 To type text, use send-text. send-keys splits its argument on spaces and commas,
 so 'echo hello' types "echohello".
 
-Keys (case-insensitive; the argument is split on spaces and commas):
+Keys (case-insensitive, and the argument is split on spaces and commas):
   Enter Tab BTab Space Comma Escape Backspace
   Up Down Left Right Home End PageUp PageDown Insert Delete F1-F12
   a single character: q, j, /, G
@@ -961,7 +965,7 @@ rounded corners, a shadow and a title bar. Every part of that is a
 screenshot.* option.
 
 The daemon renders the file, so this works on a detached session with nobody
-attached. png and svg carry the frame; ansi and txt are the bare stream.
+attached. png and svg carry the frame. ansi and txt are the bare stream.
 
 With no theme set, basic and indexed colors fall back to the xterm defaults.
 Only your terminal knows its own palette, so that is a guess and the result
@@ -1068,6 +1072,7 @@ exists: get-window and list-windows read windows with the read grant.`,
 	}
 
 	var setConfigSession string
+	var setConfigJSON bool
 	setConfigCmd := &cobra.Command{
 		Use:   "set-config <path> <value>",
 		Short: "Set a configuration option in a running TUIOS session",
@@ -1075,7 +1080,16 @@ exists: get-window and list-windows read windows with the read grant.`,
 
 Run 'tuios list-options' for every path, with its type, default and accepted
 values. An [appearance] option also answers to its bare name, so border_style
-and appearance.border_style are the same path.
+and appearance.border_style are the same path. A path or a value that the
+option does not take is refused, and nothing changes.
+
+With a client attached, the client applies the value and writes it to
+config.toml. With no client attached, the daemon keeps the value for this
+session and does not write the file. The client applies it when it attaches.
+The command then says so on stderr, and --json reports "applied": false with
+the reason.
+
+agents.enabled is the person's switch. A process in a pane cannot set it.
 
   tuios set-config appearance.border_style rounded
   tuios set-config appearance.dockbar_position top`,
@@ -1092,10 +1106,11 @@ and appearance.border_style are the same path.
   tuios set-config hide_window_buttons true`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSetConfig(setConfigSession, args[0], args[1])
+			return runSetConfig(setConfigSession, args[0], args[1], setConfigJSON)
 		},
 	}
 	setConfigCmd.Flags().StringVarP(&setConfigSession, "session", "s", "", "Target session (default: most recently active)")
+	setConfigCmd.Flags().BoolVar(&setConfigJSON, "json", false, "Output result as JSON, with applied and the reason when it is false")
 	_ = setConfigCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getConfigSession string
@@ -1137,7 +1152,7 @@ Run 'tuios list-options' to see every path.`,
 		Long: `Report the semantic state of an agent running in a pane so the daemon can
 surface which panes need attention. State is one of: none, working, needs_input,
 idle, done, errored, unknown. A pane reports its own state by running this
-against the daemon socket; tuios agent-hook, which the installed harness
+against the daemon socket. tuios agent-hook, which the installed harness
 integrations run, does exactly that.
 
 Without --window, run in a pane, the report is about that pane. Run outside
@@ -1340,6 +1355,7 @@ a bundled one.`,
 
 	var sendTextSession string
 	var sendTextWindow string
+	var sendTextJSON bool
 	sendTextCmd := &cobra.Command{
 		Use:   "send-text <text>",
 		Short: "Write text verbatim to a pane",
@@ -1358,11 +1374,12 @@ as typed. End the text with a newline to run it as a command.`,
   tuios send-text -w build 'partial input'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runSendText(sendTextSession, sendTextWindow, args[0])
+			return runSendText(sendTextSession, sendTextWindow, args[0], sendTextJSON)
 		},
 	}
 	sendTextCmd.Flags().StringVarP(&sendTextSession, "session", "s", "", "Target session (default: most recently active)")
 	sendTextCmd.Flags().StringVarP(&sendTextWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	sendTextCmd.Flags().BoolVar(&sendTextJSON, "json", false, "Output result as JSON")
 	_ = sendTextCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var newWindowSession string
@@ -1395,7 +1412,7 @@ window target for -w. --print-id prints the full id alone, for a script:
 id=$(tuios new-window build --print-id).
 
 --host runs the window's process on another machine from the [hosts] table. The
-window still belongs to this session and is drawn and sized here; only the
+window still belongs to this session and is drawn and sized here. Only the
 process is over there. There is no special mode to turn on: a session holding
 one is an ordinary session with a window that happens to be elsewhere, so it
 lists, scripts and restores like any other.
@@ -1752,6 +1769,10 @@ is showing.`,
 		Long: `Turn tiling on or off, even out the split ratios, and flip the axis of the
 split holding the focused pane.
 
+--equalize resets the splits of the layout on screen. In the BSP layout every
+split goes back to half. In the master-stack layout the master ratio goes back
+to its configured value, and the other panes share the rest evenly.
+
 --master-position and --masters shape the master-stack layout of the current
 workspace. The workspace keeps them until you change them again.
 
@@ -1790,7 +1811,7 @@ only mean something while the panes are tiled.`,
 	}
 	setLayoutCmd.Flags().StringVarP(&setLayoutSession, "session", "s", "", "Target session (default: most recently active)")
 	setLayoutCmd.Flags().StringVar(&setLayoutTiling, "tiling", "", "Tile the panes automatically: true or false")
-	setLayoutCmd.Flags().BoolVar(&setLayoutEqualize, "equalize", false, "Reset every split ratio so the panes share the space evenly")
+	setLayoutCmd.Flags().BoolVar(&setLayoutEqualize, "equalize", false, "Reset the splits: every split to half in BSP, the configured master ratio in master-stack")
 	setLayoutCmd.Flags().BoolVar(&setLayoutRotate, "rotate", false, "Flip the axis of the split holding the focused pane")
 	setLayoutCmd.Flags().StringVar(&setLayoutMasterPosition, "master-position", "", "Side the master panes take: left, right, top, bottom or center")
 	setLayoutCmd.Flags().IntVar(&setLayoutMasters, "masters", 0, "How many panes are master panes, 1 to 9")
@@ -1900,7 +1921,7 @@ dropped back to the default with nothing on screen to say so, because the
 alternative is a window control the pointer no longer lands on. The second
 column is what draws.
 
-Writing <id>.json in the glyphs directory registers that set; the directory is
+Writing <id>.json in the glyphs directory registers that set. The directory is
 re-read on every call, so a set authored a moment ago can be selected without a
 restart. Give it "inherits" to start from a built-in and change one mark.`,
 		Example: `  # What sets are there, and what roles can a set name
@@ -2073,12 +2094,12 @@ Conditions:
   window-output   the window printed something matching --pattern
   window-exit     the window's shell exited
   window-idle     the window printed nothing for --idle milliseconds
-  agent-state     an agent reached one of the --until states; without --window,
+  agent-state     an agent reached one of the --until states. Without --window,
                   any agent pane in the session matches, with --any-session,
                   any agent pane in any session, and with --select, any pane
                   the selector matches (every one of them with --every)
   agent-message   mail arrived. With --window it matches unread mail for that
-                  inbox, including mail queued before the wait started; without
+                  inbox, including mail queued before the wait started. Without
                   one, anything said in the session after it started. --thread
                   narrows either shape to one conversation
   command-finished  a shell that marks its commands with OSC 133 finished
@@ -2131,7 +2152,7 @@ non-zero with the timeout error.`,
 	waitForCmd.Flags().StringVar(&waitForSelect, "select", "", "For agent-state: watch the agent panes a selector matches, in every session. Takes no --session, --window or --any-session")
 	waitForCmd.Flags().BoolVar(&waitForEvery, "every", false, "With --select: wait until every matched pane is in one of the --until states, not only the first")
 	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
-	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused; agent-state: any window)")
+	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused, and for agent-state any window)")
 	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
 	waitForCmd.Flags().StringVar(&waitForUntil, "until", "", "Agent state(s) to wait for, comma-separated, required by agent-state")
 	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")
@@ -2463,15 +2484,36 @@ Name a verb to describe only that verb.`,
 	layoutCmd := &cobra.Command{
 		Use:   "layout",
 		Short: "Manage layout templates",
-		Long:  `Save, load, list, and delete window layout templates`,
+		Long: `List, delete and export the saved window layout templates.
+
+Save and load a layout in a running session, with the layout prefix keys or
+the command palette. With no layout saved, 'tuios layout list' says which keys
+save one.`,
 	}
+	var layoutListJSON bool
 	layoutListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List saved layout templates",
+		Long: `List the saved layout templates: the name, how many windows each holds,
+whether it is tiled, and when it was saved. 'tuios layout dir' prints the
+directory that holds them.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			templates, err := app.LoadLayoutTemplates()
 			if err != nil {
 				return err
+			}
+			if layoutListJSON {
+				type layoutRow struct {
+					Name      string    `json:"name"`
+					Windows   int       `json:"windows"`
+					Tiled     bool      `json:"tiled"`
+					CreatedAt time.Time `json:"created_at"`
+				}
+				rows := make([]layoutRow, 0, len(templates))
+				for _, t := range templates {
+					rows = append(rows, layoutRow{Name: t.Name, Windows: len(t.Windows), Tiled: t.AutoTiling, CreatedAt: t.CreatedAt})
+				}
+				return printJSON(rows)
 			}
 			if len(templates) == 0 {
 				fmt.Println(layoutSaveHint(loadKeybindConfig()))
@@ -2489,10 +2531,14 @@ Name a verb to describe only that verb.`,
 		},
 	}
 	layoutDeleteCmd := &cobra.Command{
-		Use:   "delete [name]",
+		Use:   "delete <name>",
 		Short: "Delete a layout template",
+		Long:  `Delete a saved layout template by its name. 'tuios layout list' shows the names.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if _, err := findLayoutTemplate(args[0]); err != nil {
+				return err
+			}
 			if err := app.DeleteLayoutTemplate(args[0]); err != nil {
 				return err
 			}
@@ -2503,12 +2549,13 @@ Name a verb to describe only that verb.`,
 	layoutDirCmd := &cobra.Command{
 		Use:   "dir",
 		Short: "Print layout templates directory path",
+		Long:  `Print the path of the directory that holds the layout templates. Each template is a JSON file there.`,
 		Run: func(_ *cobra.Command, _ []string) {
 			fmt.Println(app.GetTemplatesDir())
 		},
 	}
 	layoutExportCmd := &cobra.Command{
-		Use:   "export [name]",
+		Use:   "export <name>",
 		Short: "Export a layout template as a tape script",
 		Long: `Print a saved layout template as a tape script on stdout. Run the script
 with 'tuios tape play', or with 'tuios tape exec' against a running session.
@@ -2518,19 +2565,15 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
   tuios tape play dev-layout.tape`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			templates, err := app.LoadLayoutTemplates()
+			t, err := findLayoutTemplate(args[0])
 			if err != nil {
 				return err
 			}
-			for _, t := range templates {
-				if t.Name == args[0] {
-					fmt.Print(app.GenerateTapeScript(t))
-					return nil
-				}
-			}
-			return fmt.Errorf("layout '%s' not found", args[0])
+			fmt.Print(app.GenerateTapeScript(t))
+			return nil
 		},
 	}
+	layoutListCmd.Flags().BoolVar(&layoutListJSON, "json", false, "Output as JSON")
 	layoutCmd.AddCommand(layoutListCmd, layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
 	// The interface flags ride only the commands that draw the interface. They
@@ -2611,7 +2654,7 @@ would accept a question right now.`,
 		Use:   "send-agent-message <text>",
 		Short: "Leave a message for another agent, or post a notice to the session",
 		Long: `Queue a message in the session's agent ring. With -w it goes to one pane's
-inbox; without, it is a notice everyone in the session can read.
+inbox. Without -w, it is a notice everyone in the session can read.
 
 It does not touch the recipient's keyboard, which is the point: a message can be
 left for an agent that is mid-turn, and it is there when that agent next reads
@@ -2680,7 +2723,7 @@ list-agents printed for the same selector.`,
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgFrom, "from", "", "The sending window, normally \"$TUIOS_PANE_ID\"")
 	sendAgentMessageCmd.Flags().StringVar(&sendMsgSubject, "subject", "", "One-line summary, at most 120 characters")
 	sendAgentMessageCmd.Flags().Uint64Var(&sendMsgReplyTo, "reply-to", 0, "Answer this message id. The reply joins that message's thread")
-	sendAgentMessageCmd.Flags().StringArrayVar(&sendMsgAttach, "attach", nil, "Absolute path to a file to reference; repeatable, at most 8")
+	sendAgentMessageCmd.Flags().StringArrayVar(&sendMsgAttach, "attach", nil, "Absolute path to a file to reference. Repeatable, at most 8")
 	sendAgentMessageCmd.Flags().BoolVar(&sendMsgJSON, "json", false, "Output result as JSON")
 	_ = sendAgentMessageCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2696,7 +2739,7 @@ list-agents printed for the same selector.`,
 		Use:   "read-agent-messages",
 		Short: "Read the messages agents have left in this session",
 		Long: `Read the session's agent ring. With -w it reads that pane's inbox and marks
-what it returns as read; without, it reads everything and marks nothing, so
+what it returns as read. Without -w, it reads everything and marks nothing, so
 looking around never empties someone else's mailbox.
 
 --thread reads one conversation. Pass any message id in the thread, not only the
@@ -2755,12 +2798,12 @@ between.
 
 This is the difference between typing at a pane and asking an agent a question.
 The honest signal that a message landed is the target's state returning to rest,
-so that is what is waited on; a pane that reports no state falls back to going
+so that is what is waited on. A pane that reports no state falls back to going
 quiet for --settle. The answer says which of the two ended the wait.
 
 Three things it will not do. It will not type at an agent on needs_input: such
 an agent is waiting on a prompt, most often a permission menu, and the question
-would be read as the answer. That fails with agent_blocked and nothing is typed;
+would be read as the answer. That fails with agent_blocked and nothing is typed.
 read the prompt with capture-pane and answer it yourself or ask the person.
 --allow-blocked overrides it, for a prompt you have read that takes free text.
 It will not type at an agent that is working, which is what --force overrides
@@ -2810,15 +2853,15 @@ others still answer.`,
 	askAgentCmd.Flags().BoolVar(&askYes, "yes", false, "With --select: ask the set without asking you first")
 	askAgentCmd.Flags().StringVar(&askConfirm, "confirm", "", "With --select: the token list-agents printed, which asks exactly the panes it listed")
 	askAgentCmd.Flags().StringVarP(&askSession, "session", "s", "", "Target session (default: most recently active)")
-	askAgentCmd.Flags().StringVarP(&askWindow, "window", "w", "", "The agent to ask, by name or ID; list-agents finds it")
-	askAgentCmd.Flags().StringVar(&askFrom, "from", "", "The asking window, normally \"$TUIOS_PANE_ID\"; omitting it gives up loop detection")
+	askAgentCmd.Flags().StringVarP(&askWindow, "window", "w", "", "The agent to ask, by name or ID. list-agents finds it")
+	askAgentCmd.Flags().StringVar(&askFrom, "from", "", "The asking window, normally \"$TUIOS_PANE_ID\". Without it there is no loop detection")
 	askAgentCmd.Flags().IntVar(&askReadyTimeout, "ready-timeout", 0, "Milliseconds to wait for the target to stop working (default 30000)")
 	askAgentCmd.Flags().IntVar(&askSettle, "settle", 0, "Milliseconds of silence that count as finished, for a pane that reports no state (default 2000)")
 	askAgentCmd.Flags().IntVar(&askTimeout, "timeout", 0, "Milliseconds to wait for the answer overall (default 300000)")
 	askAgentCmd.Flags().IntVar(&askLines, "lines", 0, "Cap the reply to this many lines (default 200)")
 	askAgentCmd.Flags().IntVar(&askStallTimeout, "stall-timeout", 0, "Milliseconds after Enter for the target to show it took the question before prompt_stalled (default 5000)")
 	askAgentCmd.Flags().BoolVar(&askForce, "force", false, "Send without waiting for the target to be ready (a target on needs_input is still refused)")
-	askAgentCmd.Flags().BoolVar(&askAllowBlocked, "allow-blocked", false, "Type at a target on needs_input; the text answers its prompt, so read it with capture-pane first")
+	askAgentCmd.Flags().BoolVar(&askAllowBlocked, "allow-blocked", false, "Type at a target on needs_input. The text answers its prompt, so read it with capture-pane first")
 	askAgentCmd.Flags().BoolVar(&askJSON, "json", false, "Output result as JSON")
 	_ = askAgentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2985,4 +3028,18 @@ func registerInterfaceFlags(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		interfaceFlags.Register(cmd.Flags())
 	}
+}
+
+// findLayoutTemplate returns the saved layout template called name.
+func findLayoutTemplate(name string) (app.LayoutTemplate, error) {
+	templates, err := app.LoadLayoutTemplates()
+	if err != nil {
+		return app.LayoutTemplate{}, err
+	}
+	for _, t := range templates {
+		if t.Name == name {
+			return t, nil
+		}
+	}
+	return app.LayoutTemplate{}, fmt.Errorf("no layout named %q. Run 'tuios layout list' to see the saved layouts", name)
 }

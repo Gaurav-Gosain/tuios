@@ -100,13 +100,14 @@ func newAskHumanCommand() *cobra.Command {
 one, and print it.
 
 The question goes in the Inbox. A client that shows the asking pane opens the
-Inbox on it at once, and the keys 1 to 9 pick an answer; anywhere else it waits
+Inbox on it at once, and the keys 1 to 9 pick an answer. Anywhere else it waits
 there with the usual alert, and with nobody attached it waits for the next
 attach. Only the person at an attached client can answer: an agent cannot.
 
 When --timeout runs out first, this exits 2 and the question stays. The answer
 is then mailed to the asking pane from human, marked verified_human, so
-'tuios wait-for agent-message' picks it up; or come back with --request-id.
+'tuios wait-for agent-message' picks it up. You can also come back with
+--request-id.
 
 From inside a pane the question is asked as that pane. It exits 0 with the
 answer on stdout, 2 when there is no answer yet, and 1 when the question ended
@@ -114,7 +115,7 @@ without one (dismissed, superseded, or its pane closed).`,
 		Example: `  # Ask, and keep the answer
   answer=$(tuios ask-human 'Deploy to staging?' -o yes -o no) && echo "$answer"
 
-  # Ask and move on; the answer arrives as mail
+  # Ask and move on. The answer arrives as mail
   tuios ask-human 'Which region?' -o us -o eu --no-wait
 
   # Come back for an answer
@@ -132,9 +133,9 @@ without one (dismissed, superseded, or its pane closed).`,
 	}
 	cmd.Flags().StringVarP(&o.session, "session", "s", "", "Target session (default: most recently active)")
 	cmd.Flags().StringVarP(&o.window, "window", "w", "", "The pane asking, where a late answer is mailed (default: your own pane)")
-	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick; give 1 to 9")
+	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick. Give 1 to 9")
 	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: 120000, at most one hour)")
-	cmd.Flags().BoolVar(&o.noWait, "no-wait", false, "Ask and return at once; the answer arrives as mail")
+	cmd.Flags().BoolVar(&o.noWait, "no-wait", false, "Ask and return at once. The answer arrives as mail")
 	cmd.Flags().StringVar(&o.requestID, "request-id", "", "Come back for a question already asked")
 	cmd.Flags().BoolVar(&o.jsonOut, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)

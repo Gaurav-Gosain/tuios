@@ -103,9 +103,10 @@ name. Installing one into a directory identified as the other's also refuses.
 
 With --mcp, also register tuios mcp as an MCP server named tuios, for the
 harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.
-The server is read-only and reaches only the session of the pane the harness
-runs in. --mcp-write registers it with --write, which adds the tools that
-type into panes.
+The server reaches only the session of the pane the harness runs in. It reads
+panes, waits on them, reports the agent's own state and metadata, and sends
+mail. It cannot type into a pane. --mcp-write registers it with --write, which
+adds the tools that type into panes.
 
 With --statusline, also point Claude Code's status line at "tuios agent-statusline",
 which writes the model, context use and cost to the pane's agent metadata
@@ -197,7 +198,7 @@ stays as it was. Uninstall puts your command back.`,
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Install for every supported harness whose configuration directory exists")
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program the hooks run, when tuios is not on the harness's PATH")
-	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, read-only, as an MCP server named tuios")
+	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, without the tools that type into panes, as an MCP server named tuios")
 	cmd.Flags().BoolVar(&mcpWrite, "mcp-write", false, "Register tuios mcp with --write, which adds the tools that type into panes. Implies --mcp")
 	cmd.Flags().BoolVar(&statusLine, "statusline", false, "Also feed the model, context use and cost to tuios from Claude Code's status line")
 	cmd.Flags().StringVar(&then, "then", "", "Your own status line command, run by the tuios status line with the same input and printed unchanged. Implies --statusline")
@@ -262,8 +263,14 @@ func installMCPFor(t *integration.Target, env integration.Env, command string, w
 func newIntegrationUninstallCommand() *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
-		Use:               "uninstall [harness...]",
-		Short:             "Remove the hook entries tuios wrote, and nothing else",
+		Use:   "uninstall [harness...]",
+		Short: "Remove the hook entries tuios wrote, and nothing else",
+		Long: `Remove what 'tuios integration install' wrote: the hook entries or the
+plugin, the MCP server entry, and the Claude Code status line. When the status
+line chained to a command of your own, that command is put back.
+
+Entries and files that tuios did not write are not changed. With no harness
+named, give --all.`,
 		Example:           `  tuios integration uninstall claude-code`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -320,8 +327,15 @@ func newIntegrationStatusCommand() *cobra.Command {
 	var asJSON bool
 	var command string
 	cmd := &cobra.Command{
-		Use:               "status [harness...]",
-		Short:             "Say whether each harness's integration is installed and current",
+		Use:   "status [harness...]",
+		Short: "Say whether each harness's integration is installed and current",
+		Long: `Say, for each harness, whether the tuios integration is installed and current,
+and whether it reports the pane's state or only the conversation id. For the
+harnesses with an MCP registration it says whether 'tuios mcp' is registered.
+For Claude Code it says whether the status line feed is installed.
+
+With no harness named, every harness is listed. --command names the program a
+current install runs, for a tuios that is not on PATH.`,
 		Example:           `  tuios integration status --json`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
