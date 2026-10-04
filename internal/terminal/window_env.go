@@ -83,6 +83,9 @@ func getTerminalEnv() (termType, colorTerm string) {
 				localTermType, localColorTerm = d.term, d.colorTerm
 			}
 		}
+		// The outer terminal's TERM is only useful to a pane when this
+		// machine has a terminfo entry for it. See guestenv.PaneTerm.
+		localTermType = guestenv.PaneTerm(localTermType)
 	})
 	return localTermType, localColorTerm
 }

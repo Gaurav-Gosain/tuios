@@ -3742,6 +3742,15 @@ tuios can pass through to yours: `ghostty` when your terminal takes kitty
 graphics, `WezTerm` when it takes sixel, and `TUIOS` when it takes neither.
 Image tools choose their output from this name.
 
+`TERM` is the `TERM` of the client that made the session, if the machine that
+runs the pane has a terminfo entry for it. If it has none, the pane gets
+`xterm-256color`. This keeps `clear`, `tput` and curses programs working when
+you attach from a terminal such as kitty to a machine without its entry. To
+keep your terminal's own `TERM`, install its terminfo entry on that machine,
+for example with `infocmp -x xterm-kitty | ssh HOST tic -x -`. tuios looks in
+`$TERMINFO`, `~/.terminfo`, `$TERMINFO_DIRS` and the system terminfo
+directories, as ncurses does.
+
 One pane is told something else. Codex sends its notifications as OSC 9, which
 tuios shows with their text, only to a terminal it knows by that name (Ghostty,
 iTerm2, kitty, Warp, WezTerm), and rings the bell for any other. So a pane that

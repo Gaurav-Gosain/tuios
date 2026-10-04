@@ -275,10 +275,9 @@ func clampHostedDim(v int) int {
 func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 	env := guestenv.WithoutHostMultiplexer(os.Environ())
 
-	term := spec.Term
-	if term == "" {
-		term = "xterm-256color"
-	}
+	// The owner's TERM, checked against this machine's terminfo, which is
+	// the one the pane's programs read. See guestenv.PaneTerm.
+	term := guestenv.PaneTerm(spec.Term)
 	colorTerm := spec.ColorTerm
 	if colorTerm == "" {
 		colorTerm = "truecolor"

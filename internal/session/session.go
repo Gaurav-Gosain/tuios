@@ -2922,11 +2922,14 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 		env = append(kept, extra...)
 	}
 
-	term := "xterm-256color"
-	if s.config != nil && s.config.Term != "" {
+	// The TERM the session's first client named, checked against this
+	// machine's terminfo: a client's xterm-kitty is no use to a pane on a host
+	// with no entry for it. See guestenv.PaneTerm.
+	term := ""
+	if s.config != nil {
 		term = s.config.Term
 	}
-	env = append(env, "TERM="+term)
+	env = append(env, "TERM="+guestenv.PaneTerm(term))
 
 	colorTerm := "truecolor"
 	if s.config != nil && s.config.ColorTerm != "" {
