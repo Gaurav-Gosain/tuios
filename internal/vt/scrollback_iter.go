@@ -227,6 +227,8 @@ func (c *ScrollbackCopy) Padded(index int) bool {
 // push appends a decoded line and its flags to a copy built line by line, for
 // a backend that does not keep the encoded form. n is the number of lines the
 // copy will hold.
+//
+//nolint:unused // Only the ghostty backend calls it (ghostty_scrollback_iter.go).
 func (c *ScrollbackCopy) push(line uv.Line, flags rowFlag, n int) {
 	if c.sb == nil {
 		c.sb = NewScrollback(max(n, 1))

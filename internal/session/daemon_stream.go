@@ -271,13 +271,6 @@ func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
 	return err
 }
 
-func (d *Daemon) sendError(cs *connState, code int, message string) error {
-	return d.sendMessage(cs, MsgError, &ErrorPayload{
-		Code:    code,
-		Message: message,
-	})
-}
-
 // reply sends msgType as the answer to req, tagged with req's request id so
 // the client can tell it from the answer to any other request. Everything a
 // handler sends in answer to the message it is handling goes through here or
@@ -298,7 +291,7 @@ func (d *Daemon) reply(cs *connState, req *Message, msgType MessageType, payload
 	return d.sendEncoded(cs, msg)
 }
 
-// replyError is sendError as the answer to req. See reply.
+// replyError sends an error as the answer to req. See reply.
 func (d *Daemon) replyError(cs *connState, req *Message, code int, message string) error {
 	return d.reply(cs, req, MsgError, &ErrorPayload{
 		Code:    code,

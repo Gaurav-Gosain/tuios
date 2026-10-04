@@ -144,13 +144,3 @@ func lookupCommand(word string) (string, error) {
 	}
 	return "", fmt.Errorf("ambiguous command: %s, could be: %s", word, strings.Join(names, ", "))
 }
-
-// isTmuxCommand reports whether name is the full name of a tmux command.
-func isTmuxCommand(name string) bool {
-	for _, c := range tmuxCommands {
-		if c.name == name {
-			return true
-		}
-	}
-	return false
-}

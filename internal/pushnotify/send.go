@@ -290,7 +290,7 @@ func sendPushover(ctx context.Context, c *Client, p config.PushoverConfig, m Mes
 		return err
 	}
 	if user == "" || token == "" {
-		return errors.New("Pushover needs a user key and an application token. Set both in [notify.pushover]")
+		return errors.New("a Pushover message needs a user key and an application token. Set both in [notify.pushover]")
 	}
 	form := url.Values{"token": {token}, "user": {user}, "title": {m.Title}}
 	msg := m.Body
