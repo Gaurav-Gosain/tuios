@@ -167,7 +167,8 @@ its first half second, so a fast load never flashes a "reading" line.
 ## Messages
 
 A message shows at the right end of the dock. A message that is too long
-for the dock ends with `…` and `more`.
+for the dock stops after its last whole word, with `…` and `more`. A word with
+no space in it, such as a long path, is cut where the room ends.
 
 - Put the pointer on a message to hold it. It does not go away while the
   pointer is on it. A key press, or the terminal losing focus, ends the hold.

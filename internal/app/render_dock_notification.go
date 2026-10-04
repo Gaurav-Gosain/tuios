@@ -397,7 +397,22 @@ func notifFit(message string, room int) string {
 	if room <= ellW {
 		return truncateToWidth(ell, room)
 	}
-	return strings.TrimRight(truncateToWidth(message, room-ellW), " ") + ell
+	return notifWordCut(truncateToWidth(message, room-ellW), message) + ell
+}
+
+// notifWordCut takes a cut message back to the end of its last whole word,
+// so the block never shows part of a word: "Ctrl+label ope" reads as a word
+// that does not exist, and the reader cannot tell what is missing. The word
+// boundary is given up only when it would throw away more than half of the
+// text, which is a long path or an address with no space in it, and then the
+// cut stays where it fell.
+func notifWordCut(cut, message string) string {
+	if len(cut) < len(message) && strings.HasPrefix(message, cut) && message[len(cut)] != ' ' {
+		if i := strings.LastIndexByte(cut, ' '); i > 0 && 2*lipgloss.Width(cut[:i]) >= lipgloss.Width(cut) {
+			cut = cut[:i]
+		}
+	}
+	return strings.TrimRight(cut, " ,;:")
 }
 
 // notifBurnRule lights the dock's hairline across the message's span and

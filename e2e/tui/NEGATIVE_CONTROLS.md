@@ -827,6 +827,7 @@ word boundary by chance and passes.
 | --- | --- | --- | --- |
 | Hints mode shows its keys in the dock | the `m.hints != nil` branch in `modeLegend` (`internal/app/mode_legend.go`) | `TestHintsModeLegend` 60x20, 80x24 and 200x50 ("no hints legend on the dock") | **caught** (3 of 3) |
 | The legend is fitted by whole keys, and esc stays | `renderModeLegend` draws `overlay.HintStrip` unfitted, so the dock's generic cut ends it | `TestHintsModeLegend/80x24` ("the dock shows "ope", which is not a whole key or label", "the dock does not show esc"), `/60x20` ("the dock lost the key "esc""); `TestCopyModeLegend/60x20` and `/80x24` (no legend with its exit key); both 200x50 runs pass | **caught** |
+| A cut message ends on a whole word | `notifFit` back to `strings.TrimRight(truncateToWidth(...), " ")` without `notifWordCut` (`internal/app/render_dock_notification.go`) | `TestCutMessageEndsOnAWholeWord/82x24` ("word 6 of the cut message is "1", want 106"), `/83x24` ("is "10""); 80 and 81 pass | **caught** (2 of 4 widths, as designed) |
 | `?` in hints mode shows all of its keys | the `r == '?'` branch in `handleHintsKey` (`internal/input/hints_input.go`) | `TestHintsHelpKeyListsAllKeys` ("? did not open the help on hints mode's keys") | **caught** |
 
 Copy mode also said its keys in a message ("Copy mode (hjkl, q to exit)"),

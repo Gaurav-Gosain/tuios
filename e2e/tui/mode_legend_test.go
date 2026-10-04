@@ -344,3 +344,38 @@ func TestCopyModeLegend(t *testing.T) {
 		})
 	}
 }
+
+// TestCutMessageEndsOnAWholeWord raises a message too long for the dock, made
+// of three-digit numbers, at four widths one column apart. A cut that ignores
+// words falls inside a number at three of any four widths, so each width must
+// show only whole numbers before the ellipsis, each the one after the last.
+func TestCutMessageEndsOnAWholeWord(t *testing.T) {
+	for cols := 80; cols < 84; cols++ {
+		t.Run(fmt.Sprintf("%dx24", cols), func(t *testing.T) {
+			term, _ := start(t, startOpts{cols: cols, rows: 24})
+			waitBoot(t, term)
+			newWindow(t, term)
+			raiseLongMessage(t, term, 100, 220)
+			row := dockRow(term.Screen())
+			saveArtifact(t, term, artifactDir(t), "cut-message")
+
+			i := strings.Index(row, longHead)
+			j := strings.Index(row, "…")
+			if j < 0 {
+				j = strings.Index(row, "...")
+			}
+			if i < 0 || j < i {
+				t.Fatalf("the dock does not show the cut message with an ellipsis: %q", row)
+			}
+			words := strings.Fields(row[i+len(longHead) : j])
+			if len(words) < 2 {
+				t.Fatalf("the cut message shows fewer than two numbers: %q", row)
+			}
+			for k, w := range words {
+				if w != fmt.Sprint(100+k) {
+					t.Errorf("word %d of the cut message is %q, want %d: %q", k, w, 100+k, row)
+				}
+			}
+		})
+	}
+}
