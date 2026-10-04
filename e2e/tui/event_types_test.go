@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These tests hold the scripting surface to what a script reads from it: a
@@ -33,6 +34,24 @@ func startDetached(t *testing.T, base, name string) {
 	}
 }
 
+// subscribeWithin is splitCLI with a deadline, for a command that may not exit.
+func subscribeWithin(t *testing.T, base string, d time.Duration, args ...string) (string, string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	pinPreV080Looks(t, base)
+	cmd := exec.CommandContext(ctx, tuiosBin, args...)
+	cmd.Dir = workDirIn(t, base)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	var stdout, stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
+}
+
 func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 	base := t.TempDir()
 	startDetached(t, base, "events")
@@ -42,10 +61,13 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		{"window-creted", "unknown event type window-creted"},
 		{"after-new-window", "after-new-window is a hook name. The event it fires on is window-created"},
 	} {
-		out, errOut, err := splitCLI(t, base, "subscribe", "-s", "events", "--types", tc.types, "--count", "1")
+		// A filter that is not refused streams nothing and never exits, so
+		// the call has a deadline: it fails the check below instead of the
+		// whole run timing out.
+		out, errOut, err := subscribeWithin(t, base, uiTimeout, "subscribe", "-s", "events", "--types", tc.types, "--count", "1")
 		transcript.WriteString("$ tuios subscribe --types " + tc.types + "\n" + out + errOut + "\n")
-		if err == nil {
-			t.Errorf("subscribe --types %s succeeded, want a refusal\n%s", tc.types, out)
+		if err == nil || strings.Contains(err.Error(), "killed") {
+			t.Errorf("subscribe --types %s was not refused (%v)\n%s", tc.types, err, out)
 			continue
 		}
 		if !strings.Contains(out+errOut, tc.want) {

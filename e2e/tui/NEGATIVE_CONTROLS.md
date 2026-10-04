@@ -1013,6 +1013,18 @@ same two cuts.
 | --- | --- | --- | --- |
 | No switch check | `dockSwitchedOff` returns `""` | `TestDockListSaysWhichSwitchTurnsAComponentOff` ("cpu: off = \"\", want \"show_cpu = false\"", then the same for clock) | **caught** |
 
+## Subscribe types and close-window
+
+The tests are in `event_types_test.go`. Each control is its own build.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Unknown types accepted | the `checkEventTypes` call in `verbSubscribe` made `false &&` | `TestSubscribeRefusesUnknownTypes` (both `window-creted` and `after-new-window` subscribe, stream nothing and are killed at the deadline) | **caught** |
+| The window sent empty | `runCloseWindow` dials with `dialSessionTarget` and puts the name in `params`, which overwrites it with the empty target window | `TestCloseWindowClosesOnePane` (the focused pane, `keep`, is closed and `build` is still listed) | **caught** |
+
+The positive halves are in the same tests: `--types window-created` streams
+the event of a new window, and `keep` is still listed after `build` closes.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
