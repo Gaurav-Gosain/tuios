@@ -884,6 +884,20 @@ tree with the tick change and without that message.
 | --- | --- | --- | --- |
 | A changed listing draws a frame | `refreshForeignSessionsCmd` in `internal/app/update.go` returns nil after the refresh, as before the fix | `TestSubagentCountOnARestingRow` ("waiting for the count on the finished row": the daemon holds `3 subagents` and the rail never shows it), 3 of 3 runs. a640011 passes, since its tick drew a frame | **caught** (3 of 3 run) |
 
+## A loaded layout shows its shells (#411)
+
+`TestALoadedLayoutShowsItsShells` saves a layout of three panes and loads it
+on an empty workspace of a daemon session.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released bug | build v0.8.5 and point `TUIOS_E2E_BIN` at it | `TestALoadedLayoutShowsItsShells` (0 of 3 prompts on workspace 2) | **caught** |
+| The stream reconcile after a sync | `ApplyStateSyncFrom`: the `reconcilePaneStreams` call cut | `TestALoadedLayoutShowsItsShells` (0 of 3 prompts on workspace 2) | **caught** |
+
+The fix is e1af811a (#384), which landed after v0.8.5. The panes of a loaded
+layout reach the client in a state sync, and before that fix nothing
+subscribed a pane that arrived that way.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
