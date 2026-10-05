@@ -89,3 +89,16 @@ fn scrollback_viewport() {
     t.scroll_to_bottom();
     assert!(t.at_bottom());
 }
+
+#[test]
+fn row_above_the_viewport() {
+    let mut t = Terminal::new(10, 3, 1000).unwrap();
+    for i in 0..10 {
+        t.write(format!("line{i}\r\n").as_bytes());
+    }
+    assert_eq!(t.row_above().unwrap().plain().trim_end(), "line7");
+    t.scroll_delta(-2);
+    assert_eq!(t.row_above().unwrap().plain().trim_end(), "line5");
+    let s = t.snapshot();
+    assert_eq!(s.rows[0].plain().trim_end(), "line6", "the viewport is back where it was");
+}

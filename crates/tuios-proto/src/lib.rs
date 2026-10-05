@@ -100,7 +100,11 @@ impl Bridge {
             cmd.arg("--session").arg(s);
         }
         for (k, v) in &launch.env {
-            cmd.env(k, v);
+            if v.is_empty() {
+                cmd.env_remove(k);
+            } else {
+                cmd.env(k, v);
+            }
         }
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
         let mut child = cmd.spawn().map_err(|e| anyhow::anyhow!("failed to start {}: {e}", launch.tuios.display()))?;
@@ -156,7 +160,11 @@ pub fn list_sessions(tuios: &std::path::Path, env: &[(String, String)]) -> anyho
     let mut cmd = Process::new(tuios);
     cmd.arg("ls").arg("--json");
     for (k, v) in env {
-        cmd.env(k, v);
+        if v.is_empty() {
+            cmd.env_remove(k);
+        } else {
+            cmd.env(k, v);
+        }
     }
     let out = cmd.stderr(Stdio::null()).output()?;
     types::parse_sessions(&out.stdout)

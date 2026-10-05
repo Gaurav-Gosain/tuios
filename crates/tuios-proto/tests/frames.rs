@@ -69,3 +69,10 @@ fn parses_ls_json() {
     assert_eq!(s[0].name, "a");
     assert_eq!(tuios_proto::types::parse_sessions(b"null\n").unwrap().len(), 0);
 }
+
+#[test]
+fn go_nulls_read_as_empty() {
+    let e: tuios_proto::Event = serde_json::from_str(r#"{"type":"state","state":{"session":"s","cols":1,"rows":1,"workspace":1,"num_workspaces":9,"workspace_names":null,"occupied":null,"focused":"","tiling":false,"windows":null}}"#).unwrap();
+    let s = e.state.unwrap();
+    assert!(s.windows.is_empty() && s.occupied.is_empty() && s.workspace_names.is_empty());
+}

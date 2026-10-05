@@ -42,6 +42,11 @@ pub struct Terminal {
     /// The last copied screen. Rows are replaced as ghostty reports them dirty.
     screen: Screen,
     grapheme_buf: Vec<u32>,
+    /// Where copy_row builds a row before it is swapped into place.
+    scratch: Row,
+    /// The row just above the viewport, for smooth scrolling: the viewport
+    /// offset it was read at, and the row.
+    above: Option<(u64, Row)>,
 }
 
 fn ok(r: GhosttyResult, what: &str) -> Result<(), String> {
@@ -157,6 +162,8 @@ impl Terminal {
                 rows_n: rows,
                 screen: Screen::blank(cols, rows),
                 grapheme_buf: Vec::with_capacity(8),
+                scratch: Row::default(),
+                above: None,
             })
         }
     }
@@ -175,6 +182,7 @@ impl Terminal {
         if bytes.is_empty() {
             return;
         }
+        self.above = None;
         unsafe { ghostty_terminal_vt_write(self.raw, bytes.as_ptr(), bytes.len()) }
     }
 
@@ -583,7 +591,8 @@ impl Terminal {
                 let mut row_dirty = false;
                 let _ = ghostty_render_state_row_get(self.rows, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &mut row_dirty as *mut _ as *mut _);
                 if full || row_dirty {
-                    self.copy_row(y, &colors);
+                    self.copy_row(&colors);
+                    std::mem::swap(&mut self.screen.rows[y], &mut self.scratch);
                     let off = false;
                     let _ = ghostty_render_state_row_set(self.rows, GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY, &off as *const bool as *const _);
                 }
@@ -592,6 +601,44 @@ impl Terminal {
             let clean: GhosttyRenderStateDirty = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
             let _ = ghostty_render_state_set(self.render, GHOSTTY_RENDER_STATE_OPTION_DIRTY, &clean as *const _ as *const _);
             self.update_cursor(&cur, &colors);
+        }
+    }
+
+    /// The row just above the viewport, when the viewport is scrolled into
+    /// history. Smooth scrolling shows part of it. Reading it moves the
+    /// viewport up a row and back, so it is cached per viewport position.
+    pub fn row_above(&mut self) -> Option<&Row> {
+        let (_, offset, _) = self.scrollbar();
+        if offset == 0 {
+            return None;
+        }
+        if self.above.as_ref().is_none_or(|(o, _)| *o != offset) {
+            self.scroll_delta(-1);
+            let row = unsafe { self.read_first_row() };
+            self.scroll_delta(1);
+            self.screen.full_dirty = true;
+            self.above = row.map(|r| (offset, r));
+        }
+        self.above.as_ref().map(|(_, r)| r)
+    }
+
+    unsafe fn read_first_row(&mut self) -> Option<Row> {
+        unsafe {
+            if ghostty_render_state_update(self.render, self.raw) != GHOSTTY_SUCCESS {
+                return None;
+            }
+            let mut colors: GhosttyRenderStateColors = std::mem::zeroed();
+            colors.size = std::mem::size_of::<GhosttyRenderStateColors>();
+            let _ = ghostty_render_state_get(self.render, GHOSTTY_RENDER_STATE_DATA_COLORS, &mut colors as *mut _ as *mut _);
+            let mut it = self.rows;
+            if ghostty_render_state_get(self.render, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &mut it as *mut _ as *mut _)
+                != GHOSTTY_SUCCESS
+                || !ghostty_render_state_row_iterator_next(self.rows)
+            {
+                return None;
+            }
+            self.copy_row(&colors);
+            Some(self.scratch.clone())
         }
     }
 
@@ -612,7 +659,7 @@ impl Terminal {
         };
     }
 
-    unsafe fn copy_row(&mut self, y: usize, colors: &GhosttyRenderStateColors) {
+    unsafe fn copy_row(&mut self, colors: &GhosttyRenderStateColors) {
         unsafe {
             let mut cells = self.cells;
             if ghostty_render_state_row_get(self.rows, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &mut cells as *mut _ as *mut _)
@@ -634,7 +681,7 @@ impl Terminal {
             let default_bg = Rgb::from_ffi(colors.background);
             let palette = &colors.palette;
             let generation = self.screen.next_generation();
-            let row = &mut self.screen.rows[y];
+            let row = &mut self.scratch;
             row.cells.clear();
             row.text.clear();
             row.wrapped = wrapped;

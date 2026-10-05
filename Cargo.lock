@@ -5646,8 +5646,11 @@ name = "tuios-gpui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
+ "ghostty-vt",
  "gpui-pre",
  "gpui-pre-platform",
+ "tuios-proto",
 ]
 
 [[package]]

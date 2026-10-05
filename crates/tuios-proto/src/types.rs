@@ -1,6 +1,11 @@
 //! JSON shapes shared with the bridge.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Go encodes an empty map or slice as null; read null as the default.
+fn null_default<'de, D: Deserializer<'de>, T: Default + Deserialize<'de>>(d: D) -> Result<T, D::Error> {
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -21,15 +26,15 @@ pub struct State {
     pub rows: u16,
     pub workspace: u32,
     pub num_workspaces: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     pub workspace_names: BTreeMap<String, String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     pub occupied: Vec<u32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     pub focused: String,
     #[serde(default)]
     pub tiling: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     pub windows: Vec<Window>,
 }
 
@@ -58,7 +63,7 @@ impl State {
 pub struct Window {
     pub id: String,
     pub pty: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     pub title: String,
     #[serde(default)]
     pub name: Option<String>,

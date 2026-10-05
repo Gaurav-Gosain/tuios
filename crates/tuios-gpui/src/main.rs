@@ -1,16 +1,116 @@
-use gpui::{App, Bounds, Context, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size};
+//! tuios-gpui: a native, GPU-drawn client for the tuios terminal window
+//! manager. See README.md.
 
-struct Hello;
-impl Render for Hello {
-    fn render(&mut self, _w: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().bg(rgb(0x1e1e2e)).text_color(rgb(0xffffff)).child("tuios-gpui")
-    }
+mod app;
+mod boxdraw;
+mod keys;
+mod painter;
+mod palette;
+mod pane;
+mod perf;
+mod rowplan;
+mod stats;
+mod theme;
+
+use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use std::path::PathBuf;
+
+fn usage() -> ! {
+    eprintln!(
+        "Usage: tuios-gpui [options]
+
+Options:
+  --tuios PATH        The tuios binary (default: tuios on PATH)
+  --session NAME      The session to attach, created when missing
+  --isolate DIR       Run against a private daemon whose files live in DIR
+  --font FAMILY       Terminal font (default: FiraCode Nerd Font Mono)
+  --font-size N       Terminal font size in points (default: 14)
+  --light             Use the light theme
+  --show-fps          Show paint timings in the status bar
+  --perf              Run the performance harness and print the results
+  --perf-out FILE     Also write the results to FILE as JSON"
+    );
+    std::process::exit(2)
 }
 
 fn main() {
-    gpui_platform::application().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(800.), px(500.)), cx);
-        cx.open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |_, cx| cx.new(|_| Hello)).unwrap();
+    let mut cfg = app::Config {
+        tuios: PathBuf::from("tuios"),
+        session: None,
+        env: Vec::new(),
+        font_family: "FiraCode Nerd Font Mono".into(),
+        font_size: 14.,
+        line_height: 1.3,
+        dark: true,
+        ui_font: "Adwaita Sans".into(),
+        show_fps: false,
+    };
+    let mut perf = false;
+    let mut perf_out: Option<PathBuf> = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        let mut val = || args.next().unwrap_or_else(|| usage());
+        match a.as_str() {
+            "--tuios" => cfg.tuios = PathBuf::from(val()),
+            "--session" => cfg.session = Some(val()),
+            "--isolate" => cfg.env = isolated_env(&PathBuf::from(val())),
+            "--font" => cfg.font_family = val(),
+            "--font-size" => cfg.font_size = val().parse().unwrap_or_else(|_| usage()),
+            "--light" => cfg.dark = false,
+            "--show-fps" => cfg.show_fps = true,
+            "--perf" => perf = true,
+            "--perf-out" => perf_out = Some(PathBuf::from(val())),
+            "-h" | "--help" => usage(),
+            _ => usage(),
+        }
+    }
+
+    gpui_platform::application().run(move |cx: &mut App| {
+        let bounds = Bounds::centered(None, size(px(1400.), px(880.)), cx);
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitlebarOptions { title: Some("tuios".into()), ..Default::default() }),
+            app_id: Some("dev.tuios.gpui".into()),
+            window_min_size: Some(size(px(480.), px(320.))),
+            ..Default::default()
+        };
+        if perf {
+            let cfg = cfg.clone();
+            let out = perf_out.clone();
+            cx.open_window(options, |window, cx| cx.new(|cx| perf::PerfView::new(cfg, out, window, cx))).expect("open window");
+        } else {
+            cx.open_window(options, |window, cx| cx.new(|cx| app::TuiosApp::new(cfg.clone(), window, cx))).expect("open window");
+        }
+        cx.on_window_closed(|cx, _| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
         cx.activate(true);
     });
+}
+
+/// Environment for a private tuios daemon rooted at `dir`: its own runtime
+/// directory (and so its own socket), config, state and home.
+fn isolated_env(dir: &std::path::Path) -> Vec<(String, String)> {
+    let mut env = Vec::new();
+    for (k, sub) in [
+        ("XDG_RUNTIME_DIR", "run"),
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_STATE_HOME", "state"),
+        ("XDG_CACHE_HOME", "cache"),
+        ("XDG_DATA_HOME", "data"),
+        ("HOME", "home"),
+    ] {
+        let p = dir.join(sub);
+        let _ = std::fs::create_dir_all(&p);
+        if sub == "run" {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700));
+        }
+        env.push((k.to_string(), p.display().to_string()));
+    }
+    env.push(("TUIOS_SOCKET".into(), String::new()));
+    env
 }
