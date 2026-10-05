@@ -1551,3 +1551,30 @@ of the security boundary kind, in `cmd/tuios/list_every_pane_test.go`.
 | No note for a session past the deadline | the loader: the "Did not answer in time" row cut | `TestNavigatorSaysWhatItDidNotRead/deadline` ("a session held past the deadline does not say so") | **caught** |
 | A late reply is taken by the next call | `CallWithTimeout`: the `broken` check and the reply id check cut | `TestVerbClientRefusesAReplyOutOfStep` ("the second call returned {"for":"1"} after the first timed out"), `TestVerbClientRefusesAReplyForAnotherRequest` | **caught** |
 | Host fields printed raw | `printListedPanes`: `plainLine` on the name and `plainText` on the text cut | `TestListWindowsAllHostsPrintsHostFieldsPlain` ("an escape reached the terminal") | **caught** |
+
+## Agents settings tab and the integration notice
+
+`agents_settings_test.go` uses a temporary home with a Claude Code integration
+aged from the current version to the one before, and a stand-in `claude` on
+PATH. The positive halves are in the same fixtures: the same frame shows Codex
+as not installed, the daemon's `list-agents` is read for the harness on both
+panes before the "no second toast" half counts, and
+`TestAgentsSettingsTabBeforeTape` is the switch-on twin of
+`TestAgentsSettingsHiddenWithAgentsOff`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`7411942b`) | `TestAgentsSettingsUpdatesAndUninstalls` ("the prefix key opened no Agents tab"), `TestAgentsIntegrationNoticeOncePerRun` ("no toast for the out of date integration"), `TestAgentsSettingsHiddenWithAgentsOff` (no "Agent features are off" for the key), `TestAgentsSettingsTabBeforeTape` | **caught** |
+| The tab is not on the page | `settingsCategories`: the `append(cats, m.agentsCategory())` line cut | `TestAgentsSettingsUpdatesAndUninstalls`, `TestAgentsIntegrationNoticeOncePerRun` (the palette entry opens no tab), `TestAgentsSettingsTabBeforeTape`. The off test passes, which is correct | **caught** |
+| The prefix action is not registered | `prefix_actions.go`: the `prefix_agents_settings` Register line cut | `TestAgentsSettingsUpdatesAndUninstalls` ("the prefix key opened no Agents tab") | **caught** |
+| The prefix key is not bound | `userconfig.go`: the `"prefix_agents_settings": {"A"}` default cut | `TestAgentsSettingsUpdatesAndUninstalls` (same) | **caught** |
+| The report is never asked for | `Update`: the `agentsSyncCmd` call replaced by nil | `TestAgentsSettingsUpdatesAndUninstalls`, `TestAgentsIntegrationNoticeOncePerRun`, `TestAgentsSettingsTabBeforeTape` | **caught** |
+| The report never lands | `handleMsg`: the `agentsOverviewMsg` case cut | the same three | **caught** |
+| An action's result never lands | `handleMsg`: the `agentsActionMsg` case cut | `TestAgentsSettingsUpdatesAndUninstalls` ("the update said nothing") | **caught** |
+| A click on a status row does nothing | `overlayRowClick`: the `controlStatus` case cut | `TestAgentsSettingsUpdatesAndUninstalls` ("a click on the row opened no update action") | **caught** |
+| Esc closes the page from the action rows | `handleSettingsInput`: the `SettingsBack` call cut | `TestAgentsSettingsUpdatesAndUninstalls` ("esc did not go back to the list") | **caught** |
+| No palette entry | `command_palette.go`: the entry renamed away from `paletteAgentsSettingsName` | `TestAgentsIntegrationNoticeOncePerRun` ("the palette has no Agents settings entry") | **caught** |
+| The tab ignores the agent switch | `settingsCategories`: `agentsPageAvailable()` replaced by true | `TestAgentsSettingsHiddenWithAgentsOff` ("the tab before Tape is not Hosts") | **caught** |
+| No notice | both `noticeAgentIntegrations` calls cut | `TestAgentsIntegrationNoticeOncePerRun` ("no toast") | **caught** |
+| The notice is not once per harness | `noticeAgentIntegrations`: the `panesSeen` and `noticed` checks cut | `TestAgentsIntegrationNoticeOncePerRun` ("esc did not dismiss the toast": it comes back at once) | **caught** |
+| The doctor footer counts only missing integrations | `doctorAgents`: `st.State() == StateInstalled` back to `st.Installed` | `TestAgentsIntegrationNoticeOncePerRun` ("the doctor does not name the pane with the out of date integration") | **caught** |
