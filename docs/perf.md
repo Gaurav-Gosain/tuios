@@ -2161,8 +2161,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 31,908,002 | 31,945,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,066,354 | 30,105,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,977,634 | 32,015,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,116,962 | 30,155,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2364,6 +2364,12 @@ for `tuios hosts sync`: the probe, install and restart scripts, the dev
 cross-build, the release download by tag, the restart question and the
 report. It links no new package. On Go 1.26.6 the build measured 31,908,002
 and 30,066,354 bytes, 88,002 and 86,354 over the old budgets.
+
+The budgets went to 32,015,000 (linux/amd64) and 30,155,000 (darwin/arm64)
+for the sessionizer work: `tuios switch-session`, its verb, and the start
+directory of a session. It links no new package. On Go 1.26.6 the build
+measured 31,977,634 and 30,116,962 bytes, 32,634 and 11,962 over the old
+budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
