@@ -314,12 +314,34 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 	}
 }
 
+// reconcilePrevFocus moves the previous-pane record to the pane focus just
+// left, whatever moved it. FocusWindow, new panes, workspace switches, closes
+// and daemon sync all land focus without a shared hook, so the record is read
+// off the landed focus once a message instead of written by every caller.
+func (m *OS) reconcilePrevFocus() {
+	var cur string
+	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+		cur = m.Windows[m.FocusedWindow].ID
+	}
+	if cur == m.lastFocusedID {
+		return
+	}
+	if m.lastFocusedID != "" && m.windowIndexByID(m.lastFocusedID) >= 0 {
+		m.PrevFocusedID = m.lastFocusedID
+	}
+	m.lastFocusedID = cur
+}
+
 // LastPane flips focus back to the window focus came from most recently.
 // Alternating presses walk back and forth between the last two panes, because
 // focusing the previous window makes the current one previous. Reports whether
 // it moved; a dead target (closed pane, nothing recorded yet) says so rather
 // than moving somewhere random.
 func (m *OS) LastPane() bool {
+	// Two presses can land in one Update, and the flip needs the pane the
+	// last press left, so settle the record here rather than trust the last
+	// message boundary.
+	m.reconcilePrevFocus()
 	if m.PrevFocusedID == "" {
 		return false
 	}
@@ -381,7 +403,6 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Leaving an agent pane is when the person looked away from it.
 	if oldFocused >= 0 && oldFocused < len(m.Windows) {
 		m.markAgentSeenAt(m.Windows[oldFocused])
-		m.PrevFocusedID = m.Windows[oldFocused].ID
 	}
 
 	// ATOMIC: Set focus and Z-index in one operation

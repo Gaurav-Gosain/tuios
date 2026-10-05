@@ -7,6 +7,8 @@ import (
 )
 
 // lastPaneTestOS is three panes on one workspace, focus on the first.
+// Focus moves in tests through FocusWindow plus reconcilePrevFocus, the pair
+// Update runs for every real message.
 func lastPaneTestOS(t *testing.T) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 120, 40)
@@ -18,7 +20,15 @@ func lastPaneTestOS(t *testing.T) *OS {
 		{ID: "three", CustomName: "three", Width: 40, Height: 20, Workspace: 1},
 	}
 	m.FocusedWindow = 0
+	m.reconcilePrevFocus()
 	return m
+}
+
+// focusTo moves focus the way a message does: the jump, then the reconcile
+// Update runs once a message.
+func focusTo(m *OS, i int) {
+	m.FocusWindow(i)
+	m.reconcilePrevFocus()
 }
 
 // TestLastPaneAlternates checks the flip invariant: alternating presses walk
@@ -29,8 +39,8 @@ func TestLastPaneAlternates(t *testing.T) {
 	if m.LastPane() {
 		t.Fatal("nothing was focused before, yet LastPane claimed a target")
 	}
-	m.FocusWindow(1)
-	m.FocusWindow(2)
+	focusTo(m, 1)
+	focusTo(m, 2)
 	if !m.LastPane() || m.FocusedWindow != 1 {
 		t.Fatalf("first flip landed on %d, want 1", m.FocusedWindow)
 	}
@@ -46,7 +56,7 @@ func TestLastPaneAcrossWorkspaces(t *testing.T) {
 	m := lastPaneTestOS(t)
 	m.Windows[2].Workspace = 3
 
-	m.FocusWindow(2)
+	focusTo(m, 2)
 	if m.CurrentWorkspace != 3 {
 		t.Fatalf("workspace = %d, want 3 after the jump", m.CurrentWorkspace)
 	}
@@ -60,8 +70,8 @@ func TestLastPaneAcrossWorkspaces(t *testing.T) {
 // of landing on whatever pane reused the index.
 func TestLastPaneDeadTarget(t *testing.T) {
 	m := lastPaneTestOS(t)
-	m.FocusWindow(1)
-	m.FocusWindow(2)                             // previous is now pane two
+	focusTo(m, 1)
+	focusTo(m, 2)                                // previous is now pane two
 	m.Windows = []*terminal.Window{m.Windows[0]} // two and three closed
 	m.FocusedWindow = 0
 
