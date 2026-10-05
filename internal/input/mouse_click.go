@@ -1,7 +1,6 @@
 package input
 
 import (
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -298,39 +297,16 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Shift and the left button on a link acts on it.
-	//
-	// Shift is the terminal's own "this click is mine, not the program's"
-	// modifier, which xterm has meant by it for decades, so it is the one
-	// modifier a user already expects to reach past a program that is tracking
-	// the mouse. That is also why this sits above the forwarding below rather
-	// than under it: holding shift is the user saying the click is tuios's.
-	//
-	// A plain click is deliberately not this. A left press on a pane is already
-	// how you focus it, start typing in it, and select text in it, and a browser
-	// opening on top of any of those three would be a gesture nobody asked for
-	// landing on text that merely looks like an address.
-	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
+	// A left click on a link acts on it, plain or shifted. A tuios:// link
+	// resolves in-process, so a guest can hand the viewer a jump the way the
+	// wait bar does; a preview URL a pane printed opens in the browser. A
+	// click on a link cell is a deliberate gesture at known text, so it is
+	// taken from the guest even where the guest tracks the mouse — every
+	// other click still lands there through the forwarding below. Shift
+	// keeps its xterm meaning for users who reach for it, and does the same
+	// thing here.
+	if msg.Button == tea.MouseLeft && (msg.Mod == 0 || msg.Mod == tea.ModShift) {
 		if link, ok := o.LinkAt(X, Y); ok {
-			if clickedWindowIndex != -1 {
-				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
-			}
-			return o, o.OpenLink(link.URL)
-		}
-	}
-
-	// A plain click acts on a tuios:// link tuios drew itself, and on nothing
-	// else. Shift guards the click paths that could reach the desktop, where a
-	// browser opening over a selection is a gesture nobody asked for. A tuios://
-	// link resolves in-process, so the click's action is a focus change inside
-	// the app the click is already in — but OSC 8 lets any program print such an
-	// address, and this check runs before mouse forwarding, so the mark is what
-	// keeps a guest's link from taking the click the guest's own mouse tracking
-	// should have had. Links tuios paints carry the client's nonce; a guest
-	// cannot read the frame stream to learn it. This is the wait bar's path, and
-	// the bar's whole point is that a click lands on the pane it names.
-	if msg.Button == tea.MouseLeft && msg.Mod == 0 {
-		if link, ok := o.LinkAt(X, Y); ok && strings.HasPrefix(link.URL, "tuios://") && o.LinkIsOurs(link.Params) {
 			if clickedWindowIndex != -1 {
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			}

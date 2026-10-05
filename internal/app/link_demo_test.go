@@ -76,9 +76,6 @@ func TestSpendPendingLinkDemoPaintsTheBar(t *testing.T) {
 	for col := 0; col < 40; col++ {
 		cell := paneCellAt(origin, col, 1)
 		if cell != nil && cell.Link.URL == "tuios://window/"+demo.ID {
-			if !o.LinkIsOurs(cell.Link.Params) {
-				t.Fatal("the bar's link carries no client mark; a plain click would ignore it")
-			}
 			found = true
 			break
 		}

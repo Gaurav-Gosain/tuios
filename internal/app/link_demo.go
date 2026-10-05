@@ -78,7 +78,7 @@ func (m *OS) spendPendingLinkDemo(created []*terminal.Window) {
 // on a pane that closed in the meantime: WriteOutput is a no-op there.
 func paintJumpLinkBar(w *terminal.Window, targetID string) {
 	w.WriteOutput([]byte(fmt.Sprintf(
-		"\r\n\x1b[2m[jump demo]\x1b[0m \x1b]8;%s;tuios://window/%s\x1b\\click here to jump\x1b]8;;\x1b\\\r\n",
-		TuiosLinkParams(), targetID,
+		"\r\n\x1b[2m[jump demo]\x1b[0m \x1b]8;;tuios://window/%s\x1b\\click here to jump\x1b]8;;\x1b\\\r\n",
+		targetID,
 	)))
 }
