@@ -122,9 +122,14 @@ func (s *Shim) writeBuffer(name, data string) error {
 	}
 	dir := s.bufferDir()
 	if dir == "" {
-		s.memBuffers = append(withoutBuffer(s.memBuffers, name), buffer{name: name, data: data, at: time.Now()})
+		s.memBuffers = append(withoutBuffer(s.memBuffers, name), buffer{name: name, data: data, at: newestAfter(s.memBuffers)})
 		return nil
 	}
+	list, err := s.buffers()
+	if err != nil {
+		return err
+	}
+	stamp := newestAfter(list)
 	if err := EnsureDir(s.Dir); err != nil {
 		return err
 	}
@@ -145,7 +150,27 @@ func (s *Shim) writeBuffer(name, data string) error {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
+	if err := os.Chtimes(tmp.Name(), stamp, stamp); err != nil {
+		_ = os.Remove(tmp.Name())
+		return err
+	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// newestAfter is the time to stamp a new buffer with: now, or just after the
+// newest buffer in list when the clock has not moved past it. The kernel
+// stamps a file with a clock that ticks every few milliseconds, so two
+// buffers written in one tick would otherwise tie, and the top of the stack
+// would fall to the name order. The step is a microsecond, which NTFS's
+// 100ns mtime keeps.
+func newestAfter(list []buffer) time.Time {
+	stamp := time.Now().Round(0)
+	for _, b := range list {
+		if !stamp.After(b.at) {
+			stamp = b.at.Add(time.Microsecond)
+		}
+	}
+	return stamp
 }
 
 // removeBuffer deletes buffer name.
