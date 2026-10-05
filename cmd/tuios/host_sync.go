@@ -135,6 +135,13 @@ type syncResult struct {
 	RestartCommand string   `json:"restart_command,omitempty"`
 	Notes          []string `json:"notes,omitempty"`
 	Error          string   `json:"error,omitempty"`
+	// ErrorKind names an error a script can act on: "tailscale_check" for a
+	// login that waits for an approval, "tailscale_policy" for a login the
+	// tailnet policy refuses. Empty for any other error.
+	ErrorKind string `json:"error_kind,omitempty"`
+	// ApprovalURL is where the person approves the login, with
+	// "tailscale_check".
+	ApprovalURL string `json:"approval_url,omitempty"`
 }
 
 // syncTarget is one machine being worked on.
@@ -177,6 +184,10 @@ func (t *syncTarget) note(s string) {
 func (t *syncTarget) fail(err error) {
 	t.failed = true
 	t.res.Error = err.Error()
+	if ge := gateErrorOf(err); ge != nil {
+		t.res.ErrorKind = ge.Gate.Kind
+		t.res.ApprovalURL = ge.Gate.URL
+	}
 }
 
 // Where the binary comes from.
@@ -268,6 +279,11 @@ sessions and the panes with a running program on each host. Then it asks you
 to agree. Without a terminal, add --yes. A daemon with no sessions restarts
 without a question. A daemon with the new version is never restarted.
 
+If Tailscale SSH asks you to approve a login, sync shows the link to open.
+On a terminal, sync asks to wait for the approvals. Each host continues when
+you approve it. All ssh calls to a host share one connection, so one approval
+is enough for the run.
+
 The ghostty backend cannot be cross-compiled. Build it on the host with
 scripts/install.sh ghostty.`,
 		Example: `  # See what sync would do, and change nothing
@@ -327,27 +343,44 @@ func runHostsSync(opts syncOptions) error {
 	if err != nil {
 		return err
 	}
+	// The ssh calls of this run share one connection per host, so one
+	// Tailscale SSH approval covers the run. See host_gate.go.
+	share := newSSHShare(os.Getenv("TUIOS_SSH"))
+	defer share.close()
+	desk := newApprovalDesk(opts.errOut, opts.in, syncIsTTY(opts) && !opts.json)
+	for _, t := range targets {
+		if t.local {
+			continue
+		}
+		share.share(&t.host)
+		t.runner = sshSyncRunner{host: t.host, desk: desk}
+	}
 	src, err := chooseSyncSource(opts)
 	if err != nil {
 		return err
 	}
 	defer src.cleanup()
 
-	// 1. Probe.
+	// 1. Probe. The probe goes first and the daemon is read after it, so the
+	// probe's connection is the one the link shares, and a host that
+	// Tailscale holds asks for one approval, not two.
 	forEachTarget(targets, func(t *syncTarget) {
 		ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 		defer cancel()
-		var wg sync.WaitGroup
-		var probeErr error
-		wg.Go(func() { probeErr = probeHostBinary(ctx, t) })
-		wg.Go(func() {
+		probeErr := probeHostBinary(ctx, t)
+		if gateErrorOf(probeErr) != nil {
+			t.res.Daemon.State = daemonUnknown
+		} else {
+			// The approval wait does not count against the probe's budget,
+			// so the daemon gets a budget of its own.
+			dctx, dcancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 			if t.local {
-				readLocalDaemon(ctx, t)
+				readLocalDaemon(dctx, t)
 			} else {
-				readHostDaemon(ctx, t)
+				readHostDaemon(dctx, t)
 			}
-		})
-		wg.Wait()
+			dcancel()
+		}
 		switch {
 		case probeErr != nil:
 			t.fail(probeErr)
@@ -798,11 +831,7 @@ func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 	if opts.yes || opts.dryRun {
 		return nil
 	}
-	tty := term.IsTerminal(int(os.Stdin.Fd()))
-	if opts.tty != nil {
-		tty = *opts.tty
-	}
-	if !tty {
+	if !syncIsTTY(opts) {
 		return &diagnosticError{
 			What:  "--restart needs your agreement, and there is no terminal to ask on.",
 			Cause: "a restart ends the programs listed above.",
@@ -816,6 +845,14 @@ func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 		return nil
 	}
 	return errors.New("no daemon was restarted and nothing was changed")
+}
+
+// syncIsTTY reports whether the person can answer a question.
+func syncIsTTY(opts syncOptions) bool {
+	if opts.tty != nil {
+		return *opts.tty
+	}
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // writeRestartCost writes what a restart of one daemon ends.
@@ -986,6 +1023,9 @@ func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 	r := &t.res
 	if r.Error != "" {
 		r.Action = "failed"
+		if r.ErrorKind == federation.GateTailscaleCheck {
+			r.Action = "needs approval"
+		}
 		return
 	}
 	var parts []string

@@ -47,6 +47,12 @@ type Host struct {
 	// SSHOptions are extra arguments placed before the address. They are the
 	// escape hatch for a host that needs a flag ssh_config cannot carry.
 	SSHOptions []string
+	// ControlPath, when set, makes every ssh to the host share one
+	// connection through a master socket at this path. It is never read from
+	// the config file: a command that runs several ssh calls against a host
+	// sets it for its own run, so one Tailscale SSH approval covers them all.
+	// The caller owns the path and stops the master with StopSharingArgs.
+	ControlPath string
 }
 
 func (h Host) connectTimeout() time.Duration {

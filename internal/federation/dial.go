@@ -85,6 +85,7 @@ func SSHArgs(h Host, remoteCmd string) []string {
 		"-T",
 	}
 	args = append(args, h.SSHOptions...)
+	args = append(args, sharingOptions(h)...)
 	args = append(args, keepaliveOptions()...)
 	// One string: ssh joins its command words with spaces and the far
 	// side's login shell re-parses them, so what is sent is what that
@@ -93,6 +94,30 @@ func SSHArgs(h Host, remoteCmd string) []string {
 	// -- ends ssh's options. Without it ssh reads options after the host
 	// name as well, so a command starting with a dash would be one.
 	return append(args, "--", h.Addr, remoteCmd)
+}
+
+// sharingPersist is how long a shared master connection outlives its last
+// ssh. It covers the gaps of a run, such as the build of a binary between the
+// probe and the install, and it is the limit on a master the run did not stop.
+const sharingPersist = "10m"
+
+// sharingOptions are the options that make ssh share the connection at
+// h.ControlPath, or none when the host has no path.
+func sharingOptions(h Host) []string {
+	if h.ControlPath == "" {
+		return nil
+	}
+	return []string{
+		"-o", "ControlMaster=auto",
+		"-o", "ControlPath=" + h.ControlPath,
+		"-o", "ControlPersist=" + sharingPersist,
+	}
+}
+
+// StopSharingArgs is the ssh argv, without the program name, that stops the
+// master connection at h.ControlPath.
+func StopSharingArgs(h Host) []string {
+	return []string{"-o", "ControlPath=" + h.ControlPath, "-O", "exit", "--", h.Addr}
 }
 
 // The keepalive settings.
@@ -223,7 +248,7 @@ func (t *cmdTransport) Exited() (bool, error) {
 
 func (t *cmdTransport) Diagnostic() string {
 	if b, ok := t.cmd.Stderr.(*boundedBuffer); ok {
-		return b.String()
+		return WithoutApprovedBanner(b.String())
 	}
 	return ""
 }

@@ -32,6 +32,10 @@ type Options struct {
 	// InitialBackoff and MaxBackoff bound the redial cycle.
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
+	// ApprovalWait is how long one dial waits for the person to approve a
+	// Tailscale SSH check before it gives up and dials again. Zero means
+	// DefaultApprovalWait.
+	ApprovalWait time.Duration
 	// Log receives one line whenever a link drops, is kept through a failed
 	// listing, or drops a stream for a reader that stopped reading. It is how
 	// a person finds out which of those happened, which is the difference
@@ -59,6 +63,12 @@ type Options struct {
 	linkQuietLimit time.Duration
 }
 
+// DefaultApprovalWait is how long a dial holds a connection that waits for a
+// Tailscale SSH approval. The connection itself is the wait: when the person
+// approves, the same ssh goes on, so the URL shown stays the one that works.
+// A dial that gives up shows a new URL on the next one.
+const DefaultApprovalWait = 10 * time.Minute
+
 // defaultLinkQuietLimit is the silence that makes a link dead rather than slow.
 //
 // It is set above KeepaliveWindow on purpose. ssh's own keepalives end a
@@ -80,6 +90,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.MaxBackoff <= 0 {
 		o.MaxBackoff = 60 * time.Second
+	}
+	if o.ApprovalWait <= 0 {
+		o.ApprovalWait = DefaultApprovalWait
 	}
 	if o.now == nil {
 		o.now = time.Now
@@ -107,7 +120,10 @@ type HostReport struct {
 	Reason string `json:"reason,omitempty"`
 	// Detail is the underlying message, usually ssh's own. It comes from
 	// another machine, so it is bounded and it is data, never an instruction.
-	Detail        string `json:"detail,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	// ApprovalURL is where the person approves a Tailscale SSH check that
+	// the link waits on. It is set only while Status is StatusApproval.
+	ApprovalURL   string `json:"approval_url,omitempty"`
 	DaemonVersion string `json:"daemon_version,omitempty"`
 	Protocol      int    `json:"protocol,omitempty"`
 	MinProtocol   int    `json:"min_protocol,omitempty"`

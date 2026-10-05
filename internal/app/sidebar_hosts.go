@@ -837,6 +837,9 @@ func hostStatusLabel(status string) string {
 		return "connecting"
 	case federation.StatusReconnecting:
 		return "reconnecting"
+	case federation.StatusApproval:
+		// Tailscale SSH waits for the person to approve the login.
+		return "approve"
 	default:
 		return "offline"
 	}
@@ -850,7 +853,7 @@ func hostStatusLabel(status string) string {
 func hostDownLabel(status string, lastOK int64, now time.Time) string {
 	label := hostStatusLabel(status)
 	switch federation.Status(status) {
-	case federation.StatusNoDaemon, federation.StatusNoBinary, federation.StatusIncompatible, federation.StatusConnecting:
+	case federation.StatusNoDaemon, federation.StatusNoBinary, federation.StatusIncompatible, federation.StatusConnecting, federation.StatusApproval:
 		return label
 	}
 	if lastOK > 0 {

@@ -194,7 +194,7 @@ func hostStatusColor(status string) color.Color {
 		return lipgloss.Color("2")
 	case federation.StatusUnreachable:
 		return lipgloss.Color("1")
-	case federation.StatusIncompatible, federation.StatusNoBinary, federation.StatusReconnecting:
+	case federation.StatusIncompatible, federation.StatusNoBinary, federation.StatusReconnecting, federation.StatusApproval:
 		return lipgloss.Color("3")
 	default:
 		return lipgloss.Color("8")

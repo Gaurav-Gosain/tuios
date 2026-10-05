@@ -139,6 +139,8 @@ func hostStateSentence(status, reason, detail string) string {
 		head = "The link is starting."
 	case federation.StatusReconnecting:
 		head = "The link dropped and tuios is connecting again."
+	case federation.StatusApproval:
+		head = "Tailscale waits for you to approve the ssh login."
 	}
 	parts := []string{head}
 	if reason != "" && reason != head {

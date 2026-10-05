@@ -48,6 +48,11 @@ const (
 	// called, so a reconnecting host fails a call at once, exactly as an
 	// unreachable one does.
 	StatusReconnecting Status = "reconnecting"
+	// StatusApproval means ssh reached the machine and Tailscale SSH holds the
+	// login until the person approves it in a browser. The report carries
+	// the URL. The dial keeps the connection open, so the link comes up as
+	// soon as the person approves. See sshgate.go.
+	StatusApproval Status = GateTailscaleCheck
 )
 
 // Handshake is what a remote daemon reported about itself. The field names
@@ -72,11 +77,14 @@ type link struct {
 	status Status
 	// reason is the short sentence shown to a user. It is plain English on
 	// purpose: it lands in `tuios hosts` and in the sidebar.
-	reason  string
-	detail  string
-	shake   Handshake
-	lastOK  time.Time
-	lastTry time.Time
+	reason string
+	detail string
+	// approvalURL is the Tailscale SSH check URL while status is
+	// StatusApproval.
+	approvalURL string
+	shake       Handshake
+	lastOK      time.Time
+	lastTry     time.Time
 
 	// drops counts the times a link that was up went down, and dropReason is
 	// the plain sentence for the last of them. They are reported so a person
@@ -141,6 +149,9 @@ func (l *link) set(status Status, reason, detail string) {
 	l.status = status
 	l.reason = reason
 	l.detail = detail
+	if status != StatusApproval {
+		l.approvalURL = ""
+	}
 	if status == StatusUp {
 		l.lastOK = l.opts.now()
 	}
@@ -166,6 +177,7 @@ func (l *link) report() HostReport {
 		Status:        l.status,
 		Reason:        l.reason,
 		Detail:        l.detail,
+		ApprovalURL:   l.approvalURL,
 		DaemonVersion: l.shake.DaemonVersion,
 		Protocol:      l.shake.Protocol,
 		MinProtocol:   l.shake.MinProtocol,
@@ -256,37 +268,69 @@ func (l *link) attempt(ctx context.Context) bool {
 		preambleDone <- preambleResult{note, err}
 	}()
 	var note preambleNote
-	select {
-	case res := <-preambleDone:
-		note = res.note
-		if res.err != nil {
-			exited, code := awaitChildExit(tr)
-			switch {
-			case note.missing:
-				// The machine answered, ran the probe, and the probe found
-				// nothing. That is a state of the machine, not of the link,
-				// and it is reported as its own status so the listing says
-				// where the problem is.
-				l.set(StatusNoBinary, "The link cannot find tuios on the host.", trimDetail(tr.Diagnostic()))
-			case exited:
-				l.set(StatusUnreachable, "The host did not answer.", trimDetail(tr.Diagnostic()))
-			default:
-				l.set(StatusUnreachable, "The host did not answer as a tuios link.", trimDetail(tr.Diagnostic()))
+	// The dial's deadline holds until Tailscale asks for an approval. Then the
+	// approval wait replaces it: the connection is held open, and the same ssh
+	// goes on when the person approves. See sshgate.go.
+	waitCtx := dialCtx
+	gateTick := time.NewTicker(gatePoll)
+	defer gateTick.Stop()
+	var waitedGate *SSHGate
+preamble:
+	for {
+		select {
+		case res := <-preambleDone:
+			note = res.note
+			if res.err != nil {
+				exited, code := awaitChildExit(tr)
+				gate := ParseSSHGate(tr.Diagnostic())
+				switch {
+				case gate != nil && gate.Kind == GateTailscalePolicy:
+					l.set(StatusUnreachable, gate.Sentence(), trimDetail(tr.Diagnostic()))
+				case gate != nil && gate.Kind == GateTailscaleCheck && !gate.Approved:
+					l.setApproval("", "Tailscale ended the login before it was approved. tuios asks again and shows a new link to open.")
+				case note.missing:
+					// The machine answered, ran the probe, and the probe found
+					// nothing. That is a state of the machine, not of the link,
+					// and it is reported as its own status so the listing says
+					// where the problem is.
+					l.set(StatusNoBinary, "The link cannot find tuios on the host.", trimDetail(tr.Diagnostic()))
+				case exited:
+					l.set(StatusUnreachable, "The host did not answer.", trimDetail(tr.Diagnostic()))
+				default:
+					l.set(StatusUnreachable, "The host did not answer as a tuios link.", trimDetail(tr.Diagnostic()))
+				}
+				// A cached path that reached the machine and ran nothing is
+				// stale: the binary moved or was removed. The next dial probes
+				// again. 255 is ssh's own code and means the machine was never
+				// reached, so the path it knows is kept for when it is.
+				if fromCache && exited && code != sshExitCode {
+					l.mu.Lock()
+					l.resolved = ""
+					l.mu.Unlock()
+				}
+				return false
 			}
-			// A cached path that reached the machine and ran nothing is
-			// stale: the binary moved or was removed. The next dial probes
-			// again. 255 is ssh's own code and means the machine was never
-			// reached, so the path it knows is kept for when it is.
-			if fromCache && exited && code != sshExitCode {
-				l.mu.Lock()
-				l.resolved = ""
-				l.mu.Unlock()
+			break preamble
+		case <-gateTick.C:
+			if waitedGate != nil {
+				continue
 			}
+			if g := ParseSSHGate(tr.Diagnostic()); g != nil && g.Kind == GateTailscaleCheck && !g.Approved {
+				waitedGate = g
+				l.setApproval(g.URL, g.WaitSentence())
+				var cancelWait context.CancelFunc
+				waitCtx, cancelWait = context.WithTimeout(ctx, l.opts.ApprovalWait)
+				defer cancelWait()
+				l.logf("host %s: Tailscale SSH waits for an approval at %s", l.host.Name, g.URL)
+			}
+		case <-waitCtx.Done():
+			if waitedGate != nil {
+				l.setApproval("", "Tailscale SSH still waits for an approval. tuios asks again and shows a new link to open.")
+				return false
+			}
+			l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
 			return false
 		}
-	case <-dialCtx.Done():
-		l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
-		return false
 	}
 
 	// What the far side runs is known now: the path the probe announced, or
@@ -382,6 +426,20 @@ func (l *link) attempt(ctx context.Context) bool {
 	// would be reporting a failure that has not happened yet.
 	l.set(StatusReconnecting, reason, detail)
 	return true
+}
+
+// gatePoll is how often a dial that waits for its preamble reads ssh's stderr
+// for a Tailscale gate.
+const gatePoll = 100 * time.Millisecond
+
+// setApproval records a Tailscale SSH check the link waits on, with the URL
+// that approves it. The URL is stored first, so a listing never sees the state
+// without it.
+func (l *link) setApproval(url, reason string) {
+	l.mu.Lock()
+	l.approvalURL = url
+	l.mu.Unlock()
+	l.set(StatusApproval, reason, "")
 }
 
 // lossCause turns a dead link into the sentence its report carries.

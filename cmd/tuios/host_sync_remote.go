@@ -34,9 +34,12 @@ type syncRunner interface {
 }
 
 // sshSyncRunner runs a script on a host over ssh, with the options the link
-// uses, through TUIOS_SSH when that names a stand-in.
+// uses, through TUIOS_SSH when that names a stand-in. desk, when set, decides
+// what to do when Tailscale SSH holds the login (see host_gate.go). Without
+// one, such a call fails at once with the URL.
 type sshSyncRunner struct {
 	host federation.Host
+	desk *approvalDesk
 }
 
 func (r sshSyncRunner) run(ctx context.Context, script string, args []string, stdin io.Reader) (string, string, error) {
@@ -49,8 +52,8 @@ func (r sshSyncRunner) run(ctx context.Context, script string, args []string, st
 	if bin == "" {
 		bin = "ssh"
 	}
-	cmd := exec.CommandContext(ctx, bin, federation.SSHArgs(r.host, federation.ShellCommand(script, args...))...)
-	return runSyncCmd(cmd, stdin)
+	cmd := exec.Command(bin, federation.SSHArgs(r.host, federation.ShellCommand(script, args...))...)
+	return runGatedSSH(ctx, cmd, stdin, r.host.Name, r.desk)
 }
 
 // localSyncRunner runs a script on this machine.
@@ -337,7 +340,16 @@ func probeHostBinary(ctx context.Context, t *syncTarget) error {
 
 // remoteRunError is one plain error for a script that failed, with what ssh
 // or the far side said.
+//
+// A Tailscale SSH gate is its own error, whatever ssh did after it, because
+// the last line ssh wrote ("Connection timed out") names the wrong cause.
 func remoteRunError(what, stderr string, err error) error {
+	if ge := gateErrorOf(err); ge != nil {
+		return ge
+	}
+	if ge := federation.GateFromStderr(stderr); ge != nil {
+		return ge
+	}
 	if exit, ok := errors.AsType[*exec.ExitError](err); ok && exit.ExitCode() == 255 {
 		what += ": ssh could not connect"
 	} else if errors.Is(err, context.DeadlineExceeded) {

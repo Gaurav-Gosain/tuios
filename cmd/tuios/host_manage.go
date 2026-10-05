@@ -470,6 +470,14 @@ func printHostTest(r federation.HostReport) error {
 // --start, so the advice does not tell the person to add it.
 func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	fmt.Fprintf(w, "%s  %s  %s\n", r.Host, r.Addr, r.Status)
+	if r.Status == federation.StatusApproval {
+		// The link of this command stops when the command does, so the
+		// person approves and runs the command again. The reason the link
+		// gives says it waits, which is true only of the daemon's link.
+		gate := federation.SSHGate{Kind: federation.GateTailscaleCheck, URL: r.ApprovalURL}
+		fmt.Fprintln(w, gate.Sentence())
+		return fmt.Errorf("host %s waits for a Tailscale approval", r.Host)
+	}
 	if r.Reason != "" {
 		fmt.Fprintln(w, r.Reason)
 	}
@@ -508,7 +516,11 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	case federation.StatusIncompatible:
 		fmt.Fprintln(w, "Upgrade tuios on one of the two machines.")
 	default:
-		fmt.Fprintln(w, "Run ssh to the machine by hand to see the whole error.")
+		// A policy refusal is already said in full. Anything else is said
+		// best by ssh itself.
+		if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
+			fmt.Fprintln(w, "Run ssh to the machine by hand to see the whole error.")
+		}
 	}
 	if r.Status == federation.StatusNoBinary {
 		return fmt.Errorf("host %s has no tuios that the link can find", r.Host)
