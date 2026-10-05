@@ -623,6 +623,15 @@ var ActionDescriptions = map[string]string{
 	"focus_sidebar":       "Focus sidebar",
 	"next_session":        "Next session",
 	"prev_session":        "Previous session",
+	"switch_session_1":    "Switch to session 1",
+	"switch_session_2":    "Switch to session 2",
+	"switch_session_3":    "Switch to session 3",
+	"switch_session_4":    "Switch to session 4",
+	"switch_session_5":    "Switch to session 5",
+	"switch_session_6":    "Switch to session 6",
+	"switch_session_7":    "Switch to session 7",
+	"switch_session_8":    "Switch to session 8",
+	"switch_session_9":    "Switch to session 9",
 
 	// Clipboard
 	"copy_selection":  "Copy selection to clipboard",
