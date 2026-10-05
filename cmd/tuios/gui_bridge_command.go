@@ -38,5 +38,6 @@ func newGUIBridgeCommand() *cobra.Command {
 	f.IntVar(&opts.Rows, "rows", 40, "Grid height in cells")
 	f.IntVar(&opts.CellWidth, "cell-width", 9, "Cell width in pixels")
 	f.IntVar(&opts.CellHeight, "cell-height", 18, "Cell height in pixels")
+	f.StringVar(&opts.Theme, "theme", "", "Theme to use instead of the one the config names")
 	return cmd
 }
