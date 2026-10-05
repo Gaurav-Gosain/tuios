@@ -1182,6 +1182,24 @@ that runs `sleep`, and found no busy pane (run 37232323815). The pane was not
 yet running `sleep`. The test now reads the plan again, for up to 20 seconds,
 until the pane shows. The busy-pane control still fails after that wait.
 
+## A pending wait-for and a flood of output
+
+`TestWaitForOutputDoesNotSlowFlood` in `internal/session` compared the wall
+time of a flood with a pending waiter against one without it. On shared CI
+runners that ratio failed at 2.76x and 2.83x (runs 37241456414 and
+37246926645), and it was 1.00x to 1.12x locally on one core and on eight.
+The load on a runner changes between the two floods, so the ratio measured
+the runner. The test now counts what the waiter does during the flood: its
+captures, and how long they hold the emulator lock.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A capture on every output event | `waitOutputMinGap` set to 0 in `internal/session/verb_subscribe.go` | `TestWaitForOutputDoesNotSlowFlood` ("the waiter took 1554 captures in 983ms, more than the 26 its gap allows"), 10 of 10 runs | **caught in `internal/session`** |
+
+With the fix the waiter took 7 to 27 captures, and held the lock for 1% to 2%
+of the flood on the pure Go backend and 12% on libghostty-vt. 30 of 30 runs
+passed on one core, and 5 of 5 with `-tags ghostty`.
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -13,8 +14,14 @@ import (
 // one per PTY read, under the pane's emulator lock. The pane fed the emulator
 // behind those captures, and a seq flood took over five times as long while a
 // waiter that never matched was pending. The wait now captures at most once
-// per waitOutputMinGap, so the flood must take about as long with the waiter
-// as without it.
+// per waitOutputMinGap.
+//
+// The budget is on what the waiter does during the flood: how many captures
+// it takes and how long they hold the emulator lock, against how long the
+// flood ran. Both scale with the machine's load the way the flood does. The
+// wall time of a flood with a waiter against one without does not: on a
+// shared runner the load changes between the two, and that ratio swung from
+// 0.8x to 2.8x with no change in the waiter.
 //
 // The flood is timed to the shell finishing (it touches a file) and the
 // emulator applying everything read, not by a capture, so the measurement
@@ -66,12 +73,40 @@ func TestWaitForOutputDoesNotSlowFlood(t *testing.T) {
 	w.send(t, `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"flood","window":"`+id+`","pattern":"NEVER-MATCHES-[X]YZ","timeout":600000}}`)
 	waitForSubscribers(t, d, 1)
 
+	var (
+		mu       sync.Mutex
+		captures int
+		held     time.Duration
+	)
+	hook := func(d time.Duration) {
+		mu.Lock()
+		captures++
+		held += d
+		mu.Unlock()
+	}
+	waitOutputCaptured.Store(&hook)
+	t.Cleanup(func() { waitOutputCaptured.Store(nil) })
+
+	start := time.Now()
 	with := best(lines)
-	t.Logf("seq 1 %d: %v without a waiter, %v with one (%.2fx)", lines, without, with, float64(with)/float64(without))
-	// Room for a shared machine. A capture per event cost about 3x here, and
-	// 5x on the real binary with a wider pane.
-	if with > without*3/2+100*time.Millisecond {
-		t.Fatalf("a pending wait-for made the flood %.2fx slower (%v against %v)", float64(with)/float64(without), with, without)
+	ran := time.Since(start)
+	mu.Lock()
+	gotCaptures, gotHeld := captures, held
+	mu.Unlock()
+	t.Logf("seq 1 %d: %v without a waiter, %v with one (%.2fx); the waiter took %d captures holding the lock %v in %v",
+		lines, without, with, float64(with)/float64(without), gotCaptures, gotHeld, ran)
+
+	// The gap allows one capture per waitOutputMinGap, and the backstop one
+	// more per waitOutputRecheck. A capture per event took about one per
+	// millisecond.
+	if limit := int(ran/waitOutputMinGap+ran/waitOutputRecheck) + 3; gotCaptures > limit {
+		t.Errorf("the waiter took %d captures in %v, more than the %d its gap allows", gotCaptures, ran, limit)
+	}
+	// A capture per event held the lock for most of the flood. With the gap,
+	// the share is a capture's cost against the gap after it, which stays
+	// under half until one capture takes as long as the gap.
+	if gotHeld > ran/2 {
+		t.Errorf("the waiter held the emulator lock %v of the %v the floods ran", gotHeld, ran)
 	}
 }
 

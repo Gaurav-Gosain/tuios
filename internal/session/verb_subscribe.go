@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -90,6 +91,10 @@ const defaultIdleWindow = 500 * time.Millisecond
 // times slower. Events that arrive inside the gap arm one deferred re-check at
 // its end instead, so output that matches is still seen within the gap.
 const waitOutputMinGap = 50 * time.Millisecond
+
+// waitOutputCaptured, when set, is told how long each capture a
+// wait-for-output takes held the pane's emulator lock. Test-only.
+var waitOutputCaptured atomic.Pointer[func(time.Duration)]
 
 // waitOutputRecheck is a cheap in-process backstop interval for wait-for-output.
 // The output events drive an immediate re-check; this ticker only guards the rare
@@ -806,8 +811,12 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	var lastCheck time.Time
 	matches := func() bool {
 		var content string
+		start := time.Now()
 		content, checked = pty.capturePlainAt(scrollback)
 		lastCheck = time.Now()
+		if hook := waitOutputCaptured.Load(); hook != nil {
+			(*hook)(lastCheck.Sub(start))
+		}
 		return re.MatchString(content)
 	}
 
