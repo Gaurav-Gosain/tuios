@@ -49,8 +49,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// A drag of the picture-in-picture view owns the pointer until release:
-	// the box follows it and nothing underneath sees the motion.
-	if o.PiPDragMove(mouse.X, mouse.Y) {
+	// the box follows it (or resizes under it) and nothing underneath sees
+	// the motion.
+	if o.PiPDragMove(mouse.X, mouse.Y) || o.PiPResizeMove(mouse.X, mouse.Y) {
 		return o, nil
 	}
 

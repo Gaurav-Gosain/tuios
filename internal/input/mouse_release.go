@@ -39,7 +39,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// return skips the general cleanup below.
 		o.Dragging = false
 		o.InteractionMode = false
-		if o.PiPDragEnd() {
+		if o.PiPDragEnd() || o.PiPResizeEnd() {
 			return o, o.PersistSettings()
 		}
 		return o, nil

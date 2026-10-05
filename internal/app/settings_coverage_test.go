@@ -98,8 +98,14 @@ var settingsUIExcluded = map[string]string{
 	// be a second control for the same thing, disagreeing with the editor the
 	// moment either was used.
 	"appearance.sidebar.show_windows": "folded into appearance.sidebar.sections; the Sections editor is the row",
-	"appearance.sidebar.show_agents":  "folded into appearance.sidebar.sections; the Sections editor is the row",
-	"appearance.hide_clock":           "the positive spelling appearance.show_clock has the row",
+
+	// The dragged position of the picture-in-picture view. The border and
+	// right-press drags are the rows: they write these, and a number pair is
+	// a worse way to place a box than dragging it.
+	"pip.x":                          "set by dragging the view; empty returns it to the corner rule",
+	"pip.y":                          "set by dragging the view; empty returns it to the corner rule",
+	"appearance.sidebar.show_agents": "folded into appearance.sidebar.sections; the Sections editor is the row",
+	"appearance.hide_clock":          "the positive spelling appearance.show_clock has the row",
 
 	// A shell command the host runs on its own, with no further gesture from
 	// anyone. The panel is reachable by every attached client and `tuios ssh`

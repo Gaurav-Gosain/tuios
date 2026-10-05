@@ -35,4 +35,5 @@ func (m *OS) EndPointerGesture() {
 	// write waits for a proper release, so the change reaches the file with
 	// the next one.
 	m.PiPDragEnd()
+	m.PiPResizeEnd()
 }

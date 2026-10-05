@@ -140,6 +140,51 @@ func TestPiPRightDragMovesTheView(t *testing.T) {
 	}
 }
 
+// pipBorderCell scans the drawn box for the leftmost cell of its bottom
+// row, the frame the resize grab takes.
+func pipBorderCell(t *testing.T, o *app.OS) (x, y int) {
+	t.Helper()
+	o.GetCanvas(true)
+	for y := o.Height - 1; y >= 0; y-- {
+		for x := 0; x < o.Width; x++ {
+			if o.PiPAt(x, y) {
+				return x, y
+			}
+		}
+	}
+	t.Fatal("the view was not drawn")
+	return 0, 0
+}
+
+func TestPiPBorderDragResizesTheView(t *testing.T) {
+	o, _, _, _, _ := pipMouseOS(t)
+	bx, by := pipBorderCell(t, o)
+	w0, h0 := o.UserConfig.PiP.Width, o.UserConfig.PiP.Height
+	handleMouseClick(tea.MouseClickMsg{X: bx, Y: by, Button: tea.MouseLeft}, o)
+	// A pull to the left widens the box; the right edge stays put.
+	dx, dy := bx-30, by
+	handleMouseMotion(tea.MouseMotionMsg{X: dx, Y: dy, Button: tea.MouseLeft}, o)
+	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseLeft}
+	_, cmd := handleMouseRelease(rel, o)
+	if cmd == nil {
+		t.Fatal("the release did not persist the new size")
+	}
+	if o.UserConfig.PiP.Width <= w0 || o.UserConfig.PiP.Height != h0 {
+		t.Fatalf("the left-border drag did not widen the box: %dx%d was %dx%d",
+			o.UserConfig.PiP.Width, o.UserConfig.PiP.Height, w0, h0)
+	}
+	if o.Dragging || o.PiPPressed {
+		t.Fatal("the release left the drag flags set")
+	}
+	// The interior stays the click-to-jump: a press well inside the box does
+	// not begin a resize.
+	ox, oy := pipCellInside(t, o)
+	handleMouseClick(tea.MouseClickMsg{X: ox, Y: oy, Button: tea.MouseLeft}, o)
+	if f := o.GetFocusedWindow(); f == nil || f.ID != "pinned" {
+		t.Fatal("the interior press no longer jumps")
+	}
+}
+
 func TestPiPMoveReturnsTheViewToItsCorner(t *testing.T) {
 	o, _, _, x, y := pipMouseOS(t)
 	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)

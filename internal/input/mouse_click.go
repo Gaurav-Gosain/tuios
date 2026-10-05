@@ -204,6 +204,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.InteractionMode = true
 			return o, nil
 		}
+		// Left-press on the frame resizes the view from that side, and a
+		// press in the interior stays the jump.
+		if msg.Button == tea.MouseLeft && o.PiPResizeStart(X, Y) {
+			o.PiPPressed = true
+			o.Dragging = true
+			o.InteractionMode = true
+			return o, nil
+		}
 		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
 			o.SyncStateToDaemon()
 		}

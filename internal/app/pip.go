@@ -158,6 +158,12 @@ type pipState struct {
 	// pointer's offset into the box from where the drag took hold.
 	dragging bool
 	grab     image.Point
+	// resizing is on while a border drag changes the box's size. edges are
+	// the grabbed sides (-1 left/top, +1 right/bottom, 0 not grabbed), and
+	// start is the box the drag began against.
+	resizing bool
+	edges    image.Point
+	start    image.Rectangle
 	// occluder is the scratch slice the graphics pass hands the box in.
 	occluder []cellRect
 	// layer is the last layer built from box.
@@ -446,6 +452,74 @@ func (m *OS) PiPDragEnd() bool {
 		return false
 	}
 	m.pip.dragging = false
+	return true
+}
+
+// PiPResizeStart begins a border drag that changes the box's size, the way a
+// window's edge does. Only a press on the frame counts: the interior stays
+// the click-to-jump. edges records which sides the press holds.
+func (m *OS) PiPResizeStart(x, y int) bool {
+	r := m.pip.rect
+	if r.Empty() || !(image.Point{x, y}).In(r) {
+		return false
+	}
+	ex, ey := 0, 0
+	if x <= r.Min.X+1 {
+		ex = -1
+	} else if x >= r.Max.X-2 {
+		ex = 1
+	}
+	if y <= r.Min.Y+1 {
+		ey = -1
+	} else if y >= r.Max.Y-2 {
+		ey = 1
+	}
+	if ex == 0 && ey == 0 {
+		return false
+	}
+	m.pip.resizing = true
+	m.pip.edges = image.Point{ex, ey}
+	m.pip.start = r
+	return true
+}
+
+// PiPResizeMove resizes the box under the pointer while a border drag is on,
+// and says whether it handled the motion. The pulled side follows the
+// pointer; the size is config state, so the caller owes the release a
+// persist.
+func (m *OS) PiPResizeMove(x, y int) bool {
+	if !m.pip.resizing {
+		return false
+	}
+	if m.UserConfig == nil {
+		m.pip.resizing = false
+		return true
+	}
+	start, e := m.pip.start, m.pip.edges
+	w, h := m.UserConfig.PiP.Width, m.UserConfig.PiP.Height
+	if e.X > 0 {
+		w = x - start.Min.X + 1
+	} else if e.X < 0 {
+		w = start.Max.X - x
+	}
+	if e.Y > 0 {
+		h = y - start.Min.Y + 1
+	} else if e.Y < 0 {
+		h = start.Max.Y - y
+	}
+	m.UserConfig.PiP.Width = min(max(w, config.PiPMinWidth), config.PiPMaxWidth)
+	m.UserConfig.PiP.Height = min(max(h, config.PiPMinHeight), config.PiPMaxHeight)
+	m.pip.dirty = true
+	m.pip.box, m.pip.boxKey = "", ""
+	return true
+}
+
+// PiPResizeEnd ends a border drag, and says whether there was one.
+func (m *OS) PiPResizeEnd() bool {
+	if !m.pip.resizing {
+		return false
+	}
+	m.pip.resizing = false
 	return true
 }
 
