@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -72,8 +73,15 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 		if err != nil {
 			return err
 		}
-		defer t.Close()
-		p, e := listSessionPanes(t.client, t.host, t.session, text)
+		conn := &listConn{c: t.client, dial: func() (*session.VerbClient, error) {
+			t, err := dialSessionTarget(sessionName)
+			if err != nil {
+				return nil, err
+			}
+			return t.client, nil
+		}}
+		defer conn.Close()
+		p, e := listSessionPanes(conn, t.host, t.session, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 		return printListedPanes(panes, errs, text, jsonOutput)
 	}
@@ -82,8 +90,9 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
-	names, err := listSessionNames(client)
+	conn := &listConn{c: client, dial: dialVerb}
+	defer conn.Close()
+	names, err := listSessionNames(conn)
 	if err != nil {
 		// A caller limited to its own session may not list the others. It
 		// still gets its own.
@@ -91,12 +100,12 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 		names = []string{""}
 	}
 	for _, name := range names {
-		p, e := listSessionPanes(client, "", name, text)
+		p, e := listSessionPanes(conn, "", name, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 	}
 
 	if allHosts {
-		raw, err := client.CallWithTimeout("list-host-sessions", nil, listCallTimeout)
+		raw, err := conn.CallWithTimeout("list-host-sessions", nil, listCallTimeout)
 		if err != nil {
 			errs = append(errs, listError{Error: explainVerbError("list-host-sessions", err).Error()})
 		} else {
@@ -112,16 +121,16 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 						errs = append(errs, listError{Host: h.Host, Error: hostTrouble(h.Status, h.Reason)})
 						continue
 					}
-					hc, _, err := session.DialVerbClientThroughHost(h.Host, version)
-					if err != nil {
-						errs = append(errs, listError{Host: h.Host, Error: err.Error()})
-						continue
-					}
+					host := h.Host
+					hc := &listConn{dial: func() (*session.VerbClient, error) {
+						c, _, err := session.DialVerbClientThroughHost(host, version)
+						return c, err
+					}}
 					for _, s := range h.Sessions {
-						p, e := listSessionPanes(hc, h.Host, s.Name, text)
+						p, e := listSessionPanes(hc, host, s.Name, text)
 						panes, errs = append(panes, p...), append(errs, e...)
 					}
-					_ = hc.Close()
+					hc.Close()
 				}
 			}
 		}
@@ -129,8 +138,44 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 	return printListedPanes(panes, errs, text, jsonOutput)
 }
 
+// listConn is a verb connection that dials again after a call that left it
+// out of step: a timeout or a broken read (see session.ErrVerbClientBroken).
+// The call that failed reports its error, and the next call has a fresh
+// connection.
+type listConn struct {
+	c    *session.VerbClient
+	dial func() (*session.VerbClient, error)
+}
+
+// CallWithTimeout makes one call, dialling first when there is no connection.
+func (l *listConn) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
+	if l.c == nil {
+		c, err := l.dial()
+		if err != nil {
+			return nil, err
+		}
+		l.c = c
+	}
+	raw, err := l.c.CallWithTimeout(verb, params, timeout)
+	if err != nil {
+		if _, answered := errors.AsType[*session.VerbCallError](err); !answered {
+			_ = l.c.Close()
+			l.c = nil
+		}
+	}
+	return raw, err
+}
+
+// Close closes the connection, if there is one.
+func (l *listConn) Close() {
+	if l.c != nil {
+		_ = l.c.Close()
+		l.c = nil
+	}
+}
+
 // listSessionNames is every session on the client's machine.
-func listSessionNames(client *session.VerbClient) ([]string, error) {
+func listSessionNames(client *listConn) ([]string, error) {
 	raw, err := client.CallWithTimeout("list-sessions", nil, listCallTimeout)
 	if err != nil {
 		return nil, err
@@ -152,7 +197,7 @@ func listSessionNames(client *session.VerbClient) ([]string, error) {
 
 // listSessionPanes lists one session's panes, and with text > 0 reads each
 // one's last lines with capture-pane.
-func listSessionPanes(client *session.VerbClient, host, name string, text int) ([]listedPane, []listError) {
+func listSessionPanes(client *listConn, host, name string, text int) ([]listedPane, []listError) {
 	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": name}, listCallTimeout)
 	if err != nil {
 		return nil, []listError{{Host: host, Session: name, Error: explainVerbError("list-windows", err).Error()}}
@@ -206,7 +251,7 @@ func listSessionPanes(client *session.VerbClient, host, name string, text int) (
 
 // listWorkspaceNames is a session's named workspaces, and the session's
 // name as its daemon reports it.
-func listWorkspaceNames(client *session.VerbClient, name string) (map[int]string, string) {
+func listWorkspaceNames(client *listConn, name string) (map[int]string, string) {
 	out := map[int]string{}
 	raw, err := client.CallWithTimeout("session-info", map[string]any{"session": name}, listCallTimeout)
 	if err != nil {
@@ -229,7 +274,7 @@ func listWorkspaceNames(client *session.VerbClient, name string) (map[int]string
 
 // listPaneText reads a pane's last lines through capture-pane, or says why it
 // could not.
-func listPaneText(client *session.VerbClient, sessionName, window string, lines int) ([]string, string) {
+func listPaneText(client *listConn, sessionName, window string, lines int) ([]string, string) {
 	raw, err := client.CallWithTimeout("capture-pane", map[string]any{
 		"session": sessionName, "window": window, "source": "recent", "lines": lines,
 	}, listCallTimeout)
@@ -270,40 +315,53 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 		return nil
 	}
 	for _, e := range errs {
-		where := e.Session
+		where := plainLine(e.Session)
 		if e.Host != "" {
-			where = e.Host + ":" + where
+			where = plainLine(e.Host) + ":" + where
 		}
 		if where != "" {
 			where += ": "
 		}
-		fmt.Printf("%s%s\n", where, e.Error)
+		fmt.Printf("%s%s\n", where, plainLine(e.Error))
 	}
 	if len(panes) == 0 {
 		fmt.Println("No panes.")
 		return nil
 	}
 	for _, p := range panes {
-		where := p.Session
+		// Every field a pane's program or another machine wrote is laundered
+		// of control and invisible characters before it reaches the terminal:
+		// a title can carry an escape sequence, and a host's text is fenced
+		// as untrusted, as capture-pane fences it.
+		where := plainLine(p.Session)
 		if p.Host != "" {
-			where = p.Host + ":" + where
+			where = plainLine(p.Host) + ":" + where
 		}
 		ws := strconv.Itoa(p.Workspace)
 		if p.WorkspaceNm != "" {
-			ws += " " + p.WorkspaceNm
+			ws += " " + plainLine(p.WorkspaceNm)
 		}
 		mark := " "
 		if p.Focused {
 			mark = "*"
 		}
-		fmt.Printf("%s %-20s %-10s %-24s %-12s %s\n", mark, where, ws, p.Name, p.Command, p.Cwd)
-		if text > 0 {
-			if p.TextError != "" {
-				fmt.Printf("    (%s)\n", p.TextError)
-			}
-			for _, l := range p.Text {
-				fmt.Printf("    │ %s\n", l)
-			}
+		fmt.Printf("%s %-20s %-10s %-24s %-12s %s\n", mark, where, ws, plainLine(p.Name), plainLine(p.Command), plainLine(p.Cwd))
+		if text == 0 {
+			continue
+		}
+		if p.TextError != "" {
+			fmt.Printf("    (%s)\n", plainLine(p.TextError))
+		}
+		if len(p.Text) == 0 {
+			continue
+		}
+		body := plainText(strings.Join(p.Text, "\n"))
+		if p.Host != "" {
+			fmt.Println(session.UntrustedFence("pane "+plainLine(p.Name)+" on "+plainLine(p.Host), body))
+			continue
+		}
+		for _, l := range strings.Split(body, "\n") {
+			fmt.Printf("    │ %s\n", l)
 		}
 	}
 	return nil

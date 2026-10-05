@@ -314,3 +314,150 @@ func TestListWindowsAllHoldsToTheReadGrant(t *testing.T) {
 		t.Fatalf("the pane's listing does not hold its own session and the refusal:\n%s", got)
 	}
 }
+
+// navClient attaches a client to home with env, in terminal mode.
+func navClient(t *testing.T, base string, env []string) *tuitest.Terminal {
+	t.Helper()
+	term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40, env: env})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	return term
+}
+
+// openWorkLogs opens the navigator and puts the cursor on work's logs pane:
+// G goes to the last row, work, l opens it, and G again goes to its last
+// pane, logs.
+func openWorkLogs(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	openNavigator(t, term, "work")
+	sendKeys(t, term, "G", "l")
+	waitScreen(t, term, "work did not open", "logs")
+	sendKeys(t, term, "G")
+	waitScreen(t, term, "the preview is not on logs", "work · workspace 1")
+}
+
+// TestNavigatorTakesPastes: a paste never reaches the shell under the
+// navigator. In the list it is dropped. In the search line it is search
+// text. The positive half, first, shows that the same paste reaches the
+// shell with the navigator closed, and leaves the line the check looks for.
+func TestNavigatorTakesPastes(t *testing.T) {
+	base, _ := navigatorSessions(t)
+	home := focusedIn(t, base, "home")
+	if o, err := tuiosCLI(t, base, "send-text", "-s", "home", "-w", home, "PS1='NAV> '"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, o)
+	}
+	if o, err := tuiosCLI(t, base, "send-keys", "-s", "home", "-w", home, "Enter"); err != nil {
+		t.Fatalf("send-keys: %v\n%s", err, o)
+	}
+	last := func() string {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "home", "-w", home)
+		l := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.TrimSpace(line) != "" {
+				l = strings.TrimRight(line, " ")
+			}
+		}
+		return l
+	}
+	waitLast := func(want, what string) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for last() != want {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: the shell's last line is %q, want %q", what, last(), want)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	waitLast("NAV>", "the prompt was never set")
+	term := navClient(t, base, nil)
+	windowManagementMode(t, term)
+	enterTerminalMode(t, term)
+
+	if err := term.Paste("pz1"); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	waitLast("NAV> pz1", "a paste with the navigator closed")
+	sendKeys(t, term, tuitest.Ctrl('u'))
+	waitLast("NAV>", "ctrl+u")
+
+	openNavigator(t, term, "work")
+	if err := term.Paste("pz2"); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	time.Sleep(700 * time.Millisecond)
+	if got := last(); got != "NAV>" {
+		t.Fatalf("a paste in the navigator's list reached the shell: %q", got)
+	}
+	sendKeys(t, term, "/")
+	if err := term.Paste(navMarker); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), navMarker) >= 3 && strings.Contains(s.Text(), "logs")
+	}, uiTimeout); err != nil {
+		t.Fatalf("a paste in the search line did not search: %v\n%s", err, term.Snapshot())
+	}
+	if got := last(); got != "NAV>" {
+		t.Fatalf("a paste in the search line reached the shell: %q", got)
+	}
+}
+
+// TestNavigatorDropsAStaleLoad: a load that the person closed the navigator
+// on, and that answers after a newer navigator's load, changes nothing. The
+// first load is held by the test seam, cancelled by esc, and let go after
+// the second load has filled the tree. A cancelled load answers that every
+// session did not answer in time, so a stale answer that got in would put
+// that note on work's row.
+func TestNavigatorDropsAStaleLoad(t *testing.T) {
+	base, _ := navigatorSessions(t)
+	hold := filepath.Join(base, "hold-nav")
+	if err := os.WriteFile(hold, []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	term := navClient(t, base, []string{"TUIOS_E2E_HOLD_NAV=" + hold})
+	openNavigator(t, term, "work")
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Press / to search") }, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the navigator: %v\n%s", err, term.Snapshot())
+	}
+	openWorkLogs(t, term)
+	waitScreen(t, term, "the second load never filled the preview", navMarker)
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if text := term.Screen().Text(); strings.Contains(text, "Did not answer in time") || !strings.Contains(text, navMarker) {
+		t.Fatalf("the first, cancelled load changed the tree after the second:\n%s", term.Snapshot())
+	}
+}
+
+// TestNavigatorSaysWhatItDidNotRead: past the cap on screens one load reads
+// (set to 1 for the test), a pane's preview says it was not read, and a
+// session that does not answer by the load's deadline says so on its row.
+func TestNavigatorSaysWhatItDidNotRead(t *testing.T) {
+	t.Run("cap", func(t *testing.T) {
+		base, _ := navigatorSessions(t)
+		term := navClient(t, base, []string{"TUIOS_E2E_NAV_CAPTURES=1"})
+		openWorkLogs(t, term)
+		waitScreen(t, term, "the pane past the cap does not say it was not read", "Not read. The navigator reads the screens of the first 1 panes.")
+		if strings.Contains(term.Screen().Text(), navMarker) {
+			t.Fatalf("the pane past the cap was read:\n%s", term.Snapshot())
+		}
+	})
+	t.Run("deadline", func(t *testing.T) {
+		base, _ := navigatorSessions(t)
+		hold := filepath.Join(base, "hold-nav")
+		if err := os.WriteFile(hold, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		term := navClient(t, base, []string{"TUIOS_E2E_HOLD_NAV=" + hold})
+		openNavigator(t, term, "work")
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), "Did not answer in time")
+		}, 15*time.Second); err != nil {
+			t.Fatalf("a session held past the deadline does not say so: %v\n%s", err, term.Snapshot())
+		}
+	})
+}

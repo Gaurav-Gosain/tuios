@@ -26,7 +26,18 @@ type VerbClient struct {
 	daemon *DaemonHandshake
 	// host is the machine the verbs run on, "" for this one.
 	host string
+	// broken is why the connection can no longer be trusted to pair a reply
+	// with its request, or nil. A call that timed out or failed part way
+	// leaves its reply, if one ever comes, waiting on the connection, and the
+	// next call would read that reply as its own: a capture of one pane
+	// handed back as the capture of another. So every call after such a
+	// failure fails at once, and the caller dials again.
+	broken error
 }
+
+// ErrVerbClientBroken is wrapped by every call on a connection an earlier
+// call left out of step. Dial again.
+var ErrVerbClientBroken = fmt.Errorf("the verb connection is out of step after an earlier failed call; dial again")
 
 // VerbCallError is returned by VerbClient.Call when the daemon answers with an
 // error envelope. It exposes the stable string code and the structured hint
@@ -199,6 +210,9 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 	}
 	c.callMu.Lock()
 	defer c.callMu.Unlock()
+	if c.broken != nil {
+		return nil, fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
+	}
 
 	c.nextID++
 	id := c.nextID
@@ -225,18 +239,28 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := c.conn.Write(line); err != nil {
+		c.broken = err
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(timeout))
 	respLine, err := c.r.ReadBytes('\n')
 	if err != nil {
+		c.broken = err
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var resp verbResponse
 	if err := json.Unmarshal(respLine, &resp); err != nil {
+		c.broken = err
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	// A reply that names another request is one an earlier call gave up
+	// on. Taking it would hand this caller an answer to a different
+	// question.
+	if len(resp.ID) > 0 && string(bytes.TrimSpace(resp.ID)) != fmt.Sprintf("%d", id) {
+		c.broken = fmt.Errorf("reply %s to request %d", resp.ID, id)
+		return nil, fmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)
 	}
 	if resp.Error != nil {
 		return nil, &VerbCallError{

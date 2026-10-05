@@ -1,10 +1,15 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -63,6 +68,21 @@ type navPane struct {
 	// Text is the last lines of the pane's screen, oldest first. For a pane
 	// this client draws, the preview reads the live screen instead.
 	Text []string
+	// lower is Text in lower case, for the search, made once when Text is
+	// set rather than on every key and frame.
+	lower []string
+	// TextSkipped says the load did not read the pane's screen, because it
+	// had read as many as it reads in one go.
+	TextSkipped bool
+}
+
+// setText sets the pane's text and the lower case copy the search reads.
+func (p *navPane) setText(text []string) {
+	p.Text = text
+	p.lower = make([]string, len(text))
+	for i, t := range text {
+		p.lower[i] = strings.ToLower(t)
+	}
 }
 
 // navSession is one session in the navigator.
@@ -144,6 +164,8 @@ type navigatorState struct {
 	// from the answer to a navigator since closed.
 	loading bool
 	gen     uint64
+	// cancel stops the load that is out, if one is.
+	cancel context.CancelFunc
 }
 
 // NavigatorLoadedMsg is the answer of a detail load.
@@ -187,6 +209,9 @@ func (m *OS) OpenNavigator() tea.Cmd {
 func (m *OS) CloseNavigator() {
 	if !m.navigator.open {
 		return
+	}
+	if m.navigator.cancel != nil {
+		m.navigator.cancel()
 	}
 	m.navigator = navigatorState{gen: m.navigator.gen}
 	m.MarkAllDirty()
@@ -285,8 +310,8 @@ func (m *OS) navigatorCurrentSession() navSession {
 			Workspace:  w.Workspace,
 			Focused:    i == m.FocusedWindow,
 			AgentState: w.AgentState,
-			Text:       navScreenText(w, navTextLines),
 		})
+		s.Panes[len(s.Panes)-1].setText(navScreenText(w, navTextLines))
 	}
 	s.Count = len(s.Panes)
 	return s
@@ -337,86 +362,207 @@ func navLastLines(lines []string, n int) []string {
 // navigatorLoad reads what the tree does not hold yet, off the UI goroutine:
 // for every session but the current one, its panes with their folders and
 // commands, its workspace names, and each pane's last lines.
+//
+// Each machine is read in a goroutine of its own, so a slow machine costs its
+// own rows and not the others'. All of them share one deadline, navLoadBudget,
+// and a session not read by then is marked as not answering in time. Closing
+// the navigator cancels the load. A call that fails leaves its connection out
+// of step (see session.ErrVerbClientBroken), so the machine is dialled again
+// for the next session, once.
 func (m *OS) navigatorLoad() tea.Cmd {
 	gen := m.navigator.gen
 	build := m.DaemonClient.ClientVersion()
 	attached := m.attachedMachine()
-	type job struct {
-		host, name string
-	}
-	var jobs []job
+	byMachine := map[string][]navSession{}
+	var order []string
+	var jobs []navSession
 	for _, s := range m.navigator.sessions {
 		if s.Current || s.Note != "" {
 			continue
 		}
-		jobs = append(jobs, job{host: s.Host, name: s.Name})
+		machine := s.Host
+		if machine == "" {
+			machine = attached
+		}
+		if _, ok := byMachine[machine]; !ok {
+			order = append(order, machine)
+		}
+		job := navSession{Host: s.Host, Name: s.Name}
+		byMachine[machine] = append(byMachine[machine], job)
+		jobs = append(jobs, job)
 	}
 	if len(jobs) == 0 {
 		return func() tea.Msg { return NavigatorLoadedMsg{Gen: gen} }
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), navLoadBudget)
+	m.navigator.cancel = cancel
+	hold := navHoldForTest()
+	maxCaptures := navMaxCapturesInForce()
 	return func() tea.Msg {
-		deadline := time.Now().Add(navLoadBudget)
-		clients := map[string]*session.VerbClient{}
-		defer func() {
-			for _, c := range clients {
-				_ = c.Close()
-			}
-		}()
-		dial := func(host string) *session.VerbClient {
-			machine := host
-			if machine == "" {
-				machine = attached
-			}
-			if c, ok := clients[machine]; ok {
-				return c
-			}
-			var c *session.VerbClient
-			var err error
-			if machine == federation.LocalHostName {
-				c, err = session.DialVerbClientAs(build)
-			} else {
-				c, _, err = session.DialVerbClientThroughHost(machine, build)
-			}
-			if err != nil {
-				c = nil
-			}
-			clients[machine] = c
-			return c
-		}
-		captures := 0
-		out := make([]navSession, 0, len(jobs))
-		for _, j := range jobs {
-			if time.Now().After(deadline) {
-				break
-			}
-			c := dial(j.host)
-			if c == nil {
-				out = append(out, navSession{Host: j.host, Name: j.name, Note: "Could not reach this session"})
-				continue
-			}
-			s, ok := navLoadSession(c, j.host, j.name)
-			if !ok {
-				out = append(out, navSession{Host: j.host, Name: j.name, Note: "Could not read this session"})
-				continue
-			}
-			for i := range s.Panes {
-				if captures >= navMaxCaptures || time.Now().After(deadline) {
-					break
+		defer cancel()
+		hold(ctx)
+		var (
+			mu       sync.Mutex
+			done     = map[string]navSession{}
+			captures atomic.Int64
+			wg       sync.WaitGroup
+		)
+		for _, machine := range order {
+			wg.Add(1)
+			go func(machine string, sessions []navSession) {
+				defer wg.Done()
+				dial := func() *session.VerbClient {
+					var c *session.VerbClient
+					var err error
+					if machine == federation.LocalHostName {
+						c, err = session.DialVerbClientAs(build)
+					} else {
+						c, _, err = session.DialVerbClientThroughHost(machine, build)
+					}
+					if err != nil {
+						return nil
+					}
+					return c
 				}
-				captures++
-				s.Panes[i].Text = navCapture(c, j.name, s.Panes[i].ID)
+				c := dial()
+				defer func() { _ = c.Close() }()
+				for _, job := range sessions {
+					if ctx.Err() != nil {
+						return
+					}
+					if c == nil {
+						mu.Lock()
+						done[job.key()] = navSession{Host: job.Host, Name: job.Name, Note: "Could not reach this machine"}
+						mu.Unlock()
+						continue
+					}
+					s, ok, inStep := navLoadSession(ctx, c, job.Host, job.Name)
+					if !inStep {
+						_ = c.Close()
+						c = dial()
+					}
+					if !ok {
+						mu.Lock()
+						done[job.key()] = navSession{Host: job.Host, Name: job.Name, Note: "Could not read this session"}
+						mu.Unlock()
+						continue
+					}
+					if c == nil {
+						mu.Lock()
+						done[job.key()] = s
+						mu.Unlock()
+						continue
+					}
+					for i := range s.Panes {
+						if ctx.Err() != nil {
+							break
+						}
+						if captures.Add(1) > int64(maxCaptures) {
+							s.Panes[i].TextSkipped = true
+							continue
+						}
+						text, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID)
+						if !ok {
+							_ = c.Close()
+							c = dial()
+							if c == nil {
+								break
+							}
+						}
+						s.Panes[i].setText(text)
+					}
+					mu.Lock()
+					done[job.key()] = s
+					mu.Unlock()
+				}
+			}(machine, byMachine[machine])
+		}
+		finished := make(chan struct{})
+		go func() { wg.Wait(); close(finished) }()
+		select {
+		case <-finished:
+		case <-ctx.Done():
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]navSession, 0, len(jobs))
+		for _, job := range jobs {
+			if s, ok := done[job.key()]; ok {
+				out = append(out, s)
+				continue
 			}
-			out = append(out, s)
+			out = append(out, navSession{Host: job.Host, Name: job.Name, Note: "Did not answer in time"})
 		}
 		return NavigatorLoadedMsg{Gen: gen, Sessions: out}
 	}
 }
 
-// navLoadSession reads a session's panes and workspace names.
-func navLoadSession(c *session.VerbClient, host, name string) (navSession, bool) {
-	raw, err := c.CallWithTimeout("list-windows", map[string]any{"session": name}, navCallTimeout)
+// navCallTimeoutFor is navCallTimeout, cut to what is left of the load.
+func navCallTimeoutFor(ctx context.Context) time.Duration {
+	t := navCallTimeout
+	if d, ok := ctx.Deadline(); ok {
+		t = min(t, time.Until(d))
+	}
+	return max(t, time.Millisecond)
+}
+
+// navHoldForTest lets the end-to-end tests decide when a load reads.
+//
+// TUIOS_E2E_HOLD_NAV names a file. While it exists, a load that started while
+// it existed waits before it reads anything, until the file goes or the
+// load's deadline passes. A number in the file holds only that many loads, counted from
+// the start of the process, so a test can hold one load and let the next run.
+// Ordinary runs never set the variable.
+func navHoldForTest() func(context.Context) {
+	path := os.Getenv("TUIOS_E2E_HOLD_NAV")
+	if path == "" {
+		return func(context.Context) {}
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return navSession{}, false
+		return func(context.Context) {}
+	}
+	n := navHeldLoads.Add(1)
+	if limit, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && n > int64(limit) {
+		return func(context.Context) {}
+	}
+	return func(ctx context.Context) {
+		for {
+			if _, err := os.Stat(path); err != nil {
+				return
+			}
+			// A load past its deadline goes on, to answer that it ran out
+			// of time. A cancelled one still waits for the file, so a test
+			// can hand its answer back after a newer load's.
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+}
+
+// navHeldLoads counts the loads navHoldForTest has seen.
+var navHeldLoads atomic.Int64
+
+// navMaxCapturesInForce is navMaxCaptures, or the number the end-to-end
+// tests set in TUIOS_E2E_NAV_CAPTURES to reach the cap with a few panes.
+func navMaxCapturesInForce() int {
+	if v, err := strconv.Atoi(os.Getenv("TUIOS_E2E_NAV_CAPTURES")); err == nil && v >= 0 {
+		return v
+	}
+	return navMaxCaptures
+}
+
+// navLoadSession reads a session's panes and workspace names.
+//
+// ok is false when the panes could not be read. inStep is false when a call
+// failed in a way that leaves the connection out of step, and the caller dials
+// again before its next call.
+func navLoadSession(ctx context.Context, c *session.VerbClient, host, name string) (s navSession, ok, inStep bool) {
+	raw, err := c.CallWithTimeout("list-windows", map[string]any{"session": name}, navCallTimeoutFor(ctx))
+	if err != nil {
+		return navSession{}, false, navInStep(err)
 	}
 	var list struct {
 		Focused string `json:"focused_window_id"`
@@ -432,9 +578,9 @@ func navLoadSession(c *session.VerbClient, host, name string) (navSession, bool)
 		} `json:"windows"`
 	}
 	if json.Unmarshal(raw, &list) != nil {
-		return navSession{}, false
+		return navSession{}, false, true
 	}
-	s := navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}}
+	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}}
 	for _, w := range list.Windows {
 		if w.Scratch {
 			continue
@@ -449,7 +595,12 @@ func navLoadSession(c *session.VerbClient, host, name string) (navSession, bool)
 		})
 	}
 	s.Count = len(s.Panes)
-	if raw, err := c.CallWithTimeout("session-info", map[string]any{"session": name}, navCallTimeout); err == nil {
+	raw, err = c.CallWithTimeout("session-info", map[string]any{"session": name}, navCallTimeoutFor(ctx))
+	if err != nil {
+		// The panes are worth more than the workspace names. They are kept.
+		return s, true, navInStep(err)
+	}
+	{
 		var info struct {
 			Names map[string]string `json:"workspace_names"`
 		}
@@ -461,28 +612,36 @@ func navLoadSession(c *session.VerbClient, host, name string) (navSession, bool)
 			}
 		}
 	}
-	return s, true
+	return s, true, true
 }
 
-// navCapture reads a pane's last lines with capture-pane, or nil.
-func navCapture(c *session.VerbClient, sessionName, window string) []string {
+// navInStep reports whether a failed call left its connection usable: the
+// daemon answered with an error, so the reply was read.
+func navInStep(err error) bool {
+	_, answered := errors.AsType[*session.VerbCallError](err)
+	return answered
+}
+
+// navCapture reads a pane's last lines with capture-pane. It reports false
+// when the call failed in a way that leaves the connection out of step.
+func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string) ([]string, bool) {
 	raw, err := c.CallWithTimeout("capture-pane", map[string]any{
 		"session": sessionName, "window": window, "source": "recent", "lines": navTextLines,
-	}, navCallTimeout)
+	}, navCallTimeoutFor(ctx))
 	if err != nil {
-		return nil
+		return nil, navInStep(err)
 	}
 	var res struct {
 		Content string `json:"content"`
 	}
 	if json.Unmarshal(raw, &res) != nil {
-		return nil
+		return nil, true
 	}
 	lines := strings.Split(ansi.Strip(res.Content), "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " \r")
 	}
-	return navLastLines(lines, navTextLines)
+	return navLastLines(lines, navTextLines), true
 }
 
 // ApplyNavigatorLoaded merges a detail load into the tree. The cursor stays
@@ -502,9 +661,9 @@ func (m *OS) ApplyNavigatorLoaded(msg NavigatorLoadedMsg) {
 			}
 			title, note := s.Title, loaded.Note
 			if note != "" && len(s.Panes) > 0 {
-				// Keep the cached rows. The note says they could not be
-				// read fresh.
-				s.Note = ""
+				// Keep the cached rows, with the note that says they could
+				// not be read fresh.
+				s.Note = note
 				break
 			}
 			*s = loaded
@@ -562,7 +721,7 @@ func (m *OS) navExpanded(key string, def bool) bool {
 // navigatorRows is the list as it is drawn: the tree, or with a search the
 // panes that match, best first.
 func (m *OS) navigatorRows() []navRow {
-	if strings.TrimSpace(m.navigator.query) != "" {
+	if m.navSearch() {
 		return m.navigatorSearchRows()
 	}
 	var rows []navRow
@@ -616,8 +775,8 @@ func (m *OS) navigatorSearchRows() []navRow {
 				hits = append(hits, scored{row, r.Score + 1<<20})
 				continue
 			}
-			for i := len(p.Text) - 1; i >= 0; i-- {
-				if strings.Contains(strings.ToLower(p.Text[i]), lq) {
+			for i := len(p.lower) - 1; i >= 0; i-- {
+				if strings.Contains(p.lower[i], lq) {
 					row.Snippet = strings.TrimSpace(p.Text[i])
 					hits = append(hits, scored{row, 0})
 					break
@@ -632,6 +791,11 @@ func (m *OS) navigatorSearchRows() []navRow {
 	}
 	return rows
 }
+
+// navSearch reports whether a search is in force: a query with more than
+// spaces in it. Every reader of the query asks this, so the list, the folds
+// and the glyphs agree on whether the tree or the results are showing.
+func (m *OS) navSearch() bool { return strings.TrimSpace(m.navigator.query) != "" }
 
 // NavigatorRowCount is how many rows the list has.
 func (m *OS) NavigatorRowCount() int { return len(m.navigatorRows()) }
@@ -658,7 +822,7 @@ func (m *OS) NavigatorSelect(i int) {
 // under the cursor. On a pane row, shutting goes to its workspace row, and on
 // a shut row or a pane it does nothing more. It does nothing in a search.
 func (m *OS) NavigatorFold(open bool) {
-	if m.navigator.query != "" {
+	if m.navSearch() {
 		return
 	}
 	rows := m.navigatorRows()
@@ -688,7 +852,7 @@ func (m *OS) NavigatorFold(open bool) {
 // NavigatorToggle opens a shut row and shuts an open one.
 func (m *OS) NavigatorToggle() {
 	rows := m.navigatorRows()
-	if m.navigator.query != "" || m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
+	if m.navSearch() || m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
 		return
 	}
 	r := rows[m.navigator.cursor]
@@ -711,7 +875,7 @@ func (m *OS) NavigatorSearch(on bool) {
 func (m *OS) NavigatorSetQuery(q string) {
 	m.navigator.query = q
 	m.navigator.cursor, m.navigator.scroll = 0, 0
-	if q == "" {
+	if !m.navSearch() {
 		m.navigatorCursorToCurrent()
 	}
 	m.MarkAllDirty()
@@ -756,7 +920,7 @@ func (m *OS) NavigatorActivate(i int) {
 // reports whether it did. A pane row is not folded: a click goes to it.
 func (m *OS) NavigatorClickFolds(i int) bool {
 	rows := m.navigatorRows()
-	if m.navigator.query != "" || i < 0 || i >= len(rows) || rows[i].Kind == navRowPane {
+	if m.navSearch() || i < 0 || i >= len(rows) || rows[i].Kind == navRowPane {
 		return false
 	}
 	m.navigator.cursor = i

@@ -96,7 +96,7 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	if len(rows) == 0 {
 		msg := "No pane matches"
-		if nav.query == "" {
+		if !m.navSearch() {
 			msg = "No sessions"
 		}
 		empty := overlay.Empty{Message: msg, Hint: overlay.Hint{Key: "esc", Label: "close"}}
@@ -188,7 +188,7 @@ func (m *OS) navigatorRow(r navRow, selected bool, rowBg color.Color, pal overla
 			name += " @ " + s.Host
 		}
 		left := name
-		if m.navigator.query == "" {
+		if !m.navSearch() {
 			left = fold(m.navExpanded(s.key(), s.Current)) + " " + name
 		}
 		var right string
@@ -216,7 +216,7 @@ func (m *OS) navigatorRow(r navRow, selected bool, rowBg color.Color, pal overla
 	}
 	p := &s.Panes[r.Pane]
 	indent := "      "
-	if m.navigator.query != "" {
+	if m.navSearch() {
 		indent = ""
 	}
 	mark := st.Render("  ")
@@ -224,7 +224,7 @@ func (m *OS) navigatorRow(r navRow, selected bool, rowBg color.Color, pal overla
 		mark = st.Foreground(pal.Success).Render("● ")
 	}
 	left := st.Render(indent) + mark + st.Foreground(labelInk).Bold(selected).Render(printableTitle(p.Name))
-	if m.navigator.query != "" {
+	if m.navSearch() {
 		// A search lists panes from every session, so a row says whose.
 		where := printableTitle(s.Title)
 		if s.Host != "" {
@@ -236,7 +236,7 @@ func (m *OS) navigatorRow(r navRow, selected bool, rowBg color.Color, pal overla
 	switch {
 	case r.Snippet != "":
 		right = st.Foreground(pal.FgDim).Italic(true).Render(overlay.Truncate(printableTitle(r.Snippet), max(width/2, 8)))
-	case m.navigator.query != "":
+	case m.navSearch():
 		right = st.Foreground(pal.FgMute).Render(printableTitle(s.workspaceLabel(p.Workspace)))
 	case p.Command != "" && p.Command != p.Name:
 		right = st.Foreground(pal.FgMute).Render(printableTitle(p.Command))
@@ -300,7 +300,7 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	}
 	where += " · workspace " + printableTitle(s.workspaceLabel(p.Workspace))
 	if p.Cwd != "" {
-		where += " · " + navShortPath(p.Cwd)
+		where += " · " + printableTitle(navShortPath(p.Cwd))
 	}
 	out = append(out, line(where, pal.FgMute), overlay.Rule(width, bg, pal))
 
@@ -314,7 +314,10 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	room := height - len(out)
 	if len(text) == 0 {
 		msg := "Nothing on the screen yet."
-		if m.navigator.loading && !s.Current {
+		switch {
+		case p.TextSkipped:
+			msg = fmt.Sprintf("Not read. The navigator reads the screens of the first %d panes.", navMaxCapturesInForce())
+		case m.navigator.loading && !s.Current:
 			msg = "Reading the screen…"
 		}
 		return append(out, line(msg, pal.FgMute))
@@ -328,10 +331,18 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	return out
 }
 
-// navShortPath writes the home folder as ~.
+// navShortPath writes the home folder as ~. The home folder has to be the
+// whole first part of the path: /home/al is not ~ in /home/alex.
 func navShortPath(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home) {
-		return "~" + strings.TrimPrefix(p, home)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if p == home {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(p, strings.TrimSuffix(home, "/")+"/"); ok {
+		return "~/" + rest
 	}
 	return p
 }

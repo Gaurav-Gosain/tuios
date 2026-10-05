@@ -215,6 +215,17 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 	if o.PaneLabelsOpen() {
 		return true
 	}
+	// The pane navigator covers the screen, so a paste is never the pane's.
+	// In the search line it is search text, on one line. In the list it is
+	// dropped.
+	if o.NavigatorOpen() {
+		if o.NavigatorSearching() {
+			if text := strings.Join(strings.Fields(content), " "); text != "" {
+				o.NavigatorSetQuery(o.NavigatorQuery() + text)
+			}
+		}
+		return true
+	}
 	// The multi copy save prompt takes a paste as its path, with line
 	// breaks and control characters removed. It must never reach a shell:
 	// a pasted path ending in a newline would run as a command.

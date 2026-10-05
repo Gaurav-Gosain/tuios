@@ -1532,3 +1532,22 @@ session's text.
 | Enter does not focus the pane | `NavigatorActivate`: the `focusWindowByID` call cut | `TestNavigatorFindsAPaneByScreenText` ("enter switched to work but left the focus on ...") | **caught** |
 | The other machines are not listed | `navigatorSessions`: the `FederationHosts` loop given no hosts | `TestNavigatorListsAHostPane` ("the navigator never showed" far-shell @ build) | **caught** |
 | The daemon does not check pane grants | `dispatchVerbLine`: the `checkGrants` call cut | `TestListWindowsAllHoldsToTheReadGrant` ("a pane holding read alone listed the other session") | **caught** |
+
+### Review fixes for the navigator
+
+`TestNavigatorTakesPastes` sets one known prompt in the shell and shows
+first, with the navigator closed, that a paste reaches it. The stale-load,
+cap and deadline tests use two seams: `TUIOS_E2E_HOLD_NAV` holds a load
+until a file goes, and `TUIOS_E2E_NAV_CAPTURES` lowers the cap to one pane.
+The verb client tests are unit tests of the deterministic race kind, in
+`internal/session/verb_client_step_test.go`. The listing test is a unit test
+of the security boundary kind, in `cmd/tuios/list_every_pane_test.go`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A paste passes the navigator | `pasteTakenByOverlay`: the `NavigatorOpen` block made false | `TestNavigatorTakesPastes` ("a paste in the navigator's list reached the shell: NAV> pz2") | **caught** |
+| A stale load is applied | `ApplyNavigatorLoaded`: the `msg.Gen != nav.gen` check cut | `TestNavigatorDropsAStaleLoad` ("the first, cancelled load changed the tree after the second") | **caught** |
+| No cap on the screens read | the loader: the cap compare made unreachable | `TestNavigatorSaysWhatItDidNotRead/cap` ("the pane past the cap does not say it was not read") | **caught** |
+| No note for a session past the deadline | the loader: the "Did not answer in time" row cut | `TestNavigatorSaysWhatItDidNotRead/deadline` ("a session held past the deadline does not say so") | **caught** |
+| A late reply is taken by the next call | `CallWithTimeout`: the `broken` check and the reply id check cut | `TestVerbClientRefusesAReplyOutOfStep` ("the second call returned {"for":"1"} after the first timed out"), `TestVerbClientRefusesAReplyForAnotherRequest` | **caught** |
+| Host fields printed raw | `printListedPanes`: `plainLine` on the name and `plainText` on the text cut | `TestListWindowsAllHostsPrintsHostFieldsPlain` ("an escape reached the terminal") | **caught** |
