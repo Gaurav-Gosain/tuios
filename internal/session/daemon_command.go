@@ -121,7 +121,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				name = payload.Args[0]
 			}
 			payload.Args = append([]string{name}, argv...)
-			LogBasic("Execute command: following ssh of window %s: %v", payload.SSHFrom, argv)
+			LogBasic("Execute command: following ssh of window %s: %v", payload.SSHFrom, redactSSHArgv(argv))
 		}
 	}
 	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {

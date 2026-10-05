@@ -46,10 +46,16 @@ type placeRecord struct {
 	// is not this one: the pane is running ssh and the shell on the far end
 	// reported its folder. Empty otherwise. It holds while the program that
 	// made the report holds the terminal; see Session.checkPaneCwd.
-	elsewhere atomic.Pointer[string]
-	// elsewhereDir is the folder that report named on that machine. An ssh
-	// split starts the new pane there. See ssh_follow.go.
-	elsewhereDir atomic.Pointer[string]
+	//
+	// The folder that report named is kept with the machine in one value, so
+	// a reader never pairs one report's machine with another's folder. An ssh
+	// split starts the new pane there; see ssh_follow.go.
+	elsewhere atomic.Pointer[elsewhereReport]
+}
+
+// elsewhereReport is an OSC 7 report that named another machine.
+type elsewhereReport struct {
+	host, dir string
 }
 
 // setCwd records a directory the shell reported (an OSC 7 payload or a bare
@@ -73,8 +79,9 @@ func (r *placeRecord) announce(raw string) bool {
 		return false
 	}
 	if host != "" {
-		r.elsewhereDir.Store(&path)
-		return r.setElsewhere(host)
+		changed := r.Elsewhere() != host
+		r.elsewhere.Store(&elsewhereReport{host: host, dir: path})
+		return changed
 	}
 	moved := r.setElsewhere("")
 	if !r.announced.Swap(true) {
@@ -89,19 +96,18 @@ func (r *placeRecord) announce(raw string) bool {
 // Elsewhere is the machine the pane's shell last reported a folder on, when
 // that is not this one.
 func (r *placeRecord) Elsewhere() string {
-	if p := r.elsewhere.Load(); p != nil {
-		return *p
-	}
-	return ""
+	host, _ := r.ElsewhereReport()
+	return host
 }
 
-// ElsewhereDir is the folder the last report from another machine named.
-// It means something only while Elsewhere is not empty.
-func (r *placeRecord) ElsewhereDir() string {
-	if p := r.elsewhereDir.Load(); p != nil {
-		return *p
+// ElsewhereReport is the machine and the folder of the last report from
+// another machine, both from the same report. Both are empty when there is
+// none.
+func (r *placeRecord) ElsewhereReport() (host, dir string) {
+	if p := r.elsewhere.Load(); p != nil {
+		return p.host, p.dir
 	}
-	return ""
+	return "", ""
 }
 
 // setElsewhere records the machine, or clears it, and says whether it changed.
@@ -109,7 +115,11 @@ func (r *placeRecord) setElsewhere(host string) bool {
 	if r.Elsewhere() == host {
 		return false
 	}
-	r.elsewhere.Store(&host)
+	if host == "" {
+		r.elsewhere.Store(nil)
+	} else {
+		r.elsewhere.Store(&elsewhereReport{host: host})
+	}
 	return true
 }
 

@@ -3,9 +3,11 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +29,10 @@ import (
 //   - The remote folder could be passed for a report that names another
 //     machine. The ordinary case passes a report from the destination host,
 //     and the parser tests in internal/session cover the mismatch.
+//   - A script stand-in runs under an interpreter, which is not what a real
+//     ssh looks like. One test uses a compiled stand-in (./fakessh).
+//   - The refusals could pass because the split never happened at all. Each
+//     one waits for the new pane and for its shell to compute a marker.
 
 // fakeSSH writes an ssh stand-in into dir/bin and returns the bin directory
 // and the directory its runs record their arguments in.
@@ -53,7 +59,55 @@ while IFS= read -r line; do eval "$line"; done
 	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// An scp stand-in that runs ssh for its transfer, as scp does, and stays
+	// its parent while the transfer runs.
+	scp := "#!/bin/sh\nssh \"$1\" scp -t /tmp\necho SCP-DONE\n"
+	if err := os.WriteFile(filepath.Join(bin, "scp"), []byte(scp), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return bin, runs
+}
+
+var (
+	fakeSSHBinOnce sync.Once
+	fakeSSHBin     string
+	fakeSSHBinErr  error
+)
+
+// compiledFakeSSH builds ./fakessh once and copies it to path.
+func compiledFakeSSH(t *testing.T, path string) {
+	t.Helper()
+	fakeSSHBinOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "fakessh")
+		if err != nil {
+			fakeSSHBinErr = err
+			return
+		}
+		fakeSSHBin = filepath.Join(dir, "fakessh")
+		if out, err := exec.Command("go", "build", "-o", fakeSSHBin, "./fakessh").CombinedOutput(); err != nil {
+			fakeSSHBinErr = fmt.Errorf("build fakessh: %v\n%s", err, out)
+		}
+	})
+	if fakeSSHBinErr != nil {
+		t.Fatal(fakeSSHBinErr)
+	}
+	data, err := os.ReadFile(fakeSSHBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sshRunArgv0 is what run n of the compiled stand-in was started as.
+func sshRunArgv0(t *testing.T, runs string, n int) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(runs, fmt.Sprintf("%d.argv0", n)))
+	if err != nil {
+		t.Fatalf("run %d wrote no argv0: %v", n, err)
+	}
+	return strings.TrimSpace(string(data))
 }
 
 // sshRunArgs waits for run n of the fake ssh and returns its arguments.
@@ -82,8 +136,18 @@ func sshRunCount(runs string) int {
 // window-management mode.
 func startSSHSplit(t *testing.T, extra string) (*tuitest.Terminal, string, string) {
 	t.Helper()
+	return startSSHSplitWith(t, extra, nil)
+}
+
+// startSSHSplitWith is startSSHSplit with a step that runs once the fake ssh
+// is in place and before tuios starts.
+func startSSHSplitWith(t *testing.T, extra string, prepare func(base, bin string)) (*tuitest.Terminal, string, string) {
+	t.Helper()
 	base := t.TempDir()
 	bin, runs := fakeSSH(t, base)
+	if prepare != nil {
+		prepare(base, bin)
+	}
 	writeConfig(t, base, `
 [keybindings.layout]
 split_ssh_vertical = ["alt+v"]
@@ -186,12 +250,13 @@ func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
 
 	// The fake ssh evals what is typed, so this is the remote shell's report.
 	enterTerminalMode(t, term)
-	typeUntil(t, term, `printf '\033]7;file://fakehost/srv/it'"'"'s here\033\\'; echo REPORT""ED`, "REPORTED")
+	typeUntil(t, term, `printf '\033]7;file://fakehost/srv/my app\033\\'; echo REPORT""ED`, "REPORTED")
 	leaveTerminalMode(t, term)
 
 	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
 	wantArgs(t, term, "split with a reported folder", sshRunArgs(t, term, runs, 1),
-		[]string{"-t", "pollen@fakehost", `cd '/srv/it'"'"'s here' 2>/dev/null; exec "$SHELL" -l`})
+		[]string{"-t", "-o", "RemoteCommand=none", "pollen@fakehost",
+			`exec sh -c 'cd "/srv/my app" 2>/dev/null; exec "$SHELL" -l'`})
 	alive(t, term, "after the split with a folder")
 }
 
@@ -220,4 +285,56 @@ func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
 	wantArgs(t, term, "split of a nested ssh", sshRunArgs(t, term, runs, 1),
 		[]string{"-J", "jump", "nested@fakehost"})
 	alive(t, term, "after the nested split")
+}
+
+// A compiled ssh run from the project folder (./ssh) is followed with the ssh
+// on the daemon's PATH, never with the binary the pane ran.
+func TestSSHSplitRunsTheSSHOnPath(t *testing.T) {
+	var pathSSH string
+	term, _, runs := startSSHSplitWith(t, "", func(base, bin string) {
+		pathSSH = filepath.Join(bin, "ssh")
+		compiledFakeSSH(t, pathSSH)
+		compiledFakeSSH(t, filepath.Join(workDirIn(t, base), "ssh"))
+	})
+	sshIn(t, term, "./ssh -p 2222 pollen@fakehost", 0)
+	if got := sshRunArgv0(t, runs, 0); got != "./ssh" {
+		t.Fatalf("the first pane ran %q, want ./ssh", got)
+	}
+	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
+	wantArgs(t, term, "split of a compiled ssh", sshRunArgs(t, term, runs, 1),
+		[]string{"-p", "2222", "pollen@fakehost"})
+	if got := sshRunArgv0(t, runs, 1); got != pathSSH {
+		t.Fatalf("the split ran %q, want the ssh on PATH, %q", got, pathSSH)
+	}
+	alive(t, term, "after the compiled split")
+}
+
+// An ssh line with an option that runs code on this machine is not followed:
+// the split is an ordinary shell.
+func TestSSHSplitRefusesAProxyCommand(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "")
+	sshIn(t, term, "ssh -o ProxyCommand='nc %h %p' pollen@fakehost", 0)
+	pressAndCount(t, term, 2, "split_ssh_vertical with a ProxyCommand", tuitest.Alt('v'))
+	enterTerminalMode(t, term)
+	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
+	if n := sshRunCount(runs); n != 1 {
+		t.Fatalf("a split of an ssh with a ProxyCommand ran ssh: %d runs, want 1", n)
+	}
+	alive(t, term, "after the refused split")
+}
+
+// ssh started by scp is a transfer, not a login: the split is an ordinary
+// shell.
+func TestSSHSplitIgnoresTheSSHOfATransfer(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "")
+	sshIn(t, term, "scp pollen@fakehost", 0)
+	wantArgs(t, term, "the transfer's ssh", sshRunArgs(t, term, runs, 0),
+		[]string{"pollen@fakehost", "scp", "-t", "/tmp"})
+	pressAndCount(t, term, 2, "split_ssh_vertical under scp", tuitest.Alt('v'))
+	enterTerminalMode(t, term)
+	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
+	if n := sshRunCount(runs); n != 1 {
+		t.Fatalf("a split of scp's ssh ran ssh: %d runs, want 1", n)
+	}
+	alive(t, term, "after the transfer split")
 }

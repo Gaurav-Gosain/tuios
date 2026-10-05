@@ -5,6 +5,7 @@ package session
 import (
 	"os"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -29,4 +30,19 @@ func readParentAndOwner(pid int) (ppid, uid int, ok bool) {
 		return 0, 0, false
 	}
 	return ppid, int(st.Uid), true
+}
+
+// readArgvExact returns a process's arguments with empty ones kept. readCmdline
+// drops them, which is right for naming a process and wrong for replaying one:
+// an empty value (ssh -o "") would pair the next argument with the option.
+func readArgvExact(pid int) []string {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	s := string(data)
+	if s[len(s)-1] == 0 {
+		s = s[:len(s)-1]
+	}
+	return strings.Split(s, "\x00")
 }
