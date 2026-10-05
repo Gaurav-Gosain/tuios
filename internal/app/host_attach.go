@@ -54,7 +54,10 @@ func (m *OS) SwitchToHostSession(host, name string, create bool) error {
 // hostDial is everything opening a session on a machine needs from the model,
 // taken on the UI goroutine so open can run off it.
 type hostDial struct {
-	host, name     string
+	host, name string
+	// cwd is the start directory of a session the attach creates. See
+	// session.AttachPayload.Cwd.
+	cwd            string
 	create, global bool
 	reserve        session.LayoutReserve
 	version        string
@@ -78,6 +81,7 @@ func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
 func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	client := session.NewTUIClient()
 	client.SetOwnLayoutReserve(d.reserve)
+	client.StartDir = d.cwd
 	var err error
 	if d.host == federation.LocalHostName {
 		err = client.ConnectWithCapabilities(d.version, d.width, d.height, d.caps)
@@ -115,6 +119,69 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	}
 	client.StartReadLoop()
 	return client, state, nil
+}
+
+// applyStartupToUnarranged applies [startup] tiled to the session the client
+// just switched to, when nobody has arranged it yet. A session the new-session
+// verb or tuios new --detach made is one: the daemon built it with tiling off
+// and no client has placed its windows. A session somebody laid out keeps the
+// layout it has. See stateUnarranged.
+func (m *OS) applyStartupToUnarranged() {
+	if m.sessionUnarranged {
+		m.applyStartupTiling()
+	}
+}
+
+// switchToHostAsync is switch-session to a session on another machine. The
+// connection and the attach run on a goroutine, as makeSessionHere's do, and
+// finishHostSwitch adopts the result and answers requestID.
+func (m *OS) switchToHostAsync(host, name string, create bool, cwd, requestID string) error {
+	if m.DaemonClient == nil {
+		return fmt.Errorf("not in daemon mode")
+	}
+	if !m.hostIsUp(host) {
+		return &hostUnavailableError{host: host}
+	}
+	d := m.hostDialFor(host, name, create, false)
+	d.cwd = cwd
+	ch := m.sessionCreateChan()
+	go func() {
+		client, state, err := d.open()
+		msg := SessionCreatedMsg{Err: err, Client: client, State: state, Host: host, RequestID: requestID, Switched: true, Create: create}
+		if client != nil {
+			msg.Name = client.SessionName()
+		}
+		ch <- msg
+	}()
+	return nil
+}
+
+// finishHostSwitch answers a switch-session to another machine and, when the
+// attach there landed, adopts the connection.
+func (m *OS) finishHostSwitch(msg SessionCreatedMsg) {
+	if msg.Err != nil {
+		refusal := &hostSwitchError{msg: hostAttachRefusal(msg.Host, msg.Err)}
+		if m.DaemonClient != nil && msg.RequestID != "" {
+			_ = m.DaemonClient.SendCommandResult(msg.RequestID, false, refusal.Error())
+		}
+		m.reportSwitchFailure(refusal)
+		return
+	}
+	// The answer goes over the connection being left, so it goes before
+	// adoptHostClient closes it.
+	if m.DaemonClient != nil && msg.RequestID != "" {
+		_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
+	}
+	m.clearSidebarReturn()
+	m.adoptHostClient(msg.Client, msg.State, msg.Host)
+	// Tiling first, so the window below is tiled as it opens.
+	m.applyStartupToUnarranged()
+	// switch-session --create makes a session with one window on this
+	// machine (the new-session verb). The attach that made this one made it
+	// empty, so the window is opened here, in the session's start directory.
+	if msg.Create && len(m.Windows) == 0 {
+		m.AddWindow("")
+	}
 }
 
 // adoptHostClient is the UI half of a switch across machines: the model takes
@@ -332,6 +399,7 @@ func (m *OS) switchSession(host, name string) error {
 func (m *OS) openSession(host, name string) bool {
 	err := m.switchSession(host, name)
 	if err == nil {
+		m.applyStartupToUnarranged()
 		return true
 	}
 	m.reportSwitchFailure(err)

@@ -1822,6 +1822,40 @@ Response:
 `attached` to `true` or `false`. A session rename sends one with the new name
 and `attached: true` for each client in the session.
 
+### switch-session
+
+Switch an attached client to a different session, in place, as the session
+switcher does.
+
+Params: `name` (required), `host`, `create`, `cwd`, `session`, `client`.
+
+- `name` is the session to show. `host` is a machine from the client's
+  `[hosts]` table. Omit it, or pass `local`, for this daemon.
+- `create` makes the session when it is missing. On this daemon it is made as
+  `new-session` makes one, with `cwd` as its directory. On a host, the client
+  makes it there and opens its first window. `cwd` needs `create`.
+- The client to switch is the one `client` names, else the one that shows
+  `session`, else the one that shows the caller's session when the caller
+  runs in a pane, else the only TUI client attached. With more than one
+  attached and nothing to choose by, the call fails with `invalid_params`.
+
+Request:
+
+```json
+{"verb": "switch-session", "params": {"name": "api", "create": true, "cwd": "/src/api", "session": "work"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "session_switched", "session": "api", "client_id": "client-1790941960197517900", "created": true}}
+```
+
+On this daemon the answer comes when the client shows the session. A missing
+session without `create` fails with `session_not_found`. No client to switch
+fails with `needs_client`. `already: true` says the client showed the session
+already. A pane needs the `admin` grant. Over a link the verb needs `write`.
+
 ### session-info
 
 Report details about one session.
@@ -4537,7 +4571,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
-| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |

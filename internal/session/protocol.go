@@ -315,6 +315,10 @@ type AttachPayload struct {
 	// window_size policies it does not count toward the session's size;
 	// under smallest it counts like any client. An older daemon ignores it.
 	ViewOnly bool `json:"view_only,omitzero"`
+	// Cwd is the start directory of a session this attach creates (CreateNew
+	// and no session by that name). See NewPayload.Cwd. An attach to a
+	// session that exists ignores it.
+	Cwd string `json:"cwd,omitempty"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the
@@ -396,6 +400,10 @@ type NewPayload struct {
 	// a window spawned here would be a local pane nobody asked for, in the one
 	// session whose whole point is that the machine is chosen.
 	Global bool `json:"global,omitempty"`
+	// Cwd is the directory the session's windows start in when nothing else
+	// names one, the first window included. See Session.startDir. An older
+	// daemon ignores it, and the windows start in the daemon's directory.
+	Cwd string `json:"cwd,omitempty"`
 }
 
 // WindowSummary is a lightweight per-window entry in a session listing: enough

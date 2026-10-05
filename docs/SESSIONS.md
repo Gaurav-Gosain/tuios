@@ -14,6 +14,7 @@ what does and does not come back after each kind of interruption.
 - [Local Sessions](#local-sessions)
 - [Daemon Sessions](#daemon-sessions)
 - [Attaching and Detaching](#attaching-and-detaching)
+- [Sessionizer](#sessionizer)
 - [The Scratch Terminal](#the-scratch-terminal)
 - [Picture in Picture](#picture-in-picture)
 - [What Survives](#what-survives)
@@ -225,6 +226,9 @@ direction. The rail, the palette and session cycling switch across machines
 the same way. Rename and delete work only on sessions on the machine you are
 on.
 
+`tuios switch-session` switches a client from the command line, also from a
+pane. See [Sessionizer](#sessionizer).
+
 Switching is not the same as detaching and reattaching: the client tears down
 its view of the current session and builds a view of the target, in place. The
 session you left keeps running.
@@ -249,6 +253,43 @@ A client that dies without detaching (its terminal is closed, the SSH connection
 drops, the process is killed) is equivalent to a detach as far as the session is
 concerned. The daemon notices the connection go away and keeps the session
 running. Nothing is lost, because nothing the session needs lived in the client.
+
+## Sessionizer
+
+A sessionizer opens a project as a session. You pick a folder, and tuios
+shows its session. When the session does not exist, tuios makes it in that
+folder first.
+
+Add this command key to `config.toml`. It opens a popup with `fzf` over the
+folders in `~/dev`:
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+s"
+type = "popup"
+command = 'dir=$(find ~/dev -mindepth 1 -maxdepth 1 -type d | fzf) && tuios switch-session --create --cwd "$dir" "$(basename "$dir")"'
+description = "Open a project"
+```
+
+Press `Ctrl+B` `Alt+S`, pick a folder, and press `Enter`. The client switches
+to the session of that folder. Its windows start in the folder.
+
+- [`tuios switch-session`](CLI_REFERENCE.md#tuios-switch-session) switches
+  the client that shows the popup. Nothing is nested.
+- `--create` makes the session when it is missing. `--cwd` sets the folder
+  of its windows.
+- With `startup.tiled = true`, the new session is tiled.
+- To open a project on a host, put the host before the name:
+  `tuios switch-session --create --cwd "$dir" "build:$(basename "$dir")"`.
+  The folder is a path on that host.
+
+From a shell outside tuios, name the client with `-s`:
+
+```sh
+tuios switch-session -s work --create --cwd ~/dev/api api
+```
+
+To make a session without a switch, run `tuios new NAME --detach --cwd DIR`.
 
 ## The Scratch Terminal
 

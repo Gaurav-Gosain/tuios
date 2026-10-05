@@ -323,6 +323,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	if cwd == "" && opts.Host == "" {
 		cwd = s.inheritedCwd()
 	}
+	// With nothing to inherit, the session's own start directory: the one
+	// tuios new --cwd named. A local path, so a window with a host skips it
+	// for the reason above.
+	if cwd == "" && opts.Host == "" {
+		cwd = s.StartDir()
+	}
 
 	// A command can exit before its window is in the state: one that fails
 	// at once does. onExit finds the window by its PTY (close_on_exit and

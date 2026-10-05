@@ -14,6 +14,13 @@ tuios new --detach scratch
 tuios new-window -s scratch build --cwd /src/api
 ```
 
+`tuios new` starts the session's windows in the directory you run it from.
+`--cwd DIR` names another one:
+
+```sh
+tuios new --detach api --cwd /src/api
+```
+
 Over the control protocol this is the `new-session` verb, which does both in one
 call and returns the ids:
 

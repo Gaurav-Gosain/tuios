@@ -1874,6 +1874,9 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	}
 
 	if state == nil || len(state.Windows) == 0 {
+		// Nobody has arranged a session with no windows. RestoreFromState
+		// records this for a session with windows, and does not run here.
+		m.sessionUnarranged = true
 		m.adoptEmptySessionVersion(state)
 		// The labels are the session's, and RestoreFromState, which adopts
 		// them for a session with windows, does not run for one without. The

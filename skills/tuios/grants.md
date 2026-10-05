@@ -16,7 +16,7 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
 | `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
-| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach. Includes `read`, `write` and `fan`, never `respond` |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, attach. Includes `read`, `write` and `fan`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human`,

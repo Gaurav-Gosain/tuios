@@ -1331,3 +1331,14 @@ pills. Their cap accessors did not read the setting.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The whole change | build `origin/main` (`1e0b4c89`) and point `TUIOS_E2E_BIN` at it | `TestDockPillCapsFollowTheSetting/off` ("dock_pill_caps = false, and the dock row draws caps", six cap glyphs on the row). The `on` case passes on main, which is correct | **caught** |
+
+## Sessionizer: tuios new --cwd and switch-session (#452)
+
+`tuios new` started the first window in the daemon's directory. No command
+switched an attached client, and a session switched to in place ignored
+`[startup]`. The tests are in `sessionizer_test.go`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole change | build `origin/main` (`1e0b4c89`) and point `TUIOS_E2E_BIN` at it | `TestNewStartsInTheCallersDirectory` ("the first window of plain is in .../cwd, want .../here"), `TestSwitchSessionMovesTheClient` ("the refusal does not name --create": the command does not exist), `TestSwitchSessionReachesAHost` ("switch-session build:far-new: exit status 1"), `TestSwitchToAnUnarrangedSessionAppliesStartup` ("switch-session later: exit status 1") | **caught** |
+| No `[startup]` on a switch | `applyStartupToUnarranged` in `internal/app/host_attach.go` does nothing | `TestSwitchToAnUnarrangedSessionAppliesStartup` ("later's pane is 80 wide, want it filling the 120 columns: it came up floating") | **caught** |

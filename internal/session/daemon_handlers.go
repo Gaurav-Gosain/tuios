@@ -127,7 +127,13 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if payload.SessionName == "" {
 		session, err = d.manager.GetDefaultSession(cfg, payload.Width, payload.Height)
 	} else if payload.CreateNew {
-		session, _, err = d.manager.GetOrCreateSession(payload.SessionName, cfg, payload.Width, payload.Height)
+		var created bool
+		session, created, err = d.manager.GetOrCreateSession(payload.SessionName, cfg, payload.Width, payload.Height)
+		// Only a session this attach made takes the directory: an attach
+		// to one that exists must not move where its windows start.
+		if err == nil && created && payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
+			session.SetStartDir(payload.Cwd)
+		}
 	} else {
 		session = d.manager.GetSession(payload.SessionName)
 		if session == nil {
@@ -473,6 +479,12 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 			return d.replyError(cs, msg, ErrCodeSessionExists, err.Error())
 		}
 		return fmt.Errorf("failed to create session: %w", err)
+	}
+	// Checked after the create, as the attach does: the client checked the
+	// directory already, and one that has gone since leaves the shell in the
+	// daemon's directory rather than failing the create.
+	if payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
+		sess.SetStartDir(payload.Cwd)
 	}
 
 	// A detached session has no client to create its first window, so spawn one

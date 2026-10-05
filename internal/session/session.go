@@ -1027,6 +1027,14 @@ type Session struct {
 	// persistMu serializes writes of the state file with a rename, which moves
 	// the file. See persist.
 	persistMu sync.Mutex
+	// startDir is the directory a new local window starts in when nothing
+	// else names one: no cwd from the caller and no focused pane to inherit
+	// from. tuios new --cwd and the new-session verb's cwd set it, so every
+	// window of a session made for a project starts in the project, not in
+	// whatever directory the daemon was started from. Empty keeps the
+	// daemon's own directory. Held in memory only: after a restart each
+	// restored window keeps its own directory, and a new one inherits it.
+	startDir atomic.Pointer[string]
 
 	// PTYs managed by this session
 	ptys   map[string]*PTY
@@ -1382,6 +1390,20 @@ type SessionConfig struct {
 	// so a client's ids for it stay valid. Empty, or an id already in use,
 	// mints a new one.
 	restoreID string
+}
+
+// SetStartDir sets the directory new local windows start in when nothing
+// else names one. See Session.startDir.
+func (s *Session) SetStartDir(dir string) {
+	s.startDir.Store(&dir)
+}
+
+// StartDir is the directory set with SetStartDir, or "".
+func (s *Session) StartDir() string {
+	if p := s.startDir.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 // historyPolicy is the session's HistoryPolicy, off when none was stamped.

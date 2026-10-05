@@ -3,6 +3,22 @@
 Each recipe is a whole job, end to end, using only commands described in the
 other topics. Change the names and prompts; keep the order.
 
+## A sessionizer
+
+Open a project as a session: pick a folder, and switch to its session, made in
+that folder when it is missing. As a command key in `config.toml`, in a popup:
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+s"
+type = "popup"
+command = 'dir=$(find ~/dev -mindepth 1 -maxdepth 1 -type d | fzf) && tuios switch-session --create --cwd "$dir" "$(basename "$dir")"'
+description = "Open a project"
+```
+
+The popup is a pane, so `switch-session` moves the client that shows it. Put
+`build:` before the name to open the project on a host.
+
 ## A fleet of agents on one task
 
 Three agents, each in its own worktree, allowed to work in their own sessions

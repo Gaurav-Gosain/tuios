@@ -190,6 +190,26 @@ func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error)
 	return listed.Sessions, nil
 }
 
+// newSessionDir is the start directory of the session tuios new makes: --cwd,
+// else the directory the command runs in. See newSessionStartDir.
+var newSessionDir string
+
+// newSessionStartDir is the directory a session tuios new makes starts its
+// windows in. --cwd wins. Without it, the caller's own directory, which is
+// what tmux new-session does too: the daemon's directory is wherever the
+// daemon happened to start, which says nothing about the caller. A caller
+// whose directory cannot be read sends none, and the daemon's is used.
+func newSessionStartDir(flag string) (string, error) {
+	if flag != "" {
+		return checkSessionDir(flag)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", nil
+	}
+	return wd, nil
+}
+
 func runNewSession(sessionName string) error {
 	if err := ensureDaemon(); err != nil {
 		return err
@@ -248,11 +268,14 @@ func newSessionDetached(sessionName string, global bool) error {
 		sessionName = generateUniqueSessionName(existing)
 	}
 
-	create := client.CreateDetachedSession
+	var err error
 	if global {
-		create = client.CreateGlobalSession
+		// A global session has no window of its own to start anywhere.
+		err = client.CreateGlobalSession(sessionName, 80, 24)
+	} else {
+		err = client.CreateDetachedSessionIn(sessionName, 80, 24, newSessionDir)
 	}
-	if err := create(sessionName, 80, 24); err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -330,6 +353,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	client := session.NewTUIClient()
 	client.AllowNested = nestedAllowed()
 	client.SetNestProbe(probe)
+	if host == "" && createNew {
+		// Only tuios new sets it. A session the attach finds is not moved.
+		client.StartDir = newSessionDir
+	}
 	// The real host size, asked for here rather than left at a placeholder.
 	//
 	// The session's size is the minimum over its attached clients, and this is

@@ -455,7 +455,7 @@ func init() {
 				{Name: "height", Type: "int", Description: "Nominal height in rows. An attached client replaces it with its own viewport.", Default: "24"},
 				{Name: "window", Type: "bool", Description: "Create the first window. Pass false for an empty session you place every window in yourself.", Default: "true"},
 				{Name: "window_name", Type: "string", Description: "Name for the first window. Omit to use the shell's title."},
-				{Name: "cwd", Type: "string", Description: "Directory to start the first window's shell in. Omit to inherit the daemon's."},
+				{Name: "cwd", Type: "string", Description: "Directory the session's windows start in: the first window, and any later one with no directory to inherit. Omit to use the daemon's."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
 			},
 			returns: []verbParam{
@@ -474,6 +474,30 @@ func init() {
 				`{"id":1,"verb":"new-session","params":{"name":"empty","window":false}}`,
 			},
 			handler: (*Daemon).verbNewSession,
+		},
+		"switch-session": {
+			description: "Switch an attached client to another session in place, as the session switcher does. The client is the one named by client, else the one showing session, else the one showing the caller's own session from a pane, else the only one attached.",
+			params: []verbParam{
+				{Name: "name", Type: "string", Required: true, Description: "Session to switch to."},
+				{Name: "host", Type: "string", Description: "Machine from the client's [hosts] table that holds the session. Omit, or local, for this daemon."},
+				{Name: "create", Type: "bool", Description: "Create the session when it does not exist.", Default: "false"},
+				{Name: "cwd", Type: "string", Description: "With create, the directory the new session's windows start in."},
+				{Name: "session", Type: "string", Description: "Session the client to switch shows."},
+				{Name: "client", Type: "string", Description: "Id of the client to switch, from list-clients."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "Session the client now shows."},
+				{Name: "host", Type: "string", Description: "Machine the session is on. Absent for this daemon."},
+				{Name: "client_id", Type: "string", Description: "Id of the client that switched."},
+				{Name: "created", Type: "bool", Description: "True when create made the session on this daemon."},
+				{Name: "already", Type: "bool", Description: "True when the client already showed the session. Nothing changed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"switch-session","params":{"name":"api"}}`,
+				`{"id":1,"verb":"switch-session","params":{"name":"api","create":true,"cwd":"/src/api"}}`,
+				`{"id":1,"verb":"switch-session","params":{"name":"api","host":"build","session":"work"}}`,
+			},
+			handler: (*Daemon).verbSwitchSession,
 		},
 		"new-worktree": {
 			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",

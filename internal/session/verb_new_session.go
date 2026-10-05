@@ -61,10 +61,10 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 	// The directory and the argv are checked before the session exists, so a
 	// caller that mistyped a path does not get a session it then has to clean
 	// up. new-window refuses the same two mistakes for the same reason.
+	if verr := checkWindowCwd(p.Cwd); verr != nil {
+		return nil, verr
+	}
 	if makeWindow {
-		if verr := checkWindowCwd(p.Cwd); verr != nil {
-			return nil, verr
-		}
 		if len(p.Command) > 0 && p.Command[0] == "" {
 			return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 		}
@@ -96,6 +96,12 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 			})
 		}
 		return nil, newVerbError(ErrVerbInternal, "could not create the session: "+err.Error())
+	}
+
+	// The directory is the session's, not only its first window's: a window
+	// opened in it later with nothing to inherit starts there too.
+	if p.Cwd != "" {
+		sess.SetStartDir(p.Cwd)
 	}
 
 	out := map[string]any{

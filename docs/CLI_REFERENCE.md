@@ -310,12 +310,19 @@ tuios new [session-name] [flags]
 - `--ssh`: With `--host`, run ssh to the host and its own tuios instead of attaching here
 - `--global`: Create a global session, which holds panes from more than one machine
 - `--hold`: After a failure, wait for enter before the command exits
+- `--cwd <dir>`: Directory the session's windows start in. The default is the current directory
 - The appearance flags of the root command (`tuios new --help` lists them)
+
+The session's windows start in the directory where you run `tuios new`.
+`--cwd` names a different directory. The directory applies to the first
+window, and to each later window that has no pane to take a directory from.
+`--cwd` does not work with `--host`.
 
 **Examples:**
 ```bash
 tuios new                      # Create session with auto-generated name
 tuios new mysession            # Create session named "mysession"
+tuios new api --cwd ~/dev/api  # Create a session whose windows start in ~/dev/api
 tuios new work --theme dracula # Create session with Dracula theme
 tuios new ci --detach          # Create a headless session and return
 tuios new --host build         # Create a session on the host build and attach it
@@ -358,6 +365,8 @@ the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
 it does not name a session. To show a different session in the pane, name
 that session. To attach the same session, open a new terminal outside tuios.
 To attach anyway, use `--force` or set `TUIOS_ALLOW_NESTED=1`.
+To move the client that shows the pane to a different session, use
+[`tuios switch-session`](#tuios-switch-session).
 
 The same refusal applies when the session would show itself through a
 chain. For example, session A shows session B in a pane, and a pane of B
@@ -380,6 +389,51 @@ tuios cannot find a client behind tmux or mosh in a pane. These redraw
 the screen and do not pass the output through. Such an attach goes
 through, and the session shrinks to 20x6. It stays at 20x6 until the
 inner client exits. A forced attach also stays at 20x6 or more.
+
+### `tuios switch-session`
+
+Switch an attached client to a different session, in place. This is what the
+session switcher does. Nothing is nested.
+
+**Usage:**
+```bash
+tuios switch-session [HOST:]NAME [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Switch the client that shows this session
+- `--client <id>`: Switch the client with this id, from `tuios list-clients`
+- `-c, --create`: Create the session if it does not exist
+- `--cwd <dir>`: With `--create`, the directory the new session's windows start in
+- `--json`: Output as JSON
+
+The command switches one client:
+
+1. The client that `--client` names.
+2. Else the client that shows the session that `-s` names.
+3. Else, from a pane or a popup, the client that shows the session of the pane.
+4. Else the only client that is attached. With more than one client, name one.
+
+`HOST` is a machine from the `[hosts]` table. Without `HOST`, the session is
+on this machine. A session that `--create` makes has one window. When the
+session exists, `--create` and `--cwd` do nothing, and the client switches to
+it.
+
+When the session is not arranged yet, `[startup]` applies to it, as on a first
+attach. For example, `startup.tiled = true` tiles a session that
+`tuios new --detach` made. A session that a person arranged keeps its layout.
+
+From a pane, the command needs the `admin` grant.
+
+**Examples:**
+```bash
+tuios switch-session api                           # From a pane: show the session api
+tuios switch-session --create --cwd ~/dev/api api  # Show api, and make it in ~/dev/api if it is missing
+tuios switch-session build:api                     # Show the session api on the host build
+tuios switch-session -s work api                   # From outside tuios: switch the client that shows work
+```
+
+See [Sessionizer](SESSIONS.md#sessionizer) for a key that opens a project.
 
 ### `tuios ls`
 

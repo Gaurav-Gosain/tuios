@@ -60,6 +60,20 @@ type SessionCreatedMsg struct {
 	// rather than switching over the current one.
 	Client *session.TUIClient
 	State  *session.SessionState
+	// Host is the machine Client is connected to, for a switch-session to
+	// another machine (switchToHostAsync). Empty means this machine.
+	Host string
+	// RequestID is the routed switch-session request this result answers.
+	// The answer goes over the connection being left, before it is closed.
+	RequestID string
+	// Switched marks a switch to a session that may already exist, rather
+	// than a session made here: [startup] applies only while nobody has
+	// arranged it.
+	Switched bool
+	// Create says the switch asked for the session to be made. A session an
+	// attach makes is empty, and switch-session's sessions get a first
+	// window, as they do on this machine (finishHostSwitch).
+	Create bool
 }
 
 // SessionKilledMsg carries the result of killing a session this client is not
@@ -1253,6 +1267,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case SessionCreatedMsg:
 		cmd := ListenForSessionCreate(m.sessionCreateChan())
+		if msg.Switched {
+			m.finishHostSwitch(msg)
+			return m, cmd
+		}
 		if msg.Err != nil {
 			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
@@ -2481,17 +2499,42 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			resultData = map[string]any{"changed": m.ClientTitle != title}
 			m.ClientTitle = title
 		case "switch_session":
-			// herdr's workspace.focus: show another session. The answer goes
-			// first, because the switch detaches this client from the session
-			// the daemon routed the request through.
-			if len(msg.TapeArgs) != 1 || msg.TapeArgs[0] == "" {
+			// herdr's workspace.focus and switch-session: show another
+			// session. TapeArgs are the name, and for switch-session to
+			// another machine the host, "create" or "", and the directory
+			// of a session create makes there.
+			if len(msg.TapeArgs) < 1 || msg.TapeArgs[0] == "" {
 				err = fmt.Errorf("switch_session needs a session name")
 				break
 			}
+			name := msg.TapeArgs[0]
+			host := ""
+			if len(msg.TapeArgs) > 1 {
+				host = msg.TapeArgs[1]
+			}
+			if host == federation.LocalHostName && m.AttachedHost == "" {
+				host = ""
+			}
+			if host != "" && host != m.attachedMachine() {
+				// Another machine: the attach there is made off this
+				// goroutine, and the answer waits for it, so the caller
+				// learns whether the switch landed.
+				create := len(msg.TapeArgs) > 2 && msg.TapeArgs[2] == "create"
+				cwd := ""
+				if len(msg.TapeArgs) > 3 {
+					cwd = msg.TapeArgs[3]
+				}
+				if err = m.switchToHostAsync(host, name, create, cwd, msg.RequestID); err != nil {
+					break
+				}
+				return m, relisten
+			}
+			// This machine, or the one the client is attached to. The answer
+			// goes first, because the switch detaches this client from the
+			// session the daemon routed the request through.
 			if m.DaemonClient != nil && msg.RequestID != "" {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
 			}
-			name := msg.TapeArgs[0]
 			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: name} }, relisten)
 		case "refresh_dock":
 			// Re-run one component now, or every one when unnamed.

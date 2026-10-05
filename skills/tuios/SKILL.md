@@ -286,7 +286,7 @@ Print one with `tuios --skill <topic>`:
 | `ship` | Commit, merge, push and open a pull request for a worktree, and the Inbox question a push asks |
 | `hosts` | Other machines: hosts, remote sessions, hosted panes, agents and worktrees there |
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
-| `clients` | `list-clients`: which client shows which session, and the `client-session-changed` event |
+| `clients` | `list-clients`: which client shows which session, `switch-session`, and the `client-session-changed` event |
 | `mcp` | tuios as an MCP server: setup, tools, scope |
 | `tmux` | The tmux shim for tools that only drive tmux |
 | `herdr` | herdr's command line and socket, for tools built for herdr |
@@ -295,4 +295,4 @@ Print one with `tuios --skill <topic>`:
 | `grants` | Pane grants: what a pane may do, and giving a helper less |
 | `config` | Options, appearance, themes, glyphs, the dock, hooks and keybindings |
 | `errors` | Every error code and its remedy, and a daemon that is not running |
-| `recipes` | End to end: a fleet of agents, answering from the Inbox, approvals, agents on another machine, MCP, the tmux shim, scoped grants, a conductor, phone alerts |
+| `recipes` | End to end: a sessionizer, a fleet of agents, answering from the Inbox, approvals, agents on another machine, MCP, the tmux shim, scoped grants, a conductor, phone alerts |

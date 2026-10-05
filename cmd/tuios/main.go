@@ -610,6 +610,7 @@ the remote client. See 'tuios hosts --help'.`,
 	var newHold bool
 	var newGlobal bool
 	var newSSH bool
+	var newCwd string
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -625,6 +626,10 @@ gets an initial window, is immediately usable by control commands
 Sessions persist even when you detach, allowing you to reconnect later
 with 'tuios attach'.
 
+The session's windows start in the directory you run the command from.
+--cwd names another directory. A window opened later with no pane to take
+a directory from starts there too.
+
 With --host the session is created on another machine. tuios runs ssh to the
 host named in the [hosts] table and runs 'tuios new' there. The client you
 see is the remote one. With --detach the far side creates the session and
@@ -638,6 +643,9 @@ returns. See 'tuios hosts --help'.`,
   # Create a headless session without attaching
   tuios new mysession --detach
 
+  # Create a session whose windows start in ~/dev/api
+  tuios new api --cwd ~/dev/api
+
   # Create a session on the machine named build and attach to it
   tuios new --host build
 
@@ -650,8 +658,16 @@ returns. See 'tuios hosts --help'.`,
 				name = args[0]
 			}
 			if newHost != "" {
+				if newCwd != "" {
+					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
+				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
+			dir, err := newSessionStartDir(newCwd)
+			if err != nil {
+				return err
+			}
+			newSessionDir = dir
 			if newGlobal {
 				// A global session is created with no windows whether or not
 				// --detach was asked for: its first window names a machine,
@@ -669,6 +685,7 @@ returns. See 'tuios hosts --help'.`,
 	newCmd.Flags().BoolVar(&newSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
 	newCmd.Flags().BoolVar(&newGlobal, "global", false, "Create a global session, which holds panes from more than one machine")
 	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
+	newCmd.Flags().StringVar(&newCwd, "cwd", "", "Directory the session's windows start in (default: the current directory)")
 	registerHostNameCompletion(newCmd, "host")
 
 	var lsJSON bool
@@ -3025,6 +3042,7 @@ command in authorized_keys to make the policy a boundary:
 
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
+	rootCmd.AddCommand(newSwitchSessionCmd())
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)

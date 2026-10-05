@@ -477,6 +477,19 @@ command = "tuios send-text -w \"$TUIOS_ACTIVE_PANE_ID\" \"$(fzf)\""
 description = "Pick a file"
 ```
 
+**Open a project.** This popup runs `fzf` over the folders in `~/dev` and
+switches to the session of the folder you pick. When the session does not
+exist, [`tuios switch-session`](CLI_REFERENCE.md#tuios-switch-session) makes
+it in that folder. See [Sessionizer](SESSIONS.md#sessionizer).
+
+```toml
+[[keybindings.command]]
+key = "prefix+alt+s"
+type = "popup"
+command = 'dir=$(find ~/dev -mindepth 1 -maxdepth 1 -type d | fzf) && tuios switch-session --create --cwd "$dir" "$(basename "$dir")"'
+description = "Open a project"
+```
+
 **Copy the pane's folder.** This shell entry copies the focused pane's folder
 to the clipboard. It tries `pbcopy`, then `wl-copy`, then `xclip`, and uses the
 first one it finds.

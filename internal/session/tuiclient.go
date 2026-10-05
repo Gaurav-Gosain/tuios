@@ -45,6 +45,10 @@ type TUIClient struct {
 	// first one. See AttachPayload.
 	Served      bool
 	AllowNested bool
+	// StartDir is sent with every attach as AttachPayload.Cwd: the start
+	// directory of a session the attach creates. An attach to a session that
+	// exists ignores it.
+	StartDir string
 	// ViewOnly marks a client whose input is dropped, such as a tuios-web
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
@@ -444,6 +448,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		AllowNested: c.AllowNested,
 		NestProbe:   probe,
 		ViewOnly:    c.viewOnly(),
+		Cwd:         c.StartDir,
 	})
 	if err != nil {
 		return nil, err

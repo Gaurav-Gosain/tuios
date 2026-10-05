@@ -157,6 +157,8 @@ var verbScopes = map[string]scopeKind{
 	"refresh-dock":         scopeDeny,
 	"pip":                  scopeDeny,
 	"new-session":          scopeDeny,
+	// switch-session moves a client: a client-level action, like attach.
+	"switch-session":       scopeDeny,
 	"new-worktree":         scopeDeny,
 	"remove-worktree":      scopeDeny,
 	"open-host-connection": scopeDeny,

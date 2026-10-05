@@ -31,6 +31,25 @@ before you call them:
 tuios list-clients --json | jq -e --arg s "$TUIOS_SESSION" 'any(.[]; .session == $s)'
 ```
 
+## Switching a client to another session
+
+`tuios switch-session` moves an attached client to another session in place,
+as the session switcher does. From a pane it moves the client that shows your
+session. From outside, name the client's session with `-s` or the client with
+`--client`.
+
+```sh
+tuios switch-session api
+tuios switch-session --create --cwd /src/api api
+tuios switch-session build:api
+tuios switch-session -s work api
+```
+
+`--create` makes the session when it is missing, and `--cwd` sets where its
+windows start. `HOST:` names a machine from `[hosts]`. It moves what the
+person sees, so it needs the `admin` grant. Do not switch the person's client
+unless they asked for it.
+
 ## Following clients as they move
 
 `tuios subscribe` carries `client-session-changed` when a client attaches,
