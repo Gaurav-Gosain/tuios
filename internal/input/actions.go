@@ -451,7 +451,7 @@ func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleLastPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	if !o.LastPane() {
-		o.ShowNotification("No pane to go back to.", "info", o.Settings.NotificationDuration)
+		o.ShowNotification("No pane to go back to", "info", o.Settings.NotificationDuration)
 		return o, nil
 	}
 	return afterFocusCommand(o, prev, focusEnterTargeted)

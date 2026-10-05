@@ -1423,3 +1423,14 @@ selection.
 | The released behaviour | build origin/main (`486ce455`) | `TestCopyFlashSweepsACopyModeYank` visual-y, line-y-daemon and copy-pipe ("no frame showed the sweep"). `TestCopyFlashSweepsAMultiCopyYank` passes, which is correct: multi copy mode already swept | **caught** |
 | The yank never draws the sweep | `copyModeEffects.apply`: the `NoteCopyFlashRegion` call cut | `TestCopyFlashSweepsACopyModeYank` visual-y and line-y-daemon ("no frame showed the sweep"). copy-pipe passes, which is correct: it takes another path | **caught** |
 | Multi copy mode never draws the sweep | `yankMultiCopy`: the `NoteCopyFlashMany` call cut | `TestCopyFlashSweepsAMultiCopyYank` ("the sweep reached ... in 0 frames" for both selected panes) | **caught** |
+
+## last_pane
+
+`last_pane_test.go` walks the focus with the focus-window CLI, presses `;` to
+flip back and forth, then repeats the flip after a new pane (`n`) and after a
+switch to an empty workspace (`Alt+2`, `n`), where the flip must return to the
+pane focus left on workspace one.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The previous pane is recorded only inside FocusWindow | build `b535edb6` (the PR before the fix) | `TestLastPane` ("first flip landed on c0088b40, want 1b79e71f"): the CLI focus moves never passed through FocusWindow, so nothing recorded them and the flip had no target. The new-pane and workspace cases sit downstream of the first flip and never ran | **caught** |

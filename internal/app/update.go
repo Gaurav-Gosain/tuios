@@ -778,6 +778,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.settleChrome()
 	// Focus reports for every path that moved the focus without FocusWindow.
 	m.reportFocusChange()
+	m.reconcilePrevFocus()
 	m.recordScrollAnchors()
 	// Asked again after the handler, not only before it, because the handler
 	// itself is one of the things that lengthens a pane's history: a workspace

@@ -145,6 +145,11 @@ type OS struct {
 	// last_pane toggle. A window ID, not an index: indices shift on close and
 	// reorder.
 	PrevFocusedID string
+	// lastFocusedID is the window reconcilePrevFocus last saw focused. Focus
+	// moves through FocusWindow, new panes, workspace switches, closes and
+	// the daemon, so the previous pane is read off the landed focus once a
+	// message, not written by every caller.
+	lastFocusedID string
 	Width         int
 	Height        int
 	Mode          Mode
