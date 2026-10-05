@@ -3,6 +3,7 @@
 
 mod app;
 mod boxdraw;
+mod control;
 mod keys;
 mod painter;
 mod palette;
@@ -27,6 +28,7 @@ Options:
   --font-size N       Terminal font size in points (default: 14)
   --light             Use the light theme
   --show-fps          Show paint timings in the status bar
+  --control PATH      Accept test commands on a unix socket at PATH
   --perf              Run the performance harness and print the results
   --perf-out FILE     Also write the results to FILE as JSON"
     );
@@ -44,6 +46,7 @@ fn main() {
         dark: true,
         ui_font: "Adwaita Sans".into(),
         show_fps: false,
+        control: None,
     };
     let mut perf = false;
     let mut perf_out: Option<PathBuf> = None;
@@ -59,6 +62,7 @@ fn main() {
             "--light" => cfg.dark = false,
             "--show-fps" => cfg.show_fps = true,
             "--perf" => perf = true,
+            "--control" => cfg.control = Some(PathBuf::from(val())),
             "--perf-out" => perf_out = Some(PathBuf::from(val())),
             "-h" | "--help" => usage(),
             _ => usage(),

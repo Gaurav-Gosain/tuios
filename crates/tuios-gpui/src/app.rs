@@ -1,5 +1,6 @@
 //! The main window: sidebar, workspace strip, the pane grid and the palette.
 
+use crate::control;
 use crate::keys;
 use crate::painter::{CursorPaint, Metrics};
 use crate::palette::{self, Act, Entry};
@@ -31,6 +32,8 @@ pub struct Config {
     pub ui_font: String,
     /// Show frame timings in the status bar.
     pub show_fps: bool,
+    /// A control socket for tests (see control.rs).
+    pub control: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -48,6 +51,12 @@ enum Drag {
     Select { pty: String, anchor: (u16, u16) },
     /// Reporting to the program in a pane, which asked for mouse events.
     Report { pty: String, button: u8 },
+}
+
+/// What a control command turns into.
+enum Plan {
+    Events(Vec<PlatformInput>),
+    Reply(String),
 }
 
 struct PaletteUi {
@@ -121,7 +130,161 @@ impl TuiosApp {
         };
         this.connect(this.cfg.session.clone(), window, cx);
         this.poll_sessions(cx);
+        if let Some(path) = this.cfg.control.clone() {
+            this.serve_control(path, window, cx);
+        }
         this
+    }
+
+    fn serve_control(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        let (tx, rx) = async_channel::unbounded::<control::Request>();
+        control::serve(path, tx);
+        let handle = window.window_handle();
+        cx.spawn(async move |this, cx| {
+            while let Ok(req) = rx.recv().await {
+                let answer = cx
+                    .update_window(handle, |_, window, cx| {
+                        let plan = this.update(cx, |this, cx| this.control_plan(&req.line, window, cx));
+                        match plan {
+                            Ok(Ok(Plan::Events(evs))) => {
+                                for e in evs {
+                                    window.dispatch_event(e, cx);
+                                }
+                                "ok".to_string()
+                            }
+                            Ok(Ok(Plan::Reply(s))) => s,
+                            Ok(Err(e)) => format!("err {e}"),
+                            Err(e) => format!("err {e}"),
+                        }
+                    })
+                    .unwrap_or_else(|e| format!("err {e}"));
+                let _ = req.reply.send(answer);
+            }
+        })
+        .detach();
+    }
+
+    /// The window position of the centre of a cell of the `n`-th visible pane.
+    fn cell_pos(&self, n: usize, col: f32, row: f32) -> Result<Point<Pixels>, String> {
+        let m = self.metrics.as_ref().ok_or("no metrics yet")?;
+        let st = self.state.as_ref().ok_or("not attached")?;
+        let mut vis = st.visible();
+        // Reading order, so an index names the same pane whatever the stacking.
+        vis.sort_by_key(|w| (w.y, w.x));
+        let w = vis.get(n).ok_or_else(|| format!("no pane {n}"))?;
+        let (x, y, _, _) = w.content();
+        let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
+        Ok(point(
+            self.grid.origin.x + px((x as f32 + col + 0.5) * cw),
+            self.grid.origin.y + px((y as f32 + row + 0.5) * ch),
+        ))
+    }
+
+    fn control_plan(&mut self, line: &str, _window: &mut Window, _cx: &mut Context<Self>) -> Result<Plan, String> {
+        let mut it = line.split_whitespace();
+        let cmd = it.next().ok_or("empty command")?;
+        let mut num = |name: &str| -> Result<f32, String> { it.next().ok_or(format!("missing {name}"))?.parse::<f32>().map_err(|e| e.to_string()) };
+        Ok(match cmd {
+            "key" => {
+                let k = line[3..].trim();
+                Plan::Events(vec![control::key(Keystroke::parse(k).map_err(|e| e.to_string())?)])
+            }
+            "type" => {
+                let text = line.get(5..).unwrap_or("");
+                Plan::Events(
+                    text.chars()
+                        .map(|c| {
+                            let shift = c.is_uppercase();
+                            let key = if c == ' ' { "space".to_string() } else { c.to_lowercase().to_string() };
+                            control::key(Keystroke {
+                                modifiers: Modifiers { shift, ..Default::default() },
+                                key,
+                                key_char: Some(c.to_string()),
+                            })
+                        })
+                        .collect(),
+                )
+            }
+            "click" => {
+                let (x, y) = (num("x")?, num("y")?);
+                let mut rest = line.split_whitespace().skip(3);
+                let b = control::parse_button(rest.next());
+                let count = rest.next().and_then(|c| c.parse().ok()).unwrap_or(1);
+                let p = point(px(x), px(y));
+                Plan::Events(vec![control::down(p, b, count), control::up(p, b, count)])
+            }
+            "cellclick" => {
+                let (n, c, r) = (num("pane")? as usize, num("col")?, num("row")?);
+                let count = line.split_whitespace().nth(4).and_then(|c| c.parse().ok()).unwrap_or(1);
+                let p = self.cell_pos(n, c, r)?;
+                Plan::Events(vec![control::down(p, MouseButton::Left, count), control::up(p, MouseButton::Left, count)])
+            }
+            "drag" => {
+                let (n, c1, r1, c2, r2) = (num("pane")? as usize, num("c1")?, num("r1")?, num("c2")?, num("r2")?);
+                let a = self.cell_pos(n, c1, r1)?;
+                let b = self.cell_pos(n, c2, r2)?;
+                let mid = point(px((f32::from(a.x) + f32::from(b.x)) / 2.), px((f32::from(a.y) + f32::from(b.y)) / 2.));
+                Plan::Events(vec![
+                    control::down(a, MouseButton::Left, 1),
+                    control::moved(mid, Some(MouseButton::Left)),
+                    control::moved(b, Some(MouseButton::Left)),
+                    control::up(b, MouseButton::Left, 1),
+                ])
+            }
+            "wheel" | "lines" => {
+                let (n, amount) = (num("pane")? as usize, num("amount")?);
+                let p = self.cell_pos(n, 2., 2.)?;
+                let delta = if cmd == "wheel" { ScrollDelta::Pixels(point(px(0.), px(amount))) } else { ScrollDelta::Lines(point(0., amount)) };
+                Plan::Events(vec![control::wheel(p, delta)])
+            }
+            "dump" => Plan::Reply(self.dump()),
+            _ => return Err(format!("unknown command {cmd}")),
+        })
+    }
+
+    fn dump(&mut self) -> String {
+        let (cw, ch) = self.metrics.as_ref().map(|m| (f32::from(m.cell_w), f32::from(m.cell_h))).unwrap_or((0., 0.));
+        let mut out = format!(
+            "{{\"cols\":{},\"rows\":{},\"cell\":[{cw},{ch}],\"origin\":[{},{}],\"connected\":{},\"palette\":{},",
+            self.grid.cols,
+            self.grid.rows,
+            f32::from(self.grid.origin.x),
+            f32::from(self.grid.origin.y),
+            self.connected,
+            self.palette.is_some()
+        );
+        let focused = self.focused_id().unwrap_or_default();
+        let st = self.state.clone().unwrap_or_default();
+        out.push_str(&format!("\"session\":{},\"workspace\":{},\"focused\":{},\"panes\":[", control::json_str(&st.session), st.workspace, control::json_str(&focused)));
+        let mut vis = st.visible();
+        vis.sort_by_key(|w| (w.y, w.x));
+        for (i, w) in vis.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let (x, y, c, r) = w.content();
+            let (text, sel, scroll, bottom, size) = match self.panes.get_mut(&w.pty) {
+                Some(p) => {
+                    let sel = p.term.selection_text().unwrap_or_default();
+                    let bottom = p.term.at_bottom();
+                    let size = (p.term.cols(), p.term.rows());
+                    (p.term.snapshot().plain_text(), sel, p.scroll_px, bottom, size)
+                }
+                None => (String::new(), String::new(), 0., true, (0, 0)),
+            };
+            out.push_str(&format!(
+                "{{\"id\":{},\"title\":{},\"cells\":[{x},{y},{c},{r}],\"term\":[{},{}],\"agent\":{},\"scroll_px\":{scroll},\"at_bottom\":{bottom},\"selection\":{},\"text\":{}}}",
+                control::json_str(&w.id),
+                control::json_str(w.label()),
+                size.0,
+                size.1,
+                control::json_str(w.agent_state().unwrap_or("")),
+                control::json_str(&sel),
+                control::json_str(&text)
+            ));
+        }
+        out.push_str("]}");
+        out
     }
 
     // ---- connection -------------------------------------------------------

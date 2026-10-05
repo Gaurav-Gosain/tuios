@@ -102,3 +102,16 @@ fn row_above_the_viewport() {
     let s = t.snapshot();
     assert_eq!(s.rows[0].plain().trim_end(), "line6", "the viewport is back where it was");
 }
+
+#[test]
+fn generations_never_repeat_across_resizes() {
+    let mut t = Terminal::new(10, 2, 0).unwrap();
+    t.write(b"a");
+    let before: Vec<u64> = t.snapshot().rows.iter().map(|r| r.generation).collect();
+    t.resize(12, 2, 9, 18);
+    t.write(b"b");
+    let after: Vec<u64> = t.snapshot().rows.iter().map(|r| r.generation).collect();
+    for g in &after {
+        assert!(!before.contains(g), "generation {g} reused after a resize");
+    }
+}

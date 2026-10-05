@@ -180,8 +180,12 @@ impl Screen {
         }
     }
 
+    /// A new row generation. The counter is process-wide, so a generation
+    /// never repeats even when a screen is rebuilt (resize, reset): a painter
+    /// cache keyed by generation cannot mistake a new row for an old one.
     pub(crate) fn next_generation(&mut self) -> u64 {
-        self.generation += 1;
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        self.generation = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.generation
     }
 
