@@ -1434,3 +1434,18 @@ pane focus left on workspace one.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The previous pane is recorded only inside FocusWindow | build `b535edb6` (the PR before the fix) | `TestLastPane` ("first flip landed on c0088b40, want 1b79e71f"): the CLI focus moves never passed through FocusWindow, so nothing recorded them and the flip had no target. The new-pane and workspace cases sit downstream of the first flip and never ran | **caught** |
+## Resizing under shared borders
+
+`shared_border_resize_test.go` resizes panes with shared borders on and reads
+both the rectangles from `list-windows` and the divider cells from the frame.
+Each test asserts that the resize moved something before it asserts the
+divider survived, so a fixture that resizes nothing cannot pass.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`486ce455`) | `TestSharedBorderKeyResizeKeepsTheDivider`, all nine cases ("pane 1 starts 0 columns after pane 0 ends, want 1", and "pane 0 and pane 1 overlap" with `gap = 2`), `TestSharedBorderDragKeepsTheDivider` ("the divider during the drag is not on column 47"), `TestSharedBorderDragFromAJunction`, both cases (the master did not move), `TestScrollingSharedBorders` ("pane 1 starts 0 columns after pane 0 ends, want 1") | **caught** |
+| The split mover ignores the gap | `adjustTilingNeighborsGeneric`: `gap := 0` in place of `m.separatorGap()` | `TestSharedBorderKeyResizeKeepsTheDivider` (all nine cases), `TestSharedBorderDragKeepsTheDivider` | **caught** |
+| No grab on a pane's left divider | `armTiledBorderResize`: the borderless left-edge case cut | `TestSharedBorderDragFromAJunction/master-right` ("the master starts on column 61, want 69"). `master-bottom` passes, which is correct | **caught** |
+| No grab on a pane's top divider | `armTiledBorderResize`: the borderless top-edge case cut | `TestSharedBorderDragFromAJunction/master-bottom` ("the master starts on row 20, want 24"). `master-right` passes, which is correct | **caught** |
+| The strip keeps its own borders | `panesBorderless`: `&& !m.UseScrollingLayout` put back | `TestScrollingSharedBorders` ("pane 1 starts 0 columns after pane 0 ends, want 1") | **caught** |
+| No grab on a strip divider | `armBorderResize`: `armScrollDividerResize` call replaced by `return false` | `TestScrollingSharedBorders` ("the first column is 48 columns wide after the drag, want 38") | **caught** |
