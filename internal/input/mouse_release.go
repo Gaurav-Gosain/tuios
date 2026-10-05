@@ -35,6 +35,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// pane went on to that pane as a release it never saw pressed.
 	if o.PiPPressed {
 		o.PiPPressed = false
+		// The pip drag rides on PiPPressed and cleared nothing by itself: this
+		// return skips the general cleanup below.
+		o.Dragging = false
+		o.InteractionMode = false
+		if o.PiPDragEnd() {
+			return o, o.PersistSettings()
+		}
 		return o, nil
 	}
 

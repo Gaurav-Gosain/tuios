@@ -31,4 +31,8 @@ func (m *OS) EndPointerGesture() {
 		m.pointerGestureWasTerminal = false
 		m.Mode = TerminalMode
 	}
+	// A lost release leaves the box where the last motion put it. The config
+	// write waits for a proper release, so the change reaches the file with
+	// the next one.
+	m.PiPDragEnd()
 }

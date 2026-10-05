@@ -96,3 +96,68 @@ func TestPiPTakesTheReleaseOfItsClick(t *testing.T) {
 		t.Fatal("the release did not end the view's press")
 	}
 }
+
+// pipCellInside scans the composed frame for a cell inside the drawn box.
+func pipCellInside(t *testing.T, o *app.OS) (x, y int) {
+	t.Helper()
+	o.GetCanvas(true)
+	for y := o.Height - 1; y >= 0; y-- {
+		for x := o.Width - 1; x >= 0; x-- {
+			if o.PiPAt(x, y) {
+				return x - 3, y - 2
+			}
+		}
+	}
+	t.Fatal("the view was not drawn")
+	return 0, 0
+}
+
+func TestPiPRightDragMovesTheView(t *testing.T) {
+	o, _, _, x, y := pipMouseOS(t)
+	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)
+	dx, dy := x-60, y-20
+	if !o.PiPDragMove(dx, dy) {
+		t.Fatal("the right-press did not start a drag")
+	}
+	if !o.Dragging {
+		t.Fatal("the drag did not hold the pointer")
+	}
+	// Motion without the press would drop the gesture; with it the box moves.
+	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseRight}
+	_, cmd := handleMouseRelease(rel, o)
+	if cmd == nil {
+		t.Fatal("the release did not persist the dropped position")
+	}
+	if o.Dragging || o.PiPPressed {
+		t.Fatal("the release left the drag flags set")
+	}
+	if o.UserConfig == nil || o.UserConfig.PiP.X == nil || o.UserConfig.PiP.Y == nil {
+		t.Fatal("the release did not keep the dropped position")
+	}
+	nx, ny := pipCellInside(t, o)
+	if nx == x-3 && ny == y-2 {
+		t.Fatal("the view did not move")
+	}
+}
+
+func TestPiPMoveReturnsTheViewToItsCorner(t *testing.T) {
+	o, _, _, x, y := pipMouseOS(t)
+	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)
+	if !o.PiPDragMove(x-60, y-20) {
+		t.Fatal("the right-press did not start a drag")
+	}
+	if !o.CyclePiPCorner() {
+		t.Fatal("the corner cycle did nothing")
+	}
+	if o.UserConfig.PiP.X != nil || o.UserConfig.PiP.Y != nil {
+		t.Fatal("the corner cycle kept the dropped position")
+	}
+	pos := 7
+	o.UserConfig.PiP.X, o.UserConfig.PiP.Y = &pos, &pos
+	if !o.CyclePiPCorner() {
+		t.Fatal("the corner cycle did nothing the second time")
+	}
+	if o.UserConfig.PiP.X != nil || o.UserConfig.PiP.Y != nil {
+		t.Fatal("the corner cycle kept a config-set position")
+	}
+}

@@ -423,8 +423,14 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// Multifocus toggles. The palette has a row for each, and a user binds
 	// them where they want them (issue #232).
 	"toggle_multifocus_active": "palette row, user binding",
-	"toggle_multifocus_all":    "palette row, user binding",
-	"close_workspace":          "palette row, user binding",
+
+	// Picture-in-picture sizing and corner. The palette has a row for each;
+	// the keys stay for the user.
+	"pip_grow":              "palette row, user binding",
+	"pip_shrink":            "palette row, user binding",
+	"pip_move":              "palette row, user binding",
+	"toggle_multifocus_all": "palette row, user binding",
+	"close_workspace":       "palette row, user binding",
 	// tmux's "copy-mode \; send-keys ?" as one action. The palette reaches
 	// them too.
 	"copy_mode_search_forward":  "user binding and palette row",

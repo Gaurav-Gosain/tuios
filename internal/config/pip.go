@@ -17,6 +17,13 @@ type PiPConfig struct {
 	// Corner is where the box goes first (default: bottom-right). When the
 	// focused pane's cursor enters the box, the box moves to another corner.
 	Corner string `toml:"corner"`
+	// X and Y pin the box to an exact spot, in cells from the screen's top
+	// left, when both are set. Values outside the pane region are clamped at
+	// draw. nil leaves the box in corner mode, where the cursor dodge keeps
+	// it off the cursor. A right-press drag of the box sets them, and the
+	// corner key puts the box back in corner mode.
+	X *int `toml:"x"`
+	Y *int `toml:"y"`
 }
 
 // The four corners, in the spelling [pip] corner takes.

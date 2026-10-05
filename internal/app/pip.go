@@ -154,6 +154,10 @@ type pipState struct {
 	// rect is where the box was drawn on the last composed frame, empty when
 	// it was not drawn. Clicks are tested against it.
 	rect image.Rectangle
+	// dragging is on while a right-press drag moves the box, and grab is the
+	// pointer's offset into the box from where the drag took hold.
+	dragging bool
+	grab     image.Point
 	// occluder is the scratch slice the graphics pass hands the box in.
 	occluder []cellRect
 	// layer is the last layer built from box.
@@ -354,6 +358,97 @@ func (m *OS) PiPAt(x, y int) bool {
 	return m.pip.windowID != "" && image.Pt(x, y).In(m.pip.rect)
 }
 
+// ResizePiP grows or shrinks the view by dw and dh cells, inside the bounds
+// the config validator enforces. It reports whether anything changed. The
+// size is config state, so the caller owes the change a persist.
+func (m *OS) ResizePiP(dw, dh int) bool {
+	if m.UserConfig == nil {
+		return false
+	}
+	p := &m.UserConfig.PiP
+	w, h := p.Width+dw, p.Height+dh
+	if w == p.Width && h == p.Height {
+		return false
+	}
+	p.Width = min(max(w, config.PiPMinWidth), config.PiPMaxWidth)
+	p.Height = min(max(h, config.PiPMinHeight), config.PiPMaxHeight)
+	m.pip.dirty = true
+	m.pip.box, m.pip.boxKey = "", ""
+	return true
+}
+
+// CyclePiPCorner moves the view to the next corner in reading order. Like a
+// resize, it is config state and reports whether it moved. A free-placed box
+// returns to the corner rule.
+func (m *OS) CyclePiPCorner() bool {
+	if m.UserConfig == nil {
+		return false
+	}
+	corners := config.PiPCorners
+	for i, c := range corners {
+		if c == m.UserConfig.PiP.Corner {
+			m.UserConfig.PiP.Corner = corners[(i+1)%len(corners)]
+			m.UserConfig.PiP.X, m.UserConfig.PiP.Y = nil, nil
+			m.pip.dirty = true
+			m.pip.box, m.pip.boxKey = "", ""
+			return true
+		}
+	}
+	return false
+}
+
+// pipFreeBox is the box a free-placed view draws in: the config position,
+// clamped so the box stays inside the region. free is false when the config
+// holds no position and the corner rule applies.
+func (m *OS) pipFreeBox(region image.Rectangle, w, h int) (box image.Rectangle, free bool) {
+	if m.UserConfig == nil || m.UserConfig.PiP.X == nil || m.UserConfig.PiP.Y == nil {
+		return image.Rectangle{}, false
+	}
+	w = min(w, region.Dx()-2*pipMargin)
+	h = min(h, region.Dy()-2*pipMargin)
+	x := min(max(*m.UserConfig.PiP.X, region.Min.X), max(region.Min.X, region.Max.X-w))
+	y := min(max(*m.UserConfig.PiP.Y, region.Min.Y), max(region.Min.Y, region.Max.Y-h))
+	return image.Rect(x, y, x+w, y+h), true
+}
+
+// PiPDragStart begins a right-press drag of the drawn box. The drag keeps
+// the pointer's offset into the box, so the box does not jump to it.
+func (m *OS) PiPDragStart(x, y int) bool {
+	if m.pip.rect.Empty() || !(image.Point{x, y}).In(m.pip.rect) {
+		return false
+	}
+	m.pip.dragging = true
+	m.pip.grab = image.Point{x - m.pip.rect.Min.X, y - m.pip.rect.Min.Y}
+	return true
+}
+
+// PiPDragMove moves the box under the pointer while a drag is on, and says
+// whether it handled the motion. The position is clamped into the pane
+// region and is config state, so the caller owes the release a persist.
+func (m *OS) PiPDragMove(x, y int) bool {
+	if !m.pip.dragging {
+		return false
+	}
+	region := m.pipRegion()
+	w, h := m.pipConfig().Size()
+	nx := min(max(x-m.pip.grab.X, region.Min.X), max(region.Min.X, region.Max.X-w))
+	ny := min(max(y-m.pip.grab.Y, region.Min.Y), max(region.Min.Y, region.Max.Y-h))
+	pos := image.Point{nx, ny}
+	m.UserConfig.PiP.X, m.UserConfig.PiP.Y = &pos.X, &pos.Y
+	m.pip.dirty = true
+	m.pip.box, m.pip.boxKey = "", ""
+	return true
+}
+
+// PiPDragEnd ends a drag, and says whether there was one.
+func (m *OS) PiPDragEnd() bool {
+	if !m.pip.dragging {
+		return false
+	}
+	m.pip.dragging = false
+	return true
+}
+
 // JumpToPiP focuses the pinned pane: it switches to the pane's workspace,
 // restores it when it is minimised, and shows its group when it is a scratch
 // pane (FocusWindow does the switch). The view then is not drawn,
@@ -447,12 +542,15 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 		m.pip.corner = parsePiPCorner(preferred)
 	}
 	region := m.pipRegion()
-	corner, ok := pipChooseCorner(region, w, h, m.pip.corner, parsePiPCorner(preferred), m.pipKeepClear())
-	if !ok {
-		return nil
+	box, free := m.pipFreeBox(region, w, h)
+	if !free {
+		corner, ok := pipChooseCorner(region, w, h, m.pip.corner, parsePiPCorner(preferred), m.pipKeepClear())
+		if !ok {
+			return nil
+		}
+		m.pip.corner = corner
+		box, _ = pipBox(region, w, h, corner)
 	}
-	m.pip.corner = corner
-	box, _ := pipBox(region, w, h, corner)
 
 	cols, rows := box.Dx()-2, box.Dy()-2
 	m.pipReadBody(src, cols, rows)

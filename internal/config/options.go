@@ -1178,6 +1178,14 @@ var optionSpecs = []Option{
 		Description: "Corner the picture-in-picture view goes to first. It moves to another corner when the cursor enters it",
 		Accepted:    PiPCorners, Default: PiPCornerBottomRight,
 	},
+	{
+		Path: "pip.x", Type: OptionInt, Section: "pip",
+		Description: "Cells from the screen's left edge to place the view at. Setting it leaves the corner rule; empty puts the view back in it",
+	},
+	{
+		Path: "pip.y", Type: OptionInt, Section: "pip",
+		Description: "Cells from the screen's top edge to place the view at. Setting it leaves the corner rule; empty puts the view back in it",
+	},
 
 	// [hints]. Read each time hints mode opens. hints.patterns is a list and
 	// is set in the file only, like [keybindings].

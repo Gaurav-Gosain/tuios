@@ -265,6 +265,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
 	d.Register("toggle_pip", handleTogglePiP)
+	d.Register("pip_grow", makePiPResizeHandler(4, 2))
+	d.Register("pip_shrink", makePiPResizeHandler(-4, -2))
+	d.Register("pip_move", handlePiPMoveCyclesCorner)
 
 	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
@@ -1026,6 +1029,25 @@ func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.TogglePiP()
 	return o, nil
+}
+
+// makePiPResizeHandler grows (positive) or shrinks (negative) the view by a
+// step per press. The size lives in the config file, so the change persists.
+func makePiPResizeHandler(dw, dh int) func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd) {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		if !o.ResizePiP(dw, dh) {
+			return o, nil
+		}
+		return o, o.PersistSettings()
+	}
+}
+
+// handlePiPMoveCyclesCorner walks the view through the four corners.
+func handlePiPMoveCyclesCorner(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if !o.CyclePiPCorner() {
+		return o, nil
+	}
+	return o, o.PersistSettings()
 }
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

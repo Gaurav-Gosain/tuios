@@ -189,6 +189,21 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// The release that ends this press is the view's too. See
 		// handleMouseRelease.
 		o.PiPPressed = true
+		// Shift is the click-is-tuios's modifier, and on the view it acts on
+		// the view itself: it takes the pin away. The plain click below stays
+		// the jump.
+		if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
+			o.TogglePiP()
+			return o, nil
+		}
+		// Right-press drag moves the view, the way a floating window's title
+		// bar does. The press owns the release either way.
+		if msg.Button == tea.MouseRight && o.PiPDragStart(X, Y) {
+			o.PiPPressed = true
+			o.Dragging = true
+			o.InteractionMode = true
+			return o, nil
+		}
 		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
 			o.SyncStateToDaemon()
 		}

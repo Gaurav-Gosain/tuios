@@ -48,6 +48,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndPointerGrabs()
 	}
 
+	// A drag of the picture-in-picture view owns the pointer until release:
+	// the box follows it and nothing underneath sees the motion.
+	if o.PiPDragMove(mouse.X, mouse.Y) {
+		return o, nil
+	}
+
 	// An open context menu tracks the pointer, so the row that would run on a
 	// click is the row the cursor is on. It also stops here rather than falling
 	// through: the pane underneath is behind a modal menu and has no business
