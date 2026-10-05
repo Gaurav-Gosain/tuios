@@ -1391,3 +1391,19 @@ and the rename leaves the session the client left alone.
 | --- | --- | --- | --- |
 | The released behaviour | build origin/main (`43573cf8`) | `TestSwitchSessionByNumberAndRenameWorkspace` ("switch_session_3 never landed on charlie") | **caught** |
 | The rename action is not registered | `registerHandlers`: the `rename_workspace` line cut | `TestSwitchSessionByNumberAndRenameWorkspace` ("rename_workspace never opened the editor") | **caught** |
+
+## Tailscale SSH check mode and policy refusals
+
+The tests are in `hosts_tailscale_test.go`. A wrapper in front of the sync
+stand-in prints the banner real Tailscale prints in check mode, then waits for
+an approval file. A second address prints the policy refusal and exits 255.
+The positive half of each test is a host with no gate in the same run, which
+syncs or is listed as reached.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`43573cf8`) | `TestHostsSyncReportsATailscaleCheck` (kind "" and "could not read the host. ssh reported: # To authenticate, visit: ...", sync took 1m30s, hosts test reports "unreachable", the listing shows no approval), `TestHostsSyncReportsATailscalePolicyRefusal` (kind "", "ssh could not connect"), `TestHostsSyncOneApprovalCoversTheRun` (no offer to wait) | **caught** |
+| No shared connection | `runHostsSync`: the `share.share(&t.host)` line cut | `TestHostsSyncOneApprovalCoversTheRun` (the link asks for a second approval, and sync never finishes) | **caught** |
+| No approval desk | `runHostsSync`: the runner gets no desk | `TestHostsSyncOneApprovalCoversTheRun` (sync exits 1 before it offers to wait) | **caught** |
+| The link never reads the gate | `link.attempt`: the `ParseSSHGate` call in the preamble wait made nil | `TestHostsSyncReportsATailscaleCheck` (hosts test reports "unreachable", the listing shows no approval) | **caught** |
+| A policy refusal read as a plain ssh failure | `remoteRunError`: the `GateFromStderr` check cut | `TestHostsSyncReportsATailscalePolicyRefusal` (kind "") | **caught** |
