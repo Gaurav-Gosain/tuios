@@ -1342,3 +1342,14 @@ switched an attached client, and a session switched to in place ignored
 | --- | --- | --- | --- |
 | The whole change | build `origin/main` (`1e0b4c89`) and point `TUIOS_E2E_BIN` at it | `TestNewStartsInTheCallersDirectory` ("the first window of plain is in .../cwd, want .../here"), `TestSwitchSessionMovesTheClient` ("the refusal does not name --create": the command does not exist), `TestSwitchSessionReachesAHost` ("switch-session build:far-new: exit status 1"), `TestSwitchToAnUnarrangedSessionAppliesStartup` ("switch-session later: exit status 1") | **caught** |
 | No `[startup]` on a switch | `applyStartupToUnarranged` in `internal/app/host_attach.go` does nothing | `TestSwitchToAnUnarrangedSessionAppliesStartup` ("later's pane is 80 wide, want it filling the 120 columns: it came up floating") | **caught** |
+
+## Keybindings in a config saved on disk (#358)
+
+`TestAKeybindingSavedOnDiskReachesTheClient` in `config_watch_test.go` binds
+`prefix+alt+h` in a saved file and presses it on the running client. The
+positive half is in the same test: `prefix+alt+y` from the startup file fires,
+and `prefix+alt+h` does nothing before the save.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The registry never reloaded | `ApplyReloadedConfig`: the `KeybindRegistry.Reload` block cut | `TestAKeybindingSavedOnDiskReachesTheClient` ("a keybinding saved on disk never reached the running client") | **caught** |
