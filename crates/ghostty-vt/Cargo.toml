@@ -1,0 +1,11 @@
+[package]
+name = "ghostty-vt"
+description = "Thin safe wrapper over libghostty-vt for tuios-gpui"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+publish.workspace = true
+links = "ghostty-vt"
+build = "build.rs"
+
+[dependencies]

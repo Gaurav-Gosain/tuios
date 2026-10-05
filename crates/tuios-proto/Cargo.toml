@@ -1,0 +1,6 @@
+[package]
+name = "tuios-proto"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+publish.workspace = true
