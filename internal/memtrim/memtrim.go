@@ -36,8 +36,12 @@ const (
 )
 
 var (
-	mu       sync.Mutex
-	timer    *time.Timer
+	mu sync.Mutex
+	// gen counts Requests. Each one starts its own timer, and only the timer
+	// of the latest Request looks. A Request never stops or resets an
+	// earlier timer: a timer started inside a synctest bubble belongs to that
+	// bubble, and touching it from outside is a fatal runtime error.
+	gen      uint64
 	armAlloc uint64
 	lastTrim time.Time
 )
@@ -47,20 +51,22 @@ var (
 func Request() {
 	allocs := read().allocs
 	mu.Lock()
-	defer mu.Unlock()
 	armAlloc = allocs
-	if timer != nil {
-		timer.Reset(settle)
-		return
-	}
-	timer = time.AfterFunc(settle, check)
+	gen++
+	g := gen
+	mu.Unlock()
+	time.AfterFunc(settle, func() { check(g) })
 }
 
 // check runs on the timer's goroutine: it trims when the process was quiet
-// over the wait and holds enough heap it no longer uses.
-func check() {
+// over the wait and holds enough heap it no longer uses. A timer whose
+// Request was followed by another one does nothing.
+func check(g uint64) {
 	mu.Lock()
-	timer = nil
+	if g != gen {
+		mu.Unlock()
+		return
+	}
 	since := armAlloc
 	recent := !lastTrim.IsZero() && time.Since(lastTrim) < minInterval
 	mu.Unlock()
