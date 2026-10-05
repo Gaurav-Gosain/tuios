@@ -200,6 +200,34 @@ func syncRestartScript() string {
 	}, "; ")
 }
 
+// syncStartScript starts the daemon with the binary in $1, as syncResolveArg
+// reads it. It is for a machine with no daemon: start-server refuses to start
+// a second one.
+func syncStartScript() string {
+	return strings.Join([]string{
+		syncResolveArg,
+		`if "$a" start-server </dev/null >/dev/null 2>&1; then echo "started=1"; else echo "startfail=1"; exit 7; fi`,
+	}, "; ")
+}
+
+// startDaemonWith runs start-server on a machine with the binary arg, as
+// syncResolveArg reads it. shown is the binary as a person types it, for the
+// error.
+func startDaemonWith(ctx context.Context, runner syncRunner, arg, shown string) error {
+	out, stderr, err := runner.run(ctx, syncStartScript(), []string{arg}, nil)
+	f := parseSyncFacts(out)
+	switch {
+	case f.has("started"):
+		return nil
+	case f.has("startfail"):
+		return fmt.Errorf("the daemon did not start. Run '%s start-server' on the host to see why", shown)
+	}
+	if err == nil {
+		return errors.New("the start of the daemon did not finish")
+	}
+	return remoteRunError("the start of the daemon failed", stderr, err)
+}
+
 // syncPaneScript reports, for each pane process in $@, the foreground
 // process group of its terminal, the process's own name, and the name of
 // that group's leader. A pane whose foreground group is not its own process

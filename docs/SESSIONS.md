@@ -23,6 +23,7 @@ what does and does not come back after each kind of interruption.
 - [Agents and Worktrees on Another Machine](#agents-and-worktrees-on-another-machine)
 - [Global Sessions](#global-sessions)
 - [Keeping Hosts on One Version](#keeping-hosts-on-one-version)
+- [Starting the Daemon on a Host](#starting-the-daemon-on-a-host)
 - [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
 - [Limitations](#limitations)
@@ -794,6 +795,20 @@ running. The row for the host gives the command to restart it. Add
 programs that a restart ends, and asks first. The sessions come back after the
 restart with their layouts and new shells. See
 [`tuios hosts sync`](CLI_REFERENCE.md#tuios-hosts-sync).
+
+## Starting the Daemon on a Host
+
+A link reaches a host only when a tuios daemon runs there. When none runs,
+`tuios hosts test NAME` reports `no_daemon` and prints the command to run on
+the host. To start the daemon from this machine, add `--start`:
+
+```sh
+tuios hosts test build --start    # start the daemon on build if it does not run
+tuios hosts sync build --start    # install tuios on build if needed, then start it
+```
+
+`hosts test --start` does not install tuios. On a host with no tuios, use
+`hosts sync --start`. See [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test).
 
 ## Machines on a Tailnet
 

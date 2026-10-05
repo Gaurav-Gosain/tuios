@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
@@ -110,6 +112,7 @@ Nothing on the other machine changes. This only stops asking it for listings.`,
 		},
 	}
 
+	var testOpts hostTestOptions
 	testCmd := &cobra.Command{
 		Use:   "test <name>",
 		Short: "Open one link to a host and report what happened",
@@ -123,14 +126,28 @@ failed". When the link cannot find tuios on the host, it prints every place it
 looked.
 
 tuios runs ssh with BatchMode on. A link never asks for a password and never
-asks about a host key. Run ssh to the machine once by hand to accept its key.`,
-		Example:           `  tuios hosts test build`,
+asks about a host key. Run ssh to the machine once by hand to accept its key.
+
+--start starts the daemon on the host when it does not run. It uses the
+tuios binary the link found there, over the same ssh. When tuios is missing on
+the host, --start does nothing: run 'tuios hosts sync NAME --start' to install
+it and start the daemon.`,
+		Example: `  tuios hosts test build
+
+  # Start the daemon on the host if it does not run
+  tuios hosts test build --start
+
+  # See what --start would do, and change nothing
+  tuios hosts test build --start --dry-run --json`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeConfiguredHosts,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runHostTest(args[0])
+			return runHostTest(args[0], testOpts)
 		},
 	}
+	testCmd.Flags().BoolVar(&testOpts.start, "start", false, "Start the daemon on the host when it does not run")
+	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
+	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
 
 	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand()}
 }
@@ -260,12 +277,43 @@ const hostTestBudget = 20 * time.Second
 // the probe and the handshake.
 const hostTestGrace = 3 * time.Second
 
-// runHostTest dials one host and prints what happened.
+// hostTestOptions are the flags of `tuios hosts test`.
+type hostTestOptions struct {
+	start  bool
+	dryRun bool
+	json   bool
+}
+
+// hostTestResult is the JSON of `tuios hosts test`: the report of the last
+// dial, and what --start did.
+type hostTestResult struct {
+	federation.HostReport
+	// Before is the status before --start started the daemon. It is empty
+	// when nothing was started.
+	Before federation.Status `json:"before,omitempty"`
+	// Action is what --start did, or with --dry-run what it would do.
+	Action string `json:"action,omitempty"`
+	// StartCommand is the command that starts the daemon on the host, as a
+	// person types it there.
+	StartCommand string `json:"start_command,omitempty"`
+	Error        string `json:"error,omitempty"`
+}
+
+// The actions --start reports.
+const (
+	testActionStarted   = "daemon started"
+	testActionWould     = "would start daemon"
+	testActionNone      = "none"
+	testActionStartFail = "start failed"
+)
+
+// runHostTest dials one host and prints what happened. With --start it starts
+// the daemon there when it does not run, and dials again.
 //
 // The dial is this process's own, not the daemon's. That is what makes the
 // command useful before a daemon has ever started, and what makes it a test of
 // the host rather than a reading of a link that came up minutes ago.
-func runHostTest(name string) error {
+func runHostTest(name string, opts hostTestOptions) error {
 	host, err := resolveConfiguredHost(name)
 	if err != nil {
 		return err
@@ -274,7 +322,118 @@ func runHostTest(name string) error {
 	if err != nil {
 		return err
 	}
-	return printHostTest(r)
+	res := hostTestResult{HostReport: r}
+	if r.Status == federation.StatusNoDaemon {
+		res.StartCommand = remoteStartCommand(r.Command)
+	}
+
+	var startErr error
+	if opts.start {
+		startErr = startHostDaemon(host, &res, opts.dryRun)
+		if startErr != nil {
+			res.Error = startErr.Error()
+		}
+	}
+
+	if opts.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(res); err != nil {
+			return err
+		}
+		switch {
+		case startErr != nil:
+			return &diagnosticError{What: startErr.Error(), Status: 1}
+		case res.Action == testActionWould, res.Status == federation.StatusUp:
+			return nil
+		}
+		return &diagnosticError{What: fmt.Sprintf("Host %s is %s.", res.Host, res.Status), Status: 1}
+	}
+
+	if res.Action == testActionStarted {
+		fmt.Printf("%s  %s  %s\n", r.Host, r.Addr, r.Status)
+		fmt.Printf("No daemon ran on the host. tuios started one with this command: %s\n", res.StartCommand)
+	}
+	err = writeHostTest(os.Stdout, res.HostReport, opts.start)
+	switch res.Action {
+	case testActionWould:
+		fmt.Printf("--start would run this command on the host: %s\n", res.StartCommand)
+		fmt.Println("This is a dry run. Nothing is changed.")
+		return startErr
+	case testActionNone:
+		fmt.Println("The daemon runs. --start did nothing.")
+	}
+	if startErr != nil {
+		return startErr
+	}
+	return err
+}
+
+// startHostDaemon is --start: it starts the daemon on a host that has tuios
+// and no running daemon, and fills res with the dial after the start.
+func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) error {
+	switch res.Status {
+	case federation.StatusUp:
+		res.Action = testActionNone
+		return nil
+	case federation.StatusNoDaemon:
+	case federation.StatusNoBinary:
+		return &diagnosticError{
+			What: fmt.Sprintf("tuios is missing on %s, so --start did not start a daemon.", res.Host),
+			Fix:  fmt.Sprintf("run 'tuios hosts sync %s --start' to install tuios and start the daemon", res.Host),
+		}
+	default:
+		// The host cannot be reached, or its daemon cannot be used. There is
+		// nothing to start, and the report says what is wrong.
+		return nil
+	}
+	arg, ok := syncCommandArg(res.Command)
+	if !ok || arg == "-" {
+		return &diagnosticError{
+			What: fmt.Sprintf("The link runs %q on %s, which is not one path, so --start cannot run it.", res.Command, res.Host),
+			Fix:  "run the start command on the host: " + res.StartCommand,
+		}
+	}
+	if dryRun {
+		res.Action = testActionWould
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
+	defer cancel()
+	if err := startDaemonWith(ctx, sshSyncRunner{host: host}, arg, res.Command); err != nil {
+		res.Action = testActionStartFail
+		return err
+	}
+	res.Action = testActionStarted
+	res.Before = res.Status
+	// The daemon answers once start-server returns. A second dial is the
+	// proof, and a few are allowed for a slow machine.
+	var after federation.HostReport
+	for range 3 {
+		var err error
+		after, err = dialHostOnce(host, hostTestBudget)
+		if err != nil {
+			return err
+		}
+		if after.Status == federation.StatusUp {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	res.HostReport = after
+	if after.Status != federation.StatusUp {
+		return fmt.Errorf("start-server ran on %s, and the link still reports %s", res.Host, after.Status)
+	}
+	return nil
+}
+
+// remoteStartCommand is the command that starts the daemon on a host, with the
+// binary the link runs there.
+func remoteStartCommand(binary string) string {
+	if binary == "" {
+		binary = "tuios"
+	}
+	return binary + " start-server"
 }
 
 // dialHostOnce opens one link to the host in this process, waits for its
@@ -304,14 +463,20 @@ func dialHostOnce(host federation.Host, budget time.Duration) (federation.HostRe
 // printHostTest prints one dial's result and fails the command when the host is
 // not usable, so a script can act on it.
 func printHostTest(r federation.HostReport) error {
-	fmt.Printf("%s  %s  %s\n", r.Host, r.Addr, r.Status)
+	return writeHostTest(os.Stdout, r, false)
+}
+
+// writeHostTest is printHostTest to w. starting says the command was run with
+// --start, so the advice does not tell the person to add it.
+func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
+	fmt.Fprintf(w, "%s  %s  %s\n", r.Host, r.Addr, r.Status)
 	if r.Reason != "" {
-		fmt.Println(r.Reason)
+		fmt.Fprintln(w, r.Reason)
 	}
 	if r.Detail != "" {
 		// The detail comes from ssh or from the other machine. It is labelled
 		// so a reader cannot mistake it for something tuios said.
-		fmt.Printf("  the link reported: %s\n", r.Detail)
+		fmt.Fprintf(w, "  the link reported: %s\n", r.Detail)
 	}
 	switch r.Status {
 	case federation.StatusUp:
@@ -319,29 +484,31 @@ func printHostTest(r federation.HostReport) error {
 		if version == "" {
 			version = "unknown"
 		}
-		fmt.Printf("The host answers. It runs tuios %s and holds %d session(s).\n", version, r.Sessions)
+		fmt.Fprintf(w, "The host answers. It runs tuios %s and holds %s.\n", version, plural.Count(r.Sessions, "session"))
 		if r.Command != "" {
-			fmt.Printf("The link runs %s on the host.\n", r.Command)
+			fmt.Fprintf(w, "The link runs %s on the host.\n", r.Command)
 		}
 		return nil
 	case federation.StatusNoDaemon:
-		if r.Command != "" {
-			fmt.Printf("The link runs %s on the host.\n", r.Command)
+		if !starting {
+			fmt.Fprintln(w, "To start the daemon, run this command on the host:")
+			fmt.Fprintf(w, "  %s\n", remoteStartCommand(r.Command))
+			fmt.Fprintln(w, "Or start it from this machine:")
+			fmt.Fprintf(w, "  tuios hosts test %s --start\n", r.Host)
 		}
-		fmt.Println("Start tuios on that machine, then test it again.")
 	case federation.StatusNoBinary:
 		// The whole reason this state exists: the person sees at once that
 		// their install is somewhere unusual, and what to type about it.
-		fmt.Println("The link looked on the PATH, in a login shell, and at these paths:")
+		fmt.Fprintln(w, "The link looked on the PATH, in a login shell, and at these paths:")
 		for _, c := range federation.RemoteBinaryCandidates() {
-			fmt.Printf("  %s\n", c)
+			fmt.Fprintf(w, "  %s\n", c)
 		}
-		fmt.Println("Install tuios on the host.")
-		fmt.Printf("If tuios is somewhere else, run 'tuios hosts add %s %s --command PATH'.\n", r.Host, r.Addr)
+		fmt.Fprintf(w, "Install tuios on the host. 'tuios hosts sync %s --start' installs it and starts the daemon.\n", r.Host)
+		fmt.Fprintf(w, "If tuios is somewhere else, run 'tuios hosts add %s %s --command PATH'.\n", r.Host, r.Addr)
 	case federation.StatusIncompatible:
-		fmt.Println("Upgrade tuios on one of the two machines.")
+		fmt.Fprintln(w, "Upgrade tuios on one of the two machines.")
 	default:
-		fmt.Println("Run ssh to the machine by hand to see the whole error.")
+		fmt.Fprintln(w, "Run ssh to the machine by hand to see the whole error.")
 	}
 	if r.Status == federation.StatusNoBinary {
 		return fmt.Errorf("host %s has no tuios that the link can find", r.Host)

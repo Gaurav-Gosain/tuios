@@ -2734,7 +2734,7 @@ tuios list-windows -s mysession --json
 │ 1   │ ce9ae44c │ build │ 1  │ 60x38 │ none  │
 ╰─────┴──────────┴───────┴────┴───────┴───────╯
 
-2 window(s). * marks the focused one.
+2 windows. * marks the focused one.
 ```
 
 The `ID` column is the 8-character prefix that `-w` accepts. With no windows
@@ -3210,9 +3210,9 @@ An enabled plugin runs with your rights. See
 | `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox. A host with mail waiting here for its link says how many |
 | `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link; `--repos-root DIR` says where the host keeps its checkouts, for `fan --host`, `worktree new --host` and `start-agent -s HOST:SESSION`, and is kept when the host is added again without it, as its link policy fields are |
 | `tuios hosts remove <name>` | Remove a machine |
-| `tuios hosts test <name>` | Open one link to a host and report what happened |
+| `tuios hosts test <name>` | Open one link to a host and report what happened. `--start` starts the daemon there when it does not run. `--dry-run`, `--json`. See [below](#tuios-hosts-test) |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
-| `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
+| `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--start` starts each daemon that does not run, after the install. `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
 | `tuios stdio-proxy [--as NAME]` | Hidden. What the other machine's daemon runs over ssh for a link. `--as` pins the name this machine's link policy is resolved for, whatever the other machine calls itself: put it in a forced command in `authorized_keys` (`command="tuios stdio-proxy --as laptop",restrict ...`) to make the policy a boundary. See [What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here) |
 
 A call over a link that the far machine's policy does not allow fails with
@@ -3245,6 +3245,43 @@ there.
 | `tuios tape delete <name>` | Delete a tape recording |
 | `tuios tape dir` | Show the tape recordings directory path |
 
+### `tuios hosts test`
+
+Open one link to a host and report what happened.
+
+```sh
+tuios hosts test build                    # dial build and report
+tuios hosts test build --start            # start the daemon on build if it does not run
+tuios hosts test build --start --dry-run  # show what --start does, and change nothing
+```
+
+| Flag | What it does |
+|------|--------------|
+| `--start` | Start the daemon on the host when it does not run |
+| `--dry-run` | Show what `--start` would do and change nothing |
+| `--json` | Print the result as JSON |
+
+When the host is up and no daemon runs there, the status is `no_daemon`. The
+output gives the command to run on the host, with the tuios binary that the
+link found:
+
+```
+build  gaurav@buildbox  no_daemon
+The host is up and no tuios daemon is running on it.
+To start the daemon, run this command on the host:
+  /home/gaurav/.local/bin/tuios start-server
+Or start it from this machine:
+  tuios hosts test build --start
+```
+
+`--start` runs that command over the same ssh that the link uses. Then it
+dials the host again and reports the new state. When a daemon already runs,
+`--start` does nothing. When tuios is missing on the host, `--start` starts
+nothing: run `tuios hosts sync NAME --start` to install tuios and then start
+the daemon. The JSON is the host report, with `action` (`daemon started`,
+`would start daemon`, `none` or `start failed`), `before` (the status before
+the start) and `start_command`.
+
 ### `tuios hosts sync`
 
 Install the tuios version of this machine on the hosts in the `[hosts]` table.
@@ -3254,6 +3291,7 @@ tuios hosts sync --dry-run          # the plan, and no change
 tuios hosts sync --dev              # install a build of this checkout on every host
 tuios hosts sync build lab          # only these hosts
 tuios hosts sync build --restart    # install, then restart the daemon on build
+tuios hosts sync build --start      # install if needed, then start the daemon if it does not run
 tuios hosts sync --restart --yes --json
 ```
 
@@ -3263,6 +3301,7 @@ tuios hosts sync --restart --yes --json
 | `--src DIR` | The checkout to build. Sets `--dev` |
 | `--binary PATH` | Send this binary. A host with a different system fails |
 | `--restart` | Restart each daemon whose version is different |
+| `--start` | Start the daemon on each host where it does not run |
 | `--yes`, `-y` | Restart without a question. Needed for `--restart` without a terminal |
 | `--dry-run` | Show the plan and change nothing |
 | `--json` | Print the result as JSON |
@@ -3299,6 +3338,13 @@ layouts come back with new shells, and the programs in them end. A daemon with
 no sessions restarts without a question. A daemon that already runs the new
 version is never restarted. On this machine, sync does not restart the daemon
 of the pane it runs in.
+
+With `--start`, sync starts the daemon on each host where it does not run,
+with the binary that the host has after the install. On a host with no
+tuios, sync installs tuios first and then starts the daemon. The row says
+`daemon started`, and with `--dry-run` it says `would start daemon`. In
+`--json`, `daemon.started` is true. Without `--start`, the row for a host
+with no daemon gives the command that starts it.
 
 One host that fails does not stop the others. The exit status is 1 when a host
 failed. The table has one row per host: the system, the version before and

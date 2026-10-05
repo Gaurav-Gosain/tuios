@@ -9,12 +9,14 @@ across it.
 ```sh
 tuios hosts add build gaurav@buildbox   # add a machine
 tuios hosts test build                  # dial it and say what happened
+tuios hosts test build --start          # start its daemon if it does not run
 tuios hosts remove build                # drop it
 tuios hosts                             # every host and its link state
 tuios hosts tailnet                     # machines on a Tailscale tailnet
 tuios hosts add gpu --tailnet           # the tailnet machine named gpu
 tuios hosts sync --dry-run --json      # which hosts run another tuios version
 tuios hosts sync --dev                  # install a build of this checkout on each host
+tuios hosts sync build --start          # install tuios if missing, then start the daemon
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
@@ -29,6 +31,13 @@ the panes of that daemon. Without a terminal, `--restart` also needs `--yes`.
 Do not pass either unless the person asked for a restart. Each row of `--json`
 has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
 the panes a restart would end.
+
+A host with tuios and no daemon reports `no_daemon`. `hosts test NAME --start`
+starts the daemon there over ssh. It does nothing on a host that already runs
+one, and it starts nothing on a host with no tuios. `hosts sync NAME --start`
+installs tuios first on such a host, then starts the daemon. Both take
+`--dry-run` and `--json`. Starting a daemon ends nothing, so it needs no
+question.
 
 The daemon follows each host's agents and Inbox over the link as they change, so
 `list-attention` and the person's Inbox cover every machine, and

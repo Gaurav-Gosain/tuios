@@ -1182,6 +1182,22 @@ that runs `sleep`, and found no busy pane (run 37232323815). The pane was not
 yet running `sleep`. The test now reads the plan again, for up to 20 seconds,
 until the pane shows. The busy-pane control still fails after that wait.
 
+## --start on tuios hosts test and tuios hosts sync
+
+`TestHostsTestStart` tests a fake host that has tuios and no daemon.
+`TestHostsSyncStart` tests a fake host with no tuios. `TestHostsSync` also
+checks that a restart counts one session as "1 session". Each control ran
+the named tests against one build.
+
+| Wiring | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The feature | the binary built from origin/main | `TestHostsTestStart` (the message does not name `PATH start-server` or `--start`, and `--start` is an unknown flag), `TestHostsSyncStart` (`--start` is an unknown flag), `TestHostsSync` ("1 session(s)") | **caught** |
+| The start in hosts test | `startHostDaemon`: the `startDaemonWith` call replaced by success | `TestHostsTestStart` (the host still reports no_daemon after `--start`) | **caught** |
+| The dry run of hosts test | `startHostDaemon`: `if dryRun` made `if false` | `TestHostsTestStart` ("the dry run changed the host, which now reports \"up\"") | **caught** |
+| The start in sync | `startSyncDaemon`: returns at once | `TestHostsSyncStart` (fresh is installed and its daemon is stopped) | **caught** |
+| The plan in sync | `planSyncTarget`: `t.start = true` made `false` | `TestHostsSyncStart` (the plan is "would install", and no daemon starts) | **caught** |
+| The dry run of sync | `runHostsSync`: the `!opts.dryRun` gate on the apply step made `true` | `TestHostsSyncStart` ("the dry run installed a binary on fresh") | **caught** |
+
 ## A pending wait-for and a flood of output
 
 `TestWaitForOutputDoesNotSlowFlood` in `internal/session` compared the wall

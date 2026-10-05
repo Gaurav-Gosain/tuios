@@ -177,6 +177,7 @@ type syncResultRow struct {
 		PID          int    `json:"pid"`
 		SessionCount int    `json:"session_count"`
 		Restarted    bool   `json:"restarted"`
+		Started      bool   `json:"started"`
 		Sessions     []struct {
 			Name string `json:"name"`
 			Busy []struct {
@@ -314,6 +315,9 @@ func TestHostsSync(t *testing.T) {
 	}
 	if !strings.Contains(out, "--yes") || !strings.Contains(out, "sleep") {
 		t.Errorf("ASSERTION: the refusal does not name --yes and the program a restart ends:\n%s", out)
+	}
+	if strings.Contains(out, "(s)") || !strings.Contains(out, "1 session)") {
+		t.Errorf("ASSERTION: the refusal does not count the one session as \"1 session\":\n%s", out)
 	}
 	if fresh.sha(t) != "" || old.sha(t) != oldSHA {
 		t.Fatalf("ASSERTION: the refused restart changed a binary on a host")

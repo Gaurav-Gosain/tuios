@@ -22,6 +22,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -65,6 +66,7 @@ type syncOptions struct {
 	src     string
 	binary  string
 	restart bool
+	start   bool
 	yes     bool
 	dryRun  bool
 	json    bool
@@ -109,6 +111,8 @@ type syncDaemon struct {
 	// not known.
 	Unread    bool `json:"unread,omitzero"`
 	Restarted bool `json:"restarted"`
+	// Started says --start started a daemon that was not running.
+	Started bool `json:"started"`
 }
 
 // syncResult is one host's row.
@@ -153,6 +157,7 @@ type syncTarget struct {
 	install    bool
 	targetArg  string
 	restart    bool
+	start      bool
 	oldArg     string
 	newVersion string
 	failed     bool
@@ -254,6 +259,10 @@ restart it, because a restart ends every program in its panes. The layout
 comes back with new shells. sync tells you which daemons are old and gives
 the command to restart them.
 
+--start starts the daemon on each host where it does not run. On a host
+with no tuios, sync installs tuios first and then starts the daemon. sync
+never starts a daemon where tuios is missing.
+
 --restart restarts each daemon whose version is different. First it lists the
 sessions and the panes with a running program on each host. Then it asks you
 to agree. Without a terminal, add --yes. A daemon with no sessions restarts
@@ -266,6 +275,9 @@ scripts/install.sh ghostty.`,
 
   # Install this checkout on every host
   tuios hosts sync --dev
+
+  # Install where tuios is missing, and start every daemon that is not running
+  tuios hosts sync --start
 
   # Install on two hosts, and restart their daemons
   tuios hosts sync build lab --restart
@@ -283,6 +295,7 @@ scripts/install.sh ghostty.`,
 	f.StringVar(&opts.src, "src", "", "The tuios checkout to build from. Sets --dev")
 	f.StringVar(&opts.binary, "binary", "", "Send this tuios binary")
 	f.BoolVar(&opts.restart, "restart", false, "Restart each daemon whose version is different")
+	f.BoolVar(&opts.start, "start", false, "Start the daemon on each host where it does not run")
 	f.BoolVarP(&opts.yes, "yes", "y", false, "Restart without a question. Needed for --restart without a terminal")
 	f.BoolVar(&opts.dryRun, "dry-run", false, "Show the plan and change nothing")
 	f.BoolVar(&opts.json, "json", false, "Print the result as JSON")
@@ -414,9 +427,9 @@ func runHostsSync(opts syncOptions) error {
 	}
 	if failed > 0 {
 		if opts.json {
-			return &diagnosticError{What: fmt.Sprintf("%d host(s) failed.", failed), Status: 1}
+			return &diagnosticError{What: plural.Count(failed, "host") + " failed.", Status: 1}
 		}
-		return fmt.Errorf("%d of %d host(s) failed. The rows above say why", failed, len(targets))
+		return fmt.Errorf("%d of %s failed. The rows above say why", failed, plural.Count(len(targets), "host"))
 	}
 	return nil
 }
@@ -693,6 +706,14 @@ func planSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 			}
 		}
 	}
+	if opts.start {
+		switch d.State {
+		case daemonStopped:
+			t.start = true
+		case daemonUnknown:
+			t.note("The state of the daemon is not known, so sync does not start one.")
+		}
+	}
 }
 
 // sameVersion reports whether two version strings name the same build. A
@@ -800,21 +821,21 @@ func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 // writeRestartCost writes what a restart of one daemon ends.
 func writeRestartCost(w io.Writer, t *syncTarget) {
 	d := t.res.Daemon
-	fmt.Fprintf(w, "%s (daemon %s, %d session(s)):\n", t.name, orUnknown(d.Version), d.SessionCount)
+	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.name, orUnknown(d.Version), plural.Count(d.SessionCount, "session"))
 	if d.Unread {
 		fmt.Fprintln(w, "  The sessions could not be read.")
 		return
 	}
 	for _, s := range d.Sessions {
 		if len(s.Busy) == 0 {
-			fmt.Fprintf(w, "  session %s: %d pane(s), each at a shell prompt\n", s.Name, s.Panes)
+			fmt.Fprintf(w, "  session %s: %s, %s at a shell prompt\n", s.Name, plural.Count(s.Panes, "pane"), plural.Word(s.Panes, "it", "each"))
 			continue
 		}
 		var progs []string
 		for _, b := range s.Busy {
 			progs = append(progs, fmt.Sprintf("%s in %q", b.Program, b.Window))
 		}
-		fmt.Fprintf(w, "  session %s: %d pane(s). Running: %s\n", s.Name, s.Panes, strings.Join(progs, ", "))
+		fmt.Fprintf(w, "  session %s: %s. Running: %s\n", s.Name, plural.Count(s.Panes, "pane"), strings.Join(progs, ", "))
 	}
 }
 
@@ -872,6 +893,7 @@ func applySyncTarget(t *syncTarget, src *syncSource) {
 		if t.restart {
 			restartResult(t, f)
 		}
+		startSyncDaemon(t)
 		return
 	}
 	t.res.After = t.res.Before
@@ -890,6 +912,37 @@ func applySyncTarget(t *syncTarget, src *syncSource) {
 		}
 		restartResult(t, f)
 	}
+	startSyncDaemon(t)
+}
+
+// startSyncDaemon starts the daemon on a host where it does not run, with the
+// binary the host has now: the one just installed, or else the one it had.
+func startSyncDaemon(t *syncTarget) {
+	if !t.start || t.failed {
+		return
+	}
+	arg, shown := t.oldArg, t.res.Path
+	if t.res.Installed {
+		arg, shown = t.res.InstallPath, t.res.InstallPath
+		if !federation.SafeRemoteArg(arg) {
+			arg = t.targetArg
+		}
+	}
+	if arg == "-" {
+		arg = t.targetArg
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), syncRestartTimeout)
+	defer cancel()
+	if err := startDaemonWith(ctx, t.runner, arg, shown); err != nil {
+		t.fail(err)
+		return
+	}
+	d := &t.res.Daemon
+	d.Started = true
+	d.State = daemonRunning
+	d.Version = t.res.After
+	t.res.RestartNeeded = false
+	t.res.RestartCommand = ""
 }
 
 // restartResult reads what the install or restart script said about the
@@ -955,6 +1008,12 @@ func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 	}
 	d := r.Daemon
 	switch {
+	case d.Started:
+		parts = append(parts, "daemon started")
+	case opts.dryRun && t.start:
+		parts = append(parts, "would start daemon")
+	case d.State == daemonStopped && !opts.start && !t.local:
+		t.note(fmt.Sprintf("The daemon does not run. To start it, run: tuios hosts sync %s --start", t.name))
 	case d.Restarted:
 		parts = append(parts, "daemon restarted")
 		if d.SessionCount == 0 {
@@ -968,8 +1027,8 @@ func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 			if d.SessionCount == 0 && !d.Unread {
 				t.note(fmt.Sprintf("The daemon still runs %s and holds no sessions. A restart loses nothing. Run: %s", orUnknown(d.Version), r.RestartCommand))
 			} else {
-				t.note(fmt.Sprintf("The daemon still runs %s. Its %d session(s) keep running. A client of the new version can refuse to connect to it if the protocol changed. To restart it, run: %s. A restart ends the programs in its panes.",
-					orUnknown(d.Version), d.SessionCount, r.RestartCommand))
+				t.note(fmt.Sprintf("The daemon still runs %s. Its %s %s running. A client of the new version can refuse to connect to it if the protocol changed. To restart it, run: %s. A restart ends the programs in its panes.",
+					orUnknown(d.Version), plural.Count(d.SessionCount, "session"), plural.Word(d.SessionCount, "keeps", "keep"), r.RestartCommand))
 			}
 		}
 	}
@@ -1051,13 +1110,16 @@ func daemonCell(d syncDaemon) string {
 		return "not running"
 	case daemonRunning:
 		v := orUnknown(d.Version)
+		if d.Started {
+			return "started"
+		}
 		if d.Restarted {
 			return "restarted"
 		}
 		if d.Unread && d.SessionCount == 0 {
 			return v
 		}
-		s := fmt.Sprintf("%s, %d session(s)", v, d.SessionCount)
+		s := v + ", " + plural.Count(d.SessionCount, "session")
 		busy := 0
 		for _, ss := range d.Sessions {
 			busy += len(ss.Busy)
