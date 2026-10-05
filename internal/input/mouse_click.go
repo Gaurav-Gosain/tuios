@@ -190,29 +190,26 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// handleMouseRelease.
 		o.PiPPressed = true
 		// Shift is the click-is-tuios's modifier, and on the view it acts on
-		// the view itself: it takes the pin away. The plain click below stays
-		// the jump.
+		// the view itself: it takes the pin away.
 		if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
 			o.TogglePiP()
 			return o, nil
 		}
-		// Right-press drag moves the view, the way a floating window's title
-		// bar does. The press owns the release either way.
-		if msg.Button == tea.MouseRight && o.PiPDragStart(X, Y) {
-			o.PiPPressed = true
+		// A floating window's edges: the right button on the frame resizes
+		// from that edge or corner.
+		if msg.Button == tea.MouseRight && o.PiPResizeStart(X, Y) {
 			o.Dragging = true
 			o.InteractionMode = true
 			return o, nil
 		}
-		// Left-press on the frame resizes the view from that side, and a
-		// press in the interior stays the jump.
-		if msg.Button == tea.MouseLeft && o.PiPResizeStart(X, Y) {
-			o.PiPPressed = true
+		// The left button on the title bar moves the view.
+		if msg.Button == tea.MouseLeft && o.PiPDragStart(X, Y) {
 			o.Dragging = true
 			o.InteractionMode = true
 			return o, nil
 		}
-		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
+		// A double-click anywhere on the view goes to the pane.
+		if msg.Button == tea.MouseLeft && o.PiPJumpOnDoubleClick(X, Y) {
 			o.SyncStateToDaemon()
 		}
 		return o, nil

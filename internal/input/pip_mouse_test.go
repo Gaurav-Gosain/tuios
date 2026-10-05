@@ -84,9 +84,6 @@ func TestPiPTakesHover(t *testing.T) {
 func TestPiPTakesTheReleaseOfItsClick(t *testing.T) {
 	o, under, pinned, x, y := pipMouseOS(t)
 	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
-	if f := o.GetFocusedWindow(); f == nil || f.ID != "pinned" {
-		t.Fatalf("the click on the view did not go to the pinned pane")
-	}
 	o.Mode = app.TerminalMode
 	handleMouseRelease(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
 	if len(*pinned) != 0 || len(*under) != 0 {
@@ -94,6 +91,73 @@ func TestPiPTakesTheReleaseOfItsClick(t *testing.T) {
 	}
 	if o.PiPPressed {
 		t.Fatal("the release did not end the view's press")
+	}
+}
+
+func TestPiPDoubleClickGoesToThePane(t *testing.T) {
+	o, _, _, x, y := pipMouseOS(t)
+	// One press reads as a click, not a jump; the second inside the window
+	// is the double.
+	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
+	if f := o.GetFocusedWindow(); f != nil && f.ID == "pinned" {
+		t.Fatal("a single click jumped")
+	}
+	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
+	if f := o.GetFocusedWindow(); f == nil || f.ID != "pinned" {
+		t.Fatal("the double-click did not go to the pinned pane")
+	}
+}
+
+// pipTitleCell scans the drawn box for a cell on its top row, the title bar
+// the move grab takes.
+func pipTitleCell(t *testing.T, o *app.OS) (x, y int) {
+	t.Helper()
+	o.GetCanvas(true)
+	for y := 0; y < o.Height; y++ {
+		for x := 0; x < o.Width; x++ {
+			if o.PiPAt(x, y) {
+				return x + 3, y
+			}
+		}
+	}
+	t.Fatal("the view was not drawn")
+	return 0, 0
+}
+
+func TestPiPTitleDragMovesTheView(t *testing.T) {
+	o, _, _, _, _ := pipMouseOS(t)
+	tx, ty := pipTitleCell(t, o)
+	handleMouseClick(tea.MouseClickMsg{X: tx, Y: ty, Button: tea.MouseLeft}, o)
+	dx, dy := tx-60, ty-20
+	if !o.PiPDragMove(dx, dy) {
+		t.Fatal("the title-bar press did not start a drag")
+	}
+	if !o.Dragging {
+		t.Fatal("the drag did not hold the pointer")
+	}
+	// Motion without the press would drop the gesture; with it the box moves.
+	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseLeft}
+	_, cmd := handleMouseRelease(rel, o)
+	if cmd == nil {
+		t.Fatal("the release did not persist the dropped position")
+	}
+	if o.Dragging || o.PiPPressed {
+		t.Fatal("the release left the drag flags set")
+	}
+	if o.UserConfig == nil || o.UserConfig.PiP.X == nil || o.UserConfig.PiP.Y == nil {
+		t.Fatal("the release did not keep the dropped position")
+	}
+	nx, ny := pipTitleCell(t, o)
+	if nx == tx+3 && ny == ty {
+		t.Fatal("the view did not move")
+	}
+}
+
+func TestPiPRightPressInsideTheViewDoesNothing(t *testing.T) {
+	o, _, _, x, y := pipMouseOS(t)
+	_, cmd := handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)
+	if cmd != nil || o.Dragging || o.Resizing {
+		t.Fatal("a right-press inside the box started a gesture")
 	}
 }
 
@@ -110,34 +174,6 @@ func pipCellInside(t *testing.T, o *app.OS) (x, y int) {
 	}
 	t.Fatal("the view was not drawn")
 	return 0, 0
-}
-
-func TestPiPRightDragMovesTheView(t *testing.T) {
-	o, _, _, x, y := pipMouseOS(t)
-	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)
-	dx, dy := x-60, y-20
-	if !o.PiPDragMove(dx, dy) {
-		t.Fatal("the right-press did not start a drag")
-	}
-	if !o.Dragging {
-		t.Fatal("the drag did not hold the pointer")
-	}
-	// Motion without the press would drop the gesture; with it the box moves.
-	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseRight}
-	_, cmd := handleMouseRelease(rel, o)
-	if cmd == nil {
-		t.Fatal("the release did not persist the dropped position")
-	}
-	if o.Dragging || o.PiPPressed {
-		t.Fatal("the release left the drag flags set")
-	}
-	if o.UserConfig == nil || o.UserConfig.PiP.X == nil || o.UserConfig.PiP.Y == nil {
-		t.Fatal("the release did not keep the dropped position")
-	}
-	nx, ny := pipCellInside(t, o)
-	if nx == x-3 && ny == y-2 {
-		t.Fatal("the view did not move")
-	}
 }
 
 // pipBorderCell scans the drawn box for the leftmost cell of its bottom
@@ -160,11 +196,11 @@ func TestPiPBorderDragResizesTheView(t *testing.T) {
 	o, _, _, _, _ := pipMouseOS(t)
 	bx, by := pipBorderCell(t, o)
 	w0, h0 := o.UserConfig.PiP.Width, o.UserConfig.PiP.Height
-	handleMouseClick(tea.MouseClickMsg{X: bx, Y: by, Button: tea.MouseLeft}, o)
+	handleMouseClick(tea.MouseClickMsg{X: bx, Y: by, Button: tea.MouseRight}, o)
 	// A pull to the left widens the box; the right edge stays put.
 	dx, dy := bx-30, by
-	handleMouseMotion(tea.MouseMotionMsg{X: dx, Y: dy, Button: tea.MouseLeft}, o)
-	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseLeft}
+	handleMouseMotion(tea.MouseMotionMsg{X: dx, Y: dy, Button: tea.MouseRight}, o)
+	rel := tea.MouseReleaseMsg{X: dx, Y: dy, Button: tea.MouseRight}
 	_, cmd := handleMouseRelease(rel, o)
 	if cmd == nil {
 		t.Fatal("the release did not persist the new size")
@@ -176,20 +212,21 @@ func TestPiPBorderDragResizesTheView(t *testing.T) {
 	if o.Dragging || o.PiPPressed {
 		t.Fatal("the release left the drag flags set")
 	}
-	// The interior stays the click-to-jump: a press well inside the box does
-	// not begin a resize.
+	// The interior takes no resize: a right-press well inside the box does
+	// not begin one.
 	ox, oy := pipCellInside(t, o)
-	handleMouseClick(tea.MouseClickMsg{X: ox, Y: oy, Button: tea.MouseLeft}, o)
-	if f := o.GetFocusedWindow(); f == nil || f.ID != "pinned" {
-		t.Fatal("the interior press no longer jumps")
+	handleMouseClick(tea.MouseClickMsg{X: ox, Y: oy, Button: tea.MouseRight}, o)
+	if o.Resizing {
+		t.Fatal("the interior right-press began a resize")
 	}
 }
 
 func TestPiPMoveReturnsTheViewToItsCorner(t *testing.T) {
-	o, _, _, x, y := pipMouseOS(t)
-	handleMouseClick(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight}, o)
-	if !o.PiPDragMove(x-60, y-20) {
-		t.Fatal("the right-press did not start a drag")
+	o, _, _, _, _ := pipMouseOS(t)
+	tx, ty := pipTitleCell(t, o)
+	handleMouseClick(tea.MouseClickMsg{X: tx, Y: ty, Button: tea.MouseLeft}, o)
+	if !o.PiPDragMove(tx-60, ty-20) {
+		t.Fatal("the title-bar press did not start a drag")
 	}
 	if !o.CyclePiPCorner() {
 		t.Fatal("the corner cycle did nothing")

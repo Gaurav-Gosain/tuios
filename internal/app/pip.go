@@ -154,7 +154,7 @@ type pipState struct {
 	// rect is where the box was drawn on the last composed frame, empty when
 	// it was not drawn. Clicks are tested against it.
 	rect image.Rectangle
-	// dragging is on while a right-press drag moves the box, and grab is the
+	// dragging is on while a title-bar drag moves the box, and grab is the
 	// pointer's offset into the box from where the drag took hold.
 	dragging bool
 	grab     image.Point
@@ -164,6 +164,12 @@ type pipState struct {
 	resizing bool
 	edges    image.Point
 	start    image.Rectangle
+	// hover says the pointer rests on the box, which lights the frame up.
+	hover bool
+	// lastPress and lastPressAt are the previous left press on the box, for
+	// the double-click that jumps to the pane.
+	lastPress   time.Time
+	lastPressAt image.Point
 	// occluder is the scratch slice the graphics pass hands the box in.
 	occluder []cellRect
 	// layer is the last layer built from box.
@@ -417,15 +423,45 @@ func (m *OS) pipFreeBox(region image.Rectangle, w, h int) (box image.Rectangle, 
 	return image.Rect(x, y, x+w, y+h), true
 }
 
-// PiPDragStart begins a right-press drag of the drawn box. The drag keeps
-// the pointer's offset into the box, so the box does not jump to it.
+// PiPDragStart begins a drag of the box by its title bar, the row a
+// window's title occupies. The drag keeps the pointer's offset into the
+// box, so the box does not jump to it.
 func (m *OS) PiPDragStart(x, y int) bool {
-	if m.pip.rect.Empty() || !(image.Point{x, y}).In(m.pip.rect) {
+	r := m.pip.rect
+	if r.Empty() || y != r.Min.Y || !(image.Point{x, y}).In(r) {
 		return false
 	}
 	m.pip.dragging = true
-	m.pip.grab = image.Point{x - m.pip.rect.Min.X, y - m.pip.rect.Min.Y}
+	m.pip.grab = image.Point{x - r.Min.X, y - r.Min.Y}
 	return true
+}
+
+// pipDoubleClickWindow is how long after a press a second press still reads
+// as a double-click.
+const pipDoubleClickWindow = 300 * time.Millisecond
+
+// PiPJumpOnDoubleClick takes the second press of a double-click on the box
+// and jumps to the pane, saying whether it did.
+func (m *OS) PiPJumpOnDoubleClick(x, y int) bool {
+	now := time.Now()
+	near := abs(x-m.pip.lastPressAt.X) <= 4 && abs(y-m.pip.lastPressAt.Y) <= 4
+	double := now.Sub(m.pip.lastPress) <= pipDoubleClickWindow && near
+	m.pip.lastPress, m.pip.lastPressAt = now, image.Point{x, y}
+	if !double || !m.JumpToPiP() {
+		return false
+	}
+	return true
+}
+
+// PiPHover records whether the pointer rests on the box, which the frame
+// draws lit up. The reset makes the next frame rebuild its string.
+func (m *OS) PiPHover(x, y int) {
+	hover := !m.pip.rect.Empty() && (image.Point{x, y}).In(m.pip.rect)
+	if hover == m.pip.hover {
+		return
+	}
+	m.pip.hover = hover
+	m.pip.box, m.pip.boxKey = "", ""
 }
 
 // PiPDragMove moves the box under the pointer while a drag is on, and says
@@ -632,9 +668,9 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 	pal := theme.UI()
 	state, seen := m.railAgentState(src.ID, src.AgentState, src.AgentCompletionSeq)
 	name := pipPaneName(src)
-	key := fmt.Sprintf("%d:%d:%s:%s:%t:%t", box.Dx(), box.Dy(), name, state, seen, overlay.UseASCII())
+	key := fmt.Sprintf("%d:%d:%s:%s:%t:%t:%t", box.Dx(), box.Dy(), name, state, seen, overlay.UseASCII(), m.pip.hover)
 	if m.pip.box == "" || m.pip.boxKey != key {
-		m.pip.box = pipFrame(m.pip.body, cols, rows, name, state, seen, pal)
+		m.pip.box = pipFrame(m.pip.body, cols, rows, name, state, seen, m.pip.hover, pal)
 		m.pip.boxKey = key
 	}
 	m.pip.rect = box
@@ -756,14 +792,19 @@ func pipRowHasText(scr pipScreen, y, w int) bool {
 	return false
 }
 
-// pipFrame draws the box: a border in the accent, the source's agent mark and
-// name on the top edge, and the body inside.
-func pipFrame(body string, cols, rows int, name, state string, seen bool, pal overlay.Palette) string {
+// pipFrame draws the box: a border in the accent, lit brighter while the
+// pointer rests on it, the source's agent mark and name on the top edge,
+// and the body inside.
+func pipFrame(body string, cols, rows int, name, state string, seen, hover bool, pal overlay.Palette) string {
 	tl, tr, bl, br, hz, vl := "╭", "╮", "╰", "╯", "─", "│"
 	if overlay.UseASCII() {
 		tl, tr, bl, br, hz, vl = "+", "+", "+", "+", "-", "|"
 	}
-	edge := lipgloss.NewStyle().Foreground(pal.Accent)
+	edgeInk := pal.Accent
+	if hover {
+		edgeInk = pal.AccentBright
+	}
+	edge := lipgloss.NewStyle().Foreground(edgeInk)
 
 	// The title: the state's mark in its own colour, then the name, cut to
 	// fit between the corner and a cell of rule on the right.
