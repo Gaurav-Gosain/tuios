@@ -99,18 +99,28 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 	return login.argv(dir), env, true
 }
 
-// ownedSocket reports whether path is an absolute path to a Unix socket owned
-// by the user the daemon runs as.
+// ownedSocket reports whether path is an absolute path to a Unix socket, not
+// a link, owned by the user the daemon runs as, in a folder that user owns
+// and no one else may write to. Another user could otherwise put a socket of
+// their own where the name points.
 func ownedSocket(path string) bool {
 	if !filepath.IsAbs(path) || hasControl(path) {
 		return false
 	}
-	fi, err := os.Stat(path)
+	me := os.Geteuid()
+	fi, err := os.Lstat(path)
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
 		return false
 	}
-	uid, ok := fileOwner(fi)
-	return ok && uid == os.Geteuid()
+	if uid, ok := fileOwner(fi); !ok || uid != me {
+		return false
+	}
+	dir, err := os.Lstat(filepath.Dir(path))
+	if err != nil || !dir.IsDir() || dir.Mode().Perm()&0o022 != 0 {
+		return false
+	}
+	uid, ok := fileOwner(dir)
+	return ok && uid == me
 }
 
 // findRemoteLogin finds the ssh or mosh client in the foreground of the pane
@@ -258,6 +268,12 @@ type remoteLogin struct {
 // remote folder to start in.
 func (l remoteLogin) argv(dir string) []string {
 	out := append([]string{l.bin}, l.opts...)
+	if !l.mosh {
+		// The new pane neither becomes a control master nor shares one: the
+		// line's control socket is dropped, and one from ~/.ssh/config is
+		// not made by a pane the person did not start.
+		out = append(out, "-o", "ControlMaster=no")
+	}
 	dir = safeRemoteDir(dir)
 	script := ""
 	if dir != "" {
@@ -337,6 +353,11 @@ var resolveSSHHostName = func(l remoteLogin) string {
 	}
 	cmd := exec.CommandContext(ctx, l.bin, append(args, l.dest)...)
 	cmd.Stdin = nil
+	// A Match exec in ~/.ssh/config runs a child that can outlive ssh and
+	// hold its output open. ssh gets a process group of its own, the whole
+	// group is killed at the timeout, and the wait for the pipes is bounded.
+	killGroupOnCancel(cmd)
+	cmd.WaitDelay = 500 * time.Millisecond
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -413,12 +434,16 @@ func parseRemoteLogin(argv []string) (remoteLogin, bool) {
 const (
 	sshValueOpts = "BbcDEeFIiJLlmOoPpQRSWw"
 	sshFlagOpts  = "46AaCfGgKkMNnqsTtVvXxYy"
-	// sshDropValue and sshDropFlag are the ones the new pane does not get.
-	sshDropValue = "DLRWw"
-	sshDropFlag  = "fMNnsTt"
+	// sshDropValue and sshDropFlag are the ones the new pane does not get:
+	// forwards, sessions that are not a shell, the control socket (-S), and
+	// agent and X11 forwarding (-A, -X, -Y). The user's ~/.ssh/config still
+	// applies the last two where the user chose them.
+	sshDropValue = "DLRSWw"
+	sshDropFlag  = "AfMNnsTtXY"
 	// sshRefuse are the ones that make the line not followed: -F and -I can
-	// run code on this machine, and -G, -V, -Q and -O are not a session.
-	sshRefuse = "FIGVQO"
+	// run code on this machine, -E appends to a file the line names, and -G,
+	// -V, -Q and -O are not a session.
+	sshRefuse = "EFIGVQO"
 )
 
 // sshAllowConfig are the -o keywords a followed line may carry, lower case,
@@ -428,20 +453,20 @@ const (
 // keyword was checked against ssh_config(5) to neither run nor load a program
 // named by its value.
 //
-// The ones the new pane drops are a forward, which the first client holds, or
-// a session that is not a shell.
+// The kept ones are what it takes to reach the same host as the same user.
+// The new pane drops the rest without refusing the line: forwards, which the
+// first client holds; sessions that are not a shell; and the settings that
+// choose files, sockets, environment or forwarding (known hosts files, the
+// control path, the agent, X11). The user's ~/.ssh/config still applies those
+// where the user chose them, and a line read from a process does not get to.
 var sshAllowConfig = map[string]bool{
-	"port": true, "user": true, "hostname": true, "hostkeyalias": true,
-	"identityfile": true, "identitiesonly": true, "identityagent": true,
-	"certificatefile":     true,
+	"port": true, "user": true, "hostname": true,
+	"identityfile": true, "identitiesonly": true, "certificatefile": true,
 	"serveraliveinterval": true, "serveralivecountmax": true,
 	"connecttimeout": true, "connectionattempts": true, "tcpkeepalive": true,
-	"stricthostkeychecking": true, "userknownhostsfile": true,
-	"globalknownhostsfile": true, "checkhostip": true,
+	"stricthostkeychecking": true, "checkhostip": true,
 	"compression": true, "addressfamily": true, "batchmode": true,
-	"forwardagent": true, "forwardx11": true, "forwardx11trusted": true,
-	"setenv": true, "sendenv": true, "loglevel": true, "escapechar": true,
-	"controlpath": true, "proxyjump": true,
+	"loglevel": true, "escapechar": true, "proxyjump": true,
 	"preferredauthentications": true, "pubkeyauthentication": true,
 	"passwordauthentication": true, "kbdinteractiveauthentication": true,
 	"ciphers": true, "macs": true, "kexalgorithms": true,
@@ -452,7 +477,11 @@ var sshAllowConfig = map[string]bool{
 	"localforward": false, "remoteforward": false, "dynamicforward": false,
 	"gatewayports": false, "exitonforwardfailure": false,
 	"clearallforwardings": false, "tunnel": false, "tunneldevice": false,
-	"controlmaster": false, "controlpersist": false,
+	"controlmaster": false, "controlpersist": false, "controlpath": false,
+	"userknownhostsfile": false, "globalknownhostsfile": false,
+	"hostkeyalias": false, "identityagent": false,
+	"sendenv": false, "setenv": false,
+	"forwardagent": false, "forwardx11": false, "forwardx11trusted": false,
 }
 
 // parseSSHArgs reads ssh's arguments the way ssh does: options, the
@@ -534,12 +563,18 @@ func sshValueVerdict(c byte, val string) (keep, refuse bool) {
 	if strings.IndexByte(sshDropValue, c) >= 0 {
 		return false, false
 	}
+	if c == 'J' {
+		return true, !validJumpHosts(val)
+	}
 	if c != 'o' {
 		return true, false
 	}
 	key := sshConfigKeyword(val)
 	keep, known := sshAllowConfig[key]
 	if !known {
+		return false, true
+	}
+	if key == "proxyjump" && !validJumpHosts(sshConfigValue(val)) {
 		return false, true
 	}
 	return keep, false
@@ -556,6 +591,43 @@ func sshConfigKeyword(val string) string {
 		v = v[:i]
 	}
 	return strings.ToLower(v)
+}
+
+// sshConfigValue is the value of an -o option: what follows the keyword and
+// the space or = after it.
+func sshConfigValue(val string) string {
+	v := strings.TrimLeft(strings.TrimSpace(val), `"'`)
+	if i := strings.IndexAny(v, "= \t\"'"); i >= 0 {
+		v = v[i:]
+	} else {
+		return ""
+	}
+	v = strings.TrimLeft(v, `"' 	=`)
+	return strings.TrimRight(v, `"'`)
+}
+
+// validJumpHosts reports whether a ProxyJump value is a comma-separated list
+// of hops, each [user@]host[:port] or ssh://[user@]host[:port], spelt with
+// letters, digits and ._:@[]- only and not starting with -. ssh builds a
+// command line from the hops, so anything else is not followed.
+func validJumpHosts(v string) bool {
+	if v == "" {
+		return false
+	}
+	for hop := range strings.SplitSeq(v, ",") {
+		hop = strings.TrimPrefix(hop, "ssh://")
+		if hop == "" || hop[0] == '-' {
+			return false
+		}
+		for _, r := range hop {
+			ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+				strings.ContainsRune("._:@[]-", r)
+			if !ok {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // moshValueOpts are the mosh options that take a value. moshFlagOpts are the
@@ -594,6 +666,9 @@ func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 				return remoteLogin{}, false
 			}
 			l.dest = args[i+1]
+			if strings.HasPrefix(l.dest, "-") {
+				return remoteLogin{}, false
+			}
 			if strict && i+2 < len(args) {
 				return remoteLogin{}, false
 			}

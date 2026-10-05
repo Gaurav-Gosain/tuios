@@ -221,7 +221,7 @@ func TestSSHSplitRunsTheSameSSH(t *testing.T) {
 	if err := term.WaitForText("FAKESSH-RUN-1-UP", uiTimeout); err != nil {
 		t.Fatalf("the split pane never ran ssh: %v\n%s", err, term.Snapshot())
 	}
-	want := []string{"-p", "2222", "-i", "/tmp/key", "-o", "ServerAliveInterval=5", "pollen@fakehost"}
+	want := []string{"-p", "2222", "-i", "/tmp/key", "-o", "ServerAliveInterval=5", "-o", "ControlMaster=no", "pollen@fakehost"}
 	wantArgs(t, term, "split_ssh_vertical", sshRunArgs(t, term, runs, 1), want)
 	t.Logf("after split_ssh_vertical:\n%s", term.Snapshot())
 
@@ -253,7 +253,7 @@ func TestSSHSplitFollowOption(t *testing.T) {
 	leaveTerminalMode(t, term)
 	pressAndCount(t, term, 3, "split_vertical in ssh", "|")
 	wantArgs(t, term, "split_vertical with new_window_follow_ssh", sshRunArgs(t, term, runs, 1),
-		[]string{"-l", "pollen", "fakehost"})
+		[]string{"-l", "pollen", "-o", "ControlMaster=no", "fakehost"})
 	alive(t, term, "after the followed split")
 }
 
@@ -270,7 +270,7 @@ func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
 
 	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
 	wantArgs(t, term, "split with a reported folder", sshRunArgs(t, term, runs, 1),
-		[]string{"-t", "-o", "RemoteCommand=none", "pollen@fakehost",
+		[]string{"-o", "ControlMaster=no", "-t", "-o", "RemoteCommand=none", "pollen@fakehost",
 			`exec sh -c 'cd "/srv/my app" 2>/dev/null; exec "$SHELL" -l'`})
 	alive(t, term, "after the split with a folder")
 }
@@ -298,7 +298,7 @@ func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
 	sshIn(t, term, "sh -c 'ssh -J jump nested@fakehost; true'", 0)
 	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
 	wantArgs(t, term, "split of a nested ssh", sshRunArgs(t, term, runs, 1),
-		[]string{"-J", "jump", "nested@fakehost"})
+		[]string{"-J", "jump", "-o", "ControlMaster=no", "nested@fakehost"})
 	alive(t, term, "after the nested split")
 }
 
@@ -317,7 +317,7 @@ func TestSSHSplitRunsTheSSHOnPath(t *testing.T) {
 	}
 	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
 	wantArgs(t, term, "split of a compiled ssh", sshRunArgs(t, term, runs, 1),
-		[]string{"-p", "2222", "pollen@fakehost"})
+		[]string{"-p", "2222", "-o", "ControlMaster=no", "pollen@fakehost"})
 	if got := sshRunArgv0(t, runs, 1); got != pathSSH {
 		t.Fatalf("the split ran %q, want the ssh on PATH, %q", got, pathSSH)
 	}
@@ -379,7 +379,7 @@ func TestSSHSplitKeepsTheFolderOfAnAlias(t *testing.T) {
 	leaveTerminalMode(t, term)
 	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
 	wantArgs(t, term, "split of an alias with a reported folder", sshRunArgs(t, term, runs, 1),
-		[]string{"-o", "HostName=fakehost.example.com", "-t", "-o", "RemoteCommand=none", "pollen@prod",
+		[]string{"-o", "HostName=fakehost.example.com", "-o", "ControlMaster=no", "-t", "-o", "RemoteCommand=none", "pollen@prod",
 			`exec sh -c 'cd "/srv/app" 2>/dev/null; exec "$SHELL" -l'`})
 	alive(t, term, "after the alias split")
 }
@@ -425,4 +425,18 @@ func TestSSHSplitPassesTheAgentSocket(t *testing.T) {
 		t.Fatalf("the split's ssh had SSH_AUTH_SOCK %q, want the followed ssh's %q", got, first)
 	}
 	alive(t, term, "after the agent split")
+}
+
+// -E makes ssh append its log to a file the line names, so a line with it is
+// not followed: the split is an ordinary shell.
+func TestSSHSplitRefusesALogFile(t *testing.T) {
+	term, base, runs := startSSHSplit(t, "")
+	sshIn(t, term, "ssh -E "+filepath.Join(base, "ssh.log")+" pollen@fakehost", 0)
+	pressAndCount(t, term, 2, "split_ssh_vertical with -E", tuitest.Alt('v'))
+	enterTerminalMode(t, term)
+	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
+	if n := sshRunCount(runs); n != 1 {
+		t.Fatalf("a split of an ssh with -E ran ssh: %d runs, want 1", n)
+	}
+	alive(t, term, "after the refused split")
 }

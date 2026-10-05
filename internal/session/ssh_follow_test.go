@@ -29,33 +29,55 @@ func TestParseRemoteLogin(t *testing.T) {
 	t.Cleanup(func() { lookPath = old })
 
 	const cd = `exec sh -c 'cd "/srv/a b" 2>/dev/null; exec "$SHELL" -l'`
+	// ssh is the replayed ssh line: the binary, the kept options, the
+	// ControlMaster=no every ssh line gets, then the rest.
+	ssh := func(opts []string, rest ...string) []string {
+		out := append([]string{"/path/ssh"}, opts...)
+		out = append(out, "-o", "ControlMaster=no")
+		return append(out, rest...)
+	}
+	var none []string
 	cases := []struct {
 		name string
 		argv []string
 		dir  string
 		want []string // nil: not followed
 	}{
-		{"plain", []string{"ssh", "host"}, "", []string{"/path/ssh", "host"}},
-		{"binary from the process is not used", []string{"./ssh", "host"}, "", []string{"/path/ssh", "host"}},
+		{"plain", []string{"ssh", "host"}, "", ssh(none, "host")},
+		{"binary from the process is not used", []string{"./ssh", "host"}, "", ssh(none, "host")},
 		{"remote command dropped", []string{"ssh", "-p", "2222", "u@h", "tail", "-f", "log"}, "",
-			[]string{"/path/ssh", "-p", "2222", "u@h"}},
+			ssh([]string{"-p", "2222"}, "u@h")},
 		{"options kept", []string{"ssh", "-i", "/k", "-J", "jump", "-o", "User=x", "-l", "me", "h"}, "",
-			[]string{"/path/ssh", "-i", "/k", "-J", "jump", "-o", "User=x", "-l", "me", "h"}},
+			ssh([]string{"-i", "/k", "-J", "jump", "-o", "User=x", "-l", "me"}, "h")},
 		{"attached values", []string{"ssh", "-p2222", "-oPort=1", "-i/k", "h"}, "",
-			[]string{"/path/ssh", "-p", "2222", "-o", "Port=1", "-i", "/k", "h"}},
+			ssh([]string{"-p", "2222", "-o", "Port=1", "-i", "/k"}, "h")},
 		{"cluster with value", []string{"ssh", "-4Cp", "22", "h"}, "",
-			[]string{"/path/ssh", "-4", "-C", "-p", "22", "h"}},
-		{"session changers dropped", []string{"ssh", "-N", "-f", "-T", "-n", "-tt", "-M", "-S", "/s", "h"}, "",
-			[]string{"/path/ssh", "-S", "/s", "h"}},
+			ssh([]string{"-4", "-C", "-p", "22"}, "h")},
+		{"session changers dropped", []string{"ssh", "-N", "-f", "-T", "-n", "-tt", "-M", "h"}, "", ssh(none, "h")},
 		{"forwards dropped", []string{"ssh", "-L", "8080:x:80", "-R8081:y:81", "-D", "1080", "-W", "x:1", "h"}, "",
-			[]string{"/path/ssh", "h"}},
+			ssh(none, "h")},
+		{"agent and X11 dropped", []string{"ssh", "-A", "-X", "-Y", "-v", "h"}, "", ssh([]string{"-v"}, "h")},
+		{"control socket dropped", []string{"ssh", "-S", "/tmp/s", "-o", "ControlPath=/tmp/s", "h"}, "", ssh(none, "h")},
 		{"o options dropped", []string{"ssh", "-o", "RemoteCommand=top", "-oSessionType=none", "-o", "RequestTTY no",
-			"-o", "ControlMaster=yes", "-o", " controlpersist=10m", "h"}, "", []string{"/path/ssh", "h"}},
+			"-o", "ControlMaster=yes", "-o", " controlpersist=10m", "h"}, "", ssh(none, "h")},
+		{"files, environment and forwarding dropped", []string{"ssh",
+			"-o", "UserKnownHostsFile=/tmp/k", "-o", "GlobalKnownHostsFile=/tmp/g", "-o", "HostKeyAlias=x",
+			"-o", "SendEnv=X", "-o", "SetEnv=X=1", "-o", "ForwardAgent=/tmp/a", "-o", "ForwardX11=yes",
+			"-o", "ForwardX11Trusted=yes", "-o", "IdentityAgent=/tmp/a", "h"}, "", ssh(none, "h")},
 		{"options after destination", []string{"ssh", "h", "-p", "2222", "ls"}, "",
-			[]string{"/path/ssh", "-p", "2222", "h"}},
+			ssh([]string{"-p", "2222"}, "h")},
 		{"double dash before destination", []string{"ssh", "-p", "1", "--", "h", "-p", "2"}, "",
-			[]string{"/path/ssh", "-p", "1", "h"}},
-		{"double dash after destination", []string{"ssh", "h", "--", "ls"}, "", []string{"/path/ssh", "h"}},
+			ssh([]string{"-p", "1"}, "h")},
+		{"double dash after destination", []string{"ssh", "h", "--", "ls"}, "", ssh(none, "h")},
+		{"log file", []string{"ssh", "-E", "/tmp/log", "h"}, "", nil},
+		{"log file attached", []string{"ssh", "-vE/tmp/log", "h"}, "", nil},
+		{"jump hosts", []string{"ssh", "-J", "u@a:22,ssh://b,[::1]:2", "-o", "ProxyJump=c.example", "h"}, "",
+			ssh([]string{"-J", "u@a:22,ssh://b,[::1]:2", "-o", "ProxyJump=c.example"}, "h")},
+		{"jump host with an option", []string{"ssh", "-J", "-oProxyCommand=x", "h"}, "", nil},
+		{"jump host with a space", []string{"ssh", "-J", "a b", "h"}, "", nil},
+		{"jump host with a shell character", []string{"ssh", "-o", "ProxyJump=a;b", "h"}, "", nil},
+		{"second jump host with an option", []string{"ssh", "-o", "ProxyJump a,-x", "h"}, "", nil},
+		{"empty jump host", []string{"ssh", "-J", "a,", "h"}, "", nil},
 		{"proxy command", []string{"ssh", "-o", "ProxyCommand=nc %h %p", "h"}, "", nil},
 		{"proxy command attached", []string{"ssh", "-oproxycommand nc", "h"}, "", nil},
 		{"proxy command quoted", []string{"ssh", "-o", ` "ProxyCommand" nc`, "h"}, "", nil},
@@ -71,8 +93,6 @@ func TestParseRemoteLogin(t *testing.T) {
 		{"unknown keyword", []string{"ssh", "-o", "Frobnicate=1", "h"}, "", nil},
 		{"include", []string{"ssh", "-o", "Include /tmp/x", "h"}, "", nil},
 		{"control character in destination", []string{"ssh", "h\n"}, "", nil},
-		{"allowed keywords kept", []string{"ssh", "-X", "-o", "ControlPath=/s", "-o", "ForwardAgent yes", "h"}, "",
-			[]string{"/path/ssh", "-X", "-o", "ControlPath=/s", "-o", "ForwardAgent yes", "h"}},
 		{"config file", []string{"ssh", "-F", "/x", "h"}, "", nil},
 		{"pkcs11 flag", []string{"ssh", "-I", "/x.so", "h"}, "", nil},
 		{"print config", []string{"ssh", "-G", "h"}, "", nil},
@@ -85,21 +105,23 @@ func TestParseRemoteLogin(t *testing.T) {
 		{"no destination", []string{"ssh", "-v"}, "", nil},
 		{"not ssh", []string{"vim", "h"}, "", nil},
 		{"sshd is not ssh", []string{"sshd", "-D"}, "", nil},
-		{"script", []string{"/bin/sh", "/opt/bin/ssh", "h", "ls"}, "", []string{"/path/ssh", "h"}},
+		{"script", []string{"/bin/sh", "/opt/bin/ssh", "h", "ls"}, "", ssh(none, "h")},
 		{"shell running code", []string{"sh", "-c", "x /opt/ssh", "h"}, "", nil},
 		{"perl running code", []string{"perl", "-e", "1", "/usr/bin/ssh", "h"}, "", nil},
 		{"script with interpreter option", []string{"/usr/bin/perl", "-w", "/usr/bin/mosh", "h"}, "",
 			[]string{"/path/mosh", "h"}},
 		{"remote folder", []string{"ssh", "-p", "22", "h", "ls"}, "/srv/a b",
-			[]string{"/path/ssh", "-p", "22", "-t", "-o", "RemoteCommand=none", "h", cd}},
-		{"folder with single quote", []string{"ssh", "h"}, "/x'; rm -rf ~; '", []string{"/path/ssh", "h"}},
-		{"folder with double quote", []string{"ssh", "h"}, `/x"y`, []string{"/path/ssh", "h"}},
-		{"folder with dollar", []string{"ssh", "h"}, "/x$(id)", []string{"/path/ssh", "h"}},
-		{"folder with backslash", []string{"ssh", "h"}, `/x\y`, []string{"/path/ssh", "h"}},
-		{"folder with newline", []string{"ssh", "h"}, "/x\nrm", []string{"/path/ssh", "h"}},
-		{"relative folder", []string{"ssh", "h"}, "x", []string{"/path/ssh", "h"}},
+			ssh([]string{"-p", "22"}, "-t", "-o", "RemoteCommand=none", "h", cd)},
+		{"folder with single quote", []string{"ssh", "h"}, "/x'; rm -rf ~; '", ssh(none, "h")},
+		{"folder with double quote", []string{"ssh", "h"}, `/x"y`, ssh(none, "h")},
+		{"folder with dollar", []string{"ssh", "h"}, "/x$(id)", ssh(none, "h")},
+		{"folder with backslash", []string{"ssh", "h"}, `/x\y`, ssh(none, "h")},
+		{"folder with newline", []string{"ssh", "h"}, "/x\nrm", ssh(none, "h")},
+		{"relative folder", []string{"ssh", "h"}, "x", ssh(none, "h")},
 		{"mosh", []string{"mosh", "-p", "6000", "h", "--", "top"}, "",
 			[]string{"/path/mosh", "--port=6000", "h"}},
+		{"mosh destination after a double dash", []string{"mosh", "--", "h"}, "", []string{"/path/mosh", "h"}},
+		{"mosh destination that is an option", []string{"mosh", "--", "-x"}, "", nil},
 		{"mosh ssh option", []string{"mosh", "--ssh=ssh -p 2", "h"}, "", nil},
 		{"mosh client option", []string{"mosh", "--client", "/x", "h"}, "", nil},
 		{"mosh server option", []string{"mosh", "--server=/x", "h"}, "", nil},
@@ -113,6 +135,7 @@ func TestParseRemoteLogin(t *testing.T) {
 		{"mosh-client with predict", []string{"mosh-client", "-# --predict=always u@h |", "1.2.3.4", "6"}, "", nil},
 		{"mosh-client with ssh", []string{"mosh-client", "-# --ssh=ssh u@h |", "1.2.3.4", "6"}, "", nil},
 		{"mosh-client with client", []string{"mosh-client", "-# --client=/x u@h |", "1.2.3.4", "6"}, "", nil},
+		{"mosh-client destination that is an option", []string{"mosh-client", "-# -- -x |", "1.2.3.4", "6"}, "", nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
