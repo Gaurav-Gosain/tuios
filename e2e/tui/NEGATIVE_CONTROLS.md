@@ -1379,3 +1379,15 @@ a full dock and asserts the pane's edge on the row after the rule.
 | The released behaviour | build origin/main (`43573cf8`) | `TestDockCompactGivesThePaneARow`, `TestDockCompactPillClickSwitchesWorkspace`, `TestDockCompactSwitchesOnConfigSave` ("the pane meets the dock at row 2, want 1" at the top, "row 37, want 38" at the bottom), `TestDockCompactClientSharesASessionWithAFullOne` (the rule drawn on the row a compact client keeps blank), `TestDockCompactFromTheSettingsPanel` (no Compact dock row) | **caught** |
 | The dock band stays two rows | `InDockBand`: `config.DockFullHeight` in place of `Settings.DockHeight()` | `TestDockCompactPillClickSwitchesWorkspace` top and bottom ("the pane row next to a compact dock: context menu never showed [Split right Rename]"). The pill click before it passes, which is correct | **caught** |
 | The fast path ignores a larger peer reserve | `fullscreenFastWindow`: the `OwnLayoutReserve` check cut | `TestDockCompactClientSharesASessionWithAFullOne` (the dock row drawn on the row the compact client keeps blank, one row above the screen's last row) | **caught** |
+
+## Session number keys and the workspace rename action
+
+`TestSwitchSessionByNumberAndRenameWorkspace` in `session_number_keys_test.go`
+binds `switch_session_3`, `switch_session_9` and `rename_workspace` with three
+sessions. The positive half is in the same test: slot 9 is empty and says so,
+and the rename leaves the session the client left alone.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`43573cf8`) | `TestSwitchSessionByNumberAndRenameWorkspace` ("switch_session_3 never landed on charlie") | **caught** |
+| The rename action is not registered | `registerHandlers`: the `rename_workspace` line cut | `TestSwitchSessionByNumberAndRenameWorkspace` ("rename_workspace never opened the editor") | **caught** |
