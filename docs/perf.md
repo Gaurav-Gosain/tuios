@@ -2161,8 +2161,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 31,305,890 | 31,340,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 29,509,922 | 29,540,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 31,633,570 | 31,670,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 29,797,122 | 29,830,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2348,6 +2348,10 @@ darwin/arm64, 43,610 over.
 The budgets went to 31,340,000 (linux/amd64) and 29,540,000 (darwin/arm64) for
 the herdr methods that plugins call. On Go 1.26.6 the build measured
 31,305,890 and 29,509,922 bytes.
+
+The budgets went to 31,670,000 (linux/amd64) and 29,830,000 (darwin/arm64) for
+the herdr plugin host. On Go 1.26.6 the build measured 31,633,570 and
+29,797,122 bytes.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
