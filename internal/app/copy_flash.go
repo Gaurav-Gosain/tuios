@@ -51,19 +51,23 @@ type copyFlash struct {
 // the moment of the copy and usually gone immediately after: the sweep outlives
 // the selection it describes, which is the whole point.
 func (m *OS) NoteCopyFlash(window *terminal.Window) {
-	if window == nil || !m.Settings.CopyFlash || m.copyFlashDuration() <= 0 {
+	if window == nil || !window.HasSelection() || window.CopyMode == nil {
 		return
 	}
-	// appearance.motion = none draws every change in one frame, and a sweep is
-	// nothing but frames. The selection and the dock message still say what
-	// was copied.
-	if !m.Settings.MotionAllows(config.MotionBasic) {
+	m.NoteCopyFlashRegion(window, window.CopyMode.VisualStart, window.CopyMode.VisualEnd)
+}
+
+// NoteCopyFlashRegion records a copy of an explicit region of the pane, in
+// the pane's absolute coordinates, so the next frames can sweep over it.
+//
+// It is for a copy whose selection is gone by the time the copy is applied.
+// Copy mode's y ends the visual selection while it still holds the pane's
+// lock, and the copy is applied after the lock is dropped, so the region is
+// taken at the key and handed over here.
+func (m *OS) NoteCopyFlashRegion(window *terminal.Window, start, end terminal.Position) {
+	if window == nil || !m.copyFlashAllowed() {
 		return
 	}
-	if !window.HasSelection() || window.CopyMode == nil {
-		return
-	}
-	start, end := window.CopyMode.VisualStart, window.CopyMode.VisualEnd
 	if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
 		start, end = end, start
 	}
@@ -73,6 +77,18 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 	// frame. The first one is asked for here and the motion clock keeps them
 	// coming while the sweep runs; see motionInterval.
 	window.ContentDirty = true
+}
+
+// copyFlashAllowed reports whether a copy sweeps at all: copy_flash is on,
+// its duration is above zero, and appearance.motion allows it.
+func (m *OS) copyFlashAllowed() bool {
+	if !m.Settings.CopyFlash || m.copyFlashDuration() <= 0 {
+		return false
+	}
+	// appearance.motion = none draws every change in one frame, and a sweep is
+	// nothing but frames. The selection and the dock message still say what
+	// was copied.
+	return m.Settings.MotionAllows(config.MotionBasic)
 }
 
 // NoteCopyFlashMany records one copy taken from several panes at once, the

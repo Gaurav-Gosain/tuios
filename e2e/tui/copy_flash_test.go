@@ -56,6 +56,9 @@ type flashFrame struct {
 	refLo, refHi int
 	// art is the reference row, one character per cell, for the log.
 	art string
+	// mask holds, for each sampled row from the first, which columns carry
+	// the light.
+	mask [][]bool
 }
 
 // startFlashClient starts a client with the sweep on, a white light so the
@@ -64,10 +67,18 @@ type flashFrame struct {
 // daemon session, which is how tuios ships.
 func startFlashClient(t *testing.T, motion string, daemon bool) *tuitest.Terminal {
 	t.Helper()
+	return startFlashClientWith(t, motion, daemon, "")
+}
+
+// startFlashClientWith is startFlashClient with extra config appended. The
+// extra lines land in the [appearance.selection] table unless they open a
+// table of their own.
+func startFlashClientWith(t *testing.T, motion string, daemon bool, extra string) *tuitest.Terminal {
+	t.Helper()
 	base := t.TempDir()
 	writeConfig(t, base, fmt.Sprintf(
 		"[appearance]\nmotion = %q\n\n[appearance.selection]\nflash = true\nflash_ms = %d\nflash_style = \"horizontal\"\nflash_color = \"#ffffff\"\n",
-		motion, flashTestMs))
+		motion, flashTestMs)+extra)
 	opts := startOpts{
 		animations: true,
 		env:        []string{"TERM=xterm-256color", "COLORTERM=truecolor"},
@@ -159,12 +170,15 @@ func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release 
 		ff := flashFrame{at: f.at, peak: -1, refLo: -1, refHi: -1}
 		best := settled
 		var art strings.Builder
+		ff.mask = make([][]bool, len(f.cells))
 		for ri, row := range f.cells {
+			ff.mask[ri] = make([]bool, len(row))
 			for c, bg := range row {
 				l := luminance(bg)
 				lit := l > settled
 				if lit {
 					ff.lit++
+					ff.mask[ri][c] = true
 				}
 				if r0+ri != ref {
 					continue

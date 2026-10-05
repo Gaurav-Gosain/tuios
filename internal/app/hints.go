@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -582,21 +581,14 @@ func (m *OS) copyHint(window *terminal.Window, match hintMatch, note string) tea
 // sweeps it over the selection. The flash takes absolute rows, in which the
 // scrollback comes first and the screen follows it.
 func (m *OS) noteHintFlash(window *terminal.Window, match hintMatch) {
-	if !m.Settings.CopyFlash || m.copyFlashDuration() <= 0 || !m.Settings.MotionAllows(config.MotionBasic) {
-		return
-	}
 	if len(match.cells) == 0 {
 		return
 	}
 	base := window.ScrollbackLen() - window.ScrollbackOffset
 	first, last := match.cells[0], match.cells[len(match.cells)-1]
-	m.copyFlash = &copyFlash{
-		WindowID: window.ID,
-		Start:    terminal.Position{X: first.x, Y: base + first.y},
-		End:      terminal.Position{X: last.x, Y: base + last.y},
-		At:       time.Now(),
-	}
-	window.ContentDirty = true
+	m.NoteCopyFlashRegion(window,
+		terminal.Position{X: first.x, Y: base + first.y},
+		terminal.Position{X: last.x, Y: base + last.y})
 }
 
 // openHint opens a URL or a path and copies anything else.

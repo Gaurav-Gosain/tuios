@@ -473,6 +473,9 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.ShowNotification("", "info", 0)
 	case "y", "c":
 		text := extractVisualText(cm, window)
+		// The region is taken before the selection ends, because the sweep
+		// is drawn over it after the selection has gone.
+		fx.Flash(cm.VisualStart, cm.VisualEnd)
 		cm.State = terminal.CopyModeNormal
 		fx.ShowNotification(fmt.Sprintf("Yanked %d chars", len(text)), "success", s.NotificationDuration)
 		fx.InvalidateCache()

@@ -41,6 +41,8 @@ func copyPipeYank(o *app.OS, window *terminal.Window, pipe config.CopyPipeBindin
 		o.ShowNotification(fmt.Sprintf("No text is selected. Press v or V to select, then press %s.", pipe.Key), "warning", d)
 		return o, nil
 	}
+	// The sweep is written down while the selection still holds its region.
+	o.NoteCopyFlash(window)
 	cm.State = terminal.CopyModeNormal
 	window.InvalidateCache()
 	if pipe.Cancel {

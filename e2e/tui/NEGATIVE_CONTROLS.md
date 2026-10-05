@@ -1407,3 +1407,19 @@ syncs or is listed as reached.
 | No approval desk | `runHostsSync`: the runner gets no desk | `TestHostsSyncOneApprovalCoversTheRun` (sync exits 1 before it offers to wait) | **caught** |
 | The link never reads the gate | `link.attempt`: the `ParseSSHGate` call in the preamble wait made nil | `TestHostsSyncReportsATailscaleCheck` (hosts test reports "unreachable", the listing shows no approval) | **caught** |
 | A policy refusal read as a plain ssh failure | `remoteRunError`: the `GateFromStderr` check cut | `TestHostsSyncReportsATailscalePolicyRefusal` (kind "") | **caught** |
+
+## Copy sweep after a copy-mode yank
+
+`copy_flash_yank_test.go` samples the frames after a copy-mode yank and holds
+the light to the yanked text. `TestCopyFlashSweepsACopyModeYank` covers `y` on
+a `v` selection, `y` on a `V` selection through a daemon, and a copy-pipe key.
+`TestCopyFlashSweepsAMultiCopyYank` covers `y` in multi copy mode. The positive
+half is the mouse copy in `copy_flash_test.go`, which sweeps with the same
+config, and the multi copy test also asserts no light on the pane without a
+selection.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`486ce455`) | `TestCopyFlashSweepsACopyModeYank` visual-y, line-y-daemon and copy-pipe ("no frame showed the sweep"). `TestCopyFlashSweepsAMultiCopyYank` passes, which is correct: multi copy mode already swept | **caught** |
+| The yank never draws the sweep | `copyModeEffects.apply`: the `NoteCopyFlashRegion` call cut | `TestCopyFlashSweepsACopyModeYank` visual-y and line-y-daemon ("no frame showed the sweep"). copy-pipe passes, which is correct: it takes another path | **caught** |
+| Multi copy mode never draws the sweep | `yankMultiCopy`: the `NoteCopyFlashMany` call cut | `TestCopyFlashSweepsAMultiCopyYank` ("the sweep reached ... in 0 frames" for both selected panes) | **caught** |
