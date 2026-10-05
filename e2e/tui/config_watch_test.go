@@ -82,6 +82,99 @@ func TestConfigEditedOnDiskReachesTheScreen(t *testing.T) {
 	alive(t, term, "after two config reloads")
 }
 
+// TestAKeybindingSavedOnDiskReachesTheClient: the hot reload carries
+// keybindings too. A chord that did nothing before the save fires after it,
+// pressed on the same running client, and the binding the config started with
+// still works.
+func TestAKeybindingSavedOnDiskReachesTheClient(t *testing.T) {
+	base := t.TempDir()
+	late := filepath.Join(base, "late.fired")
+	writeConfig(t, base, keybindConfigFor("late", "y", late))
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	pressChord(t, term, 'y')
+	waitForFile(t, term, late, "the startup config's binding")
+
+	added := filepath.Join(base, "added.fired")
+	pressChord(t, term, 'h')
+	time.Sleep(2 * time.Second)
+	if _, err := os.Stat(added); err == nil {
+		t.Fatalf("prefix+alt+h fired with no binding behind it, so a pass after the "+
+			"save would prove nothing\n%s", term.Snapshot())
+	}
+
+	saveConfigLikeAnEditor(t, base, keybindConfigFor("late", "y", late)+keybindConfigFor("added", "h", added))
+	deadline := time.Now().Add(configWatchTimeout)
+	for {
+		pressChord(t, term, 'h')
+		if _, err := os.Stat(added); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a keybinding saved on disk never reached the running client\n%s",
+				term.Snapshot())
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	// The second save drops the h binding and points y at a new marker, so
+	// firing y proves the reloaded table replaced the old one instead of
+	// stacking on top of it.
+	after := filepath.Join(base, "after.fired")
+	saveConfigLikeAnEditor(t, base, keybindConfigFor("late2", "y", after))
+	deadline = time.Now().Add(configWatchTimeout)
+	for {
+		pressChord(t, term, 'y')
+		if _, err := os.Stat(after); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the surviving binding never fired after a second reload\n%s",
+				term.Snapshot())
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	alive(t, term, "after two config reloads")
+}
+
+// keybindConfigFor is one [[keybindings.command]] entry: the chord alt+key
+// touches marker. A fired chord leaves evidence on disk instead of on a
+// screen the test would have to read. The name is explicit because two
+// nameless entries whose command text shares a 40-character prefix slug to
+// the same name and tuios keeps only the first.
+func keybindConfigFor(name, key, marker string) string {
+	return `
+[[keybindings.command]]
+name = "` + name + `"
+key = "prefix+alt+` + key + `"
+type = "shell"
+command = "touch ` + marker + `"
+`
+}
+
+func pressChord(t *testing.T, term *tuitest.Terminal, k rune) {
+	t.Helper()
+	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Alt(k)); err != nil {
+		t.Fatalf("send the chord alt+%c: %v", k, err)
+	}
+}
+
+func waitForFile(t *testing.T, term *tuitest.Terminal, path, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s did not fire\n%s", what, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // TestBrokenConfigOnDiskKeepsWhatIsRunning. A file caught half written, or one
 // with an unbalanced quote, must leave the session exactly as it is and say so.
 // The reload used to write the failure to a log nobody reads, so a typo meant
