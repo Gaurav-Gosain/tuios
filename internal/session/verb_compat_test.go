@@ -128,7 +128,7 @@ func TestHandshakeAgainstLegacyDaemonReportsMismatch(t *testing.T) {
 		"client 1.4.0",
 		"upgraded while the daemon kept running",
 		"tuios kill-server",
-		"2 session(s)",
+		"2 sessions",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("mismatch message missing %q\n--- message ---\n%s", want, msg)

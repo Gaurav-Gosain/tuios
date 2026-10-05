@@ -133,7 +133,7 @@ func assertHiddenEverywhere(t *testing.T, term *tuitest.Terminal, base, id strin
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, table)
 	}
-	if strings.Contains(table, "scratch") || !strings.Contains(table, "1 window(s)") {
+	if strings.Contains(table, "scratch") || !strings.Contains(table, "1 window") {
 		t.Errorf("the list-windows table shows the hidden scratch terminal:\n%s", table)
 	}
 	if row := waitScratch(t, term, base, true, false, "hidden"); row.ID != id {

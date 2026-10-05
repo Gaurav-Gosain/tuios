@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // Checkpoints: the state of a work tree at the end of an agent's turn, kept
@@ -464,7 +466,7 @@ func (e *OverwriteError) Error() string {
 	if len(shown) > dirtyShown {
 		shown = shown[:dirtyShown]
 	}
-	return fmt.Sprintf("the restore would write over %d %s that no checkpoint holds: %s", len(e.Paths), plural(len(e.Paths), "file", "files"), strings.Join(shown, ", "))
+	return fmt.Sprintf("the restore would write over %d %s that no checkpoint holds: %s", len(e.Paths), plural.Word(len(e.Paths), "file", "files"), strings.Join(shown, ", "))
 }
 
 // blockingPath is the path that keeps the checkpoint's file at path from

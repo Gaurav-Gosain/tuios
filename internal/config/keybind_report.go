@@ -3,6 +3,8 @@ package config
 import (
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // PaneFacts is what the caller observed about the pane the report is about.
@@ -357,45 +359,21 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 func (rep KeybindReport) Summary() string {
 	var parts []string
 	if n := len(rep.KeyProblems); n > 0 {
-		parts = append(parts, plural(n, "key tuios cannot read", "keys tuios cannot read"))
+		parts = append(parts, plural.CountAs(n, "key tuios cannot read", "keys tuios cannot read"))
 	}
 	if n := len(rep.Collisions); n > 0 {
-		parts = append(parts, plural(n, "key claimed twice", "keys claimed twice"))
+		parts = append(parts, plural.CountAs(n, "key claimed twice", "keys claimed twice"))
 	}
 	if n := len(rep.GuestClashes); n > 0 {
-		parts = append(parts, plural(n, "key a guest wants", "keys a guest wants"))
+		parts = append(parts, plural.CountAs(n, "key a guest wants", "keys a guest wants"))
 	}
 	if n := len(rep.Ambiguous); n > 0 {
-		parts = append(parts, plural(n, "ambiguous key", "ambiguous keys"))
+		parts = append(parts, plural.CountAs(n, "ambiguous key", "ambiguous keys"))
 	}
 	if len(parts) == 0 {
 		return "No conflicts found"
 	}
 	return strings.Join(parts, ", ")
-}
-
-// plural renders a count with the right noun.
-func plural(n int, one, many string) string {
-	word := many
-	if n == 1 {
-		word = one
-	}
-	return itoa(n) + " " + word
-}
-
-// itoa avoids pulling strconv in for one call site.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }
 
 // readAs returns the canonical spelling of key when it differs from what the

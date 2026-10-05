@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -461,7 +462,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 					record(g.add, g.addSession, "", y)
 				} else {
 					// A header with no control is a label, so it takes no band.
-					note(sidebarStripHeader, "", "", plural(g.noun, 2), y)
+					note(sidebarStripHeader, "", "", g.noun+"s", y)
 					lit = false
 				}
 				bg := stripRowBg(lit, pal)
@@ -495,7 +496,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 				// The tail names what it cut, and expanding is the only way to see
 				// it, so that is what a click on it does.
 				hidden := g.total - g.shown()
-				note(sidebarStripMore, "", "", strconv.Itoa(hidden)+" more "+plural(g.noun, hidden), y)
+				note(sidebarStripMore, "", "", plural.Count(hidden, "more "+g.noun), y)
 				record(sidebarRowCollapse, "", "", y)
 				bg := stripRowBg(lit, pal)
 				lines = append(lines, m.sidebarStripBand(sidebarStripMoreCell(cw, pal, bg, lit), cw, edgeLeft, bg, nil, pal))

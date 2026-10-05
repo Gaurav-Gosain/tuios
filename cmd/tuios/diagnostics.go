@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
@@ -406,7 +407,7 @@ func explainMissingSession(name string, available []string) error {
 	// wrong".
 	if info, ok := savedSession(name); ok {
 		e.Cause = "the daemon is running but has not restored it."
-		e.Extra = append(e.Extra, fmt.Sprintf("It has saved state (%d window(s)) and can be brought back.", info.WindowCount))
+		e.Extra = append(e.Extra, fmt.Sprintf("It has saved state (%s) and can be brought back.", plural.Count(info.WindowCount, "window")))
 		e.Fix = fmt.Sprintf("run 'tuios resurrect %s' to restore it and attach.", name)
 		return e
 	}

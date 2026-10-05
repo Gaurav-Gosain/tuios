@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/spf13/cobra"
@@ -259,7 +260,7 @@ N out for the newest checkpoint. Nothing in the repository changes.`,
 			}
 			fmt.Printf("Checkpoint %d of %s, pane %s%s, against %s: %d %s, +%d -%d\n",
 				res.Checkpoint.N, plainLine(res.Session), shortWindowID(res.Window), on, plainLine(res.Base),
-				res.Totals.Files, pluralWord(res.Totals.Files, "file", "files"), res.Totals.Added, res.Totals.Removed)
+				res.Totals.Files, plural.Word(res.Totals.Files, "file", "files"), res.Totals.Added, res.Totals.Removed)
 			if what := checkpointWhat(res.Checkpoint); what != "-" {
 				fmt.Printf("Label: %s\n", what)
 			}
@@ -316,7 +317,7 @@ prompt. Use --force to restore then.`,
 			}
 			fmt.Printf("Restored checkpoint %d in %s, pane %s%s: %d %s written, %d removed.\n",
 				res.Restored.N, plainLine(res.Session), shortWindowID(res.Window), on,
-				len(res.Written), pluralWord(len(res.Written), "file", "files"), len(res.Removed))
+				len(res.Written), plural.Word(len(res.Written), "file", "files"), len(res.Removed))
 			fmt.Printf("Checkpoint %d holds the work tree as it was before. To undo, run: tuios checkpoint restore -s %s -w %s %d\n",
 				res.Safety.N, plainLine(res.Session), shortWindowID(res.Window), res.Safety.N)
 			return nil

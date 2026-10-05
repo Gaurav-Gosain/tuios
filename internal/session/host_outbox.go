@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // Mail to a machine whose link is down.
@@ -308,7 +309,7 @@ func (o *hostOutbox) discard(host string) int {
 	o.saveLocked()
 	o.mu.Unlock()
 	if dropped > 0 {
-		LogBasic("Discarded %d message(s) waiting for %s", dropped, host)
+		LogBasic("Discarded %s waiting for %s", plural.Count(dropped, "message"), host)
 	}
 	o.pushHost(host)
 	return dropped

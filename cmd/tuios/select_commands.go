@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"golang.org/x/term"
 )
@@ -61,7 +62,7 @@ func callWithSelection(client *session.VerbClient, verb string, params map[strin
 		return raw, err
 	}
 	panes := callErr.Hint.Available
-	fmt.Fprintf(c.out, "The selector matches %d %s:\n", len(panes), pluralWord(len(panes), "pane", "panes"))
+	fmt.Fprintf(c.out, "The selector matches %d %s:\n", len(panes), plural.Word(len(panes), "pane", "panes"))
 	for _, p := range panes {
 		fmt.Fprintln(c.out, "  "+plainLine(p))
 	}

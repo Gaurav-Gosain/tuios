@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -256,7 +257,7 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	case patchNote != "":
 		fmt.Println(patchNote)
 	case first.Changes > 0:
-		fmt.Printf("%d uncommitted %s applied in %s.\n", first.Changes, pluralWord(first.Changes, "change is", "changes are"), made.Path)
+		fmt.Printf("%d uncommitted %s applied in %s.\n", first.Changes, plural.Word(first.Changes, "change is", "changes are"), made.Path)
 	}
 	fmt.Printf("Created session '%s'.\n", made.Session)
 	if detach {

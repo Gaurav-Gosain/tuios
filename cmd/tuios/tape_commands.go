@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -217,7 +218,7 @@ func listTapeFiles(asJSON bool) error {
 			dateStyle.Render(dateStr))
 	}
 
-	fmt.Printf("\n%d tape(s) found\n", len(files))
+	fmt.Printf("\n%s found\n", plural.Count(len(files), "tape"))
 	return nil
 }
 

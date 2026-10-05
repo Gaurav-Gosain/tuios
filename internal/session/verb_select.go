@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 var itoa = strconv.Itoa
@@ -173,7 +175,7 @@ func (d *Daemon) resolveSelection(cs *connState, text, confirm string, max int) 
 	case token:
 		return panes, nil
 	case "":
-		return nil, hintedVerbError(ErrVerbConfirmRequired, "the selector matches "+itoa(len(panes))+" "+plural(len(panes), "pane", "panes")+"; nothing was sent", &VerbHint{
+		return nil, hintedVerbError(ErrVerbConfirmRequired, "the selector matches "+itoa(len(panes))+" "+plural.Word(len(panes), "pane", "panes")+"; nothing was sent", &VerbHint{
 			Param:     "confirm",
 			Available: labels,
 			Confirm:   token,

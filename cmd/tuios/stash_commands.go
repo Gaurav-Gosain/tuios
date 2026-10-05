@@ -12,6 +12,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/spf13/cobra"
 )
 
@@ -394,9 +395,9 @@ func printStashPut(out, notes io.Writer, raw json.RawMessage) error {
 		note = fmt.Sprintf("already stored, %s", stashBytes(res.Bytes))
 	}
 	if res.Evicted > 0 {
-		note += fmt.Sprintf(", dropped %d older file(s) to make room", res.Evicted)
+		note += fmt.Sprintf(", dropped %s to make room", plural.Count(res.Evicted, "older file"))
 	} else if res.Evictions > 0 {
-		note += fmt.Sprintf(", %d file(s) dropped so far in this session", res.Evictions)
+		note += fmt.Sprintf(", %s dropped so far in this session", plural.Count(res.Evictions, "file"))
 	}
 	fmt.Fprintln(notes, note)
 	return nil
@@ -476,10 +477,10 @@ func printStashList(w io.Writer, raw json.RawMessage) error {
 		})
 
 	lipgloss.Fprintln(w, t.Render())
-	fmt.Fprintf(w, "\n%d file(s), %s of %s, in %s\n",
-		res.Total, stashBytes(res.Bytes), stashBytes(res.MaxBytes), res.Dir)
+	fmt.Fprintf(w, "\n%s, %s of %s, in %s\n",
+		plural.Count(res.Total, "file"), stashBytes(res.Bytes), stashBytes(res.MaxBytes), res.Dir)
 	if res.Evicted > 0 {
-		fmt.Fprintf(w, "%d file(s) were dropped to make room. USED marks the ones a message still points at.\n", res.Evicted)
+		fmt.Fprintf(w, "%s %s dropped to make room. USED marks the ones a message still points at.\n", plural.Count(res.Evicted, "file"), plural.Word(res.Evicted, "was", "were"))
 	}
 	fmt.Fprintln(w, "Every file here is deleted when the session is killed or the daemon stops.")
 	return nil

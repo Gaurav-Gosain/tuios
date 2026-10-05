@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -457,7 +458,7 @@ func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) erro
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Printf("workspace %d, %d window(s)\n", res.Current, res.WindowCount)
+	fmt.Printf("workspace %d, %s\n", res.Current, plural.Count(res.WindowCount, "window"))
 	return nil
 }
 
@@ -533,7 +534,7 @@ func printWorkspaceList(raw json.RawMessage) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d workspace(s). * marks the one showing.\n", len(res.Workspaces))
+	fmt.Printf("\n%s. * marks the one showing.\n", plural.Count(len(res.Workspaces), "workspace"))
 	return nil
 }
 
@@ -884,7 +885,7 @@ func printWindowList(raw json.RawMessage, on string) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d window(s)%s. * marks the focused one.\n", len(res.Windows), on)
+	fmt.Printf("\n%s%s. * marks the focused one.\n", plural.Count(len(res.Windows), "window"), on)
 	return nil
 }
 
@@ -1144,7 +1145,7 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 		}
 	}
 
-	fmt.Fprintf(w, "\n%d option(s). Set one with 'tuios set-config <path> <value>'.\n", total)
+	fmt.Fprintf(w, "\n%s. Set one with 'tuios set-config <path> <value>'.\n", plural.Count(total, "option"))
 	if len(sections) > 0 {
 		fmt.Fprintf(w, "Sections: %s\n", strings.Join(sections, ", "))
 		fmt.Fprintln(w, "Narrow with --section <name>, or pass a path prefix as the argument.")

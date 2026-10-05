@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/spf13/cobra"
@@ -108,7 +109,7 @@ func runFanCompare(target string, changes, jsonOutput bool) error {
 // a short list, and the two commands that come next.
 func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s in %s%s, %d %s against %s\n", res.Group, res.Repo, on, len(res.Rows), pluralWord(len(res.Rows), "attempt", "attempts"), res.Base)
+	fmt.Fprintf(&b, "%s in %s%s, %d %s against %s\n", res.Group, res.Repo, on, len(res.Rows), plural.Word(len(res.Rows), "attempt", "attempts"), res.Base)
 	cells := make([][]string, 0, len(res.Rows))
 	for _, r := range res.Rows {
 		agent := r.Agent
@@ -117,7 +118,7 @@ func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 		}
 		files, lines := "-", "-"
 		if r.Files != nil {
-			files = fmt.Sprintf("%d %s", *r.Files, pluralWord(*r.Files, "file", "files"))
+			files = fmt.Sprintf("%d %s", *r.Files, plural.Word(*r.Files, "file", "files"))
 			lines = fmt.Sprintf("+%d -%d", derefInt(r.Added), derefInt(r.Removed))
 		}
 		if r.Gone {
@@ -408,7 +409,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 			return printVerbResultOn(t, raw, true)
 		}
 		fmt.Printf("Started %q in %d %s of %s%s. See how they end with 'tuios fan compare %s'.\n",
-			command, len(started.Sessions), pluralWord(len(started.Sessions), "attempt", "attempts"), started.Group, t.on(), target)
+			command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group, t.on(), target)
 		for _, s := range started.Skipped {
 			fmt.Printf("  %s: not started, %s\n", s.Session, s.Reason)
 		}
@@ -418,7 +419,7 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 		return reportVerbError(errors.New("no check was started"), jsonOutput)
 	}
 	if !jsonOutput {
-		fmt.Printf("Running %q in %d %s of %s%s.\n", command, len(started.Sessions), pluralWord(len(started.Sessions), "attempt", "attempts"), started.Group, t.on())
+		fmt.Printf("Running %q in %d %s of %s%s.\n", command, len(started.Sessions), plural.Word(len(started.Sessions), "attempt", "attempts"), started.Group, t.on())
 	}
 	rows, err := waitFanVerify(t, started.Sessions[0], started.Sessions)
 	if err != nil {

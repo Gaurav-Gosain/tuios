@@ -190,7 +190,7 @@ func TestVerbsTakeAHostQualifiedTarget(t *testing.T) {
 		t.Fatalf("ASSERTION: list-windows -s build:far failed, so the target did not reach build: %v\n%s", err, out)
 	}
 	t.Logf("list-windows -s build:far:\n%s", out)
-	if !strings.Contains(out, "window(s) on build") {
+	if !strings.Contains(out, " on build. * marks") {
 		t.Fatalf("ASSERTION: list-windows did not say its answer is build's:\n%s", out)
 	}
 	out, _ = tuiosCLIEnv(t, base, env, "list-windows", "-s", "build:far", "--json")

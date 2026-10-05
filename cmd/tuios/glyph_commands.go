@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // glyphSetDetail is the described set as list-glyphs reports it.
@@ -96,7 +97,7 @@ func printGlyphSetList(w *os.File, sets []string, total int) {
 	for _, id := range sets {
 		fmt.Fprintf(w, "  %-20s", id)
 	}
-	fmt.Fprintf(w, "\n\n%d glyph set(s).\n", total)
+	fmt.Fprintf(w, "\n\n%s.\n", plural.Count(total, "glyph set"))
 }
 
 // printGlyphSet prints one set, role by role: what the set says, and what draws.

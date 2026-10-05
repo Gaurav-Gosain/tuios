@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -210,12 +211,12 @@ func (r shipMergeResult) sentences() string {
 	case r.UpToDate:
 		fmt.Fprintf(&b, "%s already has every commit of %s. Nothing was merged.\n", plainLine(r.Into), plainLine(r.Branch))
 	case r.FastForward:
-		fmt.Fprintf(&b, "Merged %s into %s in %s: fast-forward, %d %s, now at %s.\n", plainLine(r.Branch), plainLine(r.Into), plainLine(r.RepoRoot), r.Commits, pluralWord(r.Commits, "commit", "commits"), shortHash(r.After))
+		fmt.Fprintf(&b, "Merged %s into %s in %s: fast-forward, %d %s, now at %s.\n", plainLine(r.Branch), plainLine(r.Into), plainLine(r.RepoRoot), r.Commits, plural.Word(r.Commits, "commit", "commits"), shortHash(r.After))
 	default:
-		fmt.Fprintf(&b, "Merged %s into %s in %s: %s, %d %s, now at %s.\n", plainLine(r.Branch), plainLine(r.Into), plainLine(r.RepoRoot), plainLine(r.Mode), r.Commits, pluralWord(r.Commits, "commit", "commits"), shortHash(r.After))
+		fmt.Fprintf(&b, "Merged %s into %s in %s: %s, %d %s, now at %s.\n", plainLine(r.Branch), plainLine(r.Into), plainLine(r.RepoRoot), plainLine(r.Mode), r.Commits, plural.Word(r.Commits, "commit", "commits"), shortHash(r.After))
 	}
 	if r.Uncommitted > 0 {
-		fmt.Fprintf(&b, "The worktree still has %d uncommitted %s, which were not merged. Commit them with 'tuios ship commit -s %s'.\n", r.Uncommitted, pluralWord(r.Uncommitted, "change", "changes"), plainLine(r.Session))
+		fmt.Fprintf(&b, "The worktree still has %d uncommitted %s, which were not merged. Commit them with 'tuios ship commit -s %s'.\n", r.Uncommitted, plural.Word(r.Uncommitted, "change", "changes"), plainLine(r.Session))
 	}
 	return b.String()
 }

@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 func listKeybindings(asJSON bool) error {
@@ -189,7 +190,7 @@ func listCustomKeybindings() error {
 
 	note := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("11")).
-		Render(fmt.Sprintf("Found %d customized keybinding(s)", len(customizations)))
+		Render("Found " + plural.Count(len(customizations), "customized keybinding"))
 	fmt.Println(note)
 	fmt.Println()
 	return nil

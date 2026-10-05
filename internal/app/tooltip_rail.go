@@ -1,12 +1,12 @@
 package app
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -94,7 +94,7 @@ func sidebarTooltipBadgeLabel(info sidebarStripBadgeInfo) string {
 	if info.State == "needs_input" {
 		words = agentNeedsYou(info.Count)
 	}
-	return strconv.Itoa(info.Count) + " " + plural("agent", info.Count) + " " + words
+	return plural.Count(info.Count, "agent") + " " + words
 }
 
 // sidebarTooltipSessionLabel is what a session cell says in words: the two
@@ -105,7 +105,7 @@ func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 	if overlay.UseASCII() {
 		sep = " - "
 	}
-	label := printableTitle(s.Title) + sep + strconv.Itoa(s.WindowCount) + " " + plural("terminal", s.WindowCount)
+	label := printableTitle(s.Title) + sep + plural.Count(s.WindowCount, "terminal")
 	if sidebarAttention(s.AgentState) {
 		loud := agentStateIndicator(s.AgentState) + " " + sidebarStateWords(s.AgentState)
 		if age := agentElapsed(s.AgentState, s.StateAt, time.Now()); age != "" {
@@ -201,14 +201,6 @@ func agentNeedsYou(n int) string {
 		return "needs you"
 	}
 	return "need you"
-}
-
-// plural appends an s past one, so the label reads as a sentence.
-func plural(word string, n int) string {
-	if n == 1 {
-		return word
-	}
-	return word + "s"
 }
 
 // renderRailTooltip composes the hovered strip row's label as its own layer.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -1640,7 +1641,7 @@ func LoadUserConfig() (*UserConfig, error) {
 		for _, err := range validation.Errors {
 			fmt.Fprintf(os.Stderr, "Config error in [%s]: %s: %s\n", err.Field, err.Key, err.Message)
 		}
-		return nil, fmt.Errorf("configuration has %d error(s), please fix and restart", len(validation.Errors))
+		return nil, fmt.Errorf("configuration has %s, please fix and restart", plural.Count(len(validation.Errors), "error"))
 	}
 
 	// Warnings are deliberately not printed here. Loading happens before the

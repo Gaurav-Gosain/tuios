@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -113,6 +114,6 @@ func printOptionSearch(w io.Writer, raw json.RawMessage, query string, jsonOutpu
 			fmt.Fprintf(w, "%-*s  this session: %s\n", width, "", o.SessionVal)
 		}
 	}
-	fmt.Fprintf(w, "\n%d option(s) match %q, best first. Set one with 'tuios set-config <path> <value>'.\n", len(hits), query)
+	fmt.Fprintf(w, "\n%s %s %q, best first. Set one with 'tuios set-config <path> <value>'.\n", plural.Count(len(hits), "option"), plural.Word(len(hits), "matches", "match"), query)
 	return nil
 }

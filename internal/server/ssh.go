@@ -23,6 +23,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -177,7 +178,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// hand it.
 	if authPlan.Authenticated() {
 		opts = append(opts, wish.WithPublicKeyAuth(publicKeyHandler(authPlan.Keys.Path)))
-		log.Printf("SSH authentication is on. %d key(s) from %s", len(authPlan.Keys.Keys), authPlan.Keys.Path)
+		log.Printf("SSH authentication is on. %s from %s", plural.Count(len(authPlan.Keys.Keys), "key"), authPlan.Keys.Path)
 	} else {
 		// Once, at startup. Not per connection: a line on every connect is a
 		// line nobody reads, and this one has to be read.

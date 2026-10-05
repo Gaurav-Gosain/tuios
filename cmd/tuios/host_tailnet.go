@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // The tailnet half of address discovery. See internal/federation's tailnet.go
@@ -185,7 +186,7 @@ func runHostsTailnet(asJSON bool) error {
 		fmt.Printf(" %s %-20s %-46s %s\n", mark, r.Name, r.Addr, note)
 	}
 	fmt.Println()
-	fmt.Printf("%d machine(s), %d offered as addresses. + is offered, = is already a host.\n", len(rows), offered)
+	fmt.Printf("%s, %d offered as addresses. + is offered, = is already a host.\n", plural.Count(len(rows), "machine"), offered)
 	fmt.Println("Add one with 'tuios hosts add NAME --tailnet'.")
 	return nil
 }

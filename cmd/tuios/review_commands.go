@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/spf13/cobra"
 )
@@ -199,9 +200,9 @@ func reviewHeading(res reviewDiffResult, on string) string {
 	}
 	line := fmt.Sprintf("Review of %s, pane %s%s, %s: %d %s, +%d -%d",
 		plainLine(res.Session), shortWindowID(res.Window), on, against,
-		res.Totals.Files, pluralWord(res.Totals.Files, "file", "files"), res.Totals.Added, res.Totals.Removed)
+		res.Totals.Files, plural.Word(res.Totals.Files, "file", "files"), res.Totals.Added, res.Totals.Removed)
 	if n := len(res.Notes); n > 0 {
-		line += fmt.Sprintf(", %d %s", n, pluralWord(n, "note", "notes"))
+		line += fmt.Sprintf(", %d %s", n, plural.Word(n, "note", "notes"))
 	}
 	return line
 }
@@ -480,9 +481,9 @@ func runReviewNote(w io.Writer, sessionName, window string, params map[string]an
 		fmt.Fprintf(w, "Removed note %v%s.\n", params["id"], t.on())
 		return nil
 	case "clear":
-		fmt.Fprintf(w, "Removed %d %s%s.", res.Removed, pluralWord(res.Removed, "note", "notes"), t.on())
+		fmt.Fprintf(w, "Removed %d %s%s.", res.Removed, plural.Word(res.Removed, "note", "notes"), t.on())
 		if len(res.Notes) > 0 {
-			fmt.Fprintf(w, " %d written by others %s kept.", len(res.Notes), pluralWord(len(res.Notes), "was", "were"))
+			fmt.Fprintf(w, " %d written by others %s kept.", len(res.Notes), plural.Word(len(res.Notes), "was", "were"))
 		}
 		fmt.Fprintln(w)
 		return nil
@@ -584,7 +585,7 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, pluralWord(res.Notes, "note", "notes"),
+	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, plural.Word(res.Notes, "note", "notes"),
 		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+t.on())
 	if len(res.Withheld) > 0 {
 		ids := make([]string, len(res.Withheld))
@@ -592,7 +593,7 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 			ids[i] = plainLine(id)
 		}
 		fmt.Fprintf(w, "Withheld %s %s: %s. Edit a note to make it yours, or remove it.\n",
-			pluralWord(len(ids), "note", "notes"), strings.Join(ids, ", "), plainLine(res.Reason))
+			plural.Word(len(ids), "note", "notes"), strings.Join(ids, ", "), plainLine(res.Reason))
 	}
 	return nil
 }

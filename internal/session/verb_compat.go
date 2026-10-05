@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // This file detects the one failure that has no good error message anywhere
@@ -109,7 +111,7 @@ func (e *ProtocolMismatchError) Error() string {
 		b.WriteString("\nFix: run 'tuios kill-server', then run this command again.")
 	}
 	if e.Sessions > 0 {
-		fmt.Fprintf(&b, "\nNote: the daemon is holding %d session(s). They are saved and restored when it restarts (see 'tuios resurrect').", e.Sessions)
+		fmt.Fprintf(&b, "\nNote: the daemon is holding %s. %s saved and restored when it restarts (see 'tuios resurrect').", plural.Count(e.Sessions, "session"), plural.Word(e.Sessions, "It is", "They are"))
 	}
 	if e.DaemonPID > 0 {
 		fmt.Fprintf(&b, "\nDaemon PID: %d.", e.DaemonPID)

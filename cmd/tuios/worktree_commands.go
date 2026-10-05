@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/spf13/cobra"
@@ -541,7 +542,7 @@ func runWorktreeList(host, repo, group string, jsonOutput bool) error {
 		return nil
 	}
 	fmt.Println(renderWorktreeTable(rows))
-	fmt.Printf("\n%d worktree session(s)\n", len(rows))
+	fmt.Printf("\n%s\n", plural.Count(len(rows), "worktree session"))
 	return nil
 }
 
@@ -657,9 +658,9 @@ func (r removedWorktree) sentences() string {
 	}
 	switch {
 	case r.Stashed:
-		fmt.Fprintf(&b, "%d uncommitted %s %s in git stash as '%s'.\n", r.Changes, pluralWord(r.Changes, "change", "changes"), pluralWord(r.Changes, "is", "are"), r.StashMessage)
+		fmt.Fprintf(&b, "%d uncommitted %s %s in git stash as '%s'.\n", r.Changes, plural.Word(r.Changes, "change", "changes"), plural.Word(r.Changes, "is", "are"), r.StashMessage)
 	case r.Discarded:
-		fmt.Fprintf(&b, "%d uncommitted %s %s discarded.\n", r.Changes, pluralWord(r.Changes, "change", "changes"), pluralWord(r.Changes, "was", "were"))
+		fmt.Fprintf(&b, "%d uncommitted %s %s discarded.\n", r.Changes, plural.Word(r.Changes, "change", "changes"), plural.Word(r.Changes, "was", "were"))
 	}
 	if r.SessionKilled {
 		fmt.Fprintf(&b, "Killed session '%s'.", r.Session)
@@ -667,13 +668,6 @@ func (r removedWorktree) sentences() string {
 		fmt.Fprintf(&b, "Session '%s' is still running.", r.Session)
 	}
 	return b.String()
-}
-
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 func runWorktreeDiff(name string, stat bool) error {
@@ -854,7 +848,7 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if !jsonOutput {
-		fmt.Printf("Started %d %s on %s%s. Each prompt is sent when its agent is ready.\n", len(res.Sessions), pluralWord(len(res.Sessions), "agent", "agents"), res.Group, t.on())
+		fmt.Printf("Started %d %s on %s%s. Each prompt is sent when its agent is ready.\n", len(res.Sessions), plural.Word(len(res.Sessions), "agent", "agents"), res.Group, t.on())
 		for _, s := range res.Sessions {
 			line := fmt.Sprintf("  %s  %s  %s", s.Session, s.Branch, s.Path)
 			if len(o.agents) > 1 && s.Command != "" {

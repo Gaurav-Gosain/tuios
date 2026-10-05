@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // tuios list-hooks is the dock's debugging story, applied to the extension
@@ -107,7 +108,7 @@ func printHookList(raw json.RawMessage) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d hook(s).\n", len(res.Hooks))
+	fmt.Printf("\n%s.\n", plural.Count(len(res.Hooks), "hook"))
 	if broken > 0 {
 		fmt.Printf("%d failed. The LAST column carries the exit code and the error.\n", broken)
 	}

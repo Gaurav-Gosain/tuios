@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"golang.org/x/term"
@@ -587,7 +588,7 @@ func runListClients(jsonOutput bool) error {
 			}
 			return baseStyle.Foreground(lipgloss.Color("8"))
 		}).Render())
-	fmt.Printf("\n%d client(s)\n", len(rows))
+	fmt.Printf("\n%s\n", plural.Count(len(rows), "client"))
 	return nil
 }
 
@@ -658,7 +659,7 @@ func runListSessions(jsonOutput bool) error {
 	}
 
 	fmt.Println(renderSessionTable(rows))
-	fmt.Printf("\n%d session(s)\n", len(sessions))
+	fmt.Printf("\n%s\n", plural.Count(len(sessions), "session"))
 	if anyRestored {
 		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
 	}
@@ -707,7 +708,7 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 			})
 		}
 		fmt.Println(renderSessionTable(rows))
-		fmt.Printf("\n%d session(s)\n", len(infos))
+		fmt.Printf("\n%s\n", plural.Count(len(infos), "session"))
 		fmt.Printf("%s: %s.\n\n", session.SavedTag, session.SavedNote)
 	}
 
@@ -996,7 +997,7 @@ func listResurrectableSessions(asJSON bool) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d resurrectable session(s). Use 'tuios resurrect <name>' to restore.\n", len(infos))
+	fmt.Printf("\n%s. Use 'tuios resurrect <name>' to restore.\n", plural.Count(len(infos), "resurrectable session"))
 	return nil
 }
 

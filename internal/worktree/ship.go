@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // Shipping: what takes an agent's work from its worktree to the base branch
@@ -47,7 +49,7 @@ type ConflictError struct {
 }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("the merge conflicts in %d %s: %s", len(e.Files), plural(len(e.Files), "file", "files"), strings.Join(e.Files, ", "))
+	return fmt.Sprintf("the merge conflicts in %d %s: %s", len(e.Files), plural.Word(len(e.Files), "file", "files"), strings.Join(e.Files, ", "))
 }
 
 // DirtyError is a main checkout with tracked changes, which a merge refuses.
@@ -59,14 +61,7 @@ type DirtyError struct {
 }
 
 func (e *DirtyError) Error() string {
-	return fmt.Sprintf("the main checkout has %d uncommitted %s", e.Count, plural(e.Count, "change", "changes"))
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
+	return fmt.Sprintf("the main checkout has %d uncommitted %s", e.Count, plural.Word(e.Count, "change", "changes"))
 }
 
 // CommitAll stages every change in the work tree at dir, untracked files

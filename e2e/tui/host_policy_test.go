@@ -190,7 +190,7 @@ func TestMailWaitsForAMachineWhoseLinkIsDown(t *testing.T) {
 		t.Fatalf("ASSERTION: the send did not say the message waits:\n%s", out)
 	}
 	hosts, _ := tuiosCLIEnv(t, base, env, "hosts")
-	if !contains(hosts, "build: 1 message(s) wait here for the link") {
+	if !contains(hosts, "build: 1 message waits here for the link") {
 		t.Errorf("tuios hosts does not say mail waits:\n%s", hosts)
 	}
 

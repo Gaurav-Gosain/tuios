@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -811,9 +812,9 @@ func (m *OS) agentRowItem() settingItem {
 			if !spec.Custom() {
 				return "default"
 			}
-			tokens := strconv.Itoa(len(spec.Tokens)) + " " + plural("token", len(spec.Tokens))
+			tokens := plural.Count(len(spec.Tokens), "token")
 			if n := spec.RuleCount(); n > 0 {
-				return tokens + ", " + strconv.Itoa(n) + " " + plural("rule", n)
+				return tokens + ", " + plural.Count(n, "rule")
 			}
 			return tokens
 		},

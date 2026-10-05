@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
@@ -379,7 +380,7 @@ func (m *OS) TapeManagerPlaySelected() {
 	// A tape with errors does not play. It used to play whatever parsed and
 	// skip the rest without a word.
 	if len(script.Errors) > 0 {
-		m.TapeManager.ErrorMessage = fmt.Sprintf("Tape has %d error(s). The first is at %s", len(script.Errors), script.Errors[0])
+		m.TapeManager.ErrorMessage = fmt.Sprintf("Tape has %s. The first is at %s", plural.Count(len(script.Errors), "error"), script.Errors[0])
 		m.TapeManager.MessageTime = time.Now()
 		return
 	}

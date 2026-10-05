@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -430,12 +431,12 @@ func (d *Daemon) shipMerge(sessionName, root, repoRoot, recorded, into, mode, me
 	switch {
 	case errors.As(err, &conflict):
 		LogBasic("Merge of %s into %s in %s conflicted and was aborted: %v", branch, into, repoRoot, conflict.Files)
-		return nil, hintedVerbError(ErrVerbMergeConflict, "merging "+branch+" into "+into+" conflicts in "+strconv.Itoa(len(conflict.Files))+" "+plural(len(conflict.Files), "file", "files"), &VerbHint{
+		return nil, hintedVerbError(ErrVerbMergeConflict, "merging "+branch+" into "+into+" conflicts in "+strconv.Itoa(len(conflict.Files))+" "+plural.Word(len(conflict.Files), "file", "files"), &VerbHint{
 			Available: conflict.Files,
 			Detail:    "The merge was aborted, and the main checkout is as it was. Rebase " + branch + " on " + into + " in the worktree and resolve the conflicts there, then merge again.",
 		})
 	case errors.As(err, &dirty):
-		return nil, hintedVerbError(ErrVerbCheckoutDirty, "the main checkout "+repoRoot+" has "+strconv.Itoa(dirty.Count)+" uncommitted "+plural(dirty.Count, "change", "changes"), &VerbHint{
+		return nil, hintedVerbError(ErrVerbCheckoutDirty, "the main checkout "+repoRoot+" has "+strconv.Itoa(dirty.Count)+" uncommitted "+plural.Word(dirty.Count, "change", "changes"), &VerbHint{
 			Available: dirty.Files,
 			Detail:    "Nothing was merged. Commit or stash the changes in the main checkout, then merge again.",
 		})

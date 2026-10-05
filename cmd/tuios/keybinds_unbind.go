@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -84,7 +85,7 @@ func keybindsFree(key string) error {
 		if err := config.SaveUserConfig(cfg); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}
-		fmt.Printf("Took %s off %d action(s):\n", key, len(removed))
+		fmt.Printf("Took %s off %s:\n", key, plural.Count(len(removed), "action"))
 		for _, r := range removed {
 			fmt.Printf("  %-28s [keybindings.%s]%s\n", r.Action, r.Section, unboundNote(r))
 		}

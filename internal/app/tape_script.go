@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -111,7 +112,7 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 		return fmt.Errorf("no pane is named %q", c.Value)
 	case "gone":
 		if n := len(m.windowsNamed(c.Value)); n > 0 {
-			return fmt.Errorf("%d pane(s) are still named %q", n, c.Value)
+			return fmt.Errorf("%s %s still named %q", plural.Count(n, "pane"), plural.Word(n, "is", "are"), c.Value)
 		}
 		return nil
 	case "focus":
@@ -125,7 +126,7 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 		return fmt.Errorf("the focused pane is %s", m.paneLabel(w))
 	case "panes":
 		if n := m.GetWorkspaceWindowCount(m.CurrentWorkspace); n != c.Count {
-			return fmt.Errorf("workspace %d has %d pane(s)", m.CurrentWorkspace, n)
+			return fmt.Errorf("workspace %d has %s", m.CurrentWorkspace, plural.Count(n, "pane"))
 		}
 		return nil
 	case "agent":
@@ -306,7 +307,7 @@ func (m *OS) scriptBusy() bool {
 func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error) {
 	commands, errs := tape.ParseFile(script)
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("the tape has %d error(s). The first is at %s", len(errs), errs[0])
+		return nil, fmt.Errorf("the tape has %s. The first is at %s", plural.Count(len(errs), "error"), errs[0])
 	}
 	if len(commands) == 0 {
 		return nil, errors.New("the tape has no commands")

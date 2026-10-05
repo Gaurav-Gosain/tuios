@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -212,11 +213,11 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 	lipgloss.Fprintln(w, t.Render())
 	// With --all the rows are windows rather than agents, and calling them agent
 	// panes is exactly the confusion --all exists to clear up.
-	noun := "agent pane(s)"
+	count := plural.Count(res.Total, "agent pane")
 	if all {
-		noun = "window(s), agent or not"
+		count = plural.Count(res.Total, "window") + ", agent or not"
 	}
-	fmt.Fprintf(w, "\n%d %s%s. * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total, noun, on)
+	fmt.Fprintf(w, "\n%s%s. * marks the focused one. Address one with -w and its ID or NAME.\n", count, on)
 	if res.Confirm != "" {
 		fmt.Fprintf(w, "To message or ask exactly these, pass --select %q --confirm %s.\n", plainLine(res.Select), plainLine(res.Confirm))
 	}
@@ -498,12 +499,12 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		where = " on " + on
 	}
 	if res.Thread != 0 {
-		fmt.Fprintf(w, "\n%d message(s) in thread %d%s, %d unread.\n", res.Total, res.Thread, where, res.Unread)
+		fmt.Fprintf(w, "\n%s in thread %d%s, %d unread.\n", plural.Count(res.Total, "message"), res.Thread, where, res.Unread)
 	} else {
-		fmt.Fprintf(w, "\n%d message(s)%s, %d unread.\n", res.Total, where, res.Unread)
+		fmt.Fprintf(w, "\n%s%s, %d unread.\n", plural.Count(res.Total, "message"), where, res.Unread)
 	}
 	if res.Evicted > 0 {
-		fmt.Fprintf(w, "%d older message(s) were dropped: the ring was full, and they were never read.\n", res.Evicted)
+		fmt.Fprintf(w, "%s %s dropped: the ring was full, and %s never read.\n", plural.Count(res.Evicted, "older message"), plural.Word(res.Evicted, "was", "were"), plural.Word(res.Evicted, "it was", "they were"))
 	}
 	return nil
 }

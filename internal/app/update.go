@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -293,7 +294,7 @@ func (m *OS) reportConfigWarnings() {
 		m.LogWarn("Config: %s", warning)
 	}
 	m.ShowNotification(
-		fmt.Sprintf("%d config problem(s), see the log viewer", len(m.ConfigWarnings)),
+		plural.Count(len(m.ConfigWarnings), "config problem")+", see the log viewer",
 		"warning",
 		5*time.Second,
 	)

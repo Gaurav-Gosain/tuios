@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"golang.org/x/term"
 )
@@ -126,7 +127,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			}
 		})
 	lipgloss.Fprintln(w, t.Render())
-	fmt.Fprintf(w, "\n%d host(s). Attach a session on a host with 'tuios attach --host NAME SESSION'.\n", res.Total)
+	fmt.Fprintf(w, "\n%s. Attach a session on a host with 'tuios attach --host NAME SESSION'.\n", plural.Count(res.Total, "host"))
 
 	// The reason a host is not usable is the only thing the table cannot say in
 	// a column, so it goes below, one line per host that has one.
@@ -174,7 +175,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 	// Mail kept here for a machine whose link is down goes when it is back.
 	for _, h := range res.Hosts {
 		if h.Queued > 0 {
-			fmt.Fprintf(w, "%s: %d message(s) wait here for the link. The Inbox shows them; dismissing the item there discards them.\n", h.Host, h.Queued)
+			fmt.Fprintf(w, "%s: %s here for the link. The Inbox shows %s; dismissing the item there discards %s.\n", h.Host, plural.Count(h.Queued, "message")+" "+plural.Word(h.Queued, "waits", "wait"), plural.Word(h.Queued, "it", "them"), plural.Word(h.Queued, "it", "them"))
 		}
 	}
 	printConfigProblems(w, res.ConfigProblems)
@@ -295,7 +296,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 		fmt.Println(renderSessionTable(rows))
 		fmt.Println()
 	}
-	fmt.Printf("%d session(s) on %d host(s).\n", total, reachable)
+	fmt.Printf("%s on %s.\n", plural.Count(total, "session"), plural.Count(reachable, "host"))
 	return nil
 }
 
@@ -406,7 +407,7 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 		lipgloss.Println(t.Render())
 		fmt.Println()
 	}
-	fmt.Printf("%d agent pane(s). A pane on another host is read only in this release.\n", total)
+	fmt.Printf("%s. A pane on another host is read only in this release.\n", plural.Count(total, "agent pane"))
 	return nil
 }
 

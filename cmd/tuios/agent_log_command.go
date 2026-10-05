@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -278,12 +279,12 @@ func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 	} else {
 		fmt.Fprintln(w, "No activity recorded for this pane.")
 	}
-	line := plural(int(rc.Turns), "turn", "turns") + "."
+	line := plural.CountAs(int(rc.Turns), "turn", "turns") + "."
 	if rc.FilesTotal > 0 {
-		line += " " + plural(rc.FilesTotal, "file", "files") + ": " + listFiles(rc.Files, rc.FilesTotal, 3)
+		line += " " + plural.CountAs(rc.FilesTotal, "file", "files") + ": " + listFiles(rc.Files, rc.FilesTotal, 3)
 	}
 	fmt.Fprintln(w, line)
-	line = plural(rc.Commands, "command", "commands") + "."
+	line = plural.CountAs(rc.Commands, "command", "commands") + "."
 	if rc.Tests != nil {
 		ago := waitedFor(rc.Tests.At, now)
 		switch {
@@ -301,12 +302,4 @@ func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 	}
 	fmt.Fprintf(w, "Now: %s\n", plainLine(rc.State))
 	return nil
-}
-
-// plural is n and the word for it: 1 turn, 3 turns.
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return strconv.Itoa(n) + " " + many
 }

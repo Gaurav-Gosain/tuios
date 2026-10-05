@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // The CLI half of the dock's two verbs.
@@ -155,7 +156,7 @@ func printDockComponentList(raw json.RawMessage) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d component(s).\n", len(res.Components))
+	fmt.Printf("\n%s.\n", plural.Count(len(res.Components), "component"))
 	if broken > 0 {
 		fmt.Printf("%d is not drawing; the READS column carries the reason. "+
 			"Fix the script and run 'tuios refresh-dock <name>'.\n", broken)

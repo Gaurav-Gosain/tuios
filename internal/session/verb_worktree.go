@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -364,7 +365,7 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 		out["changes"] = changes
 		if changes > 0 && !p.Force && !p.Stash {
 			return nil, hintedVerbError(ErrVerbWorktreeDirty,
-				fmt.Sprintf("%s holds %d uncommitted %s. Nothing was removed.", info.Path, changes, plural(changes, "change", "changes")),
+				fmt.Sprintf("%s holds %d uncommitted %s. Nothing was removed.", info.Path, changes, plural.Word(changes, "change", "changes")),
 				&VerbHint{
 					Param:   "stash",
 					Command: "tuios worktree rm " + sess.Name() + " --stash",
@@ -658,11 +659,4 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string,
 	// took it. See prompt_gate.go.
 	status, note, at := d.typeFirstPrompt(sess, windowID, text)
 	sess.setPromptStatus(status, note, at)
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
