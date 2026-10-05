@@ -188,3 +188,59 @@ func TestSessionColourIgnoresTheOrderItIsAsked(t *testing.T) {
 		t.Errorf("the order the sessions were listed in changed the colours:\n%v\n%v", want, got)
 	}
 }
+
+// TestSessionColoursNeverShareARow: past the palette's size a duplicate hue is
+// unavoidable, and the one thing that must not survive it is two sessions
+// wearing the same hue in neighbouring rows of the surface drawing them. The
+// neighbour pass moves one of the pair, and moves it onto a hue neither
+// neighbour wears.
+func TestSessionColoursNeverShareARow(t *testing.T) {
+	var names []string
+	for i := range sessionAccentSlotCount + 2 {
+		names = append(names, "session-"+strconv.Itoa(i))
+	}
+	base := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
+
+	first, second := "", ""
+	seen := map[Accent]string{}
+	for _, name := range names {
+		if other, dup := seen[base[name]]; dup {
+			first, second = other, name
+			break
+		}
+		seen[base[name]] = name
+	}
+	if first == "" {
+		t.Fatalf("%d sessions produced no duplicate hue to repair", len(names))
+	}
+
+	ordered := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == first || name == second {
+			continue
+		}
+		ordered = append(ordered, name)
+	}
+	ordered = append(ordered, first, second)
+
+	auto := assignSessionColors(slices.Clone(ordered), [sessionAccentSlotCount]bool{})
+	settleAdjacentRows(ordered, auto, map[string]Accent{})
+	for i := 1; i < len(ordered); i++ {
+		if auto[ordered[i]] == auto[ordered[i-1]] {
+			t.Errorf("%q and %q wear the same hue in neighbouring rows", ordered[i-1], ordered[i])
+		}
+	}
+}
+
+// TestSessionNeighbourPassLeavesSmallSetsAlone: up to the palette's size
+// nobody shares, so the neighbour pass has nothing to do and must not move a
+// hue to get there.
+func TestSessionNeighbourPassLeavesSmallSetsAlone(t *testing.T) {
+	names := []string{"main", "api", "docs", "infra", "notes", "build", "deploy"}
+	want := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
+	auto := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
+	settleAdjacentRows(names, auto, map[string]Accent{})
+	if !maps.Equal(auto, want) {
+		t.Errorf("the neighbour pass moved a hue in a set that never shared:\n%v\n%v", want, auto)
+	}
+}

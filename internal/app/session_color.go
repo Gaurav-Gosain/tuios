@@ -177,17 +177,71 @@ func (m *OS) refreshSessionColors(names []string) {
 	}
 	var reserved [sessionAccentSlotCount]bool
 	auto := names[:0:0]
+	own := make(map[string]Accent)
 	for _, name := range names {
 		a, ok := ParseAccent(m.sessionAccentString(name))
 		if !ok {
 			auto = append(auto, name)
 			continue
 		}
+		own[name] = a
 		if slot, ok := sessionReservedSlot(a); ok {
 			reserved[slot] = true
 		}
 	}
-	m.sessionColors = assignSessionColors(auto, reserved)
+	colors := assignSessionColors(auto, reserved)
+	settleAdjacentRows(names, colors, own)
+	m.sessionColors = colors
+}
+
+// settleAdjacentRows repairs the one case the set-based assignment cannot see:
+// past the palette's size a duplicate hue is unavoidable, and nothing in a
+// set-based answer stops the two sessions wearing it from standing next to each
+// other in the row order a surface is about to draw. Walking the rows in order
+// and moving the auto side of each adjacent pair to a hue neither neighbour
+// wears fixes that pair without touching any other row, so one left-to-right
+// pass is enough, and the hue it moves to is one the palette already had, so
+// the repair never invents a colour. An accent the user set never moves; when
+// two pinned accents collide the user asked for both, and they stand.
+//
+// This is the one place the answer depends on the order the rows were listed
+// in. The rail's row order is a local drag order, so two clients can repair a
+// duplicate pair differently and an over-cap session can wear a different hue
+// on each. Up to the palette's size nobody shares and nothing moves, which is
+// the case the order-independence guarantee is about.
+func settleAdjacentRows(names []string, auto, own map[string]Accent) {
+	eff := make([]Accent, len(names))
+	for i, name := range names {
+		if a, ok := own[name]; ok {
+			eff[i] = a
+		} else {
+			eff[i] = auto[name]
+		}
+	}
+	for i := range names {
+		if _, pinned := own[names[i]]; pinned {
+			continue
+		}
+		var prev, next Accent
+		if i > 0 {
+			prev = eff[i-1]
+		}
+		if i+1 < len(eff) {
+			next = eff[i+1]
+		}
+		if eff[i] != prev && eff[i] != next {
+			continue
+		}
+		for _, idx := range sessionAccentSlots {
+			cand := SlotAccent(idx)
+			if cand == eff[i] || cand == prev || cand == next {
+				continue
+			}
+			eff[i] = cand
+			auto[names[i]] = cand
+			break
+		}
+	}
 }
 
 // sessionReservedSlot is the palette position an explicit accent takes out of
