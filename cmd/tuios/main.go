@@ -2980,7 +2980,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
-	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
+	rootCmd.AddCommand(hostsCmd, stdioProxyCmd, newGUIBridgeCommand())
 	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand())
 	rootCmd.AddCommand(newBufferCommands()...)
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand())
