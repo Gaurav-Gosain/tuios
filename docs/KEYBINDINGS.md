@@ -586,6 +586,41 @@ agents are in them. `Cancel` is the default row. Scratch panes stay open.
 `tuios close-workspace` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
 
+## Split into the same ssh
+
+These actions open a pane on the machine that the focused pane is connected to
+with ssh:
+
+| Action | What it does |
+| --- | --- |
+| `split_ssh_horizontal` | Splits the pane top and bottom. |
+| `split_ssh_vertical` | Splits the pane left and right. |
+| `new_window_ssh` | Opens a new window. |
+
+The new pane runs ssh again, to the same destination with the same options.
+tuios does not run the remote command again. It also removes `-N`, `-f`, `-T`,
+`-W`, port forwards and the other options that stop a shell. `mosh` works the
+same way.
+
+When the focused pane does not run ssh, the action opens an ordinary pane. You
+can use the keys in every pane.
+
+The actions have no default key. The command palette has an entry for each
+one. To bind them, add them to a section. This example uses keys for
+window-management mode:
+
+```toml
+[keybindings.layout]
+split_ssh_vertical = ["alt+v"]
+split_ssh_horizontal = ["alt+s"]
+new_window_ssh = ["alt+w"]
+```
+
+To make the ordinary split and new-window keys do the same, set
+`appearance.new_window_follow_ssh`. To start the new pane in the remote
+folder, make the remote shell report its folder. See
+[CONFIGURATION.md](CONFIGURATION.md#splits-that-follow-ssh).
+
 ## Copy mode
 
 `Ctrl+B [` starts copy mode on the focused pane. The copy cursor starts on the

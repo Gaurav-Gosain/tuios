@@ -75,6 +75,19 @@ stays in the list until something closes it:
 tuios close-window -s work "$id"
 ```
 
+## A pane on the machine a pane is ssh'd into
+
+The actions `split_ssh_vertical`, `split_ssh_horizontal` and `new_window_ssh`
+open a pane that runs the focused pane's ssh again: the same destination and
+options, with no remote command. A pane that does not run ssh gets an ordinary
+pane. They are keybinding actions, so `run-command` runs them, and the same
+grant rules apply as for any other `run-command`:
+
+```sh
+tuios focus-window -s work build
+tuios run-command -s work split_ssh_vertical
+```
+
 ## Many panes at once
 
 `tuios xpanes` opens one pane per item on a new workspace, tiled, with

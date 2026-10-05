@@ -416,6 +416,51 @@ When clients with different docks share a session, the panes keep the
 largest dock height. A client with a compact dock shows a blank row in that
 case.
 
+## Splits that follow ssh
+
+The actions `split_ssh_horizontal`, `split_ssh_vertical` and `new_window_ssh`
+open a pane on the machine that the focused pane is connected to with ssh. See
+[KEYBINDINGS.md](KEYBINDINGS.md#split-into-the-same-ssh).
+
+`appearance.new_window_follow_ssh` makes the ordinary actions do the same:
+`split_horizontal`, `split_vertical` and `new_window`. When the focused pane
+does not run ssh, these actions open an ordinary pane. The default is `false`.
+
+```toml
+[appearance]
+new_window_follow_ssh = true
+```
+
+tuios finds ssh in the foreground of the pane. ssh can run from a shell or a
+script in the pane. tuios reads only the processes that you own in the pane.
+It runs the new ssh directly, with no shell on this machine.
+
+### Start in the remote folder
+
+The new pane starts in the remote folder when the remote shell reports its
+folder with OSC 7. The host name in the report must be the host that ssh
+connects to. The first part of the name is enough: `reachy-mini` matches
+`pollen@reachy-mini.example.ts.net`. When the remote shell sends no report,
+the new pane starts in the remote home folder.
+
+fish sends the report by default. For bash, add this line to `~/.bashrc` on
+the remote machine:
+
+```bash
+PROMPT_COMMAND='printf "\033]7;file://%s%s\033\\" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+;$PROMPT_COMMAND}
+```
+
+For zsh, add these lines to `~/.zshrc` on the remote machine:
+
+```zsh
+autoload -Uz add-zsh-hook
+_tuios_osc7() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
+add-zsh-hook precmd _tuios_osc7
+```
+
+To go to the folder, tuios adds `-t` and a `cd` command to ssh. If the folder
+is gone, the new pane starts in the home folder.
+
 ## The dock's components
 
 The `[dock]` table's region lists and custom components are not scalar

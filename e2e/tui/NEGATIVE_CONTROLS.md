@@ -1473,3 +1473,21 @@ and the paste reach the shells and leave the line it looks for.
 | The labels do not own the keyboard | `routeKey`: the `PaneLabelsOpen` check cut | `TestPaneLabelsKeepKeysAndPastesFromPanes` (in multifocus, "the label key: 3 reached pane ...") | **caught** |
 | A paste passes the labels | `pasteTakenByOverlay`: the `PaneLabelsOpen` check cut | `TestPaneLabelsKeepKeysAndPastesFromPanes` ("a paste with the labels up: pz9 reached pane ...") | **caught** |
 | The labels outlive a layout change | `PaneLabelsOpen`: the layout compare made a workspace compare | `TestPaneLabelsFocusAPane` ("after a pane opened: the labels stayed up") | **caught** |
+
+## ssh-aware splits
+
+The tests are in `ssh_split_test.go`. A fake ssh on PATH writes its arguments
+to a numbered file and then acts as a shell. The positive half of the follow
+option is in its own fixture: the same split key in a pane with no ssh opens a
+shell. `TestSSHSplitFallsBackToAShell` is the positive half of every other
+test: the actions open a pane when no ssh runs.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`5c0fa9c1`) | `TestSSHSplitRunsTheSameSSH`, `TestSSHSplitKeepsTheRemoteFolder`, `TestSSHSplitFallsBackToAShell`, `TestSSHSplitFindsSSHUnderANestedShell` (the window count never reached 2), `TestSSHSplitFollowOption` (the fake ssh never ran a run 1) | **caught** |
+| The daemon ignores `ssh_from` | `handleExecuteCommand`: the `SSHFrom` block made `if false` | `TestSSHSplitRunsTheSameSSH`, `TestSSHSplitFollowOption`, `TestSSHSplitKeepsTheRemoteFolder`, `TestSSHSplitFindsSSHUnderANestedShell` (the new pane never ran ssh). `TestSSHSplitFallsBackToAShell` passes, which is correct | **caught** |
+| The action is not registered | `registerHandlers`: the `split_ssh_vertical` line cut | `TestSSHSplitRunsTheSameSSH`, `TestSSHSplitFallsBackToAShell` (the window count never reached 2) | **caught** |
+| The client split does not ask to follow | `splitFocused`: the daemon branch calls `NewWindowHere` whatever `followSSH` says | `TestSSHSplitRunsTheSameSSH` (the split pane never ran ssh) | **caught** |
+| The ordinary split ignores the option | `handleSplitVertical`: the `FollowSSHOnNewWindow` check made `false &&` | `TestSSHSplitFollowOption` (the fake ssh never ran a run 1) | **caught** |
+| The remote folder is not kept | `placeRecord.announce`: the `elsewhereDir.Store` line cut | `TestSSHSplitKeepsTheRemoteFolder` (ssh ran with `pollen@fakehost` alone) | **caught** |
+| Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |
