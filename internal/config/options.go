@@ -285,7 +285,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.shared_borders", Type: OptionBool, Section: "appearance",
-		Description: "Share one border between adjacent tiled panes",
+		Description: "Draw one border between neighbouring tiled panes, in every layout",
 		Default:     "false",
 	},
 	{

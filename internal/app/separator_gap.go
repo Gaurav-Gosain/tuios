@@ -11,15 +11,18 @@ import (
 // for themselves from the shared-borders setting alone: which border a pane
 // draws, whether a separator is painted between two of them, and how many
 // columns the layout keeps free for that separator. The setting is only half of
-// it. Shared borders merge nothing unless tiling is arranging the panes, and
-// the scrolling layout never merges at all, so a pane under any of those keeps
-// its own box.
+// it. Shared borders merge nothing unless tiling is arranging the panes, so a
+// floating pane keeps its own box.
+//
+// Every tiler merges, the scrolling strip included: its columns stand side by
+// side like any other tiled panes, and the divider between two of them is
+// drawn from their rectangles the way the master-stack dividers are.
 //
 // It reads the session-settled m.SharedBorders, never config.SharedBorders:
 // this is geometry, and geometry inputs have to be identical on every client of
 // a session (see the field comment in os.go).
 func (m *OS) panesBorderless() bool {
-	return m.SharedBorders && m.AutoTiling && !m.UseScrollingLayout
+	return m.SharedBorders && m.AutoTiling
 }
 
 // PanesBorderless is panesBorderless for the input package, whose shared-border
@@ -46,6 +49,10 @@ func (m *OS) separatorGap() int {
 	return m.PaneGap
 }
 
+// SeparatorGap is separatorGap for the input package, whose shared-border drag
+// gestures have to know which cells between two panes are the divider.
+func (m *OS) SeparatorGap() int { return m.separatorGap() }
+
 // reclaimSeparatorGaps re-lays-out every workspace's panes at the gap the
 // layout now reserves, so a column held open for a divider that is no longer
 // drawn goes back to the panes beside it instead of sitting empty.
@@ -64,6 +71,9 @@ func (m *OS) separatorGap() int {
 // structural.
 func (m *OS) reclaimSeparatorGaps() {
 	if m.UseScrollingLayout {
+		// The strip is only laid out for the workspace on screen; the others
+		// are placed again, at the gap then in force, when they are shown.
+		m.scrollingSetPositionsInstant()
 		return
 	}
 	borderless := m.panesBorderless()

@@ -247,11 +247,18 @@ A new column is `appearance.scroll_column_width` percent of the screen wide.
 The default of 55% is deliberately over half, so two columns never quite fit
 side by side and the strip reads as something you scroll.
 
+### Shared borders
+
+With `appearance.shared_borders` on, the columns do not draw their own borders.
+One divider stands between two columns, as it does between tiled panes in the
+other layouts. Drag the divider to set the width of the column on its left.
+The columns after it move with it.
+
+Windows stacked in one column have a divider between them too. Dragging it
+does nothing, because the windows in a column always share its height evenly.
+
 ### Limitations
 
-- **Shared borders are not drawn in scrolling mode.** `shared_borders` applies
-  to BSP and master-stack tiling only; scrolling columns always draw their own
-  borders.
 - **Column widths and the strip order are not shared or saved.** The layout mode
   and the scroll offset are session state; the column arrangement is not, and is
   rebuilt from the window list on reattach and on each client.

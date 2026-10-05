@@ -87,14 +87,6 @@ func TestSeparatorsOnlyDrawWherePanesLeftRoom(t *testing.T) {
 				m.TileAllWindows()
 
 				splits := m.separatorSplits()
-				if mode == LayoutModeScrolling {
-					// Scrolling panes keep their own borders and are never
-					// borderless, so a shared divider would have nowhere to go.
-					if len(splits) != 0 {
-						t.Fatalf("scrolling layout offered %d dividers; its panes draw their own borders", len(splits))
-					}
-					return
-				}
 				if len(splits) == 0 {
 					t.Fatalf("%d panes under shared borders drew no divider at all", n)
 				}

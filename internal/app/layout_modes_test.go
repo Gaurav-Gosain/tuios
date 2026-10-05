@@ -91,9 +91,10 @@ func paneAt(m *OS, x, y int) int {
 // divider even when the user asked for no gap, since their rectangles are guest
 // output edge to edge and the line has nowhere else to go. Panes with their own
 // borders need only what the user asked for, because their two adjacent border
-// columns already divide them.
-func wantGap(mode string, shared bool, gap int) int {
-	if shared && mode != LayoutModeScrolling {
+// columns already divide them. The rule is the same in every mode: the
+// scrolling strip shares its borders too.
+func wantGap(_ string, shared bool, gap int) int {
+	if shared {
 		return max(gap, 1)
 	}
 	return gap

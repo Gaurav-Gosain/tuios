@@ -113,10 +113,14 @@ type OS struct {
 	// display's rate for max_fps = "auto". See frame_rate.go.
 	frameRate frameRate
 
-	Dragging                 bool
-	Resizing                 bool
-	BorderResizing           bool // a pane-border drag is moving one edge
-	BorderResizeEdge         BorderResizeEdge
+	Dragging         bool
+	Resizing         bool
+	BorderResizing   bool // a pane-border drag is moving one edge
+	BorderResizeEdge BorderResizeEdge
+	// BorderResizeGrab is how far the dragged edge lies from the cell the
+	// pointer pressed, along the axis it moves: a pane-border drag keeps the
+	// edge that far from the pointer, so the pane does not jump on the press.
+	BorderResizeGrab         int
 	ResizeCorner             ResizeCorner
 	PreResizeState           terminal.Window
 	ResizeStartX             int

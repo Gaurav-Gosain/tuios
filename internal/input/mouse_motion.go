@@ -513,52 +513,15 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Scrolling mode: compute width from horizontal drag delta. All
 			// strip math runs against the content width beside the sidebar band,
 			// matching ScrollingSetPositions.
-			sl := o.GetOrCreateScrollingLayout()
-			viewW := o.ScrollingViewWidth()
 			switch o.ResizeCorner {
 			case app.TopLeft, app.BottomLeft:
 				newWidth = o.PreResizeState.Width - xOffset
 			case app.TopRight, app.BottomRight:
 				newWidth = o.PreResizeState.Width + xOffset
 			}
-			// Cap at the strip's ceiling, the same one the keyboard resize reads.
-			// The hardcoded nine tenths would ignore appearance.scroll_column_max
-			// the way scrollingResizeColumn used to.
-			maxWidth := sl.MaxColumnWidth(viewW)
-			newWidth = max(min(newWidth, maxWidth), config.DefaultWindowWidth)
-			intID := o.GetWindowIntID(focusedWindow.ID)
-			oldWidth := 0
-			for ci := range sl.Columns {
-				for _, wid := range sl.Columns[ci].WindowIDs {
-					if wid == intID {
-						oldWidth = sl.ResolveColumnWidth(ci, viewW)
-						sl.Columns[ci].FixedWidth = newWidth
-						sl.Columns[ci].Proportion = 0
-					}
-				}
-			}
-			// For left-edge resize, shift viewport so the right edge stays fixed
-			if (o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft) && oldWidth > 0 {
-				sl.ViewportX += newWidth - oldWidth
-			}
-			sl.ClampViewport(viewW)
-			layouts := sl.ComputePositions(viewW, o.PaneHeight(), o.PaneTop())
-			stripLeft := o.PaneLeft()
-			for winID, rect := range layouts {
-				win := o.GetWindowByIntID(winID)
-				if win == nil {
-					continue
-				}
-				win.X = stripLeft + rect.X
-				win.Y = rect.Y
-				win.Width = rect.W
-				// Don't call ResizeVisual or Resize, just set visual width.
-				// Terminal emulator keeps old dimensions until release.
-				win.MarkPositionDirty()
-				win.InvalidateCache()
-			}
-			// Defer PTY resize to mouse release
-			o.PendingResizes[focusedWindow.ID] = [2]int{newWidth, focusedWindow.Height}
+			// For a left-edge resize the right edge stays where it is.
+			keepRight := o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft
+			o.ScrollingResizeColumnVisual(focusedWindow, newWidth, keepRight)
 		} else {
 			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX

@@ -233,62 +233,84 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 
 	// The right edge first, then the left, then the bottom, then the top: each
 	// move sees the panes the one before it already moved.
+	//
+	// A split is named by the far edge of the panes before it, and the panes
+	// after it start gap cells later. The gap is the column or row the layout
+	// keeps between neighbours: the divider's cell under shared borders, plus
+	// appearance.gap. Moving both sides to the same line, as this once did,
+	// closed that gap, so the divider had nowhere to be drawn and vanished
+	// for as long as the panes stayed where the resize left them.
+	gap := m.separatorGap()
 	if newRight != oldRight {
-		newRight = m.moveVerticalSplit(oldRight, newRight, resized, resize, minWidth, minX, maxX)
+		newRight = m.moveVerticalSplit(oldRight, newRight, gap, resized, resize, minWidth, minX, maxX)
 	}
 	if newX != oldX {
-		newX = m.moveVerticalSplit(oldX, newX, resized, resize, minWidth, minX, maxX)
+		newX = m.moveVerticalSplit(oldX-gap, newX-gap, gap, resized, resize, minWidth, minX, maxX) + gap
 	}
 	if newBottom != oldBottom {
-		newBottom = m.moveHorizontalSplit(oldBottom, newBottom, resized, resize, minHeight, minY, maxY)
+		newBottom = m.moveHorizontalSplit(oldBottom, newBottom, gap, resized, resize, minHeight, minY, maxY)
 	}
 	if newY != oldY {
-		newY = m.moveHorizontalSplit(oldY, newY, resized, resize, minHeight, minY, maxY)
+		newY = m.moveHorizontalSplit(oldY-gap, newY-gap, gap, resized, resize, minHeight, minY, maxY) + gap
 	}
 
 	return newX, newY, newRight, newBottom
 }
 
-// moveVerticalSplit moves the vertical split line at column old toward
-// requested, resizing every pane on it except resized, and returns the column
-// the line landed on once the neighbours' minimum widths are respected.
-func (m *OS) moveVerticalSplit(old, requested int, resized *terminal.Window, resize resizeOp, minWidth, minX, maxX int) int {
-	leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, old)
-	leftWindows = removeWindowFromList(leftWindows, resized)
-	rightWindows = removeWindowFromList(rightWindows, resized)
+// moveVerticalSplit moves the vertical split whose left panes end at column
+// old toward requested, resizing every pane on it except resized, and returns
+// the column the left panes end at once every pane's minimum width is
+// respected. The right panes start gap columns after it.
+//
+// resized takes part in the constraint and not in the move: the caller sets
+// its rectangle from the returned line, and a line that left it narrower than
+// the minimum would be clamped afterwards into a pane that no longer meets its
+// neighbour.
+func (m *OS) moveVerticalSplit(old, requested, gap int, resized *terminal.Window, resize resizeOp, minWidth, minX, maxX int) int {
+	leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, old, gap)
 
-	split := m.constrainVerticalSplit(requested, leftWindows, rightWindows, minWidth, minX, maxX)
+	split := m.constrainVerticalSplit(requested, gap, leftWindows, rightWindows, minWidth, minX, maxX)
 
 	for _, win := range leftWindows {
+		if win == resized {
+			continue
+		}
 		resize(m, win, split-win.X, win.Height)
 		win.MarkPositionDirty()
 	}
 	for _, win := range rightWindows {
+		if win == resized {
+			continue
+		}
 		oldWinRight := win.X + win.Width
-		win.X = split
-		resize(m, win, oldWinRight-split, win.Height)
+		win.X = split + gap
+		resize(m, win, oldWinRight-win.X, win.Height)
 		win.MarkPositionDirty()
 	}
 	return split
 }
 
-// moveHorizontalSplit is moveVerticalSplit for the horizontal split line at
-// row old.
-func (m *OS) moveHorizontalSplit(old, requested int, resized *terminal.Window, resize resizeOp, minHeight, minY, maxY int) int {
-	topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, old)
-	topWindows = removeWindowFromList(topWindows, resized)
-	bottomWindows = removeWindowFromList(bottomWindows, resized)
+// moveHorizontalSplit is moveVerticalSplit for the horizontal split whose top
+// panes end at row old.
+func (m *OS) moveHorizontalSplit(old, requested, gap int, resized *terminal.Window, resize resizeOp, minHeight, minY, maxY int) int {
+	topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, old, gap)
 
-	split := m.constrainHorizontalSplit(requested, topWindows, bottomWindows, minHeight, minY, maxY)
+	split := m.constrainHorizontalSplit(requested, gap, topWindows, bottomWindows, minHeight, minY, maxY)
 
 	for _, win := range topWindows {
+		if win == resized {
+			continue
+		}
 		resize(m, win, win.Width, split-win.Y)
 		win.MarkPositionDirty()
 	}
 	for _, win := range bottomWindows {
+		if win == resized {
+			continue
+		}
 		oldWinBottom := win.Y + win.Height
-		win.Y = split
-		resize(m, win, win.Width, oldWinBottom-split)
+		win.Y = split + gap
+		resize(m, win, win.Width, oldWinBottom-win.Y)
 		win.MarkPositionDirty()
 	}
 	return split
@@ -373,44 +395,34 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 	return true
 }
 
-// constrainVerticalSplit calculates the valid position for a vertical split
-// line, kept within [minX, maxX]: the content region's own edges.
-func (m *OS) constrainVerticalSplit(requested int, leftWindows, rightWindows []*terminal.Window, minWidth, minX, maxX int) int {
+// constrainVerticalSplit calculates the valid column for the far edge of the
+// panes left of a vertical split, kept within the content region [minX, maxX]
+// with gap columns left over for the panes on its right.
+func (m *OS) constrainVerticalSplit(requested, gap int, leftWindows, rightWindows []*terminal.Window, minWidth, minX, maxX int) int {
 	minValidX := minX
 	for _, win := range leftWindows {
-		minRequired := win.X + minWidth
-		if minRequired > minValidX {
-			minValidX = minRequired
-		}
+		minValidX = max(minValidX, win.X+minWidth)
 	}
 
-	maxValidX := maxX
+	maxValidX := maxX - gap
 	for _, win := range rightWindows {
-		maxAllowed := win.X + win.Width - minWidth
-		if maxAllowed < maxValidX {
-			maxValidX = maxAllowed
-		}
+		maxValidX = min(maxValidX, win.X+win.Width-minWidth-gap)
 	}
 
 	return max(minValidX, min(requested, maxValidX))
 }
 
-// constrainHorizontalSplit calculates the valid position for a horizontal split line
-func (m *OS) constrainHorizontalSplit(requested int, topWindows, bottomWindows []*terminal.Window, minHeight, minY, maxY int) int {
+// constrainHorizontalSplit is constrainVerticalSplit for the bottom edge of
+// the panes above a horizontal split.
+func (m *OS) constrainHorizontalSplit(requested, gap int, topWindows, bottomWindows []*terminal.Window, minHeight, minY, maxY int) int {
 	minValidY := minY
 	for _, win := range topWindows {
-		minRequired := win.Y + minHeight
-		if minRequired > minValidY {
-			minValidY = minRequired
-		}
+		minValidY = max(minValidY, win.Y+minHeight)
 	}
 
-	maxValidY := maxY
+	maxValidY := maxY - gap
 	for _, win := range bottomWindows {
-		maxAllowed := win.Y + win.Height - minHeight
-		if maxAllowed < maxValidY {
-			maxValidY = maxAllowed
-		}
+		maxValidY = min(maxValidY, win.Y+win.Height-minHeight-gap)
 	}
 
 	return max(minValidY, min(requested, maxValidY))
@@ -577,55 +589,51 @@ func (m *OS) setWorkspaceStackRatio(workspace int, ratio float64) {
 	m.WorkspaceStackRatio[workspace] = ratio
 }
 
-// findWindowsOnVerticalSplitAll finds all windows on a vertical split line (not excluding any window)
-func findWindowsOnVerticalSplitAll(m *OS, splitX int) (leftWindows, rightWindows []*terminal.Window) {
-	const tolerance = 1
+// splitTolerance is how far off a split a pane edge may sit and still count
+// as on it. Panes the layout placed edge to edge are matched with a cell of
+// slack, as they always were. Panes the layout spaced apart are matched
+// exactly: with slack, the edge of a pane on one side of a one-cell gap would
+// also read as on the other side.
+func splitTolerance(gap int) int {
+	if gap == 0 {
+		return 1
+	}
+	return 0
+}
 
+// findWindowsOnVerticalSplitAll finds the tiled panes of the current
+// workspace on a vertical split: those that end at column splitX, and those
+// that start gap columns after it.
+func findWindowsOnVerticalSplitAll(m *OS, splitX, gap int) (leftWindows, rightWindows []*terminal.Window) {
+	tolerance := splitTolerance(gap)
 	for _, win := range m.Windows {
-		if win.Workspace != m.CurrentWorkspace || win.Minimized {
+		if win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
-
-		winRight := win.X + win.Width
-		if abs(winRight-splitX) <= tolerance {
+		if abs(win.X+win.Width-splitX) <= tolerance {
 			leftWindows = append(leftWindows, win)
-		} else if abs(win.X-splitX) <= tolerance {
+		} else if abs(win.X-(splitX+gap)) <= tolerance {
 			rightWindows = append(rightWindows, win)
 		}
 	}
-
 	return leftWindows, rightWindows
 }
 
-// findWindowsOnHorizontalSplitAll finds all windows on a horizontal split line (not excluding any window)
-func findWindowsOnHorizontalSplitAll(m *OS, splitY int) (topWindows, bottomWindows []*terminal.Window) {
-	const tolerance = 1
-
+// findWindowsOnHorizontalSplitAll is findWindowsOnVerticalSplitAll for a
+// horizontal split whose top panes end at row splitY.
+func findWindowsOnHorizontalSplitAll(m *OS, splitY, gap int) (topWindows, bottomWindows []*terminal.Window) {
+	tolerance := splitTolerance(gap)
 	for _, win := range m.Windows {
-		if win.Workspace != m.CurrentWorkspace || win.Minimized {
+		if win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
-
-		winBottom := win.Y + win.Height
-		if abs(winBottom-splitY) <= tolerance {
+		if abs(win.Y+win.Height-splitY) <= tolerance {
 			topWindows = append(topWindows, win)
-		} else if abs(win.Y-splitY) <= tolerance {
+		} else if abs(win.Y-(splitY+gap)) <= tolerance {
 			bottomWindows = append(bottomWindows, win)
 		}
 	}
-
 	return topWindows, bottomWindows
-}
-
-// removeWindowFromList removes a window from a slice
-func removeWindowFromList(windows []*terminal.Window, toRemove *terminal.Window) []*terminal.Window {
-	result := make([]*terminal.Window, 0, len(windows))
-	for _, win := range windows {
-		if win != toRemove {
-			result = append(result, win)
-		}
-	}
-	return result
 }
 
 // abs returns the absolute value of an integer

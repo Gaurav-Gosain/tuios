@@ -322,7 +322,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		layers = append(layers, frame)
 	}
 
-	// Add shared border separator overlay when active (not in scrolling mode)
+	// Add the shared-border dividers when the panes have given up their own borders
 	if m.panesBorderless() {
 		if sepLayers := m.renderSeparatorOverlay(); len(sepLayers) > 0 {
 			layers = append(layers, sepLayers...)
