@@ -56,9 +56,6 @@ func (m *OS) PointerOverLink(x, y int) bool {
 		return false
 	}
 	window := m.Windows[idx]
-	if m.guestOwnsPointer(window) {
-		return false
-	}
 	termX, termY, inContent := window.ScreenToTerminal(x, y)
 	if !inContent {
 		return false
@@ -121,9 +118,11 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 		return m.clearLinkHover()
 	}
 	window := m.Windows[idx]
-	if m.guestOwnsPointer(window) {
-		return m.clearLinkHover()
-	}
+
+	// A guest that tracks the mouse does not suppress the marking, because a
+	// click on a link cell is taken from the guest whatever it is doing — the
+	// same rule the click path applies. Marking the cell therefore promises an
+	// action tuios takes, and the guest still gets every other click.
 
 	termX, termY, inContent := window.ScreenToTerminal(x, y)
 	if !inContent {
@@ -146,9 +145,9 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 // pointer to move, and a press one cell away from where the pointer last
 // reported would otherwise act on the run it left behind.
 //
-// It does not apply the guest-owns-the-pointer test that the hover does. The
-// caller reaches this only with the modifier held, and holding it is the user
-// saying this click is the terminal's rather than the program's.
+// It does not apply a guest-owns-the-pointer test, because a click on a link
+// cell is taken from the guest plain or shifted, and the guest keeps every
+// other click.
 func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 	if !linksEnabled(&m.Settings) {
 		return PaneLink{}, false
@@ -163,20 +162,6 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 		return PaneLink{}, false
 	}
 	return resolvePaneLink(window, termX, termY, &m.Settings)
-}
-
-// guestOwnsPointer reports whether the program in this pane is tracking the
-// mouse and would receive a click on it. It is the same three-part test the
-// click handler applies before forwarding: the pane is focused, tuios is in
-// terminal mode, and the guest asked for mouse reporting.
-func (m *OS) guestOwnsPointer(window *terminal.Window) bool {
-	if window == nil || window.Terminal == nil || m.Mode != TerminalMode {
-		return false
-	}
-	if f := m.GetFocusedWindow(); f == nil || f.ID != window.ID {
-		return false
-	}
-	return window.Terminal.HasMouseMode()
 }
 
 // setLinkHover records a new run and repaints the panes that changed. Moving

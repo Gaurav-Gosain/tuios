@@ -77,17 +77,12 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	}
 }
 
-// TestLinkHoverYieldsToAMouseTrackingGuest is the ownership rule.
+// TestLinkHoverMarksUnderAMouseTrackingGuest is the ownership rule.
 //
-// A pane in terminal mode whose program asked for mouse reporting owns the
-// pointer: the click handler forwards to it, so underlining a link there would
-// promise an action tuios is not going to take. The suppression has to be the
-// same three-part test the click path applies, or the two disagree about who
-// owns the same cell.
-//
-// Negative control: with guestOwnsPointer returning false unconditionally, the
-// last assertion fails.
-func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
+// A guest that reports the mouse still loses a click on a link cell to the
+// link, so marking the cell promises an action tuios takes. Every other click
+// still forwards, which is what keeps the guest's own mouse UI working.
+func TestLinkHoverMarksUnderAMouseTrackingGuest(t *testing.T) {
 	m, win := linkTestOS(t, "go to https://example.org/a now")
 	m.Windows[0].Workspace = 1
 
@@ -97,21 +92,15 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 	}
 
 	// The guest turns on mouse reporting (DECSET 1000) and tuios is in terminal
-	// mode with that pane focused: all three parts of the test hold.
+	// mode with that pane focused: the pane is one whose click on a link cell
+	// would be taken, so the marking stays.
 	win.WriteOutput([]byte("\x1b[?1000h"))
 	m.Mode = TerminalMode
 	if !win.Terminal.HasMouseMode() {
 		t.Fatal("the emulator did not record DECSET 1000")
 	}
-	if m.LinkHoverAt(sx, sy) {
-		t.Error("the pointer picked up a link over a pane whose program is tracking the mouse")
-	}
-
-	// Window management mode is tuios's own, so the pane does not own the
-	// pointer there even with reporting on.
-	m.Mode = WindowManagementMode
 	if !m.LinkHoverAt(sx, sy) {
-		t.Error("window management mode handed the pointer to the guest")
+		t.Error("the pointer dropped the link over a pane whose program is tracking the mouse")
 	}
 }
 
