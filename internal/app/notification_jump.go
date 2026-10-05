@@ -149,6 +149,26 @@ func (m *OS) jumpTarget(t NotifTarget, record bool) bool {
 	return true
 }
 
+// linkTargetAlive reports whether the pane a tuios:// link names is still
+// somewhere the jump could land. A pane's text outlives the panes it points
+// at, so a link whose target has closed stops being one: no hover, no click.
+// Anything that is not our scheme has no target to die.
+func (m *OS) linkTargetAlive(link PaneLink) bool {
+	target, ok := tuiosLinkTarget(link.URL)
+	if !ok {
+		return true
+	}
+	if target.SessionID != "" && target.SessionID != m.sidebarCurrentSessionID() {
+		return m.sessionCached(target.SessionID)
+	}
+	for _, w := range m.Windows {
+		if w != nil && strings.HasPrefix(w.ID, target.WindowID) {
+			return true
+		}
+	}
+	return false
+}
+
 // expandWindowID resolves a window id that may be a prefix of the full form.
 // An exact match wins; otherwise a prefix naming exactly one live pane expands
 // to it. Zero or several matches resolve to false.

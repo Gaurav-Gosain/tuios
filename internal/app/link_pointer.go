@@ -130,7 +130,7 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 	}
 
 	link, ok := resolvePaneLink(window, termX, termY, &m.Settings)
-	if !ok {
+	if !ok || !m.linkTargetAlive(link) {
 		return m.clearLinkHover()
 	}
 	m.setLinkHover(link)
@@ -161,7 +161,11 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 	if !inContent {
 		return PaneLink{}, false
 	}
-	return resolvePaneLink(window, termX, termY, &m.Settings)
+	link, ok := resolvePaneLink(window, termX, termY, &m.Settings)
+	if !ok || !m.linkTargetAlive(link) {
+		return PaneLink{}, false
+	}
+	return link, true
 }
 
 // setLinkHover records a new run and repaints the panes that changed. Moving

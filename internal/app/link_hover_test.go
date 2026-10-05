@@ -125,6 +125,33 @@ func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
 	}
 }
 
+// TestDeadTuiosLinkStopsBeingALink: pane text outlives the panes it names, so
+// a tuios:// link whose target has closed must drop out of both the hover and
+// the click, the way it would if the words were not an address at all.
+func TestDeadTuiosLinkStopsBeingALink(t *testing.T) {
+	m, win := linkTestOS(t, "jump tuios://window/534f6ba8 now")
+	sx, sy := screenOf(win, 8, 0)
+
+	target := newTestWindow(t, "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a", 40, 20)
+	target.Workspace = 1
+	m.Windows = append(m.Windows, target)
+
+	if _, ok := m.LinkAt(sx, sy); !ok {
+		t.Fatal("the link to the live pane did not resolve")
+	}
+	if !m.LinkHoverAt(sx, sy) {
+		t.Error("the pointer did not pick up the link to the live pane")
+	}
+
+	m.Windows = m.Windows[:1]
+	if _, ok := m.LinkAt(sx, sy); ok {
+		t.Error("a link whose pane has closed still resolved on click")
+	}
+	if m.LinkHoverAt(sx, sy) {
+		t.Error("a link whose pane has closed still resolved on hover")
+	}
+}
+
 // TestLinkHoverFollowsASoftWrap checks that a URL the guest broke across rows
 // resolves whole, from either half.
 //
