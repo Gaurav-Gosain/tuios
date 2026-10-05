@@ -110,22 +110,26 @@ func SnapshotVT(st *session.TerminalState) []byte {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	origin := false
-	for _, k := range keys {
-		switch k {
-		case 47, 1047, 1049, 2026, 6:
-			// The screen switch is done above, a synchronized-output hold
-			// would freeze the renderer until the guest ends it, and origin
-			// mode moves the cursor, so it goes last.
-			if k == 6 {
-				origin = cp.Modes[k]
+	// Resets first, then sets: in ghostty the mouse modes share one state, so
+	// resetting 1002 after setting 1000 would turn mouse reporting off.
+	origin := cp.Modes[6]
+	for _, want := range []bool{false, true} {
+		for _, k := range keys {
+			switch k {
+			case 47, 1047, 1049, 2026, 6:
+				// The screen switch is done above, a synchronized-output hold
+				// would freeze the renderer until the guest ends it, and origin
+				// mode moves the cursor, so it goes last.
+				continue
 			}
-			continue
-		}
-		if cp.Modes[k] {
-			b.WriteString("\x1b[?" + strconv.Itoa(k) + "h")
-		} else {
-			b.WriteString("\x1b[?" + strconv.Itoa(k) + "l")
+			if cp.Modes[k] != want {
+				continue
+			}
+			if want {
+				b.WriteString("\x1b[?" + strconv.Itoa(k) + "h")
+			} else {
+				b.WriteString("\x1b[?" + strconv.Itoa(k) + "l")
+			}
 		}
 	}
 	y := cp.CursorY

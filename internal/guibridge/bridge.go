@@ -285,15 +285,13 @@ func (m *model) handle(c Command) tea.Cmd {
 	case "tape":
 		// The routed-command path the daemon uses for `tuios run-command`, so
 		// the renderer can run anything a tape can.
-		next, cmd := m.os.Update(app.RemoteCommandMsg{
+		if dropped := m.os.QueueRemoteCommand(&session.RemoteCommandPayload{
 			CommandType: "tape_command",
 			TapeCommand: c.Command,
 			TapeArgs:    c.Args,
-		})
-		if o, ok := next.(*app.OS); ok {
-			m.os = o
+		}); dropped {
+			log.Printf("gui-bridge: command queue full, dropped %s", c.Command)
 		}
-		return cmd
 	case "quit":
 		return tea.Quit
 	}
