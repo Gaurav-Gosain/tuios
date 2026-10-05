@@ -45,6 +45,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // Frame kinds.
@@ -69,8 +71,10 @@ type Options struct {
 	Cols, Rows            int
 	CellWidth, CellHeight int
 	Version               string
-	In                    io.Reader
-	Out                   io.Writer
+	// Theme overrides the theme the user's config names. Empty keeps it.
+	Theme string
+	In    io.Reader
+	Out   io.Writer
 }
 
 // Event is the JSON the bridge sends.
@@ -79,6 +83,8 @@ type Event struct {
 	Message string `json:"message,omitempty"`
 	// State is set on "state" events.
 	State *State `json:"state,omitempty"`
+	// Theme is set on "theme" events.
+	Theme *Theme `json:"theme,omitempty"`
 }
 
 // State is the session as the renderer draws it. Positions are cells.
@@ -132,6 +138,8 @@ type Command struct {
 	Window string `json:"window,omitempty"`
 	// workspace
 	N int `json:"n,omitempty"`
+	// theme: the theme to switch to; "" is the default colours.
+	Theme string `json:"theme,omitempty"`
 	// tape: any tape command by name, with its arguments
 	Command string   `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
@@ -179,6 +187,7 @@ func Run(opts Options) error {
 		Width:           opts.Cols,
 		Height:          opts.Rows,
 		Caps:            caps,
+		ConfigReadOnly:  true,
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     name,
@@ -197,7 +206,15 @@ func Run(opts Options) error {
 	program := tea.NewProgram(m, popts...)
 	osModel.BindProgram(program)
 
+	// The renderer has a truecolor display whatever this process's stdout
+	// says, and the theme it gets is worked out for that depth.
+	theme.SetColorProfile(colorprofile.TrueColor)
+	if opts.Theme != "" {
+		_ = theme.Initialize(opts.Theme)
+	}
 	out.JSON(Event{Type: "attached", Message: name})
+	th := CurrentTheme()
+	out.JSON(Event{Type: "theme", Theme: &th})
 
 	go func() {
 		err := readCommands(opts.In, client, program)
@@ -292,6 +309,14 @@ func (m *model) handle(c Command) tea.Cmd {
 		}); dropped {
 			log.Printf("gui-bridge: command queue full, dropped %s", c.Command)
 		}
+	case "theme":
+		// The theme is this client's own setting, as in the terminal
+		// client. Nothing is written to the config file.
+		if err := theme.Initialize(c.Theme); err != nil {
+			log.Printf("gui-bridge: theme %q: %v", c.Theme, err)
+		}
+		th := CurrentTheme()
+		m.out.JSON(Event{Type: "theme", Theme: &th})
 	case "quit":
 		return tea.Quit
 	}
