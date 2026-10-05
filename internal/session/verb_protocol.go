@@ -1423,6 +1423,25 @@ func init() {
 			examples: []string{`{"id":1,"verb":"set-workspace-order","params":{"session":"work","order":[3,1,2]}}`},
 			handler:  (*Daemon).verbSetWorkspaceOrder,
 		},
+		"paint-link": {
+			description: "Paint a link chip on a pane's frame: a short label the viewer can click to jump to the target pane. The chip is chrome the daemon paints, so the pane's own redraws cannot take it and a click on it needs no nonce. Painting again on the same pane replaces the chip. An empty label clears it.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "target", Type: "string", Description: "The pane a click on the chip jumps to. Required unless the call clears the chip."},
+				{Name: "label", Type: "string", Description: "The chip's text, cut to 40 characters. Empty clears the chip."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the pane the chip was painted on."},
+				{Name: "label", Type: "string", Description: "The label that now shows, empty when the call cleared the chip."},
+				{Name: "cleared", Type: "bool", Description: "Whether the call cleared a chip."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"paint-link","params":{"session":"work","window":"build","target":"review","label":"open review"}}`,
+				`{"id":1,"verb":"paint-link","params":{"session":"work","label":""}}`,
+			},
+			handler: (*Daemon).verbPaintLink,
+		},
 		"set-agent-state": {
 			description: "Set the agent state a window's pane reports (working, needs_input, idle, done, errored, or none to clear). A pane reports its own state by calling this against the daemon socket.",
 			params: []verbParam{

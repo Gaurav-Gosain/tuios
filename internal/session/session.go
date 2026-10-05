@@ -273,6 +273,16 @@ type WindowState struct {
 	// The poll is the authority: it corrects the stamp and clears it when the
 	// shell goes.
 	ShellPID int `json:"-"`
+	// LinkChip is a link chip the daemon paints on the pane's frame at the
+	// pane's own request through the paint-link verb: a label that names a
+	// jump, and the pane the jump lands on. It is chrome, so it survives
+	// guest redraws, and a click on it is trusted without the client nonce a
+	// guest cannot forge. Daemon-owned like AgentState: a pane asks for its
+	// own, a client sync can neither set nor clear it, and repainting
+	// replaces it. An empty label clears it. Nil in older state, which reads
+	// as no chip. Transient: cleared on resurrection, because the pane it
+	// points at does not survive one either. See verbPaintLink.
+	LinkChip *LinkChip `json:"link_chip,omitempty"`
 	// Grants is what the pane's process may do through tuios, by grant name,
 	// when it was given grants of its own: at start (start-agent, fan and
 	// new-window take grants) or later with set-pane-grants. Nil means it
@@ -282,6 +292,13 @@ type WindowState struct {
 	// this copy, and it is saved so a restored pane holds what it held.
 	// Older peers and older state read it as absent, which is the default.
 	Grants []string `json:"grants,omitempty"`
+}
+
+// LinkChip is what a WindowState's LinkChip carries: the text the chip shows
+// and the pane a click on it jumps to.
+type LinkChip struct {
+	Label  string `json:"label"`
+	Target string `json:"target"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization

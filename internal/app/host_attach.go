@@ -210,6 +210,8 @@ func (m *OS) rebuildForSessionOn(state *session.SessionState, savedWidth, savedH
 		w.Close()
 	}
 	m.Windows = nil
+	m.linkChips = nil
+	m.resetLinkChipRects()
 	m.rebuildForSession(state, savedWidth, savedHeight)
 }
 

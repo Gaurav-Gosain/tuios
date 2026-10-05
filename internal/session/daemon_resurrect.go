@@ -29,6 +29,9 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentQueued = 0
 	w.AgentSubagents = 0
 	w.ForegroundCmd = ""
+	// The chip points at a pane of the live session, which a restart does
+	// not preserve.
+	w.LinkChip = nil
 }
 
 // restoreAllSessions recreates every resurrectable session that is not already

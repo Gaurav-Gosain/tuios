@@ -2894,3 +2894,47 @@ func completeHostNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
+
+// runPaintLink paints or clears a pane's link chip. Run in a pane with no
+// --window, the chip paints on that pane, which is the caller an agent hands
+// a link from.
+func runPaintLink(sessionName, windowTarget, target, label string) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	if windowTarget == "" && (sessionName == "" || sessionName == os.Getenv("TUIOS_SESSION")) {
+		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" && os.Getenv("TUIOS_SESSION") != "" {
+			windowTarget, sessionName = pane, os.Getenv("TUIOS_SESSION")
+		}
+	}
+	if target != "" && strings.TrimSpace(label) == "" {
+		return fmt.Errorf("a chip needs a label; pass an empty target to clear the chip")
+	}
+
+	raw, err := client.Call("paint-link", map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"target":  target,
+		"label":   label,
+	})
+	if err != nil {
+		return explainVerbError("paint-link", err)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+		Label    string `json:"label"`
+		Cleared  bool   `json:"cleared"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.Cleared {
+		fmt.Printf("Chip cleared on %s\n", shortWindowID(res.WindowID))
+	} else {
+		fmt.Printf("Chip %q painted on %s\n", res.Label, shortWindowID(res.WindowID))
+	}
+	return nil
+}

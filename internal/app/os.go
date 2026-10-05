@@ -505,6 +505,14 @@ type OS struct {
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.
 	scrollbarRects map[string]ScrollbarRect
+	// linkChips is the chip each pane's frame paints, keyed by window ID,
+	// as the daemon's state sync last reported it. Nil means the pane paints
+	// none. See link_chip.go.
+	linkChips map[string]*session.LinkChip
+	// linkChipRects is where each pane's chip was drawn on the last frame.
+	// Recorded by the renderer, read by input. Cleared per frame the way the
+	// scrollbar's is, because the chip layer is drawn every frame.
+	linkChipRects map[string]LinkChipRect
 	// windowButtonRects is where each window's title-bar controls were drawn,
 	// keyed by window ID. Recorded by the renderer, read by input. Unlike the
 	// scrollbar's it is not cleared per frame: a window composed from its cached

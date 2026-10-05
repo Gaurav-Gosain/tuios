@@ -233,6 +233,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// grants nor take them away by syncing. The daemon enforces them from its
 	// own table anyway; this is the copy that is shown and saved.
 	paneGrants := make(map[string][]string)
+	// The link chip is daemon-owned the same way: only the paint-link verb
+	// sets or clears it.
+	chips := make(map[string]*LinkChip, len(canonical.Windows))
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
 		if w.Grants != nil {
@@ -274,6 +277,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.AgentSubagents != 0 {
 			subagents[w.ID] = w.AgentSubagents
+		}
+		if w.LinkChip != nil {
+			chips[w.ID] = w.LinkChip
 		}
 	}
 	for i := range incoming.Windows {
@@ -338,6 +344,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentMeta = metas[w.ID]
 		w.AgentQueued = queued[w.ID]
 		w.AgentSubagents = subagents[w.ID]
+		w.LinkChip = chips[w.ID]
 		w.Grants = paneGrants[w.ID]
 	}
 }

@@ -120,6 +120,10 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 		num(w.AgentQueued)
 		num(w.AgentSubagents)
+		if w.LinkChip != nil {
+			str(w.LinkChip.Label)
+			str(w.LinkChip.Target)
+		}
 		flag(w.Popup)
 		str(w.PopupWidth)
 		str(w.PopupHeight)

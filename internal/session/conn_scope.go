@@ -138,6 +138,7 @@ var verbScopes = map[string]scopeKind{
 	"set-agent-state":   scopeSelf,
 	"set-agent-meta":    scopeSelf,
 	"set-agent-session": scopeSelf,
+	"paint-link":        scopeSelf,
 	// set-agent-state's activity with no state: the same record.
 	"report-agent-activity": scopeSelf,
 

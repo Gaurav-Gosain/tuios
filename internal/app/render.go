@@ -62,6 +62,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// previous frame's go first: a bar that has returned to the live tail or
 	// slid under the rail must stop being grabbable with it.
 	m.resetScrollbarRects()
+	// The link chips are drawn with the panes below, so their hit rects go
+	// first for the same reason.
+	m.resetLinkChipRects()
 	// The controls are recorded per window rather than per frame, because a
 	// window composed from its cached layer is not redrawn and still has them on
 	// screen. What has to go is a closed window's.
@@ -317,6 +320,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			window.ClearDirtyFlags()
 		}
 	}
+
+	// A pane's link chip rides above the pane it paints on, drawn every frame
+	// so a cached pane layer cannot hold back a chip that just arrived.
+	layers = append(layers, m.renderLinkChipLayers(rightClip)...)
 
 	if frame := m.renderScratchFrame(); frame != nil {
 		layers = append(layers, frame)
@@ -834,6 +841,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// does not silently lose it. At the live tail there is no thumb, so a deep
 	// scrollback no longer costs the fast path.
 	if windowNeedsScrollbar(window, &m.Settings) {
+		return nil, false
+	}
+	// A link chip is a layer over the pane's bottom row, which only the
+	// compositor draws.
+	if m.linkChips[window.ID] != nil {
 		return nil, false
 	}
 	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()

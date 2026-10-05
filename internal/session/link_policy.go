@@ -157,6 +157,7 @@ var verbCapabilities = map[string][]string{
 	"set-agent-state":     {config.LinkAllowWrite},
 	"set-agent-session":   {config.LinkAllowWrite},
 	"set-agent-meta":      {config.LinkAllowWrite},
+	"paint-link":          {config.LinkAllowWrite},
 	"resume-agent":        {config.LinkAllowWrite},
 	"request-approval":    {config.LinkAllowWrite},
 	"run":                 {config.LinkAllowWrite},

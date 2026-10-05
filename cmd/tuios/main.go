@@ -1206,6 +1206,40 @@ activity the harness hooks report, and are refused here.`,
 	setAgentMetaCmd.Flags().BoolVar(&setAgentMetaJSON, "json", false, "Print the result as JSON")
 	_ = setAgentMetaCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var paintLinkSession string
+	var paintLinkWindow string
+	paintLinkCmd := &cobra.Command{
+		Use:   "paint-link <target> [label]",
+		Short: "Paint a clickable link chip on a pane's frame",
+		Long: `Paint a link chip on a pane's frame: a short label the viewer can click
+to jump to the target pane. The chip is chrome the daemon paints on the pane,
+so the pane's own output cannot take it, and the jump back out of it is the
+usual one, undone with ctrl+b u.
+
+Without --window, run in a pane, the chip paints on that pane. The chip is
+replaced by painting again and cleared with an empty label.`,
+		Example: `  # From the pane that wants the link: jump to the pane named build
+  tuios paint-link "$TUIOS_PANE_ID_OF_BUILD" "open build"
+
+  # Paint on a specific pane
+  tuios paint-link -w "$TUIOS_PANE_ID" logs-jump "open logs"
+
+  # Clear a pane's chip
+  tuios paint-link -w "$TUIOS_PANE_ID" ""`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			target := args[0]
+			label := ""
+			if len(args) > 1 {
+				label = args[1]
+			}
+			return runPaintLink(paintLinkSession, paintLinkWindow, target, label)
+		},
+	}
+	paintLinkCmd.Flags().StringVarP(&paintLinkSession, "session", "s", "", "Target session (default: most recently active)")
+	paintLinkCmd.Flags().StringVarP(&paintLinkWindow, "window", "w", "", "Pane to paint the chip on, by name or ID (default: the pane this runs in)")
+	_ = paintLinkCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var setAgentSessionSession string
 	var setAgentSessionWindow string
 	var setAgentSessionHarness string
@@ -2936,6 +2970,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
+	rootCmd.AddCommand(paintLinkCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newReviewCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())

@@ -197,6 +197,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A plain left click on a pane's link chip jumps to the chip's target and
+	// takes the chip down. The chip is chrome the daemon paints, so the click
+	// is tuios's own and needs no nonce, and it is consumed: not forwarded to
+	// a mouse-tracking guest, not a selection, not a focus change. The jump
+	// goes through jumpToNotifTarget, so it records its origin and ctrl+b u
+	// undoes it.
+	if msg.Button == tea.MouseLeft && msg.Mod == 0 && clickedWindowIndex != -1 {
+		if chipWindowID, chip, ok := o.LinkChipClick(X, Y); ok {
+			return o, o.LinkChipJump(chipWindowID, chip)
+		}
+	}
+
 	// Ctrl + left press on a window: multi-select on a click, or grab the pane
 	// for moving on a drag. On the content it arms the click-vs-drag decision
 	// (committed past the threshold in handleMouseMotion, then moved through the

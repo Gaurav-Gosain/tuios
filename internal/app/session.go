@@ -317,6 +317,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		w.Close()
 	}
 	m.Windows = nil
+	// Chips belong to the session just left; the rebuild adopts the new
+	// session's from its state.
+	m.linkChips = nil
+	m.resetLinkChipRects()
 	// A pin names a pane of the windows just closed. See rebuildForSession.
 	m.pip = pipState{occluder: m.pip.occluder[:0]}
 
@@ -1218,6 +1222,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentMessage = ws.AgentMessage
 	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
+	m.noteLinkChip(w.ID, ws.LinkChip)
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
 	w.AgentSubagents = ws.AgentSubagents
@@ -1385,6 +1390,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	}
 
 	adoptWindowState(window, *ws)
+	m.noteLinkChip(ws.ID, ws.LinkChip)
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)
@@ -1421,6 +1427,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 // gone, and a stale BSP id mapping hands a later window an id this one still
 // owns.
 func (m *OS) closeWindowFromSync(w *terminal.Window) {
+	m.noteLinkChip(w.ID, nil)
 	m.pipSourceClosed(w)
 	if m.DaemonClient != nil && w.PTYID != "" {
 		m.unsubscribeFromPTY(w)
