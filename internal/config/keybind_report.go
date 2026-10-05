@@ -277,6 +277,9 @@ type KeybindReport struct {
 	LeaderReadAs string `json:"leader_read_as,omitempty"`
 	// KeyProblems are the keys in config.toml that tuios cannot read.
 	KeyProblems []KeyProblem `json:"key_problems"`
+	// CommandProblems are the [[keybindings.command]] entries tuios ignores
+	// or warns about, in the validator's words.
+	CommandProblems []CommandProblem `json:"command_problems"`
 	// EvidenceNote is the report explaining its own tiers. It ships inside the
 	// payload because a consumer that only ever sees the JSON has nowhere else
 	// to learn that one third of it is a curated list.
@@ -326,6 +329,8 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 		GuestClashes: r.GuestClashes(facts.Command),
 		LeaderReadAs: readAs(leader),
 		KeyProblems:  r.KeyProblems(),
+
+		CommandProblems: r.config.Keybindings.CommandProblems(),
 	}
 
 	seen := map[string]bool{}
@@ -360,6 +365,15 @@ func (rep KeybindReport) Summary() string {
 	var parts []string
 	if n := len(rep.KeyProblems); n > 0 {
 		parts = append(parts, plural.CountAs(n, "key tuios cannot read", "keys tuios cannot read"))
+	}
+	ignored := 0
+	for _, p := range rep.CommandProblems {
+		if p.Ignored {
+			ignored++
+		}
+	}
+	if ignored > 0 {
+		parts = append(parts, plural.CountAs(ignored, "command entry tuios ignores", "command entries tuios ignores"))
 	}
 	if n := len(rep.Collisions); n > 0 {
 		parts = append(parts, plural.CountAs(n, "key claimed twice", "keys claimed twice"))

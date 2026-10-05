@@ -1353,3 +1353,15 @@ and `prefix+alt+h` does nothing before the save.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The registry never reloaded | `ApplyReloadedConfig`: the `KeybindRegistry.Reload` block cut | `TestAKeybindingSavedOnDiskReachesTheClient` ("a keybinding saved on disk never reached the running client") | **caught** |
+
+## Command entries whose made-up names clash
+
+`TestKeybindsDoctorNamesACommandNameClash` in `keybinds_doctor_test.go` writes
+two `[[keybindings.command]]` entries with no name, whose commands agree in the
+first 40 characters. The positive half is the same two entries with a name
+each: the doctor reports nothing and `keybinds list` shows both.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (1e0b4c89) | `TestKeybindsDoctorNamesACommandNameClash` ("the doctor reports 0 command entries, want 1") | **caught** |
+| The report never reads the entries | `Report`: the `CommandProblems` field cut | `TestKeybindsDoctorNamesACommandNameClash` ("the doctor reports 0 command entries, want 1") | **caught** |

@@ -94,6 +94,19 @@ func (c CommandBinding) ResolvedName() string {
 	return fmt.Sprintf("cmd-%08x", h.Sum32())
 }
 
+// nameSource is the field ResolvedName made the name from, and its text:
+// "name", "description", "command" or "key", or "" for a hash or no name.
+func (c CommandBinding) nameSource() (field, text string) {
+	for _, f := range []struct{ field, text string }{
+		{"name", c.Name}, {"description", c.Description}, {"command", c.Command}, {"key", c.Key},
+	} {
+		if commandSlug(f.text) != "" {
+			return f.field, f.text
+		}
+	}
+	return "", ""
+}
+
 // Action is the entry's action name, for the registry and the dispatcher.
 func (c CommandBinding) Action() string {
 	return CommandActionPrefix + c.ResolvedName()
@@ -141,8 +154,15 @@ func cutPrefixKey(key string) (string, bool) {
 	return "", false
 }
 
+// commandSlugMax is the longest name tuios makes from a description or a
+// command. Two texts that agree up to here get the same name.
+const commandSlugMax = 40
+
 // commandSlug lowercases s and keeps letters, digits and single dashes.
-func commandSlug(s string) string {
+func commandSlug(s string) string { return commandSlugN(s, commandSlugMax) }
+
+// commandSlugN is commandSlug cut at max bytes, or not cut when max is 0.
+func commandSlugN(s string, max int) string {
 	var b strings.Builder
 	dash := false
 	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
@@ -154,7 +174,7 @@ func commandSlug(s string) string {
 			b.WriteByte('-')
 			dash = true
 		}
-		if b.Len() >= 40 {
+		if max > 0 && b.Len() >= max {
 			break
 		}
 	}
@@ -236,31 +256,74 @@ func (k *KeybindingsConfig) isLeader(key string) bool {
 // when the key is the leader.
 const LeaderAction = "leader_key"
 
+// CommandProblem is a [[keybindings.command]] entry that needs attention:
+// one tuios ignores, or one whose key every pane loses.
+type CommandProblem struct {
+	// Entry is the entry's place in config.toml, from 1.
+	Entry int    `json:"entry"`
+	Key   string `json:"key"`
+	// Name is the name tuios gives the entry, when it can make one.
+	Name string `json:"name,omitempty"`
+	// Ignored is true when tuios leaves the entry out.
+	Ignored bool   `json:"ignored"`
+	Problem string `json:"problem"`
+}
+
+// CommandProblems lists what is wrong with the command entries, in file
+// order. validateCommands warns with it at load, and the doctor prints it.
+func (k *KeybindingsConfig) CommandProblems() []CommandProblem {
+	normalizer := NewKeyNormalizer()
+	first := map[string]int{}
+	var out []CommandProblem
+	for i, c := range k.Command {
+		entry := i + 1
+		name := c.ResolvedName()
+		if msg := commandProblem(c, normalizer); msg != "" {
+			out = append(out, CommandProblem{Entry: entry, Key: c.Key, Name: name, Ignored: true, Problem: msg + " tuios ignores this entry."})
+			continue
+		}
+		if prev, ok := first[name]; ok {
+			out = append(out, CommandProblem{Entry: entry, Key: c.Key, Name: name, Ignored: true, Problem: nameClash(c, prev, name)})
+			continue
+		}
+		first[name] = entry
+		if c.Section() == SectionGlobal && bareLetterKey(c.BareKey()) {
+			out = append(out, CommandProblem{Entry: entry, Key: c.Key, Name: name,
+				Problem: fmt.Sprintf("The key %s has no modifier and no prefix+, so tuios takes it from every pane. Use prefix+%s or add a modifier, for example alt+%s.", c.BareKey(), c.BareKey(), c.BareKey()),
+			})
+		}
+	}
+	return out
+}
+
+// nameClash says why an entry lost its name to entry prev. An entry with no
+// name of its own gets one made from its text, and two different texts can
+// make the same name: tuios keeps only the first 40 characters, and drops
+// case and punctuation. That case says which text the name came from, since
+// nothing in the file shows the name.
+func nameClash(c CommandBinding, prev int, name string) string {
+	field, text := c.nameSource()
+	if field == "name" || field == "" {
+		return fmt.Sprintf("An earlier entry has the name %q. Add a different name. tuios ignores this entry.", name)
+	}
+	cut := ""
+	if len(commandSlugN(text, 0)) > commandSlugMax {
+		cut = fmt.Sprintf(" tuios uses only the first %d characters.", commandSlugMax)
+	}
+	// The suggestion is itself a name, so it has to fit in the same 40
+	// characters or it would be cut back to the clash.
+	suggest := strings.TrimRight(name[:min(len(name), commandSlugMax-2)], "-") + "-2"
+	return fmt.Sprintf("This entry has no name, so tuios makes the name %q from its %s.%s Entry %d has the same name. Add a name to this entry, for example name = %q. tuios ignores this entry.",
+		name, field, cut, prev, suggest)
+}
+
 // validateCommands warns about each entry tuios leaves out. An entry is a
 // warning and not an error, so a mistake in one entry never stops tuios.
 func validateCommands(cfg *UserConfig, result *ValidationResult) {
-	normalizer := NewKeyNormalizer()
-	seen := map[string]bool{}
-	for i, c := range cfg.Keybindings.Command {
-		field := fmt.Sprintf("keybindings.command[%d]", i+1)
-		if msg := commandProblem(c, normalizer); msg != "" {
-			result.Warnings = append(result.Warnings, ValidationError{Field: field, Key: c.Key, Message: msg + " tuios ignores this entry."})
-			continue
-		}
-		if seen[c.ResolvedName()] {
-			result.Warnings = append(result.Warnings, ValidationError{
-				Field: field, Key: c.Key,
-				Message: fmt.Sprintf("An earlier entry has the name %q. Add a different name. tuios ignores this entry.", c.ResolvedName()),
-			})
-			continue
-		}
-		seen[c.ResolvedName()] = true
-		if c.Section() == SectionGlobal && bareLetterKey(c.BareKey()) {
-			result.Warnings = append(result.Warnings, ValidationError{
-				Field: field, Key: c.Key,
-				Message: fmt.Sprintf("The key %s has no modifier and no prefix+, so tuios takes it from every pane. Use prefix+%s or add a modifier, for example alt+%s.", c.BareKey(), c.BareKey(), c.BareKey()),
-			})
-		}
+	for _, p := range cfg.Keybindings.CommandProblems() {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: fmt.Sprintf("keybindings.command[%d]", p.Entry), Key: p.Key, Message: p.Problem,
+		})
 	}
 }
 

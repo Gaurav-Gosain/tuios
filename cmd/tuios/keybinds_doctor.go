@@ -66,6 +66,14 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
+	if len(rep.CommandProblems) > 0 {
+		fmt.Printf("\nCOMMAND ENTRIES (%s)\n", config.EvidenceCertain)
+		fmt.Println("  These [[keybindings.command]] entries need a change in config.toml.")
+		for _, p := range rep.CommandProblems {
+			fmt.Printf("  entry %-3d %-22s %s\n", p.Entry, p.Key, p.Problem)
+		}
+	}
+
 	fmt.Println("\nEVIDENCE")
 	for _, tier := range []config.Evidence{config.EvidenceCertain, config.EvidenceObserved, config.EvidenceReference} {
 		fmt.Printf("  %-10s %s\n", tier, rep.EvidenceNote[tier])

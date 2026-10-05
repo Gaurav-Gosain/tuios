@@ -377,7 +377,10 @@ height = "80%"
 - `description` is the name in the command palette and in
   `tuios keybinds list`. It is optional.
 - `name` keeps a scratch terminal under a fixed name. It is optional. Without it,
-  tuios makes the name from the description or the command.
+  tuios makes the name from the description or the command. tuios uses only
+  the first 40 characters, so two entries can get the same name. tuios then
+  ignores the second entry, and `tuios keybinds doctor` shows it. Give one of
+  the two entries a `name`.
 - `width` and `height` set the size of a scratch or popup entry, in cells
   (`100`) or percent (`80%`). The default is `80%`.
 
