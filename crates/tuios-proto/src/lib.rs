@@ -10,7 +10,7 @@ pub mod frame;
 pub mod types;
 
 pub use frame::{Decoded, FrameReader, encode_command, encode_input};
-pub use types::{Command, Event, SessionSummary, State, Window};
+pub use types::{Command, Event, SessionSummary, State, ThemeExport, Window, parse_hex};
 
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
@@ -43,6 +43,8 @@ pub struct Launch {
     pub rows: u16,
     pub cell_width: u32,
     pub cell_height: u32,
+    /// A theme for the bridge to use instead of the one its config names.
+    pub theme: Option<String>,
     /// Extra environment for the bridge (and the daemon it may start).
     pub env: Vec<(String, String)>,
 }
@@ -98,6 +100,9 @@ impl Bridge {
             .arg(launch.cell_height.to_string());
         if let Some(s) = &launch.session {
             cmd.arg("--session").arg(s);
+        }
+        if let Some(t) = launch.theme.as_ref().filter(|t| !t.is_empty()) {
+            cmd.arg("--theme").arg(t);
         }
         for (k, v) in &launch.env {
             if v.is_empty() {

@@ -231,17 +231,19 @@ impl Terminal {
         cfg.value
     }
 
+    /// The mouse tracking the program asked for. ghostty reports only
+    /// whether any is on, so the level comes from the DEC modes.
     pub fn mouse_tracking(&self) -> MouseTracking {
-        let mut v: GhosttyMouseTrackingMode = 0;
-        unsafe {
-            let _ = ghostty_terminal_get(self.raw, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &mut v as *mut _ as *mut _);
-        }
-        match v {
-            GHOSTTY_MOUSE_TRACKING_X10 => MouseTracking::X10,
-            GHOSTTY_MOUSE_TRACKING_NORMAL => MouseTracking::Normal,
-            GHOSTTY_MOUSE_TRACKING_BUTTON => MouseTracking::Button,
-            GHOSTTY_MOUSE_TRACKING_ANY => MouseTracking::Any,
-            _ => MouseTracking::None,
+        if self.mode(mode(1003, false)) {
+            MouseTracking::Any
+        } else if self.mode(mode(1002, false)) {
+            MouseTracking::Button
+        } else if self.mode(mode(1000, false)) {
+            MouseTracking::Normal
+        } else if self.mode(mode(9, false)) {
+            MouseTracking::X10
+        } else {
+            MouseTracking::None
         }
     }
 

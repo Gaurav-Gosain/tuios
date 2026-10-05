@@ -165,10 +165,10 @@ impl PerfView {
         }
         let now = Instant::now();
         if self.metrics.is_none() {
-            self.metrics = Some(Metrics::new(&self.cfg.font_family, self.cfg.font_size, self.cfg.line_height, window, 1));
+            self.metrics = Some(Metrics::new(&self.cfg.font_family, self.cfg.font_size, self.cfg.line_height, self.cfg.ligatures, window, 1));
         }
         let m = self.metrics.clone().expect("metrics");
-        let t = theme::NIGHT;
+        let t = theme::Theme::fallback();
         let pane = self.pane.get_or_insert_with(|| {
             let mut p = Pane::new(COLS, ROWS, &t);
             // History for the scroll phase.
@@ -318,7 +318,7 @@ fn unicode_cols(s: &str) -> usize {
 impl Render for PerfView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
-        div().size_full().bg(rgb(theme::NIGHT.bg)).child(
+        div().size_full().bg(rgb(theme::Theme::fallback().bg)).child(
             canvas(|_, _, _| {}, move |bounds, _, window, cx| {
                 entity.update(cx, |this, cx| this.step(bounds, window, cx));
             })

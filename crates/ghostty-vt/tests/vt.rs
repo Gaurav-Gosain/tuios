@@ -115,3 +115,14 @@ fn generations_never_repeat_across_resizes() {
         assert!(!before.contains(g), "generation {g} reused after a resize");
     }
 }
+
+#[test]
+fn mouse_tracking_levels() {
+    use ghostty_vt::MouseTracking;
+    let mut t = Terminal::new(10, 2, 0).unwrap();
+    assert_eq!(t.mouse_tracking(), MouseTracking::None);
+    t.write(b"\x1b[?1000h");
+    assert_eq!(t.mouse_tracking(), MouseTracking::Normal);
+    t.write(b"\x1b[?1003h");
+    assert_eq!(t.mouse_tracking(), MouseTracking::Any);
+}

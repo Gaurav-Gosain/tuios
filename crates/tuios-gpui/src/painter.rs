@@ -40,10 +40,10 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(family: &str, font_size: f32, line_height: f32, window: &mut Window, epoch: u64) -> Self {
+    pub fn new(family: &str, font_size: f32, line_height: f32, ligatures: bool, window: &mut Window, epoch: u64) -> Self {
         let base = Font {
             family: SharedString::from(family.to_string()),
-            features: FontFeatures::default(),
+            features: if ligatures { FontFeatures::default() } else { FontFeatures::disable_ligatures() },
             // CJK and symbol fonts only. Emoji must not be named here: GPUI's
             // Linux text system drops any font without an "m" glyph from its
             // database when it is loaded by name, which takes Noto Color

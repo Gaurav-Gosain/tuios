@@ -76,3 +76,12 @@ fn go_nulls_read_as_empty() {
     let s = e.state.unwrap();
     assert!(s.windows.is_empty() && s.occupied.is_empty() && s.workspace_names.is_empty());
 }
+
+#[test]
+fn theme_events_parse() {
+    let e: tuios_proto::Event = serde_json::from_str(r##"{"type":"theme","theme":{"name":"dracula","names":["a","b"],"light":false,"terminal":{"fg":"#f8f8f2","bg":"#282a36","cursor":"#f8f8f2","ansi":["#21222c","","","","","","","","","","","","","","",""]},"ui":{"Surface":"#3a3943"},"ground":{"Fg":"#fffaf1"},"rail_ground":"#282a36","rail_rule":"#484851","border_focused":"#8be9fd","border_focused_terminal":"#50fa7b","border_unfocused":"#ff5555","agent":{"working":"#bd93f9"}}}"##).unwrap();
+    let t = e.theme.unwrap();
+    assert_eq!(tuios_proto::parse_hex(&t.terminal.bg), Some(0x282a36));
+    assert_eq!(tuios_proto::parse_hex(""), None);
+    assert_eq!(t.ui["Surface"], "#3a3943");
+}

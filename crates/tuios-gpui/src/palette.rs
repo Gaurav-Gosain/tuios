@@ -15,7 +15,8 @@ pub enum Act {
     FontSmaller,
     FontReset,
     ToggleSidebar,
-    ToggleTheme,
+    /// Switch to a tuios theme, for this window only.
+    Theme(String),
     Quit,
 }
 
@@ -51,7 +52,6 @@ pub fn entries(sessions: &[String], current: &str) -> Vec<Entry> {
         e("Smaller text", "ctrl+-", Act::FontSmaller),
         e("Reset text size", "ctrl+0", Act::FontReset),
         e("Toggle sidebar", "ctrl+shift+b", Act::ToggleSidebar),
-        e("Switch light or dark theme", "", Act::ToggleTheme),
         e("New session", "", Act::NewSession),
         e("Quit", "ctrl+shift+q", Act::Quit),
     ];

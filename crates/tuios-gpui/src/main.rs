@@ -3,6 +3,7 @@
 
 mod app;
 mod boxdraw;
+mod config;
 mod control;
 mod keys;
 mod painter;
@@ -24,9 +25,10 @@ Options:
   --tuios PATH        The tuios binary (default: tuios on PATH)
   --session NAME      The session to attach, created when missing
   --isolate DIR       Run against a private daemon whose files live in DIR
-  --font FAMILY       Terminal font (default: FiraCode Nerd Font Mono)
+  --font FAMILY       Terminal font (default: JetBrainsMono Nerd Font Mono)
   --font-size N       Terminal font size in points (default: 14)
-  --light             Use the light theme
+  --theme NAME        A tuios theme (default: the one tuios's config names)
+  --no-ligatures      Turn off programming ligatures
   --show-fps          Show paint timings in the status bar
   --control PATH      Accept test commands on a unix socket at PATH
   --perf              Run the performance harness and print the results
@@ -36,15 +38,17 @@ Options:
 }
 
 fn main() {
+    let file = config::load_gui();
     let mut cfg = app::Config {
         tuios: PathBuf::from("tuios"),
         session: None,
         env: Vec::new(),
-        font_family: "FiraCode Nerd Font Mono".into(),
-        font_size: 14.,
-        line_height: 1.3,
-        dark: true,
-        ui_font: "Adwaita Sans".into(),
+        font_family: file.font_family.clone().unwrap_or_else(|| config::TERMINAL_FONTS[0].into()),
+        font_size: file.font_size.unwrap_or(14.),
+        line_height: file.line_height.unwrap_or(1.3),
+        ligatures: file.ligatures.unwrap_or(true),
+        theme: file.theme.clone().or_else(config::tuios_theme),
+        ui_font: file.ui_font_family.clone().unwrap_or_else(|| config::UI_FONTS[0].into()),
         show_fps: false,
         control: None,
     };
@@ -59,7 +63,8 @@ fn main() {
             "--isolate" => cfg.env = isolated_env(&PathBuf::from(val())),
             "--font" => cfg.font_family = val(),
             "--font-size" => cfg.font_size = val().parse().unwrap_or_else(|_| usage()),
-            "--light" => cfg.dark = false,
+            "--theme" => cfg.theme = Some(val()),
+            "--no-ligatures" => cfg.ligatures = false,
             "--show-fps" => cfg.show_fps = true,
             "--perf" => perf = true,
             "--control" => cfg.control = Some(PathBuf::from(val())),

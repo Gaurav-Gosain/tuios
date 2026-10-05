@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tuios_proto::{Bridge, Command, Launch, Message, Sender, SessionSummary, State};
 
-const SIDEBAR_W: f32 = 232.;
-const STRIP_H: f32 = 34.;
+const SIDEBAR_W: f32 = 240.;
+const STRIP_H: f32 = 32.;
 const STATUS_H: f32 = 24.;
 const GRID_PAD: f32 = 6.;
 
@@ -28,7 +28,9 @@ pub struct Config {
     pub font_family: String,
     pub font_size: f32,
     pub line_height: f32,
-    pub dark: bool,
+    pub ligatures: bool,
+    /// A theme to use instead of the one the bridge's tuios config names.
+    pub theme: Option<String>,
     pub ui_font: String,
     /// Show frame timings in the status bar.
     pub show_fps: bool,
@@ -102,13 +104,24 @@ pub struct TuiosApp {
     last_input: Instant,
     /// Text an input method is composing, drawn at the cursor until committed.
     marked: Option<String>,
+    /// Themes tuios knows, for the palette, and the one last picked there.
+    theme_names: Vec<String>,
+    theme_wanted: Option<String>,
 }
 
 impl TuiosApp {
     pub fn new(cfg: Config, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        let theme = if cfg.dark { theme::NIGHT } else { theme::DAY };
+        let theme = Theme::fallback();
+        let mut cfg = cfg;
+        let installed = window.text_system().all_font_names();
+        let mut wanted: Vec<&str> = vec![cfg.font_family.as_str()];
+        wanted.extend(crate::config::TERMINAL_FONTS);
+        cfg.font_family = crate::config::pick_font(&wanted, &installed, true);
+        let mut wanted: Vec<&str> = vec![cfg.ui_font.as_str()];
+        wanted.extend(crate::config::UI_FONTS);
+        cfg.ui_font = crate::config::pick_font(&wanted, &installed, false);
         let mut this = TuiosApp {
             cfg,
             focus,
@@ -138,6 +151,8 @@ impl TuiosApp {
             blink_on: true,
             last_input: Instant::now(),
             marked: None,
+            theme_names: Vec::new(),
+            theme_wanted: None,
         };
         this.connect(this.cfg.session.clone(), window, cx);
         this.poll_sessions(cx);
@@ -303,17 +318,24 @@ impl TuiosApp {
                 out.push(',');
             }
             let (x, y, c, r) = w.content();
-            let (text, sel, scroll, bottom, size) = match self.panes.get_mut(&w.pty) {
+            let (text, sel, scroll, bottom, size, modes) = match self.panes.get_mut(&w.pty) {
                 Some(p) => {
                     let sel = p.term.selection_text().unwrap_or_default();
                     let bottom = p.term.at_bottom();
                     let size = (p.term.cols(), p.term.rows());
-                    (p.term.snapshot().plain_text(), sel, p.scroll_px, bottom, size)
+                    let modes = format!(
+                        "{{\"kitty_flags\":{},\"mouse\":\"{:?}\",\"bracketed_paste\":{},\"alt_screen\":{}}}",
+                        p.term.kitty_keyboard_flags(),
+                        p.term.mouse_tracking(),
+                        p.term.mode(ghostty_vt::MODE_BRACKETED_PASTE),
+                        p.term.alt_screen()
+                    );
+                    (p.term.snapshot().plain_text(), sel, p.scroll_px, bottom, size, modes)
                 }
-                None => (String::new(), String::new(), 0., true, (0, 0)),
+                None => (String::new(), String::new(), 0., true, (0, 0), "{}".to_string()),
             };
             out.push_str(&format!(
-                "{{\"id\":{},\"title\":{},\"cells\":[{x},{y},{c},{r}],\"term\":[{},{}],\"agent\":{},\"scroll_px\":{scroll},\"at_bottom\":{bottom},\"selection\":{},\"text\":{}}}",
+                "{{\"id\":{},\"title\":{},\"cells\":[{x},{y},{c},{r}],\"term\":[{},{}],\"agent\":{},\"scroll_px\":{scroll},\"at_bottom\":{bottom},\"modes\":{modes},\"selection\":{},\"text\":{}}}",
                 control::json_str(&w.id),
                 control::json_str(w.label()),
                 size.0,
@@ -331,7 +353,7 @@ impl TuiosApp {
 
     fn ensure_metrics(&mut self, window: &mut Window) -> Metrics {
         if self.metrics.is_none() {
-            self.metrics = Some(Metrics::new(&self.cfg.font_family, self.cfg.font_size, self.cfg.line_height, window, self.epoch));
+            self.metrics = Some(Metrics::new(&self.cfg.font_family, self.cfg.font_size, self.cfg.line_height, self.cfg.ligatures, window, self.epoch));
         }
         self.metrics.clone().expect("metrics")
     }
@@ -356,6 +378,7 @@ impl TuiosApp {
             rows,
             cell_width: f32::from(m.cell_w).round() as u32,
             cell_height: f32::from(m.cell_h).round() as u32,
+            theme: self.theme_wanted.clone().or_else(|| self.cfg.theme.clone()),
             env: self.cfg.env.clone(),
         };
         let (tx, rx) = async_channel::unbounded::<Message>();
@@ -455,6 +478,11 @@ impl TuiosApp {
                     "state" => {
                         if let Some(st) = ev.state {
                             self.on_state(st);
+                        }
+                    }
+                    "theme" => {
+                        if let Some(t) = ev.theme {
+                            self.set_theme(Theme::from_export(&t), t.names);
                         }
                     }
                     _ => {}
@@ -570,18 +598,30 @@ impl TuiosApp {
             Act::FontSmaller => self.set_font_size(self.cfg.font_size - 1., cx),
             Act::FontReset => self.set_font_size(14., cx),
             Act::ToggleSidebar => self.sidebar = !self.sidebar,
-            Act::ToggleTheme => {
-                self.theme = if self.theme.name == theme::NIGHT.name { theme::DAY } else { theme::NIGHT };
-                let t = self.theme.clone();
-                for p in self.panes.values_mut() {
-                    apply_theme(&mut p.term, &t);
-                }
-                self.epoch += 1;
-                self.metrics = None;
+            Act::Theme(name) => {
+                self.theme_wanted = Some(name.clone());
+                self.send(Command::theme(&name));
             }
             Act::Quit => cx.quit(),
         }
         cx.notify();
+    }
+
+    fn set_theme(&mut self, theme: Theme, names: Vec<String>) {
+        if !names.is_empty() {
+            self.theme_names = names;
+        }
+        if theme == self.theme {
+            return;
+        }
+        self.theme = theme;
+        let t = self.theme.clone();
+        for p in self.panes.values_mut() {
+            apply_theme(&mut p.term, &t);
+        }
+        // Row caches hold resolved colours; new metrics start them over.
+        self.epoch += 1;
+        self.metrics = None;
     }
 
     fn set_font_size(&mut self, size: f32, cx: &mut Context<Self>) {
@@ -686,7 +726,13 @@ impl TuiosApp {
     fn open_palette(&mut self, cx: &mut Context<Self>) {
         let names: Vec<String> = self.sessions.iter().map(|s| s.name.clone()).collect();
         let current = self.state.as_ref().map(|s| s.session.clone()).unwrap_or_default();
-        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries: palette::entries(&names, &current) });
+        let mut entries = palette::entries(&names, &current);
+        for t in &self.theme_names {
+            if *t != self.theme.name {
+                entries.push(Entry { title: format!("Theme: {t}"), hint: "", act: Act::Theme(t.clone()) });
+            }
+        }
+        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries });
         cx.notify();
     }
 
@@ -986,7 +1032,7 @@ impl TuiosApp {
                 paint_scrollbar(term, rect, &theme, window);
             }
             if let Some(state) = w.agent_state() {
-                paint_agent_tag(state, rect, &theme, window, cx);
+                paint_agent_tag(state, rect, &theme, &self.cfg.ui_font, window, cx);
             }
         }
 
@@ -999,7 +1045,9 @@ impl TuiosApp {
                     size(px(c as f32 * cw), px(r as f32 * ch)),
                 );
                 let is_focused = focused.as_deref() == Some(w.id.as_str());
-                let color = if is_focused { Theme::alpha(theme.accent, 0xd0) } else { Theme::alpha(theme.border, 0xff) };
+                // tuios's own frame colours: the focused pane in the terminal-mode
+                // border colour, the others in the unfocused one, kept quiet.
+                let color = if is_focused { Theme::alpha(theme.border_focused, 0xff) } else { Theme::alpha(theme.border_unfocused, 0x70) };
                 window.paint_quad(outline(rect.dilate(px(1.)), color, BorderStyle::Solid));
             }
         }
@@ -1025,6 +1073,12 @@ impl TuiosApp {
     }
 
     // ---- chrome ------------------------------------------------------------
+    //
+    // Sizes follow what well-made GPUI apps settled on (docs/RESEARCH.md):
+    // 32 px strip, 24 px status bar, 28 px rows with 4 px corners, 13 px text,
+    // 12 px secondary text, two weights. Colours come from tuios's rail
+    // palette (GroundUI) for the frame and its dialog palette (UI) for the
+    // command palette, so a theme reads as the same app in both clients.
 
     fn render_sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme.clone();
@@ -1032,7 +1086,14 @@ impl TuiosApp {
         let current = st.session.clone();
         let focused = self.focused_id();
         let section = |label: &str| {
-            div().px_3().pt_4().pb_1().text_xs().text_color(rgb(t.muted)).child(SharedString::from(label.to_uppercase()))
+            div()
+                .px(px(14.))
+                .pt(px(16.))
+                .pb(px(6.))
+                .text_size(px(11.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(t.rail_mute))
+                .child(SharedString::from(label.to_uppercase()))
         };
         let mut col = div()
             .id("sidebar")
@@ -1041,19 +1102,24 @@ impl TuiosApp {
             .w(px(SIDEBAR_W))
             .h_full()
             .flex_none()
-            .bg(rgb(t.sidebar))
+            .bg(rgb(t.rail))
             .border_r_1()
-            .border_color(rgb(t.border))
+            .border_color(rgb(t.rail_rule))
             .overflow_y_scroll()
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap_2()
-                    .px_3()
+                    .gap(px(8.))
+                    .px(px(14.))
                     .h(px(STRIP_H))
-                    .child(div().size(px(8.)).rounded_full().bg(rgb(if self.connected { t.done } else { t.errored })))
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(rgb(t.text)).child("tuios")),
+                    .flex_none()
+                    .border_b_1()
+                    .border_color(rgb(t.rail_rule))
+                    .child(div().size(px(7.)).rounded_full().bg(rgb(if self.connected { t.done } else { t.errored })))
+                    .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).text_color(rgb(t.rail_fg)).child("tuios"))
+                    .child(div().flex_1())
+                    .child(div().text_size(px(11.)).text_color(rgb(t.rail_mute)).child(SharedString::from(if t.name.is_empty() { "default".to_string() } else { t.name.clone() }))),
             );
 
         col = col.child(section("Sessions"));
@@ -1072,16 +1138,18 @@ impl TuiosApp {
                             this.connect(Some(name.clone()), window, cx);
                         }
                     }))
+                    .child(div().w(px(14.)).text_color(rgb(if active { t.accent_bright } else { t.rail_mute })).child("\u{f120}"))
                     .child(div().flex_1().truncate().child(SharedString::from(s.name.clone())))
-                    .child(div().text_xs().text_color(rgb(t.muted)).child(SharedString::from(format!("{}", s.window_count)))),
+                    .child(div().text_size(px(11.)).text_color(rgb(t.rail_mute)).child(SharedString::from(format!("{}", s.window_count)))),
             );
         }
         col = col.child(
             row_item(&t, false)
                 .id("new-session")
-                .text_color(rgb(t.muted))
+                .text_color(rgb(t.rail_mute))
                 .on_click(cx.listener(|this, _, window, cx| this.run(Act::NewSession, window, cx)))
-                .child("+ New session"),
+                .child(div().w(px(14.)).child("\u{f067}"))
+                .child("New session"),
         );
 
         col = col.child(section("Panes"));
@@ -1093,30 +1161,14 @@ impl TuiosApp {
                 row_item(&t, active)
                     .id(SharedString::from(format!("pane-{}", w.id)))
                     .on_click(cx.listener(move |this, _, _, cx| this.focus_window(&id, cx)))
-                    .child(
-                        div()
-                            .size(px(7.))
-                            .rounded_full()
-                            .flex_none()
-                            .bg(rgb(agent.as_deref().map(|a| t.agent_color(a)).unwrap_or(t.border))),
-                    )
+                    .child(agent_dot(&t, agent.as_deref(), &w.id))
                     .child(div().flex_1().truncate().child(SharedString::from(w.label().to_string())))
-                    .when_some(agent, |el, a| {
-                        el.child(
-                            div()
-                                .text_xs()
-                                .px_1p5()
-                                .rounded_sm()
-                                .bg(Theme::alpha(t.agent_color(&a), 0x26))
-                                .text_color(rgb(t.agent_color(&a)))
-                                .child(SharedString::from(a.replace('_', " "))),
-                        )
-                    }),
+                    .when_some(agent, |el, a| el.child(agent_badge(&t, &a))),
             );
         }
         let others: Vec<_> = st.windows.iter().filter(|w| w.workspace != st.workspace).collect();
         if !others.is_empty() {
-            col = col.child(section("Elsewhere"));
+            col = col.child(section("Other workspaces"));
             for w in others {
                 let id = w.id.clone();
                 let ws = w.workspace;
@@ -1124,14 +1176,13 @@ impl TuiosApp {
                 col = col.child(
                     row_item(&t, false)
                         .id(SharedString::from(format!("other-{}", w.id)))
-                        .text_color(rgb(t.muted))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.send(Command::workspace(ws));
                             this.focus_window(&id, cx);
                         }))
-                        .child(div().text_xs().w(px(14.)).child(SharedString::from(ws.to_string())))
+                        .child(div().w(px(14.)).text_size(px(11.)).text_color(rgb(t.rail_mute)).child(SharedString::from(ws.to_string())))
                         .child(div().flex_1().truncate().child(SharedString::from(w.label().to_string())))
-                        .when_some(agent, |el, a| el.child(div().size(px(7.)).rounded_full().bg(rgb(t.agent_color(&a))))),
+                        .when_some(agent, |el, a| el.child(agent_dot(&t, Some(&a), &w.id))),
                 );
             }
         }
@@ -1141,7 +1192,7 @@ impl TuiosApp {
     fn render_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme.clone();
         let st = self.state.clone().unwrap_or_default();
-        let mut tabs = div().flex().items_center().gap_1().px_2().h(px(STRIP_H)).flex_none();
+        let mut tabs = div().flex().items_center().gap(px(2.)).px(px(6.)).h_full().flex_none();
         let mut shown: Vec<u32> = st.occupied.clone();
         if st.workspace > 0 && !shown.contains(&st.workspace) {
             shown.push(st.workspace);
@@ -1149,45 +1200,57 @@ impl TuiosApp {
         shown.sort();
         for ws in shown {
             let active = ws == st.workspace;
-            let label = match st.workspace_name(ws) {
-                Some(n) => format!("{ws}  {n}"),
-                None => format!("{ws}"),
-            };
-            let busy = st.windows.iter().filter(|w| w.workspace == ws).filter_map(|w| w.agent_state()).next().map(|s| t.agent_color(s));
+            let busy = st
+                .windows
+                .iter()
+                .filter(|w| w.workspace == ws)
+                .filter_map(|w| w.agent_state())
+                .max_by_key(|s| match *s {
+                    "needs_input" => 3,
+                    "errored" => 2,
+                    "working" => 1,
+                    _ => 0,
+                })
+                .map(|s| t.agent_color(s));
+            let name = st.workspace_name(ws).map(|s| s.to_string());
             tabs = tabs.child(
                 div()
                     .id(SharedString::from(format!("ws-{ws}")))
+                    .relative()
                     .flex()
                     .items_center()
-                    .gap_1p5()
+                    .gap(px(6.))
                     .h(px(24.))
-                    .px_2p5()
-                    .rounded_md()
-                    .text_sm()
+                    .px(px(10.))
+                    .rounded(px(6.))
+                    .text_size(px(13.))
                     .cursor_pointer()
-                    .text_color(rgb(if active { t.text } else { t.muted }))
-                    .when(active, |el| el.bg(rgb(t.surface)))
-                    .hover(|s| s.bg(rgb(t.surface)))
+                    .text_color(rgb(if active { t.rail_fg } else { t.rail_mute }))
+                    .when(active, |el| el.bg(rgb(t.rail_row)).font_weight(FontWeight::MEDIUM))
+                    .hover(|s| s.bg(rgb(t.rail_hover)).text_color(rgb(t.rail_fg)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.send(Command::workspace(ws));
                         cx.notify();
                     }))
-                    .child(SharedString::from(label))
+                    .child(div().text_color(rgb(if active { t.accent_bright } else { t.rail_mute })).child(SharedString::from(ws.to_string())))
+                    .when_some(name, |el, n| el.child(SharedString::from(n)))
                     .when_some(busy, |el, c| el.child(div().size(px(6.)).rounded_full().bg(rgb(c)))),
             );
         }
-        let button = |id: &'static str, label: &'static str| {
+        let button = |id: &'static str, icon: &'static str, label: &'static str| {
             div()
                 .id(id)
                 .h(px(24.))
-                .px_2()
+                .px(px(8.))
                 .flex()
                 .items_center()
-                .rounded_md()
-                .text_sm()
-                .text_color(rgb(t.muted))
+                .gap(px(6.))
+                .rounded(px(6.))
+                .text_size(px(12.))
+                .text_color(rgb(t.rail_dim))
                 .cursor_pointer()
-                .hover(|s| s.bg(rgb(t.surface)).text_color(rgb(t.text)))
+                .hover(|s| s.bg(rgb(t.rail_hover)).text_color(rgb(t.rail_fg)))
+                .child(div().text_size(px(13.)).child(icon))
                 .child(label)
         };
         div()
@@ -1197,17 +1260,22 @@ impl TuiosApp {
             .h(px(STRIP_H))
             .flex_none()
             .border_b_1()
-            .border_color(rgb(t.border))
-            .bg(rgb(t.sidebar))
+            .border_color(rgb(t.rail_rule))
+            .bg(rgb(t.rail))
             .child(tabs)
             .child(
                 div()
                     .flex()
-                    .gap_1()
-                    .px_2()
-                    .child(button("split-r", "Split right").on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["vertical"]), w, cx))))
-                    .child(button("split-d", "Split down").on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["horizontal"]), w, cx))))
-                    .child(button("palette", "Commands").on_click(cx.listener(|this, _, _, cx| this.open_palette(cx)))),
+                    .items_center()
+                    .gap(px(2.))
+                    .px(px(6.))
+                    .child(button("split-r", "\u{eb56}", "Split").on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["vertical"]), w, cx))))
+                    .child(button("split-d", "\u{eb57}", "Stack").on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["horizontal"]), w, cx))))
+                    .child(
+                        button("palette", "\u{f002}", "Commands")
+                            .child(div().text_size(px(11.)).text_color(rgb(t.rail_mute)).child("ctrl+shift+p"))
+                            .on_click(cx.listener(|this, _, _, cx| this.open_palette(cx))),
+                    ),
             )
     }
 
@@ -1215,10 +1283,22 @@ impl TuiosApp {
         let t = self.theme.clone();
         let st = self.state.clone().unwrap_or_default();
         let focused = self.focused_id().and_then(|id| st.window(&id).cloned());
-        let left = match &focused {
-            Some(w) => format!("{}   workspace {}   {}", st.session, st.workspace, w.label()),
-            None => format!("{}", self.status),
-        };
+        let sep = || div().w(px(1.)).h(px(12.)).bg(rgb(t.rail_rule));
+        let mut left = div().flex().items_center().gap(px(8.)).min_w_0();
+        match &focused {
+            Some(w) => {
+                left = left
+                    .child(div().text_color(rgb(t.rail_dim)).child(SharedString::from(st.session.clone())))
+                    .child(sep())
+                    .child(SharedString::from(format!("workspace {}", st.workspace)))
+                    .child(sep())
+                    .child(div().truncate().child(SharedString::from(w.label().to_string())));
+                if let Some(a) = w.agent_state() {
+                    left = left.child(sep()).child(div().text_color(rgb(t.agent_color(a))).child(SharedString::from(a.replace('_', " "))));
+                }
+            }
+            None => left = left.child(SharedString::from(self.status.to_string())),
+        }
         let mut right = format!("{} x {}", self.grid.cols, self.grid.rows);
         if self.cfg.show_fps {
             if let Some((p50, p95)) = self.stats.paint_percentiles() {
@@ -1231,73 +1311,114 @@ impl TuiosApp {
             .justify_between()
             .h(px(STATUS_H))
             .flex_none()
-            .px_3()
-            .text_xs()
-            .text_color(rgb(t.muted))
-            .bg(rgb(t.sidebar))
+            .px(px(10.))
+            .text_size(px(12.))
+            .text_color(rgb(t.rail_mute))
+            .bg(rgb(t.rail))
             .border_t_1()
-            .border_color(rgb(t.border))
-            .child(div().truncate().child(SharedString::from(left)))
+            .border_color(rgb(t.rail_rule))
+            .child(left)
             .child(SharedString::from(right))
     }
 
-    fn render_palette(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn render_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.palette.as_ref()?;
         let t = self.theme.clone();
         let list = palette::filter(&p.entries, &p.query);
         let selected = p.selected.min(list.len().saturating_sub(1));
-        let start = selected.saturating_sub(9);
-        let mut items = div().flex().flex_col().py_1();
-        for (i, e) in list.iter().enumerate().skip(start).take(10) {
+        let start = selected.saturating_sub(11);
+        let mut items = div().flex().flex_col().p(px(6.));
+        for (i, e) in list.iter().enumerate().skip(start).take(12) {
             let act = e.act.clone();
+            let is_sel = i == selected;
+            let swatch = match &e.act {
+                Act::Theme(_) => true,
+                _ => false,
+            };
             items = items.child(
                 div()
                     .id(("pal", i))
+                    .relative()
                     .flex()
                     .justify_between()
                     .items_center()
-                    .mx_1()
-                    .px_3()
+                    .px(px(10.))
                     .h(px(30.))
-                    .rounded_md()
-                    .text_sm()
+                    .rounded(px(6.))
+                    .text_size(px(13.))
                     .cursor_pointer()
-                    .text_color(rgb(t.text))
-                    .when(i == selected, |el| el.bg(Theme::alpha(t.accent, 0x30)))
-                    .hover(|s| s.bg(Theme::alpha(t.accent, 0x18)))
+                    .text_color(rgb(if is_sel { t.dlg_fg } else { t.dlg_dim }))
+                    .when(is_sel, |el| el.bg(rgb(t.dlg_row)))
+                    .hover(|s| s.bg(rgb(t.dlg_row)).text_color(rgb(t.dlg_fg)))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.palette = None;
                         this.run(act.clone(), window, cx);
                     }))
-                    .child(SharedString::from(e.title.clone()))
-                    .child(div().text_xs().text_color(rgb(t.muted)).child(e.hint)),
+                    .when(is_sel, |el| el.child(div().absolute().left_0().top(px(7.)).w(px(2.)).h(px(16.)).rounded(px(1.)).bg(rgb(t.accent))))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .when(swatch, |el| el.child(div().text_color(rgb(t.accent_bright)).child("\u{f53f}")))
+                            .child(SharedString::from(e.title.clone())),
+                    )
+                    .child(div().text_size(px(11.)).text_color(rgb(t.dlg_mute)).child(e.hint)),
             );
         }
         if list.is_empty() {
-            items = items.child(div().px_4().py_2().text_sm().text_color(rgb(t.muted)).child("No command matches."));
+            items = items.child(div().px(px(12.)).py(px(8.)).text_size(px(13.)).text_color(rgb(t.dlg_mute)).child("No command matches."));
         }
-        let query = if p.query.is_empty() { SharedString::from("Type a command") } else { SharedString::from(p.query.clone()) };
+        let query = if p.query.is_empty() { SharedString::from("Run a command, switch a session or pick a theme") } else { SharedString::from(p.query.clone()) };
+        let shadow = |y: f32, blur: f32, a: f32| BoxShadow {
+            color: hsla(0., 0., 0., a),
+            offset: point(px(0.), px(y)),
+            blur_radius: px(blur),
+            spread_radius: px(0.),
+            inset: false,
+        };
         let panel = div()
-            .w(px(520.))
-            .bg(rgb(t.surface))
+            .w(px(600.))
+            .bg(rgb(t.dlg_surface))
             .border_1()
-            .border_color(rgb(t.border))
-            .rounded_lg()
-            .shadow_lg()
+            .border_color(rgb(t.dlg_edge))
+            .rounded(px(12.))
+            .shadow(vec![shadow(2., 3., 0.12), shadow(3., 6., 0.10), shadow(6., 12., 0.08), shadow(16., 32., 0.18)])
             .overflow_hidden()
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .px_4()
-                    .h(px(44.))
+                    .gap(px(10.))
+                    .px(px(16.))
+                    .h(px(48.))
                     .border_b_1()
-                    .border_color(rgb(t.border))
-                    .text_color(rgb(if p.query.is_empty() { t.muted } else { t.text }))
-                    .child(query)
-                    .child(div().w(px(1.5)).h(px(18.)).ml_0p5().bg(rgb(t.accent))),
+                    .border_color(rgb(t.dlg_edge))
+                    .text_size(px(14.))
+                    .child(div().text_color(rgb(t.dlg_mute)).child("\u{f002}"))
+                    .child(div().text_color(rgb(if p.query.is_empty() { t.dlg_mute } else { t.dlg_fg })).child(query))
+                    .child(div().w(px(1.5)).h(px(18.)).bg(rgb(t.accent)).with_animation(
+                        "caret",
+                        Animation::new(Duration::from_millis(1060)).repeat(),
+                        |el, d| el.opacity(if d < 0.5 { 1. } else { 0. }),
+                    )),
             )
-            .child(items);
+            .child(items)
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .px(px(16.))
+                    .h(px(28.))
+                    .items_center()
+                    .border_t_1()
+                    .border_color(rgb(t.dlg_edge))
+                    .text_size(px(11.))
+                    .text_color(rgb(t.dlg_mute))
+                    .child(SharedString::from(format!("{} of {}", list.len(), p.entries.len())))
+                    .child("enter run   esc close"),
+            );
+        let top = (f32::from(window.viewport_size().height) / 10.).max(48.);
         Some(
             div()
                 .id("palette-scrim")
@@ -1305,16 +1426,16 @@ impl TuiosApp {
                 .inset_0()
                 .flex()
                 .justify_center()
-                .bg(Theme::alpha(0x000000, 0x40))
+                .bg(Theme::alpha(0x000000, if t.light { 0x0d } else { 0x33 }))
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.palette = None;
                     cx.notify();
                 }))
                 .child(
-                    div().pt(px(72.)).child(panel).with_animation(
+                    div().pt(px(top)).child(panel).with_animation(
                         "palette-in",
                         Animation::new(Duration::from_millis(150)).with_easing(ease_out_quint()),
-                        |el, t| el.opacity(t).mt(px(-10. * (1. - t))),
+                        |el, d| el.opacity(d).mt(px(-8. * (1. - d))),
                     ),
                 )
                 .into_any_element(),
@@ -1336,7 +1457,7 @@ impl Render for TuiosApp {
         let sidebar = self.sidebar.then(|| self.render_sidebar(cx));
         let strip = self.render_strip(cx);
         let status = self.render_status();
-        let palette = self.render_palette(cx);
+        let palette = self.render_palette(_window, cx);
         div()
             .id("root")
             .size_full()
@@ -1344,7 +1465,7 @@ impl Render for TuiosApp {
             .flex_row()
             .relative()
             .bg(rgb(t.bg))
-            .text_color(rgb(t.text))
+            .text_color(rgb(t.rail_fg))
             .font_family(SharedString::from(self.cfg.ui_font.clone()))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -1384,18 +1505,54 @@ impl Render for TuiosApp {
 
 fn row_item(t: &Theme, active: bool) -> Div {
     div()
+        .relative()
         .flex()
         .items_center()
-        .gap_2()
-        .mx_1p5()
-        .px_2()
+        .gap(px(8.))
+        .mx(px(6.))
+        .px(px(8.))
         .h(px(28.))
-        .rounded_md()
-        .text_sm()
+        .flex_none()
+        .rounded(px(4.))
+        .text_size(px(13.))
         .cursor_pointer()
-        .text_color(rgb(if active { t.text } else { t.muted }))
-        .when(active, |el| el.bg(rgb(t.surface)))
-        .hover(|s| s.bg(rgb(t.surface)).text_color(rgb(t.text)))
+        .text_color(rgb(if active { t.rail_fg } else { t.rail_dim }))
+        .when(active, |el| {
+            el.bg(rgb(t.rail_row))
+                .font_weight(FontWeight::MEDIUM)
+                .child(div().absolute().left_0().top(px(6.)).w(px(2.)).h(px(16.)).rounded(px(1.)).bg(rgb(t.accent)))
+        })
+        .hover(|s| s.bg(rgb(t.rail_hover)).text_color(rgb(t.rail_fg)))
+}
+
+/// An agent's state as a dot; a working agent's dot breathes.
+fn agent_dot(t: &Theme, state: Option<&str>, id: &str) -> AnyElement {
+    let color = state.map(|a| t.agent_color(a)).unwrap_or(t.rail_rule);
+    let dot = div().size(px(8.)).rounded_full().flex_none().bg(rgb(color));
+    if state == Some("working") {
+        dot.with_animation(
+            SharedString::from(format!("breathe-{id}")),
+            Animation::new(Duration::from_millis(1600)).repeat().with_easing(pulsating_between(0.35, 1.)),
+            |el, d| el.opacity(d),
+        )
+        .into_any_element()
+    } else {
+        dot.into_any_element()
+    }
+}
+
+fn agent_badge(t: &Theme, state: &str) -> Div {
+    let c = t.agent_color(state);
+    div()
+        .text_size(px(11.))
+        .px(px(6.))
+        .h(px(18.))
+        .flex()
+        .items_center()
+        .rounded(px(4.))
+        .bg(Theme::alpha(c, 0x24))
+        .text_color(rgb(c))
+        .child(SharedString::from(state.replace('_', " ")))
 }
 
 fn mouse_mods(m: &Modifiers) -> u16 {
@@ -1466,16 +1623,16 @@ fn paint_scrollbar(term: &ghostty_vt::Terminal, rect: Bounds<Pixels>, t: &Theme,
     let top = offset as f32 / (total - len) as f32 * (h - thumb);
     let x = rect.origin.x + rect.size.width - px(6.);
     window.paint_quad(
-        fill(Bounds::new(point(x, rect.origin.y + px(top)), size(px(4.), px(thumb))), Theme::alpha(t.muted, 0xb0)).corner_radii(px(2.)),
+        fill(Bounds::new(point(x, rect.origin.y + px(top)), size(px(4.), px(thumb))), Theme::alpha(t.rail_mute, 0xb0)).corner_radii(px(2.)),
     );
 }
 
-fn paint_agent_tag(state: &str, rect: Bounds<Pixels>, t: &Theme, window: &mut Window, cx: &mut App) {
+fn paint_agent_tag(state: &str, rect: Bounds<Pixels>, t: &Theme, font: &str, window: &mut Window, cx: &mut App) {
     let label: SharedString = state.replace('_', " ").into();
     let color = t.agent_color(state);
     let run = TextRun {
         len: label.len(),
-        font: gpui::font("Adwaita Sans"),
+        font: gpui::font(SharedString::from(font.to_string())),
         color: rgb(color).into(),
         background_color: None,
         underline: None,
@@ -1486,7 +1643,7 @@ fn paint_agent_tag(state: &str, rect: Bounds<Pixels>, t: &Theme, window: &mut Wi
     let w = line.width + px(16.);
     let h = px(18.);
     let origin = point(rect.origin.x + rect.size.width - w - px(10.), rect.origin.y + px(8.));
-    window.paint_quad(fill(Bounds::new(origin, size(w, h)), Theme::alpha(t.surface, 0xe8)).corner_radii(px(9.)));
+    window.paint_quad(fill(Bounds::new(origin, size(w, h)), Theme::alpha(t.rail_row, 0xe8)).corner_radii(px(9.)));
     window.paint_quad(fill(Bounds::new(point(origin.x + px(6.), origin.y + px(7.)), size(px(4.), px(4.))), rgb(color)).corner_radii(px(2.)));
     let _ = line.paint(point(origin.x + px(12.), origin.y + px(2.)), h - px(4.), TextAlign::Left, None, window, cx);
 }
@@ -1575,10 +1732,10 @@ impl TuiosApp {
     fn paint_preedit(&self, window: &mut Window, cx: &mut App) {
         let (Some(text), Some(b), Some(m)) = (self.marked.as_ref(), self.cursor_bounds(), self.metrics.as_ref()) else { return };
         let t = &self.theme;
-        let run = TextRun { len: text.len(), font: m.fonts[0].clone(), color: rgb(t.text).into(), background_color: None, underline: None, strikethrough: None };
+        let run = TextRun { len: text.len(), font: m.fonts[0].clone(), color: rgb(t.rail_fg).into(), background_color: None, underline: None, strikethrough: None };
         let line = window.text_system().shape_line(text.clone().into(), m.font_size, &[run], None);
         let w = line.width.max(m.cell_w);
-        window.paint_quad(fill(Bounds::new(b.origin, size(w, m.cell_h)), rgb(t.surface)));
+        window.paint_quad(fill(Bounds::new(b.origin, size(w, m.cell_h)), rgb(t.rail_row)));
         window.paint_quad(fill(Bounds::new(point(b.origin.x, b.origin.y + m.cell_h - px(2.)), size(w, px(1.5))), rgb(t.accent)));
         let _ = line.paint(b.origin, m.cell_h, TextAlign::Left, None, window, cx);
     }

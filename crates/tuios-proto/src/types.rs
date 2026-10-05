@@ -16,6 +16,59 @@ pub struct Event {
     pub message: Option<String>,
     #[serde(default)]
     pub state: Option<State>,
+    #[serde(default)]
+    pub theme: Option<ThemeExport>,
+}
+
+/// A theme as tuios works it out (internal/guibridge/theme.go). Colours are
+/// "#rrggbb"; an empty string is no colour.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct ThemeExport {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, deserialize_with = "null_default")]
+    pub names: Vec<String>,
+    #[serde(default)]
+    pub light: bool,
+    #[serde(default)]
+    pub terminal: TerminalColors,
+    #[serde(default, deserialize_with = "null_default")]
+    pub ui: BTreeMap<String, String>,
+    #[serde(default, deserialize_with = "null_default")]
+    pub ground: BTreeMap<String, String>,
+    #[serde(default)]
+    pub rail_ground: String,
+    #[serde(default)]
+    pub rail_rule: String,
+    #[serde(default)]
+    pub border_focused: String,
+    #[serde(default)]
+    pub border_focused_terminal: String,
+    #[serde(default)]
+    pub border_unfocused: String,
+    #[serde(default, deserialize_with = "null_default")]
+    pub agent: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct TerminalColors {
+    #[serde(default)]
+    pub fg: String,
+    #[serde(default)]
+    pub bg: String,
+    #[serde(default)]
+    pub cursor: String,
+    #[serde(default)]
+    pub ansi: Vec<String>,
+}
+
+/// Parses "#rrggbb" into 0xRRGGBB.
+pub fn parse_hex(s: &str) -> Option<u32> {
+    let h = s.strip_prefix('#')?;
+    if h.len() != 6 {
+        return None;
+    }
+    u32::from_str_radix(h, 16).ok()
 }
 
 /// The session layout. Positions and sizes are cells.
@@ -127,6 +180,8 @@ pub struct Command {
     #[serde(skip_serializing_if = "is_zero32")]
     pub n: u32,
     #[serde(skip_serializing_if = "String::is_empty")]
+    pub theme: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub command: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
@@ -145,6 +200,9 @@ impl Command {
     }
     pub fn focus(window: &str) -> Self {
         Command { cmd: "focus".into(), window: window.into(), ..Default::default() }
+    }
+    pub fn theme(name: &str) -> Self {
+        Command { cmd: "theme".into(), theme: name.into(), ..Default::default() }
     }
     pub fn workspace(n: u32) -> Self {
         Command { cmd: "workspace".into(), n, ..Default::default() }
