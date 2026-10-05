@@ -80,7 +80,9 @@ tuios close-window -s work "$id"
 The actions `split_ssh_vertical`, `split_ssh_horizontal` and `new_window_ssh`
 open a pane that runs the focused pane's ssh again: the same destination and
 options, with no remote command. A pane that does not run ssh gets an ordinary
-pane. They are keybinding actions, so `run-command` runs them, and the same
+pane. An ssh line with an option that runs a program on this machine
+(`ProxyCommand`, `-F` and similar), or ssh that `scp` or `git` started, also
+gets an ordinary pane. They are keybinding actions, so `run-command` runs them, and the same
 grant rules apply as for any other `run-command`:
 
 ```sh

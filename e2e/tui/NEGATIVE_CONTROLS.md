@@ -1477,7 +1477,12 @@ and the paste reach the shells and leave the line it looks for.
 ## ssh-aware splits
 
 The tests are in `ssh_split_test.go`. A fake ssh on PATH writes its arguments
-to a numbered file and then acts as a shell. The positive half of the follow
+to a numbered file and then acts as a shell. `TestSSHSplitRunsTheSSHOnPath`
+uses a compiled stand-in (`fakessh/`) on PATH and a copy of it in the pane's
+folder, run as `./ssh`. The refusal tests (`TestSSHSplitRefusesAProxyCommand`,
+`TestSSHSplitIgnoresTheSSHOfATransfer`) have their positive half in
+`TestSSHSplitRunsTheSameSSH` and `TestSSHSplitFindsSSHUnderANestedShell`,
+which follow ssh through the same fixture. The positive half of the follow
 option is in its own fixture: the same split key in a pane with no ssh opens a
 shell. `TestSSHSplitFallsBackToAShell` is the positive half of every other
 test: the actions open a pane when no ssh runs.
@@ -1489,5 +1494,10 @@ test: the actions open a pane when no ssh runs.
 | The action is not registered | `registerHandlers`: the `split_ssh_vertical` line cut | `TestSSHSplitRunsTheSameSSH`, `TestSSHSplitFallsBackToAShell` (the window count never reached 2) | **caught** |
 | The client split does not ask to follow | `splitFocused`: the daemon branch calls `NewWindowHere` whatever `followSSH` says | `TestSSHSplitRunsTheSameSSH` (the split pane never ran ssh) | **caught** |
 | The ordinary split ignores the option | `handleSplitVertical`: the `FollowSSHOnNewWindow` check made `false &&` | `TestSSHSplitFollowOption` (the fake ssh never ran a run 1) | **caught** |
-| The remote folder is not kept | `placeRecord.announce`: the `elsewhereDir.Store` line cut | `TestSSHSplitKeepsTheRemoteFolder` (ssh ran with `pollen@fakehost` alone) | **caught** |
+| The remote folder is not kept | `placeRecord.announce`: the report stored with its host and no folder | `TestSSHSplitKeepsTheRemoteFolder` (ssh ran with `pollen@fakehost` alone) | **caught** |
+| The first PR head, before the review fixes | build `d6fbe24c` | `TestSSHSplitRunsTheSSHOnPath` (the split ran `cwd/ssh`, the binary of the process), `TestSSHSplitRefusesAProxyCommand` and `TestSSHSplitIgnoresTheSSHOfATransfer` (2 runs, want 1) | **caught** |
+| The binary is taken from the process | `parseRemoteLogin`: `l.bin = argv[0]` in place of the `lookPath` call | `TestSSHSplitRunsTheSSHOnPath` (the split ran `./ssh`) | **caught** |
+| A local-command option is not refused | `sshValueVerdict`: the `sshRefuseConfig` check cut | `TestSSHSplitRefusesAProxyCommand` (2 runs, want 1) | **caught** |
+| Any parent may start ssh | `startedByShell`: the `sshLaunchers` check made `false &&` | `TestSSHSplitIgnoresTheSSHOfATransfer` (2 runs, want 1). `TestSSHSplitFindsSSHUnderANestedShell` passes, which is correct | **caught** |
+| No `-o RemoteCommand=none` with the cd | `remoteLogin.argv`: only `-t` added | `TestSSHSplitKeepsTheRemoteFolder` (the argv lacks the option) | **caught** |
 | Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |

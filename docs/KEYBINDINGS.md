@@ -603,7 +603,8 @@ tuios does not run the remote command again. It also removes `-N`, `-f`, `-T`,
 same way.
 
 When the focused pane does not run ssh, the action opens an ordinary pane. You
-can use the keys in every pane.
+can use the keys in every pane. Some ssh lines also get an ordinary pane. See
+[CONFIGURATION.md](CONFIGURATION.md#lines-that-are-not-followed).
 
 The actions have no default key. The command palette has an entry for each
 one. To bind them, add them to a section. This example uses keys for

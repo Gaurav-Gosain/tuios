@@ -431,17 +431,32 @@ does not run ssh, these actions open an ordinary pane. The default is `false`.
 new_window_follow_ssh = true
 ```
 
-tuios finds ssh in the foreground of the pane. ssh can run from a shell or a
-script in the pane. tuios reads only the processes that you own in the pane.
-It runs the new ssh directly, with no shell on this machine.
+tuios finds ssh in the foreground of the pane. ssh can run from a shell, or
+from `sshpass`, `autossh` or `mosh`. tuios reads only the processes that you
+own in the pane. It runs the `ssh` or `mosh` that it finds on its own `PATH`,
+with no shell on this machine. It never runs the program that the pane runs.
+
+### Lines that are not followed
+
+These ssh lines get an ordinary pane:
+
+- An option that runs a program on this machine: `-F`, `-I`, or `-o` with
+  `ProxyCommand`, `LocalCommand`, `PermitLocalCommand`, `KnownHostsCommand`,
+  `PKCS11Provider`, `SecurityKeyProvider` or `Match`.
+- `-G`, `-V`, `-Q` and `-O`, and an option that tuios does not know.
+- mosh with `--ssh`, `--client` or `--server`.
+- ssh that another program starts, such as `scp`, `rsync`, `git` or `sftp`.
+
+Put a `ProxyCommand` or a `ProxyJump` in `~/.ssh/config` to use it with a
+split. A split with `-J` on the command line is followed.
 
 ### Start in the remote folder
 
 The new pane starts in the remote folder when the remote shell reports its
-folder with OSC 7. The host name in the report must be the host that ssh
-connects to. The first part of the name is enough: `reachy-mini` matches
-`pollen@reachy-mini.example.ts.net`. When the remote shell sends no report,
-the new pane starts in the remote home folder.
+folder with OSC 7. The host name in the report must be the same as the host
+in the ssh line. `reachy-mini` matches `pollen@reachy-mini`. It does not
+match `pollen@reachy-mini.example.ts.net`. When there is no match, the new
+pane starts in the remote home folder.
 
 fish sends the report by default. For bash, add this line to `~/.bashrc` on
 the remote machine:
@@ -458,8 +473,10 @@ _tuios_osc7() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
 add-zsh-hook precmd _tuios_osc7
 ```
 
-To go to the folder, tuios adds `-t` and a `cd` command to ssh. If the folder
-is gone, the new pane starts in the home folder.
+To go to the folder, tuios adds `-t`, `-o RemoteCommand=none` and the
+command `exec sh -c 'cd "FOLDER" ...'` to ssh. This works with every login
+shell that can start `sh`. If the folder is gone, the new pane starts in the
+home folder. A folder name with a quote, `$`, a backslash or `!` is not used.
 
 ## The dock's components
 
