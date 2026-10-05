@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -198,8 +200,8 @@ func TestSharedBorderDragKeepsTheDivider(t *testing.T) {
 	for col := from - 1; col >= to; col-- {
 		mouseMotion(t, term, col, row, tuitest.MouseLeft, 0)
 	}
-	// Every row of the new divider column but the two the stack's own
-	// division and the dock rule can meet it on.
+	// Every row of the master's height on the new divider column holds a
+	// divider glyph, the junction with the stack's own division included.
 	var last string
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		for y := master.Y; y < master.Y+master.Height; y++ {
@@ -275,7 +277,13 @@ func TestSharedBorderDragFromAJunction(t *testing.T) {
 // scrollingSession is masterSession for the scrolling layout.
 func scrollingSession(t *testing.T, base, name, appearance string, n int) *tuitest.Terminal {
 	t.Helper()
-	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"scrolling\"\n"+
+	return layoutSession(t, base, name, "scrolling", appearance, n)
+}
+
+// layoutSession is masterSession for any layout.
+func layoutSession(t *testing.T, base, name, layout, appearance string, n int) *tuitest.Terminal {
+	t.Helper()
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \""+layout+"\"\n"+
 		"[appearance]\n"+appearance)
 	if out, err := tuiosCLI(t, base, "new", "-d", name); err != nil {
 		t.Fatalf("create the detached session: %v\n%s", err, out)
@@ -329,5 +337,226 @@ func TestScrollingSharedBorders(t *testing.T) {
 	if w := resized[0].Width; w != first.Width-10 {
 		t.Fatalf("the first column is %d columns wide after the client grew, want %d\n%s", w, first.Width-10, describeRects(resized))
 	}
+	saveArtifact(t, term, dir, "after-resize")
+}
+
+// shellSize asks the shell in one window for the size of its terminal, and
+// returns what stty reports. It is the size the program in the pane draws
+// into, which is what a missed resize leaves wrong.
+func shellSize(t *testing.T, base, session, window string) (rows, cols int) {
+	t.Helper()
+	file := filepath.Join(base, "stty-"+strings.ReplaceAll(window, "/", "_"))
+	_ = os.Remove(file)
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "-w", window, "--literal", "stty size > "+file+"\r"); err != nil {
+		t.Fatalf("ask window %s for its size: %v\n%s", window, err, out)
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(file); err == nil {
+			if _, err := fmt.Sscanf(string(b), "%d %d", &rows, &cols); err == nil {
+				return rows, cols
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("window %s never reported its size", window)
+	return 0, 0
+}
+
+// TestScrollingDividerDragResizesEveryStackedWindow drags the divider of a
+// column that holds two stacked windows. Both windows take the new width, so
+// both shells have to be told it, not only the one level with the pointer.
+//
+// NEGATIVE CONTROL: with ScrollingResizeColumnVisual putting only the dragged
+// window in PendingResizes, the other stacked window's shell keeps the old
+// width: "the lower window's shell is 48 columns wide, want 38".
+func TestScrollingDividerDragResizesEveryStackedWindow(t *testing.T) {
+	base := t.TempDir()
+	const name = "sbstack"
+	term := scrollingSession(t, base, name, "shared_borders = true\nscroll_column_width = 40\n"+
+		"[keybindings.window_management]\nscroll_consume = [\"Y\"]\n", 3)
+	dir := artifactDir(t)
+	// Focus the first column and pull the second column's window into it.
+	sendKeys(t, term, "h", "h")
+	time.Sleep(500 * time.Millisecond)
+	sendKeys(t, term, "Y")
+	rects := waitForShape(t, base, name, 3, "the stacked column", func(rects []winRect) error {
+		n := 0
+		for _, r := range rects {
+			if r.X == rects[0].X {
+				n++
+			}
+		}
+		if n != 2 {
+			return fmt.Errorf("%d windows share the first column, want 2", n)
+		}
+		return nil
+	})
+	waitForDividers(t, term, base, name, 3, 1, "the stacked column")
+	saveArtifact(t, term, dir, "stacked")
+	var upper, lower winRect
+	for _, r := range rects {
+		if r.X != rects[0].X {
+			continue
+		}
+		if upper.ID == "" || r.Y < upper.Y {
+			upper, lower = r, upper
+		} else {
+			lower = r
+		}
+	}
+
+	from := upper.X + upper.Width
+	to := from - 10
+	mouseDrag(t, term, from, upper.Y+3, to, upper.Y+3, tuitest.MouseLeft, 0)
+	waitForShape(t, base, name, 3, "after the drag", func(rects []winRect) error {
+		for _, r := range rects {
+			if (r.ID == upper.ID || r.ID == lower.ID) && r.Width != upper.Width-10 {
+				return fmt.Errorf("window %s is %d columns wide, want %d", r.ID, r.Width, upper.Width-10)
+			}
+		}
+		return nil
+	})
+	saveArtifact(t, term, dir, "after-drag")
+	for _, w := range []struct {
+		which string
+		r     winRect
+	}{{"upper", upper}, {"lower", lower}} {
+		if _, cols := shellSize(t, base, name, w.r.ID); cols != upper.Width-10 {
+			t.Fatalf("the %s window's shell is %d columns wide, want %d\n%s", w.which, cols, upper.Width-10, term.Snapshot())
+		}
+	}
+}
+
+// TestScrollingDividerDragAtTheStripEnd drags a divider one cell at a time
+// with the strip scrolled to its right end. The column has to end exactly
+// where the pointer let go.
+//
+// NEGATIVE CONTROL: with ScrollingResizeColumnVisual clamping the viewport on
+// every motion and the width measured from the column's current edge, the
+// strip slides left under the pointer and the width runs away: "the column is
+// 45 columns wide after the drag, want 60".
+func TestScrollingDividerDragAtTheStripEnd(t *testing.T) {
+	base := t.TempDir()
+	const name = "sbstripend"
+	term := scrollingSession(t, base, name, "shared_borders = true\n", 3)
+	dir := artifactDir(t)
+	rects := waitForDividers(t, term, base, name, 3, 1, "the opening layout")
+	saveArtifact(t, term, dir, "before")
+	// The last column is focused, so the strip is at its right end and the
+	// column before it ends at the divider on screen.
+	var col winRect
+	for _, r := range rects {
+		if r.X+r.Width > 0 && r.X+r.Width < 119 && (col.ID == "" || r.X > col.X) {
+			col = r
+		}
+	}
+	if col.ID == "" {
+		t.Fatalf("no divider on screen\n%s", describeRects(rects))
+	}
+	from := col.X + col.Width
+	to := from - 6
+	mousePress(t, term, from, 10, tuitest.MouseLeft, 0)
+	for x := from - 1; x >= to; x-- {
+		mouseMotion(t, term, x, 10, tuitest.MouseLeft, 0)
+	}
+	var last string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := s.Cell(to, 10).Rune
+		last = string(r)
+		return isBoxRune(r)
+	}, 5*time.Second); err != nil {
+		saveArtifact(t, term, dir, "during-drag")
+		t.Fatalf("the divider is not under the pointer at column %d during the drag: the cell holds %q\n%s", to, last, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "during-drag")
+	mouseRelease(t, term, to, 10, tuitest.MouseLeft, 0)
+	after := waitForDividers(t, term, base, name, 3, 1, "after the drag")
+	for _, r := range after {
+		if r.ID == col.ID && r.Width != col.Width-6 {
+			t.Fatalf("the column is %d columns wide after the drag, want %d\n%s", r.Width, col.Width-6, describeRects(after))
+		}
+	}
+	saveArtifact(t, term, dir, "after-drag")
+}
+
+// TestSharedBorderPressInsideAZoomedPane drags across the cell where the
+// first divider is, while a zoomed pane covers it. The divider is hidden, so
+// the press belongs to the zoomed pane and must resize nothing.
+//
+// It runs in BSP, where a resize is written into the tree at once. A
+// master-stack resize under a zoom is never recorded as a ratio, so the
+// retile at the end of the zoom would hide a wrong grab.
+//
+// The positive half is TestSharedBorderDragKeepsTheDivider: the same drag
+// with no zoom moves the divider.
+//
+// NEGATIVE CONTROL: with the paneOver check cut from armTiledBorderResize,
+// the press grabs the hidden divider and the first pane is narrower after
+// the zoom ends: "the panes moved under the zoomed pane".
+func TestSharedBorderPressInsideAZoomedPane(t *testing.T) {
+	base := t.TempDir()
+	const name = "sbzoom"
+	term := layoutSession(t, base, name, "bsp", "shared_borders = true\nzoom_size = 100\n", 3)
+	dir := artifactDir(t)
+	before := waitForDividers(t, term, base, name, 3, 1, "the opening layout")
+	if out, err := tuiosCLI(t, base, "run-command", "-s", name, "ToggleZoom"); err != nil {
+		t.Fatalf("zoom: %v\n%s", err, out)
+	}
+	waitForShape(t, base, name, 3, "the zoomed pane", func(rects []winRect) error {
+		for _, r := range rects {
+			if r.Width == 120 {
+				return nil
+			}
+		}
+		return fmt.Errorf("no pane is zoomed")
+	})
+	time.Sleep(500 * time.Millisecond)
+	saveArtifact(t, term, dir, "zoomed")
+	first := before[0]
+	from := first.X + first.Width
+	mouseDrag(t, term, from, first.Y+5, from-10, first.Y+5, tuitest.MouseLeft, 0)
+	time.Sleep(time.Second)
+	if out, err := tuiosCLI(t, base, "run-command", "-s", name, "ToggleZoom"); err != nil {
+		t.Fatalf("unzoom: %v\n%s", err, out)
+	}
+	after := waitForDividers(t, term, base, name, 3, 1, "after the zoom ended")
+	saveArtifact(t, term, dir, "unzoomed")
+	if !sameGeometry(before, after) {
+		t.Fatalf("the panes moved under the zoomed pane\nbefore:\n%safter:\n%s", describeRects(before), describeRects(after))
+	}
+}
+
+// TestScrollingDividerClickKeepsAProportionalColumn clicks a strip divider
+// without moving the pointer. A click resizes nothing, so the column keeps
+// its width as a share of the screen and follows the client's width.
+//
+// The positive half is the end of TestScrollingSharedBorders: after a real
+// drag the column keeps its width in cells through the same resize.
+//
+// NEGATIVE CONTROL: with the width check cut from the scrolling capture in
+// handleMouseRelease, the click records the width as fixed: "the first
+// column is 48 columns wide after the client grew, want 60".
+func TestScrollingDividerClickKeepsAProportionalColumn(t *testing.T) {
+	base := t.TempDir()
+	const name = "sbclick"
+	term := scrollingSession(t, base, name, "shared_borders = true\nscroll_column_width = 40\n", 3)
+	dir := artifactDir(t)
+	rects := waitForDividers(t, term, base, name, 3, 1, "the opening layout")
+	first := rects[0]
+	mouseClick(t, term, first.X+first.Width, first.Y+5, tuitest.MouseLeft, 0)
+	time.Sleep(time.Second)
+	saveArtifact(t, term, dir, "after-click")
+	if err := term.Resize(150, 40); err != nil {
+		t.Fatalf("resize the client: %v", err)
+	}
+	waitForShape(t, base, name, 3, "after the client grew", func(rects []winRect) error {
+		for _, r := range rects {
+			if r.ID == first.ID && r.Width != 60 {
+				return fmt.Errorf("the first column is %d columns wide after the client grew, want 60", r.Width)
+			}
+		}
+		return nil
+	})
 	saveArtifact(t, term, dir, "after-resize")
 }

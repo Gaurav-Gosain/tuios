@@ -67,7 +67,10 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 				m.SetPointerShape(PointerEWResize)
 				return
 			}
-			if !s.Vertical && y == s.Pos && x >= s.From && x <= s.To {
+			// The strip's horizontal dividers stand between windows stacked
+			// in one column, which always share its height evenly: a drag
+			// there does nothing, so it offers no resize pointer.
+			if !s.Vertical && !m.UseScrollingLayout && y == s.Pos && x >= s.From && x <= s.To {
 				m.SetPointerShape(PointerNSResize)
 				return
 			}

@@ -357,7 +357,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// In scrolling mode, capture resized width into the column BEFORE retiling
 		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
-			if resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) {
+			// Only when the width moved. A press and release with no motion
+			// between them is a click, and recording the width it left alone
+			// would turn a column sized as a share of the screen into a fixed
+			// one, which then stops following the screen's width.
+			if resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) &&
+				o.Windows[resizedWindowIndex].Width != o.PreResizeState.Width {
 				win := o.Windows[resizedWindowIndex]
 				sl := o.GetOrCreateScrollingLayout()
 				intID := o.GetWindowIntID(win.ID)

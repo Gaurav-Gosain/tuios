@@ -82,6 +82,12 @@ func armBorderResize(x, y int, o *app.OS) bool {
 // at the bottom that junction is the middle of the divider the user is most
 // likely to grab.
 func armTiledBorderResize(x, y int, o *app.OS) bool {
+	// A floating or zoomed pane drawn over the cell owns the press: the
+	// divider under it is hidden, and grabbing it would resize panes the user
+	// cannot see.
+	if paneOver(x, y, o) {
+		return false
+	}
 	contentLeft, contentTop := o.PaneLeft(), o.PaneTop()
 	contentRight := contentLeft + o.PaneWidth()
 	contentBottom := contentTop + o.PaneHeight()
@@ -121,26 +127,77 @@ func armTiledBorderResize(x, y int, o *app.OS) bool {
 	return false
 }
 
+// paneOver reports whether a floating or zoomed pane covers the cell.
+func paneOver(x, y int, o *app.OS) bool {
+	idx := findClickedWindow(x, y, o)
+	if idx < 0 {
+		return false
+	}
+	w := o.Windows[idx]
+	return w.IsFloating || w.Zoomed
+}
+
 // armScrollDividerResize grabs the divider between two columns of the
 // scrolling strip. The column on its left is the one resized: the strip has
 // no other column to give the width to, and the columns after it slide along.
-// Columns stacked in a column share its height evenly, so the dividers between
+// Windows stacked in a column share its height evenly, so the dividers between
 // them do not move.
+//
+// The divider runs the full height of the strip, the row of a stacked
+// column's own divider included, where no window of that column reaches. A
+// cell past the last column is empty ground and grabs nothing.
+//
+// The grab does not focus the column. Focus in the strip scrolls the focused
+// column into view, which would slide the strip under the pointer as the drag
+// starts, and the column on the left may be one whose only visible part is
+// the divider.
 func armScrollDividerResize(x, y int, o *app.OS) bool {
+	// A press on a pane is the pane's, whatever is drawn under it.
+	if findClickedWindow(x, y, o) >= 0 {
+		return false
+	}
 	contentRight := o.PaneLeft() + o.PaneWidth()
+	contentTop := o.PaneTop()
+	if y < contentTop || y >= contentTop+o.PaneHeight() {
+		return false
+	}
+	// A slide still in flight would stamp its own rectangles over the drag.
+	// The panes land first, and the press is measured against where they
+	// stand.
+	o.CompleteAllAnimations()
 	gap := o.SeparatorGap()
-	for i := range o.Windows {
-		w := o.Windows[i]
-		if w.Workspace != o.CurrentWorkspace || w.Minimized || w.IsFloating {
+	slop := borderSlop(o)
+	tiled := func(w *terminal.Window) bool {
+		return w.Workspace == o.CurrentWorkspace && !w.Minimized && !w.IsFloating
+	}
+	found := -1
+	for i, w := range o.Windows {
+		right := w.X + w.Width
+		if !tiled(w) || right >= contentRight || !onDivision(x, right, right+gap, slop) {
 			continue
 		}
-		if y >= w.Y && y < w.Y+w.Height && w.X+w.Width < contentRight &&
-			onDivision(x, w.X+w.Width, w.X+w.Width+gap, borderSlop(o)) {
-			beginBorderResize(o, i, app.BorderEdgeRight, w.X+w.Width-x)
-			return true
+		neighbour := false
+		for _, n := range o.Windows {
+			if tiled(n) && n.X == right+gap {
+				neighbour = true
+				break
+			}
+		}
+		if !neighbour {
+			continue
+		}
+		// Any window of the column names it. The one level with the press
+		// is preferred, so the edge is measured from a window on that row.
+		if found < 0 || (y >= w.Y && y < w.Y+w.Height) {
+			found = i
 		}
 	}
-	return false
+	if found < 0 {
+		return false
+	}
+	w := o.Windows[found]
+	beginBorderResizeAt(o, found, app.BorderEdgeRight, w.X+w.Width-x, false)
+	return true
 }
 
 // dividerSpan is how many cells past a pane's far edge its division runs: the
@@ -205,8 +262,16 @@ func armFloatingBorderResize(x, y int, o *app.OS) bool {
 // single-edge motion handler. grab is how far the edge lies from the pressed
 // cell, which the motion handler keeps.
 func beginBorderResize(o *app.OS, idx int, edge app.BorderResizeEdge, grab int) {
+	beginBorderResizeAt(o, idx, edge, grab, true)
+}
+
+// beginBorderResizeAt is beginBorderResize with the choice of focusing the
+// pane whose edge was grabbed.
+func beginBorderResizeAt(o *app.OS, idx int, edge app.BorderResizeEdge, grab int, focus bool) {
 	w := o.Windows[idx]
-	o.FocusWindow(idx)
+	if focus {
+		o.FocusWindow(idx)
+	}
 	o.BeginPointerGesture()
 	o.Resizing = true
 	o.BorderResizing = true
@@ -255,7 +320,10 @@ func applyBorderResize(o *app.OS, mx, my int) {
 	}
 
 	if o.AutoTiling && o.UseScrollingLayout {
-		o.ScrollingResizeColumnVisual(w, newW, false)
+		// Measured from where the column stood at the press. The strip may
+		// move under the pointer during the drag, and a width measured from
+		// the column's current edge would chase it.
+		o.ScrollingResizeColumnVisual(w, mx+grab-o.PreResizeState.X, false)
 		return
 	}
 	if o.AutoTiling {

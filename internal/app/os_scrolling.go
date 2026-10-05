@@ -681,25 +681,29 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool
 //
 // The width is held between the smallest pane and the strip's ceiling, the
 // same one the keyboard resize reads.
+//
+// The viewport is not clamped to the strip's right end until the release.
+// With the strip scrolled to that end, a column that shrinks leaves ground
+// past the last column, and the clamp would pull the strip left under the
+// pointer on every motion event: the column's left edge would move away from
+// the pointer, and a width measured from it would run away. Only a viewport
+// before the strip's start is held back here. The release lays the strip out
+// again through ScrollingSetPositions, which clamps it fully.
 func (m *OS) ScrollingResizeColumnVisual(win *terminal.Window, width int, keepRight bool) {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
 	width = max(min(width, sl.MaxColumnWidth(viewW)), config.DefaultWindowWidth)
-	intID := m.GetWindowIntID(win.ID)
-	oldWidth := 0
-	for ci := range sl.Columns {
-		for _, wid := range sl.Columns[ci].WindowIDs {
-			if wid == intID {
-				oldWidth = sl.ResolveColumnWidth(ci, viewW)
-				sl.Columns[ci].FixedWidth = width
-				sl.Columns[ci].Proportion = 0
-			}
-		}
+	col := sl.ColumnContaining(m.GetWindowIntID(win.ID))
+	if col < 0 {
+		return
 	}
+	oldWidth := sl.ResolveColumnWidth(col, viewW)
+	sl.Columns[col].FixedWidth = width
+	sl.Columns[col].Proportion = 0
 	if keepRight && oldWidth > 0 {
 		sl.ViewportX += width - oldWidth
 	}
-	sl.ClampViewport(viewW)
+	sl.ViewportX = max(sl.ViewportX, 0)
 	stripLeft := m.PaneLeft()
 	for winID, rect := range sl.ComputePositions(viewW, m.PaneHeight(), m.PaneTop()) {
 		w := m.GetWindowByIntID(winID)
@@ -714,7 +718,13 @@ func (m *OS) ScrollingResizeColumnVisual(win *terminal.Window, width int, keepRi
 		w.MarkPositionDirty()
 		w.InvalidateCache()
 	}
-	m.PendingResizes[win.ID] = [2]int{width, win.Height}
+	// Every window stacked in the column takes the new width, so every one
+	// of them owes its guest the size on release, not only the one dragged.
+	for _, wid := range sl.Columns[col].WindowIDs {
+		if w := m.GetWindowByIntID(wid); w != nil {
+			m.PendingResizes[w.ID] = [2]int{width, w.Height}
+		}
+	}
 }
 
 // scrollingResizeColumn changes the focused column's width by delta pixels.
