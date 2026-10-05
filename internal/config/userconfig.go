@@ -1017,6 +1017,11 @@ func DefaultConfig() *UserConfig {
 				// is free here, and a run of presses walks the stack home (see
 				// the prefix repeat set).
 				"jump_back": {"u"},
+				// Paints a tuios:// link on the focused pane, naming a pane it
+				// just asked for: the test surface for the link click path.
+				// l for link, free in the leader scope (layout's snap_right l
+				// is a sub-prefix away).
+				"jump_link_demo": {"l"},
 				// Capital M: m is the minimize prefix, and a slip into it costs
 				// nothing. It opens the Inbox on its mail filter, one key (m)
 				// from the whole mailbox.
