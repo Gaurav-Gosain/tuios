@@ -321,20 +321,40 @@ func (d *Daemon) findTargetSession(sessionName string) *Session {
 // is still attaching: a routed command is an unsolicited message, and a client
 // inside its attach call has no read loop to tell one from its own reply. See
 // connState.attached.
+//
+// With several clients attached it is the one the person used last: the
+// newest key typed into a pane or activity reported, and with no input at any
+// of them, the one that attached last. A command routed here acts as that
+// person, and some of what it sets, multifocus for one, is the client's own.
+// It used to be whichever client the map gave first, so tuios xpanes turned
+// multifocus on at the other client half the time, and Enter at the client
+// that ran it reached one pane.
 func (d *Daemon) findTUIClient(sessionID string) *connState {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
+	var best *connState
+	var bestInput time.Time
+	var bestSeq uint64
 	for _, cs := range d.clients {
 		cs.mu.Lock()
 		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
+		input, seq := cs.lastActivity, cs.attachSeq
 		cs.mu.Unlock()
-		if match {
-			return cs
+		if !match {
+			continue
+		}
+		if in := cs.lastInput.Load(); in != 0 {
+			if t := time.Unix(0, in); t.After(input) {
+				input = t
+			}
+		}
+		if best == nil || input.After(bestInput) || (input.Equal(bestInput) && seq > bestSeq) {
+			best, bestInput, bestSeq = cs, input, seq
 		}
 	}
 
-	return nil
+	return best
 }
 
 // sendCommandResult sends a command result to a client.

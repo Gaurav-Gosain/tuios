@@ -987,6 +987,17 @@ ran the five `TestEmptyWorkspace` tests or the one named.
 `TestEmptyWorkspaceStaysWhenTheSettingIsOff` passes on origin/main, because
 it holds the old behaviour.
 
+`TestEmptyWorkspaceReturnsAfterXpanesSpeedy` then failed in five main runs in
+a row (37232733943 to 37243024125), with two panes left after Enter. The
+daemon sent xpanes's `SetMultifocus` to the first client its map gave, which
+was the second client about half the time. Multifocus is the client's own, so
+Enter at the client that ran xpanes reached one pane. `findTUIClient` now
+takes the client the person used last.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A routed command goes to any client | origin/main (946add0f), where `findTUIClient` returns the first match in the map | `TestEmptyWorkspaceReturnsAfterXpanesSpeedy` ("Enter closes the held panes: workspace 2 has 2 panes, want 0"), 9 of 30 runs on two cores. With the fix: 30 of 30 pass | **caught** |
+
 ## CLI output for scripts, and names that do not exist
 
 The tests are in `cli_scripting_test.go`. One build cut the three checks
