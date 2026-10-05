@@ -488,10 +488,11 @@ var ActionDescriptions = map[string]string{
 	"reorder_down": "Rail: move this session or machine down",
 
 	// Window Management
-	"new_window":    "New window",
-	"close_window":  "Close window",
-	"rename_window": "Rename window",
-	"set_accent":    "Accent color",
+	"new_window":     "New window",
+	"new_window_ssh": "New window that runs the focused pane's ssh",
+	"close_window":   "Close window",
+	"rename_window":  "Rename window",
+	"set_accent":     "Accent color",
 	// Reached from the rail's session row and its menu; the row carries which
 	// session, so it has no key of its own.
 	"set_session_accent": "Session color",
@@ -590,6 +591,8 @@ var ActionDescriptions = map[string]string{
 	// BSP Tiling
 	"split_horizontal":               "Split window horizontally (top/bottom)",
 	"split_vertical":                 "Split window vertically (left/right)",
+	"split_ssh_horizontal":           "Split top/bottom, and run the focused pane's ssh in the new pane",
+	"split_ssh_vertical":             "Split left/right, and run the focused pane's ssh in the new pane",
 	"rotate_split":                   "Rotate split",
 	"equalize_splits":                "Equalize all split ratios",
 	"preselect_left":                 "Preselect left for next window",

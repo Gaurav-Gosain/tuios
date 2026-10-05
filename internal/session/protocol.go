@@ -694,6 +694,12 @@ type ExecuteCommandPayload struct {
 	// current one. A client in a scratch group sends the group's workspace,
 	// which is never the session's current one. An older daemon ignores it.
 	Workspace int `json:"workspace,omitempty"`
+	// SSHFrom names the window a NewWindow follows into ssh. When that
+	// window's pane runs an ssh or mosh client, the new window runs the same
+	// client to the same destination instead of a shell. When it does not,
+	// or the NewWindow names its own command, the field changes nothing. An
+	// older daemon ignores it and opens a shell.
+	SSHFrom string `json:"ssh_from,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

@@ -636,41 +636,51 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 // is typed into the pane afterwards.
 func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		var args []string
-		if name != "" || len(command) > 0 {
-			// The name always travels when a command does, because the args are
-			// positional: name first, argv after.
-			args = append([]string{name}, command...)
-		}
-		// Inside a scratch group the window goes on the group's workspace,
-		// which is never the session's current one.
-		ws := 0
-		if m.InScratchView() {
-			ws = m.CurrentWorkspace
-		}
-		// A preselection belongs to the pane focused now, and the window it is
-		// for arrives later through a state sync. Record it for that sync the
-		// way a split key records its direction, and spend it here, so it
-		// applies once. See insertSyncedWindow.
-		if m.pendingSplitTarget == "" && m.PreselectionDir != layout.PreselectionNone {
-			if fw := m.GetFocusedWindow(); fw != nil {
-				m.pendingSplitDir = m.PreselectionDir
-				m.pendingSplitTarget = fw.ID
-			}
-			m.PreselectionDir = layout.PreselectionNone
-		}
-		if err := m.DaemonClient.SendIntentAt(dir, ws, "NewWindow", args...); err != nil {
-			m.LogError("Failed to ask the daemon for a new window: %v", err)
-			m.CancelPendingSplit()
-		} else {
-			// From here until the daemon says what it did, this client does not
-			// know the session's window set, so the state it holds must not be
-			// pushed. See SyncStateToDaemon.
-			m.daemonWindowIntent = true
-		}
-		return m
+		return m.addDaemonWindow(dir, name, "", command)
 	}
+	return m.addLocalWindow(dir, name, command)
+}
 
+// addDaemonWindow is AddWindowIn in a daemon session. sshFrom names a window
+// the daemon follows into ssh, empty for none; see ssh_split.go.
+func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
+	var args []string
+	if name != "" || len(command) > 0 {
+		// The name always travels when a command does, because the args are
+		// positional: name first, argv after.
+		args = append([]string{name}, command...)
+	}
+	// Inside a scratch group the window goes on the group's workspace,
+	// which is never the session's current one.
+	ws := 0
+	if m.InScratchView() {
+		ws = m.CurrentWorkspace
+	}
+	// A preselection belongs to the pane focused now, and the window it is
+	// for arrives later through a state sync. Record it for that sync the
+	// way a split key records its direction, and spend it here, so it
+	// applies once. See insertSyncedWindow.
+	if m.pendingSplitTarget == "" && m.PreselectionDir != layout.PreselectionNone {
+		if fw := m.GetFocusedWindow(); fw != nil {
+			m.pendingSplitDir = m.PreselectionDir
+			m.pendingSplitTarget = fw.ID
+		}
+		m.PreselectionDir = layout.PreselectionNone
+	}
+	if err := m.DaemonClient.SendNewWindowIntent(dir, ws, sshFrom, "NewWindow", args...); err != nil {
+		m.LogError("Failed to ask the daemon for a new window: %v", err)
+		m.CancelPendingSplit()
+	} else {
+		// From here until the daemon says what it did, this client does not
+		// know the session's window set, so the state it holds must not be
+		// pushed. See SyncStateToDaemon.
+		m.daemonWindowIntent = true
+	}
+	return m
+}
+
+// addLocalWindow is AddWindowIn when this client runs the pane itself.
+func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	newID := createID()
 	title := fmt.Sprintf("Terminal %s", newID[:8])
 

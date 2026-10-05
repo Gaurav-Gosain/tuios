@@ -89,6 +89,7 @@ func NewActionDispatcher() *ActionDispatcher {
 func (d *ActionDispatcher) registerHandlers() {
 	// Window Management actions
 	d.Register("new_window", handleNewWindow)
+	d.Register("new_window_ssh", handleNewWindowSSH)
 	d.Register("close_window", handleCloseWindow)
 	d.Register("rename_window", handleRenameWindow)
 	d.Register("set_accent", handleSetAccent)
@@ -172,6 +173,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("smart_split", handleSmartSplit)
 	d.Register("split_horizontal", handleSplitHorizontal)
 	d.Register("split_vertical", handleSplitVertical)
+	d.Register("split_ssh_horizontal", handleSplitSSHHorizontal)
+	d.Register("split_ssh_vertical", handleSplitSSHVertical)
 	d.Register("rotate_split", handleRotateSplit)
 	d.Register("equalize_splits", handleEqualizeSplits)
 	d.Register("cycle_tiling_scheme", handleCycleTilingScheme)
@@ -352,7 +355,18 @@ func GetDispatcher() *ActionDispatcher {
 // ============================================================================
 
 func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.FollowSSHOnNewWindow() {
+		o.NewWindowSSH()
+		return o, nil
+	}
 	o.NewWindowHere()
+	return o, nil
+}
+
+// handleNewWindowSSH opens a window that runs the focused pane's ssh, or an
+// ordinary one when that pane runs none.
+func handleNewWindowSSH(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.NewWindowSSH()
 	return o, nil
 }
 
@@ -759,6 +773,9 @@ func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.FollowSSHOnNewWindow() {
+		return handleSplitSSHHorizontal(tea.KeyPressMsg{}, o)
+	}
 	if o.AutoTiling {
 		o.SplitFocusedHorizontal()
 		o.ShowNotification("Split horizontal", "info", o.Settings.NotificationDuration)
@@ -767,8 +784,31 @@ func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.FollowSSHOnNewWindow() {
+		return handleSplitSSHVertical(tea.KeyPressMsg{}, o)
+	}
 	if o.AutoTiling {
 		o.SplitFocusedVertical()
+		o.ShowNotification("Split vertical", "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+// handleSplitSSHHorizontal splits top/bottom and runs the focused pane's ssh
+// in the new pane, or a shell when that pane runs no ssh.
+func handleSplitSSHHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SplitFocusedHorizontalSSH()
+		o.ShowNotification("Split horizontal", "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
+// handleSplitSSHVertical splits left/right and runs the focused pane's ssh in
+// the new pane, or a shell when that pane runs no ssh.
+func handleSplitSSHVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.SplitFocusedVerticalSSH()
 		o.ShowNotification("Split vertical", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil

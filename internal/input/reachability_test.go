@@ -402,6 +402,12 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"settings_sidebar":      "rail mouse row",
 	"rename_workspace":      "user binding",
 
+	// ssh-aware splits. The palette lists each one, and a user binds a key
+	// or sets appearance.new_window_follow_ssh to make the ordinary keys follow.
+	"split_ssh_horizontal": "palette row and user binding",
+	"split_ssh_vertical":   "palette row and user binding",
+	"new_window_ssh":       "palette row and user binding",
+
 	// Debug and tape surfaces reached from their own prefix, whose actions are
 	// separate names. These are the bodies both share.
 	"toggle_logs":         "shared body, reached as debug_prefix_logs",

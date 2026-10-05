@@ -80,6 +80,7 @@ var settingLabels = map[string]string{
 	"appearance.link_opener":            "Link opener",
 	"appearance.right_click_opens_menu": "Right-click menu",
 	"appearance.new_window_inherit_cwd": "Inherit directory",
+	"appearance.new_window_follow_ssh":  "Follow ssh",
 	"appearance.kitty_placeholders":     "Kitty placeholders",
 	"appearance.dock_pill_caps":         "Pill caps",
 	"appearance.dock_compact":           "Compact dock",

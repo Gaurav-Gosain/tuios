@@ -537,6 +537,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.alt_drag"),
 			opt("appearance.right_click_opens_menu"),
 			opt("appearance.new_window_inherit_cwd"),
+			opt("appearance.new_window_follow_ssh"),
 			opt("appearance.niri_reverse_scroll"),
 			opt("appearance.niri_scroll_cells"),
 			opt("appearance.niri_click_reveals"),

@@ -32,7 +32,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 		{
 			Name: "Window Management",
 			Bindings: generateCategoryBindings(registry, "Window Management", []string{
-				"new_window", "close_window", "rename_window",
+				"new_window", "new_window_ssh", "close_window", "rename_window",
 				"minimize_window", "restore_all", "toggle_zoom", "toggle_pip", "toggle_spotlight",
 				"next_window", "prev_window",
 				"terminal_next_window", "terminal_prev_window",
@@ -67,7 +67,8 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 		{
 			Name: "BSP",
 			Bindings: generateCategoryBindings(registry, "BSP", []string{
-				"split_horizontal", "split_vertical", "rotate_split", "equalize_splits",
+				"split_horizontal", "split_vertical", "split_ssh_horizontal", "split_ssh_vertical",
+				"rotate_split", "equalize_splits",
 				"preselect_left", "preselect_right", "preselect_up", "preselect_down",
 			}),
 		},

@@ -470,6 +470,10 @@ type Window struct {
 	// when that is not the machine the pane runs on: the pane is running ssh.
 	// Empty otherwise. Only the daemon reports it.
 	CwdHost string
+	// CwdElsewhereDir is the folder that report from CwdHost named. An ssh
+	// split starts the new pane there. Only a client that runs the pane
+	// itself sets it.
+	CwdElsewhereDir string
 
 	// Host is the machine the pane's process runs on, empty for this one.
 	//

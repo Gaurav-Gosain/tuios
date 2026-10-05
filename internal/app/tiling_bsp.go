@@ -563,6 +563,18 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 
 // SplitFocusedHorizontal splits the focused window horizontally (top/bottom) and creates a new terminal
 func (m *OS) SplitFocusedHorizontal() {
+	m.splitFocused(layout.PreselectionDown, false)
+}
+
+// SplitFocusedVertical splits the focused window vertically (left/right) and creates a new terminal
+func (m *OS) SplitFocusedVertical() {
+	m.splitFocused(layout.PreselectionRight, false)
+}
+
+// splitFocused splits the focused window toward dir and creates a new
+// terminal. With followSSH, a focused pane that runs ssh gets a new pane that
+// runs the same ssh; see ssh_split.go.
+func (m *OS) splitFocused(dir layout.PreselectionDir, followSSH bool) {
 	if !m.AutoTiling {
 		return
 	}
@@ -577,7 +589,7 @@ func (m *OS) SplitFocusedHorizontal() {
 	// (AddWindow only asks the daemon and returns). Record the forced direction so
 	// the sync path applies it; see adoptSyncedWindows.
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		m.pendingSplitDir = layout.PreselectionDown
+		m.pendingSplitDir = dir
 		m.pendingSplitTarget = focusedWin.ID
 		// The split's own direction replaces a preselection, as it does on
 		// the local path below.
@@ -587,7 +599,11 @@ func (m *OS) SplitFocusedHorizontal() {
 		// every other way of making one does. The recorded direction outlives
 		// the question: the window still arrives through a state sync, and
 		// adoptSyncedWindows still applies it.
-		m.NewWindowHere()
+		if followSSH {
+			m.newWindowFollowingSSH(focusedWin)
+		} else {
+			m.NewWindowHere()
+		}
 		return
 	}
 
@@ -595,45 +611,14 @@ func (m *OS) SplitFocusedHorizontal() {
 	m.SplitTargetWindowID = focusedWin.ID
 
 	// Set preselection direction for the next window
-	m.PreselectionDir = layout.PreselectionDown
+	m.PreselectionDir = dir
 
 	// Create a new window. It will be added with the preselection.
-	m.AddWindow("")
-
-	// Clear the split target
-	m.SplitTargetWindowID = ""
-}
-
-// SplitFocusedVertical splits the focused window vertically (left/right) and creates a new terminal
-func (m *OS) SplitFocusedVertical() {
-	if !m.AutoTiling {
-		return
+	if followSSH {
+		m.newWindowFollowingSSH(focusedWin)
+	} else {
+		m.AddWindow("")
 	}
-
-	focusedWin := m.GetFocusedWindow()
-	if focusedWin == nil {
-		return
-	}
-
-	// See SplitFocusedHorizontal: on the daemon path the forced direction has to
-	// outlive the round trip that creates the pane.
-	if m.IsDaemonSession && m.DaemonClient != nil {
-		m.pendingSplitDir = layout.PreselectionRight
-		m.pendingSplitTarget = focusedWin.ID
-		m.PreselectionDir = layout.PreselectionNone
-		// See SplitFocusedHorizontal.
-		m.NewWindowHere()
-		return
-	}
-
-	// Store the target window ID BEFORE creating new window (which will change focus)
-	m.SplitTargetWindowID = focusedWin.ID
-
-	// Set preselection direction for the next window
-	m.PreselectionDir = layout.PreselectionRight
-
-	// Create a new window. It will be added with the preselection.
-	m.AddWindow("")
 
 	// Clear the split target
 	m.SplitTargetWindowID = ""

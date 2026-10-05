@@ -1159,12 +1159,19 @@ func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error 
 // SendIntentAt is SendIntentIn with the workspace a NewWindow goes on. Zero
 // is the session's current workspace.
 func (c *TUIClient) SendIntentAt(cwd string, workspace int, commandType string, args ...string) error {
+	return c.SendNewWindowIntent(cwd, workspace, "", commandType, args...)
+}
+
+// SendNewWindowIntent is SendIntentAt with the window a NewWindow follows into
+// ssh. Empty follows none. See ExecuteCommandPayload.SSHFrom.
+func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, commandType string, args ...string) error {
 	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
 		SessionName: c.SessionName(),
 		CommandType: commandType,
 		Args:        args,
 		Cwd:         cwd,
 		Workspace:   workspace,
+		SSHFrom:     sshFrom,
 	})
 	if err != nil {
 		return err

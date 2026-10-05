@@ -191,7 +191,20 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+c",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.FollowSSHOnNewWindow() {
+					m.NewWindowSSH()
+					return m, nil
+				}
 				m.NewWindowHere()
+				return m, nil
+			},
+		},
+		{
+			Name:     "New window that runs the focused pane's ssh",
+			Shortcut: "",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.NewWindowSSH()
 				return m, nil
 			},
 		},
@@ -290,7 +303,19 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
-					m.SplitFocusedHorizontal()
+					m.splitFocused(layout.PreselectionDown, m.FollowSSHOnNewWindow())
+					m.ShowNotification("Split horizontal", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Split horizontal, and run the focused pane's ssh",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.AutoTiling {
+					m.SplitFocusedHorizontalSSH()
 					m.ShowNotification("Split horizontal", "info", s.NotificationDuration)
 				}
 				return m, nil
@@ -302,7 +327,19 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
-					m.SplitFocusedVertical()
+					m.splitFocused(layout.PreselectionRight, m.FollowSSHOnNewWindow())
+					m.ShowNotification("Split vertical", "info", s.NotificationDuration)
+				}
+				return m, nil
+			},
+		},
+		{
+			Name:     "Split vertical, and run the focused pane's ssh",
+			Shortcut: "",
+			Category: "Layout",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.AutoTiling {
+					m.SplitFocusedVerticalSSH()
 					m.ShowNotification("Split vertical", "info", s.NotificationDuration)
 				}
 				return m, nil

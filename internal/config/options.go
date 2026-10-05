@@ -217,6 +217,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.new_window_follow_ssh", Type: OptionBool, Section: "appearance",
+		Description: "A split or new window of a pane that runs ssh runs the same ssh",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.click_to_type", Type: OptionString, Section: "appearance",
 		Description: "What a click on a pane's content does in window-management mode",
 		Accepted:    ClickToTypeModes, Default: ClickToTypeDouble,

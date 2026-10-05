@@ -497,6 +497,13 @@ type Settings struct {
 	// Set via appearance.new_window_inherit_cwd config.
 	NewWindowInheritCwd bool
 
+	// NewWindowFollowSSH makes the ordinary split and new-window actions
+	// behave like their ssh versions: when the focused pane runs ssh, the new
+	// pane runs the same ssh. Off by default, so a split is a local shell
+	// unless the person asks for the ssh version by its own key.
+	// Set via appearance.new_window_follow_ssh config.
+	NewWindowFollowSSH bool
+
 	// WordCharacters lists the punctuation that counts as part of a word when a
 	// double-click selects one, on top of letters and digits, which always do.
 	//

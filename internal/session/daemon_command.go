@@ -111,6 +111,19 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 		payload.CommandType, payload.Args = canonical, args
 	}
+	if payload.SSHFrom != "" && payload.CommandType == "NewWindow" && len(payload.Args) <= 1 {
+		// The client asked for a pane on the machine another pane is ssh'd
+		// into. The daemon reads that pane's processes, because it is the side
+		// that owns them. With no ssh client there it is an ordinary window.
+		if argv, ok := session.sshFollowArgv(payload.SSHFrom); ok {
+			name := ""
+			if len(payload.Args) == 1 {
+				name = payload.Args[0]
+			}
+			payload.Args = append([]string{name}, argv...)
+			LogBasic("Execute command: following ssh of window %s: %v", payload.SSHFrom, argv)
+		}
+	}
 	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
 	}

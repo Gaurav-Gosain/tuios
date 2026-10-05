@@ -724,6 +724,9 @@ func (m *OS) recordWindowCwd(windowID, raw string) {
 	}
 	if w.Pty != nil {
 		w.CwdHost = host
+		if host != "" {
+			w.CwdElsewhereDir = dir
+		}
 	}
 	if host == "" {
 		w.Cwd = dir

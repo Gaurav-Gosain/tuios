@@ -273,6 +273,7 @@ type AppearanceConfig struct {
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
 	NewWindowInheritCwd      *bool                   `toml:"new_window_inherit_cwd"`       // A new window starts in the focused pane's working directory (default: true)
+	NewWindowFollowSSH       *bool                   `toml:"new_window_follow_ssh"`        // A split or new window of a pane that runs ssh runs the same ssh (default: false)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
 	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: double)
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
@@ -2258,6 +2259,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// the config is what puts new windows back in the daemon's directory.
 	if cfg.Appearance.NewWindowInheritCwd != nil {
 		s.NewWindowInheritCwd = *cfg.Appearance.NewWindowInheritCwd
+	}
+	if cfg.Appearance.NewWindowFollowSSH != nil {
+		s.NewWindowFollowSSH = *cfg.Appearance.NewWindowFollowSSH
 	}
 
 	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo

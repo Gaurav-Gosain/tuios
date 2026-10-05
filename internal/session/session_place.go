@@ -47,6 +47,9 @@ type placeRecord struct {
 	// reported its folder. Empty otherwise. It holds while the program that
 	// made the report holds the terminal; see Session.checkPaneCwd.
 	elsewhere atomic.Pointer[string]
+	// elsewhereDir is the folder that report named on that machine. An ssh
+	// split starts the new pane there. See ssh_follow.go.
+	elsewhereDir atomic.Pointer[string]
 }
 
 // setCwd records a directory the shell reported (an OSC 7 payload or a bare
@@ -70,6 +73,7 @@ func (r *placeRecord) announce(raw string) bool {
 		return false
 	}
 	if host != "" {
+		r.elsewhereDir.Store(&path)
 		return r.setElsewhere(host)
 	}
 	moved := r.setElsewhere("")
@@ -86,6 +90,15 @@ func (r *placeRecord) announce(raw string) bool {
 // that is not this one.
 func (r *placeRecord) Elsewhere() string {
 	if p := r.elsewhere.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// ElsewhereDir is the folder the last report from another machine named.
+// It means something only while Elsewhere is not empty.
+func (r *placeRecord) ElsewhereDir() string {
+	if p := r.elsewhereDir.Load(); p != nil {
 		return *p
 	}
 	return ""
