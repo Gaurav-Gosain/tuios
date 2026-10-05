@@ -411,7 +411,7 @@ func (t *Target) InstallStatusLine(env Env, tuios, then string) (Result, error) 
 	if st, err := os.Stat(t.ConfigDir(env)); err != nil || !st.IsDir() {
 		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
 	}
-	return t.writeStatusLine(env, &res, tuios, then, true)
+	return retryChanged(func() (Result, error) { r := res; return t.writeStatusLine(env, &r, tuios, then, true) })
 }
 
 // UninstallStatusLine removes the wrapper, putting back the command it chained
@@ -421,7 +421,7 @@ func (t *Target) UninstallStatusLine(env Env) (Result, error) {
 	if !t.SupportsStatusLine() {
 		return res, nil
 	}
-	return t.writeStatusLine(env, &res, "", "", false)
+	return retryChanged(func() (Result, error) { r := res; return t.writeStatusLine(env, &r, "", "", false) })
 }
 
 func (t *Target) writeStatusLine(env Env, res *Result, tuios, then string, install bool) (Result, error) {
@@ -443,7 +443,7 @@ func (t *Target) writeStatusLine(env Env, res *Result, tuios, then string, insta
 	if string(out) == string(have) {
 		return *res, nil
 	}
-	if err := writeAtomic(path, out); err != nil {
+	if err := writeAtomic(path, have, out); err != nil {
 		return *res, err
 	}
 	res.Changed = true

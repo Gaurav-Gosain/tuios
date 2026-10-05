@@ -199,6 +199,10 @@ func (t *Target) mcpPlan(env Env, tuios string, write, install bool) (path strin
 // set. Like Install it needs the harness to have run here, and writes nothing
 // when the entry is already current.
 func (t *Target) InstallMCP(env Env, tuios string, write bool) (Result, error) {
+	return retryChanged(func() (Result, error) { return t.installMCP(env, tuios, write) })
+}
+
+func (t *Target) installMCP(env Env, tuios string, write bool) (Result, error) {
 	res := Result{Harness: t.ID, Path: t.MCPPath(env)}
 	if st, err := os.Stat(t.ConfigDir(env)); err != nil || !st.IsDir() {
 		return res, fmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, t.ConfigDir(env), t.Name)
@@ -211,7 +215,7 @@ func (t *Target) InstallMCP(env Env, tuios string, write bool) (Result, error) {
 	if !changed {
 		return res, nil
 	}
-	if err := writeAtomic(path, out); err != nil {
+	if err := writeAtomic(path, have, out); err != nil {
 		return res, err
 	}
 	res.Changed = true
@@ -229,15 +233,19 @@ func (t *Target) InstallMCP(env Env, tuios string, write bool) (Result, error) {
 
 // UninstallMCP removes the entry tuios wrote, and nothing else.
 func (t *Target) UninstallMCP(env Env) (Result, error) {
+	return retryChanged(func() (Result, error) { return t.uninstallMCP(env) })
+}
+
+func (t *Target) uninstallMCP(env Env) (Result, error) {
 	res := Result{Harness: t.ID, Path: t.MCPPath(env)}
 	if !t.SupportsMCP() {
 		return res, nil
 	}
-	path, _, out, changed, err := t.mcpPlan(env, "", false, false)
+	path, have, out, changed, err := t.mcpPlan(env, "", false, false)
 	if err != nil || !changed {
 		return res, err
 	}
-	if err := writeAtomic(path, out); err != nil {
+	if err := writeAtomic(path, have, out); err != nil {
 		return res, err
 	}
 	res.Changed = true

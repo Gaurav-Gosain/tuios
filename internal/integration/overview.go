@@ -74,10 +74,11 @@ func (s State) String() string {
 	}
 }
 
-// State is the status in one word.
+// State is the status in one word. An install of this build's version that
+// runs another program, one made with --command, is installed.
 func (s Status) State() State {
 	switch {
-	case s.Installed && s.Current:
+	case s.Installed && (s.Current || s.OtherProgram):
 		return StateInstalled
 	case s.Installed:
 		return StateOutOfDate
@@ -89,10 +90,21 @@ func (s Status) State() State {
 }
 
 // NeedsAction reports whether install would fix the integration: it is out
-// of date, or it is not installed and the harness has run here.
+// of date, or it is not installed and the harness has run here. A status
+// whose files could not be read needs a person, not an install.
 func (s Status) NeedsAction() bool {
 	st := s.State()
-	return st == StateOutOfDate || st == StateNotInstalled
+	return !s.Unreadable && (st == StateOutOfDate || st == StateNotInstalled)
+}
+
+// InstallProgram is the program an install or update writes: the one the
+// installed hooks already run, so an update keeps a --command path, else
+// fallback.
+func (s Status) InstallProgram(fallback string) string {
+	if s.Installed && s.Program != "" {
+		return s.Program
+	}
+	return fallback
 }
 
 // Verdict is the status in a few words, as tuios integration status and
@@ -100,6 +112,9 @@ func (s Status) NeedsAction() bool {
 func (s Status) Verdict() string {
 	switch s.State() {
 	case StateInstalled:
+		if s.OtherProgram {
+			return fmt.Sprintf("installed, current (v%d), runs %s", s.Version, s.Program)
+		}
 		return fmt.Sprintf("installed, current (v%d)", s.Version)
 	case StateOutOfDate:
 		return fmt.Sprintf("installed, out of date (v%d, this tuios installs v%d): run tuios integration install %s", s.Version, s.WantVersion, s.Harness)
