@@ -26,25 +26,28 @@ func dockCapsIn(row string) []string {
 }
 
 // TestDockPillCapsFollowTheSetting: with dock_pill_caps = false the dock row
-// draws no cap on any pill, and with it true the mode chip and the workspace
-// pills are capped (#451). Before the fix the mode chip and the workspace pills
-// took their caps from accessors that ignored the setting, so false changed
-// nothing a user could see.
+// draws no cap on any pill, and with it true, or unset, the mode chip and the
+// workspace pills are capped. Before #451 the mode chip and the workspace
+// pills took their caps from accessors that ignored the setting, so false
+// changed nothing a user could see. The default is rounded.
 //
-// Negative control: build origin/main. The false case fails with the mode
-// chip's and the workspace pills' caps on the dock row.
+// Negative controls: build 1e0b4c89, before #451, and the off case fails
+// with the mode chip's and the workspace pills' caps on the dock row. Build
+// eced6152, where the default was flat, and the default case fails with no
+// caps on the row.
 func TestDockPillCapsFollowTheSetting(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
+		config string
 		capped bool
-	}{{"off", false}, {"on", true}} {
+	}{
+		{"off", "dock_pill_caps = false\n", false},
+		{"on", "dock_pill_caps = true\n", true},
+		{"default", "", true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
-			value := "false"
-			if tc.capped {
-				value = "true"
-			}
-			writeConfig(t, base, "[appearance]\ndock_pill_caps = "+value+"\n")
+			writeConfig(t, base, "[appearance]\n"+tc.config)
 			term := startIn(t, base, startOpts{cols: 120, rows: 30})
 			// The dock is whole once it shows the window count at the end of
 			// the workspace strip.
@@ -56,11 +59,11 @@ func TestDockPillCapsFollowTheSetting(t *testing.T) {
 			row := dockRow(term.Screen())
 			caps := dockCapsIn(row)
 			if !tc.capped && len(caps) > 0 {
-				t.Fatalf("dock_pill_caps = false, and the dock row draws caps %q\n%s", caps, row)
+				t.Fatalf("%s: the dock row draws caps %q, want flat pills\n%s", tc.name, caps, row)
 			}
 			// The mode chip has two caps, and every workspace pill has two.
 			if tc.capped && len(caps) < 4 {
-				t.Fatalf("dock_pill_caps = true, and the dock row draws only caps %q\n%s", caps, row)
+				t.Fatalf("%s: the dock row draws only caps %q, want caps on the mode chip and the workspace pills\n%s", tc.name, caps, row)
 			}
 		})
 	}

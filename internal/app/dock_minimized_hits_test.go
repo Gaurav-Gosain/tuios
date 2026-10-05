@@ -19,6 +19,9 @@ func dockMinimizedOS(t testing.TB) *OS {
 	m := newTestOS(a)
 	m.Windows = []*terminal.Window{a, b}
 	m.Width, m.Height = 160, 40
+	// Flat pills: dockEntryColumns finds an entry by its label, and a cap
+	// would put the entry's edge one column out from it.
+	m.Settings.DockPillCaps = false
 	m.CurrentWorkspace = 1
 	for i, w := range m.Windows {
 		w.Workspace = 1

@@ -293,10 +293,9 @@ type Settings struct {
 	// it short. Off, a long name stays truncated with no way to read the rest.
 	DockWorkspaceTooltip bool
 
-	// DockPillCaps puts powerline half-circle caps back on the dock's mode pill,
-	// workspace tabs and minimized-window pills. Off, each is a flat filled cell:
-	// the caps repeated on every one of them, so a status line read as a row of
-	// beads. The capped look is one key away for anyone who wants it.
+	// DockPillCaps puts powerline half-circle caps on the dock's mode chip,
+	// workspace tabs and minimized-window pills. On by default. Off, each is a
+	// flat filled cell, for anyone who reads a row of caps as a row of beads.
 	DockPillCaps bool
 
 	// HideWindowButtons controls whether to hide window control buttons
@@ -728,7 +727,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,
-		DockPillCaps:                false,
+		DockPillCaps:                true,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,
 		WindowButtonPosition:        WindowButtonPositionLeft,

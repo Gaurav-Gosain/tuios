@@ -546,8 +546,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dock_pill_caps", Type: OptionBool, Section: "dock",
-		Description: "Draw powerline caps on the dock's pills instead of flat ends",
-		Default:     "false",
+		Description: "Draw rounded caps on every dock pill: the mode chip, the workspace tabs and the minimized windows. Off draws flat pills",
+		Default:     "true",
 	},
 	{
 		Path: "appearance.show_clock", Type: OptionBool, Section: "dock",

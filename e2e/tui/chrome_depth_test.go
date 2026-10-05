@@ -199,7 +199,7 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 				killDaemon(t, base)
 				useShippedLooks(base)
 				// The dock's caps are on so checkPillCaps has dock pills to
-				// read: dock_pill_caps ships off.
+				// read. They ship on, and the test does not lean on that.
 				cfg := "[appearance]\ndock_pill_caps = true\n"
 				if look.theme != "" {
 					cfg += "theme = \"" + look.theme + "\"\n"

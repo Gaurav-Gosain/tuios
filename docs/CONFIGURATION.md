@@ -377,6 +377,20 @@ With `center`, the grid is off, so `master_grid` has no effect. The first pane
 of the workspace is the master. To make another pane the master, focus it and
 press `Ctrl+B L Enter`.
 
+## Rounded dock pills
+
+`appearance.dock_pill_caps` puts rounded caps on every pill in the dock: the
+mode chip, the workspace tabs and the minimized windows. It is `true` by
+default. Set it to `false` for flat pills:
+
+```toml
+[appearance]
+dock_pill_caps = false
+```
+
+Under ASCII glyphs the workspace tabs have no caps. The rail's pills do not
+change with this option.
+
 ## The dock's components
 
 The `[dock]` table's region lists and custom components are not scalar

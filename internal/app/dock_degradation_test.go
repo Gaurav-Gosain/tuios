@@ -24,6 +24,9 @@ func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 		Height:           30,
 		FocusedWindow:    -1,
 	}
+	// Flat pills: the edge checks below find an entry by its label, and a
+	// cap would put the entry's edge one column out from it.
+	m.Settings.DockPillCaps = false
 	names := []string{"editor", "server", "logs", "notes", "build", "review"}
 	m.WorkspaceNames = map[int]string{}
 	for ws := 1; ws <= workspaces; ws++ {
