@@ -406,7 +406,7 @@ program is not installed, the dock shows its exit code. The next press starts
 it again. tuios does not start it again by itself.
 
 The command and the palette row of an entry change when you save
-`config.toml`. A changed key works in the next client, as for the other
+`config.toml`. A changed key works at the next key press, as for the other
 keybindings. When you remove or rename an entry, or change the description of
 an entry that has no `name`, the panes of its scratch terminal close at the
 next reload. The

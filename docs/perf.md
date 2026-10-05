@@ -587,7 +587,8 @@ allocations. `internal/terminal`, handed to that pass.
 `ApplyReloadedConfig` never calls `KeybindRegistry.Reload`, so keybindings do
 not follow a config-file reload on any road. Pre-existing, unchanged by the
 section cache (the flattened map was already frozen the same way), and outside
-a performance pass. Reported rather than fixed.
+a performance pass. Reported rather than fixed. Fixed later in #358: the reload
+now calls it.
 
 ### Invariants held
 
