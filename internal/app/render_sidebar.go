@@ -2434,14 +2434,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 		s.tokens = append(s.tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
 	}
 	titleW := lipgloss.Width(title)
-	// The session index leads the name while the switch chord is armed: a
-	// muted number, the one switch_session_N opens, styled like the other
-	// chrome the row carries. The quiet rail keeps the one-machine rows
-	// exactly where they always were, so the number waits for the chord
-	// that gives it a question to answer. Remote sessions have no number on
-	// this machine and wear none.
+	// The session index always leads the name: a muted number, the one
+	// switch_session_N opens, styled like the other chrome the row carries.
+	// Remote sessions have no number on this machine and wear none.
 	mark, markW := "", 0
-	if sessionIdx > 0 && m.PrefixActive {
+	if sessionIdx > 0 {
 		mark = sidebarStyle(rowBg, pal.FgMute).Bold(node.IsCurrent).
 			Render(strconv.Itoa(sessionIdx) + " ")
 		markW = len(strconv.Itoa(sessionIdx)) + 1
