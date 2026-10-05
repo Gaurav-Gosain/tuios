@@ -121,7 +121,7 @@ func rectsOf(m *OS, a, b *terminal.Window) surfaceRects {
 	sw := m.GetSidebarWidth()
 	return surfaceRects{
 		sidebar:  image.Rect(0, m.GetTopMargin(), sw, m.GetTopMargin()+m.GetUsableHeight()),
-		dock:     image.Rect(0, dockY, m.GetRenderWidth(), dockY+config.DockHeight),
+		dock:     image.Rect(0, dockY, m.GetRenderWidth(), dockY+m.Settings.DockHeight()),
 		paneA:    image.Rect(a.X, a.Y, a.X+a.Width, a.Y+a.Height),
 		paneB:    image.Rect(b.X, b.Y, b.X+b.Width, b.Y+b.Height),
 		contentA: paneContentRect(a),

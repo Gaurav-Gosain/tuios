@@ -298,9 +298,10 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	if !m.Settings.BorderJoinsChromeRules() {
 		return r
 	}
-	switch m.Settings.DockbarPosition {
-	case "hidden":
-	case "top":
+	switch {
+	case m.Settings.DockbarPosition == "hidden" || m.Settings.DockCompact:
+		// A compact dock draws no rule to join.
+	case m.Settings.DockbarPosition == "top":
 		r.top = bounds.Y - 1
 	default:
 		r.bottom = bounds.Y + bounds.H

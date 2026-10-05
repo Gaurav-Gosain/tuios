@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 	"time"
 
@@ -539,11 +540,16 @@ func (m *OS) renderDockString() (string, int) {
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}
 
-	dockbarYPos := m.GetRenderHeight() - config.DockHeight
+	// A compact dock is the bar alone. The rule, and the burn a message draws
+	// on it, are not drawn.
+	dockbarYPos := m.GetRenderHeight() - m.Settings.DockHeight()
 	dockbarParts := []string{separator, dockBar}
+	if m.Settings.DockCompact {
+		dockbarParts = dockbarParts[1:]
+	}
 	if m.Settings.DockbarPosition == "top" {
 		dockbarYPos = 0
-		dockbarParts[0], dockbarParts[1] = dockbarParts[1], dockbarParts[0]
+		slices.Reverse(dockbarParts)
 	}
 
 	fullDock := lipgloss.JoinVertical(lipgloss.Left, dockbarParts...)

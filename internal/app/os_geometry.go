@@ -120,10 +120,9 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 		return // Invalid dimensions
 	}
 
-	oldUsableHeight := oldHeight - m.GetTopMargin()
-	if m.Settings.DockbarPosition != "hidden" {
-		oldUsableHeight -= 1
-	}
+	// The reserve did not move with the viewport, so the old viewport lost the
+	// same rows to it that the new one does.
+	oldUsableHeight := oldHeight - m.GetTopMargin() - m.GetBottomMargin()
 
 	newUsableHeight := m.GetUsableHeight()
 	newRenderWidth := m.GetLayoutWidth()
@@ -444,10 +443,10 @@ func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	}
 	switch m.Settings.DockbarPosition {
 	case "top":
-		r.Top = config.DockHeight
+		r.Top = m.Settings.DockHeight()
 	case "hidden":
 	default:
-		r.Bottom = config.DockHeight
+		r.Bottom = m.Settings.DockHeight()
 	}
 	return r
 }

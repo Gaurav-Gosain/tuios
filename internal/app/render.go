@@ -846,6 +846,14 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if windowNeedsScrollbar(window, &m.Settings) {
 		return nil, false
 	}
+	// The fast path stacks the box and this client's dock with nothing
+	// between them. When another client on the session reserves more rows
+	// than this one draws (a full dock beside a compact one, or any dock
+	// beside a hidden one), the layout leaves a blank band this frame would
+	// not have, and every row under it would be drawn one or more rows off.
+	if own := m.OwnLayoutReserve(); m.GetTopMargin() != own.Top || m.GetBottomMargin() != own.Bottom {
+		return nil, false
+	}
 	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
 	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
 		return nil, false

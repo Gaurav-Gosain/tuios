@@ -550,6 +550,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.dock_compact", Type: OptionBool, Section: "dock",
+		Description: "Draw the dock as one row with no rule. The panes get one more row",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.show_clock", Type: OptionBool, Section: "dock",
 		Description: "Show the clock overlay",
 		Default:     "false",

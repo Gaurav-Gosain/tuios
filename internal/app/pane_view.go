@@ -344,7 +344,7 @@ const viewMarkLayerID = "view-mark"
 // It sits at the right end of the dock's rule, the line between the panes and
 // the dock. That row is chrome that carries nothing else, so the mark covers
 // no pane, no title bar and no dock control, and it is always in the same
-// place. With the dock hidden there is no such row, and the mark goes in the
+// place. With the dock hidden or compact there is no such row, and the mark goes in the
 // bottom right corner of the view's pane area, over pane content, which is the
 // one place left. Nil when the whole session is on the screen.
 func (m *OS) renderViewMark() *lipgloss.Layer {
@@ -379,10 +379,11 @@ func (m *OS) renderViewMark() *lipgloss.Layer {
 	}
 	label, width := c.label, c.width
 	x, y := m.GetRenderWidth()-width-1, v.clip.Max.Y-1
-	switch m.Settings.DockbarPosition {
-	case "hidden":
+	switch {
+	case m.Settings.DockbarPosition == "hidden" || m.Settings.DockCompact:
+		// No rule to sit on: a compact dock is its pills alone.
 		x = v.clip.Max.X - width
-	case "top":
+	case m.Settings.DockbarPosition == "top":
 		y = m.viewReserve().Top - 1
 	default:
 		y = m.viewReserve().Top + m.ViewUsableHeight()

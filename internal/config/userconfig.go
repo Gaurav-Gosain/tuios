@@ -305,6 +305,7 @@ type AppearanceConfig struct {
 	DockWorkspaceTabFormat string   `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
+	DockCompact            bool     `toml:"dock_compact"`              // One-row dock with no rule (default: false)
 	SessionColors          *bool    `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool    `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
 	GlobalSession          *bool    `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
@@ -1977,6 +1978,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.DockPillCaps != nil {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps
 	}
+	s.DockCompact = cfg.Appearance.DockCompact
 	if cfg.Appearance.SessionColors != nil {
 		s.SessionColors = *cfg.Appearance.SessionColors
 	}

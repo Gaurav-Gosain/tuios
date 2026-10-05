@@ -391,6 +391,29 @@ dock_pill_caps = false
 Under ASCII glyphs the workspace tabs have no caps. The rail's pills do not
 change with this option.
 
+## Compact dock
+
+The dock has two rows by default: a rule and the row of pills.
+`appearance.dock_compact` removes the rule, so the dock has one row. The panes
+get that row. The default is `false`.
+
+```toml
+[appearance]
+dock_compact = true
+```
+
+The option works with the dock at the top and at the bottom. It has no effect
+when `dockbar_position` is `hidden`. You can also set it on the settings page,
+in the Dock section, or with `tuios set-config dock_compact true`. The change
+applies at once.
+
+The rule shows how long a dock message stays. A compact dock does not show
+this.
+
+When clients with different docks share a session, the panes keep the
+largest dock height. A client with a compact dock shows a blank row in that
+case.
+
 ## The dock's components
 
 The `[dock]` table's region lists and custom components are not scalar

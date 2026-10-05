@@ -517,6 +517,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.dock_workspace_tab_format"),
 			opt("appearance.dock_workspace_tooltip"),
 			opt("appearance.dock_pill_caps"),
+			opt("appearance.dock_compact"),
 		}),
 	}
 

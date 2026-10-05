@@ -1367,3 +1367,15 @@ each: the doctor reports nothing and `keybinds list` shows both.
 | --- | --- | --- | --- |
 | The released behaviour | build origin/main (1e0b4c89) | `TestKeybindsDoctorNamesACommandNameClash` ("the doctor reports 0 command entries, want 1") | **caught** |
 | The report never reads the entries | `Report`: the `CommandProblems` field cut | `TestKeybindsDoctorNamesACommandNameClash` ("the doctor reports 0 command entries, want 1") | **caught** |
+
+## Compact dock
+
+`dock_compact_test.go` drives `appearance.dock_compact` with the dock at the top
+and at the bottom. The positive half is in each fixture: the same test starts
+a full dock and asserts the pane's edge on the row after the rule.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`43573cf8`) | `TestDockCompactGivesThePaneARow`, `TestDockCompactPillClickSwitchesWorkspace`, `TestDockCompactSwitchesOnConfigSave` ("the pane meets the dock at row 2, want 1" at the top, "row 37, want 38" at the bottom), `TestDockCompactClientSharesASessionWithAFullOne` (the rule drawn on the row a compact client keeps blank), `TestDockCompactFromTheSettingsPanel` (no Compact dock row) | **caught** |
+| The dock band stays two rows | `InDockBand`: `config.DockFullHeight` in place of `Settings.DockHeight()` | `TestDockCompactPillClickSwitchesWorkspace` top and bottom ("the pane row next to a compact dock: context menu never showed [Split right Rename]"). The pill click before it passes, which is correct | **caught** |
+| The fast path ignores a larger peer reserve | `fullscreenFastWindow`: the `OwnLayoutReserve` check cut | `TestDockCompactClientSharesASessionWithAFullOne` (the dock row drawn on the row the compact client keeps blank, one row above the screen's last row) | **caught** |

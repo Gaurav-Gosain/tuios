@@ -298,6 +298,10 @@ type Settings struct {
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
 	DockPillCaps bool
 
+	// DockCompact draws the dock as one row: the pills without the rule above
+	// or below them. The panes get the row back. Off by default.
+	DockCompact bool
+
 	// HideWindowButtons controls whether to hide window control buttons
 	// Set via --hide-window-buttons flag or appearance.hide_window_buttons config
 	HideWindowButtons bool

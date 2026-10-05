@@ -606,7 +606,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 			dockOffset := 0
 			if m.Settings.DockbarPosition == "bottom" {
-				dockOffset = config.DockHeight
+				dockOffset = m.Settings.DockHeight()
 			}
 
 			x := max(m.GetRenderWidth()-contentWidth-rightMargin, 0)

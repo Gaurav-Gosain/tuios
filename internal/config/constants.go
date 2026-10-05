@@ -94,8 +94,13 @@ var (
 // =============================================================================
 
 const (
-	// DockHeight is the height of the dock area at the bottom
-	DockHeight = 2
+	// DockFullHeight is the rows a full dock takes: the rule between the panes
+	// and the dock, and the row of pills.
+	DockFullHeight = 2
+
+	// DockCompactHeight is the rows a compact dock takes: the row of pills
+	// alone. See Settings.DockHeight.
+	DockCompactHeight = 1
 
 	// SidebarDefaultWidth is the preferred sidebar width on a wide screen.
 	// Before v0.8.0 it was 28.
@@ -1452,4 +1457,14 @@ const (
 // OSC52WriteModes is every value appearance.selection.osc52_write takes.
 var OSC52WriteModes = []string{
 	OSC52WriteOff, OSC52WriteAsk, OSC52WriteFocused, OSC52WriteOn,
+}
+
+// DockHeight is the rows the dock takes when it is shown: one with
+// appearance.dock_compact, two without. It does not look at DockbarPosition,
+// so a caller that has to treat a hidden dock as no rows checks that itself.
+func (s *Settings) DockHeight() int {
+	if s.DockCompact {
+		return DockCompactHeight
+	}
+	return DockFullHeight
 }

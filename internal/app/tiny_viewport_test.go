@@ -18,7 +18,7 @@ import (
 // gave it, so the shrunk viewport leaves it starting off-screen.
 func TestFrameSurvivesAHostShorterThanTheDock(t *testing.T) {
 	for w := range 3 {
-		for h := range config.DockHeight + 2 {
+		for h := range config.DockFullHeight + 2 {
 			m := newNarrowOS(t, w, h)
 			m.CurrentWorkspace = 1
 			m.Windows = []*terminal.Window{
