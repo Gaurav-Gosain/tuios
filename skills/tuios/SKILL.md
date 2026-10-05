@@ -1,6 +1,6 @@
 ---
 name: tuios
-description: Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, turn checkpoints, shipping a worktree, the Inbox and approvals, push notifications, mail, other machines, clients, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, agent features off, errors and recipes.
+description: "Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, turn checkpoints, shipping a worktree, the Inbox and approvals, push notifications, mail, other machines, clients, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, agent features off, errors and recipes."
 ---
 
 # Driving tuios from a pane
