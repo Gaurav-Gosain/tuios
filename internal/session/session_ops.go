@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
@@ -323,6 +324,23 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
+	// A command can exit before its window is in the state: one that fails
+	// at once does. onExit finds the window by its PTY (close_on_exit and
+	// plugin panes close it that way), so it waits until the window is
+	// added or refused. Without the wait it found nothing, and the window
+	// stayed open around a dead process.
+	added := make(chan struct{})
+	var addedOnce sync.Once
+	markAdded := func() { addedOnce.Do(func() { close(added) }) }
+	defer markAdded()
+	if onExit != nil {
+		exit := onExit
+		onExit = func(ptyID string) {
+			<-added
+			exit(ptyID)
+		}
+	}
+
 	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants,
@@ -330,6 +348,9 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	})
 	if err != nil {
 		return WindowState{}, err
+	}
+	if windowSpawnedHook != nil {
+		windowSpawnedHook(pty)
 	}
 
 	// The session's directory is its first window's, so the first window is
@@ -441,6 +462,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 		return nil
 	})
+	markAdded()
 	if err != nil {
 		// The shell started for a window that was refused has no owner.
 		_ = s.ClosePTY(pty.ID)
@@ -448,6 +470,10 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	}
 	return win, nil
 }
+
+// windowSpawnedHook, when set, runs after AddDaemonWindowWith has spawned the
+// window's process and before it adds the window to the state. Test-only.
+var windowSpawnedHook func(*PTY)
 
 // ErrScratchExists is the refusal of a second scratch terminal in a session.
 var ErrScratchExists = errors.New("this session already has a scratch terminal of this name. Press its key to show it")

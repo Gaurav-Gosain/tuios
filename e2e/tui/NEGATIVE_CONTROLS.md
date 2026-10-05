@@ -1112,6 +1112,19 @@ itself with status 0. The "plain on a terminal" checks run `tuios help`,
 and `tuios keybinds list` in a terminal and check that each exits by itself,
 never shows the alternate screen, and ends with the lines it prints with no
 terminal.
+## A close_on_exit window outlived a command that exited at once
+
+`new-window` with `close_on_exit` closes the window from the process's exit
+callback, which finds the window by its PTY. A command that exited before
+the window was in the state left the callback nothing to find, and the
+window stayed. The control is a unit test in `internal/session`, because it
+must hold the add until the process has exited, and only a test hook can
+order the two. The callback runs in the same fixture, so its finding the
+window is the positive half.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| onExit runs before the window is added | `AddDaemonWindowWith` in `internal/session/session_ops.go`: the `added` gate cut, so onExit runs as the process exits | `TestOnExitSeesTheWindowOfAProcessThatExitedAtOnce` ("onExit ran before the window was in the state") | **caught in `internal/session`** (10 of 10 run) |
 
 ## What this harness structurally cannot observe
 
