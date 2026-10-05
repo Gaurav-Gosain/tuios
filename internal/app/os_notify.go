@@ -360,6 +360,7 @@ func (m *OS) DismissNotifications() bool {
 	if len(m.Notifications) == 0 {
 		return false
 	}
+	m.noteNoticesDismissed(m.Notifications)
 	m.Notifications = nil
 	return true
 }
@@ -372,6 +373,7 @@ func (m *OS) dismissVisibleNotification() bool {
 	if len(m.Notifications) == 0 {
 		return false
 	}
+	m.noteNoticesDismissed(m.Notifications[len(m.Notifications)-1:])
 	m.Notifications = m.Notifications[:len(m.Notifications)-1]
 	return true
 }

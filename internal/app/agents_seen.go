@@ -71,7 +71,7 @@ func (m *OS) noteAgentsSeen() {
 // unbound key does.
 func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 	groups := config.GetPrefixKeybindingGroups("", m.IsDaemonSession)
-	seen, review := m.agentsSeen(), m.reviewSupported()
+	seen, review, agentsTab := m.agentsSeen(), m.reviewSupported(), m.agentsPageAvailable()
 	// With multifocus on, the copy-mode key enters multi copy mode, and the
 	// menu says so: this is where a multifocus user finds out it exists.
 	multi, multiOK := m.MultiCopyEligible()
@@ -89,6 +89,9 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		}
 		if !review {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsReviewPrefixKeybinding)
+		}
+		if !agentsTab {
+			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentsSettingsPrefixKeybinding)
 		}
 		// While the beam is on, its row says the key turns it off.
 		if m.spotlight.on {

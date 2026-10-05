@@ -148,6 +148,17 @@ func (m *OS) HelpCategories() []HelpCategory {
 			}
 		}
 	}
+	// The Agents settings key is left out where the tab is. See
+	// agentsPageAvailable.
+	if !m.agentsPageAvailable() {
+		for i := range cats {
+			if cats[i].Name == HelpCategoryAgents {
+				cats[i].Bindings = slices.DeleteFunc(slices.Clone(cats[i].Bindings), func(b HelpBinding) bool {
+					return b.Description == config.ActionDescriptions["prefix_agents_settings"]
+				})
+			}
+		}
+	}
 	return cats
 }
 

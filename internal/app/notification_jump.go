@@ -176,6 +176,7 @@ func (m *OS) clickVisibleNotification() {
 	if !sameDrawnNotification(visible, m.notifHit.Drawn) {
 		return
 	}
+	m.noteNoticesDismissed([]Notification{visible})
 	m.Notifications = m.Notifications[:n-1]
 	if m.notifHit.Cut && !isClipboardAsk(visible.Target) {
 		m.notifHoverEnd()

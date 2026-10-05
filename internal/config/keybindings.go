@@ -49,6 +49,13 @@ func IsAgentPrefixKeybinding(k Keybinding) bool {
 	return false
 }
 
+// IsAgentsSettingsPrefixKeybinding reports whether a prefix menu line is the
+// one that opens the settings page's Agents tab. The client leaves it out
+// where it has no such tab, such as over SSH.
+func IsAgentsSettingsPrefixKeybinding(k Keybinding) bool {
+	return k.Description == whichKeyAgentSettings
+}
+
 // IsReviewPrefixKeybinding reports whether a prefix menu line is the review
 // of the focused pane. The client leaves it out of the menu on a daemon that
 // cannot review.

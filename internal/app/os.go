@@ -1375,6 +1375,9 @@ type OS struct {
 	// draws, the row whose actions are open, and the notices already shown.
 	// See settings_agents.go.
 	agentsPage agentsPageState
+	// agentNoticesDismissed holds the integration notices the person
+	// dismissed, by agentNoticeKey, persisted with the rail's state.
+	agentNoticesDismissed map[string]bool
 	// settingsAgentsOpen is the Alerts tab's agent group opened or closed by
 	// hand; nil follows agentsSeen.
 	settingsAgentsOpen *bool

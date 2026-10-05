@@ -72,6 +72,9 @@ type sidebarStateFile struct {
 	// not yet, which is right for a file written before it existed: the next
 	// agent sets it.
 	AgentsSeen bool `json:"agents_seen,omitempty"`
+	// AgentNoticesDismissed lists the integration notices the person
+	// dismissed, by harness, state and version. See agentNoticeKey.
+	AgentNoticesDismissed []string `json:"agent_notices_dismissed,omitempty"`
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
@@ -130,6 +133,12 @@ func (m *OS) loadSidebarState() {
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarAgentsSeen = st.AgentsSeen
+	if len(st.AgentNoticesDismissed) > 0 {
+		m.agentNoticesDismissed = make(map[string]bool, len(st.AgentNoticesDismissed))
+		for _, k := range st.AgentNoticesDismissed {
+			m.agentNoticesDismissed[k] = true
+		}
+	}
 	m.SidebarCollapsed = st.Collapsed
 	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
 		m.SidebarSectionSplit = st.SectionSplit
@@ -188,24 +197,25 @@ func (m *OS) saveSidebarState() {
 	// change to the shipped width never reached a rail that had saved any state
 	// at all.
 	data, err := json.Marshal(sidebarStateFile{
-		Order:            m.SidebarOrder,
-		Width:            m.SidebarWidthPref,
-		DragWidth:        true,
-		Accents:          slots,
-		AccentColors:     colors,
-		AgentSeen:        m.SidebarAgentSeen,
-		AgentSeenSeq:     m.SidebarAgentSeenSeq,
-		AgentSeenAt:      m.SidebarAgentSeenAt,
-		AgentsFilter:     m.SidebarAgentFilter,
-		AgentsSort:       m.SidebarAgentSort,
-		AgentsSeen:       m.SidebarAgentsSeen,
-		Collapsed:        m.SidebarCollapsed,
-		SectionSplit:     m.SidebarSectionSplit,
-		ReposCollapsed:   collapsedRepoList(m.SidebarCollapsedRepos),
-		HostsOrder:       m.SidebarHostOrder,
-		HostsCollapsed:   collapsedRepoList(m.SidebarCollapsedHosts),
-		HostSessionOrder: m.SidebarHostSessionOrder,
-		Socket:           m.sidebarStateSocket,
+		Order:                 m.SidebarOrder,
+		Width:                 m.SidebarWidthPref,
+		DragWidth:             true,
+		Accents:               slots,
+		AccentColors:          colors,
+		AgentSeen:             m.SidebarAgentSeen,
+		AgentSeenSeq:          m.SidebarAgentSeenSeq,
+		AgentSeenAt:           m.SidebarAgentSeenAt,
+		AgentsFilter:          m.SidebarAgentFilter,
+		AgentsSort:            m.SidebarAgentSort,
+		AgentsSeen:            m.SidebarAgentsSeen,
+		AgentNoticesDismissed: collapsedRepoList(m.agentNoticesDismissed),
+		Collapsed:             m.SidebarCollapsed,
+		SectionSplit:          m.SidebarSectionSplit,
+		ReposCollapsed:        collapsedRepoList(m.SidebarCollapsedRepos),
+		HostsOrder:            m.SidebarHostOrder,
+		HostsCollapsed:        collapsedRepoList(m.SidebarCollapsedHosts),
+		HostSessionOrder:      m.SidebarHostSessionOrder,
+		Socket:                m.sidebarStateSocket,
 	})
 	if err != nil {
 		return

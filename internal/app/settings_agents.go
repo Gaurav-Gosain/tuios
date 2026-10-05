@@ -70,6 +70,9 @@ type agentsPageState struct {
 	// Each is decided once a run.
 	panesSeen map[string]bool
 	noticed   map[string]bool
+	// noticeKeys maps a notice on the dock, by notification id, to its
+	// dismissal key, so a dismissal can be stored. See agentNoticeKey.
+	noticeKeys map[string]string
 }
 
 // agentsOverviewMsg carries a report read off the UI goroutine.
@@ -96,9 +99,14 @@ const (
 	agentUninstall
 )
 
-// agentsPageAvailable reports whether this client has the Agents tab.
+// agentsPageAvailable reports whether this client has the Agents tab: a
+// terminal on this machine, with the agent features on. A model built without
+// a client kind (ClientUnknown) does not get it either: the kind is what says
+// a person on this machine is looking, and pkg/tuios names ClientLocal or
+// ClientSSH for every model it builds, so only the tests and the fuzzer build
+// an unknown one.
 func (m *OS) agentsPageAvailable() bool {
-	return m.agentsOn() && !m.RemoteClient && runtime.GOOS != "js"
+	return m.agentsOn() && m.Client == ClientLocal && !m.RemoteClient && runtime.GOOS != "js"
 }
 
 // agentsEnv is where the integrations live: this process's home and PATH, the
@@ -158,7 +166,7 @@ func (m *OS) applyAgentsOverview(msg agentsOverviewMsg) {
 // looked at yet.
 func (m *OS) agentPaneUnnoticed() bool {
 	for _, w := range m.Windows {
-		if w != nil && w.AgentHarness != "" && !m.agentsPage.panesSeen[w.AgentHarness] {
+		if w != nil && w.AgentHarness != "" && w.Host == "" && !m.agentsPage.panesSeen[w.AgentHarness] {
 			return true
 		}
 	}
@@ -175,7 +183,9 @@ func (m *OS) noticeAgentIntegrations() {
 		return
 	}
 	for _, w := range m.Windows {
-		if w == nil || w.AgentHarness == "" || p.panesSeen[w.AgentHarness] {
+		// A pane on another machine runs that machine's harness, whose
+		// integration is not the one installed here.
+		if w == nil || w.AgentHarness == "" || w.Host != "" || p.panesSeen[w.AgentHarness] {
 			continue
 		}
 		if p.panesSeen == nil {
@@ -187,9 +197,60 @@ func (m *OS) noticeAgentIntegrations() {
 			continue
 		}
 		p.noticed[st.Harness] = true
+		// A file tuios could not read says nothing about what to install.
+		if st.Unreadable {
+			continue
+		}
+		key := agentNoticeKey(st)
+		if m.agentNoticesDismissed[key] {
+			continue
+		}
 		if text := agentIntegrationNotice(st); text != "" {
 			m.ShowNotification(text, "warning", m.Settings.NotificationWarningDuration)
+			if n := len(m.Notifications); n > 0 && m.Notifications[n-1].Message == text {
+				if p.noticeKeys == nil {
+					p.noticeKeys = map[string]string{}
+				}
+				p.noticeKeys[m.Notifications[n-1].ID] = key
+			}
 		}
+	}
+}
+
+// agentNoticeKey names one notice for the record of dismissals: the harness,
+// the state, and the version installed. A dismissed notice stays dismissed
+// across attaches until one of them changes, so a newer tuios that makes the
+// integration out of date again says so again.
+func agentNoticeKey(st integration.Status) string {
+	return st.Harness + ":" + st.State().String() + ":v" + strconv.Itoa(st.Version) + ":v" + strconv.Itoa(st.WantVersion)
+}
+
+// noteNoticesDismissed stores the dismissal of each integration notice among
+// gone, the messages the person took off the dock with esc or a click. A
+// notice that only timed out is not stored, so it comes back on the next
+// attach.
+func (m *OS) noteNoticesDismissed(gone []Notification) {
+	keys := m.agentsPage.noticeKeys
+	if len(keys) == 0 {
+		return
+	}
+	changed := false
+	for _, n := range gone {
+		key, ok := keys[n.ID]
+		if !ok {
+			continue
+		}
+		delete(keys, n.ID)
+		if m.agentNoticesDismissed == nil {
+			m.agentNoticesDismissed = map[string]bool{}
+		}
+		if !m.agentNoticesDismissed[key] {
+			m.agentNoticesDismissed[key] = true
+			changed = true
+		}
+	}
+	if changed {
+		m.saveSidebarState()
 	}
 }
 
@@ -350,7 +411,12 @@ func (m *OS) agentRowIndex(id string) int {
 }
 
 // agentStateWord is the value a harness row shows.
-func agentStateWord(st integration.Status) string { return st.State().String() }
+func agentStateWord(st integration.Status) string {
+	if st.Unreadable {
+		return "cannot read"
+	}
+	return st.State().String()
+}
 
 // agentStateInk is the colour of the value a harness row shows.
 func agentStateInk(st integration.Status) func(overlay.Palette) color.Color {
@@ -385,6 +451,10 @@ func (m *OS) agentItem(st integration.Status) settingItem {
 				m.ShowNotification("Another change is running. Wait for it to end.", "info", m.Settings.NotificationDuration)
 				return nil
 			}
+			if st.Unreadable {
+				m.ShowNotification("tuios cannot read the "+st.Name+" integration. Fix the file the line under the row names, then open this tab again.", "warning", m.Settings.NotificationWarningDuration)
+				return nil
+			}
 			if st.State() == integration.StateNotRun {
 				m.ShowNotification(st.Name+" has not run here. Run it once, then install.", "info", m.Settings.NotificationDuration)
 				return nil
@@ -401,9 +471,16 @@ func agentRowDesc(st integration.Status) string {
 	var parts []string
 	switch st.State() {
 	case integration.StateInstalled:
-		parts = append(parts, "Installed and current (v"+strconv.Itoa(st.Version)+") in "+shortenHome(st.Path)+". Press enter to uninstall it.")
+		parts = append(parts, "Installed and current (v"+strconv.Itoa(st.Version)+") in "+shortenHome(st.Path)+".")
+		if st.OtherProgram {
+			parts = append(parts, "The hooks run "+shortenHome(st.Program)+".")
+		}
+		parts = append(parts, "Press enter to uninstall it.")
 	case integration.StateOutOfDate:
 		parts = append(parts, "Out of date: v"+strconv.Itoa(st.Version)+" is installed and this tuios installs v"+strconv.Itoa(st.WantVersion)+". Press enter to update it.")
+		if st.Program != "" && st.Program != agentsCommand {
+			parts = append(parts, "The update keeps "+shortenHome(st.Program)+" as the program the hooks run.")
+		}
 	case integration.StateNotInstalled:
 		parts = append(parts, "Not installed. Press enter to install it in "+shortenHome(st.Path)+".")
 	default:
@@ -435,11 +512,18 @@ func (m *OS) agentActionItems(st integration.Status) []settingItem {
 	}
 	if st.Installed && t != nil {
 		paths := t.Paths(env)
-		if st.MCP != nil && st.MCP.Installed && !slices.Contains(paths, st.MCP.Path) {
-			paths = append(paths, st.MCP.Path)
+		parts := []string{"the hooks"}
+		if t.SupportsMCP() {
+			parts = append(parts, "the MCP server")
+			if p := t.MCPPath(env); !slices.Contains(paths, p) {
+				paths = append(paths, p)
+			}
+		}
+		if t.SupportsStatusLine() {
+			parts = append(parts, "the status line")
 		}
 		items = append(items, m.agentActionItem(st, agentUninstall, "Uninstall "+st.Name,
-			"This removes what tuios wrote from "+joinPaths(paths)+". Your own entries stay. Press enter to uninstall the integration.", paths))
+			"This removes "+joinWords(parts)+" that tuios wrote, from "+joinPaths(paths)+". Your own entries stay. Press enter to uninstall.", paths))
 	}
 	items = append(items, settingItem{
 		Label:    "Back",
@@ -486,24 +570,30 @@ func verbWord(v agentVerb) string {
 	return "install"
 }
 
+// joinWords lists words the way a sentence does: "a", "a and b", "a, b and c".
+func joinWords(words []string) string {
+	switch len(words) {
+	case 0:
+		return ""
+	case 1:
+		return words[0]
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
+}
+
 // joinPaths names files the way a person reads them.
 func joinPaths(paths []string) string {
 	shown := make([]string, len(paths))
 	for i, p := range paths {
 		shown[i] = shortenHome(p)
 	}
-	switch len(shown) {
-	case 0:
-		return ""
-	case 1:
-		return shown[0]
-	}
-	return strings.Join(shown[:len(shown)-1], ", ") + " and " + shown[len(shown)-1]
+	return joinWords(shown)
 }
 
 // runAgentAction runs an install or uninstall off the UI goroutine. They are
-// the calls tuios integration install and uninstall make, with the CLI's
-// default command.
+// the calls tuios integration install and uninstall make. An update keeps the
+// program the installed hooks already run, so an install made with --command
+// keeps its path. A fresh install runs the CLI's default, tuios.
 func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 	if m.agentsPage.busy {
 		return nil
@@ -520,7 +610,7 @@ func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 			msg.steps = t.UninstallAll(env)
 			return msg
 		}
-		msg.result, msg.err = t.Install(env, agentsCommand)
+		msg.result, msg.err = t.Install(env, st.InstallProgram(agentsCommand))
 		return msg
 	}
 }

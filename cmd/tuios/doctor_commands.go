@@ -166,11 +166,42 @@ func livePanes() ([]agentPane, bool) {
 		if json.Unmarshal(raw, &res) != nil {
 			continue
 		}
+		remote := remoteWindows(client, s.Name)
 		for _, a := range res.Agents {
+			// A pane on another machine runs that machine's harness, whose
+			// integration is not the one installed here.
+			if remote[a.WindowID] {
+				continue
+			}
 			out = append(out, agentPane{Session: s.Name, Window: a.WindowID, Name: a.Name, Harness: a.Harness})
 		}
 	}
 	return out, true
+}
+
+// remoteWindows lists the windows of a session whose process runs on another
+// machine, by window id. A failed call lists none.
+func remoteWindows(client *session.VerbClient, sessionName string) map[string]bool {
+	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": sessionName}, 2*time.Second)
+	if err != nil {
+		return nil
+	}
+	var res struct {
+		Windows []struct {
+			ID   string `json:"window_id"`
+			Host string `json:"host"`
+		} `json:"windows"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, w := range res.Windows {
+		if w.Host != "" {
+			out[w.ID] = true
+		}
+	}
+	return out
 }
 
 // doctorAgents builds the report. The harness half is integration.BuildOverview,
