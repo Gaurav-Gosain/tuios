@@ -22,24 +22,21 @@ func railRowFor(t *testing.T, m *OS, tree sessiontree.Tree, name string) string 
 }
 
 // TestRailRowsWearTheirSwitchNumbers: a session row leads with the muted
-// number switch_session_N opens, and a pending chord changes nothing about
-// the rail.
+// number switch_session_N opens, but only while the switch chord is armed. The
+// idle rail is the quiet one-machine rail the negative control promises, so the
+// number is the chord's answer, drawn when the chord asks.
 func TestRailRowsWearTheirSwitchNumbers(t *testing.T) {
 	withSessionColors(t, true)
 	m, tree := sessionColorOS(t, 120, 40)
 
 	idle := railRowFor(t, m, tree, "api")
-	if !strings.Contains(idle, "2 api") {
-		t.Errorf("the api session's row does not lead with its switch number: %q", idle)
+	if strings.Contains(idle, "2 api") {
+		t.Errorf("the idle rail shows the switch number the chord has not asked for: %q", idle)
 	}
 
-	base := m.sidebarSignature()
 	m.PrefixActive = true
-	if m.sidebarSignature() != base {
-		t.Error("arming the prefix chord changed the rail")
-	}
-	again := railRowFor(t, m, tree, "api")
-	if again != idle {
-		t.Errorf("a pending chord redrew the row: %q, want %q", again, idle)
+	armed := railRowFor(t, m, tree, "api")
+	if !strings.Contains(armed, "2 api") {
+		t.Errorf("the armed rail does not lead the api session with its switch number: %q", armed)
 	}
 }
