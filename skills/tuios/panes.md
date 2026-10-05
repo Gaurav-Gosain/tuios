@@ -78,12 +78,13 @@ tuios close-window -s work "$id"
 ## A pane on the machine a pane is ssh'd into
 
 The actions `split_ssh_vertical`, `split_ssh_horizontal` and `new_window_ssh`
-open a pane that runs the focused pane's ssh again: the same destination and
-options, with no remote command. A pane that does not run ssh gets an ordinary
-pane. An ssh line with an `-o` option outside a fixed list of connection
-options (so `ProxyCommand`, `XAuthLocation` and similar), with `-F`, or ssh
-that `scp` or `git` started, also gets an ordinary pane. They are keybinding actions, so `run-command` runs them, and the same
-grant rules apply as for any other `run-command`:
+open a pane that runs the focused pane's ssh again, to the same host as the
+same user. The new line keeps only the connection options, with no remote
+command. A pane that does not run ssh gets an ordinary pane. So does an ssh
+line with an `-o` option outside a fixed list (`ProxyCommand`,
+`XAuthLocation` and similar), with `-F` or `-E`, or ssh that `scp` or `git`
+started. They are keybinding actions, so `run-command` runs them, and the
+same grant rules apply as for any other `run-command`:
 
 ```sh
 tuios focus-window -s work build

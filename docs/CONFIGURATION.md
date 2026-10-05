@@ -439,35 +439,49 @@ with no shell on this machine. It never runs the program that the pane runs.
 The new ssh gets the same environment as an ordinary new pane. If the ssh
 that tuios follows has an `SSH_AUTH_SOCK` that names your own agent socket,
 the new ssh gets that value too. An agent that your shell started in the pane
-then works in the split.
+then works in the split. The socket must not be a link, and its folder must
+be yours and closed to other users.
+
+The new ssh line keeps only what it needs to reach the same host as the same
+user. It always gets `-o ControlMaster=no`. Your `~/.ssh/config` applies to it
+as usual, so a setting that you put there still works in the split.
 
 ### Lines that are not followed
 
-tuios follows an ssh line only when each `-o` option is on this list:
+tuios follows an ssh line only when each `-o` option is on one of two lists.
+The new pane keeps these options:
 
 `AddressFamily`, `BatchMode`, `CertificateFile`, `CheckHostIP`, `Ciphers`,
-`Compression`, `ConnectionAttempts`, `ConnectTimeout`, `ControlPath`,
-`EscapeChar`, `ForwardAgent`, `ForwardX11`, `ForwardX11Trusted`,
-`GlobalKnownHostsFile`, `HostKeyAlgorithms`, `HostKeyAlias`, `HostName`,
-`IdentitiesOnly`, `IdentityAgent`, `IdentityFile`, `KbdInteractiveAuthentication`,
-`KexAlgorithms`, `LogLevel`, `MACs`, `PasswordAuthentication`, `Port`,
-`PreferredAuthentications`, `ProxyJump`, `PubkeyAcceptedAlgorithms`,
-`PubkeyAuthentication`, `SendEnv`, `ServerAliveCountMax`,
-`ServerAliveInterval`, `SetEnv`, `StrictHostKeyChecking`, `TCPKeepAlive`,
-`User` and `UserKnownHostsFile`.
+`Compression`, `ConnectionAttempts`, `ConnectTimeout`, `EscapeChar`,
+`HostKeyAlgorithms`, `HostName`, `IdentitiesOnly`, `IdentityFile`,
+`KbdInteractiveAuthentication`, `KexAlgorithms`, `LogLevel`, `MACs`,
+`PasswordAuthentication`, `Port`, `PreferredAuthentications`, `ProxyJump`,
+`PubkeyAcceptedAlgorithms`, `PubkeyAuthentication`, `ServerAliveCountMax`,
+`ServerAliveInterval`, `StrictHostKeyChecking`, `TCPKeepAlive` and `User`.
 
-The new pane does not get the forward and session options: `LocalForward`,
-`RemoteForward`, `DynamicForward`, `GatewayPorts`, `ExitOnForwardFailure`,
-`ClearAllForwardings`, `Tunnel`, `TunnelDevice`, `ControlMaster`,
-`ControlPersist`, `RemoteCommand`, `SessionType`, `StdinNull`,
-`ForkAfterAuthentication` and `RequestTTY`.
+The new pane does not get these options, and tuios still follows the line:
+
+- Forwards and sessions: `LocalForward`, `RemoteForward`, `DynamicForward`,
+  `GatewayPorts`, `ExitOnForwardFailure`, `ClearAllForwardings`, `Tunnel`,
+  `TunnelDevice`, `RemoteCommand`, `SessionType`, `StdinNull`,
+  `ForkAfterAuthentication` and `RequestTTY`.
+- Files, sockets, environment and forwarding: `ControlMaster`,
+  `ControlPersist`, `ControlPath`, `UserKnownHostsFile`,
+  `GlobalKnownHostsFile`, `HostKeyAlias`, `IdentityAgent`, `SendEnv`,
+  `SetEnv`, `ForwardAgent`, `ForwardX11` and `ForwardX11Trusted`.
+- The flags `-A`, `-X`, `-Y`, `-S`, `-L`, `-R`, `-D`, `-W`, `-w`, `-N`, `-f`,
+  `-n`, `-T`, `-t`, `-M` and `-s`.
 
 These ssh lines get an ordinary pane:
 
 - An `-o` option that is not on the two lists above. `ProxyCommand`,
   `LocalCommand`, `XAuthLocation` and `Match` are examples.
 - An option or a value with a control character, such as a line break.
-- `-F`, `-I`, `-G`, `-V`, `-Q` and `-O`, and an option that tuios does not know.
+- `-E`, `-F`, `-I`, `-G`, `-V`, `-Q` and `-O`, and an option that tuios does
+  not know.
+- A `-J` or `ProxyJump` hop that is not `[user@]host[:port]` or the `ssh://`
+  form, made of letters, digits and `._:@[]-`, or a hop that starts with `-`.
+- A mosh destination that starts with `-`.
 - mosh with `--ssh`, `--client` or `--server`.
 - ssh that another program starts, such as `scp`, `rsync`, `git` or `sftp`.
 

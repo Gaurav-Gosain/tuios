@@ -1507,5 +1507,10 @@ test: the actions open a pane when no ssh runs.
 | A control character is not refused | `parseSSHArgs`: the `hasControl` check made `false &&` | `TestSSHSplitRefusesALineBreakInAnOption` (2 runs, want 1) | **caught** |
 | The alias is not resolved | `SSHFollowArgv`: `hostMatches` in place of `reportMatches` | `TestSSHSplitKeepsTheFolderOfAnAlias` (no cd). `TestSSHSplitKeepsTheRemoteFolder` passes, which is correct | **caught** |
 | The agent socket is not passed | `handleExecuteCommand`: the `newWindowEnv = env` line cut | `TestSSHSplitPassesTheAgentSocket` (the split's ssh had no `SSH_AUTH_SOCK`) | **caught** |
+| The third PR head, with -E kept | build `59403a92` | `TestSSHSplitRefusesALogFile` (2 runs, want 1) | **caught** |
+| -E is not refused | `sshRefuse`: `E` taken out | `TestSSHSplitRefusesALogFile` (2 runs, want 1) | **caught** |
+| No `-o ControlMaster=no` | `remoteLogin.argv`: the append cut | `TestSSHSplitRunsTheSameSSH` (the argv lacks the option) | **caught** |
+| ssh -G is not killed as a group | `resolveSSHHostName`: no `killGroupOnCancel`, no `WaitDelay` | No e2e test. `TestResolveSSHHostNameIsBounded` (took 30 s, want about 2 s) | **caught by a unit test only** |
+| The agent socket folder is not checked | `ownedSocket`: the folder mode check cut | No e2e test. `TestOwnedSocket` (a socket in a folder others can write to was passed). With `Stat` for `Lstat` too, it fails at the link first | **caught by a unit test only** |
 | The allowlist is a refusal list again | `sshValueVerdict`: an unknown keyword refused only when it is `proxycommand` | No e2e test: `TestSSHSplitRefusesALineBreakInAnOption` still fails at the control character check, and `TestSSHSplitRefusesAProxyCommand` at `proxycommand`. `TestParseRemoteLogin` fails 9 cases, `xauth location` and `unknown keyword` among them | **caught by the unit table only** |
 | Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |
