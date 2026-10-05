@@ -575,6 +575,17 @@ func (m *OS) SidebarMotion(x, y int) bool {
 	m.SidebarHoverX, m.SidebarHoverY = x, y
 	m.sidebarPeekAt(x, y)
 	m.sidebarTooltipTrack(x, y)
+	// Consuming the motion here also consumes the shape and link updates the
+	// motion handler would have run after it. The rail overlays the panes'
+	// left edges, so the last shape set in pane content was often a resize,
+	// and it parked on the rail. The rail is chrome: plain pointer, except
+	// its own edge rule, and no pane link survives onto it.
+	if m.sidebarOnEdge(x) {
+		m.SetPointerShape(PointerEWResize)
+	} else {
+		m.SetPointerShape(PointerDefault)
+	}
+	m.clearLinkHover()
 	return true
 }
 
