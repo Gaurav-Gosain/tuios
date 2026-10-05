@@ -120,7 +120,7 @@ mod tests {
     fn subsequence_and_word_starts() {
         assert!(score("sr", "Split right").is_some());
         assert!(score("xyz", "Split right").is_none());
-        assert!(score("sr", "Split right") > score("sr", "Show readme"), "shorter wins ties");
+        assert!(score("sr", "Split right") > score("sr", "Show the readme"), "shorter wins ties");
         assert!(score("spl", "Split down").unwrap() > score("spl", "Swap pane later").unwrap(), "runs beat scattered hits");
     }
 
