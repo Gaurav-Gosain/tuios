@@ -281,35 +281,14 @@ named, give --all.`,
 			}
 			var failed []string
 			for _, t := range targets {
-				res, err := t.Uninstall(env)
-				switch {
-				case err != nil:
-					fmt.Fprintf(os.Stderr, "%s: %v\n", t.Name, err)
-					failed = append(failed, t.ID)
-				case res.Changed:
-					fmt.Printf("%s: removed from %s\n", t.Name, res.Path)
-					printOtherPaths(res)
-				default:
-					fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
-				}
-				if t.SupportsStatusLine() {
-					sres, serr := t.UninstallStatusLine(env)
-					switch {
-					case serr != nil:
-						fmt.Fprintf(os.Stderr, "%s: status line: %v\n", t.Name, serr)
-						failed = append(failed, t.ID+" (statusline)")
-					case sres.Changed:
-						fmt.Printf("%s: status line removed from %s\n", t.Name, sres.Path)
+				for _, step := range t.UninstallAll(env) {
+					if printRemovalStep(t, step) {
+						continue
 					}
-				}
-				if t.SupportsMCP() {
-					mres, merr := t.UninstallMCP(env)
-					switch {
-					case merr != nil:
-						fmt.Fprintf(os.Stderr, "%s: MCP server: %v\n", t.Name, merr)
-						failed = append(failed, t.ID+" (mcp)")
-					case mres.Changed:
-						fmt.Printf("%s: MCP server removed from %s\n", t.Name, mres.Path)
+					if step.Part == "" {
+						failed = append(failed, t.ID)
+					} else {
+						failed = append(failed, t.ID+" ("+removalPartTag(step.Part)+")")
 					}
 				}
 			}
@@ -374,17 +353,39 @@ func integrationVerdict(s integration.Status) string {
 	return v
 }
 
-func integrationVerdictOnly(s integration.Status) string {
-	switch {
-	case s.Installed && s.Current:
-		return fmt.Sprintf("installed, current (v%d)", s.Version)
-	case s.Installed:
-		return fmt.Sprintf("installed, out of date (v%d, this tuios installs v%d): run tuios integration install %s", s.Version, s.WantVersion, s.Harness)
-	case !s.ConfigDirExists:
-		return "not installed; " + s.Name + " has not run here"
-	default:
-		return "not installed: run tuios integration install " + s.Harness
+func integrationVerdictOnly(s integration.Status) string { return s.Verdict() }
+
+// printRemovalStep says what one part of an uninstall did, and reports false
+// when it failed.
+func printRemovalStep(t *integration.Target, step integration.RemovalStep) bool {
+	prefix := t.Name + ": "
+	if step.Part != "" {
+		prefix += step.Part + ": "
 	}
+	switch {
+	case step.Err != nil:
+		fmt.Fprintf(os.Stderr, "%s%v\n", prefix, step.Err)
+		return false
+	case step.Result.Changed && step.Part != "":
+		fmt.Printf("%s: %s removed from %s\n", t.Name, step.Part, step.Result.Path)
+	case step.Result.Changed:
+		fmt.Printf("%s: removed from %s\n", t.Name, step.Result.Path)
+		printOtherPaths(step.Result)
+	case step.Part == "":
+		fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
+	}
+	return true
+}
+
+// removalPartTag is how a failed part is named in the closing error.
+func removalPartTag(part string) string {
+	switch part {
+	case "status line":
+		return "statusline"
+	case "MCP server":
+		return "mcp"
+	}
+	return part
 }
 
 func printIntegrationStatus(w io.Writer, statuses []integration.Status, asJSON bool) error {

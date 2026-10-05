@@ -83,7 +83,7 @@ For nineteen harnesses tuios writes the hooks for you:
 ```sh
 tuios integration install claude-code    # or any other harness, or --all
 tuios integration status                 # installed, current, and what it reports
-tuios doctor agents                      # also lists agent panes missing theirs
+tuios doctor agents                      # also lists agent panes whose integration is missing or out of date
 ```
 
 Claude Code, Codex, Copilot, Cursor Agent, Gemini CLI, opencode, Kilo, Amp,
