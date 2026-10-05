@@ -1200,6 +1200,20 @@ With the fix the waiter took 7 to 27 captures, and held the lock for 1% to 2%
 of the flood on the pure Go backend and 12% on libghostty-vt. 30 of 30 runs
 passed on one core, and 5 of 5 with `-tags ghostty`.
 
+## The tape FAILED indicator, looked for after it went away
+
+`TestTapeExecStopsAtTheFailedLine` failed on CI (run 37255241424, shard 3 of
+6) with "the client never showed that the tape failed". The client shows
+FAILED for `scriptDoneLinger` (2s) after a tape stops, and the first frame
+drawn after that drops it. The test slept 2s before it looked, so any frame
+drawn in between, such as a notification's, hid the indicator. The test now
+looks for FAILED as soon as exec returns, before the sleep.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A frame drawn past the linger, old order | the test as on main, with a resize 500ms after its 2s sleep | `TestTapeExecStopsAtTheFailedLine` ("WaitForText timed out ... waiting for text \"FAILED\""), 3 of 3 runs. The same resize with the new order: 3 of 3 pass | **caught** |
+| No FAILED indicator | `scriptStatus = "FAILED • "` changed to `"DONE • "` in `internal/app/render_overlays.go` | `TestTapeExecStopsAtTheFailedLine` (the same message), 1 of 1 run | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody

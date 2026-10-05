@@ -114,6 +114,14 @@ Run "echo AFTER-$((1+1))"
 			t.Errorf("tape exec stderr = %q, want it to contain %q", errOut, want)
 		}
 	}
+	// The client shows FAILED for scriptDoneLinger (2s) after the tape
+	// stops, and the first frame drawn after that drops it. exec has
+	// returned, so the tape has stopped: look now, before the sleep below
+	// outlasts the indicator.
+	if err := term.WaitForText("FAILED", uiTimeout); err != nil {
+		t.Errorf("the client never showed that the tape failed: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "tape-failed")
 	// The positive half: the line before the failure ran.
 	if err := term.WaitForText("before-2", shellTimeout); err != nil {
 		t.Fatalf("the line before the failed wait never ran: %v\n%s", err, term.Snapshot())
@@ -124,10 +132,6 @@ Run "echo AFTER-$((1+1))"
 	if strings.Contains(term.Screen().Text(), "AFTER-2") {
 		t.Errorf("the tape went on past the failed WaitFor\n%s", term.Snapshot())
 	}
-	if err := term.WaitForText("FAILED", uiTimeout); err != nil {
-		t.Errorf("the client never showed that the tape failed: %v\n%s", err, term.Snapshot())
-	}
-	saveArtifact(t, term, artifactDir(t), "tape-failed")
 }
 
 // TestRunCommandRunsAnyAction: run-command takes any keybinding action by
