@@ -92,6 +92,7 @@ var settingLabels = map[string]string{
 	"tape.auto_review":                  "Auto-open review",
 	"hints.builtins":                    "Hint patterns",
 	"hints.alphabet":                    "Hint letters",
+	"panes.label_keys":                  "Pane label keys",
 	"hints.open":                        "Ctrl opens a hint",
 	"hints.dim":                         "Dim around hints",
 	"hints.all_panes":                   "Hints on all panes",

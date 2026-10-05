@@ -999,6 +999,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Panes: label the panes and focus one",
+			Shortcut: "prefix+Q",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenPaneLabels()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Hints: label text on all panes to copy it",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

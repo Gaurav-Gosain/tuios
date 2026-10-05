@@ -208,6 +208,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateDock(cfg, result)
 	validateSidebarCustom(cfg, result)
 	validateHints(cfg, result)
+	validatePanes(cfg, result)
 	validateScratch(cfg, result)
 
 	return result

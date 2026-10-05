@@ -1453,3 +1453,19 @@ divider survived, so a fixture that resizes nothing cannot pass.
 | The strip clamps under the pointer | `ScrollingResizeColumnVisual`: `ClampViewport` on every motion, and `applyBorderResize` measuring from the column's current `X` | `TestScrollingDividerDragAtTheStripEnd` ("the divider is not under the pointer at column 47 during the drag") | **caught** |
 | A covered divider is grabbed | `armTiledBorderResize`: the `paneOver` check cut | `TestSharedBorderPressInsideAZoomedPane` ("the panes moved under the zoomed pane"). The test runs in BSP: in master-stack a resize under a zoom is not recorded, and the retile at the end of the zoom hides it | **caught** |
 | A click records a fixed width | `handleMouseRelease`: the width check on the scrolling capture cut | `TestScrollingDividerClickKeepsAProportionalColumn` ("the first column is 48 columns wide after the client grew, want 60") | **caught** |
+
+
+## Pane labels (display_panes)
+
+The tests are in `pane_labels_test.go`. They read each label's block glyphs
+off the screen with the pane's name under them, type the label, and read the
+focused pane back from list-windows. The positive half of each jump is a
+check that the focus was on another pane before the label was typed. Esc
+closes the labels with no jump in the same test.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The action is not registered | `registerPrefixHandlers`: the `display_panes` line cut | `TestPaneLabelsFocusAPane` ("label 1 over alpha never showed"), `TestPaneLabelsTwoKeysAndCustomKeys` ("label a over alpha never showed") | **caught** |
+| A key that starts a label is not kept | `PaneLabelsPress`: `prefix = true` made `prefix = false` | `TestPaneLabelsTwoKeysAndCustomKeys` ("after s s: the labels stayed up") | **caught** |
+| No list of the panes behind a zoom | `OpenPaneLabels`: the `listOn` line cut | `TestPaneLabelsZoomAndMultifocus` ("the hidden panes are not listed") | **caught** |
+| The labels do not own the keyboard | `routeKey`: the `PaneLabelsOpen` check cut | `TestPaneLabelsZoomAndMultifocus` (in terminal mode with multifocus, "after 3: the labels stayed up") | **caught** |

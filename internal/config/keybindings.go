@@ -158,7 +158,9 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		// under Tools because Tools shares a column with Menus in the narrow
 		// layout, and one row more there made the panel the tallest column
 		// at 80x24, where it reached the pane's bottom border.
-		kb("F", "Hints"),
+		// The pane labels share the hints row: one row more made the
+		// panel reach the pane's top border at 80x24.
+		kb("F/Q", "Hints, labels"),
 	}}
 	sessions := KeybindingGroup{Title: "Sessions", Bindings: []Keybinding{
 		kb("(/)", "Prev/next session"),

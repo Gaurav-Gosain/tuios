@@ -789,6 +789,10 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.hints != nil {
 		return nil, false
 	}
+	// So are the pane labels (pane_labels_render.go).
+	if m.paneLabels != nil {
+		return nil, false
+	}
 	// The celebration is a pass over the canvas too, for the second or so it
 	// is on screen.
 	if m.celebration.active() {

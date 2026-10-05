@@ -71,6 +71,11 @@ on the workspace. `hints.builtins`, `hints.alphabet`, `hints.open`,
 is a list of Go regular expressions in the file. It is for the person at the
 keyboard: to read a pane, use `capture-pane`.
 
+The pane labels (`Ctrl+B Q`, the `display_panes` action) put a large label
+on each pane of the workspace, and a typed label focuses that pane.
+`panes.label_keys` sets the keys (default `1234567890`). It is for the person
+at the keyboard: to focus a pane, use `focus-window`.
+
 ## What the person sees
 
 These are for the person at the keyboard. Know them so you can answer a

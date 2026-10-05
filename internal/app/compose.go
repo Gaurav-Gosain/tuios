@@ -324,6 +324,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			if m.hints != nil {
 				m.applyHints(canvas, cl.layer.GetID(), &grounds)
 			}
+			if m.paneLabels != nil {
+				m.applyPaneLabels(canvas, cl.layer.GetID())
+			}
 			continue
 		}
 		if !cl.bounds.Overlaps(area) {
@@ -336,6 +339,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
 		if m.hints != nil {
 			m.applyHints(canvas, cl.layer.GetID(), &grounds)
+		}
+		if m.paneLabels != nil {
+			m.applyPaneLabels(canvas, cl.layer.GetID())
 		}
 		switch id := cl.layer.GetID(); {
 		case fading:

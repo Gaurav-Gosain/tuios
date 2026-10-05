@@ -41,6 +41,9 @@ type UserConfig struct {
 	// Hints is the [hints] table: what hints mode labels on a pane. See
 	// hints.go.
 	Hints HintsConfig `toml:"hints"`
+	// Panes is the [panes] table: the keys display_panes labels the panes
+	// with. See panes.go.
+	Panes PanesConfig `toml:"panes"`
 	// Scratch is the [scratch] table: the size of the scratch terminal that
 	// toggle_scratch shows in a popup. See scratch.go.
 	Scratch ScratchConfig `toml:"scratch"`
@@ -875,6 +878,7 @@ func DefaultConfig() *UserConfig {
 		Hints:       defaultHintsConfig(),
 		Scratch:     defaultScratchConfig(),
 		PiP:         defaultPiPConfig(),
+		Panes:       defaultPanesConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -1080,6 +1084,10 @@ func DefaultConfig() *UserConfig {
 				"prefix_next_finished": {"O"},
 				// F, as in tmux-fingers. f searches files.
 				"hints": {"F"},
+				// Q, as in tmux's display-panes, which is q there. q is the
+				// quit menu here, and the slip from Q to q opens a menu that
+				// asks first.
+				"display_panes": {"Q"},
 				// g shows or hides the scratch terminal in a popup. It was
 				// free here, and f is kept free for the reason above.
 				"toggle_scratch": {"g"},
@@ -1690,6 +1698,7 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	fillMissingHints(&cfg, defaultCfg)
 	fillMissingScratch(&cfg, defaultCfg)
 	fillMissingPiP(&cfg, defaultCfg)
+	fillMissingPanes(&cfg, defaultCfg)
 	return &cfg, nil
 }
 
@@ -2733,6 +2742,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 var yieldingDefaults = map[string]bool{
 	"hints":          true,
 	"toggle_scratch": true,
+	// Q after the prefix, new in the release after v0.8.5.
+	"display_panes": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.

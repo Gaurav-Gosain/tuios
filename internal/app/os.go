@@ -640,6 +640,9 @@ type OS struct {
 
 	// hints is hints mode while it is open, or nil. See hints.go.
 	hints *hintsState
+	// paneLabels is the display_panes labels while they are up, or nil. See
+	// pane_labels.go.
+	paneLabels *paneLabelsState
 
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See

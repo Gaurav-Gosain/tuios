@@ -68,6 +68,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("hints", handleOpenHints)
 	d.Register("toggle_scratch", handleToggleScratch)
 	d.Register("hints_all_panes", handleOpenHintsAllPanes)
+	d.Register("display_panes", handleDisplayPanes)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
 

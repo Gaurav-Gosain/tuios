@@ -116,6 +116,33 @@ With tiling off, `h` and `l` snap the focused window to the left or right half o
 
 In the scrolling layout, left and right move between columns. Up and down move between the windows in one column.
 
+## Finding a pane
+
+### Pane labels
+
+`Ctrl+B Q` puts a large label on each pane of the workspace. Type a label to
+focus that pane. `esc` closes the labels. `backspace` takes back the last key.
+`q` also closes, when `q` is not a label key. The action is `display_panes`,
+as in tmux.
+
+The labels are digits by default, in the order that `select_window_1` to
+`select_window_9` count the panes. Thus label `3` is the pane that `3` selects
+in window mode. With more panes than keys, a label has two keys. A key with
+`Shift` is the same key.
+
+Set the keys in `[panes]`. Letters `a` to `z` and digits are allowed. The keys
+that come first go to the first panes.
+
+```toml
+[panes]
+label_keys = "asdfghjkl"
+```
+
+When a pane is zoomed, the zoomed pane shows its label. A list under it
+shows the labels of the panes that the zoom hides. A label of a hidden pane
+moves the zoom to that pane. In multifocus, a label key goes to the labels and
+not to the panes.
+
 ## Neovim pane navigation
 
 The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)

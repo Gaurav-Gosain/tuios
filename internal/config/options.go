@@ -1226,6 +1226,13 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [panes]. Read each time display_panes opens.
+	{
+		Path: "panes.label_keys", Type: OptionString, Section: "panes",
+		Description: "Keys the pane labels are made of, first pane first. Letters a to z and digits",
+		Default:     PanesDefaultLabelKeys,
+	},
+
 	// [scratch]. Read each time toggle_scratch creates or shows the scratch
 	// terminal. A show resizes the popup to the size in force.
 	{

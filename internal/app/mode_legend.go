@@ -33,6 +33,9 @@ func (m *OS) modeLegend() []overlay.Hint {
 	if m.hints != nil {
 		return m.hintsLegend()
 	}
+	if m.paneLabels != nil {
+		return paneLabelsLegend()
+	}
 	if fw := m.GetFocusedWindow(); fw.CopyModeVisible() {
 		return m.copyModeHelp(fw)
 	}
@@ -53,6 +56,15 @@ func (m *OS) hintsLegend() []overlay.Hint {
 		overlay.Hint{Key: hintsHelpKey, Label: "help", Priority: overlay.HintEssential},
 		overlay.Hint{Key: "esc", Label: "cancel"},
 	)
+}
+
+// paneLabelsLegend is the pane labels' legend.
+func paneLabelsLegend() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: "label", Label: "focus pane", Priority: overlay.HintEssential},
+		{Key: "backspace", Label: "undo key", Priority: overlay.HintOptional},
+		{Key: "esc", Label: "cancel", Priority: overlay.HintEssential},
+	}
 }
 
 // copyModeLegend is copy mode's legend for a sub-state.

@@ -640,6 +640,7 @@ var ActionDescriptions = map[string]string{
 	"paste_image":     "Paste the clipboard image as a file path",
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
+	"display_panes":   "Label the panes and focus one by its label",
 	"toggle_scratch":  "Show or hide the scratch terminal",
 	"hints_all_panes": "Label the text on all panes to copy it",
 

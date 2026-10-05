@@ -729,7 +729,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_toggle_sidebar", "prefix_toggle_spotlight", "prefix_explore",
 		"prefix_jump_notif", "prefix_last_message", "prefix_mail", "prefix_inbox", "prefix_next_attention",
 		"toggle_scratch", "paste_image",
-		"hints", "hints_all_panes", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
+		"hints", "hints_all_panes", "display_panes", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
 		// prefix_review and prefix_next_finished are listed only in the
 		// Agents section, which waits for an agent to have been seen.
 	}

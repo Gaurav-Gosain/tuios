@@ -43,10 +43,16 @@ func NormalizeAlphabet(alphabet string) string {
 // eats the alphabet from its end, so the first letters (the easiest on the
 // home row) stay one key long for as long as possible.
 func Labels(n int, alphabet string) []string {
-	if n <= 0 {
+	return KeyLabels(n, NormalizeAlphabet(alphabet))
+}
+
+// KeyLabels is Labels over keys taken as they are, with no check of what
+// they are. The pane labels use it: they allow digits, which a hint label
+// cannot have. keys must hold at least two distinct runes.
+func KeyLabels(n int, alphabet string) []string {
+	if n <= 0 || len([]rune(alphabet)) < 2 {
 		return nil
 	}
-	alphabet = NormalizeAlphabet(alphabet)
 	leaves := make([]string, 0, max(n, len(alphabet)))
 	for _, r := range alphabet {
 		leaves = append(leaves, string(r))

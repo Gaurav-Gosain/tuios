@@ -43,7 +43,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		// Hints mode owns the keyboard, releases included: the release of a
 		// label letter is not the pane's to see.
-		if o.HintsOpen() {
+		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
 		}
 		forwardKeyReleaseToFocused(msg, o)
@@ -56,6 +56,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// A click ends hints mode. The labels name the screen as it was when
 		// they were drawn, and a click is about to change it.
 		o.CloseHints()
+		// And the pane labels: a click picks a pane itself.
+		o.ClosePaneLabels()
 		// Capture mode is a gesture over the whole screen, the review
 		// included, so it is asked first.
 		if o.CaptureActive() {
@@ -390,6 +392,10 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// a binding. See hints_input.go.
 	if o.HintsOpen() {
 		return handleHintsKey(msg, o)
+	}
+	// The pane labels own the keyboard the same way. See pane_labels_input.go.
+	if o.PaneLabelsOpen() {
+		return handlePaneLabelsKey(msg, o)
 	}
 
 	// Handle the quit menu (highest priority, works in any mode)

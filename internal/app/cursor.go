@@ -24,7 +24,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
-	if m.ShowScrollbackBrowser || m.review.open || m.hints != nil {
+	if m.ShowScrollbackBrowser || m.review.open || m.hints != nil || m.paneLabels != nil {
 		return nil
 	}
 
