@@ -29,6 +29,13 @@ func TestScanBareURL(t *testing.T) {
 		{"http", "http://a.b/c", 3, "http://a.b/c"},
 		{"file", "file:///home/u/x.txt", 5, "file:///home/u/x.txt"},
 
+		// Our own jump scheme scans like any other, so a pane can hand the
+		// viewer a link as plain text.
+		{"tuios-window", "tuios://window/2bf05ac8", 4, "tuios://window/2bf05ac8"},
+		{"tuios-trailing-stop", "jump to tuios://window/2bf05ac8.", 12, "tuios://window/2bf05ac8"},
+		{"tuios-mid-word", "xtuios://window/2bf05ac8", 5, ""},
+		{"tuios-scheme-only", "tuios://", 2, ""},
+
 		// A sentence's full stop is not part of the address.
 		{"trailing-stop", "read https://example.com/a.", 12, "https://example.com/a"},
 		{"trailing-comma", "https://example.com/a, and", 3, "https://example.com/a"},

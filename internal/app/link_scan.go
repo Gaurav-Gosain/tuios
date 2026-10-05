@@ -29,10 +29,11 @@ import "strings"
 
 // linkSchemes are the prefixes a bare match may start with. http and https are
 // what people paste; file is what a shell prints for a local path and what OSC 8
-// carries for the same thing. Every other scheme (mailto, ssh, an application's
-// own) is left to OSC 8, where the program has said outright that it meant a
-// link.
-var linkSchemes = []string{"https://", "http://", "file://"}
+// carries for the same thing; tuios is our own jump scheme, which a pane prints
+// as plain text whenever it hands the viewer a link to another pane. Every
+// other scheme (mailto, ssh, an application's own) is left to OSC 8, where the
+// program has said outright that it meant a link.
+var linkSchemes = []string{"https://", "http://", "file://", "tuios://"}
 
 // linkTerminator reports whether c ends a bare URL. RFC 3986 allows more than
 // this, but a terminal line is prose as often as it is data, and stopping at the
