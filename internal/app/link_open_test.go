@@ -145,6 +145,31 @@ func TestPreviewLinkPinsWithoutJump(t *testing.T) {
 	}
 }
 
+// TestPipClickJumpIsUndoable checks that the click on the view that jumps to
+// the pinned pane records an origin, so jump_back lands where the user was
+// looking instead of leaving them stranded.
+func TestPipClickJumpIsUndoable(t *testing.T) {
+	m, _ := linkTestOS(t, "working here")
+
+	target := newTestWindow(t, "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a", 40, 20)
+	target.Workspace = 2
+	m.Windows = append(m.Windows, target)
+
+	m.OpenLink("tuios://pip/534f6ba8")
+	if !m.JumpToPiP() {
+		t.Fatal("the view had no pane to jump to")
+	}
+	if m.Windows[m.FocusedWindow].ID != target.ID {
+		t.Fatal("the jump did not land on the pinned pane")
+	}
+	if !m.JumpBack() {
+		t.Fatal("jump_back had nothing after a pip click jump")
+	}
+	if m.Windows[m.FocusedWindow].ID != "aaaaaaaa1111" {
+		t.Error("jump_back did not land where the user was looking")
+	}
+}
+
 // TestPreviewLinkOnDeadPaneSaysSo: a link whose pane has closed must say so
 // rather than sitting silent or pinning nothing.
 func TestPreviewLinkOnDeadPaneSaysSo(t *testing.T) {

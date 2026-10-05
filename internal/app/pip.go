@@ -364,6 +364,7 @@ func (m *OS) JumpToPiP() bool {
 	if i < 0 {
 		return false
 	}
+	m.recordJumpOrigin()
 	w := m.Windows[i]
 	if w.Minimized {
 		if w.Workspace != m.CurrentWorkspace {
