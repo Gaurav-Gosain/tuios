@@ -1060,9 +1060,12 @@ func DefaultConfig() *UserConfig {
 				"prefix_toggle_spotlight":   {"B"},
 				"prefix_session_switcher":   {"S"},
 				"prefix_workspace_switcher": {"W"},
-				"prefix_layout":             {"L"},
-				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
-				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
+				// /, which searches everywhere else too. tmux puts its tree on
+				// s, which is the scrollback browser here.
+				"choose_tree":       {"/"},
+				"prefix_layout":     {"L"},
+				"prefix_explore":    {"e"}, // the same key goes to the rail and comes back
+				"prefix_jump_notif": {"j"}, // the keyboard twin of clicking a message
 				// N for notification. It reopens the newest message the dock
 				// showed, in full, also after it has gone from the dock.
 				"prefix_last_message": {"N"},
@@ -2748,6 +2751,8 @@ var yieldingDefaults = map[string]bool{
 	"toggle_scratch": true,
 	// Q after the prefix, new in the release after v0.8.5.
 	"display_panes": true,
+	// / after the prefix, new in the release after v0.8.5.
+	"choose_tree": true,
 	// p in window mode, new in the release after v0.8.2.
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.

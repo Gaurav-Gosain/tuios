@@ -2411,6 +2411,8 @@ titles and paths.`,
 	// Inspection commands for scripting and hackability
 	var listWindowsSession string
 	var listWindowsJSON bool
+	var listWindowsAll, listWindowsAllHosts bool
+	var listWindowsText int
 	listWindowsCmd := &cobra.Command{
 		Use:   "list-windows",
 		Short: "List all windows in the session",
@@ -2425,13 +2427,25 @@ Use --json for machine-readable output that can be used for scripting.`,
   tuios list-windows --json
 
   # Use with jq to get focused window ID
-  tuios list-windows --json | jq '.focused_window_id'`,
+  tuios list-windows --json | jq '.focused_window_id'
+
+  # Every pane of every session, with the last 20 lines of each screen
+  tuios list-windows --all --text 20 --json
+
+  # Every pane on this machine and on each host
+  tuios list-windows --all --all-hosts`,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if listWindowsAll || listWindowsAllHosts || listWindowsText > 0 {
+				return runListAllWindows(listWindowsSession, listWindowsAll, listWindowsAllHosts, listWindowsText, listWindowsJSON)
+			}
 			return queryWindows(listWindowsSession, listWindowsJSON)
 		},
 	}
 	listWindowsCmd.Flags().StringVarP(&listWindowsSession, "session", "s", "", "Target session (default: most recently active)")
 	listWindowsCmd.Flags().BoolVar(&listWindowsJSON, "json", false, "Output as JSON")
+	listWindowsCmd.Flags().BoolVar(&listWindowsAll, "all", false, "List the panes of every session on this machine, one row each")
+	listWindowsCmd.Flags().BoolVar(&listWindowsAllHosts, "all-hosts", false, "Also list the panes of every session on each host in [hosts]")
+	listWindowsCmd.Flags().IntVar(&listWindowsText, "text", 0, fmt.Sprintf("Add the last N lines of each pane's screen, up to %d. capture-pane's grants apply", maxListText))
 	_ = listWindowsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getWindowSession string

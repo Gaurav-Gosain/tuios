@@ -73,6 +73,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: "agentmail", open: func(m *OS) bool { return m.ShowAgentMail }, scrim: true},
 	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }, scrim: true},
 	{id: "workspace", open: func(m *OS) bool { return m.ShowWorkspaceSwitcher }, scrim: true},
+	{id: "navigator", open: func(m *OS) bool { return m.navigator.open }, scrim: true},
 	{id: "layout", open: func(m *OS) bool { return m.ShowLayoutPicker }, scrim: true},
 	{id: "hostpicker", open: func(m *OS) bool { return m.ShowHostPicker }, scrim: true},
 	{id: "settings", open: func(m *OS) bool { return m.ShowSettings }, scrim: true},

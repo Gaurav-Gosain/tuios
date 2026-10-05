@@ -1137,6 +1137,9 @@ type OS struct {
 	// since the last save. The daemon applies a file change that dials a
 	// new host only for the person, so the save asks it to (applyHostsCmd).
 	hostsToApply []string
+	// navigator is the pane navigator (choose_tree) while it is up. See
+	// navigator.go.
+	navigator navigatorState
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

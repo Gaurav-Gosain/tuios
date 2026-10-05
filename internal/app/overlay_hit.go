@@ -42,7 +42,7 @@ type overlayPanelHit struct {
 // row opens each of them over the panel too. The guard against a fourth is
 // TestEveryOverlayKindHasAPlaceInTheStack, which reads eachOverlayGate itself
 // rather than a second copy of this list.
-var overlayKindOrder = []string{"help", "palette", "launcher", "session", "agentmail", "inbox", "workspace", "layout", "hostpicker", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog", overlayKindLogs, overlayKindMessage}
+var overlayKindOrder = []string{"help", "palette", "launcher", "session", "navigator", "agentmail", "inbox", "workspace", "layout", "hostpicker", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog", overlayKindLogs, overlayKindMessage}
 
 // overlayGate pairs a draggable overlay kind with whether it is shown.
 type overlayGate struct {
@@ -66,6 +66,7 @@ func (m *OS) eachOverlayGate(yield func(kind string, open bool) bool) {
 		{"agentmail", m.ShowAgentMail},
 		{"inbox", m.ShowInbox},
 		{"workspace", m.ShowWorkspaceSwitcher},
+		{"navigator", m.navigator.open},
 		{"layout", m.ShowLayoutPicker},
 		{"hostpicker", m.ShowHostPicker},
 		{"aggregate", m.ShowAggregateView},

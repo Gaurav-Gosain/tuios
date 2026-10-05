@@ -148,6 +148,37 @@ zooms, or the workspace or the session changes. A click or the mouse wheel
 also closes them. In multifocus, a label key goes to the labels and
 not to the panes.
 
+### The pane navigator
+
+`Ctrl+B /` opens the pane navigator. It shows a tree of sessions, workspaces
+and panes on the left, and a preview of the highlighted row on the right. The
+sessions on the machines in `[hosts]` are in the tree too. The action is
+`choose_tree`, as in tmux.
+
+| Key | What it does |
+|---|---|
+| `j`, `k`, arrows | Move |
+| `l`, `→` | Open a session or a workspace |
+| `h`, `←` | Close it, or go to its parent row |
+| `space` | Open or close |
+| `enter` | Go to the row: the session, the workspace and the pane |
+| `/` | Search |
+| `esc`, `q` | Close the navigator |
+
+Press `/` and type to search all panes. The search reads each pane's name,
+title, folder, running command, session and workspace. It also reads the last
+40 lines of each screen. A pane that matches only by its screen text shows the
+matching line on its row. `esc` stops the search and keeps the results. A
+second `esc` clears the search.
+
+The current session's panes are read from your client, and the preview of
+those panes is live. The other sessions are read when the navigator opens.
+Their preview shows the screen as it was then. A click on a pane goes to it. A
+click on a session or a workspace opens or closes it.
+
+`tuios list-windows --all --text 40 --json` prints the same rows for a script.
+See [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-list-windows).
+
 ## Neovim pane navigation
 
 The optional [tuios-nvim-navigator](https://github.com/Tim4c/tuios-nvim-navigator)

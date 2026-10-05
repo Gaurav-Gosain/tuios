@@ -49,6 +49,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleInboxInput(msg, o)
 	}
 
+	// The pane navigator, the same way.
+	if o.NavigatorOpen() {
+		return handleNavigatorInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

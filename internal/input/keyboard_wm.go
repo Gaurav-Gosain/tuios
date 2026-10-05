@@ -82,6 +82,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleInboxInput(msg, o)
 	}
 
+	// The pane navigator owns the keyboard while it is up.
+	if o.NavigatorOpen() {
+		return handleNavigatorInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

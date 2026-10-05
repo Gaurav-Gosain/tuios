@@ -76,6 +76,11 @@ on each pane of the workspace, and a typed label focuses that pane.
 `panes.label_keys` sets the keys (default `1234567890`). It is for the person
 at the keyboard: to focus a pane, use `focus-window`.
 
+The pane navigator (`Ctrl+B /`, the `choose_tree` action) is a tree of every
+session, workspace and pane, with a preview and a search over names, folders,
+commands and screen text. It is for the person at the keyboard: a script reads
+the same rows with `tuios list-windows --all --text N --json`.
+
 ## What the person sees
 
 These are for the person at the keyboard. Know them so you can answer a

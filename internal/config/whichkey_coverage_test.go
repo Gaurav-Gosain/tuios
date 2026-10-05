@@ -24,6 +24,9 @@ func whichKeyRowKeys(key string) []string {
 		return strings.Split("!@#$%^&*(", "")
 	case "Shift+M":
 		return []string{"M"}
+	case "/":
+		// The key itself, which is also how a row writes two keys.
+		return []string{"/"}
 	case "Shift+Tab":
 		return []string{"shift+tab"}
 	case "\u2190\u2191\u2193\u2192":

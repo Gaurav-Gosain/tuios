@@ -1019,6 +1019,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Panes: find a pane in every session",
+			Shortcut: "prefix+/",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenNavigator()
+			},
+		},
+		{
 			Name:     "Hints: label text on the pane to copy it",
 			Shortcut: "prefix+F",
 			Category: "Session",

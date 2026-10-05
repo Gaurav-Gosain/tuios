@@ -715,6 +715,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_next_finished":      "Jump to the newest unseen finished turn",
 	"prefix_session_switcher":   "Open the session switcher",
 	"prefix_workspace_switcher": "Open the workspace switcher",
+	"choose_tree":               "Find a pane in every session and go to it",
 	"prefix_layout":             "Enter layout prefix",
 
 	// Tape Prefix

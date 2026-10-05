@@ -117,7 +117,12 @@ type into all of them.
 
 ## Text from many panes
 
-For a script, loop over the panes and use `capture-pane`:
+`tuios list-windows --all --text 20 --json` lists every pane of every session
+with its folder, command and last 20 lines. `--all-hosts` adds the other
+machines. It reads with `capture-pane`, under the same grants: without `admin`
+you get your own session and an `errors` entry for the rest.
+
+To read one session's panes in a loop, use `capture-pane`:
 
 ```sh
 tuios list-windows --json | jq -r '.windows[] | "\(.index)\t\(.window_id)"' |

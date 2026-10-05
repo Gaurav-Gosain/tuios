@@ -2767,11 +2767,26 @@ tuios list-windows [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 - `--json`: Output as JSON (default is human-readable table)
+- `--all`: List the panes of every session on this machine, one row each
+- `--all-hosts`: Also list the panes of every session on each host in `[hosts]`
+- `--text <N>`: Add the last N lines of each pane's screen, up to 200
+
+With `--all`, `--all-hosts` or `--text`, each row has `session`, `host` (for a
+pane on another machine, with `untrusted`), `workspace`, `workspace_name`,
+`window_id`, `name`, `title`, `command`, `cwd`, `focused` and `agent_state`.
+`--text` adds `text`, or `text_error` when the pane's text cannot be read. The
+command reads text with `capture-pane`, so the same grants apply. A pane that
+holds `read` alone lists only its own session, and the JSON has an `errors`
+entry for the listing it may not make. These are the rows that the pane
+navigator (`Ctrl+B /`) shows.
 
 **Examples:**
 ```bash
 # List windows in table format
 tuios list-windows
+
+# Every pane of every session, with the last 20 lines of each screen
+tuios list-windows --all --text 20 --json
 
 # Output as JSON for scripting
 tuios list-windows --json

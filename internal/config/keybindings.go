@@ -166,6 +166,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("(/)", "Prev/next session"),
 		kb("S", "Sessions"),
 		kb("W", "Workspaces"),
+		kb("/", "Find a pane"),
 		kb("X", "Close session"),
 		kb("g", "Scratch session"),
 	}}

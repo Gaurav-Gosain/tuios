@@ -1514,3 +1514,21 @@ test: the actions open a pane when no ssh runs.
 | The agent socket folder is not checked | `ownedSocket`: the folder mode check cut | No e2e test. `TestOwnedSocket` (a socket in a folder others can write to was passed). With `Stat` for `Lstat` too, it fails at the link first | **caught by a unit test only** |
 | The allowlist is a refusal list again | `sshValueVerdict`: an unknown keyword refused only when it is `proxycommand` | No e2e test: `TestSSHSplitRefusesALineBreakInAnOption` still fails at the control character check, and `TestSSHSplitRefusesAProxyCommand` at `proxycommand`. `TestParseRemoteLogin` fails 9 cases, `xauth location` and `unknown keyword` among them | **caught by the unit table only** |
 | Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |
+
+## The pane navigator (choose_tree) and list-windows --all
+
+The tests are in `navigator_test.go`. The target pane prints its marker in
+two halves, so only its screen text holds the marker whole. The positive half
+of the jump is a check that the focus was on another pane first, and Esc
+closes the navigator with no switch in the same test. The grant test runs the
+same listing from outside every pane first, where it must hold the other
+session's text.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The action is not registered | `registerPrefixHandlers`: the `choose_tree` line cut | `TestNavigatorFindsAPaneByScreenText` ("the navigator never showed") | **caught** |
+| The other sessions are never read | `OpenNavigator`: the `navigatorLoad` command not returned | `TestNavigatorFindsAPaneByScreenText` ("the search for needle-7781 never found it") | **caught** |
+| The search skips screen text | `navigatorSearchRows`: the text match made false | `TestNavigatorFindsAPaneByScreenText` ("the search for needle-7781 never found it") | **caught** |
+| Enter does not focus the pane | `NavigatorActivate`: the `focusWindowByID` call cut | `TestNavigatorFindsAPaneByScreenText` ("enter switched to work but left the focus on ...") | **caught** |
+| The other machines are not listed | `navigatorSessions`: the `FederationHosts` loop given no hosts | `TestNavigatorListsAHostPane` ("the navigator never showed" far-shell @ build) | **caught** |
+| The daemon does not check pane grants | `dispatchVerbLine`: the `checkGrants` call cut | `TestListWindowsAllHoldsToTheReadGrant` ("a pane holding read alone listed the other session") | **caught** |

@@ -2001,6 +2001,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxPeek(msg)
 		return m, nil
 
+	case NavigatorLoadedMsg:
+		m.ApplyNavigatorLoaded(msg)
+		return m, nil
+
 	case InboxRespondedMsg:
 		return m, m.applyInboxResponded(msg)
 
