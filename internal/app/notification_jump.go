@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -113,8 +114,17 @@ func (m *OS) jumpTarget(t NotifTarget, record bool) bool {
 	if !foreign {
 		idx = m.windowIndexByID(t.WindowID)
 		if idx < 0 {
-			m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
-			return false
+			// The sidebar, the CLI and $TUIOS_WINDOW_ID all speak in the short
+			// form of the id, so a link a pane printed carries the short form
+			// too. Resolve it against the panes that exist; an ambiguous or
+			// empty prefix is as good as a dead one.
+			full, matched := m.expandWindowID(t.WindowID)
+			if !matched {
+				m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
+				return false
+			}
+			t.WindowID = full
+			idx = m.windowIndexByID(full)
 		}
 	}
 	if record {
@@ -137,6 +147,25 @@ func (m *OS) jumpTarget(t NotifTarget, record bool) bool {
 	// highlight, so the eye follows a long-distance focus change.
 	m.Windows[landed].MinimizeHighlightUntil = time.Now().Add(time.Second)
 	return true
+}
+
+// expandWindowID resolves a window id that may be a prefix of the full form.
+// An exact match wins; otherwise a prefix naming exactly one live pane expands
+// to it. Zero or several matches resolve to false.
+func (m *OS) expandWindowID(id string) (string, bool) {
+	if id == "" {
+		return "", false
+	}
+	matches := make([]string, 0, 1)
+	for _, w := range m.Windows {
+		if w != nil && strings.HasPrefix(w.ID, id) {
+			matches = append(matches, w.ID)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], true
+	}
+	return "", false
 }
 
 // sessionCached reports whether a session is still one the client could attach

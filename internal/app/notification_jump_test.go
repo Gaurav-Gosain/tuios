@@ -54,3 +54,37 @@ func TestNotificationDeadTargetsDegrade(t *testing.T) {
 		}
 	})
 }
+
+// TestJumpResolvesShortWindowID checks the lookup against the ids people
+// actually print. The sidebar, list-windows and $TUIOS_WINDOW_ID all show the
+// short form, so a link a pane printed carries a prefix, and a prefix naming
+// exactly one live pane must jump. A prefix naming two may not guess.
+func TestJumpResolvesShortWindowID(t *testing.T) {
+	t.Run("unique prefix", func(t *testing.T) {
+		m := jumpTestOS(t)
+		m.Windows[1].ID = "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a"
+		m.jumpToNotifTarget(NotifTarget{SessionID: "main", WindowID: "534f6ba8"})
+		if m.FocusedWindow != 1 {
+			t.Fatalf("focus = %d, want the pane the short id named", m.FocusedWindow)
+		}
+	})
+
+	t.Run("ambiguous prefix", func(t *testing.T) {
+		m := jumpTestOS(t)
+		m.Windows[0].ID = "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a"
+		m.Windows[1].ID = "534f6ba8-0000-0000-0000-000000000000"
+		m.jumpToNotifTarget(NotifTarget{SessionID: "main", WindowID: "534f6ba8"})
+		if m.FocusedWindow != 0 {
+			t.Fatalf("focus = %d, want an ambiguous prefix to refuse the jump", m.FocusedWindow)
+		}
+	})
+
+	t.Run("full id still exact", func(t *testing.T) {
+		m := jumpTestOS(t)
+		m.Windows[1].ID = "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a"
+		m.jumpToNotifTarget(NotifTarget{SessionID: "main", WindowID: "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a"})
+		if m.FocusedWindow != 1 {
+			t.Fatalf("focus = %d, want the full id to jump as before", m.FocusedWindow)
+		}
+	})
+}
