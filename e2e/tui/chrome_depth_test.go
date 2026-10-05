@@ -198,9 +198,13 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 				base := t.TempDir()
 				killDaemon(t, base)
 				useShippedLooks(base)
+				// The dock's caps are on so checkPillCaps has dock pills to
+				// read: dock_pill_caps ships off.
+				cfg := "[appearance]\ndock_pill_caps = true\n"
 				if look.theme != "" {
-					writeConfig(t, base, "[appearance]\ntheme = \""+look.theme+"\"\n")
+					cfg += "theme = \"" + look.theme + "\"\n"
 				}
+				writeConfig(t, base, cfg)
 				for _, name := range []string{"e2e-depth", "e2e-other"} {
 					if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
 						t.Fatalf("create session %s: %v\n%s", name, err, out)

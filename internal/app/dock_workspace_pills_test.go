@@ -73,7 +73,7 @@ func cells(row string, x0, x1 int) string {
 	return string(r[x0:x1])
 }
 
-// pillCapsOS is pillOS with the Nerd Font glyph set on, which is the state the
+// pillCapsOS is pillOS with the Nerd Font glyph set and dock_pill_caps on, the state the
 // rounded caps are drawn in. Every glyph the bar uses is still one cell wide, so
 // dockBarRow's rune-per-column assertion holds and a recorded rectangle can
 // still be compared against the cells that were painted in it.
@@ -83,6 +83,7 @@ func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *O
 	t.Cleanup(func() { config.Global.UseASCIIOnly = prev })
 	m := pillOS(t, w, names, workspaces...)
 	m.Settings.UseASCIIOnly = false
+	m.Settings.DockPillCaps = true
 	return m
 }
 

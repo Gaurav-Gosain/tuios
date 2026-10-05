@@ -712,37 +712,46 @@ func (s *Settings) GetDockPillRightChar() string {
 	return s.GetSidebarPillRightChar()
 }
 
-// GetDockModeCapLeft returns the mode chip's left cap.
+// GetDockModeCapLeft returns the mode chip's left cap, empty when the dock's
+// pills are flat.
 //
-// The chip sits at the head of a row of capped workspace pills, so a square
-// chip beside them reads as an unfinished pill rather than a different kind of
-// thing. It caps regardless of DockPillCaps, which is really about the
-// minimized run, where a cap on every entry turned the row into beads.
-func (s *Settings) GetDockModeCapLeft() string { return s.GetSidebarPillLeftChar() }
-
-// GetDockModeCapRight returns the mode chip's right cap.
-func (s *Settings) GetDockModeCapRight() string { return s.GetSidebarPillRightChar() }
-
-// GetDockWorkspaceCapLeft returns the workspace pill's left cap.
-//
-// The strip keeps its own accessor for the reason the rail does: DockPillCaps
-// is about the mode chip and the minimized run, where a cap on every entry
-// turned the row into beads. A workspace pill is a tab, and a tab wants the
-// rounded end that says where it starts and stops.
-//
-// Empty under ASCII. A half circle has no 7-bit stand-in: "[" is a bracket
-// drawn beside the pill rather than the pill's own edge, and it reads as
-// punctuation in a row that has none.
-func (s *Settings) GetDockWorkspaceCapLeft() string {
-	if s.UseASCIIOnly {
+// The mode chip, the workspace tabs and the minimized run all follow
+// DockPillCaps. The chip and the tabs once capped regardless of it, so
+// dock_pill_caps = false left the caps on the two pills a user sees most
+// (#451) while the settings page reported them off.
+func (s *Settings) GetDockModeCapLeft() string {
+	if !s.DockPillCaps {
 		return ""
 	}
 	return s.GetSidebarPillLeftChar()
 }
 
-// GetDockWorkspaceCapRight returns the workspace pill's right cap.
+// GetDockModeCapRight returns the mode chip's right cap, empty when the dock's
+// pills are flat.
+func (s *Settings) GetDockModeCapRight() string {
+	if !s.DockPillCaps {
+		return ""
+	}
+	return s.GetSidebarPillRightChar()
+}
+
+// GetDockWorkspaceCapLeft returns the workspace pill's left cap, empty when the
+// dock's pills are flat.
+//
+// Empty under ASCII too. A half circle has no 7-bit stand-in: "[" is a bracket
+// drawn beside the pill rather than the pill's own edge, and it reads as
+// punctuation in a row that has none.
+func (s *Settings) GetDockWorkspaceCapLeft() string {
+	if !s.DockPillCaps || s.UseASCIIOnly {
+		return ""
+	}
+	return s.GetSidebarPillLeftChar()
+}
+
+// GetDockWorkspaceCapRight returns the workspace pill's right cap, empty when
+// the dock's pills are flat.
 func (s *Settings) GetDockWorkspaceCapRight() string {
-	if s.UseASCIIOnly {
+	if !s.DockPillCaps || s.UseASCIIOnly {
 		return ""
 	}
 	return s.GetSidebarPillRightChar()

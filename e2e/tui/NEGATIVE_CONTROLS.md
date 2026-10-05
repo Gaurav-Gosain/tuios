@@ -1322,3 +1322,12 @@ pane's border cell, and the last column's background in one layout. It
 cannot see a style lost at the edge in every layout, because the frame cuts
 an overlong row in a way that depends on the render path. The render test in
 `internal/app` is the check for that.
+
+## Dock pill caps off (#451)
+
+`dock_pill_caps = false` left the caps on the mode chip and the workspace
+pills. Their cap accessors did not read the setting.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole change | build `origin/main` (`1e0b4c89`) and point `TUIOS_E2E_BIN` at it | `TestDockPillCapsFollowTheSetting/off` ("dock_pill_caps = false, and the dock row draws caps", six cap glyphs on the row). The `on` case passes on main, which is correct | **caught** |
