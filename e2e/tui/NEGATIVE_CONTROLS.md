@@ -1798,3 +1798,17 @@ window must fill the session. The same client then runs the palette's
 Not covered end to end: `createRemoteSession`, the picker's create on another
 machine, which now uses the same rule. `TestRemoteCreateAppliesStartup`
 covers `switch-session --create` and `tuios new --host` there.
+
+## Workspace label cap and tab format
+
+`dock_workspace_label_max_test.go` drives the dock's workspace pill through
+`appearance.dock_workspace_label_max` and `appearance.dock_workspace_tab_format`
+with a 26-character workspace name. The positive half is in each fixture: the
+capped cases show a truncated pill, the uncapped wide case shows the whole name,
+and the custom-format case shows the name inside its brackets.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The tab format is dropped when it has no `{index}` | `workspacePillLabel`: the `strings.Contains("{index}")` branch restored, passing the raw name for formats without `{index}` | `TestDockWorkspaceLabelCapAndFormats/custom_format` ("the dock row dropped the tab format around the capped name") | **caught** |
+| A narrow dock with the cap off draws no pill at all | `planDockWorkspaceStrip`: the `count == 0` fallback replaced by `addOnlyStrip` | `TestDockWorkspaceLabelCapAndFormats/uncapped_narrow` ("the narrow dock draws no pill at all for the long workspace") | **caught** |
+| Minimized names take a live message's room | `CalculateDockLayout`: the `dockNotificationBlock` yield block cut | `TestDockWorkspaceLabelCapAndFormats/default_cap` — not bound: the 120-column fixture has room for both, and no assertion pins the message's columns. The message-yield path needs a fixture narrower than the entries plus the message | **not caught** |

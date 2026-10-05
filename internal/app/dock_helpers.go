@@ -144,20 +144,13 @@ func (m *OS) workspacePillName(n int) string {
 }
 
 // workspacePillLabel is what a pill prints: the name through the configured
-// tab format (so {index} and {name} can be combined), capped by
-// appearance.dock_workspace_label_max. A cap of 0 draws the whole name; the
-// strip's scroll arithmetic is what handles a bar that no longer fits it. A
-// format that already carries {index} gets the raw name, or the strip would
-// read "2: work [2]" and say the number twice.
+// tab format, capped by appearance.dock_workspace_label_max. A cap of 0 draws
+// the whole name; the strip's scroll arithmetic is what handles a bar that no
+// longer fits it.
 func (m *OS) workspacePillLabel(n int) string {
-	var label string
-	if strings.Contains(m.Settings.DockWorkspaceTabFormat, "{index}") {
-		label = m.Settings.FormatWorkspaceTab(printableTitle(m.WorkspaceLabel(n)), n)
-	} else {
-		label = m.workspacePillName(n)
-	}
-	if max := m.Settings.DockWorkspaceLabelMax; max > 0 {
-		label = overlay.Truncate(label, max)
+	label := m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)
+	if limit := m.Settings.DockWorkspaceLabelMax; limit > 0 {
+		label = overlay.Truncate(label, limit)
 	}
 	return label
 }
@@ -167,11 +160,11 @@ func (m *OS) workspacePillLabel(n int) string {
 // through the tab format, because that is what the pill draws: a short name can
 // still be clipped once the format lengthens it.
 func (m *OS) workspacePillClipped(n int) bool {
-	max := m.Settings.DockWorkspaceLabelMax
-	if max <= 0 {
+	limit := m.Settings.DockWorkspaceLabelMax
+	if limit <= 0 {
 		return false
 	}
-	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > max
+	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > limit
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
@@ -341,24 +334,9 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	if strip.Add != nil {
 		addSpan = dockWorkspacePillGap + strip.Add.Width
 	}
-	// What a strip with no room for a pill draws: the "+" against the leading
-	// column, and nothing if there is not even room for that. The gap between
-	// pills goes with the pills.
-	addOnly := func() dockWorkspaceStrip {
-		strip.Pills, strip.Scrolls, strip.Width = nil, false, 0
-		switch {
-		case strip.Add == nil:
-		case budget >= 1+strip.Add.Width:
-			strip.Width = 1 + strip.Add.Width
-		default:
-			strip.Add = nil
-		}
-		return strip
-	}
-
 	avail := budget - 1 - addSpan
 	if avail <= 0 || len(strip.Pills) == 0 {
-		return addOnly()
+		return m.addOnlyStrip(strip, budget)
 	}
 
 	if natural := pillsSpan(strip.Pills, 0, len(strip.Pills)); natural <= avail {
@@ -371,7 +349,7 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	if inner < 1 {
 		// Room for the gutters and nothing to put between them: the arrows would
 		// scroll a strip with no pills in it.
-		return addOnly()
+		return m.addOnlyStrip(strip, budget)
 	}
 	strip.Scrolls, strip.Inner = true, inner
 
@@ -390,13 +368,51 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 
 	count := pillsFitting(all, first, inner)
 	if count == 0 {
-		// Not even the narrowest pill fits between the gutters. Arrows over an
-		// empty track scroll nothing, so the strip falls back to the "+" alone.
-		return addOnly()
+		// Not even the narrowest pill fits between the gutters — an uncapped
+		// label on a narrow bar is how. Arrows over an empty track scroll
+		// nothing, so the strip falls back to the "+" and the current pill cut
+		// to whatever the viewport holds: a strip with no pill leaves the
+		// workspaces nothing to see or click.
+		return m.pinCurrentPill(strip, inner, addSpan, budget)
 	}
 	strip.Pills = all[first : first+count]
 	strip.MoreLeft = first > 0
 	strip.MoreRight = first+count < len(all)
+	strip.Width = 1 + 2*dockWorkspaceArrowWidth + inner + addSpan
+	return strip
+}
+
+// addOnlyStrip is what a strip with no room for a pill draws: the "+" against
+// the leading column, and nothing if there is not even room for that. The gap
+// between pills goes with the pills.
+func (m *OS) addOnlyStrip(strip dockWorkspaceStrip, budget int) dockWorkspaceStrip {
+	strip.Pills, strip.Scrolls, strip.Width = nil, false, 0
+	switch {
+	case strip.Add == nil:
+	case budget >= 1+strip.Add.Width:
+		strip.Width = 1 + strip.Add.Width
+	default:
+		strip.Add = nil
+	}
+	return strip
+}
+
+// pinCurrentPill draws the current workspace's pill alone, cut to the room a
+// scrolling viewport would have had. It is the fallback for a strip whose
+// every pill is wider than that room. The geometry is the scrolled strip's:
+// the gutters hold their columns and the "\+" stays pinned at the end, so a
+// dock that narrows further degrades the same way it already does.
+func (m *OS) pinCurrentPill(strip dockWorkspaceStrip, inner, addSpan, budget int) dockWorkspaceStrip {
+	labelBudget := inner - (workspacePillWidth("", &m.Settings))
+	if labelBudget < 1 || len(strip.Pills) == 0 {
+		return m.addOnlyStrip(strip, budget)
+	}
+	active := m.activePillIndex(strip.Pills)
+	pill := strip.Pills[active]
+	pill.Label = overlay.Truncate(pill.Label, labelBudget)
+	pill.Width = workspacePillWidth(pill.Label, &m.Settings)
+	strip.Pills = []dockWorkspaceTab{pill}
+	strip.MoreLeft, strip.MoreRight = false, false
 	strip.Width = 1 + 2*dockWorkspaceArrowWidth + inner + addSpan
 	return strip
 }
@@ -539,6 +555,14 @@ func (m *OS) CalculateDockLayout() DockLayout {
 			want = 0
 		}
 		room = max(room-dockItemsWidth(allItems), 0)
+	} else if _, live := m.dockNotificationBlock(m.GetRenderWidth(), 0); live {
+		// A live message holds the block for its duration, so the entries yield
+		// their names instead of taking the message's columns. An entry that
+		// cannot fit at the floor is dropped by the position pass, which is the
+		// same step a crowded bar without a message takes.
+		if dockItemsWidth(allItems) > max(room-want, 0) {
+			shortenDockItemNames(max(room-want, 0), allItems)
+		}
 	}
 	layout.RightWidth = min(want, room)
 
