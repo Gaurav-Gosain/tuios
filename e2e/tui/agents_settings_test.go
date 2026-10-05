@@ -2,7 +2,9 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +45,24 @@ while read -r line; do :; done
 // It returns the isolation root and the integration's settings file.
 func agentsPageFixture(t *testing.T, off bool) (string, string) {
 	t.Helper()
+	return agentsFixtureWith(t, agentsFixture{off: off, aged: true})
+}
+
+// agentsFixture says how agentsFixtureWith sets the integration up.
+type agentsFixture struct {
+	// off writes [agents] enabled = false.
+	off bool
+	// command is the --command the integration is installed with, "" for
+	// the default.
+	command string
+	// aged marks the install as one the previous version wrote.
+	aged bool
+}
+
+// agentsFixtureWith is agentsPageFixture with the install chosen.
+func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
+	t.Helper()
+	off := o.off
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -75,7 +95,11 @@ func agentsPageFixture(t *testing.T, off bool) (string, string) {
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := tuiosCLI(t, base, "integration", "install", "claude-code"); err != nil {
+	install := []string{"integration", "install", "claude-code"}
+	if o.command != "" {
+		install = append(install, "--command", o.command)
+	}
+	if out, err := tuiosCLI(t, base, install...); err != nil {
 		t.Fatalf("install the integration: %v\n%s", err, out)
 	}
 	settings := filepath.Join(home, ".claude", "settings.json")
@@ -83,19 +107,27 @@ func agentsPageFixture(t *testing.T, off bool) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cur := claudeIntegrationVersion(t, base)
+	cur := claudeIntegrationStatus(t, base, o.command)
+	// The install must have landed in the test's own home. A directory
+	// override left in the environment would have sent it to the
+	// developer's real config, which the tests then rewrite and remove.
+	if cur.Path != settings {
+		t.Fatalf("the integration is at %s, not in the test's home %s", cur.Path, settings)
+	}
 	if cur.Version < 2 || !cur.Current {
 		t.Fatalf("the fresh install is not current: %+v", cur)
 	}
-	old := strings.ReplaceAll(string(data), "--integration "+itoa(cur.Version), "--integration "+itoa(cur.Version-1))
-	if old == string(data) {
-		t.Fatalf("no version marker to age in %s:\n%s", settings, data)
-	}
-	if err := os.WriteFile(settings, []byte(old), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if st := claudeIntegrationVersion(t, base); !st.Installed || st.Current || st.Version != cur.Version-1 {
-		t.Fatalf("the aged file does not read as out of date: %+v", st)
+	if o.aged {
+		old := strings.ReplaceAll(string(data), "--integration "+itoa(cur.Version), "--integration "+itoa(cur.Version-1))
+		if old == string(data) {
+			t.Fatalf("no version marker to age in %s:\n%s", settings, data)
+		}
+		if err := os.WriteFile(settings, []byte(old), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if st := claudeIntegrationStatus(t, base, o.command); !st.Installed || st.Current || st.Version != cur.Version-1 {
+			t.Fatalf("the aged file does not read as out of date: %+v", st)
+		}
 	}
 
 	if out, err := tuiosCLI(t, base, "new", "agents", "--detach"); err != nil {
@@ -106,16 +138,30 @@ func agentsPageFixture(t *testing.T, off bool) (string, string) {
 
 // claudeStatus is what tuios integration status says about Claude Code.
 type claudeStatus struct {
-	Installed   bool `json:"installed"`
-	Current     bool `json:"current"`
-	Version     int  `json:"version"`
-	WantVersion int  `json:"want_version"`
+	Path         string `json:"path"`
+	Installed    bool   `json:"installed"`
+	Current      bool   `json:"current"`
+	Version      int    `json:"version"`
+	WantVersion  int    `json:"want_version"`
+	Program      string `json:"program"`
+	OtherProgram bool   `json:"other_program"`
 }
 
 // claudeIntegrationVersion reads Claude Code's integration through the CLI.
 func claudeIntegrationVersion(t *testing.T, base string) claudeStatus {
 	t.Helper()
-	out, err := tuiosCLI(t, base, "integration", "status", "claude-code", "--json")
+	return claudeIntegrationStatus(t, base, "")
+}
+
+// claudeIntegrationStatus reads it as current for command, the CLI's
+// --command, "" for its default.
+func claudeIntegrationStatus(t *testing.T, base, command string) claudeStatus {
+	t.Helper()
+	args := []string{"integration", "status", "claude-code", "--json"}
+	if command != "" {
+		args = append(args, "--command", command)
+	}
+	out, err := tuiosCLI(t, base, args...)
 	if err != nil {
 		t.Fatalf("integration status: %v\n%s", err, out)
 	}
@@ -341,12 +387,56 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The positive half of the stored dismissal: a second client attaching
+	// before anyone dismissed the toast shows it too. It closes without
+	// dismissing it.
+	early := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	if err := early.WaitForText(integrationNotice, uiTimeout); err != nil {
+		t.Fatalf("a second client never showed the toast nobody dismissed: %v\n%s", err, early.Snapshot())
+	}
+	if err := early.Close(); err != nil {
+		t.Logf("close the early client: %v", err)
+	}
+
 	// Dismiss it, then run a second claude.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), integrationNotice) }, uiTimeout); err != nil {
 		t.Fatalf("esc did not dismiss the toast: %v\n%s", err, term.Snapshot())
+	}
+	// The early client's arrival put "Client joined" on top of the toast, so
+	// the screen alone cannot say the esc landed. The rail's state file can:
+	// the dismissal is stored there, and the next client reads it from there.
+	state := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
+	stored := time.Now().Add(uiTimeout)
+	for {
+		if data, err := os.ReadFile(state); err == nil && strings.Contains(string(data), "agent_notices_dismissed") {
+			break
+		}
+		if time.Now().After(stored) {
+			data, _ := os.ReadFile(state)
+			t.Fatalf("ASSERTION: the dismissal was never stored:\n%s", data)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// The dismissal is kept: a second client attaching to the same session,
+	// a fresh process with nothing noticed yet, shows no toast for the same
+	// out of date integration.
+	second := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	// The mode notice the attach raises sits on top of the dock for its six
+	// seconds, and a toast raised meanwhile waits under it, then shows until
+	// its own eight seconds are up. Twelve seconds of watching covers both.
+	deadline := time.Now().Add(12 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(second.Screen().Text(), integrationNotice) {
+			t.Fatalf("ASSERTION: a new client showed the dismissed toast again\n%s", second.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := second.Close(); err != nil {
+		t.Logf("close the second client: %v", err)
 	}
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "agents"); err != nil {
 		t.Fatalf("new window: %v\n%s", err, out)
@@ -355,7 +445,7 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatalf("start the second stand-in: %v\n%s", err, out)
 	}
 	waitClaudePanes(t, base, 2)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if strings.Contains(term.Screen().Text(), integrationNotice) {
 			t.Fatalf("ASSERTION: the toast came back for a second Claude Code pane\n%s", term.Snapshot())
@@ -421,6 +511,25 @@ func TestAgentsSettingsHiddenWithAgentsOff(t *testing.T) {
 func TestAgentsSettingsTabBeforeTape(t *testing.T) {
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	// The prefix menu lists the key. This is the positive half of the SSH
+	// test, which reads the same menu without it.
+	enterTerminalMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
+		t.Fatalf("the prefix menu never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitForText("Agents settings", uiTimeout); err != nil {
+		t.Fatalf("the prefix menu does not list the Agents settings key: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Toggle tiling") }, uiTimeout); err != nil {
+		t.Fatalf("the prefix menu did not close: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatal(err)
 	}
@@ -431,4 +540,215 @@ func TestAgentsSettingsTabBeforeTape(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitAgentsRow(t, term, "Claude Code", "the tab before Tape is not Agents", "out of date")
+}
+
+// TestAgentsSettingsKeepsTheCommandPath installs the integration with
+// --command and the full path of the binary under test.
+//
+// Current: the tab says installed, names the program, and a Claude Code pane
+// gets no notice. Before the fix the tab read it as out of date ("v3 is
+// installed and this tuios installs v3") and offered an update.
+//
+// Aged: the tab says out of date, and the update keeps the full path. Before
+// the fix the update wrote a bare "tuios", which need not be on the
+// harness's PATH.
+func TestAgentsSettingsKeepsTheCommandPath(t *testing.T) {
+	t.Run("current", func(t *testing.T) {
+		base, _ := agentsFixtureWith(t, agentsFixture{command: tuiosBin})
+		term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+		openAgentsTab(t, term)
+		waitAgentsRow(t, term, "Claude Code", "the row does not say installed for an install with --command", "installed")
+		if line := agentsRow(term.Screen(), "Claude Code"); strings.Contains(line, "out of date") || strings.Contains(line, "not installed") {
+			t.Fatalf("ASSERTION: an install with --command reads as %q\n%s", line, term.Snapshot())
+		}
+		if err := term.WaitForText("The hooks run", uiTimeout); err != nil {
+			t.Fatalf("the row does not name the program the hooks run: %v\n%s", err, term.Snapshot())
+		}
+		railShot(t, term, "agents-settings-command-path")
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := tuiosCLI(t, base, "send-text", "-s", "agents", "claude\n"); err != nil {
+			t.Fatalf("start the stand-in: %v\n%s", err, out)
+		}
+		waitClaudePanes(t, base, 1)
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if strings.Contains(term.Screen().Text(), "Claude Code integration is") {
+				t.Fatalf("ASSERTION: a current install with --command got a notice\n%s", term.Snapshot())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	})
+	t.Run("aged", func(t *testing.T) {
+		base, settings := agentsFixtureWith(t, agentsFixture{command: tuiosBin, aged: true})
+		term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+		openAgentsTab(t, term)
+		waitAgentsRow(t, term, "Claude Code", "the aged install with --command does not read as out of date", "out of date")
+		clickAgentsRow(t, term, "Claude Code")
+		waitAgentsRow(t, term, "› Update Claude Code", "the cursor is not on the update action")
+		if err := term.SendKeys(tuitest.Enter); err != nil {
+			t.Fatal(err)
+		}
+		if err := term.WaitForText("Claude Code integration is updated in", uiTimeout); err != nil {
+			t.Fatalf("the update said nothing: %v\n%s", err, term.Snapshot())
+		}
+		data, err := os.ReadFile(settings)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := claudeIntegrationStatus(t, base, tuiosBin)
+		if !strings.Contains(string(data), tuiosBin+" agent-hook claude-code --integration "+itoa(want.WantVersion)) {
+			t.Fatalf("ASSERTION: the update did not keep %s as the program:\n%s", tuiosBin, data)
+		}
+		if !want.Current {
+			t.Fatalf("ASSERTION: the CLI does not read the update as current for %s: %+v", tuiosBin, want)
+		}
+	})
+}
+
+// sshTUI starts tuios ssh for the isolation root on a free port, with no
+// authentication on the loopback address, and returns a terminal running an
+// ssh client attached through it to the session "agents".
+func sshTUI(t *testing.T, base string) *tuitest.Terminal {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := net.SplitHostPort(l.Addr().String())
+	_ = l.Close()
+	env := append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		env = append(env, key+"="+xdgDir(base, key))
+	}
+	srv := exec.Command(tuiosBin, "ssh", "--host", "127.0.0.1", "--port", port, "--no-auth",
+		"--key-path", filepath.Join(base, "hostkey"), "--default-session", "agents")
+	srv.Env = env
+	srv.Dir = workDirIn(t, base)
+	logf, err := os.Create(filepath.Join(t.TempDir(), "ssh-server.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.Stdout, srv.Stderr = logf, logf
+	if err := srv.Start(); err != nil {
+		t.Fatalf("start tuios ssh: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = srv.Process.Kill()
+		_ = srv.Wait()
+		_ = logf.Close()
+	})
+	deadline := time.Now().Add(bootTimeout)
+	for {
+		c, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", port))
+		if err == nil {
+			_ = c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			data, _ := os.ReadFile(logf.Name())
+			t.Fatalf("tuios ssh never listened on %s:\n%s", port, data)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	home := xdgDir(base, "HOME")
+	argv := []string{"ssh", "-tt", "-p", port,
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR", "-o", "BatchMode=yes", "-F", "/dev/null",
+		"agents@127.0.0.1"}
+	return tuitest.StartT(t, argv,
+		tuitest.WithSize(120, 40),
+		tuitest.WithTerm("xterm-256color"),
+		tuitest.WithEnv("HOME="+home),
+		tuitest.WithDir(workDirIn(t, base)))
+}
+
+// TestAgentsSettingsAbsentOverSSH attaches over tuios ssh to the same fixture
+// the local tests use. The person at the far end is not on this machine, so
+// the integrations here are not theirs to change: the prefix menu does not
+// list the key, the key opens no tab, the palette has no entry, and the tab
+// before Tape is Hosts. The positive halves are TestAgentsSettingsTabBeforeTape
+// (menu and tab) and TestAgentsIntegrationNoticeOncePerRun (palette), with a
+// local client on the same fixture.
+func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
+	if _, err := exec.LookPath("ssh"); err != nil {
+		t.Skip("no ssh client")
+	}
+	base, _ := agentsPageFixture(t, false)
+	term := sshTUI(t, base)
+	if err := term.WaitForText("1:1", bootTimeout); err != nil {
+		t.Fatalf("the ssh client never drew the session: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+
+	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
+		t.Fatalf("the prefix menu never opened over ssh: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatal(err)
+	}
+	// The menu's Agents section is there, since the installed integration
+	// counts as an agent seen, so the missing line is the one key's absence.
+	if !strings.Contains(term.Screen().Text(), "Oldest waiting") {
+		t.Fatalf("the prefix menu over ssh has no Agents section to read\n%s", term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "Agents settings") {
+		t.Fatalf("ASSERTION: the prefix menu lists the Agents settings key over ssh\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "agents-ssh-menu")
+	if err := term.SendKeys("A"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if findRow(term.Screen(), "Claude Code") >= 0 {
+			t.Fatalf("ASSERTION: the prefix key opened the Agents tab over ssh\n%s", term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText(paletteTitle, uiTimeout); err != nil {
+		t.Fatalf("the palette did not open over ssh: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("install and update integrations"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("integrations", uiTimeout); err != nil {
+		t.Fatalf("the palette query never showed: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(500 * time.Millisecond)
+	if strings.Contains(term.Screen().Text(), "Agents: settings") {
+		t.Fatalf("ASSERTION: the palette offers the Agents settings over ssh\n%s", term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Agent features", uiTimeout); err != nil {
+		t.Fatalf("the settings page did not open over ssh: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("[", "["); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Add a host", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the tab before Tape is not Hosts over ssh: %v\n%s", err, term.Snapshot())
+	}
+	if findRow(term.Screen(), "Claude Code") >= 0 {
+		t.Fatalf("ASSERTION: the settings page shows the Agents rows over ssh\n%s", term.Snapshot())
+	}
 }

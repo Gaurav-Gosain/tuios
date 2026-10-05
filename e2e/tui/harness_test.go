@@ -165,6 +165,13 @@ func runE2E(m *testing.M) int {
 	// names the person's daemon, and tuiosCLI passes the environment on. The
 	// commands would dial it to check it; the suite has no business there.
 	_ = os.Unsetenv("TUIOS_SOCKET")
+	// The harnesses' own directory overrides. HOME is redirected per test, but
+	// each of these names a directory outright, so one set in the developer's
+	// shell would point an integration install or uninstall at their real
+	// agent config. Every tuios this suite spawns inherits the environment.
+	for _, key := range harnessDirKeys {
+		_ = os.Unsetenv(key)
+	}
 	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
@@ -278,6 +285,15 @@ var xdgKeys = []string{
 	// the tests of what shows before the first agent failed on that machine
 	// alone.
 	"HOME",
+}
+
+// harnessDirKeys are the variables that move a harness's configuration
+// directory away from the home (internal/integration's targets read them).
+// runE2E clears them for the whole suite.
+var harnessDirKeys = []string{
+	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "CURSOR_CONFIG_DIR",
+	"GROK_HOME", "HERMES_HOME", "KIMI_CODE_HOME", "PI_CODING_AGENT_DIR",
+	"QODER_CONFIG_DIR", "QWEN_HOME", "ANTIGRAVITY_CLI_CONFIG_DIR",
 }
 
 // startIn spawns tuios against an explicit isolation root, so two clients can
