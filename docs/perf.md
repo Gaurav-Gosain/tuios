@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 32,034,978 | 32,075,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,167,794 | 30,210,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 32,084,130 | 32,140,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,219,138 | 30,275,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2378,6 +2378,12 @@ for an approval in the link and in `hosts sync`, and the shared ssh
 connection of a sync run. It links no new package. On Go 1.26.6 the build
 measured 32,034,978 and 30,167,794 bytes, 19,978 and 12,794 over the old
 budgets.
+
+The budgets went to 32,140,000 (linux/amd64) and 30,275,000 (darwin/arm64)
+for the pane labels (`display_panes`): the block font, the label pass over
+the canvas and the `[panes]` section. It links no new package. On Go 1.26.6
+the build measured 32,084,130 and 30,219,138 bytes, 9,130 and 9,138 over the
+old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
