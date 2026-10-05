@@ -1148,6 +1148,17 @@ runtime ended the test binary. Each `Request` now starts its own timer.
 | --- | --- | --- | --- |
 | One shared timer, reset on each Request | `internal/memtrim/memtrim.go` from origin/main | `TestRequestAfterABubbleArmedTheTimer` ("fatal error: reset of synctest timer from outside bubble") | **caught in `internal/memtrim`** (1 of 1 run, deterministic) |
 
+## The newest paste buffer lost a tie on mtime
+
+The tmux shim ordered paste buffers by their file's mtime. Two buffers
+written in one tick of the kernel's file clock tied, and the name order
+picked the top. `paste-buffer` with no `-b` then typed the older buffer.
+`writeBuffer` now stamps each buffer after the newest one.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A buffer keeps the mtime the kernel gave it | `internal/tmuxcompat/buffers.go` from origin/main | `TestPasteBufferAcrossCalls` ("the newest buffer typed \"one\\rtwo\\r\", want b2"), 19 of 30 runs. With the fix: 30 of 30 pass | **caught in `internal/tmuxcompat`** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
