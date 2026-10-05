@@ -40,8 +40,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-    name: e2e-tui (shard ${{ matrix.shard }} of 4)
+        shard: [1, 2, 3, 4, 5, 6]
+    name: e2e-tui (shard ${{ matrix.shard }} of 6)
     timeout-minutes: 20
 
     steps:
@@ -73,7 +73,7 @@ jobs:
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
           SHARD: ${{ matrix.shard }}
-          SHARDS: "4"
+          SHARDS: "6"
         # The split is by a hash of the test name, not by the order the list
         # comes back in, so adding or renaming a test moves only that test
         # between shards instead of resegmenting every one of them.
