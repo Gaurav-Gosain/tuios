@@ -1347,7 +1347,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 		// interactive resize drag (which syncs sizes rapidly) never pays for a
 		// per-motion round-trip.
 		if m.ScriptMode && w.DaemonMode && w.PTYID != "" && m.DaemonClient != nil {
-			if state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0, w.ScrollbackLenSync()); err == nil && state != nil {
+			if state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0, m.snapshotHave(w)); err == nil && state != nil {
 				m.restoreTerminalContent(w, state)
 			}
 			w.HasNewOutput.Store(true)
@@ -1729,7 +1729,7 @@ func (m *OS) RestoreTerminalStates() error {
 
 	for _, w := range m.Windows {
 		if w.DaemonMode && w.PTYID != "" {
-			state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0, w.ScrollbackLenSync())
+			state, err := m.DaemonClient.GetTerminalState(w.PTYID, 0, m.snapshotHave(w))
 			if err != nil {
 				m.LogError("Failed to get terminal state for PTY %s: %v", shortID(w.PTYID), err)
 				continue
@@ -1861,6 +1861,9 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// duplicated.
 	w.DiscardPendingOutput()
 
+	// Before the apply, which packs the state in place.
+	m.tapSnapshot(w.PTYID, state)
+
 	w.LockIO()
 	// Re-check under the lock; Close() nils Terminal while holding it.
 	session.ApplyTerminalState(w.Terminal, state)
@@ -1977,7 +1980,7 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 	// snapshot's window, and the screen at the end.
 	window.DrainPendingOutput()
 
-	state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0, window.ScrollbackLenSync())
+	state, err := m.DaemonClient.GetTerminalState(window.PTYID, 0, m.snapshotHave(window))
 	if err != nil || state == nil {
 		m.subscribeToPTY(window, 0)
 		return
@@ -1994,7 +1997,7 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 	if state.Width != window.ContentWidth() || state.Height != window.ContentHeight() {
 		window.SeedAnnouncedSize(state.Width, state.Height)
 		window.Resize(window.Width, window.Height)
-		if fresh, err := m.DaemonClient.GetTerminalState(window.PTYID, 0, window.ScrollbackLenSync()); err == nil && fresh != nil {
+		if fresh, err := m.DaemonClient.GetTerminalState(window.PTYID, 0, m.snapshotHave(window)); err == nil && fresh != nil {
 			state = fresh
 		}
 	}
@@ -2029,13 +2032,27 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	m.LogInfo("[SUBSCRIBE] Subscribing to PTY %s for window %s", shortID(ptyID), shortID(window.ID))
 	// Registered before the subscribe, so the first resize the daemon announces
 	// cannot arrive with nothing listening for it.
-	m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
+	tap := m.streamTap
+	if tap == nil {
+		m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
+	} else {
+		m.DaemonClient.OnPTYResized(ptyID, func(w, h int) {
+			tap.Resized(ptyID, w, h)
+			window.ResizeFromStream(w, h)
+		})
+		if fromSeq == 0 {
+			tap.Snapshot(ptyID, nil)
+		}
+	}
 	window.SetStreamOwnsSize(true)
 	// A subscribe that follows a restored snapshot is told to the daemon: a
 	// rolled catch-up must replay the tail on top of the snapshot, not clear
 	// it (issue #123). The only path that subscribes with fromSeq zero is the
 	// no-snapshot fallback, so fromSeq > 0 is exactly "a snapshot was applied".
 	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, fromSeq > 0, func(data []byte) {
+		if tap != nil {
+			tap.Output(ptyID, data)
+		}
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {
