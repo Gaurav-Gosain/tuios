@@ -3364,8 +3364,8 @@ tuios hosts sync --restart --yes --json
 | `--ghostty` | Refused: the ghostty backend cannot be cross-compiled |
 
 First, sync reads every host over ssh at once, four at a time: the system
-(`uname -sm`), the tuios that the link finds there, its version, and the
-daemon over a link of its own. It reads the sessions of the daemon and the
+(`uname -sm`), the tuios that the link finds there, and its version. Then it
+reads the daemon over a link of its own. It reads the sessions of the daemon and the
 panes that run a program. A pane runs a program when the foreground process of
 its terminal is not its shell, or when the pane process is not a shell.
 
@@ -3404,6 +3404,16 @@ with no daemon gives the command that starts it.
 One host that fails does not stop the others. The exit status is 1 when a host
 failed. The table has one row per host: the system, the version before and
 after, the daemon, and what was done.
+
+All ssh calls of one run to a host use one shared connection, through a
+private socket in `$XDG_RUNTIME_DIR` that is removed when the run ends. When
+Tailscale SSH in check mode holds the login, one approval covers the run. On a
+terminal, sync lists the link to open for each host, and asks to wait up to 5
+minutes. Each host continues when you approve its login. Without a terminal,
+or with `--json`, the host fails at once. Its row says `needs approval`, and
+in `--json` it has `"error_kind": "tailscale_check"` and `approval_url`. A
+login the tailnet policy refuses has `"error_kind": "tailscale_policy"`. See
+[Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode).
 
 ### `tuios pane-grants`
 

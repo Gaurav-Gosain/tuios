@@ -32,6 +32,14 @@ Do not pass either unless the person asked for a restart. Each row of `--json`
 has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
 the panes a restart would end.
 
+A host behind Tailscale SSH in check mode waits for the person to approve the
+login in a browser. Its link reports `tailscale_check` with `approval_url`, and
+a `hosts sync --json` row has `"error_kind": "tailscale_check"` and
+`approval_url`. Give the person the URL. Do not open it and do not approve it
+yourself. Run the command again after they approve. A login the tailnet policy
+refuses has `"error_kind": "tailscale_policy"`, and the fix is the user in the
+host's `addr`.
+
 A host with tuios and no daemon reports `no_daemon`. `hosts test NAME --start`
 starts the daemon there over ssh. It does nothing on a host that already runs
 one, and it starts nothing on a host with no tuios. `hosts sync NAME --start`

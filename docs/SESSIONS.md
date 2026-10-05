@@ -930,6 +930,36 @@ build = "root"
 For a script or an agent, `tuios hosts tailnet --json` gives every machine with
 `offered` and, when it is false, `skipped` saying which rule left it out.
 
+### Tailscale SSH check mode
+
+Tailscale SSH can hold a login until you approve it in a browser. This is
+"check" mode. ssh then waits, and Tailscale prints a link to open:
+
+```
+# Tailscale SSH requires an additional check.
+# To authenticate, visit: https://login.tailscale.com/a/l1d9c7e392d3020
+```
+
+tuios reads this link and shows it.
+
+- **The daemon's link** shows the state `tailscale_check` in `tuios hosts`,
+  with the link to open. The link waits up to 10 minutes. It goes on when you
+  approve the login.
+- **`tuios hosts test`** and **`tuios hosts add`** report `tailscale_check`
+  with the link. Open it, approve the login, then run the command again.
+- **`tuios hosts sync`** on a terminal lists the link of each host that waits.
+  Then it asks to wait up to 5 minutes. Each host continues when you approve
+  its login. Without a terminal, or with `--json`, the host fails at once.
+  Its row has `"error_kind": "tailscale_check"` and `approval_url`.
+
+All ssh calls of one `hosts sync` run to a host use one shared connection.
+Thus one approval covers the whole run. The connection uses a private socket
+in `$XDG_RUNTIME_DIR` and stops when the run ends.
+
+If the tailnet policy refuses the login, tuios names the user it refused. The
+row has `"error_kind": "tailscale_policy"`. Change the user in the `addr` of the
+host in `[hosts]`, for example `addr = "ubuntu@ente"`.
+
 ## Copying
 
 Copying is the one gesture in a terminal with no result to look at: the text
