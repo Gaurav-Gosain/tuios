@@ -1659,6 +1659,10 @@ type NotifTarget struct {
 	// the target, so a message drawn with one text is not the same message as
 	// one holding another. See clickVisibleNotification.
 	ClipboardVersion uint64
+	// Preview, when set, asks a click to pin the pane as the
+	// picture-in-picture view instead of jumping to it. Only the tuios://pip
+	// link shapes set it; a message target never does.
+	Preview bool
 }
 
 // LogMessage represents a log entry with timestamp and level.

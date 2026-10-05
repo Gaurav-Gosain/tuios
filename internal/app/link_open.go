@@ -39,11 +39,13 @@ import (
 //     viewer's clipboard, because OSC 52 rides the same stream the frame does
 //     and lands on the viewer machine, which is the whole point of it.
 
-// tuiosLinkTarget parses a link on our own scheme into a jump target. Two
-// shapes: tuios://window/<id>, which names a pane of the session the viewer
-// is on, and tuios://session/<name>/window/<id>, which names one on another
-// session. The first path segment after the scheme is the URL's host, so the
-// two arrive split differently and are read as one sequence.
+// tuiosLinkTarget parses a link on our own scheme into a target. The shapes:
+// tuios://window/<id>, which names a pane of the session the viewer is on;
+// tuios://session/<name>/window/<id>, which names one on another session; and
+// the same two with pip where window sits, which ask for the pane as the
+// picture-in-picture view rather than a jump. The first path segment after the
+// scheme is the URL's host, so the shapes arrive split differently and are
+// read as one sequence.
 func tuiosLinkTarget(rawURL string) (NotifTarget, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "tuios" {
@@ -51,11 +53,21 @@ func tuiosLinkTarget(rawURL string) (NotifTarget, bool) {
 	}
 	segs := append([]string{}, u.Host)
 	segs = append(segs, strings.Split(strings.Trim(u.Path, "/"), "/")...)
-	if len(segs) == 2 && segs[0] == "window" && segs[1] != "" {
-		return NotifTarget{WindowID: segs[1]}, true
+	if len(segs) == 2 && segs[1] != "" {
+		if segs[0] == "window" {
+			return NotifTarget{WindowID: segs[1]}, true
+		}
+		if segs[0] == "pip" {
+			return NotifTarget{WindowID: segs[1], Preview: true}, true
+		}
 	}
-	if len(segs) == 4 && segs[0] == "session" && segs[1] != "" && segs[2] == "window" && segs[3] != "" {
-		return NotifTarget{SessionID: segs[1], WindowID: segs[3]}, true
+	if len(segs) == 4 && segs[1] != "" && segs[3] != "" {
+		if segs[0] == "session" && segs[2] == "window" {
+			return NotifTarget{SessionID: segs[1], WindowID: segs[3]}, true
+		}
+		if segs[0] == "session" && segs[2] == "pip" {
+			return NotifTarget{SessionID: segs[1], WindowID: segs[3], Preview: true}, true
+		}
 	}
 	return NotifTarget{}, false
 }
@@ -81,12 +93,17 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	}
 
 	// Our own scheme resolves in-process, so a link tuios itself renders —
-	// in a pane, a dock cell, a pi widget — focuses the pane it names. It
-	// never reaches the desktop's URL handler, so nothing has to be
-	// registered for this to work. A dead target is already reported by the
-	// jump itself, so this branch adds no message of its own.
+	// in a pane, a dock cell, a pi widget — acts on the pane it names: a
+	// jump, or the picture-in-picture view for a pip link. Nothing has to be
+	// registered with the desktop's URL handler for this to work. A dead
+	// target is already reported by the jump itself, so this branch adds no
+	// message of its own.
 	if target, ok := tuiosLinkTarget(rawURL); ok {
-		m.jumpToNotifTarget(target)
+		if target.Preview {
+			m.previewPaneLink(target)
+		} else {
+			m.jumpToNotifTarget(target)
+		}
 		return nil
 	}
 

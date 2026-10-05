@@ -120,3 +120,55 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 		t.Error("a refused scheme said nothing about what it did instead")
 	}
 }
+
+// TestPreviewLinkPinsWithoutJump checks that a tuios://pip link turns its
+// pane into the picture-in-picture view and leaves the focus alone, and that
+// a second click takes the view away again.
+func TestPreviewLinkPinsWithoutJump(t *testing.T) {
+	m, _ := linkTestOS(t, "watch tuios://pip/534f6ba8 from here")
+
+	target := newTestWindow(t, "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a", 40, 20)
+	target.Workspace = 2
+	m.Windows = append(m.Windows, target)
+
+	m.OpenLink("tuios://pip/534f6ba8")
+	if src := m.pipSource(); src == nil || src.ID != target.ID {
+		t.Fatal("the preview link did not pin the pane it named")
+	}
+	if m.FocusedWindow < 0 || m.Windows[m.FocusedWindow].ID != "aaaaaaaa1111" {
+		t.Error("the preview link moved the focus")
+	}
+
+	m.OpenLink("tuios://pip/534f6ba8")
+	if m.pipSource() != nil {
+		t.Error("a second click on the preview link did not unpin")
+	}
+}
+
+// TestPreviewLinkOnDeadPaneSaysSo: a link whose pane has closed must say so
+// rather than sitting silent or pinning nothing.
+func TestPreviewLinkOnDeadPaneSaysSo(t *testing.T) {
+	m, _ := linkTestOS(t, "watch tuios://pip/534f6ba8 from here")
+
+	m.OpenLink("tuios://pip/534f6ba8")
+	if m.pipSource() != nil {
+		t.Error("a preview link to a pane that is not here pinned anyway")
+	}
+	if len(m.Notifications) == 0 {
+		t.Error("the dead preview link said nothing")
+	}
+}
+
+// TestPreviewLinkRefusesAnotherSession: the view reads the cells of a loaded
+// pane, and a pane on a session this client is not on is not loaded, so the
+// link pins nothing and says what it can do instead.
+func TestPreviewLinkRefusesAnotherSession(t *testing.T) {
+	m, _ := linkTestOS(t, "watch tuios://session/other/pip/534f6ba8 from here")
+	target := newTestWindow(t, "534f6ba8-2da0-4526-a5f4-f1a8d9dcf19a", 40, 20)
+	m.Windows = append(m.Windows, target)
+
+	m.OpenLink("tuios://session/other/pip/534f6ba8")
+	if m.pipSource() != nil {
+		t.Error("a preview link for another session pinned one of this session's panes")
+	}
+}

@@ -382,6 +382,42 @@ func (m *OS) JumpToPiP() bool {
 	return true
 }
 
+// previewPaneLink answers a click on a tuios://pip link: the pane it names
+// becomes the picture-in-picture view, and the focus stays where it was.
+// Clicking the link a second time takes the view away, so the link toggles
+// the way the pip key does. A pane on another session is not loaded in this
+// client, so there is nothing to preview; the view reads cells, and there
+// are none to read.
+func (m *OS) previewPaneLink(t NotifTarget) {
+	if t.SessionID != "" && t.SessionID != m.sidebarCurrentSessionID() {
+		if m.sessionCached(t.SessionID) {
+			m.ShowNotification("tuios previews panes of the session you are on. Jump there and pin it from its pane.",
+				"info", m.Settings.NotificationDuration)
+		} else {
+			m.ShowNotification("The pane's session has closed.", "info", m.Settings.NotificationDuration)
+		}
+		return
+	}
+	id, ok := m.expandWindowID(t.WindowID)
+	if !ok {
+		m.ShowNotification("The pane the link names is not here.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if src := m.pipSource(); src != nil && src.ID == id {
+		name := pipPaneName(src)
+		m.UnpinPiP()
+		m.ShowNotification("Unpinned "+name+".", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if err := m.PinPiP(id); err != nil {
+		m.ShowNotification("The pane the link names is not here.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	w := m.Windows[m.windowIndexByID(id)]
+	m.ShowNotification("Pinned "+pipPaneName(w)+". It watches from the corner; click the view to jump there.",
+		"success", m.Settings.NotificationDuration)
+}
+
 // pipPaneName is how the view and its messages name a pane: the name the
 // user gave it, else the title its program set, else its short id.
 func pipPaneName(w *terminal.Window) string {
