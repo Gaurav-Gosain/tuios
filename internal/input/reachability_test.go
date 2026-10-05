@@ -401,6 +401,9 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"workspace_pill_switch": "context menu row",
 	"settings_sidebar":      "rail mouse row",
 	"rename_workspace":      "user binding",
+	// The demo paints a tuios:// link to test the click path with. A test
+	// surface earns no default key.
+	"jump_link_demo": "user binding",
 
 	// Debug and tape surfaces reached from their own prefix, whose actions are
 	// separate names. These are the bodies both share.

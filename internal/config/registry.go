@@ -505,6 +505,8 @@ var ActionDescriptions = map[string]string{
 	"next_window":        "Next window",
 	"prev_window":        "Previous window",
 	"last_pane":          "Back to the previous pane",
+	"jump_back":          "Back to where the last jump started",
+	"jump_link_demo":     "Spawn a pane and paint a link that jumps to it",
 	"select_window_1":    "Select window 1",
 	"select_window_2":    "Select window 2",
 	"select_window_3":    "Select window 3",

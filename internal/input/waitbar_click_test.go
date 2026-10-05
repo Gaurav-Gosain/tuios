@@ -133,3 +133,51 @@ func TestShiftClickOnTuiosLinkStillJumps(t *testing.T) {
 		t.Fatalf("focus = %d, want the pane the link named", o.FocusedWindow)
 	}
 }
+
+// TestJumpBackRestoresThePaneTheJumpLeft proves the undo: the click jumps to
+// the pane the link names, and jump_back lands back on the pane the link was
+// on. A second press finds the stack empty and says so.
+func TestJumpBackRestoresThePaneTheJumpLeft(t *testing.T) {
+	o, pi, _ := waitBarPanes(t, "tuios://window/watched-0001", app.TuiosLinkParams())
+	x, y := linkCell(pi)
+
+	HandleInput(tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
+	HandleInput(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
+	if o.FocusedWindow != 1 {
+		t.Fatalf("focus = %d, want the jump to have landed first", o.FocusedWindow)
+	}
+
+	if !o.JumpBack() {
+		t.Fatal("JumpBack = false, want the origin the click left behind")
+	}
+	if o.FocusedWindow != 0 {
+		t.Fatalf("focus = %d, want the pane the click started on", o.FocusedWindow)
+	}
+
+	if o.JumpBack() {
+		t.Fatal("JumpBack = true twice, want the stack drained by the first press")
+	}
+}
+
+// TestJumpBackDropsDeadEntries checks the walk past origins whose pane has
+// closed: the stack holds where the user was, and a closed pane is where they
+// were, but going back to it is going nowhere.
+func TestJumpBackDropsDeadEntries(t *testing.T) {
+	o, pi, _ := waitBarPanes(t, "tuios://window/watched-0001", app.TuiosLinkParams())
+	x, y := linkCell(pi)
+
+	HandleInput(tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
+	HandleInput(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
+
+	// The origin is the pane the click started on. Closing it after the jump
+	// leaves the stack holding nowhere to go.
+	originIdx := indexOf(o, pi)
+	o.Windows = append(o.Windows[:originIdx], o.Windows[originIdx+1:]...)
+	if o.FocusedWindow >= len(o.Windows) {
+		o.FocusedWindow = len(o.Windows) - 1
+	}
+
+	if o.JumpBack() {
+		t.Fatal("JumpBack = true with no live origin, want false")
+	}
+}

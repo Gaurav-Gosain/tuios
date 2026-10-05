@@ -48,6 +48,9 @@ var repeatablePrefixActions = map[string]bool{
 	// Until that work lands the action reports it did nothing, and neither
 	// the prefix press nor a repeat arms the window (see runPrefixWork).
 	"prefix_next_finished": true,
+	// A run of presses walks the jump stack home, the way the attention keys
+	// walk the Inbox.
+	"jump_back": true,
 }
 
 // armIfRepeatable keeps the prefix live when the command just run is one worth

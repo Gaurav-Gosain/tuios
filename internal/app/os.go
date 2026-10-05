@@ -284,8 +284,15 @@ type OS struct {
 	// new pane is not built locally; it arrives later through a state sync. These
 	// remember which side of which pane the split was meant for so the sync path
 	// can honor the direction instead of falling back to the spiral scheme.
-	pendingSplitDir        layout.PreselectionDir
-	pendingSplitTarget     string
+	pendingSplitDir    layout.PreselectionDir
+	pendingSplitTarget string
+	// pendingLinkDemoOrigin carries a jump-link demo across the daemon round
+	// trip: the pane to paint the tuios:// bar into once the pane the demo
+	// asked for arrives through a state sync. Empty means no demo in flight.
+	pendingLinkDemoOrigin string
+	// jumpBackStack holds where the user was looking before each jump, newest
+	// last. jumpToNotifTarget pushes onto it; JumpBack pops it.
+	jumpBackStack          []NotifTarget
 	WindowToBSPID          map[string]int          // Maps window UUID to stable BSP integer ID
 	BSPIDToWindowID        map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
 	NextBSPWindowID        int                     // Next BSP window ID to assign (starts at 1)

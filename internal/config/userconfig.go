@@ -1013,6 +1013,10 @@ func DefaultConfig() *UserConfig {
 				"prefix_layout":             {"L"},
 				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
+				// Undoes a jump: a notification, a tuios:// link, a prefix+j. u
+				// is free here, and a run of presses walks the stack home (see
+				// the prefix repeat set).
+				"jump_back": {"u"},
 				// Capital M: m is the minimize prefix, and a slip into it costs
 				// nothing. It opens the Inbox on its mail filter, one key (m)
 				// from the whole mailbox.

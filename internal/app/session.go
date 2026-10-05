@@ -1049,6 +1049,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		}
 	})
 
+	m.spendPendingLinkDemo(created)
 	m.MarkAllDirty()
 	return nil
 }

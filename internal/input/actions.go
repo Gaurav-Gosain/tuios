@@ -95,6 +95,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("next_window", handleNextWindow)
 	d.Register("prev_window", handlePrevWindow)
 	d.Register("last_pane", handleLastPane)
+	d.Register("jump_back", handleJumpBack)
+	d.Register("jump_link_demo", handleJumpLinkDemo)
 
 	// Window selection (1-9)
 	for i := 1; i <= 9; i++ {
@@ -449,6 +451,26 @@ func handleLastPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	return afterFocusCommand(o, prev, focusEnterTargeted)
+}
+
+// handleJumpBack walks the jump stack one entry back. Unlike last_pane, which
+// flips between two panes, it undoes jumps of any depth, including the ones
+// across sessions that a notification or a tuios:// link made.
+func handleJumpBack(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
+	if !o.JumpBack() {
+		o.ShowNotification("No jump to go back to.", "info", o.Settings.NotificationDuration)
+		return o, nil
+	}
+	return afterFocusCommand(o, prev, focusEnterTargeted)
+}
+
+// handleJumpLinkDemo paints a tuios:// link onto the focused pane, naming a
+// pane the action just asked for. It is the test surface for the link click
+// path; nothing else in the app draws one yet.
+func handleJumpLinkDemo(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.SpawnJumpLinkDemo()
+	return o, nil
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index.

@@ -70,6 +70,13 @@ func (m *OS) JumpToNotification() bool {
 // disagree about what "go there" means: FocusWindow already switches workspace,
 // and sidebarFocusWindow already switches session first.
 func (m *OS) jumpToNotifTarget(t NotifTarget) bool {
+	return m.jumpTarget(t, true)
+}
+
+// jumpTarget is the jump itself. record says whether the jump owes the back
+// stack an entry: a jump made BY jump_back must not, or every press would
+// grow the stack and back and forth would never drain it.
+func (m *OS) jumpTarget(t NotifTarget, record bool) bool {
 	// A message that asks to let a pane set the clipboard is answered, not
 	// followed.
 	if t.ClipboardAsk != 0 {
@@ -109,6 +116,9 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) bool {
 			m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
 			return false
 		}
+	}
+	if record {
+		m.recordJumpOrigin()
 	}
 	m.sidebarFocusWindow(sidebarRowHit{
 		Kind:        sidebarRowWindow,
@@ -191,4 +201,40 @@ func (m *OS) drawnCopy(n Notification) Notification {
 		n.Target = &t
 	}
 	return n
+}
+
+// jumpBackDepth bounds the stack. A jump a minute for an hour is a stack of
+// sixty nobody would walk; past this, the oldest origin falls off.
+const jumpBackDepth = 32
+
+// recordJumpOrigin notes the pane the user is looking at now, for JumpBack to
+// restore. Called from jumpTarget just before it moves, so a jump that fails
+// its dead-target checks records nothing.
+func (m *OS) recordJumpOrigin() {
+	if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return
+	}
+	w := m.Windows[m.FocusedWindow]
+	m.jumpBackStack = append(m.jumpBackStack, NotifTarget{
+		SessionID: m.sidebarCurrentSessionID(),
+		WindowID:  w.ID,
+	})
+	if len(m.jumpBackStack) > jumpBackDepth {
+		m.jumpBackStack = m.jumpBackStack[1:]
+	}
+}
+
+// JumpBack undoes the newest jump: focus goes to where the user was looking
+// when it happened. Back jumps record nothing, so walking the stack drains it
+// and a press that lands home reports there is nothing left. Entries whose
+// pane has closed are dropped on the way, and the walk continues past them.
+func (m *OS) JumpBack() bool {
+	for len(m.jumpBackStack) > 0 {
+		t := m.jumpBackStack[len(m.jumpBackStack)-1]
+		m.jumpBackStack = m.jumpBackStack[:len(m.jumpBackStack)-1]
+		if m.jumpTarget(t, false) {
+			return true
+		}
+	}
+	return false
 }
