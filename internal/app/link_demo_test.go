@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -48,14 +49,21 @@ func demoPanes(t *testing.T) (*OS, *terminal.Window, *terminal.Window) {
 }
 
 // TestSpendPendingLinkDemoPaintsTheBar proves the demo's two promises: focus
-// returns to the pane the user was on, and that pane's buffer now carries a
+// returns to the pane the user was on, and that pane's buffer carries a
 // tuios:// link to the demo pane with the client's own mark, which is what
-// the plain-click path acts on.
+// the plain-click path acts on. The paint is delayed past the shell redraw a
+// spawn's retile causes, so the test runs it with a token delay and waits it
+// out.
 func TestSpendPendingLinkDemoPaintsTheBar(t *testing.T) {
 	o, origin, demo := demoPanes(t)
 	o.pendingLinkDemoOrigin = origin.ID
 
+	prev := jumpLinkBarDelay
+	jumpLinkBarDelay = time.Millisecond
+	t.Cleanup(func() { jumpLinkBarDelay = prev })
+
 	o.spendPendingLinkDemo([]*terminal.Window{demo})
+	time.Sleep(50 * time.Millisecond)
 
 	if o.FocusedWindow != 0 {
 		t.Fatalf("focus = %d, want the origin pane refocused", o.FocusedWindow)

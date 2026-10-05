@@ -2,9 +2,17 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
+
+// jumpLinkBarDelay is how long the demo waits before painting its bar. The
+// spawn retiles the workspace, which resizes the origin pane, and the shell
+// there redraws its prompt over anything painted ahead of that redraw. So the
+// paint goes out after the dust settles. A test surface, not a contract: the
+// var exists so a test can run the paint inline.
+var jumpLinkBarDelay = 800 * time.Millisecond
 
 // The jump-link demo is a test surface for the tuios:// click path: it asks
 // for a pane and paints a link naming it into the pane the user was on, so
@@ -61,8 +69,16 @@ func (m *OS) spendPendingLinkDemo(created []*terminal.Window) {
 	// the eye stays where it was.
 	m.FocusWindow(idx)
 
-	origin.WriteOutput([]byte(fmt.Sprintf(
+	time.AfterFunc(jumpLinkBarDelay, func() {
+		paintJumpLinkBar(origin, demo.ID)
+	})
+}
+
+// paintJumpLinkBar writes the demo's link line into the pane's buffer. Safe
+// on a pane that closed in the meantime: WriteOutput is a no-op there.
+func paintJumpLinkBar(w *terminal.Window, targetID string) {
+	w.WriteOutput([]byte(fmt.Sprintf(
 		"\r\n\x1b[2m[jump demo]\x1b[0m \x1b]8;%s;tuios://window/%s\x1b\\click here to jump\x1b]8;;\x1b\\\r\n",
-		TuiosLinkParams(), demo.ID,
+		TuiosLinkParams(), targetID,
 	)))
 }
