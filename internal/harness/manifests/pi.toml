@@ -58,3 +58,11 @@ all      = ["working..."]
 submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; not measured"
+
+# The conversation survives a daemon restart on disk: pi's hooks report the
+# session id, and --session reopens it by exact or partial id. A restored pane
+# lands in the same working directory, which is the project the session was
+# saved under.
+[resume]
+argv   = ["pi", "--session", "{session_id}"]
+source = "pi --help: --session <path|id> opens by file path, exact ID, or partial ID"
