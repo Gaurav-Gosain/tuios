@@ -1482,7 +1482,10 @@ uses a compiled stand-in (`fakessh/`) on PATH and a copy of it in the pane's
 folder, run as `./ssh`. The refusal tests (`TestSSHSplitRefusesAProxyCommand`,
 `TestSSHSplitIgnoresTheSSHOfATransfer`) have their positive half in
 `TestSSHSplitRunsTheSameSSH` and `TestSSHSplitFindsSSHUnderANestedShell`,
-which follow ssh through the same fixture. The positive half of the follow
+which follow ssh through the same fixture. The stand-in answers `ssh -G` with
+the host name of `-o HostName`, or the destination, and records nothing.
+`TestSSHSplitPassesTheAgentSocket` starts an `ssh-agent` in the pane and
+stops it when it ends. The positive half of the follow
 option is in its own fixture: the same split key in a pane with no ssh opens a
 shell. `TestSSHSplitFallsBackToAShell` is the positive half of every other
 test: the actions open a pane when no ssh runs.
@@ -1500,4 +1503,9 @@ test: the actions open a pane when no ssh runs.
 | A local-command option is not refused | `sshValueVerdict`: the `sshRefuseConfig` check cut | `TestSSHSplitRefusesAProxyCommand` (2 runs, want 1) | **caught** |
 | Any parent may start ssh | `startedByShell`: the `sshLaunchers` check made `false &&` | `TestSSHSplitIgnoresTheSSHOfATransfer` (2 runs, want 1). `TestSSHSplitFindsSSHUnderANestedShell` passes, which is correct | **caught** |
 | No `-o RemoteCommand=none` with the cd | `remoteLogin.argv`: only `-t` added | `TestSSHSplitKeepsTheRemoteFolder` (the argv lacks the option) | **caught** |
+| The second PR head, with the refusal list | build `f98a72e5` | `TestSSHSplitRefusesALineBreakInAnOption` (2 runs, want 1), `TestSSHSplitKeepsTheFolderOfAnAlias` (no cd for the alias), `TestSSHSplitPassesTheAgentSocket` (the split's ssh had no `SSH_AUTH_SOCK`) | **caught** |
+| A control character is not refused | `parseSSHArgs`: the `hasControl` check made `false &&` | `TestSSHSplitRefusesALineBreakInAnOption` (2 runs, want 1) | **caught** |
+| The alias is not resolved | `SSHFollowArgv`: `hostMatches` in place of `reportMatches` | `TestSSHSplitKeepsTheFolderOfAnAlias` (no cd). `TestSSHSplitKeepsTheRemoteFolder` passes, which is correct | **caught** |
+| The agent socket is not passed | `handleExecuteCommand`: the `newWindowEnv = env` line cut | `TestSSHSplitPassesTheAgentSocket` (the split's ssh had no `SSH_AUTH_SOCK`) | **caught** |
+| The allowlist is a refusal list again | `sshValueVerdict`: an unknown keyword refused only when it is `proxycommand` | No e2e test: `TestSSHSplitRefusesALineBreakInAnOption` still fails at the control character check, and `TestSSHSplitRefusesAProxyCommand` at `proxycommand`. `TestParseRemoteLogin` fails 9 cases, `xauth location` and `unknown keyword` among them | **caught by the unit table only** |
 | Only the group leader is read | `findRemoteLogin`: the group walk set to nil | `TestSSHSplitFindsSSHUnderANestedShell` (the fake ssh never ran a run 1) | **caught** |

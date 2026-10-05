@@ -23,10 +23,10 @@ import (
 //   - The program is never taken from the process. The daemon looks ssh or
 //     mosh up on its own PATH. A ./ssh in a project folder, or any binary that
 //     calls itself ssh, is not run.
-//   - A line with an option that runs code on this machine is not followed:
-//     -F, -I, and the -o keywords ProxyCommand, LocalCommand,
-//     PermitLocalCommand, KnownHostsCommand, PKCS11Provider,
-//     SecurityKeyProvider and Match; mosh's --ssh, --client and --server.
+//   - A line is followed only when every -o keyword is in sshAllowConfig, a
+//     list of connection options that neither run nor load a program, and
+//     no option or value holds a control character. -F, -I, and mosh's
+//     --ssh, --client and --server are refused for the same reason.
 //   - A line with an option that is not a session (-G, -V, -Q, -O) is not
 //     followed, and neither is a line with an option this file does not know.
 //   - The client must have been started by the pane's shell, through shells

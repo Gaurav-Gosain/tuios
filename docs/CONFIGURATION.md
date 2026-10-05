@@ -436,14 +436,38 @@ from `sshpass`, `autossh` or `mosh`. tuios reads only the processes that you
 own in the pane. It runs the `ssh` or `mosh` that it finds on its own `PATH`,
 with no shell on this machine. It never runs the program that the pane runs.
 
+The new ssh gets the same environment as an ordinary new pane. If the ssh
+that tuios follows has an `SSH_AUTH_SOCK` that names your own agent socket,
+the new ssh gets that value too. An agent that your shell started in the pane
+then works in the split.
+
 ### Lines that are not followed
+
+tuios follows an ssh line only when each `-o` option is on this list:
+
+`AddressFamily`, `BatchMode`, `CertificateFile`, `CheckHostIP`, `Ciphers`,
+`Compression`, `ConnectionAttempts`, `ConnectTimeout`, `ControlPath`,
+`EscapeChar`, `ForwardAgent`, `ForwardX11`, `ForwardX11Trusted`,
+`GlobalKnownHostsFile`, `HostKeyAlgorithms`, `HostKeyAlias`, `HostName`,
+`IdentitiesOnly`, `IdentityAgent`, `IdentityFile`, `KbdInteractiveAuthentication`,
+`KexAlgorithms`, `LogLevel`, `MACs`, `PasswordAuthentication`, `Port`,
+`PreferredAuthentications`, `ProxyJump`, `PubkeyAcceptedAlgorithms`,
+`PubkeyAuthentication`, `SendEnv`, `ServerAliveCountMax`,
+`ServerAliveInterval`, `SetEnv`, `StrictHostKeyChecking`, `TCPKeepAlive`,
+`User` and `UserKnownHostsFile`.
+
+The new pane does not get the forward and session options: `LocalForward`,
+`RemoteForward`, `DynamicForward`, `GatewayPorts`, `ExitOnForwardFailure`,
+`ClearAllForwardings`, `Tunnel`, `TunnelDevice`, `ControlMaster`,
+`ControlPersist`, `RemoteCommand`, `SessionType`, `StdinNull`,
+`ForkAfterAuthentication` and `RequestTTY`.
 
 These ssh lines get an ordinary pane:
 
-- An option that runs a program on this machine: `-F`, `-I`, or `-o` with
-  `ProxyCommand`, `LocalCommand`, `PermitLocalCommand`, `KnownHostsCommand`,
-  `PKCS11Provider`, `SecurityKeyProvider` or `Match`.
-- `-G`, `-V`, `-Q` and `-O`, and an option that tuios does not know.
+- An `-o` option that is not on the two lists above. `ProxyCommand`,
+  `LocalCommand`, `XAuthLocation` and `Match` are examples.
+- An option or a value with a control character, such as a line break.
+- `-F`, `-I`, `-G`, `-V`, `-Q` and `-O`, and an option that tuios does not know.
 - mosh with `--ssh`, `--client` or `--server`.
 - ssh that another program starts, such as `scp`, `rsync`, `git` or `sftp`.
 
@@ -454,9 +478,11 @@ split. A split with `-J` on the command line is followed.
 
 The new pane starts in the remote folder when the remote shell reports its
 folder with OSC 7. The host name in the report must be the same as the host
-in the ssh line. `reachy-mini` matches `pollen@reachy-mini`. It does not
-match `pollen@reachy-mini.example.ts.net`. When there is no match, the new
-pane starts in the remote home folder.
+in the ssh line, or as the `HostName` that `ssh -G` gives for that line.
+`reachy-mini` matches `pollen@reachy-mini`. When `~/.ssh/config` makes `prod`
+an alias for `box.example.com`, a report from `box.example.com` or from `box`
+matches `ssh prod`. A report from `box.other.com` does not. When there is no
+match, the new pane starts in the remote home folder.
 
 fish sends the report by default. For bash, add this line to `~/.bashrc` on
 the remote machine:
