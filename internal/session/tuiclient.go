@@ -1212,18 +1212,19 @@ func (c *TUIClient) LayoutTreeOps() bool {
 
 // SendLayoutTree sends one workspace's tree to the daemon as an op. leaves names
 // the window each leaf number in tree stands for; nil tree says the workspace
-// has none.
+// has none. base is zero for a change the user made, and otherwise the Version
+// of the state the tree was worked out from (see LayoutTreePayload.BaseVersion).
 //
 // The op is numbered in the same sequence as the state pushes, so every state
 // the daemon handed out before it landed reads as predating this client's own
 // push and is dropped (see PredatesOwnPush). That is what keeps a drag smooth:
 // the answers to the earlier steps of the drag arrive while later steps are in
 // flight, and none of them may put the divider back.
-func (c *TUIClient) SendLayoutTree(ws int, tree *SerializedBSPTree, leaves map[int]string) error {
+func (c *TUIClient) SendLayoutTree(ws int, tree *SerializedBSPTree, leaves map[int]string, base int) error {
 	c.pushMu.Lock()
 	defer c.pushMu.Unlock()
 	seq := c.pushSeq.Load() + 1
-	p := &LayoutTreePayload{PushSeq: seq, Workspace: ws, Tree: tree, Leaves: leaves}
+	p := &LayoutTreePayload{PushSeq: seq, Workspace: ws, Tree: tree, Leaves: leaves, BaseVersion: base}
 	if origin := c.pushOrigin.Load(); origin != nil {
 		p.PushOrigin = *origin
 	}

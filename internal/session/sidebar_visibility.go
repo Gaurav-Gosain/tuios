@@ -78,7 +78,7 @@ func (s *Session) ApplySidebarVisibility(p *SidebarVisibilityPayload) (bool, err
 		state.Sidebar = p.Visibility
 		// Recorded as a tree op is: the op changes one field that no push
 		// carries, so a push built before it has missed nothing it could undo.
-		s.noteTreeOpLocked(state.Version+1, p.PushOrigin)
+		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, treeOpNoWorkspace)
 		return nil
 	})
 	switch {

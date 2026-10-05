@@ -559,6 +559,10 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	}
 	defer func() {
 		m.applyingPeerSync = false
+		// The trees sent from here on were worked out from this state, except
+		// the ones the user had changed before it arrived.
+		m.treeAnswerBase, m.treeAnswerUser = state.Version, unsentBefore
+		defer func() { m.treeAnswerBase, m.treeAnswerUser = 0, nil }()
 		if m.syncAnswerOwed {
 			m.syncAnswerOwed = false
 			// One push for the whole sync, after it has been applied, so the

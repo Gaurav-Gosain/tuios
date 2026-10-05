@@ -132,7 +132,7 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 		}
 		next[p.Workspace] = p.Layout
 		state.WorkspaceMasterLayout = next
-		s.noteTreeOpLocked(state.Version+1, p.PushOrigin)
+		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, p.Workspace)
 		return nil
 	})
 	switch {

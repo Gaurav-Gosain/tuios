@@ -25,6 +25,12 @@ import (
 // Each client's push reached the other, each dropped the other's as older
 // than its own push, and neither ever sent again. The two tests after it pass
 // on main too; they pin the new-pane race, which the op has to keep working.
+//
+// NEGATIVE CONTROL: TestResizeWhilePeerAddsPaneKeepsTheResize failed 11 runs
+// in 60 with the daemon taking a placed tree whatever it was built on
+// (LayoutTreePayload.BaseVersion ignored). The peer placed the new pane on the
+// tree from before the resize, and when its op landed last the split went back
+// to 0.500. With the stale placement refused it passed 60 in 60.
 
 // rootRatio is the ratio of the split at the top of the client's tree for the
 // workspace on screen, or -1 when there is no split.

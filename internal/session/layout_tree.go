@@ -56,11 +56,25 @@ type LayoutTreePayload struct {
 	Tree *SerializedBSPTree
 	// Leaves names the window each leaf number in Tree stands for.
 	Leaves map[int]string
+	// BaseVersion is set when the tree is not a change the user made but
+	// this client's reading of the state at that Version: a pane it placed
+	// because the session's tree did not hold it. Such a tree carries every
+	// split as the client saw it then, so it is refused when another client
+	// changed the workspace's tree after that Version. Taken as sent, it
+	// would undo that change: a resize made while a peer opened a pane was
+	// lost to the peer placing it. The sender is answered with the state,
+	// and places the pane again on the tree that stands. Zero for a change
+	// the user made, which is taken whatever it was built on.
+	BaseVersion int `json:"base_version,omitempty"`
 }
 
 // errLayoutTreeSame refuses an op that would not change the tree, so it does
 // not advance Version and wake every client for nothing.
 var errLayoutTreeSame = errors.New("layout tree op changes nothing")
+
+// errLayoutTreeStale refuses a placed tree built before another client's
+// change to the same workspace. See LayoutTreePayload.BaseVersion.
+var errLayoutTreeStale = errors.New("layout tree op predates a peer's tree")
 
 // ApplyLayoutTree applies one client's tree for one workspace. It reports
 // whether the tree was applied; false with a nil error means the op changed
@@ -76,6 +90,9 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
 			return fmt.Errorf("workspace %d is out of range", p.Workspace)
 		}
+		if p.BaseVersion != 0 && s.peerTreeChangedLocked(p.PushOrigin, p.Workspace, p.BaseVersion, state.Version) {
+			return errLayoutTreeStale
+		}
 		trees, ids, next, changed := placeTree(state, p.Workspace, p.Tree, p.Leaves)
 		if !changed {
 			return errLayoutTreeSame
@@ -83,11 +100,11 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		state.WorkspaceTrees, state.WindowToBSPID, state.NextBSPWindowID = trees, ids, next
 		// mutateStateLocked advances Version by one once this returns, so the
 		// op's version is the next one.
-		s.noteTreeOpLocked(state.Version+1, p.PushOrigin)
+		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, p.Workspace)
 		return nil
 	})
 	switch {
-	case errors.Is(err, errLayoutTreeSame):
+	case errors.Is(err, errLayoutTreeSame), errors.Is(err, errLayoutTreeStale):
 		return false, nil
 	case err != nil:
 		return false, err
@@ -316,7 +333,7 @@ func (s *Session) SetLayoutTreeOps(on bool) {
 		// With no origin it also reads as another client's tree op, so each
 		// client's next push is answered with the state, which is right: the
 		// trees are about to travel another way.
-		s.noteTreeOpLocked(state.Version+1, "")
+		s.noteTreeOpLocked(state.Version+1, "", treeOpAnyWorkspace)
 		return nil
 	})
 }
@@ -324,16 +341,51 @@ func (s *Session) SetLayoutTreeOps(on bool) {
 // noteTreeOpLocked records that the mutation which will carry version was a
 // tree op. A tree op changes the trees and nothing else, and a push from a
 // client that sends ops carries no trees, so a push built before a tree op
-// has missed nothing it could undo. See missedMutationLocked. The caller holds
-// stateMu.
-func (s *Session) noteTreeOpLocked(version int, origin string) {
-	s.treeOps[version%len(s.treeOps)] = treeOpRecord{version, origin}
+// has missed nothing it could undo. See missedMutationLocked. ws is the
+// workspace whose tree the op changed, treeOpAnyWorkspace for an op that
+// bears on every tree, or treeOpNoWorkspace for one that changes none. The
+// caller holds stateMu.
+func (s *Session) noteTreeOpLocked(version int, origin string, ws int) {
+	s.treeOps[version%len(s.treeOps)] = treeOpRecord{version, origin, ws}
 }
+
+const (
+	// treeOpAnyWorkspace marks a tree op that bears on the tree of every
+	// workspace.
+	treeOpAnyWorkspace = -1
+	// treeOpNoWorkspace marks an op recorded with the tree ops that changes
+	// no tree.
+	treeOpNoWorkspace = -2
+)
 
 // treeOpRecord is one entry of Session.treeOps.
 type treeOpRecord struct {
 	version int
 	origin  string
+	ws      int
+}
+
+// peerTreeChangedLocked reports whether an op from a client other than
+// origin changed the tree of ws after base. Versions further back than the
+// record reaches read as changed, which is the safe answer: the sender is
+// sent the state and works the tree out again. The caller holds stateMu.
+func (s *Session) peerTreeChangedLocked(origin string, ws, base, current int) bool {
+	if base >= current {
+		return false
+	}
+	if current-base > len(s.treeOps) {
+		return true
+	}
+	for v := base + 1; v <= current; v++ {
+		r := s.treeOps[v%len(s.treeOps)]
+		if r.version != v || (r.ws != ws && r.ws != treeOpAnyWorkspace) {
+			continue
+		}
+		if r.origin != origin || origin == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // treeOpAt reports whether the mutation at version was a tree op, and who

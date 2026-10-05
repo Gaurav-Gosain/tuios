@@ -186,7 +186,14 @@ func (m *OS) sendTreeOps() bool {
 			leaves = make(map[int]string)
 			collectLeaves(tree.Root, name, leaves)
 		}
-		if err := m.DaemonClient.SendLayoutTree(ws, tree, leaves); err != nil {
+		// A tree worked out while applying a state, not changed by the user,
+		// names the state it was built on, so the daemon can refuse it when
+		// a peer changed the workspace since. See treeAnswerBase.
+		base := 0
+		if !m.treeAnswerUser[ws] {
+			base = m.treeAnswerBase
+		}
+		if err := m.DaemonClient.SendLayoutTree(ws, tree, leaves, base); err != nil {
 			m.LogError("Failed to send the layout of workspace %d to the daemon: %v", ws, err)
 			return false
 		}

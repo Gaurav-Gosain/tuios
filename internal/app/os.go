@@ -800,6 +800,14 @@ type OS struct {
 	// placed. That is an answer to a question, not an echo of a layout, so it is
 	// sent once, after the sync has been applied and the guard is down.
 	syncAnswerOwed bool
+	// treeAnswerBase is the Version of the state being answered while the
+	// trees owed after applying it are sent, and zero otherwise.
+	// treeAnswerUser holds the workspaces whose tree the user had changed
+	// before that state arrived. Every other tree sent then is this client's
+	// reading of the state, and the daemon refuses it when a peer changed
+	// that workspace's tree after the state. See LayoutTreePayload.BaseVersion.
+	treeAnswerBase int
+	treeAnswerUser map[int]bool
 	// turnsWithinSync holds the panes whose finished turn a sync folded away
 	// (see noteAgentTurnWithin), until the sync has adopted its focus. The
 	// windows are updated before the focus, and a turn has to be judged by
