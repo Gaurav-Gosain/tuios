@@ -1137,6 +1137,17 @@ window is the positive half.
 | --- | --- | --- | --- |
 | onExit runs before the window is added | `AddDaemonWindowWith` in `internal/session/session_ops.go`: the `added` gate cut, so onExit runs as the process exits | `TestOnExitSeesTheWindowOfAProcessThatExitedAtOnce` ("onExit ran before the window was in the state") | **caught in `internal/session`** (10 of 10 run) |
 
+## A trim timer reset from outside its synctest bubble
+
+`internal/memtrim` kept one trim timer and reset it on each `Request`. A
+window closed inside a synctest bubble armed that timer in the bubble. The
+next `Request`, from an ordinary test cleanup, reset it from outside, and the
+runtime ended the test binary. Each `Request` now starts its own timer.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| One shared timer, reset on each Request | `internal/memtrim/memtrim.go` from origin/main | `TestRequestAfterABubbleArmedTheTimer` ("fatal error: reset of synctest timer from outside bubble") | **caught in `internal/memtrim`** (1 of 1 run, deterministic) |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
