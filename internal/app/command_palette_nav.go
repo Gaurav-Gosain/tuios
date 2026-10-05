@@ -30,6 +30,11 @@ func (m *OS) rebuildPaletteItems() {
 	if !m.reviewSupported() {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteReviewName })
 	}
+	// The Agents tab is not there with the agent features off, or on a client
+	// that cannot change this machine's integrations.
+	if !m.agentsPageAvailable() {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteAgentsSettingsName })
+	}
 	// Multi copy mode needs a multifocus set, so it is offered only with one.
 	if len(m.MultifocusSet) == 0 {
 		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Name == paletteMultiCopyName })

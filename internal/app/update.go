@@ -805,10 +805,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// overlay opened by any of the handlers starts its fade on the frame it
 	// first appears in. See motion.go.
 	motion := m.motionCmd()
-	if sync == nil && replan == nil && gitSync == nil && railSync == nil && loading == nil && motion == nil {
+	// The Agents tab's report and the integration notices, on the same beat:
+	// the settings page opening and a pane starting an agent are both things
+	// any handler can do. See settings_agents.go.
+	agents := m.agentsSyncCmd()
+	if sync == nil && replan == nil && gitSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync, railSync, loading, motion)
+	return model, tea.Batch(cmd, sync, replan, gitSync, railSync, loading, motion, agents)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -1964,6 +1968,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case agentIntegrationMsg:
 		m.agentIntegrationInstalled = true
 		return m, nil
+
+	case agentsOverviewMsg:
+		m.applyAgentsOverview(msg)
+		return m, nil
+
+	case agentsActionMsg:
+		return m, m.applyAgentAction(msg)
 
 	case AgentMailLoadMsg:
 		// A session switch asked for the new session's ring. The read runs in

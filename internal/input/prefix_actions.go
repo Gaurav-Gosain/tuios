@@ -62,6 +62,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_next_attention", handlePrefixNextAttention)
 	d.Register("prefix_review", handlePrefixReview)
 	d.Register("prefix_next_finished", handlePrefixNextFinished)
+	d.Register("prefix_agents_settings", handlePrefixAgentsSettings)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
@@ -387,6 +388,12 @@ func handlePrefixMail(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixInbox(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenInbox("")
+	return o, nil
+}
+
+// handlePrefixAgentsSettings opens the settings page on its Agents tab.
+func handlePrefixAgentsSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenAgentsSettings()
 	return o, nil
 }
 

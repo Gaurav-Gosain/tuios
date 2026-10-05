@@ -56,6 +56,12 @@ func (m *OS) currentSettingsHints() []overlay.Hint {
 	if m.settingsSearch.open {
 		return settingsSearchHints
 	}
+	if m.onAgentsTab() {
+		if m.agentsPage.action != "" {
+			return agentsActionHints
+		}
+		return agentsHints
+	}
 	return settingsHints
 }
 
@@ -277,9 +283,16 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 
 	// Neither of these rows has stepper arrows to record: a toggle has one target
 	// and a colour has none, since there is no next colour to step to.
-	stepless := item.Control == controlBool || item.Control == controlColor
+	stepless := item.Control == controlBool || item.Control == controlColor || item.Control == controlStatus
 	var control string
 	switch item.Control {
+	case controlStatus:
+		ink := pal.FgDim
+		if item.ink != nil {
+			ink = item.ink(pal)
+		}
+		control = overlay.Style(bg).Foreground(theme.ReadableAt(ink, bg, theme.ContrastFloor)).Bold(selected).
+			Render(overlay.Truncate(item.value(m), max(width/2, 6)))
 	case controlBool:
 		control = overlay.Toggle(item.boolVal(m), selected, bg, pal)
 	case controlString:
@@ -327,6 +340,13 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 			tag = ""
 		}
 	}
+	aside := ""
+	if item.Aside != "" && ex.tag == "" {
+		aside = "  " + item.Aside
+		if lipgloss.Width(item.Label)+lipgloss.Width(aside) > avail {
+			aside = ""
+		}
+	}
 	label := overlay.Truncate(item.Label, avail)
 	left := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Bold(true).Render(marker) +
 		launcherRowName(label, ex.match, bg, labelColor, selected, pal)
@@ -335,6 +355,9 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	}
 	if tag != "" {
 		left += overlay.Style(bg).Foreground(pal.FgMute).Render(tag)
+	}
+	if aside != "" {
+		left += overlay.Style(bg).Foreground(pal.FgDim).Render(aside)
 	}
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(control), 1)

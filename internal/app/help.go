@@ -190,7 +190,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 			bindings = append(bindings, HelpBinding{Keys: live, Description: desc, Category: cat})
 		}
 	}
-	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_next_finished", "prefix_review", "prefix_mail", "prefix_jump_notif"} {
+	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_next_finished", "prefix_review", "prefix_mail", "prefix_jump_notif", "prefix_agents_settings"} {
 		desc := config.ActionDescriptions[action]
 		add(presses[action], desc)
 	}

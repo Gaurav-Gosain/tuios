@@ -835,6 +835,17 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The Agents tab, where each harness's integration is shown,
+			// installed and updated. Left out while the tab is.
+			Name:     paletteAgentsSettingsName,
+			Shortcut: "prefix+A",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenAgentsSettings()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Theme picker",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

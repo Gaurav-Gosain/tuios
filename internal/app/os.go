@@ -1371,6 +1371,10 @@ type OS struct {
 	// agentIntegrationInstalled is set when a harness has tuios's hooks
 	// installed, read once at start off the UI goroutine. See agentsSeen.
 	agentIntegrationInstalled bool
+	// agentsPage is the settings page's Agents tab: the integration report it
+	// draws, the row whose actions are open, and the notices already shown.
+	// See settings_agents.go.
+	agentsPage agentsPageState
 	// settingsAgentsOpen is the Alerts tab's agent group opened or closed by
 	// hand; nil follows agentsSeen.
 	settingsAgentsOpen *bool

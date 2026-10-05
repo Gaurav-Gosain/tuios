@@ -48,6 +48,9 @@ matches the build.
    tuios doctor agents                      # what is installed, and agent panes missing one
    ```
 
+   Or press `ctrl+b A` to open the Agents tab of the settings page, and press
+   enter on a harness. See [The Agents tab](#the-agents-tab).
+
 2. Learn two keys: `ctrl+b i` opens the Inbox and `ctrl+b o` goes to the
    oldest item. The rail is on by default from v0.8.0. A config file that sets
    it off keeps it off; turn it on with:
@@ -2976,7 +2979,7 @@ tuios can work out by looking. tuios wires nineteen of them itself:
 tuios integration install claude-code   # any harness below, or --all
 tuios integration status                # installed and current, per harness
 tuios integration uninstall codex
-tuios doctor agents                     # PATH, install state, and panes missing theirs
+tuios doctor agents                     # PATH, install state, and panes missing theirs or out of date
 ```
 
 An integration reports one of two things. Twelve report the pane's **state**:
@@ -3078,6 +3081,35 @@ command only, so it would replace a user's own, and it reports only that a turn
 finished. Hooks are on by default in Codex; `status` notes a `config.toml` that
 turns them off with `[features] hooks = false`. `tuios agent-hook codex` still
 reads a `notify` payload, so a hand-wired `notify` reports `done`.
+
+### The Agents tab
+
+The settings page has an Agents tab with the report `tuios doctor agents`
+prints. Open it with `ctrl+b A`, or with `Agents: settings, install and update
+integrations` in the command palette. The tab is not there when
+`[agents] enabled = false`, or on a client that a server serves over SSH or the
+web.
+
+Each row is one harness. It shows whether the harness is on PATH, and one of
+these states:
+
+| State | What it means |
+| ----- | ------------- |
+| installed | The integration is installed and current. |
+| out of date | An older tuios installed it, or it runs another program. Update it. |
+| not installed | The integration is not installed. If the harness has not run here, run it once first. |
+| no integration | tuios has no integration for this harness. The line under the row gives the reason. |
+
+Press enter or click a row to see its actions: install, update or uninstall.
+Each action names the file it changes. Press enter on the action to do it, or
+esc to go back. The actions run the same code as `tuios integration install`
+and `tuios integration uninstall`, with the default `--command`. The result
+or the error shows in the dock.
+
+When a pane runs a harness whose integration is out of date, or not installed
+where it could be, tuios shows one notice for that harness, such as "Claude
+Code integration is out of date. Open Settings, Agents to update it." The
+notice comes once per harness each time the client starts.
 
 ### The MCP server
 

@@ -365,6 +365,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 				// A click anywhere on a text row opens its inline editor.
 				m.SettingsBeginEdit()
 				return nil
+			case controlStatus:
+				// A status row has nothing to step, so a click anywhere on it
+				// is the row's enter.
+				return m.SettingsActivate()
 			case controlColor:
 				// And anywhere on a colour row, swatch included, opens its picker.
 				// The row's rect is the one the renderer recorded as it drew, so

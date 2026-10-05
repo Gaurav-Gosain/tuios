@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -24,6 +25,10 @@ const (
 	// no stepper: there is no next colour to step to, and typing a hex into a
 	// text field was never the way to choose one.
 	controlColor
+	// controlStatus is a word that says how something stands, with no stepper.
+	// Enter or a click anywhere on the row runs its activate hook. The Agents
+	// tab's rows are these.
+	controlStatus
 )
 
 // settingItem is one row on the settings page. adjust changes the value by dir
@@ -34,8 +39,11 @@ type settingItem struct {
 	// not one (the daemon log level's own spelling, a section header). The
 	// coverage test reads it to tell an option with no way to reach it from one
 	// that is deliberately absent.
-	Path    string
-	Label   string
+	Path  string
+	Label string
+	// Aside is a short note drawn quietly after the label, such as whether
+	// an agent is on PATH.
+	Aside   string
 	Desc    string
 	Control settingControl
 	Options []string
@@ -55,6 +63,8 @@ type settingItem struct {
 	// painted on. It is the colour in force rather than the value stored, so an
 	// unset row still shows what it is inheriting.
 	swatch func(ground color.Color, s *config.Settings) color.Color
+	// ink is the colour a controlStatus row writes its value in.
+	ink func(pal overlay.Palette) color.Color
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker). It returns a command so a
 	// row can open something that has to start running: the effect picker's
@@ -682,11 +692,18 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	return []settingsCategory{
+	cats := []settingsCategory{
 		appearance, backgrounds, sidebar, selection, dock, behavior,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
-		m.hostsCategory(), tape,
+		m.hostsCategory(),
 	}
+	// The Agents tab goes with the agent features. See settings_agents.go.
+	m.agentsPage.tab = -1
+	if m.agentsPageAvailable() {
+		m.agentsPage.tab = len(cats)
+		cats = append(cats, m.agentsCategory())
+	}
+	return append(cats, tape)
 }
 
 // themeItem is the theme row. Hand-written because the value is a name from an

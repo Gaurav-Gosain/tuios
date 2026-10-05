@@ -923,6 +923,7 @@ not offered and do what an unbound key does: after `ctrl+b` in terminal mode,
 | --- | --- | --- |
 | `ctrl+b v` | anywhere | Review the focused pane's changes |
 | `ctrl+b O` | anywhere | Go to the newest finished turn nobody has seen; `O` again, inside the repeat window, goes to the next older one, and a turn that finishes meanwhile starts over |
+| `ctrl+b A` | anywhere | Open the Agents tab of the settings page, where you install, update and uninstall each harness's integration |
 | `v` | Inbox | Review the changes in the item's pane |
 | `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
 | `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
@@ -948,7 +949,8 @@ shown. The digits are not bindings.
 The Inbox's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
 `inbox_show_snoozed`, `inbox_deny_reason`, `inbox_detail_down` and
 `inbox_detail_up` in `[keybindings.inbox]`, and the prefix chords are
-`prefix_review` and `prefix_next_finished` in `[keybindings.prefix_mode]`.
+`prefix_review`, `prefix_next_finished` and `prefix_agents_settings` in
+`[keybindings.prefix_mode]`.
 The agent rows' keys are a section of their own,
 `[keybindings.sidebar_agents]` (`agent_unread`, `agent_snooze`,
 `agent_reply`, `agent_review`, `agent_cancel_queued`). It is consulted before

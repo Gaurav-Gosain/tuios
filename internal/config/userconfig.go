@@ -1086,6 +1086,9 @@ func DefaultConfig() *UserConfig {
 				// prefix stays armed so O O O walks back through them.
 				"prefix_review":        {"v"},
 				"prefix_next_finished": {"O"},
+				// A opens the settings page on its Agents tab, where each
+				// harness's integration is shown, installed and updated.
+				"prefix_agents_settings": {"A"},
 				// F, as in tmux-fingers. f searches files.
 				"hints": {"F"},
 				// Q, as in tmux's display-panes, which is q there. q is the

@@ -33,6 +33,7 @@ const (
 	whichKeyInboxMail     = "Inbox: mail"
 	whichKeyReview        = "Review changes"
 	whichKeyNewestDone    = "Newest finished"
+	whichKeyAgentSettings = "Agents settings"
 )
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
@@ -42,7 +43,7 @@ const (
 // been seen; the keys work either way.
 func IsAgentPrefixKeybinding(k Keybinding) bool {
 	switch k.Description {
-	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone:
+	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone, whichKeyAgentSettings:
 		return true
 	}
 	return false
@@ -215,6 +216,7 @@ func GetPrefixKeybindingGroups(prefixType string, isDaemonSession ...bool) []Key
 		kb("M", whichKeyInboxMail),
 		kb("O", whichKeyNewestDone),
 		kb("v", whichKeyReview),
+		kb("A", whichKeyAgentSettings),
 	}}
 	return []KeybindingGroup{windows, panes, sessions, modes, menus, tools, agents}
 }

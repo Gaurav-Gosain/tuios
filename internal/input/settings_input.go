@@ -18,7 +18,12 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	switch msg.String() {
-	case "esc", "q", "ctrl+c":
+	case "esc", "q":
+		// Esc leaves the Agents tab's action rows before it closes the page.
+		if !o.SettingsBack() {
+			o.CloseSettings()
+		}
+	case "ctrl+c":
 		o.CloseSettings()
 	case "left", "h":
 		return o, o.SettingsAdjust(-1)
