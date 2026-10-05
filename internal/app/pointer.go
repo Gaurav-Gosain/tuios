@@ -58,6 +58,19 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		return
 	}
 
+	// The session rail sits over the panes' left edges, so the geometry below
+	// would offer a resize shape for an edge the rail is covering. The rail is
+	// chrome, and chrome hover is the plain pointer — except its own edge
+	// rule, which carries the width-resize gesture.
+	if m.SidebarBandContains(x, y) {
+		if m.sidebarOnEdge(x) {
+			m.SetPointerShape(PointerEWResize)
+		} else {
+			m.SetPointerShape(PointerDefault)
+		}
+		return
+	}
+
 	// In tiled mode with shared borders, check separator lines
 	if m.panesBorderless() {
 		// The same lines the separator overlay draws, so the resize cursor is
