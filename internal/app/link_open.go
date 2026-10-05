@@ -1,12 +1,16 @@
 package app
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/anmitsu/go-shlex"
@@ -38,6 +42,42 @@ import (
 //     pretend to. What a remote client can do is put the address on the
 //     viewer's clipboard, because OSC 52 rides the same stream the frame does
 //     and lands on the viewer machine, which is the whole point of it.
+
+// linkMark is the nonce a link tuios draws itself carries in its OSC 8
+// parameters. A guest can print any tuios:// address it likes, but it cannot
+// read the client's frame stream, which is the only place the nonce appears, so
+// it cannot forge a link the plain-click path will act on. The value never
+// leaves the process that draws the link and checks it.
+var linkMark = newLinkMark()
+
+func newLinkMark() string {
+	b := make([]byte, 16)
+	if _, err := crand.Read(b); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b)
+}
+
+// TuiosLinkParams is the OSC 8 parameter string a link tuios draws into a
+// pane's content carries. Everything that paints a tuios:// link onto a pane's
+// cells goes through here, so the attribute on screen and the check the click
+// path makes cannot drift apart.
+func TuiosLinkParams() string { return "tuios=" + linkMark }
+
+// LinkIsOurs reports whether OSC 8 parameters mark a link tuios drew itself.
+// Parameters are colon-separated per T.416, and a program is free to carry
+// parameters of its own beside ours, so the check reads one segment.
+func (m *OS) LinkIsOurs(params string) bool {
+	if params == "" {
+		return false
+	}
+	for _, seg := range strings.Split(params, ":") {
+		if seg == "tuios="+linkMark {
+			return true
+		}
+	}
+	return false
+}
 
 // tuiosLinkTarget parses a link on our own scheme into a jump target. Two
 // shapes: tuios://window/<id>, which names a pane of the session the viewer

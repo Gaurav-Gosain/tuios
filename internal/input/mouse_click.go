@@ -307,14 +307,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A plain click on a link on our own scheme acts on it. Shift guards the
-	// click paths that could reach the desktop, where a browser opening over a
-	// selection is a gesture nobody asked for. A tuios:// link cannot do that:
-	// OpenLink resolves it in-process, so the click's action is a focus change
-	// inside the app the click is already in. This is the wait bar's path, and
+	// A plain click acts on a tuios:// link tuios drew itself, and on nothing
+	// else. Shift guards the click paths that could reach the desktop, where a
+	// browser opening over a selection is a gesture nobody asked for. A tuios://
+	// link resolves in-process, so the click's action is a focus change inside
+	// the app the click is already in — but OSC 8 lets any program print such an
+	// address, and this check runs before mouse forwarding, so the mark is what
+	// keeps a guest's link from taking the click the guest's own mouse tracking
+	// should have had. Links tuios paints carry the client's nonce; a guest
+	// cannot read the frame stream to learn it. This is the wait bar's path, and
 	// the bar's whole point is that a click lands on the pane it names.
 	if msg.Button == tea.MouseLeft && msg.Mod == 0 {
-		if link, ok := o.LinkAt(X, Y); ok && strings.HasPrefix(link.URL, "tuios://") {
+		if link, ok := o.LinkAt(X, Y); ok && strings.HasPrefix(link.URL, "tuios://") && o.LinkIsOurs(link.Params) {
 			if clickedWindowIndex != -1 {
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			}

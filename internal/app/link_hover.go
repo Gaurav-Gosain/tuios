@@ -35,6 +35,10 @@ type PaneLink struct {
 	WindowID string
 	// URL is the address the link points at, exactly as the program wrote it.
 	URL string
+	// Params is the OSC 8 parameter string the link carries, exactly as the
+	// program wrote it. It is what tells a link tuios drew itself from one a
+	// program printed: only the former carries the client's mark.
+	Params string
 	// Marked says the address came from OSC 8, so the program declared it. A
 	// bare URL found in plain text is not marked, and the two are treated
 	// differently by nothing except this field and the config that finds them.
@@ -154,6 +158,7 @@ func markedLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 	return PaneLink{
 		WindowID: window.ID,
 		URL:      want.URL,
+		Params:   want.Params,
 		Marked:   true,
 		Y0:       y0, X0: x0, Y1: y1, X1: x1,
 		Row: y, Col: x,
