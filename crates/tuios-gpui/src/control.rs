@@ -85,10 +85,6 @@ pub fn wheel(pos: Point<Pixels>, delta: ScrollDelta) -> PlatformInput {
     PlatformInput::ScrollWheel(ScrollWheelEvent { position: pos, delta, modifiers: Modifiers::default(), touch_phase: TouchPhase::Moved })
 }
 
-pub fn key(k: Keystroke) -> PlatformInput {
-    PlatformInput::KeyDown(KeyDownEvent { keystroke: k, is_held: false, prefer_character_input: false })
-}
-
 pub fn json_str(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     o.push('"');

@@ -56,6 +56,8 @@ enum Drag {
 /// What a control command turns into.
 enum Plan {
     Events(Vec<PlatformInput>),
+    /// Keystrokes, dispatched the way the platform does, text input included.
+    Keys(Vec<Keystroke>),
     Reply(String),
 }
 
@@ -94,6 +96,12 @@ pub struct TuiosApp {
     last_title: String,
     /// Smooth scrolling and other animations ask for frames while running.
     animating: bool,
+    /// Blink phase of the focused pane's cursor, when its program asked for
+    /// a blinking cursor. Typing restarts the phase.
+    blink_on: bool,
+    last_input: Instant,
+    /// Text an input method is composing, drawn at the cursor until committed.
+    marked: Option<String>,
 }
 
 impl TuiosApp {
@@ -127,13 +135,43 @@ impl TuiosApp {
             stats: FrameStats::default(),
             last_title: String::new(),
             animating: false,
+            blink_on: true,
+            last_input: Instant::now(),
+            marked: None,
         };
         this.connect(this.cfg.session.clone(), window, cx);
         this.poll_sessions(cx);
+        this.blink(cx);
         if let Some(path) = this.cfg.control.clone() {
             this.serve_control(path, window, cx);
         }
         this
+    }
+
+    fn blink(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_millis(530)).await;
+                let alive = this.update(cx, |this, cx| {
+                    let blinking = this
+                        .focused_pty()
+                        .and_then(|p| this.panes.get(&p))
+                        .is_some_and(|p| p.term.screen().cursor.blinking && p.term.screen().cursor.visible);
+                    let next = if this.last_input.elapsed() < Duration::from_millis(600) { true } else { !this.blink_on };
+                    if blinking && next != this.blink_on {
+                        this.blink_on = next;
+                        cx.notify();
+                    } else if !blinking && !this.blink_on {
+                        this.blink_on = true;
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     fn serve_control(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
@@ -149,6 +187,12 @@ impl TuiosApp {
                             Ok(Ok(Plan::Events(evs))) => {
                                 for e in evs {
                                     window.dispatch_event(e, cx);
+                                }
+                                "ok".to_string()
+                            }
+                            Ok(Ok(Plan::Keys(keys))) => {
+                                for k in keys {
+                                    window.dispatch_keystroke(k, cx);
                                 }
                                 "ok".to_string()
                             }
@@ -187,20 +231,16 @@ impl TuiosApp {
         Ok(match cmd {
             "key" => {
                 let k = line[3..].trim();
-                Plan::Events(vec![control::key(Keystroke::parse(k).map_err(|e| e.to_string())?)])
+                Plan::Keys(vec![Keystroke::parse(k).map_err(|e| e.to_string())?])
             }
             "type" => {
                 let text = line.get(5..).unwrap_or("");
-                Plan::Events(
+                Plan::Keys(
                     text.chars()
                         .map(|c| {
                             let shift = c.is_uppercase();
                             let key = if c == ' ' { "space".to_string() } else { c.to_lowercase().to_string() };
-                            control::key(Keystroke {
-                                modifiers: Modifiers { shift, ..Default::default() },
-                                key,
-                                key_char: Some(c.to_string()),
-                            })
+                            Keystroke { modifiers: Modifiers { shift, ..Default::default() }, key, key_char: Some(c.to_string()) }
                         })
                         .collect(),
                 )
@@ -575,8 +615,18 @@ impl TuiosApp {
     // ---- keyboard ----------------------------------------------------------
 
     fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
         let k = &ev.keystroke;
+        // Plain text goes to the platform input handler, so input methods,
+        // dead keys and compose sequences work; it arrives in
+        // replace_text_in_range. Programs that asked the kitty protocol to
+        // report every key as an escape code (flag 8) get key events instead.
+        if self.palette.is_none() && keys::is_text(k) && !ev.is_held {
+            let report_all = self.focused_pty().and_then(|p| self.panes.get(&p)).is_some_and(|p| p.term.kitty_keyboard_flags() & 8 != 0);
+            if !report_all {
+                return;
+            }
+        }
+        cx.stop_propagation();
         if self.palette.is_some() {
             self.palette_key(k, window, cx);
             return;
@@ -611,6 +661,8 @@ impl TuiosApp {
             p.snap_to_bottom();
             p.term.clear_selection();
             self.input(&pty, &bytes);
+            self.last_input = Instant::now();
+            self.blink_on = true;
             cx.notify();
         }
     }
@@ -920,7 +972,7 @@ impl TuiosApp {
                     screen,
                     rect.origin,
                     &m,
-                    CursorPaint { visible: y_off == 0. && term.at_bottom(), focused: is_focused, color: Rgb::from_u32(theme.cursor) },
+                    CursorPaint { visible: y_off == 0. && term.at_bottom() && (self.blink_on || !is_focused), focused: is_focused, color: Rgb::from_u32(theme.cursor) },
                     y_off,
                     window,
                     cx,
@@ -961,6 +1013,9 @@ impl TuiosApp {
             window.set_window_title(&title);
             self.last_title = title;
         }
+
+        self.paint_preedit(window, cx);
+        window.handle_input(&self.focus, ElementInputHandler::new(bounds, cx.entity()), cx);
 
         if more_frames || self.animating {
             self.animating = more_frames;
@@ -1434,4 +1489,97 @@ fn paint_agent_tag(state: &str, rect: Bounds<Pixels>, t: &Theme, window: &mut Wi
     window.paint_quad(fill(Bounds::new(origin, size(w, h)), Theme::alpha(t.surface, 0xe8)).corner_radii(px(9.)));
     window.paint_quad(fill(Bounds::new(point(origin.x + px(6.), origin.y + px(7.)), size(px(4.), px(4.))), rgb(color)).corner_radii(px(2.)));
     let _ = line.paint(point(origin.x + px(12.), origin.y + px(2.)), h - px(4.), TextAlign::Left, None, window, cx);
+}
+
+impl EntityInputHandler for TuiosApp {
+    fn text_for_range(&mut self, _: std::ops::Range<usize>, _: &mut Option<std::ops::Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
+        None
+    }
+
+    fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
+        let n = self.marked.as_ref().map(|m| m.encode_utf16().count()).unwrap_or(0);
+        Some(UTF16Selection { range: n..n, reversed: false })
+    }
+
+    fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<std::ops::Range<usize>> {
+        self.marked.as_ref().map(|m| 0..m.encode_utf16().count())
+    }
+
+    fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.marked = None;
+        cx.notify();
+    }
+
+    fn replace_text_in_range(&mut self, _: Option<std::ops::Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
+        self.marked = None;
+        if text.is_empty() {
+            cx.notify();
+            return;
+        }
+        if let Some(p) = self.palette.as_mut() {
+            p.query.push_str(text);
+            p.selected = 0;
+            cx.notify();
+            return;
+        }
+        let Some(pty) = self.focused_pty() else { return };
+        if let Some(p) = self.panes.get_mut(&pty) {
+            p.snap_to_bottom();
+            p.term.clear_selection();
+        }
+        self.input(&pty, text.as_bytes());
+        self.last_input = Instant::now();
+        self.blink_on = true;
+        cx.notify();
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _: Option<std::ops::Range<usize>>,
+        new_text: &str,
+        _: Option<std::ops::Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.marked = (!new_text.is_empty()).then(|| new_text.to_string());
+        cx.notify();
+    }
+
+    fn bounds_for_range(&mut self, _: std::ops::Range<usize>, _: Bounds<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<Bounds<Pixels>> {
+        self.cursor_bounds()
+    }
+
+    fn character_index_for_point(&mut self, _: Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
+        None
+    }
+}
+
+impl TuiosApp {
+    /// The focused pane's cursor cell in window coordinates.
+    fn cursor_bounds(&self) -> Option<Bounds<Pixels>> {
+        let m = self.metrics.as_ref()?;
+        let st = self.state.as_ref()?;
+        let id = self.focused_id()?;
+        let w = st.window(&id)?;
+        let p = self.panes.get(&w.pty)?;
+        let cur = p.term.screen().cursor;
+        let (x, y, _, _) = w.content();
+        let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
+        Some(Bounds::new(
+            point(self.grid.origin.x + px((x as f32 + cur.x as f32) * cw), self.grid.origin.y + px((y as f32 + cur.y as f32) * ch)),
+            size(px(cw), px(ch)),
+        ))
+    }
+
+    /// Draws the text an input method is composing over the cursor.
+    fn paint_preedit(&self, window: &mut Window, cx: &mut App) {
+        let (Some(text), Some(b), Some(m)) = (self.marked.as_ref(), self.cursor_bounds(), self.metrics.as_ref()) else { return };
+        let t = &self.theme;
+        let run = TextRun { len: text.len(), font: m.fonts[0].clone(), color: rgb(t.text).into(), background_color: None, underline: None, strikethrough: None };
+        let line = window.text_system().shape_line(text.clone().into(), m.font_size, &[run], None);
+        let w = line.width.max(m.cell_w);
+        window.paint_quad(fill(Bounds::new(b.origin, size(w, m.cell_h)), rgb(t.surface)));
+        window.paint_quad(fill(Bounds::new(point(b.origin.x, b.origin.y + m.cell_h - px(2.)), size(w, px(1.5))), rgb(t.accent)));
+        let _ = line.paint(b.origin, m.cell_h, TextAlign::Left, None, window, cx);
+    }
 }

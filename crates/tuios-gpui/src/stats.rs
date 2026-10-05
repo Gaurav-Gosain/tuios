@@ -25,11 +25,6 @@ impl FrameStats {
     pub fn paint_percentiles(&self) -> Option<(f64, f64)> {
         Some((percentile(&self.paints, 50.)?, percentile(&self.paints, 95.)?))
     }
-
-    pub fn clear(&mut self) {
-        self.paints.clear();
-        self.next = 0;
-    }
 }
 
 /// The p-th percentile by nearest rank. None for no samples.

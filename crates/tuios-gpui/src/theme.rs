@@ -87,10 +87,6 @@ impl Theme {
         p
     }
 
-    pub fn rgb(c: u32) -> Rgba {
-        rgb(c)
-    }
-
     /// `c` with alpha `a` (0-255).
     pub fn alpha(c: u32, a: u8) -> Rgba {
         rgba((c << 8) | a as u32)

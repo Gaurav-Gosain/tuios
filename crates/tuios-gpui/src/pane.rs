@@ -85,10 +85,6 @@ impl Pane {
         self.scroll_px = 0.;
         self.scroll_pending = 0.;
     }
-
-    pub fn scrolled(&self) -> bool {
-        !self.term.at_bottom() || self.scroll_px > 0.
-    }
 }
 
 pub fn apply_theme(term: &mut Terminal, theme: &Theme) {

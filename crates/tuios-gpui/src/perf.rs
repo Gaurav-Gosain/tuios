@@ -27,8 +27,12 @@ const WARMUP: usize = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
-    /// Every row rewritten with new text each frame.
+    /// Every row rewritten with new text each frame, from a small
+    /// vocabulary of code-like words (the shape cache hits).
     Full,
+    /// Every row rewritten with words never seen before (the shape cache
+    /// misses on every word): the worst case for shaping.
+    Unique,
     /// Five new lines per frame, so the whole screen scrolls (like `cat`).
     Stream,
     /// One row changes per frame (typing).
@@ -39,7 +43,7 @@ enum Phase {
     SmoothScroll,
 }
 
-const PHASES: [Phase; 5] = [Phase::Full, Phase::Stream, Phase::Typing, Phase::Idle, Phase::SmoothScroll];
+const PHASES: [Phase; 6] = [Phase::Full, Phase::Unique, Phase::Stream, Phase::Typing, Phase::Idle, Phase::SmoothScroll];
 
 #[derive(Default, Clone)]
 struct Samples {
@@ -51,6 +55,12 @@ struct Samples {
     quads: u64,
     rows_shaped: u64,
     frames: u64,
+    /// VT bytes fed to the emulator.
+    vt_bytes: u64,
+    /// What the same frames would cost as a cell grid on the wire, the way
+    /// herdr's daemon sends them: per changed cell its text plus about 12
+    /// bytes of colour and attributes.
+    cell_bytes: u64,
 }
 
 pub struct PerfView {
@@ -65,11 +75,12 @@ pub struct PerfView {
     results: Vec<(Phase, Samples)>,
     current: Samples,
     done: bool,
+    gens: Vec<u64>,
 }
 
 impl PerfView {
     pub fn new(cfg: Config, out: Option<PathBuf>, _window: &mut Window, _cx: &mut Context<Self>) -> Self {
-        PerfView { cfg, out, pane: None, metrics: None, phase: 0, frame: 0, seed: 0x2545F4914F6CDD1D, last: None, results: Vec::new(), current: Samples::default(), done: false }
+        PerfView { cfg, out, pane: None, metrics: None, phase: 0, frame: 0, seed: 0x2545F4914F6CDD1D, last: None, results: Vec::new(), current: Samples::default(), done: false, gens: Vec::new() }
     }
 
     fn rand(&mut self) -> u64 {
@@ -82,6 +93,10 @@ impl PerfView {
 
     /// One dense row of styled text, exactly COLS cells wide.
     fn line(&mut self, out: &mut Vec<u8>) {
+        self.line_with(out, false)
+    }
+
+    fn line_with(&mut self, out: &mut Vec<u8>, unique: bool) {
         const WORDS: [&str; 12] = ["fn", "let", "match", "tuios", "render", "ghostty", "->", "!=", "=>", "0x1f", "pane", "async"];
         let mut col = 0usize;
         while col < COLS as usize {
@@ -95,7 +110,17 @@ impl PerfView {
             } else {
                 out.extend_from_slice(format!("\x1b[38;5;{fg}m").as_bytes());
             }
-            let word: &str = if r % 23 == 0 { "漢字" } else if r % 29 == 0 { "│─┼" } else { WORDS[((r >> 40) % WORDS.len() as u64) as usize] };
+            let fresh;
+            let word: &str = if unique {
+                fresh = format!("{:07x}", (r >> 20) & 0xfffffff);
+                &fresh
+            } else if r % 23 == 0 {
+                "漢字"
+            } else if r % 29 == 0 {
+                "│─┼"
+            } else {
+                WORDS[((r >> 40) % WORDS.len() as u64) as usize]
+            };
             let w = unicode_cols(word);
             if col + w + 1 > COLS as usize {
                 break;
@@ -110,10 +135,10 @@ impl PerfView {
     fn input_for(&mut self, phase: Phase) -> Vec<u8> {
         let mut out = Vec::with_capacity(32 << 10);
         match phase {
-            Phase::Full => {
+            Phase::Full | Phase::Unique => {
                 out.extend_from_slice(b"\x1b[H");
                 for y in 0..ROWS {
-                    self.line(&mut out);
+                    self.line_with(&mut out, phase == Phase::Unique);
                     if y + 1 < ROWS {
                         out.extend_from_slice(b"\r\n");
                     }
@@ -167,10 +192,18 @@ impl PerfView {
         let feed = t0.elapsed();
 
         let t1 = Instant::now();
+        let mut cell_bytes = 0u64;
         let bg = {
             let Pane { term, painter, .. } = p;
             let s = term.snapshot();
             painter.prepare(s, &m, &t, window);
+            self.gens.resize(s.rows.len(), 0);
+            for (y, row) in s.rows.iter().enumerate() {
+                if self.gens[y] != row.generation {
+                    self.gens[y] = row.generation;
+                    cell_bytes += row.cells.len() as u64 * 12 + row.text.len() as u64;
+                }
+            }
             s.bg
         };
         if p.scroll_px > 0. {
@@ -203,6 +236,8 @@ impl PerfView {
             s.quads += after.quads - before.quads;
             s.rows_shaped += after.rows_shaped.saturating_sub(before.rows_shaped);
             s.frames += 1;
+            s.vt_bytes += input.len() as u64;
+            s.cell_bytes += cell_bytes;
         }
         // rows_shaped is counted in prepare, which ran before `before` was
         // read; account for it from the painter's running total instead.
@@ -234,7 +269,7 @@ impl PerfView {
             f32::from(m.cell_h),
             window.scale_factor()
         ));
-        println!("phase           feed p50/p95    prepare p50/p95   paint p50/p95    interval p50/p95   glyphs/f  quads/f");
+        println!("phase           feed p50/p95    prepare p50/p95   paint p50/p95    interval p50/p95   glyphs/f  quads/f  vt B/f  cells B/f");
         let n = self.results.len();
         for (i, (phase, s)) in self.results.iter().enumerate() {
             let pc = |v: &Vec<f64>| (percentile(v, 50.).unwrap_or(0.), percentile(v, 95.).unwrap_or(0.));
@@ -244,7 +279,7 @@ impl PerfView {
             let (i50, i95) = pc(&s.interval);
             let frames = s.frames.max(1);
             println!(
-                "{:<14} {:>6.3} {:>6.3}   {:>7.3} {:>7.3}   {:>6.3} {:>6.3}   {:>7.2} {:>7.2}   {:>8} {:>8}",
+                "{:<14} {:>6.3} {:>6.3}   {:>7.3} {:>7.3}   {:>6.3} {:>6.3}   {:>7.2} {:>7.2}   {:>8} {:>8} {:>7} {:>9}",
                 format!("{phase:?}"),
                 f50,
                 f95,
@@ -255,12 +290,16 @@ impl PerfView {
                 i50,
                 i95,
                 s.glyphs / frames,
-                s.quads / frames
+                s.quads / frames,
+                s.vt_bytes / frames,
+                s.cell_bytes / frames
             );
             json.push_str(&format!(
-                "    \"{phase:?}\": {{\"feed_ms\": [{f50:.3}, {f95:.3}], \"prepare_ms\": [{r50:.3}, {r95:.3}], \"paint_ms\": [{p50:.3}, {p95:.3}], \"interval_ms\": [{i50:.2}, {i95:.2}], \"glyphs_per_frame\": {}, \"quads_per_frame\": {}}}{}\n",
+                "    \"{phase:?}\": {{\"feed_ms\": [{f50:.3}, {f95:.3}], \"prepare_ms\": [{r50:.3}, {r95:.3}], \"paint_ms\": [{p50:.3}, {p95:.3}], \"interval_ms\": [{i50:.2}, {i95:.2}], \"glyphs_per_frame\": {}, \"quads_per_frame\": {}, \"vt_bytes_per_frame\": {}, \"cell_grid_bytes_per_frame\": {}}}{}\n",
                 s.glyphs / frames,
                 s.quads / frames,
+                s.vt_bytes / frames,
+                s.cell_bytes / frames,
                 if i + 1 < n { "," } else { "" }
             ));
         }

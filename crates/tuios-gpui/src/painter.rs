@@ -13,6 +13,9 @@
 //! per-call layer that `ShapedLine::paint` pushes.
 
 use crate::boxdraw;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use crate::rowplan::{DecoKind, PlanColors, plan_row};
 use crate::theme::{Theme, hsla};
 use ghostty_vt::{CursorShape, Rgb, Row, Screen, UnderlineKind};
@@ -33,6 +36,7 @@ pub struct Metrics {
     pub underline_thickness: Pixels,
     /// Changes whenever the font or size changes; row caches compare it.
     pub epoch: u64,
+    pub shapes: Rc<RefCell<ShapeCache>>,
 }
 
 impl Metrics {
@@ -102,7 +106,61 @@ impl Metrics {
             baseline,
             underline_thickness: px(snap((font_size / 14.).max(1.))),
             epoch,
+            shapes: Rc::new(RefCell::new(ShapeCache::default())),
         }
+    }
+}
+
+/// One shaped glyph of a word: its byte index in the word and its pen
+/// position from the word's start.
+#[derive(Clone, Copy, Debug)]
+pub struct WordGlyph {
+    index: u32,
+    x: f32,
+    font_id: FontId,
+    glyph: GlyphId,
+    emoji: bool,
+}
+
+/// Shaped words, keyed by font style and text. Shared by every pane through
+/// [`Metrics`]; a font change builds new metrics and so a new cache.
+#[derive(Default)]
+pub struct ShapeCache {
+    words: HashMap<(u8, Box<str>), Rc<[WordGlyph]>>,
+    pub hits: u64,
+    pub misses: u64,
+}
+
+/// Entries kept before the cache starts over. A screen of distinct words is
+/// a few thousand; this holds many screens.
+const SHAPE_CACHE_LIMIT: usize = 32_768;
+
+impl ShapeCache {
+    fn get(&mut self, style: usize, word: &str, m: &Metrics, window: &mut Window, stats: &mut PaintStats) -> Rc<[WordGlyph]> {
+        if let Some(g) = self.words.get(&(style as u8, Box::from(word))) {
+            self.hits += 1;
+            return g.clone();
+        }
+        self.misses += 1;
+        stats.runs_shaped += 1;
+        let shaped = window.text_system().shape_line(
+            SharedString::from(word.to_string()),
+            m.font_size,
+            &[TextRun { len: word.len(), font: m.fonts[style].clone(), color: Hsla::default(), background_color: None, underline: None, strikethrough: None }],
+            None,
+        );
+        let glyphs: Rc<[WordGlyph]> = shaped
+            .runs
+            .iter()
+            .flat_map(|r| {
+                r.glyphs.iter().map(move |g| WordGlyph { index: g.index as u32, x: f32::from(g.position.x), font_id: r.font_id, glyph: g.id, emoji: g.is_emoji })
+            })
+            .collect();
+        if self.words.len() >= SHAPE_CACHE_LIMIT {
+            self.words.clear();
+        }
+        self.words.insert((style as u8, Box::from(word)), glyphs.clone());
+        glyphs
     }
 }
 
@@ -316,42 +374,40 @@ fn build_row(cache: &mut RowCache, row: &Row, colors: &PlanColors, metrics: &Met
         cache.bgs.push(QuadInst { x0: s.start as f32 * cw, y0: 0., x1: s.end as f32 * cw, y1: chh, color: hsla(s.color) });
     }
     for run in &plan.runs {
-        stats.runs_shaped += 1;
-        let shaped = window.text_system().shape_line(
-            SharedString::from(run.text.clone()),
-            metrics.font_size,
-            &[TextRun {
-                len: run.text.len(),
-                font: metrics.fonts[run.style].clone(),
-                color: Hsla::default(),
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
-            None,
-        );
-        // Each glyph sits at its cell's column; within a cell (a base
-        // and its combining marks) the shaper's own offsets are kept.
-        let mut cluster_col = u16::MAX;
-        let mut cluster_x = 0f32;
-        for srun in &shaped.runs {
-            for g in &srun.glyphs {
-                if run.text.as_bytes().get(g.index) == Some(&b' ') {
-                    continue;
-                }
-                let Some(cell) = run.cell_at(g.index) else { continue };
-                let gx = f32::from(g.position.x);
+        // Runs are shaped a word at a time through a cache shared by every
+        // pane: words repeat across rows and frames, so a scrolled or redrawn
+        // screen mostly reuses shapes. Ligatures sit inside words ("->",
+        // "!="), and a space breaks them in every monospace font.
+        let bytes = run.text.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i] == b' ' {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < bytes.len() && bytes[i] != b' ' {
+                i += 1;
+            }
+            let word = &run.text[start..i];
+            let glyphs = metrics.shapes.borrow_mut().get(run.style, word, metrics, window, stats);
+            // Each glyph sits at its cell's column; within a cell (a base
+            // and its combining marks) the shaper's own offsets are kept.
+            let mut cluster_col = u16::MAX;
+            let mut cluster_x = 0f32;
+            for g in glyphs.iter() {
+                let Some(cell) = run.cell_at(start + g.index as usize) else { continue };
                 if cell.col != cluster_col {
                     cluster_col = cell.col;
-                    cluster_x = gx;
+                    cluster_x = g.x;
                 }
                 cache.glyphs.push(GlyphInst {
-                    x: cell.col as f32 * cw + (gx - cluster_x),
-                    font_id: srun.font_id,
-                    glyph: g.id,
+                    x: cell.col as f32 * cw + (g.x - cluster_x),
+                    font_id: g.font_id,
+                    glyph: g.glyph,
                     color: hsla(cell.fg),
                     col: cell.col,
-                    emoji: g.is_emoji,
+                    emoji: g.emoji,
                 });
             }
         }
