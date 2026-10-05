@@ -391,6 +391,24 @@ dock_pill_caps = false
 Under ASCII glyphs the workspace tabs have no caps. The rail's pills do not
 change with this option.
 
+## Workspace label cap
+
+`appearance.dock_workspace_label_max` caps a workspace tab's label in cells,
+so one long name cannot push the other pills off the bar. The cap is `12` by
+default and counts the tab format's own characters, so `"<{name}>"` loses two
+of them to the brackets. Set it to `0` to draw the whole name and let the
+strip scroll instead:
+
+```toml
+[appearance]
+dock_workspace_label_max = 0
+```
+
+A dock too narrow for even one pill keeps the current workspace's tab, cut to
+whatever room is left, so the workspaces always have something to click. You
+can also set it on the settings page, in the Appearance section. The change
+applies at once.
+
 ## Compact dock
 
 The dock has two rows by default: a rule and the row of pills.

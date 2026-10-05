@@ -1379,3 +1379,17 @@ a full dock and asserts the pane's edge on the row after the rule.
 | The released behaviour | build origin/main (`43573cf8`) | `TestDockCompactGivesThePaneARow`, `TestDockCompactPillClickSwitchesWorkspace`, `TestDockCompactSwitchesOnConfigSave` ("the pane meets the dock at row 2, want 1" at the top, "row 37, want 38" at the bottom), `TestDockCompactClientSharesASessionWithAFullOne` (the rule drawn on the row a compact client keeps blank), `TestDockCompactFromTheSettingsPanel` (no Compact dock row) | **caught** |
 | The dock band stays two rows | `InDockBand`: `config.DockFullHeight` in place of `Settings.DockHeight()` | `TestDockCompactPillClickSwitchesWorkspace` top and bottom ("the pane row next to a compact dock: context menu never showed [Split right Rename]"). The pill click before it passes, which is correct | **caught** |
 | The fast path ignores a larger peer reserve | `fullscreenFastWindow`: the `OwnLayoutReserve` check cut | `TestDockCompactClientSharesASessionWithAFullOne` (the dock row drawn on the row the compact client keeps blank, one row above the screen's last row) | **caught** |
+
+## Workspace label cap and tab format
+
+`dock_workspace_label_max_test.go` drives the dock's workspace pill through
+`appearance.dock_workspace_label_max` and `appearance.dock_workspace_tab_format`
+with a 26-character workspace name. The positive half is in each fixture: the
+capped cases show a truncated pill, the uncapped wide case shows the whole name,
+and the custom-format case shows the name inside its brackets.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The tab format is dropped when it has no `{index}` | `workspacePillLabel`: the `strings.Contains("{index}")` branch restored, passing the raw name for formats without `{index}` | `TestDockWorkspaceLabelCapAndFormats/custom_format` ("the dock row dropped the tab format around the capped name") | **caught** |
+| A narrow dock with the cap off draws no pill at all | `planDockWorkspaceStrip`: the `count == 0` fallback replaced by `addOnlyStrip` | `TestDockWorkspaceLabelCapAndFormats/uncapped_narrow` ("the narrow dock draws no pill at all for the long workspace") | **caught** |
+| Minimized names take a live message's room | `CalculateDockLayout`: the `dockNotificationBlock` yield block cut | `TestDockWorkspaceLabelCapAndFormats/default_cap` — not bound: the 120-column fixture has room for both, and no assertion pins the message's columns. The message-yield path needs a fixture narrower than the entries plus the message | **not caught** |
