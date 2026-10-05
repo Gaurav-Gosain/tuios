@@ -72,9 +72,31 @@ func pinPreV080Looks(t *testing.T, base string) {
 	pinPreV080LooksIn(t, base, xdgDir(base, "XDG_CONFIG_HOME"))
 }
 
+// pinnedConfigs holds the config files the pins have already been through.
+var pinnedConfigs sync.Map
+
+// tuiosConfigHeader is the first line of every config file tuios writes.
+const tuiosConfigHeader = "# TUIOS Configuration File\n"
+
+// writtenByTuios reports whether data is a config file tuios wrote, or the
+// part of one a reader sees while tuios is still writing it: nothing, or a
+// prefix of the header.
+func writtenByTuios(data []byte) bool {
+	s := string(data)
+	return strings.HasPrefix(s, tuiosConfigHeader) || strings.HasPrefix(tuiosConfigHeader, s)
+}
+
 // pinPreV080LooksIn is pinPreV080Looks for a config home other than the
 // root's own, which is what a second client started with its own
 // XDG_CONFIG_HOME reads.
+//
+// Every CLI call pins, so this runs while a client is attached and saving the
+// file. A file the pins have been through and that tuios wrote since is left
+// alone: tuios wrote it from a config that already held the pins. Pinning it
+// read the file mid-save, while it was empty, and wrote a file of pins and
+// nothing else over the finished save. The client's watcher then applied
+// that file, which moved the dock to the bottom row under a test that had
+// just hidden it.
 func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	t.Helper()
 	if _, ok := shippedLooksBases.Load(base); ok {
@@ -82,6 +104,9 @@ func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	}
 	path := filepath.Join(configHome, "tuios", "config.toml")
 	data, err := os.ReadFile(path)
+	if _, seen := pinnedConfigs.Load(path); seen && err == nil && writtenByTuios(data) {
+		return
+	}
 	replace := false
 	if errors.Is(err, fs.ErrNotExist) {
 		// No file is a first run, and a first run writes the whole default
@@ -96,14 +121,34 @@ func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 		t.Fatalf("pin looks: read %s: %v", path, err)
 	}
 	out := withPreV080Pins(string(data), replace)
-	if out == string(data) {
-		return
+	if out != string(data) {
+		writeConfigAtomically(t, path, []byte(out))
 	}
+	pinnedConfigs.Store(path, true)
+}
+
+// writeConfigAtomically puts data at path through a temporary file and a
+// rename, so a client watching the file never reads it half written. The
+// temporary file is created 0600, the mode the suite gives every config.
+func writeConfigAtomically(t *testing.T, path string, data []byte) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("pin looks: mkdir: %v", err)
 	}
-	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config.toml.pin.*")
+	if err != nil {
 		t.Fatalf("pin looks: write %s: %v", path, err)
+	}
+	_, werr := tmp.Write(data)
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(tmp.Name(), path)
+	}
+	if werr != nil {
+		_ = os.Remove(tmp.Name())
+		t.Fatalf("pin looks: write %s: %v", path, werr)
 	}
 }
 

@@ -295,6 +295,12 @@ func TestOldClientKeepsItsOwnRail(t *testing.T) {
 // the dock went away and the panes stayed where they were, because nothing
 // on that path laid them out again or told the daemon. With settleChrome's
 // call removed from Update it fails at the same step.
+//
+// NEGATIVE CONTROL: the CI failures of this test ("a pane is at row 0 and
+// 38 rows tall") came from the harness. Each CLI call pinned the looks into
+// the config file, and a pin that read the file while the client was saving
+// it (empty, before the save was atomic) wrote back a file of pins alone:
+// the dock at the bottom. See NEGATIVE_CONTROLS.md.
 func TestChromeSetFromTheCommandLineRetilesThePanes(t *testing.T) {
 	base := t.TempDir()
 	const name = "railcli"
@@ -336,6 +342,17 @@ func TestChromeSetFromTheCommandLineRetilesThePanes(t *testing.T) {
 	}
 	waitSpan(t, base, name, "the daemon after the rail is turned off", func(s paneSpan) bool {
 		return s.left == 0 && s.right == bigCols && s.width == spanOf(before).width+rail
+	})
+	// The dock stays hidden. A config file rewritten under the client while it
+	// saved this change brought the dock back at the bottom, and the span
+	// above does not see rows.
+	waitForShape(t, base, name, 2, "the daemon after the rail is turned off", func(rects []winRect) error {
+		for _, r := range rects {
+			if r.Y != 0 || r.Height != height+top {
+				return fmt.Errorf("a pane is at row %d and %d rows tall, want row 0 and %d rows", r.Y, r.Height, height+top)
+			}
+		}
+		return nil
 	})
 	saveArtifact(t, term, dir, "rail-off")
 }

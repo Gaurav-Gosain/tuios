@@ -1214,6 +1214,35 @@ looks for FAILED as soon as exec returns, before the sleep.
 | A frame drawn past the linger, old order | the test as on main, with a resize 500ms after its 2s sleep | `TestTapeExecStopsAtTheFailedLine` ("WaitForText timed out ... waiting for text \"FAILED\""), 3 of 3 runs. The same resize with the new order: 3 of 3 pass | **caught** |
 | No FAILED indicator | `scriptStatus = "FAILED • "` changed to `"DONE • "` in `internal/app/render_overlays.go` | `TestTapeExecStopsAtTheFailedLine` (the same message), 1 of 1 run | **caught** |
 
+## The looks pin and a config save in flight
+
+`TestChromeSetFromTheCommandLineRetilesThePanes` failed in CI on 2 and 3
+October with "a pane is at row 0 and 38 rows tall" and the rail at column 28.
+That is the dock at the bottom row and the rail of the pinned looks. The
+harness pins the looks on every CLI call, and the call reads and rewrites the
+config file. Before `e57ecf37` a save truncated the file and then wrote it. A
+pin that read the empty file wrote back a file of pins alone after the save
+ended, and the client's watcher applied it. `e57ecf37` closed the empty read.
+The harness now leaves alone a file it has pinned once and that tuios wrote
+since, and it writes through a rename. The test also checks the rows after
+the rail step, where the rewrite went unseen before.
+
+Both injections below make the two windows wide enough to hit every time. The
+product one is on `e57ecf37~1`: `writeConfigBytes` opens the file with
+`O_TRUNC`, sleeps, and then writes. The harness one: a pin that reads an empty
+file sleeps 1.2 s before it writes. Without them the race did not show
+locally: 30 of 30 runs passed on main on 2 cores, and 30 of 30 on
+`e57ecf37~1` on 1 core with a busy loop beside it. No CI run of this test
+failed after `e57ecf37`. With this change, 30 of 30 runs pass on main on 2
+cores.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The pin rewrites a file read mid-save (the CI failure) | n/a, injected: the product sleeps 1 s after the truncate, the old harness | `TestChromeSetFromTheCommandLineRetilesThePanes` ("the daemon after the dock is hidden: a pane is at row 0 and 38 rows tall, want row 0 and 40 rows", rects at `(28,0) 46x38`, the CI shape) | **caught** (5 of 5) |
+| The same, with the harness fix | as above, the new harness | the same test, with the shape of the row before it: "a pane is at row 2 and 38 rows tall". The client's own watcher read the empty file, which `e57ecf37` fixed. No run shows the pins-only shape | **caught**, the product half only (5 of 5) |
+| The pin rewrite alone | n/a, injected: the product sleeps 150 ms, inside the 200 ms debounce, the old harness | `TestChromeSetFromTheCommandLineRetilesThePanes` ("the daemon after the rail is turned off: a pane is at row 0 and 38 rows tall, want row 0 and 40 rows"). The pin read the empty file in 10 of 10 runs | **caught** (10 of 10) |
+| The same, with the harness fix | as above, the new harness | none. The pin read the empty file in 10 of 10 runs and left it alone | **passes** (10 of 10), the positive half |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
