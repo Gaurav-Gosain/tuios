@@ -229,12 +229,13 @@ raw bytes (`internal/guibridge/bridge.go`). The change is on the local branch
 herdr-gpui paints cells the daemon renders. tuios-gpui feeds bytes into its own
 emulator. Measured with the harness (release build, `docs/PERFORMANCE.md`):
 
-- Feeding a full 160x50 screen of dense styled text costs a p50 of
-  0.25 ms, small next to painting.
-- On the wire, VT bytes are smaller than a cell grid. For the full-screen
-  phase the harness counts about 23 KB of VT per frame against about 105 KB
-  for the same frame as a cell grid. For streaming output it is 4.7 KB against
-  about 104 KB, because every scrolled row is a changed row.
+- Feeding a full 160x50 screen of dense styled text into ghostty costs a p50
+  of 0.37 ms; streaming five lines costs 0.05 ms. Both are small next to the
+  rest of a frame.
+- On the wire, VT bytes are smaller than a cell grid. For a full-screen
+  rewrite the harness counts 37 KB of VT per frame against about 104 KB for the
+  same frame as a cell grid. For streaming output it is 3.7 KB against about
+  104 KB, because every scrolled row is a changed row.
 - A local emulator gives scrollback, selection, search and smooth scrolling
   without a round trip, and lets ghostty's encoders see the exact modes the
   program set.
@@ -242,3 +243,86 @@ emulator. Measured with the harness (release build, `docs/PERFORMANCE.md`):
   attach. tuios already pays the latter for its TUI clients.
 
 So the GUI runs ghostty per pane, which is also what tuios's own clients do.
+
+## 6. Theme and fonts
+
+### Theme: reuse tuios's derivation instead of porting it
+
+tuios builds its look in `internal/theme` and `internal/overlay`:
+
+- A theme (a bubbletint `Tint`, 385 bundled plus user themes from
+  `custom.go`) gives the terminal colours and the 16-colour palette.
+- `theme.UI()` derives the dialog palette (`overlay.Palette`: Canvas, Panel,
+  Surface, Card, RowSel, Hover, Edge, Fg, FgDim, FgMute, Accent, tints and
+  more). Dark themes use charmtone neutrals; light themes derive a ramp from the
+  ground (`lightDialogChrome`), and inks are pushed until they pass contrast
+  floors (`liftOnLight`). Colours are mixed in OKLab (`overlay.MixColors`).
+- `theme.GroundUI()` is the same palette re-derived on the rail's ground (the
+  theme background), for the rail and the dock.
+- Borders: `BorderFocusedWindow`, `BorderFocusedTerminal` and
+  `BorderUnfocused`, each made readable on the terminal background. Agent
+  states map to Info, Warning, FgMute, Success and Warn
+  (`internal/app/render_sidebar.go`, `agentGlyphColor`).
+
+Porting this to Rust would mean porting charmtone, the OKLab mixing, the
+contrast search and the per-depth rules, and keeping them in step. The bridge
+already runs tuios's code, so it sends the result instead
+(`internal/guibridge/theme.go`): the terminal colours, both palettes at
+truecolor depth, the border and agent colours, and the list of theme names. A
+`theme` command switches the theme for that client only, as in the terminal
+client; nothing is written to `config.toml`. The GUI reads `[appearance]
+theme` from tuios's `config.toml` (read only) and passes it to the bridge. A
+build-time snapshot of the no-theme export (`assets/default-theme.json`) is
+shown until the bridge answers.
+
+The GUI maps the rail palette onto the sidebar, workspace strip and status
+bar, and the dialog palette onto the command palette. With no theme set, tuios
+leaves the terminal's own colours in place; the GUI has no host terminal, so it
+uses what tuios reports for that case: `#e5e5e5` on black, the xterm palette,
+and charmtone chrome.
+
+### Fonts
+
+- The grid uses "JetBrainsMono Nerd Font Mono", so Nerd Font icons keep one
+  cell. The chrome uses "JetBrainsMono Nerd Font". Either falls back to
+  "JetBrainsMono Nerd Font", "JetBrains Mono", then any installed monospace
+  family (`src/config.rs`, `pick_font`).
+- Bold, italic and bold italic come from the family's own faces. Ligatures
+  (JetBrains Mono's `calt`) are on by default; `ligatures = false` or
+  `--no-ligatures` turns them off with `FontFeatures::disable_ligatures()`.
+- Emoji come from the shaper's own fallback; see the note in section 2 about
+  GPUI dropping fonts without an `m` glyph.
+
+## 7. Design: what other GPUI apps settled on
+
+Studied for values, not code. Zed is GPL, so only its numbers are used.
+herdr-gpui and gpui-component are Apache-2.0.
+
+- **Zed** (`crates/ui`, `crates/theme`): content is the darkest layer and
+  chrome one step lighter. Hover and selection are small neutral lightness
+  steps. Borders come in two tiers (structure and a fainter variant). Spacing
+  runs 2, 4, 6, 8, 12, 16, 20 px. Tabs are 32 px. UI text is 14 px, small
+  12 px. The command palette is 608 px wide. Popovers are 8 px rounded with a
+  1 px border and a stacked shadow (offsets 2, 3, 6 px; blur 3, 6, 12 px;
+  alpha 0.04 to 0.12). Motion is 150 ms ease-out-quint.
+- **gpui-component** (longbridge, 0.7.1, pins `gpui-pre =0.3.8`): around 135
+  theme tokens per component (sidebar, tab bar, list active, ring, overlay).
+  Sidebar 255 px with 28 px rows; title and tab bars 32 to 34 px; status bar
+  with 4 px by 8 px padding and 12 px text; dialogs at a tenth of the window
+  height; scrim alpha 0.2 dark and 0.05 light; motion 120, 180 and 280 ms with
+  cubic-bezier(0.16, 1, 0.3, 1) on enter. It can be used as a dependency, but
+  the exact pin means bumping GPUI in step with it every week; tuios-gpui does
+  not depend on it.
+- **herdr-gpui**: 232 px sidebar, 8 px status dot, 12 px row padding, a 34 px
+  title bar, chrome derived from background and foreground mixes.
+- **tty7** (a daemon-backed terminal on a fork of gpui-component): 26 to 28 px
+  rows, inactive split panes drawn at reduced opacity, badges delayed by
+  200 ms.
+
+Applied in tuios-gpui: a 32 px workspace strip, a 24 px status bar with 12 px
+text and a 1 px rule, a 240 px sidebar with 28 px rows, 4 px corners and a 2 px
+accent edge on the active row, 13 px UI text with two weights, a 600 px command
+palette at a tenth of the window height with 12 px corners, a hairline border
+and the stacked shadow, a 150 ms ease-out-quint entrance, a breathing dot for
+working agents, and panes without focus drawn slightly back. Every colour
+comes from the tuios palettes above.

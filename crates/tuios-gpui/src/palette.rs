@@ -94,7 +94,10 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
             s += 8;
         }
         if prev.is_some_and(|p| p + 1 == pos) {
-            s += 5;
+            s += 8;
+        }
+        if pos == 0 {
+            s += 10;
         }
         prev = Some(pos);
         ti = pos + 1;
@@ -102,10 +105,16 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
     Some(s * 100 - t.len() as i32)
 }
 
+/// Hundreds of themes would bury the commands, so a theme ranks below a
+/// command that matches as well.
+fn bias(e: &Entry) -> i32 {
+    if matches!(e.act, Act::Theme(_)) { -1000 } else { 0 }
+}
+
 /// The entries matching `query`, best first. Order is stable for equal scores.
 pub fn filter<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
     let mut v: Vec<(i32, usize, &Entry)> =
-        entries.iter().enumerate().filter_map(|(i, e)| score(query, &e.title).map(|s| (s, i, e))).collect();
+        entries.iter().enumerate().filter_map(|(i, e)| score(query, &e.title).map(|s| (s + bias(e), i, e))).collect();
     if !query.is_empty() {
         v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     }
@@ -126,7 +135,10 @@ mod tests {
 
     #[test]
     fn filter_ranks_best_first() {
-        let e = entries(&["work".into(), "play".into()], "work");
+        let mut e = entries(&["work".into(), "play".into()], "work");
+        e.push(Entry { title: "Theme: seafoam_pastel".into(), hint: "", act: Act::Theme("seafoam_pastel".into()) });
+        assert!(filter(&e, "sp")[0].title.starts_with("Split"), "commands before themes");
+        assert_eq!(filter(&e, "theme seafoam")[0].act, Act::Theme("seafoam_pastel".into()));
         let r = filter(&e, "split");
         assert!(r[0].title.starts_with("Split"));
         assert!(filter(&e, "session play").iter().any(|e| e.act == Act::Session("play".into())));

@@ -10,7 +10,15 @@ emulator library.
 This is an experiment. It is not published, and it may move into the tuios
 tree later.
 
-![Three panes: a shell with CJK, emoji, ligatures and box drawing, htop, and nvim](docs/screenshots/panes.png)
+![Three panes in the dracula theme: font styles, Nerd Font icons, ligatures, CJK, emoji, box drawing and colours; htop; nvim](docs/screenshots/theme-dracula.png)
+
+More screenshots: [tokyonight](docs/screenshots/theme-tokyonight.png),
+[catppuccin mocha](docs/screenshots/theme-catppuccin_mocha.png),
+[catppuccin latte](docs/screenshots/theme-catppuccin-latte.png) and
+[tokyonight day](docs/screenshots/theme-tokyonight-day.png) (light), the
+[command palette](docs/screenshots/palette.png),
+[theme picking](docs/screenshots/palette-themes.png) and
+[smooth scrolling](docs/screenshots/smooth-scroll.png) part way through a row.
 
 ## What it does
 
@@ -34,7 +42,10 @@ tree later.
 - Scrolls the scrollback by the pixel, with an eased animation for wheel steps.
 - Pastes with bracketed paste when the program enabled it.
 - Shows a sidebar of sessions and panes with agent-state badges, a workspace
-  strip, and a command palette that runs tuios actions.
+  strip, and a command palette that runs tuios actions and switches themes.
+- Uses tuios's themes, with the colours tuios itself works out for them, so a
+  theme looks the same in the terminal client and here. Light and dark themes
+  both work.
 
 ## How it works
 
@@ -93,6 +104,26 @@ target/release/tuios-gpui --tuios /path/to/tuios --isolate /tmp/tuios-test
 `--isolate DIR` gives the bridge and the daemon it starts their own runtime
 directory, socket, config, state and home under DIR. Use it to test without
 touching your own sessions.
+
+### Settings
+
+The theme comes from `[appearance] theme` in tuios's own `config.toml`. The
+GUI only reads that file. Its own settings live in
+`~/.config/tuios-gpui/config.toml`; every key is optional:
+
+```toml
+font_family = "JetBrainsMono Nerd Font Mono"   # the grid
+ui_font_family = "JetBrainsMono Nerd Font"     # the chrome
+font_size = 14
+line_height = 1.3
+ligatures = true
+theme = "tokyonight"                           # instead of tuios's theme
+```
+
+A missing font falls back to JetBrainsMono Nerd Font, JetBrains Mono, then any
+monospace font. `--font`, `--font-size`, `--theme` and `--no-ligatures` set
+the same things for one run. Pick a theme for the open window from the
+command palette: type "theme" and part of its name.
 
 ### Keys
 
