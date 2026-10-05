@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"strings"
 	"unicode"
@@ -16,11 +17,21 @@ import (
 // on screen. Typing a label focuses that pane. With more panes than label
 // keys the labels take two keys, as hints mode's do. Esc closes.
 //
-// The panes are taken in the order select_window_1 to select_window_9 count
-// them, so with the default digit keys the first nine labels are the numbers
-// those keys already give the same panes. A zoom shows one pane and hides the
-// rest, so the zoomed pane's label also lists the hidden panes with theirs:
-// focusing one of them moves the zoom to it (see ZoomFollowsFocus).
+// The labels are handed out in the order select_window_1 to select_window_9
+// count the panes, minimised panes included when tiling is off, so with the
+// default digit keys label 3 is the pane select_window_3 gives. A minimised
+// pane gets no label: it is not on the screen to point at.
+//
+// A pane whose label would not be seen gets its label in a list instead: a
+// pane behind a zoom, a pane mostly off the screen (a scrolling column at the
+// edge, or a view of a larger session), and a pane too small for its label.
+// The list is drawn under the label of the zoomed pane, else the focused
+// pane, else the first pane shown. Focusing a pane behind a zoom moves the
+// zoom to it (see ZoomFollowsFocus).
+//
+// The labels name the layout they were drawn for. When it changes under them
+// (a pane opens, closes, moves, resizes or zooms, the session changes) they
+// close, rather than point at panes that are no longer where they were.
 //
 // Nothing is copied. The labels are a pass over the canvas after each pane is
 // drawn (pane_labels_render.go), so closing them is the next frame not
@@ -50,15 +61,36 @@ type paneLabelsState struct {
 	listOn string
 	// typed is the start of a label typed so far.
 	typed string
+	// layout is paneLabelsLayout when the labels were made.
+	layout string
 }
 
 // PaneLabelsOpen reports whether the pane labels are up. Labels made for a
-// workspace that is no longer on screen are closed first.
+// layout that is no longer on screen are closed first: another workspace or
+// session, or a pane opened, closed, moved, resized or zoomed since.
 func (m *OS) PaneLabelsOpen() bool {
-	if m.paneLabels != nil && m.paneLabels.workspace != m.CurrentWorkspace {
+	if m.paneLabels != nil && m.paneLabels.layout != m.paneLabelsLayout() {
 		m.ClosePaneLabels()
 	}
 	return m.paneLabels != nil
+}
+
+// paneLabelsLayout describes what the labels depend on: the session, the
+// workspace, the region panes are drawn in, and each pane of the workspace
+// with its box and its minimised and zoomed state.
+func (m *OS) paneLabelsLayout() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s|%d|%v|%v", m.SessionName, m.CurrentWorkspace, m.hintsRegion(), m.sessionView.on)
+	if v := m.sessionView; v.on {
+		fmt.Fprintf(&b, "|%d,%d", v.dx, v.dy)
+	}
+	for _, w := range m.Windows {
+		if w == nil || w.Workspace != m.CurrentWorkspace {
+			continue
+		}
+		fmt.Fprintf(&b, "|%s,%d,%d,%d,%d,%v,%v,%v", w.ID, w.X, w.Y, w.Width, w.Height, w.Minimized, w.Zoomed, w.IsPopup)
+	}
+	return b.String()
 }
 
 // PaneLabels maps each labelled pane's id to its label, for tests.
@@ -95,20 +127,22 @@ func (m *OS) OpenPaneLabels() {
 	m.ClosePaneLabels()
 	m.CloseHints()
 	windows := m.paneLabelWindows()
-	if len(windows) == 0 {
-		m.ShowNotification("This workspace has no panes to label.", "info", m.Settings.NotificationDuration)
-		return
-	}
 	labels := hints.KeyLabels(len(windows), m.paneLabelKeys())
-	state := &paneLabelsState{workspace: m.CurrentWorkspace}
-	region := m.hintsRegion()
+	state := &paneLabelsState{workspace: m.CurrentWorkspace, layout: m.paneLabelsLayout()}
 	for i, w := range windows {
+		if w.Minimized {
+			continue
+		}
 		state.panes = append(state.panes, paneLabel{
 			windowID: w.ID,
 			label:    labels[i],
 			name:     m.getWindowDisplayName(w),
-			shown:    m.hintsDrawn(w) && paneContentRect(w).Overlaps(region),
+			shown:    m.hintsDrawn(w) && paneLabelFits(m.paneLabelVisible(w), labels[i]),
 		})
+	}
+	if len(state.panes) == 0 {
+		m.ShowNotification("This workspace has no panes to label.", "info", m.Settings.NotificationDuration)
+		return
 	}
 	state.listOn = m.paneLabelListOn(state)
 	m.paneLabels = state
@@ -140,19 +174,35 @@ func (m *OS) paneLabelListOn(s *paneLabelsState) string {
 	return ""
 }
 
-// paneLabelWindows is every pane the labels are for: the panes of the
-// workspace on screen that are not minimised, in the order select_window_N
-// counts them. A pane behind a zoom is in the list: a label can move the
-// zoom to it.
+// paneLabelWindows is every pane select_window_N counts, in its order: the
+// panes of the workspace on screen, without the minimised ones while tiling
+// is on. The caller labels the list and then leaves the minimised panes out,
+// so the labels keep select_window_N's numbers. A pane behind a zoom is in
+// the list: a label can move the zoom to it.
 func (m *OS) paneLabelWindows() []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
-		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized {
+		if w == nil || w.Workspace != m.CurrentWorkspace {
+			continue
+		}
+		if m.AutoTiling && w.Minimized {
 			continue
 		}
 		out = append(out, w)
 	}
 	return out
+}
+
+// paneLabelVisible is the part of a pane's label area that is on the
+// screen, in layout coordinates.
+func (m *OS) paneLabelVisible(w *terminal.Window) image.Rectangle {
+	return paneLabelRect(w).Intersect(m.hintsRegion())
+}
+
+// paneLabelFits reports whether the smallest form of a label, its keys with
+// a cell either side, fits in the visible part of a pane.
+func paneLabelFits(r image.Rectangle, label string) bool {
+	return r.Dx() >= len(label)+2 && r.Dy() >= 1
 }
 
 // ClosePaneLabels takes the labels down.

@@ -70,8 +70,16 @@ func validatePanes(cfg *UserConfig, result *ValidationResult) {
 	if keys == "" {
 		return
 	}
+	// Count the keys a label can use here rather than compare with the
+	// default: "1234567890!" keeps the default's keys and drops one.
+	var kept strings.Builder
+	for _, r := range strings.ToLower(keys) {
+		if paneLabelKey(r) && !strings.ContainsRune(kept.String(), r) {
+			kept.WriteRune(r)
+		}
+	}
 	used := NormalizePaneLabelKeys(keys)
-	if used == PanesDefaultLabelKeys && !strings.EqualFold(keys, PanesDefaultLabelKeys) {
+	if kept.Len() < 2 {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "panes",
 			Key:     "label_keys",

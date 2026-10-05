@@ -173,7 +173,9 @@ func (m *OS) applyPaneLabels(canvas *frameCanvas, id string) {
 	if w == nil {
 		return
 	}
-	rect := paneLabelRect(w)
+	// Centred on the part of the pane that is on the screen, so a pane
+	// that is partly off it still shows its label.
+	rect := m.paneLabelVisible(w)
 	area := canvas.Bounds()
 	// In a view of a larger session the pane is drawn shifted and clipped,
 	// and its label goes with it. See pane_view.go.

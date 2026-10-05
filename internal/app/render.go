@@ -704,6 +704,7 @@ func (m *OS) composeFrame() string {
 	// is drawn, so a pane that is not drawn would otherwise hold hints open,
 	// and the fast path off, for good.
 	m.closeStaleHints()
+	m.PaneLabelsOpen()
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
 		// The fast path draws no rail, so no working row is on screen and the
 		// shimmer's clock must not go on asking for frames.

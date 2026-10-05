@@ -1461,11 +1461,15 @@ The tests are in `pane_labels_test.go`. They read each label's block glyphs
 off the screen with the pane's name under them, type the label, and read the
 focused pane back from list-windows. The positive half of each jump is a
 check that the focus was on another pane before the label was typed. Esc
-closes the labels with no jump in the same test.
+closes the labels with no jump in the same test. The leak test sets one known
+prompt in every pane and shows first, with the labels closed, that the key
+and the paste reach the shells and leave the line it looks for.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The action is not registered | `registerPrefixHandlers`: the `display_panes` line cut | `TestPaneLabelsFocusAPane` ("label 1 over alpha never showed"), `TestPaneLabelsTwoKeysAndCustomKeys` ("label a over alpha never showed") | **caught** |
 | A key that starts a label is not kept | `PaneLabelsPress`: `prefix = true` made `prefix = false` | `TestPaneLabelsTwoKeysAndCustomKeys` ("after s s: the labels stayed up") | **caught** |
-| No list of the panes behind a zoom | `OpenPaneLabels`: the `listOn` line cut | `TestPaneLabelsZoomAndMultifocus` ("the hidden panes are not listed") | **caught** |
-| The labels do not own the keyboard | `routeKey`: the `PaneLabelsOpen` check cut | `TestPaneLabelsZoomAndMultifocus` (in terminal mode with multifocus, "after 3: the labels stayed up") | **caught** |
+| No list of the panes behind a zoom | `OpenPaneLabels`: the `listOn` line cut | `TestPaneLabelsZoom` ("the hidden panes are not listed") | **caught** |
+| The labels do not own the keyboard | `routeKey`: the `PaneLabelsOpen` check cut | `TestPaneLabelsKeepKeysAndPastesFromPanes` (in multifocus, "the label key: 3 reached pane ...") | **caught** |
+| A paste passes the labels | `pasteTakenByOverlay`: the `PaneLabelsOpen` check cut | `TestPaneLabelsKeepKeysAndPastesFromPanes` ("a paste with the labels up: pz9 reached pane ...") | **caught** |
+| The labels outlive a layout change | `PaneLabelsOpen`: the layout compare made a workspace compare | `TestPaneLabelsFocusAPane` ("after a pane opened: the labels stayed up") | **caught** |

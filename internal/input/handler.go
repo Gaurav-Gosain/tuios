@@ -76,7 +76,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseMotionMsg:
 		// The labels cover the pane, so motion over it is not the pane's.
-		if o.HintsOpen() {
+		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
 		}
 		if o.CaptureActive() {
@@ -109,8 +109,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
 		// A wheel scrolls the pane out from under the labels, so it ends
-		// hints mode and then scrolls as usual.
+		// hints mode and then scrolls as usual. The pane labels the same.
 		o.CloseHints()
+		o.ClosePaneLabels()
 		if o.ReviewOpen() {
 			switch msg.Button {
 			case tea.MouseWheelUp:
@@ -207,6 +208,11 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 	// method's commit that arrives as one, is not a label, and nothing
 	// typed while the labels are up may reach the pane.
 	if o.HintsOpen() {
+		return true
+	}
+	// The pane labels the same: a paste is not a label, and with multifocus
+	// on it would reach every pane of the set.
+	if o.PaneLabelsOpen() {
 		return true
 	}
 	// The multi copy save prompt takes a paste as its path, with line

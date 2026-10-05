@@ -127,8 +127,8 @@ as in tmux.
 
 The labels are digits by default, in the order that `select_window_1` to
 `select_window_9` count the panes. Thus label `3` is the pane that `3` selects
-in window mode. With more panes than keys, a label has two keys. A key with
-`Shift` is the same key.
+in window mode. A minimised pane gets no label. With more panes than keys, a
+label has two keys. A key with `Shift` is the same key.
 
 Set the keys in `[panes]`. Letters `a` to `z` and digits are allowed. The keys
 that come first go to the first panes.
@@ -140,7 +140,12 @@ label_keys = "asdfghjkl"
 
 When a pane is zoomed, the zoomed pane shows its label. A list under it
 shows the labels of the panes that the zoom hides. A label of a hidden pane
-moves the zoom to that pane. In multifocus, a label key goes to the labels and
+moves the zoom to that pane. A pane that is mostly off the screen, or too
+small for its label, is in the same list.
+
+The labels close when the layout changes: a pane opens, closes, moves or
+zooms, or the workspace or the session changes. A click or the mouse wheel
+also closes them. In multifocus, a label key goes to the labels and
 not to the panes.
 
 ## Neovim pane navigation

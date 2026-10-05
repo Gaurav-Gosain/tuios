@@ -26,8 +26,11 @@ import (
 //     only with the pane's name two rows under it.
 //   - The labels could stay up after the jump and still pass a focus check.
 //     Every jump waits for the glyphs to go.
-//   - A typed label key could reach a shell as well as the labels. The
-//     multifocus test checks that no pane of the set shows the key.
+//   - A typed label key or a paste could reach a shell as well as the
+//     labels. The multifocus test gives every pane one known prompt, shows
+//     with the labels closed that the key and the paste do reach the shells
+//     and leave the line it looks for, then checks no pane shows that line
+//     with the labels up.
 //
 // Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md).
 
@@ -285,6 +288,14 @@ func TestPaneLabelsFocusAPane(t *testing.T) {
 	if got := focusedPaneID(t, base, "e2e-labels"); got != ids[2] {
 		t.Fatalf("esc moved the focus to %s", got)
 	}
+
+	// A pane that opens under the labels changes the layout they name, and
+	// they close rather than point at panes that moved.
+	openPaneLabels(t, term, "2", "beta")
+	if o, err := tuiosCLI(t, base, "new-window", "delta", "-s", "e2e-labels", "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, o)
+	}
+	waitPaneLabelsGone(t, term, "after a pane opened")
 }
 
 // TestPaneLabelsTwoKeysAndCustomKeys: label_keys = "as" gives three panes
@@ -315,11 +326,9 @@ func TestPaneLabelsTwoKeysAndCustomKeys(t *testing.T) {
 	waitFocusedPane(t, base, ids[2], "label ss")
 }
 
-// TestPaneLabelsZoomAndMultifocus: with a pane zoomed, the hidden panes are
-// listed under the zoomed pane's label, and a label moves the zoom to its
-// pane. With every pane in multifocus, the label key focuses the pane and
-// reaches no shell.
-func TestPaneLabelsZoomAndMultifocus(t *testing.T) {
+// TestPaneLabelsZoom: with a pane zoomed, the hidden panes are listed under
+// the zoomed pane's label, and a label moves the zoom to its pane.
+func TestPaneLabelsZoom(t *testing.T) {
 	term, base, ids := paneLabelsSession(t, "", startOpts{})
 	focusPaneByCLI(t, base, ids[0])
 
@@ -332,10 +341,78 @@ func TestPaneLabelsZoomAndMultifocus(t *testing.T) {
 	waitPaneLabelsGone(t, term, "after 2 in zoom")
 	waitFocusedPane(t, base, ids[1], "label 2 in zoom")
 	waitOnlyPane(t, term, "beta", "the zoom did not move to beta")
-	sendKeys(t, term, tuitest.Ctrl('b'), "z")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return len(panesDrawn(s)) == 3 }, uiTimeout); err != nil {
-		t.Fatalf("the zoom never ended: %v\n%s", err, term.Snapshot())
+}
+
+// labelPrompt is the prompt the multifocus test gives every pane, so a line
+// a key or a paste reached reads the same whatever the shell's own prompt.
+const labelPrompt = "LBL>"
+
+// lastPaneLine is the last line of a pane's screen that is not blank.
+func lastPaneLine(t *testing.T, base, id string) string {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "capture-pane", "-w", id, "-s", "e2e-labels")
+	if err != nil {
+		t.Fatalf("capture-pane: %v\n%s", err, out)
 	}
+	last := ""
+	for _, line := range strings.Split(out, "\n") {
+		if l := strings.TrimRight(line, " "); strings.TrimSpace(l) != "" {
+			last = l
+		}
+	}
+	return last
+}
+
+// waitEveryPaneLine waits for every pane's last line to be want.
+func waitEveryPaneLine(t *testing.T, base string, ids []string, want, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		ok := true
+		got := ""
+		for _, id := range ids {
+			if got = lastPaneLine(t, base, id); got != want {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: a pane's last line is %q, want %q", what, got, want)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// noPaneLine fails when any pane's last line is the prompt and text.
+func noPaneLine(t *testing.T, base string, ids []string, text, what string) {
+	t.Helper()
+	for _, id := range ids {
+		if got := lastPaneLine(t, base, id); got == labelPrompt+" "+text {
+			t.Fatalf("%s: %q reached pane %s", what, text, id)
+		}
+	}
+}
+
+// TestPaneLabelsKeepKeysAndPastesFromPanes: with every pane in multifocus
+// and the labels up, neither the label key nor a paste reaches a shell. The
+// positive half runs first in the same panes with the labels closed: the key
+// and the paste reach the shells, and the line they leave is the one the
+// check looks for.
+func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
+	term, base, ids := paneLabelsSession(t, "", startOpts{})
+	focusPaneByCLI(t, base, ids[0])
+	for _, id := range ids {
+		if o, err := tuiosCLI(t, base, "send-text", "-s", "e2e-labels", "-w", id, "PS1='"+labelPrompt+" '"); err != nil {
+			t.Fatalf("send-text: %v\n%s", err, o)
+		}
+		if o, err := tuiosCLI(t, base, "send-keys", "-s", "e2e-labels", "-w", id, "Enter"); err != nil {
+			t.Fatalf("send-keys: %v\n%s", err, o)
+		}
+	}
+	waitEveryPaneLine(t, base, ids, labelPrompt, "the prompt was never set")
 
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
 		t.Fatalf("open palette: %v", err)
@@ -349,22 +426,39 @@ func TestPaneLabelsZoomAndMultifocus(t *testing.T) {
 		t.Fatalf("the multifocus set never held three panes: %v\n%s", err, term.Snapshot())
 	}
 	enterTerminalMode(t, term)
-	openPaneLabels(t, term, "3", "gamma")
+
+	// The positive half: with the labels closed, a key reaches every pane
+	// and so does a paste.
 	sendKeys(t, term, "3")
+	waitEveryPaneLine(t, base, ids, labelPrompt+" 3", "a key with the labels closed")
+	sendKeys(t, term, tuitest.Ctrl('u'))
+	waitEveryPaneLine(t, base, ids, labelPrompt, "ctrl+u after the key")
+	if err := term.Paste("pz9"); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	waitEveryPaneLine(t, base, ids, labelPrompt+" pz9", "a paste with the labels closed")
+	sendKeys(t, term, tuitest.Ctrl('u'))
+	waitEveryPaneLine(t, base, ids, labelPrompt, "ctrl+u after the paste")
+
+	// The labels up: a paste goes nowhere, and the labels stay.
+	openPaneLabels(t, term, "3", "gamma")
+	if err := term.Paste("pz9"); err != nil {
+		t.Fatalf("paste: %v", err)
+	}
+	time.Sleep(700 * time.Millisecond)
+	noPaneLine(t, base, ids, "pz9", "a paste with the labels up")
+	if !anyPaneLabel(term.Screen()) {
+		t.Fatalf("a paste closed the labels:\n%s", term.Snapshot())
+	}
+
+	// And the label key focuses its pane and reaches no shell. The shells
+	// are read before the labels are checked, so a key that both reached
+	// the shells and left the labels up fails here, on the leak.
+	sendKeys(t, term, "3")
+	time.Sleep(700 * time.Millisecond)
+	noPaneLine(t, base, ids, "3", "the label key")
 	waitPaneLabelsGone(t, term, "after 3 in multifocus")
 	waitFocusedPane(t, base, ids[2], "label 3 in multifocus")
-	time.Sleep(500 * time.Millisecond)
-	for _, id := range ids {
-		out, err := tuiosCLI(t, base, "capture-pane", "-w", id, "-s", "e2e-labels")
-		if err != nil {
-			t.Fatalf("capture-pane: %v\n%s", err, out)
-		}
-		for _, line := range strings.Split(out, "\n") {
-			if strings.HasSuffix(strings.TrimSpace(line), "$ 3") {
-				t.Fatalf("the label key reached pane %s:\n%s", id, out)
-			}
-		}
-	}
 }
 
 // panesDrawn is the names on the bottom borders of the panes drawn.
