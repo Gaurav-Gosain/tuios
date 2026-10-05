@@ -597,7 +597,7 @@ with ssh:
 | `split_ssh_vertical` | Splits the pane left and right. |
 | `new_window_ssh` | Opens a new window. |
 
-The new pane runs ssh again, to the same destination with the same options.
+The new pane runs ssh again, to the same destination as the same user, with the connection options only.
 tuios does not run the remote command again. It also removes `-N`, `-f`, `-T`,
 `-W`, port forwards and the other options that stop a shell. `mosh` works the
 same way.
