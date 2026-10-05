@@ -4,6 +4,8 @@ package session
 
 import (
 	"encoding/binary"
+	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -53,4 +55,23 @@ func readArgvExact(pid int) []string {
 		rest = rest[end+1:]
 	}
 	return argv
+}
+
+// readEnvVarOf reads one variable of a process's environment from
+// kern.procargs2, which the kernel gives only for a process of the same user.
+func readEnvVarOf(pid int, name string) (string, bool) {
+	buf, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return "", false
+	}
+	return procargsEnvVar(buf, name)
+}
+
+// fileOwner is the uid that owns a file.
+func fileOwner(fi os.FileInfo) (int, bool) {
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, false
+	}
+	return int(st.Uid), true
 }

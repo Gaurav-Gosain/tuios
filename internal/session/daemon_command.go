@@ -111,11 +111,13 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 		payload.CommandType, payload.Args = canonical, args
 	}
+	var newWindowEnv []string
 	if payload.SSHFrom != "" && payload.CommandType == "NewWindow" && len(payload.Args) <= 1 {
 		// The client asked for a pane on the machine another pane is ssh'd
 		// into. The daemon reads that pane's processes, because it is the side
 		// that owns them. With no ssh client there it is an ordinary window.
-		if argv, ok := session.sshFollowArgv(payload.SSHFrom); ok {
+		if argv, env, ok := session.sshFollowArgv(payload.SSHFrom); ok {
+			newWindowEnv = env
 			name := ""
 			if len(payload.Args) == 1 {
 				name = payload.Args[0]
@@ -138,7 +140,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				"tape scripts need an attached client. A headless daemon has no renderer to run them")
 		}
 		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
-		data, err := d.executeDaemonCommandAt(session, payload.CommandType, payload.Args, payload.Cwd, payload.Workspace, onExit)
+		data, err := d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, payload.Cwd, payload.Workspace, newWindowEnv, onExit)
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 		}

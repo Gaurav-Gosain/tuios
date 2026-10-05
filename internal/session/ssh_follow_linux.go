@@ -46,3 +46,22 @@ func readArgvExact(pid int) []string {
 	}
 	return strings.Split(s, "\x00")
 }
+
+// readEnvVarOf reads one variable of a process's environment. The file is
+// readable only for a process of the same user.
+func readEnvVarOf(pid int, name string) (string, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
+	if err != nil {
+		return "", false
+	}
+	return environVar(data, name)
+}
+
+// fileOwner is the uid that owns a file.
+func fileOwner(fi os.FileInfo) (int, bool) {
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, false
+	}
+	return int(st.Uid), true
+}

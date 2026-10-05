@@ -54,6 +54,13 @@ func (d *Daemon) executeDaemonCommandIn(sess *Session, commandType string, args 
 // executeDaemonCommandAt is executeDaemonCommandIn with the workspace a
 // NewWindow goes on. Zero is the session's current one.
 func (d *Daemon) executeDaemonCommandAt(sess *Session, commandType string, args []string, cwd string, workspace int, onExit func(ptyID string)) (map[string]any, error) {
+	return d.executeDaemonCommandEnv(sess, commandType, args, cwd, workspace, nil, onExit)
+}
+
+// executeDaemonCommandEnv is executeDaemonCommandAt with environment entries
+// a NewWindow's process gets on top of an ordinary pane's. An ssh split uses
+// it for the agent socket; see SSHFollowArgv.
+func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, cwd string, workspace int, env []string, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":
 		name := ""
@@ -69,7 +76,7 @@ func (d *Daemon) executeDaemonCommandAt(sess *Session, commandType string, args 
 			command = args[1:]
 		}
 		win, err := sess.AddDaemonWindowWith(
-			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd, Workspace: workspace}, onExit)
+			NewWindowOptions{Focus: true, Command: command, Name: name, Cwd: cwd, Workspace: workspace, Env: env}, onExit)
 		if err != nil {
 			return nil, err
 		}

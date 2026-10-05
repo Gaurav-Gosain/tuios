@@ -75,5 +75,9 @@ func localSSHArgv(w *terminal.Window) ([]string, bool) {
 	if w.CwdHost != "" {
 		dir = w.CwdElsewhereDir
 	}
-	return session.SSHFollowArgv(w.Cmd.Process.Pid, w.CwdHost, dir)
+	// A pane this client runs starts with the client's environment, and
+	// AddWindow has no way to add to it, so the agent socket SSHFollowArgv
+	// names is not passed here. The daemon path passes it.
+	argv, _, ok := session.SSHFollowArgv(w.Cmd.Process.Pid, w.CwdHost, dir)
+	return argv, ok
 }

@@ -23,6 +23,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(255)
 	}
+	if len(os.Args) > 1 && os.Args[1] == "-G" {
+		// ssh -G: the host name from -o HostName, or the destination.
+		host := os.Args[len(os.Args)-1]
+		for i := 1; i+1 < len(os.Args); i++ {
+			if v, ok := strings.CutPrefix(os.Args[i+1], "HostName="); ok && os.Args[i] == "-o" {
+				host = v
+			}
+		}
+		fmt.Printf("hostname %s\n", host)
+		return
+	}
 	runs := filepath.Join(filepath.Dir(filepath.Dir(exe)), "ssh-runs")
 	if err := os.MkdirAll(runs, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -1,10 +1,12 @@
 package session
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Following a pane into ssh.
@@ -69,21 +71,46 @@ const sshAncestryLimit = 64
 var lookPath = exec.LookPath
 
 // SSHFollowArgv returns the argv that opens a new session to where the ssh or
-// mosh client running under shellPID is connected, and whether there is one.
+// mosh client running under shellPID is connected, the environment entries
+// the new pane needs on top of an ordinary pane's, and whether there is a
+// client to follow.
 //
 // reportHost and reportDir are the host and folder of one OSC 7 report the
 // pane's terminal saw from another machine, both empty when there was none.
 // The folder is used only when the host is the client's destination host.
-func SSHFollowArgv(shellPID int, reportHost, reportDir string) ([]string, bool) {
+//
+// The environment is an ordinary pane's: the daemon's, which is what a split
+// of the pane gets before its shell starts. The one thing a shell commonly
+// adds that ssh needs is the agent socket (keychain, gpg-agent, an
+// ssh-agent started in the pane), so SSH_AUTH_SOCK is taken from the client
+// being followed when it names a socket this user owns.
+func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []string, ok bool) {
 	login, ok := findRemoteLogin(shellPID)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	dir := ""
-	if reportHost != "" && login.hostMatches(reportHost) {
+	if reportHost != "" && login.reportMatches(reportHost) {
 		dir = reportDir
 	}
-	return login.argv(dir), true
+	if sock, ok := readEnvVarOf(login.pid, "SSH_AUTH_SOCK"); ok && ownedSocket(sock) {
+		env = []string{"SSH_AUTH_SOCK=" + sock}
+	}
+	return login.argv(dir), env, true
+}
+
+// ownedSocket reports whether path is an absolute path to a Unix socket owned
+// by the user the daemon runs as.
+func ownedSocket(path string) bool {
+	if !filepath.IsAbs(path) || hasControl(path) {
+		return false
+	}
+	fi, err := os.Stat(path)
+	if err != nil || fi.Mode()&os.ModeSocket == 0 {
+		return false
+	}
+	uid, ok := fileOwner(fi)
+	return ok && uid == os.Geteuid()
 }
 
 // findRemoteLogin finds the ssh or mosh client in the foreground of the pane
@@ -109,7 +136,9 @@ func findRemoteLogin(shellPID int) (remoteLogin, bool) {
 		if !startedByShell(pid, shellPID, uid) {
 			return remoteLogin{}, false
 		}
-		return parseRemoteLogin(argv)
+		login, ok := parseRemoteLogin(argv)
+		login.pid = pid
+		return login, ok
 	}
 	if login, ok := try(leader); ok || found {
 		return login, ok
@@ -221,6 +250,8 @@ type remoteLogin struct {
 	opts []string
 	// dest is the destination as it was given.
 	dest string
+	// pid is the client process the line was read from.
+	pid int
 }
 
 // argv builds the command line for the new pane. dir, when not empty, is the
@@ -260,6 +291,62 @@ func (l remoteLogin) hostMatches(reported string) bool {
 	host := destHost(l.dest)
 	reported = strings.ToLower(strings.TrimSpace(reported))
 	return host != "" && host == reported
+}
+
+// reportMatches is hostMatches, and then a match against the host name ssh
+// resolves the destination to. A shell reports its machine's own name, and a
+// destination is often an alias in ~/.ssh/config: "prod" whose HostName is
+// box.example.com. The whole resolved name matches, and a report with no dot
+// may match its first label, because that is what most machines call
+// themselves.
+func (l remoteLogin) reportMatches(reported string) bool {
+	if l.hostMatches(reported) {
+		return true
+	}
+	if l.mosh {
+		return false
+	}
+	reported = strings.ToLower(strings.TrimSpace(reported))
+	resolved := strings.ToLower(resolveSSHHostName(l))
+	if reported == "" || resolved == "" {
+		return false
+	}
+	if reported == resolved {
+		return true
+	}
+	// An address has no first label to compare.
+	if strings.Trim(resolved, "0123456789.") == "" || strings.Contains(resolved, ":") {
+		return false
+	}
+	first, _, dotted := strings.Cut(resolved, ".")
+	return !strings.Contains(reported, ".") && dotted && reported == first
+}
+
+// sshResolveTimeout bounds ssh -G, which reads config files and nothing else.
+const sshResolveTimeout = 2 * time.Second
+
+// resolveSSHHostName is the HostName ssh -G gives for the line, run with the
+// line's kept options only, or "" when it cannot say. A variable so the tests
+// can stand in for ssh.
+var resolveSSHHostName = func(l remoteLogin) string {
+	ctx, cancel := context.WithTimeout(context.Background(), sshResolveTimeout)
+	defer cancel()
+	args := append([]string{"-G"}, l.opts...)
+	if strings.HasPrefix(l.dest, "-") {
+		args = append(args, "--")
+	}
+	cmd := exec.CommandContext(ctx, l.bin, append(args, l.dest)...)
+	cmd.Stdin = nil
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	for line := range strings.Lines(string(out)) {
+		if v, ok := strings.CutPrefix(line, "hostname "); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 // destHost is the host part of an ssh destination, lower case: the user, the
@@ -334,21 +421,38 @@ const (
 	sshRefuse = "FIGVQO"
 )
 
-// sshDropConfig are the -o keywords the new pane does not get, lower case.
-var sshDropConfig = map[string]bool{
-	"remotecommand": true, "sessiontype": true, "stdinnull": true,
-	"forkafterauthentication": true, "requesttty": true,
-	"localforward": true, "remoteforward": true, "dynamicforward": true,
-	"tunnel": true, "tunneldevice": true,
-	"controlmaster": true, "controlpersist": true,
-}
+// sshAllowConfig are the -o keywords a followed line may carry, lower case,
+// and whether the new pane keeps the option. A keyword outside this table
+// makes the line not followed. A refusal list missed ProxyCommand split by a
+// newline and XAuthLocation, so the table names what is safe instead: each
+// keyword was checked against ssh_config(5) to neither run nor load a program
+// named by its value.
+//
+// The ones the new pane drops are a forward, which the first client holds, or
+// a session that is not a shell.
+var sshAllowConfig = map[string]bool{
+	"port": true, "user": true, "hostname": true, "hostkeyalias": true,
+	"identityfile": true, "identitiesonly": true, "identityagent": true,
+	"certificatefile":     true,
+	"serveraliveinterval": true, "serveralivecountmax": true,
+	"connecttimeout": true, "connectionattempts": true, "tcpkeepalive": true,
+	"stricthostkeychecking": true, "userknownhostsfile": true,
+	"globalknownhostsfile": true, "checkhostip": true,
+	"compression": true, "addressfamily": true, "batchmode": true,
+	"forwardagent": true, "forwardx11": true, "forwardx11trusted": true,
+	"setenv": true, "sendenv": true, "loglevel": true, "escapechar": true,
+	"controlpath": true, "proxyjump": true,
+	"preferredauthentications": true, "pubkeyauthentication": true,
+	"passwordauthentication": true, "kbdinteractiveauthentication": true,
+	"ciphers": true, "macs": true, "kexalgorithms": true,
+	"hostkeyalgorithms": true, "pubkeyacceptedalgorithms": true,
 
-// sshRefuseConfig are the -o keywords that make the line not followed,
-// lower case. Each one runs a program on this machine, or (Match exec) can.
-var sshRefuseConfig = map[string]bool{
-	"proxycommand": true, "localcommand": true, "permitlocalcommand": true,
-	"knownhostscommand": true, "pkcs11provider": true,
-	"securitykeyprovider": true, "match": true,
+	"remotecommand": false, "sessiontype": false, "stdinnull": false,
+	"forkafterauthentication": false, "requesttty": false,
+	"localforward": false, "remoteforward": false, "dynamicforward": false,
+	"gatewayports": false, "exitonforwardfailure": false,
+	"clearallforwardings": false, "tunnel": false, "tunneldevice": false,
+	"controlmaster": false, "controlpersist": false,
 }
 
 // parseSSHArgs reads ssh's arguments the way ssh does: options, the
@@ -359,6 +463,13 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 	terminated := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		if l.dest != "" && (terminated || a == "--" || !strings.HasPrefix(a, "-")) {
+			// The remote command starts here, and it is dropped.
+			break
+		}
+		if hasControl(a) || (i+1 < len(args) && hasControl(args[i+1]) && takesValue(a)) {
+			return remoteLogin{}, false
+		}
 		if !terminated && a == "--" {
 			if l.dest != "" {
 				break
@@ -427,15 +538,17 @@ func sshValueVerdict(c byte, val string) (keep, refuse bool) {
 		return true, false
 	}
 	key := sshConfigKeyword(val)
-	if key == "" || sshRefuseConfig[key] {
+	keep, known := sshAllowConfig[key]
+	if !known {
 		return false, true
 	}
-	return !sshDropConfig[key], false
+	return keep, false
 }
 
 // sshConfigKeyword is the lower-case keyword of an -o value, read the way ssh
 // reads a config line: leading space and a quote are skipped, and the keyword
-// ends at =, space or a quote.
+// ends at =, space or a quote. A value with a control character never gets
+// here: ssh splits a line at \r and \n too, so parseSSHArgs refuses it.
 func sshConfigKeyword(val string) string {
 	v := strings.TrimSpace(val)
 	v = strings.TrimLeft(v, `"'`)
@@ -583,19 +696,44 @@ func redactSSHArgv(argv []string) []string {
 // sshFollowArgv is SSHFollowArgv for one of the session's windows, named by
 // id or name. It is false for a window on another machine: its processes are
 // not on this one to read.
-func (s *Session) sshFollowArgv(window string) ([]string, bool) {
+func (s *Session) sshFollowArgv(window string) (argv, env []string, ok bool) {
 	state := s.GetState()
 	idx, err := findWindowStateIndex(state.Windows, window)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	pty := s.GetPTY(state.Windows[idx].PTYID)
 	if pty == nil || pty.IsExited() {
-		return nil, false
+		return nil, nil, false
 	}
 	if _, remote := pty.pty.(*remotePane); remote {
-		return nil, false
+		return nil, nil, false
 	}
 	host, dir := pty.place.ElsewhereReport()
 	return SSHFollowArgv(pty.ShellPID(), host, dir)
+}
+
+// hasControl reports whether s holds a control character. ssh reads an -o
+// value as a config line, and a line break in it starts a second line.
+func hasControl(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// takesValue reports whether an ssh argument is an option cluster that ends in
+// an option with its value in the next argument.
+func takesValue(a string) bool {
+	if len(a) < 2 || a[0] != '-' || a == "--" {
+		return false
+	}
+	for j := 1; j < len(a); j++ {
+		if strings.IndexByte(sshValueOpts, a[j]) >= 0 {
+			return j+1 == len(a)
+		}
+	}
+	return false
 }

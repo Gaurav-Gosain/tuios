@@ -64,6 +64,15 @@ func TestParseRemoteLogin(t *testing.T) {
 		{"pkcs11 provider", []string{"ssh", "-o", "PKCS11Provider=/x.so", "h"}, "", nil},
 		{"security key provider", []string{"ssh", "-o", "SecurityKeyProvider=/x.so", "h"}, "", nil},
 		{"match", []string{"ssh", "-o", "Match exec true", "h"}, "", nil},
+		{"proxy command after a newline", []string{"ssh", "-o", "ProxyCommand\necho PWNED", "h"}, "", nil},
+		{"allowed keyword then a newline", []string{"ssh", "-o", "User=x\nProxyCommand=echo PWNED", "h"}, "", nil},
+		{"carriage return", []string{"ssh", "-oPort=22\rProxyCommand=x", "h"}, "", nil},
+		{"xauth location", []string{"ssh", "-X", "-o", "XAuthLocation=/tmp/evil", "h"}, "", nil},
+		{"unknown keyword", []string{"ssh", "-o", "Frobnicate=1", "h"}, "", nil},
+		{"include", []string{"ssh", "-o", "Include /tmp/x", "h"}, "", nil},
+		{"control character in destination", []string{"ssh", "h\n"}, "", nil},
+		{"allowed keywords kept", []string{"ssh", "-X", "-o", "ControlPath=/s", "-o", "ForwardAgent yes", "h"}, "",
+			[]string{"/path/ssh", "-X", "-o", "ControlPath=/s", "-o", "ForwardAgent yes", "h"}},
 		{"config file", []string{"ssh", "-F", "/x", "h"}, "", nil},
 		{"pkcs11 flag", []string{"ssh", "-I", "/x.so", "h"}, "", nil},
 		{"print config", []string{"ssh", "-G", "h"}, "", nil},
@@ -145,6 +154,32 @@ func TestRemoteLoginHostMatches(t *testing.T) {
 		l := remoteLogin{dest: c.dest}
 		if got := l.hostMatches(c.reported); got != c.want {
 			t.Errorf("hostMatches(%q, %q) = %v, want %v", c.dest, c.reported, got, c.want)
+		}
+	}
+}
+
+// A destination that is an alias matches the host name ssh -G resolves it to,
+// in full, or by its first label when the report has no dot.
+func TestRemoteLoginReportMatchesResolvedHost(t *testing.T) {
+	old := resolveSSHHostName
+	t.Cleanup(func() { resolveSSHHostName = old })
+	cases := []struct {
+		dest, resolved, reported string
+		want                     bool
+	}{
+		{"prod", "box.example.com", "box.example.com", true},
+		{"prod", "box.example.com", "box", true},
+		{"prod", "box.example.com", "box.other.com", false},
+		{"prod", "box.example.com", "other", false},
+		{"prod", "10.0.0.5", "10", false},
+		{"prod", "", "box", false},
+		{"box", "", "box", true},
+	}
+	for _, c := range cases {
+		resolveSSHHostName = func(remoteLogin) string { return c.resolved }
+		l := remoteLogin{dest: c.dest}
+		if got := l.reportMatches(c.reported); got != c.want {
+			t.Errorf("reportMatches(%q via %q, %q) = %v, want %v", c.dest, c.resolved, c.reported, got, c.want)
 		}
 	}
 }

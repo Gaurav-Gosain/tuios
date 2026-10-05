@@ -6,8 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -47,10 +49,23 @@ func fakeSSH(t *testing.T, dir string) (bin, runs string) {
 	}
 	// Each run takes the next number, writes one argument per line, says it
 	// connected, and then runs what is typed into it as a shell would.
+	// ssh -G, which tuios runs to resolve an alias, prints the host name
+	// from -o HostName, or the destination, and records nothing.
 	script := fmt.Sprintf(`#!/bin/sh
 runs=%q
-n=$(ls "$runs" | wc -l | tr -d ' ')
+if [ "$1" = "-G" ]; then
+	h=""; prev=""; last=""
+	for a in "$@"; do
+		case "$prev$a" in -oHostName=*) h=${a#HostName=} ;; esac
+		prev=$a; last=$a
+	done
+	[ -n "$h" ] || h=$last
+	echo "hostname $h"
+	exit 0
+fi
+n=$(ls "$runs" | grep -c '[.]argv$')
 : > "$runs/$n.tmp"
+printf '%%s\n' "$SSH_AUTH_SOCK" > "$runs/$n.sock"
 for a in "$@"; do printf '%%s\n' "$a" >> "$runs/$n.tmp"; done
 mv "$runs/$n.tmp" "$runs/$n.argv"
 echo "FAKESSH-RUN-$n-UP"
@@ -337,4 +352,77 @@ func TestSSHSplitIgnoresTheSSHOfATransfer(t *testing.T) {
 		t.Fatalf("a split of scp's ssh ran ssh: %d runs, want 1", n)
 	}
 	alive(t, term, "after the transfer split")
+}
+
+// An -o value with a line break is two config lines to ssh, so a
+// ProxyCommand can hide behind it. Such a line is not followed: the split is
+// an ordinary shell.
+func TestSSHSplitRefusesALineBreakInAnOption(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "")
+	sshIn(t, term, `ssh -o "$(printf 'User=pollen\nProxyCommand=echo PWNED')" fakehost`, 0)
+	pressAndCount(t, term, 2, "split_ssh_vertical with a line break", tuitest.Alt('v'))
+	enterTerminalMode(t, term)
+	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
+	if n := sshRunCount(runs); n != 1 {
+		t.Fatalf("a split of an ssh with a line break in -o ran ssh: %d runs, want 1", n)
+	}
+	alive(t, term, "after the refused split")
+}
+
+// A destination that is an alias keeps the remote folder when the reported
+// host is the host name ssh -G resolves the alias to.
+func TestSSHSplitKeepsTheFolderOfAnAlias(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "")
+	sshIn(t, term, "ssh -o HostName=fakehost.example.com pollen@prod", 0)
+	enterTerminalMode(t, term)
+	typeUntil(t, term, `printf '\033]7;file://fakehost/srv/app\033\\'; echo REPORT""ED`, "REPORTED")
+	leaveTerminalMode(t, term)
+	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
+	wantArgs(t, term, "split of an alias with a reported folder", sshRunArgs(t, term, runs, 1),
+		[]string{"-o", "HostName=fakehost.example.com", "-t", "-o", "RemoteCommand=none", "pollen@prod",
+			`exec sh -c 'cd "/srv/app" 2>/dev/null; exec "$SHELL" -l'`})
+	alive(t, term, "after the alias split")
+}
+
+// The split's ssh gets the agent socket the followed ssh had, when the pane's
+// shell started that agent itself. An ordinary pane starts with the daemon's
+// environment, which has no such socket.
+func TestSSHSplitPassesTheAgentSocket(t *testing.T) {
+	if _, err := exec.LookPath("ssh-agent"); err != nil {
+		t.Skip("no ssh-agent on PATH")
+	}
+	term, base, runs := startSSHSplit(t, "")
+	pidFile := filepath.Join(base, "agent.pid")
+	t.Cleanup(func() {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 1 {
+				_ = syscall.Kill(pid, syscall.SIGTERM)
+			}
+		}
+	})
+	// The isolated home is too deep for a socket path, so the agent gets a
+	// short one.
+	sockDir, err := os.MkdirTemp("", "ag")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sshIn(t, term, `eval "$(ssh-agent -s -a `+filepath.Join(sockDir, "s")+`)" >/dev/null; echo "$SSH_AGENT_PID" > `+pidFile+`; ssh pollen@fakehost`, 0)
+	sock := func(n int) string {
+		data, err := os.ReadFile(filepath.Join(runs, fmt.Sprintf("%d.sock", n)))
+		if err != nil {
+			t.Fatalf("run %d wrote no socket: %v", n, err)
+		}
+		return strings.TrimSpace(string(data))
+	}
+	first := sock(0)
+	if first == "" {
+		t.Fatalf("the agent in the pane set no SSH_AUTH_SOCK\n%s", term.Snapshot())
+	}
+	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
+	sshRunArgs(t, term, runs, 1)
+	if got := sock(1); got != first {
+		t.Fatalf("the split's ssh had SSH_AUTH_SOCK %q, want the followed ssh's %q", got, first)
+	}
+	alive(t, term, "after the agent split")
 }
