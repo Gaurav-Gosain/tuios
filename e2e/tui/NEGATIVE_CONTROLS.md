@@ -1578,3 +1578,30 @@ panes before the "no second toast" half counts, and
 | No notice | both `noticeAgentIntegrations` calls cut | `TestAgentsIntegrationNoticeOncePerRun` ("no toast") | **caught** |
 | The notice is not once per harness | `noticeAgentIntegrations`: the `panesSeen` and `noticed` checks cut | `TestAgentsIntegrationNoticeOncePerRun` ("esc did not dismiss the toast": it comes back at once) | **caught** |
 | The doctor footer counts only missing integrations | `doctorAgents`: `st.State() == StateInstalled` back to `st.Installed` | `TestAgentsIntegrationNoticeOncePerRun` ("the doctor does not name the pane with the out of date integration") | **caught** |
+
+### Review fixes
+
+`TestAgentsSettingsKeepsTheCommandPath` installs with `--command` and the full
+path of the binary under test, current and aged.
+`TestAgentsSettingsAbsentOverSSH` attaches through `tuios ssh` to the same
+fixture. Its positive halves are `TestAgentsSettingsTabBeforeTape` (the menu
+line and the tab) and `TestAgentsIntegrationNoticeOncePerRun` (the palette),
+with a local client. The notice test now also starts a second client before
+the dismissal, which shows the toast, and a third after it, which does not.
+The race tests in `internal/integration/file_changed_test.go` change the file
+just before the last check, through a test hook.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`52361999`) with this branch's e2e directory | `TestAgentsSettingsKeepsTheCommandPath`, `TestAgentsSettingsTabBeforeTape` (no menu line), `TestAgentsIntegrationNoticeOncePerRun`. `TestAgentsSettingsAbsentOverSSH` passes, which is correct: main has no tab anywhere | **caught** |
+| A --command install reads as out of date | `Status`: the `installedPrograms` loop given no programs | `TestAgentsSettingsKeepsTheCommandPath` current ("the row does not say installed") and aged ("the update did not keep ... as the program") | **caught** |
+| An update writes a bare tuios | `runAgentAction`: `st.InstallProgram(agentsCommand)` back to `agentsCommand` | `TestAgentsSettingsKeepsTheCommandPath` aged | **caught** |
+| The tab on a remote client | `agentsPageAvailable`: the `ClientLocal` and `RemoteClient` checks cut | `TestAgentsSettingsAbsentOverSSH` ("the prefix menu lists the Agents settings key over ssh") | **caught** |
+| A dismissal is not stored | `DismissNotifications`: the `noteNoticesDismissed` call cut | `TestAgentsIntegrationNoticeOncePerRun` ("the dismissal was never stored") | **caught** |
+| A stored dismissal is not read | `loadSidebarState`: the line that fills `agentNoticesDismissed` cut | `TestAgentsIntegrationNoticeOncePerRun` ("a new client showed the dismissed toast again") | **caught** |
+| The suite keeps a harness directory override | `runE2E`: the `harnessDirKeys` unset loop cut, run with `CLAUDE_CONFIG_DIR` exported to a scratch directory | `TestAgentsSettingsUpdatesAndUninstalls` fails in its fixture, and the install landed in the scratch directory. With the loop in place the same run passes and the scratch directory stays empty | **caught** |
+| A save during an edit is overwritten | `writeAtomic`: the check after `beforeRename` cut | `TestInstallKeepsASaveMadeWhileItWrites`, `TestInstallReportsAFileThatKeepsChanging`, `TestInstallChecksTheTargetOfASymlink` | **caught** |
+
+Not covered end to end: skipping panes on another machine in the notice and in
+`tuios doctor agents`. A pane with a host needs a federation link, which this
+fixture does not set up.
