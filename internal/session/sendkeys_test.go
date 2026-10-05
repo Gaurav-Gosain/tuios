@@ -65,7 +65,7 @@ func TestParseSendKeysSpellings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseSendKeys(%q): %v", tc.keys, err)
 			}
-			got, err := sendKeysBytes(keys, tc.appCursor)
+			got, err := sendKeysBytes(keys, paneKeyModes{appCursor: tc.appCursor})
 			if err != nil {
 				t.Fatalf("sendKeysBytes(%q): %v", tc.keys, err)
 			}
@@ -81,7 +81,7 @@ func TestParseSendKeysRepeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := sendKeysBytes(keys, false)
+	got, _ := sendKeysBytes(keys, paneKeyModes{})
 	if want := strings.Repeat("\x1b[B\x1b[A", 3); string(got) != want {
 		t.Errorf("repeat 3 gave %q, want %q", got, want)
 	}

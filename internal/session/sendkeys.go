@@ -7,6 +7,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // This file turns a send-keys argument into keys. One parser serves both
@@ -84,41 +87,42 @@ type namedKey struct {
 	plain string // keyPlain: the bytes
 	final byte   // keyCursor, keySS3: the final byte
 	num   int    // keyTilde: the parameter before the ~
+	code  rune   // the key's code, as the pane key encoder reads it
 }
 
 // namedKeys is every key name send-keys knows, in the order errors list them.
 var namedKeys = []namedKey{
-	{name: "Enter", kind: keyPlain, plain: "\r"},
-	{name: "Tab", kind: keyPlain, plain: "\t"},
-	{name: "BTab", kind: keyPlain, plain: "\x1b[Z"},
-	{name: "Space", kind: keyPlain, plain: " "},
+	{name: "Enter", kind: keyPlain, plain: "\r", code: vt.KeyEnter},
+	{name: "Tab", kind: keyPlain, plain: "\t", code: vt.KeyTab},
+	{name: "BTab", kind: keyPlain, plain: "\x1b[Z", code: vt.KeyTab},
+	{name: "Space", kind: keyPlain, plain: " ", code: vt.KeySpace},
 	// Comma is the one character send-keys cannot take as itself, since it
 	// splits keys on commas.
-	{name: "Comma", kind: keyPlain, plain: ","},
-	{name: "Escape", kind: keyPlain, plain: "\x1b"},
-	{name: "Backspace", kind: keyPlain, plain: "\x7f"},
-	{name: "Up", kind: keyCursor, final: 'A'},
-	{name: "Down", kind: keyCursor, final: 'B'},
-	{name: "Right", kind: keyCursor, final: 'C'},
-	{name: "Left", kind: keyCursor, final: 'D'},
-	{name: "Home", kind: keyCursor, final: 'H'},
-	{name: "End", kind: keyCursor, final: 'F'},
-	{name: "PageUp", kind: keyTilde, num: 5},
-	{name: "PageDown", kind: keyTilde, num: 6},
-	{name: "Insert", kind: keyTilde, num: 2},
-	{name: "Delete", kind: keyTilde, num: 3},
-	{name: "F1", kind: keySS3, final: 'P'},
-	{name: "F2", kind: keySS3, final: 'Q'},
-	{name: "F3", kind: keySS3, final: 'R'},
-	{name: "F4", kind: keySS3, final: 'S'},
-	{name: "F5", kind: keyTilde, num: 15},
-	{name: "F6", kind: keyTilde, num: 17},
-	{name: "F7", kind: keyTilde, num: 18},
-	{name: "F8", kind: keyTilde, num: 19},
-	{name: "F9", kind: keyTilde, num: 20},
-	{name: "F10", kind: keyTilde, num: 21},
-	{name: "F11", kind: keyTilde, num: 23},
-	{name: "F12", kind: keyTilde, num: 24},
+	{name: "Comma", kind: keyPlain, plain: ",", code: ','},
+	{name: "Escape", kind: keyPlain, plain: "\x1b", code: vt.KeyEscape},
+	{name: "Backspace", kind: keyPlain, plain: "\x7f", code: vt.KeyBackspace},
+	{name: "Up", kind: keyCursor, final: 'A', code: vt.KeyUp},
+	{name: "Down", kind: keyCursor, final: 'B', code: vt.KeyDown},
+	{name: "Right", kind: keyCursor, final: 'C', code: vt.KeyRight},
+	{name: "Left", kind: keyCursor, final: 'D', code: vt.KeyLeft},
+	{name: "Home", kind: keyCursor, final: 'H', code: vt.KeyHome},
+	{name: "End", kind: keyCursor, final: 'F', code: vt.KeyEnd},
+	{name: "PageUp", kind: keyTilde, num: 5, code: vt.KeyPgUp},
+	{name: "PageDown", kind: keyTilde, num: 6, code: vt.KeyPgDown},
+	{name: "Insert", kind: keyTilde, num: 2, code: vt.KeyInsert},
+	{name: "Delete", kind: keyTilde, num: 3, code: vt.KeyDelete},
+	{name: "F1", kind: keySS3, final: 'P', code: vt.KeyF1},
+	{name: "F2", kind: keySS3, final: 'Q', code: vt.KeyF2},
+	{name: "F3", kind: keySS3, final: 'R', code: vt.KeyF3},
+	{name: "F4", kind: keySS3, final: 'S', code: vt.KeyF4},
+	{name: "F5", kind: keyTilde, num: 15, code: vt.KeyF5},
+	{name: "F6", kind: keyTilde, num: 17, code: vt.KeyF6},
+	{name: "F7", kind: keyTilde, num: 18, code: vt.KeyF7},
+	{name: "F8", kind: keyTilde, num: 19, code: vt.KeyF8},
+	{name: "F9", kind: keyTilde, num: 20, code: vt.KeyF9},
+	{name: "F10", kind: keyTilde, num: 21, code: vt.KeyF10},
+	{name: "F11", kind: keyTilde, num: 23, code: vt.KeyF11},
+	{name: "F12", kind: keyTilde, num: 24, code: vt.KeyF12},
 }
 
 // keyAliases maps a normalized spelling (see normalizeKeyName) to the
@@ -251,6 +255,82 @@ func (k sendKey) bytes(appCursor bool) []byte {
 		return append([]byte{0x1b}, out...)
 	}
 	return []byte(out)
+}
+
+// paneKeyModes is the keyboard mode a pane asked for, as the daemon's emulator
+// last read it. A named key or a modified character is encoded for it the way
+// the client encodes a key a person types.
+type paneKeyModes struct {
+	// appCursor is application cursor keys (DECSET 1, DECCKM).
+	appCursor bool
+	// kittyFlags is the pane's kitty keyboard flags.
+	kittyFlags int
+	// modifyOtherKeys is the pane's XTMODKEYS level: 0 off, 1 or 2.
+	modifyOtherKeys int
+}
+
+// vtKey is the key as a key press event for the pane key encoder. ok is false
+// for a token that is typed as text: a character with no modifier, a word or
+// an escape sequence. Those reach the pane as their bytes in every mode.
+func (k sendKey) vtKey() (key vt.KeyPressEvent, ok bool) {
+	var mod vt.KeyMod
+	if k.mods.ctrl {
+		mod |= vt.ModCtrl
+	}
+	if k.mods.alt {
+		mod |= vt.ModAlt
+	}
+	if k.mods.shift {
+		mod |= vt.ModShift
+	}
+	if k.named != nil {
+		key = vt.KeyPressEvent{Code: k.named.code, Mod: mod}
+		if k.named.name == "BTab" {
+			key.Mod |= vt.ModShift
+		}
+		if key.Mod == 0 && (k.named.code == vt.KeySpace || k.named.code == ',') {
+			key.Text = string(k.named.code)
+		}
+		return key, true
+	}
+	if mod == 0 {
+		return key, false
+	}
+	// A character with modifiers: withMods kept the token's key after them.
+	r, size := utf8.DecodeRuneInString(k.canonical[len(k.mods.prefix()):])
+	if size == 0 || r == utf8.RuneError {
+		return key, false
+	}
+	key = vt.KeyPressEvent{Code: unicode.ToLower(r), Mod: mod}
+	if k.mods.shift {
+		key.ShiftedCode = unicode.ToUpper(r)
+		if !k.mods.ctrl && !k.mods.alt {
+			// Shift alone types the shifted character, as a host reports it.
+			key.Text = string(key.ShiftedCode)
+		}
+	}
+	return key, true
+}
+
+// encode is the key as the terminal of a pane in modes receives it. A pane that
+// asked for the kitty keyboard protocol or modifyOtherKeys gets the encoding it
+// asked for, from the encoder the client uses for a key a person types. Without
+// one, Vim in kitty mode read ctrl+h sent as 0x08 as Backspace. A pane that
+// asked for event types also gets the release, since no release follows a sent
+// key.
+func (k sendKey) encode(modes paneKeyModes) []byte {
+	key, ok := k.vtKey()
+	if !ok {
+		return k.bytes(modes.appCursor)
+	}
+	out := []byte(vt.EncodePaneKey(key, modes.kittyFlags, modes.modifyOtherKeys))
+	if len(out) == 0 {
+		out = k.bytes(modes.appCursor)
+	}
+	if modes.kittyFlags&ansi.KittyReportEventTypes != 0 {
+		out = append(out, vt.EncodeKeyReleaseCSIu(key, modes.kittyFlags)...)
+	}
+	return out
 }
 
 // errUnknownKey is a token that looks like a key name and is not one.
@@ -621,9 +701,9 @@ func decodeEscapeToken(tok string) (b []byte, ok bool, err error) {
 	return out, true, nil
 }
 
-// sendKeysBytes is the bytes a parsed sequence writes to a pane. The prefix has
-// no bytes: only an attached client knows the leader key.
-func sendKeysBytes(keys []sendKey, appCursor bool) ([]byte, error) {
+// sendKeysBytes is the bytes a parsed sequence writes to a pane in modes. The
+// prefix has no bytes: only an attached client knows the leader key.
+func sendKeysBytes(keys []sendKey, modes paneKeyModes) ([]byte, error) {
 	var out []byte
 	for _, k := range keys {
 		if k.prefix {
@@ -632,7 +712,7 @@ func sendKeysBytes(keys []sendKey, appCursor bool) ([]byte, error) {
 		if k.mods.super {
 			return nil, fmt.Errorf("unsupported modifier in %q: a terminal has no encoding for super. Use ctrl, alt or shift", k.token)
 		}
-		out = append(out, k.bytes(appCursor)...)
+		out = append(out, k.encode(modes)...)
 	}
 	return out, nil
 }
@@ -661,13 +741,21 @@ func hasPrefixKey(keys []sendKey) bool {
 	return false
 }
 
-// ApplicationCursorKeysOn reports whether the application in the pane has
-// turned on application cursor keys (DECSET 1, DECCKM), as the daemon's
-// emulator last read it. less and vim do; a key sent to them has to match.
-func (p *PTY) ApplicationCursorKeysOn() bool {
+// keyModes is the keyboard mode the application in the pane asked for, as the
+// daemon's emulator last read it: application cursor keys (less and vim turn
+// it on), the kitty keyboard flags and modifyOtherKeys. A key sent to the pane
+// has to match it.
+func (p *PTY) keyModes() paneKeyModes {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return p.terminal != nil && p.terminal.ApplicationCursorKeys()
+	if p.terminal == nil {
+		return paneKeyModes{}
+	}
+	return paneKeyModes{
+		appCursor:       p.terminal.ApplicationCursorKeys(),
+		kittyFlags:      p.terminal.KittyKeyboardFlags(),
+		modifyOtherKeys: p.terminal.ModifyOtherKeys(),
+	}
 }
 
 // keyModifiers are the modifiers a send-keys token can carry, each with every

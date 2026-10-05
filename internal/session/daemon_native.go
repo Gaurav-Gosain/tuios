@@ -211,7 +211,7 @@ func keysToBytes(keys string, literal, raw bool) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sendKeysBytes(parsed, false)
+	return sendKeysBytes(parsed, paneKeyModes{})
 }
 
 // resolvePTYForTarget resolves a window target (name/ID, or empty for the
@@ -245,7 +245,8 @@ func (d *Daemon) resolvePTYForTarget(sess *Session, target string) (*PTY, error)
 // wrote to. parsed is the sequence parseSendKeys made of keys, or nil to parse
 // it here; literal and raw write keys as they are. Named keys are encoded for
 // the pane's current modes, so an arrow reaches an application that turned on
-// application cursor keys as the SS3 form it asked for.
+// application cursor keys as the SS3 form it asked for, and ctrl+h reaches one
+// that asked for the kitty keyboard protocol as CSI 104;5u.
 func (d *Daemon) writeKeysToWindow(sess *Session, target, keys string, literal, raw bool, parsed []sendKey) (WindowState, error) {
 	state := sess.GetState()
 	resolved := target
@@ -275,7 +276,7 @@ func (d *Daemon) writeKeysToWindow(sess *Session, target, keys string, literal, 
 				return win, err
 			}
 		}
-		if data, err = sendKeysBytes(parsed, pty.ApplicationCursorKeysOn()); err != nil {
+		if data, err = sendKeysBytes(parsed, pty.keyModes()); err != nil {
 			return win, err
 		}
 	}

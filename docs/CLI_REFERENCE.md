@@ -937,7 +937,10 @@ case-insensitive.
 | The leader key | `PREFIX` | `$PREFIX`; only without `-w`, with a client attached |
 
 Arrows, `Home` and `End` are sent in the form the program asked for
-(application cursor keys). A word that looks like a key but is not one (`Dwon`,
+(application cursor keys). A named key or a key with modifiers is encoded
+the way the client encodes it for a person: a program that asked for the
+kitty keyboard protocol or modifyOtherKeys gets that encoding. Text stays
+text. A word that looks like a key but is not one (`Dwon`,
 `KEY_FOO`, `F13`) is refused with the key names and the closest one, and
 nothing is sent. A plain lower-case word such as `ls` is typed as its letters.
 

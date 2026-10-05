@@ -171,7 +171,10 @@ mode. With no client attached they go to the focused window.
 
 Names are case-insensitive. Arrows, `Home` and `End` are sent in the form the
 program asked for: `less` and `vim` turn on application cursor keys and get
-`ESC O A`, a shell gets `ESC [ A`. A word that looks like a key but is not one
+`ESC O A`, a shell gets `ESC [ A`. A named key or a key with modifiers is
+sent the way the client sends it for a person. A program that asked for the
+kitty keyboard protocol gets `ctrl+h` as `ESC [ 104;5u`, a shell gets `0x08`.
+A word that looks like a key but is not one
 (`Dwon`, `KEY_FOO`, `F13`) fails with `invalid_params`, the names above, and
 the closest one; nothing is sent. A plain lower-case word such as `ls` is still
 typed as its letters.

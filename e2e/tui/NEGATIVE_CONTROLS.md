@@ -1083,6 +1083,17 @@ person enables it.
 | A plugin that is off has no palette row | `pluginPaletteItems`: `!e.Runnable()` made `e.Plugin == nil` | `TestHerdrPluginPalette` ("the palette offers an action of a plugin that is off") | **caught** |
 | The grant check on the plugin log | `herdrPluginLogList`: the admin check never refuses | `TestHerdrPluginActions` ("plugin log from a read-only pane: exit 0" with the action's output) | **caught** |
 
+## send-keys in the pane's keyboard mode
+
+`TestSendKeysEncodesKeysForThePaneMode` in `send_keys_encoding_test.go` sends
+keys to three panes: one in the kitty keyboard protocol, one in
+modifyOtherKeys 2, and one that asked for nothing. The legacy pane is the
+positive half: it still gets `ctrl+h` as `08`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The pane mode never read | `sendKeysBytes`: `k.encode(modes)` made `k.bytes(modes.appCursor)` | `TestSendKeysEncodesKeysForThePaneMode` (the kitty pane shows `read1=08`, not `read1=1b5b3130343b3575`) | **caught** |
+
 ## What this harness structurally cannot observe
 
 Some things cannot be simulated from here at all. They are listed so that nobody
