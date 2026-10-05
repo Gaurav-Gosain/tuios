@@ -26,18 +26,29 @@ import (
 // The colour comes from the session's name, which is its identity everywhere
 // else too. That makes it stable across a daemon restart, identical on every
 // attached client with nothing stored and no round trip to agree on, and
-// unchanged by a display-name rename. The price is collisions: six hues means
-// two sessions can land on the same one. set-session-accent is the way out and
+// unchanged by a display-name rename. The price is collisions: ten hues means
+// two sessions can still land on the same one. set-session-accent is the way out and
 // always wins, which is what makes the collision an annoyance rather than a
 // defect.
 
-// The six chromatic bright ANSI slots, as legacy accent indices (0-7 are ANSI
-// 8-15). Bright black and bright white are skipped: a session is identified by
-// hue, and the two achromatic slots are the rail's own ink and its background.
-const (
-	sessionAccentSlotFirst = 1 // bright red
-	sessionAccentSlotCount = 6 // through bright cyan
-)
+// The ten chromatic ANSI slots a session colour is drawn from, as legacy accent
+// indices (0-7 are ANSI 8-15, 8-14 are ANSI 1-7). Bright black and bright white
+// are skipped: a session is identified by hue, and the two achromatic slots are
+// the rail's own ink and its background. The six bright chromatic slots come
+// first, each followed by its normal-ANSI twin where one exists; normal yellow
+// is olive on the rail's ground and normal cyan sits too close to normal blue,
+// so those two twins are left out and the two brights without a twin close the
+// row.
+const sessionAccentSlotCount = 10
+
+var sessionAccentSlots = [sessionAccentSlotCount]int{
+	1, 8, // bright red, red
+	2, 9, // bright green, green
+	4, 11, // bright blue, blue
+	5, 12, // bright purple, purple
+	3, // bright yellow
+	6, // bright cyan
+}
 
 // sessionAccentNames maps the words set-session-accent takes to legacy accent
 // slots. The daemon records the string verbatim and has never interpreted it,
@@ -93,7 +104,7 @@ func sessionPreferredSlot(name string) int {
 // sessionAutoAccent is the colour a session gets when nothing is known about
 // what else exists: its preferred hue, unarbitrated.
 func sessionAutoAccent(name string) Accent {
-	return SlotAccent(sessionAccentSlotFirst + sessionPreferredSlot(name))
+	return SlotAccent(sessionAccentSlots[sessionPreferredSlot(name)])
 }
 
 // assignSessionColors hands out a hue to each name, settling the collisions six
@@ -123,7 +134,7 @@ func assignSessionColors(names []string, reserved [sessionAccentSlotCount]bool) 
 		}
 		if slot := sessionPreferredSlot(name); !taken[slot] {
 			taken[slot] = true
-			out[name] = SlotAccent(sessionAccentSlotFirst + slot)
+			out[name] = SlotAccent(sessionAccentSlots[slot])
 			continue
 		}
 		spilled = append(spilled, name)
@@ -137,11 +148,11 @@ func assignSessionColors(names []string, reserved [sessionAccentSlotCount]bool) 
 				break
 			}
 		}
-		// Past the sixth session there is no free hue left and the preferred one
+		// Past the tenth session there is no free hue left and the preferred one
 		// stands: a duplicate is better than a hue picked by arithmetic nobody
 		// can predict.
 		taken[slot] = true
-		out[name] = SlotAccent(sessionAccentSlotFirst + slot)
+		out[name] = SlotAccent(sessionAccentSlots[slot])
 	}
 	return out
 }
@@ -179,20 +190,25 @@ func (m *OS) refreshSessionColors(names []string) {
 	m.sessionColors = assignSessionColors(auto, reserved)
 }
 
-// sessionReservedSlot is the hue an explicit accent takes out of the automatic
-// pool. A named accent says its slot outright. A literal claims one only when it
-// is exactly that slot's colour, which is what the picker writes when the user
-// lands on the session's own hue: without the match, an accent set to the very
-// colour another session was about to be handed would not stop it being handed
-// out, and the two would collide in the one way the colours exist to prevent.
+// sessionReservedSlot is the palette position an explicit accent takes out of
+// the automatic pool. A named accent says its slot outright. A literal claims
+// one only when it is exactly that slot's colour, which is what the picker
+// writes when the user lands on the session's own hue: without the match, an
+// accent set to the very colour another session was about to be handed would
+// not stop it being handed out, and the two would collide in the one way the
+// colours exist to prevent.
 func sessionReservedSlot(a Accent) (int, bool) {
 	if a.IsSlot() {
-		slot := a.Slot - sessionAccentSlotFirst
-		return slot, slot >= 0 && slot < sessionAccentSlotCount
+		for i, idx := range sessionAccentSlots {
+			if a.Slot == idx {
+				return i, true
+			}
+		}
+		return 0, false
 	}
 	rgb := a.RGB()
-	for i := range sessionAccentSlotCount {
-		if SlotAccent(sessionAccentSlotFirst+i).RGB() == rgb {
+	for i, idx := range sessionAccentSlots {
+		if SlotAccent(idx).RGB() == rgb {
 			return i, true
 		}
 	}
