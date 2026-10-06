@@ -107,6 +107,11 @@ func TestConform_OSCTitleAndDirectory(t *testing.T) {
 			in:   "\x1b]7;file://host/tmp/x\x07",
 			cwd:  "file://host/tmp/x",
 		},
+		{
+			name: "OSC 9;9 reports the working directory, quotes and all",
+			in:   "\x1b]9;9;\"C:\\Users\\x\"\x1b\\",
+			cwd:  "\"C:\\Users\\x\"",
+		},
 	}
 
 	for _, tc := range tests {
@@ -253,6 +258,19 @@ func TestConform_OSCClipboardAndNotifications(t *testing.T) {
 		}
 		if len(c.notify) != 1 {
 			t.Fatalf("notifications = %d, want 1", len(c.notify))
+		}
+	})
+
+	t.Run("OSC 9;9 is a folder report, not a notification", func(t *testing.T) {
+		emu, c := newOSCEmulator(t, 20, 3)
+		if _, err := emu.WriteString("\x1b]9;9;/tmp/x\x07"); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		if len(c.notify) != 0 {
+			t.Errorf("notifications = %d, want 0: the folder report became a desktop alert", len(c.notify))
+		}
+		if c.cwd != "/tmp/x" {
+			t.Errorf("working directory = %q, want /tmp/x", c.cwd)
 		}
 	})
 

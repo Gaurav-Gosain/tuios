@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +31,37 @@ func TestParseCwdReportAcceptsLocalPathsOnly(t *testing.T) {
 		got, ok := parseCwdReport(c.raw)
 		if ok != c.ok || got != c.want {
 			t.Errorf("parseCwdReport(%q) = %q, %v; want %q, %v", c.raw, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// TestHostNameSetIsNarrow pins which OSC 7 hosts count as this machine. It is
+// a security boundary: a report read as local can name the folder a new
+// window starts in. A short name matches only on macOS, only for a host name
+// with dots, and only as the whole first label. COMPUTERNAME matches as it is.
+func TestHostNameSetIsNarrow(t *testing.T) {
+	cases := []struct {
+		hostname, computer string
+		darwin             bool
+		report             string
+		local              bool
+	}{
+		{"box.lan", "", true, "box", true},
+		{"box.lan", "", true, "BOX.LAN", true},
+		{"box.lan", "", false, "box", false},
+		{"box", "", true, "box.lan", false},
+		{"box.lan", "", true, "box.other", false},
+		{"box.lan", "", true, "bo", false},
+		{"desktop-1234", "DESKTOP-NETBIOS", false, "desktop-netbios", true},
+		{"desktop-1234", "DESKTOP-NETBIOS", false, "desktop", false},
+		{"desktop-1234", "", false, "desktop-netbios", false},
+		{"", "", false, "localhost", true},
+	}
+	for _, c := range cases {
+		names := hostNameSet(c.hostname, c.computer, c.darwin)
+		if got := names[strings.ToLower(c.report)]; got != c.local {
+			t.Errorf("host %q, COMPUTERNAME %q, darwin %v: report %q local = %v, want %v",
+				c.hostname, c.computer, c.darwin, c.report, got, c.local)
 		}
 	}
 }

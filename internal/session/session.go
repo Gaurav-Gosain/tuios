@@ -1447,9 +1447,9 @@ func (s *Session) historyPolicy() HistoryPolicy {
 // The focused pane's live shell is asked rather than the Cwd on the window
 // record: that field is filled when resurrection state is saved, so it says
 // where the pane was the last time the daemon wrote state, not where the user
-// has since cd'd to. What the shell reported over OSC 7 comes first, then its
-// process; see windowCwd. "" is the fallback after that, and the caller then
-// uses the session's start directory.
+// has since cd'd to. The shell's process comes first, then the record, which a
+// snapshot fills with the shell's OSC 7 report; see windowCwd. "" is the
+// fallback after that, and the caller then uses the session's start directory.
 func (s *Session) inheritedCwd() string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
@@ -1460,13 +1460,12 @@ func (s *Session) inheritedCwd() string {
 // windowCwd is the directory of the window id's pane, or "" when the window is
 // gone or no answer names a folder that exists here. The answers, best first:
 //
-//   - The folder the pane's shell reported over OSC 7, from this machine.
-//     It is the shell's own answer, and the same one list-windows and the
-//     clients are given (see fillLiveFacts).
-//   - The folder of the shell's process. No platform but Linux and macOS
-//     can read it, so on Windows the report above is the only live answer
-//     (#491).
-//   - The folder the window record holds.
+//   - The folder of the shell's process. It cannot be spoofed. Any program in
+//     the pane can print an OSC 7 report, and a shell without OSC 7 hooks
+//     never corrects one, so a report must not win over the process.
+//   - The folder the window record holds. In a snapshot it is the shell's
+//     OSC 7 report when there is one (see fillLiveFacts). On native Windows
+//     no process can be read, so this is the only live answer there (#491).
 //
 // Each answer must be a folder that exists. A shell can report a folder it
 // deleted, and a record can hold one from before a restart. A window that
@@ -1478,11 +1477,6 @@ func (s *Session) windowCwd(id string) string {
 		return ""
 	}
 	if pty := s.GetPTY(win.PTYID); pty != nil {
-		if _, remote := pty.pty.(*remotePane); !remote {
-			if cwd := pty.place.announcedCwd(); isLocalDir(cwd) {
-				return cwd
-			}
-		}
 		if cwd, ok := pty.ProcessCwd(); ok && isLocalDir(cwd) {
 			return cwd
 		}

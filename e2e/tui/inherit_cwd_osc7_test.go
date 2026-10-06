@@ -21,7 +21,7 @@ const computerName = "TUIOS-E2E-PC"
 // TUIOS_E2E_NO_PROCESS_CWD makes every process read fail, as it does on
 // Windows. The pane's shell is /bin/sh, which reports nothing by itself, so
 // the only thing that says where it is is the OSC 7 report the test prints.
-// Three reports are checked, each from the pane that has the focus:
+// Four reports are checked, each from the pane that has the focus:
 //
 //   - one that names this machine by its host name in capitals. It is the
 //     positive half: the fixture and the report work.
@@ -30,6 +30,8 @@ const computerName = "TUIOS-E2E-PC"
 //     another machine and dropped.
 //   - one that names a folder that does not exist. It must not be
 //     inherited: the window starts in the session's start folder.
+//   - an OSC 9;9 report with a quoted path, which Windows Terminal asks
+//     PowerShell to send.
 //
 // How this could pass wrongly: the new window could start in the right folder
 // because the session or the daemon started there. The daemon runs where the
@@ -41,7 +43,8 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	proj := filepath.Join(base, "proj")
 	other := filepath.Join(base, "other")
 	start := filepath.Join(base, "start")
-	for _, dir := range []string{proj, other, start} {
+	nine := filepath.Join(base, "nine")
+	for _, dir := range []string{proj, other, start, nine} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -94,6 +97,60 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 	fourth := newWindowIn(t, base, "osc")
 	if got := paneFolder(t, base, "osc", fourth); got != start {
 		t.Fatalf("ASSERTION: a new window started in %q after the focused pane reported a missing folder, want the session's start folder %q", got, start)
+	}
+
+	// OSC 9;9, the report Windows Terminal asks PowerShell to send. Its path
+	// has no host and is quoted.
+	cd(fourth, nine)
+	if err := paneSend(base, "osc", fourth, `printf '\033]9;9;"%s"\033\\' '`+nine+"'\n"); err != nil {
+		t.Fatalf("send the OSC 9;9 report: %v", err)
+	}
+	waitAnnounced(t, base, "osc", fourth, nine)
+	fifth := newWindowIn(t, base, "osc")
+	if got := paneFolder(t, base, "osc", fifth); got != nine {
+		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder the focused pane reported over OSC 9;9", got, nine)
+	}
+}
+
+// TestNewWindowPrefersTheShellsProcessFolder is the review's regression for
+// #491: OSC 7 can be spoofed, so it must not win over the shell's process.
+// The shell is /bin/sh, which has no OSC 7 hooks. A program prints a report
+// for a folder that exists, and the person then runs cd into another one.
+// The shell never corrects the report. A new window must start where the
+// shell is, not where the report says.
+//
+// The positive half is in the same fixture: the daemon must hold the report,
+// or the test would not prove that the process wins over it.
+func TestNewWindowPrefersTheShellsProcessFolder(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	fake := filepath.Join(base, "fake")
+	realDir := filepath.Join(base, "real")
+	for _, dir := range []string{fake, realDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "new", "spoof", "--detach"); err != nil {
+		t.Fatalf("create spoof: %v: %s", err, out)
+	}
+	first := firstWindow(t, base, "spoof").ID
+
+	line := `printf '\033]7;file://localhost%s\033\\' '` + fake + "'\n"
+	if err := paneSend(base, "spoof", first, line); err != nil {
+		t.Fatalf("send the OSC 7 report: %v", err)
+	}
+	waitAnnounced(t, base, "spoof", first, fake)
+	if err := paneSend(base, "spoof", first, "cd '"+realDir+"'\n"); err != nil {
+		t.Fatalf("cd into %s: %v", realDir, err)
+	}
+	if got := paneFolder(t, base, "spoof", first); got != realDir {
+		t.Fatalf("the shell is in %q after cd, want %q: the fixture does not hold", got, realDir)
+	}
+
+	second := newWindowIn(t, base, "spoof")
+	if got := paneFolder(t, base, "spoof", second); got != realDir {
+		t.Fatalf("ASSERTION: a new window started in %q, want %q, the folder of the shell's process. The pane's OSC 7 report named %q", got, realDir, fake)
 	}
 }
 

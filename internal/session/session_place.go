@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -206,27 +207,35 @@ var localHostname = sync.OnceValue(func() string {
 //     reads the DNS host name, which can differ and is not cut to 15
 //     characters. Read as another machine, every report from such a shell
 //     was dropped, and a new window did not inherit its folder (#491).
-//   - Many prompts report the short name (hostname -s), where os.Hostname
-//     gives the full name, such as box.lan on macOS.
+//   - On macOS, os.Hostname often gives the full name, such as box.lan, and
+//     many prompts report the short name, box (hostname -s).
 //
-// So the set holds the host name, its first label, and COMPUTERNAME and its
-// first label when that is set, which it is only on Windows.
+// So the set holds the host name and COMPUTERNAME, which is set only on
+// Windows. On macOS alone it also holds the host name's first label. That is
+// the narrow form of the short-name rule: only on darwin, and only a report
+// with no dots matches, since a first label has none. On Linux the host name
+// is usually the short name already, and a short name that matched there
+// could be another machine's.
 var localHostNames = sync.OnceValue(func() map[string]bool {
+	return hostNameSet(localHostname(), os.Getenv("COMPUTERNAME"), runtime.GOOS == "darwin")
+})
+
+// hostNameSet is localHostNames for the given host name and COMPUTERNAME.
+// With shortName set it adds the host name's first label when the name has
+// dots.
+func hostNameSet(hostname, computerName string, shortName bool) map[string]bool {
 	names := map[string]bool{"localhost": true}
-	add := func(name string) {
-		name = strings.ToLower(strings.TrimSpace(name))
-		if name == "" {
-			return
-		}
-		names[name] = true
-		if short, _, ok := strings.Cut(name, "."); ok && short != "" {
-			names[short] = true
+	for _, name := range []string{hostname, computerName} {
+		if name = strings.ToLower(strings.TrimSpace(name)); name != "" {
+			names[name] = true
 		}
 	}
-	add(localHostname())
-	add(os.Getenv("COMPUTERNAME"))
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if short, _, ok := strings.Cut(hostname, "."); shortName && ok && short != "" {
+		names[short] = true
+	}
 	return names
-})
+}
 
 // IsLocalHostName reports whether host, from an OSC 7 report or a file://
 // address, names this machine. An empty host does.
@@ -261,6 +270,11 @@ func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 		return "", "", false
 	}
 	if !strings.HasPrefix(raw, "file://") {
+		// An OSC 9;9 report quotes its path, as Windows Terminal's
+		// PowerShell snippet does: "C:\Users\x".
+		if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
+			raw = raw[1 : len(raw)-1]
+		}
 		if p := winpath.Native(raw); filepath.IsAbs(p) {
 			return filepath.Clean(p), "", true
 		}

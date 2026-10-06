@@ -461,6 +461,17 @@ func (e *Emulator) handleNotify9(data []byte) bool {
 		return true
 	}
 	msg := parts[1]
+	// OSC 9;9;<path> is ConEmu's working directory report, which Windows
+	// Terminal asks PowerShell to send. It is a folder report like OSC 7,
+	// not a notification. libghostty-vt reads it the same way: a bare 9;9
+	// with no path stays a notification.
+	if path, ok := strings.CutPrefix(msg, "9;"); ok {
+		e.cwd = path
+		if e.cb.WorkingDirectory != nil {
+			e.cb.WorkingDirectory(path)
+		}
+		return true
+	}
 	// OSC 9;4 is the ConEmu progress-report sequence, not a notification: the
 	// program is describing its own progress rather than asking for a desktop
 	// alert, so it goes to the progress callback and never to Notify.

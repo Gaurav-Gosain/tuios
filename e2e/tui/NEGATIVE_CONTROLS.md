@@ -1816,26 +1816,42 @@ and the custom-format case shows the name inside its brackets.
 ## A new window ignores the OSC 7 folder on Windows (#491)
 
 `TestNewWindowInheritsTheOSC7Folder` in `inherit_cwd_osc7_test.go` starts the
-daemon with `TUIOS_E2E_NO_PROCESS_CWD=1`, which makes every process read fail,
-as it does on Windows, and with `COMPUTERNAME=TUIOS-E2E-PC`. The pane's shell
-is `/bin/sh`, which reports nothing, and the test prints each OSC 7 report.
-The session starts in `base/start`. From the focused pane each time:
+daemon with `TUIOS_E2E=1` and `TUIOS_E2E_NO_PROCESS_CWD=1`, which makes every
+process read fail, as it does on Windows, and with
+`COMPUTERNAME=TUIOS-E2E-PC`. The pane's shell is `/bin/sh`, which reports
+nothing, and the test prints each report. The session starts in
+`base/start`. From the focused pane each time:
 
-- a report with this machine's host name in capitals: the new window must
-  start there. This is the positive half, and it passed on main with the hook.
-- a report with the host `TUIOS-E2E-PC`: the new window must start there.
-- a report that names a folder that does not exist: the new window must start
+- an OSC 7 report with this machine's host name in capitals: the new window
+  must start there. This is the positive half, and main with the hook passes
+  it.
+- an OSC 7 report with the host `TUIOS-E2E-PC`: the new window must start
+  there.
+- an OSC 7 report of a folder that does not exist: the new window must start
   in `base/start`.
+- an OSC 9;9 report with a quoted path: the new window must start there.
+
+`TestNewWindowPrefersTheShellsProcessFolder` is the review's regression,
+with process reads on. A program in a `/bin/sh` pane prints OSC 7 for
+`base/fake`, which exists, and the person then runs `cd base/real`. The new
+window must start in `base/real`. The daemon holding the report is the
+positive half.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The released behaviour | build origin/main (`5d627b1e`) with this branch's e2e directory | `TestNewWindowInheritsTheOSC7Folder` (the missing folder: the window is in `other`, the process folder, want `start`). Main has no hook, so its process read answers | **caught** |
-| The released behaviour, with process reads off | origin/main with only the `ptyspawn` hook added | `TestNewWindowInheritsTheOSC7Folder` (the `TUIOS-E2E-PC` report is dropped: the pane stays in `proj`, want `other`) | **caught** |
-| COMPUTERNAME is not a local name | `localHostNames`: the `add(os.Getenv("COMPUTERNAME"))` line cut | `TestNewWindowInheritsTheOSC7Folder` (the same assertion) | **caught** |
+| The released behaviour | build origin/main (`e82f3bbe`) with this branch's e2e directory | `TestNewWindowInheritsTheOSC7Folder` (the missing folder: the window is in `other`, the process folder, want `start`). Main has no hook, so its process read answers. `TestNewWindowPrefersTheShellsProcessFolder` passes, as it must: it guards main's order | **caught** |
+| The released behaviour, with process reads off | origin/main (`5d627b1e`) with only the `ptyspawn` hook added | `TestNewWindowInheritsTheOSC7Folder` (the `TUIOS-E2E-PC` report is dropped: the pane stays in `proj`, want `other`) | **caught** |
+| OSC 7 wins over the process | `windowCwd`: the OSC 7 branch put back before the process read, as the first version of this change had it | `TestNewWindowPrefersTheShellsProcessFolder` (the window is in `fake`, want `real`) | **caught** |
+| COMPUTERNAME is not a local name | `localHostNames`: COMPUTERNAME not passed to `hostNameSet` | `TestNewWindowInheritsTheOSC7Folder` (the `TUIOS-E2E-PC` report is dropped) | **caught** |
 | A record that names a missing folder is inherited | `windowCwd`: the `isLocalDir` check on `win.Cwd` cut | `TestNewWindowInheritsTheOSC7Folder` (the window starts in the daemon's folder, want `start`) | **caught** |
-| Only the process is asked | `windowCwd`: the OSC 7 branch and the record both cut | `TestNewWindowInheritsTheOSC7Folder` (the first window starts in `start`, want `proj`). This proves the hook turns process reads off | **caught** |
-| The OSC 7 branch alone | `windowCwd`: the OSC 7 branch cut, the record kept | none: with process reads off, the record holds the same report (`fillLiveFacts`) | **not caught** |
-| The record fallback alone | `windowCwd`: the record cut, the OSC 7 branch kept | none, for the same reason | **not caught** |
+| Only the process is asked | `windowCwd`: the record cut (first version of this change) | `TestNewWindowInheritsTheOSC7Folder` (the first window starts in `start`, want `proj`). This proves the hook turns process reads off | **caught** |
+| OSC 9;9 is a notification | `handleNotify9`: the 9;9 branch cut | `TestNewWindowInheritsTheOSC7Folder` (the pane stays in `start`, want `nine`) | **caught** |
+| The quotes stay on the OSC 9;9 path | `parseCwdAnnouncement`: the quote strip cut | `TestNewWindowInheritsTheOSC7Folder` (the same assertion) | **caught** |
 
-Not covered end to end: the order of the OSC 7 report and the process read
-when both answer and differ, a real Windows machine, and ConPTY.
+`TestHostNameSetIsNarrow` in `internal/session/session_place_test.go` pins
+the host rule, a security boundary: a short name matches only on darwin,
+only for a dotted host name, and only as its whole first label.
+
+Not covered end to end: a real Windows machine, ConPTY, the short-name match
+on macOS, and OSC 9;9 on the libghostty-vt backend, which reads it the same
+way in its own parser.
