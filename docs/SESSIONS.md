@@ -278,7 +278,9 @@ to the session of that folder. Its windows start in the folder.
   the client that shows the popup. Nothing is nested.
 - `--create` makes the session when it is missing. `--cwd` sets the folder
   of its windows.
-- With `startup.tiled = true`, the new session is tiled.
+- With `startup.tiled = true`, the new session is tiled. tuios reads this
+  setting from the config of the client that switches. This is also true
+  for a session on a host.
 - To open a project on a host, put the host before the name:
   `tuios switch-session --create --cwd "$dir" "build:$(basename "$dir")"`.
   The folder is a path on that host.

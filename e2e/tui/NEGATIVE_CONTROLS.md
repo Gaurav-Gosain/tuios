@@ -1628,3 +1628,25 @@ Not covered by a test: the fresh report a new harness pane asks for, the merge
 of dismissals on save, the uninstall row for an install with only the MCP
 server or the status line left, and the doctor's note for a session whose
 hosts it could not read.
+
+## A new session on a host ignores startup.tiled (#480)
+
+`TestRemoteCreateAppliesStartup` in `sessionizer_test.go` uses the second
+daemon and the ssh stand-in of the host tests. This client has `[startup]
+tiled = true`. The host has no config, so the tiling comes from the config of
+the client. From a tiled session, `switch-session --create build:far-new` must
+make a tiled session on the host. `tuios new --host build far-fresh` is checked
+in the same fixture. It already passed on main, so it is the positive half: the
+host and the check of the tiling work.
+
+`TestSwitchToAnEmptySessionTakesItsLayout` in the same file checks the layout
+mode. `blank` is master-stack and empty, and `home` is BSP. The client goes
+from `home` to `blank` and switches workspace there, which sends its layout to
+the daemon. `blank` must stay master-stack. Its positive half is `home`: the
+same client reports BSP there.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`b23b1cd6`) with this branch's e2e directory | `TestRemoteCreateAppliesStartup` ("far-new on build is \"floating\""), `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\"") | **caught** |
+| The empty session keeps the tiling of the session left | `adoptEmptySessionVersion`: the `m.AutoTiling = state.AutoTiling` line cut | `TestRemoteCreateAppliesStartup` (the same assertion). `TestSwitchToAnEmptySessionTakesItsLayout` passes, which is correct: tiling is on in both sessions | **caught** |
+| The empty session keeps the layout mode of the session left | `adoptEmptySessionVersion`: the `ApplyLayoutModeName` call cut | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\""). `TestRemoteCreateAppliesStartup` passes, which is correct: [startup] sets the mode there | **caught** |

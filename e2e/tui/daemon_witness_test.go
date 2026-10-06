@@ -237,6 +237,7 @@ type daemonSessionInfo struct {
 	NumWorkspaces    int    `json:"num_workspaces"`
 	WindowCount      int    `json:"window_count"`
 	TilingMode       string `json:"tiling_mode"`
+	LayoutMode       string `json:"layout_mode"`
 	Width            int    `json:"width"`
 	Height           int    `json:"height"`
 	TUIAttached      bool   `json:"tui_attached"`
