@@ -1812,3 +1812,30 @@ and the custom-format case shows the name inside its brackets.
 | The tab format is dropped when it has no `{index}` | `workspacePillLabel`: the `strings.Contains("{index}")` branch restored, passing the raw name for formats without `{index}` | `TestDockWorkspaceLabelCapAndFormats/custom_format` ("the dock row dropped the tab format around the capped name") | **caught** |
 | A narrow dock with the cap off draws no pill at all | `planDockWorkspaceStrip`: the `count == 0` fallback replaced by `addOnlyStrip` | `TestDockWorkspaceLabelCapAndFormats/uncapped_narrow` ("the narrow dock draws no pill at all for the long workspace") | **caught** |
 | Minimized names take a live message's room | `shortenDockItemNames`: the budget search replaced by the earlier even split, which subtracts each entry's padding and never counts the label's own " 1: " around the name | `TestDockWorkspaceLabelCapAndFormats/live_message_keeps_its_columns` ("the live message never drew in full on the dock row"): at 140 columns the drawn entries run wider than the room the pass was given, and the message is cut to `Window…  more` | **caught** |
+
+## A new window ignores the OSC 7 folder on Windows (#491)
+
+`TestNewWindowInheritsTheOSC7Folder` in `inherit_cwd_osc7_test.go` starts the
+daemon with `TUIOS_E2E_NO_PROCESS_CWD=1`, which makes every process read fail,
+as it does on Windows, and with `COMPUTERNAME=TUIOS-E2E-PC`. The pane's shell
+is `/bin/sh`, which reports nothing, and the test prints each OSC 7 report.
+The session starts in `base/start`. From the focused pane each time:
+
+- a report with this machine's host name in capitals: the new window must
+  start there. This is the positive half, and it passed on main with the hook.
+- a report with the host `TUIOS-E2E-PC`: the new window must start there.
+- a report that names a folder that does not exist: the new window must start
+  in `base/start`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`5d627b1e`) with this branch's e2e directory | `TestNewWindowInheritsTheOSC7Folder` (the missing folder: the window is in `other`, the process folder, want `start`). Main has no hook, so its process read answers | **caught** |
+| The released behaviour, with process reads off | origin/main with only the `ptyspawn` hook added | `TestNewWindowInheritsTheOSC7Folder` (the `TUIOS-E2E-PC` report is dropped: the pane stays in `proj`, want `other`) | **caught** |
+| COMPUTERNAME is not a local name | `localHostNames`: the `add(os.Getenv("COMPUTERNAME"))` line cut | `TestNewWindowInheritsTheOSC7Folder` (the same assertion) | **caught** |
+| A record that names a missing folder is inherited | `windowCwd`: the `isLocalDir` check on `win.Cwd` cut | `TestNewWindowInheritsTheOSC7Folder` (the window starts in the daemon's folder, want `start`) | **caught** |
+| Only the process is asked | `windowCwd`: the OSC 7 branch and the record both cut | `TestNewWindowInheritsTheOSC7Folder` (the first window starts in `start`, want `proj`). This proves the hook turns process reads off | **caught** |
+| The OSC 7 branch alone | `windowCwd`: the OSC 7 branch cut, the record kept | none: with process reads off, the record holds the same report (`fillLiveFacts`) | **not caught** |
+| The record fallback alone | `windowCwd`: the record cut, the OSC 7 branch kept | none, for the same reason | **not caught** |
+
+Not covered end to end: the order of the OSC 7 report and the process read
+when both answer and differ, a real Windows machine, and ConPTY.

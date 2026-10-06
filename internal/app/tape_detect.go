@@ -199,16 +199,11 @@ func localCwdPath(raw string) (string, bool) {
 	return path, true
 }
 
-// isLocalHost reports whether an OSC 7 host refers to this machine.
+// isLocalHost reports whether an OSC 7 host refers to this machine. It is the
+// daemon's rule, so the client and the daemon agree about which reports are
+// local.
 func isLocalHost(host string) bool {
-	host = strings.ToLower(host)
-	if host == "localhost" {
-		return true
-	}
-	if h, err := os.Hostname(); err == nil && strings.EqualFold(h, host) {
-		return true
-	}
-	return false
+	return session.IsLocalHostName(host)
 }
 
 // evaluateTapeDir checks whether dir carries a .tuios.tape and, if so, updates

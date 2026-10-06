@@ -1447,11 +1447,9 @@ func (s *Session) historyPolicy() HistoryPolicy {
 // The focused pane's live shell is asked rather than the Cwd on the window
 // record: that field is filled when resurrection state is saved, so it says
 // where the pane was the last time the daemon wrote state, not where the user
-// has since cd'd to. Reading the process is what makes a window opened from a
-// project land in the project. The record is the fallback for a pane whose
-// process cannot be read, which is every pane on a platform with no procfs
-// equivalent, and "" is the fallback after that, meaning the daemon's own
-// directory exactly as before.
+// has since cd'd to. What the shell reported over OSC 7 comes first, then its
+// process; see windowCwd. "" is the fallback after that, and the caller then
+// uses the session's start directory.
 func (s *Session) inheritedCwd() string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
@@ -1459,19 +1457,50 @@ func (s *Session) inheritedCwd() string {
 	return s.windowCwd(s.GetState().FocusedWindowID)
 }
 
-// windowCwd is the directory of the window id's pane: what its process
-// reports, else the directory saved for it. Empty when the window is gone.
+// windowCwd is the directory of the window id's pane, or "" when the window is
+// gone or no answer names a folder that exists here. The answers, best first:
+//
+//   - The folder the pane's shell reported over OSC 7, from this machine.
+//     It is the shell's own answer, and the same one list-windows and the
+//     clients are given (see fillLiveFacts).
+//   - The folder of the shell's process. No platform but Linux and macOS
+//     can read it, so on Windows the report above is the only live answer
+//     (#491).
+//   - The folder the window record holds.
+//
+// Each answer must be a folder that exists. A shell can report a folder it
+// deleted, and a record can hold one from before a restart. A window that
+// inherits such a folder starts in the daemon's folder, so it is skipped and
+// the caller falls back to the session's start folder.
 func (s *Session) windowCwd(id string) string {
 	win, ok := findWindowState(s.GetState(), id)
 	if !ok {
 		return ""
 	}
 	if pty := s.GetPTY(win.PTYID); pty != nil {
-		if cwd, ok := pty.ProcessCwd(); ok && cwd != "" {
+		if _, remote := pty.pty.(*remotePane); !remote {
+			if cwd := pty.place.announcedCwd(); isLocalDir(cwd) {
+				return cwd
+			}
+		}
+		if cwd, ok := pty.ProcessCwd(); ok && isLocalDir(cwd) {
 			return cwd
 		}
 	}
-	return win.Cwd
+	if isLocalDir(win.Cwd) {
+		return win.Cwd
+	}
+	return ""
+}
+
+// isLocalDir reports whether dir is an absolute path to a folder that exists
+// on this machine.
+func isLocalDir(dir string) bool {
+	if dir == "" || !filepath.IsAbs(dir) {
+		return false
+	}
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
 }
 
 // cwdFrom is the directory a new window named by ExecuteCommandPayload.CwdFrom

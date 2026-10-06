@@ -198,6 +198,43 @@ var localHostname = sync.OnceValue(func() string {
 	return strings.ToLower(h)
 })
 
+// localHostNames is every name a shell on this machine may put in an OSC 7
+// report, lower case. A shell does not ask Go for the name, so the name it
+// reports can differ from os.Hostname:
+//
+//   - PowerShell on Windows reports $env:COMPUTERNAME, the NetBIOS name. Go
+//     reads the DNS host name, which can differ and is not cut to 15
+//     characters. Read as another machine, every report from such a shell
+//     was dropped, and a new window did not inherit its folder (#491).
+//   - Many prompts report the short name (hostname -s), where os.Hostname
+//     gives the full name, such as box.lan on macOS.
+//
+// So the set holds the host name, its first label, and COMPUTERNAME and its
+// first label when that is set, which it is only on Windows.
+var localHostNames = sync.OnceValue(func() map[string]bool {
+	names := map[string]bool{"localhost": true}
+	add := func(name string) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" {
+			return
+		}
+		names[name] = true
+		if short, _, ok := strings.Cut(name, "."); ok && short != "" {
+			names[short] = true
+		}
+	}
+	add(localHostname())
+	add(os.Getenv("COMPUTERNAME"))
+	return names
+})
+
+// IsLocalHostName reports whether host, from an OSC 7 report or a file://
+// address, names this machine. An empty host does.
+func IsLocalHostName(host string) bool {
+	host = strings.ToLower(host)
+	return host == "" || localHostNames()[host]
+}
+
 // parseCwdReport reads a local absolute path out of what a shell reported. OSC 7
 // carries a file://host/path URI; a bare absolute path is accepted too, which is
 // what the spawn directory and some prompts are. Anything else, including a
@@ -233,7 +270,7 @@ func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 	if err != nil || u.Path == "" {
 		return "", "", false
 	}
-	if h := strings.ToLower(u.Hostname()); h != "" && h != "localhost" && h != localHostname() {
+	if h := u.Hostname(); !IsLocalHostName(h) {
 		// Bounded: it is shown on a rail row, and the pane wrote it. The path
 		// is another machine's, so it is not converted for this one.
 		return filepath.Clean(u.Path), ClampDisplayText(u.Hostname()), true
