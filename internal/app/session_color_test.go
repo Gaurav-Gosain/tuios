@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -110,6 +111,13 @@ func withSessionColors(t *testing.T, on bool) {
 	t.Cleanup(func() { config.Global.SessionColors = prev })
 }
 
+// testPool is the pool for the ground the tests measure against: no theme is
+// on, so the terminal background is the black theme.TerminalBg assumes.
+func testPool(t *testing.T) []sessionHue {
+	t.Helper()
+	return sessionAccentPool(theme.TerminalBg())
+}
+
 // TestSessionColourIsStableAndShared is the whole case for deriving the colour
 // from the session's name instead of handing out indices in creation order: two
 // clients attached to different sessions agree about every session's colour
@@ -162,10 +170,11 @@ func TestSessionColourIsStableAndShared(t *testing.T) {
 // prevent, so the preference alone is not enough. Up to the palette's size,
 // nobody shares.
 func TestSessionColoursAreDistinctUpToThePalette(t *testing.T) {
+	pool := testPool(t)
 	var names []string
-	for i := range sessionAccentSlotCount {
+	for i := range len(pool) {
 		names = append(names, "session-"+strconv.Itoa(i))
-		got := assignSessionColors(names, [sessionAccentSlotCount]bool{})
+		got := assignSessionColors(names, make([]bool, len(pool)), pool)
 		seen := map[Accent]string{}
 		for _, name := range names {
 			if other, dup := seen[got[name]]; dup {
@@ -181,10 +190,11 @@ func TestSessionColoursAreDistinctUpToThePalette(t *testing.T) {
 // different colours for the same sessions.
 func TestSessionColourIgnoresTheOrderItIsAsked(t *testing.T) {
 	names := []string{"main", "api", "docs", "infra", "notes"}
-	want := assignSessionColors(names, [sessionAccentSlotCount]bool{})
+	pool := testPool(t)
+	want := assignSessionColors(names, make([]bool, len(pool)), pool)
 	shuffled := slices.Clone(names)
 	slices.Reverse(shuffled)
-	if got := assignSessionColors(shuffled, [sessionAccentSlotCount]bool{}); !maps.Equal(got, want) {
+	if got := assignSessionColors(shuffled, make([]bool, len(pool)), pool); !maps.Equal(got, want) {
 		t.Errorf("the order the sessions were listed in changed the colours:\n%v\n%v", want, got)
 	}
 }
@@ -199,7 +209,7 @@ func TestSessionColoursNeverShareARow(t *testing.T) {
 	for i := range sessionAccentSlotCount + 2 {
 		names = append(names, "session-"+strconv.Itoa(i))
 	}
-	base := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
+	base := assignSessionColors(slices.Clone(names), make([]bool, len(testPool(t))), testPool(t))
 
 	first, second := "", ""
 	seen := map[Accent]string{}
@@ -223,12 +233,51 @@ func TestSessionColoursNeverShareARow(t *testing.T) {
 	}
 	ordered = append(ordered, first, second)
 
-	auto := assignSessionColors(slices.Clone(ordered), [sessionAccentSlotCount]bool{})
-	settleAdjacentRows(ordered, auto, map[string]Accent{})
+	pool := testPool(t)
+	auto := assignSessionColors(slices.Clone(ordered), make([]bool, len(pool)), pool)
+	settleAdjacentRows(ordered, auto, map[string]Accent{}, pool, theme.TerminalBg())
+	shown := func(name string) color.Color {
+		return overlay.Shown(theme.Readable(auto[name].RGB(), theme.TerminalBg()))
+	}
 	for i := 1; i < len(ordered); i++ {
-		if auto[ordered[i]] == auto[ordered[i-1]] {
-			t.Errorf("%q and %q wear the same hue in neighbouring rows", ordered[i-1], ordered[i])
+		if overlay.Distance(shown(ordered[i]), shown(ordered[i-1])) < sessionHueMinGap {
+			t.Errorf("%q and %q wear hues that look the same in neighbouring rows", ordered[i-1], ordered[i])
 		}
+	}
+}
+
+// TestSessionColoursOnOneDarkNeverShare is the theme-shaped case that blocked
+// the ten-hue palette in review: one_dark paints a normal slot and its bright
+// twin identically, so the pool folds to six hues. Six sessions or fewer must
+// all show different colours on it, where the old slot-counting arbiter let
+// two wear the same ink.
+func TestSessionColoursOnOneDarkNeverShare(t *testing.T) {
+	withTheme(t, "one_dark")
+	m, _ := sessionColorOS(t, 120, 40)
+
+	if got := len(m.sessionPool()); got != 6 {
+		t.Errorf("one_dark's pool holds %d hues, want the six main draws today", got)
+	}
+
+	var names []string
+	for i := range 6 {
+		names = append(names, "session-"+strconv.Itoa(i))
+	}
+	railStyled(t, m, sessionColorTree())
+
+	shown := make([]color.Color, 0, len(names))
+	for _, name := range names {
+		a, ok := m.SessionColor(name)
+		if !ok {
+			t.Fatalf("%q has no colour", name)
+		}
+		s := overlay.Shown(theme.Readable(a.RGB(), theme.TerminalBg()))
+		for i, prev := range shown {
+			if overlay.Distance(s, prev) < sessionHueMinGap {
+				t.Errorf("on one_dark, %q and %q show colours that look the same", names[i], name)
+			}
+		}
+		shown = append(shown, s)
 	}
 }
 
@@ -237,9 +286,10 @@ func TestSessionColoursNeverShareARow(t *testing.T) {
 // hue to get there.
 func TestSessionNeighbourPassLeavesSmallSetsAlone(t *testing.T) {
 	names := []string{"main", "api", "docs", "infra", "notes", "build", "deploy"}
-	want := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
-	auto := assignSessionColors(slices.Clone(names), [sessionAccentSlotCount]bool{})
-	settleAdjacentRows(names, auto, map[string]Accent{})
+	pool := testPool(t)
+	want := assignSessionColors(slices.Clone(names), make([]bool, len(pool)), pool)
+	auto := assignSessionColors(slices.Clone(names), make([]bool, len(pool)), pool)
+	settleAdjacentRows(names, auto, map[string]Accent{}, pool, theme.TerminalBg())
 	if !maps.Equal(auto, want) {
 		t.Errorf("the neighbour pass moved a hue in a set that never shared:\n%v\n%v", want, auto)
 	}

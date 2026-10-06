@@ -50,6 +50,57 @@ var sessionAccentSlots = [sessionAccentSlotCount]int{
 	6, // bright cyan
 }
 
+// sessionHue is one palette position a theme can tell apart, with the colour
+// it shows on the rail's ground.
+type sessionHue struct {
+	slot  int
+	shown color.Color
+}
+
+// sessionHueMinGap is how far apart two shown hues must sit in OKLab before a
+// person can tell them apart in one cell. A pair closer than this is one hue.
+const sessionHueMinGap = 0.05
+
+// sessionAccentPool folds the candidate slots down to the hues the theme
+// behind bg can tell apart. Many themes give a normal slot and its bright twin
+// the same colour, or nearly one, and to a person reading one cell those are
+// the same hue: a pool that kept both would hand two sessions colours that
+// look equal, which is the exact thing the colours exist to prevent. A slot
+// survives only when the colour it shows (lifted to read on the ground, then
+// stepped down to what a 16-colour terminal paints) sits at least
+// sessionHueMinGap from every hue already kept. A theme with distinct twins
+// keeps all ten; one_dark keeps six.
+func sessionAccentPool(bg color.Color) []sessionHue {
+	pool := make([]sessionHue, 0, sessionAccentSlotCount)
+	for _, idx := range sessionAccentSlots {
+		shown := overlay.Shown(theme.Readable(SlotAccent(idx).RGB(), bg))
+		crowded := false
+		for _, kept := range pool {
+			if overlay.Distance(shown, kept.shown) < sessionHueMinGap {
+				crowded = true
+				break
+			}
+		}
+		if !crowded {
+			pool = append(pool, sessionHue{slot: idx, shown: shown})
+		}
+	}
+	return pool
+}
+
+// sessionPool is the pool for this client's ground, remembered so a render
+// that asks per row does not re-lift the palette each time. A theme switch
+// moves the ground, so the ground is the key.
+func (m *OS) sessionPool() []sessionHue {
+	bg := m.terminalBg()
+	if m.sessionPoolCache != nil && m.sessionPoolBg == bg {
+		return m.sessionPoolCache
+	}
+	m.sessionPoolCache = sessionAccentPool(bg)
+	m.sessionPoolBg = bg
+	return m.sessionPoolCache
+}
+
 // sessionAccentNames maps the words set-session-accent takes to legacy accent
 // slots. The daemon records the string verbatim and has never interpreted it,
 // so this is the whole vocabulary; anything else reads as unset and the
@@ -88,23 +139,23 @@ func ParseAccent(s string) (Accent, bool) {
 	return Accent{}, false
 }
 
-// sessionPreferredSlot is the hue a session asks for: an FNV-1a fold of its
-// name, so the same name asks for the same hue on every client and after every
-// restart, with nothing written down.
-func sessionPreferredSlot(name string) int {
+// sessionPreferredSlot is the position in the pool a session asks for: an
+// FNV-1a fold of its name, so the same name asks for the same hue on every
+// client and after every restart, with nothing written down.
+func sessionPreferredSlot(name string, size int) int {
 	const prime = 1099511628211
 	h := uint64(1469598103934665603)
 	for i := range len(name) {
 		h ^= uint64(name[i])
 		h *= prime
 	}
-	return int(h % sessionAccentSlotCount)
+	return int(h % uint64(size))
 }
 
 // sessionAutoAccent is the colour a session gets when nothing is known about
 // what else exists: its preferred hue, unarbitrated.
-func sessionAutoAccent(name string) Accent {
-	return SlotAccent(sessionAccentSlots[sessionPreferredSlot(name)])
+func sessionAutoAccent(name string, pool []sessionHue) Accent {
+	return SlotAccent(pool[sessionPreferredSlot(name, len(pool))].slot)
 }
 
 // assignSessionColors hands out a hue to each name, settling the collisions six
@@ -121,7 +172,7 @@ func sessionAutoAccent(name string) Accent {
 //
 // reserved holds the hues explicit accents have already claimed, so an accent
 // the user set is not duplicated by one we derived.
-func assignSessionColors(names []string, reserved [sessionAccentSlotCount]bool) map[string]Accent {
+func assignSessionColors(names []string, reserved []bool, pool []sessionHue) map[string]Accent {
 	sorted := slices.Clone(names)
 	slices.Sort(sorted)
 
@@ -132,27 +183,27 @@ func assignSessionColors(names []string, reserved [sessionAccentSlotCount]bool) 
 		if _, done := out[name]; done || name == "" {
 			continue
 		}
-		if slot := sessionPreferredSlot(name); !taken[slot] {
+		if slot := sessionPreferredSlot(name, len(pool)); !taken[slot] {
 			taken[slot] = true
-			out[name] = SlotAccent(sessionAccentSlots[slot])
+			out[name] = SlotAccent(pool[slot].slot)
 			continue
 		}
 		spilled = append(spilled, name)
 	}
 	for _, name := range spilled {
-		slot := sessionPreferredSlot(name)
-		for step := 1; step <= sessionAccentSlotCount; step++ {
-			next := (slot + step) % sessionAccentSlotCount
+		slot := sessionPreferredSlot(name, len(pool))
+		for step := 1; step <= len(pool); step++ {
+			next := (slot + step) % len(pool)
 			if !taken[next] {
 				slot = next
 				break
 			}
 		}
-		// Past the tenth session there is no free hue left and the preferred one
+		// Past the pool's size there is no free hue left and the preferred one
 		// stands: a duplicate is better than a hue picked by arithmetic nobody
 		// can predict.
 		taken[slot] = true
-		out[name] = SlotAccent(sessionAccentSlots[slot])
+		out[name] = SlotAccent(pool[slot].slot)
 	}
 	return out
 }
@@ -170,12 +221,19 @@ func (m *OS) refreshSessionColorsFor(sessions []sessiontree.Node) {
 // refreshSessionColors settles the colours for the sessions a surface is about
 // to draw. Called once per rail and once per switcher render, off the cached
 // path, so a row can ask per cell without redoing the arbitration.
+//
+// The two callers arbitrate independently, and the pane borders read whichever
+// ran last, so the switcher's render can leave the answer behind: past the
+// pool's size a duplicate is repaired against the caller's own row order, so a
+// session can change hue when the switcher opens. Up to the pool's size nobody
+// shares and the two calls agree.
 func (m *OS) refreshSessionColors(names []string) {
 	if !m.Settings.SessionColors {
 		m.sessionColors = nil
 		return
 	}
-	var reserved [sessionAccentSlotCount]bool
+	pool := m.sessionPool()
+	reserved := make([]bool, len(pool))
 	auto := names[:0:0]
 	own := make(map[string]Accent)
 	for _, name := range names {
@@ -185,84 +243,99 @@ func (m *OS) refreshSessionColors(names []string) {
 			continue
 		}
 		own[name] = a
-		if slot, ok := sessionReservedSlot(a); ok {
+		if slot, ok := sessionReservedSlot(a, pool); ok {
 			reserved[slot] = true
 		}
 	}
-	colors := assignSessionColors(auto, reserved)
-	settleAdjacentRows(names, colors, own)
+	colors := assignSessionColors(auto, reserved, pool)
+	settleAdjacentRows(names, colors, own, pool, m.terminalBg())
 	m.sessionColors = colors
 }
 
 // settleAdjacentRows repairs the one case the set-based assignment cannot see:
-// past the palette's size a duplicate hue is unavoidable, and nothing in a
+// past the pool's size a duplicate hue is unavoidable, and nothing in a
 // set-based answer stops the two sessions wearing it from standing next to each
 // other in the row order a surface is about to draw. Walking the rows in order
 // and moving the auto side of each adjacent pair to a hue neither neighbour
 // wears fixes that pair without touching any other row, so one left-to-right
-// pass is enough, and the hue it moves to is one the palette already had, so
+// pass is enough, and the hue it moves to is one the pool already had, so
 // the repair never invents a colour. An accent the user set never moves; when
 // two pinned accents collide the user asked for both, and they stand.
 //
-// This is the one place the answer depends on the order the rows were listed
-// in. The rail's row order is a local drag order, so two clients can repair a
+// Rows are compared by the colour they show, not by the Accent value: two
+// slots a theme paints identically are one hue to a person, and a pass that
+// compared values would stand aside from a pair that looks doubled. This is
+// the one place the answer depends on the order the rows were listed in. The
+// rail's row order is a local drag order, so two clients can repair a
 // duplicate pair differently and an over-cap session can wear a different hue
-// on each. Up to the palette's size nobody shares and nothing moves, which is
+// on each. Up to the pool's size nobody shares and nothing moves, which is
 // the case the order-independence guarantee is about.
-func settleAdjacentRows(names []string, auto, own map[string]Accent) {
+func settleAdjacentRows(names []string, auto, own map[string]Accent, pool []sessionHue, bg color.Color) {
+	shown := func(a Accent) color.Color {
+		return overlay.Shown(theme.Readable(a.RGB(), bg))
+	}
+	sameHue := func(a, b color.Color) bool {
+		if a == nil || b == nil {
+			return a == nil && b == nil
+		}
+		return overlay.Distance(a, b) < sessionHueMinGap
+	}
 	eff := make([]Accent, len(names))
+	hues := make([]color.Color, len(names))
 	for i, name := range names {
 		if a, ok := own[name]; ok {
 			eff[i] = a
 		} else {
 			eff[i] = auto[name]
 		}
+		hues[i] = shown(eff[i])
 	}
 	for i := range names {
 		if _, pinned := own[names[i]]; pinned {
 			continue
 		}
-		var prev, next Accent
+		var prevH, nextH color.Color
 		if i > 0 {
-			prev = eff[i-1]
+			prevH = hues[i-1]
 		}
 		if i+1 < len(eff) {
-			next = eff[i+1]
+			nextH = hues[i+1]
 		}
-		if eff[i] != prev && eff[i] != next {
+		if !sameHue(hues[i], prevH) && !sameHue(hues[i], nextH) {
 			continue
 		}
-		for _, idx := range sessionAccentSlots {
-			cand := SlotAccent(idx)
-			if cand == eff[i] || cand == prev || cand == next {
+		for _, h := range pool {
+			if sameHue(h.shown, hues[i]) || sameHue(h.shown, prevH) || sameHue(h.shown, nextH) {
 				continue
 			}
-			eff[i] = cand
-			auto[names[i]] = cand
+			eff[i] = SlotAccent(h.slot)
+			hues[i] = h.shown
+			auto[names[i]] = eff[i]
 			break
 		}
 	}
 }
 
-// sessionReservedSlot is the palette position an explicit accent takes out of
+// sessionReservedSlot is the pool position an explicit accent takes out of
 // the automatic pool. A named accent says its slot outright. A literal claims
 // one only when it is exactly that slot's colour, which is what the picker
 // writes when the user lands on the session's own hue: without the match, an
 // accent set to the very colour another session was about to be handed would
 // not stop it being handed out, and the two would collide in the one way the
-// colours exist to prevent.
-func sessionReservedSlot(a Accent) (int, bool) {
+// colours exist to prevent. An accent naming a slot the theme's pool dropped
+// reserves nothing: no automatic assignment can land on it.
+func sessionReservedSlot(a Accent, pool []sessionHue) (int, bool) {
 	if a.IsSlot() {
-		for i, idx := range sessionAccentSlots {
-			if a.Slot == idx {
+		for i, h := range pool {
+			if a.Slot == h.slot {
 				return i, true
 			}
 		}
 		return 0, false
 	}
 	rgb := a.RGB()
-	for i, idx := range sessionAccentSlots {
-		if SlotAccent(idx).RGB() == rgb {
+	for i, h := range pool {
+		if SlotAccent(h.slot).RGB() == rgb {
 			return i, true
 		}
 	}
@@ -308,7 +381,7 @@ func (m *OS) SessionColor(name string) (Accent, bool) {
 	if a, ok := m.sessionColors[name]; ok {
 		return a, true
 	}
-	return sessionAutoAccent(name), true
+	return sessionAutoAccent(name, m.sessionPool()), true
 }
 
 // sessionTint is SessionColor lifted until it reads on the ground it is about

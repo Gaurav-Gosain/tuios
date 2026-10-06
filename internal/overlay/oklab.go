@@ -91,6 +91,13 @@ func (c lab) rgba() color.RGBA {
 	}
 }
 
+// Distance is how far apart two colours sit in OKLab, the same space the
+// package blends in. A pair under 0.05 is hard to tell apart in one cell.
+func Distance(a, b color.Color) float64 {
+	x, y := toLab(a), toLab(b)
+	return math.Sqrt((x.l-y.l)*(x.l-y.l) + (x.a-y.a)*(x.a-y.a) + (x.b-y.b)*(x.b-y.b))
+}
+
 // okChroma is c's chroma in OKLab: 0 for a grey, about 0.3 for the most
 // saturated sRGB colours.
 func okChroma(c color.Color) float64 {
