@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 32,399,522 | 32,445,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,505,330 | 30,550,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 32,571,554 | 32,600,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,639,922 | 30,690,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2404,6 +2404,13 @@ with `tuios doctor agents`, the install and uninstall actions, the notice and
 its stored dismissals, and the check that a file did not change during an
 edit. It links no new package. On Go 1.26.6 the build measured 32,399,522 and
 30,505,330 bytes, 34,522 and 25,330 over the old budgets.
+
+The budgets went to 32,600,000 (linux/amd64) and 30,690,000 (darwin/arm64)
+for the Tailscale SSH sign-in: the rail's sign-in control and hover, the check
+that a sign-in link is on a Tailscale login origin, the `retry-host` verb, and
+`tuios hosts signin`. It links no new package. On Go 1.26.6 the build measured
+32,571,554 and 30,639,922 bytes: linux/amd64 was 46,554 over its budget of
+32,525,000, and darwin/arm64 had 10,078 left of its 30,650,000.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
