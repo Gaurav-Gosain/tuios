@@ -2212,6 +2212,9 @@ func (m *OS) SyncStateToDaemon() {
 	if m.syncedFPSet && m.syncedFP == fp {
 		return
 	}
+	// A push sent while the person's key, click or wheel is being handled
+	// says the person used the session.
+	state.PushByPerson = m.personInput > 0
 
 	if err := m.DaemonClient.UpdateState(state); err != nil {
 		m.LogError("Failed to sync state to daemon: %v", err)

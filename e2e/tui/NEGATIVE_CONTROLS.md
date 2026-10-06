@@ -1867,18 +1867,47 @@ way in its own parser.
 
 ## A bare attach picks the most recent session (#486)
 
-`TestBareAttachLandsOnTheMostRecentSession` in `attach_most_recent_test.go`
-makes four sessions. Each of eight rounds opens a window in one session with
-`tuios new-window -s`, runs a bare `tuios attach`, and checks the session the
-client is on. The rounds visit every session, out of creation order, so map
-order and creation order both fail. The positive half is in each round: the
-client lands on a session at all. The fixed build passed six runs in a row.
+## A bare attach picks the session the person used last (#486)
+
+A bare `tuios attach` lands on the session the person used last: the
+latest `lastUsed`, then the latest activity. Only the person's input sets
+`lastUsed`: keys typed into a pane from a client that is not in a pane, and a
+state push the client marks as sent while it handled the person's key, click
+or wheel. A window spawn, a routed command, a tape and a restore do not. It
+is saved with the session and restored.
+
+The tests are in `attach_most_recent_test.go`:
+
+- `TestBareAttachLandsOnTheSessionTypedInLast` makes four sessions. Each of
+  five rounds attaches a client to one session by name and uses it, then a
+  bare attach must land there. Rounds 1, 3 and 5 type a command into the
+  pane. Rounds 2 and 4 press Alt and a number in window mode, which reaches
+  the daemon only as the client's push.
+- `TestBareAttachIgnoresAgentWindowsAndRoutedCommands` has a client sit on
+  `watched`, untouched. The person types in `person`. Then windows open in
+  `agent` from the CLI, `select-workspace` is routed to the client on
+  `watched`, and `send-keys alt+3` goes to that client. A bare attach must
+  land on `person`. The positive half comes first: before any typing, the
+  agent's windows make `agent` the pick.
+- `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` types in `alpha`
+  of `alpha`, `beta` and `gamma`, runs `kill-server`, and a bare attach that
+  starts the daemon again must land on `alpha`.
+
+The fixed build passed three runs in a row.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The released behaviour | build origin/main (`5d627b1e`) with this branch's e2e directory | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: a bare attach landed on \"recent-b\", want \"recent-c\""), 3 of 3 runs, on `recent-a` or `recent-b` | **caught** |
-| The attach does not ask for the most recent session | `GetDefaultSession`: the `MostRecentSession` call cut, the range over the map put back | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: ... landed on \"recent-a\""), 2 of 2 runs | **caught** |
-| The pick ignores activity | `mostRecentSession`: `active` set to the zero time, so only the creation tiebreak is left | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: ... landed on \"recent-d\"") | **caught** |
+| The released behaviour | build origin/main (`a77a90f3`) with this branch's e2e directory | `TestBareAttachLandsOnTheSessionTypedInLast` ("round 1: ... landed on \"recent-a\", want \"recent-c\""), `TestBareAttachIgnoresAgentWindowsAndRoutedCommands` (lands on `person` before any typing) | **caught** |
+| The pick by activity, the first version of this change | `GetDefaultSession`: `LastUsedSession` back to `MostRecentSession` | `TestBareAttachIgnoresAgentWindowsAndRoutedCommands` ("landed on \"watched\", want \"person\"") | **caught** |
+| Typing is not use | `handleInput`: `TouchUsed` cut | `TestBareAttachLandsOnTheSessionTypedInLast` ("round 3: ... landed on \"recent-a\", want \"recent-d\"") | **caught** |
+| The daemon ignores the person's push | `handleUpdateState`: the `TouchUsed` for `byPerson` cut | `TestBareAttachLandsOnTheSessionTypedInLast` ("round 2: ... landed on \"recent-c\", want \"recent-a\"") | **caught** |
+| The client never marks a push | `Update`: `personInput` raised after the handler instead of around it | `TestBareAttachLandsOnTheSessionTypedInLast` (the same round 2 assertion) | **caught** |
+| The client marks every push | `SyncStateToDaemon`: `PushByPerson` always true | `TestBareAttachIgnoresAgentWindowsAndRoutedCommands` (the untouched client's attach makes `watched` the pick before any typing) | **caught** |
+| The save leaves the time out | `ResurrectionState`: `LastUsed` not stamped | `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` ("landed on \"gamma\", want \"alpha\"") | **caught** |
+| The restore drops the time | `restoreSession`: `setLastUsed` cut | `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` (the same assertion) | **caught** |
 
-Not covered end to end: the commands that leave `-s` out, which share the
-pick through `findTargetSession`, and the herdr focused workspace.
+Not covered end to end: a client inside a pane typing, which counts as
+activity only, a routed `send-keys` while the watching client is in terminal
+mode, whose keys reach the pane as typed input and count as use, and a crash.
+Typing changes no state, so the time is saved only with the next change or
+by `kill-server`.

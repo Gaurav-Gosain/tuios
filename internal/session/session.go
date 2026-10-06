@@ -379,6 +379,13 @@ type SessionState struct {
 	// every save. Empty in state written before it existed, and such a
 	// session starts its new windows where the daemon did.
 	StartDir string `json:"start_dir,omitempty"`
+	// LastUsed is when the person last used the session, in unix
+	// nanoseconds (see Session.lastUsed), as it was when the state was saved.
+	// ResurrectionState stamps it and a restore sets it again, so a bare
+	// attach after a daemon restart still lands on the session the person
+	// used last. Only the save and the restore read it. Zero in state written
+	// before it existed, and for a session nobody has used.
+	LastUsed int64 `json:"last_used,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
 	// omitted when nil, which is what every older client and state file reads.
@@ -537,6 +544,12 @@ type SessionState struct {
 	// them. See PushSeen.
 	PushOrigin string `json:"-"`
 	PushSeq    uint64 `json:"-"`
+	// PushByPerson says the client sent this push because of the person's own
+	// key, click or wheel, and not because of a routed command, a tape or a
+	// peer's state. The daemon takes it as the person using the session (see
+	// Session.TouchUsed) only from a client that may act as the person, and
+	// drops it. An older client never sets it.
+	PushByPerson bool `json:"-"`
 	// PushSeen is, for each client connection attached to the session, the
 	// newest of its pushes the daemon had merged when it handed this state out.
 	// It is what lets a client tell a broadcast built before its own last push
@@ -1192,7 +1205,15 @@ type Session struct {
 	// goroutine on every keystroke and read from whichever goroutine is
 	// answering a session listing.
 	lastActive time.Time
-	activeMu   sync.Mutex
+	// lastUsed is when the person last used this session: typed into one of
+	// its panes, or changed it from an attached client by key or mouse. It is
+	// what a bare attach picks by. lastActive is not, because a window an
+	// agent or a script opens bumps it, so an orchestrator opening windows in
+	// one session would pull the person's attach away from the session they
+	// were typing in. Zero until the person uses the session. activeMu
+	// guards it too.
+	lastUsed time.Time
+	activeMu sync.Mutex
 
 	// Configuration
 	config *SessionConfig
@@ -2075,6 +2096,32 @@ func (s *Session) LastActive() time.Time {
 	return s.lastActive
 }
 
+// TouchUsed records that the person used the session now. Only input the
+// person makes calls it: keys typed into a pane from a client that is not in
+// a pane, and a state push such a client marks as made by the person's key or
+// mouse. A window spawn, a routed command, a tape and a restore do not. It
+// bumps LastActive too.
+func (s *Session) TouchUsed() {
+	now := time.Now()
+	s.activeMu.Lock()
+	s.lastUsed, s.lastActive = now, now
+	s.activeMu.Unlock()
+}
+
+// LastUsed is when the person last used the session, zero when never.
+func (s *Session) LastUsed() time.Time {
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	return s.lastUsed
+}
+
+// setLastUsed puts back the time a saved session was last used, on restore.
+func (s *Session) setLastUsed(t time.Time) {
+	s.activeMu.Lock()
+	s.lastUsed = t
+	s.activeMu.Unlock()
+}
+
 // GetPTY returns a PTY by ID.
 func (s *Session) GetPTY(id string) *PTY {
 	s.ptysMu.RLock()
@@ -2541,6 +2588,10 @@ func (s *Session) ResurrectionState() *SessionState {
 	}
 	state.SessionID = s.ID
 	state.StartDir = s.StartDir()
+	state.LastUsed = 0
+	if used := s.LastUsed(); !used.IsZero() {
+		state.LastUsed = used.UnixNano()
+	}
 	return state
 }
 
@@ -2632,6 +2683,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	origin := state.PushOrigin
 	s.notePushLocked(origin, state.PushSeq)
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
+	state.PushByPerson = false
 
 	accepted = true
 	prev := s.state

@@ -563,35 +563,61 @@ func (m *Manager) AllSessions() []*Session {
 
 // MostRecentSession returns the most recently active session, or nil when
 // there is none. It is the session every command that leaves its session out
-// acts on, and the one a bare attach lands on.
+// acts on.
 func (m *Manager) MostRecentSession() *Session {
-	return mostRecentSession(m.AllSessions())
+	return mostRecentSession(m.AllSessions(), false)
 }
 
-// mostRecentSession picks the session with the latest LastActive. It compares
-// the full-precision time: SessionInfo truncates it to whole seconds, so two
+// LastUsedSession returns the session the person used last, or nil when there
+// is none. It is the one a bare attach lands on. A session the person never
+// used ranks below every one they did, and sessions tied there are ranked as
+// MostRecentSession ranks them.
+func (m *Manager) LastUsedSession() *Session {
+	return mostRecentSession(m.AllSessions(), true)
+}
+
+// mostRecentSession picks the session with the latest LastActive, or with
+// byUse the latest LastUsed and then the latest LastActive. It compares the
+// full-precision times: SessionInfo truncates them to whole seconds, so two
 // sessions used in the same second tied and the pick fell to list order. A
 // tie that remains goes to the newer session, then to the lower name, so the
 // answer never depends on map order.
-func mostRecentSession(sessions []*Session) *Session {
+func mostRecentSession(sessions []*Session, byUse bool) *Session {
 	var best *Session
-	var bestActive time.Time
+	var bestUsed, bestActive time.Time
 	for _, s := range sessions {
+		var used time.Time
+		if byUse {
+			used = s.LastUsed()
+		}
 		active := s.LastActive()
-		if best == nil || active.After(bestActive) ||
-			(active.Equal(bestActive) && (s.Created.After(best.Created) ||
-				(s.Created.Equal(best.Created) && s.Name() < best.Name()))) {
-			best, bestActive = s, active
+		if best == nil || newerPick(used, bestUsed, active, bestActive, s, best) {
+			best, bestUsed, bestActive = s, used, active
 		}
 	}
 	return best
 }
 
-// GetDefaultSession returns the most recently active session, creating one if
+// newerPick reports whether s, used and active at the times given, ranks
+// above best: the later use, then the later activity, then the newer
+// session, then the lower name.
+func newerPick(used, bestUsed, active, bestActive time.Time, s, best *Session) bool {
+	switch {
+	case !used.Equal(bestUsed):
+		return used.After(bestUsed)
+	case !active.Equal(bestActive):
+		return active.After(bestActive)
+	case !s.Created.Equal(best.Created):
+		return s.Created.After(best.Created)
+	}
+	return s.Name() < best.Name()
+}
+
+// GetDefaultSession returns the session the person used last, creating one if
 // none exist. It used to return the first session a range over the map gave,
 // which Go randomises, so a bare attach landed on any session at all.
 func (m *Manager) GetDefaultSession(cfg *SessionConfig, width, height int) (*Session, error) {
-	if session := m.MostRecentSession(); session != nil {
+	if session := m.LastUsedSession(); session != nil {
 		return session, nil
 	}
 

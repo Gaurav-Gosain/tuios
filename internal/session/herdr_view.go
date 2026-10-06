@@ -272,10 +272,10 @@ func (d *Daemon) herdrFocusedSession(sessions []*Session) *Session {
 			attached = append(attached, s)
 		}
 	}
-	if best := mostRecentSession(attached); best != nil {
+	if best := mostRecentSession(attached, false); best != nil {
 		return best
 	}
-	return mostRecentSession(sessions)
+	return mostRecentSession(sessions, false)
 }
 
 // herdrListedWorkspace reports whether workspace ws of a session is one of

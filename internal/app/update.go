@@ -1611,7 +1611,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if handler == nil {
 			return m, tea.Batch(shakeCmd, m.armScreensaver())
 		}
+		// Every sync the handler sends is the person's doing. A routed
+		// send-keys and a tape run the same handler from elsewhere, and
+		// their syncs are not marked. See SessionState.PushByPerson.
+		m.personInput++
 		newModel, cmd := handler(m.fixHostKeyMods(msg), m)
+		m.personInput--
 		if shakeCmd != nil {
 			cmd = tea.Batch(cmd, shakeCmd)
 		}
