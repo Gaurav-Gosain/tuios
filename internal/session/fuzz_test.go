@@ -144,6 +144,9 @@ func FuzzReadMessageFraming(f *testing.F) {
 	f.Add(frame(2+8+2, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42, 'h', 'i'))
 	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42))
 	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 0))
+	// The reserved codec byte 1 with a payload long enough to hold an id. It
+	// is plain gob, so the reader must not take the first 8 bytes as one.
+	f.Add(frame(2+10, byte(MsgList), 1, 0, 0, 0, 0, 0, 0, 0, 42, 'h', 'i'))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
