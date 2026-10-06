@@ -1077,6 +1077,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		}
 	})
 
+	// A pane a switch to an empty workspace asked for has arrived.
+	m.settlePaneRequests()
+
 	// After the sizes settle, so a pane primed here takes its snapshot at
 	// the size it is shown at.
 	m.reconcilePaneStreams()

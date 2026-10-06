@@ -362,9 +362,14 @@ new_window_when_empty = true
 ```
 
 The new pane starts in the folder of the pane that had focus on the
-workspace you came from. When that workspace had no pane, the new pane
-starts in the session's start folder: the folder that `tuios new --cwd`
-gave.
+workspace you came from. The new pane starts in the session's start folder
+in these cases:
+
+- You came from a workspace with no pane.
+- You came from a scratch terminal.
+- The pane you came from runs on another machine.
+
+The start folder is the folder that `tuios new --cwd` gave.
 
 A pane opens only when you switch: with a workspace key, a click on the
 dock, the workspace switcher, the pane navigator or the command palette.
@@ -378,7 +383,13 @@ These switches do not open a pane:
   stays as it is.
 
 When two clients show the same session, the client that switches opens the
-pane. The other client shows it. The session gets one pane.
+pane. The other client shows it. The session gets one pane. When you switch
+away before the pane opens, you stay where you went, and a switch back does
+not open a second pane.
+
+The daemon must be this version of tuios or newer. With an older daemon, a
+switch opens no pane. Run `tuios kill-server` and start tuios again to load
+the new daemon.
 
 Each client reads the setting from its config file, and a change applies at
 once. The settings page has it under Daemon, and

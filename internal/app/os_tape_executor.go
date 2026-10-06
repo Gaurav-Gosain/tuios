@@ -403,6 +403,9 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		"height":             m.Height,
 		"workspace_windows":  workspaceWindows,
 		"num_workspaces":     m.NumWorkspaces,
+		// Workspaces a switch asked a pane for that has not arrived. See
+		// workspaces.new_window_when_empty.
+		"pane_requests": m.PaneRequestsInFlight(),
 	}
 
 	// Script playback info

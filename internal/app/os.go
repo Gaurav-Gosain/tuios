@@ -835,6 +835,12 @@ type OS struct {
 	// holds describes a session that no longer exists and must not be pushed.
 	// See SyncStateToDaemon, AddWindow and DeleteWindow.
 	daemonWindowIntent bool
+	// paneRequests is, by workspace, when this client asked the daemon for
+	// the pane a switch to that empty workspace opens. A switch back to the
+	// workspace before the pane arrives asks for nothing more. A sync that
+	// shows a window there clears the entry, and an entry older than
+	// paneRequestTimeout counts as gone. See openPaneOnEmptyWorkspace.
+	paneRequests map[int]time.Time
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query

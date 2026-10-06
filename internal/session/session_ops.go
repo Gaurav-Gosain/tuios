@@ -251,6 +251,11 @@ type NewWindowOptions struct {
 	// saved: a window a restore brings back starts with the daemon's
 	// environment. A window on another machine ignores it.
 	Env []string
+	// FocusIfShown focuses the window only when its workspace is the one the
+	// session shows, never changes the current workspace, and does not count
+	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
+	// nothing with Focus set.
+	FocusIfShown bool
 	// Grants is what the window's process may do through tuios, nil for the
 	// default of [agents.permissions]. It is in force before the process
 	// starts, and it is saved with the window. See pane_grants.go.
@@ -465,6 +470,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 				state.CurrentWorkspace = workspace
 			}
 			state.FocusHistory = RecordFocus(state.FocusHistory, workspace, windowID)
+		} else if opts.FocusIfShown {
+			if workspace == state.CurrentWorkspace {
+				state.FocusedWindowID = windowID
+				state.FocusHistory = RecordFocus(state.FocusHistory, workspace, windowID)
+			}
+			s.focusNeutral = true
 		}
 		return nil
 	})

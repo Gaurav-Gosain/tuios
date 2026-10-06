@@ -3,7 +3,9 @@ package session
 import (
 	"fmt"
 	"maps"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,7 +128,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			LogBasic("Execute command: following ssh of window %s: %v", payload.SSHFrom, redactSSHArgv(argv))
 		}
 	}
-	if payload.CwdFrom != "" && payload.Cwd == "" && payload.CommandType == "NewWindow" {
+	if payload.FocusIfShown && payload.Cwd == "" && payload.CommandType == "NewWindow" {
 		payload.Cwd = session.cwdFrom(payload.CwdFrom)
 	}
 	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {
@@ -143,7 +145,22 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 				"tape scripts need an attached client. A headless daemon has no renderer to run them")
 		}
 		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
-		data, err := d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, payload.Cwd, payload.Workspace, newWindowEnv, onExit)
+		var data map[string]any
+		var err error
+		if payload.FocusIfShown && payload.CommandType == "NewWindow" && len(payload.Args) == 0 {
+			// The pane a client opens on an empty workspace. See
+			// ExecuteCommandPayload.FocusIfShown.
+			paneHoldForTest()
+			var win WindowState
+			win, err = session.AddDaemonWindowWith(NewWindowOptions{
+				FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace,
+			}, onExit)
+			if err == nil {
+				data = map[string]any{"window_id": win.ID, "name": win.Title}
+			}
+		} else {
+			data, err = d.executeDaemonCommandEnv(session, payload.CommandType, payload.Args, payload.Cwd, payload.Workspace, newWindowEnv, onExit)
+		}
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 		}
@@ -400,4 +417,28 @@ func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgLogsData, &LogsDataPayload{
 		Entries: entries,
 	})
+}
+
+// paneHoldForTest lets the end-to-end tests hold the pane a client opens on
+// an empty workspace, so they can send the switches that follow while the
+// request waits, as a slow daemon would.
+//
+// TUIOS_E2E_HOLD_PANE names a file that holds a number of milliseconds. While
+// the file exists, each request waits that long, ten seconds at most.
+// Messages are read one at a time per connection, so the client's later
+// messages wait behind it. Ordinary runs never set the variable.
+func paneHoldForTest() {
+	path := os.Getenv("TUIOS_E2E_HOLD_PANE")
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	ms, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || ms <= 0 {
+		return
+	}
+	time.Sleep(min(time.Duration(ms)*time.Millisecond, 10*time.Second))
 }

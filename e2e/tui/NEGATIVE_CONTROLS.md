@@ -1454,6 +1454,7 @@ divider survived, so a fixture that resizes nothing cannot pass.
 | A covered divider is grabbed | `armTiledBorderResize`: the `paneOver` check cut | `TestSharedBorderPressInsideAZoomedPane` ("the panes moved under the zoomed pane"). The test runs in BSP: in master-stack a resize under a zoom is not recorded, and the retile at the end of the zoom hides it | **caught** |
 | A click records a fixed width | `handleMouseRelease`: the width check on the scrolling capture cut | `TestScrollingDividerClickKeepsAProportionalColumn` ("the first column is 48 columns wide after the client grew, want 60") | **caught** |
 
+
 ## Pane labels (display_panes)
 
 The tests are in `pane_labels_test.go`. They read each label's block glyphs
@@ -1715,17 +1716,41 @@ Inheritance is off, so the folder has one way to be chosen.
 `TestEmptyWorkspaceOpensOnePaneForTwoClients` switches one of two attached
 clients and counts one pane. `TestEmptyWorkspacePaneSettingReloads` switches
 with the setting off (no pane), turns it on in the file and switches again
-(one pane). Every count waits 1.5 s after it first matches and counts again.
+(one pane). Every count waits until the client that took the keys reports
+no pane request in flight (`run-command GetSessionInfo`, `pane_requests`), then
+counts again. A request clears when a sync brings its pane, so the daemon has
+made every pane the client asked for. The two client test asks each client.
+The rows below were run again on the reviewed tree, and each fails as listed.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The released behaviour | build origin/main (`a596a20b`) with this branch's e2e directory | all three ("workspace 2 has 0 panes, want 1", "no switch ... opened a pane after the reload") | **caught** |
 | The switch does not open a pane | `SwitchToWorkspace`: the `openPaneOnEmptyWorkspace` call cut | all three | **caught** |
 | The daemon ignores the source pane | `handleExecuteCommand`: the `session.cwdFrom(payload.CwdFrom)` line cut | `TestEmptyWorkspaceOpensAPane` (the pane is in `start`, want `elsewhere`) | **caught** |
-| A move that brings its pane also gets one | `openPaneOnEmptyWorkspace`: the loop that returns on a workspace with panes cut | `TestEmptyWorkspaceOpensAPane` ("move_and_follow to workspace 7: workspace 7 has 2 panes") | **caught** |
+| A move that brings its pane also gets one | `openPaneOnEmptyWorkspace`: the loop that returns on a workspace with panes cut | `TestEmptyWorkspaceOpensAPane` ("move_and_follow to workspace 7: workspace 7 has 2 panes"), `TestEmptyWorkspaceFastSwitches` ("workspace 1 has 2 panes") | **caught** |
 | A script switch opens a pane | `OS.SwitchWorkspace` (tape and run-command): back to `SwitchToWorkspace` | `TestEmptyWorkspaceOpensAPane` ("run-command SwitchWorkspace: workspace 4 has 1 panes") | **caught** |
 | Every client that follows a switch opens a pane | injected: `ApplyStateSyncFrom` calls `openPaneOnEmptyWorkspace` after it adopts the workspace | `TestEmptyWorkspaceOpensAPane` ("tuios xpanes: workspace 2 has 3 panes"), `TestEmptyWorkspaceOpensOnePaneForTwoClients` ("workspace 2 has 2 panes") | **caught** |
 
 Not covered end to end: a client attached to a session on another machine,
 a session without a daemon (the pane starts in the folder of the source
 pane's shell, read by this client), and the settings page row.
+
+### Review fixes: fast switches
+
+`TestEmptyWorkspaceFastSwitches` sends Alt+2 Alt+1, then Alt+2 Alt+1 Alt+2,
+then Alt+2 Alt+3, each as one write. `TUIOS_E2E_HOLD_PANE` makes the daemon
+hold each pane request for a second, so the pushes the later keys make queue
+behind it. Once no request is in flight it checks the workspace the session
+and the client show (1, 2, 3) and the panes on each workspace (one each).
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The pane counts as a focus move | `AddDaemonWindowWith`: the `s.focusNeutral = true` line cut | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+1: the session shows workspace 2, want 1") | **caught** |
+| The daemon focuses the pane and moves the session to it | `handleExecuteCommand`: `FocusIfShown: true` changed to `Focus: true` | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+1: the session shows workspace 2, want 1") | **caught** |
+| A switch back asks for a second pane | `openPaneOnEmptyWorkspace`: the `paneRequests` check cut | `TestEmptyWorkspaceFastSwitches` ("Alt+2 Alt+1 Alt+2: workspace 2 has 2 panes, want 1") | **caught** |
+| The request holds back the client's pushes | `openPaneOnEmptyWorkspace`: `m.daemonWindowIntent = true` put back after the request | none: `TestEmptyWorkspaceFastSwitches` passes. With the pane focus neutral, the session still ends on workspace 1 | **not caught** |
+| The build before the review | `fe57ce01` | none: it has no `TUIOS_E2E_HOLD_PANE`, so its daemon answers before the next key, and it has no `pane_requests` | **not caught** |
+
+Not covered end to end: the version check (`EmptyWorkspacePanes` in the
+welcome) against a daemon from before this change, and a switch from a
+scratch terminal.

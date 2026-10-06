@@ -1128,6 +1128,10 @@ type Session struct {
 	// counts as a focus move even when the focus it names is the one already
 	// held: the verb is a later intent than any push in flight.
 	focusIntent bool
+	// focusNeutral is set by a mutation inside mutateState that must not
+	// count as a focus move, so a stale push still keeps its own focus. Only
+	// a FocusIfShown window sets it. See ExecuteCommandPayload.FocusIfShown.
+	focusNeutral bool
 
 	// stateDirty is set by every change to the session's structure and consumed
 	// by the resurrection saver, which is how a new window reaches disk in a
@@ -1471,12 +1475,13 @@ func (s *Session) windowCwd(id string) string {
 }
 
 // cwdFrom is the directory a new window named by ExecuteCommandPayload.CwdFrom
-// starts in: the window's own, else the session's start directory. A window
+// starts in: the window's own, else the session's start directory. An empty
+// id, from a switch that left no pane, is the start directory too. A window
 // whose process runs on another machine gives the start directory, since
 // its paths mean nothing here. It does not fall back to the focused pane,
 // which on the workspace the client just switched to is no pane at all.
 func (s *Session) cwdFrom(id string) string {
-	if win, ok := findWindowState(s.GetState(), id); ok && win.Host == "" {
+	if win, ok := findWindowState(s.GetState(), id); id != "" && ok && win.Host == "" {
 		if cwd := s.windowCwd(id); cwd != "" {
 			return cwd
 		}
@@ -2703,9 +2708,9 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 
 	before := snapshotLifecycle(s.state)
 	focusBefore := focusViewOf(s.state)
-	s.focusIntent = false
+	s.focusIntent, s.focusNeutral = false, false
 	if err := fn(s.state); err != nil {
-		s.focusIntent = false
+		s.focusIntent, s.focusNeutral = false, false
 		return nil, err
 	}
 	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
@@ -2717,10 +2722,10 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	// this point is reconciled by UpdateState rather than winning by arriving
 	// last.
 	s.state.Version++
-	if s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state)) {
+	if !s.focusNeutral && (s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state))) {
 		s.focusMovedVersion = s.state.Version
 	}
-	s.focusIntent = false
+	s.focusIntent, s.focusNeutral = false, false
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
 	return s.snapshotStateLocked(), nil

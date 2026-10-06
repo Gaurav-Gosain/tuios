@@ -198,6 +198,8 @@ type TUIClient struct {
 	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
 	// WatchDir.
 	dirWatchSupported bool
+	// emptyWorkspacePanes says the daemon's welcome set EmptyWorkspacePanes.
+	emptyWorkspacePanes atomic.Bool
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
 	// multiClientMu like the other push handlers.
 	dirChangedHandler func(dir string)
@@ -397,6 +399,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
 	c.dirWatchSupported = welcome.DirWatch
+	c.emptyWorkspacePanes.Store(welcome.EmptyWorkspacePanes)
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
 	c.requestIDs.Store(welcome.RequestIDs)
 
@@ -1176,14 +1179,22 @@ func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, comm
 
 // SendNewWindowFrom asks for a shell on workspace that starts in the
 // directory of the window cwdFrom, or in the session's start directory
-// when that window has none. Empty cwdFrom gives the default directory.
-// See ExecuteCommandPayload.CwdFrom.
+// when that window has none. Empty cwdFrom gives the start directory too.
+// The window takes the focus only if the session still shows workspace.
+// See ExecuteCommandPayload.CwdFrom and FocusIfShown.
 func (c *TUIClient) SendNewWindowFrom(workspace int, cwdFrom string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
-		CommandType: "NewWindow",
-		Workspace:   workspace,
-		CwdFrom:     cwdFrom,
+		CommandType:  "NewWindow",
+		Workspace:    workspace,
+		CwdFrom:      cwdFrom,
+		FocusIfShown: true,
 	})
+}
+
+// EmptyWorkspacePanes reports whether the daemon takes SendNewWindowFrom.
+// See WelcomePayload.EmptyWorkspacePanes.
+func (c *TUIClient) EmptyWorkspacePanes() bool {
+	return c != nil && c.emptyWorkspacePanes.Load()
 }
 
 // sendNewWindow sends an execute-command payload for this client's session.

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"slices"
+	"time"
+
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -24,7 +27,7 @@ import (
 func (m *OS) SwitchToWorkspace(workspace int) {
 	from := m.CurrentWorkspace
 	var fromPane *terminal.Window
-	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from {
+	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from && !fw.IsScratch {
 		fromPane = fw
 	}
 	m.switchToWorkspace(workspace, -1)
@@ -49,19 +52,34 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		}
 	}
 	if m.IsDaemonSession && m.DaemonClient != nil {
+		// A daemon too old for the request would open the pane on the
+		// workspace the person left, or pull the session over to it.
+		if !m.DaemonClient.EmptyWorkspacePanes() {
+			return
+		}
+		// A pane already asked for and not yet here: one switch back and
+		// forth must not open two.
+		if at, ok := m.paneRequests[workspace]; ok && time.Since(at) < paneRequestTimeout {
+			return
+		}
 		cwdFrom := ""
 		if fromPane != nil {
 			cwdFrom = fromPane.ID
 		}
-		// The workspace is named, not left to the daemon's current one: the
-		// switch's state push and this request are separate messages.
+		// The switch's state push went out in switchToWorkspace, before this.
+		// The request names the workspace and asks for no focus move, so the
+		// pane cannot pull the session back to it after a later switch. It
+		// does not hold back this client's pushes the way addDaemonWindow's
+		// intent does: a push that leaves the pane out is reconciled by the
+		// daemon, and holding one back would lose the next switch.
 		if err := m.DaemonClient.SendNewWindowFrom(workspace, cwdFrom); err != nil {
 			m.LogError("Failed to ask the daemon for a pane on workspace %d: %v", workspace, err)
 			return
 		}
-		// As addDaemonWindow does: the window set is the daemon's until it
-		// answers. See SyncStateToDaemon.
-		m.daemonWindowIntent = true
+		if m.paneRequests == nil {
+			m.paneRequests = make(map[int]time.Time)
+		}
+		m.paneRequests[workspace] = time.Now()
 		return
 	}
 	dir := ""
@@ -69,6 +87,47 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		dir = fromPane.CWD()
 	}
 	m.addLocalWindow(dir, "", nil)
+}
+
+// paneRequestTimeout is how long a request for a pane on an empty workspace
+// counts as in flight. A daemon answers in milliseconds, so an entry this old
+// is one whose answer was lost, and the next switch may ask again.
+const paneRequestTimeout = 5 * time.Second
+
+// settlePaneRequests clears the request for each workspace a sync shows a
+// window on. When that workspace is on screen with nothing focused, which is
+// where a push this client sent before the pane arrived leaves it, the pane
+// takes the focus, as the daemon gives it when the workspace is still shown.
+func (m *OS) settlePaneRequests() {
+	for ws := range m.paneRequests {
+		idx := -1
+		for i, w := range m.Windows {
+			if w.Workspace == ws && !w.IsScratch {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			continue
+		}
+		delete(m.paneRequests, ws)
+		if ws == m.CurrentWorkspace && m.FocusedWindow < 0 {
+			m.FocusWindow(idx)
+		}
+	}
+}
+
+// PaneRequestsInFlight lists the workspaces this client asked a pane for that
+// has not arrived, for GetSessionInfo.
+func (m *OS) PaneRequestsInFlight() []int {
+	out := []int{}
+	for ws, at := range m.paneRequests {
+		if time.Since(at) < paneRequestTimeout {
+			out = append(out, ws)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // switchToWorkspace switches to the workspace and resolves focus. A focusTarget

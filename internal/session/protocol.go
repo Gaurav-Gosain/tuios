@@ -288,6 +288,12 @@ type WelcomePayload struct {
 	// tagged request with the same id (see Message.ReqID). A client that does
 	// not see it matches replies by message type, as every client did before.
 	RequestIDs bool `json:"request_ids,omitzero"`
+	// EmptyWorkspacePanes says the daemon reads ExecuteCommandPayload's
+	// Workspace, CwdFrom and FocusIfShown on a NewWindow. A client that does
+	// not see it opens no pane on a switch to an empty workspace: an older
+	// daemon would open it on the workspace the person left, or move the
+	// session to it.
+	EmptyWorkspacePanes bool `json:"empty_workspace_panes,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -709,6 +715,14 @@ type ExecuteCommandPayload struct {
 	// older daemon ignores it and the window starts where it would have
 	// before.
 	CwdFrom string `json:"cwd_from,omitempty"`
+	// FocusIfShown asks for a NewWindow that changes nothing about what the
+	// person sees. The new window takes the focus only when its workspace is
+	// the one the session shows when the daemon adds it. It never changes the
+	// session's current workspace, and it does not count as a focus move, so
+	// a push the client sends after a later switch still wins. A client
+	// sends it for the pane it opens on an empty workspace, and only to a
+	// daemon whose welcome set EmptyWorkspacePanes.
+	FocusIfShown bool `json:"focus_if_shown,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

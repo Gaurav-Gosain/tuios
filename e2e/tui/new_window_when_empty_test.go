@@ -20,9 +20,10 @@ import (
 //     client, or the test itself. The test counts the panes on the workspace
 //     with list-windows, checks that startup opened none, and opens no pane
 //     by key on any workspace it switches to.
-//   - Two clients could each open one and the count could be read before the
-//     second lands. Every count waits noPaneWait after the first pane before it
-//     is read again.
+//   - A second pane could land after the count was read. Every count waits
+//     until the client that took the keys has no pane request in flight
+//     (GetSessionInfo's pane_requests), and is read again after that. The
+//     two client test asks each client.
 //   - The directory could match by accident. The pane the switch comes from
 //     is in "elsewhere", the session starts in "start", the daemon runs in
 //     base/cwd, and inheriting from the focused pane is off, so each folder
@@ -32,8 +33,53 @@ import (
 //
 // The list-windows output at the end is saved under artifactDir.
 
-// noPaneWait is how long a test waits for a pane that must not come.
-const noPaneWait = 1500 * time.Millisecond
+// paneRequestsDone waits until the client that took the last input has no
+// request for a pane in flight. A request is cleared when a sync brings its
+// pane, so after this the daemon has made every pane this client asked for.
+// A build without the field reports none.
+func paneRequestsDone(t *testing.T, base, what string) {
+	t.Helper()
+	var out string
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		var err error
+		out, err = tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
+		if err == nil {
+			var res map[string]any
+			if json.Unmarshal([]byte(out), &res) == nil {
+				info := res
+				if d, ok := res["data"].(map[string]any); ok {
+					info = d
+				}
+				if reqs, _ := info["pane_requests"].([]any); len(reqs) == 0 {
+					return
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("%s: a pane request is still in flight\n%s", what, out)
+}
+
+// clientWorkspace is the workspace the client that took the last input
+// shows, from GetSessionInfo.
+func clientWorkspace(t *testing.T, base string) int {
+	t.Helper()
+	out, err := tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
+	if err != nil {
+		t.Fatalf("GetSessionInfo: %v\n%s", err, out)
+	}
+	var res map[string]any
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("GetSessionInfo json: %v\n%s", err, out)
+	}
+	info := res
+	if d, ok := res["data"].(map[string]any); ok {
+		info = d
+	}
+	ws, _ := info["current_workspace"].(float64)
+	return int(ws)
+}
 
 // cwdOnWorkspace waits for a pane on workspace ws of session sess to report
 // want as its directory, and returns the last directory a pane there
@@ -67,12 +113,12 @@ func cwdOnWorkspace(t *testing.T, base, sess string, ws int, want string) string
 	return got
 }
 
-// exactlyPanesOn waits for workspace ws to hold n panes, waits noPaneWait, and
-// fails when the count moved.
+// exactlyPanesOn waits for workspace ws to hold n panes and for the client to
+// have no pane request in flight, and fails when the count moved.
 func exactlyPanesOn(t *testing.T, term *tuitest.Terminal, base, sess string, ws, n int, what string) {
 	t.Helper()
 	waitPanesOn(t, term, base, sess, ws, n, what)
-	time.Sleep(noPaneWait)
+	paneRequestsDone(t, base, what)
 	if got := panesOn(t, base, sess, ws); got != n {
 		t.Fatalf("ASSERTION: %s: workspace %d has %d panes, want exactly %d\n%s", what, ws, got, n, term.Snapshot())
 	}
@@ -105,7 +151,7 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess, "--cwd", start}})
 	waitBoot(t, term)
 	// Startup is not a switch: the splash stays and no pane opens.
-	time.Sleep(noPaneWait)
+	paneRequestsDone(t, base, "startup")
 	if n := len(xpanesRowsIn(t, base, sess)); n != 0 {
 		t.Fatalf("ASSERTION: startup opened %d panes, want none\n%s", n, term.Snapshot())
 	}
@@ -225,6 +271,11 @@ func TestEmptyWorkspaceOpensOnePaneForTwoClients(t *testing.T) {
 	sendKeys(t, term, tuitest.Alt("2"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to workspace 2 with two clients")
+	// The second client takes an input that changes nothing, so the next
+	// GetSessionInfo goes to it, and it must have asked for nothing.
+	sendKeys(t, second, tuitest.Esc)
+	time.Sleep(insertGuard)
+	exactlyPanesOn(t, second, base, sess, 2, 1, "the second client after the switch")
 	// The second client draws the pane the first one opened.
 	if err := second.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "HOME-42") && !strings.Contains(s.Text(), "Terminal UI Operating System")
@@ -275,4 +326,93 @@ func TestEmptyWorkspacePaneSettingReloads(t *testing.T) {
 	}
 	exactlyPanesOn(t, term, base, sess, ws, 1, "the switch after the reload")
 	alive(t, term, "after the reload")
+}
+
+// TestEmptyWorkspaceFastSwitches sends each sequence as one write, with no
+// wait between the keys, and checks where the session ends and how many
+// panes each workspace holds once no pane request is in flight.
+//
+//   - Alt+2 Alt+1: the pane opens on 2, and the session ends on 1. The pane
+//     must not pull the session back to 2.
+//   - Alt+2 Alt+1 Alt+2: one pane on 2, not one per visit.
+//   - Alt+2 Alt+3: one pane on each, and the session ends on 3.
+//
+// A local daemon can answer before the next key is read, which hides both
+// races. TUIOS_E2E_HOLD_PANE holds each pane request in the daemon for a
+// second, as a slow daemon or a slow link would, so the pushes the later keys
+// make queue behind it.
+func TestEmptyWorkspaceFastSwitches(t *testing.T) {
+	const sess = "nwf"
+	base := t.TempDir()
+	hold := filepath.Join(base, "hold-pane")
+	writeConfig(t, base, "[workspaces]\nnew_window_when_empty = true\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess},
+		env: []string{"TUIOS_E2E_HOLD_PANE=" + hold}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "setup")
+	toWindowMode(t, term)
+
+	// run sends keys as one write while the daemon holds each pane request
+	// for a second, which is far longer than the client takes to read the
+	// keys, so every push the keys make reaches the daemon after the request.
+	run := func(name string, keys ...any) {
+		t.Helper()
+		if err := os.WriteFile(hold, []byte("1000"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sendKeys(t, term, keys...)
+	}
+	check := func(name string, final int, want map[int]int) {
+		t.Helper()
+		began := time.Now()
+		defer func() { t.Logf("%s: the check took %v", name, time.Since(began)) }()
+		for ws, n := range want {
+			waitPanesOn(t, term, base, sess, ws, n, name)
+		}
+		paneRequestsDone(t, base, name)
+		if ws := currentWorkspace(t, base, sess); ws != final {
+			t.Fatalf("ASSERTION: %s: the session shows workspace %d, want %d\n%s", name, ws, final, term.Snapshot())
+		}
+		if ws := clientWorkspace(t, base); ws != final {
+			t.Fatalf("ASSERTION: %s: the client shows workspace %d, want %d\n%s", name, ws, final, term.Snapshot())
+		}
+		for ws, n := range want {
+			if got := panesOn(t, base, sess, ws); got != n {
+				t.Fatalf("ASSERTION: %s: workspace %d has %d panes, want %d\n%s", name, ws, got, n, term.Snapshot())
+			}
+		}
+	}
+	// reset closes the panes a sequence opened and goes back to 1.
+	reset := func(wss ...int) {
+		t.Helper()
+		if err := os.Remove(hold); err != nil {
+			t.Fatal(err)
+		}
+		if currentWorkspace(t, base, sess) != 1 {
+			sendKeys(t, term, tuitest.Alt("1"))
+			waitShowing(t, base, sess, 1, "", term)
+		}
+		for _, ws := range wss {
+			if out, err := tuiosCLI(t, base, "close-workspace", "--session", sess, strconv.Itoa(ws)); err != nil {
+				t.Fatalf("close-workspace %d: %v\n%s", ws, err, out)
+			}
+			waitPanesOn(t, term, base, sess, ws, 0, "reset")
+		}
+	}
+
+	run("Alt+2 Alt+1", tuitest.Alt("2"), tuitest.Alt("1"))
+	check("Alt+2 Alt+1", 1, map[int]int{1: 1, 2: 1})
+	reset(2)
+
+	run("Alt+2 Alt+1 Alt+2", tuitest.Alt("2"), tuitest.Alt("1"), tuitest.Alt("2"))
+	check("Alt+2 Alt+1 Alt+2", 2, map[int]int{1: 1, 2: 1})
+	reset(2)
+
+	run("Alt+2 Alt+3", tuitest.Alt("2"), tuitest.Alt("3"))
+	check("Alt+2 Alt+3", 3, map[int]int{1: 1, 2: 1, 3: 1})
+	_ = os.Remove(hold)
+
+	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
+	alive(t, term, "after the fast switches")
 }

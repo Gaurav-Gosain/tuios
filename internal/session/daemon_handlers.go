@@ -83,6 +83,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		SidebarOps: true,
 		// See Message.ReqID.
 		RequestIDs: true,
+		// See ExecuteCommandPayload.FocusIfShown.
+		EmptyWorkspacePanes: true,
 	})
 }
 
