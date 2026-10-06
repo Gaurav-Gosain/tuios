@@ -2658,3 +2658,104 @@ The `TestLatency*` tests in `internal/terminal`, `internal/input` and
 `TestNovelClusterRunAllocatesBoundedly` and `TestKittyFrameCopiesPayloadOnce`
 hold the budgets. Each fails on the tree before its change. The kitty one
 measures 2.99 times the frame size there.
+
+## 2026-10 frame clock
+
+A guest that animates at the frame rate showed 83 to 88% of its frames at
+max_fps 120, with gaps of 17 ms, and max_fps 240 drew at most 125 frames a
+second of an animating pane. The client ran two clocks. Each pane's coalescer
+signalled on its own, with a fixed 8 ms floor, and every signal composed a
+frame. Bubble Tea wrote frames only on its ticker. A frame composed just
+after a tick waited almost a whole period, and two guest frames could land
+between two ticks while the next period had none. Nine animating panes asked
+for about 1000 composes a second, and the ticker wrote 120 of them.
+
+### The harness
+
+`e2e/tui/perf_frames_test.go` runs a guest (`e2e/tui/framepace`) that draws
+at a fixed rate and logs when each frame was ready. The host side of the
+client's PTY is read without rendering, and every frame end (the end of the
+client's synchronized update) is timestamped as it arrives. Each guest frame
+carries its sequence number, in a tag at the top left for text and in the
+first eight pixel bytes for kitty images, so a host frame is matched to the
+guest frame it shows. It reports frame intervals and guest-to-host latency as
+p50, p95 and p99, the share of guest frames shown, and client and daemon CPU.
+`TUIOS_PERF_PPROF` takes CPU profiles of both over the window, and
+`TUIOS_PERF_OUT` keeps every sample as JSON.
+
+```
+cd e2e/tui && TUIOS_E2E=1 TUIOS_PERF=1 go test -count=1 -v -run TestPerfFrames .
+```
+
+The host is a truecolor terminal (`COLORTERM=truecolor`), as kitty and
+ghostty are. Without it the renderer converts every colour to the 256-colour
+palette, which was a third of the client's CPU in the first profile.
+
+### What changed
+
+- `terminal.SetFrameInterval`: the coalescer floor is one frame at max_fps,
+  not 8 ms.
+- The coalescer and the new frame gate count intervals with the generic cell
+  rate algorithm (`terminal.NextFrameTime`, `terminal.FrameSlack`). A frame up
+  to a quarter of a period early stands for the end of the period. Counted
+  from the moment of the emit, every late Go timer stretched the next interval,
+  and the intervals of a 120 Hz guest came out 9 ms long.
+- `takePaneOutput`: frames for pane output are spaced one period apart for
+  the whole client, and a held frame comes as a `frameDueMsg`. Output that
+  answers a key, a paste, a click or a wheel step is not held.
+- `kickFlush`: `View` sends one value on Bubble Tea's ticker channel when the
+  frame or the cursor changed, so a composed frame is written at once.
+  `TestKickFlushWritesTheFrame` fails on a Bubble Tea release where that no
+  longer works.
+- Every visible pane with output is drawn in each frame. Unfocused panes were
+  drawn on every third pass, which made them uneven once passes were bounded.
+- A pane far behind its output is drawn every two frames, not every 250 ms,
+  and a frame that costs more keeps its own interval.
+
+### Numbers
+
+207x55, one guest unless noted, two interleaved runs of each build at a load
+average of 2 to 5 (other work shared the machine). Base is origin/main at
+582af540.
+
+| Case | base | after |
+|---|---|---|
+| 120 Hz guest, max_fps 120: frames shown | 100, 103 a second | 120, 120 |
+| interval p95 / p99 | 16.9 / 17.4 ms | 9.3 / 9.7 ms |
+| latency p50 | 10.9, 10.7 ms | 8.9, 8.7 ms |
+| 240 Hz guest, max_fps 240: frames shown | 123, 122 | 240, 235 |
+| interval p95 / p99 | 9.5 / 12.2 ms | 5.6 / 6.2 ms |
+| 240 Hz guest, max_fps 120: latency p50 | 8.3, 11.2 ms | 4.5, 4.5 ms |
+| 9 panes at 120 Hz: frames of the first guest | 97, 92 | 116, 116 |
+| interval p99 | 17.7, 25.1 ms | 17.0, 17.2 ms |
+| client CPU | 908, 1012 ms/s | 622, 600 ms/s |
+| flood (`framepace scroll`): frames a second | 18, 43 | 65, 66 |
+| interval p95 | 100.7, 99.2 ms | 17.9, 18.5 ms |
+| 285 MB flood (`yes \| head`): time, max gap | 5.3 to 5.6 s, 101 ms | 5.1 to 5.2 s, 16 to 21 ms |
+| shm frames, 120 and 240 Hz | all shown, p99 9.6 and 5.5 ms | all shown, unchanged |
+
+Typed keys at the default 60 frames a second (`TestPerfInputLatency`, 1, 4 and
+8 panes): p50 16.6 to 16.9 ms before, 11.0 to 16.2 ms after. p95 is 17.2 to
+17.5 ms before and 17.4 to 17.8 ms after, and p99 17.5 to 17.7 ms before and
+17.8 to 20.2 ms after.
+
+`TestFramePacingKeepsTheGuestsRate` and `TestFloodStaysSmooth` assert the
+rates under `TUIOS_E2E_PERF`. `TestMaxFPS240DrawsPastTheOldClamp` measures 63,
+243 and 241.
+
+### What it costs
+
+- A pane flooding past what the client can parse is drawn three times as
+  often, so it is further behind its guest: latency p50 156 to 254 ms against
+  84 to 105 ms. The guest wrote as many lines in the same time.
+- At max_fps 240 a pane streaming kitty graphics composes 240 frames a second
+  instead of 125. Each is the same frame and is not written, but the client
+  takes 344 ms/s of CPU against 206.
+
+### Invariants held
+
+```
+BenchmarkIdleTick-4   0 render/tick   0 work/tick   296 B/op   5 allocs/op
+```
+
+`TestIdleCostStaysLow`: 0 idle wire bytes, 104 ticks, 0 work, 0 renders.
