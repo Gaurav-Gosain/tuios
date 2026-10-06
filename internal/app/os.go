@@ -788,11 +788,6 @@ type OS struct {
 	// client, and syncedFPSet says whether there is one. See SyncStateToDaemon.
 	syncedFP    uint64
 	syncedFPSet bool
-	// personInput is nonzero while the input handler runs for input from the
-	// host terminal: the person's key, click or wheel. A sync sent then is
-	// marked as the person's (SessionState.PushByPerson). A routed send-keys
-	// and a tape run the same handler without it.
-	personInput int
 	// treeSeen keys, by workspace, the BSP tree the session was last known to
 	// hold: the one this client last sent as an op or last took from the
 	// daemon. See layout_tree_sync.go.

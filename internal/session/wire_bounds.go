@@ -118,7 +118,7 @@ func daemonFrameLimit(t MessageType) uint32 {
 		return maxMasterLayoutFrame
 	case MsgSidebarVisibility:
 		return maxSidebarVisibilityFrame
-	case MsgClientActivity:
+	case MsgClientActivity, MsgSessionUsed:
 		return maxClientActivityFrame
 	}
 	return maxFrameBytes

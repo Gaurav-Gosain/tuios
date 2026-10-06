@@ -1851,6 +1851,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleMasterLayout(cs, msg)
 	case MsgSidebarVisibility:
 		return d.handleSidebarVisibility(cs, msg)
+	case MsgSessionUsed:
+		return d.handleSessionUsed(cs)
 	case MsgSubscribePTY:
 		return d.handleSubscribePTY(cs, msg)
 	case MsgUnsubscribePTY:

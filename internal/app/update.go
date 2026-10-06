@@ -1611,12 +1611,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if handler == nil {
 			return m, tea.Batch(shakeCmd, m.armScreensaver())
 		}
-		// Every sync the handler sends is the person's doing. A routed
-		// send-keys and a tape run the same handler from elsewhere, and
-		// their syncs are not marked. See SessionState.PushByPerson.
-		m.personInput++
 		newModel, cmd := handler(m.fixHostKeyMods(msg), m)
-		m.personInput--
 		if shakeCmd != nil {
 			cmd = tea.Batch(cmd, shakeCmd)
 		}
@@ -2704,6 +2699,10 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	input := isActivityInput(msg)
 	if input {
 		m.lastActivity = m.msgClock
+		// Input from this terminal is the person using the session. Keys a
+		// routed send-keys or a tape presses arrive as other messages and
+		// are not reported. See session.MsgSessionUsed.
+		m.DaemonClient.ReportUsed(m.msgClock)
 	}
 	// The policy is unknown against a daemon that does not name it in the
 	// attach reply, and during a session switch until the reply lands. Such

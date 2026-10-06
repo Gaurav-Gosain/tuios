@@ -71,8 +71,9 @@ func TestBareAttachIgnoresAgentWindowsAndRoutedCommands(t *testing.T) {
 			t.Fatalf("create %s: %v: %s", name, err, out)
 		}
 	}
-	// A client that sits on watched and is never typed in.
-	attachIn(t, base, "watched", startOpts{})
+	// A client that sits on watched and is never typed in. attachIn would
+	// press Alt+Esc in it, which is the person using watched.
+	startIn(t, base, startOpts{args: []string{"attach", "watched"}})
 	clientShows(t, base, "watched")
 
 	// The agent: windows opened from outside every client.
@@ -102,15 +103,55 @@ func TestBareAttachIgnoresAgentWindowsAndRoutedCommands(t *testing.T) {
 		t.Fatalf("select-workspace in watched: %v: %s", err, out)
 	}
 	waitWorkspace(t, base, "watched", 2)
-	// Keys a script sends: they go through the client's own key handling,
-	// as the person's do, and the push they make must not count as use.
-	if out, err := tuiosCLI(t, base, "send-keys", "-s", "watched", "alt+3"); err != nil {
-		t.Fatalf("send-keys in watched: %v: %s", err, out)
-	}
-	waitWorkspace(t, base, "watched", 3)
 
 	if got := bareAttachLandsOn(t, base); got != "person" {
 		t.Fatalf("ASSERTION: a bare attach landed on %q, want \"person\", the session typed in last. An agent's windows or a routed command took the pick", got)
+	}
+}
+
+// TestBareAttachIgnoresKeysSentToATerminalModeClient is the second review's
+// case. A client sits on "watched" in terminal mode, so keys a script sends
+// to it reach its pane as typed input, the same message the person's typing
+// is. The person types in "person", then tuios send-keys types into
+// "watched" through that client. A bare attach must land on "person".
+//
+// The positive half: the keys did reach the pane in "watched", so they were
+// typed there after the person's typing.
+func TestBareAttachIgnoresKeysSentToATerminalModeClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, name := range []string{"person", "watched"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v: %s", name, err, out)
+		}
+	}
+	// A client boots in terminal mode. No key is pressed in it: attachIn
+	// would press Alt+Esc, which is the person using watched.
+	watcher := startIn(t, base, startOpts{args: []string{"attach", "watched"}})
+	clientShows(t, base, "watched")
+
+	typeInSession(t, base, "person", 0)
+
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "watched", "--raw", "echo sent-by-script-done"); err != nil {
+		t.Fatalf("send-keys to watched: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "watched", "Enter"); err != nil {
+		t.Fatalf("send-keys Enter to watched: %v: %s", err, out)
+	}
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, _ := tuiosOut(base, "capture-pane", "-s", "watched")
+		if strings.Contains(out, "\nsent-by-script-done") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the keys sent to watched never ran in its pane: the fixture does not hold\n%s\n%s", out, watcher.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if got := bareAttachLandsOn(t, base); got != "person" {
+		t.Fatalf("ASSERTION: a bare attach landed on %q, want \"person\", the session typed in last. Keys a script sent through a client took the pick", got)
 	}
 }
 

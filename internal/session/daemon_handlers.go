@@ -85,6 +85,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		RequestIDs: true,
 		// See ExecuteCommandPayload.FocusIfShown.
 		EmptyWorkspacePanes: true,
+		// See session_used.go.
+		SessionUsed: true,
 	})
 }
 
@@ -589,14 +591,10 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 			// it was right by accident and would have gone stale the moment
 			// those redundant syncs stopped being sent.
 			//
-			// It is the person using the session only from a client that
-			// may act as the person: a client an agent runs in a pane is
-			// not, and its keys count as activity alone.
-			if d.mayActAsHuman(cs) {
-				session.TouchUsed()
-			} else {
-				session.TouchActive()
-			}
+			// It is activity, not the person's use: a routed send-keys, a
+			// tape and a focus report reach the pane this way too. The
+			// person's use comes as MsgSessionUsed. See session_used.go.
+			session.TouchActive()
 			cs.lastInput.Store(time.Now().UnixNano())
 		} else {
 			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
@@ -869,14 +867,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// is this client's own, and it is what the panes' emulators answer OSC 11
 	// and OSC 10 with. See report_colors.go.
 	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
-	human := d.mayActAsHuman(cs)
-	// Read before the merge, which drops it. A push the client made for a
-	// routed command or a tape does not carry it. See SessionState.PushByPerson.
-	byPerson := state.PushByPerson && human
-	accepted, behind := session.updateStateFrom(&state, human)
-	if byPerson {
-		session.TouchUsed()
-	}
+	accepted, behind := session.updateStateFrom(&state, d.mayActAsHuman(cs))
 	session.applyReportColors(reportBg, reportFg, reportPal)
 
 	// The merged state is a full copy of the session's, retitled from every

@@ -544,12 +544,6 @@ type SessionState struct {
 	// them. See PushSeen.
 	PushOrigin string `json:"-"`
 	PushSeq    uint64 `json:"-"`
-	// PushByPerson says the client sent this push because of the person's own
-	// key, click or wheel, and not because of a routed command, a tape or a
-	// peer's state. The daemon takes it as the person using the session (see
-	// Session.TouchUsed) only from a client that may act as the person, and
-	// drops it. An older client never sets it.
-	PushByPerson bool `json:"-"`
 	// PushSeen is, for each client connection attached to the session, the
 	// newest of its pushes the daemon had merged when it handed this state out.
 	// It is what lets a client tell a broadcast built before its own last push
@@ -1205,15 +1199,17 @@ type Session struct {
 	// goroutine on every keystroke and read from whichever goroutine is
 	// answering a session listing.
 	lastActive time.Time
-	// lastUsed is when the person last used this session: typed into one of
-	// its panes, or changed it from an attached client by key or mouse. It is
-	// what a bare attach picks by. lastActive is not, because a window an
-	// agent or a script opens bumps it, so an orchestrator opening windows in
-	// one session would pull the person's attach away from the session they
+	// lastUsed is when the person last used this session: a key, a click or a
+	// wheel turn at the terminal of a client attached to it (see
+	// session_used.go). It is what a bare attach picks by. lastActive is not,
+	// because a window an agent opens and keys a script sends bump it, so an
+	// orchestrator would pull the person's attach away from the session they
 	// were typing in. Zero until the person uses the session. activeMu
 	// guards it too.
 	lastUsed time.Time
-	activeMu sync.Mutex
+	// usedMarked is when TouchUsed last marked the session for a save.
+	usedMarked time.Time
+	activeMu   sync.Mutex
 
 	// Configuration
 	config *SessionConfig
@@ -2096,16 +2092,25 @@ func (s *Session) LastActive() time.Time {
 	return s.lastActive
 }
 
-// TouchUsed records that the person used the session now. Only input the
-// person makes calls it: keys typed into a pane from a client that is not in
-// a pane, and a state push such a client marks as made by the person's key or
-// mouse. A window spawn, a routed command, a tape and a restore do not. It
-// bumps LastActive too.
+// TouchUsed records that the person used the session now. Only a
+// MsgSessionUsed report from a client that may act as the person calls it
+// (see session_used.go). A window spawn, a routed command, a tape and a
+// restore do not. It bumps LastActive too.
+//
+// A use changes nothing the saver watches, so it marks the session for a
+// save itself, at most once per usedSaveGap.
 func (s *Session) TouchUsed() {
 	now := time.Now()
 	s.activeMu.Lock()
 	s.lastUsed, s.lastActive = now, now
+	save := now.Sub(s.usedMarked) >= usedSaveGap
+	if save {
+		s.usedMarked = now
+	}
 	s.activeMu.Unlock()
+	if save {
+		s.stateDirty.Store(true)
+	}
 }
 
 // LastUsed is when the person last used the session, zero when never.
@@ -2683,7 +2688,6 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	origin := state.PushOrigin
 	s.notePushLocked(origin, state.PushSeq)
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
-	state.PushByPerson = false
 
 	accepted = true
 	prev := s.state

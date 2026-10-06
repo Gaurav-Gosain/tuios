@@ -359,6 +359,7 @@ var messageTypeNames = [...]string{
 	MsgClientGraphics:    "ClientGraphics",
 	MsgMasterLayout:      "MasterLayout",
 	MsgSidebarVisibility: "SidebarVisibility",
+	MsgSessionUsed:       "SessionUsed",
 	MsgClientActivity:    "ClientActivity",
 	MsgWatchDir:          "WatchDir",
 	MsgDirChanged:        "DirChanged",

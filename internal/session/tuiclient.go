@@ -177,6 +177,12 @@ type TUIClient struct {
 	// sidebarOps says the daemon's welcome offered MsgSidebarVisibility. See
 	// sidebar_visibility.go.
 	sidebarOps atomic.Bool
+	// sessionUsed says the daemon's welcome offered MsgSessionUsed, and
+	// usedMu, usedAt and usedSession throttle it. See session_used.go.
+	sessionUsed atomic.Bool
+	usedMu      sync.Mutex
+	usedAt      time.Time
+	usedSession string
 	// daemonRefusesAnimation says the daemon's welcome offered
 	// KittyAnimationRefusal. See DaemonRefusesKittyAnimation.
 	daemonRefusesAnimation atomic.Bool
@@ -395,6 +401,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.treeOps.Store(welcome.LayoutTreeOps)
 	c.masterOps.Store(welcome.MasterLayoutOps)
 	c.sidebarOps.Store(welcome.SidebarOps && !legacySidebar())
+	c.sessionUsed.Store(welcome.SessionUsed)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize

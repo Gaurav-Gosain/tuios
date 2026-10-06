@@ -156,6 +156,13 @@ const (
 	// as an op the daemon applies and versions. A client sends it only to a
 	// daemon whose welcome set SidebarOps. See sidebar_visibility.go.
 	MsgSidebarVisibility
+	// MsgSessionUsed says the person used the client's session: a key, a
+	// paste, a click, a drag or a wheel turn from the terminal the client
+	// runs in. Keys a script sends through the client (send-keys, a tape)
+	// are not reported. A bare attach picks the session used last. A client
+	// sends it only to a daemon whose welcome set SessionUsed. See
+	// session_used.go.
+	MsgSessionUsed
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -294,6 +301,10 @@ type WelcomePayload struct {
 	// daemon would open it on the workspace the person left, or move the
 	// session to it.
 	EmptyWorkspacePanes bool `json:"empty_workspace_panes,omitzero"`
+	// SessionUsed says the daemon reads MsgSessionUsed. A client that does
+	// not see it sends none, and an older daemon picks a bare attach by
+	// activity alone.
+	SessionUsed bool `json:"session_used,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
