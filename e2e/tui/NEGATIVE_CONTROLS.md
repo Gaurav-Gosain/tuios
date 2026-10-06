@@ -1673,3 +1673,22 @@ is gone, so the order is the same on every run.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The wait reads only the PTY | `verbPopup`: `waitPopupExit` given `nil` in place of the status kept by `onExit` | `TestPopupWaitAfterTheDaemonClosedIt` ("exit_code:-1 ... want exit_code 4") | **caught** |
+
+## A session's start directory across a restart (#478)
+
+`TestRestoredSessionKeepsItsStartDirectory` makes a session with
+`tuios new --cwd`, runs `tuios kill-server`, waits for the new daemon to
+restore the session, and opens a window on an empty workspace with
+`tuios new-window --workspace 3`. Inheritance is off in the config, and the
+only pane moves out of the project first, so the start directory is the only
+way the window can land in the project. The daemon runs in `base/cwd`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`a596a20b`) with this branch's e2e directory | `TestRestoredSessionKeepsItsStartDirectory` (the window is in `base/cwd`) | **caught** |
+| The save leaves the directory out | `ResurrectionState`: the `state.StartDir = s.StartDir()` line cut | `TestRestoredSessionKeepsItsStartDirectory` | **caught** |
+| The restore does not set it | `restoreSessionOffers`: the `sess.SetStartDir(state.StartDir)` call cut | `TestRestoredSessionKeepsItsStartDirectory` | **caught** |
+
+Not covered end to end: a start directory removed before the restore. The
+`checkWindowCwd` call keeps it unset, and a PTY in a missing directory starts
+in the daemon's directory anyway, so the two cases look the same from outside.

@@ -277,7 +277,7 @@ to the session of that folder. Its windows start in the folder.
 - [`tuios switch-session`](CLI_REFERENCE.md#tuios-switch-session) switches
   the client that shows the popup. Nothing is nested.
 - `--create` makes the session when it is missing. `--cwd` sets the folder
-  of its windows.
+  of its windows. The session keeps this folder after a daemon restart.
 - With `startup.tiled = true`, the new session is tiled. tuios reads this
   setting from the config of the client that switches. This is also true
   for a session on a host.

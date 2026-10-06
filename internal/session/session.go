@@ -369,6 +369,14 @@ type SessionState struct {
 	// so a client sync that omits it must not clear it. False is what every
 	// older client and every state file written before this reads back as.
 	Global bool `json:"global,omitempty"`
+	// StartDir is the session's start directory (see Session.startDir), as
+	// it was when the state was saved. ResurrectionState stamps it, and a
+	// restore sets it again, so a session made with tuios new --cwd keeps
+	// its directory across a daemon restart. The in-memory field stays the
+	// authority: a client push that carries this changes nothing. Empty in
+	// state written before it existed, and such a session starts its new
+	// windows where the daemon did.
+	StartDir string `json:"start_dir,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
 	// omitted when nil, which is what every older client and state file reads.
@@ -1032,8 +1040,8 @@ type Session struct {
 	// from. tuios new --cwd and the new-session verb's cwd set it, so every
 	// window of a session made for a project starts in the project, not in
 	// whatever directory the daemon was started from. Empty keeps the
-	// daemon's own directory. Held in memory only: after a restart each
-	// restored window keeps its own directory, and a new one inherits it.
+	// daemon's own directory. Saved as SessionState.StartDir and set again
+	// on a restore, so it survives a daemon restart.
 	startDir atomic.Pointer[string]
 
 	// PTYs managed by this session
@@ -2452,6 +2460,7 @@ func (s *Session) ResurrectionState() *SessionState {
 		s.refreshWorktree(state.Windows[0].Cwd)
 	}
 	state.SessionID = s.ID
+	state.StartDir = s.StartDir()
 	return state
 }
 

@@ -127,6 +127,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		return nil, nil, err
 	}
 
+	// The start directory comes back before any window is spawned, through
+	// the check the create paths use: a folder removed since the save
+	// leaves the daemon's directory in place, as a create would.
+	if state.StartDir != "" && checkWindowCwd(state.StartDir) == nil {
+		sess.SetStartDir(state.StartDir)
+	}
+
 	sessionID := sess.ID
 	onExit := func(ptyID string) {
 		d.notifyPTYClosed(sessionID, ptyID)
