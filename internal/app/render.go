@@ -962,6 +962,9 @@ func (m *OS) chargeRenderCost(d time.Duration) {
 
 func (m *OS) View() tea.View {
 	var view tea.View
+	// composed is set when this call composed a frame that differs from the
+	// last one.
+	var composed bool
 
 	// The last frame of a remote client that lost its session or its daemon.
 	// It leaves the alternate screen so the reason stays on the user's terminal
@@ -1018,16 +1021,12 @@ func (m *OS) View() tea.View {
 			// screen that never changed.
 			return m.crashView()
 		}
-		// A frame to flush: the frame ticker runs at the frame rate again,
-		// and this frame goes out now rather than at its next tick. A frame
-		// equal to the last one has nothing to write, which is every frame a
-		// pane streaming kitty graphics composes.
-		changed := content != m.cachedViewContent
+		// A frame to flush: the frame ticker runs at the frame rate again.
+		// It goes out now rather than at its next tick, unless it equals the
+		// last one; see below.
+		composed = content != m.cachedViewContent
 		m.cachedViewContent = content
 		m.noteFrame()
-		if changed {
-			m.kickFlush()
-		}
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather
 		// than on the motion path so a frame composed for any other reason (a
@@ -1061,6 +1060,15 @@ func (m *OS) View() tea.View {
 	// The title of the terminal tuios runs in, when a tool set one through
 	// herdr's client.window_title.set. Empty leaves the title alone.
 	view.WindowTitle = m.ClientTitle
+
+	// A composed frame goes out now rather than at the next tick. One equal
+	// to the last, with the cursor where it was, has nothing to write: that
+	// is every frame a pane streaming kitty graphics composes, and asking
+	// for it cost a timer and a wakeup each.
+	if cur := cursorState(view.Cursor); composed || cur != m.frameRate.lastCursor {
+		m.frameRate.lastCursor = cur
+		m.kickFlush()
+	}
 
 	// Flush graphics AFTER setting view content. bubbletea will render the
 	// text first, then we write graphics. This keeps them in the same frame

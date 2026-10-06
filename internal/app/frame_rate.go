@@ -46,6 +46,16 @@ type frameRate struct {
 	// with output: a key, a paste, a click or a wheel step. See
 	// paneFrameWait.
 	lastAnswered time.Time
+	// lastCursor is the cursor of the last frame kickFlush was asked for.
+	lastCursor tea.Cursor
+}
+
+// cursorState is a cursor as a value, the zero value for none.
+func cursorState(c *tea.Cursor) tea.Cursor {
+	if c == nil {
+		return tea.Cursor{}
+	}
+	return *c
 }
 
 // answerWindow is how long after a key, paste, click or wheel step pane output
