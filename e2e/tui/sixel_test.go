@@ -586,26 +586,34 @@ print("DA1=" + r.decode(errors="replace").replace("\x1b[?", "").rstrip("c") + "=
 }
 
 // TestSixelFallbacks covers the hosts that do not draw sixel. A kitty host is
-// sent the picture as a kitty image, cropped with a source rectangle; a host
-// with neither is shown a box, and never a sixel or raw marker text. In both
-// the pane is told sixel only when the picture will be shown.
+// sent the picture as a kitty image, cropped with a source rectangle. A host
+// with neither is shown the picture as block glyphs by default, and a box
+// with appearance.image_symbols off; it is never sent a sixel or raw marker
+// text. The pane is told sixel only when the picture will be shown.
 func TestSixelFallbacks(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		sixel, kitty bool
 		env          string
+		symbols      string
 	}{
 		// The harness's own terminal answers DA1 and the kitty query before
 		// the stand-in does, so the hosts without sixel are pinned by the
 		// override the probe itself honours.
-		{"sixel", true, false, "TUIOS_KITTY_GRAPHICS=0"},
-		{"kitty", false, true, "TUIOS_SIXEL_GRAPHICS=0"},
-		{"plain", false, false, "TUIOS_SIXEL_GRAPHICS=0 TUIOS_KITTY_GRAPHICS=0"},
+		{"sixel", true, false, "TUIOS_KITTY_GRAPHICS=0", ""},
+		{"kitty", false, true, "TUIOS_SIXEL_GRAPHICS=0", ""},
+		{"plain", false, false, "TUIOS_SIXEL_GRAPHICS=0 TUIOS_KITTY_GRAPHICS=0", ""},
+		{"plain-off", false, false, "TUIOS_SIXEL_GRAPHICS=0 TUIOS_KITTY_GRAPHICS=0", "off"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			host := newSixelHost(tc.sixel, tc.kitty)
-			term, base := start(t, startOpts{cols: 120, rows: 40, out: host,
-				env: append([]string{"TUIOS_CELL_SIZE=10x20"}, strings.Fields(tc.env)...)})
+			env := append([]string{"TUIOS_CELL_SIZE=10x20"}, strings.Fields(tc.env)...)
+			if tc.symbols != "" {
+				home := t.TempDir()
+				writeConfigIn(t, home, "[appearance]\nimage_symbols = \""+tc.symbols+"\"\n")
+				env = append(env, "XDG_CONFIG_HOME="+home)
+			}
+			term, base := start(t, startOpts{cols: 120, rows: 40, out: host, env: env})
 			_ = base
 			host.answer(term)
 			waitBoot(t, term)
@@ -616,13 +624,13 @@ func TestSixelFallbacks(t *testing.T) {
 			dir := t.TempDir()
 			da1 := paneDA1(t, term, dir)
 			told := strings.Contains(";"+da1+";", ";4;")
-			if want := tc.sixel || tc.kitty; told != want {
+			if want := tc.name != "plain-off"; told != want {
 				t.Errorf("pane DA1 = %q: sixel listed %v, want %v", da1, told, want)
 			}
 
 			f := writeSixelFixture(t, dir, 140, 4)
 			before := len(host.bytes())
-			showFixture(t, term, f, "IMGTOP")
+			origin := showFixture(t, term, f, "IMGTOP")
 			out := host.bytes()[before:]
 			switch tc.name {
 			case "sixel":
@@ -640,13 +648,27 @@ func TestSixelFallbacks(t *testing.T) {
 				if place == nil || string(place[2]) != "118" || string(place[1]) != "1180" {
 					t.Errorf("kitty placement %q, want the pane's 118 columns (1180 px) of the image", place)
 				}
-			case "plain":
+			case "plain", "plain-off":
 				if sixelDCS.Match(out) || bytes.Contains(out, []byte("\x1b_G")) {
 					t.Errorf("a host with no graphics was sent graphics")
 				}
 				text := term.Screen().Text()
-				if !strings.Contains(text, "┌") || !strings.Contains(text, "image") {
-					t.Errorf("no placeholder box where the image is\n%s", text)
+				box := strings.Contains(text, "┌─") && strings.Contains(text, "└─")
+				// The picture's cells are painted: their colours are
+				// checked by TestImageSymbolsOnAHostWithoutGraphics.
+				painted := 0
+				for r := range f.rows {
+					for c := range 8 {
+						if term.Screen().Cell(origin.X+c, origin.Y+r).Bg.Kind != tuitest.ColorDefault {
+							painted++
+						}
+					}
+				}
+				if tc.name == "plain-off" && (!box || painted > 0) {
+					t.Errorf("image_symbols off: want the placeholder box and no picture, got box %v and %d painted cells\n%s", box, painted, text)
+				}
+				if tc.name == "plain" && (box || painted != 8*f.rows) {
+					t.Errorf("default: want the picture drawn as cells, got box %v and %d of %d painted cells\n%s", box, painted, 8*f.rows, text)
 				}
 			}
 			if bytes.Contains(host.bytes(), []byte(vt.SixelMarkerLead)) {

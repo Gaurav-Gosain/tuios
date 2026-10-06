@@ -287,6 +287,7 @@ type AppearanceConfig struct {
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
+	ImageSymbols             string                  `toml:"image_symbols"`                // Draw pane images as block glyphs on a terminal without graphics: auto, octant, sextant, quadrant, half, off (default: auto)
 	NewWindowInheritCwd      *bool                   `toml:"new_window_inherit_cwd"`       // A new window starts in the focused pane's working directory (default: true)
 	NewWindowFollowSSH       *bool                   `toml:"new_window_follow_ssh"`        // A split or new window of a pane that runs ssh runs the same ssh (default: false)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
@@ -842,6 +843,7 @@ func DefaultConfig() *UserConfig {
 			PreferredShell:           "",
 			ClickToType:              ClickToTypeDouble,
 			KittyPlaceholders:        KittyPlaceholdersAuto,
+			ImageSymbols:             ImageSymbolsAuto,
 			AutoEnterTerminalOnFocus: AutoEnterTerminalOff,
 			Glyphs:                   theme.GlyphSetNone,
 			Motion:                   MotionFull,
@@ -2425,6 +2427,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	switch cfg.Appearance.KittyPlaceholders {
 	case KittyPlaceholdersOn, KittyPlaceholdersOff, KittyPlaceholdersAuto:
 		s.KittyPlaceholders = cfg.Appearance.KittyPlaceholders
+	}
+
+	// ImageSymbols takes one of its words; anything else is the default.
+	if slices.Contains(ImageSymbolModes, cfg.Appearance.ImageSymbols) {
+		s.ImageSymbols = cfg.Appearance.ImageSymbols
 	}
 
 	// NewWindowInheritCwd defaults to true. A pointer so an explicit false in

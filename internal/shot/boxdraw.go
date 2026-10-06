@@ -1,6 +1,10 @@
 package shot
 
-import "math"
+import (
+	"math"
+
+	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
+)
 
 // Procedural geometry for the glyph ranges a font cannot be trusted with.
 // Terminals stretch box drawing to fill the whole cell; fonts do not, which
@@ -49,6 +53,11 @@ func IsProcedural(r rune) bool {
 		return true
 	case r >= 0xE0B0 && r <= 0xE0B7:
 		return true
+	case r >= 0x1CD00 && r <= 0x1FBFF:
+		// Sextants, octants and the quarter blocks beside them, which
+		// tuios draws a pane's image with on a host without graphics.
+		_, _, _, ok := mosaic.Shape(r)
+		return ok
 	case r == 0x21B5:
 		// The Enter key in tuios's own key hints. Go Mono, the embedded
 		// fallback, has no glyph for it, nor do common coding fonts, so a
@@ -91,6 +100,8 @@ func proceduralPaths(r rune, x, y, w, h float64) ([]gpath, bool) {
 		b.powerline(r)
 	case r == 0x21B5:
 		b.returnArrow()
+	default:
+		b.mosaicBlock(r)
 	}
 	for i := range b.paths {
 		ops := b.paths[i].ops
@@ -601,6 +612,24 @@ func (b *glyphBuilder) blockElement(r rune) {
 		if q&qLR != 0 {
 			b.rect(w/2, h/2, w, h)
 		}
+	}
+}
+
+// mosaicBlock fills the sub-cells of a sextant or octant glyph. Each edge is
+// rounded to a whole pixel from its absolute position, so the sub-cells of
+// one glyph tile the cell with no gap and no overlap.
+func (b *glyphBuilder) mosaicBlock(r rune) {
+	gx, gy, mask, ok := mosaic.Shape(r)
+	if !ok {
+		return
+	}
+	for i := range gx * gy {
+		if mask&(1<<i) == 0 {
+			continue
+		}
+		col, row := i%gx, i/gx
+		b.rect(math.Round(b.w*float64(col)/float64(gx)), math.Round(b.h*float64(row)/float64(gy)),
+			math.Round(b.w*float64(col+1)/float64(gx)), math.Round(b.h*float64(row+1)/float64(gy)))
 	}
 }
 

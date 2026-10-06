@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -565,6 +566,14 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 				blankCellKeepGround(c)
 				continue
 			}
+			if mode == sixelSymbols && info.cells != nil {
+				if i := row*info.cols + col; row >= 0 && col >= 0 && col < info.cols && i < len(info.cells) {
+					symbolCell(c, &info.cells[i])
+				} else {
+					blankCellKeepGround(c)
+				}
+				continue
+			}
 			if mode == sixelPlaceholder || !info.picture {
 				// The theme's dim text colour, read once a frame.
 				if dim == nil {
@@ -634,16 +643,24 @@ func groundHash(canvas *frameCanvas, r sixelRect) uint64 {
 type sixelInfo struct {
 	picture    bool
 	rows, cols int
+	// cells is the image as glyphs, in symbols mode.
+	cells []mosaic.Cell
 }
 
 func (sp *SixelPassthrough) info(id uint32) sixelInfo {
 	sp.mu.Lock()
-	defer sp.mu.Unlock()
 	e := sp.images[id]
 	if id == 0 || e == nil {
+		sp.mu.Unlock()
 		return sixelInfo{}
 	}
-	return sixelInfo{picture: e.img != nil, rows: e.rows, cols: e.cols}
+	info := sixelInfo{picture: e.img != nil, rows: e.rows, cols: e.cols}
+	symbols := sp.mode == sixelSymbols && e.img != nil
+	sp.mu.Unlock()
+	if symbols {
+		info.cells = sp.symbolCellsOf(id)
+	}
+	return info
 }
 
 // blankCellKeepGround makes an image cell a plain blank on its background.

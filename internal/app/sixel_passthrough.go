@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -37,6 +38,9 @@ const (
 	// sixelViaKitty sends the decoded image as a kitty graphics image, for a
 	// host that has kitty graphics and not sixel.
 	sixelViaKitty
+	// sixelSymbols draws the image as block glyphs, for a host with neither
+	// (see internal/mosaic). It is text, so nothing is sent beside the frame.
+	sixelSymbols
 )
 
 func (m sixelMode) String() string {
@@ -45,6 +49,8 @@ func (m sixelMode) String() string {
 		return "sixel"
 	case sixelViaKitty:
 		return "kitty"
+	case sixelSymbols:
+		return "symbols"
 	default:
 		return "placeholder"
 	}
@@ -77,6 +83,9 @@ type SixelPassthrough struct {
 	mu   sync.Mutex
 	mode sixelMode
 	caps *HostCapabilities
+	// symbols is the glyph set an image is drawn with on a host that draws
+	// no graphics, mosaic.Off for the placeholder box.
+	symbols mosaic.Kind
 
 	nextID   uint32
 	images   map[uint32]*sixelEntry
@@ -105,8 +114,14 @@ type sixelEntry struct {
 	// it is sent, and kittyPayload the transmission once it is built.
 	kittyID      uint32
 	kittyPayload []byte
-	bytes        int
-	seq          uint64 // registration order, for eviction
+	// cells is the image drawn as glyphs of the set symbolKind, for a host
+	// without graphics. Made once, on the PTY reader where possible, and
+	// never changed after: the frame scan reads it without the lock.
+	cells      []mosaic.Cell
+	symbolKind mosaic.Kind
+	symbol256  bool
+	bytes      int
+	seq        uint64 // registration order, for eviction
 	// born is when the image was registered. The sweep leaves a young image
 	// alone: its cells are written just after it is registered.
 	born time.Time
@@ -124,6 +139,9 @@ type SixelPassthroughOptions struct {
 	// Caps is the terminal at the far end of this session. Nil falls back to
 	// this process's own terminal.
 	Caps *HostCapabilities
+	// Symbols is the glyph set images are drawn with when the terminal draws
+	// no graphics. mosaic.Off shows the placeholder box.
+	Symbols mosaic.Kind
 }
 
 // NewSixelPassthroughWithOptions creates the passthrough for one connection.
@@ -134,24 +152,27 @@ func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthro
 	}
 	sp := &SixelPassthrough{
 		caps:     caps,
+		symbols:  opts.Symbols,
 		images:   make(map[uint32]*sixelEntry),
 		byWindow: make(map[string]int),
 	}
-	sp.mode = chooseSixelMode(caps.SixelGraphics || opts.ForceEnable, caps.KittyGraphics)
-	sixelPassthroughLog("NewSixelPassthrough: sixel=%v kitty=%v force=%v term=%s mode=%s",
-		caps.SixelGraphics, caps.KittyGraphics, opts.ForceEnable, caps.TerminalName, sp.mode)
+	sp.mode = chooseSixelMode(caps.SixelGraphics || opts.ForceEnable, caps.KittyGraphics, opts.Symbols)
+	sixelPassthroughLog("NewSixelPassthrough: sixel=%v kitty=%v force=%v term=%s mode=%s symbols=%s",
+		caps.SixelGraphics, caps.KittyGraphics, opts.ForceEnable, caps.TerminalName, sp.mode, opts.Symbols)
 	return sp
 }
 
-// chooseSixelMode prefers the host's own sixel, then kitty, then the box.
-// Sixel first because it is the format the image arrived in: the whole image
-// goes out byte for byte, and only a crop is re-encoded.
-func chooseSixelMode(sixel, kitty bool) sixelMode {
+// chooseSixelMode prefers the host's own sixel, then kitty, then glyphs, then
+// the box. Sixel first because it is the format the image arrived in: the
+// whole image goes out byte for byte, and only a crop is re-encoded.
+func chooseSixelMode(sixel, kitty bool, symbols mosaic.Kind) sixelMode {
 	switch {
 	case sixel:
 		return sixelNative
 	case kitty:
 		return sixelViaKitty
+	case symbols != mosaic.Off:
+		return sixelSymbols
 	default:
 		return sixelPlaceholder
 	}
@@ -163,11 +184,27 @@ func chooseSixelMode(sixel, kitty bool) sixelMode {
 func (sp *SixelPassthrough) SetHostSixel(sixel bool) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	mode := chooseSixelMode(sixel, sp.caps.KittyGraphics)
+	sp.setModeLocked(chooseSixelMode(sixel, sp.caps.KittyGraphics, sp.symbols))
+}
+
+// SetSymbols changes the glyph set images are drawn with on a host without
+// graphics, for a settings change. Images registered while the box was shown
+// were never decoded and keep showing it.
+func (sp *SixelPassthrough) SetSymbols(k mosaic.Kind) {
+	if sp == nil {
+		return
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.symbols = k
+	sp.setModeLocked(chooseSixelMode(sp.mode == sixelNative, sp.caps.KittyGraphics, k))
+}
+
+func (sp *SixelPassthrough) setModeLocked(mode sixelMode) {
 	if mode == sp.mode {
 		return
 	}
-	sixelPassthroughLog("SetHostSixel: %s -> %s", sp.mode, mode)
+	sixelPassthroughLog("sixel mode: %s -> %s", sp.mode, mode)
 	sp.frame.pending = append(sp.frame.pending, sp.takeDownLocked()...)
 	sp.mode = mode
 	// Images decoded for the old mode stay valid; ones registered in
@@ -205,7 +242,7 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint
 		return 0
 	}
 	sp.mu.Lock()
-	mode := sp.mode
+	mode, symbols := sp.mode, sp.symbols
 	sp.mu.Unlock()
 
 	e := &sixelEntry{windowID: windowID, cellW: cw, cellH: ch, rows: rows, cols: cols}
@@ -222,6 +259,13 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint
 		}
 		// An image too large to decode still gets an id, so its cells show
 		// the placeholder rather than nothing.
+		if mode == sixelSymbols && e.img != nil {
+			// Drawn here, on the PTY reader, so the frame only looks
+			// cells up.
+			p256 := hostIs256()
+			e.cells, e.symbolKind, e.symbol256 = symbolCells(e, symbols, p256), symbols, p256
+			e.bytes += len(e.cells) * symbolCellBytes
+		}
 	}
 
 	sp.mu.Lock()

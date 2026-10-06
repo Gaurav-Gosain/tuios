@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
@@ -307,6 +308,9 @@ func ClientCapabilitiesOf(caps *HostCapabilities) *session.ClientCapabilities {
 		// The daemon answers a frame edit a host cannot make, so the
 		// refusal reaches the guest in order. See Session.SetKittyAnimation.
 		KittyAnimation: caps.KittyAnimation,
+		// Read from the process's settings: the hello is built before
+		// any OS exists. See imageSymbolKind.
+		SymbolImages: symbolsFromGlobal() != mosaic.Off,
 	}
 }
 

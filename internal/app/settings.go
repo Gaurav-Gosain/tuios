@@ -155,6 +155,7 @@ func (m *OS) applyAppearanceLive(retile bool) {
 	m.detectDisplayRate(false)
 	m.adoptConfigPaneGeometry()
 	m.refreshKittyPlaceholderMode()
+	m.refreshImageSymbols()
 	m.MarkAllDirty()
 	if retile && m.AutoTiling {
 		m.TileAllWindows()
@@ -634,6 +635,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.window_button_zoom"),
 			opt("appearance.zoom_max_width"),
 			opt("appearance.kitty_placeholders"),
+			opt("appearance.image_symbols"),
 			custom("debug.show_key_events", m.showKeysItem()),
 		}),
 	}

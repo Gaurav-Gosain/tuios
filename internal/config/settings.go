@@ -501,6 +501,16 @@ type Settings struct {
 	// Set via appearance.kitty_placeholders config.
 	KittyPlaceholders string
 
+	// ImageSymbols decides how a pane's sixel image is shown on a host
+	// terminal that draws no graphics, such as the Linux console under
+	// kmscon. A glyph set name draws the picture as block glyphs of that
+	// set, finest first: octant (Unicode 16), sextant (Unicode 13),
+	// quadrant, half. "auto" is quadrant, which every font with block
+	// elements has. "off" draws a box and tells the pane there is no sixel,
+	// so programs use their own text output.
+	// Set via appearance.image_symbols config.
+	ImageSymbols string
+
 	// NewWindowInheritCwd starts a new window in the working directory of the
 	// pane that was focused when it was asked for, rather than in the
 	// directory the daemon itself was started in.
@@ -715,6 +725,13 @@ const (
 // KittyPlaceholderModes is what appearance.kitty_placeholders accepts.
 var KittyPlaceholderModes = []string{KittyPlaceholdersAuto, KittyPlaceholdersOn, KittyPlaceholdersOff}
 
+// ImageSymbolsAuto is the default of appearance.image_symbols.
+const ImageSymbolsAuto = "auto"
+
+// ImageSymbolModes is what appearance.image_symbols accepts. The names other
+// than auto are mosaic.Kind names.
+var ImageSymbolModes = []string{ImageSymbolsAuto, "octant", "sextant", "quadrant", "half", "off"}
+
 func DefaultSettings() Settings {
 	return Settings{
 		NotificationDuration:        6 * time.Second,
@@ -803,6 +820,7 @@ func DefaultSettings() Settings {
 		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,
 		KittyPlaceholders:           KittyPlaceholdersAuto,
+		ImageSymbols:                ImageSymbolsAuto,
 		RightClickOpensMenu:         false,
 		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,

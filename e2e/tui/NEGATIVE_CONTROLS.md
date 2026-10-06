@@ -1508,7 +1508,6 @@ divider survived, so a fixture that resizes nothing cannot pass.
 | A covered divider is grabbed | `armTiledBorderResize`: the `paneOver` check cut | `TestSharedBorderPressInsideAZoomedPane` ("the panes moved under the zoomed pane"). The test runs in BSP: in master-stack a resize under a zoom is not recorded, and the retile at the end of the zoom hides it | **caught** |
 | A click records a fixed width | `handleMouseRelease`: the width check on the scrolling capture cut | `TestScrollingDividerClickKeepsAProportionalColumn` ("the first column is 48 columns wide after the client grew, want 60") | **caught** |
 
-
 ## Pane labels (display_panes)
 
 The tests are in `pane_labels_test.go`. They read each label's block glyphs
@@ -2597,3 +2596,45 @@ Each lands one event inside an attach through the `attachSnapshotTaken` hook.
 | No reply check in `detachClientFrom` only | that one check cut | none | **not caught**: `markOthers` checks first |
 | A notice before the handler is lost | `OnSessionEnded`: the pending notice never delivered | `TestADetachNoticeBeforeTheHandlerIsDelivered` | **caught** |
 | The shim's `-s` honours `-a` | `detachClient` in the shim: `all_other` set with `-s` | `TestDetachClientAllOther` (the newest client is kept after `-a -s`) | **caught** |
+
+## Images on a host without graphics (kmscon)
+
+A pane's sixel image on a host with neither sixel nor kitty graphics, such as
+the Linux console under kmscon, used to show as a box with "image" in it. It is
+now drawn as block glyphs, one glyph with two colours per image cell
+(`appearance.image_symbols`, `internal/mosaic`). The pane is told it can draw
+sixel, so programs send the picture.
+
+`TestImageSymbolsOnAHostWithoutGraphics` draws a generated picture (sky, sun,
+hills, a red band, a checker) in a pane, for each glyph set, in a daemon
+session, and at 256 colours. It reads the picture back off the host's screen:
+each glyph is turned back into its shape, and its two colours are compared with
+the source averaged over the same sub-cells. The glyphs must also beat a flat
+cell on the cells with an edge in them. It then scrolls the picture partly out
+of the pane and clears it. `TestSixelFallbacks/plain` checks the default (the
+picture is drawn) and `plain-off` the positive half (the box, and no sixel in
+DA1). `TestImageSymbolsWithChafa` runs chafa, which picks sixel from the DA1.
+
+The daemon variant first ran standalone without anyone noticing: its config
+file had no `startup.daemon`, and the controls on the daemon wiring passed. The
+test now writes `startup.daemon = true` when it asks for a daemon, and both
+controls below fail.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The frame scan draws no glyphs | `scanSixelFrame`: the symbols branch cut | `octant-standalone` (error 377 against a ceiling of 10, nothing to clear) | **caught** |
+| The daemon does not count a glyph client | `refreshTreeOps`: `cs.symbolImages` cut | `octant-daemon` (pane DA1 is `62;22`) | **caught** |
+| The hello does not carry it | `Connect`: `hello.SymbolImages` cut | `octant-daemon` (pane DA1 is `62;22`) | **caught** |
+| The sextant table is off by one | `buildSextants`: first code point U+1FB01 | `sextant-standalone` (error 15.3, edge cells 49.9 against a flat 32.8) | **caught** |
+| Default off | `imageSymbolKind`: auto gives `Off` | `TestSixelFallbacks/plain` (DA1 has no 4, the box is shown) | **caught** |
+
+The octant and sextant tables were also checked once against the Unicode 16
+character names (Python's `unicodedata`): every one of the 256 and 64 shapes
+names the right cells. The e2e decode reads plane 1 glyphs through
+`mosaic.Shape`, the table's inverse, so a table error that is its own inverse
+would pass it; the name check is what covers that.
+
+Not covered: a real kmscon. It needs a free VT and DRM master, which this
+machine's test run must not take. A kitty graphics image on such a host is not
+drawn: the pane is still told kitty graphics are absent, and programs fall back
+to their own output.

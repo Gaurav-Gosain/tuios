@@ -303,6 +303,9 @@ type ClientCapabilities struct {
 	// KittyAnimation says the host terminal edits image frames. See
 	// HelloPayload.KittyAnimation.
 	KittyAnimation bool
+	// SymbolImages says images are drawn as block glyphs on a terminal
+	// without graphics. See HelloPayload.SymbolImages.
+	SymbolImages bool
 }
 
 // Connect connects to the daemon and performs handshake.
@@ -355,6 +358,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.SixelGraphics = caps.SixelGraphics
 		hello.TerminalName = caps.TerminalName
 		hello.KittyAnimation = caps.KittyAnimation
+		hello.SymbolImages = caps.SymbolImages
 	}
 
 	hello.LayoutTreeOps = true

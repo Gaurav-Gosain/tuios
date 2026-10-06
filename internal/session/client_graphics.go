@@ -7,6 +7,10 @@ import "fmt"
 type ClientGraphicsPayload struct {
 	SixelGraphics bool `json:"sixel_graphics,omitempty"`
 	KittyGraphics bool `json:"kitty_graphics,omitempty"`
+	// SymbolImages says the client draws a pane's sixel image as block
+	// glyphs when its terminal has neither protocol. See
+	// HelloPayload.SymbolImages.
+	SymbolImages bool `json:"symbol_images,omitempty"`
 }
 
 // handleClientGraphics records a client's graphics after the hello and
@@ -20,6 +24,7 @@ func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 	cs.mu.Lock()
 	cs.sixelGraphics = p.SixelGraphics
 	cs.kittyGraphics = p.KittyGraphics
+	cs.symbolImages = p.SymbolImages
 	sessionID := cs.sessionID
 	cs.mu.Unlock()
 	if sessionID == "" {
@@ -35,11 +40,11 @@ func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 // ReportGraphics tells the daemon what this client's terminal draws, when
 // that is learned after the hello. It does nothing on a daemon that did not
 // offer MsgClientGraphics.
-func (c *TUIClient) ReportGraphics(sixel, kitty bool) error {
+func (c *TUIClient) ReportGraphics(sixel, kitty, symbols bool) error {
 	if !c.graphicsSupported {
 		return nil
 	}
-	msg, err := NewMessage(MsgClientGraphics, &ClientGraphicsPayload{SixelGraphics: sixel, KittyGraphics: kitty})
+	msg, err := NewMessage(MsgClientGraphics, &ClientGraphicsPayload{SixelGraphics: sixel, KittyGraphics: kitty, SymbolImages: symbols})
 	if err != nil {
 		return err
 	}

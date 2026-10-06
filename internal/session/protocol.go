@@ -228,6 +228,10 @@ type HelloPayload struct {
 	// a=a, a=c). Without it the daemon refuses those commands itself, in
 	// order with its other answers. See Session.SetKittyAnimation.
 	KittyAnimation bool `json:"kitty_animation,omitempty"`
+	// SymbolImages says the client draws a pane's sixel image as block
+	// glyphs when its terminal has neither sixel nor kitty graphics. Such a
+	// client shows the image, so the panes are told they can draw sixel.
+	SymbolImages bool `json:"symbol_images,omitempty"`
 	// Protocol is the wire protocol version the client speaks. Zero means a
 	// client that predates the field, which is read as LegacyProtocolVersion:
 	// gob ignores a field the peer does not know, so silence here is age, not

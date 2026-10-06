@@ -818,7 +818,8 @@ and over the next pane, with nothing to take it back.
 
 A pane is told it can draw sixel (DA1 attribute 4, and an answer to
 XTSMGRAPHICS for 256 colour registers and the pane's size in pixels) only when
-its picture will be shown: the host draws sixel or kitty graphics. In daemon
+its picture will be shown: the host draws sixel or kitty graphics, or the
+client draws images as block glyphs (see below), which is the default. In daemon
 mode the daemon's emulator answers, from the clients attached to the session:
 yes while any of them will show the picture (`Session.SetSixelAdvertised`).
 chafa, lsix, timg, yazi and notcurses choose between sixel and a text fallback
@@ -859,7 +860,21 @@ the frame's text in the same write:
   row, where a sixel would scroll the screen.
 - On a host with kitty graphics and no sixel, as a kitty image with one
   placement per rectangle, cropped with a source rectangle.
-- On a host with neither, the cells show a dim box with "image" in it.
+- On a host with neither, as block glyphs (`internal/app/sixel_symbols.go`,
+  `internal/mosaic`): one glyph with a foreground and a background colour per
+  image cell. Each cell is split into sub-cells (2x4 for octants, 2x3 for
+  sextants, 2x2 for quadrants, 1x2 for half blocks), each the average of the
+  pixels under it in linear light, and the sub-cells are split into the two
+  groups whose OKLab means leave the least error. The glyphs are drawn once,
+  on the pane's PTY reader, and a frame only looks them up. At 256 colours the
+  sub-cells are dithered with a 4x4 Bayer matrix and snapped to the xterm
+  palette. `appearance.image_symbols` picks the set: `auto` is quadrants,
+  which every font with block elements has. `off` shows a dim box with
+  "image" in it, and the pane is told no sixel.
+
+  This is how a picture reaches the Linux console under kmscon, which has no
+  image protocol. Its built-in Unifont has the sextants and octants
+  (kmscon 10), so `octant` is the setting to use there.
 
 Each marker becomes a space with the conceal attribute. It draws nothing, but a
 cell that stops being part of an image changes, the renderer rewrites it, and a
@@ -881,15 +896,15 @@ tuios mode does not change the result, because every client shows images to
 its own terminal: standalone, daemon, an SSH client (its DA1 answer decides)
 and tuios-web (a sixel host) all take the same path.
 
-| Program | Sixel host (foot, WezTerm, xterm, mlterm, Konsole, Windows Terminal, tuios-web) | Kitty host without sixel (kitty, Ghostty) | Host with neither |
+| Program | Sixel host (foot, WezTerm, xterm, mlterm, Konsole, Windows Terminal, tuios-web) | Kitty host without sixel (kitty, Ghostty) | Host with neither (kmscon, plain SSH) |
 | --- | --- | --- | --- |
-| chafa | tested: sixel | expected: chafa draws kitty graphics | expected: chafa's text |
-| timg | tested: sixel | expected: timg draws kitty graphics | expected: timg's text |
-| lsix | tested: sixel | expected: sent as kitty graphics | expected: lsix refuses to run |
-| yazi | tested: sixel preview | expected: yazi draws kitty graphics | expected: no preview picture |
-| a sixel file (`cat`), img2sixel | tested: sixel | tested: sent as kitty graphics | tested: placeholder box |
+| chafa | tested: sixel | expected: chafa draws kitty graphics | tested: sixel, drawn as glyphs |
+| timg | tested: sixel | expected: timg draws kitty graphics | expected: sixel, drawn as glyphs |
+| lsix | tested: sixel | expected: sent as kitty graphics | expected: sixel, drawn as glyphs |
+| yazi | tested: sixel preview | expected: yazi draws kitty graphics | expected: sixel preview, drawn as glyphs |
+| a sixel file (`cat`), img2sixel | tested: sixel | tested: sent as kitty graphics | tested: drawn as glyphs |
 | viu | no sixel in common builds: text | expected: viu draws kitty graphics | expected: viu's text |
-| notcurses, matplotlib sixel backends | expected: sixel | expected: sent as kitty graphics | expected: text or placeholder box |
+| notcurses, matplotlib sixel backends | expected: sixel | expected: sent as kitty graphics | expected: drawn as glyphs |
 
 img2sixel 1.10.5 on the test machine writes nothing for any input, so its row
 was tested with a sixel file of the same form.

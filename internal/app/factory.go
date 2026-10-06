@@ -285,6 +285,7 @@ func NewOS(opts OSOptions) *OS {
 		ForceEnable: opts.ForceGraphicsEnabled,
 		Output:      opts.GraphicsOutput,
 		Caps:        caps,
+		Symbols:     imageSymbolKind(seed.ImageSymbols),
 	})
 
 	// Tell the terminal package what tuios can forward, so shells spawned

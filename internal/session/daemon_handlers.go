@@ -49,6 +49,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.kittyGraphics = payload.KittyGraphics
 	cs.sixelGraphics = payload.SixelGraphics
 	cs.kittyAnimation = payload.KittyAnimation
+	cs.symbolImages = payload.SymbolImages
 	cs.terminalName = payload.TerminalName
 
 	if payload.CellWidth > 0 && payload.CellHeight > 0 {
@@ -829,7 +830,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 			if !cs.kittyAnimation {
 				animate = false
 			}
-			if cs.sixelGraphics || cs.kittyGraphics {
+			if cs.sixelGraphics || cs.kittyGraphics || cs.symbolImages {
 				images = true
 			}
 			if cs.kittyGraphics {

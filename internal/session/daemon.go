@@ -633,6 +633,9 @@ type connState struct {
 	cellHeight    int
 	kittyGraphics bool
 	sixelGraphics bool
+	// symbolImages says the client draws images as block glyphs on a
+	// terminal without graphics. See HelloPayload.SymbolImages.
+	symbolImages bool
 	// kittyAnimation is HelloPayload.KittyAnimation.
 	kittyAnimation bool
 	terminalName   string

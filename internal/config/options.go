@@ -222,6 +222,11 @@ var optionSpecs = []Option{
 		Accepted:    KittyPlaceholderModes, Default: KittyPlaceholdersAuto,
 	},
 	{
+		Path: "appearance.image_symbols", Type: OptionString, Section: "appearance",
+		Description: "Draw pane images as block glyphs when the terminal has no graphics: auto, octant, sextant, quadrant, half, off",
+		Accepted:    ImageSymbolModes, Default: ImageSymbolsAuto,
+	},
+	{
 		Path: "appearance.new_window_inherit_cwd", Type: OptionBool, Section: "appearance",
 		Description: "A new window starts in the focused pane's working directory",
 		Default:     "true",
