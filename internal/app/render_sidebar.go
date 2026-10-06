@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // sidebarRestoredTag is the rail's marker for a session rebuilt from saved
@@ -199,7 +200,7 @@ func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
 func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool, s *config.Settings, rowBg color.Color) (string, sidebarTokenSpan, bool) {
 	gw := lipgloss.Width(sidebarAddGlyph(s))
 	x0 := cw - 1 - gw
-	if x0 < labelW+1 {
+	if x0 < labelW+sidebarHeaderGap {
 		return "", sidebarTokenSpan{}, false
 	}
 	span := sidebarTokenSpan{Kind: kind, X0: x0, X1: x0 + gw}
@@ -706,9 +707,27 @@ func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
 //
 // right is an already-styled trailing element (the peeked session's name, the
 // agents section's controls), inset one cell from the rail's edge so it lands
-// on the same spine the rows' figures do.
+// on the same spine the rows' figures do. At least sidebarHeaderGap blank cells
+// always stand between the label and right. A right element too wide for that
+// loses cells from its front behind an ellipsis, never the label and never its
+// last cells: those are where the controls sit, at columns the caller has
+// already recorded as click targets. A caller sizes right with
+// sidebarHeaderRightRoom so this cut is only a backstop.
 func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
 	return sidebarHeaderRowRuled(label, right, cw, pal, nil)
+}
+
+// sidebarHeaderGap is the fewest blank cells between a header's label and the
+// element on its right. One cell read as a word break at best: with the peeked
+// session's name it was lost entirely, and "terminals" and "session-1" printed
+// as "terminalssession-1". Two cells keep the label a label.
+const sidebarHeaderGap = 2
+
+// sidebarHeaderRightRoom is how many cells a header's right element may take
+// beside the label of width labelW (sidebarHeaderLabelW): the rail's content
+// width less the label, the gap after it and the inset cell before the edge.
+func sidebarHeaderRightRoom(cw, labelW int) int {
+	return max(cw-labelW-sidebarHeaderGap-1, 0)
 }
 
 // sidebarHeaderRowRuled is sidebarHeaderRow with the rule that marks a heading.
@@ -717,26 +736,49 @@ func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
 func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
 	row := sidebarStyle(nil, nil).Render(" ") +
 		sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(label, max(cw-2, 1)))
+	lw := lipgloss.Width(row)
 	rw := lipgloss.Width(right)
-	if s != nil {
-		pad := 1
-		if rw > 0 {
-			pad = 2
+	if rw > 0 {
+		if room := sidebarHeaderRightRoom(cw, lw); rw > room {
+			right = sidebarHeaderCutFront(right, rw, room)
+			rw = lipgloss.Width(right)
 		}
-		if run := cw - lipgloss.Width(row) - rw - pad; run > 1 {
-			row += sidebarStyle(nil, nil).Render(" ") +
-				sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), run-1))
-		}
-		if rw > 0 {
-			row += " " + right + " "
+	}
+	if rw == 0 {
+		if s != nil {
+			if run := cw - lw - 1; run > 1 {
+				row += sidebarStyle(nil, nil).Render(" ") +
+					sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), run-1))
+			}
 		}
 		return sidebarFit(row, cw, nil)
 	}
-	if rw > 0 {
-		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
-		row += strings.Repeat(" ", gap) + right + " "
+	// The cells between the label and right. The cut above leaves at least
+	// sidebarHeaderGap of them. A rule needs a blank on each side of it, so it
+	// draws only when there are three or more.
+	gap := cw - lw - rw - 1
+	if s != nil && gap > sidebarHeaderGap {
+		row += sidebarStyle(nil, nil).Render(" ") +
+			sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), gap-2)) +
+			sidebarStyle(nil, nil).Render(" ")
+	} else {
+		row += strings.Repeat(" ", gap)
 	}
+	row += right + " "
 	return sidebarFit(row, cw, nil)
+}
+
+// sidebarHeaderCutFront shortens the styled string right, rw cells wide, to
+// room cells by dropping cells from its front behind an ellipsis. The back is
+// kept because a header's controls are at its back. Nothing is returned when
+// the room cannot hold more than the ellipsis.
+func sidebarHeaderCutFront(right string, rw, room int) string {
+	ell := overlay.Ellipsis()
+	ew := lipgloss.Width(ell)
+	if room <= ew {
+		return ""
+	}
+	return ansi.TruncateLeft(right, rw-room+ew, ell)
 }
 
 // sidebarHeaderLabelW is the columns a section's label occupies, its leading
@@ -907,7 +949,7 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 
 	fw, sw := lipgloss.Width(filter), lipgloss.Width(sort)
 	sepW := lipgloss.Width(sep)
-	room := cw - 1 - (headerW + 1)
+	room := sidebarHeaderRightRoom(cw, headerW)
 	fits := func(countText, mailText string) bool {
 		total := fw + sepW + sw
 		if mailText != "" {
@@ -1703,14 +1745,23 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// readout that pushes a click target off its own cells is worse than a
 			// readout cut one word shorter. The control keeps the spine's last cell,
 			// so its recorded columns hold whether or not a label precedes it.
-			room := max(cw/2, 1)
+			//
+			// The name's room is what the row really has: the rail less the
+			// label, the gap after it, the inset, and the control with the
+			// blank in front of it. Half the rail, which this used to take,
+			// ignored the label and on a narrow rail ran the name into it.
+			room := sidebarHeaderRightRoom(cw, sidebarHeaderLabelW("terminals"))
 			if hasTermAdd {
-				room = max(room-lipgloss.Width(sidebarAddGlyph(&m.Settings))-1, 1)
+				room -= lipgloss.Width(sidebarAddGlyph(&m.Settings)) + 1
 			}
-			name := sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), room))
-			right = name + sidebarStyle(nil, nil).Render(" ") + termAdd
-			if !hasTermAdd {
+			// Below three cells a cut name is an ellipsis and a letter or two,
+			// which names nothing, so the header shows the control alone.
+			if room >= 3 {
+				name := sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), room))
 				right = name
+				if hasTermAdd {
+					right += sidebarStyle(nil, nil).Render(" ") + termAdd
+				}
 			}
 		}
 		if hasTermAdd {

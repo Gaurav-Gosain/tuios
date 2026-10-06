@@ -164,7 +164,7 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 	}
 	tw := lipgloss.Width(fileTokenCd)
 	x0 := cw - 1 - tw
-	if x0 < sidebarHeaderLabelW(sidebarFilesLabel)+1 {
+	if x0 < sidebarHeaderLabelW(sidebarFilesLabel)+sidebarHeaderGap {
 		return "", sidebarTokenSpan{}, false
 	}
 	span := sidebarTokenSpan{Kind: sidebarRowFileCd, X0: x0, X1: x0 + tw}
@@ -192,7 +192,7 @@ func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, curso
 // there is nothing to correct, but a remote viewer is not looking at their own
 // disk.
 func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay.Palette) string {
-	room := cw - sidebarHeaderLabelW(sidebarFilesLabel) - 2
+	room := sidebarHeaderRightRoom(cw, sidebarHeaderLabelW(sidebarFilesLabel))
 	if hasCd {
 		room -= lipgloss.Width(fileTokenCd) + 1
 	}

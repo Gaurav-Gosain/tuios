@@ -2043,3 +2043,29 @@ needs a hold in both backends.
 | Each client sets its own cell | the reviewed build, `b4868417` | `TestPaneCellFollowsOneClient` (the guest was told a 12x24 cell, then 8x16 again) | **caught** |
 | The last client to attach wins | `sessionCellSize`: the highest `attachSeq` picked | `TestPaneCellFollowsOneClient` (the guest was told a 12x24 cell) | **caught** |
 | ghostty passes the same cell through | `GhosttyTerminal.SetCellSize`: the same-cell return cut | `TestGhosttyDiffPixelSizeReports` ("the same cell twice sent ... ghostty=\"\x1b[48;5;20;80;160t\"") | **caught** |
+
+## The rail's terminals header runs into the peeked name
+
+While the pointer peeks a session row, the terminals header names that session
+on its right, in front of the add control. The name was sized from half the
+rail, which ignored the label. On a narrow rail the header read
+"terminalssession-1", and at some widths the add control moved one cell off its
+spine. `sidebarHeaderRow` now keeps two blank cells (`sidebarHeaderGap`) after
+every header label and cuts the right element from its front. The terminals
+header sizes the name from the room the row really has, and shows no name when
+fewer than three cells are left. The add, cd and agents controls refuse to draw
+closer than the same gap.
+
+`TestRailHeaderKeepsAGapBeforeThePeekedName` peeks a session with a long name
+at rail widths 16, 18, 20 and 24. It checks the gap after "terminals", that the
+header names the session at 20 and up (the positive half), that the add control
+is on its spine, and that a click on it makes a pane.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The build before the fix | `render_sidebar.go` and `render_sidebar_files.go` from `b0bb1e20` | all four widths (" terminalszebr…│" at 16, " terminalszebra-… +│" at 20, one blank cell at 24) | **caught** |
+| One cell of gap | `sidebarHeaderGap = 1` | widths 18, 20 and 24 (" terminals zebr… + │" at 20) | **caught** |
+| The name sized from half the rail | the terminals `room` set back to `max(cw/2, 1)` | widths 20 and 24 (the backstop cut leaves " terminals  …a-… + │", which does not name the session) | **caught** |
+
+Width 16 passes the two narrow controls because no name fits there. The first
+control covers it.
