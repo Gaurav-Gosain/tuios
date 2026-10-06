@@ -1605,3 +1605,26 @@ just before the last check, through a test hook.
 Not covered end to end: skipping panes on another machine in the notice and in
 `tuios doctor agents`. A pane with a host needs a federation link, which this
 fixture does not set up.
+
+### Second review
+
+`TestAgentsNoticeOutlastsAnEsc` presses esc in terminal mode once the toast
+shows, checks that nothing was stored, and attaches again: the toast comes
+back. It is also the positive half of the stored dismissal, which
+`TestAgentsIntegrationNoticeOncePerRun` now makes with a click on the dismiss
+end of the toast. `TestInstallNamesWhatAPartialWriteChanged` changes Hermes's
+`config.yaml`, the last of its three files, before each rename.
+`TestE2EClearsEveryDirOverride` reads `e2e/tui/harness_test.go` from the main
+module.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Esc stores a lasting dismissal | `DismissNotifications`: the `noteNoticesDismissed` call put back | `TestAgentsNoticeOutlastsAnEsc` ("an esc stored a lasting dismissal") | **caught** |
+| A click on the dismiss end stores nothing | `NotificationClick`: the `noteNoticesDismissed` call cut | `TestAgentsIntegrationNoticeOncePerRun` ("the dismissal was never stored") | **caught** |
+| A partial write reads as nothing changed | `retryChanged`: the message that names the files made unreachable | `TestInstallNamesWhatAPartialWriteChanged` | **caught** |
+| The e2e list misses an override | `harnessDirKeys`: `QWEN_HOME` cut | `TestE2EClearsEveryDirOverride` ("reads QWEN_HOME ... neither clears it nor redirects it") | **caught** |
+
+Not covered by a test: the fresh report a new harness pane asks for, the merge
+of dismissals on save, the uninstall row for an install with only the MCP
+server or the status line left, and the doctor's note for a session whose
+hosts it could not read.
