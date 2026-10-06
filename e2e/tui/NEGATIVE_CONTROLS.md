@@ -2120,3 +2120,23 @@ with the kick cut 14.9 ms, both over the 12 ms bound. The frame gate across
 panes (`takePaneOutput`) has no control of its own: with nine guests the
 shown rate is noisy on a shared machine, and the gate's effect is CPU, 600
 against 908 ms/s, which the suite does not assert.
+
+## Kitty streams without a compose
+
+`TestKittyStreamCostsLittle` runs the `framepace` guest as a 240 Hz shared
+memory stream and asserts the client's CPU, and as a 120 Hz stream of 64x64
+frame edits and asserts the p95 latency from guest to host. Under
+`TUIOS_E2E_PERF`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`582af540`) | `TestKittyStreamCostsLittle` (206 ms/s of CPU; an edit takes 3.8 ms at p95) | **caught** |
+| The frame clock without this change | build `cc61f3b8` | `TestKittyStreamCostsLittle` (338 ms/s; 3.1 ms) | **caught** |
+| Every write marks the pane | `outputWriter`: the `graphicsOnly` branch cut | `TestKittyStreamCostsLittle/shm-240` (344 ms/s) | **caught** |
+| Edits wait for a compose | `forwardAnimation`: the `editShowsAtOnce` flush cut | `TestKittyStreamCostsLittle/patch-120` (2.5 ms) | **caught** |
+
+The edit control measured 2.5 ms against a 2 ms bound when it ran; the bound
+is now 1.5 ms, against 0.9 to 0.95 ms with the change.
+
+Not covered: a guest whose cursor is visible, which takes the usual path, and
+a placement without `C=1`, which `graphicsOnly` refuses.

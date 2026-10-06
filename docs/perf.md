@@ -2781,3 +2781,40 @@ BenchmarkIdleTick-4   0 render/tick   0 work/tick   296 B/op   5 allocs/op
 ```
 
 `TestIdleCostStaysLow`: 0 idle wire bytes, 104 ticks, 0 work, 0 renders.
+
+## 2026-10 kitty streams without a compose
+
+A guest that streams kitty images through shared memory, reusing one image id,
+has each frame written to the host by the passthrough at once (#344). Each
+frame still marked its pane as having new output, so the client composed the
+whole screen for it and threw the result away. A frame edit (`a=f`), which the
+tuios-wayland viewer sends for small damage, waited in the passthrough's queue
+for that compose.
+
+### What changed
+
+- `terminal.graphicsOnly` recognises a write that holds only kitty commands
+  leaving every cell alone (no placement without `C=1`, no virtual placement),
+  with cursor moves between them. With the guest's cursor hidden, such a write
+  sets `HasGraphicsOutput` instead of `HasNewOutput`. The client composes for
+  it only when the passthrough queued commands for the next frame
+  (`KittyPassthrough.HasQueued`). A pane output signal that marked nothing no
+  longer composes either.
+- `forwardAnimation`: an edit of an image that is placed and shown, with no
+  synchronized update open, is written at once (`editShowsAtOnce`).
+
+### Numbers
+
+`TestPerfFrames`, 207x55, a frame the size of the pane (2070x1040 pixels):
+
+| Case | before | after |
+|---|---|---|
+| shm, 240 Hz, max_fps 240: client CPU | 206 ms/s (344 with the frame clock alone) | 48 ms/s |
+| shm, 120 Hz, max_fps 120: client CPU | 170 to 190 ms/s | 24 ms/s |
+| shm, 60 Hz: client CPU | 86 ms/s | 10 ms/s |
+| 64x64 edit at 120 Hz: latency p50 / p95 / p99 | 1.9 / 4.8 / 6.8 ms | 0.6 / 0.9 / 1.1 ms |
+| edit: client CPU | 164 ms/s | 14 to 18 ms/s |
+
+Every frame and every edit reaches the host on both sides.
+`TestKittyStreamCostsLittle` asserts the CPU and the edit latency under
+`TUIOS_E2E_PERF`.

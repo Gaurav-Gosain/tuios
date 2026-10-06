@@ -715,3 +715,35 @@ func TestFloodStaysSmooth(t *testing.T) {
 		t.Errorf("the p95 gap between two frames of the flood was %.1f ms, want at most 30", p95)
 	}
 }
+
+// TestKittyStreamCostsLittle asserts the two kitty stream paths that skip the
+// screen compose, under TUIOS_E2E_PERF. A pane that streams shared memory
+// frames at 240 a second costs the client little CPU, since no frame is
+// composed for them, and a frame edit (a=f) of a shown image reaches the host
+// without waiting for one.
+//
+// Before, the 240 Hz stream cost the client 206 ms of CPU a second (344 with
+// max_fps 240 drawing every compose), and an edit took 4.8 ms at p95.
+func TestKittyStreamCostsLittle(t *testing.T) {
+	if os.Getenv("TUIOS_E2E_PERF") == "" {
+		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
+	}
+	t.Run("shm-240", func(t *testing.T) {
+		r := runFrameCase(t, frameCase{name: "cost-shm-240guest/max240", maxFPS: "240", mode: "shm", fps: 240, panes: 1, kitty: true})
+		if fps := float64(r.Shown) / r.Seconds; fps < 228 {
+			t.Errorf("%.0f frames a second reached the host, want at least 228", fps)
+		}
+		if r.ClientCPU > 120 {
+			t.Errorf("the client took %.0f ms of CPU a second, want at most 120", r.ClientCPU)
+		}
+	})
+	t.Run("patch-120", func(t *testing.T) {
+		r := runFrameCase(t, frameCase{name: "cost-patch-120guest/max120", maxFPS: "120", mode: "patch", fps: 120, panes: 1, kitty: true})
+		if fps := float64(r.Shown) / r.Seconds; fps < 114 {
+			t.Errorf("%.0f edits a second reached the host, want at least 114", fps)
+		}
+		if r.Latency.P95 > 1500*time.Microsecond {
+			t.Errorf("an edit took %v at p95 from the guest to the host, want at most 1.5ms", r.Latency.P95)
+		}
+	})
+}
