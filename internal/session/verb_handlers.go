@@ -308,7 +308,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	onExit := func(ptyID string) {
 		d.notifyPTYClosed(sess.ID, ptyID)
 		if p.CloseOnExit {
-			d.closeWindowOfPTY(sess, ptyID)
+			d.closeWindowOfPTY(sess, ptyID, false)
 		}
 	}
 	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
@@ -507,7 +507,26 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		}
 	}
 
-	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
+	// The daemon closes a popup itself when its command exits. The attached
+	// client closes it too when it hears the exit, but only a client attached
+	// to the popup's session hears it (see notifyPTYClosed). A popup whose
+	// command moved that client to another session, which is what a
+	// sessionizer does, exited with nobody left to hear it, and stayed in the
+	// session it was opened from as an empty box (#479).
+	//
+	// The close removes the PTY, and a caller that waits reads the exit status
+	// from the PTY. So the status is kept here before the close is queued, and
+	// waitPopupExit falls back to it when the PTY is already gone.
+	exitStatus := newPopupExit()
+	onExit := func(ptyID string) {
+		d.notifyPTYClosed(sess.ID, ptyID)
+		if pty := sess.GetPTY(ptyID); pty != nil {
+			if code, ok := pty.ExitStatus(); ok {
+				exitStatus.record(code)
+			}
+		}
+		d.closeWindowOfPTY(sess, ptyID, true)
+	}
 	opts := NewWindowOptions{
 		Title:       p.Name,
 		Cwd:         p.Cwd,
@@ -547,7 +566,10 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		displayName = p.Name
 	}
 	if p.Wait {
-		code, exited := d.waitPopupExit(sess, win, time.Duration(p.Timeout)*time.Millisecond)
+		if popupBeforeWaitHook != nil {
+			popupBeforeWaitHook(sess, win)
+		}
+		code, exited := d.waitPopupExit(sess, win, time.Duration(p.Timeout)*time.Millisecond, exitStatus)
 		if !exited {
 			return nil, hintedVerbError(ErrVerbTimeout, "the popup was still open when the wait ended", &VerbHint{
 				Command: "tuios wait-for window-exit -w " + win.ID,
@@ -648,12 +670,17 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 }
 
 // closeWindowOfPTY closes the window whose PTY is ptyID, off the caller's
-// goroutine: an exit callback can run where the state lock is held. A window
-// that an attached client closed first is gone already, which is fine.
-func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string) {
+// goroutine: an exit callback can run where the state lock is held, and
+// closing the window closes the PTY whose exit is being reported. A window
+// that an attached client closed first is gone already, which is fine. With
+// popupOnly set, a window that is not a popup is left open.
+func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string, popupOnly bool) {
 	d.goTracked(func() {
 		for _, w := range sess.GetState().Windows {
 			if w.PTYID == ptyID {
+				if popupOnly && !w.Popup {
+					return
+				}
 				_, _ = sess.CloseDaemonWindow(w.ID)
 				return
 			}

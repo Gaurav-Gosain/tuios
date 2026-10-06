@@ -490,7 +490,7 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		go func() { status <- readVerifyStatus(r, sess, win.PTYID) }()
 	} else {
 		go func() {
-			code, exited := d.waitPopupExit(sess, win, 0)
+			code, exited := d.waitPopupExit(sess, win, 0, nil)
 			if !exited {
 				status <- nil
 				return

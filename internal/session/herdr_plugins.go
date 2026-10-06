@@ -668,7 +668,7 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	}
 	onExit := func(ptyID string) {
 		d.notifyPTYClosed(sess.ID, ptyID)
-		d.closeWindowOfPTY(sess, ptyID)
+		d.closeWindowOfPTY(sess, ptyID, false)
 	}
 	if _, err := os.Stat(cwd); err != nil {
 		return nil, herdrErr("plugin_pane_open_failed", "cannot start the pane in "+echoName(cwd)+": "+err.Error())

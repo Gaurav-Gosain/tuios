@@ -1650,3 +1650,26 @@ same client reports BSP there.
 | The released behaviour | build origin/main (`b23b1cd6`) with this branch's e2e directory | `TestRemoteCreateAppliesStartup` ("far-new on build is \"floating\""), `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\"") | **caught** |
 | The empty session keeps the tiling of the session left | `adoptEmptySessionVersion`: the `m.AutoTiling = state.AutoTiling` line cut | `TestRemoteCreateAppliesStartup` (the same assertion). `TestSwitchToAnEmptySessionTakesItsLayout` passes, which is correct: tiling is on in both sessions | **caught** |
 | The empty session keeps the layout mode of the session left | `adoptEmptySessionVersion`: the `ApplyLayoutModeName` call cut | `TestSwitchToAnEmptySessionTakesItsLayout` ("blank has layout mode \"bsp\""). `TestRemoteCreateAppliesStartup` passes, which is correct: [startup] sets the mode there | **caught** |
+
+## A popup that switches the session (#479)
+
+`TestPopupThatSwitchesSessionCloses` in `popup_test.go` opens a popup whose
+command runs `tuios switch-session --create away` and exits. The popup must
+leave the window list of `home`, where no client is attached when it exits.
+Its positive half is in the same fixture: a popup that exits without a switch
+leaves the list too.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`b23b1cd6`) with this branch's e2e directory | `TestPopupThatSwitchesSessionCloses` ("the popup ... is still in home after its command exited", after the positive half passed) | **caught** |
+| The daemon does not close an exited popup | `verbPopup`: the `closeWindowOfPTY` call in `onExit` cut | `TestPopupThatSwitchesSessionCloses` (the same assertion) | **caught** |
+
+`TestPopupWaitAfterTheDaemonClosedIt` in `internal/session/popup_wait_test.go`
+is a race regression for the close. The daemon closes the popup, and with it
+the PTY, when the command exits. `popup --wait` must still return the exit
+status. A test-only hook, `popupBeforeWaitHook`, holds the wait until the PTY
+is gone, so the order is the same on every run.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The wait reads only the PTY | `verbPopup`: `waitPopupExit` given `nil` in place of the status kept by `onExit` | `TestPopupWaitAfterTheDaemonClosedIt` ("exit_code:-1 ... want exit_code 4") | **caught** |
