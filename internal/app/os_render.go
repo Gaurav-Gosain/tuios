@@ -72,6 +72,12 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 		activeTerminals++
 
+		// A write of kitty graphics alone changed no cell (see
+		// terminal.graphicsOnly). The frame is needed only to draw what the
+		// passthrough queued for the next frame; a frame it already wrote
+		// itself needs nothing.
+		graphics := window.HasGraphicsOutput.Swap(false)
+
 		// Skip content checking for minimized windows or windows on a different workspace.
 		// Their PTY data is still consumed (preventing buffer overflow), but we avoid
 		// marking them dirty and triggering unnecessary rendering work.
@@ -103,6 +109,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		// This avoids the old unconditional dirty-marking that defeated frame skipping.
 		newOutput := window.HasNewOutput.Swap(false)
 		if !newOutput {
+			if graphics && m.KittyPassthrough != nil && m.KittyPassthrough.HasQueued() {
+				hasChanges = true
+			}
 			continue
 		}
 

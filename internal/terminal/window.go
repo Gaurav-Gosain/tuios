@@ -358,6 +358,11 @@ type Window struct {
 	// HasNewOutput is set when new data is written to the terminal.
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
+	// HasGraphicsOutput is set instead of HasNewOutput for a write that was
+	// only kitty graphics commands leaving every cell as it was, while the
+	// cursor is hidden: a frame of a guest that streams images. See
+	// graphicsOnly.
+	HasGraphicsOutput atomic.Bool
 
 	// frameInterval is the coalescer's floor in nanoseconds, 0 for the
 	// default. See SetFrameInterval.
