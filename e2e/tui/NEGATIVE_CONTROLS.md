@@ -1873,8 +1873,10 @@ latest `lastUsed`, then the latest activity. Only `MsgSessionUsed` sets
 once a second per session, and only to a daemon whose welcome set
 `SessionUsed`. The daemon takes it only from a client that may act as the
 person. Pane input (`MsgInput`) is activity only: a routed `send-keys`, a
-tape and a focus report reach the pane that way too. `lastUsed` is saved
-with the session, at the latest 30 seconds after a use, and restored.
+tape and a focus report reach the pane that way too. The client reports
+input before it handles it, so after a key or a click that switches sessions
+it reports once more for the session moved to. `lastUsed` is saved with the
+session, at the latest 30 seconds after a use, and restored.
 
 The tests are in `attach_most_recent_test.go`. A client that must not count
 as the person is started with no key pressed: `attachIn` presses Alt+Esc,
@@ -1893,6 +1895,11 @@ which is the person using the session.
   review's case. A client sits on `watched` in terminal mode. The person
   types in `person`, then `tuios send-keys -s watched` types a command, which
   runs in the pane there. A bare attach must land on `person`.
+- `TestBareAttachFollowsASwitchFromTheSessionBrowser` is the third review's
+  case. The person attaches to `first`, switches to `second` in the session
+  browser, reads it with no key, and detaches. A bare attach must land on
+  `second`. Every key the person pressed was used in `first`, which is the
+  positive half.
 - `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` types in `alpha`
   of `alpha`, `beta` and `gamma`, runs `kill-server`, and a bare attach that
   starts the daemon again must land on `alpha`.
@@ -1910,6 +1917,7 @@ The fixed build passed three runs in a row.
 | The client reports every message | `reportActivity`: `ReportUsed` called for any message, not only terminal input | `TestBareAttachIgnoresAgentWindowsAndRoutedCommands` (an untouched client makes `watched` the pick before any typing) | **caught** |
 | The save leaves the time out | `ResurrectionState`: `LastUsed` not stamped | `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` ("landed on \"gamma\", want \"alpha\"") | **caught** |
 | The restore drops the time | `restoreSession`: `setLastUsed` cut | `TestBareAttachAfterARestartLandsOnTheSessionTypedInLast` (the same assertion) | **caught** |
+| No report for the session moved to | build `50c78158`, the head before the report on a session change | `TestBareAttachFollowsASwitchFromTheSessionBrowser` ("landed on \"first\", want \"second\"") | **caught** |
 
 Not covered end to end: the save mark in `TouchUsed`, since the attach that
 precedes the typing already marks the session for a save, a crash, a client

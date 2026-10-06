@@ -20,10 +20,12 @@ import "time"
 // for another session goes at once, so a switch is never late.
 const usedInterval = time.Second
 
-// usedSaveGap is the longest a recorded use goes without being saved. A use
-// changes nothing else in the session, so without this it would wait for the
-// next change, and a crash before it lost the use. kill-server saves every
-// session, so only a crash loses up to this much.
+// usedSaveGap spaces the save marks TouchUsed sets. The saver writes every
+// session on its own every 30 seconds whatever changed, so a use reaches disk
+// within that anyway. What the mark adds is speed for the first use after an
+// idle spell: it marks the session dirty, and the saver writes it within
+// about two seconds. Uses that follow within the gap wait for the next
+// regular write.
 const usedSaveGap = 30 * time.Second
 
 // ReportUsed tells the daemon the person at this client used its session. It

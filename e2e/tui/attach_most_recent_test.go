@@ -155,6 +155,53 @@ func TestBareAttachIgnoresKeysSentToATerminalModeClient(t *testing.T) {
 	}
 }
 
+// TestBareAttachFollowsASwitchFromTheSessionBrowser is the third review's
+// case. The client reports the person's input before it handles it, so the
+// Enter that switches sessions is reported for the session left. The person
+// attaches to "first", switches to "second" in the session browser, reads
+// it without a key, and detaches. A bare attach must land on "second".
+//
+// The positive half: every key the person pressed was used in "first", so
+// without the report for the session moved to, "first" is the pick.
+func TestBareAttachFollowsASwitchFromTheSessionBrowser(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, name := range []string{"first", "second"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v: %s", name, err, out)
+		}
+	}
+	term := attachIn(t, base, "first", startOpts{})
+	clientShows(t, base, "first")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
+		t.Fatalf("open the session browser: %v", err)
+	}
+	if err := term.WaitForText("Sessions", uiTimeout); err != nil {
+		t.Fatalf("the session browser did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("second"); err != nil {
+		t.Fatalf("type the filter: %v", err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+	if err := term.WaitForText("Session: second", uiTimeout); err != nil {
+		t.Fatalf("the browser did not switch to second: %v\n%s", err, term.Snapshot())
+	}
+	clientShows(t, base, "second")
+	// Reading: the screen redraws, and no key is pressed.
+	time.Sleep(500 * time.Millisecond)
+	if err := term.Close(); err != nil {
+		t.Logf("close the client: %v", err)
+	}
+	waitNoClient(t, base, 2)
+
+	if got := bareAttachLandsOn(t, base); got != "second" {
+		t.Fatalf("ASSERTION: a bare attach landed on %q, want \"second\", the session the person switched to and read", got)
+	}
+}
+
 // TestBareAttachAfterARestartLandsOnTheSessionTypedInLast types in "alpha",
 // the first of three sessions by name, then restarts the daemon. The restore
 // starts every session again in name order, so a pick by activity alone goes

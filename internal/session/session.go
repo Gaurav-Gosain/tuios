@@ -2097,8 +2097,9 @@ func (s *Session) LastActive() time.Time {
 // (see session_used.go). A window spawn, a routed command, a tape and a
 // restore do not. It bumps LastActive too.
 //
-// A use changes nothing the saver watches, so it marks the session for a
-// save itself, at most once per usedSaveGap.
+// The saver writes every session every 30 seconds anyway. A use marks the
+// session dirty at most once per usedSaveGap, so the first use after an idle
+// spell reaches disk within about two seconds. See usedSaveGap.
 func (s *Session) TouchUsed() {
 	now := time.Now()
 	s.activeMu.Lock()

@@ -2713,6 +2713,15 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	// asked for the move belongs to the session it left, so only input
 	// given since the move is carried.
 	if name := m.DaemonClient.SessionName(); name != m.activitySession {
+		// The use is the other way round. The report above goes out before
+		// the message is handled, so a key or a click that switched
+		// sessions was reported for the session left. Input in the last
+		// activityCarry is what made the move, so the session moved to is
+		// the one the person is using now.
+		if m.activitySession != "" && !m.lastActivity.IsZero() &&
+			m.msgClock.Sub(m.lastActivity) < activityCarry {
+			m.DaemonClient.ReportUsed(m.msgClock)
+		}
 		m.activitySession, m.activitySince = name, m.msgClock
 	}
 	switch {
