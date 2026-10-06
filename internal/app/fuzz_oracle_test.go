@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -498,7 +499,7 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		}
 		marks[i] = paneMarker(i)
 		w.LockIO()
-		_, _ = w.Terminal.Write([]byte("\x1b[H\x1b[2J" + marks[i]))
+		writeMarkerAtOrigin(w.Terminal, marks[i])
 		w.UnlockIO()
 		w.MarkContentDirty()
 	}
@@ -539,6 +540,46 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 		}
 	}
 	return nil
+}
+
+// writeMarkerAtOrigin clears a pane's screen and writes mark into its top-left
+// cell, whatever modes its guest left set.
+//
+// A plain CUP home is not enough. With origin mode (DECOM) on, home is the top
+// left corner of the margins, not of the screen, and a right margin (DECSLRM)
+// wraps the marker before it ends. Both are the emulator doing what the guest
+// asked, so a marker they move is not chrome painting over a pane. The marker
+// goes in with origin mode off and the margins at the screen's edges, and the
+// guest's mode and margins go back afterwards, so the actions after a check
+// still run under them.
+//
+// All of it goes through Write, as sequences. The Restore calls look like the
+// shorter way, but they exist for a reattach: the ghostty backend queues them
+// and replays them on its next read, which cleared the marker it had just
+// written.
+func writeMarkerAtOrigin(t vt.Terminal, mark string) {
+	const decom, declrmm = 6, 69
+	modes := t.GetModes()
+	region := t.ScrollRegion()
+
+	seq := "\x1b[?6l\x1b[r"
+	if modes[declrmm] {
+		seq += "\x1b[s" // DECSLRM with no parameters: the full width
+	}
+	seq += "\x1b[H\x1b[2J" + mark
+
+	// Put the guest's margins and origin mode back. Each of these homes the
+	// cursor, which the marker no longer needs.
+	if !region.Empty() {
+		seq += fmt.Sprintf("\x1b[%d;%dr", region.Min.Y+1, region.Max.Y)
+		if modes[declrmm] {
+			seq += fmt.Sprintf("\x1b[%d;%ds", region.Min.X+1, region.Max.X)
+		}
+	}
+	if modes[decom] {
+		seq += "\x1b[?6h"
+	}
+	_, _ = t.Write([]byte(seq))
 }
 
 // paneCellsAreOnScreen reports whether the n cells starting at (x,y) are cells

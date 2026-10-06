@@ -1,0 +1,6 @@
+# seed 0. A guest turns on origin mode (DECOM) and sets a left margin of 19.
+# The oracle wrote its marker after a CUP home, which origin mode puts at the
+# margin, so the marker sat 18 columns right. The emulator was right and the
+# oracle was wrong: it now writes the marker with origin mode off and the
+# margins at the screen's edges, and puts the guest's state back after.
+guest "\x1b[?6h\x1b7\x1b[?69h\x1b[19;65536s\x1b[65535;10r"
