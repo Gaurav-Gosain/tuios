@@ -34,11 +34,17 @@ env:
 
 jobs:
   fuzz:
-    name: fuzz ${{ matrix.pkg }}
+    name: fuzz ${{ matrix.corpus || matrix.pkg }}
     runs-on: ubuntu-latest
-    # The longest package runs nine targets. At the default four minutes that
-    # is 36 minutes of fuzzing plus the build and the minimisation of a
-    # finding, which go test does inside the target's own time.
+    # The longest job runs nine targets. At the default four minutes that is
+    # 36 minutes of fuzzing plus the build and the minimisation of a finding,
+    # which go test does inside the target's own time.
+    #
+    # Every Fuzz target in the tree is listed below except the two ghostty
+    # differential ones (see the ghostty job). A package with more targets
+    # than fit in one job is split, and the second job gets a corpus name of
+    # its own. The jobs run side by side, so a split adds runner minutes, not
+    # wall time.
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -49,6 +55,14 @@ jobs:
               FuzzEmulatorScript FuzzEmulatorSplitWrites FuzzEmulatorSplitEquivalence
               FuzzEmulatorRenderRoundTrip FuzzEmulatorWrite FuzzEmulatorWriteChunked
               FuzzEmulatorResize FuzzKittyPayloadDecode FuzzKittyCommand
+          # corpus names the job and its cache entry. It must not start with
+          # another job's corpus followed by "-", or that job's restore-keys
+          # prefix would match it.
+          - pkg: internal/vt
+            corpus: internal/vt.2
+            targets: >-
+              FuzzResizeConservesText FuzzResizeConservesTextHeights
+              FuzzKittyHeader FuzzStringPayloadRuns
           - pkg: internal/app
             targets: >-
               FuzzModel FuzzClipWindowContent FuzzClipWindowContentNoPanicOnEscapes
@@ -56,13 +70,19 @@ jobs:
           - pkg: internal/session
             targets: >-
               FuzzVerbDispatch FuzzClosestMatch FuzzReadMessageFraming
-              FuzzWirePayloadDecode FuzzSelector
+              FuzzWirePayloadDecode FuzzSelector FuzzGfxScanner FuzzFrameSkipping
           - pkg: internal/config
             targets: FuzzNormalizeKey FuzzExpandKeys FuzzLoadConfigPipeline FuzzConfigSaveRoundTrip
           - pkg: internal/tape
             targets: FuzzTapeParse FuzzTapeTokenize FuzzTapeRecordRoundTrip
           - pkg: internal/harness
             targets: FuzzClassifyAgreesWithExplain FuzzManifest FuzzManifestRules
+          - pkg: internal/layout
+            targets: FuzzMasterLayout
+          - pkg: internal/hints
+            targets: FuzzURLs
+          - pkg: internal/herdrcli
+            targets: FuzzParse
 
     steps:
       - uses: actions/checkout@v7
@@ -84,8 +104,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ steps.gocache.outputs.dir }}
-          key: fuzz-corpus-${{ matrix.pkg }}-${{ github.run_id }}
-          restore-keys: fuzz-corpus-${{ matrix.pkg }}-
+          key: fuzz-corpus-${{ matrix.corpus || matrix.pkg }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.corpus || matrix.pkg }}-
 
       - name: Fuzz
         env:
