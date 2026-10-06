@@ -821,6 +821,14 @@ func (kp *KittyPassthrough) flushToHost() {
 	kp.captureStart = 0
 }
 
+// HasQueued reports whether commands wait for the next frame to be written
+// to the host.
+func (kp *KittyPassthrough) HasQueued() bool {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	return kp.pendingGraphicsBytes() > 0
+}
+
 // pendingGraphicsBytes is what is queued for the host, held updates included.
 // Callers hold kp.mu.
 func (kp *KittyPassthrough) pendingGraphicsBytes() int {

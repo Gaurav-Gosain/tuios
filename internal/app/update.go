@@ -538,7 +538,7 @@ func (m *OS) tickNeedsWork() bool {
 		if w == nil {
 			continue
 		}
-		if w.ProcessExited() || w.HasNewOutput.Load() || w.IsBeingManipulated {
+		if w.ProcessExited() || w.HasNewOutput.Load() || w.HasGraphicsOutput.Load() || w.IsBeingManipulated {
 			return true
 		}
 		// A title that has drifted from what the rail shows needs a work tick to
@@ -895,8 +895,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// output waits for the frame at the end of the period, and the panes
 		// keep their new-output flags until it comes. See paneFrameWait.
 		listen := ListenForPTYData(m.PTYDataChan)
-		open, _, due := m.takePaneOutput(time.Now())
-		m.renderSkipped = !open
+		_, changed, due := m.takePaneOutput(time.Now())
+		// Nothing marked means nothing to draw: the output was on a hidden
+		// pane, or it was kitty graphics the passthrough already wrote.
+		m.renderSkipped = !changed
 		if due != nil {
 			return m, tea.Batch(listen, due)
 		}

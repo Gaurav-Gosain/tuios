@@ -137,6 +137,20 @@ func (w *Window) applyStreamResize(chunk outputChunk) {
 // separate so consuming one does not consume the other. The wake is what lets
 // the coalescer sleep between bursts rather than poll a flag that is false
 // almost every time it looks.
+// noteGraphicsOutput is noteOutput for a write graphicsOnly accepted: the
+// render signal goes out, so the passthrough's queued commands are drawn, but
+// the pane is not marked as having new cells.
+func (w *Window) noteGraphicsOutput() {
+	w.HasGraphicsOutput.Store(true)
+	w.coalesceSignal.Store(true)
+	if w.coalesceWake != nil {
+		select {
+		case w.coalesceWake <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (w *Window) noteOutput() {
 	w.HasNewOutput.Store(true)
 	w.coalesceSignal.Store(true)
@@ -287,7 +301,11 @@ func (w *Window) outputWriter() {
 			// Don't signal PTYDataChan here. The renderCoalescer
 			// goroutine holds the rate cap and signals on its own,
 			// which is what prevents partial-frame renders.
-			w.noteOutput()
+			if !resize.isResize() && graphicsOnly(batch) && w.cursorHidden() {
+				w.noteGraphicsOutput()
+			} else {
+				w.noteOutput()
+			}
 		}
 	}
 }
@@ -510,6 +528,13 @@ func NextFrameTime(last time.Time, interval time.Duration, now time.Time) time.T
 		return end
 	}
 	return now
+}
+
+// cursorHidden reports whether the guest has hidden its cursor.
+func (w *Window) cursorHidden() bool {
+	w.ioMu.RLock()
+	defer w.ioMu.RUnlock()
+	return w.Terminal != nil && w.Terminal.IsCursorHidden()
 }
 
 // terminalRef returns the emulator, or nil once Close() has taken it away.
