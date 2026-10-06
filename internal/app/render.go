@@ -1018,11 +1018,16 @@ func (m *OS) View() tea.View {
 			// screen that never changed.
 			return m.crashView()
 		}
-		m.cachedViewContent = content
 		// A frame to flush: the frame ticker runs at the frame rate again,
-		// and this frame goes out now rather than at its next tick.
+		// and this frame goes out now rather than at its next tick. A frame
+		// equal to the last one has nothing to write, which is every frame a
+		// pane streaming kitty graphics composes.
+		changed := content != m.cachedViewContent
+		m.cachedViewContent = content
 		m.noteFrame()
-		m.kickFlush()
+		if changed {
+			m.kickFlush()
+		}
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather
 		// than on the motion path so a frame composed for any other reason (a
