@@ -46,7 +46,9 @@ type clipboardAsk struct {
 const clipboardPreviewLen = 24
 
 // paneClipboardWrite decides what a pane's OSC 52 write does to the host
-// clipboard and returns the command that writes it, or nil.
+// clipboard and returns the command that writes it, or nil. An allowed write
+// goes out the way tuios's own copies do (clipboardWriteCmd), so it reaches the
+// system clipboard on a terminal that ignores OSC 52.
 func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 	mode := m.Settings.OSC52Write
 	switch mode {
@@ -54,13 +56,13 @@ func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 		m.LogInfo("A pane set the clipboard. osc52_write is off, so the host clipboard is not changed.")
 		return nil
 	case config.OSC52WriteOn:
-		return tea.SetClipboard(msg.Text)
+		return m.clipboardWriteCmd(msg.Text)
 	case config.OSC52WriteAsk:
 	default:
 		// focused, and anything unknown, which is treated as the default.
 		if fw := m.GetFocusedWindow(); fw != nil && fw.ID == msg.WindowID {
 			m.noteFocusedCopy(msg)
-			return tea.SetClipboard(msg.Text)
+			return m.clipboardWriteCmd(msg.Text)
 		}
 	}
 	m.askClipboardWrite(msg)
@@ -210,5 +212,5 @@ func (m *OS) ClipboardApprovalCmd() tea.Cmd {
 	}
 	text := *m.clipboardApproved
 	m.clipboardApproved = nil
-	return tea.SetClipboard(text)
+	return m.clipboardWriteCmd(text)
 }

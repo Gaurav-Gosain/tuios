@@ -76,3 +76,25 @@ func TestShouldUseNativeClipboard(t *testing.T) {
 		})
 	}
 }
+
+func TestHostTerminalLacksOSC52(t *testing.T) {
+	cases := []struct {
+		name string
+		vars map[string]string
+		want bool
+	}{
+		{"a VTE terminal never answers OSC 52", map[string]string{"VTE_VERSION": "7600"}, true},
+		{"macOS Terminal.app never answers OSC 52", map[string]string{"TERM_PROGRAM": "Apple_Terminal"}, true},
+		{"a terminal that answers OSC 52 keeps it", map[string]string{"TERM_PROGRAM": "ghostty"}, false},
+		{"an unknown terminal keeps OSC 52", map[string]string{}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			getenv := func(k string) string { return tc.vars[k] }
+			if got := hostTerminalLacksOSC52(getenv); got != tc.want {
+				t.Fatalf("hostTerminalLacksOSC52(%v) = %v, want %v", tc.vars, got, tc.want)
+			}
+		})
+	}
+}

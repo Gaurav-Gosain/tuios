@@ -126,30 +126,31 @@ func (t *clipboardTool) Read() (string, error) {
 	return string(out), err
 }
 
-// hostTerminalIsVTE reports whether the outer terminal is VTE-based. VTE is the
-// family that never answers OSC 52, so it is where the native route earns its
-// keep; on a terminal that does answer, OSC 52 already works and spawning a
-// helper would only add a duplicate clipboard-manager entry per selection.
-func hostTerminalIsVTE() bool {
-	return os.Getenv("VTE_VERSION") != ""
+// hostTerminalLacksOSC52 reports whether the outer terminal is one that never
+// answers OSC 52: the VTE family (GNOME Terminal, Ptyxis) and macOS
+// Terminal.app. That is where the native route earns its keep; on a terminal
+// that does answer, OSC 52 already works and spawning a helper would only add a
+// duplicate clipboard-manager entry per selection.
+func hostTerminalLacksOSC52(getenv func(string) string) bool {
+	return getenv("VTE_VERSION") != "" || getenv("TERM_PROGRAM") == "Apple_Terminal"
 }
 
 // ShouldUseNativeClipboard is the single decision point for the fallback. It is
-// true only when a native tool is reachable AND the human is either at a VTE
-// terminal on this box or on a loopback SSH session, which is the same person
-// whose clipboard is this machine's.
+// true only when a native tool is reachable AND the human is either at a
+// terminal without OSC 52 on this box or on a loopback SSH session, which is
+// the same person whose clipboard is this machine's.
 func ShouldUseNativeClipboard(loopback bool) bool {
 	return shouldUseNativeClipboard(detectClipboardToolEnv{
 		getenv:   os.Getenv,
 		lookPath: hasExecutable,
-	}, hostTerminalIsVTE(), loopback)
+	}, hostTerminalLacksOSC52(os.Getenv), loopback)
 }
 
-func shouldUseNativeClipboard(env detectClipboardToolEnv, hostIsVTE, loopback bool) bool {
+func shouldUseNativeClipboard(env detectClipboardToolEnv, hostLacksOSC52, loopback bool) bool {
 	// A loopback SSH session is the same human on the same box: the server
-	// process cannot see the client's VTE_VERSION, but the native clipboard is
-	// still theirs, so a loopback session is treated as VTE-hosted here.
-	if !hostIsVTE && !loopback {
+	// process cannot see the client's terminal, but the native clipboard is
+	// still theirs, so a loopback session is treated like one without OSC 52.
+	if !hostLacksOSC52 && !loopback {
 		return false
 	}
 	return detectClipboardTool(env) != nil
