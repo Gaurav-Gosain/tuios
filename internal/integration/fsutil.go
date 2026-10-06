@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 // BackupSuffix is appended to a file's name for the copy kept before tuios
@@ -50,7 +52,7 @@ func resolveWriteTarget(path string) (string, error) {
 // ErrFileChanged is returned when a file changed between the read an edit was
 // worked out from and the write that would replace it. Nothing is written over
 // the other program's change.
-var ErrFileChanged = errors.New("the file changed while tuios was editing it, so it was left as it is. Try again")
+var ErrFileChanged = errors.New("the file changed while tuios was editing it, so tuios did not write it. Try again")
 
 // sameAsRead reports whether the file at target still holds have, the bytes
 // the edit was worked out from. A nil have means the file did not exist.
@@ -65,10 +67,28 @@ func sameAsRead(target string, have []byte) (bool, error) {
 // retryChanged runs op, and once more when the file changed under it, so an
 // edit worked out from a file another program was saving is worked out again
 // from the saved file. A second change in a row is reported.
+//
+// An integration can span several files, and a failure can come after some
+// of them were written. The error then names the files changed, over both
+// tries, and the ones not reached, so nobody reads it as "nothing changed".
 func retryChanged(op func() (Result, error)) (Result, error) {
 	res, err := op()
 	if errors.Is(err, ErrFileChanged) {
+		first := res
 		res, err = op()
+		for _, p := range first.Paths {
+			if !slices.Contains(res.Paths, p) {
+				res.Paths = append([]string{p}, res.Paths...)
+			}
+		}
+		res.Changed = res.Changed || first.Changed
+		if res.Backup == "" {
+			res.Backup = first.Backup
+		}
+	}
+	if err != nil && len(res.Paths) > 0 {
+		err = fmt.Errorf("%w. tuios already changed %s. It did not change %s",
+			err, strings.Join(res.Paths, ", "), strings.Join(res.notWritten, ", "))
 	}
 	return res, err
 }

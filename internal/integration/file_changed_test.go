@@ -86,3 +86,31 @@ func TestInstallChecksTheTargetOfASymlink(t *testing.T) {
 		t.Fatalf("the link's target was overwritten:\n%s", got)
 	}
 }
+
+// TestInstallNamesWhatAPartialWriteChanged: Hermes is three files, and the
+// last, config.yaml, keeps changing. The two plugin files are already
+// written when it fails, and the error must say so rather than read as
+// nothing changed.
+func TestInstallNamesWhatAPartialWriteChanged(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, Hermes)
+	cfg := filepath.Join(tg.ConfigDir(env), "config.yaml")
+	writeFile(t, cfg, "plugins:\n  enabled:\n    - other\n")
+	n := 0
+	beforeRename = func(target string) {
+		if filepath.Base(target) == "config.yaml" {
+			n++
+			writeFile(t, cfg, "plugins:\n  enabled:\n    - other\n# save "+string(rune('a'+n))+"\n")
+		}
+	}
+	t.Cleanup(func() { beforeRename = nil })
+	_, err := tg.Install(env, "tuios")
+	if !errors.Is(err, ErrFileChanged) {
+		t.Fatalf("install = %v, want ErrFileChanged", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "already changed") || !strings.Contains(msg, "__init__.py") ||
+		!strings.Contains(msg, "did not change "+cfg) {
+		t.Fatalf("the error does not name what was changed and what was not: %s", msg)
+	}
+}

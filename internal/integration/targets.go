@@ -502,6 +502,9 @@ type Result struct {
 	// was rewritten or there was no file.
 	Backup string   `json:"backup,omitempty"`
 	Notes  []string `json:"notes,omitempty"`
+	// notWritten lists the files a failed install or uninstall did not get
+	// to, for the error that says what it did change.
+	notWritten []string
 }
 
 // ErrNoConfigDir is returned by Install when the harness has never run here.
@@ -543,15 +546,22 @@ func (t *Target) plan(env Env, tuios string, install bool) ([]filePlan, error) {
 // carryOut writes or removes each changed file, in order. removing says this is
 // an uninstall, which also removes the owned directory once it is empty.
 func (t *Target) carryOut(env Env, res *Result, plans []filePlan, removing bool) error {
-	for _, p := range plans {
+	for i, p := range plans {
 		if !p.changed {
 			continue
 		}
+		var err error
 		if p.remove {
-			if err := os.Remove(p.path); err != nil {
-				return err
+			err = os.Remove(p.path)
+		} else {
+			err = writeAtomic(p.path, p.have, p.out)
+		}
+		if err != nil {
+			for _, rest := range plans[i:] {
+				if rest.changed {
+					res.notWritten = append(res.notWritten, rest.path)
+				}
 			}
-		} else if err := writeAtomic(p.path, p.have, p.out); err != nil {
 			return err
 		}
 		res.Changed = true
