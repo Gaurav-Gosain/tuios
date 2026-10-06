@@ -383,9 +383,13 @@ These switches do not open a pane:
   stays as it is.
 
 When two clients show the same session, the client that switches opens the
-pane. The other client shows it. The session gets one pane. When you switch
-away before the pane opens, you stay where you went, and a switch back does
-not open a second pane.
+pane. The other client shows it. A workspace gets one pane, also when two
+clients switch to it at the same time. When you switch away before the pane
+opens, you stay where you went, and a switch back does not open a second
+pane.
+
+With `appearance.new_window_follow_ssh = true`, a pane that runs ssh gives a
+new pane that runs the same ssh, as the new-window key does.
 
 The daemon must be this version of tuios or newer. With an older daemon, a
 switch opens no pane. Run `tuios kill-server` and start tuios again to load

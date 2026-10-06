@@ -1754,3 +1754,27 @@ and the client show (1, 2, 3) and the panes on each workspace (one each).
 Not covered end to end: the version check (`EmptyWorkspacePanes` in the
 welcome) against a daemon from before this change, and a switch from a
 scratch terminal.
+
+### Second review: one pane per workspace at the daemon
+
+`TUIOS_E2E_HOLD_PANE` now acts only with `TUIOS_E2E=1`, and a file that holds
+`refuse` makes the daemon fail the request.
+`TestEmptyWorkspaceSlowRequestOpensOnePane` holds the first request for 7 s,
+waits 5.5 s, and sends Alt+1 Alt+2, so the client asks again after its 5 s
+timeout. `TestEmptyWorkspaceTwoClientsSwitchAtOnce` holds requests for 2 s:
+the first client switches to 2, and the second follows, then sends Alt+1
+Alt+2, so both clients ask. `TestEmptyWorkspaceFailedRequestKeepsTheSwitch`
+refuses the request for Alt+2, presses Alt+1, and waits for the session to
+show workspace 1 with no pane on 2. `TestEmptyWorkspacePaneFollowsSSH` turns
+on `appearance.new_window_follow_ssh`, runs the fake ssh in the pane on 1,
+and switches to 2: the new pane runs the same ssh.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The daemon opens a second pane on a workspace | `AddDaemonWindowWith`: the `ErrWorkspaceHasPane` check cut | `TestEmptyWorkspaceSlowRequestOpensOnePane` ("workspace 2 has 2 panes, want 1"), `TestEmptyWorkspaceTwoClientsSwitchAtOnce` ("workspace 2 has 2 panes, want exactly 1") | **caught** |
+| The client does not ask to follow ssh | `openPaneOnEmptyWorkspace`: `sshFrom` not sent | `TestEmptyWorkspacePaneFollowsSSH` ("the fake ssh never ran a run 1") | **caught** |
+| The daemon drops the followed ssh | `handleExecuteCommand`: `Command` not passed to `AddDaemonWindowWith` | `TestEmptyWorkspacePaneFollowsSSH` ("the fake ssh never ran a run 1") | **caught** |
+| A request holds back the client's pushes | `openPaneOnEmptyWorkspace`: `m.daemonWindowIntent = true` put back | none: `TestEmptyWorkspaceFailedRequestKeepsTheSwitch` passes. A later push from the same client reaches the daemon within the wait | **not caught** |
+
+Not covered end to end: `paneRequests` cleared on a session switch, an
+attach and a reconnect, and the `TUIOS_E2E=1` gate itself.

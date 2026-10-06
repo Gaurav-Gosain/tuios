@@ -347,7 +347,7 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 	hold := filepath.Join(base, "hold-pane")
 	writeConfig(t, base, "[workspaces]\nnew_window_when_empty = true\n")
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess},
-		env: []string{"TUIOS_E2E_HOLD_PANE=" + hold}})
+		env: holdEnv(hold)})
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "setup")
@@ -415,4 +415,128 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 
 	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
 	alive(t, term, "after the fast switches")
+}
+
+// holdEnv is the environment that lets the daemon hold or refuse pane
+// requests through the file hold. See paneHoldForTest.
+func holdEnv(hold string) []string {
+	return []string{"TUIOS_E2E=1", "TUIOS_E2E_HOLD_PANE=" + hold}
+}
+
+// setHold writes value to the hold file: milliseconds to hold each request,
+// or "refuse".
+func setHold(t *testing.T, hold, value string) {
+	t.Helper()
+	if err := os.WriteFile(hold, []byte(value), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// startHeld starts a client on a new session with one pane on workspace 1,
+// the setting on, and pane requests that read the hold file. It returns in
+// window-management mode.
+func startHeld(t *testing.T, base, sess, hold string) *tuitest.Terminal {
+	t.Helper()
+	writeConfig(t, base, "[workspaces]\nnew_window_when_empty = true\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess}, env: holdEnv(hold)})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "setup")
+	toWindowMode(t, term)
+	return term
+}
+
+// TestEmptyWorkspaceSlowRequestOpensOnePane: the daemon holds the first
+// request for 7 s, longer than a client waits before it asks again. The
+// client switches away and back at 5.5 s, so it asks a second time. The
+// workspace still gets one pane: the daemon refuses a second one.
+func TestEmptyWorkspaceSlowRequestOpensOnePane(t *testing.T) {
+	const sess = "nws"
+	base := t.TempDir()
+	hold := filepath.Join(base, "hold-pane")
+	term := startHeld(t, base, sess, hold)
+
+	setHold(t, hold, "7000")
+	sendKeys(t, term, tuitest.Alt("2"))
+	time.Sleep(5500 * time.Millisecond)
+	sendKeys(t, term, tuitest.Alt("1"), tuitest.Alt("2"))
+	// The second request reads the file when the first is done, so it is
+	// not held.
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
+	exactlyPanesOn(t, term, base, sess, 2, 1, "a request slower than the client's wait")
+	if ws := currentWorkspace(t, base, sess); ws != 2 {
+		t.Fatalf("ASSERTION: the session shows workspace %d, want 2\n%s", ws, term.Snapshot())
+	}
+	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
+	alive(t, term, "after the slow request")
+}
+
+// TestEmptyWorkspaceTwoClientsSwitchAtOnce: two clients ask for the pane of
+// one workspace. The first client switches to workspace 2, and its request
+// is held. The second client follows the switch, goes to workspace 1 and
+// comes back to 2 by key before the pane exists, so it asks too. The
+// workspace gets one pane.
+func TestEmptyWorkspaceTwoClientsSwitchAtOnce(t *testing.T) {
+	const sess = "nw2c"
+	base := t.TempDir()
+	hold := filepath.Join(base, "hold-pane")
+	term := startHeld(t, base, sess, hold)
+	second := attachIn(t, base, sess, startOpts{cols: 120, rows: 40, env: holdEnv(hold)})
+	waitWindowCount(t, second, 1, "the second client")
+	toWindowMode(t, second)
+
+	setHold(t, hold, "2000")
+	sendKeys(t, term, tuitest.Alt("2"))
+	waitShowing(t, base, sess, 2, "", term)
+	sendKeys(t, second, tuitest.Alt("1"), tuitest.Alt("2"))
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
+	exactlyPanesOn(t, term, base, sess, 2, 1, "two clients ask for one workspace")
+	sendKeys(t, second, tuitest.Esc)
+	time.Sleep(insertGuard)
+	exactlyPanesOn(t, second, base, sess, 2, 1, "the second client's request")
+	saveWindowList(t, base, sess, filepath.Join(artifactDir(t), "list-windows.json"))
+	alive(t, term, "after two requests")
+	alive(t, second, "after two requests")
+}
+
+// TestEmptyWorkspaceFailedRequestKeepsTheSwitch: the daemon refuses the
+// request. The switch to workspace 2 stands with no pane, and the next
+// switch, to workspace 1, reaches the daemon.
+func TestEmptyWorkspaceFailedRequestKeepsTheSwitch(t *testing.T) {
+	const sess = "nwr2"
+	base := t.TempDir()
+	hold := filepath.Join(base, "hold-pane")
+	term := startHeld(t, base, sess, hold)
+
+	setHold(t, hold, "refuse")
+	sendKeys(t, term, tuitest.Alt("2"))
+	waitShowing(t, base, sess, 2, "", term)
+	sendKeys(t, term, tuitest.Alt("1"))
+	deadline := time.Now().Add(uiTimeout)
+	for currentWorkspace(t, base, sess) != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: after a refused request, Alt+1 left the session on workspace %d\n%s", currentWorkspace(t, base, sess), term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if n := panesOn(t, base, sess, 2); n != 0 {
+		t.Fatalf("ASSERTION: workspace 2 has %d panes after a refused request, want 0", n)
+	}
+	alive(t, term, "after the refused request")
+}
+
+// TestEmptyWorkspacePaneFollowsSSH: with appearance.new_window_follow_ssh,
+// a switch from a pane that runs ssh opens a pane that runs the same ssh, as
+// the new-window key does.
+func TestEmptyWorkspacePaneFollowsSSH(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "\n[appearance]\nnew_window_follow_ssh = true\n[workspaces]\nnew_window_when_empty = true\n")
+	sshIn(t, term, "ssh -l pollen fakehost uptime", 0)
+	sendKeys(t, term, tuitest.Alt("2"))
+	wantArgs(t, term, "the pane on workspace 2", sshRunArgs(t, term, runs, 1),
+		[]string{"-l", "pollen", "-o", "ControlMaster=no", "fakehost"})
+	alive(t, term, "after the followed pane")
 }

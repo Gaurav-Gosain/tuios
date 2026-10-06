@@ -1182,11 +1182,15 @@ func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, comm
 // when that window has none. Empty cwdFrom gives the start directory too.
 // The window takes the focus only if the session still shows workspace.
 // See ExecuteCommandPayload.CwdFrom and FocusIfShown.
-func (c *TUIClient) SendNewWindowFrom(workspace int, cwdFrom string) error {
+//
+// sshFrom, when set, names the window whose ssh the new one follows, as
+// SendNewWindowIntent's does.
+func (c *TUIClient) SendNewWindowFrom(workspace int, cwdFrom, sshFrom string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType:  "NewWindow",
 		Workspace:    workspace,
 		CwdFrom:      cwdFrom,
+		SSHFrom:      sshFrom,
 		FocusIfShown: true,
 	})
 }

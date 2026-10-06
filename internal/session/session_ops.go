@@ -418,6 +418,13 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		if opts.Workspace != 0 {
 			workspace = opts.Workspace
 		}
+		// The pane a switch to an empty workspace asks for is one per
+		// workspace, whatever asked: a second client that switched too, or a
+		// request sent again after the first one was slow. Checked under the
+		// state lock, so two that race cannot both add one.
+		if opts.FocusIfShown && !scratch && hasPanes(state, workspace) {
+			return ErrWorkspaceHasPane
+		}
 
 		win = WindowState{
 			ID:         windowID,
@@ -491,6 +498,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 // windowSpawnedHook, when set, runs after AddDaemonWindowWith has spawned the
 // window's process and before it adds the window to the state. Test-only.
 var windowSpawnedHook func(*PTY)
+
+// ErrWorkspaceHasPane is the refusal of a FocusIfShown window on a workspace
+// that has a pane already. The caller treats it as a success that did
+// nothing. See ExecuteCommandPayload.FocusIfShown.
+var ErrWorkspaceHasPane = errors.New("the workspace has a pane already")
 
 // ErrScratchExists is the refusal of a second scratch terminal in a session.
 var ErrScratchExists = errors.New("this session already has a scratch terminal of this name. Press its key to show it")

@@ -276,6 +276,8 @@ func (m *OS) resumeOnHost(client *session.TUIClient, state *session.SessionState
 		// not what coming back means.
 		was := m.SubscribedPTYs
 		m.SubscribedPTYs = make(map[string]bool)
+		// A request in flight when the link went may be lost with it.
+		m.paneRequests = nil
 		for _, w := range m.Windows {
 			if w.DaemonMode && w.PTYID != "" && was[w.PTYID] {
 				m.primePaneFromDaemon(w)

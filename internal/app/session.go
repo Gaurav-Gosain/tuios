@@ -1903,6 +1903,8 @@ func (m *OS) SetupPTYOutputHandlers() error {
 
 	// Always reset subscribed PTYs to prevent stale entries from previous sessions
 	m.SubscribedPTYs = make(map[string]bool)
+	// The same for requests for panes: they were made before this attach.
+	m.paneRequests = nil
 
 	m.LogInfo("[SETUP] SetupPTYOutputHandlers: setting up handlers for %d windows", len(m.Windows))
 

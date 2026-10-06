@@ -1887,6 +1887,8 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	// refuses to navigate to, leaving it permanently invisible.
 	m.CurrentWorkspace = 1
 	m.SubscribedPTYs = make(map[string]bool)
+	// Requests for panes were made in the session just left.
+	m.paneRequests = nil
 	// The pinned pane belongs to the session just left. Its stream was
 	// dropped above, and on a switch back the ids match again with nothing
 	// streaming the pane, so the view would show a frozen screen.

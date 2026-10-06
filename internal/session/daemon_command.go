@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -147,15 +148,30 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
 		var data map[string]any
 		var err error
-		if payload.FocusIfShown && payload.CommandType == "NewWindow" && len(payload.Args) == 0 {
+		if payload.FocusIfShown && payload.CommandType == "NewWindow" {
 			// The pane a client opens on an empty workspace. See
-			// ExecuteCommandPayload.FocusIfShown.
-			paneHoldForTest()
+			// ExecuteCommandPayload.FocusIfShown. Its args are empty, or the
+			// ssh the source pane runs when SSHFrom asked to follow it.
+			var name string
+			var command []string
+			if len(payload.Args) > 0 {
+				name, command = payload.Args[0], payload.Args[1:]
+			}
+			err = paneHoldForTest()
 			var win WindowState
-			win, err = session.AddDaemonWindowWith(NewWindowOptions{
-				FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace,
-			}, onExit)
 			if err == nil {
+				win, err = session.AddDaemonWindowWith(NewWindowOptions{
+					FocusIfShown: true, Cwd: payload.Cwd, Workspace: payload.Workspace,
+					Name: name, Command: command, Env: newWindowEnv,
+				}, onExit)
+			}
+			switch {
+			case errors.Is(err, ErrWorkspaceHasPane):
+				// Another request opened it first. Nothing to do, and the
+				// shell this one started is closed already.
+				err = nil
+				data = map[string]any{"skipped": "the workspace has a pane already"}
+			case err == nil:
 				data = map[string]any{"window_id": win.ID, "name": win.Title}
 			}
 		} else {
@@ -421,24 +437,34 @@ func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 
 // paneHoldForTest lets the end-to-end tests hold the pane a client opens on
 // an empty workspace, so they can send the switches that follow while the
-// request waits, as a slow daemon would.
+// request waits, as a slow daemon would, or refuse it, as a failed request
+// would be.
 //
-// TUIOS_E2E_HOLD_PANE names a file that holds a number of milliseconds. While
-// the file exists, each request waits that long, ten seconds at most.
-// Messages are read one at a time per connection, so the client's later
-// messages wait behind it. Ordinary runs never set the variable.
-func paneHoldForTest() {
+// It does anything only with TUIOS_E2E=1 and TUIOS_E2E_HOLD_PANE naming a
+// file, which ordinary runs never set. A file that holds a number of
+// milliseconds makes each request wait that long, ten seconds at most. A file
+// that holds "refuse" makes each request fail. Messages are read one at a time
+// per connection, so the client's later messages wait behind a held request.
+func paneHoldForTest() error {
+	if os.Getenv("TUIOS_E2E") != "1" {
+		return nil
+	}
 	path := os.Getenv("TUIOS_E2E_HOLD_PANE")
 	if path == "" {
-		return
+		return nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		return nil
 	}
-	ms, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	value := strings.TrimSpace(string(data))
+	if value == "refuse" {
+		return errors.New("the test hold refused the pane")
+	}
+	ms, err := strconv.Atoi(value)
 	if err != nil || ms <= 0 {
-		return
+		return nil
 	}
 	time.Sleep(min(time.Duration(ms)*time.Millisecond, 10*time.Second))
+	return nil
 }

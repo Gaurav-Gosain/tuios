@@ -57,14 +57,23 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		if !m.DaemonClient.EmptyWorkspacePanes() {
 			return
 		}
-		// A pane already asked for and not yet here: one switch back and
-		// forth must not open two.
+		// A pane already asked for and not yet here: a switch back and
+		// forth asks for nothing more. This only saves a shell. The daemon
+		// opens one pane per workspace whatever reaches it (see
+		// ErrWorkspaceHasPane), which covers a request slower than the
+		// timeout and a second client.
 		if at, ok := m.paneRequests[workspace]; ok && time.Since(at) < paneRequestTimeout {
 			return
 		}
-		cwdFrom := ""
+		cwdFrom, sshFrom := "", ""
 		if fromPane != nil {
 			cwdFrom = fromPane.ID
+			// As the new-window key does with
+			// appearance.new_window_follow_ssh: a pane that runs ssh gives a
+			// pane that runs the same ssh.
+			if m.FollowSSHOnNewWindow() {
+				sshFrom = fromPane.ID
+			}
 		}
 		// The switch's state push went out in switchToWorkspace, before this.
 		// The request names the workspace and asks for no focus move, so the
@@ -72,7 +81,7 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		// does not hold back this client's pushes the way addDaemonWindow's
 		// intent does: a push that leaves the pane out is reconciled by the
 		// daemon, and holding one back would lose the next switch.
-		if err := m.DaemonClient.SendNewWindowFrom(workspace, cwdFrom); err != nil {
+		if err := m.DaemonClient.SendNewWindowFrom(workspace, cwdFrom, sshFrom); err != nil {
 			m.LogError("Failed to ask the daemon for a pane on workspace %d: %v", workspace, err)
 			return
 		}
