@@ -44,6 +44,14 @@ func graphicsOnly(b []byte) bool {
 				return false
 			}
 			body := b[i+3 : i+3+end]
+			// A control or a byte past ASCII ends the string early in the
+			// parser (CAN, SUB, ESC), and what follows is printed. Kitty
+			// commands are ASCII: keys, numbers and base64.
+			for _, c := range body {
+				if c < 0x20 || c > 0x7e {
+					return false
+				}
+			}
 			head, _, _ := bytes.Cut(body, []byte(";"))
 			if !kittyKeepsCursor(head) {
 				return false
