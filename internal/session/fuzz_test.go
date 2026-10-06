@@ -139,6 +139,11 @@ func FuzzReadMessageFraming(f *testing.F) {
 	// the one a writer sends.
 	f.Add(append(frame(2+36+2, byte(MsgInput), wireCodecGob), append(make([]byte, 36), 'h', 'i')...))
 	f.Add(frame(3, byte(MsgResize), 1, 'x'))
+	// Tagged frames: an id and a payload, an id alone, and the id 0 that no
+	// sender writes.
+	f.Add(frame(2+8+2, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42, 'h', 'i'))
+	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42))
+	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -157,12 +162,16 @@ func FuzzReadMessageFraming(f *testing.F) {
 			if msg == nil {
 				t.Fatalf("ReadMessage returned a nil message and no error")
 			}
-			// The writer must put back exactly the frame the reader took,
-			// apart from the codec byte, which the reader ignores and the
-			// writer always sends as gob. A frame that re-encodes to other
-			// bytes is one a relaying daemon forwards changed.
+			// The writer must put back exactly the frame the reader took. The
+			// one byte it may change is a codec byte other than the tagged
+			// one: the reader takes any such value as plain gob, and the
+			// writer sends plain gob as 0. The tagged value is not ignored,
+			// so it must come back with its id. A frame that re-encodes to
+			// other bytes is one a relaying daemon forwards changed.
 			consumed := append([]byte(nil), data[off:len(data)-r.Len()]...)
-			consumed[5] = wireCodecGob
+			if consumed[5] != wireCodecGobTagged {
+				consumed[5] = wireCodecGob
+			}
 			var back bytes.Buffer
 			if err := WriteMessage(&back, msg); err != nil {
 				t.Fatalf("WriteMessage of a frame ReadMessage accepted: %v", err)
@@ -182,8 +191,9 @@ func FuzzReadMessageFraming(f *testing.F) {
 					len(msg.Payload), len(data))
 			}
 			// PTY frames are parsed further, with the ID taken from a fixed
-			// 36-byte prefix.
-			if msg.Type == MsgPTYOutput || msg.Type == MsgInput {
+			// 36-byte prefix. The PTY writer never tags a frame, so only an
+			// untagged one can come back from it unchanged.
+			if (msg.Type == MsgPTYOutput || msg.Type == MsgInput) && msg.ReqID == 0 {
 				ptyID, payload, perr := ParseBinaryPTYMessage(msg.Payload)
 				if perr == nil {
 					if len(ptyID) > 36 {

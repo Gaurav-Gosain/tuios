@@ -988,6 +988,13 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 			return nil, fmt.Errorf("failed to read request id (len=%d, type=%d): %w", payloadLen, msgType, err)
 		}
 		reqID = binary.BigEndian.Uint64(id[:])
+		if reqID == 0 {
+			// Zero is the id of a message that answers nothing, and that
+			// message goes out untagged. A tagged zero would read as the
+			// same Message as an untagged frame, so the frame a relay writes
+			// back would not be the one it read. No sender writes one.
+			return nil, fmt.Errorf("tagged message with request id 0 (type=%d)", msgType)
+		}
 		payloadLen -= reqIDLen
 	}
 

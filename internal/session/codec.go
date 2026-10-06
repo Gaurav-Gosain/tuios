@@ -14,7 +14,8 @@ const wireCodecGob byte = 0
 
 // wireCodecGobTagged marks a frame whose gob payload is preceded by an 8-byte
 // big-endian request id: the id a client put on a request, and the id the
-// daemon puts on its answer to it. See Message.ReqID.
+// daemon puts on its answer to it. See Message.ReqID. The id is never 0: a
+// message with no id goes out untagged, and a reader refuses a tagged 0.
 //
 // A reader from before the value existed ignores the codec byte and would take
 // the id for the start of the payload, so neither side writes one to a peer
