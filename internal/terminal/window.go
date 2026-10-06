@@ -666,10 +666,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 	// sessions and they need not agree about it.
 	terminal := vt.NewWithScrollback(terminalWidth, terminalHeight, scrollbackLines)
 
-	// Set cell size for XTWINOPS terminal size reporting
-	// Using 10x20 pixels as reasonable defaults for a typical monospace font
-	terminal.SetCellSize(10, 20)
-
 	window := &Window{
 		Width:         width,
 		Height:        height,

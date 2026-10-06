@@ -1,7 +1,6 @@
 package vt
 
 import (
-	"io"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -173,7 +172,7 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 		}
 	case ansi.ModeInBandResize:
 		if setting.IsSet() {
-			_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+			e.sendInBandResize()
 		}
 	}
 	if setting.IsSet() {

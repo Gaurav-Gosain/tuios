@@ -441,6 +441,55 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 	}
 }
 
+// TestGhosttyDiffPixelSizeReports compares the answers a guest reads its
+// pixel size from: XTWINOPS 14, 16 and 18 and the mode 2048 report, with no
+// cell size set and with the host's. libghostty sent none of them until the
+// size callback was wired, and a guest that waited for one waited for good
+// (issue #506). After 2048 is on, a new cell size must reach the guest too.
+func TestGhosttyDiffPixelSizeReports(t *testing.T) {
+	read := func(term Terminal) string {
+		got := make(chan string, 1)
+		go func() {
+			buf := make([]byte, 512)
+			n, _ := term.Read(buf)
+			got <- string(buf[:n])
+		}()
+		select {
+		case s := <-got:
+			return s
+		case <-time.After(2 * time.Second):
+			return ""
+		}
+	}
+	for _, cell := range [][2]int{{0, 0}, {8, 16}} {
+		for _, in := range []string{"\x1b[14t", "\x1b[16t", "\x1b[18t", "\x1b[?2048h"} {
+			t.Run(fmt.Sprintf("cell %dx%d %q", cell[0], cell[1], in), func(t *testing.T) {
+				p := newDiffPair(t, 20, 5)
+				p.pure.SetCellSize(cell[0], cell[1])
+				p.gh.SetCellSize(cell[0], cell[1])
+				p.write(t, []byte(in))
+				a, g := read(p.pure), read(p.gh)
+				if a != g {
+					t.Errorf("reply pure=%q ghostty=%q", a, g)
+				}
+				if strings.Contains(a, ";0;0t") || a == "" {
+					t.Errorf("reply %q has no pixel size", a)
+				}
+			})
+		}
+	}
+	t.Run("a new cell size while 2048 is on", func(t *testing.T) {
+		p := newDiffPair(t, 20, 5)
+		p.write(t, []byte("\x1b[?2048h"))
+		_, _ = read(p.pure), read(p.gh)
+		p.pure.SetCellSize(8, 16)
+		p.gh.SetCellSize(8, 16)
+		if a, g := read(p.pure), read(p.gh); a != g || a != "\x1b[48;5;20;80;160t" {
+			t.Errorf("reply pure=%q ghostty=%q, want both %q", a, g, "\x1b[48;5;20;80;160t")
+		}
+	})
+}
+
 // TestGhosttyDiffAltScreenLegacy checks IsAltScreen under mode 47 on both
 // backends. libghostty switched screens for 47 all along, but the wrapper only
 // asked it about 1047 and 1049, so a program using 47 was reported as being on

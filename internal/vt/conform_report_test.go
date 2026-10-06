@@ -247,7 +247,7 @@ func TestConform_DECRQM(t *testing.T) {
 		{"SGR pixel mouse reports set after ?1016h", "\x1b[?1016h\x1b[?1016$p", "\x1b[?1016;1$y"},
 		{"in-band resize reports reset by default", "\x1b[?2048$p", "\x1b[?2048;2$y"},
 		// Setting 2048 sends the current size at once, ahead of the report.
-		{"in-band resize reports set after ?2048h", "\x1b[?2048h\x1b[?2048$p", "\x1b[48;24;80;0;0t\x1b[?2048;1$y"},
+		{"in-band resize reports set after ?2048h", "\x1b[?2048h\x1b[?2048$p", "\x1b[48;24;80;480;800t\x1b[?2048;1$y"},
 
 		// A mode nobody defines has to report 0, not 2. Reporting reset says
 		// the terminal knows the mode and has it off, which is a different
@@ -284,5 +284,104 @@ func TestConform_DECRQM(t *testing.T) {
 				t.Errorf("reply = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestConform_PixelSizeReports pins the three answers a guest reads its pixel
+// size from: XTWINOPS 14 (text area), XTWINOPS 16 (one cell) and the in-band
+// resize report of mode 2048. They come from one cell size, the host's once it
+// is set and the fallback cell before that, and none of them is ever zero.
+//
+// Issue #506: the 2048 report carried 0 for both pixel sizes. Textual takes
+// pixels per cell from it and divides every SGR-pixel mouse report by that,
+// so it quit with ZeroDivisionError when the mouse entered its pane.
+//
+// The ways it could fail, written down before the code:
+//   - The 2048 report keeps 0;0 for the pixels.
+//   - The reports disagree: 14 from the host cell, 2048 from the fallback.
+//   - A cell size that changes after 2048 is on is never told to the guest,
+//     which then scales the mouse by the old cell.
+//   - A cell size set again to the same value sends a report each time.
+func TestConform_PixelSizeReports(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		cw, ch int
+		in     string
+		want   string
+	}{
+		{"14t with no cell size uses the fallback", 0, 0, "\x1b[14t", "\x1b[4;480;800t"},
+		{"16t with no cell size uses the fallback", 0, 0, "\x1b[16t", "\x1b[6;20;10t"},
+		{"2048 with no cell size uses the fallback", 0, 0, "\x1b[?2048h", "\x1b[48;24;80;480;800t"},
+		{"14t with the host cell", 8, 16, "\x1b[14t", "\x1b[4;384;640t"},
+		{"16t with the host cell", 8, 16, "\x1b[16t", "\x1b[6;16;8t"},
+		{"2048 with the host cell", 8, 16, "\x1b[?2048h", "\x1b[48;24;80;384;640t"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			emu := vt.NewEmulator(80, 24)
+			emu.SetCellSize(tc.cw, tc.ch)
+			next := replies(emu)
+			if _, err := emu.WriteString(tc.in); err != nil {
+				t.Fatal(err)
+			}
+			if got := next(); got != tc.want {
+				t.Errorf("reply = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a new cell size is reported once while 2048 is on", func(t *testing.T) {
+		emu := vt.NewEmulator(80, 24)
+		next := replies(emu)
+		if _, err := emu.WriteString("\x1b[?2048h"); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := next(), "\x1b[48;24;80;480;800t"; got != want {
+			t.Fatalf("on ?2048h: reply = %q, want %q", got, want)
+		}
+		emu.SetCellSize(8, 16)
+		if got, want := next(), "\x1b[48;24;80;384;640t"; got != want {
+			t.Fatalf("after a new cell size: reply = %q, want %q", got, want)
+		}
+		emu.SetCellSize(8, 16)
+		if got := next(); got != "" {
+			t.Fatalf("the same cell size again sent %q, want nothing", got)
+		}
+	})
+
+	t.Run("a new cell size is not reported while 2048 is off", func(t *testing.T) {
+		emu := vt.NewEmulator(80, 24)
+		next := replies(emu)
+		emu.SetCellSize(8, 16)
+		if got := next(); got != "" {
+			t.Fatalf("a new cell size with 2048 off sent %q, want nothing", got)
+		}
+	})
+}
+
+// replies starts one reader of what the emulator writes back to the guest.
+// Each call of the function it returns is the next chunk, or "" when nothing
+// came within a short wait. One reader serves every call, so a call that
+// timed out cannot leave a reader behind that eats the next chunk.
+func replies(emu *vt.Emulator) func() string {
+	ch := make(chan string, 16)
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			n, err := emu.Read(buf)
+			if n > 0 {
+				ch <- string(buf[:n])
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return func() string {
+		select {
+		case s := <-ch:
+			return s
+		case <-time.After(300 * time.Millisecond):
+			return ""
+		}
 	}
 }

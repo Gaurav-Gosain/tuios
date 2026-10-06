@@ -11,6 +11,8 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	gh "go.mitchellh.com/libghostty"
+
+	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 )
 
 // GhosttyTerminal implements Terminal on top of libghostty-vt. libghostty
@@ -304,6 +306,21 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		// draws kitty graphics on a host that may only draw sixel. The text
 		// is the one the pure emulator sends, version included.
 		gh.WithXtversion(func(_ *gh.Terminal) string { return XTVersionName() }),
+		// XTWINOPS 14, 16 and 18 and the mode 2048 report are answered only
+		// when this is set: without it the library sends nothing, and a guest
+		// that waits for its pixel size waits for good. The size is the one
+		// the pure emulator answers with, from the host cell or the fallback
+		// cell (issue #506). The library calls this from inside a write or a
+		// resize, which hold t.mu, so the fields are read without it.
+		gh.WithSizeReport(func(_ *gh.Terminal) (gh.SizeReportSize, bool) {
+			cw, ch := cellsize.Or(t.cellW, t.cellH)
+			return gh.SizeReportSize{
+				Rows:       clampU16(t.height),
+				Columns:    clampU16(t.width),
+				CellWidth:  uint32(cw),
+				CellHeight: uint32(ch),
+			}, true
+		}),
 		gh.WithDeviceAttributes(func(_ *gh.Terminal) (gh.DeviceAttributes, bool) {
 			return ghosttyDeviceAttributes(t.sixelOn()), true
 		}),
@@ -356,8 +373,8 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 const (
 	// defaultCellWidth/Height match the pure emulator's assumptions until
 	// the host reports real pixel metrics via SetCellSize.
-	defaultCellWidth  = 10
-	defaultCellHeight = 20
+	defaultCellWidth  = cellsize.FallbackWidth
+	defaultCellHeight = cellsize.FallbackHeight
 	// maxSemanticMarkers matches the pure emulator's marker list bound.
 	maxSemanticMarkers = 1000
 )

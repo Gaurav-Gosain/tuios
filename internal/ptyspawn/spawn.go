@@ -87,6 +87,14 @@ func SpawnTTY(width, height int, build func(tty string) *exec.Cmd, logf func(str
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
 		}
+		// The new pty has no pixel size, and the guest can read its size
+		// before the first resize gives it one. It starts with the fallback
+		// cell's, which the emulator also answers XTWINOPS with. A pty that
+		// takes no pixels is left at the size it was made with.
+		if ws, ok := pty.(WinsizeSetter); ok {
+			xpixel, ypixel := pixelsOr(width, height, 0, 0)
+			_ = ws.SetWinsize(width, height, xpixel, ypixel)
+		}
 
 		tty := ""
 		if named, ok := pty.(interface{ SlaveName() string }); ok {

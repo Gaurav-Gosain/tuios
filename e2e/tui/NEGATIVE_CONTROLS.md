@@ -1964,3 +1964,49 @@ The fixed build passed three runs in a row.
 Not covered end to end: the save mark in `TouchUsed`, since the attach that
 precedes the typing already marks the session for a save, a crash, a client
 inside a pane, and a mix of an old client with a new daemon.
+
+## A pane reports a pixel size of zero (#506)
+
+A Textual app quit with `ZeroDivisionError` when the mouse entered its pane.
+Textual turns on in-band resize reports (mode 2048) and then SGR-pixel mouse
+reports (mode 1016). It takes pixels per cell from the 2048 report and divides
+each mouse report by it. The pure Go emulator sent `0;0` for the pixels in
+every 2048 report. libghostty-vt sent no 2048 report and no XTWINOPS 14, 16 or
+18 answer, because tuios never gave it the size callback. A pane that no
+client had measured, such as a detached session's, also had a TIOCGWINSZ pixel
+size of zero.
+
+The fix takes every pixel size from one cell: the host's, or the fallback cell
+in `internal/cellsize` (10x20) before a client reports one. The 2048 report,
+XTWINOPS 14 and 16, the pty's winsize from its spawn on, and the 1016 mouse
+reports all use it. A guest with 2048 on gets a new report when the cell size
+changes.
+
+The guest in `pixel_size_test.go` reads TIOCGWINSZ, the 2048 report and
+XTWINOPS 14 and 16, and prints each SGR-pixel mouse report.
+`TestPaneReportsItsPixelSize` runs it in a standalone and a daemon session
+with an 8x16 host cell. Every size must match that cell, and two hovers one
+cell apart must be reported 8 pixels apart. `TestDetachedPaneReportsAPixelSize`
+runs it in a detached session: the sizes must match the fallback cell. A
+client with an 8x16 cell then attaches, and the guest's last 2048 report must
+be in 8x16 cells. A real Textual 8.2.8 app, run the same way, quit with the
+reported traceback on main and mapped six hovers to six consecutive cells with
+the fix, on both backends. That run is not in the suite, because CI has no
+Textual.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`951dc83e`) | `TestPaneReportsItsPixelSize` (both: the 2048 report is `36;118;0;0`), `TestDetachedPaneReportsAPixelSize` (TIOCGWINSZ is 0x0 pixels, the 2048 report is `22;78;0;0`) | **caught** |
+| The 2048 report has no pixels | `sendInBandResize`: pixels written as 0 | `TestPaneReportsItsPixelSize` (both), `TestDetachedPaneReportsAPixelSize` | **caught** |
+| No pixel fallback in the winsize | `pixelsOr`: the pixel size passed through as given | `TestDetachedPaneReportsAPixelSize` (TIOCGWINSZ is 0x0 pixels) | **caught** |
+| No pixels at spawn | `SpawnTTY`: the first `SetWinsize` cut | `TestDetachedPaneReportsAPixelSize` (TIOCGWINSZ is 0x0 pixels) | **caught** |
+| libghostty-vt has no size callback | ghostty build, `WithSizeReport` returns false | `TestPaneReportsItsPixelSize` (both: no 2048, 14 or 16 answer), `TestDetachedPaneReportsAPixelSize` | **caught** |
+| A new cell size is not sent to a 2048 guest | `Emulator.SetCellSize`: the report cut | none end to end: the attach also resizes the pane, and that report carries the new cell. `TestConform_PixelSizeReports` in `internal/vt` catches it | **unit only** |
+
+`TestGhosttyDiffPixelSizeReports` (`-tags ghostty`) compares the two backends'
+answers to 14, 16, 18 and 2048, with and without a host cell, and after a new
+cell size.
+
+Not covered end to end: macOS, a host that reports its cell size itself
+rather than through `TUIOS_CELL_SIZE`, and a resize of a detached pane, which
+goes through the winsize fallback.

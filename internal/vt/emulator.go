@@ -11,6 +11,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/parser"
+
+	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 )
 
 // Logger represents a logger interface.
@@ -721,18 +723,32 @@ func (e *Emulator) Width() int {
 
 // SetCellSize sets the pixel dimensions of a single character cell.
 // Used for XTWINOPS terminal size reporting.
+//
+// A guest with in-band resize reports on (mode 2048) is sent a new report
+// when the size in pixels changes, as it is on a resize: it scales SGR-pixel
+// mouse reports by the size it was last told.
 func (e *Emulator) SetCellSize(width, height int) {
+	oldW, oldH := e.CellSize()
 	e.cellWidth = width
 	e.cellHeight = height
+	if newW, newH := e.CellSize(); (newW != oldW || newH != oldH) && e.isModeSet(ansi.ModeInBandResize) {
+		e.sendInBandResize()
+	}
 }
 
-// CellSize returns the pixel dimensions of a single character cell.
+// CellSize returns the pixel dimensions of a single character cell, or the
+// fallback cell when none was set. It is never zero.
 func (e *Emulator) CellSize() (width, height int) {
-	// Default to 8x16 pixels if not set (common VGA text mode dimensions)
-	if e.cellWidth == 0 || e.cellHeight == 0 {
-		return 8, 16
-	}
-	return e.cellWidth, e.cellHeight
+	return cellsize.Or(e.cellWidth, e.cellHeight)
+}
+
+// sendInBandResize sends the guest a mode 2048 report: the size in cells and
+// in pixels. Textual divides every SGR-pixel mouse report by pixels per cell
+// from this report, so the pixels are never zero (issue #506).
+func (e *Emulator) sendInBandResize() {
+	cw, ch := e.CellSize()
+	h, w := e.Height(), e.Width()
+	_, _ = io.WriteString(e.pipe, ansi.InBandResize(h, w, h*ch, w*cw))
 }
 
 // CursorPosition returns the terminal's cursor position.
@@ -1225,7 +1241,7 @@ func (e *Emulator) Resize(width int, height int) {
 	e.atPhantom = phantom
 
 	if e.isModeSet(ansi.ModeInBandResize) {
-		_, _ = io.WriteString(e.pipe, ansi.InBandResize(e.Height(), e.Width(), 0, 0))
+		e.sendInBandResize()
 	}
 }
 
