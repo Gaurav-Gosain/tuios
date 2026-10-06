@@ -765,6 +765,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Tea flushes on the same ticker.
 	if isPersonInput(msg) {
 		m.noteFrame()
+		m.noteAnsweredInput(msg)
 	} else if _, raw := msg.(tea.RawMsg); raw {
 		m.noteFrame()
 	}
@@ -871,9 +872,23 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// PTY output arrived: mark dirty terminals and re-render immediately.
 		// This is the primary render trigger, replacing tick-driven rendering.
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
-		m.MarkTerminalsWithNewContent()
-		m.renderSkipped = false
-		return m, ListenForPTYData(m.PTYDataChan)
+		//
+		// Unless a frame went out less than a frame period ago: then the
+		// output waits for the frame at the end of the period, and the panes
+		// keep their new-output flags until it comes. See paneFrameWait.
+		listen := ListenForPTYData(m.PTYDataChan)
+		open, _, due := m.takePaneOutput(time.Now())
+		m.renderSkipped = !open
+		if due != nil {
+			return m, tea.Batch(listen, due)
+		}
+		return m, listen
+
+	case frameDueMsg:
+		m.frameRate.dueArmed = false
+		_, changed, due := m.takePaneOutput(time.Now())
+		m.renderSkipped = !changed
+		return m, due
 
 	case GitStateMsg:
 		// The reading the git section asked for. It is applied rather than
@@ -1205,7 +1220,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Sync background windows that have accumulated output.
 		// This catches windows whose HasNewOutput flag was preserved by
 		// the throttling logic, ensuring they eventually render.
-		hasBackgroundChanges := m.MarkTerminalsWithNewContent()
+		_, hasBackgroundChanges, frameDue := m.takePaneOutput(time.Time(msg))
+		if frameDue != nil {
+			cmds = append(cmds, frameDue)
+		}
 
 		// Zen mode (mouse): the borders melt once the pointer sits still past
 		// the reveal window. tickNeedsWork already wakes this tick for the

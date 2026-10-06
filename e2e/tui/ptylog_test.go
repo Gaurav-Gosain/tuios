@@ -168,7 +168,7 @@ func removeStandInShm(prefix string) {
 		}
 		// Only a stand-in: a pid can be reused after its owner exits.
 		cmdline, _ := os.ReadFile(filepath.Join("/proc", head, "cmdline"))
-		for _, standIn := range []string{"frameloop", "placeholders", "placeonce", "shmstream"} {
+		for _, standIn := range []string{"frameloop", "placeholders", "placeonce", "shmstream", "framepace"} {
 			if bytes.Contains(cmdline, []byte(standIn)) {
 				_ = syscall.Kill(pid, syscall.SIGKILL)
 				break

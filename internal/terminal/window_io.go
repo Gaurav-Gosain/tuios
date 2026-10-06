@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
@@ -292,9 +293,38 @@ func (w *Window) outputWriter() {
 	}
 }
 
+// frameInterval is the coalescer's floor in nanoseconds: one frame at the
+// client's max_fps. The app sets it with SetFrameInterval when the frame rate
+// is known or changes; until then it is minCoalesceInterval.
+//
+// It used to be the constant 8 ms, about 120 frames a second, whatever
+// max_fps said. A pane could then never be drawn more than 125 times a
+// second, so max_fps 240 drew 125 frames of an animating pane, and a
+// guest that drew at exactly 120 raced a floor 0.33 ms shorter than its own
+// period.
+var frameInterval atomic.Int64
+
+// SetFrameInterval sets the shortest interval between two render signals from
+// one pane: one frame at the client's frame rate. A value of zero or less
+// restores the default.
+func SetFrameInterval(d time.Duration) {
+	if d <= 0 {
+		d = minCoalesceInterval
+	}
+	frameInterval.Store(int64(d))
+}
+
+// minFrameInterval is the coalescer's floor now.
+func minFrameInterval() time.Duration {
+	if d := frameInterval.Load(); d > 0 {
+		return time.Duration(d)
+	}
+	return minCoalesceInterval
+}
+
 const (
-	// minCoalesceInterval is the floor: ~120fps, the rate the coalescer used
-	// unconditionally before it learned what a frame costs.
+	// minCoalesceInterval is the default floor: ~120fps, the rate the
+	// coalescer used unconditionally before it learned what a frame costs.
 	minCoalesceInterval = 8 * time.Millisecond
 
 	// maxCoalesceInterval is the ceiling, so one pathological frame cannot
@@ -351,7 +381,7 @@ func (w *Window) coalesceInterval() time.Duration {
 		return catchUpCoalesceInterval
 	}
 	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
-	return min(max(cost, minCoalesceInterval), maxCoalesceInterval)
+	return min(max(cost, minFrameInterval()), maxCoalesceInterval)
 }
 
 // ChargeRenderCost records what the client's last composed frame cost, so the
@@ -383,25 +413,38 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 // bursts instead of ticking also means an idle pane costs no wakeups at all,
 // where before every open pane woke 125 times a second forever.
 func (w *Window) renderCoalescer() {
-	timer := time.NewTimer(minCoalesceInterval)
+	timer := time.NewTimer(minFrameInterval())
 	if !timer.Stop() {
 		<-timer.C
 	}
 	defer timer.Stop()
 
 	// armed says the timer is holding the tail of an interval that has already
-	// emitted. last is when that emit happened; its zero value is what makes
-	// the very first output take the leading edge.
+	// emitted. last is the time the last emit stands for; its zero value is
+	// what makes the very first output take the leading edge.
 	var armed bool
 	var last time.Time
 
 	// emit consumes the coalescer's own flag, not HasNewOutput, so the latter
 	// survives for the UI goroutine's MarkTerminalsWithNewContent.
-	emit := func() {
+	//
+	// An emit before the end of the interval stands for the end of the
+	// interval, and the next interval is counted from there; one after it
+	// stands for itself. A signal up to FrameSlack before the end is emitted
+	// at once, and the timer of one that came earlier fires FrameSlack before
+	// the end.
+	//
+	// Counted from the moment of the emit, every timer that fired late (Go's
+	// timers are often a fraction of a millisecond late) started the next
+	// interval late: the intervals of a pane drawing at the frame rate came
+	// out 9 ms long at 120 frames a second, and a 120 Hz guest showed 111 of
+	// its frames. Counted from the end, the slack absorbs the lateness, and
+	// the emits still come no faster than one an interval on average.
+	emit := func(now time.Time, interval time.Duration) {
 		if !w.coalesceSignal.CompareAndSwap(true, false) {
 			return
 		}
-		last = time.Now()
+		last = NextFrameTime(last, interval, now)
 		if w.PTYDataChan != nil {
 			select {
 			case w.PTYDataChan <- struct{}{}:
@@ -421,18 +464,44 @@ func (w *Window) renderCoalescer() {
 			if armed {
 				continue
 			}
-			if wait := w.coalesceInterval() - time.Since(last); wait > 0 {
-				timer.Reset(wait)
+			now := time.Now()
+			interval := w.coalesceInterval()
+			if wait := last.Add(interval).Sub(now); wait > FrameSlack(interval) {
+				timer.Reset(wait - FrameSlack(interval))
 				armed = true
 				continue
 			}
-			emit()
+			emit(now, interval)
 
 		case <-timer.C:
 			armed = false
-			emit()
+			emit(time.Now(), w.coalesceInterval())
 		}
 	}
+}
+
+// FrameSlack is how long before the end of an interval a frame may be drawn:
+// a quarter of the interval. See renderCoalescer and NextFrameTime.
+//
+// A quarter is wide enough that a guest drawing at the frame rate, whose
+// frames arrive with a jitter of a millisecond or so, is never held back, and
+// that a timer firing late still lands inside it. Two frames can then be as
+// little as three quarters of an interval apart, but never more of them than
+// the frame rate allows over time.
+func FrameSlack(interval time.Duration) time.Duration { return interval / 4 }
+
+// NextFrameTime is the time a frame drawn at now stands for, when the last one
+// stood for last and frames are spaced interval apart: the end of the
+// interval for a frame drawn before it, and now for one drawn after. This is
+// the generic cell rate algorithm with FrameSlack as its tolerance: frames
+// keep to the interval on average, an early one does not move the frames after
+// it earlier, and a late one moves them later, so they follow a guest that
+// draws at the frame rate whatever its phase.
+func NextFrameTime(last time.Time, interval time.Duration, now time.Time) time.Time {
+	if end := last.Add(interval); now.Before(end) {
+		return end
+	}
+	return now
 }
 
 // terminalRef returns the emulator, or nil once Close() has taken it away.
