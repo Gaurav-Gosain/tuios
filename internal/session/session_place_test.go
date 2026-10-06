@@ -66,6 +66,34 @@ func TestHostNameSetIsNarrow(t *testing.T) {
 	}
 }
 
+// TestPickWindowCwdTrustsAReadableProcess pins which folder a new window
+// inherits. The record holds the pane's OSC 7 or OSC 9;9 report, which any
+// program in the pane can print, so it is used only when no process can be
+// read. A shell whose folder was deleted is readable, and Linux names its
+// folder "/x (deleted)": the window must not take the report then.
+func TestPickWindowCwdTrustsAReadableProcess(t *testing.T) {
+	proc, report := t.TempDir(), t.TempDir()
+	gone := filepath.Join(t.TempDir(), "gone")
+	cases := []struct {
+		name    string
+		procCwd string
+		procOK  bool
+		record  string
+		want    string
+	}{
+		{"the process folder wins over a report", proc, true, report, proc},
+		{"a deleted process folder does not fall back to the report", gone + " (deleted)", true, report, ""},
+		{"no readable process takes the report", "", false, report, report},
+		{"a report of a missing folder is not taken", "", false, gone, ""},
+		{"a relative report is not taken", "", false, "rel/dir", ""},
+	}
+	for _, c := range cases {
+		if got := pickWindowCwd(c.procCwd, c.procOK, c.record); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 // writeFile creates a file with its parent directories.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()

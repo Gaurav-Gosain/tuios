@@ -1463,7 +1463,8 @@ func (s *Session) inheritedCwd() string {
 //   - The folder of the shell's process. It cannot be spoofed. Any program in
 //     the pane can print an OSC 7 report, and a shell without OSC 7 hooks
 //     never corrects one, so a report must not win over the process.
-//   - The folder the window record holds. In a snapshot it is the shell's
+//   - The folder the window record holds, only when no process can be read
+//     (see pickWindowCwd). In a snapshot it is the shell's
 //     OSC 7 report when there is one (see fillLiveFacts). On native Windows
 //     no process can be read, so this is the only live answer there (#491).
 //
@@ -1476,13 +1477,30 @@ func (s *Session) windowCwd(id string) string {
 	if !ok {
 		return ""
 	}
+	var procCwd string
+	var procOK bool
 	if pty := s.GetPTY(win.PTYID); pty != nil {
-		if cwd, ok := pty.ProcessCwd(); ok && isLocalDir(cwd) {
-			return cwd
-		}
+		procCwd, procOK = pty.ProcessCwd()
 	}
-	if isLocalDir(win.Cwd) {
-		return win.Cwd
+	return pickWindowCwd(procCwd, procOK, win.Cwd)
+}
+
+// pickWindowCwd is the rule windowCwd applies to what it read: the process
+// folder when the process could be read, else the record. The record is only
+// for a process that cannot be read at all, as on Windows. A process that can
+// be read but sits in a folder that is gone (Linux reads "/x (deleted)")
+// gives "", so the caller uses the start folder. Taking the record there
+// would let an OSC 7 or OSC 9;9 report, which any program in the pane can
+// print, choose the folder in place of the shell.
+func pickWindowCwd(procCwd string, procOK bool, record string) string {
+	if procOK {
+		if isLocalDir(procCwd) {
+			return procCwd
+		}
+		return ""
+	}
+	if isLocalDir(record) {
+		return record
 	}
 	return ""
 }

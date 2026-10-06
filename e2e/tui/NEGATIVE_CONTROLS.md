@@ -1852,6 +1852,15 @@ positive half.
 the host rule, a security boundary: a short name matches only on darwin,
 only for a dotted host name, and only as its whole first label.
 
-Not covered end to end: a real Windows machine, ConPTY, the short-name match
+`TestPickWindowCwdTrustsAReadableProcess` in the same file pins the second
+review's case: the record, which holds the pane's report, is taken only when
+no process can be read. A shell whose folder was deleted is readable, and
+then the window gets the start folder, not the report.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A deleted process folder falls back to the report | `pickWindowCwd`: the `return ""` after an unusable process folder cut | `TestPickWindowCwdTrustsAReadableProcess` ("a deleted process folder does not fall back to the report") | **caught** |
+
+Not covered end to end: a shell in a deleted folder, a real Windows machine, ConPTY, the short-name match
 on macOS, and OSC 9;9 on the libghostty-vt backend, which reads it the same
 way in its own parser.
