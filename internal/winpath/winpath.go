@@ -7,10 +7,15 @@
 // the folder was gone (issue #413). The drive form is converted on its own.
 // The rest needs the folder MSYS2 is installed in, which is found once from
 // the environment and kept.
+//
+// The file:// URL of an OSC 7 report is read here too (FileURL), because a
+// native Windows shell's URL keeps a slash in front of the drive, /C:/x, and
+// that is the same kind of path.
 package winpath
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -162,22 +167,63 @@ func FindMounts(pathList, exepath, tmp string, exists func(string) bool) Mounts 
 	return Mounts{}
 }
 
-// Native converts a path a shell reported into a path this platform reads.
-// On every platform but Windows it returns p unchanged. On Windows it returns
-// the converted path, or p unchanged when it cannot be converted.
-func Native(p string) string {
-	if runtime.GOOS != "windows" {
-		return p
+// FileURL splits a file:// URL that a shell reported over OSC 7 into the host
+// it names and the folder, percent-decoded and in forward slashes. It is the
+// one place tuios reads such a URL, on the client and in the daemon.
+//
+// The path of a URL from a native Windows shell keeps a slash in front of the
+// drive, file://HOST/C:/x, and that slash is dropped here, so the folder is
+// C:/x on every OS. A Windows host can report through ssh to a machine that
+// is not Windows, and the folder is still shown by its own name there.
+//
+// The host is the machine the shell runs on, as OSC 7 means it, and never a
+// file server: file://server/share/x is the folder /share/x on the machine
+// "server". A shell in a UNC folder reports file://HOST//server/share/x, and
+// the path keeps both of its leading slashes.
+func FileURL(raw string) (host, p string, ok bool) {
+	u, err := url.Parse(raw)
+	if err != nil || !strings.EqualFold(u.Scheme, "file") || u.Path == "" {
+		return "", "", false
 	}
+	return u.Hostname(), dropDriveSlash(u.Path), true
+}
+
+// dropDriveSlash turns /C: and /C:/x into C: and C:/x. Any other path, /C:x
+// among them, is returned unchanged: that is a folder named C:x.
+func dropDriveSlash(p string) string {
+	if len(p) >= 3 && p[0] == '/' && p[2] == ':' && isLetter(p[1:2]) &&
+		(len(p) == 3 || p[3] == '/' || p[3] == '\\') {
+		return p[1:]
+	}
+	return p
+}
+
+// ForOS converts a folder a shell on this machine reported, from an OSC 7
+// URL (after FileURL) or from OSC 9;9, into a clean absolute path for a
+// machine that runs goos. It reports false when p is not one.
+//
+// On Windows, a drive path in either slash, a UNC path, and an MSYS2 or Cygwin
+// path become a Windows path. An MSYS2 path under / needs the folder MSYS2 is
+// installed in, which is looked up only when the process runs on Windows
+// itself. On every other OS a drive path is refused, because no folder on this
+// machine has that name.
+func ForOS(p, goos string) (string, bool) {
+	if goos != "windows" {
+		if !strings.HasPrefix(p, "/") {
+			return "", false
+		}
+		return path.Clean(p), true
+	}
+	p = strings.ReplaceAll(p, `\`, "/")
 	if w, ok := FromPOSIX(p, Mounts{}); ok {
 		// A drive path, a UNC path or a Windows path: no root needed, so the
 		// environment is not searched for one.
-		return w
+		return w, true
 	}
-	if w, ok := FromPOSIX(p, localMounts()); ok {
-		return w
+	if runtime.GOOS != "windows" {
+		return "", false
 	}
-	return p
+	return FromPOSIX(p, localMounts())
 }
 
 // localMounts is the tree this process runs under, found on first use and

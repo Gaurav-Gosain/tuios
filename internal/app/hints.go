@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -686,11 +686,8 @@ func hintCwdHost(cwd string) (string, bool) {
 	if !strings.HasPrefix(cwd, "file://") {
 		return "", false
 	}
-	u, err := url.Parse(cwd)
-	if err != nil {
-		return "", false
-	}
-	return u.Hostname(), true
+	host, _, ok := winpath.FileURL(cwd)
+	return host, ok
 }
 
 // hintLocalPath turns a path match into an absolute path on this machine: the

@@ -169,3 +169,73 @@ func TestGitBranchAgreesWithGitInit(t *testing.T) {
 		t.Fatalf("gitBranch on a git-made checkout = %q, want from-git", got)
 	}
 }
+
+// TestParseCwdOnEachOS pins how a folder report becomes a path, for a daemon on
+// Windows and on any other OS, whatever OS the test runs on. It is issue #491:
+// PowerShell reports file://NOTE238/C:/dev/x, and tuios kept the slash in front
+// of the drive, so the folder read \C:\dev\x, which does not exist, and a new
+// window never started in it.
+//
+// The ways it could fail, written down before the code:
+//   - The slash in front of a drive stays: /C:/x reads as \C:\x on Windows.
+//   - Only the local report is fixed, and a report that names another machine
+//     keeps /C:/x, or is turned into a backslash path on a Windows daemon,
+//     which is no path on the machine that sent it.
+//   - A path with %20 or %25 is not decoded, or is decoded twice.
+//   - file:///C:/x, with no host, is not read as this machine.
+//   - A drive path is taken as a folder on Linux or macOS, where it is none.
+//   - A folder named C: (a top folder of /C:x) is read as a drive.
+//   - An OSC 9;9 path in back slashes, forward slashes or quotes is read in one
+//     form only, or a UNC path from OSC 9;9 is refused.
+//   - A UNC report, file://server/share/x, is read as a share on this machine.
+//     OSC 7 names the machine the shell runs on, so it is another machine.
+//   - A shell in a UNC folder reports file://HOST//server/share/x, and one of
+//     the two slashes in front of the server is lost.
+func TestParseCwdOnEachOS(t *testing.T) {
+	local := func(h string) bool {
+		h = strings.ToLower(h)
+		return h == "" || h == "localhost" || h == "note238"
+	}
+	cases := []struct {
+		goos, raw  string
+		path, host string
+		ok         bool
+	}{
+		{"windows", "file://NOTE238/C:/dev/tuios_0.8.5_Windows_x86_64", `C:\dev\tuios_0.8.5_Windows_x86_64`, "", true},
+		{"windows", "file:///C:/x", `C:\x`, "", true},
+		{"windows", "file://localhost/c:/x/", `C:\x`, "", true},
+		{"windows", "file:///C:", `C:\`, "", true},
+		{"windows", "file:///C:/", `C:\`, "", true},
+		{"windows", "file:///C:/My%20Docs/100%25", `C:\My Docs\100%`, "", true},
+		{"windows", "file:///C:/a/../b", `C:\b`, "", true},
+		{"windows", "file://NOTE238//server/share/x", `\\server\share\x`, "", true},
+		{"windows", "file://server/share/x", "/share/x", "server", true},
+		{"windows", "file://far-box/C:/dev/x", "C:/dev/x", "far-box", true},
+		{"windows", "file://far-box/home/u", "/home/u", "far-box", true},
+		{"windows", "file://far-box//server/share", "//server/share", "far-box", true},
+		{"windows", `C:\dev\x`, `C:\dev\x`, "", true},
+		{"windows", `"C:\dev\x"`, `C:\dev\x`, "", true},
+		{"windows", "C:/dev/x", `C:\dev\x`, "", true},
+		{"windows", `\\server\share\x`, `\\server\share\x`, "", true},
+		{"windows", "file:///C:x", "", "", false},
+		{"windows", "dev/x", "", "", false},
+		{"linux", "file://far-box/C:/dev/x", "C:/dev/x", "far-box", true},
+		{"linux", "file://NOTE238/C:/dev/x", "", "", false},
+		{"linux", "file:///C:/x", "", "", false},
+		{"linux", `C:\x`, "", "", false},
+		{"linux", "file:///C:x", "/C:x", "", true},
+		{"linux", "file:///home/u/My%20Docs", "/home/u/My Docs", "", true},
+		{"linux", "file://localhost/a/b/../c/", "/a/c", "", true},
+		{"linux", "file://server/share/x", "/share/x", "server", true},
+		{"darwin", "/Users/u", "/Users/u", "", true},
+		{"linux", "file://far-box", "", "", false},
+		{"linux", "", "", "", false},
+	}
+	for _, c := range cases {
+		path, host, ok := parseCwdFor(c.raw, c.goos, local)
+		if path != c.path || host != c.host || ok != c.ok {
+			t.Errorf("%s: parseCwdFor(%q) = %q, %q, %v; want %q, %q, %v",
+				c.goos, c.raw, path, host, ok, c.path, c.host, c.ok)
+		}
+	}
+}

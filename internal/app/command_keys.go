@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
 // Command keybindings, the [[keybindings.command]] entries. See
@@ -169,14 +169,17 @@ func (m *OS) remotePaneDir() string {
 
 // remoteFolder is the path an OSC 7 report names, whatever host it names, or
 // "". Nothing checks it: the folder is on the session's machine, not this one.
+// That machine can be Windows, so a drive path is kept in either form: the
+// C:/x a file:// URL names, and the C:\x a Windows daemon sends.
 func remoteFolder(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	if u, err := url.Parse(raw); err == nil && u.Scheme == "file" {
-		return u.Path
+	if strings.HasPrefix(raw, "file://") {
+		_, p, _ := winpath.FileURL(raw)
+		return p
 	}
-	if filepath.IsAbs(raw) {
+	if _, ok := winpath.ForOS(raw, "windows"); ok || filepath.IsAbs(raw) {
 		return raw
 	}
 	return ""

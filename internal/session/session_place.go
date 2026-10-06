@@ -2,8 +2,8 @@ package session
 
 import (
 	"io"
-	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -265,6 +265,12 @@ func ParseCwdAnnouncement(raw string) (path, host string, ok bool) {
 // parseCwdAnnouncement reads a report the way parseCwdReport does, and keeps one
 // that names another machine. host is that machine, empty for this one.
 func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
+	return parseCwdFor(raw, runtime.GOOS, IsLocalHostName)
+}
+
+// parseCwdFor is parseCwdAnnouncement for a daemon that runs goos, with
+// isLocal judging the host. It is pure so every OS's rules are tested on any.
+func parseCwdFor(raw, goos string, isLocal func(string) bool) (dir, host string, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", "", false
@@ -275,24 +281,34 @@ func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 		if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
 			raw = raw[1 : len(raw)-1]
 		}
-		if p := winpath.Native(raw); filepath.IsAbs(p) {
-			return filepath.Clean(p), "", true
-		}
+		dir, ok := winpath.ForOS(raw, goos)
+		return dir, "", ok
+	}
+	h, p, ok := winpath.FileURL(raw)
+	if !ok {
 		return "", "", false
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Path == "" {
-		return "", "", false
-	}
-	if h := u.Hostname(); !IsLocalHostName(h) {
+	if !isLocal(h) {
 		// Bounded: it is shown on a rail row, and the pane wrote it. The path
-		// is another machine's, so it is not converted for this one.
-		return filepath.Clean(u.Path), ClampDisplayText(u.Hostname()), true
+		// is another machine's, so it is not converted for this one: it stays
+		// in forward slashes, which is what ssh to that machine reads, and
+		// filepath on a Windows daemon would turn /home/u into \home\u.
+		return cleanSlashPath(p), ClampDisplayText(h), true
 	}
-	// An MSYS2 or Cygwin shell on Windows reports /c/Users/x, which a native
-	// program reads as \c\Users\x. winpath.Native makes it C:\Users\x, and
-	// leaves the path alone on every other platform.
-	return filepath.Clean(winpath.Native(u.Path)), "", true
+	// A native Windows shell reports /C:/x, and an MSYS2 or Cygwin shell
+	// /c/Users/x. ForOS makes both a Windows path on Windows, and refuses a
+	// drive path everywhere else.
+	dir, ok = winpath.ForOS(p, goos)
+	return dir, "", ok
+}
+
+// cleanSlashPath cleans a forward-slash path from another machine, and keeps
+// the two leading slashes of a UNC path, which path.Clean would fold into one.
+func cleanSlashPath(p string) string {
+	if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
+		return "/" + path.Clean(p)
+	}
+	return path.Clean(p)
 }
 
 // dirLabel is the short form of a directory for a row: its base name, or "~"

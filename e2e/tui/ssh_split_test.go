@@ -275,6 +275,25 @@ func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
 	alive(t, term, "after the split with a folder")
 }
 
+// Issue #491: a native Windows shell reports file://HOST/C:/x. The folder is
+// C:/x, and tuios kept the slash in front of the drive, so a split ran
+// cd "/C:/x" on the far machine, which is no folder there. The cd goes
+// through sh, which a Windows ssh server does not run, so a drive folder
+// gets no cd at all: the new pane opens the far machine's login shell.
+func TestSSHSplitIntoWindowsSendsNoDriveFolder(t *testing.T) {
+	term, _, runs := startSSHSplit(t, "")
+	sshIn(t, term, "ssh pollen@fakehost", 0)
+
+	enterTerminalMode(t, term)
+	typeUntil(t, term, `printf '\033]7;file://fakehost/C:/Users/pollen/my%%20app\033\\'; echo REPORT""ED`, "REPORTED")
+	leaveTerminalMode(t, term)
+
+	pressAndCount(t, term, 2, "split_ssh_vertical", tuitest.Alt('v'))
+	wantArgs(t, term, "split with a reported drive folder", sshRunArgs(t, term, runs, 1),
+		[]string{"-o", "ControlMaster=no", "pollen@fakehost"})
+	alive(t, term, "after the split with a drive folder")
+}
+
 // The ssh actions in a pane with no ssh open an ordinary pane with a shell.
 func TestSSHSplitFallsBackToAShell(t *testing.T) {
 	term, _, runs := startSSHSplit(t, "")

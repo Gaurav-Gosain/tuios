@@ -1866,6 +1866,36 @@ Not covered end to end: a shell in a deleted folder, a real Windows machine, Con
 on macOS, and OSC 9;9 on the libghostty-vt backend, which reads it the same
 way in its own parser.
 
+### The slash in front of the drive (#491, second report)
+
+The reporter's `list-windows` showed the folder `\C:\dev\x` for the report
+`file://NOTE238/C:/dev/x`: the URL path keeps a slash in front of the drive.
+`winpath.FileURL` is now the one reader of an OSC 7 URL, on the client and in
+the daemon, and it drops that slash. `winpath.ForOS` turns the folder into a
+path for the daemon's OS, and refuses a drive path on any OS but Windows.
+
+`TestParseCwdOnEachOS` in `internal/session/session_place_test.go` runs the
+parser for a Windows daemon and for a Linux one on any OS: the reporter's URL,
+`file:///C:/x`, percent escapes, OSC 9;9 in both slashes and quoted, UNC paths,
+and reports from another machine. It also passes as a Windows binary under
+wine. A UNC report, `file://server/share/x`, is read as the folder `/share/x`
+on the machine `server`, because OSC 7 names the machine the shell runs on.
+
+`TestSSHSplitIntoWindowsSendsNoDriveFolder` in `ssh_split_test.go` is the
+case Linux can show: the far shell reports `file://fakehost/C:/Users/pollen/my%20app`,
+and an ssh split must run plain ssh. Before, it ran `cd "/C:/Users/pollen/my app"`
+through `sh`, which a Windows ssh server does not have.
+`TestSSHSplitKeepsTheRemoteFolder` is the positive half: a POSIX folder from
+the same far machine still gets its `cd`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The drive slash stays in the URL path | `dropDriveSlash`: `return p[1:]` made `return p` | `TestSSHSplitIntoWindowsSendsNoDriveFolder` (ssh ran `cd "/C:/Users/pollen/my app"`), `TestParseCwdOnEachOS` (the far-machine rows read `/C:/dev/x`, and Linux takes `file:///C:/x` as a local folder) | **caught** |
+| No drive slash is dropped anywhere, as in v0.8.5 | the same, and `FromPOSIX` no longer trims the slash before its drive check | `TestParseCwdOnEachOS` (every Windows row with a drive: the reporter's URL is refused, want `C:\dev\tuios_0.8.5_Windows_x86_64`) | **caught** |
+
+Not covered end to end: a real Windows machine. The unit table and the wine run
+stand in for it.
+
 ## A bare attach picks the session the person used last (#486)
 
 A bare `tuios attach` lands on the session the person used last: the
