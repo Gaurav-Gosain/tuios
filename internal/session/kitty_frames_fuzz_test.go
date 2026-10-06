@@ -48,6 +48,10 @@ func FuzzGfxScanner(f *testing.F) {
 	// A frame on each screen, the switches split across reads.
 	f.Add([]byte(frame(1, "AAAA", 1)+"\x1b[?1049h"+frame(1, "BBBB", 2)+"\x1b[?1;1049l\x1bc\x1b[?47h"+frame(1, "CCCC", 1)), uint64(0x3121))
 
+	// An id-less frame, as mpv sends it, in three chunks, with the reads
+	// cutting its payloads: every segment of it carries the same key.
+	f.Add([]byte("\x1b[3;5H\x1b_Ga=T,f=24,s=2,v=2,C=1,m=1;AAAAAAAA\x1b\\\x1b_Gm=1;BBBBBBBB\x1b\\\x1b_Gm=0;CCCC\x1b\\"), uint64(0x9a9a9a9a))
+
 	f.Fuzz(func(t *testing.T, stream []byte, splits uint64) {
 		whole := scanAll(t, stream, nil)
 		var cuts []int
@@ -86,8 +90,9 @@ func scanAll(t *testing.T, stream []byte, cuts []int) string {
 				t.Fatalf("a frame segment at %d says first=%v while a frame open=%v", end, sg.first, inFrame)
 			}
 			inFrame = !sg.last
-			fmt.Fprintf(&desc, "[%d-%d id=%d alt=%v moves=%v first=%v last=%v]",
-				end-int64(len(sg.b)), end, sg.id, sg.alt, sg.moves, sg.first, sg.last)
+			// The key goes in as a hash: it holds raw bytes, "]" among them.
+			fmt.Fprintf(&desc, "[%d-%d id=%d alt=%v moves=%v keep=%v key=%d first=%v last=%v]",
+				end-int64(len(sg.b)), end, sg.id, sg.alt, sg.moves, sg.keep, keyHash(sg.key), sg.first, sg.last)
 		}
 		if len(s.carry) > maxGfxHeader+4 {
 			t.Fatalf("the carry holds %d bytes", len(s.carry))
@@ -119,7 +124,8 @@ func joinRuns(d string) string {
 		from, to           int64
 		id                 uint32
 		moves, first, last bool
-		alt                bool
+		alt, keep          bool
+		key                uint64
 	}
 	var runs []run
 	for _, part := range bytes.Split([]byte(d), []byte("]")) {
@@ -127,15 +133,30 @@ func joinRuns(d string) string {
 			continue
 		}
 		var r run
-		if _, err := fmt.Sscanf(string(part), "[%d-%d id=%d alt=%t moves=%t first=%t last=%t",
-			&r.from, &r.to, &r.id, &r.alt, &r.moves, &r.first, &r.last); err != nil {
+		if _, err := fmt.Sscanf(string(part), "[%d-%d id=%d alt=%t moves=%t keep=%t key=%d first=%t last=%t",
+			&r.from, &r.to, &r.id, &r.alt, &r.moves, &r.keep, &r.key, &r.first, &r.last); err != nil {
 			panic(err)
 		}
-		if n := len(runs); n > 0 && runs[n-1].to == r.from && !runs[n-1].last && !r.first {
+		// Only segments that describe the frame the same way join. A read
+		// that cut a frame and gave the second half other attributes must
+		// not compare equal to a read that did not cut it.
+		if n := len(runs); n > 0 && runs[n-1].to == r.from && !runs[n-1].last && !r.first &&
+			runs[n-1].id == r.id && runs[n-1].alt == r.alt && runs[n-1].moves == r.moves &&
+			runs[n-1].keep == r.keep && runs[n-1].key == r.key {
 			runs[n-1].to, runs[n-1].last = r.to, r.last
 			continue
 		}
 		runs = append(runs, r)
 	}
 	return fmt.Sprint(runs)
+}
+
+// keyHash stands for an id-less frame's key in a segment description.
+func keyHash(key string) uint64 {
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(key); i++ {
+		h ^= uint64(key[i])
+		h *= 1099511628211
+	}
+	return h
 }

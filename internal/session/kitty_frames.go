@@ -146,9 +146,11 @@ type gfxScanner struct {
 	alt  bool
 	mode []byte
 
-	// frameAlt is alt as it was at the first chunk of the frame in progress.
-	// Every segment of a frame carries it, whichever read the segment came in.
+	// frameAlt is alt as it was at the first chunk of the frame in progress,
+	// and frameKey is the key its first chunk got. Every segment of a frame
+	// carries both, whichever read the segment came in.
 	frameAlt bool
+	frameKey string
 
 	// What classify found in the command in progress.
 	frameID        uint32
@@ -188,6 +190,7 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 		// A payload the last read ended inside. Its segments describe the
 		// same frame as the ones before them did.
 		cur.id, cur.alt, cur.moves, cur.keep = s.frameID, s.frameAlt, s.frameMoves, s.frameKeep
+		cur.key = s.frameKey
 	}
 	emit := func(to int) {
 		if to > segStart {
@@ -296,8 +299,10 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 						cur.key = string(cup) + "\x00" + string(keys)
 					}
 					s.frameAlt = s.alt
+					s.frameKey = cur.key
 				}
 				cur.id, cur.alt, cur.moves, cur.keep = s.frameID, s.frameAlt, s.frameMoves, s.frameKeep
+				cur.key = s.frameKey
 				s.inFrame = true
 			} else {
 				cur.pins = true
