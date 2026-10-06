@@ -1892,6 +1892,17 @@ the same far machine still gets its `cd`.
 | --- | --- | --- | --- |
 | The drive slash stays in the URL path | `dropDriveSlash`: `return p[1:]` made `return p` | `TestSSHSplitIntoWindowsSendsNoDriveFolder` (ssh ran `cd "/C:/Users/pollen/my app"`), `TestParseCwdOnEachOS` (the far-machine rows read `/C:/dev/x`, and Linux takes `file:///C:/x` as a local folder) | **caught** |
 | No drive slash is dropped anywhere, as in v0.8.5 | the same, and `FromPOSIX` no longer trims the slash before its drive check | `TestParseCwdOnEachOS` (every Windows row with a drive: the reporter's URL is refused, want `C:\dev\tuios_0.8.5_Windows_x86_64`) | **caught** |
+| A UNC folder gets a cd | `safeRemoteDir`: the `//` refusal cut | `TestSSHSplitIntoWindowsSendsNoDriveFolder/unc` (ssh ran `cd "//srv/share"`) | **caught** |
+
+The review's second round added three things. `safeRemoteDir` refuses a
+folder that starts with `//`, which is the UNC folder of a Windows shell
+(`file://winbox//srv/share`), and the `unc` row of
+`TestSSHSplitIntoWindowsSendsNoDriveFolder` covers it. `FileURL` refuses a
+path that decodes to a control character (`%00`, `%1b`, `%0a`), and
+`TestParseCwdOnEachOS` has rows for those and a positive row for `%C3%A9`.
+`hintCwdHost` reads the host with `url.Parse` again, so a report with no
+path, `file://far`, still names another machine and still blocks opening a
+path here.
 
 Not covered end to end: a real Windows machine. The unit table and the wine run
 stand in for it.

@@ -191,6 +191,8 @@ func TestGitBranchAgreesWithGitInit(t *testing.T) {
 //     OSC 7 names the machine the shell runs on, so it is another machine.
 //   - A shell in a UNC folder reports file://HOST//server/share/x, and one of
 //     the two slashes in front of the server is lost.
+//   - A decoded control character (%00, %1b, %0a) reaches the rail or a
+//     command. A plain non-ASCII name must still pass.
 func TestParseCwdOnEachOS(t *testing.T) {
 	local := func(h string) bool {
 		h = strings.ToLower(h)
@@ -229,6 +231,10 @@ func TestParseCwdOnEachOS(t *testing.T) {
 		{"linux", "file://server/share/x", "/share/x", "server", true},
 		{"darwin", "/Users/u", "/Users/u", "", true},
 		{"linux", "file://far-box", "", "", false},
+		{"linux", "file:///home/u/a%00b", "", "", false},
+		{"linux", "file://far-box/home/%1b[2Ju", "", "", false},
+		{"windows", "file:///C:/x%0a", "", "", false},
+		{"linux", "file:///home/u/caf%C3%A9", "/home/u/café", "", true},
 		{"linux", "", "", "", false},
 	}
 	for _, c := range cases {

@@ -391,8 +391,12 @@ func destHost(dest string) string {
 // the double quotes of the cd, inside the single quotes around the sh script,
 // in any login shell. It returns "" otherwise, and the new pane then starts in
 // the home folder. The folder came from bytes the remote shell printed.
+//
+// A path that starts with // is refused too. That is a UNC folder reported by
+// a Windows shell (file://winbox//srv/share), and a Windows ssh server has no
+// sh to run the cd through, so the new pane would die at once.
 func safeRemoteDir(dir string) string {
-	if !strings.HasPrefix(dir, "/") || len(dir) > 4096 {
+	if !strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "//") || len(dir) > 4096 {
 		return ""
 	}
 	for _, r := range dir {

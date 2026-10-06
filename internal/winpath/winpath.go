@@ -185,6 +185,12 @@ func FileURL(raw string) (host, p string, ok bool) {
 	if err != nil || !strings.EqualFold(u.Scheme, "file") || u.Path == "" {
 		return "", "", false
 	}
+	// The path is decoded, so %00 or %1b is a control character now. No
+	// folder name needs one, and the folder is shown on the rail and handed
+	// to commands, so a report that carries one is refused.
+	if strings.ContainsFunc(u.Path, func(r rune) bool { return r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) }) {
+		return "", "", false
+	}
 	return u.Hostname(), dropDriveSlash(u.Path), true
 }
 
