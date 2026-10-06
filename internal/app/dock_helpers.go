@@ -555,10 +555,9 @@ func (m *OS) CalculateDockLayout() DockLayout {
 			want = 0
 		}
 		room = max(room-dockItemsWidth(allItems), 0)
-	} else if _, live := m.dockNotificationBlock(m.GetRenderWidth(), 0); live {
-		_ = room
-		_ = want
 	}
+	// With a live message, the right block keeps its full width, and the
+	// position pass shortens the entries' names into what the block leaves.
 	layout.RightWidth = min(want, room)
 
 	// Calculate how many items fit and their positions
