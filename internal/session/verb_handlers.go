@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -187,6 +188,11 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	}
 	data := buildWindowListData(sess.GetState())
 	data["type"] = "window_list"
+	// The shell a new pane runs, by base name, so a reader can say what a
+	// pane at its prompt is running: foreground_cmd is omitted there.
+	if sh := sess.getShell(); sh != "" {
+		data["shell"] = filepath.Base(sh)
+	}
 	addShellFacts(sess, data)
 	addPaneMeta(sess, data)
 	return data, nil

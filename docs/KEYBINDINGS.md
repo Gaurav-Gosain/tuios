@@ -178,7 +178,9 @@ layout until it closes. `[panes] navigator_layout` sets the first layout. See
 [CONFIGURATION.md](CONFIGURATION.md).
 
 A session name has the color of the session in the sidebar. A dot in front of
-a pane shows the state of its agent. A search shows the matched characters in
+a pane shows the state of its agent. After the pane name is the command that
+runs in the pane, or the shell when the pane is at its prompt. A pane that has
+no name and no title shows its folder as its name. A search shows the matched characters in
 the accent color.
 
 Press `/` and type to search all panes. The search reads each pane's name,

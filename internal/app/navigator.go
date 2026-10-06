@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -66,6 +67,9 @@ type navPane struct {
 	Workspace  int
 	Focused    bool
 	AgentState string
+	// Cmdline is the command line running in the pane, when its shell
+	// marks its commands (OSC 133). The row reads an ssh target from it.
+	Cmdline string
 	// DoneSeen says a finished agent's pane has been looked at since, so
 	// its mark is the resting one. Known for the panes this client draws.
 	DoneSeen bool
@@ -110,6 +114,10 @@ type navSession struct {
 	// Count is how many panes the session has, from the listing, for a
 	// session whose panes are not known yet.
 	Count int
+	// Shell is the base name of the shell the session's panes run, so a
+	// pane at its prompt can say what it is running. Empty when the daemon
+	// did not say.
+	Shell string
 }
 
 // key is the session's identity in the navigator.
@@ -346,7 +354,7 @@ func (m *OS) navigatorCurrentSession() navSession {
 	if name == "" {
 		name = "local"
 	}
-	s := navSession{Name: name, Title: name, Current: true, WorkspaceNames: map[int]string{}}
+	s := navSession{Name: name, Title: name, Current: true, WorkspaceNames: map[int]string{}, Shell: m.navClientShell()}
 	for ws, n := range m.WorkspaceNames {
 		s.WorkspaceNames[ws] = n
 	}
@@ -374,6 +382,18 @@ func (m *OS) navigatorCurrentSession() navSession {
 	}
 	s.Count = len(s.Panes)
 	return s
+}
+
+// navClientShell is the base name of the shell this client asks a session
+// it makes to run: the one the daemon runs in the attached session's panes
+// unless that session was made by another client with another shell.
+func (m *OS) navClientShell() string {
+	preferred := ""
+	if m.UserConfig != nil {
+		preferred = m.UserConfig.Appearance.PreferredShell
+	}
+	shell, _ := config.ShellFor(preferred)
+	return filepath.Base(shell)
 }
 
 // navScreenText is the last n non-blank-tailed lines of a pane's screen as
@@ -627,12 +647,14 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	}
 	var list struct {
 		Focused string `json:"focused_window_id"`
+		Shell   string `json:"shell"`
 		Windows []struct {
 			ID         string `json:"window_id"`
 			Display    string `json:"display_name"`
 			Title      string `json:"title"`
 			Cwd        string `json:"cwd"`
 			Command    string `json:"foreground_cmd"`
+			Cmdline    string `json:"running_cmdline"`
 			Workspace  int    `json:"workspace"`
 			Scratch    bool   `json:"scratch"`
 			AgentState string `json:"agent_state"`
@@ -641,7 +663,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	if json.Unmarshal(raw, &list) != nil {
 		return navSession{}, false, true
 	}
-	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}}
+	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}, Shell: list.Shell}
 	for _, w := range list.Windows {
 		if w.Scratch {
 			continue
@@ -651,7 +673,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 			state = ""
 		}
 		s.Panes = append(s.Panes, navPane{
-			ID: w.ID, Name: w.Display, Title: w.Title, Cwd: w.Cwd, Command: w.Command,
+			ID: w.ID, Name: w.Display, Title: w.Title, Cwd: w.Cwd, Command: w.Command, Cmdline: w.Cmdline,
 			Workspace: w.Workspace, Focused: w.ID == list.Focused, AgentState: state,
 		})
 	}

@@ -194,6 +194,15 @@ func TestNavigatorDrawsTheTree(t *testing.T) {
 			if !strings.Contains(row, "├─") && !strings.Contains(row, "└─") {
 				t.Fatalf("the logs pane has no guide: %q\n%s", row, term.Snapshot())
 			}
+			// logs sits at its prompt, so its command is its session's
+			// shell, which the daemon names in list-windows.
+			if !strings.Contains(row, "logs │ sh") {
+				t.Fatalf("the logs pane does not say it runs sh: %q\n%s", row, term.Snapshot())
+			}
+		}
+		// A pane with only the name tuios made up is called by its folder.
+		if strings.Contains(row, "Terminal ") {
+			t.Fatalf("a row shows a made-up pane name: %q\n%s", row, term.Snapshot())
 		}
 		if s.Cell(left+1, y).Content == "▎" {
 			barRows++

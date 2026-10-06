@@ -1595,6 +1595,8 @@ kind, for what a daemon that is not tuios could send.
 | No tree guides | `navTreeGlyphs`: the branch and the closing guide made blank | `TestNavigatorDrawsTheTree` ("the logs pane has no guide") | **caught** |
 | No bar on the cursor row | `navigatorItem`: the focus mark drawn as a blank | `TestNavigatorDrawsTheTree` ("0 rows carry the bar, want one, on work") | **caught** |
 | No ground on the cursor row | `navigatorItem` and `renderNavigator`: the rows drawn on the surface and not through `pal.Row` | `TestNavigatorDrawsTheTree` ("the cursor row's ground ... is the ground of the other rows") | **caught** |
+| A pane at its prompt names no command | `navPaneCommand`: the session's shell not used | `TestNavigatorDrawsTheTree` ("the logs pane does not say it runs sh") | **caught** |
+| A made-up pane name is shown | `navPaneLabel`: the `isDefaultTitle` check cut | `TestNavigatorDrawsTheTree` ("a row shows a made-up pane name: ... Terminal 0ccfc9a8") | **caught** |
 
 ## Agents settings tab and the integration notice
 

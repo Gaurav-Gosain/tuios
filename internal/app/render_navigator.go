@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -252,11 +253,15 @@ type navInks struct {
 // navRowInks are the inks for a row drawn on ground.
 func navRowInks(ground color.Color, pal overlay.Palette) navInks {
 	return navInks{
-		ground:  ground,
-		fg:      pal.Fg,
-		dim:     pal.FgDim,
-		mute:    pal.FgMute,
-		edge:    pal.Edge,
+		ground: ground,
+		// The cursor row's ground is tinted past the palette's own steps
+		// (see navGround), so the inks are measured again on it.
+		fg:   overlay.ReadableAt(pal.Fg, ground, overlay.ContrastFloor),
+		dim:  overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor),
+		mute: overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor),
+		// The guides are structure, but they are read: a row's place in the
+		// tree is what they say. The quiet ink, not the frame's.
+		edge:    overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor),
 		command: theme.Readable(pal.Info, ground),
 		current: theme.Readable(pal.Success, ground),
 		accent:  theme.Readable(pal.Accent, ground),
@@ -264,6 +269,34 @@ func navRowInks(ground color.Color, pal overlay.Palette) navInks {
 		// ink, so a match is underlined as well as bold there.
 		hit: overlay.Style(ground).Foreground(theme.Readable(pal.AccentBright, ground)).Bold(true).Underline(pal.Depth == overlay.Depth16),
 	}
+}
+
+// navCursorTint is how far the cursor row's ground is carried toward the
+// accent: the palette's cursor step alone is a few percent of lightness,
+// which on a dark theme's surface read as no cursor at all. A list without
+// the keyboard keeps a quieter tint.
+const (
+	navCursorTint      = 0.22
+	navCursorTintQuiet = 0.10
+)
+
+// navGround is the ground of a list row in state st: the palette's ground,
+// and on the cursor row that ground tinted toward the accent. At 16 colours
+// the row is the palette's (pal.Row makes the cursor reverse video there).
+func navGround(st overlay.RowState, pal overlay.Palette) color.Color {
+	g := pal.Ground(st, pal.Surface)
+	if pal.Depth == overlay.Depth16 || !st.Cursor {
+		return g
+	}
+	w := navCursorTint
+	if !st.Focused {
+		w = navCursorTintQuiet
+	}
+	c := overlay.MixColors(g, pal.Accent, w)
+	if pal.Depth == overlay.Depth256 {
+		c = overlay.Apart256(c, pal.Surface)
+	}
+	return c
 }
 
 // ink is a style in c on the row's ground.
@@ -377,11 +410,15 @@ func navTreePlace(s *navSession, r navRow) (wsLast, paneLast bool) {
 }
 
 // navigatorItem draws one row of the list as its lines: one, or two for a
-// card. Each line is drawn on the row's ground and left for pal.Row to
-// finish.
+// card. Each line is drawn on the row's ground, the whole width across, and
+// left for pal.Row to finish.
+//
+// The tree is drawn the way tree(1) draws it. A session starts at the left
+// edge, its workspaces hang from a trunk under its first cell, and a
+// workspace's panes hang from a trunk under its own first cell. A trunk runs
+// down past a row only while a later sibling follows it.
 func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay.Palette) []string {
-	ground := pal.Ground(st, pal.Surface)
-	k := navRowInks(ground, pal)
+	k := navRowInks(navGround(st, pal), pal)
 	bar := k.ink(k.accent).Render(" ")
 	if st.Cursor {
 		bar = k.ink(k.accent).Render(m.Settings.GetRailFocusMark())
@@ -390,7 +427,7 @@ func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay
 	s := &m.navigator.sessions[r.Session]
 	switch {
 	case r.Kind == navRowSession:
-		left, right := m.navSessionSpans(s, !m.navFlat(), k)
+		left, right := m.navSessionSpans(s, k)
 		if m.navCards() {
 			return []string{
 				navSpans(width, bar+left, "", k),
@@ -405,14 +442,13 @@ func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay
 		if wsLast {
 			guide = last
 		}
-		key := s.key() + "\x00ws" + strconv.Itoa(r.Workspace)
 		n := 0
 		for _, p := range s.Panes {
 			if p.Workspace == r.Workspace {
 				n++
 			}
 		}
-		left := k.ink(k.edge).Render(guide) + k.ink(k.dim).Render(m.navFold(m.navExpanded(key, true))+" ") + m.navWorkspaceLabel(s, r.Workspace, k)
+		left := k.ink(k.edge).Render(guide) + m.navWorkspaceLabel(s, r.Workspace, k)
 		return []string{navSpans(width, bar+left, k.ink(k.mute).Render(strconv.Itoa(n)), k)}
 	}
 
@@ -430,20 +466,21 @@ func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay
 		}
 		lead = k.ink(k.edge).Render(outer + inner)
 	}
-	name := m.navPaneName(p, st.Cursor, k)
+	name, byFolder := m.navPaneName(s, p, st.Cursor, k)
 	right := ""
 	switch {
 	case r.Snippet != "":
-		snip := printableTitle(r.Snippet)
-		right = k.lit(overlay.Truncate(snip, max(width/2, 8)), k.ink(k.dim).Italic(true), m.navMatch(overlay.Truncate(snip, max(width/2, 8)), true))
+		snip := overlay.Truncate(printableTitle(r.Snippet), max(width/2, 8))
+		right = k.lit(snip, k.ink(k.dim).Italic(true), m.navMatch(snip, true))
 	case p.Focused && s.Current:
 		right = k.ink(k.current).Render("current")
 	}
+	folder := ""
+	if p.Cwd != "" && !byFolder {
+		folder = k.ink(k.mute).Render("  " + printableTitle(navFolder(p.Cwd)))
+	}
 	if m.navCards() {
-		second := k.ink(k.fg).Render("  ") + m.navBreadcrumb(s, p.Workspace, k)
-		if p.Cwd != "" {
-			second += k.ink(k.mute).Render("  " + printableTitle(navFolder(p.Cwd)))
-		}
+		second := k.ink(k.fg).Render("  ") + m.navBreadcrumb(s, p.Workspace, k) + folder
 		return []string{
 			navSpans(width, bar+name, right, k),
 			navSpans(width, bar+second, "", k),
@@ -452,32 +489,21 @@ func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay
 	left := bar + lead + name
 	if m.navFlat() {
 		left += k.ink(k.mute).Render("  ") + m.navBreadcrumb(s, p.Workspace, k)
-	} else if p.Cwd != "" {
-		left += k.ink(k.mute).Render("  " + printableTitle(navFolder(p.Cwd)))
+	} else {
+		left += folder
 	}
 	return []string{navSpans(width, left, right, k)}
 }
 
-// navFold is the fold mark: open or shut.
-func (m *OS) navFold(open bool) string {
-	if open {
-		return m.Settings.GetRailFoldOpenGlyph()
-	}
-	return m.Settings.GetRailFoldShutGlyph()
-}
-
-// navSessionSpans is a session row: its fold in the tree, its name bold in
-// its own colour and its machine, and on the right what is known of it.
-func (m *OS) navSessionSpans(s *navSession, fold bool, k navInks) (left, right string) {
+// navSessionSpans is a session row: its name bold in its own colour and its
+// machine, and on the right what is known of it.
+func (m *OS) navSessionSpans(s *navSession, k navInks) (left, right string) {
 	tint := k.fg
 	if c := m.sessionTint(navTintKey(s), k.ground); c != nil {
 		tint = c
 	}
-	if fold {
-		left = k.ink(k.dim).Render(m.navFold(m.navExpanded(s.key(), s.Current)) + " ")
-	}
 	title := printableTitle(s.Title)
-	left += k.lit(title, k.ink(tint).Bold(true), m.navMatch(title, false))
+	left = k.lit(title, k.ink(tint).Bold(true), m.navMatch(title, false))
 	if s.Host != "" {
 		left += k.ink(k.mute).Render(" @ ") + k.ink(k.dim).Render(printableTitle(s.Host))
 	}
@@ -510,23 +536,88 @@ func (m *OS) navWorkspaceLabel(s *navSession, ws int, k navInks) string {
 	return out
 }
 
-// navPaneName is a pane's mark, name and command: the agent state's mark in
-// its colour (a blank cell when there is no agent), the name, and the running
-// command after a rule in the informational ink.
-func (m *OS) navPaneName(p *navPane, selected bool, k navInks) string {
+// navPaneLabel is what a pane's row calls it. A name the person gave it or a
+// title its program set comes first. A pane with only the name tuios made
+// up ("Terminal 1a2b3c4d") is called by its folder instead, and byFolder
+// says so, so the row does not show the folder twice. With no folder known
+// the made-up name stands, and quiet says to draw it in the quiet ink.
+func navPaneLabel(p *navPane) (label string, byFolder, quiet bool) {
+	name := printableTitle(p.Name)
+	if name != "" && !isDefaultTitle(p.Name, p.ID) {
+		return name, false, false
+	}
+	if t := printableTitle(p.Title); t != "" && !isDefaultTitle(p.Title, p.ID) {
+		return t, false, false
+	}
+	if p.Cwd != "" {
+		return printableTitle(navFolder(p.Cwd)), true, false
+	}
+	if name == "" {
+		name = "pane"
+	}
+	return name, false, true
+}
+
+// navPaneCommand is what a pane is running, for its row: the foreground
+// command, or the session's shell at a prompt. An ssh session says where it
+// went when the pane's shell reported the command line.
+func navPaneCommand(s *navSession, p *navPane) string {
+	cmd := printableTitle(p.Command)
+	if cmd == "" && p.AgentState == "" {
+		cmd = printableTitle(s.Shell)
+	}
+	if cmd == "ssh" {
+		if host := navSSHTarget(p.Cmdline); host != "" {
+			cmd += " " + printableTitle(host)
+		}
+	}
+	return cmd
+}
+
+// navSSHTarget is the destination of an ssh command line: its first word
+// after ssh that is not an option or an option's value.
+func navSSHTarget(cmdline string) string {
+	f := strings.Fields(cmdline)
+	if len(f) == 0 || filepath.Base(f[0]) != "ssh" {
+		return ""
+	}
+	// The options of ssh(1) that take a value.
+	const valued = "BbcDEeFIiJLlmOopQRSWw"
+	for i := 1; i < len(f); i++ {
+		a := f[i]
+		if strings.HasPrefix(a, "-") {
+			if len(a) == 2 && strings.ContainsRune(valued, rune(a[1])) {
+				i++
+			}
+			continue
+		}
+		if at := strings.LastIndex(a, "@"); at >= 0 {
+			a = a[at+1:]
+		}
+		return a
+	}
+	return ""
+}
+
+// navPaneName is a pane's mark, label and command: the agent state's mark in
+// its colour (a blank cell when there is no agent), the label, and the
+// running command after a rule in the informational ink. byFolder is
+// navPaneLabel's.
+func (m *OS) navPaneName(s *navSession, p *navPane, selected bool, k navInks) (string, bool) {
 	mark := k.ink(k.fg).Render("  ")
 	if glyph, c := agentMark(p.AgentState, p.DoneSeen, theme.UI()); glyph != "" {
 		mark = k.ink(theme.Readable(c, k.ground)).Bold(sidebarAttention(p.AgentState)).Render(glyph) + k.ink(k.fg).Render(" ")
 	}
-	name := printableTitle(p.Name)
-	if name == "" {
-		name = "pane"
+	label, byFolder, quiet := navPaneLabel(p)
+	ink := k.fg
+	if quiet {
+		ink = k.mute
 	}
-	out := mark + k.lit(name, k.ink(k.fg).Bold(selected), m.navMatch(name, false))
-	if cmd := printableTitle(p.Command); cmd != "" && !strings.EqualFold(cmd, name) {
+	out := mark + k.lit(label, k.ink(ink).Bold(selected && !quiet), m.navMatch(label, false))
+	if cmd := navPaneCommand(s, p); cmd != "" && !strings.EqualFold(cmd, label) {
 		out += k.ink(k.edge).Render(" │ ") + k.lit(cmd, k.ink(k.command), m.navMatch(cmd, false))
 	}
-	return out
+	return out, byFolder
 }
 
 // navBreadcrumb is where a pane is: its session in the session's colour, its
@@ -578,7 +669,7 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	}
 	var out []string
 	if r.Kind != navRowPane {
-		left, right := m.navSessionSpans(s, false, k)
+		left, right := m.navSessionSpans(s, k)
 		if r.Kind == navRowWorkspace {
 			left += k.ink(k.mute).Render(" › ") + m.navWorkspaceLabel(s, r.Workspace, k)
 		}
@@ -617,7 +708,7 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	}
 
 	p := &s.Panes[r.Pane]
-	head := m.navPaneName(p, true, k)
+	head, _ := m.navPaneName(s, p, true, k)
 	out = append(out, pad+navSpans(width-2, head, m.navBreadcrumb(s, p.Workspace, k), k))
 	where := ""
 	if p.Cwd != "" {
@@ -665,8 +756,9 @@ func (m *OS) navigatorPreviewPane(r navRow, width int, pal overlay.Palette) stri
 	if paneLast {
 		guide = last
 	}
-	left := k.ink(k.edge).Render(guide) + m.navPaneName(p, false, k)
-	if p.Cwd != "" {
+	name, byFolder := m.navPaneName(s, p, false, k)
+	left := k.ink(k.edge).Render(guide) + name
+	if p.Cwd != "" && !byFolder {
 		left += k.ink(k.mute).Render("  " + printableTitle(navFolder(p.Cwd)))
 	}
 	right := ""
