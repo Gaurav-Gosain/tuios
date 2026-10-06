@@ -56,6 +56,12 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 		t.charsetIDs[2] = final
 	case '+':
 		t.charsetIDs[3] = final
+	case '#':
+		if final == '8' {
+			// DECALN resets every margin, in the library as in the pure
+			// emulator, and turns origin mode off.
+			t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
+		}
 	case 0:
 		switch final {
 		case 'c': // RIS resets to the main screen among everything else.
@@ -90,6 +96,7 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.gl, t.gr = 0, 0
 	t.savedGL, t.savedGR = 0, 0
 	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
+	t.savedLRMM = false // a full reset clears the saved modes too
 	t.kittyKbd.Reset()
 	t.modifyOtherKeys.Store(0)
 	t.semanticMarkers.Clear()
@@ -98,7 +105,11 @@ func (t *GhosttyTerminal) resetShadowState() {
 func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 	switch {
 	case final == 'r' && prefix == 0 && inter == 0:
-		// DECSTBM. Empty params reset to the full screen.
+		// DECSTBM. Empty params reset to the full screen. The library
+		// ignores one with more than two parameters.
+		if csiParamCount(params) > 2 {
+			return
+		}
 		top, bottom := csiTwoParams(params, 1, t.height)
 		if top < 1 {
 			top = 1
@@ -115,7 +126,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			return
 		}
 		t.scanner.flushOut()
-		if on, _ := t.term.Mode(gh.ModeLeftRightMargin); on {
+		if on, _ := t.term.Mode(gh.ModeLeftRightMargin); on && csiParamCount(params) <= 2 {
+			// The library ignores a DECSLRM with more than two parameters.
 			left, right := csiTwoParams(params, 1, t.width)
 			if left < 1 {
 				left = 1
@@ -126,6 +138,18 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			if left < right {
 				t.scrollRegion = uv.Rect(left-1, t.scrollRegion.Min.Y, right-left+1, t.scrollRegion.Dy())
 			}
+		}
+	case final == 's' && prefix == '?' && inter == 0:
+		// XTSAVE. Only DECLRMM matters to the margin copy.
+		if csiHasParam(params, 69) && !t.closed.Load() {
+			t.scanner.flushOut()
+			t.savedLRMM, _ = t.term.Mode(gh.ModeLeftRightMargin)
+		}
+	case final == 'r' && prefix == '?' && inter == 0:
+		// XTRESTORE. The library sets each mode through its mode handler,
+		// so DECLRMM restored to off gives the columns back as ?69l does.
+		if csiHasParam(params, 69) && !t.savedLRMM {
+			t.scrollRegion = uv.Rect(0, t.scrollRegion.Min.Y, t.width, t.scrollRegion.Dy())
 		}
 	case final == 'q' && inter == ' ' && prefix == 0:
 		// DECSCUSR, mapped exactly as the pure emulator maps it.
@@ -616,6 +640,25 @@ func csiFirstParam(params []byte) (int, bool) {
 }
 
 // csiTwoParams parses the first two numeric CSI parameters with defaults.
+// csiParamCount is how many parameters a CSI carries, as the library counts
+// them: none for an empty list, and one more than the separators otherwise.
+func csiParamCount(params []byte) int {
+	if len(params) == 0 {
+		return 0
+	}
+	return bytes.Count(params, []byte{';'}) + 1
+}
+
+// csiHasParam reports whether n is one of a CSI's parameters.
+func csiHasParam(params []byte, n int) bool {
+	for _, part := range bytes.Split(params, []byte{';'}) {
+		if v, ok := atoiBytes(part); ok && v == n {
+			return true
+		}
+	}
+	return false
+}
+
 func csiTwoParams(params []byte, def1, def2 int) (int, int) {
 	a, b := def1, def2
 	parts := bytes.SplitN(params, []byte{';'}, 3)

@@ -258,6 +258,14 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 			fmt.Fprintf(&seq, "\x1b[%d;%dr", reg.Min.Y+1, reg.Max.Y)
 			regionTop = reg.Min.Y
 		}
+		// The left and right margins, after the mode loop above set
+		// DECLRMM: the library takes DECSLRM only with the mode on. Sending
+		// only DECSTBM left the library at the full width while the copy
+		// below said otherwise, so the client wrapped where the guest did
+		// not.
+		if lrmm := r.modes[69]; lrmm && !reg.Empty() && (reg.Min.X > 0 || reg.Max.X < t.width) {
+			fmt.Fprintf(&seq, "\x1b[%d;%ds", reg.Min.X+1, reg.Max.X)
+		}
 	}
 
 	if decom {

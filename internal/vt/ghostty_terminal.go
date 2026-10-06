@@ -102,7 +102,13 @@ type GhosttyTerminal struct {
 	savedCharsets    [4]byte
 	savedGL, savedGR int
 	scrollRegion     uv.Rectangle
-	kittyKbd         *kittyKeyboardState
+	// savedLRMM is the value XTSAVE (CSI ? 69 s) last saved for DECLRMM,
+	// which XTRESTORE (CSI ? 69 r) puts back. The library keeps its own
+	// copy. This one lets the margin copy follow a restore that turns the
+	// mode off, because the hook runs before the library has read the
+	// restore and cannot ask it for the result.
+	savedLRMM bool
+	kittyKbd  *kittyKeyboardState
 	// modifyOtherKeys mirrors the XTMODKEYS level the guest set, for the
 	// input path. libghostty keeps its own copy for its key encoder, which
 	// tuios does not use.
