@@ -38,11 +38,13 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -124,6 +126,15 @@ type Window struct {
 	AgentMsg  string `json:"agent_message,omitempty"`
 	AgentKind string `json:"agent_kind,omitempty"`
 	Cwd       string `json:"cwd,omitempty"`
+	// Foreground is what the pane runs, empty at a shell prompt.
+	Foreground string `json:"foreground,omitempty"`
+	// Harness is the agent harness that reported the state (claude, codex).
+	Harness string `json:"harness,omitempty"`
+	// AgentAt is when the pane entered its agent state, in Unix milliseconds.
+	AgentAt int64 `json:"agent_at,omitempty"`
+	// Repo and Branch describe the git checkout the pane's folder is in.
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch,omitempty"`
 }
 
 // Command is the JSON the renderer sends.
@@ -261,6 +272,34 @@ type model struct {
 	out     *frameWriter
 	session string
 	last    []byte
+	gitSeen map[string]gitEntry
+}
+
+// gitEntry is a cached reading of a folder's checkout.
+type gitEntry struct {
+	repo, branch string
+	at           time.Time
+}
+
+// git names the repository and branch of dir, read at most every few seconds
+// per folder, since export runs after every message.
+func (m *model) git(dir string) (string, string) {
+	if dir == "" {
+		return "", ""
+	}
+	if e, ok := m.gitSeen[dir]; ok && time.Since(e.at) < 4*time.Second {
+		return e.repo, e.branch
+	}
+	st, ok := gitstate.Read(dir)
+	e := gitEntry{at: time.Now()}
+	if ok {
+		e.repo, e.branch = st.Repo, st.Branch
+	}
+	if m.gitSeen == nil {
+		m.gitSeen = map[string]gitEntry{}
+	}
+	m.gitSeen[dir] = e
+	return e.repo, e.branch
 }
 
 func (m *model) Init() tea.Cmd { return m.os.Init() }
@@ -344,11 +383,18 @@ func (m *model) export() {
 			continue
 		}
 		occupied[w.Workspace] = true
+		cwd := w.Cwd
+		if cwd == "" {
+			cwd = w.DaemonCwd
+		}
+		repo, branch := m.git(cwd)
 		st.Windows = append(st.Windows, Window{
 			ID: w.ID, PTY: w.PTYID, Title: w.Title(), Name: w.CustomName,
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
+			Cwd: cwd, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, AgentAt: w.AgentStateAt / int64(time.Millisecond),
+			Repo: repo, Branch: branch,
 		})
 	}
 	for ws := 1; ws <= max(o.NumWorkspaces, 9); ws++ {
