@@ -1833,6 +1833,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The pointer leaves with the focus, and no motion will say so, so
 		// the message hold ends here too.
 		m.NotifHoldEnd()
+		// The pointer shape is the last OSC 22 tuios sent, and the terminal
+		// paints it wherever the pointer lands while focus is away, including
+		// over other applications' content when it comes back. No motion will
+		// restate it (motion that would is filtered out over pane content), so
+		// retire it now.
+		m.ResetPointerShape()
 		return m, m.noteHostFocus(false)
 
 	case tea.ColorProfileMsg:
