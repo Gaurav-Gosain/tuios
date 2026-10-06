@@ -70,6 +70,10 @@ type agentsPageState struct {
 	// Each is decided once a run.
 	panesSeen map[string]bool
 	noticed   map[string]bool
+	// loadFor holds the harness names panes reported when the report in
+	// flight was asked for. Only those are decided when it lands: a report
+	// read before a pane started says nothing about an install made since.
+	loadFor map[string]bool
 	// noticeKeys maps a notice on the dock, by notification id, to its
 	// dismissal key, so a dismissal can be stored. See agentNoticeKey.
 	noticeKeys map[string]string
@@ -121,9 +125,10 @@ func loadAgentsOverviewCmd() tea.Cmd {
 }
 
 // agentsSyncCmd is asked after every message. It asks for a fresh report when
-// the settings page opens, or when a pane runs a harness this run has not
-// looked at yet and there is no report, and it puts up the notices. The work
-// per message is a pass over the panes.
+// the settings page opens, and when a pane runs a harness this run has not
+// looked at yet. The notice for that harness is decided when the fresh report
+// lands, so an install made in a shell meanwhile is seen. The work per message
+// is a pass over the panes.
 func (m *OS) agentsSyncCmd() tea.Cmd {
 	p := &m.agentsPage
 	if !m.agentsPageAvailable() {
@@ -137,15 +142,16 @@ func (m *OS) agentsSyncCmd() tea.Cmd {
 		p.action = ""
 	}
 	p.wasOpen = m.ShowSettings
-	if p.overview != nil {
-		m.noticeAgentIntegrations()
+	if p.loading {
+		return nil
 	}
-	want := p.stale || (p.overview == nil && m.agentPaneUnnoticed())
-	if !want || p.loading {
+	unseen := m.agentPanesUnnoticed()
+	if !p.stale && len(unseen) == 0 {
 		return nil
 	}
 	p.loading = true
 	p.stale = false
+	p.loadFor = unseen
 	return loadAgentsOverviewCmd()
 }
 
@@ -159,33 +165,38 @@ func (m *OS) applyAgentsOverview(msg agentsOverviewMsg) {
 			m.agentIntegrationInstalled = true
 		}
 	}
-	m.noticeAgentIntegrations()
+	m.noticeAgentIntegrations(m.agentsPage.loadFor)
+	m.agentsPage.loadFor = nil
 }
 
-// agentPaneUnnoticed reports whether a pane runs a harness this run has not
-// looked at yet.
-func (m *OS) agentPaneUnnoticed() bool {
+// agentPanesUnnoticed is the harness names panes on this machine report that
+// this run has not looked at yet, nil when there are none.
+func (m *OS) agentPanesUnnoticed() map[string]bool {
+	var out map[string]bool
 	for _, w := range m.Windows {
 		if w != nil && w.AgentHarness != "" && w.Host == "" && !m.agentsPage.panesSeen[w.AgentHarness] {
-			return true
+			if out == nil {
+				out = map[string]bool{}
+			}
+			out[w.AgentHarness] = true
 		}
 	}
-	return false
+	return out
 }
 
-// noticeAgentIntegrations looks at each harness a pane runs, once a run, and
-// puts up a toast when its integration is out of date, or not installed where
-// it could be. A harness with no integration, or one that is current, is
-// marked and left alone.
-func (m *OS) noticeAgentIntegrations() {
+// noticeAgentIntegrations decides, once a run, for each harness name in names
+// that a pane still runs, and puts up a toast when its integration is out of
+// date, or not installed where it could be. A harness with no integration, or
+// one that is current, is marked and left alone.
+func (m *OS) noticeAgentIntegrations(names map[string]bool) {
 	p := &m.agentsPage
-	if p.overview == nil {
+	if p.overview == nil || len(names) == 0 {
 		return
 	}
 	for _, w := range m.Windows {
 		// A pane on another machine runs that machine's harness, whose
 		// integration is not the one installed here.
-		if w == nil || w.AgentHarness == "" || w.Host != "" || p.panesSeen[w.AgentHarness] {
+		if w == nil || w.AgentHarness == "" || w.Host != "" || p.panesSeen[w.AgentHarness] || !names[w.AgentHarness] {
 			continue
 		}
 		if p.panesSeen == nil {
@@ -226,9 +237,12 @@ func agentNoticeKey(st integration.Status) string {
 }
 
 // noteNoticesDismissed stores the dismissal of each integration notice among
-// gone, the messages the person took off the dock with esc or a click. A
-// notice that only timed out is not stored, so it comes back on the next
-// attach.
+// gone, so it does not come back on the next attach. Only a click on the
+// dismiss end of a notice that was drawn comes here. Esc clears the whole dock
+// in every mode, also when the person pressed it for the pane, before the
+// notice was even drawn, and a click on the body opens the message: both
+// count for this run only, through noticed. A notice that timed out is not
+// stored either.
 func (m *OS) noteNoticesDismissed(gone []Notification) {
 	keys := m.agentsPage.noticeKeys
 	if len(keys) == 0 {
@@ -455,7 +469,7 @@ func (m *OS) agentItem(st integration.Status) settingItem {
 				m.ShowNotification("tuios cannot read the "+st.Name+" integration. Fix the file the line under the row names, then open this tab again.", "warning", m.Settings.NotificationWarningDuration)
 				return nil
 			}
-			if st.State() == integration.StateNotRun {
+			if parts, _ := installedParts(st, lookupTarget(st.Harness), agentsEnv()); st.State() == integration.StateNotRun && len(parts) == 0 {
 				m.ShowNotification(st.Name+" has not run here. Run it once, then install.", "info", m.Settings.NotificationDuration)
 				return nil
 			}
@@ -464,6 +478,12 @@ func (m *OS) agentItem(st integration.Status) settingItem {
 			return nil
 		},
 	}
+}
+
+// lookupTarget is integration.LookupTarget without the found flag.
+func lookupTarget(id string) *integration.Target {
+	t, _ := integration.LookupTarget(id)
+	return t
 }
 
 // agentRowDesc is the line under a harness row.
@@ -485,6 +505,18 @@ func agentRowDesc(st integration.Status) string {
 		parts = append(parts, "Not installed. Press enter to install it in "+shortenHome(st.Path)+".")
 	default:
 		parts = append(parts, "Not installed. "+st.Name+" has not run here. Run it once, then install.")
+	}
+	if !st.Installed {
+		var other []string
+		if st.MCP != nil && st.MCP.Installed {
+			other = append(other, "the MCP server")
+		}
+		if st.StatusLine != nil && st.StatusLine.Installed {
+			other = append(other, "the status line")
+		}
+		if len(other) > 0 {
+			parts = append(parts, "tuios still has "+joinWords(other)+" installed. Press enter to remove it.")
+		}
 	}
 	if st.Reports == integration.ReportsSession {
 		parts = append(parts, "It reports the session id. The state comes from screen rules.")
@@ -510,18 +542,7 @@ func (m *OS) agentActionItems(st integration.Status) []settingItem {
 		items = append(items, m.agentActionItem(st, verb, label,
 			"This writes the hook entries to "+joinPaths(paths)+". Press enter to "+verbWord(verb)+" the integration.", paths))
 	}
-	if st.Installed && t != nil {
-		paths := t.Paths(env)
-		parts := []string{"the hooks"}
-		if t.SupportsMCP() {
-			parts = append(parts, "the MCP server")
-			if p := t.MCPPath(env); !slices.Contains(paths, p) {
-				paths = append(paths, p)
-			}
-		}
-		if t.SupportsStatusLine() {
-			parts = append(parts, "the status line")
-		}
+	if parts, paths := installedParts(st, t, env); len(parts) > 0 {
 		items = append(items, m.agentActionItem(st, agentUninstall, "Uninstall "+st.Name,
 			"This removes "+joinWords(parts)+" that tuios wrote, from "+joinPaths(paths)+". Your own entries stay. Press enter to uninstall.", paths))
 	}
@@ -534,6 +555,34 @@ func (m *OS) agentActionItems(st integration.Status) []settingItem {
 		activate: func(m *OS) tea.Cmd { m.SettingsBack(); return nil },
 	})
 	return items
+}
+
+// installedParts lists the parts of the integration that are installed, as
+// the uninstall row names them, and the files they are in: the hooks, the MCP
+// server and the status line, each only when it is there. Uninstall removes
+// every part, so it is offered when any one of them is installed.
+func installedParts(st integration.Status, t *integration.Target, env integration.Env) (parts, paths []string) {
+	if t == nil {
+		return nil, nil
+	}
+	add := func(part string, files ...string) {
+		parts = append(parts, part)
+		for _, f := range files {
+			if !slices.Contains(paths, f) {
+				paths = append(paths, f)
+			}
+		}
+	}
+	if st.Installed {
+		add("the hooks", t.Paths(env)...)
+	}
+	if st.MCP != nil && st.MCP.Installed {
+		add("the MCP server", st.MCP.Path)
+	}
+	if st.StatusLine != nil && st.StatusLine.Installed {
+		add("the status line", t.Path(env))
+	}
+	return parts, paths
 }
 
 // agentActionItem is one action row. Its value is the file it changes.

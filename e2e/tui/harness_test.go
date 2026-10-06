@@ -289,11 +289,14 @@ var xdgKeys = []string{
 
 // harnessDirKeys are the variables that move a harness's configuration
 // directory away from the home (internal/integration's targets read them).
-// runE2E clears them for the whole suite.
+// runE2E clears them for the whole suite. TestE2EClearsEveryDirOverride in
+// internal/integration fails when that package reads one missing here.
 var harnessDirKeys = []string{
 	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "CURSOR_CONFIG_DIR",
 	"GROK_HOME", "HERMES_HOME", "KIMI_CODE_HOME", "PI_CODING_AGENT_DIR",
 	"QODER_CONFIG_DIR", "QWEN_HOME", "ANTIGRAVITY_CLI_CONFIG_DIR",
+	// Windows only, cleared all the same. Hermes and Devin read them there.
+	"APPDATA", "LOCALAPPDATA",
 }
 
 // startIn spawns tuios against an explicit isolation root, so two clients can

@@ -148,6 +148,12 @@ func (m *OS) NotificationClick(x, y int) bool {
 		return false
 	}
 	if x >= z.DismissX0 {
+		// The one explicit dismissal: a click on the dismiss end of a message
+		// that was on screen. An integration notice dismissed this way stays
+		// dismissed across attaches. See noteNoticesDismissed.
+		if top := m.Notifications[len(m.Notifications)-1]; sameDrawnNotification(top, z.Drawn) {
+			m.noteNoticesDismissed([]Notification{top})
+		}
 		m.dismissVisibleNotification()
 		return true
 	}
@@ -176,7 +182,6 @@ func (m *OS) clickVisibleNotification() {
 	if !sameDrawnNotification(visible, m.notifHit.Drawn) {
 		return
 	}
-	m.noteNoticesDismissed([]Notification{visible})
 	m.Notifications = m.Notifications[:n-1]
 	if m.notifHit.Cut && !isClipboardAsk(visible.Target) {
 		m.notifHoverEnd()

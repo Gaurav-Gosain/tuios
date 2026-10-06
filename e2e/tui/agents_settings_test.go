@@ -387,38 +387,16 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The positive half of the stored dismissal: a second client attaching
-	// before anyone dismissed the toast shows it too. It closes without
-	// dismissing it.
-	early := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
-	if err := early.WaitForText(integrationNotice, uiTimeout); err != nil {
-		t.Fatalf("a second client never showed the toast nobody dismissed: %v\n%s", err, early.Snapshot())
-	}
-	if err := early.Close(); err != nil {
-		t.Logf("close the early client: %v", err)
-	}
-
-	// Dismiss it, then run a second claude.
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatal(err)
-	}
+	// Dismiss it the one way that lasts: a click on the dismiss end of the
+	// toast while it is drawn. Esc clears the dock for this run only; see
+	// TestAgentsNoticeOutlastsAnEsc.
+	clickNoticeDismiss(t, term, integrationNotice)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), integrationNotice) }, uiTimeout); err != nil {
-		t.Fatalf("esc did not dismiss the toast: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the click did not dismiss the toast: %v\n%s", err, term.Snapshot())
 	}
-	// The early client's arrival put "Client joined" on top of the toast, so
-	// the screen alone cannot say the esc landed. The rail's state file can:
-	// the dismissal is stored there, and the next client reads it from there.
-	state := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
-	stored := time.Now().Add(uiTimeout)
-	for {
-		if data, err := os.ReadFile(state); err == nil && strings.Contains(string(data), "agent_notices_dismissed") {
-			break
-		}
-		if time.Now().After(stored) {
-			data, _ := os.ReadFile(state)
-			t.Fatalf("ASSERTION: the dismissal was never stored:\n%s", data)
-		}
-		time.Sleep(100 * time.Millisecond)
+	if !waitDismissalStored(base, true) {
+		data, _ := os.ReadFile(sidebarStatePath(base))
+		t.Fatalf("ASSERTION: the dismissal was never stored:\n%s", data)
 	}
 
 	// The dismissal is kept: a second client attaching to the same session,
@@ -750,5 +728,91 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	}
 	if findRow(term.Screen(), "Claude Code") >= 0 {
 		t.Fatalf("ASSERTION: the settings page shows the Agents rows over ssh\n%s", term.Snapshot())
+	}
+}
+
+// sidebarStatePath is the rail's state file of the isolation root, where a
+// dismissed notice is stored.
+func sidebarStatePath(base string) string {
+	return filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
+}
+
+// waitDismissalStored waits for the state file to hold a dismissed notice,
+// and reports whether it did. With want false it watches for the same time
+// and reports whether none appeared.
+func waitDismissalStored(base string, want bool) bool {
+	deadline := time.Now().Add(uiTimeout)
+	if !want {
+		deadline = time.Now().Add(3 * time.Second)
+	}
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(sidebarStatePath(base))
+		stored := err == nil && strings.Contains(string(data), "agent_notices_dismissed")
+		if stored && want {
+			return true
+		}
+		if stored && !want {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return !want
+}
+
+// clickNoticeDismiss clicks the dismiss end of the dock message that shows
+// text: the columns after its "more" word, where the counter and the bare
+// bar columns are.
+func clickNoticeDismiss(t *testing.T, term *tuitest.Terminal, text string) {
+	t.Helper()
+	if err := term.WaitForText(text, uiTimeout); err != nil {
+		t.Fatalf("no message %q to dismiss: %v\n%s", text, err, term.Snapshot())
+	}
+	s := term.Screen()
+	row := findRow(s, text)
+	cols, _ := s.Size()
+	for x := 0; x+3 < cols; x++ {
+		if s.Cell(x, row).Content == "m" && s.Cell(x+1, row).Content == "o" &&
+			s.Cell(x+2, row).Content == "r" && s.Cell(x+3, row).Content == "e" {
+			mouseClick(t, term, x+5, row, tuitest.MouseLeft, 0)
+			return
+		}
+	}
+	t.Fatalf("the message %q has no \"more\" to find its dismiss end by:\n%s", text, term.Snapshot())
+}
+
+// TestAgentsNoticeOutlastsAnEsc: a person in a pane presses esc for the pane,
+// to interrupt the agent. Esc also clears the dock, the toast with it, but
+// only for this run. A client that attaches later shows the toast again.
+// This is also the positive half of the stored dismissal in
+// TestAgentsIntegrationNoticeOncePerRun: a new client shows the toast when no
+// click stored its dismissal.
+func TestAgentsNoticeOutlastsAnEsc(t *testing.T) {
+	base, _ := agentsPageFixture(t, false)
+	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	enterTerminalMode(t, term)
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "agents", "claude\n"); err != nil {
+		t.Fatalf("start the stand-in: %v\n%s", err, out)
+	}
+	waitClaudePanes(t, base, 1)
+	if err := term.WaitForText(integrationNotice, uiTimeout); err != nil {
+		t.Fatalf("no toast for the out of date integration: %v\n%s", err, term.Snapshot())
+	}
+	// Esc in terminal mode goes to the agent, and clears the dock.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), integrationNotice) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not clear the dock: %v\n%s", err, term.Snapshot())
+	}
+	if !waitDismissalStored(base, false) {
+		data, _ := os.ReadFile(sidebarStatePath(base))
+		t.Fatalf("ASSERTION: an esc stored a lasting dismissal:\n%s", data)
+	}
+	if err := term.Close(); err != nil {
+		t.Logf("close the first client: %v", err)
+	}
+	again := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
+	if err := again.WaitForText(integrationNotice, 15*time.Second); err != nil {
+		t.Fatalf("ASSERTION: the toast did not come back after an esc and a new attach: %v\n%s", err, again.Snapshot())
 	}
 }

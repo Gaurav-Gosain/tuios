@@ -191,6 +191,20 @@ func (m *OS) saveSidebarState() {
 	if os.MkdirAll(dir, 0o750) != nil {
 		return
 	}
+	// Dismissed notices only accumulate, and every client of this user writes
+	// the same file. Without the union a client that started before another
+	// stored a dismissal would write its own older set over it.
+	if data, err := os.ReadFile(filepath.Join(dir, sidebarStateFileName)); err == nil {
+		var disk sidebarStateFile
+		if json.Unmarshal(data, &disk) == nil {
+			for _, k := range disk.AgentNoticesDismissed {
+				if m.agentNoticesDismissed == nil {
+					m.agentNoticesDismissed = map[string]bool{}
+				}
+				m.agentNoticesDismissed[k] = true
+			}
+		}
+	}
 	slots, colors := accentsToFile(m.SidebarAccents)
 	// Width is only a width someone dragged to. Writing the config width when
 	// nobody had dragged made it look like a choice on the next load, so a

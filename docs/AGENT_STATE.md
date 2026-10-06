@@ -3109,16 +3109,20 @@ and `tuios integration uninstall`. An update keeps the program the installed
 hooks run, so an install made with `--command /path/to/tuios` keeps that path.
 A new install runs `tuios`. Uninstall removes the hooks, the MCP server and the
 status line that tuios wrote. If the harness saves the file while tuios edits
-it, tuios tries once more, and then says the file changed and leaves it as it
-is. The result or the error shows in the dock.
+it, tuios tries once more, and then says the file changed and does not write
+it. When an integration spans several files and one fails, the message names
+the files tuios already changed and the ones it did not. The result or the error shows in the dock.
 
 When a pane runs a harness whose integration is out of date, or not installed
 where it could be, tuios shows one notice for that harness, such as "Claude
 Code integration is out of date. Open Settings, Agents to update it." The
-notice comes once per harness each time the client starts. When you dismiss it
-with esc or a click, it does not come back until the state or the version
-changes. Panes on other machines get no notice, since their harness uses that
-machine's integration. `tuios doctor agents` leaves those panes out too.
+notice comes once per harness each time the client starts. Click the right
+end of the notice to dismiss it for good: it does not come back until the
+state or the version changes. Esc and a click on the text clear it for this
+run only. Panes on other machines get no notice, since their harness uses that
+machine's integration. `tuios doctor agents` leaves those panes out too. When
+it cannot read which machine the panes of a session run on, it says that it
+did not check that session.
 
 ### The MCP server
 
