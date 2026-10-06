@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -167,6 +168,13 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 			// covers, and the hovers after that are in host pixels.
 			col, row := paneCell(t, term)
 			x0 := lastPixelX(t, term, "the first hover", -1, func() { mouseHover(t, term, col, row) })
+			// The first hover is a cell report, so the guest is told the
+			// centre of the pane cell under it: the pane's first column is
+			// where the guest's SIZES line starts on the screen.
+			left := paneLeftOf(t, term, "SIZES ws=")
+			if want := (col-left)*8 + 4 + 1; x0 != want {
+				t.Fatalf("ASSERTION: the first hover, at pane column %d, was reported at x %d, want %d, the centre of that cell in pixels\n%s", col-left, x0, want, term.Snapshot())
+			}
 			if err := waitOutput(out, "\x1b[?1016h", uiTimeout); err != nil {
 				t.Fatalf("tuios never turned on SGR-pixel reports in its terminal: %v", err)
 			}
@@ -188,6 +196,19 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 			alive(t, term, "after the pixel guest")
 		})
 	}
+}
+
+// paneLeftOf is the screen column of marker, which the guest printed at the
+// start of a line, so it is the pane's first column.
+func paneLeftOf(t *testing.T, term *tuitest.Terminal, marker string) int {
+	t.Helper()
+	for _, line := range strings.Split(term.Screen().Text(), "\n") {
+		if i := strings.Index(line, marker); i >= 0 {
+			return utf8.RuneCountInString(line[:i])
+		}
+	}
+	t.Fatalf("%q is not on the screen\n%s", marker, term.Snapshot())
+	return 0
 }
 
 // lastPixelX sends with send until the guest's last motion report has an x
@@ -276,6 +297,126 @@ func TestDetachedPaneReportsAPixelSize(t *testing.T) {
 		t.Fatalf("ASSERTION: after a client with an 8x16 cell attached, the guest's last 2048 report is %q, want one in 8x16 cells: %v\n%s", last, err, term.Snapshot())
 	}
 	if err := term.SendKeys("q"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ibReports is every 2048 report the guest printed, as rows, cols, pixel
+// height and pixel width, read from the daemon's copy of the pane.
+func ibReports(base, session string) (string, [][4]int) {
+	out, _ := tuiosOut(base, "capture-pane", "-s", session)
+	var got [][4]int
+	for _, m := range regexp.MustCompile(`IB(\d+);(\d+);(\d+);(\d+)\.`).FindAllStringSubmatch(out, -1) {
+		var r [4]int
+		for i := range r {
+			r[i], _ = strconv.Atoi(m[i+1])
+		}
+		got = append(got, r)
+	}
+	return out, got
+}
+
+// cellOf is the cell a 2048 report implies, as width x height.
+func cellOf(r [4]int) string {
+	if r[0] == 0 || r[1] == 0 {
+		return "none"
+	}
+	return fmt.Sprintf("%dx%d", r[3]/r[1], r[2]/r[0])
+}
+
+// TestPaneCellFollowsOneClient covers two clients with different fonts on
+// one session. The pane's cell used to be set by whichever client spoke
+// last, on every resize and attach, so a guest's pixel size flipped between
+// them. It is now the cell of one client: under window_size = smallest, the
+// default, the client that attached first.
+//
+// The negative half: a second client with a 12x24 cell attaches, and every
+// report after it is still in client a's 8x16. The positive half: client a
+// leaves, and the cell moves to the client that is left.
+func TestPaneCellFollowsOneClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	guest := writePixelGuest(t)
+	if out, err := tuiosCLI(t, base, "new", "-d", "cells"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "cells", "--raw", "python3 "+guest); err != nil {
+		t.Fatalf("send-keys: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "cells", "Enter"); err != nil {
+		t.Fatalf("send-keys Enter: %v\n%s", err, out)
+	}
+
+	// waitCell waits until the guest's last 2048 report implies cell, and
+	// returns how many reports there were then.
+	waitCell := func(what, cell string) int {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			out, got := ibReports(base, "cells")
+			if len(got) > 0 && cellOf(got[len(got)-1]) == cell {
+				return len(got)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: %s: the guest's 2048 reports %v never came to a %s cell\n%s", what, got, cell, out)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// The guest is in its report loop, with the fallback cell, before any
+	// client attaches. Otherwise the first client could settle the cell
+	// before the guest turns 2048 on, and no report would follow.
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		out, _ := tuiosOut(base, "capture-pane", "-s", "cells")
+		if s, ok := parsePaneSizes(out); ok && strings.Contains(out, "PIXON") {
+			if s.t16 != "20;10" {
+				t.Fatalf("the guest started with a %q cell, want the fallback\n%s", s.t16, out)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the guest never printed its sizes:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	a := attachIn(t, base, "cells", startOpts{env: []string{"TUIOS_CELL_SIZE=8x16"}})
+	waitCell("client a attached", "8x16")
+
+	b := attachIn(t, base, "cells", startOpts{cols: 100, rows: 30, env: []string{"TUIOS_CELL_SIZE=12x24"}})
+	// b is smaller, so the session shrinks to it and the guest gets a report
+	// for the new size. That report must still be in a's cell. The wait is for
+	// the shrink to reach the guest, so the check below has b's attach in it.
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		_, got := ibReports(base, "cells")
+		if len(got) > 0 && got[len(got)-1][1] <= 100 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the session never shrank to client b: reports %v", got)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	time.Sleep(time.Second)
+	out, got := ibReports(base, "cells")
+	for _, r := range got {
+		if cellOf(r) != "8x16" && cellOf(r) != "10x20" {
+			t.Fatalf("ASSERTION: with client a attached first, the guest was told a %s cell (%v), not client a's 8x16\n%s", cellOf(r), got, out)
+		}
+	}
+	if last := cellOf(got[len(got)-1]); last != "8x16" {
+		t.Fatalf("ASSERTION: the guest's last report is in a %s cell, want client a's 8x16 (%v)\n%s", last, got, out)
+	}
+	t.Logf("reports with both clients attached: %v", got)
+
+	if err := a.Close(); err != nil {
+		t.Fatalf("close client a: %v", err)
+	}
+	waitCell("client a left", "12x24")
+	if err := b.SendKeys("q"); err != nil {
 		t.Fatal(err)
 	}
 }

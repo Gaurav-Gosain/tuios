@@ -487,7 +487,31 @@ func TestGhosttyDiffPixelSizeReports(t *testing.T) {
 		if a, g := read(p.pure), read(p.gh); a != g || a != "\x1b[48;5;20;80;160t" {
 			t.Errorf("reply pure=%q ghostty=%q, want both %q", a, g, "\x1b[48;5;20;80;160t")
 		}
+		// The same cell again sends nothing. The daemon sets the cell on
+		// every pane resize and every attach.
+		p.pure.SetCellSize(8, 16)
+		p.gh.SetCellSize(8, 16)
+		if a, g := readQuick(p.pure), readQuick(p.gh); a != "" || g != "" {
+			t.Errorf("the same cell twice sent pure=%q ghostty=%q, want nothing", a, g)
+		}
 	})
+}
+
+// readQuick is what term wrote back within a short wait, or "". The reader
+// it starts outlives a wait that saw nothing, so it is used last in a test.
+func readQuick(term Terminal) string {
+	got := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 512)
+		n, _ := term.Read(buf)
+		got <- string(buf[:n])
+	}()
+	select {
+	case s := <-got:
+		return s
+	case <-time.After(300 * time.Millisecond):
+		return ""
+	}
 }
 
 // TestGhosttyDiffAltScreenLegacy checks IsAltScreen under mode 47 on both

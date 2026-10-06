@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+
+	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 )
 
 // HostCapabilities holds information about the host terminal's capabilities.
@@ -826,9 +828,9 @@ func setDefaultCellSize(caps *HostCapabilities) {
 	}
 
 	if caps.CellWidth == 0 {
-		caps.CellWidth = 9
+		caps.CellWidth = cellsize.FallbackWidth
 	}
 	if caps.CellHeight == 0 {
-		caps.CellHeight = 20
+		caps.CellHeight = cellsize.FallbackHeight
 	}
 }

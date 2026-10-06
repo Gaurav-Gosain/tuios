@@ -348,6 +348,19 @@ func TestConform_PixelSizeReports(t *testing.T) {
 		}
 	})
 
+	t.Run("a zero cell size keeps the cell set before", func(t *testing.T) {
+		emu := vt.NewEmulator(80, 24)
+		next := replies(emu)
+		emu.SetCellSize(8, 16)
+		emu.SetCellSize(0, 0)
+		if _, err := emu.WriteString("\x1b[16t"); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := next(), "\x1b[6;16;8t"; got != want {
+			t.Fatalf("reply = %q, want %q", got, want)
+		}
+	})
+
 	t.Run("a new cell size is not reported while 2048 is off", func(t *testing.T) {
 		emu := vt.NewEmulator(80, 24)
 		next := replies(emu)

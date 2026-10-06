@@ -528,7 +528,11 @@ func (t *GhosttyTerminal) SetCellSize(width, height int) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.closed.Load() {
+	// The same cell again is nothing. The library sends a 2048 report on
+	// every resize, and the daemon sets the cell on every pane resize and
+	// every attach, so passing it through sent a guest a report for a size
+	// it already had.
+	if t.closed.Load() || (width == t.cellW && height == t.cellH) {
 		return
 	}
 	t.cellW, t.cellH = width, height

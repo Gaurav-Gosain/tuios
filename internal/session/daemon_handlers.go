@@ -287,11 +287,10 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, shortID(w.ID), shortID(w.PTYID))
 	}
 
-	// Sync PTY pixel dimensions from client's terminal capabilities
-	// This enables graphics tools like kitty icat to query proper pixel sizes
-	if cs.cellWidth > 0 && cs.cellHeight > 0 {
-		d.syncPTYPixelDimensions(session, cs.cellWidth, cs.cellHeight)
-	}
+	// Give the panes the session's cell, so graphics tools like kitty icat
+	// read the right pixel size. It is one client's cell, which this client
+	// may or may not be: see sessionCellSize.
+	d.syncSessionCell(session.ID)
 
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
@@ -634,7 +633,9 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
 			_ = pty.Resize(payload.Width, payload.Height)
-			_ = pty.UpdatePixelDimensions(cs.cellWidth, cs.cellHeight)
+			if w, h, ok := d.sessionCellSize(cs.sessionID); ok {
+				_ = pty.UpdatePixelDimensions(w, h)
+			}
 		}
 	}
 
@@ -685,9 +686,11 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		return d.replyError(cs, msg, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
 	}
 
-	// Set pixel dimensions from client's terminal capabilities
-	if err := pty.UpdatePixelDimensions(cs.cellWidth, cs.cellHeight); err != nil {
-		debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
+	// The session's cell, which is one client's: see sessionCellSize.
+	if w, h, ok := d.sessionCellSize(cs.sessionID); ok {
+		if err := pty.UpdatePixelDimensions(w, h); err != nil {
+			debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
+		}
 	}
 
 	debugLog("[DEBUG] PTY created: %s", pty.ID)

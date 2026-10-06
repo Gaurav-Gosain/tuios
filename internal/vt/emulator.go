@@ -728,6 +728,11 @@ func (e *Emulator) Width() int {
 // when the size in pixels changes, as it is on a resize: it scales SGR-pixel
 // mouse reports by the size it was last told.
 func (e *Emulator) SetCellSize(width, height int) {
+	// A size that is not one is ignored, as the ghostty backend ignores it:
+	// the cell set before, or the fallback, stays.
+	if width <= 0 || height <= 0 {
+		return
+	}
 	oldW, oldH := e.CellSize()
 	e.cellWidth = width
 	e.cellHeight = height

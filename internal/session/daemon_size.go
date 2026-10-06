@@ -173,6 +173,16 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
 // excludeClientID is left out of the broadcast. It is the client whose own
 // action caused the change and which is being answered directly instead.
 func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) (width, height int, reserve LayoutReserve) {
+	width, height, reserve = d.recalculateSize(sessionID, excludeClientID)
+	// Every change to who is attached, and to which client owns the size,
+	// comes through here, so the cell the panes take follows the same owner.
+	// It runs after layoutMu is released: it takes each PTY's locks.
+	d.syncSessionCell(sessionID)
+	return width, height, reserve
+}
+
+// recalculateSize is recalculateAndBroadcastSize less the cell sync.
+func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, height int, reserve LayoutReserve) {
 	d.layoutMu.Lock()
 	defer d.layoutMu.Unlock()
 
@@ -228,8 +238,58 @@ func (d *Daemon) broadcastStateSync(sessionID string, state *SessionState, trigg
 	d.broadcastToSession(sessionID, MsgStateSync, payload, sourceClientID)
 }
 
+// sessionCellSize is the cell, in pixels, that the session's panes take. It
+// is one client's cell, never a mix: clients with different fonts used to
+// set it in turn, on every resize and attach, and a guest saw its pixel size
+// flip and was sent a 2048 report each time.
+//
+// The client is the one that owns the session's size when there is one, the
+// latest client under window_size = latest, because the pane is laid out for
+// that client's screen. Under smallest and largest no single client owns the
+// size, and the client that attached first is used, so the cell holds still
+// while others come and go. A client that reported no cell is skipped. ok is
+// false when no attached client reported one; the panes then keep the cell
+// they have, the fallback cell for one no client has measured.
+func (d *Daemon) sessionCellSize(sessionID string) (w, h int, ok bool) {
+	owner := ""
+	if s := d.manager.GetSessionByID(sessionID); s != nil && s.WindowSizePolicy() == config.WindowSizeLatest {
+		d.latest.mu.Lock()
+		if st := d.latest.sessions[sessionID]; st != nil {
+			owner = st.client
+		}
+		d.latest.mu.Unlock()
+	}
+
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+	var firstSeq uint64
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient && cs.cellWidth > 0 && cs.cellHeight > 0
+		id, seq, cw, ch := cs.clientID, cs.attachSeq, cs.cellWidth, cs.cellHeight
+		cs.mu.Unlock()
+		if !match {
+			continue
+		}
+		if owner != "" && id == owner {
+			return cw, ch, true
+		}
+		if !ok || seq < firstSeq {
+			w, h, firstSeq, ok = cw, ch, seq, true
+		}
+	}
+	return w, h, ok
+}
+
+// syncSessionCell gives every pane of the session the session's cell (see
+// sessionCellSize). A pane that has it already is left alone.
+func (d *Daemon) syncSessionCell(sessionID string) {
+	if w, h, ok := d.sessionCellSize(sessionID); ok {
+		d.syncPTYPixelDimensions(d.manager.GetSessionByID(sessionID), w, h)
+	}
+}
+
 // syncPTYPixelDimensions sets pixel dimensions on all PTYs in a session.
-// This is called when a client attaches with terminal graphics capabilities.
 func (d *Daemon) syncPTYPixelDimensions(session *Session, cellWidth, cellHeight int) {
 	if session == nil || cellWidth <= 0 || cellHeight <= 0 {
 		return

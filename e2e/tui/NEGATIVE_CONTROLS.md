@@ -2010,3 +2010,36 @@ cell size.
 Not covered end to end: macOS, a host that reports its cell size itself
 rather than through `TUIOS_CELL_SIZE`, and a resize of a detached pane, which
 goes through the winsize fallback.
+
+### Review fixes: one client's cell, and no repeated reports
+
+The pane's cell flipped between clients with different fonts: each client set
+it on its own attach and its own pane resizes. It is now one client's cell
+(`sessionCellSize`). Under `window_size = latest` that is the latest client,
+which owns the session's size. Under smallest and largest, no client owns the
+size, so it is the client that attached first. A client that reported no cell
+is skipped. Every change to who is attached, and to who owns the size, goes
+through `recalculateAndBroadcastSize`, which now gives every pane that cell.
+
+`TestPaneCellFollowsOneClient` starts the guest in a detached session with the
+fallback cell. Client a attaches with an 8x16 cell and client b with 12x24.
+Every 2048 report the guest gets must stay in a's cell. When a leaves, the cell
+must move to b's, which is the positive half.
+
+The ghostty backend now ignores the same cell set twice. The library sends a
+2048 report on every resize, and the daemon sets the cell on every pane resize
+and every attach. `Emulator.SetCellSize` ignores a zero cell, as the ghostty
+backend does. `TestPaneReportsItsPixelSize` also checks the absolute x of the
+first hover: the centre of the pane cell under it, from the pane's first
+column on the screen.
+
+The 2048 reports are not held back during a drag with the winsize hold. The
+pure emulator sends its report when it applies the resize in the output
+stream, and libghostty sends its own from inside its resize. Holding them back
+needs a hold in both backends.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Each client sets its own cell | the reviewed build, `b4868417` | `TestPaneCellFollowsOneClient` (the guest was told a 12x24 cell, then 8x16 again) | **caught** |
+| The last client to attach wins | `sessionCellSize`: the highest `attachSeq` picked | `TestPaneCellFollowsOneClient` (the guest was told a 12x24 cell) | **caught** |
+| ghostty passes the same cell through | `GhosttyTerminal.SetCellSize`: the same-cell return cut | `TestGhosttyDiffPixelSizeReports` ("the same cell twice sent ... ghostty=\"\x1b[48;5;20;80;160t\"") | **caught** |
