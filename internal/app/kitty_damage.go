@@ -191,14 +191,41 @@ func (kp *KittyPassthrough) forwardAnimation(cmd *vt.KittyCommand, rawData []byt
 	// transmitted here: the guest's own id may be another pane's image on
 	// the host, and an edit of that is an edit of the other pane's picture.
 	out := rawData
+	var hostID uint32
 	if cmd.ImageID != 0 {
-		out = rewriteKittyImageID(rawData, kp.getOrAllocateHostID(windowID, cmd.ImageID))
+		hostID = kp.getOrAllocateHostID(windowID, cmd.ImageID)
+		out = rewriteKittyImageID(rawData, hostID)
 	}
 
 	// The edit changes pixels the host holds, and it is the guest that knows
 	// what they now are, so our own record of that bitmap is stale.
 	kp.forgetBitmaps(windowID, 0)
 	kp.pendingOutput = append(kp.pendingOutput, out...)
+
+	// An edit of an image the host is showing as it was placed goes out now,
+	// the way a reused shared memory frame does (streamFrameFitsPlacement).
+	// It used to wait for the next composed frame: a compositor that sends
+	// its damage as edits had every edit wait for a compose of the screen.
+	if cmd.Action == vt.KittyActionFrame && kp.editShowsAtOnce(windowID, hostID) {
+		kp.flushToHost()
+	}
+}
+
+// editShowsAtOnce reports whether an edit of hostID can be written to the host
+// now: the image is placed and shown, its placement is current, and the guest
+// has no synchronized update open, which the edit would otherwise run ahead
+// of. Callers hold kp.mu.
+func (kp *KittyPassthrough) editShowsAtOnce(windowID string, hostID uint32) bool {
+	if hostID == 0 || kp.hostOut == nil || kp.held[windowID] != nil {
+		return false
+	}
+	if probe := kp.syncProbes[windowID]; probe != nil {
+		if open, _ := probe(); open {
+			return false
+		}
+	}
+	p := kp.placements[windowID][hostID]
+	return p != nil && !p.Hidden && !p.DataDirty && p.PlacementID != 0
 }
 
 // rewriteKittyImageID returns an APC sequence with its i= parameter replaced,

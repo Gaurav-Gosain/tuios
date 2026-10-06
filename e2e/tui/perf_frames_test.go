@@ -381,7 +381,7 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 	// A truecolor host, as kitty and ghostty are: without it the renderer
 	// converts every colour to the 256-colour palette, which the hosts this
 	// measures never ask for.
-	env := append(perfEnvVars(), "TUIOS_SIXEL_GRAPHICS=0", "COLORTERM=truecolor")
+	env := append(perfEnvVars(), "TUIOS_SIXEL_GRAPHICS=0", "COLORTERM=truecolor", "TUIOS_KITTY_ANIMATION=1")
 	if v := os.Getenv("TUIOS_DBG_COMPOSE"); v != "" {
 		env = append(env, "TUIOS_DBG_COMPOSE="+v)
 	}
@@ -583,6 +583,7 @@ func TestPerfFrames(t *testing.T) {
 		{name: "shm-120guest/max120", maxFPS: "120", mode: "shm", fps: 120, panes: 1, kitty: true},
 		{name: "shm-240guest/max240", maxFPS: "240", mode: "shm", fps: 240, panes: 1, kitty: true},
 		{name: "shm-60guest/max120", maxFPS: "120", mode: "shm", fps: 60, panes: 1, kitty: true},
+		{name: "patch-120guest/max120", maxFPS: "120", mode: "patch", fps: 120, panes: 1, kitty: true},
 		{name: "b64-60guest/max120", maxFPS: "120", mode: "b64", fps: 60, panes: 1, kitty: true},
 	}
 	want := os.Getenv("TUIOS_PERF_CASES")

@@ -13,6 +13,8 @@
 //	shm    a kitty image the size of the pane in shared memory (t=s), one id
 //	       reused, the way the tuios-wayland viewer and mpv's shm mode send it
 //	b64    the same image inline as chunked base64 (t=d)
+//	patch  the shm image once, then a 64x64 edit of it (a=f) each frame, the
+//	       way the tuios-wayland viewer sends small damage
 //
 // Every frame carries its sequence number where the host can read it back:
 // text frames start with a tag (see tag), and image frames carry it in their
@@ -90,7 +92,24 @@ func main() {
 	var shmName string
 	var shm *os.File
 	var pix []byte
-	if mode == "shm" || mode == "b64" {
+	var patchName string
+	var patch *os.File
+	var patchPix []byte
+	if mode == "patch" {
+		patchPix = make([]byte, 64*64*4)
+		prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
+		if prefix == "" {
+			prefix = "tuios-framepace-"
+		}
+		patchName = fmt.Sprintf("%s%d-patch", prefix, os.Getpid())
+		if err := os.WriteFile("/dev/shm/"+patchName, patchPix, 0o600); err != nil {
+			fmt.Println("FRAMEPACE-ERR", err)
+			return
+		}
+		patch, _ = os.OpenFile("/dev/shm/"+patchName, os.O_WRONLY, 0o600)
+		defer func() { _ = os.Remove("/dev/shm/" + patchName) }()
+	}
+	if mode == "shm" || mode == "b64" || mode == "patch" {
 		if xpx == 0 || ypx == 0 {
 			fmt.Println("FRAMEPACE-ERR no pixel size")
 			return
@@ -99,7 +118,7 @@ func main() {
 		for i := range pix {
 			pix[i] = byte(i * 7)
 		}
-		if mode == "shm" {
+		if mode == "shm" || mode == "patch" {
 			prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
 			if prefix == "" {
 				prefix = "tuios-framepace-"
@@ -125,6 +144,7 @@ func main() {
 		tick = tk.C
 	}
 	enc := base64.StdEncoding.EncodeToString([]byte(shmName))
+	patchEnc := base64.StdEncoding.EncodeToString([]byte(patchName))
 	line := make([]byte, 0, cols+16)
 	for seq := base + 1; ; seq++ {
 		if tick != nil {
@@ -158,6 +178,23 @@ func main() {
 			}
 			_, _ = out.Write(line)
 			_, _ = out.WriteString("\r\n")
+		case "patch":
+			if seq == base+1 {
+				binary.LittleEndian.PutUint64(pix, uint64(seq))
+				if _, err := shm.WriteAt(pix, 0); err != nil {
+					return
+				}
+				_, _ = fmt.Fprintf(out, "\x1b[H\x1b_Ga=T,f=32,t=s,s=%d,v=%d,i=1,q=2,C=1;%s\x1b\\", xpx, ypx, enc)
+				break
+			}
+			binary.LittleEndian.PutUint64(patchPix, uint64(seq))
+			for i := 8; i < len(patchPix); i += 97 {
+				patchPix[i] = byte(seq)
+			}
+			if _, err := patch.WriteAt(patchPix, 0); err != nil {
+				return
+			}
+			_, _ = fmt.Fprintf(out, "\x1b_Ga=f,r=1,i=1,x=0,y=0,s=64,v=64,f=32,q=2,t=s;%s\x1b\\", patchEnc)
 		case "shm", "b64":
 			binary.LittleEndian.PutUint64(pix, uint64(seq))
 			for i := 8; i < len(pix); i += 4093 {
