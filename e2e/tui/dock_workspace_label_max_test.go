@@ -70,10 +70,13 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 		// asserts on the pill alone, and at 70 columns the entry names would
 		// not show on the row for the commit wait to see.
 		noEntries bool
+		// liveMessage opens one more pane after the minimize loop, so the
+		// "Window created" toast is up while the row is read.
+		liveMessage bool
 		// expect runs against the dock row after the client is up.
 		expect func(t *testing.T, row string)
 	}{
-		{"default cap", "", 120, false, func(t *testing.T, row string) {
+		{"default cap", "", 120, false, false, func(t *testing.T, row string) {
 			if strings.Contains(row, long) {
 				t.Fatalf("the dock row draws the whole name with the default cap\n%s", row)
 			}
@@ -81,12 +84,12 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 				t.Fatalf("the dock row draws no capped pill\n%s", row)
 			}
 		}},
-		{"uncapped wide", "dock_workspace_label_max = 0\n", 120, false, func(t *testing.T, row string) {
+		{"uncapped wide", "dock_workspace_label_max = 0\n", 120, false, false, func(t *testing.T, row string) {
 			if !strings.Contains(row, long) {
 				t.Fatalf("the dock row does not draw the whole name with the cap off\n%s", row)
 			}
 		}},
-		{"uncapped narrow", "dock_workspace_label_max = 0\n", 70, true, func(t *testing.T, row string) {
+		{"uncapped narrow", "dock_workspace_label_max = 0\n", 70, true, false, func(t *testing.T, row string) {
 			// A strip with no pill leaves the workspaces nothing to see or
 			// click, so the current pill is drawn even when the name barely
 			// fits: cut to the room there is, or whole when the room holds it.
@@ -95,7 +98,7 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 				t.Fatalf("the narrow dock draws no pill at all for the long workspace\n%s", row)
 			}
 		}},
-		{"custom format", "dock_workspace_tab_format = \"<{name}>\"\n", 120, false, func(t *testing.T, row string) {
+		{"custom format", "dock_workspace_tab_format = \"<{name}>\"\n", 120, false, false, func(t *testing.T, row string) {
 			// The format wraps the name, and the cap is applied to the
 			// formatted label, so the opening bracket must survive with the
 			// truncated name inside it. The cap counts the brackets, so the
@@ -104,12 +107,22 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 				t.Fatalf("the dock row dropped the tab format around the capped name\n%s", row)
 			}
 		}},
-		{"compact dock", "dock_compact = true\n", 120, false, func(t *testing.T, row string) {
+		{"compact dock", "dock_compact = true\n", 120, false, false, func(t *testing.T, row string) {
 			if strings.Contains(row, long) {
 				t.Fatalf("the compact dock draws the whole name with the default cap\n%s", row)
 			}
 			if !strings.Contains(row, "alphabetaga") {
 				t.Fatalf("the compact dock draws no capped pill\n%s", row)
+			}
+		}},
+		{"live message keeps its columns", "dock_workspace_label_max = 0\n", 140, false, true, func(t *testing.T, row string) {
+			// The message is the last thing in the bar and the entries yield
+			// their names to it. The yield pass counted a different width than
+			// the message draw spent, and the toast paid: an entry name came
+			// out one ellipsis short of a full row and the message was cut to
+			// "Window… more" even though the entries had given the columns up.
+			if !strings.Contains(row, "Window created (3 total)") {
+				t.Fatalf("the live message lost columns its yield made room for\n%s", row)
 			}
 		}},
 	} {
@@ -138,6 +151,14 @@ func TestDockWorkspaceLabelCapAndFormats(t *testing.T) {
 					return strings.Contains(row, "feature/") || strings.Contains(row, "refactor/")
 				}, uiTimeout); err != nil {
 					t.Fatalf("the minimized entries never settled on the dock row: %v\n%s", err, term.Snapshot())
+				}
+			}
+			if tc.liveMessage {
+				newWindow(t, term)
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					return strings.Contains(dockRow(s), "Window created (3 total)")
+				}, uiTimeout); err != nil {
+					t.Fatalf("the live message never drew in full on the dock row: %v\n%s", err, term.Snapshot())
 				}
 			}
 			tc.expect(t, dockRow(term.Screen()))
