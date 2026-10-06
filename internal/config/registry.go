@@ -2,8 +2,10 @@ package config
 
 import (
 	"maps"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // KeybindRegistry manages the mapping between keys and actions
@@ -30,6 +32,14 @@ type KeybindRegistry struct {
 	// changed without a Reload is not seen by any lookup, which was already
 	// true of the seven flattened sections.
 	sections sectionMaps
+
+	// presses is PressesByAction's answer, kept until the next buildMappings.
+	// The help overlay asks for it four times a frame while it is open, and
+	// building it walks every binding in every scope: 2.9ms a frame, most of
+	// the overlay's cost. It goes stale exactly when the maps above do, so a
+	// rebound key shows as soon as the Reload that follows every edit runs.
+	pressesMu sync.Mutex
+	presses   map[string][]string
 }
 
 // sectionMaps is the resolved form of every section the registry reads on its
@@ -55,6 +65,9 @@ func NewKeybindRegistry(cfg *UserConfig) *KeybindRegistry {
 // buildMappings builds the reverse mapping from keys to actions
 func (r *KeybindRegistry) buildMappings() {
 	r.keyToAction = make(map[string]string)
+	r.pressesMu.Lock()
+	r.presses = nil
+	r.pressesMu.Unlock()
 
 	// Build mappings for normal mode sections
 	// Note: Prefix sections (PrefixMode, WindowPrefix, MinimizePrefix, WorkspacePrefix)
@@ -357,8 +370,19 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 //
 // Built in one pass and returned as a map because the help overlay is on the
 // render path: asking per action would rescan every section for each of eighty
-// of them, once a frame.
+// of them, once a frame. The registry keeps the map until its next Reload, so
+// callers share it and must not change it. Each slice is clipped, so an append
+// to one copies it rather than writing into the next.
 func PressesByAction(r *KeybindRegistry) map[string][]string {
+	r.pressesMu.Lock()
+	defer r.pressesMu.Unlock()
+	if r.presses == nil {
+		r.presses = buildPressesByAction(r)
+	}
+	return r.presses
+}
+
+func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 	out := map[string][]string{}
 	seen := map[string]bool{}
 	for _, b := range r.Bindings() {
@@ -383,6 +407,9 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 		}
 		seen[id] = true
 		out[b.Action] = append(out[b.Action], b.Press)
+	}
+	for action, presses := range out {
+		out[action] = slices.Clip(presses)
 	}
 	return out
 }
