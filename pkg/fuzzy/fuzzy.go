@@ -296,6 +296,44 @@ func (m *Matcher) Find(pattern, text string) (Result, bool) {
 	return m.align(lo, hi), true
 }
 
+// FindRun scores pattern as one unbroken run that starts at byte offset at in
+// text, with the bonuses Find gives the same characters. It reports false when
+// the run is not there.
+//
+// Find aligns pattern inside the shortest window that ends at the first place
+// the pattern can complete, so a text that spreads the pattern's characters
+// out before a whole occurrence scores as the spread match. A caller that
+// found the occurrence itself, with strings.Index, scores it with FindRun.
+func (m *Matcher) FindRun(pattern, text string, at int) (Result, bool) {
+	if pattern == "" {
+		return Result{}, true
+	}
+	m.loadPattern(pattern)
+	if !m.loadText(text) {
+		return Result{}, false
+	}
+	lo := at
+	if !m.ascii {
+		var found bool
+		lo, found = slices.BinarySearch(m.offs, at)
+		if !found {
+			return Result{}, false
+		}
+	}
+	hi := lo + len(m.pat)
+	if lo < 0 || hi > len(m.text) {
+		return Result{}, false
+	}
+	for k := range m.pat {
+		if !m.eq(k, lo+k) {
+			return Result{}, false
+		}
+	}
+	// A window exactly as wide as the pattern leaves the matrix one
+	// alignment: the diagonal.
+	return m.align(lo, hi), true
+}
+
 func (m *Matcher) loadPattern(pattern string) {
 	m.pat = m.pat[:0]
 	m.patCS = false

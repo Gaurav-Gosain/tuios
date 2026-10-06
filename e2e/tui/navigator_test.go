@@ -235,6 +235,50 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 	saveFrame(t, term, "navigator-ranking")
 }
 
+// TestNavigatorScoresTheWholeOccurrence: a pane whose screen line holds the
+// query's characters spread out and then the query whole ranks by the whole
+// occurrence. The pane late prints navDecoy and then the marker on one line,
+// so the spread match in that line scores exactly what the decoy's name
+// scores, and only the whole occurrence puts late above the decoy. logs is
+// listed as well, so the load has read every screen when the order is read.
+func TestNavigatorScoresTheWholeOccurrence(t *testing.T) {
+	base, _ := navigatorSessions(t)
+	for _, args := range [][]string{
+		{"new-window", navDecoy, "-s", "work", "--no-focus"},
+		{"new-window", "late", "-s", "work", "--no-focus"},
+	} {
+		if o, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, o)
+		}
+	}
+	printMarker(t, base, "work", "late", "printf '"+navDecoy+" nee%s\\n' dle-7781", navDecoy+" "+navMarker)
+	term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	openNavigator(t, term, "home", "work")
+	sendKeys(t, term, "/")
+	if err := term.SendKeys(navMarker); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	rowOf := func(lines []string, prefix string) int {
+		for i, l := range lines {
+			if strings.HasPrefix(strings.TrimLeft(l, " ›"), prefix) {
+				return i
+			}
+		}
+		return -1
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		lines := strings.Split(s.Text(), "\n")
+		logs, late, decoy := rowOf(lines, "logs · work"), rowOf(lines, "late · work"), rowOf(lines, navDecoy+" · work")
+		return logs >= 0 && decoy >= 0 && late >= 0 && late < decoy
+	}, uiTimeout); err != nil {
+		t.Fatalf("the search for %s did not rank late, which shows it whole, above %q: %v\n%s", navMarker, navDecoy, err, term.Snapshot())
+	}
+	saveFrame(t, term, "navigator-whole-occurrence")
+}
+
 // TestNavigatorListsAHostPane: a pane on another machine is listed under its
 // session, found by its screen text through the link, and Enter takes the
 // client to it.

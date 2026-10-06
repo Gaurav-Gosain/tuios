@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -753,7 +754,8 @@ func (m *OS) navigatorRows() []navRow {
 // known is listed when its name matches.
 //
 // Both kinds of hit are ranked by the same fuzzy score, and a field hit wins
-// a tie. A field hit used to outrank every text hit, and that let a pane whose
+// a tie. A text hit scores its best whole occurrence of the query as one
+// unbroken run (fuzzy.Matcher.FindRun). A field hit used to outrank every text hit, and that let a pane whose
 // fields spell the query out of order, across a random id and a temp folder,
 // take the cursor from the pane that shows the query whole: the joined fields
 // are long enough to hold most short queries scattered.
@@ -787,14 +789,25 @@ func (m *OS) navigatorSearchRows() []navRow {
 				if !strings.Contains(p.lower[i], lq) {
 					continue
 				}
-				// The line holds the query whole, so the fuzzy score of
-				// the lower case pair is that of a contiguous match at
-				// least. Lower case on both sides keeps smart case out of
-				// a match that was made ignoring case. A line the matcher
-				// still refuses scores nothing and is kept.
+				// Each whole occurrence is scored as the run it is.
+				// Find would score the first spread of the query's
+				// characters in the line, which can come before the
+				// occurrence and score far less. Lower case on both sides
+				// keeps smart case out of a match that was made ignoring
+				// case. A line the matcher still refuses scores nothing
+				// and is kept.
 				score := 0
-				if r, ok := mt.Find(lq, p.lower[i]); ok {
-					score = 2 * r.Score
+				line := p.lower[i]
+				for at := 0; at <= len(line)-len(lq); {
+					k := strings.Index(line[at:], lq)
+					if k < 0 {
+						break
+					}
+					if r, ok := mt.FindRun(lq, line, at+k); ok {
+						score = max(score, 2*r.Score)
+					}
+					_, size := utf8.DecodeRuneInString(line[at+k:])
+					at += k + max(size, 1)
 				}
 				if !found || score > best {
 					best, found = score, true

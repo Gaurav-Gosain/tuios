@@ -1567,6 +1567,12 @@ build, with the same failure.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A field hit outranks every text hit | `navigatorSearchRows`: the field hit's score given a lead of `1<<21` | `TestNavigatorRanksScreenTextOverAScatteredName` ("the search for needle-7781 did not put the cursor and the preview on logs") | **caught** |
+| A text hit scores the first spread of the query | `navigatorSearchRows`: the `FindRun` loop replaced by `mt.Find(lq, line)` | `TestNavigatorScoresTheWholeOccurrence` ("the search for needle-7781 did not rank late, which shows it whole, above ...") | **caught** |
+
+`TestNavigatorScoresTheWholeOccurrence` prints `navDecoy` and then the marker
+on one line. `Find` aligns the query inside the shortest window that ends
+first, so it scores the spread copy, which ties the decoy's name, and the
+decoy wins the tie. The control frame lists late under the decoy.
 
 ## Agents settings tab and the integration notice
 
