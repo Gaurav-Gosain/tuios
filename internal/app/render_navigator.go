@@ -144,7 +144,7 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 		footer = "Reading the other sessions…"
 	}
 	listBox := overlay.Box{
-		Title: "Panes", Note: nav.layout, Footer: footer,
+		Title: "Panes", Note: m.navigatorListNote(), Footer: footer,
 		Width: listW, Lines: list, Active: !nav.searching,
 	}.Render(bg, pal)
 
@@ -188,6 +188,16 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 		})
 	}
 	return content, geo, hits
+}
+
+// navigatorListNote is set into the Panes box's top border: the layout, or
+// "results" while a search is in force, since a search lists the panes it
+// found in place of the layout.
+func (m *OS) navigatorListNote() string {
+	if m.navSearch() {
+		return "results"
+	}
+	return m.navigator.layout
 }
 
 // navigatorSessionColors settles the session colours for the sessions the

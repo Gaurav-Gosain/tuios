@@ -224,8 +224,8 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 			return false
 		}
 		for _, l := range strings.Split(text, "\n") {
-			if strings.Contains(l, "logs ·") {
-				return strings.Contains(l, "›")
+			if row := navListRow(l); strings.Contains(row, "logs │") {
+				return strings.HasPrefix(row, "▎")
 			}
 		}
 		return false
@@ -233,6 +233,17 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 		t.Fatalf("the search for %s did not put the cursor and the preview on logs above %q: %v\n%s", navMarker, navDecoy, err, term.Snapshot())
 	}
 	saveFrame(t, term, "navigator-ranking")
+}
+
+// navListRow is a screen line from the list box's left border on, without
+// the border: a row of the list starts with the cursor bar or a blank. It is
+// empty for a line with no border.
+func navListRow(l string) string {
+	_, row, ok := strings.Cut(strings.TrimLeft(l, " "), "│")
+	if !ok {
+		return ""
+	}
+	return row
 }
 
 // TestNavigatorScoresTheWholeOccurrence: a pane whose screen line holds the
@@ -263,7 +274,7 @@ func TestNavigatorScoresTheWholeOccurrence(t *testing.T) {
 	}
 	rowOf := func(lines []string, prefix string) int {
 		for i, l := range lines {
-			if strings.HasPrefix(strings.TrimLeft(l, " ›"), prefix) {
+			if strings.HasPrefix(strings.TrimLeft(navListRow(l), " ▎"), prefix) {
 				return i
 			}
 		}
@@ -271,7 +282,7 @@ func TestNavigatorScoresTheWholeOccurrence(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		lines := strings.Split(s.Text(), "\n")
-		logs, late, decoy := rowOf(lines, "logs · work"), rowOf(lines, "late · work"), rowOf(lines, navDecoy+" · work")
+		logs, late, decoy := rowOf(lines, "logs │"), rowOf(lines, "late │"), rowOf(lines, navDecoy+" │")
 		return logs >= 0 && decoy >= 0 && late >= 0 && late < decoy
 	}, uiTimeout); err != nil {
 		t.Fatalf("the search for %s did not rank late, which shows it whole, above %q: %v\n%s", navMarker, navDecoy, err, term.Snapshot())

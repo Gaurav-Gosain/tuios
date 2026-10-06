@@ -506,6 +506,8 @@ func (m *OS) navigatorLoad() tea.Cmd {
 				}
 				c := dial()
 				defer func() { _ = c.Close() }()
+				parser := newNavParser(ink)
+				defer parser.Close()
 				for _, job := range sessions {
 					if ctx.Err() != nil {
 						return
@@ -541,7 +543,7 @@ func (m *OS) navigatorLoad() tea.Cmd {
 							s.Panes[i].TextSkipped = true
 							continue
 						}
-						text, styled, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID, ink)
+						text, styled, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID, parser)
 						if !ok {
 							_ = c.Close()
 							c = dial()
@@ -706,10 +708,10 @@ func navInStep(err error) bool {
 }
 
 // navCapture reads a pane's last lines with a styled capture-pane, and
-// parses them (see navParseStyled) into plain text and styled text. It
+// parses them (see navParser) into plain text and styled text. It
 // reports false when the call failed in a way that leaves the connection out
 // of step.
-func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string, ink navInk) (plain, styled []string, inStep bool) {
+func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string, parser *navParser) (plain, styled []string, inStep bool) {
 	raw, err := c.CallWithTimeout("capture-pane", map[string]any{
 		"session": sessionName, "window": window, "source": "recent", "lines": navTextLines, "styled": true,
 	}, navCallTimeoutFor(ctx))
@@ -722,7 +724,7 @@ func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window 
 	if json.Unmarshal(raw, &res) != nil {
 		return nil, nil, true
 	}
-	plain, styled = navParseStyled(res.Content, ink, navTextLines)
+	plain, styled = parser.parse(res.Content, navTextLines)
 	return plain, styled, true
 }
 

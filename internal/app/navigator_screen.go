@@ -7,6 +7,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -48,10 +49,44 @@ func navThemeInk() navInk {
 	}
 }
 
-// navParseStyled parses a styled capture into its last keep rows: each row as
-// plain text, for the search, and as SGR-styled text, for the preview. The
-// blank rows at the end are dropped first.
+// navParser parses styled captures, one after another, with one emulator. A
+// load makes one for each machine it reads, rather than one for each pane:
+// an emulator costs about a megabyte and two milliseconds to make, which at
+// the cap of 150 panes was most of what opening the navigator cost.
+//
+// The emulator is one row of navStyledMaxCols cells. Each line starts from a
+// full reset (the pen, the modes, the margins, the main screen) with wrapping
+// off, so whatever one line holds, it cannot reach another line, or the next
+// capture. The theme's sixteen survive the reset.
+type navParser struct {
+	emu *vt.Emulator
+}
+
+// newNavParser makes a parser that resolves the sixteen ANSI colours with
+// ink.
+func newNavParser(ink navInk) *navParser {
+	emu := vt.NewEmulator(navStyledMaxCols, 1)
+	if ink.on {
+		emu.SetThemeColors(ink.fg, ink.bg, ink.cur, ink.ansiPalette)
+	}
+	return &navParser{emu: emu}
+}
+
+// Close lets the emulator go.
+func (p *navParser) Close() { _ = p.emu.Close() }
+
+// navParseStyled parses one capture with a parser of its own. The load uses
+// a navParser for each machine instead.
 func navParseStyled(content string, ink navInk, keep int) (plain, styled []string) {
+	p := newNavParser(ink)
+	defer p.Close()
+	return p.parse(content, keep)
+}
+
+// parse parses a styled capture into its last keep rows: each row as plain
+// text, for the search, and as SGR-styled text, for the preview. The blank
+// rows at the end are dropped first.
+func (p *navParser) parse(content string, keep int) (plain, styled []string) {
 	lines := strings.Split(content, "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, "\r")
@@ -71,15 +106,7 @@ func navParseStyled(content string, ink navInk, keep int) (plain, styled []strin
 	}
 	cols = min(cols, navStyledMaxCols)
 
-	// One row of grid, parsed once a line and read before the next. Each
-	// line starts from a full reset (the pen, the modes, the margins, the
-	// main screen) with wrapping off, so whatever one line holds, it cannot
-	// reach the rows of the others. The theme's sixteen survive the reset.
-	emu := vt.NewEmulator(cols, 1)
-	defer func() { _ = emu.Close() }()
-	if ink.on {
-		emu.SetThemeColors(ink.fg, ink.bg, ink.cur, ink.ansiPalette)
-	}
+	emu := p.emu
 	plain = make([]string, 0, len(lines))
 	styled = make([]string, 0, len(lines))
 	for _, l := range lines {
@@ -127,7 +154,10 @@ func navCellRow(emu *vt.Emulator, y, cols int) uv.Line {
 	return line[:min(end, cols)]
 }
 
-// navPrintable drops the C0 and C1 control characters from a cell's text.
+// navPrintable drops the C0 and C1 control characters from a cell's text,
+// and the characters that draw nothing but change how text reads (see
+// invisible.Rune): a bidi override in another machine's capture would
+// reorder the preview, and the rest hide text from the person reading it.
 func navPrintable(s string) string {
 	clean := true
 	for _, r := range s {
@@ -136,16 +166,16 @@ func navPrintable(s string) string {
 			break
 		}
 	}
-	if clean {
-		return s
-	}
-	var b strings.Builder
-	for _, r := range s {
-		if r >= 0x20 && (r < 0x7f || r >= 0xa0) {
-			b.WriteRune(r)
+	if !clean {
+		var b strings.Builder
+		for _, r := range s {
+			if r >= 0x20 && (r < 0x7f || r >= 0xa0) {
+				b.WriteRune(r)
+			}
 		}
+		s = b.String()
 	}
-	return b.String()
+	return invisible.Strip(s)
 }
 
 // navScreenLine fits one styled preview row to cols cells: cut where it is
