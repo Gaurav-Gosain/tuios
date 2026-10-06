@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 32,305,314 | 32,365,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,420,946 | 30,480,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 32,399,522 | 32,445,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,505,330 | 30,550,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2397,6 +2397,13 @@ its search and preview, the load of the other sessions, and the listing
 across sessions and hosts. It links no new package. On Go 1.26.6 the build
 measured 32,305,314 and 30,420,946 bytes, 120,314 and 90,946 over the old
 budgets.
+
+The budgets went to 32,445,000 (linux/amd64) and 30,550,000 (darwin/arm64)
+for the settings page's Agents tab: the integration report the tab shares
+with `tuios doctor agents`, the install and uninstall actions, the notice and
+its stored dismissals, and the check that a file did not change during an
+edit. It links no new package. On Go 1.26.6 the build measured 32,399,522 and
+30,505,330 bytes, 34,522 and 25,330 over the old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
