@@ -2,9 +2,11 @@
 //! manager. See README.md.
 
 mod app;
+mod assets;
 mod boxdraw;
 mod config;
 mod control;
+mod fleet;
 mod keys;
 mod painter;
 mod palette;
@@ -74,8 +76,12 @@ fn main() {
         }
     }
 
-    gpui_platform::application().run(move |cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(1400.), px(880.)), cx);
+    gpui_platform::application().with_assets(assets::Assets).run(move |cx: &mut App| {
+        let fonts = assets::FONTS.iter().map(|b| std::borrow::Cow::Borrowed(*b)).collect();
+        if let Err(e) = cx.text_system().add_fonts(fonts) {
+            eprintln!("tuios-gpui: cannot load the bundled UI font: {e}");
+        }
+        let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions { title: Some("tuios".into()), ..Default::default() }),

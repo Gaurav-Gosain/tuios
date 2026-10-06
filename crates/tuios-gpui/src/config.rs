@@ -7,7 +7,7 @@
 //! font_family = "JetBrainsMono Nerd Font Mono"
 //! font_size = 14
 //! line_height = 1.3
-//! ui_font_family = "JetBrainsMono Nerd Font"
+//! ui_font_family = "Inter"
 //! ligatures = true
 //! theme = "tokyonight"   # overrides tuios's own [appearance] theme
 //! ```
@@ -23,7 +23,7 @@ use std::path::PathBuf;
 pub const TERMINAL_FONTS: [&str; 4] =
     ["JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono"];
 /// Chrome font families tried in order.
-pub const UI_FONTS: [&str; 4] = ["JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono", "DejaVu Sans"];
+pub const UI_FONTS: [&str; 4] = [crate::assets::UI_FONT, "Adwaita Sans", "Cantarell", "DejaVu Sans"];
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct GuiFile {

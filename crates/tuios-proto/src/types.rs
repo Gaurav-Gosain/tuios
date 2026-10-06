@@ -141,6 +141,21 @@ pub struct Window {
     pub agent_message: Option<String>,
     #[serde(default)]
     pub agent_kind: Option<String>,
+    #[serde(default)]
+    pub cwd: String,
+    /// What the pane runs; empty at a shell prompt.
+    #[serde(default)]
+    pub foreground: String,
+    /// The harness that reported the agent state.
+    #[serde(default)]
+    pub harness: String,
+    /// When the pane entered its agent state, Unix milliseconds.
+    #[serde(default)]
+    pub agent_at: i64,
+    #[serde(default)]
+    pub repo: String,
+    #[serde(default)]
+    pub branch: String,
 }
 
 impl Window {

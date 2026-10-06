@@ -32,29 +32,25 @@ pub struct Theme {
     pub cursor: u32,
     pub selection: u32,
     pub ansi: [u32; 16],
-    // The rail: sidebar, workspace strip and status bar (GroundUI).
-    pub rail: u32,
-    pub rail_rule: u32,
-    pub rail_fg: u32,
-    pub rail_dim: u32,
-    pub rail_mute: u32,
-    pub rail_row: u32,
-    pub rail_hover: u32,
-    // Dialogs: the command palette (UI).
-    pub dlg_surface: u32,
-    pub dlg_edge: u32,
-    pub dlg_card: u32,
-    pub dlg_fg: u32,
-    pub dlg_dim: u32,
-    pub dlg_mute: u32,
-    pub dlg_row: u32,
+    // Chrome, derived from the terminal's own background and foreground so a
+    // theme change recolours everything at once (docs/DESIGN-RESEARCH.md,
+    // "Palette rules").
+    /// The sidebar ground.
+    pub sidebar: u32,
+    /// A row under the pointer, a keycap, a quiet field.
+    pub hover: u32,
+    /// The focused pane's row, the palette's chosen row, the active tab.
+    pub selected: u32,
+    /// The palette panel.
+    pub raised: u32,
+    /// Hairlines between regions.
+    pub hairline: u32,
+    /// Primary, secondary and tertiary chrome text.
+    pub text: u32,
+    pub text2: u32,
+    pub text3: u32,
     pub accent: u32,
-    pub accent_bright: u32,
-    pub accent_tint: u32,
-    // Pane frames.
-    pub border_focused: u32,
-    pub border_unfocused: u32,
-    // Agent states.
+    // Agent states, as tuios works them out for contrast.
     pub working: u32,
     pub needs_input: u32,
     pub idle: u32,
@@ -62,12 +58,25 @@ pub struct Theme {
     pub errored: u32,
 }
 
+/// Pulls a colour toward its own grey by `keep` (1 keeps it), so chrome text
+/// in a strongly tinted theme reads as text, not as a colour.
+fn desaturate(c: u32, keep: f32) -> u32 {
+    let (r, g, b) = (((c >> 16) & 0xff) as f32, ((c >> 8) & 0xff) as f32, (c & 0xff) as f32);
+    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let f = |v: f32| (y + (v - y) * keep).round().clamp(0., 255.) as u32;
+    (f(r) << 16) | (f(g) << 8) | f(b)
+}
+
+/// Mixes two 0xRRGGBB colours; `t` 0 keeps `a`.
+pub fn mix32(a: u32, b: u32, t: f32) -> u32 {
+    mix(Rgb::from_u32(a), Rgb::from_u32(b), t).to_u32()
+}
+
 impl Theme {
     /// Maps an exported tuios theme onto the GUI's surfaces.
     pub fn from_export(e: &ThemeExport) -> Theme {
         let c = |s: &str, d: u32| parse_hex(s).unwrap_or(d);
         let ui = |k: &str, d: u32| e.ui.get(k).and_then(|v| parse_hex(v)).unwrap_or(d);
-        let gr = |k: &str, d: u32| e.ground.get(k).and_then(|v| parse_hex(v)).unwrap_or_else(|| ui(k, d));
         let ag = |k: &str, d: u32| e.agent.get(k).and_then(|v| parse_hex(v)).unwrap_or(d);
         let mut ansi = XTERM;
         for (i, v) in e.terminal.ansi.iter().take(16).enumerate() {
@@ -77,35 +86,29 @@ impl Theme {
         }
         let fg = c(&e.terminal.fg, 0xe5e5e5);
         let bg = c(&e.terminal.bg, 0x000000);
-        let rail = c(&e.rail_ground, gr("Canvas", 0x201f26));
         let accent = ui("Accent", 0x6b50ff);
+        let light = e.light;
+        let ink = desaturate(fg, 0.45);
+        // Light grounds step toward black, dark ones toward the foreground.
+        let toward = if light { 0x000000 } else { fg };
+        let step = |t: f32| mix32(bg, toward, t);
         Theme {
             name: e.name.clone(),
-            light: e.light,
+            light,
             fg,
             bg,
             cursor: c(&e.terminal.cursor, fg),
             selection: ui("AccentTint", 0x464479),
             ansi,
-            rail,
-            rail_rule: c(&e.rail_rule, gr("Edge", 0x484851)),
-            rail_fg: gr("Fg", 0xfffaf1),
-            rail_dim: gr("FgDim", 0xbfbcc8),
-            rail_mute: gr("FgMute", 0x858392),
-            rail_row: gr("RowSel", 0x2d2c36),
-            rail_hover: gr("Hover", 0x44434c),
-            dlg_surface: ui("Surface", 0x3a3943),
-            dlg_edge: ui("Edge", 0x646269),
-            dlg_card: ui("Card", 0x4d4c57),
-            dlg_fg: ui("Fg", 0xfffaf1),
-            dlg_dim: ui("FgDim", 0xbfbcc8),
-            dlg_mute: ui("FgMute", 0x858392),
-            dlg_row: ui("RowSel", 0x2d2c36),
+            sidebar: step(if light { 0.03 } else { 0.035 }),
+            hover: step(if light { 0.05 } else { 0.06 }),
+            selected: step(if light { 0.085 } else { 0.095 }),
+            raised: if light { bg } else { step(0.06) },
+            hairline: mix32(bg, fg, if light { 0.13 } else { 0.09 }),
+            text: ink,
+            text2: mix32(ink, bg, if light { 0.32 } else { 0.36 }),
+            text3: mix32(ink, bg, if light { 0.5 } else { 0.56 }),
             accent,
-            accent_bright: ui("AccentBright", accent),
-            accent_tint: ui("AccentTint", 0x464479),
-            border_focused: c(&e.border_focused_terminal, accent),
-            border_unfocused: c(&e.border_unfocused, 0x585858),
             working: ag("working", accent),
             needs_input: ag("needs_input", 0xe0af68),
             idle: ag("idle", 0x858392),
@@ -140,16 +143,6 @@ impl Theme {
     pub fn alpha(c: u32, a: u8) -> Rgba {
         rgba((c << 8) | a as u32)
     }
-
-    pub fn agent_color(&self, state: &str) -> u32 {
-        match state {
-            "working" => self.working,
-            "needs_input" => self.needs_input,
-            "done" => self.done,
-            "errored" => self.errored,
-            _ => self.idle,
-        }
-    }
 }
 
 pub fn hsla(c: Rgb) -> Hsla {
@@ -172,7 +165,6 @@ mod tests {
         assert_eq!(t.fg, 0xe5e5e5);
         assert_eq!(t.bg, 0x000000);
         assert_eq!(t.ansi, XTERM);
-        assert_eq!(t.rail, 0x201f26, "the rail sits on charmtone Pepper");
         assert!(!t.light);
     }
 
@@ -181,14 +173,10 @@ mod tests {
         let mut e = ThemeExport::default();
         e.terminal.bg = "#282a36".into();
         e.terminal.ansi = vec!["#21222c".into(); 16];
-        e.ground.insert("Fg".into(), "#010203".into());
-        e.ui.insert("Surface".into(), "#0a0b0c".into());
         e.agent.insert("needs_input".into(), "#ffb86c".into());
         let t = Theme::from_export(&e);
         assert_eq!(t.bg, 0x282a36);
         assert_eq!(t.ansi[15], 0x21222c);
-        assert_eq!(t.rail_fg, 0x010203);
-        assert_eq!(t.dlg_surface, 0x0a0b0c);
-        assert_eq!(t.agent_color("needs_input"), 0xffb86c);
+        assert_eq!(t.needs_input, 0xffb86c);
     }
 }
