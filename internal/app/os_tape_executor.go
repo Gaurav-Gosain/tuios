@@ -499,7 +499,9 @@ func (m *OS) SwitchWorkspace(workspace int) error {
 	}
 	recorder := m.TapeRecorder
 	m.TapeRecorder = nil
-	m.SwitchToWorkspace(workspace)
+	// A script brings its own panes, so this is not a switch that opens a
+	// pane on an empty workspace. See SwitchToWorkspace.
+	m.switchToWorkspace(workspace, -1)
 	m.TapeRecorder = recorder
 	m.MarkAllDirty()
 	return nil

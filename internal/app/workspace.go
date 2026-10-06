@@ -11,8 +11,64 @@ import (
 
 // SwitchToWorkspace switches to the specified workspace, picking a default focus
 // (the workspace's saved window, else its first visible one).
+//
+// It is the switch a person makes: a key, a click, the palette, the
+// switcher. With workspaces.new_window_when_empty on, a switch to a workspace
+// with no panes opens one there. Scripts and tapes switch with
+// switchToWorkspace, because they bring their own panes. A move that follows
+// its pane comes here with the pane already on the workspace, so it opens
+// nothing. Another client following this switch, and a switch the daemon
+// makes (tuios select-workspace, tuios xpanes, return_when_empty), apply the
+// session state without coming here, so only the client that made the
+// switch opens the pane, and the session gets one.
 func (m *OS) SwitchToWorkspace(workspace int) {
+	from := m.CurrentWorkspace
+	var fromPane *terminal.Window
+	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from {
+		fromPane = fw
+	}
 	m.switchToWorkspace(workspace, -1)
+	m.openPaneOnEmptyWorkspace(from, workspace, fromPane)
+}
+
+// openPaneOnEmptyWorkspace opens a pane on workspace when the switch from
+// from landed there, the workspace is an ordinary one with no panes, and
+// workspaces.new_window_when_empty is on. The pane starts in fromPane's
+// directory, else in the session's start directory. A minimized pane counts
+// as a pane: the workspace is not empty, only its panes are out of view.
+func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Window) {
+	if m.UserConfig == nil || !m.UserConfig.Workspaces.NewWindowWhenEmpty {
+		return
+	}
+	if from == workspace || m.CurrentWorkspace != workspace || session.IsScratchWorkspace(workspace) {
+		return
+	}
+	for _, w := range m.Windows {
+		if w.Workspace == workspace && !w.IsScratch {
+			return
+		}
+	}
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		cwdFrom := ""
+		if fromPane != nil {
+			cwdFrom = fromPane.ID
+		}
+		// The workspace is named, not left to the daemon's current one: the
+		// switch's state push and this request are separate messages.
+		if err := m.DaemonClient.SendNewWindowFrom(workspace, cwdFrom); err != nil {
+			m.LogError("Failed to ask the daemon for a pane on workspace %d: %v", workspace, err)
+			return
+		}
+		// As addDaemonWindow does: the window set is the daemon's until it
+		// answers. See SyncStateToDaemon.
+		m.daemonWindowIntent = true
+		return
+	}
+	dir := ""
+	if fromPane != nil {
+		dir = fromPane.CWD()
+	}
+	m.addLocalWindow(dir, "", nil)
 }
 
 // switchToWorkspace switches to the workspace and resolves focus. A focusTarget

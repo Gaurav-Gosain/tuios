@@ -104,6 +104,7 @@ var settingLabels = map[string]string{
 	"scratch.height":                    "Scratch height",
 	"launcher.gui_command":              "Launcher GUI command",
 	"workspaces.return_when_empty":      "Go back from an empty workspace",
+	"workspaces.new_window_when_empty":  "Open a pane on an empty workspace",
 
 	"appearance.sidebar.sections":             "Sections",
 	"appearance.sidebar.file_icons":           "File icons",

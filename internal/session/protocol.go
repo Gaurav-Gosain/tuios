@@ -700,6 +700,15 @@ type ExecuteCommandPayload struct {
 	// or the NewWindow names its own command, the field changes nothing. An
 	// older daemon ignores it and opens a shell.
 	SSHFrom string `json:"ssh_from,omitempty"`
+	// CwdFrom names the window whose directory a NewWindow starts in, when
+	// Cwd is empty. The daemon reads the directory from that pane's process,
+	// because the client may not know it. A window that is gone, is on
+	// another machine, or has no directory gives the session's start
+	// directory. A client opening a window on the empty workspace it just
+	// switched to sends the pane focused on the workspace it came from. An
+	// older daemon ignores it and the window starts where it would have
+	// before.
+	CwdFrom string `json:"cwd_from,omitempty"`
 }
 
 // CommandResultPayload contains the result of a remote command execution.

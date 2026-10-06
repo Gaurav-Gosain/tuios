@@ -126,6 +126,9 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			LogBasic("Execute command: following ssh of window %s: %v", payload.SSHFrom, redactSSHArgv(argv))
 		}
 	}
+	if payload.CwdFrom != "" && payload.Cwd == "" && payload.CommandType == "NewWindow" {
+		payload.Cwd = session.cwdFrom(payload.CwdFrom)
+	}
 	if why := d.refuseMultifocusInto(cs, session, payload.CommandType, payload.Args); why != "" {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
 	}

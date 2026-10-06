@@ -350,6 +350,41 @@ The daemon reads the setting when it starts and when the file changes.
 `tuios set-config workspaces.return_when_empty false` changes it while tuios
 runs.
 
+## When you switch to an empty workspace
+
+By default, a workspace with no panes shows the splash screen. To open a
+pane there when you switch to it, as the new-window key does, turn on this
+setting:
+
+```toml
+[workspaces]
+new_window_when_empty = true
+```
+
+The new pane starts in the folder of the pane that had focus on the
+workspace you came from. When that workspace had no pane, the new pane
+starts in the session's start folder: the folder that `tuios new --cwd`
+gave.
+
+A pane opens only when you switch: with a workspace key, a click on the
+dock, the workspace switcher, the pane navigator or the command palette.
+These switches do not open a pane:
+
+- `move_and_follow` and other moves that take a pane with them.
+- `tuios xpanes`, `tuios select-workspace`, `tuios run-command` and tape
+  scripts. These bring their own panes or run from a script.
+- The switch back from an empty workspace that `return_when_empty` makes.
+- The start of tuios and an attach to a session. The workspace on screen
+  stays as it is.
+
+When two clients show the same session, the client that switches opens the
+pane. The other client shows it. The session gets one pane.
+
+Each client reads the setting from its config file, and a change applies at
+once. The settings page has it under Daemon, and
+`tuios set-config workspaces.new_window_when_empty true` changes it while
+tuios runs.
+
 ## Master-stack layout
 
 These options shape the master-stack layout. Each workspace starts with them.

@@ -111,6 +111,9 @@ question about the screen. Do not change them unless the person asks.
   the workspace the person came from: the one that ran `xpanes`, else the
   ones shown before, else the lowest with panes. `workspaces.return_when_empty
   = false` keeps the empty workspace on screen.
+- `workspaces.new_window_when_empty = true` opens a pane when the person
+  switches to an empty workspace by key or click. `move_and_follow`,
+  `xpanes`, `select-workspace` and `run-command` switches open none.
 - `Ctrl+B =` (or `tuios set-layout --equalize`) gives tiled panes equal
   shares. In the master-stack layout it puts the master back at its
   configured ratio.

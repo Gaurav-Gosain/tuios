@@ -1165,14 +1165,31 @@ func (c *TUIClient) SendIntentAt(cwd string, workspace int, commandType string, 
 // SendNewWindowIntent is SendIntentAt with the window a NewWindow follows into
 // ssh. Empty follows none. See ExecuteCommandPayload.SSHFrom.
 func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, commandType string, args ...string) error {
-	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
-		SessionName: c.SessionName(),
+	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType: commandType,
 		Args:        args,
 		Cwd:         cwd,
 		Workspace:   workspace,
 		SSHFrom:     sshFrom,
 	})
+}
+
+// SendNewWindowFrom asks for a shell on workspace that starts in the
+// directory of the window cwdFrom, or in the session's start directory
+// when that window has none. Empty cwdFrom gives the default directory.
+// See ExecuteCommandPayload.CwdFrom.
+func (c *TUIClient) SendNewWindowFrom(workspace int, cwdFrom string) error {
+	return c.sendNewWindow(&ExecuteCommandPayload{
+		CommandType: "NewWindow",
+		Workspace:   workspace,
+		CwdFrom:     cwdFrom,
+	})
+}
+
+// sendNewWindow sends an execute-command payload for this client's session.
+func (c *TUIClient) sendNewWindow(payload *ExecuteCommandPayload) error {
+	payload.SessionName = c.SessionName()
+	msg, err := NewMessage(MsgExecuteCommand, payload)
 	if err != nil {
 		return err
 	}

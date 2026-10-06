@@ -1452,8 +1452,13 @@ func (s *Session) inheritedCwd() string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
 	}
-	state := s.GetState()
-	win, ok := findWindowState(state, state.FocusedWindowID)
+	return s.windowCwd(s.GetState().FocusedWindowID)
+}
+
+// windowCwd is the directory of the window id's pane: what its process
+// reports, else the directory saved for it. Empty when the window is gone.
+func (s *Session) windowCwd(id string) string {
+	win, ok := findWindowState(s.GetState(), id)
 	if !ok {
 		return ""
 	}
@@ -1463,6 +1468,20 @@ func (s *Session) inheritedCwd() string {
 		}
 	}
 	return win.Cwd
+}
+
+// cwdFrom is the directory a new window named by ExecuteCommandPayload.CwdFrom
+// starts in: the window's own, else the session's start directory. A window
+// whose process runs on another machine gives the start directory, since
+// its paths mean nothing here. It does not fall back to the focused pane,
+// which on the workspace the client just switched to is no pane at all.
+func (s *Session) cwdFrom(id string) string {
+	if win, ok := findWindowState(s.GetState(), id); ok && win.Host == "" {
+		if cwd := s.windowCwd(id); cwd != "" {
+			return cwd
+		}
+	}
+	return s.StartDir()
 }
 
 // scrollbackLines is the history depth a new pane in this session keeps.

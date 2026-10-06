@@ -172,7 +172,8 @@ func (m *OS) startTapePlayback(commands []tape.Command, workspace int) {
 		return
 	}
 	if workspace > 0 && workspace <= m.NumWorkspaces {
-		m.SwitchToWorkspace(workspace)
+		// The tape builds the workspace, so no pane opens on it first.
+		m.switchToWorkspace(workspace, -1)
 	}
 
 	player := tape.NewPlayer(commands)

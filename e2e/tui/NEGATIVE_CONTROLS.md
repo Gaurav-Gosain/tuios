@@ -1454,7 +1454,6 @@ divider survived, so a fixture that resizes nothing cannot pass.
 | A covered divider is grabbed | `armTiledBorderResize`: the `paneOver` check cut | `TestSharedBorderPressInsideAZoomedPane` ("the panes moved under the zoomed pane"). The test runs in BSP: in master-stack a resize under a zoom is not recorded, and the retile at the end of the zoom hides it | **caught** |
 | A click records a fixed width | `handleMouseRelease`: the width check on the scrolling capture cut | `TestScrollingDividerClickKeepsAProportionalColumn` ("the first column is 48 columns wide after the client grew, want 60") | **caught** |
 
-
 ## Pane labels (display_panes)
 
 The tests are in `pane_labels_test.go`. They read each label's block glyphs
@@ -1702,3 +1701,31 @@ a third time, and opens a window on an empty workspace.
 
 Not covered end to end: `absStartDir` on the create paths. The CLI sends an
 absolute folder already, so only a raw verb call can send a relative one.
+
+## A pane on a switch to an empty workspace (#477)
+
+`new_window_when_empty_test.go` turns on `workspaces.new_window_when_empty`.
+`TestEmptyWorkspaceOpensAPane` checks that startup opens no pane, then
+switches by key to workspace 2 (one pane, in the folder of the pane it came
+from), exits that pane and switches to workspace 5 (one pane, in the
+session's start folder), presses `move_and_follow_7` (workspace 7 holds only
+the moved pane), runs `tuios xpanes` (its workspace holds two panes), and
+switches with `run-command SwitchWorkspace` and `select-workspace` (no pane).
+Inheritance is off, so the folder has one way to be chosen.
+`TestEmptyWorkspaceOpensOnePaneForTwoClients` switches one of two attached
+clients and counts one pane. `TestEmptyWorkspacePaneSettingReloads` switches
+with the setting off (no pane), turns it on in the file and switches again
+(one pane). Every count waits 1.5 s after it first matches and counts again.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`a596a20b`) with this branch's e2e directory | all three ("workspace 2 has 0 panes, want 1", "no switch ... opened a pane after the reload") | **caught** |
+| The switch does not open a pane | `SwitchToWorkspace`: the `openPaneOnEmptyWorkspace` call cut | all three | **caught** |
+| The daemon ignores the source pane | `handleExecuteCommand`: the `session.cwdFrom(payload.CwdFrom)` line cut | `TestEmptyWorkspaceOpensAPane` (the pane is in `start`, want `elsewhere`) | **caught** |
+| A move that brings its pane also gets one | `openPaneOnEmptyWorkspace`: the loop that returns on a workspace with panes cut | `TestEmptyWorkspaceOpensAPane` ("move_and_follow to workspace 7: workspace 7 has 2 panes") | **caught** |
+| A script switch opens a pane | `OS.SwitchWorkspace` (tape and run-command): back to `SwitchToWorkspace` | `TestEmptyWorkspaceOpensAPane` ("run-command SwitchWorkspace: workspace 4 has 1 panes") | **caught** |
+| Every client that follows a switch opens a pane | injected: `ApplyStateSyncFrom` calls `openPaneOnEmptyWorkspace` after it adopts the workspace | `TestEmptyWorkspaceOpensAPane` ("tuios xpanes: workspace 2 has 3 panes"), `TestEmptyWorkspaceOpensOnePaneForTwoClients` ("workspace 2 has 2 panes") | **caught** |
+
+Not covered end to end: a client attached to a session on another machine,
+a session without a daemon (the pane starts in the folder of the source
+pane's shell, read by this client), and the settings page row.

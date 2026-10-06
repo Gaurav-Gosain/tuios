@@ -1263,6 +1263,12 @@ var optionSpecs = []Option{
 		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
 		Default:     "true",
 	},
+	// Read by the client on each switch, so a change applies at once.
+	{
+		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",
+		Description: "When you switch to a workspace with no panes, open a new pane there. It starts in the folder of the pane you came from",
+		Default:     "false",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller
