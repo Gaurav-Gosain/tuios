@@ -82,9 +82,12 @@ type link struct {
 	// approvalURL is the Tailscale SSH check URL while status is
 	// StatusApproval.
 	approvalURL string
-	shake       Handshake
-	lastOK      time.Time
-	lastTry     time.Time
+	// approvalRefused says the banner named a sign-in address tuios does not
+	// trust. See SignInURLAllowed.
+	approvalRefused bool
+	shake           Handshake
+	lastOK          time.Time
+	lastTry         time.Time
 
 	// drops counts the times a link that was up went down, and dropReason is
 	// the plain sentence for the last of them. They are reported so a person
@@ -160,6 +163,7 @@ func (l *link) set(status Status, reason, detail string) {
 	l.detail = detail
 	if status != StatusApproval {
 		l.approvalURL = ""
+		l.approvalRefused = false
 	}
 	if status == StatusUp {
 		l.lastOK = l.opts.now()
@@ -181,22 +185,23 @@ func (l *link) report() HostReport {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	r := HostReport{
-		Host:          l.host.Name,
-		Addr:          l.host.Addr,
-		Status:        l.status,
-		Reason:        l.reason,
-		Detail:        l.detail,
-		ApprovalURL:   l.approvalURL,
-		DaemonVersion: l.shake.DaemonVersion,
-		Protocol:      l.shake.Protocol,
-		MinProtocol:   l.shake.MinProtocol,
-		PID:           l.shake.PID,
-		Instance:      l.shake.Instance,
-		Sessions:      l.shake.Sessions,
-		Command:       l.command,
-		Drops:         l.drops,
-		DropReason:    l.dropReason,
-		Stalls:        l.stalls,
+		Host:            l.host.Name,
+		Addr:            l.host.Addr,
+		Status:          l.status,
+		Reason:          l.reason,
+		Detail:          l.detail,
+		ApprovalURL:     l.approvalURL,
+		ApprovalRefused: l.approvalRefused,
+		DaemonVersion:   l.shake.DaemonVersion,
+		Protocol:        l.shake.Protocol,
+		MinProtocol:     l.shake.MinProtocol,
+		PID:             l.shake.PID,
+		Instance:        l.shake.Instance,
+		Sessions:        l.shake.Sessions,
+		Command:         l.command,
+		Drops:           l.drops,
+		DropReason:      l.dropReason,
+		Stalls:          l.stalls,
 	}
 	if !l.lastOK.IsZero() {
 		r.LastOK = l.lastOK.Unix()
@@ -247,14 +252,26 @@ const approvalRetry = 5 * time.Second
 // retryWindow is how long a Retry keeps the redial quick.
 const retryWindow = 2 * time.Minute
 
+// retryMinGap is the least time between the start of a dial and a dial that
+// Retry wakes.
+const retryMinGap = 2 * time.Second
+
 // retry ends the wait before the next dial, and keeps the redial quick for
 // retryWindow while the link waits for a sign-in. A dial in progress is left
 // alone: a dial that holds a Tailscale check open is the one that goes on when
 // the person signs in.
+//
+// A wake within retryMinGap of the last dial's start is dropped, so a caller
+// that calls in a loop cannot make the link spawn ssh in a loop.
 func (l *link) retry() {
 	l.mu.Lock()
-	l.eagerUntil = l.opts.now().Add(retryWindow)
+	now := l.opts.now()
+	l.eagerUntil = now.Add(retryWindow)
+	recent := !l.lastTry.IsZero() && now.Sub(l.lastTry) < retryMinGap
 	l.mu.Unlock()
+	if recent {
+		return
+	}
 	select {
 	case l.wake <- struct{}{}:
 	default:
@@ -327,12 +344,12 @@ preamble:
 			note = res.note
 			if res.err != nil {
 				exited, code := awaitChildExit(tr)
-				gate := ParseSSHGate(tr.Diagnostic())
+				gate := ParseSSHGate(tr.Diagnostic(), l.host.TailscaleLogin)
 				switch {
 				case gate != nil && gate.Kind == GateTailscalePolicy:
 					l.set(StatusUnreachable, gate.Sentence(), trimDetail(tr.Diagnostic()))
 				case gate != nil && gate.Kind == GateTailscaleCheck && !gate.Approved:
-					l.setApproval("", "Tailscale ended the sign-in before you finished it. tuios asks again and shows a new sign-in page.")
+					l.setApproval("", false, "Tailscale ended the sign-in before you finished it. tuios asks again and shows a new sign-in page.")
 				case note.missing:
 					// The machine answered, ran the probe, and the probe found
 					// nothing. That is a state of the machine, not of the link,
@@ -360,9 +377,9 @@ preamble:
 			if waitedGate != nil {
 				continue
 			}
-			if g := ParseSSHGate(tr.Diagnostic()); g != nil && g.Kind == GateTailscaleCheck && !g.Approved {
+			if g := ParseSSHGate(tr.Diagnostic(), l.host.TailscaleLogin); g != nil && g.Kind == GateTailscaleCheck && !g.Approved {
 				waitedGate = g
-				l.setApproval(g.URL, g.WaitSentence())
+				l.setApproval(g.URL, g.Refused, g.WaitSentence())
 				var cancelWait context.CancelFunc
 				waitCtx, cancelWait = context.WithTimeout(ctx, l.opts.ApprovalWait)
 				defer cancelWait()
@@ -370,7 +387,7 @@ preamble:
 			}
 		case <-waitCtx.Done():
 			if waitedGate != nil {
-				l.setApproval("", "The Tailscale sign-in page expired. tuios asks again and shows a new sign-in page.")
+				l.setApproval("", false, "The Tailscale sign-in page expired. tuios asks again and shows a new sign-in page.")
 				return false
 			}
 			l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
@@ -484,10 +501,11 @@ const gatePoll = 100 * time.Millisecond
 // A new URL under the same status is reported to OnStatus as well. A client
 // that opens the sign-in page for the person waits for that URL, and set only
 // reports a change of status.
-func (l *link) setApproval(url, reason string) {
+func (l *link) setApproval(url string, refused bool, reason string) {
 	l.mu.Lock()
-	moved := l.status == StatusApproval && l.approvalURL != url
+	moved := l.status == StatusApproval && (l.approvalURL != url || l.approvalRefused != refused)
 	l.approvalURL = url
+	l.approvalRefused = refused
 	l.mu.Unlock()
 	l.set(StatusApproval, reason, "")
 	if moved && l.opts.OnStatus != nil {

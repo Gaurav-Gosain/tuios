@@ -38,7 +38,9 @@ a browser. Its link reports `tailscale_check` with `approval_url` (the table of
 `tuios hosts` says "sign in"), and a `hosts sync --json` row has
 `"error_kind": "tailscale_check"` and `approval_url`. Give the person the URL,
 or tell them to run `tuios hosts signin NAME`. Do not open it and do not sign
-in yourself. The daemon's link comes up on its own after they sign in. Run a
+in yourself. tuios keeps only an https address on Tailscale's login origins,
+or on the host's `tailscale_login`. Any other is reported as
+`"approval_refused": true` with no address. The daemon's link comes up on its own after they sign in. Run a
 `hosts sync` or `hosts test` again after they sign in. A login the tailnet policy
 refuses has `"error_kind": "tailscale_policy"`, and the fix is the user in the
 host's `addr`.

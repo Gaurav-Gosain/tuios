@@ -98,6 +98,10 @@ const (
 	// creates a session on that machine and opens it. It carries the host name
 	// in SessionID.
 	sidebarRowHostNew
+	// sidebarRowHostSignIn is the "sign in" label on the header of a host
+	// that waits for a Tailscale sign-in. Activating it opens the sign-in
+	// page. It carries the host name in SessionID. See host_signin.go.
+	sidebarRowHostSignIn
 	// sidebarRowDivider is the rule above the pinned section. Dragging it moves
 	// the split between that section and the ones over it; a double-click, or
 	// enter with the cursor on it, resets the split. See sidebar_split.go.
@@ -2222,7 +2226,7 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 				return sidebarSectionSessions, i, true
 			}
 		}
-	case sidebarRowHost, sidebarRowHostNew:
+	case sidebarRowHost, sidebarRowHostNew, sidebarRowHostSignIn:
 		for i, s := range sessions {
 			if s.Kind == sessiontree.KindHost && s.Host == target.SessionID {
 				return sidebarSectionSessions, i, true

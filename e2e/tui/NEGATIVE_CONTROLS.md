@@ -1414,16 +1414,26 @@ syncs or is listed as reached.
 The tests are in `hosts_signin_test.go`. The rail stand-in (`writeFakeSSH`)
 has the Tailscale wrapper of `hosts_tailscale_test.go` in front of it. The link
 opener is a script that records each address it gets. `quickbox` ends each
-wait after 6 seconds, so the link's backoff grows to 8 seconds after the third
-dial, and a new page within 5 seconds can only come from the gesture.
+wait after 6 seconds. The tests wait for its fourth dial to end, so the link's
+backoff is 16 seconds: a new page within 8 seconds can only come from the
+gesture. After that dial the backoff is 32 seconds, and a page within 12
+seconds can only come from the quick redial a sign-in starts. `localbox` and
+`lookalikebox` print a banner with `http://127.0.0.1:631/admin` and
+`https://login.tailscale.com.evil.example/a/...`.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The released label | `hostStatusLabel`: "sign in" back to "approve", as on origin/main | `TestRailOpensTheTailscaleSignIn` ("the rail never said sign in beside the gated host") | **caught** |
-| A click folds the group | `activateHostHeader`: the sign-in branch made `false` | `TestRailOpensTheTailscaleSignIn` (the opener was started with [], want the page) | **caught** |
-| The mouse release drops the rail's command | `handleMouseRelease`: `return o, nil` after `SidebarRelease`, as before | `TestRailSignInAsksForANewPage/click` (the new page took 7.0s) | **caught** |
-| No wake in the link's backoff | `link.supervise`: the `case <-l.wake` line cut | `TestRailSignInAsksForANewPage/click` (7.0s), `/enter` (6.9s) | **caught** |
+| A click on the name opens the page and does not fold | `SidebarRelease`: a host that waits for a sign-in opens the page instead of folding, as the first version of this PR did | `TestRailOpensTheTailscaleSignIn` ("a click on the name ... did not fold it") | **caught** |
+| Any address in the banner is trusted | `SignInURLAllowed`: returns true for any URL-shaped text | `TestRailRefusesAnUntrustedSignInLink` (the rail opened `https://login.tailscale.com.evil.example/...`, `hosts --json` reports both addresses, `hosts signin` repeats and opens them) | **caught** |
+| No wake in the link's backoff | `link.supervise`: the `case <-l.wake` line cut | `TestRailSignInAsksForANewPage/click` (15.0s), `/enter` (14.8s) | **caught** |
+| No quick redial after a sign-in | `link.supervise`: the `wait = min(wait, approvalRetry)` line cut | `TestRailSignInAsksForANewPage/click` (31.0s), `/enter` (30.9s) | **caught** |
 | A page asked for before the daemon had one never opens | `takePendingSignIns` returns nil, and `applyHostRetry` opens nothing | `TestRailSignInAsksForANewPage/click` and `/enter` (the opener was started with []) | **caught** |
+
+Not covered by an e2e test: the 2 second floor between dials that
+`retry-host` can wake (`retryMinGap`), and the address left out of `list-hosts`
+and `list-host-sessions` for a caller over a link. The address check itself
+also has a table test, `TestSignInURLAllowed` in `internal/federation`.
 
 ## Copy sweep after a copy-mode yank
 

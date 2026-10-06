@@ -41,6 +41,9 @@ type signInRow struct {
 	URL  string `json:"url,omitempty"`
 	// Opened says a browser was started for the page.
 	Opened bool `json:"opened"`
+	// Refused says the banner named an address that is not a Tailscale login
+	// origin, so nothing was opened or printed.
+	Refused bool `json:"refused,omitempty"`
 	// Note says why the page was not opened. Omitted when it was.
 	Note string `json:"note,omitempty"`
 }
@@ -117,7 +120,7 @@ func runHostSignin(w io.Writer, name string, printOnly, asJSON bool) error {
 				return reportVerbError(explainVerbError("retry-host", err), asJSON)
 			}
 		}
-		urls := waitForSignInURLs(client, waiting, signInURLWait)
+		urls, refused := waitForSignInURLs(client, waiting, signInURLWait)
 		opener := ""
 		if cfg, err := config.LoadUserConfig(); err == nil {
 			opener = strings.TrimSpace(cfg.Appearance.LinkOpener)
@@ -125,6 +128,9 @@ func runHostSignin(w io.Writer, name string, printOnly, asJSON bool) error {
 		for _, host := range waiting {
 			row := signInRow{Host: host, URL: urls[host]}
 			switch {
+			case refused[host]:
+				row.Refused = true
+				row.Note = "The sign-in link from " + host + " is not a Tailscale address, so tuios did not open it. Run ssh to the host in a terminal to see it."
 			case row.URL == "":
 				row.Note = "The link has no sign-in page yet. Run ssh to the host in a terminal to see it."
 			case printOnly:
@@ -190,26 +196,34 @@ func signInReports(client *session.VerbClient) ([]federation.HostReport, error) 
 }
 
 // waitForSignInURLs polls list-hosts until every host has a sign-in page, or
-// the wait ends. A host that has none by then is left out.
-func waitForSignInURLs(client *session.VerbClient, hosts []string, wait time.Duration) map[string]string {
+// a refused one, or the wait ends. A host that has neither by then is left
+// out.
+func waitForSignInURLs(client *session.VerbClient, hosts []string, wait time.Duration) (map[string]string, map[string]bool) {
 	urls := map[string]string{}
+	refused := map[string]bool{}
 	deadline := time.Now().Add(wait)
 	for {
 		if reports, err := signInReports(client); err == nil {
 			for _, r := range reports {
-				if r.Status == federation.StatusApproval && r.ApprovalURL != "" {
+				if r.Status != federation.StatusApproval {
+					continue
+				}
+				switch {
+				case r.ApprovalRefused:
+					refused[r.Host] = true
+				case strings.HasPrefix(r.ApprovalURL, "https://"):
 					urls[r.Host] = r.ApprovalURL
 				}
 			}
 		}
 		done := true
 		for _, h := range hosts {
-			if urls[h] == "" {
+			if urls[h] == "" && !refused[h] {
 				done = false
 			}
 		}
 		if done || time.Now().After(deadline) {
-			return urls
+			return urls, refused
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

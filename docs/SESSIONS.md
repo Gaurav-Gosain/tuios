@@ -945,10 +945,18 @@ Tailscale SSH can hold a login until you approve it in a browser. This is
 tuios reads this link and shows it.
 
 - **The rail** shows "sign in" beside the host, in the colour of an agent that
-  needs you. Click the host or press Enter on it to open the sign-in page in
-  your browser. Hover the host to see why it waits. On an ssh or web client,
-  tuios cannot start your browser. It shows the address in a notice and puts it
-  on your clipboard.
+  needs you. Click "sign in", or move the cursor to it and press Enter, to open
+  the sign-in page in your browser. The notice names the domain of the page and
+  the host. A click on the name of the host still folds its group. Hover the
+  host to see why it waits. On an ssh or web client, tuios cannot start your
+  browser. It shows the address in a notice and puts it on your clipboard.
+- **Only a Tailscale address opens.** The link comes from ssh's error output,
+  and anything on the host can print there. tuios shows and opens it only when
+  it is https on `login.tailscale.com` or `controlplane.tailscale.com`, matched
+  exactly. For any other address, the rail says "The sign-in link from NAME is
+  not a Tailscale address, so tuios did not open it." Run ssh to the host in a
+  terminal to see it. With Headscale, give the origin of your server for that
+  host: `tailscale_login = "https://headscale.example"` in `[hosts.NAME]`.
 - **The daemon's link** waits up to 10 minutes on one page. It goes on when you
   sign in, and the host comes up on the rail with no other step. When Tailscale
   ends the wait, the link asks again and shows a new page. After you open a

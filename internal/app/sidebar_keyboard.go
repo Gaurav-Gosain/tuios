@@ -165,7 +165,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowGlobalNew, sidebarRowHost, sidebarRowRepo:
+	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowHost, sidebarRowRepo:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -242,6 +242,9 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowHostNew:
 		m.createRemoteSession(row.SessionID)
 		return true
+	case sidebarRowHostSignIn:
+		// The page opens in a browser, so the keyboard stays in the rail.
+		m.queueSidebarCmd(m.openHostSignIn(row.SessionID))
 	case sidebarRowGlobalNew:
 		// A new global session is where the user asked to end up, so the rail
 		// hands the keyboard back the way the other create controls do.
@@ -254,7 +257,7 @@ func (m *OS) SidebarActivateCursor() bool {
 		// keyboard stays in the rail on the row that was folded.
 		m.SidebarToggleRepoCollapsed(row.SessionID)
 	case sidebarRowHost:
-		m.activateHostHeader(row.SessionID)
+		m.SidebarToggleHostCollapsed(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:

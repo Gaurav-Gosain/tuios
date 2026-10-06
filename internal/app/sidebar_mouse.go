@@ -381,6 +381,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.openRemoteSession(hit.SessionID, hit.WindowID)
 	case sidebarRowHostNew:
 		m.createRemoteSession(hit.SessionID)
+	case sidebarRowHostSignIn:
+		m.queueSidebarCmd(m.openHostSignIn(hit.SessionID))
 	case sidebarRowGlobalNew:
 		m.SidebarNewGlobalSession()
 	case sidebarRowCollapse:
@@ -531,12 +533,14 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.openRemoteSession(hit.SessionID, hit.WindowID)
 	case sidebarRowHostNew:
 		m.createRemoteSession(hit.SessionID)
+	case sidebarRowHostSignIn:
+		m.queueSidebarCmd(m.openHostSignIn(hit.SessionID))
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
 		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowHost:
-		m.activateHostHeader(hit.SessionID)
+		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -689,7 +693,7 @@ func (m *OS) SidebarRelease(x, y int) bool {
 	}
 	switch {
 	case d.Host && hit.Kind == sidebarRowHost:
-		m.activateHostHeader(hit.SessionID)
+		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case !d.Host && hit.Kind == sidebarRowSession:
 		m.sidebarSwitchSession(hit.SessionID)
 	}
@@ -838,7 +842,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.Target = CtxTargetMachine
 		cm.SessionID = hit.SessionID
 		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowGlobalNew, sidebarRowRepo:
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowRepo:
 		// A session on another machine, and a repository's group header.
 		// Neither is a local session and neither has a per-row menu in this
 		// release, so the right-click opens the rail's own settings the way a

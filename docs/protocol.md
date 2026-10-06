@@ -170,8 +170,14 @@ is an answer, and each entry says which.
 The new verb `retry-host` takes `host` and makes that link dial again now
 instead of after its backoff. While the host is in `tailscale_check`, the link
 then dials again every 5 seconds at most, for two minutes. A dial in progress
-is not stopped. The result has `host`, `status` and, when the link has one,
+is not stopped, and a call within 2 seconds of the start of the last dial wakes
+nothing. The result has `host`, `status` and, when the link has one,
 `approval_url`. A restricted connection and a linked machine may not call it.
+`approval_url` is only an https address on `login.tailscale.com`,
+`controlplane.tailscale.com` or the host's `tailscale_login`, matched exactly.
+For any other address the banner named, the row has no `approval_url` and has
+`approval_refused: true`. A caller over a link gets neither field, and the
+`reason` of such a host without the address.
 `host-changed`, and the push to attached clients, now also fire when a link in
 `tailscale_check` gets a new `approval_url`, so a client sees the new sign-in
 page at once. The `reason` of such a host is reworded to "Tailscale SSH needs

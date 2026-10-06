@@ -31,6 +31,11 @@ import (
 //	someone@quickbox   check mode, but Tailscale ends the wait after
 //	                   quickHold: ssh prints that the connection closed and
 //	                   exits 255. Each dial asks for a new sign-in.
+//	someone@localbox   check mode, with a banner that names a page on this
+//	                   machine (http://127.0.0.1:631/admin), as anything on
+//	                   the host could print.
+//	someone@lookalikebox  the same, with an https host that only starts like
+//	                   Tailscale's (login.tailscale.com.evil.example).
 //
 // Once the test writes signedin, every connection to a gated host goes on, and
 // a connection that waits goes on at once: the person signed in, and Tailscale
@@ -118,10 +123,14 @@ case "$addr" in
   someone@policybox)
     echo 'tailnet policy does not permit you to SSH as user "root"' >&2
     exit 255 ;;
-  someone@gatedbox|someone@quickbox)
+  someone@gatedbox|someone@quickbox|someone@localbox|someone@lookalikebox)
     if [ ! -e "$state/signedin" ] && { [ -z "$cp" ] || [ ! -e "$cp" ]; }; then
       id="e2e$$"
       url="https://login.tailscale.com/a/$id"
+      case "$addr" in
+        someone@localbox) url="http://127.0.0.1:631/admin" ;;
+        someone@lookalikebox) url="https://login.tailscale.com.evil.example/a/$id" ;;
+      esac
       echo "$url" >> "$state/urls"
       printf '# Tailscale SSH requires an additional check.\n# To authenticate, visit: %s\n' "$url" >&2
       limit=1200

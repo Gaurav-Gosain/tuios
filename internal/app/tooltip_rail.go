@@ -33,7 +33,7 @@ func (m *OS) sidebarTooltipTrack(x, y int) {
 		m.tooltipTrack(tooltipRailAdd, int(h.Kind))
 		return
 	}
-	if h, ok := m.sidebarRowAt(x, y); ok && h.Kind == sidebarRowHost && m.hostWaitsForSignIn(h.SessionID) {
+	if h, ok := m.sidebarRowAt(x, y); ok && (h.Kind == sidebarRowHost || h.Kind == sidebarRowHostSignIn) && m.hostWaitsForSignIn(h.SessionID) {
 		m.tooltipTrack(tooltipRailHost, h.Y0)
 		return
 	}

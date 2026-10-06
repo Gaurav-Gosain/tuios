@@ -2,6 +2,7 @@ package federation
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -51,12 +52,18 @@ type SSHGate struct {
 	User string
 	// Approved says Tailscale reported the check as approved after it asked.
 	Approved bool
+	// Refused says the banner named a sign-in address that is not a
+	// Tailscale login origin. URL is then empty: the address is not shown and
+	// not opened. See SignInURLAllowed.
+	Refused bool
 }
 
 var (
 	tailscaleCheckLine    = "Tailscale SSH requires an additional check"
 	tailscaleApprovedLine = "Authentication checked with Tailscale SSH"
-	tailscaleVisitPattern = regexp.MustCompile(`To authenticate, visit:\s*(\S+)`)
+	// The URL is on the same line as the words. \s would cross a line break
+	// and take the first word of whatever the far side printed next.
+	tailscaleVisitPattern = regexp.MustCompile(`To authenticate, visit:[ \t]*(\S+)`)
 	// The URL is repeated to the person, so it is held to the characters a
 	// URL has. A far side that prints anything else gets no URL shown.
 	tailscaleURLPattern    = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/?=&+-]*)?$`)
@@ -66,9 +73,43 @@ var (
 // maxGateURL bounds the URL. Tailscale's are about fifty characters.
 const maxGateURL = 512
 
+// DefaultLoginOrigins are the origins Tailscale's own coordination server
+// sends a check-mode sign-in to.
+var DefaultLoginOrigins = []string{"https://login.tailscale.com", "https://controlplane.tailscale.com"}
+
+// SignInURLAllowed reports whether raw is a sign-in page tuios may show and
+// open: https, on one of DefaultLoginOrigins or of origins (a Headscale
+// server set in [hosts.NAME] tailscale_login), matched on the exact scheme,
+// host and port, with no user part.
+//
+// ssh's stderr also carries what the far side's shell rc files and commands
+// print, so whatever runs on that machine can print a banner. Without this
+// check one click would open any address it chose, a page on this machine's
+// localhost included.
+func SignInURLAllowed(raw string, origins ...string) bool {
+	if len(raw) > maxGateURL || !tailscaleURLPattern.MatchString(raw) {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Host == "" || u.Opaque != "" {
+		return false
+	}
+	for _, o := range append(append([]string(nil), DefaultLoginOrigins...), origins...) {
+		ou, err := url.Parse(strings.TrimRight(strings.TrimSpace(o), "/"))
+		if err != nil || ou.Scheme != "https" || ou.User != nil || ou.Host == "" || (ou.Path != "" && ou.Path != "/") {
+			continue
+		}
+		if strings.EqualFold(u.Host, ou.Host) {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseSSHGate reads ssh's stderr for a Tailscale gate, and returns nil when
-// there is none.
-func ParseSSHGate(stderr string) *SSHGate {
+// there is none. origins are the sign-in origins allowed besides Tailscale's
+// own; see SignInURLAllowed.
+func ParseSSHGate(stderr string, origins ...string) *SSHGate {
 	if m := tailscalePolicyPattern.FindStringSubmatch(stderr); m != nil {
 		return &SSHGate{Kind: GateTailscalePolicy, User: m[1]}
 	}
@@ -78,8 +119,10 @@ func ParseSSHGate(stderr string) *SSHGate {
 	g := &SSHGate{Kind: GateTailscaleCheck}
 	if m := tailscaleVisitPattern.FindStringSubmatch(stderr); m != nil {
 		u := strings.TrimRight(m[1], "\r")
-		if len(u) <= maxGateURL && tailscaleURLPattern.MatchString(u) {
+		if SignInURLAllowed(u, origins...) {
 			g.URL = u
+		} else {
+			g.Refused = true
 		}
 	}
 	g.Approved = strings.Contains(stderr, tailscaleApprovedLine)
@@ -90,6 +133,9 @@ func ParseSSHGate(stderr string) *SSHGate {
 func (g SSHGate) openWords() string {
 	if g.URL != "" {
 		return "Open " + g.URL
+	}
+	if g.Refused {
+		return "The sign-in link from the host is not a Tailscale address, so tuios does not show it. Run ssh to the host in a terminal to see it"
 	}
 	return "Run ssh to the host in a terminal to see the link"
 }
@@ -118,6 +164,9 @@ const SignInSentence = "Tailscale SSH needs you to sign in before tuios can reac
 func (g SSHGate) WaitSentence() string {
 	if g.Kind != GateTailscaleCheck {
 		return g.Sentence()
+	}
+	if g.Refused {
+		return SignInSentence + " The sign-in link from the host is not a Tailscale address, so tuios does not show it. Run ssh to the host in a terminal to see it. The link continues when you sign in."
 	}
 	if g.URL == "" {
 		return SignInSentence + " Run ssh to the host in a terminal to see the sign-in page. The link continues when you sign in."
@@ -150,9 +199,10 @@ type GateError struct {
 
 func (e *GateError) Error() string { return e.Gate.Sentence() }
 
-// GateFromStderr is a GateError for the gate in stderr, or nil.
-func GateFromStderr(stderr string) *GateError {
-	g := ParseSSHGate(stderr)
+// GateFromStderr is a GateError for the gate in stderr, or nil. origins are
+// as for ParseSSHGate.
+func GateFromStderr(stderr string, origins ...string) *GateError {
+	g := ParseSSHGate(stderr, origins...)
 	if g == nil || g.Approved {
 		return nil
 	}

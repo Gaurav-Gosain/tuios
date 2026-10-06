@@ -47,6 +47,10 @@ type Host struct {
 	// SSHOptions are extra arguments placed before the address. They are the
 	// escape hatch for a host that needs a flag ssh_config cannot carry.
 	SSHOptions []string
+	// TailscaleLogin is a sign-in origin allowed besides Tailscale's own,
+	// such as a Headscale server ("https://headscale.example"). See
+	// SignInURLAllowed.
+	TailscaleLogin string
 	// ControlPath, when set, makes every ssh to the host share one
 	// connection through a master socket at this path. It is never read from
 	// the config file: a command that runs several ssh calls against a host

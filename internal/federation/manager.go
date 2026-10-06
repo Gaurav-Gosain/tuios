@@ -123,11 +123,15 @@ type HostReport struct {
 	Detail string `json:"detail,omitempty"`
 	// ApprovalURL is where the person approves a Tailscale SSH check that
 	// the link waits on. It is set only while Status is StatusApproval.
-	ApprovalURL   string `json:"approval_url,omitempty"`
-	DaemonVersion string `json:"daemon_version,omitempty"`
-	Protocol      int    `json:"protocol,omitempty"`
-	MinProtocol   int    `json:"min_protocol,omitempty"`
-	PID           int    `json:"pid,omitempty"`
+	ApprovalURL string `json:"approval_url,omitempty"`
+	// ApprovalRefused says the link waits for a sign-in and the banner named
+	// an address that is not a Tailscale login origin, so ApprovalURL is
+	// empty. See SignInURLAllowed.
+	ApprovalRefused bool   `json:"approval_refused,omitempty"`
+	DaemonVersion   string `json:"daemon_version,omitempty"`
+	Protocol        int    `json:"protocol,omitempty"`
+	MinProtocol     int    `json:"min_protocol,omitempty"`
+	PID             int    `json:"pid,omitempty"`
 	// Instance is the far daemon's run, as its hello named it. Two reports
 	// with one instance are one daemon, whatever each table calls it. Empty
 	// for a daemon too old to say, and while the link has not come up.

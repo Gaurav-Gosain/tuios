@@ -198,7 +198,7 @@ func filterHostAgents(entries []hostAgentsEntry, sel *Selector) {
 // This is `tuios hosts`. It answers the question the design document says a
 // listing has to answer on its own: why is this host not usable, and is it the
 // machine, the daemon, or the version.
-func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbError) {
 	// events_push says this daemon pushes every change to a host it streams:
 	// host-changed on subscribe, and MsgHostsChanged to attached clients. A
 	// client that sees it polls only the hosts whose events are not live.
@@ -218,10 +218,27 @@ func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError
 	for i := range reports {
 		reports[i].Events, reports[i].EventsNote = d.fleet.mode(reports[i].Host)
 		reports[i].Queued = d.outbox.count(reports[i].Host)
+		if cs != nil && cs.viaLink {
+			// The sign-in page logs this machine's person in to a host. It is
+			// for them, not for the machine at the other end of a link.
+			reports[i].ApprovalURL = ""
+			reports[i].ApprovalRefused = false
+			reports[i].Reason = linkSafeReason(reports[i].Status, reports[i].Reason)
+		}
 	}
 	out["hosts"] = reports
 	out["total"] = len(reports)
 	return out, nil
+}
+
+// linkSafeReason is a host's reason as a link caller gets it. The reason of a
+// host that waits for a Tailscale sign-in names the sign-in page, which is
+// for the person on this machine and not for another machine.
+func linkSafeReason(status federation.Status, reason string) string {
+	if status == federation.StatusApproval {
+		return federation.SignInSentence
+	}
+	return reason
 }
 
 // verbRetryHost makes one host's link dial again now. See
@@ -246,6 +263,9 @@ func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verb
 		if r.ApprovalURL != "" {
 			out["approval_url"] = r.ApprovalURL
 		}
+		if r.ApprovalRefused {
+			out["approval_refused"] = true
+		}
 	}
 	return out, nil
 }
@@ -255,7 +275,7 @@ func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verb
 // Local always comes first and is never fetched over a link; it is this
 // daemon's own listing. Remote hosts follow in the table's sorted order,
 // answering or not.
-func (d *Daemon) verbListHostSessions(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListHostSessions(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
 	}
@@ -283,6 +303,9 @@ func (d *Daemon) verbListHostSessions(_ *connState, params json.RawMessage) (any
 	defer cancel()
 	for _, a := range d.federationAnswers(ctx, p.Host, "list-sessions", nil) {
 		e := hostSessionsEntry{Host: a.Host, Status: a.Report.Status, Reason: a.Report.Reason, Detail: a.Report.Detail}
+		if cs != nil && cs.viaLink {
+			e.Reason = linkSafeReason(e.Status, e.Reason)
+		}
 		e.Events, _ = d.fleet.mode(a.Host)
 		var rows []remoteSessionListRow
 		err := a.Err

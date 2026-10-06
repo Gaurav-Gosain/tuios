@@ -62,6 +62,7 @@ func resolveConfiguredHost(name string) (federation.Host, error) {
 		ConnectTimeout: time.Duration(entry.ConnectTimeout) * time.Second,
 		Command:        entry.Command,
 		SSHOptions:     entry.SSHOptions,
+		TailscaleLogin: entry.TailscaleLogin,
 	}})
 	if len(problems) > 0 {
 		return federation.Host{}, problems[0]

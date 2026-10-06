@@ -77,6 +77,9 @@ type FederationHost struct {
 	// ApprovalURL is the Tailscale sign-in page the link waits on, set only
 	// while Status is federation.StatusApproval and the link has one.
 	ApprovalURL string
+	// ApprovalRefused says the banner named a sign-in address that is not a
+	// Tailscale login origin, so there is no page to open.
+	ApprovalRefused bool
 }
 
 // FederationSession is one session on another machine, as that machine
@@ -209,12 +212,14 @@ func refreshFederationCmd() tea.Cmd {
 		lastOK := map[string]int64{}
 		queued := map[string]int{}
 		signIn := map[string]string{}
+		signInRefused := map[string]bool{}
 		reports, pushes := hostStatusReports(client)
 		msg.Pushed = pushes
 		for _, h := range reports {
 			lastOK[h.Host] = h.LastOK
 			queued[h.Host] = h.Queued
 			signIn[h.Host] = h.ApprovalURL
+			signInRefused[h.Host] = h.ApprovalRefused
 			if h.Status == federation.StatusUp && h.Events != "live" {
 				msg.Pushed = false
 			}
@@ -223,7 +228,7 @@ func refreshFederationCmd() tea.Cmd {
 			if h.Host != federation.LocalHostName {
 				msg.Configured++
 			}
-			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host], ApprovalURL: signIn[h.Host]}
+			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host], ApprovalURL: signIn[h.Host], ApprovalRefused: signInRefused[h.Host]}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
 					Name:        s.Name,
@@ -775,8 +780,20 @@ func (m *OS) drawHostRow(
 				}
 			}
 		}
+		lit := false
+		if node.HostStatus == string(federation.StatusApproval) {
+			// The "sign in" label is a control of its own, as the "+" is on
+			// a host that is up: it opens the sign-in page, and the rest of
+			// the header still folds the group.
+			figure, _ := hostDownFigure(node, lipgloss.Width(printableTitle(node.Title)), cw)
+			if w := lipgloss.Width(figure); w > 0 && cw-1-w > 0 {
+				span := sidebarTokenSpan{Kind: sidebarRowHostSignIn, X0: cw - 1 - w, X1: cw - 1}
+				lit = isCursor(sidebarRowHostSignIn, node.Host, "") || (headerHoverX >= span.X0 && headerHoverX < span.X1)
+				recordToken(span, node.Host)
+			}
+		}
 		recordHit(sidebarRowHost, node.Host, "", -1, 1)
-		*lines = append(*lines, compose(st.mark(pal, m.sidebarHostRow(node, cw, pal, add, st, collapsed))))
+		*lines = append(*lines, compose(st.mark(pal, m.sidebarHostRowLit(node, cw, pal, add, st, collapsed, lit))))
 		return
 	}
 
@@ -942,6 +959,13 @@ func hostDownFigure(node sessiontree.Node, nameW, cw int) (figure string, nameRo
 // host that is not answering keeps its row with one word saying why, because a
 // machine that vanished from the rail reads as a machine nobody configured.
 func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string, st sidebarRowState, collapsed bool) string {
+	return m.sidebarHostRowLit(node, cw, pal, add, st, collapsed, false)
+}
+
+// sidebarHostRowLit is sidebarHostRow with the "sign in" control under the
+// keyboard cursor or the pointer when lit is true. It is then underlined, as
+// a link is, and keeps its colour.
+func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palette, add string, st sidebarRowState, collapsed, lit bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	up := node.HostStatus == string(federation.StatusUp)
 
@@ -964,7 +988,11 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 			// agent that needs you, not the colour of an error.
 			ink = sidebarSeverityColor("needs_input", pal)
 		}
-		right = sidebarStyle(rowBg, ink).Render(label)
+		style := sidebarStyle(rowBg, ink)
+		if lit {
+			style = style.Underline(true)
+		}
+		right = style.Render(label)
 	case blocked > 0:
 		// How many of this machine's sessions want a person, in the strip
 		// badge's language. It outranks both the session count and the add

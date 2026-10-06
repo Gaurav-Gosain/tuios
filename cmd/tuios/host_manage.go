@@ -197,6 +197,8 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 		ConnectTimeout: flags.timeout,
 		SSHOptions:     flags.sshOptions,
 		ReposRoot:      flags.reposRoot,
+		// A Headscale origin is not a flag here, so a new address keeps it.
+		TailscaleLogin: prev.TailscaleLogin,
 		// What that machine may do here is not what this command sets, so a
 		// new address keeps it.
 		Allow:       prev.Allow,

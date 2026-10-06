@@ -286,6 +286,9 @@ func renderHostBlock(name string, h HostConfig) string {
 	if h.ReposRoot != "" {
 		b.WriteString("repos_root = " + tomlString(h.ReposRoot) + "\n")
 	}
+	if h.TailscaleLogin != "" {
+		b.WriteString("tailscale_login = " + tomlString(h.TailscaleLogin) + "\n")
+	}
 	// The policy for the machine linking in is carried through a rewrite of
 	// the address, so `tuios hosts add` on a known name does not drop it.
 	if h.Allow != nil {

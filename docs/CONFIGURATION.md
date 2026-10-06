@@ -1165,3 +1165,10 @@ algorithm lists. `ProxyCommand`, `LocalCommand`, the known hosts files,
 dash. A host with a refused entry is ignored, and `tuios hosts` and the Inbox
 name the reason. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
 the verb by verb table.
+
+`tailscale_login` is the origin of a Headscale server that sends the Tailscale
+SSH check for this host, for example `"https://headscale.example"`. tuios
+shows and opens a sign-in link only on `login.tailscale.com`,
+`controlplane.tailscale.com` and this origin, over https, with the host matched
+exactly. Anything on the host can print the banner that carries the link. See
+[Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode).

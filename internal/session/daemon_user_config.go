@@ -120,6 +120,7 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 			ConnectTimeout: time.Duration(h.ConnectTimeout) * time.Second,
 			Command:        h.Command,
 			SSHOptions:     h.SSHOptions,
+			TailscaleLogin: h.TailscaleLogin,
 		})
 	}
 	return out

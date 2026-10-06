@@ -14,9 +14,10 @@ import (
 
 // A host behind Tailscale SSH in check mode, on the rail. The link waits for
 // the person to sign in in a browser. The rail says "sign in" beside the host,
-// a hover says why, and a click opens the sign-in page with the link opener.
-// When the person signs in, the link goes on and the host comes up with no
-// other step.
+// a hover says why, and a click on "sign in" opens the sign-in page with the
+// link opener. The host's name still folds the group. When the person signs
+// in, the link goes on and the host comes up with no other step. A banner that
+// names a page off Tailscale's login origins opens nothing.
 //
 // The ssh is the stand-in of the rail tests (writeFakeSSH) with the Tailscale
 // wrapper of hosts_tailscale_test.go in front of it. The link opener is a
@@ -65,6 +66,24 @@ func waitRailHeader(t *testing.T, term *tuitest.Terminal, host, want, why string
 	}
 }
 
+// signInLabel is the screen cell of the "sign in" label on a host's header.
+func signInLabel(t *testing.T, term *tuitest.Terminal, host string) (int, int) {
+	t.Helper()
+	s := term.Screen()
+	row := railRowOf(s, hostOpen+" "+host)
+	if row < 0 {
+		t.Fatalf("the header of %s is not on screen:\n%s", host, term.Snapshot())
+	}
+	col := strings.Index(railLine(s, row), "sign in")
+	if col < 0 {
+		t.Fatalf("the header of %s has no sign in label:\n%s", host, term.Snapshot())
+	}
+	// The rule before the label is multi-byte, so the byte offset is not the
+	// column. Every rune on the row is one cell, so the rune count is. The
+	// click lands on the third letter.
+	return len([]rune(railLine(s, row)[:col])) + 2, row
+}
+
 // lastURL is the last sign-in page the wrapper gave out.
 func lastURL(t *testing.T, g tailscaleGate) string {
 	t.Helper()
@@ -98,17 +117,31 @@ func TestRailOpensTheTailscaleSignIn(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-host-sign-in-hover")
 
-	// A click opens the page the link waits on.
-	url := lastURL(t, g)
+	// A click on the name folds the group, and a second one opens it. It
+	// opens no page.
 	mouseClick(t, term, col+3, row, tuitest.MouseLeft, 0)
-	waitOpened(t, record, []string{url}, "a click on the header of a host that waits for a sign-in")
-	if err := term.WaitForText("Opening the Tailscale sign-in page", uiTimeout); err != nil {
-		t.Errorf("ASSERTION: the click did not say what it did: %v\n%s", err, term.Snapshot())
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, hostShut+" gated") >= 0 }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: a click on the name of a host that waits for a sign-in did not fold it: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "rail-host-sign-in-folded")
+	mouseClick(t, term, col+3, railRowOf(term.Screen(), hostShut+" gated"), tuitest.MouseLeft, 0)
+	waitRailHeader(t, term, "gated", "sign in", "a second click on the name did not open the group again")
+	time.Sleep(time.Second)
+	if got := openedLinks(record); len(got) != 0 {
+		t.Errorf("ASSERTION: a click on the name opened %q", got)
+	}
+
+	// A click on "sign in" opens the page the link waits on, and says where.
+	url := lastURL(t, g)
+	lcol, lrow := signInLabel(t, term, "gated")
+	mouseClick(t, term, lcol, lrow, tuitest.MouseLeft, 0)
+	waitOpened(t, record, []string{url}, "a click on the sign in label")
+	if err := term.WaitForText("Opening login.tailscale.com to sign in to gated.", uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the click did not say what it did and where: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "rail-host-sign-in-opened")
-	// The click opened the page. It did not fold the group.
 	if railRowOf(term.Screen(), hostShut+" gated") >= 0 {
-		t.Errorf("ASSERTION: the click folded the group instead of only opening the page:\n%s", term.Snapshot())
+		t.Errorf("ASSERTION: the click on sign in folded the group:\n%s", term.Snapshot())
 	}
 
 	// The CLI: the table says sign in and how to open it, the JSON keeps
@@ -164,9 +197,10 @@ func TestRailOpensTheTailscaleSignIn(t *testing.T) {
 }
 
 // TestRailSignInAsksForANewPage: Tailscale ended the wait, so the link has no
-// page. A click or Enter on the header asks the daemon to dial again at once,
-// opens the new page as soon as the link reports it, and the host comes up
-// once the person signs in, with nothing more to do.
+// page. A click or Enter on "sign in" asks the daemon to dial again at once,
+// opens the new page as soon as the link reports it, and keeps the redial
+// quick while the person signs in. The host comes up once they do, with
+// nothing more to do.
 func TestRailSignInAsksForANewPage(t *testing.T) {
 	t.Run("click", func(t *testing.T) { signInNewPage(t, false) })
 	t.Run("enter", func(t *testing.T) { signInNewPage(t, true) })
@@ -181,29 +215,15 @@ func signInNewPage(t *testing.T, keyboard bool) {
 
 	waitRailHeader(t, term, "quick", "sign in", "the rail never said sign in beside the quick host")
 
-	// Wait for the third dial to end. The link's backoff is then 8 seconds,
-	// so a page that shows up much sooner came from the gesture. A dial that
-	// has just started has given out its page and has not reported it yet,
-	// so "no page" is read twice, a second apart, with no new page between.
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		n := len(g.urls(t))
-		if n >= 3 && signInURLOf(t, base, env, "quick") == "" {
-			time.Sleep(time.Second)
-			if len(g.urls(t)) == n && signInURLOf(t, base, env, "quick") == "" {
-				break
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the link never ended its third dial: %d pages", len(g.urls(t)))
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	// Wait for the fourth dial to end. The link's backoff is then 16 seconds,
+	// so a page that shows up within 8 came from the gesture.
+	waitDialEnded(t, base, env, g, "quick", 4)
 	before := len(g.urls(t))
 	var asked time.Time
 	if keyboard {
 		// s gives the rail the keyboard with the cursor on the attached
-		// session. j moves it to the header of quick, the next row.
+		// session. j moves it to the next stop, the sign in label of quick,
+		// which comes before the header it sits on.
 		if err := term.SendKeys("s"); err != nil {
 			t.Fatalf("enter rail: %v", err)
 		}
@@ -219,9 +239,9 @@ func signInNewPage(t *testing.T, keyboard bool) {
 			t.Fatalf("activate the header: %v", err)
 		}
 	} else {
-		row := railRowOf(term.Screen(), hostOpen+" quick")
+		col, row := signInLabel(t, term, "quick")
 		asked = time.Now()
-		mouseClick(t, term, 5, row, tuitest.MouseLeft, 0)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	}
 	if err := term.WaitForText("Opening the Tailscale sign-in page", uiTimeout); err != nil {
 		t.Errorf("ASSERTION: the %s did not say what it does: %v\n%s", way, err, term.Snapshot())
@@ -234,11 +254,26 @@ func signInNewPage(t *testing.T, keyboard bool) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if took := time.Since(asked); took > 5*time.Second {
+	if took := time.Since(asked); took > 8*time.Second {
 		t.Errorf("ASSERTION: the new page took %v; the %s must make the link dial at once", took, way)
 	}
 	url := lastURL(t, g)
 	waitOpened(t, record, []string{url}, "the page the "+way+" asked for")
+
+	// The person is slow and Tailscale ends that page too. The link's backoff
+	// is now 32 seconds, and the quick redial a sign-in starts holds it to 5.
+	waitDialEnded(t, base, env, g, "quick", before+1)
+	ended := time.Now()
+	n := len(g.urls(t))
+	for len(g.urls(t)) == n {
+		if time.Since(ended) > 40*time.Second {
+			t.Fatalf("ASSERTION: the link never dialed again after the page expired")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if took := time.Since(ended); took > 12*time.Second {
+		t.Errorf("ASSERTION: the next page took %v after the last one expired; a sign-in keeps the redial at 5 seconds", took)
+	}
 
 	g.signIn(t)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -249,6 +284,95 @@ func signInNewPage(t *testing.T, keyboard bool) {
 	}
 	saveFrame(t, term, "rail-host-signed-in-new-page-"+way)
 	alive(t, term, "after the sign-in on a new page")
+}
+
+// waitDialEnded waits until the wrapper has given out at least pages pages for
+// host and the link has ended the dial of the last one. A dial that has just
+// started has given out its page and has not reported it yet, so "no page" is
+// read twice, a second apart, with no new page between.
+func waitDialEnded(t *testing.T, base string, env []string, g tailscaleGate, host string, pages int) {
+	t.Helper()
+	deadline := time.Now().Add(150 * time.Second)
+	for {
+		n := len(g.urls(t))
+		if n >= pages && signInURLOf(t, base, env, host) == "" {
+			time.Sleep(time.Second)
+			if len(g.urls(t)) == n && signInURLOf(t, base, env, host) == "" {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the link never ended dial %d: %d pages", pages, len(g.urls(t)))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// TestRailRefusesAnUntrustedSignInLink: the banner on ssh's stderr can be
+// printed by anything on the host. A sign-in link that is not on a Tailscale
+// login origin is not shown and not opened, by the rail or by the CLI, and
+// the person is told why.
+func TestRailRefusesAnUntrustedSignInLink(t *testing.T) {
+	term, base, record, g, env := signInSetup(t, "signin-refuse",
+		gatedHostTOML("printer", "someone@localbox")+gatedHostTOML("lookalike", "someone@lookalikebox"))
+
+	waitRailHeader(t, term, "printer", "sign in", "the rail never said sign in beside printer")
+	waitRailHeader(t, term, "lookalike", "sign in", "the rail never said sign in beside lookalike")
+	// The daemon has read both banners.
+	deadline := time.Now().Add(30 * time.Second)
+	for len(g.urls(t)) < 2 && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	time.Sleep(time.Second)
+
+	for _, host := range []string{"printer", "lookalike"} {
+		col, row := signInLabel(t, term, host)
+		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+		if err := term.WaitForText("The sign-in link from "+host+" is not a Tailscale", uiTimeout); err != nil {
+			t.Errorf("ASSERTION: a click on the sign in of %s did not say why nothing opened: %v\n%s", host, err, term.Snapshot())
+		}
+		saveFrame(t, term, "rail-host-sign-in-refused-"+host)
+	}
+	time.Sleep(2 * time.Second)
+	if got := openedLinks(record); len(got) != 0 {
+		t.Errorf("ASSERTION: the rail opened an untrusted sign-in link: %q", got)
+	}
+
+	// The daemon reports no address and says it refused one. Neither the
+	// listing nor hosts signin repeats the address.
+	out, _ := tuiosCLIEnv(t, base, env, "hosts", "--json")
+	saveSyncArtifact(t, "signin-refused-hosts.json", out)
+	var rep struct {
+		Hosts []struct {
+			Host            string `json:"host"`
+			ApprovalURL     string `json:"approval_url"`
+			ApprovalRefused bool   `json:"approval_refused"`
+		} `json:"hosts"`
+	}
+	if start := strings.Index(out, "{"); start < 0 || json.Unmarshal([]byte(out[start:]), &rep) != nil {
+		t.Fatalf("tuios hosts --json printed no JSON:\n%s", out)
+	}
+	for _, h := range rep.Hosts {
+		if h.ApprovalURL != "" || !h.ApprovalRefused {
+			t.Errorf("ASSERTION: %s reports %q, refused %v; want no address and refused", h.Host, h.ApprovalURL, h.ApprovalRefused)
+		}
+	}
+	out, _ = tuiosCLIEnv(t, base, env, "hosts")
+	saveSyncArtifact(t, "signin-refused-hosts.txt", out)
+	out2, _ := tuiosCLIEnv(t, base, env, "hosts", "signin")
+	saveSyncArtifact(t, "signin-refused-signin.txt", out2)
+	for _, text := range []string{out, out2} {
+		if strings.Contains(text, "127.0.0.1") || strings.Contains(text, "evil.example") {
+			t.Errorf("ASSERTION: the CLI repeats an untrusted address:\n%s", text)
+		}
+	}
+	if !strings.Contains(out2, "The sign-in link from printer is not a Tailscale address") {
+		t.Errorf("ASSERTION: hosts signin does not say why it opened nothing:\n%s", out2)
+	}
+	if got := openedLinks(record); len(got) != 0 {
+		t.Errorf("ASSERTION: hosts signin opened an untrusted sign-in link: %q", got)
+	}
+	alive(t, term, "after refusing the sign-in links")
 }
 
 // signInURLOf is the sign-in page the daemon reports for host, or "".

@@ -703,6 +703,7 @@ func init() {
 				{Name: "host", Type: "string", Description: "The host."},
 				{Name: "status", Type: "string", Description: "The link state when the call was made."},
 				{Name: "approval_url", Type: "string", Description: "The Tailscale sign-in page, when the link waits for one and has it. Omitted otherwise."},
+				{Name: "approval_refused", Type: "bool", Description: "True when the link waits for a sign-in and the banner named an address that is not a Tailscale login origin. Omitted otherwise."},
 			},
 			examples: []string{`{"id":1,"verb":"retry-host","params":{"host":"build"}}`},
 			handler:  (*Daemon).verbRetryHost,

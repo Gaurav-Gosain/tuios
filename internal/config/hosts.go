@@ -52,6 +52,12 @@ type HostConfig struct {
 	// path on the host, written the way the host reads it: absolute, or
 	// starting with ~/ for the host's home.
 	ReposRoot string `toml:"repos_root,omitempty"`
+	// TailscaleLogin is the origin of a Headscale server that sends this
+	// host's Tailscale SSH check, such as "https://headscale.example". tuios
+	// shows and opens a sign-in link only on Tailscale's own login origins
+	// and on this one, because the banner that carries the link can be
+	// printed by anything on the host.
+	TailscaleLogin string `toml:"tailscale_login,omitempty"`
 
 	// The three fields below are the other direction: what the machine of
 	// this name may do here when it links in. They are read on the machine
