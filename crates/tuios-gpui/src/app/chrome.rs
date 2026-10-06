@@ -438,8 +438,8 @@ impl TuiosApp {
                     .flex_none()
                     .rounded(px(7.))
                     .cursor_pointer()
-                    .when(is_sel, |el| el.bg(rgb(t.selected)))
-                    .when(!is_sel, |el| el.hover(|s| s.bg(rgb(t.hover))))
+                    .when(is_sel, |el| el.bg(rgb(t.raised_sel)))
+                    .when(!is_sel, |el| el.hover(|s| s.bg(rgb(t.raised_sel))))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.palette = None;
                         this.run(act.clone(), window, cx);

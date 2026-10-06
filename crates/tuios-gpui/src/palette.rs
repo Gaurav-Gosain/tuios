@@ -174,17 +174,25 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
     let mut s = 0i32;
     let mut ti = 0usize;
     let mut prev: Option<usize> = None;
+    // Characters that land on a word start or right after the previous one.
+    // A query whose letters are mostly scattered through the text is noise.
+    let (mut n, mut good) = (0, 0);
     for qc in query.chars().flat_map(char::to_lowercase) {
         if qc == ' ' {
             continue;
         }
         let pos = t[ti..].iter().position(|&c| c == qc)? + ti;
         let word_start = pos == 0 || !t[pos - 1].is_alphanumeric();
+        let run = prev.is_some_and(|p| p + 1 == pos);
+        n += 1;
+        if word_start || run {
+            good += 1;
+        }
         s += 1;
         if word_start {
             s += 8;
         }
-        if prev.is_some_and(|p| p + 1 == pos) {
+        if run {
             s += 8;
         }
         if pos == 0 {
@@ -192,6 +200,9 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
         }
         prev = Some(pos);
         ti = pos + 1;
+    }
+    if n >= 3 && good * 4 < n * 3 {
+        return None;
     }
     Some(s * 100 - t.len() as i32)
 }
@@ -201,7 +212,9 @@ fn haystack(e: &Entry) -> String {
     match e.section {
         Section::Themes => format!("theme {}", e.title),
         Section::Sessions => format!("session {}", e.title),
-        Section::NeedsYou | Section::Panes => format!("{} {}", e.title, e.subtitle),
+        // The name and where it is; not the agent's message, whose letters
+        // would match almost anything.
+        Section::NeedsYou | Section::Panes => format!("{} {}", e.title, e.subtitle.split(" · ").take(2).collect::<Vec<_>>().join(" ")),
         Section::Commands => e.title.clone(),
     }
 }
@@ -252,7 +265,7 @@ mod tests {
     fn subsequence_and_word_starts() {
         assert!(score("sr", "Split right").is_some());
         assert!(score("xyz", "Split right").is_none());
-        assert!(score("spl", "Split down").unwrap() > score("spl", "Swap pane later").unwrap(), "runs beat scattered hits");
+        assert!(score("spl", "Split down") > score("spl", "Swap pane later"), "runs beat scattered hits");
     }
 
     #[test]
@@ -271,6 +284,7 @@ mod tests {
         assert_eq!(filter(&e, "theme seafoam")[0].act, Act::Theme("seafoam_pastel".into()));
         assert_eq!(filter(&e, "session play")[0].act, Act::Session("play".into()));
         assert_eq!(filter(&e, "nvim")[0].title, "nvim");
+        assert!(!filter(&e, "split").iter().any(|e| e.section != Section::Commands), "scattered letters do not match");
     }
 
     #[test]

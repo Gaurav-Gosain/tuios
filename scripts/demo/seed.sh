@@ -2,7 +2,7 @@
 # Fills a private tuios daemon with sessions, panes and agent states, for
 # screenshots of the GUI. It never touches your own daemon.
 #
-#   scripts/demo/seed.sh /path/to/tuios ~/.cache/agent-tmp/demo-env
+#   THEME=tokyonight scripts/demo/seed.sh /path/to/tuios ~/.cache/agent-tmp/demo-env
 #   tuios-gpui --tuios /path/to/tuios --isolate ~/.cache/agent-tmp/demo-env --session tuios
 set -e
 TUIOS=$1
@@ -15,6 +15,12 @@ chmod 700 "$BASE/run"
 export XDG_RUNTIME_DIR="$BASE/run" XDG_CONFIG_HOME="$BASE/config" XDG_STATE_HOME="$BASE/state"
 export XDG_CACHE_HOME="$BASE/cache" XDG_DATA_HOME="$BASE/data" HOME="$BASE/home" SHELL=/bin/bash
 unset TUIOS_SOCKET TUIOS_WINDOW TUIOS_SESSION
+# The daemon answers a program's colour queries from its own theme, so the
+# panes match the GUI only when the config names the same one.
+if [ -n "$THEME" ]; then
+	mkdir -p "$XDG_CONFIG_HOME/tuios"
+	printf '[appearance]\ntheme = "%s"\n' "$THEME" >"$XDG_CONFIG_HOME/tuios/config.toml"
+fi
 T() { "$TUIOS" "$@"; }
 AGENT="$HERE/fake-agent.sh"
 
@@ -35,7 +41,10 @@ T new -d tuios --cwd "$REPO" >/dev/null
 seed=$(first tuios)
 a=$(win tuios 1 "$REPO" "paint cache" "$AGENT" codex)
 b=$(win tuios 1 "$REPO" "api retries" "$AGENT" claude-question)
-c=$(win tuios 1 "$REPO" "" nvim -n crates/tuios-gpui/src/fleet.rs)
+# nvim asks the terminal for its background before any client is attached,
+# when nobody answers, so tell it.
+case "$THEME" in *day* | *light* | *latte* | *dawn*) BG=light ;; *) BG=dark ;; esac
+c=$(win tuios 1 "$REPO" "" nvim -n -c "set background=$BG" crates/tuios-gpui/src/fleet.rs)
 T close-window -s tuios "$seed" >/dev/null 2>&1 || true
 d=$(win tuios 2 "$REPO" "" htop)
 e=$(win tuios 3 "$REPO" "flaky test" "$AGENT" claude-done)

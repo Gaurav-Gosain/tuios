@@ -41,8 +41,9 @@ pub struct Theme {
     pub hover: u32,
     /// The focused pane's row, the palette's chosen row, the active tab.
     pub selected: u32,
-    /// The palette panel.
+    /// The palette panel, and its chosen row.
     pub raised: u32,
+    pub raised_sel: u32,
     /// Hairlines between regions.
     pub hairline: u32,
     /// Primary, secondary and tertiary chrome text.
@@ -103,7 +104,8 @@ impl Theme {
             sidebar: step(if light { 0.03 } else { 0.035 }),
             hover: step(if light { 0.05 } else { 0.06 }),
             selected: step(if light { 0.085 } else { 0.095 }),
-            raised: if light { bg } else { step(0.06) },
+            raised: if light { mix32(bg, 0xffffff, 0.6) } else { step(0.06) },
+            raised_sel: if light { mix32(mix32(bg, 0xffffff, 0.6), 0x000000, 0.06) } else { step(0.12) },
             hairline: mix32(bg, fg, if light { 0.13 } else { 0.09 }),
             text: ink,
             text2: mix32(ink, bg, if light { 0.32 } else { 0.36 }),
