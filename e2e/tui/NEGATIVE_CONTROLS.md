@@ -2140,3 +2140,29 @@ is on its spine, and that a click on it makes a pane.
 
 Width 16 passes the two narrow controls because no name fits there. The first
 control covers it.
+
+## Frame clock
+
+`TestFramePacingKeepsTheGuestsRate` runs the `framepace` guest at 120 Hz with
+max_fps 120 and at 240 Hz with max_fps 240. It asserts the frames shown a
+second, the p95 interval and the p50 latency from guest to host.
+`TestFloodStaysSmooth` runs the guest as a flood and asserts the host's frame
+rate and p95 gap. Both are wall-clock measurements, so they run only with
+`TUIOS_E2E_PERF` set. `TestKickFlushWritesTheFrame` in `internal/app` pins
+the Bubble Tea behaviour the flush kick depends on.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`582af540`) | `TestFramePacingKeepsTheGuestsRate` (103 frames a second and a p95 of 17 ms at 120; 126 at 240), `TestFloodStaysSmooth` (13 and 24 frames a second, p95 100 ms) | **caught** |
+| No flush kick | `View`: the `kickFlush` call cut | `TestFramePacingKeepsTheGuestsRate` (240: 194 frames a second, p95 8.7 ms) | **caught** |
+| Intervals counted from the emit | `NextFrameTime` returns now | `TestFramePacingKeepsTheGuestsRate` (120: p95 14.6 ms) | **caught** |
+| The floor stays at 8 ms | `applyFrameRate`: the `SetFrameInterval` call cut | `TestFramePacingKeepsTheGuestsRate` (240: 129 frames a second) | **caught** |
+| A pane behind is drawn every 250 ms | `catchUpCoalesceInterval` returns 250 ms | `TestFloodStaysSmooth` (15 frames a second, p95 101 ms) | **caught** |
+| The kick does nothing | `sendTick`: the send cut | `TestKickFlushWritesTheFrame` | **caught** |
+
+Not covered: the latency assertion was added after the first controls ran.
+On the released build the 120 Hz guest measured a p50 latency of 14.8 ms and
+with the kick cut 14.9 ms, both over the 12 ms bound. The frame gate across
+panes (`takePaneOutput`) has no control of its own: with nine guests the
+shown rate is noisy on a shared machine, and the gate's effect is CPU, 600
+against 908 ms/s, which the suite does not assert.
