@@ -1,9 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"io"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,5 +36,84 @@ func TestSetProgramFPS(t *testing.T) {
 	}
 	if got := fps.Int(); got != 240 {
 		t.Fatalf("fps is %d after setProgramFPS(240)", got)
+	}
+}
+
+// kickModel shows the text its last message carried.
+type kickModel struct{ text string }
+
+func (k kickModel) Init() tea.Cmd { return nil }
+
+func (k kickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if s, ok := msg.(string); ok {
+		k.text = s
+	}
+	return k, nil
+}
+
+func (k kickModel) View() tea.View { return tea.NewView(k.text) }
+
+// syncBuffer is a bytes.Buffer two goroutines can share.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// TestKickFlushWritesTheFrame pins what kickFlush assumes about Bubble Tea:
+// that one value sent on the frame ticker's channel makes the renderer write
+// the current view at once. A release that renders some other way would leave
+// every frame waiting for the next tick again, with nothing else failing.
+func TestKickFlushWritesTheFrame(t *testing.T) {
+	in, inW := io.Pipe()
+	defer func() { _ = inW.Close() }()
+	out := &syncBuffer{}
+	p := tea.NewProgram(kickModel{}, tea.WithInput(in), tea.WithOutput(out),
+		tea.WithoutSignalHandler(), tea.WithWindowSize(80, 24),
+		tea.WithEnvironment([]string{"TERM=xterm-256color"}))
+	if !setProgramFPS(p, 1) {
+		t.Fatal("setProgramFPS did not reach the fps field")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = p.Run()
+	}()
+	defer func() {
+		p.Quit()
+		<-done
+	}()
+
+	// Wait for Run to start the ticker, and for its first frame to go out.
+	deadline := time.Now().Add(3 * time.Second)
+	for programTicker(p) == nil || out.String() == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("the program never started its frame ticker")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// At one frame a second, the next tick is up to a second away.
+	time.Sleep(50 * time.Millisecond)
+	p.Send("kicked-frame")
+	time.Sleep(20 * time.Millisecond)
+	start := time.Now()
+	sendTick(programTicker(p))
+	for !strings.Contains(out.String(), "kicked-frame") {
+		if time.Since(start) > 300*time.Millisecond {
+			t.Fatalf("one value on the ticker's channel did not write the frame within %v; output so far %q",
+				time.Since(start), out.String())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/refreshrate"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // frameRate is what the model keeps to drive the program's frame ticker and
@@ -35,7 +36,34 @@ type frameRate struct {
 	// burst is the cancel flag of the wake burst in flight, if any. See
 	// noteFrame.
 	burst *atomic.Bool
+	// lastCompose is the time the last frame for pane output stands for, and
+	// dueArmed says a frameDueMsg is on its way. See paneFrameWait. A frame
+	// composed for input does not count: a keystroke's echo comes back a
+	// millisecond after the keystroke's own frame, and must not wait for it.
+	lastCompose time.Time
+	dueArmed    bool
+	// lastAnswered is when the person last did something a pane answers
+	// with output: a key, a paste, a click or a wheel step. See
+	// paneFrameWait.
+	lastAnswered time.Time
 }
+
+// answerWindow is how long after a key, paste, click or wheel step pane output
+// is drawn without waiting for the frame period. It covers the round trip to
+// the guest and back, which is a few milliseconds even over a daemon.
+const answerWindow = 50 * time.Millisecond
+
+// noteAnsweredInput records input a pane answers with output.
+func (m *OS) noteAnsweredInput(msg tea.Msg) {
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseWheelMsg:
+		m.frameRate.lastAnswered = time.Now()
+	}
+}
+
+// frameDueMsg is the frame a pane's output was held back for: see
+// paneFrameWait. Its handler marks the panes with new output and composes.
+type frameDueMsg struct{}
 
 // idleTickerAfter is how long the client goes without composing a frame
 // before the program's frame ticker drops to IdleFPS.
@@ -66,9 +94,13 @@ func (m *OS) BindProgram(p *tea.Program) {
 	m.detectDisplayRate(false)
 }
 
-// applyFrameRate sets the program's ticker to NormalFPS when it moved.
+// applyFrameRate sets the program's ticker to NormalFPS when it moved, and the
+// panes' render signals to the same rate.
 func (m *OS) applyFrameRate() {
 	fps := m.Settings.NormalFPS
+	if fps > 0 && m.frameRate.program != nil {
+		terminal.SetFrameInterval(time.Second / time.Duration(fps))
+	}
 	if m.frameRate.program == nil || fps <= 0 || fps == m.frameRate.applied {
 		return
 	}
@@ -146,6 +178,136 @@ func (m *OS) noteFrame() {
 			ticker.Reset(time.Second / time.Duration(fps))
 		}
 	})
+}
+
+// framePeriod is one frame at NormalFPS.
+func (m *OS) framePeriod() time.Duration {
+	fps := m.Settings.NormalFPS
+	if fps <= 0 {
+		fps = config.DefaultFPS
+	}
+	return time.Second / time.Duration(fps)
+}
+
+// paneFrameWait is how long a frame for pane output has to wait, 0 when it
+// may be composed now.
+//
+// Each pane's coalescer limits that pane's render signals to the frame rate,
+// but nothing limited the frames all of them asked for together. Nine panes
+// animating at 120 frames a second asked for a thousand composes a second, and
+// Bubble Tea's ticker wrote 120 of them: the rest were composed and thrown
+// away, and the frame that did go out was whichever compose was last before
+// the tick, so an unfocused pane's animation showed at an uneven rate. Here
+// output frames are spaced one frame period apart. A signal inside the period
+// is held, and one frameDueMsg at the end of it draws every pane that had
+// output in the meantime.
+//
+// A frame up to terminal.FrameSlack early is composed at once and stands for
+// the end of the period (see takePaneOutput), so a guest drawing at exactly the
+// frame rate is neither held back nor allowed to drift until two of its frames
+// share one.
+//
+// Output that answers the person is not held either: for answerWindow after a
+// key, a paste, a click or a wheel step, output is drawn as soon as the pane
+// signals. A key repeat is about 30 keys a second, and a held period would add
+// up to three quarters of a frame to every echo.
+func (m *OS) paneFrameWait(now time.Time) time.Duration {
+	last := m.frameRate.lastCompose
+	if last.IsZero() || now.Sub(m.frameRate.lastAnswered) < answerWindow {
+		return 0
+	}
+	period := m.framePeriod()
+	slack := terminal.FrameSlack(period)
+	wait := last.Add(period).Sub(now)
+	if wait <= slack {
+		return 0
+	}
+	return wait - slack
+}
+
+// takePaneOutput marks the panes with new output for this frame when a frame
+// for pane output may be composed now (open), and reports whether any pane was
+// marked (changed). When the frame has to wait it leaves the panes' output
+// flags set and returns the command that brings the frame at the end of the
+// period. Every path that draws pane output goes through it: the panes' own
+// signals, the held frame, and the maintenance tick.
+func (m *OS) takePaneOutput(now time.Time) (open, changed bool, due tea.Cmd) {
+	if wait := m.paneFrameWait(now); wait > 0 {
+		if m.anyPaneOutput() {
+			due = m.armFrameDue(wait)
+		}
+		return false, false, due
+	}
+	changed = m.MarkTerminalsWithNewContent()
+	if changed {
+		// An early frame stands for the end of its period, so frames for
+		// output keep to the frame rate on average. See NextFrameTime.
+		m.frameRate.lastCompose = terminal.NextFrameTime(m.frameRate.lastCompose, m.framePeriod(), now)
+	}
+	return true, changed, nil
+}
+
+// anyPaneOutput reports whether a pane has output no frame has drawn yet.
+func (m *OS) anyPaneOutput() bool {
+	for _, w := range m.Windows {
+		if w != nil && w.HasNewOutput.Load() {
+			return true
+		}
+	}
+	return false
+}
+
+// armFrameDue returns the command that delivers the held frame after wait,
+// or nil when one is already on its way.
+func (m *OS) armFrameDue(wait time.Duration) tea.Cmd {
+	if m.frameRate.dueArmed {
+		return nil
+	}
+	m.frameRate.dueArmed = true
+	return tea.Tick(wait, func(time.Time) tea.Msg { return frameDueMsg{} })
+}
+
+// flushKickDelay is how long after View returns a composed frame the
+// renderer is asked to write it. View runs before Bubble Tea stores the view
+// it returns, so the request waits a moment for the store; asking at once
+// would sometimes write the frame before it.
+const flushKickDelay = 100 * time.Microsecond
+
+// kickFlush asks Bubble Tea to write the frame View is about to return now,
+// rather than at its next tick.
+//
+// Bubble Tea writes frames only from its ticker. A frame composed just after a
+// tick waited almost a whole period to go out, and since pane output and the
+// ticker run on separate clocks, a guest animating at the frame rate had some
+// of its frames composed twice in one period and none in the next: at 120
+// frames a second a 120 Hz guest showed 95 to 105 of them, and the gaps were 17
+// ms. The ticker goroutine flushes whenever its channel delivers, so one value
+// sent on that channel is a flush now. The ticker itself keeps its rate.
+//
+// The channel is reached the way setProgramFPS reaches the ticker, and a
+// Bubble Tea release that renames the field makes this do nothing: frames go
+// out on the tick as before. TestKickFlushWritesTheFrame fails on that release.
+func (m *OS) kickFlush() {
+	if m.frameRate.program == nil {
+		return
+	}
+	ticker := programTicker(m.frameRate.program)
+	if ticker == nil {
+		return
+	}
+	time.AfterFunc(flushKickDelay, func() { sendTick(ticker) })
+}
+
+// sendTick delivers one tick on ticker's channel, unless one is already
+// waiting there.
+func sendTick(ticker *time.Ticker) {
+	// #nosec G103 - a timer channel is a buffered chan time.Time; its
+	// receive-only type is the time package's API, not its representation.
+	ch := *(*chan time.Time)(unsafe.Pointer(&ticker.C))
+	select {
+	case ch <- time.Now():
+	default:
+	}
 }
 
 // detectsDisplay reports whether this client may look for the display's
