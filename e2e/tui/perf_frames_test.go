@@ -609,18 +609,20 @@ func TestPerfFrames(t *testing.T) {
 // so it runs only with TUIOS_E2E_PERF set, like TestMaxFPS240DrawsPastTheOldClamp.
 //
 // Before the frame clock a 120 Hz guest showed 95 to 105 of its frames at
-// max_fps 120 with a p95 interval of 17 ms, and max_fps 240 drew 124.
+// max_fps 120 with a p95 interval of 17 ms and a p50 latency of 11 to 15 ms,
+// and max_fps 240 drew 124.
 func TestFramePacingKeepsTheGuestsRate(t *testing.T) {
 	if os.Getenv("TUIOS_E2E_PERF") == "" {
 		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
 	}
 	for _, c := range []struct {
-		fc     frameCase
-		minFPS float64
-		maxP95 time.Duration
+		fc         frameCase
+		minFPS     float64
+		maxP95     time.Duration
+		maxLatency time.Duration // p50, guest to host
 	}{
-		{frameCase{name: "pace-120guest/max120", maxFPS: "120", mode: "text", fps: 120, panes: 1}, 111, 11 * time.Millisecond},
-		{frameCase{name: "pace-240guest/max240", maxFPS: "240", mode: "text", fps: 240, panes: 1}, 200, 7500 * time.Microsecond},
+		{frameCase{name: "pace-120guest/max120", maxFPS: "120", mode: "text", fps: 120, panes: 1}, 111, 11 * time.Millisecond, 12 * time.Millisecond},
+		{frameCase{name: "pace-240guest/max240", maxFPS: "240", mode: "text", fps: 240, panes: 1}, 200, 7500 * time.Microsecond, 10 * time.Millisecond},
 	} {
 		t.Run(c.fc.name, func(t *testing.T) {
 			r := runFrameCase(t, c.fc)
@@ -631,6 +633,84 @@ func TestFramePacingKeepsTheGuestsRate(t *testing.T) {
 			if r.Interval.P95 > c.maxP95 {
 				t.Errorf("the p95 interval between frames was %v, want at most %v", r.Interval.P95, c.maxP95)
 			}
+			if r.Latency.P50 > c.maxLatency {
+				t.Errorf("a frame took %v (p50) from the guest to the host, want at most %v", r.Latency.P50, c.maxLatency)
+			}
 		})
+	}
+}
+
+// TestPerfFloodDrain times a finite flood from the command to its last line on
+// the host, and counts the frames the host got while it ran. A client that
+// falls behind its pane paints the flood after the program is gone, so the
+// time is the drain as much as the flood.
+func TestPerfFloodDrain(t *testing.T) {
+	perfGate(t)
+	took, frames, st := floodDrain(t)
+	t.Logf("PERF flood-drain: 1500000 lines of 190 columns in %v, %d host frames (%.0f a second), interval p50 %v p95 %v max %v",
+		took.Round(time.Millisecond), frames, float64(frames)/took.Seconds(), st.P50.Round(10*time.Microsecond), st.P95.Round(10*time.Microsecond), st.Max.Round(time.Millisecond))
+}
+
+// floodDrain runs 285 MB of 190-column lines through one pane at max_fps 120
+// and returns how long it took to reach the host, how many frames the host got
+// meanwhile, and the intervals between them.
+func floodDrain(t *testing.T) (time.Duration, int, perf.Stats) {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[appearance]\nmax_fps = 120\n")
+	if out, err := tuiosCLI(t, base, "new", "fp", "--detach"); err != nil {
+		t.Fatalf("create the session: %v: %s", err, out)
+	}
+	clock := newFrameClock()
+	term := startIn(t, base, startOpts{
+		cols: perfCols, rows: perfRows,
+		args: []string{"attach", "fp"},
+		env:  append(perfEnvVars(), "COLORTERM=truecolor"),
+		out:  clock,
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
+	}
+	ids := windowIDs(t, base, "fp")
+	time.Sleep(500 * time.Millisecond)
+	clock.mu.Lock()
+	ends0 := len(clock.ends)
+	clock.mu.Unlock()
+	start := time.Now()
+	if err := paneSend(base, "fp", ids[0], "yes \"$(printf %0190d 0)\" | head -n 1500000; echo DRAIN$((1+1))DONE\n"); err != nil {
+		t.Fatalf("start the flood: %v", err)
+	}
+	if err := term.WaitForText("DRAIN2DONE", 2*time.Minute); err != nil {
+		t.Fatalf("the flood never finished: %v", err)
+	}
+	took := time.Since(start)
+	clock.mu.Lock()
+	ends := append([]int64(nil), clock.ends[ends0:]...)
+	clock.mu.Unlock()
+	var iv perf.Dist
+	for i := 1; i < len(ends); i++ {
+		iv = append(iv, time.Duration(ends[i]-ends[i-1]))
+	}
+	return took, len(ends), iv.Stats()
+}
+
+// TestFloodStaysSmooth asserts that a pane printing as fast as the client can
+// parse, which leaves the client behind it, is still drawn at an even rate.
+// Under TUIOS_E2E_PERF like TestFramePacingKeepsTheGuestsRate. Before, a pane
+// that fell behind was drawn every 250 ms or at the 96 ms cost ceiling: 13 to
+// 37 frames a second, with a p95 gap of 100 ms.
+func TestFloodStaysSmooth(t *testing.T) {
+	if os.Getenv("TUIOS_E2E_PERF") == "" {
+		t.Skip("set TUIOS_E2E_PERF=1 to measure frame pacing")
+	}
+	r := runFrameCase(t, frameCase{name: "flood-smooth/max120", maxFPS: "120", mode: "scroll", fps: 0, panes: 1})
+	fps := float64(r.HostFrames) / r.Seconds
+	p95 := r.Extra["host_interval_p95_ms"].(float64)
+	if fps < 45 {
+		t.Errorf("the flood was drawn at %.0f frames a second, want at least 45", fps)
+	}
+	if p95 > 30 {
+		t.Errorf("the p95 gap between two frames of the flood was %.1f ms, want at most 30", p95)
 	}
 }

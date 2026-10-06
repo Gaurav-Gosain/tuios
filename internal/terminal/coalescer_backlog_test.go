@@ -54,15 +54,16 @@ func TestCoalescerPacesDownAPaneThatIsBehind(t *testing.T) {
 	}
 
 	w.queuedBytes.Store(catchUpBacklog)
-	if got := w.coalesceInterval(); got != catchUpCoalesceInterval {
-		t.Errorf("a pane at the backlog paced at %v, want %v", got, catchUpCoalesceInterval)
+	if got := w.coalesceInterval(); got != catchUpCoalesceInterval() {
+		t.Errorf("a pane at the backlog paced at %v, want %v", got, catchUpCoalesceInterval())
 	}
 
-	// Being behind outranks an expensive frame in the other direction too: the
-	// ceiling is not the answer here, the catch-up interval is.
+	// An expensive frame keeps its own, longer interval while the pane is
+	// behind: the catch-up interval is a floor, so it never draws a pane
+	// that is behind faster than what its frames cost allows.
 	w.ChargeRenderCost(time.Second)
-	if got := w.coalesceInterval(); got != catchUpCoalesceInterval {
-		t.Errorf("a pane both behind and expensive paced at %v, want %v", got, catchUpCoalesceInterval)
+	if got := w.coalesceInterval(); got != maxCoalesceInterval {
+		t.Errorf("a pane both behind and expensive paced at %v, want the %v ceiling", got, maxCoalesceInterval)
 	}
 
 	// And it lets go once the pane has caught up, so a pane is not left at 4fps
@@ -112,7 +113,7 @@ func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 	}
 	lastNote := time.Now()
 
-	time.Sleep(catchUpCoalesceInterval + 400*time.Millisecond)
+	time.Sleep(catchUpCoalesceInterval() + 400*time.Millisecond)
 	close(done)
 	<-drained
 

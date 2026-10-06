@@ -338,10 +338,9 @@ const (
 	// pane the client has genuinely stopped keeping up with trips it.
 	catchUpBacklog = 4 << 20
 
-	// catchUpCoalesceInterval is the interval a pane that far behind is paced
-	// at: slow enough that the renderer stops taking the pane's read lock out
-	// from under its own output writer, fast enough to stay visibly alive.
-	catchUpCoalesceInterval = 250 * time.Millisecond
+	// catchUpFrames is the interval a pane that far behind is paced at, in
+	// frames. See catchUpCoalesceInterval.
+	catchUpFrames = 2
 
 	// coalescePaceFactor is how much host capacity a flooding pane may take.
 	// At 2 a frame that costs the client 20ms buys a 40ms interval, so the UI
@@ -349,6 +348,19 @@ const (
 	// available to whatever else needs it, which in practice is the keyboard.
 	coalescePaceFactor = 2
 )
+
+// catchUpCoalesceInterval is the shortest interval a pane far behind is paced
+// at: two frames, slow enough that the renderer does not take the pane's read
+// lock from its own output writer at every frame, fast enough that the flood
+// scrolls rather than jumps. A frame that costs more keeps its own, longer
+// interval (see coalesceInterval).
+//
+// It was 250 ms, four frames a second. A pane printing as fast as the client
+// can parse falls behind within seconds and stayed there, so a long flood was
+// drawn at 10 to 15 frames a second. At two frames it is drawn at about 68 a
+// second, and the guest wrote as many lines in the same time (1.28 million in
+// 5 s either way), so the writer did not lose to the renderer.
+func catchUpCoalesceInterval() time.Duration { return catchUpFrames * minFrameInterval() }
 
 // coalesceInterval is how long this pane must wait between render signals,
 // derived from what the client's last frame actually cost.
@@ -377,11 +389,12 @@ const (
 // back to is exactly what it would have been. What stops is the drawing of
 // frames that were never going to be looked at.
 func (w *Window) coalesceInterval() time.Duration {
-	if w.queuedBytes.Load() >= catchUpBacklog {
-		return catchUpCoalesceInterval
-	}
 	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
-	return min(max(cost, minFrameInterval()), maxCoalesceInterval)
+	interval := min(max(cost, minFrameInterval()), maxCoalesceInterval)
+	if w.queuedBytes.Load() >= catchUpBacklog {
+		return max(interval, catchUpCoalesceInterval())
+	}
+	return interval
 }
 
 // ChargeRenderCost records what the client's last composed frame cost, so the
