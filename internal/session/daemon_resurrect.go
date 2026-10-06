@@ -127,12 +127,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		return nil, nil, err
 	}
 
-	// The start directory comes back before any window is spawned, through
-	// the check the create paths use: a folder removed since the save
-	// leaves the daemon's directory in place, as a create would.
-	if state.StartDir != "" && checkWindowCwd(state.StartDir) == nil {
-		sess.SetStartDir(state.StartDir)
-	}
+	// The start directory comes back before any window is spawned. It is not
+	// checked: a folder missing when the daemon starts (a drive not mounted
+	// yet) would otherwise be saved as empty on the next save and lost. A
+	// shell asked to start in a missing folder starts in the daemon's.
+	sess.SetStartDir(state.StartDir)
 
 	sessionID := sess.ID
 	onExit := func(ptyID string) {

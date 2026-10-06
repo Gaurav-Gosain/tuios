@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -372,10 +373,11 @@ type SessionState struct {
 	// StartDir is the session's start directory (see Session.startDir), as
 	// it was when the state was saved. ResurrectionState stamps it, and a
 	// restore sets it again, so a session made with tuios new --cwd keeps
-	// its directory across a daemon restart. The in-memory field stays the
-	// authority: a client push that carries this changes nothing. Empty in
-	// state written before it existed, and such a session starts its new
-	// windows where the daemon did.
+	// its directory across a daemon restart. Only the save reads this field:
+	// a client push may carry a copy of it into canonical state, and
+	// ResurrectionState writes the in-memory value over that copy before
+	// every save. Empty in state written before it existed, and such a
+	// session starts its new windows where the daemon did.
 	StartDir string `json:"start_dir,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
@@ -1404,6 +1406,19 @@ type SessionConfig struct {
 // else names one. See Session.startDir.
 func (s *Session) SetStartDir(dir string) {
 	s.startDir.Store(&dir)
+}
+
+// absStartDir is dir made absolute, for the paths that set a start
+// directory from a request. The directory is saved, so a relative one would
+// mean another folder after a restart in another directory.
+func absStartDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
 }
 
 // StartDir is the directory set with SetStartDir, or "".

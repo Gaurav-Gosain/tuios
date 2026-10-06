@@ -1689,6 +1689,16 @@ way the window can land in the project. The daemon runs in `base/cwd`.
 | The save leaves the directory out | `ResurrectionState`: the `state.StartDir = s.StartDir()` line cut | `TestRestoredSessionKeepsItsStartDirectory` | **caught** |
 | The restore does not set it | `restoreSessionOffers`: the `sess.SetStartDir(state.StartDir)` call cut | `TestRestoredSessionKeepsItsStartDirectory` | **caught** |
 
-Not covered end to end: a start directory removed before the restore. The
-`checkWindowCwd` call keeps it unset, and a PTY in a missing directory starts
-in the daemon's directory anyway, so the two cases look the same from outside.
+### Review fixes
+
+`TestStartDirectoryOutlivesARestartWhileMissing` moves the project folder
+away, restarts the daemon (the restore runs with the folder gone), restarts it
+again (`kill-server` saves the session first), moves the folder back, restarts
+a third time, and opens a window on an empty workspace.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A missing folder is dropped on restore | `restoreSessionOffers`: the `checkWindowCwd` guard put back around `SetStartDir` | `TestStartDirectoryOutlivesARestartWhileMissing` (the window is in `base/cwd`) | **caught** |
+
+Not covered end to end: `absStartDir` on the create paths. The CLI sends an
+absolute folder already, so only a raw verb call can send a relative one.

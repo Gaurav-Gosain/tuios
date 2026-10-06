@@ -101,7 +101,7 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 	// The directory is the session's, not only its first window's: a window
 	// opened in it later with nothing to inherit starts there too.
 	if p.Cwd != "" {
-		sess.SetStartDir(p.Cwd)
+		sess.SetStartDir(absStartDir(p.Cwd))
 	}
 
 	out := map[string]any{

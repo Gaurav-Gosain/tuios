@@ -111,3 +111,56 @@ func saveListWindows(t *testing.T, base, session, path string) {
 		t.Logf("save %s: %v", path, err)
 	}
 }
+
+// TestStartDirectoryOutlivesARestartWhileMissing: the project folder is
+// gone while the daemon restores the session, as a drive that is not
+// mounted yet would be. The daemon saves the session again with the folder
+// still gone. The folder comes back, the daemon restarts once more, and a
+// new window on an empty workspace starts in it. A restore that dropped the
+// missing folder would have saved the session with no start directory.
+func TestStartDirectoryOutlivesARestartWhileMissing(t *testing.T) {
+	const session = "e2e-start-dir-missing"
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[appearance]\nnew_window_inherit_cwd = false\n")
+
+	proj := projectDir(t, base, "proj")
+	away := filepath.Join(base, "proj-unmounted")
+
+	if out, err := tuiosCLI(t, base, "new", session, "--detach", "--cwd", proj); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	firstWindowCwd(t, base, session, proj)
+
+	restart := func(trigger string) {
+		t.Helper()
+		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+			t.Fatalf("kill-server: %v\n%s", err, out)
+		}
+		if out, err := tuiosCLI(t, base, "new", trigger, "--detach"); err != nil {
+			t.Fatalf("start a fresh daemon: %v\n%s", err, out)
+		}
+		if info := waitForSessionInfo(t, base, session); !info.Restored {
+			t.Fatalf("the session is not marked restored")
+		}
+	}
+
+	if err := os.Rename(proj, away); err != nil {
+		t.Fatal(err)
+	}
+	// Restored with the folder gone, then saved by the next kill-server.
+	restart("e2e-start-dir-trigger-1")
+	if err := os.Rename(away, proj); err != nil {
+		t.Fatal(err)
+	}
+	restart("e2e-start-dir-trigger-2")
+
+	if out, err := tuiosCLI(t, base, "new-window", "-s", session, "--workspace", "3", "fresh"); err != nil {
+		t.Fatalf("open a window on workspace 3: %v\n%s", err, out)
+	}
+	got := windowCwdOn(t, base, session, 3, proj)
+	saveListWindows(t, base, session, filepath.Join(artifactDir(t), "after-second-restart.json"))
+	if got != proj {
+		t.Errorf("ASSERTION: the new window is in %q, want the start directory %q that was missing during a restart", got, proj)
+	}
+}
