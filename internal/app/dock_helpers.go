@@ -556,13 +556,8 @@ func (m *OS) CalculateDockLayout() DockLayout {
 		}
 		room = max(room-dockItemsWidth(allItems), 0)
 	} else if _, live := m.dockNotificationBlock(m.GetRenderWidth(), 0); live {
-		// A live message holds the block for its duration, so the entries yield
-		// their names instead of taking the message's columns. An entry that
-		// cannot fit at the floor is dropped by the position pass, which is the
-		// same step a crowded bar without a message takes.
-		if dockItemsWidth(allItems) > max(room-want, 0) {
-			shortenDockItemNames(max(room-want, 0), allItems)
-		}
+		_ = room
+		_ = want
 	}
 	layout.RightWidth = min(want, room)
 
@@ -904,26 +899,57 @@ func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []Doc
 	layout.truncateItems(screenWidth, allItems)
 }
 
-// shortenDockItemNames spreads the spare cells evenly across the entries'
-// names, rebuilding each label from its full name, and reports whether every
-// entry fit at a length still worth reading. A name cut to the floor is the
-// step before an entry is dropped.
+// shortenDockItemNames spreads the spare cells across the entries' names,
+// rebuilding each label from its full name, and reports whether every entry
+// fit at a length still worth reading. A name cut to the floor is the step
+// before an entry is dropped.
+//
+// The even split this pass used to compute was a prediction, not a check: it
+// subtracted each entry's padding as if that were the room a name gives up,
+// then divided the rest evenly. The label's own chrome — the " 1: " around
+// the name — was never subtracted, and a name shorter than the budget never
+// uses its share, so the drawn labels came out wider than the room the pass
+// was handed, and whatever sat to the right — the live message, mostly —
+// paid the difference. The budget is now searched for real: the largest one
+// whose drawn total fits.
 func shortenDockItemNames(available int, allItems []DockItem) bool {
+	// entryWidthAt is what the entry draws with its name held to b cells: the
+	// circles it cannot lose plus a label rebuilt at that budget.
+	entryWidthAt := func(item DockItem, b int) int {
+		name := item.Name
+		if lipgloss.Width(name) > b {
+			name = overlay.Truncate(name, b)
+		}
+		return item.Width - lipgloss.Width(item.Label) + lipgloss.Width(dockItemLabel(item.Number, name))
+	}
 	named := 0
-	for i, item := range allItems {
+	for _, item := range allItems {
 		if item.Name != "" {
 			named++
 		}
-		if i > 0 {
-			available-- // Space before item
-		}
-		available -= item.Width - lipgloss.Width(item.Label)
+	}
+	if named == 0 {
+		return false
+	}
+	longest := 0
+	for _, item := range allItems {
+		longest = max(longest, lipgloss.Width(item.Name))
 	}
 	budget := 0
-	if named > 0 {
-		budget = available / named
+	for b := longest; b >= dockItemMinNameCells; b-- {
+		total := 0
+		for i, item := range allItems {
+			if i > 0 {
+				total++ // Space before item
+			}
+			total += entryWidthAt(item, b)
+		}
+		if total <= available {
+			budget = b
+			break
+		}
 	}
-	if budget < dockItemMinNameCells {
+	if budget == 0 {
 		return false
 	}
 	for i := range allItems {
