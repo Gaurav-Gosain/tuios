@@ -381,6 +381,11 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 		if seq.Kind == "mode" && strings.Contains(seq.Bytes, "2027") {
 			continue
 		}
+		// The library ignores DECSTR, and the pure emulator runs it. Pinned by
+		// TestGhosttyDivergence_DECSTRIgnored.
+		if seq.Bytes == "\x1b[!p" {
+			continue
+		}
 		out = append(out, seq)
 	}
 	return out
@@ -922,27 +927,94 @@ func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 	}
 }
 
-// TestGhosttyDivergence_LeftRightMarginReset pins what happens to the
-// left and right margins when DECLRMM is switched back off.
+// TestGhosttyLeftRightMarginResetAgrees pins what happens to the left and
+// right margins when DECLRMM is switched back off.
 //
-// Resetting mode 69 disables left and right margin support, and the margins
-// go back to the full width with it. The pure emulator does that. The library
-// keeps the margins it was given, so a pane that ever enabled DECLRMM keeps
-// dead columns on its left for the rest of its life. The pure emulator is the
-// side that matches the DEC documentation.
-func TestGhosttyDivergence_LeftRightMarginReset(t *testing.T) {
+// Resetting mode 69 gives the margins back to the full width, on both
+// backends: the pure emulator in csi_mode.go, the library in its own mode
+// handler. This entry used to say the library kept them. It was reading the
+// Go-side copy of the margins, which did keep them, and that copy is what the
+// reattach snapshot carries. So a pane that turned DECLRMM off and on again
+// came back after a reattach with margins its guest no longer had.
+//
+// The probe prints past column 20 after the mode is set again. Kept margins
+// would wrap it there.
+func TestGhosttyLeftRightMarginResetAgrees(t *testing.T) {
 	p := newDiffPair(t, 40, 12)
-	p.write(t, []byte("\x1b[?69h\x1b[5;20s\x1b[?69l"))
+	p.write(t, []byte("\x1b[?69h\x1b[5;20s\x1b[?69l\x1b[?69h"))
 
 	full := uv.Rect(0, 0, 40, 12)
-	if got := p.pure.ScrollRegion(); got != full {
-		t.Errorf("pure scroll region = %v, want the full screen %v", got, full)
+	for name, term := range map[string]Terminal{"pure": p.pure, "ghostty": p.gh} {
+		if got := term.ScrollRegion(); got != full {
+			t.Errorf("%s scroll region = %v, want the full screen %v", name, got, full)
+		}
 	}
-	if got := p.gh.ScrollRegion(); got == full {
-		t.Fatalf("ghostty now clears the margins on DECLRMM reset; delete this entry")
-	} else {
-		t.Logf("ghostty keeps %v after DECLRMM reset, where the full screen is %v", got, full)
+
+	p.write(t, []byte("\x1b[1;7H"+strings.Repeat("x", 30)))
+	for name, term := range map[string]Terminal{"pure": p.pure, "ghostty": p.gh} {
+		if got := diffRowText(term, 0); got != "      "+strings.Repeat("x", 30) {
+			t.Errorf("%s row 0 = %q: the text wrapped at a margin the guest turned off", name, got)
+		}
 	}
+}
+
+// TestGhosttyDivergence_DECSTRIgnored pins the soft reset.
+//
+// The pure emulator runs DECSTR: the scroll region goes back to the full page,
+// with the rest of the DEC list (see softReset). libghostty does not implement
+// it. Its stream parser logs "ignoring unimplemented CSI p with intermediates"
+// and does nothing, so the region stays where the guest put it. The pure
+// emulator is the side that matches DEC and xterm.
+//
+// The Go-side copy of the region on the ghostty backend has to follow the
+// library, not the pure emulator: the reattach snapshot carries that copy,
+// and a client that restores the full page under a guest that still scrolls
+// rows 3 to 10 scrolls the wrong rows. The probe makes the library show which
+// region it is using: a line feed on row 10 scrolls rows 3 to 10 when the
+// region survived, and moves the cursor down a row when it did not.
+func TestGhosttyDivergence_DECSTRIgnored(t *testing.T) {
+	p := newDiffPair(t, 40, 12)
+	var fill strings.Builder
+	for i := 1; i <= 12; i++ {
+		if i > 1 {
+			fill.WriteString("\r\n")
+		}
+		fmt.Fprintf(&fill, "L%d", i)
+	}
+	p.write(t, []byte("\x1b[H"+fill.String()+"\x1b[3;10r\x1b[!p"))
+
+	if got, want := p.pure.ScrollRegion(), uv.Rect(0, 0, 40, 12); got != want {
+		t.Errorf("pure scroll region after DECSTR = %v, want the full page %v", got, want)
+	}
+	if got, want := p.gh.ScrollRegion(), uv.Rect(0, 2, 40, 8); got != want {
+		if got == uv.Rect(0, 0, 40, 12) {
+			t.Fatalf("the ghostty copy of the region says the full page after DECSTR, %v; "+
+				"if the library now runs DECSTR too, this entry goes", got)
+		}
+		t.Errorf("ghostty scroll region after DECSTR = %v, want rows 3 to 10, %v", got, want)
+	}
+
+	p.write(t, []byte("\x1b[10;1H\n"))
+	if got := diffRowText(p.pure, 2); got != "L3" {
+		t.Errorf("pure row 2 = %q, want L3: a line feed under the full page does not scroll", got)
+	}
+	if got := diffRowText(p.gh, 2); got != "L4" {
+		t.Errorf("ghostty row 2 = %q, want L4: the library kept rows 3 to 10 and scrolled them", got)
+	}
+}
+
+// diffRowText is one row of the screen, trailing blanks trimmed.
+func diffRowText(term Terminal, y int) string {
+	var sb strings.Builder
+	for x := range term.Width() {
+		c := term.CellAt(x, y)
+		if c == nil || c.Content == "" {
+			sb.WriteByte(' ')
+			continue
+		}
+		sb.WriteString(c.Content)
+	}
+	return strings.TrimRight(sb.String(), " ")
 }
 
 // TestGhosttyDivergence_OrphanCombiningMark pins what a combining mark with

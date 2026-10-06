@@ -157,10 +157,12 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 	case (final == 'm' || final == 'n') && prefix == '>' && inter == 0:
 		t.observeModifyOtherKeys(final, params)
 	case final == 'p' && inter == '!':
-		// DECSTR resets margins and charsets among its soft-reset set.
-		t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
-		t.charsetIDs = defaultCharsetIDs
-		t.gl, t.gr = 0, 0
+		// DECSTR. libghostty does not implement it: its parser logs the
+		// sequence as unimplemented and leaves the margins and the charsets
+		// where they were. The copy follows the library, not the pure
+		// emulator, because the reattach snapshot carries the copy, and a
+		// client must restore the state the guest's terminal really has.
+		// Pinned by TestGhosttyDivergence_DECSTRIgnored.
 	case final == 'J' && prefix == 0 && inter == 0:
 		t.observeEraseDisplay(params)
 	case final == 'h' && prefix == '?', final == 'l' && prefix == '?':
@@ -233,8 +235,9 @@ func (t *GhosttyTerminal) answerDecStatusReport(params []byte) {
 
 // observeDecMode watches DEC mode flips the shadow layer acts on: the
 // alt-screen callback and the kitty/sixel state pairs follow modes
-// 47/1047/1049, exactly where the pure emulator fires cb.AltScreen, and the
-// synchronized-output cache follows 2026.
+// 47/1047/1049, exactly where the pure emulator fires cb.AltScreen, the copy
+// of the left and right margins follows 69, and the synchronized-output cache
+// follows 2026.
 func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 	for _, part := range bytes.Split(params, []byte{';'}) {
 		n, ok := atoiBytes(part)
@@ -281,6 +284,13 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 					cb.AltScreen(set)
 				}
 			})
+		case 69:
+			// Resetting DECLRMM gives the columns back, in the library as in
+			// the pure emulator (csi_mode.go). The copy kept them, and the
+			// reattach snapshot carried margins the guest no longer had.
+			if !set {
+				t.scrollRegion = uv.Rect(0, t.scrollRegion.Min.Y, t.width, t.scrollRegion.Dy())
+			}
 		case 2026:
 			// Flipped mid-write for the same reason: the kitty passthrough
 			// asks whether a command belongs to an open update while this
