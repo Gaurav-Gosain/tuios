@@ -391,12 +391,29 @@ func startPlugin(t *testing.T, base, harness, session, window string) *pluginDri
 	case "amp":
 		mustMkdir(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "amp"))
 		file = filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "amp", "plugins", "tuios-agent-state.ts")
-	case "opencode":
+	case "opencode", "opencode-v2":
 		mustMkdir(filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "opencode"))
 		file = filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "opencode", "plugins", "tuios-agent-state.js")
 	}
-	if out, err := tuiosCLIEnv(t, base, env, "integration", "install", harness, "--command", tuiosBin); err != nil {
+	installHarness := strings.TrimSuffix(harness, "-v2")
+	if out, err := tuiosCLIEnv(t, base, env, "integration", "install", installHarness, "--command", tuiosBin); err != nil {
 		t.Fatalf("integration install %s: %v\n%s", harness, err, out)
+	}
+	if harness == "opencode-v2" {
+		solid, err := os.ReadFile(filepath.Join("..", "..", "internal", "integration", "testdata", "solid.mjs"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		module := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "opencode", "node_modules", "solid-js")
+		mustMkdir(module)
+		for name, data := range map[string][]byte{
+			"package.json": []byte(`{"type":"module","exports":"./index.js"}`),
+			"index.js":     solid,
+		} {
+			if err := os.WriteFile(filepath.Join(module, name), data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	driver := filepath.Join("testdata", "plugindriver.mjs")
 	abs, _ := filepath.Abs(driver)
@@ -474,6 +491,50 @@ func (d *pluginDriver) emit(t *testing.T, event map[string]any) {
 	if _, err := d.stdin.Write(append(line, '\n')); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
+}
+
+// TestOpenCodeV2PluginReportsOnlyItsSession exercises the installed plugin and
+// real daemon across the V2 client boundary. The shared server publishes other
+// panes' and subagents' events too; neither may finish this pane's turn.
+func TestOpenCodeV2PluginReportsOnlyItsSession(t *testing.T) {
+	term, base := agentSessions(t)
+	if out, err := tuiosCLI(t, base, "new-window", "opencode-v2", "-s", "e2e-agent", "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, out)
+	}
+	win := windowID(t, base, "e2e-agent", "opencode-v2")
+	d := startPlugin(t, base, "opencode-v2", "e2e-agent", win)
+	log := &stateLog{name: "opencode-v2-session-isolation"}
+	steps := []struct {
+		typeName string
+		data     map[string]any
+		state    string
+	}{
+		{"session.status", map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "busy"}}, "working"},
+		{"session.status", map[string]any{"sessionID": "ses_other", "status": map[string]any{"type": "idle"}}, "working"},
+		{"session.execution.succeeded", map[string]any{"sessionID": "ses_child"}, "working"},
+		{"permission.asked", map[string]any{"sessionID": "ses_e2e", "id": "per_e2e", "action": "shell", "resources": []string{"go test ./..."}}, "needs_input"},
+		{"permission.replied", map[string]any{"sessionID": "ses_e2e", "requestID": "per_e2e", "reply": "once"}, "working"},
+		{"form.created", map[string]any{"form": map[string]any{"sessionID": "ses_e2e", "id": "frm_e2e", "title": "Which approach?"}}, "needs_input"},
+		{"form.replied", map[string]any{"sessionID": "ses_e2e", "id": "frm_e2e", "answer": map[string]any{}}, "working"},
+		{"session.execution.succeeded", map[string]any{"sessionID": "ses_e2e"}, "done"},
+		{"session.status", map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "busy"}}, "working"},
+		{"session.execution.failed", map[string]any{"sessionID": "ses_e2e", "error": map[string]any{"type": "unknown", "message": "provider failed"}}, "errored"},
+		{"session.status", map[string]any{"sessionID": "ses_e2e", "status": map[string]any{"type": "idle"}}, "errored"},
+	}
+	for _, step := range steps {
+		d.emit(t, map[string]any{"event": map[string]any{"type": step.typeName, "data": step.data}})
+		// Give ignored events a chance to arrive before asserting no change.
+		time.Sleep(200 * time.Millisecond)
+		st := waitAgentState(t, base, "e2e-agent", win, step.state, "opencode", log, step.typeName)
+		if st.AgentSession != "ses_e2e" {
+			t.Fatalf("%s changed the pane's session to %q", step.typeName, st.AgentSession)
+		}
+		if step.state == "needs_input" && st.Message == "" {
+			t.Fatalf("%s blocked without a description", step.typeName)
+		}
+	}
+	log.save(t)
+	saveFrame(t, term, "opencode-v2-session-isolation")
 }
 
 // TestPluginsReportBlockingPrompts loads the real Pi, OMP, Amp and opencode

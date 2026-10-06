@@ -40,6 +40,30 @@ because all eight cut the handler and the fault was the switch above it.
 Cut the wiring, run the named test, and watch it fail. If it does not fail, the
 test enters the code below the fault, and the fault is what nobody is testing.
 
+## OpenCode V2 plugin loading and session isolation
+
+`TestOpenCodeV2PluginReportsOnlyItsSession` installs the shipped plugin, loads
+its server and CLI entrypoints under a V2 API driver, and reports through a real
+tuios daemon. It records `opencode-v2-session-isolation` state and frame artifacts.
+It covers busy/done/error, permission and form prompts, and other-session and
+subagent events while the main pane is working.
+
+On 2026-10-06, before adding the V2 entrypoints, the test failed at plugin load:
+`OpenCode V2 requires a default plugin definition` (`undefined` instead of
+`string`). The same command passed with the fix:
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/artifacts go test \
+  -run TestOpenCodeV2PluginReportsOnlyItsSession -count=1 -timeout 3m .
+```
+
+The original failure was also observed in the real OpenCode 2.0.23 server log:
+`Plugin must export a default definition with an id and an effect or setup function`
+(`Missing key ["default"]`). A separate real-client check with OpenCode 2.0.23,
+an isolated shared service and a PTY client confirmed automatic CLI plugin
+discovery and form create/cancel reporting, while another session's form was
+ignored. The driver test does not claim to execute OpenCode itself.
+
 ## How to rebuild a control
 
 The controls are built by removing one fix from the current tree, so they differ

@@ -87,9 +87,9 @@ for (const event of ` + string(evJSON) + `) {
 	time.Sleep(200 * time.Millisecond)
 	got = readCalls(t, calls, "agent-statusline")
 	want := []string{
-		"agent-statusline opencode --integration 4\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.1}`,
-		"agent-statusline opencode --integration 4\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
-		"agent-statusline opencode --integration 4 --turn-end\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
+		"agent-statusline opencode --integration 5\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.1}`,
+		"agent-statusline opencode --integration 5\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
+		"agent-statusline opencode --integration 5 --turn-end\n" + `{"session_id":"ses_1","modelID":"claude-sonnet-4-6","cost":0.351}`,
 	}
 	sort.Strings(got)
 	sort.Strings(want)

@@ -19,6 +19,8 @@
 
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import assert from "node:assert/strict";
 
 const [harness, file] = process.argv.slice(2);
 const mod = await import(pathToFileURL(file).href);
@@ -50,6 +52,29 @@ if (harness === "pi" || harness === "omp") {
 } else if (harness === "opencode") {
   const hooks = await mod.TuiosAgentState({ client: {} });
   dispatch = async (line) => hooks.event?.({ event: line.event });
+} else if (harness === "opencode-v2") {
+  assert.equal(typeof mod.default?.id, "string", "OpenCode V2 requires a default plugin definition");
+  assert.equal(typeof mod.default.setup, "function");
+  // Server setup must never report using the shared service's pane identity.
+  await mod.default.setup({});
+  const tui = await import(pathToFileURL(join(dirname(file), "tuios-agent-state", "tui.js")));
+  const stop = await tui.default.setup({
+    ui: { router: { current: () => ({ type: "session", sessionID: "ses_e2e" }) } },
+    data: {
+      listen: (handler) => { handlers.set("event", handler); return () => handlers.delete("event"); },
+      session: {
+        get: (id) => ({ id, ...(id === "ses_child" ? { parentID: "ses_e2e" } : {}) }),
+        sync: async () => {},
+        status: () => "idle",
+        permission: { list: () => [], sync: async () => {} },
+        form: { list: () => [], sync: async () => {} },
+        message: { get: () => undefined },
+      },
+    },
+    client: {},
+  });
+  dispatch = async (line) => handlers.get("event")?.({ details: line.event });
+  process.on("exit", () => stop?.());
 } else {
   throw new Error("no driver for " + harness);
 }
