@@ -751,6 +751,12 @@ func (m *OS) navigatorRows() []navRow {
 // fuzzily. Its screen text is matched as typed, ignoring case: a fuzzy match
 // over a screen of text finds nearly anything. A session whose panes are not
 // known is listed when its name matches.
+//
+// Both kinds of hit are ranked by the same fuzzy score, and a field hit wins
+// a tie. A field hit used to outrank every text hit, and that let a pane whose
+// fields spell the query out of order, across a random id and a temp folder,
+// take the cursor from the pane that shows the query whole: the joined fields
+// are long enough to hold most short queries scattered.
 func (m *OS) navigatorSearchRows() []navRow {
 	q := strings.TrimSpace(m.navigator.query)
 	lq := strings.ToLower(q)
@@ -764,23 +770,40 @@ func (m *OS) navigatorSearchRows() []navRow {
 		s := &m.navigator.sessions[si]
 		if len(s.Panes) == 0 {
 			if r, ok := mt.Find(q, s.Title+" "+s.Name+" "+s.Host); ok {
-				hits = append(hits, scored{navRow{Kind: navRowSession, Session: si}, r.Score})
+				hits = append(hits, scored{navRow{Kind: navRowSession, Session: si}, 2*r.Score + 1})
 			}
 			continue
 		}
 		for pi, p := range s.Panes {
 			fields := strings.Join([]string{p.Name, p.Title, p.Command, p.Cwd, s.Title, s.Host, s.WorkspaceNames[p.Workspace]}, " ")
 			row := navRow{Kind: navRowPane, Session: si, Workspace: p.Workspace, Pane: pi}
+			// Scores are doubled so the field hit's tie break of one point
+			// cannot pass a text hit that scored one point more.
+			best, found := 0, false
 			if r, ok := mt.Find(q, fields); ok {
-				hits = append(hits, scored{row, r.Score + 1<<20})
-				continue
+				best, found = 2*r.Score+1, true
 			}
 			for i := len(p.lower) - 1; i >= 0; i-- {
-				if strings.Contains(p.lower[i], lq) {
-					row.Snippet = strings.TrimSpace(p.Text[i])
-					hits = append(hits, scored{row, 0})
-					break
+				if !strings.Contains(p.lower[i], lq) {
+					continue
 				}
+				// The line holds the query whole, so the fuzzy score of
+				// the lower case pair is that of a contiguous match at
+				// least. Lower case on both sides keeps smart case out of
+				// a match that was made ignoring case. A line the matcher
+				// still refuses scores nothing and is kept.
+				score := 0
+				if r, ok := mt.Find(lq, p.lower[i]); ok {
+					score = 2 * r.Score
+				}
+				if !found || score > best {
+					best, found = score, true
+					row.Snippet = strings.TrimSpace(p.Text[i])
+				}
+				break
+			}
+			if found {
+				hits = append(hits, scored{row, best})
 			}
 		}
 	}

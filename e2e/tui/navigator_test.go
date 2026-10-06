@@ -188,6 +188,53 @@ func TestNavigatorFindsAPaneByScreenText(t *testing.T) {
 	}
 }
 
+// navDecoy is a pane name that holds every character of navMarker in order,
+// spread out, and never the marker whole. A fuzzy search for the marker
+// matches it.
+const navDecoy = "need a ledge-77 81"
+
+// TestNavigatorRanksScreenTextOverAScatteredName: a pane whose screen shows
+// the query whole ranks above a pane whose name only holds the query's
+// characters spread out, so the cursor and the preview are on the pane that
+// shows the text. The decoy is listed too, so the search did match it and the
+// order is what decides.
+//
+// The failure this covers came from the random parts of a pane's fields: a
+// t.TempDir path and a pane id spelled needle-7781 out of order once in CI,
+// and that pane took the cursor from logs.
+func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
+	base, _ := navigatorSessions(t)
+	if o, err := tuiosCLI(t, base, "new-window", navDecoy, "-s", "work", "--no-focus"); err != nil {
+		t.Fatalf("new-window: %v\n%s", err, o)
+	}
+	term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	openNavigator(t, term, "home", "work")
+	sendKeys(t, term, "/")
+	if err := term.SendKeys(navMarker); err != nil {
+		t.Fatalf("type the query: %v", err)
+	}
+	// The load fills in the logs pane's text after the decoy is already
+	// listed by name, so the wait is for the order the finished load gives.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		if !strings.Contains(text, navDecoy) || strings.Count(text, navMarker) < 3 {
+			return false
+		}
+		for _, l := range strings.Split(text, "\n") {
+			if strings.Contains(l, "logs ·") {
+				return strings.Contains(l, "›")
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("the search for %s did not put the cursor and the preview on logs above %q: %v\n%s", navMarker, navDecoy, err, term.Snapshot())
+	}
+	saveFrame(t, term, "navigator-ranking")
+}
+
 // TestNavigatorListsAHostPane: a pane on another machine is listed under its
 // session, found by its screen text through the link, and Enter takes the
 // client to it.

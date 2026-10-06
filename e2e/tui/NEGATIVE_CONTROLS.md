@@ -1553,6 +1553,21 @@ of the security boundary kind, in `cmd/tuios/list_every_pane_test.go`.
 | A late reply is taken by the next call | `CallWithTimeout`: the `broken` check and the reply id check cut | `TestVerbClientRefusesAReplyOutOfStep` ("the second call returned {"for":"1"} after the first timed out"), `TestVerbClientRefusesAReplyForAnotherRequest` | **caught** |
 | Host fields printed raw | `printListedPanes`: `plainLine` on the name and `plainText` on the text cut | `TestListWindowsAllHostsPrintsHostFieldsPlain` ("an escape reached the terminal") | **caught** |
 
+### A scattered name outranks the screen text
+
+`TestNavigatorLooks` failed in CI when a pane's id and its `t.TempDir`
+folder spelled `needle-7781` out of order. Every field hit outranked every
+text hit, so that pane took the cursor and the preview from logs. Now both
+kinds of hit rank by the same fuzzy score. `TestNavigatorRanksScreenTextOverAScatteredName`
+names a pane `need a ledge-77 81` so the case is fixed, not random. Its
+positive half is in the same wait: the decoy is listed, so the search matched
+it and only the order decides. The control was also run on the pre-fix
+build, with the same failure.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A field hit outranks every text hit | `navigatorSearchRows`: the field hit's score given a lead of `1<<21` | `TestNavigatorRanksScreenTextOverAScatteredName` ("the search for needle-7781 did not put the cursor and the preview on logs") | **caught** |
+
 ## Agents settings tab and the integration notice
 
 `agents_settings_test.go` uses a temporary home with a Claude Code integration
