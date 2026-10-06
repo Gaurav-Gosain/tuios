@@ -1574,6 +1574,28 @@ on one line. `Find` aligns the query inside the shortest window that ends
 first, so it scores the spread copy, which ties the decoy's name, and the
 decoy wins the tie. The control frame lists late under the decoy.
 
+### The navigator's look
+
+The tests are in `navigator_preview_test.go`. `TestNavigatorLooks`, in
+`navigator_look_test.go`, saves the frames a person looks at and asserts only
+that each screen showed. The colour test reads the ink of the marker inside
+the preview box only, so the coloured search line and list row cannot pass it.
+No theme is on, so the pane's red and green reach the host as palette slots 1
+and 2, which the chrome does not use. The inert test reads every byte tuios
+wrote to the host, from the start, after the preview shows the pane's text.
+`TestNavParseStyledPassesOnlySGR` is a unit test of the security boundary
+kind, for what a daemon that is not tuios could send.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The other session's preview is plain text | `navigatorScreen`: `p.Text` drawn in place of `p.Styled` | `TestNavigatorPreviewKeepsColour` ("does not show RED-4417 in slot [1 9]") | **caught** |
+| The attached session's preview is plain text | `navigatorScreen`: the live read through `pipCells` made unreachable | `TestNavigatorPreviewKeepsColour` ("does not show GRN-5523 in slot [2 10]") | **caught** |
+| A link in the capture reaches the host | `navCellRow`: the `cell.Link` reset cut | `TestNavigatorPreviewIsInert` ("wrote "evil.example" to the host terminal"), `TestNavParseStyledPassesOnlySGR` ("let "evil" through") | **caught** |
+| The capture is written as it came | `navParseStyled`: the raw line kept in place of the redrawn cells | `TestNavigatorPreviewIsInert` ("wrote "evil.example" to the host terminal") | **caught** |
+| No tree guides | `navTreeGlyphs`: the branch and the closing guide made blank | `TestNavigatorDrawsTheTree` ("the logs pane has no guide") | **caught** |
+| No bar on the cursor row | `navigatorItem`: the focus mark drawn as a blank | `TestNavigatorDrawsTheTree` ("0 rows carry the bar, want one, on work") | **caught** |
+| No ground on the cursor row | `navigatorItem` and `renderNavigator`: the rows drawn on the surface and not through `pal.Row` | `TestNavigatorDrawsTheTree` ("the cursor row's ground ... is the ground of the other rows") | **caught** |
+
 ## Agents settings tab and the integration notice
 
 `agents_settings_test.go` uses a temporary home with a Claude Code integration

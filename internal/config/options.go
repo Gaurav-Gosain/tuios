@@ -1242,6 +1242,12 @@ var optionSpecs = []Option{
 		Description: "Keys the pane labels are made of, first pane first. Letters a to z and digits",
 		Default:     PanesDefaultLabelKeys,
 	},
+	{
+		Path: "panes.navigator_layout", Type: OptionString, Section: "panes",
+		Description: "How the pane navigator lists the panes when it opens",
+		Accepted:    NavigatorLayouts,
+		Default:     NavigatorLayoutTree,
+	},
 
 	// [scratch]. Read each time toggle_scratch creates or shows the scratch
 	// terminal. A show resizes the popup to the size in force.

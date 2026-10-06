@@ -21,6 +21,7 @@ func handleChooseTree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 //   - h and left shut a row or go to its parent, l and right open it, space
 //     opens or shuts it
 //   - enter goes to the row
+//   - v steps the layout: tree, flat, cards
 //   - / moves to the search line
 //   - esc and q close
 //
@@ -77,6 +78,8 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.NavigatorFold(true)
 	case "space":
 		o.NavigatorToggle()
+	case "v":
+		o.NavigatorCycleLayout()
 	}
 	return o, nil
 }

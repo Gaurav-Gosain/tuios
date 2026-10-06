@@ -17,6 +17,39 @@ type PanesConfig struct {
 	// (default: 1234567890). Letters a to z and digits only. With more panes
 	// than keys, the labels take two keys.
 	LabelKeys string `toml:"label_keys"`
+	// NavigatorLayout is how the pane navigator (choose_tree) lists the
+	// panes when it opens: tree, flat or cards (default: tree). The v key
+	// changes it while the navigator is open.
+	NavigatorLayout string `toml:"navigator_layout"`
+}
+
+// The pane navigator's layouts.
+const (
+	// NavigatorLayoutTree is sessions, their workspaces and their panes, as
+	// a tree.
+	NavigatorLayoutTree = "tree"
+	// NavigatorLayoutFlat is every pane on one row, with its session and
+	// workspace after its name.
+	NavigatorLayoutFlat = "flat"
+	// NavigatorLayoutCards is every pane on two rows: the name and the
+	// command, then the session, the workspace and the folder.
+	NavigatorLayoutCards = "cards"
+)
+
+// NavigatorLayouts is the accepted navigator_layout values, in the order the
+// v key steps through them.
+var NavigatorLayouts = []string{NavigatorLayoutTree, NavigatorLayoutFlat, NavigatorLayoutCards}
+
+// NavigatorLayoutInUse is the effective navigator layout. An unknown value
+// is the tree.
+func (p PanesConfig) NavigatorLayoutInUse() string {
+	v := strings.ToLower(strings.TrimSpace(p.NavigatorLayout))
+	for _, l := range NavigatorLayouts {
+		if v == l {
+			return l
+		}
+	}
+	return NavigatorLayoutTree
 }
 
 // PanesDefaultLabelKeys is the default label keys. Digits, as tmux's
@@ -26,13 +59,16 @@ const PanesDefaultLabelKeys = "1234567890"
 
 // defaultPanesConfig returns the section DefaultConfig carries.
 func defaultPanesConfig() PanesConfig {
-	return PanesConfig{LabelKeys: PanesDefaultLabelKeys}
+	return PanesConfig{LabelKeys: PanesDefaultLabelKeys, NavigatorLayout: NavigatorLayoutTree}
 }
 
 // fillMissingPanes fills an absent value with its default.
 func fillMissingPanes(cfg, defaultCfg *UserConfig) {
 	if strings.TrimSpace(cfg.Panes.LabelKeys) == "" {
 		cfg.Panes.LabelKeys = defaultCfg.Panes.LabelKeys
+	}
+	if strings.TrimSpace(cfg.Panes.NavigatorLayout) == "" {
+		cfg.Panes.NavigatorLayout = defaultCfg.Panes.NavigatorLayout
 	}
 }
 
@@ -66,6 +102,13 @@ func (p PanesConfig) LabelKeysInUse() string { return NormalizePaneLabelKeys(p.L
 // lose characters. Without a warning the labels would look as if they
 // ignored the config.
 func validatePanes(cfg *UserConfig, result *ValidationResult) {
+	if l := strings.TrimSpace(cfg.Panes.NavigatorLayout); l != "" && cfg.Panes.NavigatorLayoutInUse() != strings.ToLower(l) {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "panes",
+			Key:     "navigator_layout",
+			Message: fmt.Sprintf("The navigator layout %q is not tree, flat or cards. The navigator uses tree.", l),
+		})
+	}
 	keys := strings.TrimSpace(cfg.Panes.LabelKeys)
 	if keys == "" {
 		return

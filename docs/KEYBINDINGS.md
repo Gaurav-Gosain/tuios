@@ -163,7 +163,23 @@ sessions on the machines in `[hosts]` are in the tree too. The action is
 | `space` | Open or close |
 | `enter` | Go to the row: the session, the workspace and the pane |
 | `/` | Search |
+| `v` | Change the layout: tree, flat, cards |
 | `esc`, `q` | Close the navigator |
+
+The navigator has three boxes. Search is at the top and shows how many panes
+match, as `3/7`. Panes is the list. Preview shows the screen of the pane under
+the cursor, in the colors of that pane.
+
+The list has three layouts. Tree shows the sessions, their workspaces and their
+panes. Flat shows one row for each pane, with its session and workspace. Cards
+shows two rows for each pane: the name and the command, then the session, the
+workspace and the folder. `v` changes the layout. Your client keeps the last
+layout until it closes. `[panes] navigator_layout` sets the first layout. See
+[CONFIGURATION.md](CONFIGURATION.md).
+
+A session name has the color of the session in the sidebar. A dot in front of
+a pane shows the state of its agent. A search shows the matched characters in
+the accent color.
 
 Press `/` and type to search all panes. The search reads each pane's name,
 title, folder, running command, session and workspace. It also reads the last
@@ -173,7 +189,9 @@ second `esc` clears the search.
 
 The current session's panes are read from your client, and the preview of
 those panes is live. The other sessions are read when the navigator opens.
-Their preview shows the screen as it was then. A click on a pane goes to it. A
+Their preview shows the screen as it was then, with its colors. The preview
+shows colors and text only. Links, clipboard writes and other control sequences
+from a pane do not reach your terminal. A click on a pane goes to it. A
 click on a session or a workspace opens or closes it.
 
 `tuios list-windows --all --text 40 --json` prints the same rows for a script.

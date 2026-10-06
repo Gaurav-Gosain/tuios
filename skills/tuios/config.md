@@ -78,7 +78,8 @@ at the keyboard: to focus a pane, use `focus-window`.
 
 The pane navigator (`Ctrl+B /`, the `choose_tree` action) is a tree of every
 session, workspace and pane, with a preview and a search over names, folders,
-commands and screen text. It is for the person at the keyboard: a script reads
+commands and screen text. `panes.navigator_layout` sets the layout it opens in:
+`tree` (default), `flat` or `cards`. It is for the person at the keyboard: a script reads
 the same rows with `tuios list-windows --all --text N --json`.
 
 ## What the person sees

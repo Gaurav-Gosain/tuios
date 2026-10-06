@@ -1146,6 +1146,9 @@ type OS struct {
 	// navigator is the pane navigator (choose_tree) while it is up. See
 	// navigator.go.
 	navigator navigatorState
+	// navLayoutPick is the navigator layout the v key last chose, kept for
+	// the next time the navigator opens. Empty is the configured one.
+	navLayoutPick string
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

@@ -14,11 +14,11 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The pane navigator, after tmux's choose-tree and fzf-pane-switch.
@@ -66,12 +66,19 @@ type navPane struct {
 	Workspace  int
 	Focused    bool
 	AgentState string
+	// DoneSeen says a finished agent's pane has been looked at since, so
+	// its mark is the resting one. Known for the panes this client draws.
+	DoneSeen bool
 	// Text is the last lines of the pane's screen, oldest first. For a pane
 	// this client draws, the preview reads the live screen instead.
 	Text []string
 	// lower is Text in lower case, for the search, made once when Text is
 	// set rather than on every key and frame.
 	lower []string
+	// Styled is Text with its colours and attributes, as SGR and printable
+	// text only (see navParseStyled). The preview draws it. It is empty for
+	// a pane this client draws, whose preview reads the live screen.
+	Styled []string
 	// TextSkipped says the load did not read the pane's screen, because it
 	// had read as many as it reads in one go.
 	TextSkipped bool
@@ -167,6 +174,9 @@ type navigatorState struct {
 	gen     uint64
 	// cancel stops the load that is out, if one is.
 	cancel context.CancelFunc
+	// layout is how the list is drawn: config.NavigatorLayoutTree, Flat or
+	// Cards.
+	layout string
 }
 
 // NavigatorLoadedMsg is the answer of a detail load.
@@ -196,6 +206,7 @@ func (m *OS) OpenNavigator() tea.Cmd {
 		gen:      m.navigator.gen,
 		expanded: map[string]bool{},
 		sessions: m.navigatorSessions(),
+		layout:   m.navigatorLayoutChoice(),
 	}
 	m.navigatorCursorToCurrent()
 	m.MarkAllDirty()
@@ -205,6 +216,51 @@ func (m *OS) OpenNavigator() tea.Cmd {
 	m.navigator.loading = true
 	return m.navigatorLoad()
 }
+
+// navigatorLayoutChoice is the layout the navigator opens in: the one the v
+// key last chose on this client, else the configured one.
+func (m *OS) navigatorLayoutChoice() string {
+	if m.navLayoutPick != "" {
+		return m.navLayoutPick
+	}
+	if m.UserConfig == nil {
+		return config.NavigatorLayoutTree
+	}
+	return m.UserConfig.Panes.NavigatorLayoutInUse()
+}
+
+// NavigatorCycleLayout steps the list to the next layout: tree, flat, cards.
+// The cursor stays on the row it was on, or on its pane when the tree row it
+// was on is not listed in the new layout. This client keeps the choice for
+// the next time the navigator opens.
+func (m *OS) NavigatorCycleLayout() {
+	nav := &m.navigator
+	before, had := m.navigatorSelectedKey()
+	i := slices.Index(config.NavigatorLayouts, nav.layout)
+	nav.layout = config.NavigatorLayouts[(i+1)%len(config.NavigatorLayouts)]
+	m.navLayoutPick = nav.layout
+	nav.cursor, nav.scroll = 0, 0
+	switch {
+	case had && m.navigatorHasKey(before):
+		m.navigatorSelectKey(before)
+	case !m.navSearch():
+		m.navigatorCursorToCurrent()
+	}
+	m.MarkAllDirty()
+}
+
+// NavigatorLayout is the layout the list is drawn in.
+func (m *OS) NavigatorLayout() string { return m.navigator.layout }
+
+// navFlat reports whether the list is a list of panes rather than a tree:
+// a search is in force, or the layout is flat or cards. A flat list has no
+// folds.
+func (m *OS) navFlat() bool {
+	return m.navSearch() || m.navigator.layout == config.NavigatorLayoutFlat || m.navigator.layout == config.NavigatorLayoutCards
+}
+
+// navCards reports whether a pane takes two lines of the list.
+func (m *OS) navCards() bool { return m.navigator.layout == config.NavigatorLayoutCards }
 
 // CloseNavigator takes the navigator down and drops what it read.
 func (m *OS) CloseNavigator() {
@@ -302,6 +358,7 @@ func (m *OS) navigatorCurrentSession() navSession {
 		if cwd == "" {
 			cwd = w.DaemonCwd
 		}
+		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
 		s.Panes = append(s.Panes, navPane{
 			ID:         w.ID,
 			Name:       m.getWindowDisplayName(w),
@@ -310,7 +367,8 @@ func (m *OS) navigatorCurrentSession() navSession {
 			Cwd:        cwd,
 			Workspace:  w.Workspace,
 			Focused:    i == m.FocusedWindow,
-			AgentState: w.AgentState,
+			AgentState: state,
+			DoneSeen:   seen,
 		})
 		s.Panes[len(s.Panes)-1].setText(navScreenText(w, navTextLines))
 	}
@@ -399,6 +457,7 @@ func (m *OS) navigatorLoad() tea.Cmd {
 	m.navigator.cancel = cancel
 	hold := navHoldForTest()
 	maxCaptures := navMaxCapturesInForce()
+	ink := navThemeInk()
 	return func() tea.Msg {
 		defer cancel()
 		hold(ctx)
@@ -462,7 +521,7 @@ func (m *OS) navigatorLoad() tea.Cmd {
 							s.Panes[i].TextSkipped = true
 							continue
 						}
-						text, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID)
+						text, styled, ok := navCapture(ctx, c, job.Name, s.Panes[i].ID, ink)
 						if !ok {
 							_ = c.Close()
 							c = dial()
@@ -471,6 +530,7 @@ func (m *OS) navigatorLoad() tea.Cmd {
 							}
 						}
 						s.Panes[i].setText(text)
+						s.Panes[i].Styled = styled
 					}
 					mu.Lock()
 					done[job.key()] = s
@@ -623,26 +683,25 @@ func navInStep(err error) bool {
 	return answered
 }
 
-// navCapture reads a pane's last lines with capture-pane. It reports false
-// when the call failed in a way that leaves the connection out of step.
-func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string) ([]string, bool) {
+// navCapture reads a pane's last lines with a styled capture-pane, and
+// parses them (see navParseStyled) into plain text and styled text. It
+// reports false when the call failed in a way that leaves the connection out
+// of step.
+func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string, ink navInk) (plain, styled []string, inStep bool) {
 	raw, err := c.CallWithTimeout("capture-pane", map[string]any{
-		"session": sessionName, "window": window, "source": "recent", "lines": navTextLines,
+		"session": sessionName, "window": window, "source": "recent", "lines": navTextLines, "styled": true,
 	}, navCallTimeoutFor(ctx))
 	if err != nil {
-		return nil, navInStep(err)
+		return nil, nil, navInStep(err)
 	}
 	var res struct {
 		Content string `json:"content"`
 	}
 	if json.Unmarshal(raw, &res) != nil {
-		return nil, true
+		return nil, nil, true
 	}
-	lines := strings.Split(ansi.Strip(res.Content), "\n")
-	for i, l := range lines {
-		lines[i] = strings.TrimRight(l, " \r")
-	}
-	return navLastLines(lines, navTextLines), true
+	plain, styled = navParseStyled(res.Content, ink, navTextLines)
+	return plain, styled, true
 }
 
 // ApplyNavigatorLoaded merges a detail load into the tree. The cursor stays
@@ -701,6 +760,16 @@ func (m *OS) navigatorSelectedKey() (string, bool) {
 	return m.navRowKey(rows[m.navigator.cursor]), true
 }
 
+// navigatorHasKey reports whether a row with key is listed.
+func (m *OS) navigatorHasKey(key string) bool {
+	for _, r := range m.navigatorRows() {
+		if m.navRowKey(r) == key {
+			return true
+		}
+	}
+	return false
+}
+
 // navigatorSelectKey puts the cursor on the row with key, when it is listed.
 func (m *OS) navigatorSelectKey(key string) {
 	for i, r := range m.navigatorRows() {
@@ -726,6 +795,25 @@ func (m *OS) navigatorRows() []navRow {
 		return m.navigatorSearchRows()
 	}
 	var rows []navRow
+	if m.navFlat() {
+		// Every pane, in the tree's order. A session whose panes are not
+		// known yet stands for them.
+		for si := range m.navigator.sessions {
+			s := &m.navigator.sessions[si]
+			if len(s.Panes) == 0 {
+				rows = append(rows, navRow{Kind: navRowSession, Session: si})
+				continue
+			}
+			for _, ws := range s.workspaces() {
+				for pi, p := range s.Panes {
+					if p.Workspace == ws {
+						rows = append(rows, navRow{Kind: navRowPane, Session: si, Workspace: ws, Pane: pi})
+					}
+				}
+			}
+		}
+		return rows
+	}
 	for si := range m.navigator.sessions {
 		s := &m.navigator.sessions[si]
 		rows = append(rows, navRow{Kind: navRowSession, Session: si})
@@ -858,7 +946,7 @@ func (m *OS) NavigatorSelect(i int) {
 // under the cursor. On a pane row, shutting goes to its workspace row, and on
 // a shut row or a pane it does nothing more. It does nothing in a search.
 func (m *OS) NavigatorFold(open bool) {
-	if m.navSearch() {
+	if m.navFlat() {
 		return
 	}
 	rows := m.navigatorRows()
@@ -888,7 +976,7 @@ func (m *OS) NavigatorFold(open bool) {
 // NavigatorToggle opens a shut row and shuts an open one.
 func (m *OS) NavigatorToggle() {
 	rows := m.navigatorRows()
-	if m.navSearch() || m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
+	if m.navFlat() || m.navigator.cursor < 0 || m.navigator.cursor >= len(rows) {
 		return
 	}
 	r := rows[m.navigator.cursor]
@@ -956,7 +1044,7 @@ func (m *OS) NavigatorActivate(i int) {
 // reports whether it did. A pane row is not folded: a click goes to it.
 func (m *OS) NavigatorClickFolds(i int) bool {
 	rows := m.navigatorRows()
-	if m.navSearch() || i < 0 || i >= len(rows) || rows[i].Kind == navRowPane {
+	if m.navFlat() || i < 0 || i >= len(rows) || rows[i].Kind == navRowPane {
 		return false
 	}
 	m.navigator.cursor = i

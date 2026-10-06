@@ -319,42 +319,6 @@ func TestNavigatorListsAHostPane(t *testing.T) {
 	}
 }
 
-// TestNavigatorLooks saves the navigator, on its tree and on a search, as
-// text, styled text and a PNG on the dark and the light look at every colour
-// depth, for a person to look at.
-func TestNavigatorLooks(t *testing.T) {
-	for _, look := range []chromeLook{lookDark, lookLatte} {
-		for _, depth := range chromeDepths {
-			t.Run(look.name+"-"+depth.name, func(t *testing.T) {
-				base, _ := navigatorSessions(t)
-				if look.theme != "" {
-					writeConfig(t, base, "[appearance]\ntheme = \""+look.theme+"\"\n")
-				}
-				term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40, shippedLooks: true, env: depth.env})
-				if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
-					t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
-				}
-				dir := artifactDir(t)
-				_ = os.WriteFile(filepath.Join(dir, "README"), []byte("choose_tree on two sessions: the tree, then a search by screen text\n"), 0o644)
-				openNavigator(t, term, "home", "work")
-				sendKeys(t, term, "G", "l")
-				waitScreen(t, term, "work did not open", "logs")
-				if err := term.WaitStable(uiTimeout); err != nil {
-					t.Fatalf("the screen never settled: %v", err)
-				}
-				saveArtifact(t, term, dir, "tree")
-				savePNG(t, term.Screen(), hostPalette(t, look.theme), dir, "tree")
-				searchNavigator(t, term, navMarker, "logs")
-				if err := term.WaitStable(uiTimeout); err != nil {
-					t.Fatalf("the screen never settled: %v", err)
-				}
-				saveArtifact(t, term, dir, "search")
-				savePNG(t, term.Screen(), hostPalette(t, look.theme), dir, "search")
-			})
-		}
-	}
-}
-
 // TestListWindowsAllHoldsToTheReadGrant: list-windows --all --text reads
 // screen text with capture-pane, so it is held to capture-pane's grants. Run
 // from outside every pane it lists the other session's pane with its text.
@@ -425,7 +389,7 @@ func openWorkLogs(t *testing.T, term *tuitest.Terminal) {
 	sendKeys(t, term, "G", "l")
 	waitScreen(t, term, "work did not open", "logs")
 	sendKeys(t, term, "G")
-	waitScreen(t, term, "the preview is not on logs", "work · workspace 1")
+	waitScreen(t, term, "the preview is not on logs", "work › 1")
 }
 
 // TestNavigatorTakesPastes: a paste never reaches the shell under the
