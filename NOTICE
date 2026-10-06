@@ -13,3 +13,9 @@ licensed under the Apache License, Version 2.0:
 
 The bindings in crates/ghostty-vt/src/ffi.rs are generated from the headers of
 libghostty-vt (https://github.com/ghostty-org/ghostty), MIT licensed.
+
+The bundled UI font is Inter (https://rsms.me/inter), Copyright the Inter
+Project Authors, licensed under the SIL Open Font License 1.1.
+
+The interface icons are from Lucide (https://lucide.dev), licensed under the
+ISC License.

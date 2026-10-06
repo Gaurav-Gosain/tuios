@@ -10,22 +10,25 @@ emulator library.
 This is an experiment. It is not published, and it may move into the tuios
 tree later.
 
-![Three panes in the dracula theme: font styles, Nerd Font icons, ligatures, CJK, emoji, box drawing and colours; htop; nvim](docs/screenshots/theme-dracula.png)
+![Three panes in tokyonight: a working agent, an agent that needs you with its ring and pill, and nvim. The sidebar lists every session and agent on the daemon.](docs/screenshots/dark-main.png)
 
-More screenshots: [tokyonight](docs/screenshots/theme-tokyonight.png),
-[catppuccin mocha](docs/screenshots/theme-catppuccin_mocha.png),
-[catppuccin latte](docs/screenshots/theme-catppuccin-latte.png) and
-[tokyonight day](docs/screenshots/theme-tokyonight-day.png) (light), the
-[command palette](docs/screenshots/palette.png),
-[theme picking](docs/screenshots/palette-themes.png) and
-[smooth scrolling](docs/screenshots/smooth-scroll.png) part way through a row.
+More screenshots: [the command palette](docs/screenshots/dark-palette.png),
+[another session after a jump](docs/screenshots/dark-other-session.png),
+[gruvbox](docs/screenshots/dark-gruvbox.png), and the light theme
+([main](docs/screenshots/light-main.png),
+[palette](docs/screenshots/light-palette.png)). The design and the research
+behind it are in [docs/DESIGN-RESEARCH.md](docs/DESIGN-RESEARCH.md).
 
 ## What it does
 
-- Starts or reaches a tuios daemon, lists its sessions, and attaches to one.
+- Lists every session on the daemon in a sidebar, with each pane's state:
+  needs you, error, working, done, idle, or a plain terminal. Panes that need
+  you, from any session, sit at the top with the agent's question. Click a row
+  to go to that pane, in any session.
 - Draws the panes of the active workspace where tuios's own layout puts them.
-  Splits, closes, focus changes and workspace switches made by another tuios
-  client show up live.
+  Each pane has a header in the row tuios leaves between panes: its state, its
+  name (the agent, then the program, then the folder), and its folder and git
+  branch. A pane that needs you gets the one coloured frame in the app.
 - Feeds each pane's byte stream into its own libghostty-vt instance and paints
   the cells on the GPU: shaped runs per row with ligatures, wide characters,
   grapheme clusters, colour emoji, bold, italic, five underline styles,
@@ -41,11 +44,12 @@ More screenshots: [tokyonight](docs/screenshots/theme-tokyonight.png),
   for a block). The selection goes to the primary selection.
 - Scrolls the scrollback by the pixel, with an eased animation for wheel steps.
 - Pastes with bracketed paste when the program enabled it.
-- Shows a sidebar of sessions and panes with agent-state badges, a workspace
-  strip, and a command palette that runs tuios actions and switches themes.
-- Uses tuios's themes, with the colours tuios itself works out for them, so a
-  theme looks the same in the terminal client and here. Light and dark themes
-  both work.
+- Has a command palette for panes in every session, sessions, tuios actions
+  and themes.
+- Takes every colour from the tuios theme: the panes from its terminal
+  colours, the chrome from its background and foreground, the agent states
+  from tuios's own agent colours. Light and dark themes both work. The UI font
+  is Inter, bundled.
 
 ## How it works
 
@@ -113,7 +117,7 @@ GUI only reads that file. Its own settings live in
 
 ```toml
 font_family = "JetBrainsMono Nerd Font Mono"   # the grid
-ui_font_family = "JetBrainsMono Nerd Font"     # the chrome
+ui_font_family = "Inter"                       # the chrome (bundled)
 font_size = 14
 line_height = 1.3
 ligatures = true
@@ -130,14 +134,16 @@ command palette: type "theme" and part of its name.
 | Keys | Action |
 | --- | --- |
 | Ctrl+Shift+P | Open the command palette |
+| Ctrl+Shift+J | Go to the next pane that needs you |
+| Ctrl+Shift+T | New pane |
 | Ctrl+Shift+D | Split right |
 | Ctrl+Shift+E | Split down |
-| Ctrl+Shift+Enter | New pane |
 | Ctrl+Shift+W | Close the pane |
 | Ctrl+Shift+Z | Zoom the pane |
 | Ctrl+Tab, Ctrl+Shift+Tab | Next or previous pane |
 | Alt+Arrow | Focus the pane in that direction |
 | Alt+1 to Alt+9 | Go to a workspace |
+| Ctrl+Shift+[ and ] | Previous or next session |
 | Ctrl+Shift+C, Ctrl+Shift+V | Copy, paste |
 | Shift+PageUp, Shift+PageDown | Scroll a page |
 | Ctrl+=, Ctrl+-, Ctrl+0 | Text size |
@@ -153,6 +159,9 @@ cargo test                    # emulator wrapper, protocol, row planning, keys, 
 cargo run --release -- --perf --perf-out perf.json
 ```
 
+`scripts/demo/seed.sh` fills a private daemon with sessions, panes and agent
+states, and `scripts/screenshot.sh` takes a screenshot of the app against it in
+a private, nested Hyprland, so it works while the desktop is locked.
 `scripts/run-isolated.sh` starts the app against a private daemon, and
 `--control SOCKET` with `scripts/ctl.py` drives it: synthetic keys, clicks,
 drags and wheel events go through GPUI's own dispatch, and `dump` reports what
@@ -165,3 +174,7 @@ Performance numbers are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 Apache-2.0. Parts of the painter follow herdr-gpui (Apache-2.0); see
 [NOTICE](NOTICE).
+
+The UI font is Inter (SIL Open Font License 1.1,
+`crates/tuios-gpui/assets/fonts/Inter-LICENSE.txt`). The icons are Lucide
+(ISC, `crates/tuios-gpui/assets/icons/LICENSE-lucide.txt`).
