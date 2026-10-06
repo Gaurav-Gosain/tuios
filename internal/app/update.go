@@ -1287,10 +1287,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, cmd
 		}
 		// A session the daemon just built carries AutoTiling false, and the switch
-		// has already stamped that onto the client. Only a session created here is
-		// tiled from the config: switching to one that already existed must keep
-		// whatever layout the user left it in.
-		m.applyStartupTiling()
+		// has already stamped that onto the client. [startup] applies to it
+		// through the same rule every switch uses: a session nobody arranged
+		// takes the config, one somebody laid out keeps its layout.
+		m.applyStartupToUnarranged()
 		// The rail relays out around a session that did not exist last frame;
 		// follow it by name so the cursor lands on it rather than on whatever
 		// took its index.

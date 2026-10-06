@@ -802,7 +802,7 @@ func (m *OS) createRemoteSession(host string) {
 		m.ShowNotification(hostAttachRefusal(host, err), "error", m.Settings.NotificationDuration*3)
 		return
 	}
-	m.applyStartupTiling()
+	m.applyStartupToUnarranged()
 }
 
 // localSessionNodes drops the other machines' rows from a tree's session list.

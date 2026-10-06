@@ -55,10 +55,10 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				o.OpenSessionNode(selected)
 			}
 		} else if o.SessionSwitcherQuery != "" {
-			// No matching session: create new one with the typed name
-			if err := o.SwitchToSession(o.SessionSwitcherQuery); err != nil {
-				o.ShowNotification("Create failed: "+err.Error(), "error", o.Settings.NotificationDuration*2)
-			}
+			// No matching session: create one with the typed name. It goes
+			// through the same switch the rows use, which applies [startup]
+			// to the new session. A bare SwitchToSession left it floating.
+			o.OpenOrCreateSession(o.SessionSwitcherQuery)
 		}
 		o.ShowSessionSwitcher = false
 		o.SessionSwitcherQuery = ""

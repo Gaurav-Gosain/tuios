@@ -1778,3 +1778,23 @@ and switches to 2: the new pane runs the same ssh.
 
 Not covered end to end: `paneRequests` cleared on a session switch, an
 attach and a reconnect, and the `TUIOS_E2E=1` gate itself.
+
+## A session made from the session switcher ignores [startup] tiled (#488)
+
+`TestSwitcherCreateAppliesStartup` in `switcher_create_startup_test.go` sets
+`[startup] tiled = true`, opens the session switcher, types `fresh`, a name
+no session has, and presses Enter. `fresh` must be tiled, and its first
+window must fill the session. The same client then runs the palette's
+"New session", which came up tiled on main too: it is the positive half.
+`TestRailNewSessionComesUpTiled` covers the rail's "+" and runs with it.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`5d627b1e`) with this branch's e2e directory | `TestSwitcherCreateAppliesStartup` ("fresh is \"floating\" with 0 windows") | **caught** |
+| The switcher skips the shared switch | `handleSessionSwitcherInput`: `OpenOrCreateSession` back to a bare `SwitchToSession` | `TestSwitcherCreateAppliesStartup` (the same assertion). `TestRailNewSessionComesUpTiled` passes | **caught** |
+| The shared switch does not apply [startup] | `openSession`: the `applyStartupToUnarranged` call cut | `TestSwitcherCreateAppliesStartup` (the same assertion) | **caught** |
+| The create handler does not apply [startup] | `SessionCreatedMsg` in `Update`: the `applyStartupToUnarranged` call cut | `TestSwitcherCreateAppliesStartup` ("session-0 is \"floating\" with 1 windows", after `fresh` passed), `TestRailNewSessionComesUpTiled` (the pane is 46 wide) | **caught** |
+
+Not covered end to end: `createRemoteSession`, the picker's create on another
+machine, which now uses the same rule. `TestRemoteCreateAppliesStartup`
+covers `switch-session --create` and `tuios new --host` there.

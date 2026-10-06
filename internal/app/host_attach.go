@@ -126,6 +126,11 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 // verb or tuios new --detach made is one: the daemon built it with tiling off
 // and no client has placed its windows. A session somebody laid out keeps the
 // layout it has. See stateUnarranged.
+//
+// It is the one place a client applies [startup] after a switch or a create.
+// Every path that lands the client on a session, new or not, ends here, so a
+// session made from one surface cannot come up laid out differently from the
+// same session made from another (#488).
 func (m *OS) applyStartupToUnarranged() {
 	if m.sessionUnarranged {
 		m.applyStartupTiling()
@@ -404,6 +409,15 @@ func (m *OS) openSession(host, name string) bool {
 	}
 	m.reportSwitchFailure(err)
 	return false
+}
+
+// OpenOrCreateSession switches to the session name on the machine the client
+// is attached to. The daemon makes the session when no session has the name.
+// It is the session switcher's Enter on a name that matches no row, and it
+// runs openSession, so [startup] applies to the new session as it does to
+// every other switch. It reports a failure itself.
+func (m *OS) OpenOrCreateSession(name string) bool {
+	return m.openSession("", name)
 }
 
 // OpenSessionNode switches to the session a tree node names, on whichever
