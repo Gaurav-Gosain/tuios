@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
@@ -560,15 +561,39 @@ func (m *Manager) AllSessions() []*Session {
 	return out
 }
 
-// GetDefaultSession returns the first/default session, creating one if none exist.
+// MostRecentSession returns the most recently active session, or nil when
+// there is none. It is the session every command that leaves its session out
+// acts on, and the one a bare attach lands on.
+func (m *Manager) MostRecentSession() *Session {
+	return mostRecentSession(m.AllSessions())
+}
+
+// mostRecentSession picks the session with the latest LastActive. It compares
+// the full-precision time: SessionInfo truncates it to whole seconds, so two
+// sessions used in the same second tied and the pick fell to list order. A
+// tie that remains goes to the newer session, then to the lower name, so the
+// answer never depends on map order.
+func mostRecentSession(sessions []*Session) *Session {
+	var best *Session
+	var bestActive time.Time
+	for _, s := range sessions {
+		active := s.LastActive()
+		if best == nil || active.After(bestActive) ||
+			(active.Equal(bestActive) && (s.Created.After(best.Created) ||
+				(s.Created.Equal(best.Created) && s.Name() < best.Name()))) {
+			best, bestActive = s, active
+		}
+	}
+	return best
+}
+
+// GetDefaultSession returns the most recently active session, creating one if
+// none exist. It used to return the first session a range over the map gave,
+// which Go randomises, so a bare attach landed on any session at all.
 func (m *Manager) GetDefaultSession(cfg *SessionConfig, width, height int) (*Session, error) {
-	m.mu.RLock()
-	// Return first session if any exist
-	for _, session := range m.sessions {
-		m.mu.RUnlock()
+	if session := m.MostRecentSession(); session != nil {
 		return session, nil
 	}
-	m.mu.RUnlock()
 
 	// No sessions, create default with generated name
 	name := m.GenerateSessionName()

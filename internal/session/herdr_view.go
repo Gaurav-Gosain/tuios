@@ -266,19 +266,16 @@ func herdrSessionParams(sess *Session) json.RawMessage {
 // herdrFocusedSession is the session herdr would call the active workspace:
 // the one an attached client showed last, else the one used last.
 func (d *Daemon) herdrFocusedSession(sessions []*Session) *Session {
-	var best, bestAttached *Session
+	var attached []*Session
 	for _, s := range sessions {
-		if best == nil || s.LastActive().After(best.LastActive()) {
-			best = s
-		}
-		if d.findTUIClient(s.ID) != nil && (bestAttached == nil || s.LastActive().After(bestAttached.LastActive())) {
-			bestAttached = s
+		if d.findTUIClient(s.ID) != nil {
+			attached = append(attached, s)
 		}
 	}
-	if bestAttached != nil {
-		return bestAttached
+	if best := mostRecentSession(attached); best != nil {
+		return best
 	}
-	return best
+	return mostRecentSession(sessions)
 }
 
 // herdrListedWorkspace reports whether workspace ws of a session is one of

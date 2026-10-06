@@ -1864,3 +1864,21 @@ then the window gets the start folder, not the report.
 Not covered end to end: a shell in a deleted folder, a real Windows machine, ConPTY, the short-name match
 on macOS, and OSC 9;9 on the libghostty-vt backend, which reads it the same
 way in its own parser.
+
+## A bare attach picks the most recent session (#486)
+
+`TestBareAttachLandsOnTheMostRecentSession` in `attach_most_recent_test.go`
+makes four sessions. Each of eight rounds opens a window in one session with
+`tuios new-window -s`, runs a bare `tuios attach`, and checks the session the
+client is on. The rounds visit every session, out of creation order, so map
+order and creation order both fail. The positive half is in each round: the
+client lands on a session at all. The fixed build passed six runs in a row.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`5d627b1e`) with this branch's e2e directory | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: a bare attach landed on \"recent-b\", want \"recent-c\""), 3 of 3 runs, on `recent-a` or `recent-b` | **caught** |
+| The attach does not ask for the most recent session | `GetDefaultSession`: the `MostRecentSession` call cut, the range over the map put back | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: ... landed on \"recent-a\""), 2 of 2 runs | **caught** |
+| The pick ignores activity | `mostRecentSession`: `active` set to the zero time, so only the creation tiebreak is left | `TestBareAttachLandsOnTheMostRecentSession` ("round 1: ... landed on \"recent-d\"") | **caught** |
+
+Not covered end to end: the commands that leave `-s` out, which share the
+pick through `findTargetSession`, and the herdr focused workspace.

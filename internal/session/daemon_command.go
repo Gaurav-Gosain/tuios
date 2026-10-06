@@ -349,23 +349,7 @@ func (d *Daemon) findTargetSession(sessionName string) *Session {
 		return sess
 	}
 
-	// Find the most recently active session
-	sessions := d.manager.ListSessions()
-	if len(sessions) == 0 {
-		return nil
-	}
-
-	var mostRecent *Session
-	var mostRecentTime int64 = 0
-
-	for _, info := range sessions {
-		if info.LastActive > mostRecentTime {
-			mostRecentTime = info.LastActive
-			mostRecent = d.manager.GetSession(info.Name)
-		}
-	}
-
-	return mostRecent
+	return d.manager.MostRecentSession()
 }
 
 // findTUIClient finds the TUI client attached to a session, and never one that
