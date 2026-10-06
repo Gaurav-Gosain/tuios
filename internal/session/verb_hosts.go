@@ -224,6 +224,32 @@ func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError
 	return out, nil
 }
 
+// verbRetryHost makes one host's link dial again now. See
+// federation.Manager.Retry.
+func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Host string `json:"host"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Host == "" {
+		return nil, newVerbError(ErrVerbInvalidParams, "retry-host needs a host")
+	}
+	if verr := d.checkHostParam(p.Host); verr != nil {
+		return nil, verr
+	}
+	d.federation.Retry(p.Host)
+	out := map[string]any{"type": "host_retry", "host": p.Host}
+	if r, ok := d.federation.Report(p.Host); ok {
+		out["status"] = r.Status
+		if r.ApprovalURL != "" {
+			out["approval_url"] = r.ApprovalURL
+		}
+	}
+	return out, nil
+}
+
 // verbListHostSessions is the aggregated `tuios ls --all-hosts`.
 //
 // Local always comes first and is never fetched over a link; it is this

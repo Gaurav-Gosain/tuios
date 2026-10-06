@@ -122,6 +122,14 @@ type link struct {
 	// can wait for first contact instead of reporting "connecting" forever.
 	settled     chan struct{}
 	settledOnce sync.Once
+
+	// wake cuts the wait between two dials short. Retry sends on it.
+	wake chan struct{}
+	// eagerUntil is when the quick redial that Retry asked for ends. Until
+	// then a link that waits for a Tailscale sign-in dials again after
+	// approvalRetry at most, so the new sign-in page shows up in seconds and
+	// a link whose sign-in went through comes up without anyone asking.
+	eagerUntil time.Time
 }
 
 func newLink(h Host, opts Options) *link {
@@ -131,6 +139,7 @@ func newLink(h Host, opts Options) *link {
 		status:  StatusConnecting,
 		reason:  "The link is starting.",
 		settled: make(chan struct{}),
+		wake:    make(chan struct{}, 1),
 	}
 }
 
@@ -215,12 +224,48 @@ func (l *link) supervise(ctx context.Context) {
 		} else if backoff < l.opts.MaxBackoff {
 			backoff = min(backoff*2, l.opts.MaxBackoff)
 		}
+		wait := backoff
+		if l.eager() {
+			// The person just opened the sign-in page. A minute of backoff
+			// here would leave them looking at a host that is still not up
+			// after they signed in.
+			wait = min(wait, approvalRetry)
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(backoff):
+		case <-time.After(wait):
+		case <-l.wake:
 		}
 	}
+}
+
+// approvalRetry is the longest wait between two dials while a Retry is fresh
+// and the link waits for a Tailscale sign-in.
+const approvalRetry = 5 * time.Second
+
+// retryWindow is how long a Retry keeps the redial quick.
+const retryWindow = 2 * time.Minute
+
+// retry ends the wait before the next dial, and keeps the redial quick for
+// retryWindow while the link waits for a sign-in. A dial in progress is left
+// alone: a dial that holds a Tailscale check open is the one that goes on when
+// the person signs in.
+func (l *link) retry() {
+	l.mu.Lock()
+	l.eagerUntil = l.opts.now().Add(retryWindow)
+	l.mu.Unlock()
+	select {
+	case l.wake <- struct{}{}:
+	default:
+	}
+}
+
+// eager reports whether a fresh Retry keeps the redial quick.
+func (l *link) eager() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.status == StatusApproval && l.opts.now().Before(l.eagerUntil)
 }
 
 // attempt dials once, handshakes, and then blocks until the link dies. It
@@ -287,7 +332,7 @@ preamble:
 				case gate != nil && gate.Kind == GateTailscalePolicy:
 					l.set(StatusUnreachable, gate.Sentence(), trimDetail(tr.Diagnostic()))
 				case gate != nil && gate.Kind == GateTailscaleCheck && !gate.Approved:
-					l.setApproval("", "Tailscale ended the login before it was approved. tuios asks again and shows a new link to open.")
+					l.setApproval("", "Tailscale ended the sign-in before you finished it. tuios asks again and shows a new sign-in page.")
 				case note.missing:
 					// The machine answered, ran the probe, and the probe found
 					// nothing. That is a state of the machine, not of the link,
@@ -325,7 +370,7 @@ preamble:
 			}
 		case <-waitCtx.Done():
 			if waitedGate != nil {
-				l.setApproval("", "Tailscale SSH still waits for an approval. tuios asks again and shows a new link to open.")
+				l.setApproval("", "The Tailscale sign-in page expired. tuios asks again and shows a new sign-in page.")
 				return false
 			}
 			l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
@@ -435,11 +480,19 @@ const gatePoll = 100 * time.Millisecond
 // setApproval records a Tailscale SSH check the link waits on, with the URL
 // that approves it. The URL is stored first, so a listing never sees the state
 // without it.
+//
+// A new URL under the same status is reported to OnStatus as well. A client
+// that opens the sign-in page for the person waits for that URL, and set only
+// reports a change of status.
 func (l *link) setApproval(url, reason string) {
 	l.mu.Lock()
+	moved := l.status == StatusApproval && l.approvalURL != url
 	l.approvalURL = url
 	l.mu.Unlock()
 	l.set(StatusApproval, reason, "")
+	if moved && l.opts.OnStatus != nil {
+		l.opts.OnStatus(l.host.Name, StatusApproval)
+	}
 }
 
 // lossCause turns a dead link into the sentence its report carries.

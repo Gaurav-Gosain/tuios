@@ -944,9 +944,23 @@ Tailscale SSH can hold a login until you approve it in a browser. This is
 
 tuios reads this link and shows it.
 
-- **The daemon's link** shows the state `tailscale_check` in `tuios hosts`,
-  with the link to open. The link waits up to 10 minutes. It goes on when you
-  approve the login.
+- **The rail** shows "sign in" beside the host, in the colour of an agent that
+  needs you. Click the host or press Enter on it to open the sign-in page in
+  your browser. Hover the host to see why it waits. On an ssh or web client,
+  tuios cannot start your browser. It shows the address in a notice and puts it
+  on your clipboard.
+- **The daemon's link** waits up to 10 minutes on one page. It goes on when you
+  sign in, and the host comes up on the rail with no other step. When Tailscale
+  ends the wait, the link asks again and shows a new page. After you open a
+  page from the rail or with `tuios hosts signin`, the link asks again every few
+  seconds for two minutes.
+- **`tuios hosts`** shows the status "sign in", with the page to open and the
+  command that opens it. In `--json` the status stays `tailscale_check`, with
+  `approval_url`.
+- **`tuios hosts signin [NAME]`** opens the sign-in page of each host that
+  waits, or of the named host. With no desktop, as over ssh, it prints the
+  address. `--print` prints it and opens nothing. `--json` prints
+  `{"hosts":[{"host","url","opened","note"}]}`.
 - **`tuios hosts test`** and **`tuios hosts add`** report `tailscale_check`
   with the link. Open it, approve the login, then run the command again.
 - **`tuios hosts sync`** on a terminal lists the link of each host that waits.

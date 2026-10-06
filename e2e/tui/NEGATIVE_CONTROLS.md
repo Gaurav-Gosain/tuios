@@ -1409,6 +1409,22 @@ syncs or is listed as reached.
 | The link never reads the gate | `link.attempt`: the `ParseSSHGate` call in the preamble wait made nil | `TestHostsSyncReportsATailscaleCheck` (hosts test reports "unreachable", the listing shows no approval) | **caught** |
 | A policy refusal read as a plain ssh failure | `remoteRunError`: the `GateFromStderr` check cut | `TestHostsSyncReportsATailscalePolicyRefusal` (kind "") | **caught** |
 
+## Tailscale SSH sign-in on the rail
+
+The tests are in `hosts_signin_test.go`. The rail stand-in (`writeFakeSSH`)
+has the Tailscale wrapper of `hosts_tailscale_test.go` in front of it. The link
+opener is a script that records each address it gets. `quickbox` ends each
+wait after 6 seconds, so the link's backoff grows to 8 seconds after the third
+dial, and a new page within 5 seconds can only come from the gesture.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released label | `hostStatusLabel`: "sign in" back to "approve", as on origin/main | `TestRailOpensTheTailscaleSignIn` ("the rail never said sign in beside the gated host") | **caught** |
+| A click folds the group | `activateHostHeader`: the sign-in branch made `false` | `TestRailOpensTheTailscaleSignIn` (the opener was started with [], want the page) | **caught** |
+| The mouse release drops the rail's command | `handleMouseRelease`: `return o, nil` after `SidebarRelease`, as before | `TestRailSignInAsksForANewPage/click` (the new page took 7.0s) | **caught** |
+| No wake in the link's backoff | `link.supervise`: the `case <-l.wake` line cut | `TestRailSignInAsksForANewPage/click` (7.0s), `/enter` (6.9s) | **caught** |
+| A page asked for before the daemon had one never opens | `takePendingSignIns` returns nil, and `applyHostRetry` opens nothing | `TestRailSignInAsksForANewPage/click` and `/enter` (the opener was started with []) | **caught** |
+
 ## Copy sweep after a copy-mode yank
 
 `copy_flash_yank_test.go` samples the frames after a copy-mode yank and holds

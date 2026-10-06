@@ -254,7 +254,7 @@ func (m *OS) SidebarActivateCursor() bool {
 		// keyboard stays in the rail on the row that was folded.
 		m.SidebarToggleRepoCollapsed(row.SessionID)
 	case sidebarRowHost:
-		m.SidebarToggleHostCollapsed(row.SessionID)
+		m.activateHostHeader(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:

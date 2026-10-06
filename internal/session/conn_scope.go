@@ -162,11 +162,14 @@ var verbScopes = map[string]scopeKind{
 	"new-worktree":         scopeDeny,
 	"remove-worktree":      scopeDeny,
 	"open-host-connection": scopeDeny,
-	"open-pane":            scopeDeny,
-	"resize-pane":          scopeDeny,
-	"pane-cwd":             scopeDeny,
-	"pane-agent":           scopeDeny,
-	"pane-calls":           scopeDeny,
+	// retry-host is the person's act from the rail or from 'tuios hosts
+	// signin'. A restricted caller has no reason to make a link dial.
+	"retry-host":  scopeDeny,
+	"open-pane":   scopeDeny,
+	"resize-pane": scopeDeny,
+	"pane-cwd":    scopeDeny,
+	"pane-agent":  scopeDeny,
+	"pane-calls":  scopeDeny,
 	// paste-image is the person's act and paste-pane-image the owning
 	// daemon's. Neither is for a restricted caller.
 	"paste-image":          scopeDeny,

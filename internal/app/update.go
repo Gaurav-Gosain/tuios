@@ -1450,10 +1450,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// most at risk of breaking.
 		m.applyFederationSnapshot(msg)
 		m.sidebarCache.invalidate()
+		// A sign-in page the person asked for before the daemon had one
+		// opens on the snapshot that brings it.
+		signIn := m.takePendingSignIns()
 		if after, refresh := m.federationRefreshPlan(); refresh {
-			return m, m.federationRefreshTick(after)
+			return m, tea.Batch(signIn, m.federationRefreshTick(after))
 		}
-		return m, nil
+		return m, signIn
+
+	case hostRetryMsg:
+		return m, m.applyHostRetry(msg)
 
 	case NewWindowOnHostMsg:
 		// The window itself arrives on the daemon's state push, the way any

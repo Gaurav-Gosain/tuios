@@ -417,6 +417,20 @@ func (m *Manager) link(name string) *link {
 	return s.link
 }
 
+// Retry asks a host's link to dial again now instead of at the end of its
+// backoff, and to keep its redial quick for a while if it waits for a
+// Tailscale sign-in. It is what a person asks for when they open the sign-in
+// page. A dial in progress is not cut short. ok is false for a name the
+// manager has no link for.
+func (m *Manager) Retry(host string) bool {
+	l := m.link(host)
+	if l == nil {
+		return false
+	}
+	l.retry()
+	return true
+}
+
 // Reports snapshots every host. It waits, bounded by ctx, for hosts whose first
 // attempt has not settled yet, so the first listing after the daemon starts
 // says up or unreachable instead of connecting. A host still unsettled when ctx

@@ -61,7 +61,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarDragActive() {
 		mouse := msg.Mouse()
 		o.SidebarRelease(mouse.X, mouse.Y)
-		return o, nil
+		// A click on a machine's header can open a Tailscale sign-in page,
+		// and the call that asks the daemon to dial again rides back here.
+		return o, o.TakeSidebarCmd()
 	}
 	if o.SidebarSplitActive() {
 		mouse := msg.Mouse()

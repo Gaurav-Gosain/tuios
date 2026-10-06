@@ -164,3 +164,30 @@ func (m *OS) handleLinkOpenFailed(msg linkOpenFailedMsg) tea.Cmd {
 		"error", m.Settings.NotificationDuration)
 	return tea.SetClipboard(msg.URL)
 }
+
+// ErrNoDesktop says this machine has no desktop to open a web link with: the
+// person reached it over ssh, or it has no display.
+var ErrNoDesktop = errNoDesktop
+
+// OpenWebLink opens a web link the way a click in tuios does, for a command
+// that runs outside the client: setting (appearance.link_opener), then
+// $BROWSER, then the desktop's own opener. It waits a moment for the opener to
+// fail and returns that failure. It returns ErrNoDesktop when there is no
+// desktop here, and refuses an address with a scheme a click would refuse.
+func OpenWebLink(setting, rawURL string) error {
+	if !linkTextClean(rawURL) || !linkOpenableScheme(rawURL) {
+		return errors.New("tuios does not open that kind of address")
+	}
+	argv, err := linkOpenerArgv(setting, rawURL)
+	if err != nil {
+		return err
+	}
+	watch, err := startLinkOpener(argv, rawURL)
+	if err != nil {
+		return err
+	}
+	if failed, ok := watch().(linkOpenFailedMsg); ok {
+		return fmt.Errorf("%s failed: %s", argv[0], failed.Detail)
+	}
+	return nil
+}

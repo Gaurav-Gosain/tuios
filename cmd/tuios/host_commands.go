@@ -97,7 +97,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		rows = append(rows, []string{
 			h.Host,
 			h.Addr,
-			h.Status,
+			hostStatusWord(h.Status),
 			version,
 			protocol,
 			sessions,
@@ -143,6 +143,9 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		}
 		if h.Status == string(federation.StatusNoBinary) {
 			fmt.Fprintf(w, "  Run 'tuios hosts test %s' to see where the link looked.\n", h.Host)
+		}
+		if h.Status == string(federation.StatusApproval) {
+			fmt.Fprintf(w, "  Run 'tuios hosts signin %s' to open the sign-in page.\n", h.Host)
 		}
 	}
 

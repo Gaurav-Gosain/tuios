@@ -166,6 +166,18 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A host that waits for a Tailscale sign-in can be dialed again on request.**
+The new verb `retry-host` takes `host` and makes that link dial again now
+instead of after its backoff. While the host is in `tailscale_check`, the link
+then dials again every 5 seconds at most, for two minutes. A dial in progress
+is not stopped. The result has `host`, `status` and, when the link has one,
+`approval_url`. A restricted connection and a linked machine may not call it.
+`host-changed`, and the push to attached clients, now also fire when a link in
+`tailscale_check` gets a new `approval_url`, so a client sees the new sign-in
+page at once. The `reason` of such a host is reworded to "Tailscale SSH needs
+you to sign in before tuios can reach this machine." and goes on to name the
+page. The status value is unchanged.
+
 **remove-worktree removes the worktree's checkpoints.** The daemon saves a
 pane's work tree under `refs/tuios/checkpoints/` when its agent finishes a turn
 (see [list-checkpoints](#list-checkpoints)). Those refs belong to the whole
@@ -4574,7 +4586,7 @@ the one before. The configuration is in
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
-| every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |
+| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and

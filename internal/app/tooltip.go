@@ -55,6 +55,10 @@ const (
 	tooltipRailAdd
 	// tooltipDockSession is one of the dock's session controls.
 	tooltipDockSession
+	// tooltipRailHost is a machine's header on the expanded rail while its
+	// link waits for a Tailscale sign-in. "sign in" is two words, and the
+	// label says why and what a click does. Key is the header's screen row.
+	tooltipRailHost
 	// tooltipDockWorkspace is a workspace pill on the dock strip whose name did
 	// not fit the twelve cells the pill has.
 	tooltipDockWorkspace
@@ -90,7 +94,7 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 		// would only repeat what is on the screen.
 		return sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph
 	}
-	if src == tooltipRailAdd {
+	if src == tooltipRailAdd || src == tooltipRailHost {
 		// The mirror of the rule above: these controls only exist on the expanded
 		// rail, and they are the one thing on it drawn as a bare glyph.
 		return sidebarVariant(m.GetSidebarWidth()) != sidebarVariantGlyph
@@ -163,6 +167,8 @@ func (m *OS) renderTooltip() *lipgloss.Layer {
 		return m.renderRailTooltip()
 	case tooltipRailAdd:
 		return m.renderRailAddTooltip()
+	case tooltipRailHost:
+		return m.renderRailHostTooltip()
 	case tooltipDockSession:
 		return m.renderDockSessionTooltip()
 	case tooltipDockWorkspace:

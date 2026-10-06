@@ -3004,6 +3004,9 @@ Statuses:
   incompatible  The remote daemon speaks a control protocol this build does not
                 serve. Upgrade tuios on one of the two machines.
   connecting    The first attempt has not finished yet.
+  sign in       Tailscale SSH needs you to sign in before tuios can reach the
+                host. Run 'tuios hosts signin NAME' to open the sign-in page.
+                The JSON status is tailscale_check.
 
 Add a machine with 'tuios hosts add', remove one with 'tuios hosts remove', and
 dial one with 'tuios hosts test'. Each writes or reads the config file, and a

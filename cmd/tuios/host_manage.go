@@ -149,7 +149,7 @@ it and start the daemon.`,
 	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
 	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
 
-	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand()}
+	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand()}
 }
 
 // runHostAdd writes one [hosts.NAME] table.

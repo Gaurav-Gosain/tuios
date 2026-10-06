@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,13 @@ import (
 //	                   through, which is what ssh does.
 //	someone@policybox  the policy refuses the login as root, and ssh exits
 //	                   255, as real Tailscale does.
+//	someone@quickbox   check mode, but Tailscale ends the wait after
+//	                   quickHold: ssh prints that the connection closed and
+//	                   exits 255. Each dial asks for a new sign-in.
+//
+// Once the test writes signedin, every connection to a gated host goes on, and
+// a connection that waits goes on at once: the person signed in, and Tailscale
+// keeps that for a while.
 //
 // The banner text is copied from a real run against a host in check mode:
 //
@@ -62,14 +70,34 @@ func (g tailscaleGate) approve(t *testing.T, url string) {
 	}
 }
 
+// signIn marks the person as signed in: every gated connection goes on.
+func (g tailscaleGate) signIn(t *testing.T) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(g.dir, "signedin"), nil, 0o600); err != nil {
+		t.Fatalf("sign in: %v", err)
+	}
+}
+
+// quickHold is how many tenths of a second the quickbox wrapper waits for a
+// sign-in before Tailscale ends the connection.
+const quickHold = 60
+
 // gateFleet puts the Tailscale wrapper in front of the fleet's ssh stand-in.
 func gateFleet(t *testing.T, f *syncFleet) tailscaleGate {
 	t.Helper()
-	g := tailscaleGate{dir: filepath.Join(f.here, "tailscale")}
+	path, g := writeTailscaleSSH(t, f.here, strings.TrimPrefix(f.env[0], "TUIOS_SSH="))
+	f.env = []string{"TUIOS_SSH=" + path}
+	return g
+}
+
+// writeTailscaleSSH puts the Tailscale wrapper in dir, in front of the ssh
+// stand-in inner, and returns its path.
+func writeTailscaleSSH(t *testing.T, dir, inner string) (string, tailscaleGate) {
+	t.Helper()
+	g := tailscaleGate{dir: filepath.Join(dir, "tailscale")}
 	if err := os.MkdirAll(g.dir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	inner := strings.TrimPrefix(f.env[0], "TUIOS_SSH=")
 	script := `#!/bin/sh
 state='` + g.dir + `'
 cp=; op=; prev=; addr=; seen=
@@ -90,16 +118,18 @@ case "$addr" in
   someone@policybox)
     echo 'tailnet policy does not permit you to SSH as user "root"' >&2
     exit 255 ;;
-  someone@gatedbox)
-    if [ -z "$cp" ] || [ ! -e "$cp" ]; then
+  someone@gatedbox|someone@quickbox)
+    if [ ! -e "$state/signedin" ] && { [ -z "$cp" ] || [ ! -e "$cp" ]; }; then
       id="e2e$$"
       url="https://login.tailscale.com/a/$id"
       echo "$url" >> "$state/urls"
       printf '# Tailscale SSH requires an additional check.\n# To authenticate, visit: %s\n' "$url" >&2
+      limit=1200
+      if [ "$addr" = someone@quickbox ]; then limit=` + strconv.Itoa(quickHold) + `; fi
       n=0
-      while [ ! -e "$state/approved-$id" ]; do
+      while [ ! -e "$state/approved-$id" ] && [ ! -e "$state/signedin" ]; do
         n=$((n+1))
-        if [ $n -gt 1200 ]; then echo "Connection to 100.64.0.9 port 22 timed out" >&2; exit 255; fi
+        if [ $n -gt $limit ]; then echo "Connection to 100.64.0.9 port 22 closed by remote host." >&2; exit 255; fi
         sleep 0.1
       done
       printf '# Authentication checked with Tailscale SSH.\r\n' >&2
@@ -108,12 +138,11 @@ case "$addr" in
 esac
 exec '` + inner + `' "$@"
 `
-	path := filepath.Join(f.here, "fake-ssh-tailscale")
+	path := filepath.Join(dir, "fake-ssh-tailscale")
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
 		t.Fatalf("write the Tailscale wrapper: %v", err)
 	}
-	f.env = []string{"TUIOS_SSH=" + path}
-	return g
+	return path, g
 }
 
 // gateRow is the part of a sync row these tests read.
@@ -214,14 +243,15 @@ func TestHostsSyncReportsATailscaleCheck(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		listing, _ = tuiosCLIEnv(t, f.here, f.env, "hosts")
-		if strings.Contains(listing, "Waiting for Tailscale approval") {
+		if strings.Contains(listing, "Tailscale SSH needs you to sign in") {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	saveSyncArtifact(t, "check-hosts.txt", listing)
 	last = g.urls(t)
-	if !strings.Contains(listing, "tailscale_check") || !strings.Contains(listing, "Waiting for Tailscale approval. Open "+last[len(last)-1]) {
+	if !strings.Contains(listing, "sign in") || !strings.Contains(listing, "Open "+last[len(last)-1]+" to sign in.") ||
+		!strings.Contains(listing, "Run 'tuios hosts signin gated' to open the sign-in page.") {
 		t.Errorf("ASSERTION: the daemon's listing does not show the approval the link waits for:\n%s", listing)
 	}
 	if !strings.Contains(listing, "open") || !strings.Contains(listing, "no_daemon") {
@@ -233,13 +263,13 @@ func TestHostsSyncReportsATailscaleCheck(t *testing.T) {
 	deadline = time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		listing, _ = tuiosCLIEnv(t, f.here, f.env, "hosts")
-		if !strings.Contains(listing, "tailscale_check") {
+		if !strings.Contains(listing, "sign in") {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	saveSyncArtifact(t, "approved-hosts.txt", listing)
-	if strings.Contains(listing, "tailscale_check") || !strings.Contains(listing, "gated") {
+	if strings.Contains(listing, "sign in") || !strings.Contains(listing, "gated") {
 		t.Errorf("ASSERTION: the link still waits after the approval:\n%s", listing)
 	}
 	if n := len(g.urls(t)); n != len(last) {

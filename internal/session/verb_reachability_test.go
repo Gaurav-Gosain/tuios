@@ -92,6 +92,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// use is not configured. The connection itself is proved with two daemons
 	// in host_connection_test.go.
 	"open-host-connection#0": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
+	"retry-host#0":           {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
 	// The host filter's example names a host; the fleet is proved with two
 	// daemons in host_fleet_test.go.
 	"list-attention#3": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},

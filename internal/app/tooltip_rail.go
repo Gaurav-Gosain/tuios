@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -30,6 +31,10 @@ func (m *OS) sidebarTooltipTrack(x, y int) {
 	// each and their headers move with the section budget.
 	if h, ok := m.sidebarRowAt(x, y); ok && sidebarAddKind(h.Kind) {
 		m.tooltipTrack(tooltipRailAdd, int(h.Kind))
+		return
+	}
+	if h, ok := m.sidebarRowAt(x, y); ok && h.Kind == sidebarRowHost && m.hostWaitsForSignIn(h.SessionID) {
+		m.tooltipTrack(tooltipRailHost, h.Y0)
 		return
 	}
 	m.tooltipClear()
@@ -77,6 +82,37 @@ func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
 	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
 	label := tooltipLabel(sidebarAddWords(kind), max(renderW-railW-1, 1), theme.UI())
 
+	x := railW
+	if m.Settings.SidebarPosition == "right" {
+		x = renderW - railW - lipgloss.Width(label)
+	}
+	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
+}
+
+// hostSignInTooltip is what the header of a machine that waits for a
+// Tailscale sign-in says when it is hovered.
+const hostSignInTooltip = federation.SignInSentence
+
+// renderRailHostTooltip composes the label for a machine header that waits
+// for a sign-in. It opens beside the rail on the header's own line, as the add
+// control's label does.
+func (m *OS) renderRailHostTooltip() *lipgloss.Layer {
+	if !m.tooltipVisible(tooltipRailHost) {
+		return nil
+	}
+	m.Tooltip.Shown = true
+	row := -1
+	for _, h := range m.SidebarHits {
+		if h.Kind == sidebarRowHost && h.Y0 == m.Tooltip.Key && m.hostWaitsForSignIn(h.SessionID) {
+			row = h.Y0
+			break
+		}
+	}
+	if row < 0 {
+		return nil
+	}
+	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
+	label := tooltipLabel(hostSignInTooltip, max(renderW-railW-1, 1), theme.UI())
 	x := railW
 	if m.Settings.SidebarPosition == "right" {
 		x = renderW - railW - lipgloss.Width(label)

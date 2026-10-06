@@ -1128,6 +1128,12 @@ type OS struct {
 	// up and pushes each change, so the rail's poll drops to a slow backstop.
 	// See FederationHostsMsg.Pushed.
 	federationPushed bool
+	// hostSignInUntil is when the fast host poll that opening a Tailscale
+	// sign-in page started ends. See host_signin.go.
+	hostSignInUntil time.Time
+	// hostSignInPending holds the machines whose sign-in page the person
+	// asked for before the daemon had one, with when the request lapses.
+	hostSignInPending map[string]time.Time
 	// federationTickGen is the generation of the host poll timer now armed. A
 	// tick from an older generation is dropped, so the snapshot's re-arm and
 	// the tick's own re-arm cannot leave two loops running.

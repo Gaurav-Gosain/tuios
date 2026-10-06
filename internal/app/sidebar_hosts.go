@@ -74,6 +74,9 @@ type FederationHost struct {
 	// Queued is how many messages the daemon holds for the machine until its
 	// link is back.
 	Queued int
+	// ApprovalURL is the Tailscale sign-in page the link waits on, set only
+	// while Status is federation.StatusApproval and the link has one.
+	ApprovalURL string
 }
 
 // FederationSession is one session on another machine, as that machine
@@ -138,6 +141,12 @@ func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
 	if !m.federationPolling {
 		return hostRefreshIdle, false
 	}
+	// The person just opened a Tailscale sign-in page. The link comes up
+	// when they sign in, and the rail must say so in seconds. A status change
+	// is pushed, so this is the backstop for a push that does not arrive.
+	if m.hostSignInWatching() {
+		return hostRefreshActive, true
+	}
 	// The push arrives on the attach connection. While the client is attached
 	// to another machine that connection goes to the far daemon, not to the
 	// one that pushes, so the rail keeps its poll.
@@ -199,11 +208,13 @@ func refreshFederationCmd() tea.Cmd {
 		msg := FederationHostsMsg{}
 		lastOK := map[string]int64{}
 		queued := map[string]int{}
+		signIn := map[string]string{}
 		reports, pushes := hostStatusReports(client)
 		msg.Pushed = pushes
 		for _, h := range reports {
 			lastOK[h.Host] = h.LastOK
 			queued[h.Host] = h.Queued
+			signIn[h.Host] = h.ApprovalURL
 			if h.Status == federation.StatusUp && h.Events != "live" {
 				msg.Pushed = false
 			}
@@ -212,7 +223,7 @@ func refreshFederationCmd() tea.Cmd {
 			if h.Host != federation.LocalHostName {
 				msg.Configured++
 			}
-			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host]}
+			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host], ApprovalURL: signIn[h.Host]}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
 					Name:        s.Name,
@@ -838,8 +849,9 @@ func hostStatusLabel(status string) string {
 	case federation.StatusReconnecting:
 		return "reconnecting"
 	case federation.StatusApproval:
-		// Tailscale SSH waits for the person to approve the login.
-		return "approve"
+		// Tailscale SSH waits for the person to sign in in a browser. A
+		// click or Enter on the header opens the page. See host_signin.go.
+		return "sign in"
 	default:
 		return "offline"
 	}
@@ -892,6 +904,10 @@ func hostDownFigure(node sessiontree.Node, nameW, cw int) (figure string, nameRo
 	case federation.StatusConnecting, federation.StatusReconnecting:
 		// On its way up, not down: the mark would say the wrong thing.
 		last = ""
+	case federation.StatusApproval:
+		// Nothing is wrong with the machine. It waits for the person, so it
+		// keeps the mark an agent that needs you wears.
+		last = agentStateIndicator("needs_input")
 	}
 	if node.HostQueued > 0 {
 		queued := strconv.Itoa(node.HostQueued) + " queued"
@@ -942,7 +958,13 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		// hostDownFigure for how the word gives way on a narrow rail.
 		var label string
 		label, nameRoom = hostDownFigure(node, lipgloss.Width(title), cw)
-		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
+		ink := pal.FgMute
+		if node.HostStatus == string(federation.StatusApproval) {
+			// A sign-in waits for the person, so it wears the colour of an
+			// agent that needs you, not the colour of an error.
+			ink = sidebarSeverityColor("needs_input", pal)
+		}
+		right = sidebarStyle(rowBg, ink).Render(label)
 	case blocked > 0:
 		// How many of this machine's sessions want a person, in the strip
 		// badge's language. It outranks both the session count and the add

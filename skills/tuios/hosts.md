@@ -14,6 +14,7 @@ tuios hosts remove build                # drop it
 tuios hosts                             # every host and its link state
 tuios hosts tailnet                     # machines on a Tailscale tailnet
 tuios hosts add gpu --tailnet           # the tailnet machine named gpu
+tuios hosts signin build --print        # the Tailscale sign-in page build waits on
 tuios hosts sync --dry-run --json      # which hosts run another tuios version
 tuios hosts sync --dev                  # install a build of this checkout on each host
 tuios hosts sync build --start          # install tuios if missing, then start the daemon
@@ -32,11 +33,13 @@ Do not pass either unless the person asked for a restart. Each row of `--json`
 has `restart_needed` and `restart_command`, and `daemon.sessions[].busy` lists
 the panes a restart would end.
 
-A host behind Tailscale SSH in check mode waits for the person to approve the
-login in a browser. Its link reports `tailscale_check` with `approval_url`, and
-a `hosts sync --json` row has `"error_kind": "tailscale_check"` and
-`approval_url`. Give the person the URL. Do not open it and do not approve it
-yourself. Run the command again after they approve. A login the tailnet policy
+A host behind Tailscale SSH in check mode waits for the person to sign in in
+a browser. Its link reports `tailscale_check` with `approval_url` (the table of
+`tuios hosts` says "sign in"), and a `hosts sync --json` row has
+`"error_kind": "tailscale_check"` and `approval_url`. Give the person the URL,
+or tell them to run `tuios hosts signin NAME`. Do not open it and do not sign
+in yourself. The daemon's link comes up on its own after they sign in. Run a
+`hosts sync` or `hosts test` again after they sign in. A login the tailnet policy
 refuses has `"error_kind": "tailscale_policy"`, and the fix is the user in the
 host's `addr`.
 

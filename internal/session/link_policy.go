@@ -174,6 +174,8 @@ var verbCapabilities = map[string][]string{
 	"answer-ask":            {config.LinkAllowRespond},
 
 	"open-host-connection": {capRelay},
+	// Another machine has no reason to make this one's links dial.
+	"retry-host": {capRelay},
 
 	// The agent review, triage, queue and approval work. compare-fan,
 	// agent-activity, list-queued and get-approval return states, counts and

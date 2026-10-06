@@ -536,7 +536,7 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowRepo:
 		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowHost:
-		m.SidebarToggleHostCollapsed(hit.SessionID)
+		m.activateHostHeader(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -689,7 +689,7 @@ func (m *OS) SidebarRelease(x, y int) bool {
 	}
 	switch {
 	case d.Host && hit.Kind == sidebarRowHost:
-		m.SidebarToggleHostCollapsed(hit.SessionID)
+		m.activateHostHeader(hit.SessionID)
 	case !d.Host && hit.Kind == sidebarRowSession:
 		m.sidebarSwitchSession(hit.SessionID)
 	}

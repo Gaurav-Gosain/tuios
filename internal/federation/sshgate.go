@@ -109,13 +109,20 @@ func (g SSHGate) Sentence() string {
 	return ""
 }
 
+// SignInSentence says what a host in check mode waits for. The rail's hover
+// and the settings page say it too, so it is one constant.
+const SignInSentence = "Tailscale SSH needs you to sign in before tuios can reach this machine."
+
 // WaitSentence is the plain message for a link that keeps waiting for the
-// approval.
+// sign-in.
 func (g SSHGate) WaitSentence() string {
 	if g.Kind != GateTailscaleCheck {
 		return g.Sentence()
 	}
-	return "Waiting for Tailscale approval. " + g.openWords() + " and approve the login. The link continues when you do."
+	if g.URL == "" {
+		return SignInSentence + " Run ssh to the host in a terminal to see the sign-in page. The link continues when you sign in."
+	}
+	return SignInSentence + " Open " + g.URL + " to sign in. The link continues when you do."
 }
 
 // WithoutApprovedBanner drops the Tailscale check lines from ssh's stderr once

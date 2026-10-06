@@ -694,6 +694,19 @@ func init() {
 			examples: []string{`{"id":1,"verb":"list-hosts"}`},
 			handler:  (*Daemon).verbListHosts,
 		},
+		"retry-host": {
+			description: "Ask the link to one host to dial again now instead of after its backoff. While the host waits for a Tailscale SSH sign-in, the link also dials again every few seconds for two minutes, so a new sign-in page shows up soon and the link comes up soon after the person signs in. A dial in progress is not stopped.",
+			params: []verbParam{
+				{Name: "host", Type: "string", Required: true, Description: "A host by name from the [hosts] config table."},
+			},
+			returns: []verbParam{
+				{Name: "host", Type: "string", Description: "The host."},
+				{Name: "status", Type: "string", Description: "The link state when the call was made."},
+				{Name: "approval_url", Type: "string", Description: "The Tailscale sign-in page, when the link waits for one and has it. Omitted otherwise."},
+			},
+			examples: []string{`{"id":1,"verb":"retry-host","params":{"host":"build"}}`},
+			handler:  (*Daemon).verbRetryHost,
+		},
 		"open-host-connection": {
 			description: "Turn this connection into a connection to the daemon on one host. After the reply, every byte written here reaches that daemon and every byte it writes comes back. Send nothing until the reply has arrived.",
 			params: []verbParam{
