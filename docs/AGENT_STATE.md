@@ -87,6 +87,24 @@ matches the build.
    attached: an `after-agent-state` hook ([HOOKS.md](HOOKS.md); `tuios --skill
    recipes` has a working one).
 
+### OpenCode versions
+
+The OpenCode integration supports V1 1.18.29+ and V2. After upgrading tuios,
+run `tuios integration install opencode` again and restart the OpenCode terminal
+client to pick up the new plugin.
+
+V1 uses the server hooks in `plugins/tuios-agent-state.js`. V2 discovers the
+adjacent `plugins/tuios-agent-state/` directory and runs its `tui.js` in the
+terminal client. The V2 server entrypoints do not report pane state: a shared
+server can inherit another pane's environment, or start outside tuios.
+
+V2 reports the displayed root session. Events for other sessions and subagents
+do not change that pane's state. Attaching or switching sessions restores the
+current state and pending prompts. It reads V2's session usage totals and forms,
+and uses the session-scoped permission reply API. The Inbox still offers only
+tool calls its whole-call checks understand; other approvals stay in OpenCode.
+Headless V2 clients such as `opencode run` do not load this terminal plugin.
+
 ## Supported agents
 
 tuios gets an agent's state in one of these ways, best first:

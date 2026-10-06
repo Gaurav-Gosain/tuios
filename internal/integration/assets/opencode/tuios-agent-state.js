@@ -130,7 +130,7 @@ function sendUsage(sessionID, turnEnd) {
 // ask runs the hook for a permission request and resolves to the reply it
 // printed, or null for anything else: no output, output that is not a reply,
 // an error, or a hook that outlived HOLD_LIMIT_MS.
-function ask(event, sessionID, extra) {
+function ask(event, sessionID, extra, signal) {
   return new Promise((resolve) => {
     let out = "";
     let settled = false;
@@ -139,9 +139,18 @@ function ask(event, sessionID, extra) {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       resolve(value);
     };
     let child;
+    const abort = () => {
+      try { child?.kill(); } catch {}
+      done(null);
+    };
+    if (signal?.aborted) {
+      done(null);
+      return;
+    }
     try {
       child = spawn(TUIOS, ARGS, {
         stdio: ["pipe", "pipe", "ignore"],
@@ -151,6 +160,7 @@ function ask(event, sessionID, extra) {
       done(null);
       return;
     }
+    signal?.addEventListener("abort", abort, { once: true });
     timer = setTimeout(() => {
       try {
         child.kill();
@@ -290,7 +300,7 @@ export const TuiosAgentState = async (ctx) => {
             extra.always = props.always.filter((p) => typeof p === "string");
           }
           // Not awaited: opencode's event loop must not wait on the person.
-          ask(type, sessionID, extra).then((answer) => {
+          ask(type, sessionID, extra, ctx?.signal).then((answer) => {
             if (answer) return reply(client, sessionID, requestID, answer);
           }).catch(() => {});
           break;

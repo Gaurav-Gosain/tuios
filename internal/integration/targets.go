@@ -19,6 +19,12 @@ import (
 //go:embed assets/opencode/tuios-agent-state.js
 var openCodePluginTemplate string
 
+//go:embed assets/opencode/index.js
+var openCodeV2IndexTemplate string
+
+//go:embed assets/opencode/tui.js
+var openCodeV2TuiTemplate string
+
 //go:embed assets/amp/tuios-agent-state.ts
 var ampPluginTemplate string
 
@@ -157,6 +163,20 @@ func renderTemplate(tmpl string) func(t *Target, tuios string) []byte {
 	}
 }
 
+// renderOpenCodePlugin keeps the legacy entrypoint at its installed path. V1
+// calls server; V2 accepts the definition but reports only from the CLI plugin,
+// since a shared server's environment does not identify the caller's pane.
+func renderOpenCodePlugin(t *Target, tuios string) []byte {
+	out := renderTemplate(openCodePluginTemplate)(t, tuios)
+	return append(out, []byte(`
+export default {
+  id: "tuios-agent-state-v1",
+  server: TuiosAgentState,
+  setup() {},
+};
+`)...)
+}
+
 // renderJSON renders a hook file tuios owns whole, from its events. build
 // makes the object for one event.
 func renderJSON(top map[string]any, build func(command string, ev HookEvent) any) func(t *Target, tuios string) []byte {
@@ -242,12 +262,18 @@ var targets = []*Target{
 		// person's reply back to opencode. Version 3 feeds the model and the
 		// session's cost to the pane's agent metadata. Version 4 ends a turn
 		// on session.status idle, which replaces the deprecated session.idle,
-		// and says why a retry is waiting.
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 4, Reports: ReportsState,
-		Source:    "https://opencode.ai/docs/plugins/ (global plugins load from ~/.config/opencode/plugins)",
+		// and says why a retry is waiting. Version 5 supports OpenCode V2 with
+		// a client plugin, where the environment identifies the correct pane.
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 5, Reports: ReportsState,
+		Source:    "https://opencode.ai/v2/docs/cli/plugins (V2 CLI plugin; V1 server entrypoint requires 1.18.29+)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
-		format:    ownedFile{render: renderTemplate(openCodePluginTemplate)},
+		format:    ownedFile{render: renderOpenCodePlugin},
+		extra: []extraFile{
+			{file: filepath.Join("plugins", "tuios-agent-state", "index.js"), format: ownedFile{render: renderTemplate(openCodeV2IndexTemplate)}},
+			{file: filepath.Join("plugins", "tuios-agent-state", "tui.js"), format: ownedFile{render: renderTemplate(openCodeV2TuiTemplate)}},
+		},
+		ownedDir: filepath.Join("plugins", "tuios-agent-state"),
 	},
 	{
 		// Version 2 reports a question asked with ask_user_choice as
@@ -366,8 +392,9 @@ var targets = []*Target{
 	{
 		// Version 2: the opencode plugin it shares offers permission requests
 		// to the Inbox. Version 3: it feeds the model and cost. Version 4: it
-		// ends a turn on session.status idle.
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 4, Reports: ReportsState,
+		// ends a turn on session.status idle. Version 5 updates the shared
+		// template with optional cancellation for the OpenCode V2 client.
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 5, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),
