@@ -88,16 +88,31 @@ func sessionAccentPool(bg color.Color) []sessionHue {
 	return pool
 }
 
+// sessionPoolKey is everything the pool is built from: the theme's ten slot
+// colours, the ground, and the colour depth. Two bundled themes can share a
+// background and still keep different hues, and a depth change folds the
+// colours differently, so the key must name all three or a theme switch to a
+// same-background theme serves the old pool.
+type sessionPoolKey struct {
+	slots [sessionAccentSlotCount]color.RGBA
+	bg    color.RGBA
+	depth overlay.Depth
+}
+
 // sessionPool is the pool for this client's ground, remembered so a render
-// that asks per row does not re-lift the palette each time. A theme switch
-// moves the ground, so the ground is the key.
+// that asks per row does not re-lift the palette each time.
 func (m *OS) sessionPool() []sessionHue {
-	bg := m.terminalBg()
-	if m.sessionPoolCache != nil && m.sessionPoolBg == bg {
+	var key sessionPoolKey
+	for i, idx := range sessionAccentSlots {
+		key.slots[i] = SlotAccent(idx).RGB()
+	}
+	key.bg = toRGBA(m.terminalBg())
+	key.depth = overlay.CurrentDepth()
+	if m.sessionPoolCache != nil && m.sessionPoolKey == key {
 		return m.sessionPoolCache
 	}
-	m.sessionPoolCache = sessionAccentPool(bg)
-	m.sessionPoolBg = bg
+	m.sessionPoolCache = sessionAccentPool(m.terminalBg())
+	m.sessionPoolKey = key
 	return m.sessionPoolCache
 }
 

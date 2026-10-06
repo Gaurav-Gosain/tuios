@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"maps"
 	"slices"
@@ -255,15 +256,32 @@ func TestSessionColoursOnOneDarkNeverShare(t *testing.T) {
 	withTheme(t, "one_dark")
 	m, _ := sessionColorOS(t, 120, 40)
 
-	if got := len(m.sessionPool()); got != 6 {
+	pool := m.sessionPool()
+	if got := len(pool); got != 6 {
 		t.Errorf("one_dark's pool holds %d hues, want the six main draws today", got)
 	}
 
-	var names []string
-	for i := range 6 {
-		names = append(names, "session-"+strconv.Itoa(i))
+	// Four plain names, then two whose hash preference collides with one
+	// already taken, so the arbiter has to spill and the set still has to come
+	// out pairwise distinct. Names that hash to six different positions would
+	// pass with no arbitration at all.
+	names := []string{"session-0", "session-1", "session-2", "session-3"}
+	for i := 0; len(names) < 6; i++ {
+		name := fmt.Sprintf("collider-%d", i)
+		want := sessionPreferredSlot(name, len(pool))
+		taken := false
+		for _, prev := range names {
+			if sessionPreferredSlot(prev, len(pool)) == want {
+				taken = true
+				break
+			}
+		}
+		if taken {
+			names = append(names, name)
+		}
 	}
-	railStyled(t, m, sessionColorTree())
+
+	m.refreshSessionColors(names)
 
 	shown := make([]color.Color, 0, len(names))
 	for _, name := range names {
@@ -292,5 +310,50 @@ func TestSessionNeighbourPassLeavesSmallSetsAlone(t *testing.T) {
 	settleAdjacentRows(names, auto, map[string]Accent{}, pool, theme.TerminalBg())
 	if !maps.Equal(auto, want) {
 		t.Errorf("the neighbour pass moved a hue in a set that never shared:\n%v\n%v", want, auto)
+	}
+}
+
+// TestSessionPoolRebuildsWhenTheThemeChangesUnderTheSameGround is the cache
+// regression: the pool is built from the theme's slot colours, the ground and
+// the colour depth, and the cache must key on all three. Bundled themes share
+// backgrounds — hardcore and jellybeans sit on the same one with different
+// hues — so a theme switch that kept the ground must not serve the old pool.
+func TestSessionPoolRebuildsWhenTheThemeChangesUnderTheSameGround(t *testing.T) {
+	withTheme(t, "hardcore")
+	m, _ := sessionColorOS(t, 120, 40)
+	before := m.sessionPool()
+
+	withTheme(t, "jellybeans")
+	after := m.sessionPool()
+
+	same := len(before) == len(after)
+	if same {
+		for i := range before {
+			same = same && before[i].slot == after[i].slot &&
+				overlay.Distance(before[i].shown, after[i].shown) < sessionHueMinGap
+		}
+	}
+	if same {
+		t.Error("a theme switch over the same background served the old theme's pool")
+	}
+}
+
+// TestSessionPoolRebuildsOnADepthChange is the other cache case: the first
+// frames render before the profile message arrives, so a pool built at
+// truecolor must not survive a switch to 256 colours. On nord the pool folds
+// differently at the two depths.
+func TestSessionPoolRebuildsOnADepthChange(t *testing.T) {
+	withTheme(t, "nord")
+	m, _ := sessionColorOS(t, 120, 40)
+
+	overlay.SetDepth(overlay.DepthTrueColor)
+	defer overlay.SetDepth(overlay.Depth256)
+	wide := m.sessionPool()
+
+	overlay.SetDepth(overlay.Depth256)
+	narrow := m.sessionPool()
+
+	if len(wide) == len(narrow) {
+		t.Errorf("a depth change served a pool of %d both times; nord folds differently at 256", len(narrow))
 	}
 }

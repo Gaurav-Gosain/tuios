@@ -615,11 +615,11 @@ type OS struct {
 	// is a pure function of the session names on screen, so every client
 	// computes the same map without saying anything to anyone.
 	sessionColors map[string]Accent
-	// sessionPoolCache remembers the theme's tell-apart hues and the ground
-	// they were measured against, so a render asking per row does not re-lift
-	// the palette each time.
+	// sessionPoolCache remembers the theme's tell-apart hues and the key they
+	// were built from, so a render asking per row does not re-lift the
+	// palette each time.
 	sessionPoolCache []sessionHue
-	sessionPoolBg    color.Color
+	sessionPoolKey   sessionPoolKey
 	// SessionRestored is the attached session's daemon-owned restored mark. The
 	// daemon clears it on attach, so it is normally false here; it is carried
 	// anyway so the attached row reads from the same field every other row does.
