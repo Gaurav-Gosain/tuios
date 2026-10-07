@@ -17,6 +17,11 @@
 // a program the system appearance changed. With -mute every colour question
 // is swallowed and none is answered, which is what mosh does.
 //
+// Every OSC 7501 (the Program Status Protocol) is taken out too and written
+// to the log as "7501 <body>". With -program-status the feature detection
+// query is answered, as ghostty and Rex answer it; without it the query goes
+// unanswered, as on a terminal that does not support the protocol.
+//
 // hostterm query SPEC asks the terminal it runs in one colour question (SPEC
 // is 10, 11 or 4;N), waits for the answer and prints it as
 // HOSTTERM-SPEC=answer on one line, so a test can read what a pane program
@@ -78,7 +83,9 @@ type host struct {
 	// mute answers no colour question at all. The questions are still taken
 	// out, so the outer terminal cannot answer them either.
 	mute bool
-	log  io.Writer
+	// programStatus answers the OSC 7501 query.
+	programStatus bool
+	log           io.Writer
 }
 
 func (h *host) now() scheme {
@@ -114,6 +121,7 @@ func run(args []string) int {
 	ansiSpec := fs.String("ansi", "", "palette slots, as N=#rrggbb,N=#rrggbb")
 	logPath := fs.String("log", "", "append every answered question here")
 	mute := fs.Bool("mute", false, "swallow every colour question and answer none, as mosh does")
+	programStatus := fs.Bool("program-status", false, "answer the OSC 7501 query, as a terminal that supports the protocol does")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -123,7 +131,7 @@ func run(args []string) int {
 		return 2
 	}
 
-	h := &host{ansi: map[int]string{}, mute: *mute}
+	h := &host{ansi: map[int]string{}, mute: *mute, programStatus: *programStatus}
 	h.schemes = append(h.schemes, scheme{fg: *fg, bg: *bg, light: isLight(*bg)})
 	fgs, bgs := strings.Split(*altFg, ","), strings.Split(*altBg, ",")
 	if len(fgs) != len(bgs) {
@@ -337,6 +345,13 @@ func csiEnd(b []byte) int {
 
 // oscQuery answers a colour question and reports whether it did.
 func (f *filter) oscQuery(body string) bool {
+	if strings.HasPrefix(body, "7501;") {
+		f.h.note("7501 %s", strings.TrimPrefix(body, "7501;"))
+		if body == "7501;?" && f.h.programStatus {
+			f.answer("\x1b]7501;?\x1b\\")
+		}
+		return true
+	}
 	s := f.h.now()
 	if f.h.mute {
 		if body == "10;?" || body == "11;?" || (strings.HasPrefix(body, "4;") && strings.HasSuffix(body, ";?")) {
