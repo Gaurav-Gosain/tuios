@@ -75,6 +75,7 @@ const (
 	SectionCopyMode         = "copy_mode"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
+	SectionGUI              = "gui"
 )
 
 // Scope identifiers. Stable strings rather than an iota because they are part of
@@ -98,6 +99,7 @@ const (
 	ScopePrefixLayout   = "prefix.layout"
 	ScopeGlobal         = "global"
 	ScopeScript         = "script"
+	ScopeGUI            = "gui"
 )
 
 // Scopes returns every keyboard context, in the order a reader should meet
@@ -227,6 +229,15 @@ func Scopes(leader string) []Scope {
 			Sections: []string{SectionScript},
 			Reaches:  ReachModal,
 		},
+		{
+			// Read only by the native GUI client, which looks these keys up
+			// before the leader and the pane. The terminal client never does,
+			// so they take nothing from it, and they are listed so the GUI's
+			// keys are rebound in the same file as every other key.
+			ID: ScopeGUI, Name: "GUI app",
+			Sections: []string{SectionGUI},
+			Reaches:  ReachSteals,
+		},
 	}
 }
 
@@ -281,6 +292,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.Mail
 	case SectionCopyMode:
 		return k.CopyMode
+	case SectionGUI:
+		return k.GUI
 	}
 	return nil
 }
@@ -481,6 +494,9 @@ func lookupForm(key string) string {
 // action name with its underscores opened up.
 func describeAction(action string) string {
 	if desc := ActionDescriptions[action]; desc != "" {
+		return desc
+	}
+	if desc := GUIActionDescriptions[action]; desc != "" {
 		return desc
 	}
 	return strings.ReplaceAll(action, "_", " ")

@@ -658,6 +658,7 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"copy_mode", kb.CopyMode},
 		{"global", kb.Global},
 		{"script", kb.Script},
+		{"gui", kb.GUI},
 	}
 }
 

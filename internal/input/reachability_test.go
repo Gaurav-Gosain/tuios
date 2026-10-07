@@ -367,6 +367,12 @@ func reachAgentsOS(t *testing.T) *app.OS {
 	return nil
 }
 
+// notTerminalSections are the config sections the terminal client never reads,
+// with the program that does. No key in them can reach this package.
+var notTerminalSections = map[string]string{
+	"gui": "the native GUI, through the GUI bridge's keybinds event",
+}
+
 // TestReachabilityTableCoversEveryBindingSection stops the table from going
 // stale in the one way it can: a new section added to the config that nobody
 // adds a row for here. The config struct is the list; this compares against it.
@@ -384,6 +390,9 @@ func TestReachabilityTableCoversEveryBindingSection(t *testing.T) {
 		name, _, _ := strings.Cut(f.Tag.Get("toml"), ",")
 		if name == "" {
 			t.Errorf("field %s has no toml name, so no section can be matched to it", f.Name)
+			continue
+		}
+		if _, gui := notTerminalSections[name]; gui {
 			continue
 		}
 		if !covered[name] {

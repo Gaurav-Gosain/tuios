@@ -437,6 +437,10 @@ func contextOnlyScope(scope string) bool {
 	switch scope {
 	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeCopyMode:
 		return true
+	case ScopeGUI:
+		// Only the GUI reads these keys. A terminal's help that listed
+		// ctrl+shift+t for new_window would name a key that does nothing there.
+		return true
 	}
 	return false
 }
