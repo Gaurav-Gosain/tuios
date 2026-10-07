@@ -1015,8 +1015,10 @@ itself. A source updating its own claim is always allowed. A report that loses
 comes back with `"applied": false` and the state that stands, rather than an
 error.
 
-`program` ranks with `report`: both are the program saying what it does. Only
-the pane's emulator sets it, so `set-agent-state` does not accept it.
+`program` ranks just below `report` and above `transcript`. Both are the
+program saying what it does, and when a harness hook and an OSC 7501 report
+describe the same pane, the hook keeps the pane. Only the pane's emulator sets
+`program`, so `set-agent-state` does not accept it.
 
 Omitting `source` means `report`, so a caller that never sets it behaves exactly
 as it always has. `get-agent-state` reports the winning `source` and, when one

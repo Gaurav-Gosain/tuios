@@ -964,7 +964,7 @@ accepted.
 ## Report pane states to your terminal
 
 When tuios runs in a terminal that reads OSC 7501, the Program Status
-Protocol (Ghostty and Rex do), it reports the agent state of each pane there.
+Protocol (Rex does), it reports the agent state of each pane there.
 `host_program_status` in `[agents]` turns this off:
 
 ```toml

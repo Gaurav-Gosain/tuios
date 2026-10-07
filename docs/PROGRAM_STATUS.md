@@ -8,7 +8,8 @@ needs no hook, no socket and no plugin.
 The sequence is the Program Status Protocol, OSC 7501, revision 0.2 of
 2026-10-06. Read the specification at
 [superlogical.com/rex/docs/build/program-status](https://www.superlogical.com/rex/docs/build/program-status).
-Ghostty and Rex also read it.
+The Rex terminal reads it too. Support in libghostty, the library under
+Ghostty, is proposed in a pull request.
 
 ```sh
 # Terraform waits for an approval. The message is base64 of
@@ -109,12 +110,22 @@ from the most urgent record of the pane:
   the progress.
 - **The Inbox.** A blocked record opens an approval or a question item, an
   `error` record an error item, and a `done` record a finished item. The item
-  names the pane, as every Inbox item does. The detail of the item lists every
-  record of the pane.
+  names the pane by its title and by its id, such as `build [3f2a9c1e]`,
+  because the program can set the title and cannot set the id. The detail of
+  the item lists every record of the pane. For `kind=auth` the Inbox offers no
+  answer: you type a login in the pane that asks for it.
 - **The verbs.** `get-agent-state` and `list-agents` report `source:
   "program"` and the records as `program_status`.
 - **Hooks and alerts.** An agent state from a record raises the same hooks,
-  alerts and push notifications as any other agent state.
+  alerts and push notifications as any other agent state. An alert names the
+  pane by its id too. The dock shows every alert, but a notification, a bell, a
+  sound or a client hook from one such pane goes out at most once in 30
+  seconds.
+- **A harness hook in the same pane wins.** The source `program` ranks just
+  below a hook's report. When a hook reports for the pane, the records still
+  show, and the pane's state is the hook's. When the records of a pane end, a
+  state that a weaker source (the screen, the detector) held before the
+  program reported comes back.
 
 ### More than one record
 
@@ -142,12 +153,16 @@ There is no heartbeat. A program does not have to send its state again.
 | A full reset (RIS) | removed | removed |
 | A soft reset (DECSTR), or a switch to the alternate screen | kept | kept |
 
-A shell without OSC 133 marks does not tell tuios that a prompt started. For
-such a pane, tuios takes the report as a sign that a program runs. When the
-agent detector next sees the shell in the foreground, the program has exited
-and its records go. The detector looks every 2 seconds. A pane whose own
-process is the program, such as `tuios new-window -- cargo watch`, keeps its
-records until the program changes them.
+A shell without OSC 133 marks does not tell tuios that a prompt started. So
+when a working, blocked or idle report arrives, tuios reads which process
+group holds the pane's terminal. If it is not the shell, a program in the
+foreground reported, and when the agent detector next sees the shell in the
+foreground, that program has exited and its records go. The detector looks
+every 2 seconds. A report from a background job (`job &`), or from a pane
+whose own process is the program (`tuios new-window -- cargo watch`), does not
+come from a foreground program, so its records stay until the program changes
+them or a prompt starts. A program that reports and exits before tuios reads
+the report leaves its record until the next prompt or OSC 133 A.
 
 Keys that `tuios send-text` or `tuios send-keys` types do not count as your
 typing for `done` and `error`. Keys from an attached client do.
@@ -161,8 +176,8 @@ would otherwise wipe out the kind and message of the program's own report.
 
 ## tuios inside a terminal that reads OSC 7501
 
-tuios is a program too. When it runs in Ghostty, Rex or another terminal that
-reads the protocol, it reports the agent states of its panes there. The
+tuios is a program too. When it runs in Rex or another terminal that reads
+the protocol, it reports the agent states of its panes there. The
 terminal can then show that a pane in tuios waits for you while tuios is in
 another tab.
 
@@ -177,7 +192,10 @@ another tab.
   It keeps at most 64 records on the terminal.
 - tuios never passes a pane's own sequence through. What the terminal gets is
   tuios's own report, built from the pane's agent state.
-- When tuios exits, it resets the terminal, and the reset removes every record.
+- When a client exits or detaches, it sends `state=clear` for each record it
+  left. A local client then also resets the terminal. An ssh client's
+  terminal gets the clears over the connection, when the connection is still
+  up.
 
 To turn this off:
 
@@ -205,13 +223,19 @@ discarded whole, and nothing from it is applied.
 
 The parser follows the grammar of the specification:
 
-- Values use only `A-Z a-z 0-9 _ . , + / = -`. Spaces around a key or a value
-  are removed.
+- Values use only `A-Z a-z 0-9 _ . , + / = -`. ASCII spaces and tabs around a
+  key or a value are removed. Other blank characters are not, so they make the
+  pair malformed.
+- Inside the sequence, a C0 control other than BEL and ESC is ignored. CAN and
+  SUB cancel the sequence. An ESC that does not start ST ends the sequence
+  there. Both emulators do the same.
 - A pair without `=`, with an empty key, or with a character outside the set is
   skipped. The rest of the report still applies.
 - An unknown key is ignored. When a key repeats, the last value wins.
 - A report without `state`, or with a state tuios does not know, is ignored.
-- A report with an `id` that does not match the grammar is ignored.
+- A report with an `id` that does not match the grammar is ignored. This
+  includes an `id` with a character outside the value set, such as `id=a b`
+  or `id=x;y`: the report does not fall back to the root record.
 - A `kind` with a state other than `blocked`, or an unknown `kind`, is ignored.
   So is a `progress` outside 0 to 100, or with a state other than `working` or
   `blocked`, and an `app` with a character outside its set.
@@ -222,16 +246,22 @@ Everything in a report comes from a program that already controls the pane.
 tuios treats it as untrusted text.
 
 - A report whose `msg` or `title` does not decode, is not UTF-8, or holds a
-  control character is discarded whole. Control characters are U+0000 to
+  control character is discarded whole. Base64 is read strictly: padding is
+  optional, but padding that is present must be right, and the unused bits at
+  the end must be zero. Control characters are U+0000 to
   U+001F, U+007F and U+0080 to U+009F.
 - tuios never reads markup in a report. `<b>` is shown as `<b>`.
 - tuios removes bidi overrides, zero width characters and other invisible
   format characters before it shows the text in the rail, the Inbox or a verb.
 - tuios writes back only the fixed answer to `OSC 7501 ; ?`. No id, title or
   message is ever sent back, and a program cannot read the records.
-- Every place that shows a record names the pane it came from.
-- The alerts and push notifications that an agent state raises have their own
-  limits. tuios reports to a host terminal at most once in 250 milliseconds.
+- Every place that shows a record names the pane it came from. Alerts and
+  Inbox items add the pane's id, which a program cannot set, to the title,
+  which it can.
+- A pane whose state comes from OSC 7501 raises a notification, a bell, a
+  sound or a client hook at most once in 30 seconds. Push notifications have
+  their own limits for each pane. tuios reports to a host terminal at most
+  once in 250 milliseconds.
 - `app` is only a label. tuios does not look it up as a harness, so a program
   cannot get the answers that a harness's approvals allow.
 
@@ -248,7 +278,12 @@ tuios treats it as untrusted text.
 - **An `app` longer than 32 bytes** discards the report, because it breaks a
   limit. An `app` with a character outside its set is treated as absent.
 - **When a key repeats**, only the last value is checked. An earlier bad value
-  that a later one replaces does not discard the report.
+  that a later one replaces does not discard the report. The exception is
+  `id`: any `id` pair with a character outside the value set discards the
+  report, so a malformed id never lands on the root record.
+- **The process exit** in a pane whose own process is a shell is the exit of
+  the program that reported from the foreground (see
+  [How long a record stays](#how-long-a-record-stays)).
 - **OSC 9;4** is not mapped to the root record. tuios keeps its own reading of
   OSC 9;4 as an agent state, and stops it once a pane sends OSC 7501.
 - **The answer to the query** ends with the terminator the query used, as

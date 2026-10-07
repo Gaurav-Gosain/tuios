@@ -77,7 +77,7 @@ tuios status --clear --id tests
 
 `blocked` reads as `needs_input` with `blocked_by` from `--kind`
 (`permission` is `approval`), `done` as `done`, `error` as `errored`. The
-source is `program`, which ranks with `report`. Each report replaces its
+source is `program`, which ranks just below `report`. Each report replaces its
 record, so send `--app` every time. A shell prompt or your exit ends `working`,
 `blocked` and `idle` records. `done` and `error` stay until the person types in
 the pane. `get-agent-state` lists the records as `program_status`. Report
@@ -185,8 +185,8 @@ state arrived. A file in `~/.config/tuios/harnesses` (or
 
 ## Who wins when reports disagree
 
-`--source` says where a state came from. Highest first, the ranks are `report`
-and `program` (an OSC 7501 report, equal to `report`), `transcript`, `osc`,
+`--source` says where a state came from. Highest first, the ranks are `report`,
+`program` (an OSC 7501 report), `transcript`, `osc`,
 `screen`, `detect`, then `stall`. A source cannot overwrite a claim from
 a higher-ranked one. Only `report`, `osc`, `screen` and `stall` are accepted
 over the socket. Leave `--source` alone unless you are writing a detector.
