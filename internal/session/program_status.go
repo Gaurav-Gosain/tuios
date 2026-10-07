@@ -242,6 +242,12 @@ func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) {
 	if pty == nil {
 		return
 	}
+	// The vtWriter, the detector, the input handler and the exit path can
+	// each raise this at once. Held from the read of the records to the
+	// last write, so a slower caller cannot write an older view over a
+	// newer one.
+	pty.progStatusApplyMu.Lock()
+	defer pty.progStatusApplyMu.Unlock()
 	wire := programStatusWire(pty.ProgramStatusRecords())
 	_ = s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, windowID)

@@ -976,6 +976,9 @@ type PTY struct {
 	// when the agent detector next sees the pane's shell in the foreground,
 	// which ends those records. See endProgramStatusAtShell.
 	progStatusAway atomic.Bool
+	// progStatusApplyMu orders the copies of the records into the session
+	// state. See Session.applyProgramStatus.
+	progStatusApplyMu sync.Mutex
 
 	// title is the last title this PTY's application set. The daemon reads every
 	// byte of every window, so this is the freshest title anyone holds: a client

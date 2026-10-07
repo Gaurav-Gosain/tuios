@@ -311,6 +311,19 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	alive(t, term, "after the program status run")
 }
 
+// TestProgramStatusQueryStandalone asks the feature detection question in a
+// pane of tuios without a daemon, where the client's own emulator answers.
+// The marker is printed by hostterm from the answer it read, and the typed
+// command does not hold it.
+func TestProgramStatusQueryStandalone(t *testing.T) {
+	host := buildHostTerm(t)
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, host+" query 7501", "HOSTTERM-7501=?", shellTimeout)
+}
+
 // TestProgramStatusReachesTheHostTerminal attaches from a stand-in host
 // terminal that supports OSC 7501, and reads what tuios reports to it.
 //
