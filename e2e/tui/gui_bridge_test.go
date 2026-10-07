@@ -964,3 +964,181 @@ func TestGUIBridgeGitBranch(t *testing.T) {
 		t.Errorf("repo = %q, want %q", w.Repo, filepath.Base(dir))
 	}
 }
+
+// along is a node's extent and position along a split's axis: width and x for
+// "x", height and y for "y".
+func along(r wireRect, axis string) (pos, extent int) {
+	if axis == "y" {
+		return r.Y, r.H
+	}
+	return r.X, r.W
+}
+
+// splitAcross is the split action that cuts a pane across axis: a pane cut
+// along x gets a new pane beside it.
+func splitAcross(axis string) string {
+	if axis == "y" {
+		return "split_horizontal"
+	}
+	return "split_vertical"
+}
+
+// TestGUIBridgeSplitRefusesSmallPanes: a split that would leave either pane
+// under the smallest size (20 columns by 5 rows) is refused, and the result
+// says why. A split the other way, where both panes fit, still runs.
+func TestGUIBridgeSplitRefusesSmallPanes(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "gb", 120, 40)
+	ids := b.tiledPanes(2)
+	root := b.waitState(func(*wireState) bool { return true }, "a state").tree()
+	_, extent := along(root.Rect, root.Axis)
+	// The first pane gets 40 cells along the root's axis on x (halves of 20
+	// and 19 plus the gap), or 10 rows on y (5 and 4 plus the gap): too small
+	// to split again that way, by one cell.
+	want := 40
+	if root.Axis == "y" {
+		want = 10
+	}
+	ratio := (float64(want) + 0.5) / float64(extent)
+	b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": ratio})
+	st := b.waitState(func(s *wireState) bool {
+		_, e := along(leaf(s.tree(), ids[0]).Rect, root.Axis)
+		return e == want
+	}, fmt.Sprintf("the first pane at %d cells", want))
+	b.send(map[string]any{"cmd": "focus", "window": ids[0]})
+	b.waitState(func(s *wireState) bool { return s.Focused == ids[0] }, "focus on the first pane")
+
+	r := b.call(map[string]any{"cmd": "action", "name": splitAcross(root.Axis)})
+	if r.OK || !strings.Contains(r.Error, "too small") {
+		t.Fatalf("%s on a %d-cell pane: ok=%v error=%q; want a refusal that says the pane is too small", splitAcross(root.Axis), want, r.OK, r.Error)
+	}
+	// Give a split that slipped through time to arrive.
+	time.Sleep(500 * time.Millisecond)
+	if st = b.waitState(func(*wireState) bool { return true }, "a state"); len(st.Windows) != 2 {
+		t.Fatalf("the refused split still made a pane: %d panes", len(st.Windows))
+	}
+
+	// One cell more and the same split runs: both halves are at the minimum.
+	b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": (float64(want+1) + 0.5) / float64(extent)})
+	b.waitState(func(s *wireState) bool {
+		_, e := along(leaf(s.tree(), ids[0]).Rect, root.Axis)
+		return e == want+1
+	}, fmt.Sprintf("the first pane at %d cells", want+1))
+	b.mustCall(map[string]any{"cmd": "action", "name": splitAcross(root.Axis)})
+	st = b.waitState(func(s *wireState) bool { return len(s.Windows) == 3 && leafCount(s.tree()) == 3 }, "a third pane")
+	for _, w := range st.Windows {
+		if w.W < 20 || w.H < 5 {
+			t.Errorf("pane %s is %dx%d, under 20x5", w.ID, w.W, w.H)
+		}
+	}
+}
+
+// TestGUIBridgeSetRatioUnderMinimum: a split whose side is already under the
+// smallest size (the window shrank under it) takes a ratio that moves its line
+// one cell, and holds at the current line, not at the far bound. Before, the
+// bound was the minimum, so the first step of a drag from there jumped the
+// line to it.
+func TestGUIBridgeSetRatioUnderMinimum(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "gb", 120, 40)
+	ids := b.tiledPanes(2)
+	root := b.waitState(func(*wireState) bool { return true }, "a state").tree()
+	axis := root.Axis
+	b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": 0.3})
+	b.waitState(func(s *wireState) bool { return s.tree().Ratio == 0.3 }, "the root at 0.3")
+
+	// Shrink the grid along the axis until 0.3 of it is under the minimum.
+	cols, rows, size := 50, 40, 50
+	if axis == "y" {
+		cols, rows, size = 120, 14, 14
+	}
+	b.send(map[string]any{"cmd": "resize", "cols": cols, "rows": rows})
+	cur := int(float64(size) * 0.3)
+	b.waitState(func(s *wireState) bool {
+		tr := s.tree()
+		if tr == nil {
+			return false
+		}
+		_, e := along(tr.Rect, axis)
+		_, a := along(leaf(tr, ids[0]).Rect, axis)
+		return e == size && a == cur
+	}, fmt.Sprintf("the root %d cells long with the first pane at %d", size, cur))
+
+	// One cell up from where it is. The minimum is further, and the line
+	// must not jump there.
+	step := (float64(cur+1) + 0.5) / float64(size)
+	r := b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": step})
+	if r.Ratio != step {
+		t.Errorf("set-ratio one cell up from %d came back as %v, want %v as asked", cur, r.Ratio, step)
+	}
+	b.waitState(func(s *wireState) bool {
+		_, a := along(leaf(s.tree(), ids[0]).Rect, axis)
+		return a == cur+1
+	}, fmt.Sprintf("the first pane at %d cells", cur+1))
+
+	// Smaller than it is now: held at the current line.
+	r = b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": 0.05})
+	if got := int(float64(size) * r.Ratio); got != cur+1 {
+		t.Errorf("a shrink came back as %v (line %d); want it held at the current line %d", r.Ratio, got, cur+1)
+	}
+}
+
+// TestGUIBridgeZoomKeepsHiddenPanes: a zoom from the bridge resizes the zoomed
+// pane only, whatever zoom_size the config sets. Below 100, the terminal
+// client's zoom is a camera over the whole layout that resizes every pane, and
+// the bridge used to run it too. A terminal client on the same session then saw
+// every hidden pane reflow. Each pane runs a program that prints a number when
+// its PTY is resized: the zoomed pane prints its own, the hidden panes none.
+func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
+	base := t.TempDir()
+	pinPreV080Looks(t, base)
+	// The bridge reads this file: a zoom of 95 % of the screen.
+	cfg := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	data, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(data), "zoom_size = 100") {
+		t.Fatalf("the pinned config does not set zoom_size = 100; this edit assumes it does")
+	}
+	writeConfigAtomically(t, cfg, []byte(strings.Replace(string(data), "zoom_size = 100", "zoom_size = 95", 1)))
+	// The terminal client reads its own, with a zoom of the whole screen, so
+	// any resize of a hidden pane comes from the bridge.
+	termHome := filepath.Join(base, "term-config")
+	pinPreV080LooksIn(t, base, termHome)
+
+	b := startBridge(t, base, "gb", 120, 40)
+	ids := b.tiledPanes(3)
+	term := attachIn(t, base, "gb", startOpts{cols: 120, rows: 40, env: []string{"XDG_CONFIG_HOME=" + termHome}})
+	// The attach can resize the panes once. Wait for that to pass before
+	// the programs start listening.
+	time.Sleep(time.Second)
+	st := b.waitState(func(*wireState) bool { return true }, "a state")
+	for i, id := range ids {
+		w := st.window(id)
+		// Pane i prints SIG4i on a resize. The command line shows the sum
+		// unworked, so only a resize puts the number on screen.
+		b.input(w.PTY, fmt.Sprintf("clear; sh -c 'trap \"echo SIG\\$((40+%d))\" WINCH; while :; do sleep 0.2; done'\r", i))
+	}
+	time.Sleep(time.Second)
+	b.send(map[string]any{"cmd": "focus", "window": ids[0]})
+	b.waitState(func(s *wireState) bool { return s.Focused == ids[0] }, "focus on the first pane")
+	b.mustCall(map[string]any{"cmd": "action", "name": "toggle_zoom"})
+	b.waitState(func(s *wireState) bool { return s.Zoomed == ids[0] }, "the first pane zoomed")
+	if err := term.WaitForText("SIG40", shellTimeout); err != nil {
+		t.Fatalf("the zoomed pane never saw its resize: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "gui-bridge-zoom-zoomed")
+	time.Sleep(time.Second)
+	b.mustCall(map[string]any{"cmd": "action", "name": "toggle_zoom"})
+	b.waitState(func(s *wireState) bool { return s.Zoomed == "" }, "no pane zoomed")
+	// The hidden panes' programs wake every 200 ms. A second is five of them.
+	time.Sleep(1500 * time.Millisecond)
+	snap := term.Snapshot()
+	saveFrame(t, term, "gui-bridge-zoom-after")
+	for i, name := range []string{"SIG41", "SIG42"} {
+		if strings.Contains(snap, name) {
+			t.Errorf("hidden pane %c was resized by the zoom (it printed %s):\n%s", 'B'+i, name, snap)
+		}
+	}
+}
