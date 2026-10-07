@@ -58,6 +58,7 @@ type wireWindow struct {
 	W         int    `json:"w"`
 	H         int    `json:"h"`
 	Floating  bool   `json:"floating"`
+	Popup     bool   `json:"popup"`
 }
 
 type wireSize struct {
@@ -834,15 +835,25 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	if kb.Prefixes["prefix_window"] != "prefix.window" {
 		t.Errorf("prefixes[prefix_window] = %q", kb.Prefixes["prefix_window"])
 	}
-	command := false
+	command := ""
 	for _, x := range kb.Bindings {
 		if x.Scope == "prefix" && x.Press == "ctrl+a y" {
-			command = true
+			command = x.Action
 		}
 	}
-	if !command {
-		t.Errorf("the user's command key ctrl+a y is not in the bindings")
+	if command == "" {
+		t.Fatalf("the user's command key ctrl+a y is not in the bindings")
 	}
+	// The action the key names runs the user's command, a popup by default.
+	b.mustCall(map[string]any{"cmd": "action", "name": command})
+	b.waitState(func(s *wireState) bool {
+		for _, w := range s.Windows {
+			if w.Popup {
+				return true
+			}
+		}
+		return false
+	}, "the popup the command key opens")
 	menuHas := func(name, action string) bool {
 		for _, g := range kb.Menus[name] {
 			for _, r := range g.Rows {

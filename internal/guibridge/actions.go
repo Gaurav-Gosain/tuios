@@ -81,6 +81,11 @@ func checkAction(name string) error {
 	if allowedActions[name] {
 		return nil
 	}
+	// The user's own [[keybindings.command]] entries: a popup, a scratch
+	// pane or a new pane, each a pane the state shows.
+	if strings.HasPrefix(name, config.CommandActionPrefix) {
+		return nil
+	}
 	for _, prefix := range numberedActions {
 		if n, ok := strings.CutPrefix(name, prefix); ok && len(n) == 1 && n[0] >= '0' && n[0] <= '9' {
 			return nil
