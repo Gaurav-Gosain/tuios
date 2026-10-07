@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 33,194,146 | 33,250,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 31,230,146 | 31,290,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 33,370,274 | 33,450,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 31,383,090 | 31,460,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2454,6 +2454,13 @@ hosts, the ssh -G check of a host's forwarding, the ssh-agent-path verb and
 command, and the agent field of the link handshake. On main at d42b9d06 the
 build measured 33,194,146 and 31,230,146 bytes on Go 1.26.6, 22,146 and
 32,146 over the old budgets.
+
+The budgets went to 33,450,000 (linux/amd64) and 31,460,000 (darwin/arm64)
+for the paste buffers (#514): the store and the session each buffer came
+from, the five buffer verbs and their commands, base64 content and uploads,
+the chooser, and the tmux shim's use of the daemon's buffers. It links no new
+package. On main at 1b570369 the build measured 33,370,274 and 31,383,090
+bytes on Go 1.26.6, 120,274 and 93,090 over the old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
