@@ -18,6 +18,12 @@ import (
 // is asked for DA1, the same question the local startup probe asks, and the
 // reply decides sixel for this session. A local terminal was probed before the
 // program started and a browser is known to draw sixel, so only SSH asks.
+//
+// A local terminal can answer the startup probe too late: the probe gives up
+// after probeTimeout, and the reply reaches the program's input reader
+// instead. Dropped, it left a terminal with sixel taken for one without, so
+// its images were drawn as glyphs. The probe records that it gave up
+// (HostCapabilities.DA1Late), and the first reply after that is taken here.
 
 // sixelProbe asks an SSH client's terminal for its device attributes.
 func (m *OS) sixelProbe() tea.Cmd {
@@ -33,13 +39,17 @@ func (m *OS) handleSixelProbe(msg tea.Msg) bool {
 	if !ok {
 		return false
 	}
-	if m.Client != ClientSSH || m.SixelPassthrough == nil || m.hostCaps().SixelPinned {
+	late := m.Client != ClientSSH && m.hostCaps().DA1Late
+	if (m.Client != ClientSSH && !late) || m.SixelPassthrough == nil || m.hostCaps().SixelPinned {
 		return true
+	}
+	if late {
+		m.hostCaps().DA1Late = false
 	}
 	sixel := slices.Contains([]int(da), 4)
 	m.hostCaps().SixelGraphics = sixel
 	m.SixelPassthrough.SetHostSixel(sixel)
-	m.LogInfo("SSH client DA1 %v: sixel=%v", []int(da), sixel)
+	m.LogInfo("client DA1 %v (late=%v): sixel=%v", []int(da), late, sixel)
 	// The daemon's emulator answers the panes' DA1, and it knew this client
 	// only from its hello, which carried the guess.
 	if client := m.DaemonClient; client != nil {

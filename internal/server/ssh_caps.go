@@ -6,7 +6,9 @@ import (
 
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // Terminals known to render the kitty graphics protocol. The client's terminal,
@@ -86,6 +88,14 @@ func buildClientCapabilities(term string, environ []string, win ssh.Window) *ses
 	if cw, ch, ok := parseCellSize(env["TUIOS_CELL_SIZE"]); ok {
 		caps.CellWidth, caps.CellHeight = cw, ch
 	}
+
+	// A client with no image protocol is shown images as block glyphs, and
+	// the daemon then tells its panes they can draw sixel. The hello says
+	// so; without it a pane on a plain SSH client was told no sixel. The
+	// colour profile is the one wish derives for this client's renderer.
+	caps.SymbolImages = app.DrawsSymbols(config.Global.ImageSymbols,
+		&app.HostCapabilities{SixelGraphics: caps.SixelGraphics, KittyGraphics: caps.KittyGraphics, Term: term},
+		colorprofile.Env(append(environ, "TERM="+term)))
 
 	return caps
 }

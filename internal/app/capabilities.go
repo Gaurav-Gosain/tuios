@@ -54,6 +54,11 @@ type HostCapabilities struct {
 	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, so no
 	// later answer from the terminal changes it.
 	SixelPinned bool
+	// DA1Late says the startup probe asked for DA1 and gave up before the
+	// answer came. A slow terminal, a console on a loaded machine say,
+	// still answers, and the program's input reader then gets the reply;
+	// see handleSixelProbe.
+	DA1Late bool
 	// Warnings are problems with the overrides, shown once the UI is up.
 	Warnings     []string
 	TrueColor    bool
@@ -365,6 +370,7 @@ func probeTerminal(caps *HostCapabilities) {
 	_, _ = tty.WriteString(q.String())
 
 	response := readTTYResponse(tty, probeTimeout, da1Response().MatchString)
+	caps.DA1Late = !da1Response().MatchString(response)
 
 	parsePixelGeometry(caps, response)
 	parseGraphicsSupport(caps, response, probeFileErr == nil)
