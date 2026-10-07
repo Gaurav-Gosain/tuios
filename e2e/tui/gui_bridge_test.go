@@ -774,6 +774,13 @@ func TestGUIBridgeAction(t *testing.T) {
 	b.waitState(func(s *wireState) bool { return s.Zoomed == "" }, "no pane zoomed")
 	b.mustCall(map[string]any{"cmd": "action", "name": "split_vertical"})
 	b.waitState(func(s *wireState) bool { return len(s.Windows) == len(ids)+1 }, "a third pane from split_vertical")
+	// The names the renderer's own prefix resolver ends with run too.
+	b.mustCall(map[string]any{"cmd": "action", "name": "workspace_prefix_switch_2"})
+	b.waitState(func(s *wireState) bool { return s.Workspace == 2 }, "workspace 2 from the workspace prefix")
+	b.mustCall(map[string]any{"cmd": "action", "name": "switch_workspace_1"})
+	b.waitState(func(s *wireState) bool { return s.Workspace == 1 }, "workspace 1 again")
+	b.mustCall(map[string]any{"cmd": "action", "name": "prefix_split_horizontal"})
+	b.waitState(func(s *wireState) bool { return len(s.Windows) == len(ids)+2 }, "a fourth pane from the leader's split")
 
 	for _, name := range []string{"toggle_help", "command_palette", "gui_pane_picker", "no_such_action"} {
 		if r := b.call(map[string]any{"cmd": "action", "name": name}); r.OK || r.Error == "" {

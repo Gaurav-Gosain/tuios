@@ -49,14 +49,28 @@ var allowedActions = map[string]bool{
 	"snap_left": true, "snap_right": true, "snap_fullscreen": true, "unsnap": true,
 	"snap_corner_1": true, "snap_corner_2": true, "snap_corner_3": true, "snap_corner_4": true,
 	"toggle_scratch": true,
+	// Window mode's focus keys
+	"nav_left": true, "nav_right": true, "nav_up": true, "nav_down": true,
 	// Sessions
 	"next_session": true, "prev_session": true,
+	// The same work under the leader and its sub-prefixes, which is where
+	// the renderer's own prefix resolver ends up.
+	"prefix_new_window": true, "prefix_close_window": true,
+	"prefix_next_window": true, "prefix_prev_window": true,
+	"prefix_toggle_tiling": true, "prefix_fullscreen": true,
+	"prefix_split_horizontal": true, "prefix_split_vertical": true,
+	"prefix_rotate_split": true, "prefix_equalize_splits": true,
+	"window_prefix_new": true, "window_prefix_close": true,
+	"window_prefix_next": true, "window_prefix_prev": true, "window_prefix_tiling": true,
+	"minimize_prefix_focused": true, "minimize_prefix_restore_all": true,
 }
 
-// numberedActions are the action families that take a digit, 1 to 9.
+// numberedActions are the action families that end in one digit.
 var numberedActions = []string{
 	"select_window_", "switch_workspace_", "move_and_follow_",
 	"resize_width_", "resize_height_", "switch_session_",
+	"restore_minimized_", "prefix_select_", "minimize_prefix_restore_",
+	"workspace_prefix_switch_", "workspace_prefix_move_",
 }
 
 // checkAction says why the action command will not run name, or nil.
@@ -68,10 +82,8 @@ func checkAction(name string) error {
 		return nil
 	}
 	for _, prefix := range numberedActions {
-		if n, ok := strings.CutPrefix(name, prefix); ok && len(n) >= 1 {
-			if _, known := config.ActionDescriptions[name]; known {
-				return nil
-			}
+		if n, ok := strings.CutPrefix(name, prefix); ok && len(n) == 1 && n[0] >= '0' && n[0] <= '9' {
+			return nil
 		}
 	}
 	if _, gui := config.GUIActionDescriptions[name]; gui {
