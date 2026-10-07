@@ -96,6 +96,13 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter") {
 				return true
 			}
+			// The GUI bridge is a transport with no terminal at all: its
+			// input is frames from a renderer, its size is the renderer's
+			// grid, and nothing is drawn.
+			if path == "internal/guibridge/bridge.go" &&
+				(name == "WithInput" || name == "WithWindowSize" || name == "WithoutRenderer") {
+				return true
+			}
 			t.Errorf("%s:%d: tea.%s set outside ProgramOptions; the other clients do not get it",
 				path, fset.Position(call.Pos()).Line, name)
 			return true
