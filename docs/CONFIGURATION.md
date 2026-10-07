@@ -648,13 +648,17 @@ and `Ctrl+B #` shows them all (see [KEYBINDINGS.md](KEYBINDINGS.md#paste-buffers
 
 ```toml
 [paste_buffers]
-limit = 20     # how many buffers to keep. 0 keeps none.
+limit = 20     # how many unnamed buffers to keep. 0 keeps none.
 max_kb = 16384 # most KiB all buffers hold together. 0 uses 16384.
 ```
 
-When a new buffer goes past `limit` or `max_kb`, the oldest buffers go. tuios
-does not keep a yank that is larger than `max_kb` as a buffer, but the yank
-still goes to the clipboard. With `limit = 0`, a yank goes only to the
+The rules are the tmux rules. A yank makes a buffer that tuios names
+`buffer0`, `buffer1` and so on. `limit` counts only these buffers, and past it
+the oldest of them goes. A buffer that you name with `set-buffer -b` stays
+until you delete it, or until the buffers pass `max_kb`. Past `max_kb` the
+oldest unnamed buffer goes first, then the oldest named one. tuios does not
+keep a yank that is larger than `max_kb` as a buffer, but the yank still goes
+to the clipboard. With `limit = 0`, a yank goes only to the
 clipboard.
 
 The daemon keeps the buffers in memory, so every client and every session

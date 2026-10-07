@@ -40,6 +40,27 @@ type buffer struct {
 	name string
 	data string
 	at   time.Time
+	// size and sample come from the daemon's listing, so a listing reads no
+	// buffer's whole content. sampled says they are set.
+	size    int
+	sample  string
+	sampled bool
+	// auto is the daemon's word that it named the buffer. A buffer in a
+	// file is automatic when its name is one tmux would give.
+	auto bool
+}
+
+// automatic reports whether the buffer is one a set without -b made.
+func (b buffer) automatic() bool {
+	if b.sampled {
+		return b.auto
+	}
+	n, ok := strings.CutPrefix(b.name, "buffer")
+	if !ok || n == "" {
+		return false
+	}
+	_, err := strconv.Atoi(n)
+	return err == nil
 }
 
 // bufferDir is where buffers live, "" when the shim keeps them in memory.
@@ -204,7 +225,7 @@ func (s *Shim) removeBuffer(name string) error {
 }
 
 // newBufferName is the name tmux gives a buffer made without -b:
-// bufferNNNN, one past the highest in use. With the daemon holding the
+// bufferN, one past the highest in use. With the daemon holding the
 // buffers it is "", and the daemon names the buffer as it names a yank.
 func (s *Shim) newBufferName() (string, error) {
 	if s.daemonBuffers() {
@@ -222,11 +243,13 @@ func (s *Shim) newBufferName() (string, error) {
 			}
 		}
 	}
-	return fmt.Sprintf("buffer%04d", next), nil
+	return fmt.Sprintf("buffer%d", next), nil
 }
 
-// topBuffer is the name of the newest buffer, "" when there is none: the top
-// of tmux's buffer stack. Of two written at one time, the later name wins.
+// topBuffer is the name of the newest automatic buffer, "" when there is
+// none: the top of tmux's buffer stack, which a command with no -b takes. A
+// buffer someone named is not on it. Of two written at one time, the later
+// name wins.
 func (s *Shim) topBuffer() (string, error) {
 	list, err := s.buffers()
 	if err != nil {
@@ -234,6 +257,9 @@ func (s *Shim) topBuffer() (string, error) {
 	}
 	var top buffer
 	for _, b := range list {
+		if !b.automatic() {
+			continue
+		}
 		if top.name == "" || b.at.After(top.at) || b.at.Equal(top.at) && b.name > top.name {
 			top = b
 		}
@@ -302,10 +328,8 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 		return OutcomeError, detail, errors.New("set-buffer: give the data as one argument")
 	}
 	data := p.Args[0]
-	buf, named := p.Value('b')
-	if !named && p.Has('a') {
-		buf, err = s.topBuffer()
-	}
+	buf, _ := p.Value('b')
+	// set-buffer -a with no -b makes a new buffer, as in tmux.
 	newBuf := buf == "" && err == nil
 	if newBuf {
 		buf, err = s.newBufferName()
@@ -395,8 +419,8 @@ func (s *Shim) pasteBuffer(name string, args []string) (string, []string, error)
 		// stays.
 		remove := s.removeBuffer
 		if s.daemonBuffers() {
-			created := s.readCreated
-			remove = func(name string) error { return s.daemonBufferRemove(name, created) }
+			version := s.readVersion
+			remove = func(name string) error { return s.daemonBufferRemove(name, version) }
 		}
 		if err := remove(buf); err != nil {
 			return OutcomeError, detail, err

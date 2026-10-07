@@ -1155,19 +1155,21 @@ tuios list-buffers [--json]
 tuios show-buffer [-b <name>] [--json]
 tuios set-buffer [-b <name>] [-s <session>] [-a] [<text> | -] [--json]
 tuios delete-buffer [-b <name>] [--json]
-tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [--json]
+tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--json]
 ```
 
 **Flags:**
-- `-b, --buffer <name>`: The buffer (default: the newest). For `set-buffer`, the default is a new buffer named `bufferNNNN`
-- `-a, --append`: `set-buffer` adds the text to the end of the buffer
+- `-b, --buffer <name>`: The buffer (default: the newest buffer that tuios named, as in tmux). For `set-buffer`, the default is a new buffer named `bufferN`
+- `-a, --append`: `set-buffer` adds the text to the end of the named buffer. With no `-b`, it makes a new buffer, as in tmux
 - `-s, --session` on `set-buffer`: The session the text belongs to. A pane of that session with the `read` grant may then read it. Without it, the buffer is yours only
 - `-s, --session`, `-w, --window`: The pane `paste-buffer` pastes into (default: the focused pane)
-- `-d, --delete`: `paste-buffer` deletes the buffer after the paste
+- `-d, --delete`: `paste-buffer` deletes the buffer after the paste, unless it was set again meanwhile
+- `-r, --raw`: `paste-buffer` keeps each line feed. Without it, each line feed becomes a carriage return, as in tmux
 - `--json`: Output the result as JSON
 
-`show-buffer` prints the text with no line feed added. `set-buffer` with no
-text, or with `-`, reads the standard input. `paste-buffer` removes control
+A buffer can hold any bytes, a binary file included. `show-buffer` prints the
+content with no line feed added. `set-buffer -` reads the standard input. With
+no text on a terminal, `set-buffer` stops and says how to give it. `paste-buffer` removes control
 characters and uses the bracketed paste marks when the program in the pane
 turned them on. With a session on another machine, `paste-buffer` sends the
 text of a buffer from this machine.

@@ -118,14 +118,18 @@ func (s *Shim) listBuffers(name string, args []string) (string, []string, error)
 	filter := valueOr(p, 'f')
 	var detail []string
 	for _, b := range list {
-		data, found, err := s.readBuffer(b.name)
-		if err != nil || !found {
-			continue
+		size, sample := b.size, b.sample
+		if !b.sampled {
+			data, found, err := s.readBuffer(b.name)
+			if err != nil || !found {
+				continue
+			}
+			size, sample = len(data), bufferSample(data)
 		}
 		vars := s.sessionVars(nil)
 		vars["buffer_name"] = b.name
-		vars["buffer_size"] = strconv.Itoa(len(data))
-		vars["buffer_sample"] = bufferSample(data)
+		vars["buffer_size"] = strconv.Itoa(size)
+		vars["buffer_sample"] = sample
 		vars["buffer_created"] = strconv.FormatInt(b.at.Unix(), 10)
 		if filter != "" {
 			ok, d := s.expand(filter, vars)

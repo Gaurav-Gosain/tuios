@@ -71,9 +71,9 @@ type Shim struct {
 	// bufMode says where the paste buffers are: in the daemon or the shim's
 	// own (buffers_daemon.go). It is found on first use.
 	bufMode int8
-	// readCreated is the set time of the daemon buffer read last, so
-	// paste-buffer -d deletes only the text it pasted.
-	readCreated int64
+	// readVersion is the version of the daemon buffer read last, so
+	// paste-buffer -d deletes only the content it pasted.
+	readVersion uint64
 	// memEnv is the set-environment state of a shim with no runtime
 	// directory, by scope (see envScope).
 	memEnv map[string][]envVar

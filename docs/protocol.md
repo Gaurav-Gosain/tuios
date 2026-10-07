@@ -2417,28 +2417,43 @@ Response:
 
 The paste buffers, after tmux's. The daemon keeps one list of buffers, newest
 first, that every client and session shares. A client adds a buffer for each
-yank in copy mode. `[paste_buffers]` `limit` and `max_kb` bound the list, and
-the oldest buffers go first. Nothing is written to disk.
+yank in copy mode. The rules are tmux's: a buffer the daemon names
+(`bufferN`) is automatic, `[paste_buffers]` `limit` counts and removes only
+automatic buffers, and a call with no `name` means the newest automatic
+buffer. `max_kb` bounds all buffers together; past it the oldest automatic
+buffer goes first. Nothing is written to disk.
 
-- `list-buffers`: `for_session` (optional). Returns `buffers` (each with
-  `name`, `bytes`, `created` in Unix nanoseconds, `automatic`, `sample`,
-  `session`, and `pane` when a process in a pane set it), `total`, `bytes`,
-  `limit` and `max_bytes`. `sample` is escaped already.
-- `show-buffer`: `name` (optional, default the newest), `for_session`
-  (optional). Returns the row and `data`, the whole text. With
-  `for_session`, only the person's own buffers and the ones a pane of that
-  session set count: this is what the paste key asks for.
-- `set-buffer`: `data` (required), `name` (optional), `append` (optional),
-  `session` (optional). With no name a new buffer named `bufferNNNN` is made,
-  unless `append` is set, which adds to the newest. The buffer goes on top.
-  `session` is the session a caller outside every pane copied the text in; a
-  pane's own session is used for a pane.
-- `delete-buffer`: `name` (optional, default the newest), `created`
-  (optional). With `created`, the buffer is deleted only while its text is
-  the one set at that time.
-- `paste-buffer`: `session`, `window`, `name` (all optional), `delete`
-  (optional). Types the buffer as `send-text` with `paste` does: sanitized,
-  and bracketed when the pane's program turned bracketed paste on. Returns
+A buffer holds bytes, not only text. `data` carries the content as text, where
+a byte that is not UTF-8 reads as U+FFFD. `data_b64` carries every byte as
+base64: send it, and read it, to keep a binary buffer whole. Each set gives a
+buffer a new `version`, a small integer; pass it back to act only on the
+content read.
+
+- `list-buffers`: `for_session`, `sample_width` (both optional). Returns
+  `buffers` (each with `name`, `bytes`, `created` in Unix nanoseconds,
+  `version`, `automatic`, `sample`, `session`, and `pane` when a process in a
+  pane set it), `total`, `bytes`, `limit` and `max_bytes`. `sample` is escaped
+  already, shows bytes that are not UTF-8 as `\xNN`, and never cuts a
+  character. `sample_width` is at most 200, and 60 when left out.
+- `show-buffer`: `name`, `for_session`, `version` (all optional). Returns the
+  row, `data` and `data_b64`. With `for_session`, only the person's own
+  buffers and the ones a pane of that session set count: this is what the
+  paste key asks for.
+- `set-buffer`: `data` or `data_b64`, `name`, `append`, `session`, `upload`
+  and `more` (all optional but the content). With no name a new automatic
+  buffer is made, with `append` or without, as in tmux. The buffer goes on
+  top. `session` is the session a caller outside every pane copied the text
+  in; a pane's own session is used for a pane. A request line is capped at
+  16 MiB, so a larger content goes as an upload: every part carries the same
+  `upload` id on one connection, every part but the last has `more`, and the
+  buffer is set once, from all parts, when the last arrives. Cut the parts
+  from the bytes before they are encoded.
+- `delete-buffer`: `name`, `version` (both optional). With `version`, the
+  buffer is deleted only while it holds that content.
+- `paste-buffer`: `session`, `window`, `name`, `delete`, `raw` and `version`
+  (all optional). Each line feed becomes a carriage return unless `raw`, as in
+  tmux. Then the text goes as `send-text` with `paste` does: sanitized, and
+  bracketed when the pane's program turned bracketed paste on. Returns
   `bracketed`.
 
 A name that no buffer has, or the newest when there is none, answers
@@ -2446,7 +2461,9 @@ A name that no buffer has, or the newest when there is none, answers
 grant, `set-buffer` and `delete-buffer` need `write`, and `paste-buffer` needs
 both and is held to the same target rules as `send-text`. A pane without
 `admin` reaches only the buffers of the sessions it may read, as if no other
-buffer were there. A buffer set from outside every pane belongs to no session. Over a link,
+buffer were there, and names are unique among the buffers one caller sees: a
+name a hidden buffer holds makes a new buffer. A buffer set from outside every
+pane belongs to no session. Over a link,
 reading needs the `list` capability and the rest need `write`.
 
 ```json

@@ -447,6 +447,6 @@ tmux paste buffers are tuios paste buffers. Each yank is also kept as a buffer
 in the daemon, which every client and session shares. `PREFIX ]` pastes the
 newest (`paste_buffer`), and `PREFIX #` lists them to choose one
 (`choose_buffer`): tmux's `=` is equalize splits here. `[paste_buffers]`
-`limit` (default 20, 0 keeps none) and `max_kb` (default 16384, which is 16 MiB) bound them.
+`limit` (default 20, counts only the buffers tuios named, 0 keeps none) and `max_kb` (default 16384, which is 16 MiB) bound them.
 `tuios list-buffers`, `show-buffer`, `set-buffer`, `delete-buffer` and
 `paste-buffer` work on the same buffers, as does `tmux` under the shim.

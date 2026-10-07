@@ -423,10 +423,16 @@ func freshWorkSession(t *testing.T, d *Daemon) {
 	// The paste buffers the buffer examples name, fresh for each example
 	// since delete-buffer and paste-buffer with delete remove one.
 	d.buffers = pastebuf.New(pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes)
-	for _, name := range []string{"buffer0001", "buffer0003", "deploy"} {
-		if _, err := d.buffers.Set(name, "echo "+name, false, pastebuf.Owner{}, nil); err != nil {
-			t.Fatalf("set buffer %q: %v", name, err)
+	for range 4 {
+		if _, err := d.buffers.Add("echo automatic", pastebuf.Owner{}); err != nil {
+			t.Fatalf("add a buffer: %v", err)
 		}
+		if _, err := d.buffers.Set("", "echo next", false, pastebuf.Owner{}, nil); err != nil {
+			t.Fatalf("set a buffer: %v", err)
+		}
+	}
+	if _, err := d.buffers.Set("deploy", "echo deploy", false, pastebuf.Owner{}, nil); err != nil {
+		t.Fatalf("set buffer deploy: %v", err)
 	}
 }
 

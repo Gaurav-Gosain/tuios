@@ -2,26 +2,33 @@
 // first, after tmux's paste buffers.
 //
 // A yank in copy mode, a mouse selection copied to the clipboard and a
-// set-buffer call each add a buffer. The store is bounded two ways: by a count
-// (Limit) and by the bytes all buffers hold together (MaxBytes). When either
-// is passed, the oldest buffer goes. A single text larger than MaxBytes is
-// refused rather than stored by dropping every other buffer.
+// set-buffer call each add a buffer. A buffer holds bytes, not only text: a
+// tmux buffer can hold a binary file, and so can this one.
+//
+// The rules follow tmux. A buffer the store named (bufferN) is automatic; a
+// buffer a caller named is not. The count limit removes only automatic
+// buffers, oldest first, and a call with no name means the newest automatic
+// buffer. The byte cap (MaxBytes) bounds what all buffers hold together, so
+// memory stays bounded: past it the oldest automatic buffer goes first, then
+// the oldest named one. A single text larger than MaxBytes is refused rather
+// than stored by dropping every other buffer.
 //
 // Each buffer records where it came from (Owner): the session it was copied
 // or set in, and the pane that set it when a process in a pane did. A caller
 // that may see only some sessions passes a Filter, and the store then acts as
-// if the other buffers were not there.
+// if the other buffers were not there. Names are unique among the buffers one
+// caller sees: a caller that names a buffer it cannot see makes a new one,
+// and learns nothing about the hidden one.
 //
-// The daemon holds one store, so every client and every session sees the
-// same buffers, as tmux's server does. A client with no daemon behind it holds
-// its own. Nothing is written to disk: buffers often hold what a person copied
+// The daemon holds one store, so every client and every session can share the
+// buffers, as tmux's server does. A client with no daemon behind it holds its
+// own. Nothing is written to disk: buffers often hold what a person copied
 // out of a terminal, which includes secrets, and they end with the process.
 package pastebuf
 
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +38,7 @@ import (
 
 // The defaults, used when the config says nothing.
 const (
-	// DefaultLimit is how many buffers the store keeps.
+	// DefaultLimit is how many automatic buffers the store keeps.
 	DefaultLimit = 20
 	// DefaultMaxBytes is how many bytes all buffers hold together. It is the
 	// 16 MiB a tmux shim buffer could always hold, so a load-buffer that
@@ -39,6 +46,9 @@ const (
 	DefaultMaxBytes = 16 << 20
 	// MaxLimit bounds the count a config may ask for.
 	MaxLimit = 1000
+	// MaxNamed bounds the named buffers, which the count limit does not
+	// remove. Past it the oldest named buffer goes.
+	MaxNamed = 1000
 	// MaxNameBytes bounds a buffer name.
 	MaxNameBytes = 64
 )
@@ -58,8 +68,8 @@ var (
 	ErrTooLarge = errors.New("the text is larger than the byte cap")
 	// ErrBadName is the error of a name that is too long or not printable.
 	ErrBadName = errors.New("a buffer name is 1 to 64 printable characters")
-	// ErrChanged is the error of a delete of a buffer that was set again
-	// after the caller read it.
+	// ErrChanged is the error of a call on a buffer that was set again after
+	// the caller read it.
 	ErrChanged = errors.New("the buffer was set again after it was read")
 )
 
@@ -75,16 +85,21 @@ type Owner struct {
 
 // Buffer is one paste buffer.
 type Buffer struct {
-	// Name is the buffer's name: bufferNNNN for one the store named, or the
+	// Name is the buffer's name: bufferN for one the store named, or the
 	// name a set-buffer call gave it.
 	Name string
-	// Data is the text.
+	// Data is the content: any bytes.
 	Data string
-	// Created is when the text was last set.
+	// Created is when the content was last set.
 	Created time.Time
+	// Version counts the sets of the store: a buffer set again gets a new
+	// one. A caller that read a buffer passes it back to act only on that
+	// content. It is a small integer, so it survives a trip through JSON as
+	// a float, where a time in nanoseconds would not.
+	Version uint64
 	// Automatic says the store named the buffer.
 	Automatic bool
-	// Owner says where the text came from.
+	// Owner says where the content came from.
 	Owner Owner
 }
 
@@ -102,6 +117,7 @@ type Store struct {
 	limit    int
 	maxBytes int
 	next     int // the number of the next automatic name
+	version  uint64
 }
 
 // New makes a store with the given limits. A negative limit or a byte cap
@@ -142,17 +158,47 @@ func (s *Store) Bytes() int {
 	return s.bytes
 }
 
-// trim drops the oldest buffers until both limits hold. s.mu is held.
+// trim drops buffers until the limits hold: the oldest automatic buffers
+// past the count limit, the oldest named ones past MaxNamed, and past the
+// byte cap the oldest automatic buffer, or the oldest named one when no
+// automatic buffer is left. s.mu is held.
 func (s *Store) trim() int {
 	dropped := 0
-	for len(s.bufs) > 0 && (len(s.bufs) > s.limit || s.bytes > s.maxBytes) {
-		last := len(s.bufs) - 1
-		s.bytes -= len(s.bufs[last].Data)
-		s.bufs[last] = Buffer{}
-		s.bufs = s.bufs[:last]
+	for {
+		auto, named := 0, 0
+		oldestAuto, oldestNamed := -1, -1
+		for i, b := range s.bufs {
+			if b.Automatic {
+				auto++
+				oldestAuto = i
+			} else {
+				named++
+				oldestNamed = i
+			}
+		}
+		victim := -1
+		switch {
+		case auto > s.limit:
+			victim = oldestAuto
+		case named > MaxNamed:
+			victim = oldestNamed
+		case s.bytes > s.maxBytes && oldestAuto >= 0:
+			victim = oldestAuto
+		case s.bytes > s.maxBytes:
+			victim = oldestNamed
+		}
+		if victim < 0 {
+			return dropped
+		}
+		s.remove(victim)
 		dropped++
 	}
-	return dropped
+}
+
+// remove takes the buffer at i out. s.mu is held.
+func (s *Store) remove(i int) {
+	s.bytes -= len(s.bufs[i].Data)
+	s.bufs = append(s.bufs[:i], s.bufs[i+1:]...)
 }
 
 // ValidName reports whether name may name a buffer: 1 to 64 bytes of
@@ -169,36 +215,42 @@ func ValidName(name string) bool {
 	return true
 }
 
-// Add stores data as a new automatic buffer on top, owned by owner. A text
+// Add stores a yank as a new automatic buffer on top, owned by owner. A text
 // equal to the newest buffer's, from the same owner, is not stored twice:
-// that buffer comes back instead.
+// that buffer comes back instead. Only a yank does this; Set never does, so
+// text set in parts never lands in an older buffer.
 func (s *Store) Add(data string, owner Owner) (Buffer, error) {
-	return s.Set("", data, false, owner, nil)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.limit > 0 && len(s.bufs) > 0 && s.bufs[0].Automatic && s.bufs[0].Owner == owner && s.bufs[0].Data == data {
+		return s.bufs[0], nil
+	}
+	return s.set("", data, false, owner, nil)
 }
 
-// Set stores data in the buffer called name, or in a new automatic buffer
-// when name is "". With appendTo the data goes after the buffer's text, and a
-// name of "" means the newest buffer f sees. The buffer goes on top and is
-// owner's from now on. A name held by a buffer f does not see is refused
-// with ErrNotFound, so a caller cannot take over a buffer it may not read.
+// Set stores data in the buffer called name that f sees, or in a new
+// automatic buffer when name is "". With appendTo the data goes after the
+// named buffer's content; with no name, appendTo makes a new buffer, as
+// tmux's set-buffer -a does. A name f sees no buffer of makes a new named
+// buffer, whatever f does not see. The buffer goes on top and is owner's from
+// now on.
 func (s *Store) Set(name, data string, appendTo bool, owner Owner, f Filter) (Buffer, error) {
 	if name != "" && !ValidName(name) {
 		return Buffer{}, ErrBadName
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.set(name, data, appendTo, owner, f)
+}
+
+// set is Set with s.mu held.
+func (s *Store) set(name, data string, appendTo bool, owner Owner, f Filter) (Buffer, error) {
 	if s.limit == 0 {
 		return Buffer{}, ErrOff
 	}
 	idx := -1
-	switch {
-	case name != "":
-		idx = s.index(name)
-		if idx >= 0 && !f.sees(s.bufs[idx]) {
-			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
-		}
-	case appendTo:
-		idx = s.newest(f)
+	if name != "" {
+		idx = s.index(name, f)
 	}
 	if appendTo && idx >= 0 {
 		data = s.bufs[idx].Data + data
@@ -209,15 +261,11 @@ func (s *Store) Set(name, data string, appendTo bool, owner Owner, f Filter) (Bu
 	if len(data) > s.maxBytes {
 		return Buffer{}, fmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
 	}
-	if name == "" && !appendTo && len(s.bufs) > 0 && s.bufs[0].Automatic && s.bufs[0].Owner == owner && s.bufs[0].Data == data {
-		// The same yank twice adds nothing.
-		return s.bufs[0], nil
-	}
-	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner}
+	s.version++
+	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner, Version: s.version}
 	if idx >= 0 {
-		b.Name, b.Automatic = s.bufs[idx].Name, s.bufs[idx].Automatic
-		s.bytes -= len(s.bufs[idx].Data)
-		s.bufs = append(s.bufs[:idx], s.bufs[idx+1:]...)
+		b.Automatic = s.bufs[idx].Automatic
+		s.remove(idx)
 	} else if name == "" {
 		b.Name, b.Automatic = s.newName(), true
 	}
@@ -227,33 +275,23 @@ func (s *Store) Set(name, data string, appendTo bool, owner Owner, f Filter) (Bu
 	return b, nil
 }
 
-// newName is the next free automatic name, bufferNNNN as tmux names them.
+// newName is the next free automatic name, bufferN as tmux names them.
 // s.mu is held.
 func (s *Store) newName() string {
 	for {
-		name := fmt.Sprintf("buffer%04d", s.next)
+		name := fmt.Sprintf("buffer%d", s.next)
 		s.next++
-		if s.index(name) < 0 {
+		if s.index(name, nil) < 0 {
 			return name
 		}
 	}
 }
 
-// index is the position of the buffer called name, -1 for none. s.mu is held.
-func (s *Store) index(name string) int {
+// index is the position of the newest buffer called name that f sees, -1
+// for none. s.mu is held.
+func (s *Store) index(name string, f Filter) int {
 	for i, b := range s.bufs {
-		if b.Name == name {
-			return i
-		}
-	}
-	return -1
-}
-
-// newest is the position of the newest buffer f sees, -1 for none. s.mu is
-// held.
-func (s *Store) newest(f Filter) int {
-	for i, b := range s.bufs {
-		if f.sees(b) {
+		if b.Name == name && f.sees(b) {
 			return i
 		}
 	}
@@ -261,30 +299,37 @@ func (s *Store) newest(f Filter) int {
 }
 
 // find is the position of the buffer called name that f sees, or of the
-// newest f sees when name is "". s.mu is held.
+// newest automatic buffer f sees when name is "". s.mu is held.
 func (s *Store) find(name string, f Filter) (int, error) {
 	if name == "" {
-		if i := s.newest(f); i >= 0 {
-			return i, nil
+		for i, b := range s.bufs {
+			if b.Automatic && f.sees(b) {
+				return i, nil
+			}
 		}
 		return -1, ErrNone
 	}
-	if i := s.index(name); i >= 0 && f.sees(s.bufs[i]) {
+	if i := s.index(name, f); i >= 0 {
 		return i, nil
 	}
 	return -1, fmt.Errorf("%w: %s", ErrNotFound, name)
 }
 
-// Get returns the buffer called name, or the newest when name is "", among
-// the buffers f sees.
-func (s *Store) Get(name string, f Filter) (Buffer, error) {
+// Get returns the buffer called name, or the newest automatic one when name
+// is "", among the buffers f sees. A nonzero version returns it only while
+// its content is the one of that version.
+func (s *Store) Get(name string, version uint64, f Filter) (Buffer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i, err := s.find(name, f)
 	if err != nil {
 		return Buffer{}, err
 	}
-	return s.bufs[i], nil
+	b := s.bufs[i]
+	if version != 0 && b.Version != version {
+		return Buffer{}, fmt.Errorf("%w: %s", ErrChanged, b.Name)
+	}
+	return b, nil
 }
 
 // List returns the buffers f sees, newest first.
@@ -300,11 +345,11 @@ func (s *Store) List(f Filter) []Buffer {
 	return out
 }
 
-// Delete removes the buffer called name, or the newest when name is "",
-// among the buffers f sees, and returns it. A nonzero created deletes the
-// buffer only when its text is still the one set at that time, so a delete
-// after a paste never removes text set after the paste read it.
-func (s *Store) Delete(name string, created time.Time, f Filter) (Buffer, error) {
+// Delete removes the buffer called name, or the newest automatic one when
+// name is "", among the buffers f sees, and returns it. A nonzero version
+// deletes the buffer only while its content is the one of that version, so
+// a delete after a paste never removes content set after the paste read it.
+func (s *Store) Delete(name string, version uint64, f Filter) (Buffer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i, err := s.find(name, f)
@@ -312,38 +357,57 @@ func (s *Store) Delete(name string, created time.Time, f Filter) (Buffer, error)
 		return Buffer{}, err
 	}
 	b := s.bufs[i]
-	if !created.IsZero() && !b.Created.Equal(created) {
+	if version != 0 && b.Version != version {
 		return Buffer{}, fmt.Errorf("%w: %s", ErrChanged, b.Name)
 	}
-	s.bytes -= len(b.Data)
-	s.bufs = append(s.bufs[:i], s.bufs[i+1:]...)
+	s.remove(i)
 	return b, nil
 }
 
-// Sample is a buffer's text as one short line for a listing: control
-// characters shown as escapes, cut to at most width runes with an ellipsis.
-// The result is already escaped, so a caller prints it as it is.
+// Sample is a buffer's content as one short line for a listing: control
+// characters and bytes that are not UTF-8 shown as escapes, cut to at most
+// width characters with an ellipsis. It never cuts a character. The result is
+// already escaped, so a caller prints it as it is.
 func Sample(data string, width int) string {
 	var b strings.Builder
 	n := 0
-	for _, r := range data {
+	for i := 0; i < len(data); {
 		if n >= width {
 			b.WriteString("…")
 			break
 		}
+		r, size := utf8.DecodeRuneInString(data[i:])
 		switch {
+		case r == utf8.RuneError && size == 1:
+			fmt.Fprintf(&b, `\x%02x`, data[i])
 		case r == '\n':
 			b.WriteString(`\n`)
 		case r == '\t':
 			b.WriteString(`\t`)
 		case r == '\r':
 			b.WriteString(`\r`)
+		case r == '\\':
+			b.WriteString(`\\`)
 		case !unicode.IsPrint(r) && r != ' ':
-			b.WriteString(strings.Trim(strconv.QuoteRune(r), "'"))
+			if r < 0x10000 {
+				fmt.Fprintf(&b, `\u%04x`, r)
+			} else {
+				fmt.Fprintf(&b, `\U%08x`, r)
+			}
 		default:
 			b.WriteRune(r)
 		}
+		i += size
 		n++
 	}
 	return b.String()
+}
+
+// PasteText is content as paste-buffer types it: each line feed turned into
+// a carriage return, as tmux does, unless raw.
+func PasteText(data string, raw bool) string {
+	if raw {
+		return data
+	}
+	return strings.ReplaceAll(data, "\n", "\r")
 }

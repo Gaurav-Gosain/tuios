@@ -42,8 +42,9 @@ test enters the code below the fault, and the fault is what nobody is testing.
 
 ## Paste buffers (#514)
 
-`paste_buffers_test.go`, `paste_buffers_scope_test.go` and
-`paste_buffers_config_test.go` have eight tests. On
+`paste_buffers_test.go`, `paste_buffers_scope_test.go`,
+`paste_buffers_config_test.go` and `paste_buffers_bytes_test.go` have twelve
+tests, and eighteen controls. On
 2026-10-07 each control below cut one piece of wiring, built a binary, and ran
 the named test against it. Every control failed where shown, and the same
 tests passed on the branch build.
@@ -63,6 +64,11 @@ tests passed on the branch build.
 | `for_session` in `pasteBufferNamed` | `TestPasteKeyIgnoresABufferPlantedFromAnotherSession` | prefix `]` pastes the buffer a pane of another session set |
 | The byte test in the store's `trim` | `TestPasteBufferByteCap` | both 600-byte buffers stay under `max_kb = 1` |
 | `[paste_buffers]` left out of `DefaultConfig` | `TestPasteBufferKeysLiveInTheirFile` | `config prune --dry-run` does not list `paste_buffers.max_kb` |
+| The shim sends a one-part buffer as text in `data`, not `data_b64` | `TestPasteBufferKeepsEveryByte` | the binary file comes back with U+FFFD from byte 128, 520 bytes for 260 |
+| The shim sends the parts of an upload as text | `TestPasteBufferKeepsEveryByte` | the 1.8 MB file differs at byte 786430, where the first cut splits a character |
+| `SanitizePaste` in `verbPasteBuffer` | `TestPasteBufferSendsNoEscapeSequences` | `^[[201~evil` reaches the pane inside the paste |
+| `BufferChooserActivate` pastes into the focused pane, not the one the chooser opened on | `TestPasteBufferChooserPastesWhereItOpened` | the paste lands in the pane that took the focus later |
+| The local save in `handlePasteBufferSaveFailed` | `TestPasteBuffersWithAnOldDaemon` | with a daemon that answers `unknown_verb`, prefix `]` shows no "Pasted" |
 
 The grant test carries its positive halves: each refused call is served once
 the grant it names is given. The session test reads the other session's
@@ -76,7 +82,12 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames go tes
 
 With `TUIOS_E2E_FRAMES` set, the run writes `paste-buffers-chooser`,
 `paste-buffers-pasted`, `paste-buffers-bracketed`, `paste-buffers-grants`,
-`paste-buffers-own-session` and `paste-buffers-planted`.
+`paste-buffers-own-session`, `paste-buffers-planted` and
+`paste-buffers-escapes`.
+
+`TestPasteBuffersWithAnOldDaemon` sets `TUIOS_E2E_NO_BUFFER_VERBS=1`. With
+`TUIOS_E2E=1` as well, the daemon answers every buffer verb with
+`unknown_verb`, as a daemon from before them does. Nothing else reads it.
 
 ## OpenCode V2 plugin loading and session isolation
 

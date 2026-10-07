@@ -1,10 +1,12 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -37,6 +39,9 @@ type PasteBufferItem struct {
 	Name   string `json:"name"`
 	Bytes  int    `json:"bytes"`
 	Sample string `json:"sample"`
+	// Version is the content the row shows. Enter and d act only while the
+	// buffer still holds it.
+	Version uint64 `json:"version"`
 	// Pane and Session say a process in a pane set the buffer, and where.
 	// The chooser marks such a row: the person did not copy that text.
 	Pane    string `json:"pane"`
@@ -71,9 +76,10 @@ type PasteBufferFetchedMsg struct {
 	Data   string
 	Window string
 	Err    error
-	// asked is the name the paste asked for, "" for the newest, so a
-	// fallback to the local store asks the same.
-	asked string
+	// asked and version are what the paste asked for, so a fallback to the
+	// local store asks the same.
+	asked   string
+	version uint64
 }
 
 // PasteBufferDeletedMsg reports a delete from the chooser.
@@ -195,17 +201,18 @@ func (m *OS) PasteNewestBuffer() tea.Cmd {
 		m.ShowNotification("No pane to paste into", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.pasteBufferNamed("", w.ID)
+	return m.pasteBufferNamed("", w.ID, 0)
 }
 
 // pasteBufferNamed pastes the buffer called name, or the newest for "", into
 // the pane with the id window. The id is taken when the key is pressed, so a
-// pane that takes focus while the text is read does not get the paste.
-func (m *OS) pasteBufferNamed(name, window string) tea.Cmd {
+// pane that takes focus while the text is read does not get the paste. A
+// nonzero version pastes the buffer only while it holds the content the
+// chooser listed.
+func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 	if !m.buffersInDaemon() {
-		b, err := m.localBuffers().Get(name, nil)
-		m.handlePasteBufferFetched(PasteBufferFetchedMsg{Name: b.Name, Data: b.Data, Window: window, Err: err, asked: name})
-		return nil
+		b, err := m.localBuffers().Get(name, version, nil)
+		return m.handlePasteBufferFetched(PasteBufferFetchedMsg{Name: b.Name, Data: b.Data, Window: window, Err: err, asked: name, version: version})
 	}
 	call := m.bufferCall()
 	params := map[string]any{}
@@ -214,19 +221,30 @@ func (m *OS) pasteBufferNamed(name, window string) tea.Cmd {
 	} else {
 		params["for_session"] = m.pasteSession()
 	}
+	if version != 0 {
+		params["version"] = version
+	}
 	return func() tea.Msg {
 		raw, err := call("show-buffer", params)
 		if err != nil {
-			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name}
+			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name, version: version}
 		}
 		var res struct {
-			Name string `json:"name"`
-			Data string `json:"data"`
+			Name    string `json:"name"`
+			Data    string `json:"data"`
+			DataB64 string `json:"data_b64"`
 		}
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name}
 		}
-		return PasteBufferFetchedMsg{Name: res.Name, Data: res.Data, Window: window}
+		data := res.Data
+		if res.DataB64 != "" {
+			// Every byte, where an older daemon gives text alone.
+			if b, err := base64.StdEncoding.DecodeString(res.DataB64); err == nil {
+				data = string(b)
+			}
+		}
+		return PasteBufferFetchedMsg{Name: res.Name, Data: data, Window: window}
 	}
 }
 
@@ -247,7 +265,11 @@ func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 	if msg.Err != nil {
 		if isUnknownVerb(msg.Err) && m.buffersInDaemon() {
 			m.noteOldDaemon()
-			return m.pasteBufferNamed(msg.asked, msg.Window)
+			return m.pasteBufferNamed(msg.asked, msg.Window, msg.version)
+		}
+		if isChangedErr(msg.Err) {
+			m.ShowNotification("Buffer "+msg.Name+" changed after the list showed it. Nothing was pasted.", "warning", d)
+			return nil
 		}
 		if isNoBufferErr(msg.Err) {
 			m.ShowNotification("There are no paste buffers. A yank in copy mode adds one.", "info", d)
@@ -265,12 +287,19 @@ func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 		m.ShowNotification("Cannot paste in copy mode. Exit copy mode first.", "warning", d)
 		return nil
 	}
-	if !m.PasteIntoWindow(w, msg.Data) {
+	// A line feed becomes a carriage return, as tmux's paste-buffer does.
+	if !m.PasteIntoWindow(w, pastebuf.PasteText(msg.Data, false)) {
 		m.ShowNotification("Paste failed", "error", d)
 		return nil
 	}
 	m.ShowNotification(fmt.Sprintf("Pasted %s (%d chars)", msg.Name, len(msg.Data)), "success", d)
 	return nil
+}
+
+// isChangedErr reports whether err says the buffer was set again after the
+// list showed it, from the daemon or the local store.
+func isChangedErr(err error) bool {
+	return errors.Is(err, pastebuf.ErrChanged) || strings.Contains(err.Error(), "set again")
 }
 
 // isNoBufferErr reports whether err says there is no such buffer, from the
@@ -356,7 +385,7 @@ func (m *OS) OpenBufferChooser() tea.Cmd {
 func bufferItems(list []pastebuf.Buffer) []PasteBufferItem {
 	out := make([]PasteBufferItem, 0, len(list))
 	for _, b := range list {
-		out = append(out, PasteBufferItem{Name: b.Name, Bytes: len(b.Data), Sample: pastebuf.Sample(b.Data, 60)})
+		out = append(out, PasteBufferItem{Name: b.Name, Bytes: len(b.Data), Sample: pastebuf.Sample(b.Data, 60), Version: b.Version})
 	}
 	return out
 }
@@ -411,13 +440,13 @@ func (m *OS) BufferChooserActivate(idx int) tea.Cmd {
 	if idx < 0 || idx >= len(m.buffers.items) {
 		return nil
 	}
-	name, target := m.buffers.items[idx].Name, m.buffers.target
+	name, target, version := m.buffers.items[idx].Name, m.buffers.target, m.buffers.items[idx].Version
 	m.CloseBufferChooser()
 	if target == "" {
 		m.ShowNotification("No pane to paste into", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.pasteBufferNamed(name, target)
+	return m.pasteBufferNamed(name, target, version)
 }
 
 // BufferChooserDelete deletes the buffer on the selected row.
@@ -426,17 +455,19 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 	if idx < 0 || idx >= len(m.buffers.items) {
 		return nil
 	}
-	name := m.buffers.items[idx].Name
+	// Only the content the row shows goes: a buffer set again since the
+	// list loaded stays.
+	name, version := m.buffers.items[idx].Name, m.buffers.items[idx].Version
 	m.buffers.items = append(m.buffers.items[:idx:idx], m.buffers.items[idx+1:]...)
 	m.buffers.selected = clampInt(idx, 0, max(len(m.buffers.items)-1, 0))
 	if !m.buffersInDaemon() {
-		_, err := m.localBuffers().Delete(name, time.Time{}, nil)
+		_, err := m.localBuffers().Delete(name, version, nil)
 		m.handlePasteBufferDeleted(PasteBufferDeletedMsg{Name: name, Err: err})
 		return nil
 	}
 	call := m.bufferCall()
 	return func() tea.Msg {
-		_, err := call("delete-buffer", map[string]any{"name": name})
+		_, err := call("delete-buffer", map[string]any{"name": name, "version": version})
 		return PasteBufferDeletedMsg{Name: name, Err: err}
 	}
 }
@@ -444,6 +475,10 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 // handlePasteBufferDeleted says how a delete ended.
 func (m *OS) handlePasteBufferDeleted(msg PasteBufferDeletedMsg) {
 	d := m.Settings.NotificationDuration
+	if msg.Err != nil && isChangedErr(msg.Err) {
+		m.ShowNotification("Buffer "+msg.Name+" changed after the list showed it. Nothing was deleted.", "warning", d)
+		return
+	}
 	if msg.Err != nil && !isNoBufferErr(msg.Err) {
 		m.ShowNotification("Could not delete "+msg.Name+": "+msg.Err.Error(), "error", d)
 		return

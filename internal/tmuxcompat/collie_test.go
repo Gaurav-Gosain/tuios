@@ -195,7 +195,7 @@ func TestCollieReplyThroughPasteBuffer(t *testing.T) {
 }
 
 // TestPasteBufferAcrossCalls keeps a buffer between two calls, as tmux's
-// server does, and pastes the newest when -b names none.
+// server does, and pastes the newest automatic buffer when -b names none.
 func TestPasteBufferAcrossCalls(t *testing.T) {
 	h := newHarness(t)
 	h.shim.Dir = t.TempDir()
@@ -213,7 +213,7 @@ func TestPasteBufferAcrossCalls(t *testing.T) {
 	if st["text"] != "one\rtwo\r" || st["paste"] != true {
 		t.Errorf("send-text = %v, want line feeds as carriage returns, as a bracketed paste", st)
 	}
-	if code, _ := h.run("paste-buffer", "-r", "-b", "buffer0000"); code != 0 {
+	if code, _ := h.run("paste-buffer", "-r", "-b", "buffer0"); code != 0 {
 		t.Fatalf("paste-buffer -r failed: %s", h.err)
 	}
 	if st := h.fake.last("send-text"); st["text"] != "one\ntwo\n" {
@@ -225,17 +225,22 @@ func TestPasteBufferAcrossCalls(t *testing.T) {
 	if code, _ := h.run("set-buffer", "-a", "-b", "b2", " there"); code != 0 {
 		t.Fatal(h.err)
 	}
+	// With no -b, tmux takes the newest buffer it named: buffer0, not the
+	// newer b2, which someone named.
 	if code, _ := h.run("paste-buffer", "-d"); code != 0 {
 		t.Fatal(h.err)
 	}
-	if st := h.fake.last("send-text"); st["text"] != "hi there" {
-		t.Errorf("the newest buffer typed %q, want b2", st["text"])
+	if st := h.fake.last("send-text"); st["text"] != "one\rtwo\r" {
+		t.Errorf("paste-buffer with no -b typed %q, want buffer0, the newest automatic buffer", st["text"])
 	}
-	if code, _ := h.run("paste-buffer", "-b", "b2"); code == 0 || !strings.Contains(h.err.String(), "no buffer b2") {
-		t.Errorf("b2 after -d = %d %q, want no buffer b2", code, h.err)
+	if code, _ := h.run("paste-buffer", "-b", "buffer0"); code == 0 || !strings.Contains(h.err.String(), "no buffer buffer0") {
+		t.Errorf("buffer0 after -d = %d %q, want no buffer buffer0", code, h.err)
 	}
-	if code, _ := h.run("delete-buffer", "-b", "buffer0000"); code != 0 {
+	if code, _ := h.run("paste-buffer", "-b", "b2"); code != 0 {
 		t.Fatal(h.err)
+	}
+	if st := h.fake.last("send-text"); st["text"] != "hi there" {
+		t.Errorf("b2 typed %q, want the appended text", st["text"])
 	}
 	before := len(h.fake.calls)
 	if code, _ := h.run("paste-buffer"); code != 0 || len(h.fake.calls) != before {

@@ -853,7 +853,8 @@ goes to the clipboard, as before.
 `Ctrl+B ]` takes the newest text that you copied, or that a pane of the same
 session set with `tuios set-buffer`. A pane of another session cannot set what
 the key pastes. The paste goes to the pane that was focused when you pressed
-the key, also when the focus moves before the text arrives.
+the key, also when the focus moves before the text arrives. Each line feed
+becomes a carriage return, as in tmux.
 
 In the list, `Enter` or a click pastes the buffer, `d` deletes it, and `Esc`
 or `q` closes the list. The list shows "from pane" and the pane id on a buffer
