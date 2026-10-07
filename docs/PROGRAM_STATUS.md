@@ -8,8 +8,12 @@ needs no hook, no socket and no plugin.
 The sequence is the Program Status Protocol, OSC 7501, revision 0.2 of
 2026-10-06. Read the specification at
 [superlogical.com/rex/docs/build/program-status](https://www.superlogical.com/rex/docs/build/program-status).
-The Rex terminal reads it too. Support in libghostty, the library under
-Ghostty, is proposed in a pull request.
+The Rex terminal reads it too. libghostty-vt, the library under Ghostty,
+parses it since
+[ghostty-org/ghostty#14560](https://github.com/ghostty-org/ghostty/pull/14560),
+merged on 2026-10-06. The Ghostty app does not show it yet. The
+libghostty-vt that tuios pins predates that change, so on the libghostty-vt
+backend tuios parses OSC 7501 itself, as on the pure Go one.
 
 ```sh
 # Terraform waits for an approval. The message is base64 of
@@ -118,14 +122,18 @@ from the most urgent record of the pane:
   "program"` and the records as `program_status`.
 - **Hooks and alerts.** An agent state from a record raises the same hooks,
   alerts and push notifications as any other agent state. An alert names the
-  pane by its id too. The dock shows every alert, but a notification, a bell, a
-  sound or a client hook from one such pane goes out at most once in 30
-  seconds.
+  pane by its id too. The dock shows every alert. For a pane whose state comes
+  from its own report, the alerts that leave tuios (a notification, a bell, a
+  sound, a client hook) go out at most once in 30 seconds. Inside that time, an
+  alert for the state last sent is dropped as a repeat, and an alert for
+  another state is held: when the 30 seconds end, the newest one held goes out
+  if the pane is still in that state. A hook's alerts are not limited this way.
 - **A harness hook in the same pane wins.** The source `program` ranks just
   below a hook's report. When a hook reports for the pane, the records still
-  show, and the pane's state is the hook's. When the records of a pane end, a
-  state that a weaker source (the screen, the detector) held before the
-  program reported comes back.
+  show, and the pane's state is the hook's. When the records of a pane end,
+  tuios clears the state they set, and the foreground detector and the screen
+  rules look at the pane again. A state that a weaker source held before the
+  program reported is not replayed, since it may no longer be true.
 
 ### More than one record
 
@@ -148,21 +156,36 @@ There is no heartbeat. A program does not have to send its state again.
 | Event | `working`, `blocked`, `idle` | `done`, `error` |
 | --- | --- | --- |
 | The shell starts a prompt (OSC 133 A) | removed | kept |
-| The program exits | removed | kept |
+| The program that reported from the foreground exits | removed, within 2 seconds | kept |
+| A background job, or the pane's own process, that reported exits | kept | kept |
 | You type in the pane | kept | removed |
 | A full reset (RIS) | removed | removed |
 | A soft reset (DECSTR), or a switch to the alternate screen | kept | kept |
 
-A shell without OSC 133 marks does not tell tuios that a prompt started. So
-when a working, blocked or idle report arrives, tuios reads which process
-group holds the pane's terminal. If it is not the shell, a program in the
-foreground reported, and when the agent detector next sees the shell in the
-foreground, that program has exited and its records go. The detector looks
-every 2 seconds. A report from a background job (`job &`), or from a pane
-whose own process is the program (`tuios new-window -- cargo watch`), does not
-come from a foreground program, so its records stay until the program changes
-them or a prompt starts. A program that reports and exits before tuios reads
-the report leaves its record until the next prompt or OSC 133 A.
+A shell without OSC 133 marks does not tell tuios that a prompt started, so
+tuios watches process groups instead. When the bytes of a working, blocked or
+idle report come off the pane's terminal, tuios reads which process group
+holds the terminal's foreground, and keeps it with the record. The agent
+detector looks every 2 seconds, and when no process is left in a record's
+group, that program has exited and its records go. Each record keeps its own
+group, so a foreground program that exits ends only its own records.
+
+A report from a background job (`job &`), or from a pane whose own process is
+the program (`tuios new-window -- cargo watch`), does not come from a
+foreground group, so its records stay until the program changes them or a
+prompt starts. For a pane on another machine, the group has ended when that
+machine says the pane's shell holds the foreground again.
+
+One case is not caught: a program that reports and exits in the same instant,
+such as `printf ...; exit`, or `tuios status working` typed at a prompt, can be
+gone before tuios reads the foreground. Its record is then taken for a
+background job's and stays until the next prompt (OSC 133 A), the next report
+for it, or a clear. A shell that marks its prompts with OSC 133 has no such
+gap.
+
+With the agent features off (`[agents] enabled = false`) the detector does not
+run, so the exit rule does not run either. A prompt, typing and a reset still
+end records.
 
 Keys that `tuios send-text` or `tuios send-keys` types do not count as your
 typing for `done` and `error`. Keys from an attached client do.
@@ -259,8 +282,9 @@ tuios treats it as untrusted text.
   Inbox items add the pane's id, which a program cannot set, to the title,
   which it can.
 - A pane whose state comes from OSC 7501 raises a notification, a bell, a
-  sound or a client hook at most once in 30 seconds. Push notifications have
-  their own limits for each pane. tuios reports to a host terminal at most
+  sound or a client hook at most once in 30 seconds, and a change of state in
+  that time goes out when it ends. Push notifications have their own limits
+  for each pane. tuios reports to a host terminal at most
   once in 250 milliseconds.
 - `app` is only a label. tuios does not look it up as a harness, so a program
   cannot get the answers that a harness's approvals allow.
@@ -281,8 +305,8 @@ tuios treats it as untrusted text.
   that a later one replaces does not discard the report. The exception is
   `id`: any `id` pair with a character outside the value set discards the
   report, so a malformed id never lands on the root record.
-- **The process exit** in a pane whose own process is a shell is the exit of
-  the program that reported from the foreground (see
+- **The process exit** in a pane whose own process is a shell is the end of
+  the process group that held the foreground when the report came in (see
   [How long a record stays](#how-long-a-record-stays)).
 - **OSC 9;4** is not mapped to the root record. tuios keeps its own reading of
   OSC 9;4 as an agent state, and stops it once a pane sends OSC 7501.

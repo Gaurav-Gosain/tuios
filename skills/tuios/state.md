@@ -78,8 +78,9 @@ tuios status --clear --id tests
 `blocked` reads as `needs_input` with `blocked_by` from `--kind`
 (`permission` is `approval`), `done` as `done`, `error` as `errored`. The
 source is `program`, which ranks just below `report`. Each report replaces its
-record, so send `--app` every time. A shell prompt or your exit ends `working`,
-`blocked` and `idle` records. `done` and `error` stay until the person types in
+record, so send `--app` every time. A shell prompt ends `working`, `blocked`
+and `idle` records, and so does your exit when you reported from the
+foreground (not from a background job, and not in the same instant you exit). `done` and `error` stay until the person types in
 the pane. `get-agent-state` lists the records as `program_status`. Report
 `done` or `error` before you exit, or the person finds nothing. A harness
 already wired with a hook needs nothing more.
