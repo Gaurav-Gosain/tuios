@@ -3158,7 +3158,9 @@ last state.
 On 2026-10-08 each control below was built from `83d95938` with one cut, and
 the named tests were run against it. Each cut is the wiring, not the function
 under it: a `case` in the dispatch, a call site, or a field in the export.
-The unbroken binary passed all eleven tests on the same day.
+The unbroken binary passed all eleven tests on the same day. The rows for
+the prefix actions and the command keys were run on the commits that added
+them.
 
 | Wiring cut | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
@@ -3168,6 +3170,7 @@ The unbroken binary passed all eleven tests on the same day.
 | Insert-beside and insert-at-root in the tiler | `MovePaneBeside` and `MovePaneToRoot` in `internal/app/gui_layout.go` skip the `tree.MoveWindow` and `tree.MoveWindowToRoot` calls | `TestGUIBridgeMove` ("cannot move beside itself"), `TestGUIBridgeMoveRoot` ("is the only tiled pane") | **caught** (2 of 2) |
 | The `action` command | rename its `case` in `model.handle` in `internal/guibridge/bridge.go` | `TestGUIBridgeAction` (no result for `new_window` within 10 s) | **caught** |
 | The prefix actions on the allow list | drop `workspace_prefix_switch_` and `prefix_split_horizontal` from the lists in `internal/guibridge/actions.go` | `TestGUIBridgeAction` ("\"workspace_prefix_switch_2\" is not an action") | **caught** |
+| The user's command keys through `action` | drop the `config.CommandActionPrefix` check from `checkAction` | `TestGUIBridgeKeybinds` ("\"command:say-hi\" is not an action the bridge runs") | **caught** |
 | The keybinds event again after a config reload | drop the `sendKeybinds` call from `model.Update` | `TestGUIBridgeKeybinds` ("keybinds event 2 never came (saw 1)") | **caught** |
 | The `gui` scope | drop the `ScopeGUI` entry from `Scopes` in `internal/config/keybind_scopes.go` | `TestGUIBridgeKeybinds` ("the gui scope's default chords are missing", "the list rows have no gui scope") | **caught** |
 | `session_size` and the session name in the state | drop the `SessionSize` field from `export`, and keep the name the bridge attached with | `TestGUIBridgeSessionSize` (never shows the session at the bridge's width), `TestGUIBridgeSessionName` (still "first" after `next_session`) | **caught** (2 of 2) |
