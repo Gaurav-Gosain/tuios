@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
@@ -539,26 +540,51 @@ func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 }
 
 // bufferChooserRow draws one buffer: its name, the start of its text, and its
-// size. A buffer a process in a pane set says so before its size, since the
-// person did not copy that text.
+// size come first, and they keep their room. A buffer a process in a pane set
+// says so after them, since the person did not copy that text: "from pane"
+// and the pane's title, cleaned of control characters and runs of space, and
+// cut to bufferPaneTagCells. A pane's title is the pane's to choose, so it
+// can never push the buffer's own fields off the row.
 func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
-	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(byteSize(b.Bytes))
-	tag := ""
-	if b.Pane != "" {
-		tag = "from pane " + b.Pane + "  "
-		right = overlay.Style(rowBg).Foreground(pal.Warning).Render(tag) + right
-	}
+	size := byteSize(b.Bytes)
 	nameColor, sampleColor := pal.FgMute, pal.FgDim
 	if selected {
 		nameColor, sampleColor = pal.Accent, pal.Fg
 	}
 	name := overlay.Truncate(printableTitle(b.Name), 16)
+	// The marker, the gaps, the name and the size.
+	fixed := 8 + ansi.StringWidth(name) + ansi.StringWidth(size)
+	tag := ""
+	if b.Pane != "" {
+		tag = overlay.Truncate("from pane "+paneTagTitle(b.Pane), bufferPaneTagCells)
+		if width-fixed-ansi.StringWidth(tag)-2 < bufferSampleMinCells {
+			// Not room for both: the tag shrinks to a mark, never the text.
+			tag = "pane"
+		}
+	}
+	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(size)
+	if tag != "" {
+		right = overlay.Style(rowBg).Foreground(pal.Warning).Render(tag) + overlay.Style(rowBg).Render("  ") + right
+		fixed += ansi.StringWidth(tag) + 2
+	}
 	left := overlay.Style(rowBg).Foreground(nameColor).Bold(true).Render(name)
-	room := width - len([]rune(name)) - len(byteSize(b.Bytes)) - len([]rune(tag)) - 8
-	if room > 0 {
+	if room := width - fixed; room > 0 {
 		left += overlay.Style(rowBg).Foreground(sampleColor).Render("  " + overlay.Truncate(printableTitle(b.Sample), room))
 	}
 	return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
+}
+
+// bufferPaneTagCells caps the "from pane" tag of a chooser row, and
+// bufferSampleMinCells is the least of the text the row keeps for it.
+const (
+	bufferPaneTagCells   = 20
+	bufferSampleMinCells = 12
+)
+
+// paneTagTitle is a pane's title for the chooser: printable, with each run of
+// space or control characters made one space.
+func paneTagTitle(title string) string {
+	return strings.Join(strings.Fields(printableTitle(title)), " ")
 }
 
 // byteSize is a buffer size as a short label.

@@ -20,19 +20,25 @@ import (
 //   - A line is read into memory of its own, which goes when the request
 //     ends. A connection that sent one large line does not keep a large
 //     buffer for its life.
-//   - Past largeVerbLine, every byte a line takes is charged to one budget
-//     the whole daemon shares (lineBudget), at three times its size: the
-//     line, the copy the request envelope's params make, and what a handler
-//     decodes from them. A line that cannot get its share within
-//     lineBudgetWait is refused, so many large requests at once wait or fail
-//     and never grow memory past the budget. A large line must also arrive
-//     within largeLineDeadline, so a client that sends one slowly cannot hold
-//     the budget.
+//   - Past largeVerbLine, every byte a line takes is charged to a budget, at
+//     three times its size: the line, the copy the request envelope's params
+//     make, and what a handler decodes from them. A line that cannot get its
+//     share within lineBudgetWait is refused, so many large requests at once
+//     wait or fail and never grow memory past the budgets. A large line must
+//     also arrive within largeLineDeadline, so a client that sends one slowly
+//     cannot hold its share.
+//   - There are two budgets. The person, outside every pane or in a pane
+//     that holds admin, has one of their own, and every other caller (a pane
+//     without admin, a link) shares the other. So no pane can use up what
+//     the person's own large requests (a stash-put, a paste-image, a large
+//     yank) need. A connection reads one line at a time, so it holds at most
+//     one line's share, maxVerbLine times lineCopies, which is under either
+//     budget.
 
 const (
 	maxVerbLine       = 12 << 20
 	largeVerbLine     = 64 << 10
-	lineBudgetBytes   = 64 << 20
+	lineBudgetBytes   = 48 << 20 // each of the two budgets
 	lineBudgetChunk   = 64 << 10
 	lineBudgetWait    = 2 * time.Second
 	largeLineDeadline = 30 * time.Second
@@ -83,14 +89,24 @@ type verbLineReader struct {
 	d    *Daemon
 	cs   *connState
 	br   *bufio.Reader
-	held int // budget chunks the current line holds
+	pool lineBudget // the budget of this connection's caller, found once
+	held int        // budget chunks the current line holds
+}
+
+// budget is the budget of the connection's caller: the person's own, or the
+// one every other caller shares. It is found at the first large line.
+func (r *verbLineReader) budget() lineBudget {
+	if r.pool == nil {
+		r.pool = r.d.lineBudgetFor(r.d.bufferAccess(r.cs).person())
+	}
+	return r.pool
 }
 
 // done gives back the budget of the line read last. The caller calls it when
 // the request has been handled.
 func (r *verbLineReader) done() {
 	if r.held > 0 {
-		r.d.lineBudget().release(r.held)
+		r.budget().release(r.held)
 		r.held = 0
 	}
 }
@@ -114,7 +130,7 @@ func (r *verbLineReader) next() ([]byte, error) {
 				// Grow by doubling, charging the budget for the new memory
 				// and for the copies the request will make of it.
 				grown := min(max(2*cap(line), len(line)+len(frag), largeVerbLine), maxVerbLine)
-				got, ok := r.d.lineBudget().acquire((grown-cap(line))*lineCopies, time.Now().Add(lineBudgetWait))
+				got, ok := r.budget().acquire((grown-cap(line))*lineCopies, time.Now().Add(lineBudgetWait))
 				if !ok {
 					return nil, errVerbLineBusy
 				}
@@ -142,8 +158,15 @@ func (r *verbLineReader) next() ([]byte, error) {
 	}
 }
 
-// lineBudget is the daemon's budget for large request lines.
-func (d *Daemon) lineBudget() lineBudget {
-	d.lineBudgetOnce.Do(func() { d.lineBudgetCh = newLineBudget() })
-	return d.lineBudgetCh
+// lineBudgetFor is the daemon's budget for large request lines of the
+// person, or of every other caller.
+func (d *Daemon) lineBudgetFor(person bool) lineBudget {
+	d.lineBudgetOnce.Do(func() {
+		d.lineBudgetPerson = newLineBudget()
+		d.lineBudgetPanes = newLineBudget()
+	})
+	if person {
+		return d.lineBudgetPerson
+	}
+	return d.lineBudgetPanes
 }

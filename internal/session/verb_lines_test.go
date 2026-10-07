@@ -39,7 +39,7 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("a line of %d bytes read as %v, want errVerbLineTooLong", maxVerbLine+1, err)
 	}
 	lr.done()
-	if n := len(d.lineBudget()); n != 0 {
+	if n := len(d.lineBudgetFor(true)); n != 0 {
 		t.Fatalf("after the refusal the budget still holds %d chunks", n)
 	}
 
@@ -49,7 +49,7 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 	lr = &verbLineReader{d: d, cs: &connState{conn: server}, br: bufio.NewReaderSize(server, 64*1024)}
 
 	// With the budget taken, a large line is refused, and a small one passes.
-	budget := d.lineBudget()
+	budget := d.lineBudgetFor(true)
 	for range cap(budget) {
 		budget <- struct{}{}
 	}

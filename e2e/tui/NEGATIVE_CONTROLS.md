@@ -44,10 +44,10 @@ test enters the code below the fault, and the fault is what nobody is testing.
 
 `paste_buffers_test.go`, `paste_buffers_scope_test.go`,
 `paste_buffers_config_test.go`, `paste_buffers_bytes_test.go` and
-`paste_buffers_rules_test.go` have seventeen tests and twenty-five controls.
-Three unit tests in `internal/session/verb_buffers_test.go` and
-`verb_lines_test.go` bound the daemon's memory, a security boundary, with six
-controls of their own. On 2026-10-08 each control below cut one piece of
+`paste_buffers_rules_test.go` have seventeen tests and twenty-six controls.
+Four unit tests in `internal/session/verb_buffers_test.go` and
+`verb_lines_test.go` bound the daemon's memory and keep the person's share of
+it, a security boundary, with eight controls of their own. On 2026-10-08 each control below cut one piece of
 wiring, built a binary, and ran the named test against it. Every control
 failed where shown, and the same tests passed on the branch build.
 
@@ -65,6 +65,7 @@ failed where shown, and the same tests passed on the branch build.
 | The owner filter in `paneBuffers` | `TestAPaneSeesOnlyItsOwnBuffers` | the pane reads the person's buffer, and `OTHER_SHOW=1` never prints |
 | `list-buffers` sums every buffer for `bytes` | `TestAPaneSeesOnlyItsOwnBuffers` | the pane's listing says 5020 bytes, want its own 8 |
 | `bare` gives the person every buffer | `TestThePersonsNewestIsNeverAPanes` | the person's bare `show-buffer` prints the agent's `planted` |
+| The chooser's tag uncut and drawn whatever its length | `TestThePersonsNewestIsNeverAPanes` | the agent's long pane name fills the row, and `planted` and `7 bytes` are gone from it |
 | The byte test in the store's `trim` | `TestPasteBufferByteCap` | both 600-byte buffers stay under `max_kb = 1` |
 | `[paste_buffers]` left out of `DefaultConfig` | `TestPasteBufferKeysLiveInTheirFile` | `config prune --dry-run` does not list `paste_buffers.max_kb` |
 | The shim sends a buffer as text in `data`, not `data_b64` | `TestPasteBufferKeepsEveryByte` | the binary file comes back with U+FFFD from byte 128, 520 bytes for 260 |
@@ -84,6 +85,8 @@ failed where shown, and the same tests passed on the branch build.
 | The `maxVerbLine` check in `verbLineReader.next` | `TestVerbLinesHoldBoundedMemory` (unit) | a line of 12582913 bytes is read whole |
 | The budget refusal in `verbLineReader.next` | `TestVerbLinesHoldBoundedMemory` (unit) | a 200 KiB line is read with the budget taken |
 | The budget release in `verbLineReader.done` | `TestVerbLinesHoldBoundedMemory` (unit) | after a refusal the budget still holds 573 chunks |
+| Every line charged to the panes' budget | `TestThePersonsShareSurvivesAFullPanePool` (unit) | with the panes' budget full, the person's 1 MB upload part is refused and the connection closed |
+| The upload total counted across the person and the panes | `TestThePersonsShareSurvivesAFullPanePool` (unit) | with the panes' uploads full, the person's part is refused as "too many uploads" |
 
 The tests carry their positive halves. Each refused grant is served once the
 grant is given. A pane that may not reach the person's buffer still reaches

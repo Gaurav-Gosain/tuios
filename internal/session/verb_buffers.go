@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -184,8 +186,19 @@ func (d *Daemon) bufferRow(b pastebuf.Buffer, sampleWidth int) map[string]any {
 func (d *Daemon) paneLabel(id string) string {
 	if sess := d.sessionHoldingWindow(id); sess != nil {
 		if w, ok := findWindowState(sess.GetState(), id); ok {
-			if name := windowDisplayName(w); name != "" {
-				return name
+			// The title is the pane's to set: no control characters, each
+			// run of space one space, and not past 64 characters.
+			clean := strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+				if unicode.IsControl(r) {
+					return ' '
+				}
+				return r
+			}, windowDisplayName(w))), " ")
+			if r := []rune(clean); len(r) > 64 {
+				clean = string(r[:63]) + "…"
+			}
+			if clean != "" {
+				return clean
 			}
 		}
 	}
@@ -276,21 +289,26 @@ type bufferUpload struct {
 	id      string
 	data    []byte
 	touched time.Time
+	person  bool
 }
 
 // bufferUploadTTL is how long an upload waits for its next part.
 const bufferUploadTTL = time.Minute
 
 // uploadPart adds part to the upload id of the connection cs, and returns
-// the whole content when this is the last part.
+// the whole content when this is the last part. person says the caller is
+// the person: outside every pane, or in a pane that holds admin.
 //
 // The memory unfinished uploads hold is bounded. A connection has at most
-// one: a part with another id starts over and drops the first. All of them
-// together hold at most maxBytes, the byte cap of the buffers, and a part past
-// it is refused and drops its own upload, never another connection's. An
-// upload is dropped when its connection closes (dropUploads) and after
-// bufferUploadTTL without a part.
-func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, maxBytes int) ([]byte, *verbError) {
+// one: a part with another id starts over and drops the first, and it holds
+// at most maxBytes, the byte cap of the buffers. The person's uploads
+// together hold at most maxBytes, and every other caller's together hold at
+// most maxBytes more, so no pane can use up what the person's own upload
+// needs. A part past a bound is refused and drops its own upload, never
+// another connection's, and the refusal says nothing of what other uploads
+// hold. An upload is dropped when its connection closes (dropUploads) and
+// after bufferUploadTTL without a part.
+func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, maxBytes int, person bool) ([]byte, *verbError) {
 	d.uploadsMu.Lock()
 	defer d.uploadsMu.Unlock()
 	if d.uploads == nil {
@@ -303,13 +321,13 @@ func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, ma
 			delete(d.uploads, c)
 			continue
 		}
-		if c != cs {
+		if c != cs && u.person == person {
 			total += len(u.data)
 		}
 	}
 	u := d.uploads[cs]
 	if u == nil || u.id != id {
-		u = &bufferUpload{id: id}
+		u = &bufferUpload{id: id, person: person}
 		d.uploads[cs] = u
 	}
 	u.touched = now
@@ -319,8 +337,8 @@ func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, ma
 	}
 	if total+len(u.data)+len(part) > maxBytes {
 		delete(d.uploads, cs)
-		return nil, hintedVerbError(ErrVerbInvalidParams, "set-buffer: other uploads in progress hold as much as the paste buffers may", &VerbHint{
-			Detail: "Nothing was stored. Send the content again when the other uploads end.",
+		return nil, hintedVerbError(ErrVerbInvalidParams, "set-buffer: too many uploads are in progress", &VerbHint{
+			Detail: "Nothing was stored. Send the content again later.",
 		})
 	}
 	u.data = append(u.data, part...)
@@ -414,7 +432,7 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 	var data string
 	if p.Upload != "" {
 		_, maxBytes := store.Limits()
-		whole, verr := d.uploadPart(cs, p.Upload, part, !p.More, maxBytes)
+		whole, verr := d.uploadPart(cs, p.Upload, part, !p.More, maxBytes, d.bufferAccess(cs).person())
 		if verr != nil {
 			return nil, verr
 		}

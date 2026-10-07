@@ -192,7 +192,11 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 		t.Fatalf("prefix ] pasted the agent's buffer\n%s", term.Snapshot())
 	}
 
-	// The chooser lists the agent's buffer and says whose it is.
+	// The chooser lists the agent's buffer and says whose it is. The agent's
+	// pane has a long name with tabs in it, and the row still shows the
+	// buffer's own text and size, with the tag cut short.
+	mustCLI(t, base, "set-window", "-s", "work", "-w", agent, "--name", strings.Repeat("x", 60)+"\t\t\tend")
+	time.Sleep(300 * time.Millisecond)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "#"); err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +204,16 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 		return strings.Contains(s.Text(), "Paste buffers") && strings.Contains(s.Text(), "from pane")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the chooser does not mark the agent's buffer: %v\n%s", err, term.Snapshot())
+	}
+	_, rows := term.Screen().Size()
+	row := ""
+	for r := range rows {
+		if line := term.Screen().Line(r); strings.Contains(line, "from pane") {
+			row = line
+		}
+	}
+	if !strings.Contains(row, "planted") || !strings.Contains(row, "7 bytes") || strings.Contains(row, strings.Repeat("x", 20)) {
+		t.Fatalf("a long pane name pushed the buffer's text or size off its row, or was not cut:\n%q", row)
 	}
 	saveFrame(t, term, "paste-buffers-planted")
 	if err := term.SendKeys(tuitest.Esc); err != nil {

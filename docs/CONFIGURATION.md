@@ -676,6 +676,17 @@ command under stays yours. From inside a pane, reading its buffers needs the
 `read` grant, changing them needs `write`, and pasting needs both. See
 [What a pane may do](#what-a-pane-may-do).
 
+Large requests to the daemon, such as a big `set-buffer`, a `stash put` or an
+image paste, take memory from a budget. You, outside every pane or in a pane
+that holds `admin`, have a budget of your own. A pane without `admin` shares
+another, so it cannot use up yours.
+
+One thing a pane can still learn: the automatic buffer numbers (`buffer0`,
+`buffer1`) come from one counter for everybody. A gap between two of a pane's
+own buffer numbers tells it that other buffers were made in between, such as
+your yanks. It tells the pane how often you copy, not what. tuios accepts this
+as a low risk.
+
 ## Master-stack layout
 
 These options shape the master-stack layout. Each workspace starts with them.

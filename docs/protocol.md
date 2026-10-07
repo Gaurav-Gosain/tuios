@@ -2460,8 +2460,11 @@ only goes up, and a name of the form `bufferN` may not be made by hand.
   the last has `more`, and the buffer is set once, from all parts, when the
   last arrives. Cut the parts from the bytes before they are encoded; the
   CLI and the shim send 768 KiB a part. A connection has one unfinished upload
-  at a time, all unfinished uploads together hold at most `max_bytes`, and an
-  upload goes when its connection closes. Empty content stores nothing and is
+  at a time, of at most `max_bytes`. The person's unfinished uploads together
+  hold at most `max_bytes`, and every other caller's together at most
+  `max_bytes` more, so no pane can use up the person's share. An upload goes
+  when its connection closes, and a refusal does not say what other uploads
+  hold. Empty content stores nothing and is
   no error, and the result then has `stored` false. A name makes the buffer a
   named one, also a name that was automatic.
 - `delete-buffer`: `name`, `version` (both optional). With `version`, the
@@ -2471,6 +2474,11 @@ only goes up, and a name of the form `bufferN` may not be made by hand.
   tmux. Then the text goes as `send-text` with `paste` does: sanitized, and
   bracketed when the pane's program turned bracketed paste on. Returns
   `bracketed`.
+
+A pane's automatic buffers take their numbers from the one counter that
+every buffer uses, so a gap between a pane's own buffer numbers tells it that
+other buffers were made meanwhile, such as the person's yanks. It tells how
+often, never what, and tuios accepts that as low.
 
 A name that no buffer has, or the newest when there is none, answers
 `no_buffer`. From a pane, `list-buffers` and `show-buffer` need the `read`

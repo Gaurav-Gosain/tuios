@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"net"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 	conns := make([]*connState, 16)
 	for i := range conns {
 		conns[i] = &connState{}
-		_, _ = d.uploadPart(conns[i], "u", part, false, capBytes)
+		_, _ = d.uploadPart(conns[i], "u", part, false, capBytes, false)
 		if got := d.uploadBytes(); got > capBytes {
 			t.Fatalf("after %d connections the unfinished uploads hold %d bytes, more than the cap of %d", i+1, got, capBytes)
 		}
@@ -43,7 +44,7 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 	}
 
 	// A second id on one connection replaces its first upload.
-	if _, verr := d.uploadPart(conns[0], "v", []byte("yy"), false, capBytes); verr != nil {
+	if _, verr := d.uploadPart(conns[0], "v", []byte("yy"), false, capBytes, false); verr != nil {
 		t.Fatalf("a new upload on the same connection was refused: %v", verr)
 	}
 	if got := d.uploadBytes(); got != 2 {
@@ -51,19 +52,19 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 	}
 
 	// Another connection can now upload, and finishing returns the whole.
-	if _, verr := d.uploadPart(conns[1], "w", part[:500], false, capBytes); verr != nil {
+	if _, verr := d.uploadPart(conns[1], "w", part[:500], false, capBytes, false); verr != nil {
 		t.Fatalf("an upload under the cap was refused: %v", verr)
 	}
-	whole, verr := d.uploadPart(conns[1], "w", part[:100], true, capBytes)
+	whole, verr := d.uploadPart(conns[1], "w", part[:100], true, capBytes, false)
 	if verr != nil || len(whole) != 600 {
 		t.Fatalf("the last part returned %d bytes (%v), want 600", len(whole), verr)
 	}
 
 	// A refused part drops only its own upload.
-	if _, verr := d.uploadPart(conns[2], "big", part, false, capBytes); verr != nil {
+	if _, verr := d.uploadPart(conns[2], "big", part, false, capBytes, false); verr != nil {
 		t.Fatalf("an upload under the cap was refused: %v", verr)
 	}
-	if _, verr := d.uploadPart(conns[3], "late", part, false, capBytes); verr == nil {
+	if _, verr := d.uploadPart(conns[3], "late", part, false, capBytes, false); verr == nil {
 		t.Fatalf("an upload past the cap was taken")
 	}
 	if got := d.uploadBytes(); got != 2+len(part) {
@@ -105,5 +106,66 @@ func TestAClosedConnectionDropsItsUpload(t *testing.T) {
 			t.Fatalf("the daemon still holds %d bytes of a closed connection's upload", d.uploadBytes())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestThePersonsShareSurvivesAFullPanePool is a security boundary: a pane
+// without admin must not be able to use up what the person's own large
+// requests need. Panes hold every byte their uploads and their large request
+// lines may, and the person's 1 MB set-buffer, sent in parts over a real
+// socket as the CLI sends it, still succeeds.
+//
+// How it could pass wrongly: the person's call could be small enough to skip
+// both bounds, so it is a 1 MB upload in two parts, each over the size at
+// which a line is charged to a budget. The pane pools could be only part
+// full, so they are filled until the next pane upload is refused, and every
+// chunk of the panes' line budget is taken.
+func TestThePersonsShareSurvivesAFullPanePool(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	_, maxBytes := d.bufferStore().Limits()
+
+	// Pane connections fill the panes' upload pool.
+	part := bytes.Repeat([]byte("p"), maxBytes/4)
+	for i := 0; ; i++ {
+		if _, verr := d.uploadPart(&connState{}, "pane", part, false, maxBytes, false); verr != nil {
+			if strings.Contains(verr.Message, "bytes") {
+				t.Fatalf("the refusal tells how much other uploads hold: %s", verr.Message)
+			}
+			break
+		}
+		if i > 8 {
+			t.Fatalf("the panes' uploads are not bounded")
+		}
+	}
+	// And the panes' line budget is taken whole.
+	panes := d.lineBudgetFor(false)
+	for range cap(panes) {
+		panes <- struct{}{}
+	}
+	defer panes.release(cap(panes))
+
+	conn, err := net.DialTimeout("unix", socketPath, 3*time.Second)
+	if err != nil {
+		t.Fatalf("dial the daemon: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	r := bufio.NewReader(conn)
+	half := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("q"), 512<<10))
+	for i, line := range []string{
+		`{"id":1,"verb":"set-buffer","params":{"upload":"mine","more":true,"data_b64":"` + half + `"}}`,
+		`{"id":2,"verb":"set-buffer","params":{"upload":"mine","name":"persons","data_b64":"` + half + `"}}`,
+	} {
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+		if _, err := conn.Write([]byte(line + "\n")); err != nil {
+			t.Fatalf("write part %d: %v", i+1, err)
+		}
+		reply, err := r.ReadString('\n')
+		if err != nil || strings.Contains(reply, `"error"`) {
+			t.Fatalf("the person's part %d was refused with the pane pools full: %v %s", i+1, err, reply)
+		}
+	}
+	b, err := d.bufferStore().Get("persons", 0, nil)
+	if err != nil || len(b.Data) != 1<<20 {
+		t.Fatalf("the person's buffer holds %d bytes (%v), want 1 MiB", len(b.Data), err)
 	}
 }
