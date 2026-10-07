@@ -2700,8 +2700,10 @@ palette, which was a third of the client's CPU in the first profile.
 
 ### What changed
 
-- `terminal.SetFrameInterval`: the coalescer floor is one frame at max_fps,
-  not 8 ms.
+- `Window.SetFrameInterval`: the coalescer floor is one frame at max_fps,
+  not 8 ms. It is per pane, and each client sets it on its own panes: in the
+  SSH and web servers each connection is its own client, and one client's
+  max_fps does not set another's.
 - The coalescer and the new frame gate count intervals with the generic cell
   rate algorithm (`terminal.NextFrameTime`, `terminal.FrameSlack`). A frame up
   to a quarter of a period early stands for the end of the period. Counted
@@ -2710,10 +2712,13 @@ palette, which was a third of the client's CPU in the first profile.
 - `takePaneOutput`: frames for pane output are spaced one period apart for
   the whole client, and a held frame comes as a `frameDueMsg`. Output that
   answers a key, a paste, a click or a wheel step is not held.
-- `kickFlush`: `View` sends one value on Bubble Tea's ticker channel when the
-  frame or the cursor changed, so a composed frame is written at once.
-  `TestKickFlushWritesTheFrame` fails on a Bubble Tea release where that no
-  longer works.
+- `kickFlush`, `flushCmd`: when the frame or the cursor changed, one value is
+  sent on Bubble Tea's ticker channel, so a composed frame is written at once.
+  It is sent when `flushMsg` reaches `Update`, after Bubble Tea has stored the
+  frame. A first version sent it on a 100 us timer from `View`, which could
+  fire before the store: the renderer then wrote the frame before, and a typed
+  key waited a whole tick (p99 17 to 24 ms). `TestKickFlushWritesTheFrame`
+  fails on a Bubble Tea release where the channel no longer works.
 - Every visible pane with output is drawn in each frame. Unfocused panes were
   drawn on every third pass, which made them uneven once passes were bounded.
 - A pane far behind its output is drawn every two frames, not every 250 ms,
@@ -2721,43 +2726,60 @@ palette, which was a third of the client's CPU in the first profile.
 
 ### Numbers
 
-207x55, one guest unless noted, two interleaved runs of each build at a load
-average of 2 to 5 (other work shared the machine). Base is origin/main at
-582af540.
+207x55, one guest unless noted, three interleaved runs of each build at a
+load average of 2.6 to 3.1. Base is origin/main at 582af540.
 
 | Case | base | after |
 |---|---|---|
-| 120 Hz guest, max_fps 120: frames shown | 100, 103 a second | 120, 120 |
-| interval p95 / p99 | 16.9 / 17.4 ms | 9.3 / 9.7 ms |
-| latency p50 | 10.9, 10.7 ms | 8.9, 8.7 ms |
-| 240 Hz guest, max_fps 240: frames shown | 123, 122 | 240, 235 |
-| interval p95 / p99 | 9.5 / 12.2 ms | 5.6 / 6.2 ms |
-| 240 Hz guest, max_fps 120: latency p50 | 8.3, 11.2 ms | 4.5, 4.5 ms |
-| 9 panes at 120 Hz: frames of the first guest | 97, 92 | 116, 116 |
-| interval p99 | 17.7, 25.1 ms | 17.0, 17.2 ms |
-| client CPU | 908, 1012 ms/s | 622, 600 ms/s |
-| flood (`framepace scroll`): frames a second | 18, 43 | 65, 66 |
-| interval p95 | 100.7, 99.2 ms | 17.9, 18.5 ms |
+| 120 Hz guest, max_fps 120: frames shown a second | 110, 101, 104 | 120, 120, 120 |
+| interval p95 / p99 | 16.8 to 17.1 / 17.4 to 17.5 ms | 9.2 to 9.4 / 9.7 to 9.9 ms |
+| latency p50 / p99 | 9.9 to 15.9 / 17.8 to 19.2 ms | 7.4 to 7.5 / 9.0 to 9.4 ms |
+| 240 Hz guest, max_fps 240: frames shown | 123, 124, 124 | 239, 240, 240 |
+| interval p95 / p99 | 9.3 to 10.0 / 12.1 to 12.7 ms | 5.3 / 5.9 ms |
+| 240 Hz guest, max_fps 120: latency p50 | 8.9 to 9.9 ms | 3.5 ms |
+| 9 panes at 120 Hz: mean of the nine guests | 108.7, 106.4, 109.3 | 108.4, 109.3, 111.0 |
+| slowest guest | 99, 95, 101 | 87, 90, 90 |
+| client CPU | 914 to 970 ms/s | 634 to 658 ms/s |
+| flood (`framepace scroll`): frames a second | 14, 16, 41 | 66, 68, 68 |
+| interval p95 | 100.8, 101.9, 99.9 ms | 17.7, 17.7, 17.6 ms |
 | 285 MB flood (`yes \| head`): time, max gap | 5.3 to 5.6 s, 101 ms | 5.1 to 5.2 s, 16 to 21 ms |
 | shm frames, 120 and 240 Hz | all shown, p99 9.6 and 5.5 ms | all shown, unchanged |
 
-Typed keys at the default 60 frames a second (`TestPerfInputLatency`, 1, 4 and
-8 panes): p50 16.6 to 16.9 ms before, 11.0 to 16.2 ms after. p95 is 17.2 to
-17.5 ms before and 17.4 to 17.8 ms after, and p99 17.5 to 17.7 ms before and
-17.8 to 20.2 ms after.
+In the nine-pane case the guests' mean rate is unchanged, but the spread is
+wider: most guests show 115 to 120 frames, and one or two show 87 to 98. All
+nine guests draw at exactly the frame rate, and with one frame clock for the
+whole client, a guest whose frames arrive at the same moment as a frame is
+composed has some of them land a frame late and some a frame early. Before,
+each pane's signal composed a frame of its own, so every guest was drawn
+soon after it wrote. A tighter gate (no early frames, a timer at the end of
+the period) and a coalescer without cost pacing were both tried and neither
+moved it outside run-to-run noise, so it is left as measured.
 
-`TestFramePacingKeepsTheGuestsRate` and `TestFloodStaysSmooth` assert the
-rates under `TUIOS_E2E_PERF`. `TestMaxFPS240DrawsPastTheOldClamp` measures 63,
+Typed keys at the default 60 frames a second, 60 ms apart
+(`TestTypingLatencyStaysLow`), two runs each:
+
+| | base | after |
+|---|---|---|
+| 1 pane: p50 / p99 | 6.2 / 7.4 ms | 4.7 to 4.8 / 5.8 to 6.0 ms |
+| 8 panes: p50 / p99 | 6.2 / 22.8 ms | 5.4 to 5.6 / 6.9 to 7.6 ms |
+
+Back to back (`TestPerfInputLatency`), where each key waits for the last
+echo, the p50 moves from 16.6 to 16.9 ms to 11.0 to 16.2 ms and the p99 stays
+at 17.5 to 18 ms.
+
+`TestFramePacingKeepsTheGuestsRate`, `TestFloodStaysSmooth` and
+`TestTypingLatencyStaysLow` assert the rates and the typing p99 under
+`TUIOS_E2E_PERF`. `TestMaxFPS240DrawsPastTheOldClamp` measures 63,
 243 and 241.
 
 ### What it costs
 
-- A pane flooding past what the client can parse is drawn three times as
-  often, so it is further behind its guest: latency p50 156 to 254 ms against
-  84 to 105 ms. The guest wrote as many lines in the same time.
+- A pane flooding past what the client can parse is drawn four times as
+  often, so it is further behind its guest: latency p50 175 to 209 ms against
+  75 to 113 ms. The guest wrote as many lines in the same time.
 - At max_fps 240 a pane streaming kitty graphics composes 240 frames a second
   instead of 125. Each is the same frame and is not written, but the client
-  takes 344 ms/s of CPU against 206.
+  takes 312 to 330 ms/s of CPU against 190 to 204.
 
 ### Invariants held
 

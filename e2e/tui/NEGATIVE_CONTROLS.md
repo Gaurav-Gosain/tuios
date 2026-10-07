@@ -2159,6 +2159,10 @@ the Bubble Tea behaviour the flush kick depends on.
 | The floor stays at 8 ms | `applyFrameRate`: the `SetFrameInterval` call cut | `TestFramePacingKeepsTheGuestsRate` (240: 129 frames a second) | **caught** |
 | A pane behind is drawn every 250 ms | `catchUpCoalesceInterval` returns 250 ms | `TestFloodStaysSmooth` (15 frames a second, p95 101 ms) | **caught** |
 | The kick does nothing | `sendTick`: the send cut | `TestKickFlushWritesTheFrame` | **caught** |
+| The kick sent on a timer from View | build `cc61f3b8`, before `flushCmd` | `TestTypingLatencyStaysLow` (p99 17.4 ms with 1 pane, 24.1 ms with 8) | **caught** |
+
+`TestTypingLatencyStaysLow` also fails on origin/main with 8 panes (p99 22.8
+ms), which had the same tail for a different reason.
 
 Not covered: the latency assertion was added after the first controls ran.
 On the released build the 120 Hz guest measured a p50 latency of 14.8 ms and
