@@ -515,7 +515,3 @@ func (d *Daemon) pluginContextForEvent(e herdrEvent, name string) pluginContext 
 	ctx := pluginContext{InvocationSource: "api", CorrelationID: name, WorkspaceID: wsID, TabID: data.TabID, FocusedPaneID: paneID}
 	return ctx
 }
-
-// HerdrPaneID is the herdr id of a window, for a client that names a pane
-// in a herdr call.
-func HerdrPaneID(sessionID, windowID string) string { return herdrPaneID(sessionID, windowID) }

@@ -379,11 +379,7 @@ func (d *Daemon) findTUIClient(sessionID string) *connState {
 		if !match {
 			continue
 		}
-		if in := cs.lastInput.Load(); in != 0 {
-			if t := time.Unix(0, in); t.After(input) {
-				input = t
-			}
-		}
+		input = cs.newestInput(input)
 		if best == nil || input.After(bestInput) || (input.Equal(bestInput) && seq > bestSeq) {
 			best, bestInput, bestSeq = cs, input, seq
 		}

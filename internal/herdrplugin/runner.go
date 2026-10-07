@@ -253,13 +253,6 @@ func (r *Runner) Logs(pluginID string, limit int) []LogEntry {
 	return out
 }
 
-// Running reports how many commands of a plugin run now.
-func (r *Runner) Running(pluginID string) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.perPlug[pluginID]
-}
-
 // StopPlugin kills every process group a plugin's commands run in. A
 // disabled plugin runs nothing.
 func (r *Runner) StopPlugin(pluginID string) {

@@ -42,24 +42,14 @@ func focusedWindowID(state *SessionState) (string, error) {
 // (for read verbs and NewWindow) or an error. Rendering-dependent verbs return
 // errNeedsClient.
 func (d *Daemon) executeDaemonCommand(sess *Session, commandType string, args []string, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandIn(sess, commandType, args, "", onExit)
+	return d.executeDaemonCommandEnv(sess, commandType, args, "", 0, nil, onExit)
 }
 
-// executeDaemonCommandIn is executeDaemonCommand with the directory a
-// NewWindow starts in. Other commands ignore cwd.
-func (d *Daemon) executeDaemonCommandIn(sess *Session, commandType string, args []string, cwd string, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandAt(sess, commandType, args, cwd, 0, onExit)
-}
-
-// executeDaemonCommandAt is executeDaemonCommandIn with the workspace a
-// NewWindow goes on. Zero is the session's current one.
-func (d *Daemon) executeDaemonCommandAt(sess *Session, commandType string, args []string, cwd string, workspace int, onExit func(ptyID string)) (map[string]any, error) {
-	return d.executeDaemonCommandEnv(sess, commandType, args, cwd, workspace, nil, onExit)
-}
-
-// executeDaemonCommandEnv is executeDaemonCommandAt with environment entries
-// a NewWindow's process gets on top of an ordinary pane's. An ssh split uses
-// it for the agent socket; see SSHFollowArgv.
+// executeDaemonCommandEnv is executeDaemonCommand with what a NewWindow takes
+// on top: the directory it starts in, the workspace it goes on (zero is the
+// session's current one), and environment entries its process gets on top of
+// an ordinary pane's. An ssh split uses env for the agent socket; see
+// SSHFollowArgv. Other commands ignore all three.
 func (d *Daemon) executeDaemonCommandEnv(sess *Session, commandType string, args []string, cwd string, workspace int, env []string, onExit func(ptyID string)) (map[string]any, error) {
 	switch commandType {
 	case "NewWindow":

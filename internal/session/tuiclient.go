@@ -1163,17 +1163,13 @@ func (c *TUIClient) SendIntent(commandType string, args ...string) error {
 // SendIntentIn is SendIntent with the directory a NewWindow starts in. The
 // daemon spawns the shell there, so nothing has to be typed into it.
 func (c *TUIClient) SendIntentIn(cwd, commandType string, args ...string) error {
-	return c.SendIntentAt(cwd, 0, commandType, args...)
+	return c.SendNewWindowIntent(cwd, 0, "", commandType, args...)
 }
 
-// SendIntentAt is SendIntentIn with the workspace a NewWindow goes on. Zero
-// is the session's current workspace.
-func (c *TUIClient) SendIntentAt(cwd string, workspace int, commandType string, args ...string) error {
-	return c.SendNewWindowIntent(cwd, workspace, "", commandType, args...)
-}
-
-// SendNewWindowIntent is SendIntentAt with the window a NewWindow follows into
-// ssh. Empty follows none. See ExecuteCommandPayload.SSHFrom.
+// SendNewWindowIntent is SendIntentIn with the workspace a NewWindow goes on
+// and the window it follows into ssh. A zero workspace is the session's
+// current one. An empty sshFrom follows none. See
+// ExecuteCommandPayload.SSHFrom.
 func (c *TUIClient) SendNewWindowIntent(cwd string, workspace int, sshFrom, commandType string, args ...string) error {
 	return c.sendNewWindow(&ExecuteCommandPayload{
 		CommandType: commandType,

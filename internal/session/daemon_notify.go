@@ -334,6 +334,17 @@ func (n *pushNotifier) sender() {
 	}
 }
 
+// newestInput is the later of act, the activity the client reported, and the
+// last key typed into a pane through it.
+func (cs *connState) newestInput(act time.Time) time.Time {
+	if in := cs.lastInput.Load(); in != 0 {
+		if t := time.Unix(0, in); t.After(act) {
+			return t
+		}
+	}
+	return act
+}
+
 // lastHumanInput is the newest input a person gave at any attached client:
 // a key typed into a pane, or the activity a client reports.
 func (d *Daemon) lastHumanInput() time.Time {
@@ -348,11 +359,7 @@ func (d *Daemon) lastHumanInput() time.Time {
 		if !attached {
 			continue
 		}
-		if in := cs.lastInput.Load(); in != 0 {
-			if t := time.Unix(0, in); t.After(act) {
-				act = t
-			}
-		}
+		act = cs.newestInput(act)
 		if act.After(last) {
 			last = act
 		}

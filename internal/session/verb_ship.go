@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -485,7 +486,7 @@ func (d *Daemon) verbShipMerge(cs *connState, params json.RawMessage) (any, *ver
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Mode != "" && !containsString(shipMergeModes, p.Mode) {
+	if p.Mode != "" && !slices.Contains(shipMergeModes, p.Mode) {
 		return nil, invalidParam("mode", "mode is merge, squash or ff-only", shipMergeModes...)
 	}
 	if p.Into != "" {
@@ -510,16 +511,6 @@ func (d *Daemon) verbShipMerge(cs *connState, params json.RawMessage) (any, *ver
 	res["type"] = "ship_merged"
 	res["window"] = target.ID
 	return res, nil
-}
-
-// containsString reports whether list holds s.
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 // shipPushParams are what ship-push takes, and ship-pr on top of them.

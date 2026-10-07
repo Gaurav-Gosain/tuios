@@ -698,7 +698,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 	if !p.Merge && (p.MergeMode != "" || p.Into != "") {
 		return nil, invalidParam("merge", "merge_mode and into apply only with merge")
 	}
-	if p.MergeMode != "" && !containsString(shipMergeModes, p.MergeMode) {
+	if p.MergeMode != "" && !slices.Contains(shipMergeModes, p.MergeMode) {
 		return nil, invalidParam("merge_mode", "merge_mode is merge, squash or ff-only", shipMergeModes...)
 	}
 	if p.Into != "" {
