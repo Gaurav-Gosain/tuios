@@ -1,0 +1,54 @@
+[
+ {
+  "scenario": "idle-quiet",
+  "seconds": 15.0,
+  "app_cpu_pct": 0.27,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 0.2,
+  "frames_per_s": 1.07,
+  "grid_paints_per_s": 1.0,
+  "paint_p50_ms": 0.236,
+  "paint_p95_ms": 0.279,
+  "rss_mb": 174.7,
+  "anon_mb": 36.6
+ },
+ {
+  "scenario": "idle-spin",
+  "seconds": 15.0,
+  "app_cpu_pct": 1.13,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 0.2,
+  "frames_per_s": 11.0,
+  "grid_paints_per_s": 1.0,
+  "paint_p50_ms": 0.236,
+  "paint_p95_ms": 0.377,
+  "rss_mb": 174.8,
+  "anon_mb": 36.7
+ },
+ {
+  "scenario": "busy4",
+  "seconds": 15.0,
+  "app_cpu_pct": 7.47,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 2.13,
+  "frames_per_s": 43.53,
+  "grid_paints_per_s": 36.2,
+  "paint_p50_ms": 0.869,
+  "paint_p95_ms": 0.925,
+  "rss_mb": 179.9,
+  "anon_mb": 42.1
+ },
+ {
+  "scenario": "scroll",
+  "seconds": 8.0,
+  "app_cpu_pct": 7.62,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 0.12,
+  "frames_per_s": 60.09,
+  "grid_paints_per_s": 59.96,
+  "paint_p50_ms": 0.439,
+  "paint_p95_ms": 0.528,
+  "rss_mb": 173.9,
+  "anon_mb": 37.5
+ }
+]

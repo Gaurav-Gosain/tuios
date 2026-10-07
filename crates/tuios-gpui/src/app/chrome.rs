@@ -420,7 +420,8 @@ impl TuiosApp {
                 (false, 1) => "1 terminal".to_string(),
                 (false, n) => format!("{n} terminals"),
             };
-            let open = !self.folded.get(&name).copied().unwrap_or(!agents);
+            // A group with no agents starts folded; the attached one never.
+            let open = !self.folded.get(&name).copied().unwrap_or(!agents && !attached);
             let (n1, n2) = (name.clone(), name.clone());
             let group: SharedString = format!("grp-{name}").into();
             list = list.child(
@@ -456,7 +457,7 @@ impl TuiosApp {
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 let agents = this.all_panes().iter().any(|p| p.session == n2 && p.status.is_agent());
-                                let folded = this.folded.get(&n2).copied().unwrap_or(!agents);
+                                let folded = this.folded.get(&n2).copied().unwrap_or(!agents && this.current_session() != n2);
                                 this.folded.insert(n2.clone(), !folded);
                                 this.refresh_sidebar(cx);
                             }))

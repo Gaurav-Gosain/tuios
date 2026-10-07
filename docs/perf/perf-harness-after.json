@@ -1,0 +1,16 @@
+{
+  "grid": "160x50",
+  "font": "JetBrains Mono",
+  "font_size": 15,
+  "cell": [9.00, 20.00],
+  "scale_factor": 1,
+  "frames_per_phase": 240,
+  "phases": {
+    "Full": {"feed_ms": [0.396, 0.449], "prepare_ms": [0.881, 0.970], "paint_ms": [0.672, 0.737], "interval_ms": [16.67, 16.71], "glyphs_per_frame": 5967, "quads_per_frame": 677, "vt_bytes_per_frame": 37404, "cell_grid_bytes_per_frame": 104345},
+    "Unique": {"feed_ms": [0.222, 0.253], "prepare_ms": [0.813, 0.946], "paint_ms": [0.755, 0.810], "interval_ms": [16.67, 16.71], "glyphs_per_frame": 7000, "quads_per_frame": 145, "vt_bytes_per_frame": 25707, "cell_grid_bytes_per_frame": 103950},
+    "Stream": {"feed_ms": [0.053, 0.067], "prepare_ms": [0.882, 0.922], "paint_ms": [0.673, 0.767], "interval_ms": [16.67, 16.70], "glyphs_per_frame": 5974, "quads_per_frame": 670, "vt_bytes_per_frame": 3731, "cell_grid_bytes_per_frame": 104335},
+    "Typing": {"feed_ms": [0.003, 0.003], "prepare_ms": [0.019, 0.024], "paint_ms": [0.687, 0.721], "interval_ms": [16.67, 16.71], "glyphs_per_frame": 5953, "quads_per_frame": 647, "vt_bytes_per_frame": 1, "cell_grid_bytes_per_frame": 2418},
+    "Idle": {"feed_ms": [0.000, 0.000], "prepare_ms": [0.003, 0.004], "paint_ms": [0.692, 1.111], "interval_ms": [16.67, 16.71], "glyphs_per_frame": 6002, "quads_per_frame": 645, "vt_bytes_per_frame": 0, "cell_grid_bytes_per_frame": 0},
+    "SmoothScroll": {"feed_ms": [0.001, 0.002], "prepare_ms": [0.005, 1.002], "paint_ms": [0.709, 0.920], "interval_ms": [16.67, 16.71], "glyphs_per_frame": 6058, "quads_per_frame": 755, "vt_bytes_per_frame": 0, "cell_grid_bytes_per_frame": 31321}
+  }
+}
