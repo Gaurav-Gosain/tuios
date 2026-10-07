@@ -1,0 +1,17 @@
+[package]
+name = "tuios-gpui"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+anyhow.workspace = true
+ghostty-vt = { path = "../ghostty-vt" }
+tuios-proto = { path = "../tuios-proto" }
+async-channel = "2"
+serde_json.workspace = true
+serde.workspace = true
+toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }

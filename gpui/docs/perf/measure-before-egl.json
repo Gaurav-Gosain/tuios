@@ -1,0 +1,15 @@
+[
+ {
+  "scenario": "busy4",
+  "seconds": 15.0,
+  "app_cpu_pct": 9.73,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 2.8,
+  "frames_per_s": 59.07,
+  "grid_paints_per_s": 55.33,
+  "paint_p50_ms": 0.607,
+  "paint_p95_ms": 0.811,
+  "rss_mb": 223.2,
+  "anon_mb": 41.8
+ }
+]

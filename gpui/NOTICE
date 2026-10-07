@@ -1,0 +1,21 @@
+tuios-gpui
+Licensed under the Apache License, Version 2.0.
+
+Parts of the terminal painter follow herdr-gpui
+(https://github.com/penso/herdr-gpui), Copyright the herdr-gpui authors,
+licensed under the Apache License, Version 2.0:
+
+- painting glyphs with Window::paint_glyph inside Window::paint_layer instead
+  of ShapedLine::paint;
+- merging equal backgrounds within a row into one quad;
+- drawing box-drawing and block characters as rectangles snapped to the grid;
+- the approach of the performance harness.
+
+The bindings in crates/ghostty-vt/src/ffi.rs are generated from the headers of
+libghostty-vt (https://github.com/ghostty-org/ghostty), MIT licensed.
+
+The bundled UI font is Inter (https://rsms.me/inter), Copyright the Inter
+Project Authors, licensed under the SIL Open Font License 1.1.
+
+The interface icons are from Lucide (https://lucide.dev), licensed under the
+ISC License.

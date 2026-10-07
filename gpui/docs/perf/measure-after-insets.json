@@ -1,0 +1,41 @@
+[
+ {
+  "scenario": "busy4",
+  "seconds": 15.0,
+  "app_cpu_pct": 9.87,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 3.53,
+  "frames_per_s": 56.8,
+  "grid_paints_per_s": 51.53,
+  "paint_p50_ms": 0.585,
+  "paint_p95_ms": 0.821,
+  "rss_mb": 179.6,
+  "anon_mb": 42.2
+ },
+ {
+  "scenario": "busy1",
+  "seconds": 15.0,
+  "app_cpu_pct": 6.33,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 1.27,
+  "frames_per_s": 43.07,
+  "grid_paints_per_s": 34.87,
+  "paint_p50_ms": 0.49,
+  "paint_p95_ms": 0.797,
+  "rss_mb": 175.2,
+  "anon_mb": 38.0
+ },
+ {
+  "scenario": "busy4-integrated-gpu",
+  "seconds": 15.0,
+  "app_cpu_pct": 10.27,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 4.0,
+  "frames_per_s": 54.53,
+  "grid_paints_per_s": 51.27,
+  "paint_p50_ms": 0.639,
+  "paint_p95_ms": 0.865,
+  "rss_mb": 143.9,
+  "anon_mb": 36.6
+ }
+]
