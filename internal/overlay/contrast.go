@@ -93,9 +93,20 @@ func linearize(c float64) float64 {
 // which is exactly where a dock on a dark ground lives.
 func relativeLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
-	return 0.2126*linearize(float64(r)/65535) +
-		0.7152*linearize(float64(g)/65535) +
-		0.0722*linearize(float64(b)/65535)
+	return 0.2126*linearChannel(r) + 0.7152*linearChannel(g) + 0.0722*linearChannel(b)
+}
+
+// linearChannel is linearize for a 16-bit channel from color.Color.RGBA. A
+// channel widened from 8 bits, which is every colour the chrome is built from,
+// reads the table toLab reads: v/65535 is then exactly the table's i/255, so
+// the value is the same and only the math.Pow is saved. Contrast checks run
+// for every badge, row and label a panel draws, and the Pow was a quarter of
+// drawing the help panel.
+func linearChannel(v uint32) float64 {
+	if hi := v >> 8; v == hi*0x101 {
+		return transfer().toLinear[hi]
+	}
+	return linearize(float64(v) / 65535)
 }
 
 // ContrastRatio returns the WCAG 2.1 contrast ratio between two colours: 1 for
@@ -227,7 +238,7 @@ func delinearize(c float64) float64 {
 // the target lies past what the colour can say.
 func atLuminance(c color.Color, target float64) color.Color {
 	r, g, b, _ := c.RGBA()
-	lr, lg, lb := linearize(float64(r)/65535), linearize(float64(g)/65535), linearize(float64(b)/65535)
+	lr, lg, lb := linearChannel(r), linearChannel(g), linearChannel(b)
 	if l := 0.2126*lr + 0.7152*lg + 0.0722*lb; l > 0 {
 		k := target / l
 		lr, lg, lb = lr*k, lg*k, lb*k
