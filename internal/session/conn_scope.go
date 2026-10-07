@@ -376,16 +376,15 @@ func (d *Daemon) sessionOfWindow(id string) string {
 }
 
 // sessionHoldingWindow is the local session holding a window, nil for none.
+// It runs on every verb a pane calls, so it reads each session's windows in
+// place rather than copying its state.
 func (d *Daemon) sessionHoldingWindow(id string) *Session {
 	if id == "" {
 		return nil
 	}
 	for _, sess := range d.manager.AllSessions() {
-		st := sess.GetState()
-		for i := range st.Windows {
-			if st.Windows[i].ID == id {
-				return sess
-			}
+		if sess.holdsWindowID(id) {
+			return sess
 		}
 	}
 	return nil

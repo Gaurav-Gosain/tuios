@@ -452,17 +452,9 @@ func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentAct
 // lock, so either the sink forgets the ring after this check or this check
 // sees the window gone.
 func (d *Daemon) dropRingOfClosedWindow(sess *Session, windowID string) {
-	if !sess.hasWindowID(windowID) {
+	if !sess.holdsWindowID(windowID) {
 		d.activity.forgetWindow(sess.ID, windowID)
 	}
-}
-
-// hasWindowID reports whether the session has a window with this id.
-func (s *Session) hasWindowID(windowID string) bool {
-	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	_, err := findWindowStateIndex(s.state.Windows, windowID)
-	return err == nil
 }
 
 // activityMeta is what one activity entry does to the reserved metadata keys:
