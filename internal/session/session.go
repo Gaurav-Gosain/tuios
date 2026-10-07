@@ -972,9 +972,9 @@ type PTY struct {
 	// the vtWriter last handed it on.
 	progStatus      progstatus.Store
 	progStatusDirty atomic.Bool
-	// progStatusAway is set by a working, blocked or idle report and cleared
-	// when the agent detector next sees the pane's shell in the foreground,
-	// which ends those records. See endProgramStatusAtShell.
+	// progStatusAway is set by a working, blocked or idle report from a program
+	// in the foreground, and cleared when the agent detector next sees the
+	// pane's shell there, which ends those records. See armProgramStatusExit.
 	progStatusAway atomic.Bool
 	// progStatusApplyMu orders the copies of the records into the session
 	// state. See Session.applyProgramStatus.
@@ -1245,6 +1245,10 @@ type Session struct {
 	// express which of several sources should win, so the value carries the source
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
+	// programPrior is, per window, the state a weaker source held when a
+	// pane's OSC 7501 report took the pane over, so it comes back when the
+	// records end. Read and written under stateMu. See program_status.go.
+	programPrior map[string]AgentReport
 
 	// agentHarnessPIDs records, by window ID, the pid of the harness process
 	// whose hook last set the window's AgentSessionID, as the hook reported it.

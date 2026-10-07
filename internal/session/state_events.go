@@ -43,6 +43,9 @@ type lifecycleWindow struct {
 	// needs_input window is blocked by, and how many turns it has finished.
 	agentKind     string
 	completionSeq uint64
+	// program rides along for the attention queue too: a pane whose state
+	// comes from OSC 7501 is named by its id as well as its title.
+	program bool
 	// root rides along for the risk rules: the session's worktree root, else
 	// the window's working directory.
 	root string
@@ -101,6 +104,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			agentStateAt:  w.AgentStateAt,
 			agentKind:     agentBlockedBy(*w),
 			completionSeq: w.CompletionSeq,
+			program:       len(w.ProgramStatus) > 0,
 			root:          root,
 		})
 	}
@@ -201,6 +205,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 
 				hookKind:          w.agentKind,
 				hookRoot:          w.root,
+				hookProgram:       w.program,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: prev.completionSeq,
 			})
@@ -221,6 +226,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 
 				hookKind:          w.agentKind,
 				hookRoot:          w.root,
+				hookProgram:       w.program,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: w.completionSeq,
 			})
@@ -279,7 +285,7 @@ func attentionDetailChanged(w, prev *lifecycleWindow) bool {
 	}
 	return w.agentKind != prev.agentKind || w.agentMessage != prev.agentMessage ||
 		w.agentHarness != prev.agentHarness || w.workspace != prev.workspace ||
-		w.displayTitle() != prev.displayTitle()
+		w.displayTitle() != prev.displayTitle() || w.program != prev.program
 }
 
 // displayTitle is the title reported for a window in a lifecycle event: the

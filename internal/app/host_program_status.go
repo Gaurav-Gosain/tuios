@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -210,6 +211,28 @@ func (m *OS) hostProgramStatusReports() map[string]string {
 		want[r.ID] = progstatus.Encode(r)
 	}
 	return want
+}
+
+// HostProgramStatusClear returns the reports that remove every record this
+// client left on its terminal, and forgets them, or "" when it left none. The
+// caller writes it to the client's terminal once the program has stopped: an
+// ssh client's terminal gets no reset when the connection ends, and a local
+// one gets it before the reset, which removes the records too.
+func (m *OS) HostProgramStatusClear() string {
+	if len(m.hostPS.sent) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(m.hostPS.sent))
+	for id := range m.hostPS.sent {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	var out strings.Builder
+	for _, id := range ids {
+		out.WriteString(progstatus.Sequence(progstatus.Report{State: progstatus.Clear, ID: id}))
+	}
+	m.hostPS.sent = nil
+	return out.String()
 }
 
 // hostStatusText makes a pane's text fit a title or msg: one line, no control

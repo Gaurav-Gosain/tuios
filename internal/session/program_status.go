@@ -48,7 +48,7 @@ type ProgramStatusRecord struct {
 	At int64 `json:"at,omitempty"`
 }
 
-// AgentSourceProgram ranks with AgentSourceReport. See agent_source.go.
+// AgentSourceProgram ranks just below AgentSourceReport. See agent_source.go.
 
 // noteProgramStatus is the emulator's ProgramStatus callback. It runs with the
 // terminal lock held, so it only records; flushProgramStatus hands the change
@@ -59,7 +59,23 @@ func (p *PTY) noteProgramStatus(ev progstatus.Event) {
 	}
 	switch ev.Report.State {
 	case progstatus.Working, progstatus.Blocked, progstatus.Idle:
-		// Something in the pane is running to have said so.
+		p.armProgramStatusExit()
+	}
+}
+
+// armProgramStatusExit notes that the program which just reported holds the
+// pane's foreground, so the shell taking the foreground back means it exited.
+// The foreground process group is read now, while the report is being
+// handled: when it is the shell's own, the report came from a background job
+// or from the pane's own process, and neither returning to the shell says
+// anything about it, so the drop is not armed. Reading it is one procfs read
+// (or one sysctl), which a report, being rare, can afford under the lock.
+func (p *PTY) armProgramStatusExit() {
+	shell := p.ShellPID()
+	if shell <= 0 {
+		return
+	}
+	if pgid, ok := readForegroundPGID(shell); ok && pgid > 0 && pgid != shell {
 		p.progStatusAway.Store(true)
 	}
 }
@@ -281,20 +297,71 @@ func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) {
 		// agentKindOf).
 		r.Kind = programStatusBlockedBy(sum.Kind)
 	}
+	s.noteProgramPrior(windowID)
 	_, _, _ = s.ApplyAgentReport(windowID, r)
+}
+
+// noteProgramPrior keeps what a weaker source said about a window before an
+// OSC 7501 report takes the window over: the screen tier's prompt, the
+// transcript's turn, the detector's working. releaseProgramStatusClaim puts
+// it back, so the records ending does not erase a state that is still true.
+// A claim the program already holds keeps the prior it saved; a window
+// nobody claims has none.
+func (s *Session) noteProgramPrior(windowID string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	claim, held := s.agentClaims[windowID]
+	if held && claim.source.rank() > AgentSourceProgram.rank() {
+		// A stronger claim that says none is a harness that reported it left
+		// the pane. It holds nothing worth keeping, so a program that reports
+		// in the pane afterwards is heard. Any other stronger claim keeps the
+		// pane, and the program's report is refused.
+		if idx, err := findWindowStateIndex(s.state.Windows, windowID); err == nil &&
+			s.state.Windows[idx].AgentState == AgentStateNone && !claim.auto {
+			delete(s.agentClaims, windowID)
+			held = false
+		}
+	}
+	switch {
+	case held && claim.source == AgentSourceProgram:
+		return
+	case !held || claim.source.rank() > AgentSourceProgram.rank():
+		delete(s.programPrior, windowID)
+		return
+	}
+	idx, err := findWindowStateIndex(s.state.Windows, windowID)
+	if err != nil {
+		return
+	}
+	w := s.state.Windows[idx]
+	if w.AgentState == AgentStateNone {
+		delete(s.programPrior, windowID)
+		return
+	}
+	if s.programPrior == nil {
+		s.programPrior = make(map[string]AgentReport)
+	}
+	s.programPrior[windowID] = AgentReport{
+		State:   w.AgentState,
+		Message: w.AgentMessage,
+		Kind:    w.AgentKind,
+		Harness: claim.harness,
+		Source:  claim.source,
+	}
 }
 
 // endProgramStatusAtShell is the agent detector's reading that the pane's
 // shell holds the foreground. When a working, blocked or idle record arrived
-// since the last such reading, the program that reported it has exited, and
-// those records end.
+// from a program in the foreground since the last such reading (see
+// armProgramStatusExit), that program has exited, and those records end.
 //
 // It is the process-exit rule of the specification for a pane whose shell
 // does not mark its prompt with OSC 133: without it a program that crashed
 // before it reported done would leave a working record behind for good, since
-// the protocol has no heartbeat. A report marks the pane (noteProgramStatus)
-// rather than the detector seeing the program run, because a script can
-// report and exit between two readings. The caller holds no lock.
+// the protocol has no heartbeat. The report arms it rather than the detector
+// seeing the program run, because a script can report and exit between two
+// readings. A background job's report never arms it, so a job still running
+// keeps its records. The caller holds no lock.
 func (p *PTY) endProgramStatusAtShell() {
 	if p.progStatusAway.Swap(false) && p.progStatus.DropTransient() {
 		p.progStatusDirty.Store(true)
@@ -302,15 +369,25 @@ func (p *PTY) endProgramStatusAtShell() {
 	}
 }
 
-// releaseProgramStatusClaim clears the pane's agent state when the program's
-// records were what set it and none is left. A claim another source holds is
-// left alone: the records ending says nothing about a harness that reports
-// for itself.
+// releaseProgramStatusClaim gives the pane back when the program's records
+// were what set its state and none is left: to the state a weaker source held
+// before the program took it (noteProgramPrior), or to none. A claim another
+// source holds is left alone: the records ending says nothing about a harness
+// that reports for itself.
 func (s *Session) releaseProgramStatusClaim(windowID string) {
-	s.stateMu.RLock()
+	s.stateMu.Lock()
 	claim, held := s.agentClaims[windowID]
-	s.stateMu.RUnlock()
+	prior, hadPrior := s.programPrior[windowID]
+	delete(s.programPrior, windowID)
+	s.stateMu.Unlock()
 	if !held || claim.source != AgentSourceProgram {
+		return
+	}
+	if hadPrior {
+		// What the program took the pane from comes back: let go first, so
+		// the weaker source may write again.
+		s.yieldAgentClaim(windowID, AgentSourceProgram)
+		_, _, _ = s.ApplyAgentReport(windowID, prior)
 		return
 	}
 	_, _, _ = s.ApplyAgentReport(windowID, AgentReport{State: AgentStateNone, Source: AgentSourceProgram})

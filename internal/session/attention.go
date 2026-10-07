@@ -614,6 +614,9 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		Harness:   ev.hookHarness,
 		Name:      attentionText(ev.hookTitle, attentionMaxSummary),
 	}
+	if ev.hookProgram {
+		base.Name += " [" + shortWindowID(ev.Window) + "]"
+	}
 
 	if state != AgentStateNeedsInput.Name() {
 		a.closeKeyLocked(attentionKey(AttentionApproval, sessionName, ev.Window, 0), AttentionClosedResolved)

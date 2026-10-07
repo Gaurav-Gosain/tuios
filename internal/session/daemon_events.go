@@ -211,6 +211,10 @@ type SessionEvent struct {
 	hookPrevWorkspace int
 	hookHarness       string
 	hookMessage       string
+	// hookProgram says the window's state comes from OSC 7501 records. The
+	// Inbox then names the pane by its id as well as its title, since the
+	// program can set the title.
+	hookProgram bool
 
 	// These feed the attention queue, and like the hook fields they never reach
 	// the wire. hookKind is the blocked_by of a needs_input window.

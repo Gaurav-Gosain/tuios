@@ -1472,6 +1472,10 @@ type OS struct {
 	// window ID. A non-empty map is the only thing that keeps the maintenance
 	// tick awake for them, so an idle session with nothing parked pays nothing.
 	pendingAgentAlerts map[string]pendingAgentAlert
+	// programAlertAt is when each pane whose state comes from OSC 7501 last
+	// raised an alert outside tuios (a notification, a bell, a sound, a
+	// hook). See programAlertGap.
+	programAlertAt map[string]time.Time
 	// Accent picker state: what is being accented (a pane or a session) and
 	// which one, the colour under the cursor and where that cursor is, and the
 	// hit geometry the renderer records as it draws the grid, the hue strip and

@@ -139,6 +139,12 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	if name == "" {
 		name = "pane"
 	}
+	// A pane that reports over OSC 7501 also sets its own title, so the
+	// alert names it by its id as well, which no program can set.
+	program := len(w.ProgramStatus) > 0
+	if program {
+		name += " [" + shortWindowLabel(w.ID) + "]"
+	}
 	text := name + " " + word
 	// The reason, when the pane gave one: the question a blocked agent asked,
 	// or the note a report carried. Without it the alert says that the agent
@@ -151,6 +157,12 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 		m.showAgentNotification(text, sev, to, m.Settings.NotificationDuration,
 			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
 	}
+	// What reaches outside tuios is rate limited for a pane whose state
+	// comes from OSC 7501: a program can change state as fast as it writes.
+	if program && !m.programAlertDue(w.ID, time.Now()) {
+		return
+	}
+
 	// One write for both, so a terminal that treats BEL as "raise the window"
 	// does not race the notification it belongs to.
 	var seq []byte
@@ -186,6 +198,23 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 		AgentHarness:   w.AgentHarness,
 		AgentMessage:   w.AgentMessage,
 	})
+}
+
+// programAlertGap is the shortest time between two alerts outside tuios
+// from one pane whose state comes from OSC 7501. The dock still shows each.
+const programAlertGap = 30 * time.Second
+
+// programAlertDue reports whether the pane may raise an alert outside tuios
+// now, and if so records that it did.
+func (m *OS) programAlertDue(windowID string, now time.Time) bool {
+	if last, ok := m.programAlertAt[windowID]; ok && now.Sub(last) < programAlertGap {
+		return false
+	}
+	if m.programAlertAt == nil {
+		m.programAlertAt = make(map[string]time.Time)
+	}
+	m.programAlertAt[windowID] = now
+	return true
 }
 
 // agentAlertSep joins an alert's headline to the reason behind it, in the

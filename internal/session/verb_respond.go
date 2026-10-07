@@ -153,6 +153,13 @@ func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verb
 		look.reason = "the pane is not waiting on a prompt: its state is " + w.AgentState.Name()
 		return look, nil
 	}
+	if agentBlockedBy(w) == harness.PromptKindAuth {
+		// A login, a token or a credential. Nothing is read off the screen
+		// and nothing can be typed from the Inbox: a secret is typed in the
+		// pane that asks for it, where the person can see what asks.
+		look.reason = "the pane waits for a login, which is answered in the pane"
+		return look, nil
+	}
 	reg := d.agentMatcher.registry
 	hid := w.AgentHarness
 	if reg == nil || hid == "" {

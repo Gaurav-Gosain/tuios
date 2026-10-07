@@ -43,9 +43,11 @@ const (
 	AgentSourceTranscript AgentSource = "transcript"
 	// AgentSourceProgram is the pane's own OSC 7501 report (the Program Status
 	// Protocol): the program saying what it is doing, for any program and not
-	// only a known agent. It ranks with AgentSourceReport, because it is the
-	// same kind of evidence as a harness hook, and above every look at the
-	// screen. It is daemon-internal: only the pane's emulator sets it, so a
+	// only a known agent. It ranks just below AgentSourceReport and above
+	// everything else: it is the program's own word, so it outranks every
+	// look at the screen, and a harness hook in the same pane keeps the last
+	// word, so the two never take the pane from each other in turn. It is
+	// daemon-internal: only the pane's emulator sets it, so a
 	// caller of set-agent-state cannot name it. See program_status.go.
 	AgentSourceProgram AgentSource = "program"
 	// AgentSourceOSC is an in-band escape sequence the pane emitted.
@@ -105,7 +107,7 @@ func (a AgentSource) Name() string {
 func (a AgentSource) rank() int {
 	switch a {
 	case AgentSourceProgram:
-		return 40
+		return 38
 	case AgentSourceTranscript:
 		return 35
 	case AgentSourceOSC:

@@ -323,6 +323,13 @@ func tuiosSessionMiddleware() wish.Middleware {
 			// the terminal state.
 			program.Kill()
 			cancel()
+			// An ssh client's terminal gets no reset when the session ends, so
+			// the OSC 7501 records this client left there are cleared here.
+			// A connection already gone takes the write as an error, and that
+			// is fine.
+			if seq := model.HostProgramStatusClear(); seq != "" {
+				_, _ = io.WriteString(sess, seq)
+			}
 
 			// Tear down after the program has fully stopped. In daemon mode
 			// this closes the daemon client, otherwise its read loop, socket,

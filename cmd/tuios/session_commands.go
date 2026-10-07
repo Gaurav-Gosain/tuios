@@ -499,6 +499,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 			finalOS.SyncStateToDaemon()
 		}
 		finalOS.Cleanup()
+		// The OSC 7501 records this client left on the terminal, before
+		// the reset that removes them too.
+		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
 	}
 
 	_ = client.Close()

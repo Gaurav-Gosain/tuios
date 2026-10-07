@@ -90,6 +90,7 @@ func runTapeInteractive(tapeFile string) error {
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		failure = finalOS.ScriptFailure
 		finalOS.Cleanup()
+		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
 	}
 
 	fmt.Print("\033c")
