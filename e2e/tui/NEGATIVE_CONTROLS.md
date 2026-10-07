@@ -2248,3 +2248,21 @@ both default keys in both modes.
 
 Not covered end to end: multi copy mode looks the action up at its own call
 site in `handleMultiCopyKey`, and no test presses `Home` there.
+
+## A copy trims the whitespace it covers (#516)
+
+`copy_whitespace_test.go` prints indented lines and reads each copy off the
+wire as OSC 52, untrimmed. `TestCopyKeepsPrintedWhitespace` copies a line
+with `V y` and with `0 v $ y`, three lines with `V j j y`, a line with a triple
+click and three lines with a drag. The lines hold leading spaces, interior
+runs and a tab. `TestCopyKeepsSpacesAtASoftWrap` copies one long indented line
+that the pane wraps over more than three rows, with a space on the last column
+of at least one row. Both run alone and through a daemon.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`a9a54261`) | both tests, alone and through the daemon (`V y copied "LEAD-one  two   x", want "    LEAD-one  two   x"`, and the wrapped line lost its indent and joined `abab` at each wrap) | **caught** |
+| The copy trims its ends | `extractVisualText` returns `strings.TrimSpace` again | both tests, alone and through the daemon | **caught** |
+| A line selection starts at the first printed cell | `enterVisualLine` takes `startX` from `getLineContentBounds` | `TestCopyKeepsPrintedWhitespace`, both modes. The wrapped test passes, which is correct: `j` moves the start to the first column | **caught** |
+| The wrap flag ignored | `selectionRowWraps` returns false | `TestCopyKeepsSpacesAtASoftWrap`, both modes (a newline at every wrap). `TestCopyKeepsPrintedWhitespace` passes, which is its positive half: none of its lines wrap | **caught** |
+| Screen rows read at the window's width | `selectionRowCells` sized by `window.Width`, which counts the border | `TestCopyKeepsSpacesAtASoftWrap`, both modes (two extra spaces at every wrap) | **caught** |
