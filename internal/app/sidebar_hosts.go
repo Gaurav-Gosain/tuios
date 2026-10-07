@@ -833,6 +833,17 @@ func (m *OS) createRemoteSession(host string) {
 	m.applyStartupToUnarranged()
 }
 
+// localSessionIndexes maps a local session's id to its 1-based position in the
+// local rail, the number switch_session_N opens. Remote sessions are absent:
+// no number on this machine reaches them.
+func localSessionIndexes(nodes []sessiontree.Node) map[string]int {
+	indexes := make(map[string]int, len(nodes))
+	for i, s := range localSessionNodes(nodes) {
+		indexes[s.ID] = i + 1
+	}
+	return indexes
+}
+
 // localSessionNodes drops the other machines' rows from a tree's session list.
 // The surfaces that only deal with the attached machine (the colour
 // arbitration, the collapsed glyph strip, session cycling) read the tree

@@ -734,6 +734,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.show_numbers", Type: OptionBool, Section: "sidebar",
+		Description: "Show the switch number ahead of each session name",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.sidebar.show_agents", Type: OptionBool, Section: "sidebar",
 		Description: "Show the agents section at the rail's bottom",
 		Default:     "true",
