@@ -76,40 +76,34 @@ jobs:
             fi
           done
 
-      # These four do not depend on each other. The test step spends most of
-      # its time in the long tail of internal/app and internal/testutil, with
-      # cores to spare, so vet and the builds run in that slack instead of
-      # in front of it. A failure in any of them still fails the job, at the
-      # end of the group.
-      - parallel:
-          - name: Vet
-            run: go vet ./...
+      - name: Vet
+        run: go vet ./...
 
-          - name: Build
-            run: go build ./...
+      - name: Build
+        run: go build ./...
 
-          - name: Example tapes validate
-            # Every example under examples/ is held to the parser the release
-            # ships. A tape the parser grew stricter about fails here, in the
-            # change that made it stricter, instead of on a reader's machine.
-            run: |
-              go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
-              status=0
-              for f in examples/*.tape; do
-                "$RUNNER_TEMP/tuios" tape validate "$f" > /dev/null || status=1
-              done
-              exit $status
+      - name: Example tapes validate
+        # Every example under examples/ is held to the parser the release
+        # ships. A tape the parser grew stricter about fails here, in the
+        # change that made it stricter, instead of on a reader's machine.
+        run: |
+          go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+          status=0
+          for f in examples/*.tape; do
+            "$RUNNER_TEMP/tuios" tape validate "$f" > /dev/null || status=1
+          done
+          exit $status
 
-          - name: Test
-            # No -race here. internal/app takes over ten minutes under the detector
-            # on a developer machine and longer on a runner, and a job that times
-            # out is a job somebody switches off. The race build runs nightly
-            # instead, where the wall time costs nobody a review.
-            #
-            # -count=1 because the test cache replays a pass across a change the
-            # cache key does not see, which is how a mutation sweep can come back
-            # green on code that no longer exists.
-            run: go test ./... -count=1 -timeout 20m
+      - name: Test
+        # No -race here. internal/app takes over ten minutes under the detector
+        # on a developer machine and longer on a runner, and a job that times
+        # out is a job somebody switches off. The race build runs nightly
+        # instead, where the wall time costs nobody a review.
+        #
+        # -count=1 because the test cache replays a pass across a change the
+        # cache key does not see, which is how a mutation sweep can come back
+        # green on code that no longer exists.
+        run: go test ./... -count=1 -timeout 20m
 
   race:
     name: go test -race ./...
