@@ -547,6 +547,12 @@ func (e *Emulator) Bounds() uv.Rectangle {
 	return e.scr.Bounds()
 }
 
+// AtGround reports whether the parser is between sequences: no escape
+// sequence, string or character is half read.
+func (e *Emulator) AtGround() bool {
+	return e.parser.state == parser.GroundState
+}
+
 // CellAt returns the current focused screen cell at the given x, y position.
 // It returns nil if the cell is out of bounds.
 func (e *Emulator) CellAt(x, y int) *uv.Cell {
