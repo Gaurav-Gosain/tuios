@@ -921,6 +921,11 @@ type KeybindingsConfig struct {
 	// visual selection. Copy mode's vim motions are fixed keys and are not
 	// here. See getDefaultCopyModeKeybinds.
 	CopyMode map[string][]string `toml:"copy_mode"`
+	// GUI binds are read only by a native GUI client (tuios-gpui), through
+	// the GUI bridge's keybinds event. They are desktop chords that need no
+	// leader, such as ctrl+shift+t. The terminal client never looks them up,
+	// so they take no key from it. See gui_keybinds.go.
+	GUI map[string][]string `toml:"gui"`
 }
 
 // defaultPrefixRepeatTime is addressable so DefaultConfig can point at it.
@@ -1359,6 +1364,7 @@ func DefaultConfig() *UserConfig {
 			Mail:          getDefaultMailKeybinds(),
 			Transfers:     getDefaultTransfersKeybinds(),
 			CopyMode:      getDefaultCopyModeKeybinds(),
+			GUI:           getDefaultGUIKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -3085,6 +3091,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Transfers == nil {
 		cfg.Keybindings.Transfers = make(map[string][]string)
 	}
+	if cfg.Keybindings.GUI == nil {
+		cfg.Keybindings.GUI = make(map[string][]string)
+	}
 	if cfg.Keybindings.CopyMode == nil {
 		cfg.Keybindings.CopyMode = make(map[string][]string)
 	}
@@ -3153,6 +3162,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
 	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
+	// The GUI section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		dropStaleDuplicateKeys(section.target, section.defaults)
@@ -3333,6 +3344,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.Mail, d.Mail},
 		{c.Transfers, d.Transfers},
 		{c.CopyMode, d.CopyMode},
+		{c.GUI, d.GUI},
 		{c.Global, d.Global},
 		{c.Script, d.Script},
 	}
