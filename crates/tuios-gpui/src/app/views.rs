@@ -105,6 +105,27 @@ impl Render for Spin {
     }
 }
 
+/// One pane's content, a view of its own so its output redraws nothing else.
+pub struct PaneView {
+    pub app: WeakEntity<TuiosApp>,
+    pub pty: String,
+}
+
+impl Render for PaneView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let (app, pty) = (self.app.clone(), self.pty.clone());
+        canvas(
+            |_, _, _| {},
+            move |bounds, _, window, cx| {
+                if let Some(app) = app.upgrade() {
+                    app.update(cx, |this, cx| this.paint_pane(&pty, bounds, window, cx));
+                }
+            },
+        )
+        .size_full()
+    }
+}
+
 #[derive(Clone)]
 pub struct Views {
     pub band: Entity<Part>,

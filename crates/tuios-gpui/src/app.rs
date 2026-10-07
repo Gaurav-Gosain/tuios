@@ -230,6 +230,10 @@ pub struct TuiosApp {
     /// Shaped header text per window, rebuilt when what it shows changes.
     headers: HashMap<String, grid::HeaderLines>,
     spin_slots: Rc<RefCell<SpinSlots>>,
+    /// One view per pane, by PTY.
+    pane_views: HashMap<String, Entity<views::PaneView>>,
+    /// Paint time of the stage frame in progress, for the stats.
+    frame_ms: f64,
     /// Frames drawn (root renders), for the `stats` control command.
     frames: u64,
 }
@@ -300,6 +304,8 @@ impl TuiosApp {
             resized_at: None,
             headers: HashMap::new(),
             spin_slots,
+            pane_views: HashMap::new(),
+            frame_ms: 0.,
             frames: 0,
         };
         this.connect(this.cfg.session.clone(), window, cx);
@@ -307,7 +313,7 @@ impl TuiosApp {
         cx.observe_window_activation(window, |this, window, cx| {
             this.window_active = window.is_window_active();
             this.update_timers(cx);
-            this.refresh_grid(cx);
+            this.refresh_stage(cx);
             this.refresh_spin(cx);
         })
         .detach();
@@ -323,9 +329,33 @@ impl TuiosApp {
         self.views.as_ref().expect("views")
     }
 
-    /// Redraws the stage: panes, headers, splits.
+    /// Redraws the stage around the panes: the stage, headers, splits.
     fn refresh_grid(&self, cx: &mut Context<Self>) {
         self.views().grid.update(cx, |_, cx| cx.notify());
+    }
+
+    /// Redraws the stage and every pane on it.
+    fn refresh_stage(&self, cx: &mut Context<Self>) {
+        self.refresh_grid(cx);
+        for v in self.pane_views.values() {
+            v.update(cx, |_, cx| cx.notify());
+        }
+    }
+
+    /// Redraws one pane's content.
+    fn refresh_pane(&self, pty: &str, cx: &mut Context<Self>) {
+        match self.pane_views.get(pty) {
+            Some(v) => v.update(cx, |_, cx| cx.notify()),
+            None => self.refresh_grid(cx),
+        }
+    }
+
+    /// Redraws the focused pane, for its cursor.
+    fn refresh_focused(&self, cx: &mut Context<Self>) {
+        match self.focused_pty() {
+            Some(p) => self.refresh_pane(&p, cx),
+            None => self.refresh_grid(cx),
+        }
     }
 
     /// Redraws the sidebar and the title band.
@@ -358,7 +388,7 @@ impl TuiosApp {
             cx.background_executor().timer(wait).await;
             let _ = this.update(cx, |this, cx| {
                 this.wake_task = None;
-                this.refresh_grid(cx);
+                this.refresh_stage(cx);
             });
         });
         self.wake_task = Some((at, task));
@@ -399,7 +429,7 @@ impl TuiosApp {
                         .unwrap_or(BLINK);
                     cx.background_executor().timer(wait).await;
                     let go = this.update(cx, |this, cx| {
-                        this.refresh_grid(cx);
+                        this.refresh_focused(cx);
                         this.cursor_blinks()
                     });
                     if !matches!(go, Ok(true)) {
@@ -998,9 +1028,10 @@ impl TuiosApp {
         let cell = self.cell_px();
         let debug = std::env::var_os("TUIOS_GPUI_DEBUG").is_some();
         let mut all = false;
-        // Output to a pane on another workspace changes nothing on screen.
-        let mut seen = false;
-        let shown = |this: &Self, pty: &str| this.state.as_ref().is_some_and(|s| s.visible().iter().any(|w| w.pty == pty));
+        // Output redraws its own pane; output to a pane on another
+        // workspace redraws nothing. A state change redraws the stage.
+        let mut stage = false;
+        let mut touched: HashSet<String> = HashSet::new();
         for msg in batch {
             if debug {
                 match &msg {
@@ -1021,7 +1052,7 @@ impl TuiosApp {
                     "state" => {
                         if let Some(st) = ev.state {
                             self.on_state(st, cx);
-                            seen = true;
+                            stage = true;
                         }
                     }
                     "theme" => {
@@ -1040,21 +1071,21 @@ impl TuiosApp {
                     _ => {}
                 },
                 Message::Snapshot { pty, cols, rows, bytes } => {
-                    seen |= shown(self, &pty);
+                    touched.insert(pty.clone());
                     let theme = self.theme.clone();
                     let sb = self.cfg.scrollback;
                     let pane = self.panes.entry(pty).or_insert_with(|| Pane::new(cols.max(1), rows.max(1), &theme, sb));
                     pane.restore(cols, rows, &bytes, &theme, cell);
                 }
                 Message::Output { pty, bytes } => {
-                    seen |= shown(self, &pty);
+                    touched.insert(pty.clone());
                     let (c, r) = self.layout_size(&pty);
                     let theme = self.theme.clone();
                     let sb = self.cfg.scrollback;
                     self.panes.entry(pty).or_insert_with(|| Pane::new(c, r, &theme, sb)).write(&bytes);
                 }
                 Message::Resized { pty, cols, rows } => {
-                    seen |= shown(self, &pty);
+                    touched.insert(pty.clone());
                     if let Some(p) = self.panes.get_mut(&pty) {
                         p.term.resize(cols, rows, cell.0, cell.1);
                     }
@@ -1069,8 +1100,13 @@ impl TuiosApp {
         }
         if all {
             cx.notify();
-        } else if seen {
-            self.refresh_grid(cx);
+        } else if stage {
+            self.refresh_stage(cx);
+        } else {
+            let visible: HashSet<String> = self.state.as_ref().map(|s| s.visible().iter().map(|w| w.pty.clone()).collect()).unwrap_or_default();
+            for pty in touched.iter().filter(|p| visible.contains(*p)) {
+                self.refresh_pane(pty, cx);
+            }
         }
     }
 
@@ -1108,7 +1144,7 @@ impl TuiosApp {
             self.focus_wanted = Some((id.to_string(), Instant::now()));
             self.send(Command::focus(id));
             self.rebuild_attached();
-            self.refresh_grid(cx);
+            self.refresh_stage(cx);
             self.refresh_chrome(cx);
         }
     }
@@ -1309,7 +1345,7 @@ impl TuiosApp {
                     p.scroll_pixels(if k.key == "pageup" { page } else { -page }, ch);
                     p.scrolled_at = Some(Instant::now());
                     self.wake_grid_at(Instant::now() + SCROLLBAR, cx);
-                    self.refresh_grid(cx);
+                    self.refresh_pane(&pty, cx);
                 }
             }
             return;
@@ -1324,7 +1360,7 @@ impl TuiosApp {
             p.term.clear_selection();
             self.input(&pty, &bytes);
             self.last_input = Instant::now();
-            self.refresh_grid(cx);
+            self.refresh_pane(&pty, cx);
         }
     }
 
@@ -1464,12 +1500,12 @@ impl TuiosApp {
                         _ => p.term.clear_selection(),
                     }
                 }
+                self.refresh_pane(&pty, cx);
                 self.drag = Some(Drag::Select { pty, anchor: cell });
             }
             3 => self.paste(cx, true),
             _ => {}
         }
-        self.refresh_grid(cx);
     }
 
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -1494,7 +1530,7 @@ impl TuiosApp {
                     if let Some(p) = self.panes.get_mut(&pty) {
                         if cell != anchor {
                             p.term.select(anchor, cell, ev.modifiers.alt);
-                            self.refresh_grid(cx);
+                            self.refresh_pane(&pty, cx);
                         }
                     }
                 }
@@ -1594,7 +1630,7 @@ impl TuiosApp {
         }
         p.scrolled_at = Some(Instant::now());
         self.wake_grid_at(Instant::now() + SCROLLBAR, cx);
-        self.refresh_grid(cx);
+        self.refresh_pane(&pty, cx);
     }
 
     /// The pane whose header row is under `pos`.
@@ -1766,7 +1802,7 @@ impl EntityInputHandler for TuiosApp {
         }
         self.input(&pty, text.as_bytes());
         self.last_input = Instant::now();
-        self.refresh_grid(cx);
+        self.refresh_pane(&pty, cx);
     }
 
     fn replace_and_mark_text_in_range(

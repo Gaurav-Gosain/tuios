@@ -57,18 +57,38 @@ fn bezier(x1: f32, y1: f32, x2: f32, y2: f32, t: f32) -> f32 {
 
 impl TuiosApp {
     pub(super) fn render_grid(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let entity = cx.entity();
-        let canvas = canvas(
-            |_, _, _| {},
-            move |bounds, _, window, cx| {
-                entity.update(cx, |this, cx| this.paint_grid(bounds, window, cx));
-            },
-        )
-        .size_full();
+        let (under, over) = (cx.entity(), cx.entity());
+        // Under the panes: the stage and the headers. Over them: splits, the
+        // needs-you ring and the resize badge. Each pane is a view of its
+        // own between the two, so output in one pane redraws only that pane.
+        let stage = canvas(|_, _, _| {}, move |_, _, window, cx| under.update(cx, |this, cx| this.paint_stage(window, cx))).absolute().size_full();
+        let overlay = canvas(|_, _, _| {}, move |_, _, window, cx| over.update(cx, |this, cx| this.paint_overlay(window, cx))).absolute().size_full();
         let empty = self.empty_state(cx);
         let lay = self.layout;
         let x0 = if lay.overlay || lay.side_w == 0. { 0. } else { lay.side_w };
-        let stage = Bounds::new(point(lay.stage.origin.x - px(x0), lay.stage.origin.y - px(BAND_H)), lay.stage.size);
+        let stage_rect = Bounds::new(point(lay.stage.origin.x - px(x0), lay.stage.origin.y - px(BAND_H)), lay.stage.size);
+        let mut panes: Vec<AnyElement> = Vec::new();
+        if let Some(m) = self.metrics.clone() {
+            let rects = self.pane_rects(&m);
+            self.pane_views.retain(|pty, _| self.panes.contains_key(pty));
+            for r in rects {
+                let me = cx.entity();
+                let view = self
+                    .pane_views
+                    .entry(r.pty.clone())
+                    .or_insert_with(|| {
+                        let pty = r.pty.clone();
+                        cx.new(move |cx: &mut Context<views::PaneView>| {
+                            cx.observe(&me, |_, _, cx| cx.notify()).detach();
+                            views::PaneView { app: me.downgrade(), pty }
+                        })
+                    })
+                    .clone();
+                let c = r.content;
+                let style = StyleRefinement::default().absolute().left(c.origin.x - px(x0)).top(c.origin.y - px(BAND_H)).w(c.size.width).h(c.size.height);
+                panes.push(view.cached(style).into_any_element());
+            }
+        }
         div()
             .id("grid")
             .size_full()
@@ -82,14 +102,16 @@ impl TuiosApp {
             .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_mouse_up))
             .on_mouse_up(MouseButton::Right, cx.listener(Self::on_mouse_up))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
-            .child(canvas)
+            .child(stage)
+            .children(panes)
+            .child(overlay)
             .children(empty.map(|e| {
                 div()
                     .absolute()
-                    .left(stage.origin.x)
-                    .top(stage.origin.y)
-                    .w(stage.size.width)
-                    .h(stage.size.height)
+                    .left(stage_rect.origin.x)
+                    .top(stage_rect.origin.y)
+                    .w(stage_rect.size.width)
+                    .h(stage_rect.size.height)
                     .flex()
                     .items_center()
                     .justify_center()
@@ -288,47 +310,37 @@ impl TuiosApp {
         }
     }
 
-    pub(super) fn paint_grid(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    /// Under the panes: the stage, the backgrounds of programs that set
+    /// their own, and each pane's header.
+    pub(super) fn paint_stage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let started = Instant::now();
+        self.frame_ms = 0.;
         let Some(m) = self.metrics.clone() else { return };
         let t = self.theme.clone();
         let lay = self.layout;
-        let s = m.scale;
-        let one = px(1. / s);
-        let _ = bounds;
+        let one = px(1. / m.scale);
         // The stage: one bordered quad.
         window.paint_quad(quad(lay.stage, px(10.), rgb(t.stage), one, t.border, BorderStyle::Solid));
-        let stage_mask = ContentMask { bounds: lay.stage };
         self.spin_slots.borrow_mut().grid.clear();
         if self.state.is_none() {
-            self.stats.record_paint(started.elapsed());
             return;
         }
-        let cw = f32::from(m.cell_w);
+        let stage_mask = ContentMask { bounds: lay.stage };
         let rects = self.pane_rects(&m);
         let multi = rects.len() > 1;
         let focused = self.focused_id();
-        let mut more_frames = false;
-        let now = Instant::now();
-        let blink_on = self.blink_on();
         let infos: HashMap<String, PaneInfo> = self.attached.iter().map(|p| (p.window.clone(), p.clone())).collect();
         let inner = lay.stage.dilate(-one);
-
         for r in &rects {
             let is_focused = focused.as_deref() == Some(r.id.as_str());
             let arrive = self.need_since.get(&r.id).map(|t0| decelerate(t0.elapsed().as_secs_f32() / ARRIVE.as_secs_f32())).unwrap_or(1.);
-            if arrive < 1. {
-                more_frames = true;
-            }
             if let Some(info) = infos.get(&r.id) {
                 self.paint_header(info, r.header, is_focused || !multi, arrive, stage_mask, window, cx);
             }
-            let Some(pane) = self.panes.get_mut(&r.pty) else { continue };
-            pane.shown = true;
-            let y_off = pane.scroll_px;
-            let screen_bg = pane.term.snapshot().bg;
+            let Some(pane) = self.panes.get(&r.pty) else { continue };
             // A program that set its own background fills its content grown
             // into the gaps, and out to the stage edge where it touches it.
+            let screen_bg = pane.term.screen().bg;
             if screen_bg.to_u32() != t.stage {
                 let grow = 4.;
                 let c = r.content;
@@ -345,40 +357,6 @@ impl TuiosApp {
                 };
                 window.paint_quad(fill(Bounds::new(point(px(x0), px(y0)), size(px(x1 - x0), px(y1 - y0))), hsla(screen_bg)).corner_radii(corners));
             }
-            {
-                let Pane { term, painter, .. } = pane;
-                painter.prepare(term.snapshot(), &m, &t, window);
-            }
-            if y_off > 0. {
-                let above = pane.term.row_above().cloned();
-                pane.painter.prepare_above(above.as_ref(), screen_bg, &m, &t, window);
-            }
-            let Pane { term, painter, scrolled_at, .. } = pane;
-            let cursor = CursorPaint {
-                visible: y_off == 0. && term.at_bottom() && (blink_on || !is_focused),
-                focused: is_focused && self.window_active,
-                color: Rgb::from_u32(t.cursor),
-            };
-            window.with_content_mask(Some(ContentMask { bounds: r.content }), |window| {
-                painter.paint(term.screen(), r.content.origin, &m, cursor, y_off, window, cx);
-            });
-            if multi && !is_focused {
-                // Panes without focus sit back; the header keeps its marks.
-                window.paint_quad(fill(r.content, with_alpha(t.stage, t.dim)));
-            }
-            // The scrollbar shows while scrolling, then fades.
-            if let Some(at) = *scrolled_at {
-                let age = now.saturating_duration_since(at);
-                if age < SCROLLBAR + SCROLLBAR_FADE {
-                    let fade = if age > SCROLLBAR { 1. - exit((age - SCROLLBAR).as_secs_f32() / SCROLLBAR_FADE.as_secs_f32()) } else { 1. };
-                    if age > SCROLLBAR {
-                        more_frames = true;
-                    }
-                    paint_scrollbar(term, r.content, &t, fade, s, window);
-                } else {
-                    *scrolled_at = None;
-                }
-            }
         }
         // Panes out of sight drop their row caches; they keep their history.
         let shown: HashSet<&str> = rects.iter().map(|r| r.pty.as_str()).collect();
@@ -388,6 +366,78 @@ impl TuiosApp {
                 p.painter.clear();
             }
         }
+        self.frame_ms += started.elapsed().as_secs_f64() * 1000.;
+    }
+
+    /// One pane's content, in its own view: the cells, the cursor, the dim
+    /// of a pane without focus and the scrollbar.
+    pub(super) fn paint_pane(&mut self, pty: &str, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+        let started = Instant::now();
+        let Some(m) = self.metrics.clone() else { return };
+        let t = self.theme.clone();
+        let Some(st) = self.state.as_ref() else { return };
+        let Some(w) = st.windows.iter().find(|w| w.pty == pty) else { return };
+        let id = w.id.clone();
+        let multi = st.visible().len() > 1;
+        let is_focused = self.focused_id().as_deref() == Some(id.as_str());
+        let blink_on = self.blink_on();
+        let active = self.window_active;
+        let now = Instant::now();
+        let Some(pane) = self.panes.get_mut(pty) else { return };
+        pane.shown = true;
+        let y_off = pane.scroll_px;
+        let screen_bg = pane.term.snapshot().bg;
+        {
+            let Pane { term, painter, .. } = pane;
+            painter.prepare(term.screen(), &m, &t, window);
+        }
+        if y_off > 0. {
+            let above = pane.term.row_above().cloned();
+            pane.painter.prepare_above(above.as_ref(), screen_bg, &m, &t, window);
+        }
+        let Pane { term, painter, scrolled_at, .. } = pane;
+        let cursor = CursorPaint {
+            visible: y_off == 0. && term.at_bottom() && (blink_on || !is_focused),
+            focused: is_focused && active,
+            color: Rgb::from_u32(t.cursor),
+        };
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            painter.paint(term.screen(), bounds.origin, &m, cursor, y_off, window, cx);
+        });
+        if multi && !is_focused {
+            // Panes without focus sit back; the header keeps its marks.
+            window.paint_quad(fill(bounds, with_alpha(t.stage, t.dim)));
+        }
+        // The scrollbar shows while scrolling, then fades.
+        if let Some(at) = *scrolled_at {
+            let age = now.saturating_duration_since(at);
+            if age < SCROLLBAR + SCROLLBAR_FADE {
+                let fade = if age > SCROLLBAR { 1. - exit((age - SCROLLBAR).as_secs_f32() / SCROLLBAR_FADE.as_secs_f32()) } else { 1. };
+                if age > SCROLLBAR {
+                    window.request_animation_frame();
+                }
+                paint_scrollbar(term, bounds, &t, fade, m.scale, window);
+            } else {
+                *scrolled_at = None;
+            }
+        }
+        self.frame_ms += started.elapsed().as_secs_f64() * 1000.;
+    }
+
+    /// Over the panes: the splits, the needs-you ring, the resize badge and
+    /// text an input method is composing.
+    pub(super) fn paint_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let started = Instant::now();
+        let Some(m) = self.metrics.clone() else { return };
+        let t = self.theme.clone();
+        let lay = self.layout;
+        let one = px(1. / m.scale);
+        let mut more_frames = false;
+        let now = Instant::now();
+        let rects = self.pane_rects(&m);
+        let focused = self.focused_id();
+        let cw = f32::from(m.cell_w);
+        let inner = lay.stage.dilate(-one);
 
         // Splits: 1 px hairlines on the gap centre lines.
         let line = t.hairline;
@@ -409,7 +459,7 @@ impl TuiosApp {
 
         // The one coloured frame: around a pane that needs you.
         for r in &rects {
-            if infos.get(&r.id).is_none_or(|i| i.status != Status::NeedsYou) {
+            if self.attached.iter().find(|p| p.window == r.id).is_none_or(|i| i.status != Status::NeedsYou) {
                 continue;
             }
             let c = &r.content;
@@ -419,6 +469,9 @@ impl TuiosApp {
             let y1 = if r.edges[3] { f32::from(lay.stage.bottom()) - 4. } else { f32::from(c.bottom()) + 3. };
             let ring = Bounds::new(point(px(m.snap(x0)), px(m.snap(y0))), size(px(m.snap(x1 - x0)), px(m.snap(y1 - y0))));
             let arrive = self.need_since.get(&r.id).map(|t0| (t0.elapsed().as_secs_f32() / ARRIVE.as_secs_f32()).min(1.)).unwrap_or(1.);
+            if arrive < 1. {
+                more_frames = true;
+            }
             // The glow peaks at 40 % on the way in, then rests at 16 %.
             let glow = if arrive < 1. { if arrive < 0.5 { 0.4 * arrive * 2. } else { 0.4 - 0.24 * (arrive - 0.5) * 2. } } else { 0.16 };
             window.paint_quad(quad(ring.dilate(px(3.)), px(9.), transparent_black(), px(3.), with_alpha(t.need, glow), BorderStyle::Solid));
@@ -447,10 +500,9 @@ impl TuiosApp {
             }
         }
 
-        let title = rects
-            .iter()
-            .find(|r| focused.as_deref() == Some(r.id.as_str()))
-            .and_then(|r| infos.get(&r.id))
+        let title = focused
+            .as_ref()
+            .and_then(|id| self.attached.iter().find(|p| &p.window == id))
             .map(|i| format!("{} - {} - tuios", i.name, self.current_session()))
             .unwrap_or_else(|| "tuios".into());
         if title != self.last_title {
@@ -465,7 +517,11 @@ impl TuiosApp {
             self.animating = more_frames;
             window.request_animation_frame();
         }
-        self.stats.record_paint(started.elapsed());
+        // One frame of the stage: the stage and headers, every pane that
+        // drew, and this overlay. Panes that did not change cost nothing.
+        let total = self.frame_ms + started.elapsed().as_secs_f64() * 1000.;
+        self.frame_ms = 0.;
+        self.stats.record_paint(Duration::from_secs_f64(total / 1000.));
     }
 
     /// "128 × 41" in the middle of the stage while the window resizes.

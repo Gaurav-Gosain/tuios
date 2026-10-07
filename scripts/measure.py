@@ -12,6 +12,7 @@ history), then starts BIN in gamescope's headless backend at 1440x900 and
   idle-quiet  the demo session, no agent working anywhere
   idle-spin   the demo session, two agents working
   busy4       four panes printing about 200 lines a second each
+  busy1       one of three panes printing about 200 lines a second
   scroll      wheel steps of 40 px every 16 ms over the history pane
 
 For each it reads the app's own `stats` control command (frames drawn, grid
@@ -57,6 +58,13 @@ def seed():
     w0 = [s for s in first if s["name"] == "busy4"][0]["windows"][0]["id"]
     t("close-window", "-s", "busy4", w0)
     t("new-window", "-s", "busy4", "--no-focus", "busy", "--", busy)
+    t("new", "-d", "busy1", "--cwd", ROOT)
+    first = json.loads(t("ls", "--json"))
+    w0 = [s for s in first if s["name"] == "busy1"][0]["windows"][0]["id"]
+    t("new-window", "-s", "busy1", "--no-focus", "busy", "--", busy)
+    t("new-window", "-s", "busy1", "--no-focus", "quiet", "--", "sh", "-c", "seq 40; exec sleep 1d")
+    t("new-window", "-s", "busy1", "--no-focus", "quiet", "--", "sh", "-c", "seq 40; exec sleep 1d")
+    t("close-window", "-s", "busy1", w0)
     hist = "seq -f 'line %g of the history, with a few words to shape' 6000; exec sleep 1d"
     t("new", "-d", "hist", "--cwd", ROOT)
     t("new-window", "-s", "hist", "--no-focus", "history", "--", "sh", "-c", hist)
@@ -191,6 +199,8 @@ def main():
             results.append(run("idle-spin", "tuios", 15))
         if wanted("busy4"):
             results.append(run("busy4", "busy4", 15))
+        if wanted("busy1"):
+            results.append(run("busy1", "busy1", 15))
         if wanted("scroll"):
             results.append(run("scroll", "hist", 8, action=scroll))
     finally:
