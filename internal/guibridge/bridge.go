@@ -102,6 +102,16 @@ type Event struct {
 	// Result is set on "result" events, the answer to an action or layout
 	// command. It follows the state that shows the command's effect.
 	Result *Result `json:"result,omitempty"`
+	// VerbResult is set on "verb_result" events, the answer to a verb
+	// command. See verb.go.
+	VerbResult *VerbResult `json:"verb_result,omitempty"`
+	// Attention is set on "attention" events: every open Inbox item, sent
+	// when the list changes. Notify is set on "notify" events, one per alert.
+	// Detached is set on the "detached" event, sent once before the bridge
+	// exits when the daemon ended the attach. See inbox.go.
+	Attention *Attention `json:"attention,omitempty"`
+	Notify    *Notify    `json:"notify,omitempty"`
+	Detached  *Detached  `json:"detached,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -240,6 +250,10 @@ type Command struct {
 	Target string  `json:"target,omitempty"`
 	Side   string  `json:"side,omitempty"`
 	Rect   *Rect   `json:"rect,omitempty"`
+	// verb: a daemon verb by name, and its params. The answer is a
+	// "verb_result" event with the same req. See verb.go.
+	Verb   string         `json:"verb,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // Run attaches and serves the renderer until its input closes or the session
@@ -295,7 +309,7 @@ func Run(opts Options) error {
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
 
-	m := &model{os: osModel, out: out}
+	m := &model{os: osModel, out: out, version: opts.Version, nonce: client.HumanNonce}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -336,6 +350,10 @@ func Run(opts Options) error {
 	}()
 
 	_, err = program.Run()
+	// The daemon ended the attach: say why, before the pipe closes.
+	if d := detachedEvent(m.os); d != nil {
+		out.JSON(Event{Type: "detached", Detached: d})
+	}
 	osModel.Cleanup()
 	_ = client.Close()
 	return err
@@ -387,6 +405,16 @@ type model struct {
 	keysFrom *config.UserConfig
 	// results wait for the state that shows their effect.
 	results []Result
+	// version is this build's, for the verb connections. nonce reads the
+	// attach nonce the daemon issued to this client, for the person verbs.
+	version string
+	nonce   func() string
+	// attentionSent, attentionGen and attentionLive are the Inbox as last
+	// sent, and notified the alerts already sent. See inbox.go.
+	attentionSent bool
+	attentionGen  uint64
+	attentionLive bool
+	notified      map[string]bool
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -462,6 +490,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sendKeybinds()
 	}
 	m.export()
+	m.exportAttention()
+	m.exportNotify()
 	for i := range m.results {
 		m.out.JSON(Event{Type: "result", Result: &m.results[i]})
 	}
@@ -534,6 +564,17 @@ func (m *model) handle(c Command) tea.Cmd {
 			res.Ratio = got.Ratio
 		}
 		m.answer(res, err)
+	case "verb":
+		nonce := ""
+		if personVerbs[c.Verb] && m.nonce != nil {
+			nonce = m.nonce()
+		}
+		if c.Verb == "reply-approval" {
+			// This client answers it: the close that follows is not news.
+			id, _ := c.Params["request_id"].(string)
+			m.os.NoteInboxReplied(id)
+		}
+		go runVerb(m.out, m.version, nonce, c)
 	case "quit":
 		return tea.Quit
 	}
