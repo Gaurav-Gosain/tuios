@@ -38,11 +38,14 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, clientProtocolRefusal(d.version, &payload))
 	}
 
-	// Store client's graphics capabilities for PTY pixel size reporting
+	// Store client's graphics capabilities for PTY pixel size reporting. The
+	// cell size is read under cs.mu by sessionCellSize, so it is written there.
+	cs.mu.Lock()
 	cs.pixelWidth = payload.PixelWidth
 	cs.pixelHeight = payload.PixelHeight
 	cs.cellWidth = payload.CellWidth
 	cs.cellHeight = payload.CellHeight
+	cs.mu.Unlock()
 	cs.kittyGraphics = payload.KittyGraphics
 	cs.sixelGraphics = payload.SixelGraphics
 	cs.kittyAnimation = payload.KittyAnimation
