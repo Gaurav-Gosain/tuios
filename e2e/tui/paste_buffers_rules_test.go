@@ -183,23 +183,23 @@ func TestPasteBufferTurnsLineFeedsIntoReturns(t *testing.T) {
 	if err := os.WriteFile(file, []byte("LFa\nLFb"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	runInShell(t, term, "clear; "+tuiosBin+" set-buffer -b lines < "+file+"; stty -icanon -icrnl -echo; echo CAT\"\"READY; cat -v", "CATREADY", shellTimeout)
+	// dd reads exactly the bytes of the two pastes and ends, so the shell
+	// gets its terminal back with no key that a changed terminal mode could
+	// eat. cat -v shows a carriage return as ^M.
+	runInShell(t, term, "clear; "+tuiosBin+" set-buffer -b lines < "+file+"; stty -icanon -icrnl -echo; echo CAT\"\"READY; dd bs=1 count=14 2>/dev/null | cat -v; stty sane; echo; echo CAT\"\"DONE", "CATREADY", shellTimeout)
 	mustCLI(t, base, "paste-buffer", "-s", pbSession, "-b", "lines")
-	if err := term.WaitForText("LFa^MLFb", shellTimeout); err != nil {
-		t.Fatalf("paste-buffer kept the line feed: %v\n%s", err, term.Snapshot())
-	}
 	mustCLI(t, base, "paste-buffer", "-s", pbSession, "-b", "lines", "-r")
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Count(s.Text(), "LFb") >= 2 }, shellTimeout); err != nil {
-		t.Fatalf("paste-buffer -r typed nothing: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("CATDONE", shellTimeout); err != nil {
+		t.Fatalf("the two pastes never reached dd: %v\n%s", err, term.Snapshot())
 	}
-	if strings.Count(term.Screen().Text(), "^M") != 1 {
+	text := term.Screen().Text()
+	if !strings.Contains(text, "LFa^MLFbLFa") {
+		t.Fatalf("paste-buffer kept the line feed\n%s", term.Snapshot())
+	}
+	if strings.Count(text, "^M") != 1 {
 		t.Fatalf("paste-buffer -r turned the line feed into a carriage return\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "paste-buffers-line-feeds")
-	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
-		t.Fatal(err)
-	}
-	runInShell(t, term, "stty sane; echo STTY\"\"SANE", "STTYSANE", shellTimeout)
 	alive(t, term, "after the line feed check")
 }
 

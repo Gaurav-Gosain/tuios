@@ -75,7 +75,7 @@ tests passed on the branch build.
 | `find` takes the newest buffer of any kind for no name | `TestPasteBufferNamesFollowTmux` | `show-buffer` prints `named-x`, not `auto-y` |
 | `trim` counts every buffer against the limit | `TestPasteBufferNamesFollowTmux` | under `limit = 2` the named buffer goes at the third buffer, so the `-a` check finds two |
 | `set-buffer -a` with no name appends to the newest buffer | `TestPasteBufferNamesFollowTmux` | `-a extra` lands in `named-x`, and no new buffer appears |
-| `PasteText` keeps every line feed | `TestPasteBufferTurnsLineFeedsIntoReturns` | `LFa^MLFb` never shows in `cat -v` |
+| `PasteText` keeps every line feed | `TestPasteBufferTurnsLineFeedsIntoReturns` | `cat -v` shows no `LFa^MLFbLFa` |
 | The version cut from `pasteBufferNamed` | `TestPasteBufferChooserSkipsAChangedBuffer` | Enter pastes the new text, and "changed after the list" never shows |
 | The total check in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | two connections hold 1800 bytes under a cap of 1000 |
 | One upload per connection in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | after a second id the connection holds 902 bytes, want 2 |
