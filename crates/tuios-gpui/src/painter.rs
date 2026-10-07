@@ -264,6 +264,8 @@ struct RowCache {
     over: Vec<QuadInst>,
     /// Powerline separators, drawn as paths: column, character, colour.
     paths: Vec<(u16, char, Hsla)>,
+    /// When the row left the screen for the pool.
+    left: Option<std::time::Instant>,
 }
 
 /// Counters for the performance harness.
@@ -317,6 +319,8 @@ impl PanePainter {
             }
             let old = std::mem::take(&mut self.rows[y]);
             if old.epoch == metrics.epoch && old.generation != 0 {
+                let mut old = old;
+                old.left = Some(std::time::Instant::now());
                 self.pool.insert(old.hash, old);
             }
             let mut next = match self.pool.remove(&row.hash).filter(|c| c.epoch == metrics.epoch) {
@@ -460,6 +464,14 @@ impl PanePainter {
         });
         self.stats.glyphs += glyphs;
         self.stats.quads += quads;
+    }
+
+    /// Drops the rows that left the screen more than `age` ago. In a pane
+    /// that keeps printing they rarely come back, and the pool would hold
+    /// them until the pane goes quiet.
+    pub fn trim(&mut self, age: std::time::Duration) {
+        self.pool.retain(|_, c| c.left.is_some_and(|t| t.elapsed() < age));
+        self.pool.shrink_to_fit();
     }
 
     /// Drops every cached row, for a font change or a hidden pane.
