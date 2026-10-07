@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -143,4 +144,68 @@ func TestWhichKeyShowsTheConfiguredKeys(t *testing.T) {
 			alive(t, term, "after rebinding the which-key menus")
 		})
 	}
+}
+
+// TestWhichKeyRowsAreTheKeysThatRun: a which-key row names the key that runs
+// its action, and a row is gone when its key does nothing. The window menu is
+// opened with new window moved from n to y and close window unbound. The menu
+// shows y for the new window and no close row, y opens a pane, and the old n
+// and the unbound x do nothing.
+//
+// Negative control: build the window menu from the shipped keymap (pass nil
+// for the registry in whichKeyMenu's menu helper in
+// internal/app/render_whichkey.go). The new window row shows n, and the close
+// row comes back.
+func TestWhichKeyRowsAreTheKeysThatRun(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[keybindings.window_prefix]\nwindow_prefix_new = [\"y\"]\nwindow_prefix_close = []\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 36})
+	waitBoot(t, term)
+	// The dock's "1:<windows>" readout is the count of windows on workspace 1.
+	readout := regexp.MustCompile(`\b1:(\d+)\b`)
+	frames := func(s tuitest.Screen) int {
+		m := readout.FindStringSubmatch(s.Text())
+		if m == nil {
+			return -1
+		}
+		n, _ := strconv.Atoi(m[1])
+		return n
+	}
+	panes := func() int { return frames(term.Screen()) }
+	before := panes()
+	if before < 0 {
+		t.Fatalf("the dock shows no window count\n%s", term.Snapshot())
+	}
+
+	sendKeys(t, term, tuitest.Ctrl('b'), "t")
+	waitScreen(t, term, "the window menu never drew", "New window", "Toggle tiling mode")
+	s := term.Screen()
+	if got := whichKeyKeyOf(s, "New window"); got != "y" {
+		t.Fatalf("the new window row shows key %q, want y\n%s", got, term.Snapshot())
+	}
+	if strings.Contains(s.Text(), "Close window") {
+		t.Fatalf("the window menu offers the unbound close key\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "window-menu-rebound")
+
+	// The key the row names runs the action.
+	sendKeys(t, term, "y")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return frames(s) == before+1 }, uiTimeout); err != nil {
+		t.Fatalf("the y the menu shows did not open a window: %d windows, want %d\n%s", panes(), before+1, term.Snapshot())
+	}
+
+	// The old key and the unbound key do nothing.
+	for _, key := range []string{"n", "x"} {
+		sendKeys(t, term, tuitest.Ctrl('b'), "t")
+		waitScreen(t, term, "the window menu never drew", "New window")
+		sendKeys(t, term, key)
+		waitGone(t, term, "the which-key menu", "Toggle tiling mode")
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("the screen never settled: %v", err)
+		}
+		if got := panes(); got != before+1 {
+			t.Fatalf("ctrl+b t %s changed the windows: %d windows, want %d\n%s", key, got, before+1, term.Snapshot())
+		}
+	}
+	alive(t, term, "after the rebound window menu")
 }
