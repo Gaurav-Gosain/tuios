@@ -2794,12 +2794,16 @@ for that compose.
 ### What changed
 
 - `terminal.graphicsOnly` recognises a write that holds only kitty commands
-  leaving every cell alone (no placement without `C=1`, no virtual placement),
-  with cursor moves between them. With the guest's cursor hidden, such a write
-  sets `HasGraphicsOutput` instead of `HasNewOutput`. The client composes for
-  it only when the passthrough queued commands for the next frame
-  (`KittyPassthrough.HasQueued`). A pane output signal that marked nothing no
-  longer composes either.
+  leaving every cell alone (no placement without `C=1`, no virtual placement,
+  no chunk of a command that began in an earlier write), with cursor moves
+  between them, written while the parser is between sequences
+  (`Emulator.AtGround`; libghostty-vt cannot say, so it never skips). With
+  the guest's cursor hidden, such a write sets `HasGraphicsOutput` instead of
+  `HasNewOutput`. The client composes for it only when the passthrough queued
+  commands for the next frame (`KittyPassthrough.HasQueued`). A pane output
+  signal that marked nothing no longer composes either, except while a drag
+  or a resize is open, when it composes as before: those frames show the
+  gesture between motion events.
 - `forwardAnimation`: an edit of an image that is placed and shown, with no
   synchronized update open, is written at once (`editShowsAtOnce`).
 
@@ -2809,11 +2813,11 @@ for that compose.
 
 | Case | before | after |
 |---|---|---|
-| shm, 240 Hz, max_fps 240: client CPU | 206 ms/s (344 with the frame clock alone) | 48 ms/s |
-| shm, 120 Hz, max_fps 120: client CPU | 170 to 190 ms/s | 24 ms/s |
-| shm, 60 Hz: client CPU | 86 ms/s | 10 ms/s |
-| 64x64 edit at 120 Hz: latency p50 / p95 / p99 | 1.9 / 4.8 / 6.8 ms | 0.6 / 0.9 / 1.1 ms |
-| edit: client CPU | 164 ms/s | 14 to 18 ms/s |
+| shm, 240 Hz, max_fps 240: client CPU | 206 ms/s (312 to 336 with the frame clock alone) | 42 to 44 ms/s |
+| shm, 120 Hz, max_fps 120: client CPU | 170 to 190 ms/s | 22 ms/s |
+| shm, 60 Hz: client CPU | 86 ms/s | 10 to 12 ms/s |
+| 64x64 edit at 120 Hz: latency p50 / p95 / p99 | 1.9 / 4.8 / 6.8 ms | 0.6 / 0.7 to 0.8 / 0.8 to 1.0 ms |
+| edit: client CPU | 164 ms/s | 14 ms/s |
 
 Every frame and every edit reaches the host on both sides.
 `TestKittyStreamCostsLittle` asserts the CPU and the edit latency under
