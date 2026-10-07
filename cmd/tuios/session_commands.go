@@ -388,6 +388,12 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		sessionName = generateUniqueSessionName(client.AvailableSessionNames())
 	}
 
+	// An older daemon reads no -d and attaches beside the other clients.
+	// Said before the TUI takes the screen, so the person knows why.
+	if client.DetachOthers && !client.DaemonDetachesOthers() {
+		fmt.Fprintln(os.Stderr, "Warning: the daemon is older than this tuios and ignores -d. The other clients stay attached. Run 'tuios kill-server' and attach again to use -d.")
+	}
+
 	clientLogf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
 	state, err := client.AttachSession(sessionName, createNew, width, height)
 	if err != nil {

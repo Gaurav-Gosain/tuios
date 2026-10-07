@@ -53,10 +53,14 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
-	// DetachOthers is sent with the first attach only, as tuios attach -d
-	// asks: the other clients of the session are detached. A session switch
-	// later on does not detach anybody. See AttachPayload.DetachOthers.
+	// DetachOthers is sent with the next AttachSession, as tuios attach -d
+	// asks: the other clients of the session are detached. AttachSession
+	// clears it, so a later attach on this client (a session switch, a host
+	// reconnect) detaches nobody. See AttachPayload.DetachOthers.
 	DetachOthers bool
+	// Reconnect marks the attach as the client getting back a session it
+	// lost, not the person attaching. See AttachPayload.Reconnect.
+	Reconnect bool
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -203,7 +207,9 @@ type TUIClient struct {
 	graphicsSupported bool
 	// windowSize says the daemon's welcome offered WindowSize, and this
 	// client offered it too. See tuiclient_window_size.go.
-	windowSize bool
+	// daemonDetachOthers says the daemon's welcome offered DetachOthers.
+	daemonDetachOthers bool
+	windowSize         bool
 	// activityMu and lastActivity throttle MsgClientActivity.
 	activityMu   sync.Mutex
 	lastActivity time.Time
@@ -229,8 +235,12 @@ type TUIClient struct {
 	// OnHostsChanged.
 	hostsChangedHandler HostsChangedHandler
 	sessionEndedOnce    sync.Once // gates the single session-ended notification
-	disconnectOnce      sync.Once // gates the single disconnect notification
-	multiClientMu       sync.RWMutex
+	// pendingEnded holds a session-ended notice that arrived before a handler
+	// was registered: the read loop starts before the app wires itself, and
+	// the daemon can detach a client in between. OnSessionEnded delivers it.
+	pendingEnded   *[2]string
+	disconnectOnce sync.Once // gates the single disconnect notification
+	multiClientMu  sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts.
 	// pendingByID holds the round trip waiting on each request id, for a
@@ -413,6 +423,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
+	c.daemonDetachOthers = welcome.DetachOthers
 	c.dirWatchSupported = welcome.DirWatch
 	c.emptyWorkspacePanes.Store(welcome.EmptyWorkspacePanes)
 	c.daemonRefusesAnimation.Store(welcome.KittyAnimationRefusal)
@@ -468,10 +479,12 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		ViewOnly:     c.viewOnly(),
 		Cwd:          c.StartDir,
 		DetachOthers: c.DetachOthers,
+		Reconnect:    c.Reconnect,
 	})
 	if err != nil {
 		return nil, err
 	}
+	c.DetachOthers = false
 
 	if err := c.send(msg); err != nil {
 		return nil, err
@@ -975,7 +988,22 @@ func (c *TUIClient) OnSessionResize(handler SessionResizeHandler) {
 func (c *TUIClient) OnSessionEnded(handler SessionEndedHandler) {
 	c.multiClientMu.Lock()
 	c.sessionEndedHandler = handler
+	pending := c.pendingEnded
+	if handler != nil {
+		c.pendingEnded = nil
+	}
 	c.multiClientMu.Unlock()
+	if handler != nil && pending != nil {
+		c.sessionEndedOnce.Do(func() { handler(pending[0], pending[1]) })
+	}
+}
+
+// DaemonDetachesOthers reports whether the daemon's welcome said it reads
+// AttachPayload.DetachOthers. An older daemon ignores tuios attach -d.
+func (c *TUIClient) DaemonDetachesOthers() bool {
+	c.multiClientMu.RLock()
+	defer c.multiClientMu.RUnlock()
+	return c.daemonDetachOthers
 }
 
 // AgentMailHandler takes one MsgAgentMail push: a message from the session's
@@ -1644,14 +1672,15 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			}
 			c.detachedReason.Store(&reason)
 		}
-		c.sessionEndedOnce.Do(func() {
-			c.multiClientMu.RLock()
-			handler := c.sessionEndedHandler
-			c.multiClientMu.RUnlock()
-			if handler != nil {
-				handler(name, payload.Reason)
-			}
-		})
+		c.multiClientMu.Lock()
+		handler := c.sessionEndedHandler
+		if handler == nil {
+			c.pendingEnded = &[2]string{name, payload.Reason}
+		}
+		c.multiClientMu.Unlock()
+		if handler != nil {
+			c.sessionEndedOnce.Do(func() { handler(name, payload.Reason) })
+		}
 
 	case MsgAgentMail:
 		var payload AgentMailPayload

@@ -324,6 +324,9 @@ func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedP
 	cs.sendMu.Lock()
 	cs.mu.Lock()
 	cs.attached = true
+	// Written with the reply, under sendMu: a message sent to the client
+	// for this session after this point cannot overtake the reply.
+	cs.repliedSession = payload.SessionID
 	cs.mu.Unlock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err = WriteMessage(cs.conn, msg)

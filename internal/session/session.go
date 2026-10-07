@@ -1055,6 +1055,12 @@ func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
 // Session represents a persistent TUIOS session.
 // The daemon manages PTYs and stores state; the client runs the TUI.
 type Session struct {
+	// attachMu serialises attaches to the session from the moment a client
+	// is placed on it through its reply. exclusiveSeq is the attachSeq of the
+	// newest attach that detaches the others. See detach_client.go.
+	attachMu     sync.Mutex
+	exclusiveSeq atomic.Uint64
+
 	// Identity
 	ID string
 	// name is the session's one name: what the daemon lists, addresses it by,

@@ -26,6 +26,24 @@ import (
 // Taking another person's client away is an admin action. From a pane the
 // verb needs the admin grant (scopeDeny in verbScopes), and an attach from a
 // pane already needs it for the binary protocol (checkGrantMessage).
+//
+// Ordering. Two clients that attach -d at the same moment must end with one
+// of them attached and the other told why, never with both attached or with
+// a notice that reaches a client before its own attach reply:
+//
+//   - Attaches to one session hold Session.attachMu from the moment the
+//     client is placed through its reply, so attachSeq follows the order
+//     they took it.
+//   - A sweep takes off only clients fully attached to the session (their
+//     reply sent, repliedSession) with a lower attachSeq. A client still
+//     waiting for its reply would read the notice as the answer.
+//   - After its reply, an attach checks Session.exclusiveSeq and takes
+//     itself off when a newer exclusive attach landed meanwhile.
+//
+// Which attaches are exclusive: -d, or any attach under single_client, but
+// not a view-only one (a read-only web viewer must not take the screen from
+// the person) and not the attach a client makes on its own to get back a
+// session after a host link dropped (AttachPayload.Reconnect).
 
 // DetachedByAttachMessage is what a client detached by a newer attach shows.
 const DetachedByAttachMessage = "Another client attached to this session."
@@ -33,9 +51,10 @@ const DetachedByAttachMessage = "Another client attached to this session."
 // DetachedByCommandMessage is what a client detached by detach-client shows.
 const DetachedByCommandMessage = "The tuios detach-client command detached this client."
 
-// detachOthers takes every TUI client of sess other than keep off the session,
-// and returns their ids.
-func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string) []string {
+// detachOthers takes every TUI client fully attached to sess, other than
+// keep, off the session, and returns their ids. With before above zero only
+// clients that attached before that attachSeq are taken.
+func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string, before uint64) []string {
 	var targets []*connState
 	d.clientsMu.RLock()
 	for _, c := range d.clients {
@@ -43,7 +62,8 @@ func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string) []s
 			continue
 		}
 		c.mu.Lock()
-		ok := c.isTUIClient && c.sessionID == sess.ID
+		ok := c.isTUIClient && c.sessionID == sess.ID && c.repliedSession == sess.ID &&
+			(before == 0 || c.attachSeq < before)
 		c.mu.Unlock()
 		if ok {
 			targets = append(targets, c)
@@ -60,11 +80,31 @@ func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string) []s
 	return ids
 }
 
+// exclusiveAttach reports whether an attach detaches the other clients of
+// its session. See the top of this file.
+func (d *Daemon) exclusiveAttach(p *AttachPayload) bool {
+	if p.ViewOnly || p.Reconnect {
+		return false
+	}
+	return p.DetachOthers || d.singleClient.Load()
+}
+
+// ejectIfSuperseded takes cs off sess when an exclusive attach newer than its
+// own reached the session.
+func (d *Daemon) ejectIfSuperseded(cs *connState, sess *Session) {
+	cs.mu.Lock()
+	seq, on := cs.attachSeq, cs.sessionID == sess.ID
+	cs.mu.Unlock()
+	if on && sess.exclusiveSeq.Load() > seq {
+		d.ejectDetached(cs, sess, DetachedByAttachMessage)
+	}
+}
+
 // ejectDetached takes a client off sess and tells it why. It reports whether
 // the client was attached to sess.
 func (d *Daemon) ejectDetached(cs *connState, sess *Session, reason string) bool {
 	cs.mu.Lock()
-	on := cs.sessionID == sess.ID
+	on := cs.sessionID == sess.ID && cs.repliedSession == sess.ID
 	cs.mu.Unlock()
 	if !on || !d.detachClient(cs) {
 		return false
@@ -110,7 +150,7 @@ func (d *Daemon) verbDetachClient(cs *connState, params json.RawMessage) (any, *
 			return nil, newVerbError(ErrVerbNeedsClient, "client "+echoName(p.Client)+" is not attached to a session")
 		}
 		if p.AllOther {
-			detached = d.detachOthers(sess, target, DetachedByCommandMessage)
+			detached = d.detachOthers(sess, target, DetachedByCommandMessage, 0)
 		} else if d.ejectDetached(target, sess, DetachedByCommandMessage) {
 			detached = []string{target.clientID}
 		}
@@ -126,7 +166,7 @@ func (d *Daemon) verbDetachClient(cs *connState, params json.RawMessage) (any, *
 			keep = d.findTUIClient(sess.ID)
 		}
 		if !p.AllOther || keep != nil {
-			detached = d.detachOthers(sess, keep, DetachedByCommandMessage)
+			detached = d.detachOthers(sess, keep, DetachedByCommandMessage, 0)
 		}
 	default:
 		sess, verr := d.detachDefaultSession(cs)
@@ -138,7 +178,7 @@ func (d *Daemon) verbDetachClient(cs *connState, params json.RawMessage) (any, *
 			return nil, noClientOn(sess)
 		}
 		if p.AllOther {
-			detached = d.detachOthers(sess, newest, DetachedByCommandMessage)
+			detached = d.detachOthers(sess, newest, DetachedByCommandMessage, 0)
 		} else if d.ejectDetached(newest, sess, DetachedByCommandMessage) {
 			detached = []string{newest.clientID}
 		}

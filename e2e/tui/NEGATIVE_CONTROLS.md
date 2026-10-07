@@ -2550,3 +2550,24 @@ still runs at the end.
 | `single_client` is not read | `handleAttach`: `d.singleClient.Load()` cut from the gate | `TestSingleClientOptionDetachesOnEveryAttach` ("tuios never exited") | **caught** |
 | A pane needs no grant | `verbScopes`: `detach-client` classed `scopeOpen` | `TestDetachClientByIDAndSession` (the client exits, and `DC_EXIT=1` never shows) | **caught** |
 | The shim does not answer `detach-client` | `commands` in `internal/tmuxcompat/shim.go`: the entry cut | `TestDetachClientByIDAndSession` (`tuios tmux detach-client -s` exits 1) | **caught** |
+
+### Review fixes: racing attaches, viewers and `-a`
+
+`TestConcurrentAttachDetachLeavesOneClient` attaches one client and then
+starts two `attach -d` clients at the same moment, for six rounds. Each round
+must end with one client attached and two that exit 0 with the message.
+`TestSingleClientIgnoresAViewOnlyClient` attaches a `TUIOS_VIEW_ONLY=1`
+client under `single_client`, which must leave the owner attached. A plain
+attach after it detaches both, which is the positive half.
+`TestDetachClientAllOther` keeps one client with `--client ID --all-other`,
+and keeps the newest with the shim's `detach-client -a -s`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The first version of the pull request | built from its head, `4847ca2` | `TestConcurrentAttachDetachLeavesOneClient` (round 1: one client neither exits nor stays attached), `TestSingleClientIgnoresAViewOnlyClient` (the viewer detaches the owner) | **caught** |
+| No session lock and no reply check | `handleAttach`: the `attachMu` lines cut, and `repliedSession` cut from `detachOthers` and `ejectDetached` | `TestConcurrentAttachDetachLeavesOneClient` (round 6: a client exits 1) | **caught** |
+| No session lock only | the `attachMu` lines cut | none | **not caught**: the reply check alone keeps a notice from reaching a client before its reply |
+| No reply check only | `repliedSession` cut | none | **not caught**: the lock alone orders the attaches |
+| A notice before the handler is lost | `OnSessionEnded`: the pending notice never delivered | none | **not caught**: the window between the read loop and the wiring is too short to hit here |
+| A viewer counts as exclusive | `exclusiveAttach`: the `ViewOnly` test cut | `TestSingleClientIgnoresAViewOnlyClient` | **caught** |
+| `all_other` is not read | `verbDetachClient`: `p.AllOther = false` | `TestDetachClientAllOther` (the first client never exits) | **caught** |

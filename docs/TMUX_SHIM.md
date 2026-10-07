@@ -234,10 +234,18 @@ session continues to run, and each detached client exits with a message.
 - With neither, the client used last in the caller's session detaches, as
   tmux detaches the current client.
 - `-a` keeps the client used last in the session and detaches the others.
+  In tmux, `-a` acts on every client of the server. In the shim, `-a` acts
+  on one session only: the session of `-t` or `-s`, else the caller's
+  session.
 - `-P` and `-E` fail with `unknown flag`.
 
 A session out of the shim's reach is not found. From a pane, the command
-needs the `admin` grant. In control mode, `detach-client` with no flags ends
+needs the `admin` grant. Under `[agents.permissions]` mode `open`, the
+default, every pane holds `admin`. A tool in a pane can then detach the
+person's client through the shim, as a tool under tmux can. To prevent this,
+give the pane fewer grants or use mode `strict`.
+
+In control mode, `detach-client` with no flags ends
 the control client, as in tmux. With flags, it detaches tuios clients as
 above. A read-only control client cannot detach tuios clients.
 

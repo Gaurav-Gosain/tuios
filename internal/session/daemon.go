@@ -488,6 +488,11 @@ type connState struct {
 	// attachSeq orders the clients by when they attached, for the latest
 	// policy when no client has had input. Guarded by mu.
 	attachSeq uint64
+	// repliedSession is the session whose attach reply this client was sent,
+	// "" while an attach is on its way or the client is detached. Only a
+	// client fully attached is detached by another: one that has not read
+	// its reply would read the notice as the answer. See detach_client.go.
+	repliedSession string
 	// viewOnly says the client's attach marked it as sending no input. Under
 	// largest and latest it does not count toward the session's size.
 	// Guarded by mu.

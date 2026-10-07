@@ -90,6 +90,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		EmptyWorkspacePanes: true,
 		// See session_used.go.
 		SessionUsed: true,
+		// See detach_client.go.
+		DetachOthers: true,
 	})
 }
 
@@ -193,6 +195,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 			return fmt.Errorf("failed to issue the attach nonce: %w", err)
 		}
 	}
+	// Attaches to one session are serialised from here through the reply, so
+	// the sweep below sees every earlier attach either finished or not begun,
+	// and attachSeq orders them the way they took the lock. See
+	// detach_client.go.
+	session.attachMu.Lock()
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
@@ -211,8 +218,10 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// tuios attach -d, or single_client: the other clients leave before this
 	// one is counted, so the session takes this client's size alone. See
 	// detach_client.go.
-	if payload.DetachOthers || d.singleClient.Load() {
-		d.detachOthers(session, cs, DetachedByAttachMessage)
+	exclusive := d.exclusiveAttach(&payload)
+	if exclusive {
+		session.exclusiveSeq.Store(cs.attachSeq)
+		d.detachOthers(session, cs, DetachedByAttachMessage, cs.attachSeq)
 	}
 	// A client can now see a pull request's state, so an open one is polled
 	// again. With none recorded this is a scan of the sessions and no more.
@@ -303,7 +312,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
-	if err := d.sendAttachReply(cs, msg, &AttachedPayload{
+	err = d.sendAttachReply(cs, msg, &AttachedPayload{
 		SessionName: session.Name(),
 		SessionID:   session.ID,
 		Width:       effectiveWidth,
@@ -314,9 +323,15 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Generation:  session.LayoutGeneration(),
 		HumanNonce:  humanNonce,
 		Policy:      session.WindowSizePolicy(),
-	}); err != nil {
+	})
+	session.attachMu.Unlock()
+	if err != nil {
 		return err
 	}
+	// A newer exclusive attach that landed once the lock was free has
+	// already taken this client off. This catches one that a sweep could not
+	// reach, and does nothing when the client is gone already.
+	d.ejectIfSuperseded(cs, session)
 	// A verb can be waiting for a client to show this session.
 	session.wakeStateWaiters()
 	if hook := attachReplied.Load(); hook != nil {
@@ -426,6 +441,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	cs.ptySubscriptions = make(map[string]*ptySubscriber)
 	cs.sessionID = ""
 	cs.sessionName = ""
+	cs.repliedSession = ""
 	cs.width = 0
 	cs.height = 0
 	cs.reserve = LayoutReserve{}

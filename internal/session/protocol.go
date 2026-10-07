@@ -305,6 +305,10 @@ type WelcomePayload struct {
 	// not see it sends none, and an older daemon picks a bare attach by
 	// activity alone.
 	SessionUsed bool `json:"session_used,omitzero"`
+	// DetachOthers says the daemon reads AttachPayload.DetachOthers. A client
+	// asked for tuios attach -d warns when it does not see it: an older
+	// daemon attaches and detaches nobody.
+	DetachOthers bool `json:"detach_others,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.
@@ -340,6 +344,10 @@ type AttachPayload struct {
 	// attaches, as tuios attach -d asks. See detach_client.go. An older
 	// daemon ignores it.
 	DetachOthers bool `json:"detach_others,omitzero"`
+	// Reconnect marks the attach a client makes on its own to get back a
+	// session it lost, through a host link that dropped. It is not the
+	// person attaching, so single_client does not detach anybody for it.
+	Reconnect bool `json:"reconnect,omitzero"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the
