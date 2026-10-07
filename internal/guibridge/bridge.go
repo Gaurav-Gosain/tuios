@@ -303,6 +303,7 @@ func Run(opts Options) error {
 		tea.WithoutRenderer(),
 	}, app.ProgramOptions()...)
 	program := tea.NewProgram(m, popts...)
+	m.program = program
 	osModel.BindProgram(program)
 
 	// The renderer has a truecolor display whatever this process's stdout
@@ -371,6 +372,10 @@ type model struct {
 	out     *frameWriter
 	last    []byte
 	gitSeen map[string]gitEntry
+	// gitBusy marks the folders a read is out for, and program is where the
+	// read's answer goes. See git.
+	gitBusy map[string]bool
+	program *tea.Program
 	// keysFrom is the config the last keybinds event was built from. A
 	// reload replaces the registry's config, and the next message sends the
 	// keys again.
@@ -393,24 +398,37 @@ type gitEntry struct {
 	at           time.Time
 }
 
-// git names the repository and branch of dir, read at most every few seconds
-// per folder, since export runs after every message.
+// gitReadMsg carries a finished read of a folder's checkout into Update.
+type gitReadMsg struct {
+	dir   string
+	entry gitEntry
+}
+
+// git names the repository and branch of dir from the last reading, and
+// starts a new reading when that one is older than a few seconds. The read
+// runs on its own goroutine, because it can run git, and export runs after
+// every message on the model's goroutine. Until the first reading lands the
+// folder has no repository, and the state that follows the reading has it.
 func (m *model) git(dir string) (string, string) {
 	if dir == "" {
 		return "", ""
 	}
-	if e, ok := m.gitSeen[dir]; ok && time.Since(e.at) < 4*time.Second {
-		return e.repo, e.branch
+	e, ok := m.gitSeen[dir]
+	if (!ok || time.Since(e.at) >= 4*time.Second) && !m.gitBusy[dir] && m.program != nil {
+		if m.gitBusy == nil {
+			m.gitBusy = map[string]bool{}
+		}
+		m.gitBusy[dir] = true
+		p := m.program
+		go func() {
+			st, ok := gitstate.Read(dir)
+			e := gitEntry{at: time.Now()}
+			if ok {
+				e.repo, e.branch = st.Repo, st.Branch
+			}
+			p.Send(gitReadMsg{dir: dir, entry: e})
+		}()
 	}
-	st, ok := gitstate.Read(dir)
-	e := gitEntry{at: time.Now()}
-	if ok {
-		e.repo, e.branch = st.Repo, st.Branch
-	}
-	if m.gitSeen == nil {
-		m.gitSeen = map[string]gitEntry{}
-	}
-	m.gitSeen[dir] = e
 	return e.repo, e.branch
 }
 
@@ -420,7 +438,13 @@ func (m *model) View() tea.View { return tea.NewView("") }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if c, ok := msg.(cmdMsg); ok {
+	if g, ok := msg.(gitReadMsg); ok {
+		if m.gitSeen == nil {
+			m.gitSeen = map[string]gitEntry{}
+		}
+		m.gitSeen[g.dir] = g.entry
+		delete(m.gitBusy, g.dir)
+	} else if c, ok := msg.(cmdMsg); ok {
 		cmd = m.handle(Command(c))
 	} else {
 		next, c := m.os.Update(msg)
