@@ -2188,5 +2188,11 @@ frame edits and asserts the p95 latency from guest to host. Under
 The edit control measured 2.5 ms against a 2 ms bound when it ran; the bound
 is now 1.5 ms, against 0.9 to 0.95 ms with the change.
 
+`TestGraphicsOnlyRefusesAChunkOfAnEarlierCommand` (`internal/terminal`) fails
+on the classifier before the review fix: it accepted the last chunk,
+`\x1b_Gm=0;...`, of an a=T without C=1 whose first chunk came in an earlier
+write. `FuzzGraphicsOnlyAfterAWrite` keeps the two inputs it found, a write
+after half a UTF-8 character and one after an open sixel DCS.
+
 Not covered: a guest whose cursor is visible, which takes the usual path, and
 a placement without `C=1`, which `graphicsOnly` refuses.
