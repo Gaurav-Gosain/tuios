@@ -65,6 +65,13 @@ func exportTrees(o *app.OS) map[string]*Tree {
 	}
 	bounds := o.GetBSPBounds()
 	gap := o.SeparatorGap()
+	// Leaf numbers to window IDs, from the forward map: a session restore
+	// rebuilds WindowToBSPID and not always the reverse map, so a client that
+	// attached to a tiled session would name no leaf.
+	names := make(map[int]string, len(o.WindowToBSPID))
+	for id, n := range o.WindowToBSPID {
+		names[n] = id
+	}
 	out := map[string]*Tree{}
 	for ws, tree := range o.WorkspaceTrees {
 		if tree == nil || tree.IsEmpty() {
@@ -74,19 +81,19 @@ func exportTrees(o *app.OS) map[string]*Tree {
 			Bounds: rectOf(bounds),
 			Gap:    gap,
 			Scheme: tree.AutoScheme.String(),
-			Root:   exportNode(o, tree.Root, bounds, gap),
+			Root:   exportNode(names, tree.Root, bounds, gap),
 		}
 	}
 	return out
 }
 
-func exportNode(o *app.OS, n *layout.TileNode, box layout.Rect, gap int) *Node {
+func exportNode(names map[int]string, n *layout.TileNode, box layout.Rect, gap int) *Node {
 	if n == nil {
 		return nil
 	}
 	node := &Node{ID: n.ID, Rect: rectOf(box)}
 	if n.IsLeaf() {
-		node.Window = o.BSPIDToWindowID[n.WindowID]
+		node.Window = names[n.WindowID]
 		return node
 	}
 	node.Axis = "y"
@@ -95,8 +102,8 @@ func exportNode(o *app.OS, n *layout.TileNode, box layout.Rect, gap int) *Node {
 	}
 	node.Ratio = n.SplitRatio
 	near, far := layout.SplitBounds(n, box, gap)
-	node.A = exportNode(o, n.Left, near, gap)
-	node.B = exportNode(o, n.Right, far, gap)
+	node.A = exportNode(names, n.Left, near, gap)
+	node.B = exportNode(names, n.Right, far, gap)
 	return node
 }
 
