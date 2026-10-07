@@ -2,6 +2,8 @@ package tuie2e
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -216,6 +218,37 @@ func TestCopyKeepsSpacesAtASoftWrap(t *testing.T) {
 			sendEach(t, term, append(keys, "y")...)
 			if got := rawWrite(t, term, out, from, "V over the wrapped line"); got != want {
 				t.Fatalf("the wrapped line copied as\n%q\nwant\n%q", got, want)
+			}
+
+			// A wide character that does not fit in the last column wraps
+			// early and leaves that column as padding. The pad is not text.
+			sendEach(t, term, "q")
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				_, _, ok := copyCursorCell(s)
+				return !ok
+			}, uiTimeout); err != nil {
+				t.Fatalf("q did not leave copy mode\n%s", term.Snapshot())
+			}
+			wideCmd := `clear; c=$(stty size | cut -d' ' -f2); echo "WCOLS=$c="; printf 'WIDE%sS' -; ` +
+				`printf 'a%.0s' $(seq $((c-7))); printf '\344\270\255b WIDE%sE\n' -`
+			runInShell(t, term, wideCmd, "WIDE-E", shellTimeout)
+			time.Sleep(300 * time.Millisecond)
+			s = term.Screen()
+			m := regexp.MustCompile(`WCOLS=(\d+)=`).FindStringSubmatch(s.Text())
+			if m == nil {
+				t.Fatalf("the shell did not print the pane width\n%s", term.Snapshot())
+			}
+			cols, _ := strconv.Atoi(m[1])
+			wideWant := "WIDE-S" + strings.Repeat("a", cols-7) + "\u4e2db WIDE-E"
+			wideFirst := lastRowWith(s, "WIDE-S")
+			if wideLast := lastRowWith(s, "WIDE-E"); wideLast != wideFirst+1 {
+				t.Fatalf("the wide line spans rows %d to %d, want two rows\n%s", wideFirst, wideLast, term.Snapshot())
+			}
+			copySearch(t, term, "WIDE-S", wideFirst)
+			from = len(clipboardWrites(out))
+			sendEach(t, term, "V", "j", "y")
+			if got := rawWrite(t, term, out, from, "V over the wide wrap"); got != wideWant {
+				t.Fatalf("the line wrapped before a wide character copied as\n%q\nwant\n%q", got, wideWant)
 			}
 			alive(t, term, "after the wrapped copy")
 		})

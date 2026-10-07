@@ -53,12 +53,50 @@ func ghosttyRowWrap(term *gh.Terminal, p gh.Point) bool {
 	return err == nil && wrapped
 }
 
-// RowPadded is false: the library keeps its own spacer heads and reflows
-// with them, and does not say which rows end in one.
-func (t *GhosttyTerminal) RowPadded(int) bool { return false }
+// RowPadded reports whether active-screen row y ends in the library's spacer
+// head: the last column a wide character did not fit in, so it wrapped to the
+// next row and left the column as padding.
+func (t *GhosttyTerminal) RowPadded(y int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed.Load() || y < 0 || y >= t.height || t.width <= 0 {
+		return false
+	}
+	t.flushRestoreLocked()
+	return ghosttySpacerHead(t.term, gh.Point{Tag: gh.PointTagActive, X: uint16(t.width - 1), Y: uint32(y)})
+}
 
-// ScrollbackPadded is false, as RowPadded.
-func (t *GhosttyTerminal) ScrollbackPadded(int) bool { return false }
+// ScrollbackPadded is RowPadded for history line index, oldest first.
+func (t *GhosttyTerminal) ScrollbackPadded(index int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.flushRestoreLocked()
+	if t.closed.Load() || index < 0 || index >= t.scrollbackLenLocked() || t.width <= 0 {
+		return false
+	}
+	src := t.term
+	if t.activeAltLiveLocked() {
+		src = t.altHistoryLocked()
+		if src == nil {
+			return false
+		}
+	}
+	return ghosttySpacerHead(src, gh.Point{Tag: gh.PointTagHistory, X: uint16(t.width - 1), Y: uint32(index)})
+}
+
+// ghosttySpacerHead reports whether the cell at p is a spacer head.
+func ghosttySpacerHead(term *gh.Terminal, p gh.Point) bool {
+	ref, err := term.GridRef(p)
+	if err != nil || ref == nil {
+		return false
+	}
+	cell, err := ref.Cell()
+	if err != nil || cell == nil {
+		return false
+	}
+	wide, err := cell.Wide()
+	return err == nil && wide == gh.CellWideSpacerHead
+}
 
 // RestorePads does nothing: the library rebuilds its spacer heads when the
 // restore types the rows out.

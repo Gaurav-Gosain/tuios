@@ -90,6 +90,11 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 	for y := start.Y; y <= end.Y; y++ {
 		cells := selectionRowCells(window, y)
 		wraps := y < end.Y && selectionRowWraps(window, y)
+		if wraps && selectionRowPadded(window, y) && len(cells) > 0 {
+			// The last column is the pad left by a wide character that
+			// did not fit, not a printed space.
+			cells = cells[:len(cells)-1]
+		}
 
 		lo, hi := 0, len(cells)-1
 		if y == start.Y {
@@ -146,6 +151,18 @@ func selectionRowWraps(window *terminal.Window, y int) bool {
 		wrapped, known = window.Terminal.RowSoftWrapped(y - scrollbackLen)
 	}
 	return known && wrapped
+}
+
+// selectionRowPadded reports whether absolute row y wrapped a column early,
+// because a wide character did not fit in its last column.
+func selectionRowPadded(window *terminal.Window, y int) bool {
+	if window.Terminal == nil {
+		return false
+	}
+	if scrollbackLen := window.ScrollbackLen(); y < scrollbackLen {
+		return window.Terminal.ScrollbackPadded(y)
+	}
+	return window.Terminal.RowPadded(y - window.ScrollbackLen())
 }
 
 // lastPrintedCell is the index of the last cell in cells that holds more than
