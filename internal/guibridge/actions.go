@@ -92,5 +92,5 @@ func checkAction(name string) error {
 	if _, known := config.ActionDescriptions[name]; known {
 		return fmt.Errorf("%s shows something only a screen can show, so the bridge does not run it", name)
 	}
-	return fmt.Errorf("%q is not an action", name)
+	return fmt.Errorf("%q is not an action the bridge runs", name)
 }
