@@ -286,17 +286,15 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 }
 
 // TestPasteBufferVerbsFollowPaneGrants runs the buffer commands from inside a
-// pane held to its grants. Reading needs read, changing needs write, and a
-// paste needs both, since it types the text where the pane can read it back.
+// pane held to its grants, on a buffer the pane set itself, the only kind it
+// may reach. Reading needs read, changing needs write, and a paste needs
+// both, since it types the text where the pane can read it back.
 //
 // Negative control: with the readsBuffers check cut from checkGrants, the
 // pane without read reads the buffer and NONE_SHOW=1 never prints.
 func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
-	if out, err := tuiosCLI(t, base, "set-buffer", "-s", pbSession, "-b", "secret", "hunter"+"2"); err != nil {
-		t.Fatalf("set-buffer from outside every pane: %v\n%s", err, out)
-	}
 	out, err := tuiosCLI(t, base, "list-windows", "-s", pbSession, "--json")
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
@@ -318,16 +316,20 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	}
 	bin := tuiosBin
 
+	// The pane's own buffer, which it may reach when its grants allow.
+	grant("read,write")
+	runInShell(t, term, "clear; "+bin+" set-buffer hunter2; echo OWN\"\"_SET=$?", "OWN_SET=0", shellTimeout)
+
 	// No grants: reading is refused, and names the read grant.
 	grant("none")
-	runInShell(t, term, "clear; "+bin+" show-buffer -b secret; echo NONE_SHOW=$?", "NONE_SHOW=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" show-buffer; echo NONE_SHOW=$?", "NONE_SHOW=1", shellTimeout)
 	if !strings.Contains(term.Screen().Text(), "read grant") {
 		t.Fatalf("the refusal does not name the read grant\n%s", term.Snapshot())
 	}
 
 	// read: reading is served, writing is refused.
 	grant("read")
-	runInShell(t, term, "clear; "+bin+" show-buffer -b secret | tr a-z A-Z; echo; "+bin+" set-buffer -b mine x; echo READ_SET=$?", "READ_SET=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" show-buffer | tr a-z A-Z; echo; "+bin+" set-buffer x; echo READ_SET=$?", "READ_SET=1", shellTimeout)
 	text := term.Screen().Text()
 	if !strings.Contains(text, "HUNTER2") {
 		t.Fatalf("a pane with read could not read the buffer\n%s", term.Snapshot())
@@ -338,7 +340,7 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 
 	// write alone: setting is served, reading and pasting are refused.
 	grant("write")
-	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; "+bin+" paste-buffer -b secret; echo WRITE_PASTE=$?", "WRITE_PASTE=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; "+bin+" paste-buffer; echo WRITE_PASTE=$?", "WRITE_PASTE=1", shellTimeout)
 	text = term.Screen().Text()
 	if !strings.Contains(text, "WRITE_SET=0") {
 		t.Fatalf("a pane with write could not set a buffer\n%s", term.Snapshot())

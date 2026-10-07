@@ -231,6 +231,10 @@ type Daemon struct {
 	// verb_buffers.go.
 	buffers     *pastebuf.Store
 	buffersOnce sync.Once
+	// lineBudgetCh is the memory large verb request lines may hold across
+	// the daemon. See verb_lines.go.
+	lineBudgetCh   lineBudget
+	lineBudgetOnce sync.Once
 	// uploads are the buffers being sent in parts. See verb_buffers.go.
 	uploadsMu sync.Mutex
 	uploads   map[*connState]*bufferUpload

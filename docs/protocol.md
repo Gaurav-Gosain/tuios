@@ -2426,35 +2426,44 @@ buffer goes first. Nothing is written to disk.
 A buffer holds bytes, not only text. `data` carries the content as text, where
 a byte that is not UTF-8 reads as U+FFFD. `data_b64` carries every byte as
 base64: send it, and read it, to keep a binary buffer whole. Each set gives a
-buffer a new `version`, a small integer; pass it back to act only on the
-content read.
+buffer a new `version`, a random number under 2^53; pass it back to act only
+on the content read.
 
-- `list-buffers`: `for_session`, `sample_width` (both optional). Returns
-  `buffers` (each with `name`, `bytes`, `created` in Unix nanoseconds,
-  `version`, `automatic`, `sample`, `session`, and `pane` when a process in a
-  pane set it), `total`, `bytes`, `limit` and `max_bytes`. `sample` is escaped
-  already, the way tmux escapes it: `\n`, `\t`, `\r` and `\\`, and any other
-  byte that is not part of a printable character in octal, such as `\001`
-  and `\377`. It never cuts a character. `sample_width` is at most 200, and
-  60 when left out.
-- `show-buffer`: `name`, `for_session`, `version`, `encoding` (all
-  optional). Returns the row, `data` and `data_b64`. With `encoding` set to
-  `base64`, `data` is left out, so the reply is not doubled. With `for_session`, only the person's own
-  buffers and the ones a pane of that session set count: this is what the
-  paste key asks for.
-- `set-buffer`: `data` or `data_b64`, `name`, `append`, `session`, `upload`
-  and `more` (all optional but the content). With no name a new automatic
-  buffer is made, with `append` or without, as in tmux. The buffer goes on
-  top. `session` is the session a caller outside every pane copied the text
-  in; a pane's own session is used for a pane. A request line is capped at
-  16 MiB, so a larger content goes as an upload: every part carries the same
-  `upload` id on one connection, every part but the last has `more`, and the
-  buffer is set once, from all parts, when the last arrives. Cut the parts
-  from the bytes before they are encoded. A connection has one unfinished
-  upload at a time, all unfinished uploads together hold at most `max_bytes`,
-  and an upload goes when its connection closes. Empty content stores nothing
-  and is no error, and the result then has `stored` false. A name makes the
-  buffer a named one, also a name that was automatic.
+A buffer is the person's or one pane's. A set from outside every pane, or from
+a pane that holds `admin`, makes the person's buffer. A set from a pane
+without `admin` makes that pane's own. A pane without `admin` sees, reads,
+changes, appends to, deletes and pastes only its own buffers; every other
+buffer, the person's or another pane's, in its session or not, is as if it
+were not there, and every total it gets counts only its own. It may not make
+a named buffer, and `set-buffer` with a name it may not change answers
+`no_buffer`, the same as a missing name. With no `name`, the person's calls
+take the newest of the person's own buffers, so a buffer a pane set never
+becomes the person's newest. With a `name`, the person reaches any buffer.
+Names are unique across all owners. Automatic names come from one counter that
+only goes up, and a name of the form `bufferN` may not be made by hand.
+
+- `list-buffers`: `sample_width` (optional). Returns `buffers` (each with
+  `name`, `bytes`, `created` in Unix nanoseconds, `version`, `automatic`,
+  `sample`, and `pane`, the window name of the owner, on a pane's buffer),
+  `total`, `bytes`, `limit` and `max_bytes`. `sample` is escaped already, the
+  way tmux escapes it: `\n`, `\t`, `\r` and `\\`, and any other byte that is
+  not part of a printable character in octal, such as `\001` and `\377`. It
+  never cuts a character. `sample_width` is at most 200, and 60 when left out.
+- `show-buffer`: `name`, `version`, `encoding` (all optional). Returns the
+  row, `data` and `data_b64`. With `encoding` set to `base64`, `data` is left
+  out, so the reply is not doubled.
+- `set-buffer`: `data` or `data_b64`, `name`, `append`, `upload` and `more`
+  (all optional but the content). With no name a new automatic buffer is
+  made, with `append` or without, as in tmux. The buffer goes on top. A
+  request line is capped at 12 MiB, so a larger content goes as an upload:
+  every part carries the same `upload` id on one connection, every part but
+  the last has `more`, and the buffer is set once, from all parts, when the
+  last arrives. Cut the parts from the bytes before they are encoded; the
+  CLI and the shim send 768 KiB a part. A connection has one unfinished upload
+  at a time, all unfinished uploads together hold at most `max_bytes`, and an
+  upload goes when its connection closes. Empty content stores nothing and is
+  no error, and the result then has `stored` false. A name makes the buffer a
+  named one, also a name that was automatic.
 - `delete-buffer`: `name`, `version` (both optional). With `version`, the
   buffer is deleted only while it holds that content.
 - `paste-buffer`: `session`, `window`, `name`, `delete`, `raw` and `version`
@@ -2466,14 +2475,9 @@ content read.
 A name that no buffer has, or the newest when there is none, answers
 `no_buffer`. From a pane, `list-buffers` and `show-buffer` need the `read`
 grant, `set-buffer` and `delete-buffer` need `write`, and `paste-buffer` needs
-both and is held to the same target rules as `send-text`. A pane without
-`admin` reaches only the buffers of the sessions it may read, as if no other
-buffer were there. It may change only a buffer a pane of those sessions set,
-and it may not make a named buffer: `set-buffer` with any other name answers
-`no_buffer`, the same answer for a name the person holds as for a missing one.
-Names are unique, so no buffer can stand in for another. A buffer set from outside every
-pane belongs to no session. Over a link,
-reading needs the `list` capability and the rest need `write`.
+both and is held to the same target rules as `send-text`. A connection over a
+link is held as a pane of its own: reading needs the `list` capability and
+the rest need `write`.
 
 ```json
 {"verb": "set-buffer", "params": {"name": "deploy", "data": "make deploy"}}

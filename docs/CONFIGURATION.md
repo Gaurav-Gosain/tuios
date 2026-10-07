@@ -649,7 +649,7 @@ and `Ctrl+B #` shows them all (see [KEYBINDINGS.md](KEYBINDINGS.md#paste-buffers
 ```toml
 [paste_buffers]
 limit = 20     # how many unnamed buffers to keep. 0 keeps none.
-max_kb = 16384 # most KiB all buffers hold together. 0 uses 16384.
+max_kb = 16384 # most KiB all buffers hold together, at most 262144. 0 uses 16384.
 ```
 
 The rules are the tmux rules. A yank makes a buffer that tuios names
@@ -666,13 +666,14 @@ shares them. They go when the daemon stops. The daemon reads the setting when
 it starts and when the file changes. A smaller limit drops the oldest buffers
 at once.
 
-Each buffer records the session that you copied it in. A buffer can hold a
-secret that you copied, so from inside a pane, reading the buffers needs the
-`read` grant and changing them needs `write`. Pasting a buffer needs both. A
-pane without `admin` sees only the buffers of the sessions it may read, and
-not the buffers that you set from outside every pane. It cannot change or
-replace a buffer that you set, and it cannot make a named buffer, so a name
-you keep a command under stays yours. See
+A buffer is yours or one pane's. Your yanks, and what you set from outside
+every pane or from a pane that holds `admin`, are yours. What a pane without
+`admin` sets is that pane's own. A buffer can hold a secret that you copied,
+so a pane without `admin` sees and pastes only its own buffers: not yours,
+and not another pane's, in its session or not. It cannot change or replace a
+buffer that you set, and it cannot make a named buffer, so a name you keep a
+command under stays yours. From inside a pane, reading its buffers needs the
+`read` grant, changing them needs `write`, and pasting needs both. See
 [What a pane may do](#what-a-pane-may-do).
 
 ## Master-stack layout

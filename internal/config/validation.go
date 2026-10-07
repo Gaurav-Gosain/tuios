@@ -127,6 +127,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
+	validatePasteBuffers(cfg, result)
 
 	// Validate the notifications section (warn on a duration that would put a
 	// message back under the accessibility floor)

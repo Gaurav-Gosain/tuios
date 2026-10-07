@@ -94,7 +94,7 @@ func newShowBufferCommand() *cobra.Command {
 }
 
 func newSetBufferCommand() *cobra.Command {
-	var name, sessionName string
+	var name string
 	var appendTo, jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "set-buffer [text]",
@@ -107,8 +107,8 @@ buffer of that name is set, and made when there is none. --append adds the text
 to the end of the named buffer. With no --buffer, --append makes a new buffer,
 as in tmux. A buffer can hold any bytes, a binary file included.
 
-A buffer you set from outside every pane is yours only. With --session, the
-panes of that session that hold the read grant may read it too.
+A buffer you set from outside every pane, or from a pane that holds admin,
+is yours. A buffer a pane without admin sets is that pane's own.
 
 ` + bufferGrantsNote,
 		Example: `  # Keep a command to paste later
@@ -137,12 +137,10 @@ panes of that session that hold the read grant may read it too.
 				}
 				text = string(data)
 			}
-			return runSetBuffer(name, sessionName, text, appendTo, jsonOutput)
+			return runSetBuffer(name, text, appendTo, jsonOutput)
 		},
 	}
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer to set (default: a new buffer)")
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "The session the text belongs to, so its panes may read it (default: none, only you)")
-	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	cmd.Flags().BoolVarP(&appendTo, "append", "a", false, "Add the text to the end of the buffer")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
@@ -344,16 +342,13 @@ func runShowBuffer(name string, jsonOutput bool) error {
 // content goes as an upload, which the daemon sets once, from all parts.
 const setBufferPart = 768 << 10
 
-func runSetBuffer(name, sessionName, text string, appendTo, jsonOutput bool) error {
+func runSetBuffer(name, text string, appendTo, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}
 	defer func() { _ = client.Close() }()
 	base := bufferNameParams(name)
-	if sessionName != "" {
-		base["session"] = sessionName
-	}
 	if appendTo {
 		base["append"] = true
 	}

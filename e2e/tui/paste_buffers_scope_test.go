@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,9 +13,6 @@ import (
 // Paste buffers across sessions (#514): which buffers a pane may read, what
 // the paste key may take, and the byte cap. See paste_buffers_test.go for the
 // list of ways these could pass wrongly; the same rules apply here.
-
-// pbOther is the second session of the two-session tests.
-const pbOther = "e2e-pb-other"
 
 // onlyPaneOf returns the id of the one window in session.
 func onlyPaneOf(t *testing.T, base, session string) string {
@@ -34,86 +32,145 @@ func onlyPaneOf(t *testing.T, base, session string) string {
 	return listing.Windows[0].WindowID
 }
 
-// TestPasteBuffersStayInTheirSession gives a pane the read grant and checks
-// it sees the buffers of its own session only: not another session's, and
-// not one the person set from outside every pane. With admin, the same pane
-// sees them all.
+// TestAPaneSeesOnlyItsOwnBuffers gives a pane read and write and checks it
+// reaches only the buffers it set: not the person's, not another pane's in
+// its own session. The totals of its listing count only its own. With admin,
+// the same pane reaches every buffer.
 //
-// Negative control: with the filter in bufferAccess cut, the pane reads the
-// other session's buffer and OTHER_SHOW=1 never prints.
-func TestPasteBuffersStayInTheirSession(t *testing.T) {
+// How it could pass wrongly: the pane could see nothing at all, so it must
+// see its own buffer. The totals could hide a size in a field the test does
+// not read, so bytes and total are both checked against its one buffer.
+//
+// Negative controls: with the owner filter in paneBuffers cut, the pane reads
+// the person's buffer and OTHER_SHOW=1 never prints. With list-buffers
+// summing every buffer, its bytes count the person's buffers too.
+func TestAPaneSeesOnlyItsOwnBuffers(t *testing.T) {
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
-	if out, err := tuiosCLI(t, base, "new", pbOther, "--detach"); err != nil {
-		t.Fatalf("create the second session: %v: %s", err, out)
+	sibling := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", pbSession, "sibling", "--no-focus", "--print-id"))
+	pane := onlyPaneOfFirst(t, base, pbSession, sibling)
+	mustCLI(t, base, "set-buffer", "-b", "persons", strings.Repeat("p", 5000))
+	for _, id := range []string{pane, sibling} {
+		mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", id, "--grants", "read,write")
 	}
-	for _, args := range [][]string{
-		{"set-buffer", "-s", pbSession, "-b", "mine", "own-text"},
-		{"set-buffer", "-s", pbOther, "-b", "theirs", "their-text"},
-		{"set-buffer", "-b", "personal", "personal-text"},
-	} {
-		if out, err := tuiosCLI(t, base, args...); err != nil {
-			t.Fatalf("%v: %v\n%s", args, err, out)
-		}
-	}
-	pane := onlyPaneOf(t, base, pbSession)
-	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "read"); err != nil {
-		t.Fatalf("set-pane-grants read: %v\n%s", err, out)
-	}
-	bin := tuiosBin
-	runInShell(t, term, "clear; "+bin+" list-buffers | tr a-z A-Z; "+bin+" show-buffer -b theirs; echo OTHER_SHOW=$?", "OTHER_SHOW=1", shellTimeout)
-	text := term.Screen().Text()
-	if !strings.Contains(text, "OWN-TEXT") {
-		t.Fatalf("the pane does not see its own session's buffer\n%s", term.Snapshot())
-	}
-	if strings.Contains(text, "THEIR-TEXT") || strings.Contains(text, "PERSONAL-TEXT") {
-		t.Fatalf("the pane sees a buffer of another session, or the person's own\n%s", term.Snapshot())
-	}
-	saveFrame(t, term, "paste-buffers-own-session")
-
-	// The positive half: with admin the same calls reach every buffer.
-	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "admin"); err != nil {
-		t.Fatalf("set-pane-grants admin: %v\n%s", err, out)
-	}
-	runInShell(t, term, "clear; "+bin+" show-buffer -b theirs | tr a-z A-Z; echo; echo ADMIN_SHOW=$?", "ADMIN_SHOW=0", shellTimeout)
-	if !strings.Contains(term.Screen().Text(), "THEIR-TEXT") {
-		t.Fatalf("a pane with admin cannot read another session's buffer\n%s", term.Snapshot())
-	}
-	alive(t, term, "after the session checks")
-}
-
-// TestPasteKeyIgnoresABufferPlantedFromAnotherSession has a process in a pane
-// of another session set a buffer, newer than the person's. Prefix ] pastes
-// the person's text, and the chooser marks the planted buffer.
-//
-// Negative control: with for_session cut from pasteBufferNamed, prefix ]
-// pastes the planted text and GOT-pastedok never prints.
-func TestPasteKeyIgnoresABufferPlantedFromAnotherSession(t *testing.T) {
-	base := t.TempDir()
-	term := startPasteBufferClient(t, base, "")
-	if out, err := tuiosCLI(t, base, "new", pbOther, "--detach"); err != nil {
-		t.Fatalf("create the second session: %v: %s", err, out)
-	}
-	if out, err := tuiosCLI(t, base, "set-buffer", "pastedok"); err != nil {
-		t.Fatalf("set-buffer: %v\n%s", err, out)
-	}
-	line := tuiosBin + " set-buffer planted\n"
-	if out, err := tuiosCLI(t, base, "send-text", "-s", pbOther, line); err != nil {
-		t.Fatalf("send-text to the other session: %v\n%s", err, out)
-	}
+	// The sibling pane sets a buffer of its own.
+	line := tuiosBin + " set-buffer sibling-text\n"
+	mustCLI(t, base, "send-text", "-s", pbSession, "-w", sibling, line)
 	deadline := time.Now().Add(shellTimeout)
-	for {
-		l := listBuffers(t, base)
-		if len(l.Buffers) == 2 && l.Buffers[0].Sample == "planted" {
-			break
-		}
+	for len(listRows(t, base)) != 2 {
 		if time.Now().After(deadline) {
-			t.Fatalf("the other session's pane never set its buffer: %+v", l.Buffers)
+			t.Fatalf("the sibling pane never set its buffer: %+v", listRows(t, base))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	listing := filepath.Join(base, "pane-listing.json")
+	bin := tuiosBin
+	runInShell(t, term, "clear; "+bin+" set-buffer own-text; "+bin+" list-buffers --json > "+listing+"; "+bin+" show-buffer -b persons; echo OTHER_SHOW=$?", "OTHER_SHOW=1", shellTimeout)
+	var l struct {
+		Buffers []pbRow `json:"buffers"`
+		Total   int     `json:"total"`
+		Bytes   int     `json:"bytes"`
+	}
+	if err := json.Unmarshal([]byte(readFileString(t, listing)), &l); err != nil {
+		t.Fatalf("the pane's list-buffers gave no JSON: %v", err)
+	}
+	if l.Total != 1 || len(l.Buffers) != 1 || l.Buffers[0].Sample != "own-text" || l.Bytes != len("own-text") {
+		t.Fatalf("the pane's listing is %+v with total %d and bytes %d, want its own buffer alone, 8 bytes", l.Buffers, l.Total, l.Bytes)
+	}
+	saveFrame(t, term, "paste-buffers-own-only")
+
+	// The positive half: with admin the same pane reaches the others.
+	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "admin")
+	runInShell(t, term, "clear; "+bin+" show-buffer -b persons | head -c 3; echo; echo ADMIN_SHOW=$?", "ADMIN_SHOW=0", shellTimeout)
+	if !strings.Contains(term.Screen().Text(), "ppp") {
+		t.Fatalf("a pane with admin cannot read the person's buffer\n%s", term.Snapshot())
+	}
+	alive(t, term, "after the ownership checks")
+}
+
+// onlyPaneOfFirst is the window of session that is not other.
+func onlyPaneOfFirst(t *testing.T, base, session, other string) string {
+	t.Helper()
+	out := mustCLI(t, base, "list-windows", "-s", session, "--json")
+	var listing struct {
+		Windows []struct {
+			WindowID string `json:"window_id"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal([]byte(out), &listing); err != nil {
+		t.Fatalf("list-windows gave no JSON: %v\n%s", err, out)
+	}
+	for _, w := range listing.Windows {
+		if w.WindowID != other {
+			return w.WindowID
+		}
+	}
+	t.Fatalf("session %s has no window but %s", session, other)
+	return ""
+}
+
+// TestThePersonsNewestIsNeverAPanes is repro B: an agent pane without admin
+// in session work sets a buffer, newer than the person's. The person's bare
+// show-buffer and paste-buffer, and prefix ] in session home, take the
+// person's text. A buffer an admin pane sets with no name is the person's,
+// and does count. The chooser marks the agent's buffer.
+//
+// How it could pass wrongly: the agent's set could have failed, so the test
+// waits for it in the person's full listing first.
+//
+// Negative control: with bare in bufferCaller returning every buffer for the
+// person, show-buffer prints the agent's text.
+func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, copyCursorConfig)
+	mustCLI(t, base, "new", "home", "--detach")
+	mustCLI(t, base, "new", "work", "--detach")
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, env: copyColorOpts.env})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(insertGuard)
+
+	mustCLI(t, base, "set-buffer", "persons-text")
+	agent := onlyPaneOf(t, base, "work")
+	mustCLI(t, base, "set-pane-grants", "-s", "work", "-w", agent, "--grants", "read,write")
+	mustCLI(t, base, "send-text", "-s", "work", "-w", agent, tuiosBin+" set-buffer planted\n")
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		rows := listRows(t, base)
+		if len(rows) == 2 && rows[0].Sample == "planted" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the agent pane never set its buffer: %+v", rows)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if out := mustCLI(t, base, "show-buffer"); out != "persons-text" {
+		t.Fatalf("the person's bare show-buffer printed %q, want persons-text, not the agent's buffer", out)
+	}
+	// The person's bare paste-buffer, into the home pane.
 	if err := term.SendKeys("echo GOT-"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+	mustCLI(t, base, "paste-buffer", "-s", "home")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHasLine(s, "GOT-persons-text") || screenHasLine(s, "GOT-planted")
+	}, shellTimeout); err != nil {
+		t.Fatalf("paste-buffer pasted nothing: %v\n%s", err, term.Snapshot())
+	}
+	if !screenHasLine(term.Screen(), "GOT-persons-text") {
+		t.Fatalf("the person's bare paste-buffer pasted the agent's buffer\n%s", term.Snapshot())
+	}
+	// prefix ] takes the same.
+	if err := term.SendKeys("echo KEY-"); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(insertGuard)
@@ -127,25 +184,41 @@ func TestPasteKeyIgnoresABufferPlantedFromAnotherSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHasLine(s, "GOT-pastedok") || screenHasLine(s, "GOT-planted")
+		return screenHasLine(s, "KEY-persons-text") || screenHasLine(s, "KEY-planted")
 	}, shellTimeout); err != nil {
-		t.Fatalf("nothing was pasted: %v\n%s", err, term.Snapshot())
+		t.Fatalf("prefix ] pasted nothing: %v\n%s", err, term.Snapshot())
 	}
-	if !screenHasLine(term.Screen(), "GOT-pastedok") {
-		t.Fatalf("prefix ] pasted the buffer another session's pane set\n%s", term.Snapshot())
+	if !screenHasLine(term.Screen(), "KEY-persons-text") {
+		t.Fatalf("prefix ] pasted the agent's buffer\n%s", term.Snapshot())
 	}
 
+	// The chooser lists the agent's buffer and says whose it is.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "#"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "Paste buffers") && strings.Contains(s.Text(), "from pane")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the chooser does not mark the planted buffer: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the chooser does not mark the agent's buffer: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "paste-buffers-planted")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
+	}
+
+	// A buffer an admin pane sets with no name is the person's.
+	mustCLI(t, base, "set-pane-grants", "-s", "work", "-w", agent, "--grants", "admin")
+	mustCLI(t, base, "send-text", "-s", "work", "-w", agent, tuiosBin+" set-buffer by-admin-pane\n")
+	deadline = time.Now().Add(shellTimeout)
+	for {
+		out, _ := tuiosCLI(t, base, "show-buffer")
+		if out == "by-admin-pane" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the person's bare show-buffer never took the admin pane's buffer; it printed %q", out)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	alive(t, term, "after the planted buffer")
 }

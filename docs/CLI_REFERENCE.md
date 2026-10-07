@@ -1153,7 +1153,7 @@ many to keep.
 ```bash
 tuios list-buffers [--json]
 tuios show-buffer [-b <name>] [--json]
-tuios set-buffer [-b <name>] [-s <session>] [-a] [<text> | -] [--json]
+tuios set-buffer [-b <name>] [-a] [<text> | -] [--json]
 tuios delete-buffer [-b <name>] [--json]
 tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--json]
 ```
@@ -1161,7 +1161,6 @@ tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [-r] [--json]
 **Flags:**
 - `-b, --buffer <name>`: The buffer (default: the newest buffer that tuios named, as in tmux). For `set-buffer`, the default is a new buffer named `bufferN`
 - `-a, --append`: `set-buffer` adds the text to the end of the named buffer. With no `-b`, it makes a new buffer, as in tmux
-- `-s, --session` on `set-buffer`: The session the text belongs to. A pane of that session with the `read` grant may then read it. Without it, the buffer is yours only
 - `-s, --session`, `-w, --window`: The pane `paste-buffer` pastes into (default: the focused pane)
 - `-d, --delete`: `paste-buffer` deletes the buffer after the paste, unless it was set again meanwhile
 - `-r, --raw`: `paste-buffer` keeps each line feed. Without it, each line feed becomes a carriage return, as in tmux
@@ -1175,8 +1174,10 @@ turned them on. With a session on another machine, `paste-buffer` sends the
 text of a buffer from this machine.
 
 From inside a pane, reading the buffers needs the `read` grant, changing them
-needs `write`, and `paste-buffer` needs both. A pane without `admin` changes
-only buffers a pane set, and cannot make a named buffer. `set-buffer` with
+needs `write`, and `paste-buffer` needs both. A buffer a pane without `admin`
+sets is that pane's own, and such a pane reaches only its own buffers. It
+cannot make a named buffer. With no `-b`, your own commands take the newest
+of your own buffers, never one a pane set. `set-buffer` with
 empty text stores nothing and exits 0, as tmux does. Input longer than 64 MiB
 is refused, and nothing is stored.
 

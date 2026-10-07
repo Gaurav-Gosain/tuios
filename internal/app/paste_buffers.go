@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -159,15 +161,48 @@ func (m *OS) SaveToPasteBuffers(text string) tea.Cmd {
 		m.saveLocalBuffer(text)
 		return nil
 	}
+	if len(text) > yankPart {
+		return m.uploadYank(text)
+	}
 	call := m.bufferCall()
 	params := map[string]any{"data": text}
-	if m.SessionName != "" && m.AttachedHost == "" {
-		// The session the yank was made in, so a pane of it may read it.
-		params["session"] = m.SessionName
-	}
 	return func() tea.Msg {
 		if _, err := call("set-buffer", params); err != nil {
 			return PasteBufferSaveFailedMsg{Text: text, Err: err}
+		}
+		return nil
+	}
+}
+
+// yankPart is the most of a yank one set-buffer call carries. A request line
+// is capped, so a larger yank goes as an upload in parts of this size, on
+// one connection.
+const yankPart = 768 << 10
+
+// uploadYank sends a large yank as an upload: every part on one connection,
+// and the daemon sets the buffer once, when the last arrives.
+func (m *OS) uploadYank(text string) tea.Cmd {
+	build := ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	return func() tea.Msg {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return PasteBufferSaveFailedMsg{Text: text, Err: err}
+		}
+		defer func() { _ = client.Close() }()
+		id := strconv.FormatInt(time.Now().UnixNano(), 36)
+		for rest := text; rest != ""; {
+			part := rest[:min(len(rest), yankPart)]
+			rest = rest[len(part):]
+			params := map[string]any{"data_b64": base64.StdEncoding.EncodeToString([]byte(part)), "upload": id}
+			if rest != "" {
+				params["more"] = true
+			}
+			if _, err := client.CallWithTimeout("set-buffer", params, pasteBufferTimeout); err != nil {
+				return PasteBufferSaveFailedMsg{Text: text, Err: err}
+			}
 		}
 		return nil
 	}
@@ -192,9 +227,8 @@ func (m *OS) handlePasteBufferSaveFailed(msg PasteBufferSaveFailedMsg) {
 }
 
 // PasteNewestBuffer is the paste_buffer action: paste the newest buffer into
-// the focused pane. The newest is the newest the person copied, or one a pane
-// of this session set: a pane of another session cannot plant what this key
-// pastes.
+// the focused pane. The daemon takes the newest of the person's own buffers,
+// so a buffer a pane set never becomes what this key pastes.
 func (m *OS) PasteNewestBuffer() tea.Cmd {
 	w := m.GetFocusedWindow()
 	if w == nil {
@@ -218,8 +252,6 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 	params := map[string]any{"encoding": "base64"}
 	if name != "" {
 		params["name"] = name
-	} else {
-		params["for_session"] = m.pasteSession()
 	}
 	if version != 0 {
 		params["version"] = version
@@ -246,16 +278,6 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 		}
 		return PasteBufferFetchedMsg{Name: res.Name, Data: data, Window: window}
 	}
-}
-
-// pasteSession is the session the paste key takes buffers for: this
-// client's session on this machine. A session on another machine has no
-// buffers here, so only the person's own count there.
-func (m *OS) pasteSession() string {
-	if m.AttachedHost != "" {
-		return ""
-	}
-	return m.SessionName
 }
 
 // handlePasteBufferFetched pastes a fetched buffer into the pane it was asked

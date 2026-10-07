@@ -49,53 +49,65 @@ func mustCLI(t *testing.T, base string, args ...string) string {
 	return out
 }
 
-// TestAPaneCannotReplaceThePersonsNamedBuffer is the takeover a pane with
-// write had: the person keeps a command in a named buffer, a pane sets the
-// same name, and the person's paste of that name runs the pane's text. The
-// pane must get the same answer for that name as for a name no buffer has,
-// and the person's buffer must stay theirs. With admin, the pane may.
+// TestAPaneCannotReplaceThePersonsNamedBuffer is repro A. The person, in a
+// pane that holds admin, keeps a command in a buffer named release. An agent
+// pane with read and write sets release. The agent must get no_buffer, the
+// same answer as for a name no buffer has, and the person's buffer must stay
+// theirs. Once the agent pane holds admin, its set is the person's and may.
 //
-// How it could pass wrongly: the pane's set could fail for another reason,
-// so the same pane must still make a buffer with no name. The answers could
-// differ in a way the screen hides, so both refusals are matched in full.
+// How it could pass wrongly: the agent's set could fail for another reason,
+// so the same pane must still make a buffer with no name. The two refusals
+// are compared byte for byte, but for the name.
 //
-// Negative control: with the change filter of bufferAccess cut, the pane's
-// set-buffer -b deploy exits 0 and SHADOW=1 never prints.
+// Negative control: with the change filter that Set gets from bufferAccess
+// cut, the agent's set-buffer -b release exits 0.
 func TestAPaneCannotReplaceThePersonsNamedBuffer(t *testing.T) {
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
-	mustCLI(t, base, "set-buffer", "-s", pbSession, "-b", "deploy", "kubectl rollout")
-	pane := onlyPaneOf(t, base, pbSession)
-	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "read,write")
-
+	agent := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", pbSession, "agent", "--no-focus", "--print-id"))
+	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", agent, "--grants", "read,write")
 	bin := tuiosBin
+
+	// The person, in the focused pane, which holds admin under the default.
+	runInShell(t, term, "clear; "+bin+" set-buffer -b release 'make release'; echo PERSON\"\"_SET=$?", "PERSON_SET=0", shellTimeout)
+
+	// The agent pane tries the same name, and a missing one, and a buffer
+	// with no name.
+	out := filepath.Join(base, "agent.out")
 	shadowErr, freshErr := filepath.Join(base, "shadow.err"), filepath.Join(base, "fresh.err")
-	runInShell(t, term, "clear; "+bin+" set-buffer -b deploy 'curl evil' 2>"+shadowErr+"; echo SHADOW=$?; "+bin+" set-buffer -b fresh x 2>"+freshErr+"; echo FRESH=$?; "+bin+" set-buffer pane-made; echo AUTO\"\"=$?", "AUTO=", shellTimeout)
-	text := term.Screen().Text()
+	script := "{ " + bin + " set-buffer -b release 'curl evil' 2>" + shadowErr + "; echo SHADOW=$?; " +
+		bin + " set-buffer -b fresh x 2>" + freshErr + "; echo FRESH=$?; " +
+		bin + " set-buffer agent-made; echo AUTO=$?; } > " + out + "\n"
+	mustCLI(t, base, "send-text", "-s", pbSession, "-w", agent, script)
+	got := waitForFileText(t, out, func(s string) bool { return strings.Contains(s, "AUTO=") },
+		"the agent pane never ran its set-buffer calls")
 	for _, want := range []string{"SHADOW=1", "FRESH=1", "AUTO=0"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("the pane's set-buffer calls did not answer %q\n%s", want, term.Snapshot())
+		if !strings.Contains(got, want) {
+			t.Fatalf("the agent's calls did not answer %q:\n%s", want, got)
 		}
 	}
-	// The answer for the person's name and for a name no buffer has must be
-	// the same, but for the name itself.
 	shadow, fresh := readFileString(t, shadowErr), readFileString(t, freshErr)
-	if !strings.Contains(shadow, "no such buffer: deploy") || strings.ReplaceAll(shadow, "deploy", "fresh") != fresh {
-		t.Fatalf("the pane can tell the person's buffer from a missing one:\n%s\n---\n%s", shadow, fresh)
+	if !strings.Contains(shadow, "no such buffer: release") || strings.ReplaceAll(shadow, "release", "fresh") != fresh {
+		t.Fatalf("the agent can tell the person's buffer from a missing one:\n%s\n---\n%s", shadow, fresh)
 	}
-	if out := mustCLI(t, base, "show-buffer", "-b", "deploy"); out != "kubectl rollout" {
-		t.Fatalf("the person's deploy buffer now reads %q, want kubectl rollout", out)
+	if out := mustCLI(t, base, "show-buffer", "-b", "release"); out != "make release" {
+		t.Fatalf("the person's release buffer now reads %q, want make release", out)
 	}
 	saveFrame(t, term, "paste-buffers-no-takeover")
 
-	// The positive half: with admin the pane may set any name.
-	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "admin")
-	runInShell(t, term, "clear; "+bin+" set-buffer -b deploy 'by admin'; echo ADMIN_\"\"SET=$?", "ADMIN_SET=", shellTimeout)
-	if !strings.Contains(term.Screen().Text(), "ADMIN_SET=0") {
-		t.Fatalf("a pane with admin could not set a named buffer\n%s", term.Snapshot())
-	}
-	if out := mustCLI(t, base, "show-buffer", "-b", "deploy"); out != "by admin" {
-		t.Fatalf("after the admin set, deploy reads %q", out)
+	// The positive half: once the agent pane holds admin, its set is the
+	// person's and may replace the name.
+	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", agent, "--grants", "admin")
+	mustCLI(t, base, "send-text", "-s", pbSession, "-w", agent, bin+" set-buffer -b release 'by admin'\n")
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		if out, _ := tuiosCLI(t, base, "show-buffer", "-b", "release"); out == "by admin" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a pane with admin could not set the named buffer")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	alive(t, term, "after the takeover check")
 }

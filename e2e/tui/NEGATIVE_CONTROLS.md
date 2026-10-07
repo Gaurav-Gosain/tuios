@@ -44,12 +44,12 @@ test enters the code below the fault, and the fault is what nobody is testing.
 
 `paste_buffers_test.go`, `paste_buffers_scope_test.go`,
 `paste_buffers_config_test.go`, `paste_buffers_bytes_test.go` and
-`paste_buffers_rules_test.go` have sixteen tests and twenty-four controls. Two
-unit tests in `internal/session/verb_buffers_test.go` bound the memory of
-unfinished uploads, a security boundary, with three controls of their own. On
-2026-10-07 each control below cut one piece of wiring, built a binary, and ran
-the named test against it. Every control failed where shown, and the same
-tests passed on the branch build.
+`paste_buffers_rules_test.go` have seventeen tests and twenty-five controls.
+Three unit tests in `internal/session/verb_buffers_test.go` and
+`verb_lines_test.go` bound the daemon's memory, a security boundary, with six
+controls of their own. On 2026-10-08 each control below cut one piece of
+wiring, built a binary, and ran the named test against it. Every control
+failed where shown, and the same tests passed on the branch build.
 
 | Control: what was cut | Test | Where it failed |
 | --- | --- | --- |
@@ -58,20 +58,21 @@ tests passed on the branch build.
 | `d.Register("choose_buffer", ...)` | `TestPasteBuffersKeepYanksAndPasteThem` | prefix `#` never lists the buffers |
 | The bracketed wrap in `verbPasteBuffer` | `TestPasteBuffersKeepYanksAndPasteThem` | no marks with bracketed paste on, after the paste with it off passed |
 | `daemonBuffers` in the tmux shim always false | `TestPasteBuffersKeepYanksAndPasteThem` | `tmux show-buffer` does not see the CLI's buffer |
-| The `readsBuffers` read-grant check in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with no grants reads the buffer, and `NONE_SHOW=1` never prints |
-| `d.buffers.SetLimits` in `applyUserConfig` | `TestPasteBufferLimitFollowsTheConfig` | after `limit = 1` two buffers stay, with limit 2 |
+| The `readsBuffers` read-grant check in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with no grants reads its buffer, and `NONE_SHOW=1` never prints |
 | The `GrantWrite` check for `set-buffer` in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with read alone sets a buffer, and `READ_SET=1` never prints |
+| `d.buffers.SetLimits` in `applyUserConfig` | `TestPasteBufferLimitFollowsTheConfig` | after `limit = 1` two buffers stay, with limit 2 |
 | The local store's `Add` in `saveLocalBuffer` | `TestPasteBuffersWithoutADaemon` | prefix `]` shows no "Pasted" |
-| The session filter in `bufferAccess` | `TestPasteBuffersStayInTheirSession` | the pane with read reads another session's buffer, and `OTHER_SHOW=1` never prints |
-| `for_session` in `pasteBufferNamed` | `TestPasteKeyIgnoresABufferPlantedFromAnotherSession` | prefix `]` pastes the buffer a pane of another session set |
+| The owner filter in `paneBuffers` | `TestAPaneSeesOnlyItsOwnBuffers` | the pane reads the person's buffer, and `OTHER_SHOW=1` never prints |
+| `list-buffers` sums every buffer for `bytes` | `TestAPaneSeesOnlyItsOwnBuffers` | the pane's listing says 5020 bytes, want its own 8 |
+| `bare` gives the person every buffer | `TestThePersonsNewestIsNeverAPanes` | the person's bare `show-buffer` prints the agent's `planted` |
 | The byte test in the store's `trim` | `TestPasteBufferByteCap` | both 600-byte buffers stay under `max_kb = 1` |
 | `[paste_buffers]` left out of `DefaultConfig` | `TestPasteBufferKeysLiveInTheirFile` | `config prune --dry-run` does not list `paste_buffers.max_kb` |
-| The shim sends a one-part buffer as text in `data`, not `data_b64` | `TestPasteBufferKeepsEveryByte` | the binary file comes back with U+FFFD from byte 128, 520 bytes for 260 |
+| The shim sends a buffer as text in `data`, not `data_b64` | `TestPasteBufferKeepsEveryByte` | the binary file comes back with U+FFFD from byte 128, 520 bytes for 260 |
 | The shim sends the parts of an upload as text | `TestPasteBufferKeepsEveryByte` | the 1.8 MB file differs at byte 786430, where the first cut splits a character |
 | `SanitizePaste` in `verbPasteBuffer` | `TestPasteBufferSendsNoEscapeSequences` | `^[[201~evil` reaches the pane inside the paste |
 | `BufferChooserActivate` pastes into the focused pane, not the one the chooser opened on | `TestPasteBufferChooserPastesWhereItOpened` | the paste lands in the pane that took the focus later |
 | The local save in `handlePasteBufferSaveFailed` | `TestPasteBuffersWithAnOldDaemon` | with a daemon that answers `unknown_verb`, prefix `]` shows no "Pasted" |
-| The change filter of `bufferAccess` (a pane may set any name) | `TestAPaneCannotReplaceThePersonsNamedBuffer` | the pane's `set-buffer -b deploy` exits 0, and `SHADOW=1` never prints |
+| The change filter that `verbSetBuffer` passes to `Set` | `TestAPaneCannotReplaceThePersonsNamedBuffer` | the agent's `set-buffer -b release` exits 0, and `SHADOW=1` never prints |
 | `find` takes the newest buffer of any kind for no name | `TestPasteBufferNamesFollowTmux` | `show-buffer` prints `named-x`, not `auto-y` |
 | `trim` counts every buffer against the limit | `TestPasteBufferNamesFollowTmux` | under `limit = 2` the named buffer goes at the third buffer, so the `-a` check finds two |
 | `set-buffer -a` with no name appends to the newest buffer | `TestPasteBufferNamesFollowTmux` | `-a extra` lands in `named-x`, and no new buffer appears |
@@ -80,21 +81,27 @@ tests passed on the branch build.
 | The total check in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | two connections hold 1800 bytes under a cap of 1000 |
 | One upload per connection in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | after a second id the connection holds 902 bytes, want 2 |
 | `defer d.dropUploads(cs)` in `handleJSONConnection` | `TestAClosedConnectionDropsItsUpload` (unit) | the daemon still holds 4096 bytes 5 seconds after the connection closed |
+| The `maxVerbLine` check in `verbLineReader.next` | `TestVerbLinesHoldBoundedMemory` (unit) | a line of 12582913 bytes is read whole |
+| The budget refusal in `verbLineReader.next` | `TestVerbLinesHoldBoundedMemory` (unit) | a 200 KiB line is read with the budget taken |
+| The budget release in `verbLineReader.done` | `TestVerbLinesHoldBoundedMemory` (unit) | after a refusal the budget still holds 573 chunks |
 
-The grant test carries its positive halves: each refused call is served once
-the grant it names is given. The session test reads the other session's
-buffer once the pane holds `admin`. The bracketed check pastes once with bracketed
-paste off, where no marks may show, before the paste where they must.
+The tests carry their positive halves. Each refused grant is served once the
+grant is given. A pane that may not reach the person's buffer still reaches
+its own, and reaches every buffer once it holds `admin`. The agent that may
+not set the person's name still makes a buffer with no name. A buffer an admin
+pane sets with no name is the person's newest. The bracketed check pastes once
+with bracketed paste off, where no marks may show, before the paste where they
+must.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames go test \
-  -run 'TestPasteBuffer|TestPasteKey' -count=1 -timeout 5m .
+  -run 'TestPasteBuffer|TestPasteKey|TestAPane.*Buffer|TestThePersons' -count=1 -timeout 5m .
 ```
 
 With `TUIOS_E2E_FRAMES` set, the run writes `paste-buffers-chooser`,
 `paste-buffers-pasted`, `paste-buffers-bracketed`, `paste-buffers-grants`,
-`paste-buffers-own-session`, `paste-buffers-planted` and
-`paste-buffers-escapes`.
+`paste-buffers-own-only`, `paste-buffers-planted`, `paste-buffers-escapes`,
+`paste-buffers-no-takeover` and `paste-buffers-line-feeds`.
 
 `TestPasteBuffersWithAnOldDaemon` sets `TUIOS_E2E_NO_BUFFER_VERBS=1`. With
 `TUIOS_E2E=1` as well, the daemon answers every buffer verb with

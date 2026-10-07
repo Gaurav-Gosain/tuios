@@ -25,10 +25,10 @@ Whatever you hold, you can report about your own pane (`set-agent-state`,
 The paste buffers hold what the person copied, so they need grants too:
 `list-buffers` and `show-buffer` need `read`, `set-buffer` and `delete-buffer`
 need `write`, and `paste-buffer` needs both, since what it types into your own
-pane comes back to you. Without `admin` you see only the buffers of the
-sessions you may read, you change only buffers a pane set, and `set-buffer`
-makes a buffer with no name: a `-b` name you did not set answers
-`no_buffer`. A connection restricted to its own session
+pane comes back to you. Without `admin` a buffer you set is your pane's own,
+and you see, read, change and paste only your own buffers: not the person's,
+and not another pane's. `set-buffer` makes a buffer with no name, and a `-b`
+name that is not yours answers `no_buffer`. A connection restricted to its own session
 (`tuios mcp` without `--scope all`) reaches no buffers, since every session
 shares them.
 

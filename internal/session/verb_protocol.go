@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -2206,12 +2207,21 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 	// A buffer upload the connection did not finish goes with it.
 	defer d.dropUploads(cs)
 
-	sc := bufio.NewScanner(br)
-	// Cap a single request line at the same 16MB ceiling as a binary frame so a
-	// runaway client cannot exhaust memory.
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	// Each line is memory of its own, bounded and charged to the daemon's
+	// budget when it is large. See verb_lines.go.
+	lr := &verbLineReader{d: d, cs: cs, br: br}
+	defer lr.done()
 
-	for sc.Scan() {
+	for {
+		raw, err := lr.next()
+		if err != nil {
+			if errors.Is(err, errVerbLineTooLong) || errors.Is(err, errVerbLineBusy) {
+				// The rest of the line cannot be read as a request, so the
+				// connection ends after the answer.
+				_ = d.writeVerbError(cs, nil, "", newVerbError(ErrVerbInvalidRequest, err.Error()+"; nothing was done"))
+			}
+			return
+		}
 		select {
 		case <-d.ctx.Done():
 			return
@@ -2220,16 +2230,15 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 		default:
 		}
 
-		line := bytes.TrimSpace(sc.Bytes())
+		line := bytes.TrimSpace(raw)
 		if len(line) == 0 {
 			continue
 		}
-		// Copy the line: Scanner reuses its buffer on the next Scan, and a routed
-		// verb may block (routeToTUISync) while holding a reference to params.
-		lineCopy := make([]byte, len(line))
-		copy(lineCopy, line)
-
-		if err := d.dispatchVerbLine(cs, lineCopy); err != nil {
+		// The line is the reader's own copy, so a routed verb that blocks
+		// (routeToTUISync) may keep a reference to its params.
+		err = d.dispatchVerbLine(cs, line)
+		lr.done()
+		if err != nil {
 			// A write failure means the connection is gone; stop.
 			return
 		}

@@ -13,12 +13,15 @@
 // the oldest named one. A single text larger than MaxBytes is refused rather
 // than stored by dropping every other buffer.
 //
-// Each buffer records where it came from (Owner): the session it was copied
-// or set in, and the pane that set it when a process in a pane did. A caller
-// that may see only some sessions passes a Filter, and the store then acts as
-// if the other buffers were not there. Names are unique among the buffers one
-// caller sees: a caller that names a buffer it cannot see makes a new one,
-// and learns nothing about the hidden one.
+// Each buffer has an owner: the person, or one pane (Owner). A caller that
+// may see only some buffers passes a Filter, and the store then acts as if
+// the other buffers were not there. Names are unique across all owners, so
+// no buffer can stand in for another. A caller that names a buffer it may not
+// change gets the answer of a missing name, and learns nothing about it.
+//
+// Automatic names come from one counter that only goes up and never skips. A
+// caller may not make a buffer named like one (bufferN), so no automatic name
+// is ever taken when the counter reaches it.
 //
 // The daemon holds one store, so every client and every session can share the
 // buffers, as tmux's server does. A client with no daemon behind it holds its
@@ -27,6 +30,8 @@
 package pastebuf
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -66,20 +71,23 @@ var (
 	ErrTooLarge = errors.New("the text is larger than the byte cap")
 	// ErrBadName is the error of a name that is too long or not printable.
 	ErrBadName = errors.New("a buffer name is 1 to 64 printable characters")
+	// ErrReservedName is the error of a new buffer named like an automatic
+	// one.
+	ErrReservedName = errors.New("names of the form bufferN are for the buffers tuios names; choose another name")
 	// ErrChanged is the error of a call on a buffer that was set again after
 	// the caller read it.
 	ErrChanged = errors.New("the buffer was set again after it was read")
 )
 
-// Owner says where a buffer came from.
+// Owner says whose a buffer is: the person's when Pane is "", else the pane
+// whose process set it.
 type Owner struct {
-	// Session is the session the text was copied or set in, "" for none:
-	// the person's own command line, outside every session.
-	Session string
-	// Pane is the pane whose process set the buffer, "" when the person did
-	// with a yank or from outside every pane.
+	// Pane is the pane that owns the buffer, "" for the person.
 	Pane string
 }
+
+// Person reports whether the person owns the buffer.
+func (o Owner) Person() bool { return o.Pane == "" }
 
 // Buffer is one paste buffer.
 type Buffer struct {
@@ -90,10 +98,10 @@ type Buffer struct {
 	Data string
 	// Created is when the content was last set.
 	Created time.Time
-	// Version counts the sets of the store: a buffer set again gets a new
-	// one. A caller that read a buffer passes it back to act only on that
-	// content. It is a small integer, so it survives a trip through JSON as
-	// a float, where a time in nanoseconds would not.
+	// Version is a random number each set gives the buffer. A caller that
+	// read a buffer passes it back to act only on that content. It is random,
+	// so it says nothing of how many sets other callers made, and it stays
+	// under 2^53, so it survives a trip through JSON as a float.
 	Version uint64
 	// Automatic says the store named the buffer.
 	Automatic bool
@@ -115,7 +123,6 @@ type Store struct {
 	limit    int
 	maxBytes int
 	next     int // the number of the next automatic name
-	version  uint64
 }
 
 // New makes a store with the given limits. A negative limit or a byte cap
@@ -261,6 +268,9 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 		if change != nil && (idx < 0 || !change(s.bufs[idx])) {
 			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
 		}
+		if idx < 0 && automaticName(name) {
+			return Buffer{}, ErrReservedName
+		}
 	}
 	if data == "" {
 		return Buffer{}, nil
@@ -271,8 +281,7 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 	if len(data) > s.maxBytes {
 		return Buffer{}, fmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
 	}
-	s.version++
-	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner, Version: s.version}
+	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner, Version: newVersion()}
 	if idx >= 0 {
 		s.remove(idx)
 	} else if name == "" {
@@ -285,16 +294,39 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 }
 
 // newName is the next automatic name, bufferN as tmux names them. The
-// number only goes up, so a deleted buffer's name is not given again.
-// s.mu is held.
+// number only goes up and never skips. No other buffer can hold the name: an
+// automatic name the counter gave before is lower, and no caller may make a
+// buffer named like one (automaticName). s.mu is held.
 func (s *Store) newName() string {
-	for {
-		name := fmt.Sprintf("buffer%d", s.next)
-		s.next++
-		if s.index(name) < 0 {
-			return name
+	name := fmt.Sprintf("buffer%d", s.next)
+	s.next++
+	return name
+}
+
+// automaticName reports whether name has the form of an automatic name:
+// buffer and digits.
+func automaticName(name string) bool {
+	n, ok := strings.CutPrefix(name, "buffer")
+	if !ok || n == "" {
+		return false
+	}
+	for _, c := range n {
+		if c < '0' || c > '9' {
+			return false
 		}
 	}
+	return true
+}
+
+// newVersion is a random version under 2^53.
+func newVersion() uint64 {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	v := binary.LittleEndian.Uint64(b[:]) & (1<<53 - 1)
+	if v == 0 {
+		v = 1
+	}
+	return v
 }
 
 // index is the position of the buffer called name, -1 for none. s.mu is
