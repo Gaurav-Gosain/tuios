@@ -22,10 +22,11 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 	cm.State = terminal.CopyModeVisualLine
 	absY := getAbsoluteY(cm, window)
 
-	// Get line content bounds (first to last non-empty character)
-	startX, endX := getLineContentBounds(cm, window, absY)
+	// A line selection starts at the first column, so a line's indent is
+	// part of it (#516), and ends at the line's last printed cell.
+	_, endX := getLineContentBounds(cm, window, absY)
 
-	cm.VisualStart = terminal.Position{X: startX, Y: absY}
+	cm.VisualStart = terminal.Position{X: 0, Y: absY}
 	cm.VisualEnd = terminal.Position{X: endX, Y: absY}
 }
 
@@ -50,8 +51,9 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 			startY, endY = endY, startY
 		}
 
-		// Get line content bounds for both lines
-		startLineStartX, _ := getLineContentBounds(cm, window, startY)
+		// The upper line is taken from its first column, indent included,
+		// and the lower line to its last printed cell.
+		const startLineStartX = 0
 		_, endLineEndX := getLineContentBounds(cm, window, endY)
 
 		// If moving upwards (current Y < original start Y), we want:
@@ -69,7 +71,19 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 }
 
-// extractVisualText extracts the text from the current visual selection
+// extractVisualText extracts the text from the current visual selection.
+//
+// The copy keeps every cell the selection covers up to the last printed cell
+// of each row: leading spaces, interior runs, and the columns a tab moved
+// over (the emulator stores a tab as the blanks it skipped). The blanks after
+// a row's last printed cell are dropped. A cleared cell and a printed space
+// are the same cell in the grid, so the end of the printed text is the only
+// line that can be drawn there, and it is the one that keeps a copy free of
+// the row's padding.
+//
+// A row the emulator soft-wrapped is a full row of printed text that carries
+// on to the next, so it is kept whole, spaces at its edge included, and joined
+// to the next row without a newline.
 func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 	start, end := cm.VisualStart, cm.VisualEnd
 
@@ -79,127 +93,107 @@ func extractVisualText(cm *terminal.CopyMode, window *terminal.Window) string {
 	}
 
 	var text strings.Builder
-	scrollbackLen := window.ScrollbackLen()
-
-	// Single line
-	if start.Y == end.Y {
-		// Clamp selection to line content bounds to avoid copying empty cells
-		_, lineEndX := getLineContentBounds(cm, window, start.Y)
-		clampedEndX := min(end.X, lineEndX)
-
-		if start.Y < scrollbackLen {
-			line := window.ScrollbackLine(start.Y)
-			for x := start.X; x <= clampedEndX && line != nil && x < len(line); x++ {
-				if line[x].Content != "" && line[x].Content != " " {
-					text.WriteString(line[x].Content)
-				} else if line[x].Content == " " {
-					// Preserve internal spaces but not empty cells
-					text.WriteRune(' ')
-				}
-			}
-		} else {
-			screenY := start.Y - scrollbackLen
-			for x := start.X; x <= clampedEndX && x < window.Width; x++ {
-				cell := window.Terminal.CellAt(x, screenY)
-				if cell != nil && cell.Content != "" && cell.Content != " " {
-					text.WriteString(cell.Content)
-				} else if cell != nil && cell.Content == " " {
-					// Preserve internal spaces but not empty cells
-					text.WriteRune(' ')
-				}
-			}
-		}
-		return strings.TrimSpace(text.String())
-	}
-
-	// Multi-line
 	for y := start.Y; y <= end.Y; y++ {
-		startX, endX := 0, window.Width-1
+		cells := selectionRowCells(window, y)
+		wraps := y < end.Y && selectionRowWraps(window, y)
 
+		lo, hi := 0, len(cells)-1
 		if y == start.Y {
-			startX = start.X
+			lo = start.X
 		}
 		if y == end.Y {
-			endX = end.X
+			hi = min(hi, end.X)
 		}
-
-		// Clamp to line content bounds to avoid copying empty cells at end
-		lineStartX, lineEndX := getLineContentBounds(cm, window, y)
-		switch y {
-		case start.Y:
-			// First line: keep user's start but clamp end to content
-			endX = min(endX, lineEndX)
-		case end.Y:
-			// Last line: keep user's end but clamp to content
-			endX = min(endX, lineEndX)
-		default:
-			// Middle lines: use full content bounds
-			startX = lineStartX
-			endX = lineEndX
+		if !wraps {
+			hi = min(hi, lastPrintedCell(cells))
 		}
+		writeSelectionCells(&text, cells, lo, hi)
 
-		// Extract line content
-		var lineCells []uv.Cell
-		if y < scrollbackLen {
-			lineCells = window.ScrollbackLine(y)
-		} else {
-			screenY := y - scrollbackLen
-			// Build cells array from screen
-			for x := range window.Width {
-				cell := window.Terminal.CellAt(x, screenY)
-				if cell != nil {
-					lineCells = append(lineCells, *cell)
-				} else {
-					lineCells = append(lineCells, uv.Cell{})
-				}
-			}
-		}
-
-		// Append line content
-		if lineCells != nil {
-			for x := startX; x <= endX && x < len(lineCells); x++ {
-				if lineCells[x].Content != "" && lineCells[x].Content != " " {
-					text.WriteString(lineCells[x].Content)
-				} else if lineCells[x].Content == " " {
-					// Preserve internal spaces but not empty cells
-					text.WriteRune(' ')
-				}
-			}
-		}
-
-		// Add newline only if this is NOT a soft-wrapped line
-		if y < end.Y {
-			// Check if this line is soft-wrapped (continues on next line)
-			// Heuristic: if line content extends to terminal width and doesn't end with whitespace,
-			// it's likely wrapped
-			isSoftWrapped := false
-			if len(lineCells) > 0 {
-				// Find last non-empty cell
-				lastNonEmptyX := -1
-				for x := len(lineCells) - 1; x >= 0; x-- {
-					if lineCells[x].Content != "" && lineCells[x].Content != " " {
-						lastNonEmptyX = x
-						break
-					}
-				}
-				// If line extends close to terminal width, it's probably wrapped
-				if lastNonEmptyX >= window.Width-5 {
-					isSoftWrapped = true
-				}
-			}
-
-			if isSoftWrapped {
-				// Remove trailing whitespace since this line continues on the next
-				currentText := text.String()
-				text.Reset()
-				text.WriteString(strings.TrimRight(currentText, " "))
-			} else {
-				text.WriteRune('\n')
-			}
+		if y < end.Y && !wraps {
+			text.WriteByte('\n')
 		}
 	}
 
-	return strings.TrimSpace(text.String())
+	// Rows below the last printed line are padding too: a drag that runs on
+	// into the empty screen under the output adds no newlines.
+	return strings.TrimRight(text.String(), "\n")
+}
+
+// selectionRowCells returns the cells of absolute row y, from the scrollback
+// or the screen. A missing screen cell reads as a blank.
+func selectionRowCells(window *terminal.Window, y int) []uv.Cell {
+	scrollbackLen := window.ScrollbackLen()
+	if y < scrollbackLen {
+		return window.ScrollbackLine(y)
+	}
+	screenY := y - scrollbackLen
+	cells := make([]uv.Cell, window.Terminal.Width())
+	for x := range cells {
+		if cell := window.Terminal.CellAt(x, screenY); cell != nil {
+			cells[x] = *cell
+		} else {
+			cells[x] = uv.EmptyCell
+		}
+	}
+	return cells
+}
+
+// selectionRowWraps reports whether absolute row y carries on to the next row
+// because the emulator wrapped it. A backend that cannot tell reads as a row
+// that ends, which copies a newline rather than joining two lines.
+func selectionRowWraps(window *terminal.Window, y int) bool {
+	if window.Terminal == nil {
+		return false
+	}
+	var wrapped, known bool
+	if scrollbackLen := window.ScrollbackLen(); y < scrollbackLen {
+		wrapped, known = window.Terminal.ScrollbackSoftWrapped(y)
+	} else {
+		wrapped, known = window.Terminal.RowSoftWrapped(y - scrollbackLen)
+	}
+	return known && wrapped
+}
+
+// lastPrintedCell is the index of the last cell in cells that holds more than
+// a blank, or -1 when the row is blank.
+func lastPrintedCell(cells []uv.Cell) int {
+	for x := len(cells) - 1; x >= 0; x-- {
+		if c := cells[x].Content; c != "" && c != " " {
+			return x
+		}
+	}
+	return -1
+}
+
+// writeSelectionCells appends the text of cells[lo..hi]. A blank cell is a
+// space. The cells a wide character covers past its first are skipped, since
+// the character was already written.
+func writeSelectionCells(text *strings.Builder, cells []uv.Cell, lo, hi int) {
+	lo = max(lo, 0)
+	hi = min(hi, len(cells)-1)
+	// A selection that starts inside a wide character starts at its first
+	// cell, so the character is not lost.
+	for lo > 0 && lo <= hi && cells[lo].Width == 0 && cells[lo].Content == "" && cells[lo-1].Width > 1 {
+		lo--
+	}
+	covered := 0
+	for x := lo; x <= hi; x++ {
+		c := cells[x]
+		if covered > 0 {
+			covered--
+			if c.Content == "" {
+				continue
+			}
+		}
+		if c.Content == "" {
+			text.WriteByte(' ')
+			continue
+		}
+		text.WriteString(c.Content)
+		if c.Width > 1 {
+			covered = c.Width - 1
+		}
+	}
 }
 
 // getLineContentBounds returns the X positions of the first and last non-empty characters on a line
