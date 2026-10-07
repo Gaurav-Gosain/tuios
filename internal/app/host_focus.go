@@ -25,12 +25,6 @@ const (
 	hostFocusOut
 )
 
-// HostFocused reports whether the host terminal has focus, and whether it has
-// ever said. known is false for a terminal that sends no focus events.
-func (m *OS) HostFocused() (focused, known bool) {
-	return m.hostFocus == hostFocusIn, m.hostFocus != hostFocusUnknown
-}
-
 // HostLooking reports whether the person may be looking at this client: true
 // unless the host terminal reported losing focus. It is the question an alert
 // asks before it holds back for a pane the person is already looking at.
@@ -65,8 +59,7 @@ func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 // focus reporting. A terminal that never reports focus counts as looking. A
 // daemon pane is answered by the daemon, which keeps its own record.
 func (m *OS) notePaneFocus() {
-	focused, known := m.HostFocused()
-	looking := focused || !known
+	looking := m.HostLooking()
 	for i, w := range m.Windows {
 		if w != nil && !w.DaemonMode {
 			w.SetHasFocus(looking && i == m.FocusedWindow)

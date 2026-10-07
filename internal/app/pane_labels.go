@@ -93,26 +93,6 @@ func (m *OS) paneLabelsLayout() string {
 	return b.String()
 }
 
-// PaneLabels maps each labelled pane's id to its label, for tests.
-func (m *OS) PaneLabels() map[string]string {
-	if m.paneLabels == nil {
-		return nil
-	}
-	out := make(map[string]string, len(m.paneLabels.panes))
-	for _, p := range m.paneLabels.panes {
-		out[p.windowID] = p.label
-	}
-	return out
-}
-
-// PaneLabelsTyped is the start of a label typed so far.
-func (m *OS) PaneLabelsTyped() string {
-	if m.paneLabels == nil {
-		return ""
-	}
-	return m.paneLabels.typed
-}
-
 // paneLabelKeys is the label keys in force.
 func (m *OS) paneLabelKeys() string {
 	if m.UserConfig == nil {

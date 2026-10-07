@@ -574,15 +574,17 @@ func (e *dockEngine) emit(u dockComponentUpdate) {
 // talk back. Same shape as a hook, deliberately, because a component is a hook
 // that draws.
 func (e *dockEngine) commandEnv(name string, extra ...string) []string {
+	env := append(e.baseEnv(), "TUIOS_DOCK_COMPONENT="+strings.TrimPrefix(name, config.DockCustomPrefix))
+	return append(env, extra...)
+}
+
+// baseEnv is the client's own environment with the session and the socket,
+// which every command the engine runs is given.
+func (e *dockEngine) baseEnv() []string {
 	e.mu.Lock()
 	session, socket := e.session, e.socket
 	e.mu.Unlock()
-	env := append(os.Environ(),
-		"TUIOS_DOCK_COMPONENT="+strings.TrimPrefix(name, config.DockCustomPrefix),
-		"TUIOS_SESSION="+session,
-		"TUIOS_SOCKET="+socket,
-	)
-	return append(env, extra...)
+	return append(os.Environ(), "TUIOS_SESSION="+session, "TUIOS_SOCKET="+socket)
 }
 
 // dockKillGrace bounds how long a wait may go on after the kill.
@@ -620,13 +622,9 @@ func dockSupervise(cmd *exec.Cmd) {
 // run's goroutine, and the folder is resolved after the lock is let go: the
 // stat that checks it can block, and only this run waits.
 func (e *dockEngine) railCommandEnv(rail railContext) []string {
-	e.mu.Lock()
-	session, socket := e.session, e.socket
-	e.mu.Unlock()
+	env := e.baseEnv()
 	folder := rail.folder()
-	return append(os.Environ(),
-		"TUIOS_SESSION="+session,
-		"TUIOS_SOCKET="+socket,
+	return append(env,
 		"TUIOS_RAIL_SECTION="+config.SidebarSectionCustom,
 		"TUIOS_RAIL_WIDTH="+strconv.Itoa(rail.Width),
 		"TUIOS_RAIL_HEIGHT="+strconv.Itoa(rail.Height),
