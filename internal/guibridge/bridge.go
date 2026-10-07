@@ -96,6 +96,29 @@ type Event struct {
 	// Fleet is set on "fleet" events: every session and every pane's agent
 	// state on the daemon, sent when they change.
 	Fleet *Fleet `json:"fleet,omitempty"`
+	// Keybinds is set on "keybinds" events: the user's keys, sent after
+	// "attached" and again whenever the config reloads.
+	Keybinds *Keybinds `json:"keybinds,omitempty"`
+	// Result is set on "result" events, the answer to an action or layout
+	// command. It follows the state that shows the command's effect.
+	Result *Result `json:"result,omitempty"`
+}
+
+// Result answers one action or layout command.
+type Result struct {
+	// Req is the command's req, so the renderer can match the answer.
+	Req int64 `json:"req,omitempty"`
+	// Cmd is the command answered: "action" or "layout". Op is the layout
+	// op, and Name the action.
+	Cmd  string `json:"cmd"`
+	Op   string `json:"op,omitempty"`
+	Name string `json:"name,omitempty"`
+	OK   bool   `json:"ok"`
+	// Error says why the command did nothing, when OK is false.
+	Error string `json:"error,omitempty"`
+	// Ratio is the ratio a set-ratio left the split at, after the smallest
+	// pane size held it.
+	Ratio float64 `json:"ratio,omitempty"`
 }
 
 // State is the session as the renderer draws it. Positions are cells.
@@ -111,12 +134,44 @@ type State struct {
 	Focused  string   `json:"focused"`
 	Tiling   bool     `json:"tiling"`
 	Windows  []Window `json:"windows"`
+	// Layout is the layout on screen: "floating" (tiling off), "bsp",
+	// "master_stack" or "scrolling". Trees are sent only for "bsp".
+	Layout string `json:"layout"`
+	// Trees is each workspace's split tree, keyed by workspace number.
+	Trees map[string]*Tree `json:"trees,omitempty"`
+	// Zoomed is the window ID of the zoomed pane, if one is.
+	Zoomed string `json:"zoomed,omitempty"`
+	// SessionSize is the size the daemon gives the session, which every
+	// client shares (the smallest client's by default). ClientSize is this
+	// bridge's own size, the renderer's grid. Both in cells.
+	SessionSize Size `json:"session_size"`
+	ClientSize  Size `json:"client_size"`
+	// Viewport is set while the session is larger than this client: the
+	// client shows the part of it that starts at X, Y (session cells).
+	Viewport *Point `json:"viewport,omitempty"`
+	// AgentSeen is set once an agent has been seen in the session. Until
+	// then the renderer shows no agent chrome.
+	AgentSeen bool `json:"agent_seen"`
+}
+
+// Size is a size in cells.
+type Size struct {
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+}
+
+// Point is a position in cells.
+type Point struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // Window is one pane.
 type Window struct {
-	ID        string `json:"id"`
-	PTY       string `json:"pty"`
+	ID  string `json:"id"`
+	PTY string `json:"pty"`
+	// Kind is what draws the pane. Only "terminal" exists today.
+	Kind      string `json:"kind"`
 	Title     string `json:"title"`
 	Name      string `json:"name,omitempty"`
 	Workspace int    `json:"workspace"`
@@ -127,10 +182,14 @@ type Window struct {
 	Z         int    `json:"z"`
 	// Border is how many cells of each edge the window's frame takes; the
 	// content is the rest.
-	Border    int    `json:"border"`
-	Minimized bool   `json:"minimized,omitempty"`
-	Floating  bool   `json:"floating,omitempty"`
-	Zoomed    bool   `json:"zoomed,omitempty"`
+	Border    int  `json:"border"`
+	Minimized bool `json:"minimized,omitempty"`
+	Floating  bool `json:"floating,omitempty"`
+	Zoomed    bool `json:"zoomed,omitempty"`
+	// Popup marks a pane `tuios popup` opened: floating, closed by its
+	// program. Scratch marks a pane of a scratch group.
+	Popup     bool   `json:"popup,omitempty"`
+	Scratch   bool   `json:"scratch,omitempty"`
 	Agent     string `json:"agent,omitempty"`
 	AgentMsg  string `json:"agent_message,omitempty"`
 	AgentKind string `json:"agent_kind,omitempty"`
@@ -167,6 +226,20 @@ type Command struct {
 	// tape: any tape command by name, with its arguments
 	Command string   `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
+	// Req is echoed in the result of an action or layout command.
+	Req int64 `json:"req,omitempty"`
+	// action: a keybinding action by its registry name.
+	Name string `json:"name,omitempty"`
+	// layout: the op and its arguments. See layout.go.
+	Op     string  `json:"op,omitempty"`
+	Split  uint64  `json:"split,omitempty"`
+	Ratio  float64 `json:"ratio,omitempty"`
+	A      string  `json:"a,omitempty"`
+	B      string  `json:"b,omitempty"`
+	ID     string  `json:"id,omitempty"`
+	Target string  `json:"target,omitempty"`
+	Side   string  `json:"side,omitempty"`
+	Rect   *Rect   `json:"rect,omitempty"`
 }
 
 // Run attaches and serves the renderer until its input closes or the session
@@ -222,7 +295,7 @@ func Run(opts Options) error {
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
 
-	m := &model{os: osModel, out: out, session: name}
+	m := &model{os: osModel, out: out}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -241,6 +314,7 @@ func Run(opts Options) error {
 	out.JSON(Event{Type: "attached", Message: name})
 	th := CurrentTheme()
 	out.JSON(Event{Type: "theme", Theme: &th})
+	m.sendKeybinds()
 	// Runs before out closes: deferred calls run last first.
 	stopFleet := make(chan struct{})
 	defer close(stopFleet)
@@ -250,6 +324,12 @@ func Run(opts Options) error {
 		err := readCommands(opts.In, client, program)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Printf("gui-bridge: renderer input: %v", err)
+		}
+		// The renderer is gone. Leave the session as a detach does, so the
+		// daemon counts this client out at once and the session size follows
+		// the clients that are still there.
+		if err := client.Detach(); err != nil {
+			log.Printf("gui-bridge: detach: %v", err)
 		}
 		program.Quit()
 	}()
@@ -289,9 +369,22 @@ type cmdMsg Command
 type model struct {
 	os      *app.OS
 	out     *frameWriter
-	session string
 	last    []byte
 	gitSeen map[string]gitEntry
+	// keysFrom is the config the last keybinds event was built from. A
+	// reload replaces the registry's config, and the next message sends the
+	// keys again.
+	keysFrom *config.UserConfig
+	// results wait for the state that shows their effect.
+	results []Result
+}
+
+// sendKeybinds sends the keybinds event and notes the config it came from.
+func (m *model) sendKeybinds() {
+	if r := m.os.KeybindRegistry; r != nil {
+		m.keysFrom = r.GetConfig()
+	}
+	m.out.JSON(Event{Type: "keybinds", Keybinds: exportKeybinds(m.os)})
 }
 
 // gitEntry is a cached reading of a folder's checkout.
@@ -336,7 +429,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmd = c
 	}
+	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
+		m.sendKeybinds()
+	}
 	m.export()
+	for i := range m.results {
+		m.out.JSON(Event{Type: "result", Result: &m.results[i]})
+	}
+	m.results = m.results[:0]
 	return m, cmd
 }
 
@@ -386,16 +486,44 @@ func (m *model) handle(c Command) tea.Cmd {
 		}
 		th := CurrentTheme()
 		m.out.JSON(Event{Type: "theme", Theme: &th})
+	case "action":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
+		var cmd tea.Cmd
+		err := checkAction(c.Name)
+		if err == nil {
+			cmd, err = m.os.RunActionCmd(c.Name)
+		}
+		m.answer(res, err)
+		return cmd
+	case "layout":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Op: c.Op}
+		got, err := runLayout(m.os, c)
+		if got != nil {
+			res.Ratio = got.Ratio
+		}
+		m.answer(res, err)
 	case "quit":
 		return tea.Quit
 	}
 	return nil
 }
 
+// answer queues a command's result, sent after the state that shows it.
+func (m *model) answer(res Result, err error) {
+	res.OK = err == nil
+	if err != nil {
+		res.Error = err.Error()
+	}
+	m.results = append(m.results, res)
+}
+
 func (m *model) export() {
 	o := m.os
+	view := o.CurrentSessionView()
 	st := &State{
-		Session:        m.session,
+		// The model's own name for the session, which follows a switch made
+		// inside the session (a pane running tuios switch, say).
+		Session:        o.SessionName,
 		Cols:           o.GetRenderWidth(),
 		Rows:           o.Height,
 		Workspace:      o.CurrentWorkspace,
@@ -403,6 +531,14 @@ func (m *model) export() {
 		WorkspaceNames: o.WorkspaceNames,
 		Tiling:         o.AutoTiling,
 		Windows:        make([]Window, 0, len(o.Windows)),
+		Layout:         o.LayoutName(),
+		Trees:          exportTrees(o),
+		SessionSize:    Size{Cols: view.Cols, Rows: view.Rows},
+		ClientSize:     Size{Cols: view.ClientCols, Rows: view.ClientRows},
+		AgentSeen:      o.AgentsSeen(),
+	}
+	if view.Cropped {
+		st.Viewport = &Point{X: view.OffsetX, Y: view.OffsetY}
 	}
 	occupied := map[int]bool{}
 	if f := o.GetFocusedWindow(); f != nil {
@@ -418,8 +554,12 @@ func (m *model) export() {
 			cwd = w.DaemonCwd
 		}
 		repo, branch := m.git(cwd)
+		if w.Zoomed {
+			st.Zoomed = w.ID
+		}
 		st.Windows = append(st.Windows, Window{
-			ID: w.ID, PTY: w.PTYID, Title: w.Title(), Name: w.CustomName,
+			ID: w.ID, PTY: w.PTYID, Kind: "terminal", Title: w.Title(), Name: w.CustomName,
+			Popup: w.IsPopup, Scratch: w.IsScratch,
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
