@@ -59,6 +59,8 @@ type wireWindow struct {
 	H         int    `json:"h"`
 	Floating  bool   `json:"floating"`
 	Popup     bool   `json:"popup"`
+	Repo      string `json:"repo"`
+	Branch    string `json:"branch"`
 }
 
 type wireSize struct {
@@ -940,4 +942,25 @@ func TestGUIBridgeSessionName(t *testing.T) {
 	b.waitState(func(s *wireState) bool { return s.Session == "first" }, "session first")
 	b.mustCall(map[string]any{"cmd": "action", "name": "next_session"})
 	b.waitState(func(s *wireState) bool { return s.Session == "other" }, "session other after next_session")
+}
+
+// TestGUIBridgeGitBranch: a pane in a git checkout carries its repository and
+// branch. The bridge reads them off the model's goroutine and sends them in
+// the state that follows the read.
+func TestGUIBridgeGitBranch(t *testing.T) {
+	base := t.TempDir()
+	dir := workDirIn(t, base)
+	git := exec.Command("git", "init", "-q", "-b", "bridge-branch", dir)
+	if out, err := git.CombinedOutput(); err != nil {
+		t.Skipf("git init: %v\n%s", err, out)
+	}
+	b := startBridge(t, base, "gb", 120, 40)
+	ids := b.tiledPanes(1)
+	st := b.waitState(func(s *wireState) bool {
+		w := s.window(ids[0])
+		return w != nil && w.Branch == "bridge-branch"
+	}, "the pane on branch bridge-branch")
+	if w := st.window(ids[0]); w.Repo != filepath.Base(dir) {
+		t.Errorf("repo = %q, want %q", w.Repo, filepath.Base(dir))
+	}
 }
