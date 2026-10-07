@@ -126,3 +126,26 @@ fn mouse_tracking_levels() {
     t.write(b"\x1b[?1003h");
     assert_eq!(t.mouse_tracking(), MouseTracking::Any);
 }
+
+#[test]
+fn a_scrolled_row_keeps_its_hash() {
+    let mut t = Terminal::new(10, 3, 100).unwrap();
+    t.write(b"one\r\ntwo\r\nthree");
+    let before: Vec<u64> = t.snapshot().rows.iter().map(|r| r.hash).collect();
+    t.write(b"\r\nfour");
+    let after: Vec<u64> = t.snapshot().rows.iter().map(|r| r.hash).collect();
+    assert_eq!(after[0], before[1], "\"two\" moved up a row");
+    assert_eq!(after[1], before[2]);
+    assert_ne!(after[2], before[2]);
+    t.write(b"\x1b[31m");
+    t.write(b"\r\x1b[2Kfour");
+    assert_ne!(t.snapshot().rows[2].hash, after[2], "colour is part of the hash");
+}
+
+#[test]
+fn bold_does_not_brighten() {
+    let mut t = Terminal::new(10, 1, 0).unwrap();
+    t.write(b"\x1b[31ma\x1b[1mb");
+    let r = &t.snapshot().rows[0];
+    assert_eq!(r.cells[0].fg, r.cells[1].fg);
+}

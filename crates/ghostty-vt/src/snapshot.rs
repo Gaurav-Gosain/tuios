@@ -109,10 +109,55 @@ pub struct Row {
     pub text: String,
     /// Bumped each time the row is rebuilt from the emulator.
     pub generation: u64,
+    /// A hash of the row's cells and text. Two rows with the same hash draw
+    /// the same, so a painter can reuse what it built for one on the other,
+    /// for example when a row moves up the screen as it scrolls.
+    pub hash: u64,
     pub wrapped: bool,
 }
 
+/// FxHash's mixing step: fast and good enough for a cache key.
+#[derive(Default)]
+pub(crate) struct FxHasher(u64);
+
+impl std::hash::Hasher for FxHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut b = [0u8; 8];
+            b[..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(b));
+        }
+    }
+    fn write_u64(&mut self, v: u64) {
+        self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_u8(&mut self, v: u8) {
+        self.write_u64(v as u64)
+    }
+    fn write_u16(&mut self, v: u16) {
+        self.write_u64(v as u64)
+    }
+    fn write_u32(&mut self, v: u32) {
+        self.write_u64(v as u64)
+    }
+    fn write_usize(&mut self, v: usize) {
+        self.write_u64(v as u64)
+    }
+}
+
 impl Row {
+    /// Hashes the cells and text into [`Row::hash`].
+    pub(crate) fn rehash(&mut self) {
+        use std::hash::{Hash, Hasher};
+        let mut h = FxHasher::default();
+        self.cells.hash(&mut h);
+        h.write(self.text.as_bytes());
+        self.hash = h.finish();
+    }
+
     pub fn cell_text(&self, c: &Cell) -> &str {
         let s = c.text_start as usize;
         &self.text[s..s + c.text_len as usize]

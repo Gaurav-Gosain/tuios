@@ -742,14 +742,8 @@ impl Terminal {
                 } else {
                     None
                 };
-                // Bold text in one of the first 8 palette colours brightens, as
-                // xterm and ghostty do by default.
-                if has_style && style.bold && style.fg_color.tag == GHOSTTY_STYLE_COLOR_PALETTE {
-                    let i = style.fg_color.value.palette as usize;
-                    if i < 8 {
-                        fg = Rgb::from_ffi(palette[i + 8]);
-                    }
-                }
+                // Bold is drawn with the bold face only. It does not brighten
+                // the colour (docs/design/FINAL.md section 9, rule 8).
                 if has_style && style.inverse {
                     let new_fg = bg.unwrap_or(default_bg);
                     bg = Some(fg);
@@ -793,6 +787,7 @@ impl Terminal {
                 x += 1;
             }
             row.generation = generation;
+            row.rehash();
         }
     }
 }
