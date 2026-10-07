@@ -234,6 +234,8 @@ pub struct TuiosApp {
     pane_views: HashMap<String, Entity<views::PaneView>>,
     /// Paint time of the stage frame in progress, for the stats.
     frame_ms: f64,
+    /// The session to attach once the first frame knows the grid's size.
+    first_connect: Option<Option<String>>,
     /// Frames drawn (root renders), for the `stats` control command.
     frames: u64,
 }
@@ -306,9 +308,12 @@ impl TuiosApp {
             spin_slots,
             pane_views: HashMap::new(),
             frame_ms: 0.,
+            first_connect: None,
             frames: 0,
         };
-        this.connect(this.cfg.session.clone(), window, cx);
+        // The bridge starts at the grid's size, which the first frame works
+        // out; a later resize can lose a race with the bridge's own start.
+        this.first_connect = Some(this.cfg.session.clone());
         this.tick_ages(cx);
         cx.observe_window_activation(window, |this, window, cx| {
             this.window_active = window.is_window_active();
@@ -1048,6 +1053,17 @@ impl TuiosApp {
                         self.link = Link::Attached;
                         self.status = format!("Attached to {}", ev.message.unwrap_or_default()).into();
                         all = true;
+                        // Send the size once more after the bridge settles, in
+                        // case it applied its start size after an earlier one.
+                        cx.spawn(async move |this, cx| {
+                            cx.background_executor().timer(Duration::from_millis(300)).await;
+                            let _ = this.update(cx, |this, cx| {
+                                this.sent_size = (0, 0);
+                                let (c, r) = (this.grid.cols, this.grid.rows);
+                                this.schedule_resize(c, r, cx);
+                            });
+                        })
+                        .detach();
                     }
                     "state" => {
                         if let Some(st) = ev.state {
@@ -1653,6 +1669,9 @@ impl Render for TuiosApp {
         let before = (self.grid.cols, self.grid.rows);
         let lay = self.compute_layout(window, &m);
         self.layout = lay;
+        if let Some(session) = self.first_connect.take() {
+            self.connect(session, window, cx);
+        }
         if before != (self.grid.cols, self.grid.rows) && before.0 > 0 && self.link == Link::Attached {
             self.resized_at = Some(Instant::now());
             self.wake_grid_at(Instant::now() + BADGE, cx);
