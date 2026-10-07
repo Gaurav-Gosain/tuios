@@ -2821,3 +2821,20 @@ one included.
 These two are not covered by an e2e test. A late note from the relay's timer
 after a connection closed is now refused under the same lock the close
 forgets the client under. A failed `ssh -G` is no longer cached.
+
+## A glyph image in an unfocused pane
+
+`TestImageSymbolsDimEvenly` draws a white disc with a light-grey speckle as
+glyphs, with `theme = "dracula"` and `dim_unfocused = 50`. It runs at
+truecolor with octants and quadrants, at 256 colours, and at 16 colours with
+half blocks. It then moves the focus to a second pane. Every sub-block inside
+the disc must stay within 12 of the focused spread, and the disc must be
+darker than when it had the focus. The frames are `focused.png` and
+`unfocused.png` under each subtest's artifact directory.
+
+The control is main at 1b570369, where the glyph pass still calls `dimCell`.
+It was run on 2026-10-07.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A glyph's foreground dims toward its own background | `drawImageSymbols`: `dimCell` in place of `dimGlyphCell` | `TestImageSymbolsDimEvenly`, all four subtests. The unfocused spread is 191 to 222 against a focused spread of 12 to 47, white (251,251,251) next to grey (129,130,135) at truecolor | **caught** |

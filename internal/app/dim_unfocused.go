@@ -109,6 +109,32 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, memo *blendMemo) 
 	return dst
 }
 
+// dimGlyphCell is dimCell for a cell of an image drawn as glyphs. Both of its
+// colours are picture colours, so both go toward the pane's ground by the same
+// amount. dimCell carries the foreground toward the cell's own background,
+// which is right for text on a block of colour and wrong here: in a flat area
+// the two colours are nearly equal, so the foreground hardly moves while the
+// background moves to the pane, and the area breaks into light and dark
+// sub-blocks. A cell that names no colour stays on the pane's ground and needs
+// nothing.
+func dimGlyphCell(dst, src *uv.Cell, bg color.Color, t float64, memo *blendMemo) *uv.Cell {
+	if src == nil || isNilColor(bg) {
+		return src
+	}
+	cellFg, cellBg := src.Style.Fg, src.Style.Bg
+	if isNilColor(cellFg) && isNilColor(cellBg) {
+		return src
+	}
+	*dst = *src
+	if !isNilColor(cellFg) {
+		dst.Style.Fg = memo.mix(cellFg, bg, t)
+	}
+	if !isNilColor(cellBg) {
+		dst.Style.Bg = memo.mix(cellBg, bg, t)
+	}
+	return dst
+}
+
 // paneDimGround is the pair an unfocused pane's cells are dimmed toward. A
 // painted pane background is the pane's own background, so it is what the dim
 // carries toward when one is set, theme or not. Its foreground may be nil (a

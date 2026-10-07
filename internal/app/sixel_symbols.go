@@ -407,7 +407,7 @@ func symbolCell(c *uv.Cell, mc *mosaic.Cell, colors mosaic.Colors, boxes *colorB
 //
 // A pane's dim_unfocused was applied to the marker cells, which the glyphs
 // replace, so each glyph is dimmed here with the dim its pane was rendered at
-// and toward the same ground.
+// and toward the same ground (see dimGlyphCell).
 func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 	sp := m.SixelPassthrough
 	if sp == nil {
@@ -431,10 +431,10 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 	type paneImage struct {
 		e   *sixelEntry
 		sym *symbolImage
-		// dim is the pane's dim, 0 to 1, and ground the pair it carries
-		// toward.
+		// dim is the pane's dim, 0 to 1, and dimBg the pane ground both
+		// colours of a glyph carry toward.
 		dim            float64
-		dimFg, dimBg   color.Color
+		dimBg          color.Color
 		dimResolved    bool
 		missing        image.Rectangle
 		missingPresent bool
@@ -562,14 +562,14 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 				pi.dimResolved = true
 				if w := m.windowByID(pi.e.windowID); w != nil {
 					if d := w.CachedContentDim(); d > 0 {
-						if pi.dimFg, pi.dimBg = m.paneDimGround(); pi.dimBg != nil {
+						if _, pi.dimBg = m.paneDimGround(); pi.dimBg != nil {
 							pi.dim = float64(d) / 100
 						}
 					}
 				}
 			}
 			if pi.dim > 0 {
-				*c = *dimCell(&scratch, c, pi.dimFg, pi.dimBg, pi.dim, &memo)
+				*c = *dimGlyphCell(&scratch, c, pi.dimBg, pi.dim, &memo)
 			}
 		}
 	}
