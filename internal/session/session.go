@@ -972,10 +972,10 @@ type PTY struct {
 	// the vtWriter last handed it on.
 	progStatus      progstatus.Store
 	progStatusDirty atomic.Bool
-	// progStatusAway is set by a working, blocked or idle report from a program
-	// in the foreground, and cleared when the agent detector next sees the
-	// pane's shell there, which ends those records. See armProgramStatusExit.
-	progStatusAway atomic.Bool
+	// chunkGroup is the foreground process group the PTY reader read for the
+	// chunk the vtWriter is writing now, plus one, and 0 when it read none.
+	// See PTY.reportGroup.
+	chunkGroup atomic.Int64
 	// progStatusApplyMu orders the copies of the records into the session
 	// state. See Session.applyProgramStatus.
 	progStatusApplyMu sync.Mutex
@@ -1245,10 +1245,6 @@ type Session struct {
 	// express which of several sources should win, so the value carries the source
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
-	// programPrior is, per window, the state a weaker source held when a
-	// pane's OSC 7501 report took the pane over, so it comes back when the
-	// records end. Read and written under stateMu. See program_status.go.
-	programPrior map[string]AgentReport
 
 	// agentHarnessPIDs records, by window ID, the pid of the harness process
 	// whose hook last set the window's AgentSessionID, as the hook reported it.
@@ -4931,6 +4927,12 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
+			// Who holds the foreground, read first and only for a chunk
+			// holding an OSC 7501 report: a program that reports and exits
+			// at once may already be gone a moment later. See
+			// PTY.reportGroup.
+			reportGroup := p.readerReportGroup(data)
+
 			// The raw stream, when TUIOS_PTY_LOG asks for it. Taken here,
 			// before anything reads or reorders it, so what lands in the file
 			// is what the program wrote.
@@ -4967,7 +4969,7 @@ func (p *PTY) readOutput() {
 			// the leaf terminal lock and never waits on this loop, so there is
 			// nothing here to deadlock against.
 			select {
-			case p.vtWriteChan <- vtChunk{data: data, seq: seq}:
+			case p.vtWriteChan <- vtChunk{data: data, seq: seq, group: reportGroup}:
 			case <-p.ctx.Done():
 				p.streamMu.Unlock()
 				return
@@ -4997,6 +4999,10 @@ type vtChunk struct {
 	data          []byte
 	seq           int64
 	width, height int // both > 0 marks a resize rather than output
+	// group is the foreground process group the reader read for a chunk
+	// holding an OSC 7501 report, plus one; 0 for any other chunk. See
+	// PTY.reportGroup.
+	group int64
 }
 
 // vtWriter is a single persistent goroutine that feeds the daemon's VT
@@ -5022,9 +5028,11 @@ func (p *PTY) vtWriter() {
 			continue
 		}
 		p.terminalMu.Lock()
+		p.chunkGroup.Store(chunk.group)
 		if p.terminal != nil {
 			_, _ = p.terminal.Write(chunk.data)
 		}
+		p.chunkGroup.Store(0)
 		// Recorded under the same lock the emulator is written and read under,
 		// so a state snapshot and the position it was taken at can never
 		// disagree. That pairing is what lets a client be resumed exactly where

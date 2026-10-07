@@ -636,16 +636,12 @@ func (s *Session) scanAgentDetection(
 	shell := agentBaseName(s.getShell())
 	now := time.Now().UnixNano()
 
-	// A pane whose shell holds the foreground again has seen its program
-	// exit, which ends that program's OSC 7501 working and blocked records.
-	// Only a pane that runs a shell counts: in a pane whose own process is the
-	// program, that process is always in the foreground. See
-	// PTY.endProgramStatusAtShell.
+	// A program whose process group has ended has exited, which ends its OSC
+	// 7501 working, blocked and idle records. See
+	// PTY.endProgramStatusOfEndedGroups.
 	for _, r := range readings {
-		if r.running && r.info.atShell() && foregroundCommand(r.info, true, shell) == "" {
-			if pty := s.GetPTY(r.ptyID); pty != nil {
-				pty.endProgramStatusAtShell()
-			}
+		if pty := s.GetPTY(r.ptyID); pty != nil {
+			pty.endProgramStatusOfEndedGroups(r.info, r.running)
 		}
 	}
 

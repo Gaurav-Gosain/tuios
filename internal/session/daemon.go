@@ -908,7 +908,17 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			d.paneCreators.Delete(ev.Window)
 		}
 		if ev.Type == eventProgramStatus {
-			s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load())
+			if s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load()) {
+				// The program let go of the pane. What is true of it now
+				// comes from a fresh look: the foreground detector, then the
+				// screen tier.
+				if d.agentDetectInterval > 0 {
+					s.scanAgentDetection(d.foregroundResolver(s), d.agentMatcher.identifyDetail, nil)
+				}
+				if reg := d.agentMatcher.registry; reg != nil {
+					s.scanPaneForAgent(ev.PTYID, reg)
+				}
+			}
 			return
 		}
 		if ev.Type == EventOutput && d.agentsOff.Load() {

@@ -395,6 +395,12 @@ type Record struct {
 	Seq uint64
 	// At is when the record was last replaced, in Unix nanoseconds.
 	At int64
+	// Group is the process group that held the terminal's foreground when
+	// the report came in, for a working, blocked or idle record from a
+	// program in the foreground, and 0 otherwise. When that group ends, the
+	// program that reported has exited (DropEnded). The owner of the store
+	// sets it; the protocol knows nothing of it.
+	Group int
 }
 
 // IsRoot reports whether r is the root record.
@@ -416,10 +422,16 @@ type Store struct {
 // Handle applies an emulator event at now (Unix nanoseconds) and reports
 // whether the records changed.
 func (s *Store) Handle(ev Event, now int64) bool {
+	return s.HandleFrom(ev, now, 0)
+}
+
+// HandleFrom is Handle for a report that came from the process group group
+// (see Record.Group), 0 for none.
+func (s *Store) HandleFrom(ev Event, now int64, group int) bool {
 	if ev.Reset {
 		return s.Reset()
 	}
-	return s.Apply(ev.Report, now)
+	return s.ApplyFrom(ev.Report, now, group)
 }
 
 // Apply stores one report that Parse returned, and reports whether the
@@ -427,6 +439,13 @@ func (s *Store) Handle(ev Event, now int64) bool {
 // addressed record and every record beneath it, and with no id removes every
 // record.
 func (s *Store) Apply(r Report, now int64) bool {
+	return s.ApplyFrom(r, now, 0)
+}
+
+// ApplyFrom is Apply for a report that came from the process group group
+// (see Record.Group), 0 for none. The group is kept only on a working,
+// blocked or idle record, the states a program's exit ends.
+func (s *Store) ApplyFrom(r Report, now int64, group int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seen = true
@@ -445,12 +464,67 @@ func (s *Store) Apply(r Report, now int64) bool {
 			s.evictLocked()
 		}
 	}
+	if r.State != Working && r.State != Blocked && r.State != Idle {
+		group = 0
+	}
 	s.seq++
 	s.recs[r.ID] = &Record{
 		ID: r.ID, State: r.State, Kind: r.Kind, Progress: r.Progress,
 		App: r.App, Title: r.Title, Msg: r.Msg, Seq: s.seq, At: now,
+		Group: group,
 	}
 	return true
+}
+
+// GroupOf is the group record id came from, 0 when it has none or does not
+// exist.
+func (s *Store) GroupOf(id string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rec, ok := s.recs[id]; ok {
+		return rec.Group
+	}
+	return 0
+}
+
+// Groups lists the distinct groups records came from, 0 left out.
+func (s *Store) Groups() []int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []int
+	for _, rec := range s.recs {
+		if rec.Group != 0 && !slices.Contains(out, rec.Group) {
+			out = append(out, rec.Group)
+		}
+	}
+	return out
+}
+
+// DropEnded removes the working, blocked and idle records whose group ended
+// says has ended: the program that reported them has exited. Records from
+// any other group, and records with none, stay. It reports whether anything
+// was removed. ended is called with the store's lock held, so it must not
+// call back into the store.
+func (s *Store) DropEnded(ended func(group int) bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	gone := map[int]bool{}
+	changed := false
+	for k, rec := range s.recs {
+		if rec.Group == 0 {
+			continue
+		}
+		dead, seen := gone[rec.Group]
+		if !seen {
+			dead = ended(rec.Group)
+			gone[rec.Group] = dead
+		}
+		if dead {
+			delete(s.recs, k)
+			changed = true
+		}
+	}
+	return changed
 }
 
 // evictLocked removes the record updated least recently.
