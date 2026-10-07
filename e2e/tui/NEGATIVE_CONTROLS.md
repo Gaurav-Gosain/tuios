@@ -2802,3 +2802,22 @@ own link, and only a host that forwards gets it.
 | Every host gets the link | `hostForwardsAgent`: always yes | `TestSSHAgentLinkLeavesANonForwardingHostAlone` (plain starts with its host link) | **caught** |
 | No retry against an old hub daemon | `openHostConnectionAgent`: the retry cut | `TestSSHAgentFollowWithAnOlderDaemon/hub` (the client exits 1) | **caught** |
 | No retry against an old far daemon | `dialLinkSocket`: the retry cut | `TestSSHAgentFollowWithAnOlderDaemon/far` (the client exits 1) | **caught** |
+
+The rows below were run on the third round. `TestSSHAgentHostLinkNames` gives
+the hub three forwarding hosts: Pair and pair, which differ only in case, and
+a name of 70 characters. Each one starts with its own link, and Pair's and
+pair's links do not differ only in case. A host with `-A` then `-a` keeps the
+daemon's environment, as `ssh -G` says. A reload that drops pair removes
+pair's link and keeps Pair's. `kill-server` sweeps every host link, the long
+one included.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `-A` in `ssh_options` decides without `ssh -G` | `hostForwardsAgent`: yes when the options hold `-A` | `TestSSHAgentHostLinkNames` (undone starts with its host link) | **caught** |
+| The host name is used as it is | `hostLinkName`: `link-` and the exact name | `TestSSHAgentHostLinkNames` (Pair's link is `agent-link-Pair.sock`). The test spells the name out itself, so this fails at the first host | **caught** |
+| A host that leaves the config keeps its link | `applyUserConfig`: the `agentPruneHosts` call cut | `TestSSHAgentHostLinkNames` (pair's link stays) | **caught** |
+| The sweep does not see host links | `isOwnAgentLink`: false for `link-` | `TestSSHAgentHostLinkNames` (Pair's link stays after `kill-server`) | **caught** |
+
+These two are not covered by an e2e test. A late note from the relay's timer
+after a connection closed is now refused under the same lock the close
+forgets the client under. A failed `ssh -G` is no longer cached.

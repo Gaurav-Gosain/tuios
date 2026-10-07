@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/google/uuid"
 )
 
@@ -113,8 +115,29 @@ func SSHAgentLinkPath(socketPath, sessionID string) string {
 // hostAgentLinkPath is the agent link of one host: the socket the link ssh to
 // that host forwards, while the host forwards the agent.
 func hostAgentLinkPath(socketPath, host string) string {
-	return filepath.Join(filepath.Dir(socketPath), agentLinkPrefix(socketPath)+"link-"+host+".sock")
+	return filepath.Join(filepath.Dir(socketPath), agentLinkPrefix(socketPath)+hostLinkName(host)+".sock")
 }
+
+// hostLinkKeep is how much of a host name a host's link keeps, so the path
+// stays short enough to connect to.
+const hostLinkKeep = 32
+
+// hostLinkName is the part of a host's link name after the prefix: link-,
+// the host name lowered and cut to hostLinkKeep, and the first eight hex
+// digits of the sha256 of the exact name. The hash keeps two hosts apart when
+// their names differ only in case, on a filesystem that ignores case, or only
+// past the cut.
+func hostLinkName(host string) string {
+	sum := sha256.Sum256([]byte(host))
+	name := strings.ToLower(host)
+	if len(name) > hostLinkKeep {
+		name = name[:hostLinkKeep]
+	}
+	return "link-" + name + "-" + hex.EncodeToString(sum[:4])
+}
+
+// hostLinkPattern matches what hostLinkName makes.
+var hostLinkPattern = lazyre.New(`^link-[a-z0-9][a-z0-9._-]{0,31}-[0-9a-f]{8}$`)
 
 // agentLinkPrefix is how the links of the daemon on socketPath start. The
 // default socket's are agent-, and a daemon on another socket in the same
@@ -140,8 +163,8 @@ func isOwnAgentLink(socketPath, name string) bool {
 	if !ok {
 		return false
 	}
-	if host, isHost := strings.CutPrefix(rest, "link-"); isHost {
-		return host != "" && len(host) <= 64 && linkPeerPattern().MatchString(host)
+	if strings.HasPrefix(rest, "link-") {
+		return hostLinkPattern().MatchString(rest)
 	}
 	_, err := uuid.Parse(rest)
 	return err == nil && len(rest) == 36
@@ -197,7 +220,10 @@ func (d *Daemon) startSSHAgent() {
 	if !d.sshAgentFollowing() {
 		return
 	}
-	if n := len(SSHAgentLinkPath(d.manager.SocketPath(), "00000000-0000-0000-0000-000000000000")); n > sunPathMax() {
+	// The longest link: a session's whole id, or a host's name at its cut.
+	n := max(len(SSHAgentLinkPath(d.manager.SocketPath(), "00000000-0000-0000-0000-000000000000")),
+		len(hostAgentLinkPath(d.manager.SocketPath(), strings.Repeat("h", hostLinkKeep))))
+	if n > sunPathMax() {
 		log.Printf("Warning: the ssh agent links are %d characters long, and a Unix socket path can be at most %d. ssh in a pane cannot reach the agent. Set XDG_RUNTIME_DIR to a shorter folder.", n, sunPathMax())
 	}
 }
@@ -297,6 +323,14 @@ func (d *Daemon) agentNote(cs *connState, sock string, keys ...string) {
 	f := &d.sshAgent
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// Checked under f.mu: the close forgets the client under it too
+	// (agentForgetHosts), so a note that comes late, from the relay's timer,
+	// cannot bring the client back after.
+	select {
+	case <-cs.done:
+		return
+	default:
+	}
 	for _, key := range keys {
 		list := f.bySession[key]
 		if len(list) > 0 && list[0].clientID == cs.clientID && f.target[key] == list[0].sock {
@@ -341,15 +375,14 @@ func (d *Daemon) linkSSHEnv(h federation.Host) []string {
 	return append(env, "SSH_AUTH_SOCK="+d.agentLinkFor(key))
 }
 
-// hostForwardsAgent reports whether the link ssh to h forwards the agent: -A
-// or -o ForwardAgent=yes in its ssh_options, else forwardagent yes in what
-// ssh -G prints for its address, which is ~/.ssh/config speaking. The answer
-// is cached per host until the config changes. A ForwardAgent that names a
-// socket forwards that socket, not SSH_AUTH_SOCK, so it counts as no.
+// hostForwardsAgent reports whether the link ssh to h forwards the agent:
+// forwardagent yes in what ssh -G prints for h's address with h's ssh_options,
+// which is ssh's own reading of the options, ~/.ssh/config and their
+// precedence. The answer is cached per host until the config changes. A
+// failed or timed-out ssh -G is not cached, and is asked again at the next
+// connect. A ForwardAgent that names a socket forwards that socket, not
+// SSH_AUTH_SOCK, so it counts as no.
 func (d *Daemon) hostForwardsAgent(h federation.Host) bool {
-	if fwd, set := sshOptionsForward(h.SSHOptions); set {
-		return fwd
-	}
 	key := h.Addr + "\x00" + strings.Join(h.SSHOptions, "\x00")
 	f := &d.sshAgent
 	f.mu.Lock()
@@ -358,7 +391,10 @@ func (d *Daemon) hostForwardsAgent(h federation.Host) bool {
 		return c.forwards
 	}
 	f.mu.Unlock()
-	fwd := sshConfigForwards(h)
+	fwd, ok := sshConfigForwards(h)
+	if !ok {
+		return false
+	}
 	f.mu.Lock()
 	if f.forwards == nil {
 		f.forwards = make(map[string]hostForward)
@@ -376,47 +412,10 @@ func (d *Daemon) forgetHostForwards() {
 	d.sshAgent.mu.Unlock()
 }
 
-// sshOptionsForward reads ForwardAgent from ssh_options. set is false when
-// they do not say. ssh takes the first value it gets for an -o keyword, and
-// -A and -a are the same switch.
-func sshOptionsForward(opts []string) (fwd, set bool) {
-	for i := 0; i < len(opts); i++ {
-		o := opts[i]
-		switch {
-		case o == "-A":
-			return true, true
-		case o == "-a":
-			return false, true
-		case o == "-o" && i+1 < len(opts):
-			i++
-			if v, ok := forwardAgentValue(opts[i]); ok {
-				return v, true
-			}
-		case strings.HasPrefix(o, "-o"):
-			if v, ok := forwardAgentValue(o[2:]); ok {
-				return v, true
-			}
-		}
-	}
-	return false, false
-}
-
-// forwardAgentValue reads one -o value. ok is false for another keyword.
-func forwardAgentValue(opt string) (fwd, ok bool) {
-	k, v, found := strings.Cut(opt, "=")
-	if !found {
-		k, v, found = strings.Cut(opt, " ")
-	}
-	if !found || !strings.EqualFold(strings.TrimSpace(k), "forwardagent") {
-		return false, false
-	}
-	return strings.EqualFold(strings.TrimSpace(v), "yes"), true
-}
-
 // sshConfigForwards asks ssh -G what it would do for h's address with h's
-// options, and reports whether that is forwardagent yes. Any failure is no:
-// the daemon's environment is then left as it is.
-func sshConfigForwards(h federation.Host) bool {
+// options, which CheckSSHOptions has passed. fwd is whether that is
+// forwardagent yes. ok is false when ssh -G failed or gave no answer.
+func sshConfigForwards(h federation.Host) (fwd, ok bool) {
 	bin := os.Getenv("TUIOS_SSH")
 	if bin == "" {
 		bin = "ssh"
@@ -426,15 +425,44 @@ func sshConfigForwards(h federation.Host) bool {
 	args := append(append([]string{"-G"}, h.SSHOptions...), "--", h.Addr)
 	out, err := exec.CommandContext(ctx, bin, args...).Output()
 	if err != nil {
-		return false
+		return false, false
 	}
 	for line := range strings.SplitSeq(string(out), "\n") {
 		k, v, _ := strings.Cut(strings.TrimSpace(line), " ")
 		if strings.EqualFold(k, "forwardagent") {
-			return strings.EqualFold(strings.TrimSpace(v), "yes")
+			return strings.EqualFold(strings.TrimSpace(v), "yes"), true
 		}
 	}
-	return false
+	return false, false
+}
+
+// agentPruneHosts removes the link and the entries of every host that is not
+// in hosts, when the config drops one.
+func (d *Daemon) agentPruneHosts(hosts []federation.Host) {
+	keep := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		keep[hostAgentKey(h.Name)] = true
+	}
+	f := &d.sshAgent
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	drop := func(key string) {
+		if !strings.HasPrefix(key, "host:") || keep[key] {
+			return
+		}
+		if _, linked := f.target[key]; linked {
+			_ = os.Remove(d.agentLinkFor(key))
+			delete(f.target, key)
+		}
+		delete(f.bySession, key)
+		delete(f.forwards, strings.TrimPrefix(key, "host:"))
+	}
+	for key := range f.bySession {
+		drop(key)
+	}
+	for key := range f.target {
+		drop(key)
+	}
 }
 
 // agentForgetHosts drops the client with the given id from every host's

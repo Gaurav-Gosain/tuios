@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -77,7 +79,8 @@ func testAgent(t *testing.T, comment string) string {
 // forwardingSSH writes an ssh stand-in for a link to the daemon rooted at
 // remoteBase that forwards the agent the way ssh -A does. It forwards with -A,
 // and for an address that starts with fwd@, which stands for ForwardAgent yes
-// in ~/.ssh/config: ssh -G says forwardagent yes for such an address and no
+// in ~/.ssh/config: ssh -G says forwardagent yes with -A or for such an
+// address, and no
 // for any other. When it forwards, the far command runs with SSH_AUTH_SOCK
 // naming relay, a socket that sshd would make, and every connection to relay
 // reaches the socket the stand-in's own SSH_AUTH_SOCK names at that moment:
@@ -94,8 +97,15 @@ func forwardingSSH(t *testing.T, dir, remoteBase, relay, agentPath string) strin
 	var b strings.Builder
 	b.WriteString(`#!/bin/sh
 if [ "$1" = -G ]; then
-  for a; do last=$a; done
-  case "$last" in fwd@*) echo 'forwardagent yes' ;; *) echo 'forwardagent no' ;; esac
+  fa=
+  for a; do
+    case "$a" in -A) fa=yes ;; -a) fa=no ;; esac
+    last=$a
+  done
+  if [ -z "$fa" ]; then
+    case "$last" in fwd@*) fa=yes ;; *) fa=no ;; esac
+  fi
+  echo "forwardagent $fa"
   exit 0
 fi
 fwd=
@@ -104,6 +114,7 @@ while [ $# -gt 0 ]; do
     -o) shift 2 ;;
     -T|-t) shift ;;
     -A) fwd=1; shift ;;
+    -a) fwd=; shift ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -122,6 +133,19 @@ case "$addr" in fwd@*) fwd=1 ;; esac
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}
 	return path
+}
+
+// hostLinkName is the daemon's name for a host's agent link, after the
+// prefix: link-, the host name lowered and cut to 32, and eight hex digits of
+// the sha256 of the exact name. It is written out here rather than imported,
+// so a change to the name on one side fails this suite.
+func hostLinkName(host string) string {
+	sum := sha256.Sum256([]byte(host))
+	name := strings.ToLower(host)
+	if len(name) > 32 {
+		name = name[:32]
+	}
+	return "link-" + name + "-" + hex.EncodeToString(sum[:4])
 }
 
 // linkEnv waits for the link ssh to addr to have run, and returns the
@@ -347,7 +371,7 @@ func TestSSHAgentHostLinkFollowsOnlyThatHostsClients(t *testing.T) {
 	}
 	// Input counts at most once a second, so the hub's link for build can
 	// move up to a second after the keys.
-	hubLink := filepath.Join(filepath.Dir(readAgentLink(t, base, "home").Path), "agent-link-build.sock")
+	hubLink := filepath.Join(filepath.Dir(readAgentLink(t, base, "home").Path), "agent-"+hostLinkName("build")+".sock")
 	waitLinkTo(t, hubLink, agentA, "the hub's link for build after A typed")
 	farKey(t, remote, a, "ka549", "after A typed")
 	saveArtifact(t, a, artifactDir(t), "ssh-agent-host-typing")
@@ -380,7 +404,7 @@ func TestSSHAgentLinkLeavesANonForwardingHostAlone(t *testing.T) {
 	}
 	dir := filepath.Dir(readAgentLink(t, base, "home").Path)
 	for _, h := range []struct{ name, addr string }{{"build", "someone@buildbox"}, {"cfg", "fwd@cfgbox"}} {
-		if got, want := linkEnv(t, base, h.addr), filepath.Join(dir, "agent-link-"+h.name+".sock"); got != want {
+		if got, want := linkEnv(t, base, h.addr), filepath.Join(dir, "agent-"+hostLinkName(h.name)+".sock"); got != want {
 			t.Fatalf("the link ssh to %s, which forwards, started with SSH_AUTH_SOCK %q, want its host link %q", h.name, got, want)
 		}
 	}
@@ -465,5 +489,70 @@ func TestSSHAgentFollowWithAnOlderDaemon(t *testing.T) {
 			}
 			alive(t, term, "attached through a link to an older daemon")
 		})
+	}
+}
+
+// TestSSHAgentHostLinkNames gives the hub three forwarding hosts whose names
+// a plain link name would get wrong: Pair and pair, which differ only in case,
+// and a name of 70 characters. Each gets its own link, the links of a
+// case-insensitive filesystem cannot meet, and kill-server sweeps every one.
+// Before that, a reload drops pair from the config, and its link goes. A host
+// with -A and then -a in ssh_options does not forward, as ssh -G says, and
+// keeps the daemon's environment.
+//
+// Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
+func TestSSHAgentHostLinkNames(t *testing.T) {
+	own := fakeAgent(t, 0o700)
+	long := strings.Repeat("longhost", 8) + "abcdef"
+	base := t.TempDir()
+	killDaemon(t, base)
+	remote := remoteMachine(t)
+	agentPath := filepath.Join(base, "forwarded-agent")
+	ssh := forwardingSSH(t, base, remote, agentRelay(t, agentPath), agentPath)
+	t.Setenv("SSH_AUTH_SOCK", own)
+	t.Setenv("TUIOS_SSH", ssh)
+	host := func(name, addr, opts string) string {
+		return "\n[hosts." + name + "]\naddr = \"" + addr + "\"\ncommand = \"" + tuiosBin + "\"\nconnect_timeout = 5\n" + opts
+	}
+	cfg := "[daemon]\nssh_agent = \"follow\"\n" +
+		host("Pair", "fwd@pairbox", "") +
+		host(long, "fwd@longbox", "") +
+		host("undone", "someone@undonebox", "ssh_options = [\"-A\", \"-a\"]\n")
+	writeConfig(t, base, cfg+host("pair", "fwd@pairbox2", ""))
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the hub daemon: %v\n%s", err, out)
+	}
+	dir := filepath.Dir(readAgentLink(t, base, "home").Path)
+	links := map[string]string{}
+	for _, h := range []struct{ name, addr string }{{"Pair", "fwd@pairbox"}, {"pair", "fwd@pairbox2"}, {long, "fwd@longbox"}} {
+		want := filepath.Join(dir, "agent-"+hostLinkName(h.name)+".sock")
+		if got := linkEnv(t, base, h.addr); got != want {
+			t.Fatalf("the link ssh to %s started with SSH_AUTH_SOCK %q, want %q", h.name, got, want)
+		}
+		waitLinkTo(t, want, own, "the link of "+h.name)
+		links[h.name] = want
+	}
+	if strings.EqualFold(links["Pair"], links["pair"]) {
+		t.Fatalf("Pair and pair have links that differ only in case: %s", links["pair"])
+	}
+	if out, _ := tuiosCLI(t, base, "hosts"); !strings.Contains(out, "undone") {
+		t.Fatalf("tuios hosts does not list undone:\n%s", out)
+	}
+	if got := linkEnv(t, base, "someone@undonebox"); got != own {
+		t.Fatalf("the link ssh to undone, whose -a undoes its -A, started with SSH_AUTH_SOCK %q, want the daemon's own %q", got, own)
+	}
+
+	// pair leaves the config, and its link goes with it.
+	writeConfigAtomically(t, configPathIn(base), []byte(cfg))
+	waitLinkTo(t, links["pair"], "", "after pair left the config")
+	if _, err := os.Lstat(links["Pair"]); err != nil {
+		t.Fatalf("the link of Pair went when pair left the config: %v", err)
+	}
+
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	for name, link := range links {
+		waitLinkTo(t, link, "", "the link of "+name+" after kill-server")
 	}
 }

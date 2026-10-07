@@ -87,16 +87,9 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 
 	LogBasic("Client %s connected through to host %s", cs.clientID, p.Host)
 	cs.takeover = func(br *bufio.Reader) {
-		d.relayHostConnection(cs, br, conn, func() {
-			// A note that comes after the connection closed would bring
-			// back a client the close already forgot.
-			select {
-			case <-cs.done:
-				return
-			default:
-			}
-			d.agentNote(cs, p.SSHAuthSock, hostKey)
-		})
+		// agentNote checks for a closed connection itself, so a note from
+		// the relay's timer after the close does nothing.
+		d.relayHostConnection(cs, br, conn, func() { d.agentNote(cs, p.SSHAuthSock, hostKey) })
 		LogBasic("Client %s left host %s", cs.clientID, p.Host)
 	}
 	return map[string]any{

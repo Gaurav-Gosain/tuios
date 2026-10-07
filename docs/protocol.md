@@ -1958,7 +1958,7 @@ needs `read` and the session in reach. Over a link it needs `list`.
 The hub side: `open-host-connection` takes `ssh_auth_sock`, the caller's
 socket, because the caller's hello goes to the host and not to this daemon.
 While `ssh_agent` is `"follow"`, this daemon keeps one link for each host
-whose link forwards the agent, `agent-link-<host>.sock`. It points at the
+whose link forwards the agent, `agent-link-<host>-<hash>.sock`. It points at the
 socket of the client that opened a connection to that host, or sent input
 through one, last. Input counts at most once a second. The link ssh to such a
 host starts with `SSH_AUTH_SOCK` naming that host's link. The link ssh to any

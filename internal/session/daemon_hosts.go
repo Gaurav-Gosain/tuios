@@ -107,8 +107,10 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// The link only ever names a socket of the person's own client, so
 	// following it widens nothing a pane may do, and a file change applies.
 	d.SetSSHAgent(cfg.Daemon.SSHAgent)
-	// [hosts] or ~/.ssh/config may forward the agent differently now.
+	// [hosts] or ~/.ssh/config may forward the agent differently now, and a
+	// host that left the table leaves no agent link behind.
 	d.forgetHostForwards()
+	d.agentPruneHosts(HostsFromConfig(cfg))
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())

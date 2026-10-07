@@ -338,7 +338,7 @@ func TestSSHAgentLinkFallsBackToTheDaemonsSocket(t *testing.T) {
 	// folder are not, even one whose socket is called agent.sock.
 	const id = "0c0ffee0-0000-4000-8000-000000000549"
 	dir := filepath.Dir(link)
-	stale := []string{filepath.Join(dir, "agent-"+id+".sock"), filepath.Join(dir, "agent-link-build.sock")}
+	stale := []string{filepath.Join(dir, "agent-"+id+".sock"), filepath.Join(dir, "agent-"+hostLinkName("build")+".sock")}
 	others := []string{filepath.Join(dir, "other-agent-"+id+".sock"), filepath.Join(dir, "agent-agent-"+id+".sock")}
 	for _, p := range append(append([]string{}, stale...), others...) {
 		if err := os.Symlink(own, p); err != nil {
