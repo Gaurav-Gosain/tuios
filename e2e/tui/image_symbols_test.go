@@ -546,3 +546,202 @@ func TestImageSymbolsWithChafa(t *testing.T) {
 		})
 	}
 }
+
+// vgaPalette is the Linux console's default palette, which the sixteen-colour
+// cells are chosen against.
+var vgaPalette = [16][3]float64{
+	{0, 0, 0}, {170, 0, 0}, {0, 170, 0}, {170, 85, 0}, {0, 0, 170}, {170, 0, 170}, {0, 170, 170}, {170, 170, 170},
+	{85, 85, 85}, {255, 85, 85}, {85, 255, 85}, {255, 255, 85}, {85, 85, 255}, {255, 85, 255}, {85, 255, 255}, {255, 255, 255},
+}
+
+// scoreANSI16 checks the picture drawn at sixteen colours with half blocks:
+// every image cell holds a half-block glyph, every colour is an ANSI index,
+// and no background is bright (the Linux console gives bright backgrounds to
+// blink). It returns the correlation between the picture's lightness and the
+// cells' lightness over 2x2-cell blocks, with the cells read in the VGA
+// palette, and the problems found.
+func scoreANSI16(s tuitest.Screen, img *vt.SixelImage, origin image.Point) (float64, []string) {
+	var bad []string
+	luma := func(c [3]float64) float64 { return (0.299*c[0] + 0.587*c[1] + 0.114*c[2]) / 255 }
+	src := make([]float64, symPicRows*symPicCols)
+	shown := make([]float64, symPicRows*symPicCols)
+	for r := range symPicRows {
+		for c := range symPicCols {
+			var sum float64
+			n := 0
+			for py := r * cellH; py < (r+1)*cellH; py++ {
+				for px := c * cellW; px < (c+1)*cellW; px++ {
+					if v, ok := img.At(px, py); ok {
+						sum += luma([3]float64{float64(v.R), float64(v.G), float64(v.B)})
+					}
+					n++
+				}
+			}
+			src[r*symPicCols+c] = sum / float64(n)
+			cell := s.Cell(origin.X+c, origin.Y+r)
+			idx := func(col tuitest.Color, what string) [3]float64 {
+				switch {
+				case col.Kind == tuitest.ColorDefault:
+					return [3]float64{}
+				case col.Kind == tuitest.ColorIndexed && col.Index < 16:
+					return vgaPalette[col.Index]
+				}
+				if len(bad) < 8 {
+					bad = append(bad, fmt.Sprintf("%d,%d %s is %+v, not an ANSI index", origin.X+c, origin.Y+r, what, col))
+				}
+				return [3]float64{}
+			}
+			fg, bg := idx(cell.Fg, "fg"), idx(cell.Bg, "bg")
+			if cell.Bg.Kind == tuitest.ColorIndexed && cell.Bg.Index >= 8 && len(bad) < 8 {
+				bad = append(bad, fmt.Sprintf("%d,%d has a bright background %d", origin.X+c, origin.Y+r, cell.Bg.Index))
+			}
+			var f float64
+			switch cell.Content {
+			case " ", "":
+			case "▀", "▄":
+				f = 0.5
+			case "█":
+				f = 1
+			default:
+				if len(bad) < 8 {
+					bad = append(bad, fmt.Sprintf("%d,%d holds %q, not a half block", origin.X+c, origin.Y+r, cell.Content))
+				}
+			}
+			shown[r*symPicCols+c] = f*luma(fg) + (1-f)*luma(bg)
+		}
+	}
+	block := func(v []float64) []float64 {
+		var out []float64
+		for r := range symPicRows - 1 {
+			for c := range symPicCols - 1 {
+				i := r*symPicCols + c
+				out = append(out, (v[i]+v[i+1]+v[i+symPicCols]+v[i+symPicCols+1])/4)
+			}
+		}
+		return out
+	}
+	a, b := block(src), block(shown)
+	var ma, mb float64
+	for i := range a {
+		ma += a[i] / float64(len(a))
+		mb += b[i] / float64(len(b))
+	}
+	var ab, aa, bb float64
+	for i := range a {
+		ab += (a[i] - ma) * (b[i] - mb)
+		aa += (a[i] - ma) * (a[i] - ma)
+		bb += (b[i] - mb) * (b[i] - mb)
+	}
+	if aa == 0 || bb == 0 {
+		return 0, bad
+	}
+	return ab / math.Sqrt(aa*bb), bad
+}
+
+// planeOneGlyphs counts the image cells that hold a sextant or octant, the
+// glyphs only those two sets use.
+func planeOneGlyphs(s tuitest.Screen, origin image.Point) (sextants, octants int) {
+	for r := range symPicRows {
+		for c := range symPicCols {
+			rs := []rune(s.Cell(origin.X+c, origin.Y+r).Content)
+			if len(rs) == 0 {
+				continue
+			}
+			switch {
+			case rs[0] >= 0x1FB00 && rs[0] <= 0x1FB3B:
+				sextants++
+			case rs[0] >= 0x1CD00 && rs[0] <= 0x1CEAF:
+				octants++
+			}
+		}
+	}
+	return sextants, octants
+}
+
+// TestImageSymbolsAutoPicksByTerminal leaves appearance.image_symbols at auto
+// and checks the glyph set tuios picks from TERM: octants on kmscon, half
+// blocks on the Linux console (in sixteen colours unless COLORTERM says
+// more), and quadrants elsewhere.
+// A host that answers for sixel gets sixel and no glyphs, with TERM=kmscon
+// too.
+func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
+	for _, tc := range []struct {
+		name, term, colorterm string
+		sixel                 bool
+	}{
+		{"kmscon", "kmscon", "truecolor", false},
+		{"linux", "linux", "", false},
+		// The kernel console with COLORTERM set: still half blocks, the
+		// font has nothing finer, but in 24-bit colour.
+		{"linux-truecolor", "linux", "truecolor", false},
+		{"other", "xterm-256color", "truecolor", false},
+		{"kmscon-with-sixel", "kmscon", "truecolor", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host := newSixelHost(tc.sixel, false)
+			env := []string{"TERM=" + tc.term}
+			if tc.sixel {
+				// startSymbolPane pins the host to no graphics; this
+				// row says sixel instead.
+				env = append(env, "TUIOS_SIXEL_GRAPHICS=1")
+			}
+			term, _ := startSymbolPane(t, host, "", tc.colorterm, false, env...)
+			dir := t.TempDir()
+			da1 := paneDA1(t, term, dir)
+			if !strings.Contains(";"+da1+";", ";4;") {
+				t.Fatalf("pane DA1 = %q: sixel not listed", da1)
+			}
+			img, path := writeSymbolPicture(t, dir)
+			before := len(host.bytes())
+			typeLine(t, term, "clear; printf '%s\\n' 'IMG''TOP'; cat "+path+"; echo; echo SH''OWN")
+			if err := term.WaitForText("SHOWN", shellTimeout); err != nil {
+				t.Fatalf("the picture did not print: %v\n%s", err, term.Snapshot())
+			}
+			time.Sleep(time.Second)
+			origin := imageOrigin(t, term, "IMGTOP")
+			s := term.Screen()
+			savePNG(t, s, shot.XTermPalette(), artifactDir(t), "auto-"+tc.name)
+			sextants, octants := planeOneGlyphs(s, origin)
+			out := host.bytes()[before:]
+			switch tc.name {
+			case "kmscon":
+				sc := scoreSymbols(s, img, origin, origin.Y-1, "octant")
+				t.Logf("kmscon: error %.2f, %d octant cells, %d sextant cells", sc.err, octants, sextants)
+				if octants == 0 || sextants > 0 || len(sc.bad) > 0 || sc.err >= 10 {
+					t.Errorf("TERM=kmscon: want octants; error %.1f, %d octant and %d sextant cells; %s", sc.err, octants, sextants, strings.Join(sc.bad, "; "))
+				}
+			case "linux-truecolor":
+				sc := scoreSymbols(s, img, origin, origin.Y-1, "half")
+				t.Logf("linux-truecolor: error %.2f", sc.err)
+				if octants > 0 || sextants > 0 || imageGlyphCells(s, 0, 40) > 0 || len(sc.bad) > 0 || sc.err >= 10 {
+					t.Errorf("TERM=linux with COLORTERM: want half blocks; error %.1f; %s", sc.err, strings.Join(sc.bad, "; "))
+				}
+			case "other":
+				sc := scoreSymbols(s, img, origin, origin.Y-1, "quadrant")
+				t.Logf("other: error %.2f", sc.err)
+				if octants > 0 || sextants > 0 || len(sc.bad) > 0 || sc.err >= 10 {
+					t.Errorf("TERM=%s: want quadrants; error %.1f, %d octant and %d sextant cells; %s", tc.term, sc.err, octants, sextants, strings.Join(sc.bad, "; "))
+				}
+			case "linux":
+				corr, bad := scoreANSI16(s, img, origin)
+				t.Logf("linux: lightness correlation %.2f", corr)
+				if len(bad) > 0 || corr < 0.8 {
+					t.Errorf("TERM=linux: want half blocks in sixteen colours; correlation %.2f; %s", corr, strings.Join(bad, "; "))
+				}
+				if box := strings.Contains(s.Text(), "image"); box {
+					t.Errorf("TERM=linux: the box is shown, not the picture")
+				}
+			case "kmscon-with-sixel":
+				if !sixelDCS.Match(out) {
+					t.Errorf("a sixel host was sent no sixel")
+				}
+				if n := imageGlyphCells(s, 0, 40); n > 0 || octants > 0 {
+					t.Errorf("a sixel host got %d glyph cells", n+octants)
+				}
+			}
+			if !tc.sixel && (sixelDCS.Match(out) || bytes.Contains(out, []byte("\x1b_G"))) {
+				t.Errorf("a host with no graphics was sent graphics")
+			}
+		})
+	}
+}

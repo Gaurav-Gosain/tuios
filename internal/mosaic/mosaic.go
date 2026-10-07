@@ -96,17 +96,39 @@ type Indexed struct {
 	Palette       []color.RGBA
 }
 
+// Colors is the set of colours the host terminal shows.
+type Colors uint8
+
+const (
+	// TrueColor is 24-bit colour: every colour is sent as it is.
+	TrueColor Colors = iota
+	// XTerm256 is the xterm 256-colour palette.
+	XTerm256
+	// ANSI16 is the sixteen ANSI colours, as on the Linux console.
+	ANSI16
+)
+
 // Encode draws img as rows by cols cells, each cellW by cellH of its pixels,
 // with the glyphs of kind k. The result is row by row. Pixels past the image
 // are transparent.
 //
-// With xterm256 set, the host shows only the xterm 256-colour palette, and
-// every colour chosen is one of its entries 16 to 255 (the first 16 are the
-// terminal's own and unknown). The sub-pixels are dithered with a 4x4 Bayer
-// matrix before they are snapped to the palette, so a gradient that falls
-// between two entries is drawn as a pattern of both rather than as bands:
-// two colours in one cell is exactly what a glyph can show.
-func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, xterm256 bool) []Cell {
+// At XTerm256 every colour chosen is one of the palette's entries 16 to 255
+// (the first 16 are the terminal's own and unknown). The sub-pixels are
+// dithered with a 4x4 Bayer matrix before they are snapped to the palette, so
+// a gradient that falls between two entries is drawn as a pattern of both
+// rather than as bands: two colours in one cell is exactly what a glyph can
+// show.
+//
+// At ANSI16 the cells are always half blocks, whatever k is: see
+// encodeANSI16.
+func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, colors Colors) []Cell {
+	if colors == ANSI16 {
+		if k == Off || rows <= 0 || cols <= 0 || cellW <= 0 || cellH <= 0 {
+			return nil
+		}
+		return encodeANSI16(img, cellW, cellH, rows, cols)
+	}
+	xterm256 := colors == XTerm256
 	gx, gy := k.grid()
 	if gx == 0 || rows <= 0 || cols <= 0 || cellW <= 0 || cellH <= 0 {
 		return nil
@@ -115,10 +137,7 @@ func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, xterm256 bool) []
 	// The palette in linear light, once: the average of a sub-pixel is
 	// taken there, so a fine pattern of black and white averages to the
 	// grey the eye sees from a distance.
-	lin := make([][3]float32, len(img.Palette))
-	for i, c := range img.Palette {
-		lin[i] = [3]float32{toLinear[c.R], toLinear[c.G], toLinear[c.B]}
-	}
+	lin := linearPalette(img)
 	// Sub-pixel bounds inside a cell, the same for every cell.
 	xs := make([]int, gx+1)
 	ys := make([]int, gy+1)
@@ -152,6 +171,15 @@ func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, xterm256 bool) []
 		}
 	}
 	return out
+}
+
+// linearPalette is img's palette in linear light.
+func linearPalette(img Indexed) [][3]float32 {
+	lin := make([][3]float32, len(img.Palette))
+	for i, c := range img.Palette {
+		lin[i] = [3]float32{toLinear[c.R], toLinear[c.G], toLinear[c.B]}
+	}
+	return lin
 }
 
 // sample is one sub-pixel: its colour in OKLab (averaged in linear light), and

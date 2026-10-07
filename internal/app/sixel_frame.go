@@ -567,7 +567,14 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 				continue
 			}
 			if mode == sixelSymbols && info.cells != nil {
-				if i := row*info.cols + col; row >= 0 && col >= 0 && col < info.cols && i < len(info.cells) {
+				// An empty set is a picture too poor to show at
+				// sixteen colours: it gets the box.
+				if len(info.cells) == 0 {
+					if dim == nil {
+						dim = theme.UI().FgDim
+					}
+					placeholderCell(c, row, col, info.rows, info.cols, dim)
+				} else if i := row*info.cols + col; row >= 0 && col >= 0 && col < info.cols && i < len(info.cells) {
 					symbolCell(c, &info.cells[i])
 				} else {
 					blankCellKeepGround(c)

@@ -502,12 +502,12 @@ type Settings struct {
 	KittyPlaceholders string
 
 	// ImageSymbols decides how a pane's sixel image is shown on a host
-	// terminal that draws no graphics, such as the Linux console under
-	// kmscon. A glyph set name draws the picture as block glyphs of that
-	// set, finest first: octant (Unicode 16), sextant (Unicode 13),
-	// quadrant, half. "auto" is quadrant, which every font with block
-	// elements has. "off" draws a box and tells the pane there is no sixel,
-	// so programs use their own text output.
+	// terminal that draws no graphics, such as kmscon or the Linux console.
+	// A glyph set name draws the picture as block glyphs of that set:
+	// octant (Unicode 16), sextant (Unicode 13), quadrant, half. "auto"
+	// picks by TERM: octant on kmscon, half on the Linux console, quadrant
+	// elsewhere (see imageSymbolKind in internal/app). "off" draws a box and
+	// tells the pane there is no sixel, so programs use their own text.
 	// Set via appearance.image_symbols config.
 	ImageSymbols string
 

@@ -868,13 +868,16 @@ the frame's text in the same write:
   groups whose OKLab means leave the least error. The glyphs are drawn once,
   on the pane's PTY reader, and a frame only looks them up. At 256 colours the
   sub-cells are dithered with a 4x4 Bayer matrix and snapped to the xterm
-  palette. `appearance.image_symbols` picks the set: `auto` is quadrants,
-  which every font with block elements has. `off` shows a dim box with
-  "image" in it, and the pane is told no sixel.
+  palette. At 16 colours they are always half blocks, dithered to the ANSI
+  colours with dark backgrounds only, and a picture whose fidelity falls
+  under `mosaic.MinFidelity` shows the box. `appearance.image_symbols` picks
+  the set: `auto` reads `TERM` (octants on kmscon, half blocks on the Linux
+  console, quadrants elsewhere). `off` shows a dim box with "image" in it,
+  and the pane is told no sixel. A host that answers for sixel or kitty
+  graphics never gets glyphs.
 
   This is how a picture reaches the Linux console under kmscon, which has no
-  image protocol. Its built-in Unifont has the sextants and octants
-  (kmscon 10), so `octant` is the setting to use there.
+  image protocol. See [KMSCON-GRAPHICS.md](KMSCON-GRAPHICS.md).
 
 Each marker becomes a space with the conceal attribute. It draws nothing, but a
 cell that stops being part of an image changes, the renderer rewrites it, and a

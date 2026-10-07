@@ -48,7 +48,7 @@ func buildClientCapabilities(term string, environ []string, win ssh.Window) *ses
 	env := parseEnviron(environ)
 	name := terminalName(term, env)
 
-	caps := &session.ClientCapabilities{TerminalName: name}
+	caps := &session.ClientCapabilities{TerminalName: name, Term: term}
 
 	caps.KittyGraphics = kittyCapableTerminals[name]
 	caps.SixelGraphics = sixelCapableTerminals[name]
@@ -201,6 +201,7 @@ func clientToHostCapabilities(c *session.ClientCapabilities) *app.HostCapabiliti
 		SixelGraphics:     c.SixelGraphics,
 		TrueColor:         true,
 		TerminalName:      c.TerminalName,
+		Term:              c.Term,
 		PixelWidth:        c.PixelWidth,
 		PixelHeight:       c.PixelHeight,
 		CellWidth:         c.CellWidth,

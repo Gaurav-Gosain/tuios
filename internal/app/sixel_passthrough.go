@@ -117,11 +117,11 @@ type sixelEntry struct {
 	// cells is the image drawn as glyphs of the set symbolKind, for a host
 	// without graphics. Made once, on the PTY reader where possible, and
 	// never changed after: the frame scan reads it without the lock.
-	cells      []mosaic.Cell
-	symbolKind mosaic.Kind
-	symbol256  bool
-	bytes      int
-	seq        uint64 // registration order, for eviction
+	cells        []mosaic.Cell
+	symbolKind   mosaic.Kind
+	symbolColors mosaic.Colors
+	bytes        int
+	seq          uint64 // registration order, for eviction
 	// born is when the image was registered. The sweep leaves a young image
 	// alone: its cells are written just after it is registered.
 	born time.Time
@@ -262,8 +262,8 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand) uint
 		if mode == sixelSymbols && e.img != nil {
 			// Drawn here, on the PTY reader, so the frame only looks
 			// cells up.
-			p256 := hostIs256()
-			e.cells, e.symbolKind, e.symbol256 = symbolCells(e, symbols, p256), symbols, p256
+			colors := symbolColors()
+			e.cells, e.symbolKind, e.symbolColors = symbolCells(e, symbols, colors), symbols, colors
 			e.bytes += len(e.cells) * symbolCellBytes
 		}
 	}

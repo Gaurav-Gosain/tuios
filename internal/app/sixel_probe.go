@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -45,7 +44,7 @@ func (m *OS) handleSixelProbe(msg tea.Msg) bool {
 	// only from its hello, which carried the guess.
 	if client := m.DaemonClient; client != nil {
 		kitty := m.hostCaps().KittyGraphics
-		symbols := imageSymbolKind(m.Settings.ImageSymbols) != mosaic.Off
+		symbols := drawsSymbols(m.Settings.ImageSymbols, m.hostCaps())
 		go func() { _ = client.ReportGraphics(sixel, kitty, symbols) }()
 	}
 	return true

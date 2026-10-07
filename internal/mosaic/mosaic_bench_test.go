@@ -20,12 +20,18 @@ func BenchmarkEncode(b *testing.B) {
 		}
 	}
 	for _, k := range []Kind{Half, Quadrant, Sextant, Octant} {
-		for _, p256 := range []bool{false, true} {
-			b.Run(fmt.Sprintf("%s-256=%v", k, p256), func(b *testing.B) {
+		for _, c := range []Colors{TrueColor, XTerm256} {
+			b.Run(fmt.Sprintf("%s-%s", k, map[Colors]string{TrueColor: "truecolor", XTerm256: "256"}[c]), func(b *testing.B) {
 				for b.Loop() {
-					Encode(img, 10, 20, 24, 80, k, p256)
+					Encode(img, 10, 20, 24, 80, k, c)
 				}
 			})
 		}
 	}
+	b.Run("half-16", func(b *testing.B) {
+		for b.Loop() {
+			cells := Encode(img, 10, 20, 24, 80, Half, ANSI16)
+			Fidelity(img, 10, 20, 24, 80, cells)
+		}
+	})
 }

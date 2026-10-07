@@ -300,6 +300,9 @@ type ClientCapabilities struct {
 	KittyGraphics bool
 	SixelGraphics bool
 	TerminalName  string
+	// Term is the terminal's TERM, for the glyph set images are drawn
+	// with on a terminal without graphics. Not sent to the daemon.
+	Term string
 	// KittyAnimation says the host terminal edits image frames. See
 	// HelloPayload.KittyAnimation.
 	KittyAnimation bool

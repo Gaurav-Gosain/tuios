@@ -632,6 +632,18 @@ func TestSixelFallbacks(t *testing.T) {
 			before := len(host.bytes())
 			origin := showFixture(t, term, f, "IMGTOP")
 			out := host.bytes()[before:]
+			// A host with an image protocol gets the picture in it, and
+			// never glyphs: its image cells stay blanks on the pane's
+			// ground.
+			if tc.sixel || tc.kitty {
+				for r := range f.rows {
+					for c := range 8 {
+						if cell := term.Screen().Cell(origin.X+c, origin.Y+r); cell.Bg.Kind != tuitest.ColorDefault || strings.TrimSpace(cell.Content) != "" {
+							t.Errorf("%s host: image cell %d,%d drawn as text %q", tc.name, c, r, cell.Content)
+						}
+					}
+				}
+			}
 			switch tc.name {
 			case "sixel":
 				if !sixelDCS.Match(out) {

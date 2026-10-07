@@ -359,6 +359,67 @@ Auto looks only when tuios runs on the same machine as your desktop. Over SSH,
 in tuios-web and in the SSH server, auto uses 60, because the displays on the
 machine are not the ones you see.
 
+## Images on a terminal without graphics
+
+A program in a pane can draw a picture with sixel. Your terminal shows the
+picture when it supports sixel or kitty graphics. Some terminals support
+neither: kmscon, the Linux console, and many SSH clients. On these, tuios
+draws the picture with block characters. Each character cell shows two
+colours.
+
+`appearance.image_symbols` sets the characters.
+
+```toml
+[appearance]
+image_symbols = "auto"    # the default
+# image_symbols = "octant"
+# image_symbols = "off"   # show a box instead of the picture
+```
+
+| Value | Characters | Detail in one cell |
+| --- | --- | --- |
+| `"auto"` | Chosen from `TERM`. See the next table. | |
+| `"octant"` | Octants, Unicode 16 (U+1CD00 and on) | 2 by 4 |
+| `"sextant"` | Sextants, Unicode 13 (U+1FB00 and on) | 2 by 3 |
+| `"quadrant"` | Quadrants (▖ ▗ ▘ ▝ and others) | 2 by 2 |
+| `"half"` | Half blocks (▀ ▄) | 1 by 2 |
+| `"off"` | None. tuios shows a box with "image" in it. | |
+
+A finer set shows more detail, but your font must have the characters. A
+terminal cannot tell tuios which characters its font has. So `auto` reads
+`TERM`:
+
+| `TERM` | `auto` uses | Why |
+| --- | --- | --- |
+| `kmscon` | Octants | kmscon draws with its built-in Unifont, which has the octants. |
+| `linux` | Half blocks | The Linux console uses fonts of 256 or 512 characters. These fonts have the CP437 block characters and nothing finer. |
+| Anything else | Quadrants | Quadrants are in the Basic Multilingual Plane. Every font with block characters has them. |
+
+If your font has octants, set `"octant"` for the best picture.
+
+**Colours.** tuios uses the colours your terminal shows.
+
+- 24-bit colour: each cell gets the two colours that fit the picture best.
+- 256 colours: tuios mixes palette colours in a dither pattern.
+- 16 colours, for example the Linux console: tuios always uses half blocks.
+  It mixes the 16 colours in a dither pattern. It uses only the 8 dark
+  colours as a background, because the Linux console uses bright
+  backgrounds for blink. If a picture keeps too little of its shape in 16
+  colours, tuios shows the box instead. On the pictures we measured, this
+  did not happen. See [KMSCON-GRAPHICS.md](KMSCON-GRAPHICS.md).
+
+**What the program sees.** With block characters on, tuios tells the
+program in the pane that sixel works. Programs such as chafa, timg and yazi
+then send sixel. With `"off"`, tuios tells the program that sixel does not
+work, and the program uses its own text output.
+
+A terminal with sixel or kitty graphics always gets the real picture. It
+never gets block characters.
+
+tuios does not draw kitty graphics images as block characters yet. On a
+terminal without graphics, a program that only uses kitty graphics uses its
+own text output.
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

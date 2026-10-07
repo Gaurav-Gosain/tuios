@@ -2634,6 +2634,37 @@ names the right cells. The e2e decode reads plane 1 glyphs through
 `mosaic.Shape`, the table's inverse, so a table error that is its own inverse
 would pass it; the name check is what covers that.
 
+### The glyph set by terminal, and the 16-colour floor
+
+`auto` picks the glyph set from `TERM`: octants on kmscon, half blocks on the
+Linux console, quadrants elsewhere. At 16 colours the cells are half blocks
+dithered to the ANSI colours, with no bright background, and a picture under
+`mosaic.MinFidelity` shows the box. A host that answers for sixel or kitty
+never gets glyphs.
+
+`TestImageSymbolsAutoPicksByTerminal` runs one row per choice with the setting
+at `auto`. `kmscon` must show octants and no sextants, at the same error
+ceiling. `other` (`TERM=xterm-256color`) must show no sextant or octant.
+`linux` must hold only half blocks, every colour an ANSI index, no background
+above 7, and a lightness correlation of at least 0.8 with the picture (0.92
+measured). `linux-truecolor` must hold half blocks in 24-bit colour.
+`kmscon-with-sixel` must be sent sixel and draw no glyph. `TestSixelFallbacks`
+also checks that the sixel and kitty hosts' image cells are not drawn as text.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| kmscon gets quadrants | `imageSymbolKind`: `Quadrant` for kmscon | `kmscon` (0 octant cells) | **caught** |
+| The Linux console gets quadrants | `imageSymbolKind`: `Quadrant` for linux | `linux-truecolor` (quadrant glyphs) | **caught** |
+| No 16-colour path | `symbolColors`: `TrueColor` at `Depth16` | `linux` (correlation 0.26, bright backgrounds) | **caught** |
+| Bright backgrounds allowed | `halfCell16`: the dark-background case taken always | `linux` (bright background 12) | **caught** |
+| The threshold shows the box | `MinFidelity` 1.01 | `linux` (the box is shown) | **caught**; this is also the positive half of the box path |
+| Default octants elsewhere | `imageSymbolKind`: `Octant` by default | `other` (102 octant cells) | **caught** |
+| Glyphs before sixel | `chooseSixelMode`: the symbols case first | `kmscon-with-sixel` (no sixel sent, 336 glyph cells) | **caught** |
+
+Not caught end to end: the dither itself. Without it the test picture, which
+is at full contrast, still correlates above 0.8; the loss shows only on
+low-contrast pictures, measured in KMSCON-GRAPHICS.md.
+
 Not covered: a real kmscon. It needs a free VT and DRM master, which this
 machine's test run must not take. A kitty graphics image on such a host is not
 drawn: the pane is still told kitty graphics are absent, and programs fall back

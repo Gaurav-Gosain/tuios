@@ -8,16 +8,21 @@ what was found, the options, and what tuios does now.
 
 tuios draws a pane's sixel image as block glyphs when the host terminal has no
 graphics protocol. Each image cell becomes one glyph with a foreground and a
-background colour. On kmscon, set this in `config.toml`:
+background colour. It is on by default, and only on a host that answers for
+neither sixel nor kitty graphics. A host with either gets the real picture and
+is never sent glyphs.
 
-```toml
-[appearance]
-image_symbols = "octant"
-```
+The default, `auto`, picks the glyphs from `TERM`:
 
-kmscon's built-in Unifont has the octant glyphs. With another font engine, the
-font must have them; use `sextant` or `quadrant` if it does not. The default,
-`auto`, is `quadrant`, which every font with block elements has.
+| `TERM` | Glyphs | Why |
+| --- | --- | --- |
+| `kmscon` | Octants (2x4) | kmscon's built-in Unifont has them. |
+| `linux` | Half blocks (1x2) | Console fonts hold 256 or 512 glyphs: the CP437 block set and nothing finer. |
+| anything else | Quadrants (2x2) | In the Basic Multilingual Plane; every font with block elements has them. |
+
+At 16 colours the glyphs are always half blocks, dithered to the 16 colours.
+`appearance.image_symbols` names a set outright, or `off`. See
+[CONFIGURATION.md](CONFIGURATION.md#images-on-a-terminal-without-graphics).
 
 ## What kmscon supports
 
@@ -117,7 +122,8 @@ its DA1 answer. An older daemon ignores the field and keeps telling the panes
 no sixel.
 
 `appearance.image_symbols` takes `auto`, `octant`, `sextant`, `quadrant`,
-`half` or `off`. `off` is the old behaviour: a box, and no sixel in DA1. A
+`half` or `off`. `auto` reads the host's `TERM` (the local one, or the one an
+SSH client sent). `off` is the old behaviour: a box, and no sixel in DA1. A
 change in the settings page applies on the next frame, except to images that
 arrived while it was `off`: those were never decoded and keep the box.
 
@@ -131,10 +137,39 @@ arrived while it was `off`: those were never decoded and keep the box.
   as glyphs means answering the query, decoding PNG and raw transmissions, and
   turning placements into marked cells. That is the next step if it is wanted.
 - **Glyph detection.** A terminal cannot be asked whether its font has a
-  glyph. The set is a setting.
-- **16 colours.** At 16 colours the renderer maps each glyph's colours to the
-  terminal's own palette, which tuios does not know. The picture is still
-  there, but poor.
+  glyph. `auto` goes by `TERM`, and the setting overrides it.
+
+### The 16-colour floor
+
+At 16 colours (`TERM=linux`, or any host tuios draws for in 16 colours) the
+picture is always drawn as half blocks, top and bottom of a cell, whatever the
+setting says. Each half is dithered to the 16 colours with a 4x4 Bayer matrix
+and sent as an ANSI index, so the terminal paints its own palette; the choice is
+made against the Linux console's default (VGA) palette. Only the eight dark
+colours are used as a background: the Linux console gives bright backgrounds to
+blink. A cell whose two colours are both bright gives the one that loses least
+to its nearest dark colour.
+
+Below a measured fidelity the box is shown instead. Fidelity
+(`mosaic.Fidelity`) is the correlation between the picture's lightness and the
+cells' lightness, each averaged over 2x2-cell blocks so a dither pattern counts
+as the shade it makes. The threshold is `mosaic.MinFidelity = 0.5`.
+
+Measured on ten pictures that ship with this machine's packages (CUPS and
+gutenprint test photos, wallpapers, glmark2 textures, a logo), each at full
+contrast and at 30, 15, 8 and 4 per cent, 60x20 cells:
+
+| | lowest | typical |
+| --- | --- | --- |
+| Half blocks, 16 colours, dithered | 0.62 (fine contour lines, full contrast) | 0.85 to 0.99 |
+| The same without the dither | 0.23 (contour lines, 4 %) | 0.3 to 0.5 at 8 and 4 % |
+| Half blocks, 24-bit colour | 0.96 | 0.99 to 1.00 |
+| Random noise, any mode | 0.51 to 0.53 | |
+
+Without the dither, low-contrast pictures fall to flat bands with no shape
+left; 0.5 sits under every dithered result and over those. With the dither, no
+measured picture fell under it, so the box is a safety net. It is shown by the
+e2e control that raises the threshold (below).
 
 ## Measured
 

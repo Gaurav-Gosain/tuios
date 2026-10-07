@@ -58,6 +58,9 @@ type HostCapabilities struct {
 	Warnings     []string
 	TrueColor    bool
 	TerminalName string
+	// Term is the host's TERM. It picks the glyph set a picture is drawn
+	// with on a host without graphics; see imageSymbolKind.
+	Term string
 	// FontFamily and BoldFontFamily are the faces the host draws with, as it
 	// named them itself. kitty answers a documented XTGETTCAP key with them,
 	// and fontconfig turns the name into a file, so a PNG capture can be drawn
@@ -166,7 +169,7 @@ func (m *OS) hostCellSize() (w, h int) {
 }
 
 func DetectHostCapabilities() *HostCapabilities {
-	caps := &HostCapabilities{}
+	caps := &HostCapabilities{Term: os.Getenv("TERM")}
 
 	// Detect terminal name from environment
 	detectTerminalName(caps)
