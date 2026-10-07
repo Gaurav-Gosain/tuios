@@ -3177,6 +3177,17 @@ commits that added them.
 | `session_size` and the session name in the state | drop the `SessionSize` field from `export`, and keep the name the bridge attached with | `TestGUIBridgeSessionSize` (never shows the session at the bridge's width), `TestGUIBridgeSessionName` (still "first" after `next_session`) | **caught** (2 of 2) |
 | Leaf names from the forward map | revert `a7afa9b1` | `TestGUIBridgeSetRatio`, `TestGUIBridgeMove` (the second client's tree names no leaf) | **caught**, and the tests found this bug |
 
+On 2026-10-08 three more tests came with the smallest-pane rule and the
+bridge's zoom. One control build carried all three cuts below, and each test
+failed on its own assertion. The unbroken binary passed all three, and every
+`TestGUIBridge` test, on the same day.
+
+| Wiring cut | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The refusal of a split that leaves a pane under 20 x 5 | `CanSplit` in `internal/layout/bsp.go` reports true for every pane in the tree | `TestGUIBridgeSplitRefusesSmallPanes` ("split_vertical on a 40-cell pane: ok=true") | **caught** |
+| The divider bounds that take in the current line | `lineBounds` returns the minimum bounds alone | `TestGUIBridgeSetRatioUnderMinimum` ("one cell up from 15 came back as 0.41, want 0.33") | **caught** |
+| The bridge's full zoom | drop `o.FullZoom = true` from `newModel` in `internal/guibridge/bridge.go` | `TestGUIBridgeZoomKeepsHiddenPanes` ("hidden pane B was resized by the zoom (it printed SIG41)", and C) | **caught** |
+
 The tests do not cover the `viewport` field with a session larger than the
 bridge, because the daemon's default `window_size = smallest` never makes one.
 `TestGUIBridgeSessionSize` asserts only that `viewport` stays unset while the
