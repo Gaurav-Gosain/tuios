@@ -75,6 +75,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	validateCommands(cfg, result)
 	validateCopyPipes(cfg, result)
+	validateCopyModeKeys(cfg, result)
 
 	// Validate leader key
 	if cfg.Keybindings.LeaderKey != "" {

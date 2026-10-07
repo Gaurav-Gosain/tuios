@@ -74,6 +74,14 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
+	if len(rep.CopyModeProblems) > 0 {
+		fmt.Printf("\nCOPY MODE KEYS (%s)\n", config.EvidenceCertain)
+		fmt.Println("  Another copy-mode key also uses these keys. Change them in config.toml.")
+		for _, p := range rep.CopyModeProblems {
+			fmt.Printf("  %-22s %s [copy_mode.%s]\n", p.Key, p.Problem, p.Action)
+		}
+	}
+
 	fmt.Println("\nEVIDENCE")
 	for _, tier := range []config.Evidence{config.EvidenceCertain, config.EvidenceObserved, config.EvidenceReference} {
 		fmt.Printf("  %-10s %s\n", tier, rep.EvidenceNote[tier])

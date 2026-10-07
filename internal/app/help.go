@@ -553,20 +553,32 @@ func generateListBindings() []HelpBinding {
 // generateCopyModeBindings lists copy mode's fixed keys, then the keys the
 // [keybindings.copy_mode] section binds, read from the config.
 func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
-	bindings := copyModeKeys(s.LeaderKey)
+	fixed := copyModeKeys(s.LeaderKey)
 	if registry == nil {
-		return bindings
+		return fixed
 	}
+	var bound []HelpBinding
 	for _, row := range []struct{ action, desc string }{
 		{config.ActionCopyModeLineStart, "Line start"},
 		{config.ActionCopyModeLineEnd, "Line end"},
 	} {
 		if keys := registry.GetCopyModeKeys(row.action); len(keys) > 0 {
-			bindings = append(bindings, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
+			bound = append(bound, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
 		}
 	}
-	return bindings
+	// The bound line keys go next to the fixed ones that do the same.
+	at := len(fixed)
+	for i, b := range fixed {
+		if len(b.Keys) > 0 && b.Keys[0] == copyModeLineKeys {
+			at = i + 1
+			break
+		}
+	}
+	return slices.Insert(fixed, at, bound...)
 }
+
+// copyModeLineKeys is the row of copy mode's fixed line motions.
+const copyModeLineKeys = "0, ^, $"
 
 // copyModeKeys are copy mode's keys. They are not bindings: copy mode reads
 // them itself (see internal/input/copymode_handlers.go).
@@ -577,7 +589,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
 		{Keys: []string{"%"}, Description: "Matching bracket", Category: "Copy Mode"},
-		{Keys: []string{"0, ^, $"}, Description: "Line start/first/end", Category: "Copy Mode"},
+		{Keys: []string{copyModeLineKeys}, Description: "Line start/first/end", Category: "Copy Mode"},
 		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+u, ctrl+d"}, Description: "Half page up/down", Category: "Copy Mode"},
 		{Keys: []string{"/, ?"}, Description: "Search forward/backward", Category: "Copy Mode"},
