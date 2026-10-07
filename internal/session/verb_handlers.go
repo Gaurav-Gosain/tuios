@@ -1248,7 +1248,7 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		})
 	}
 	if p.Kind != "" {
-		if p.Kind != harness.PromptKindApproval && p.Kind != harness.PromptKindQuestion {
+		if p.Kind != harness.PromptKindApproval && p.Kind != harness.PromptKindQuestion && p.Kind != harness.PromptKindAuth {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown kind "+echoName(p.Kind), &VerbHint{
 				Param:     "kind",
 				Available: agentKindNames,
@@ -1522,7 +1522,7 @@ const maxAgentSessionIDLen = 256
 // agentKindNames are the values set-agent-state accepts for kind. They are
 // the manifest rule kinds, so a hook and a screen rule describe a block in the
 // same words.
-var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion}
+var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion, harness.PromptKindAuth}
 
 // joinReportedTranscript binds a window to the transcript file its harness
 // named in a hook. This is the exact join the transcript source was built for:
@@ -1611,6 +1611,8 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// its hooks reported them; meta's subagents key says the same in
 		// words.
 		"subagents": w.AgentSubagents,
+		// program_status is the pane's OSC 7501 records, the root first.
+		"program_status": programStatusList(w.ProgramStatus),
 	}, nil
 }
 

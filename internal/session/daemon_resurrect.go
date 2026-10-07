@@ -30,6 +30,9 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentQueued = 0
 	w.AgentSubagents = 0
 	w.ForegroundCmd = ""
+	// OSC 7501 records live in the pane's emulator, which a restore does
+	// not bring back.
+	w.ProgramStatus = nil
 }
 
 // restoreAllSessions recreates every resurrectable session that is not already

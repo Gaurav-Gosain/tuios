@@ -76,6 +76,8 @@ func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 		what = "an approval"
 	case harness.PromptKindQuestion:
 		what = "a question"
+	case harness.PromptKindAuth:
+		what = "a login"
 	}
 	fmt.Fprintf(w, "%s has waited %s on %s.\n", who, waitedFor(time.Now().Add(-time.Duration(p.WaitingMS)*time.Millisecond).UnixNano(), time.Now()), what)
 	if !p.Found {

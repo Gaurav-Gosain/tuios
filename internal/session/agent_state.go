@@ -454,7 +454,9 @@ func agentKindOf(r AgentReport) string {
 	if r.State != AgentStateNeedsInput {
 		return ""
 	}
-	if r.Kind != "" {
+	if r.Kind != "" || r.Source == AgentSourceProgram {
+		// An OSC 7501 report's msg is never read for meaning, so a blocked
+		// report with no kind keeps an empty one.
 		return r.Kind
 	}
 	return harness.GuessPromptKind(r.Message)

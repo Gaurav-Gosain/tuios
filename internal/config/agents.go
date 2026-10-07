@@ -48,6 +48,11 @@ type AgentsConfig struct {
 	// HERDR_ENV, herdr itself included, which refuses to start inside one
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
+	// HostProgramStatus says whether tuios reports its panes' agent states to
+	// the terminal it runs in, with OSC 7501 (the Program Status Protocol):
+	// "auto" (the default) asks the terminal at start and reports only when
+	// it answers, and "off" never asks. See docs/PROGRAM_STATUS.md.
+	HostProgramStatus string `toml:"host_program_status,omitempty"`
 }
 
 // On reports whether the agent features are on. They are unless the file
@@ -69,6 +74,21 @@ const (
 	HerdrProtocolAlways = "always"
 	HerdrProtocolOff    = "off"
 )
+
+// The values of [agents] host_program_status.
+const (
+	HostProgramStatusAuto = "auto"
+	HostProgramStatusOff  = "off"
+)
+
+// NormalizeHostProgramStatus reads an [agents] host_program_status value.
+// Empty and anything unrecognised mean the default, "auto".
+func NormalizeHostProgramStatus(v string) string {
+	if strings.ToLower(strings.TrimSpace(v)) == HostProgramStatusOff {
+		return HostProgramStatusOff
+	}
+	return HostProgramStatusAuto
+}
 
 // NormalizeHerdrProtocol reads an [agents] herdr_protocol value. Empty and
 // anything unrecognised mean the default, "always".

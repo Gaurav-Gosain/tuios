@@ -462,6 +462,9 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 		if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
 			add(pal.FgDim, facts)
 		}
+		for _, l := range programStatusLines(m.paneProgramStatus(it.Session, it.Window)) {
+			add(pal.FgDim, l)
+		}
 	}
 	if p.Note != "" {
 		add(pal.Warning, p.Note)
@@ -548,7 +551,7 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 
 // inboxKindForPrompt is the Inbox kind a prompt kind reads as.
 func inboxKindForPrompt(kind string) string {
-	if kind == harness.PromptKindQuestion {
+	if kind == harness.PromptKindQuestion || kind == harness.PromptKindAuth {
 		return session.AttentionQuestion
 	}
 	return session.AttentionApproval

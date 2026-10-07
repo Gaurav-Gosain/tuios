@@ -1279,6 +1279,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
 	w.AgentSubagents = ws.AgentSubagents
+	w.ProgramStatus = programStatusFromWire(w.ProgramStatus, ws.ProgramStatus)
 	w.AgentStateAt = ws.AgentStateAt
 	prevSeq := w.AgentCompletionSeq
 	w.AgentCompletionSeq = ws.CompletionSeq
@@ -1295,6 +1296,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// message and harness above, which have to be the ones that arrived with the
 	// state rather than the ones it replaced.
 	m.noteAgentState(w, string(ws.AgentState))
+	m.markHostProgramStatus()
 	w.ForegroundCmd = ws.ForegroundCmd
 	// The shell's pid, as the daemon that spawned it knows it, and the only
 	// second source a daemon-backed pane has for the directory it reports over
@@ -1404,6 +1406,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentMeta = agentMetaFromWire(nil, ws.AgentMeta)
 	window.AgentQueued = ws.AgentQueued
 	window.AgentSubagents = ws.AgentSubagents
+	window.ProgramStatus = programStatusFromWire(nil, ws.ProgramStatus)
 	window.AgentStateAt = ws.AgentStateAt
 	window.AgentCompletionSeq = ws.CompletionSeq
 	window.ForegroundCmd = ws.ForegroundCmd

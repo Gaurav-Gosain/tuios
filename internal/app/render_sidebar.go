@@ -451,6 +451,10 @@ type sidebarAgentEntry struct {
 	// Subagents is how many subagents the pane's agent is running, which the
 	// subagents row token draws.
 	Subagents int
+	// Program is the pane's OSC 7501 records, the root first. The harness
+	// token falls back to the summary record's app, and the progress token
+	// draws its progress.
+	Program []sessiontree.ProgramRecord
 	// PR is the pull request of the session's worktree branch, in short form,
 	// which the pr row token draws. Empty when there is none.
 	PR string
@@ -2195,6 +2199,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Meta:         win.Meta,
 				Queued:       win.Queued,
 				Subagents:    win.Subagents,
+				Program:      win.Program,
 				PR:           pr,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,

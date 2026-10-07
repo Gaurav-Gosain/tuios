@@ -907,6 +907,10 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		if ev.Type == EventWindowClosed {
 			d.paneCreators.Delete(ev.Window)
 		}
+		if ev.Type == eventProgramStatus {
+			s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load())
+			return
+		}
 		if ev.Type == EventOutput && d.agentsOff.Load() {
 			// The agent features are off: the pane's directory is still
 			// followed, and nothing on it is read for an agent. A report the
@@ -924,7 +928,10 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// is applied before the probe and is not throttled: the sequence
 				// only arrives when the harness has something to say, and it is a
 				// better answer than anything the probe can work out.
-				if state, ok := pty.takeAgentProgress(); ok {
+				// Not once the pane has spoken OSC 7501: a mapped progress
+				// report would wipe out the kind and message of the program's
+				// own report. That holds until the next full reset.
+				if state, ok := pty.takeAgentProgress(); ok && !pty.ProgramStatusSeen() {
 					s.applyPaneProgress(ev.PTYID, ev.Window, state, d.agentMatcher.registry)
 				}
 				// A desktop notification the emulator parked while writing these

@@ -224,6 +224,10 @@ func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 		warn("agents", "herdr_protocol", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s, %s); read as %s",
 			cfg.Agents.HerdrProtocol, HerdrProtocolAlways, HerdrProtocolAgents, HerdrProtocolOff, HerdrProtocolAlways))
 	}
+	if h := strings.ToLower(strings.TrimSpace(cfg.Agents.HostProgramStatus)); h != "" && h != NormalizeHostProgramStatus(h) {
+		warn("agents", "host_program_status", fmt.Sprintf("'%s' is not a valid value (allowed: %s, %s); read as %s",
+			cfg.Agents.HostProgramStatus, HostProgramStatusAuto, HostProgramStatusOff, HostProgramStatusAuto))
+	}
 	if k := cfg.Agents.Checkpoints.Keep; k < 0 || k > MaxCheckpointKeep {
 		warn("agents.checkpoints", "keep", fmt.Sprintf("%d is outside 1 to %d, so it reads as %d", k, MaxCheckpointKeep, cfg.Agents.Checkpoints.KeepCount()))
 	}

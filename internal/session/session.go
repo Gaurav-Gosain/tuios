@@ -29,6 +29,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -202,6 +203,12 @@ type WindowState struct {
 	// AgentQueued and never set by a client. Additive: zero, which is what an
 	// older daemon sends, means none.
 	AgentSubagents int `json:"agent_subagents,omitzero"`
+	// ProgramStatus is the pane's OSC 7501 records (the Program Status
+	// Protocol), the root first, with title and msg already made safe to
+	// draw. Daemon-owned like AgentMeta and never set by a client. Additive:
+	// an older peer drops it on decode, and nil, which is what an older
+	// daemon sends, means the pane reported nothing. See program_status.go.
+	ProgramStatus []ProgramStatusRecord `json:"program_status,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -958,6 +965,17 @@ type PTY struct {
 	// 99) for the read goroutine, for the reason agentProgress does. See
 	// agent_notify.go.
 	agentNotify atomic.Pointer[paneNotification]
+
+	// progStatus holds the pane's OSC 7501 records (program_status.go). The
+	// emulator callback writes it under the terminal lock; the store has its
+	// own leaf lock and calls nothing. progStatusDirty says it changed since
+	// the vtWriter last handed it on.
+	progStatus      progstatus.Store
+	progStatusDirty atomic.Bool
+	// progStatusAway is set by a working, blocked or idle report and cleared
+	// when the agent detector next sees the pane's shell in the foreground,
+	// which ends those records. See endProgramStatusAtShell.
+	progStatusAway atomic.Bool
 
 	// title is the last title this PTY's application set. The daemon reads every
 	// byte of every window, so this is the freshest title anyone holds: a client
@@ -1995,8 +2013,15 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
 		},
 		// A shell's OSC 133 marks: recorded under the track's own leaf lock
-		// and published at once, like the bell. See shell_commands.go.
-		SemanticMark: pty.noteShellMark,
+		// and published at once, like the bell. See shell_commands.go. A
+		// prompt also ends the working and blocked OSC 7501 records.
+		SemanticMark: func(m vt.SemanticMarker) {
+			pty.noteProgramStatusMark(m)
+			pty.noteShellMark(m)
+		},
+		// An OSC 7501 report, or a full reset: stored at once, in order with
+		// the prompt marks, and handed on by the vtWriter after the write.
+		ProgramStatus: pty.noteProgramStatus,
 	})
 
 	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
@@ -3046,6 +3071,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentMeta:     w.AgentMeta,
 			AgentQueued:   w.AgentQueued,
 			Subagents:     w.AgentSubagents,
+			ProgramStatus: w.ProgramStatus,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 			Scratch:       w.Scratch,
@@ -5000,6 +5026,7 @@ func (p *PTY) vtWriter() {
 		focusOn := p.terminal != nil && p.terminal.FocusReportingEnabled()
 		p.terminalMu.Unlock()
 		p.noteFocusReporting(focusOn)
+		p.flushProgramStatus()
 	}
 }
 
@@ -5126,6 +5153,13 @@ func (p *PTY) noteExit(code int) {
 	p.exitedMu.Unlock()
 
 	debugLog("[DEBUG] PTY %s: process exited with code %d", p.ID[:8], p.exitCode)
+
+	// The process attached to the terminal exited: its working and blocked
+	// OSC 7501 records go, and done and error stay.
+	if p.progStatus.DropTransient() {
+		p.progStatusDirty.Store(true)
+		p.flushProgramStatus()
+	}
 
 	// Notify callback (used by daemon to inform clients)
 	if p.onExit != nil {

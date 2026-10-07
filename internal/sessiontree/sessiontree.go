@@ -71,6 +71,9 @@ type Node struct {
 	// Subagents is how many subagents the pane's agent is running. Never
 	// rolled up.
 	Subagents int
+	// Program is the pane's OSC 7501 records, the root first. Nil for none.
+	// Never rolled up.
+	Program []ProgramRecord
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -137,6 +140,23 @@ type MetaToken struct {
 	Value string
 }
 
+// ProgramRecord is one OSC 7501 record (the Program Status Protocol) a pane
+// reported, as the daemon synced it: the display half of the daemon's
+// session.ProgramStatusRecord. Title and Msg are already free of control and
+// invisible formatting characters.
+type ProgramRecord struct {
+	ID       string
+	State    string
+	Kind     string
+	Progress int
+	App      string
+	Title    string
+	Msg      string
+	// At is when the record was last replaced, in Unix nanoseconds. It
+	// breaks a tie between two records of the same state.
+	At int64
+}
+
 // Tree is the full set of sessions, each with its windows when known.
 type Tree struct {
 	Sessions []Node
@@ -166,6 +186,8 @@ type WindowInput struct {
 	Queued int
 	// Subagents is how many subagents the pane's agent is running.
 	Subagents int
+	// Program is the pane's OSC 7501 records, the root first. Nil for none.
+	Program []ProgramRecord
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -318,6 +340,7 @@ func BuildSession(s SessionInput) Node {
 			Meta:       w.Meta,
 			Queued:     w.Queued,
 			Subagents:  w.Subagents,
+			Program:    w.Program,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 			Host:       w.Host,

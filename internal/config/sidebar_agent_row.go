@@ -18,7 +18,7 @@ import (
 // ordered text and numeric rules:
 //
 //	[appearance.sidebar.agent_row]
-//	tokens = ["session", "need", "harness", "name", "elapsed", "context", "subagents", "pr", "meta", "now", "message"]
+//	tokens = ["session", "need", "harness", "name", "progress", "elapsed", "context", "subagents", "pr", "meta", "now", "message"]
 //
 //	[appearance.sidebar.agent_row.name]
 //	fg = "text"
@@ -59,8 +59,9 @@ import (
 // on any row, and nothing while there are none. pr is the pull request of the
 // session's worktree branch ("PR #12 open pass"), which the daemon reads from
 // gh, and nothing when there is none. $now, $prompt and $context draw the raw
-// value on any row.
-var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "now", "prompt", "context", "subagents", "pr", "meta", "message", "session", "host"}
+// value on any row. progress draws "40%", the progress of the pane's OSC 7501
+// report, while the program works or waits, on the identity line.
+var SidebarAgentRowTokens = []string{"harness", "name", "state", "progress", "elapsed", "need", "now", "prompt", "context", "subagents", "pr", "meta", "message", "session", "host"}
 
 // SidebarAgentRowDefaultTokens is the row as it ships. state and host are left
 // out because both have a value on every row and the glyph already says the
@@ -74,7 +75,7 @@ var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "nee
 // statusline feed writes it, and now what a working agent is doing ("Bash: go
 // test ./..."). now comes last because the line cuts its last token first,
 // and a long command is what can best lose its tail.
-var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "context", "subagents", "pr", "meta", "now", "message"}
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "progress", "elapsed", "context", "subagents", "pr", "meta", "now", "message"}
 
 // SidebarContextWarnAt is the percent of its context window an agent must be
 // using before the context token draws. Below it the figure is noise on a

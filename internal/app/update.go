@@ -340,6 +340,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Ask the terminal whether it takes OSC 7501 reports. See
+	// host_program_status.go.
+	if cmd := m.hostProgramStatusProbe(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Ask the terminal for its own colours where the startup probe could not,
 	// and follow its light and dark switch. See host_colors.go.
 	if cmd := m.hostColorQueries(); cmd != nil {
@@ -757,6 +763,11 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	model, cmd := m.update(msg)
+	// A pane state that changed is reported to the host terminal, batched.
+	// See host_program_status.go.
+	if hc := m.hostProgramStatusAfter(); hc != nil {
+		cmd = tea.Batch(cmd, hc)
+	}
 	// The View after this message may compose a frame, or move the cursor
 	// for input; flushCmd brings the write back once that frame is stored.
 	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg)) {
@@ -885,6 +896,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// An SSH client's DA1 answer. See sixel_probe.go.
 	if m.handleSixelProbe(msg) {
 		return m, nil
+	}
+	// The terminal's OSC 7501 answer, and the report batch timer. See
+	// host_program_status.go.
+	if c, ok := m.handleHostProgramStatusMsg(msg); ok {
+		return m, c
 	}
 
 	switch msg := msg.(type) {

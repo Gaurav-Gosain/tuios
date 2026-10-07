@@ -122,6 +122,17 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 		num(w.AgentQueued)
 		num(w.AgentSubagents)
+		num(len(w.ProgramStatus))
+		for _, r := range w.ProgramStatus {
+			str(r.ID)
+			str(r.State)
+			str(r.Kind)
+			num(r.Progress)
+			str(r.App)
+			str(r.Title)
+			str(r.Msg)
+			num(int(r.At))
+		}
 		flag(w.Popup)
 		str(w.PopupWidth)
 		str(w.PopupHeight)

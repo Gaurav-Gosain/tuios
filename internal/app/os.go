@@ -520,6 +520,9 @@ type OS struct {
 	// hostPixel is the state of SGR-pixel mouse reports from this client's
 	// terminal. See host_pixel_mouse.go.
 	hostPixel hostPixelMouse
+	// hostPS is whether this client's terminal takes OSC 7501 reports and
+	// what was last sent to it. See host_program_status.go.
+	hostPS hostProgramStatus
 	// fastPaint is the buffer the fullscreen fast path paints its frame into
 	// while a background it draws is on. See background_fast.go.
 	fastPaint fastPainter

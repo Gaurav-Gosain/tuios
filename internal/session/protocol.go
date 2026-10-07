@@ -467,6 +467,10 @@ type WindowSummary struct {
 	// watching another session can say so. Additive and omitted when zero,
 	// which is what an older peer sends.
 	Subagents int `json:"agent_subagents,omitzero"`
+	// ProgramStatus is the pane's OSC 7501 records (WindowState.ProgramStatus),
+	// so a rail watching another session can show them. Additive and omitted
+	// when empty, which is what an older peer sends.
+	ProgramStatus []ProgramStatusRecord `json:"program_status,omitempty"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted

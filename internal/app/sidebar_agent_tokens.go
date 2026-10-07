@@ -52,13 +52,30 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		// A pane running an agent is usually already named after it, and a
 		// row reading "claude/claude" spends half its width saying one thing
 		// twice. The token earns its cells only when it adds a name.
-		if h := sidebarHarnessLabel(e.Harness); !strings.EqualFold(h, sidebarAgentName(e)) {
+		h := sidebarHarnessLabel(e.Harness)
+		if h == "" {
+			// A program that reports over OSC 7501 names itself with app.
+			// It is the program's word, drawn as text and never looked up as
+			// a harness.
+			if sum, ok := programSummary(e.Program); ok {
+				h = printableTitle(sum.App)
+			}
+		}
+		if !strings.EqualFold(h, sidebarAgentName(e)) {
 			tk.Text = h
 		}
 	case "name":
 		tk.Text = sidebarAgentName(e)
 	case "state":
 		tk.Text = sidebarStateWords(e.State)
+	case "progress":
+		// "40%": the progress of the pane's OSC 7501 summary record, while
+		// it works or waits. Its number is the percent, for gt and lt.
+		if sum, ok := programSummary(e.Program); ok {
+			if tk.Text = programProgressText(sum); tk.Text != "" {
+				tk.Number, tk.HasNumber = float64(sum.Progress), true
+			}
+		}
 	case "elapsed":
 		if variant == sidebarVariantFull {
 			tk.Text = railAgentAge(e.State, e.StateAt, now)
@@ -336,7 +353,7 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 // sidebarPromptKind reports whether kind is one of the prompt kinds a need
 // word can name.
 func sidebarPromptKind(kind string) bool {
-	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion ||
+	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion || kind == harness.PromptKindAuth ||
 		kind == inboxWordPlan || kind == inboxWordRisky
 }
 

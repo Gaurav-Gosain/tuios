@@ -16,6 +16,10 @@ import (
 const (
 	PromptKindApproval = "approval"
 	PromptKindQuestion = "question"
+	// PromptKindAuth is a block on a login, a token or a credential. Only an
+	// explicit report names it (OSC 7501 kind=auth, or set-agent-state
+	// kind=auth); no rule guesses it.
+	PromptKindAuth = "auth"
 )
 
 var promptKinds = map[string]bool{PromptKindApproval: true, PromptKindQuestion: true}

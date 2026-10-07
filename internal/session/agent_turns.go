@@ -81,6 +81,12 @@ func (s *Session) noteAgentTurnsLocked(before lifecycleSnapshot, now int64) {
 				w.CompletionSeq++
 			}
 			delete(s.agentTurns, w.ID)
+		case w.AgentState == AgentStateDone && s.agentClaims[w.ID].source == AgentSourceProgram:
+			// An OSC 7501 done is the program saying a piece of work is
+			// ready to look at, whether or not it reported working first:
+			// a script that only reports at its end is finished and unread.
+			w.CompletionSeq++
+			delete(s.agentTurns, w.ID)
 		case w.AgentState != AgentStateNeedsInput:
 			delete(s.agentTurns, w.ID)
 		}

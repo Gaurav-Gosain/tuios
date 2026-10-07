@@ -275,6 +275,8 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"queued": w.AgentQueued,
 			// How many subagents the pane's agent is running.
 			"subagents": w.AgentSubagents,
+			// The pane's OSC 7501 records, the root first.
+			"program_status": programStatusList(w.ProgramStatus),
 		})
 	}
 	return agents
@@ -1187,6 +1189,8 @@ func agentBlockedError(w WindowState) *verbError {
 		what = "an approval"
 	case harness.PromptKindQuestion:
 		what = "a question"
+	case harness.PromptKindAuth:
+		what = "a login"
 	}
 	msg := "the target agent is waiting on " + what + ", and text typed now would answer it"
 	if note := printableClaim(w.AgentMessage, agentMsgMaxSubject); note != "" {

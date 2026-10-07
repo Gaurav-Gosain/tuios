@@ -1,0 +1,313 @@
+package session
+
+import (
+	"errors"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
+)
+
+// The Program Status Protocol (OSC 7501) in the daemon.
+//
+// Any program in any pane can say what it is doing: cargo, terraform, brew, a
+// deploy script or a coding agent. The pane's emulator parses each report
+// (internal/vt, internal/progstatus) and the PTY keeps the records, with the
+// specification's limits, its id hierarchy and its lifetime: a shell prompt
+// and the exit of the pane's process end working, blocked and idle records,
+// a full reset ends all of them, and done and error stay until the person
+// types into the pane.
+//
+// The records reach clients as WindowState.ProgramStatus, and the most urgent
+// one becomes the pane's agent state through AgentSourceProgram, a source as
+// trusted as a harness hook: the program is saying what it is doing, which is
+// better than anything the screen or the process table can work out.
+
+// ProgramStatusRecord is one OSC 7501 record as clients see it.
+type ProgramStatusRecord struct {
+	// ID is the record's id, empty for the root record.
+	ID string `json:"id,omitempty"`
+	// State is idle, working, done, blocked or error.
+	State string `json:"state"`
+	// Kind is what a blocked record waits for: permission, question or auth.
+	Kind string `json:"kind,omitempty"`
+	// Progress is 0 to 100, or -1 when the record carries none. It is always
+	// sent, because 0 is a real value.
+	Progress int `json:"progress"`
+	// App is the record's app, or the nearest ancestor's when it has none.
+	App string `json:"app,omitempty"`
+	// Title and Msg are the decoded texts, with invisible formatting removed.
+	Title string `json:"title,omitempty"`
+	Msg   string `json:"msg,omitempty"`
+	// At is when the record was last replaced, in Unix nanoseconds.
+	At int64 `json:"at,omitempty"`
+}
+
+// AgentSourceProgram ranks with AgentSourceReport. See agent_source.go.
+
+// noteProgramStatus is the emulator's ProgramStatus callback. It runs with the
+// terminal lock held, so it only records; flushProgramStatus hands the change
+// on after the write.
+func (p *PTY) noteProgramStatus(ev progstatus.Event) {
+	if p.progStatus.Handle(ev, time.Now().UnixNano()) {
+		p.progStatusDirty.Store(true)
+	}
+	switch ev.Report.State {
+	case progstatus.Working, progstatus.Blocked, progstatus.Idle:
+		// Something in the pane is running to have said so.
+		p.progStatusAway.Store(true)
+	}
+}
+
+// noteProgramStatusMark ends the working, blocked and idle records when a new
+// shell prompt begins (OSC 133 A).
+func (p *PTY) noteProgramStatusMark(m vt.SemanticMarker) {
+	if m.Type == vt.MarkerPromptStart && p.progStatus.DropTransient() {
+		p.progStatusDirty.Store(true)
+	}
+}
+
+// noteProgramStatusInput ends the done and error records when the person
+// types into the pane. A focus report is the terminal speaking, not the
+// person, so it does not count.
+func (p *PTY) noteProgramStatusInput(data []byte) {
+	if len(data) == 0 || isFocusReport(data) || !p.progStatus.HasFinished() {
+		return
+	}
+	if p.progStatus.DropFinished() {
+		p.progStatusDirty.Store(true)
+		p.flushProgramStatus()
+	}
+}
+
+// isFocusReport reports whether data is only focus in or focus out reports.
+func isFocusReport(data []byte) bool {
+	for len(data) > 0 {
+		if len(data) < 3 || data[0] != 0x1b || data[1] != '[' || (data[2] != 'I' && data[2] != 'O') {
+			return false
+		}
+		data = data[3:]
+	}
+	return true
+}
+
+// flushProgramStatus tells the session the records changed, once per change.
+func (p *PTY) flushProgramStatus() {
+	if p.progStatusDirty.Swap(false) && p.emit != nil {
+		p.emit(SessionEvent{Type: eventProgramStatus})
+	}
+}
+
+// ProgramStatusSeen reports whether the pane sent an OSC 7501 report since
+// its last full reset. Once it has, OSC 9;4 no longer sets the pane's agent
+// state: a mapped progress report would wipe out the kind and the message of
+// the program's own report.
+func (p *PTY) ProgramStatusSeen() bool {
+	return p.progStatus.Seen()
+}
+
+// ProgramStatusRecords returns the pane's records.
+func (p *PTY) ProgramStatusRecords() []progstatus.Record {
+	return p.progStatus.Records()
+}
+
+// programStatusText makes a decoded title or msg safe to draw outside the
+// grid. The parser has already refused control characters; this removes the
+// characters that draw nothing but change how text reads, bidi overrides
+// among them, so a record cannot reorder or hide words.
+func programStatusText(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == utf8.RuneError || progstatus.IsControl(r) || invisible.Rune(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// programStatusWire turns the store's records into the wire form.
+func programStatusWire(recs []progstatus.Record) []ProgramStatusRecord {
+	if len(recs) == 0 {
+		return nil
+	}
+	out := make([]ProgramStatusRecord, len(recs))
+	for i, r := range recs {
+		out[i] = ProgramStatusRecord{
+			ID:       r.ID,
+			State:    string(r.State),
+			Kind:     string(r.Kind),
+			Progress: r.Progress,
+			App:      r.EffectiveApp,
+			Title:    programStatusText(r.Title),
+			Msg:      programStatusText(r.Msg),
+			At:       r.At,
+		}
+	}
+	return out
+}
+
+// ProgramStatusSummary picks the record a pane shows from its wire records:
+// the most urgent state wins, the root among equals, then the newest. See
+// progstatus.Summary.
+func ProgramStatusSummary(recs []ProgramStatusRecord) (ProgramStatusRecord, bool) {
+	if len(recs) == 0 {
+		return ProgramStatusRecord{}, false
+	}
+	conv := make([]progstatus.Record, len(recs))
+	for i, r := range recs {
+		conv[i] = progstatus.Record{ID: r.ID, State: progstatus.State(r.State), Seq: uint64(r.At)}
+	}
+	best, ok := progstatus.Summary(conv)
+	if !ok {
+		return ProgramStatusRecord{}, false
+	}
+	for _, r := range recs {
+		if r.ID == best.ID {
+			return r, true
+		}
+	}
+	return ProgramStatusRecord{}, false
+}
+
+// ProgramStatusMessage is the one line a record says: its title and its msg,
+// joined with ": " when it has both.
+func ProgramStatusMessage(r ProgramStatusRecord) string {
+	switch {
+	case r.Title != "" && r.Msg != "":
+		return r.Title + ": " + r.Msg
+	case r.Msg != "":
+		return r.Msg
+	}
+	return r.Title
+}
+
+// programStatusAgentState maps a record's state onto tuios's agent state.
+func programStatusAgentState(state string) (AgentState, bool) {
+	switch progstatus.State(state) {
+	case progstatus.Working:
+		return AgentStateWorking, true
+	case progstatus.Blocked:
+		return AgentStateNeedsInput, true
+	case progstatus.Done:
+		return AgentStateDone, true
+	case progstatus.Error:
+		return AgentStateErrored, true
+	case progstatus.Idle:
+		return AgentStateIdle, true
+	}
+	return AgentStateNone, false
+}
+
+// programStatusBlockedBy maps a blocked record's kind onto blocked_by.
+func programStatusBlockedBy(kind string) string {
+	switch progstatus.Kind(kind) {
+	case progstatus.Permission:
+		return harness.PromptKindApproval
+	case progstatus.Question:
+		return harness.PromptKindQuestion
+	case progstatus.Auth:
+		return harness.PromptKindAuth
+	}
+	return ""
+}
+
+// programStatusList is the records as a verb reports them: an empty list, not
+// null, when there are none.
+func programStatusList(recs []ProgramStatusRecord) []ProgramStatusRecord {
+	if recs == nil {
+		return []ProgramStatusRecord{}
+	}
+	return recs
+}
+
+// errProgramStatusSame tells mutateState the records did not change.
+var errProgramStatusSame = errors.New("program status unchanged")
+
+// applyProgramStatus copies a pane's records into its window state and, when
+// the agent features are on, sets the pane's agent state from the summary
+// record. It runs on the goroutine that raised eventProgramStatus, never under
+// the terminal lock.
+func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) {
+	pty := s.GetPTY(ptyID)
+	if pty == nil {
+		return
+	}
+	wire := programStatusWire(pty.ProgramStatusRecords())
+	_ = s.mutateState(func(st *SessionState) error {
+		idx, err := findWindowStateIndex(st.Windows, windowID)
+		if err != nil {
+			return err
+		}
+		w := &st.Windows[idx]
+		if slices.Equal(w.ProgramStatus, wire) {
+			return errProgramStatusSame
+		}
+		w.ProgramStatus = wire
+		return nil
+	})
+	if !agents {
+		return
+	}
+	sum, ok := ProgramStatusSummary(wire)
+	if !ok {
+		s.releaseProgramStatusClaim(windowID)
+		return
+	}
+	state, _ := programStatusAgentState(sum.State)
+	r := AgentReport{
+		State:   state,
+		Message: ProgramStatusMessage(sum),
+		Source:  AgentSourceProgram,
+	}
+	if state == AgentStateNeedsInput {
+		// Empty when the program did not say. It is not guessed from the
+		// message: the specification forbids reading meaning into msg (see
+		// agentKindOf).
+		r.Kind = programStatusBlockedBy(sum.Kind)
+	}
+	_, _, _ = s.ApplyAgentReport(windowID, r)
+}
+
+// endProgramStatusAtShell is the agent detector's reading that the pane's
+// shell holds the foreground. When a working, blocked or idle record arrived
+// since the last such reading, the program that reported it has exited, and
+// those records end.
+//
+// It is the process-exit rule of the specification for a pane whose shell
+// does not mark its prompt with OSC 133: without it a program that crashed
+// before it reported done would leave a working record behind for good, since
+// the protocol has no heartbeat. A report marks the pane (noteProgramStatus)
+// rather than the detector seeing the program run, because a script can
+// report and exit between two readings. The caller holds no lock.
+func (p *PTY) endProgramStatusAtShell() {
+	if p.progStatusAway.Swap(false) && p.progStatus.DropTransient() {
+		p.progStatusDirty.Store(true)
+		p.flushProgramStatus()
+	}
+}
+
+// releaseProgramStatusClaim clears the pane's agent state when the program's
+// records were what set it and none is left. A claim another source holds is
+// left alone: the records ending says nothing about a harness that reports
+// for itself.
+func (s *Session) releaseProgramStatusClaim(windowID string) {
+	s.stateMu.RLock()
+	claim, held := s.agentClaims[windowID]
+	s.stateMu.RUnlock()
+	if !held || claim.source != AgentSourceProgram {
+		return
+	}
+	_, _, _ = s.ApplyAgentReport(windowID, AgentReport{State: AgentStateNone, Source: AgentSourceProgram})
+	// Then let go of the pane, so the weaker tiers can read it again.
+	s.yieldAgentClaim(windowID, AgentSourceProgram)
+}

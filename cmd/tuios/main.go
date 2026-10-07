@@ -1217,7 +1217,7 @@ every pane, it is about the focused pane.`,
 				setAgentStateMessage, setAgentStateSource, setAgentStateHarness, setAgentStateExtra)
 		},
 	}
-	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval or question")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval, question or auth")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.sessionID, "agent-session-id", "", "The harness's own conversation id, stored on the pane for a later resume")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.transcriptPath, "transcript-path", "", "The transcript file the harness writes, joined exactly instead of searched for")
 	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.ifState, "if-state", "", "Apply only when the pane is in one of these comma-separated states")
@@ -3076,7 +3076,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
-	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand())
+	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 	rootCmd.AddCommand(newPluginsCommand())
 

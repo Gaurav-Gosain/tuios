@@ -587,6 +587,9 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		if pty := session.GetPTY(ptyID); pty != nil {
 			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
 			_, _ = pty.Write(data)
+			// A key from a client ends the pane's done and error OSC 7501
+			// records: the person has come back to it.
+			pty.noteProgramStatusInput(data)
 			// Someone is typing in this session, which is the plainest thing
 			// "last active" can mean. It used to be recorded only as a side
 			// effect of the state sync a client sent after every keypress, so

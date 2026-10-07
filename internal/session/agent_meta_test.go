@@ -202,7 +202,8 @@ func TestWindowSummariesAgreeCoversEveryField(t *testing.T) {
 		case reflect.Uint64:
 			f.SetUint(1)
 		case reflect.Slice:
-			f.Set(reflect.ValueOf([]AgentMetaToken{{Key: "k"}}))
+			// One zero element of the field's own type is a difference.
+			f.Set(reflect.MakeSlice(f.Type(), 1, 1))
 		case reflect.Bool:
 			f.SetBool(true)
 		default:

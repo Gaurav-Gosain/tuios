@@ -248,6 +248,12 @@ const eventAttentionDetail = "attention-detail"
 // harness shows its own prompt to the person now looking at it.
 const eventPaneFocused = "pane-focused"
 
+// eventProgramStatus is raised when a pane's OSC 7501 records changed. It is
+// internal: the daemon's sink copies the records into the window state and
+// sets the pane's agent state from them, and never publishes it. The agent
+// state change that follows is published and raises its hooks as usual.
+const eventProgramStatus = "program-status"
+
 // eventFilter selects which events a subscriber receives. A zero value matches
 // everything. An empty types set matches all event types.
 type eventFilter struct {

@@ -409,6 +409,18 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentSubagents > 0 {
 			mixI(w.AgentSubagents)
 		}
+		// The OSC 7501 records draw the app and the progress on the row.
+		if n := len(w.ProgramStatus); n > 0 {
+			mixI(n)
+			for _, r := range w.ProgramStatus {
+				mixS(r.ID)
+				mixS(r.State)
+				mixS(r.App)
+				mixI(r.Progress)
+				mixS(r.Title)
+				mixS(r.Msg)
+			}
+		}
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

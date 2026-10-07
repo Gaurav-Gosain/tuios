@@ -636,6 +636,19 @@ func (s *Session) scanAgentDetection(
 	shell := agentBaseName(s.getShell())
 	now := time.Now().UnixNano()
 
+	// A pane whose shell holds the foreground again has seen its program
+	// exit, which ends that program's OSC 7501 working and blocked records.
+	// Only a pane that runs a shell counts: in a pane whose own process is the
+	// program, that process is always in the foreground. See
+	// PTY.endProgramStatusAtShell.
+	for _, r := range readings {
+		if r.running && r.info.atShell() && foregroundCommand(r.info, true, shell) == "" {
+			if pty := s.GetPTY(r.ptyID); pty != nil {
+				pty.endProgramStatusAtShell()
+			}
+		}
+	}
+
 	s.stateMu.RLock()
 	dry := s.detectionPass(s.state, readings, shell, now, false)
 	s.stateMu.RUnlock()
