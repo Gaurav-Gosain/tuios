@@ -62,6 +62,8 @@ pub struct Theme {
     pub done_fill: u32,
     pub err: u32,
     pub err_fill: u32,
+    /// Text on `err_fill`.
+    pub err_ink: u32,
     /// Text selection behind the cells.
     pub selection: u32,
     /// The mark on a filled state disc.
@@ -222,13 +224,13 @@ impl Theme {
         if light {
             // The stage is the brightest surface: the shell is a step darker,
             // and the field and the palette are lighter still.
-            base = mix32(bg, 0x000000, 0.04);
+            base = mix32(bg, 0x000000, 0.06);
             hover = mix32(base, 0x000000, 0.03);
             selected = mix32(base, 0x000000, 0.07);
             field = mix32(base, 0xffffff, 0.5);
             raised = mix32(bg, 0xffffff, 0.85);
             raised_sel = mix32(raised, 0x000000, 0.06);
-            (border_c, border_a, hair_a, scrim_a, dim) = (0x000000, 0.16, 0.14, 0.18, 0.12);
+            (border_c, border_a, hair_a, scrim_a, dim) = (0x000000, 0.18, 0.14, 0.18, 0.12);
             ink = desaturate(fg, 0.12);
         } else {
             base = mix32(bg, 0x000000, 0.30);
@@ -244,10 +246,13 @@ impl Theme {
         let worst = grounds.iter().copied().min_by(|a, b| contrast(ink, *a).total_cmp(&contrast(ink, *b))).unwrap_or(stage);
         if light {
             // 10.5: on the darker shell, 2 % steps stall just under 11.
-            while contrast(ink, worst) < 10.5 {
-                let next = mix32(ink, 0x000000, 0.02);
+            while contrast(ink, worst) < 10.5 && ink != 0 {
+                let mut next = mix32(ink, 0x000000, 0.02);
                 if next == ink {
-                    break;
+                    // Near black a 2 % step rounds back to the same colour:
+                    // take one step of each channel instead.
+                    let ch = |sh: u32| ((ink >> sh) & 0xff).saturating_sub(1) << sh;
+                    next = ch(16) | ch(8) | ch(0);
                 }
                 ink = next;
             }
@@ -256,6 +261,7 @@ impl Theme {
         let state = |c: u32| if light { light_state(c, &|x| vec![fill(x), worst], 3.0) } else { c };
         let (accent, need, done, err) = (state(accent), state(need), state(done), state(err));
         let need_ink = if light { light_state(need, &|_| vec![fill(need)], 4.5) } else { need };
+        let err_ink = if light { light_state(err, &|_| vec![fill(err)], 4.5) } else { err };
         Theme {
             name: name.to_string(),
             light,
@@ -285,6 +291,7 @@ impl Theme {
             done_fill: fill(done),
             err,
             err_fill: fill(err),
+            err_ink,
             selection: over(accent, bg, if light { 0.22 } else { 0.28 }),
             on_state: if light { 0xffffff } else { bg },
         }
@@ -379,13 +386,13 @@ mod tests {
     fn light_tokens_match_the_spec() {
         let t = light();
         for (got, want, name) in [
-            (t.base, 0xd8d9de, "base"),
-            (t.field, 0xececee, "field"),
-            (t.selected, 0xc9cace, "selected"),
+            (t.base, 0xd4d4d9, "base"),
+            (t.field, 0xeaeaec, "field"),
+            (t.selected, 0xc5c5ca, "selected"),
             (t.raised, 0xfafbfb, "raised"),
-            (t.text, 0x191b21, "text"),
-            (t.text2, 0x53545a, "text2"),
-            (t.text3, 0x6d6e74, "text3"),
+            (t.text, 0x161616, "text"),
+            (t.text2, 0x515153, "text2"),
+            (t.text3, 0x6a6a6d, "text3"),
         ] {
             assert!(near(got, want), "{name}: {got:06x}, spec {want:06x}");
         }
@@ -400,6 +407,7 @@ mod tests {
             assert!(contrast(t.text2, g) >= 4.5);
         }
         assert!(contrast(t.need_ink, t.need_fill) >= 4.5);
+        assert!(contrast(t.err_ink, t.err_fill) >= 4.5);
         // The stage is the brightest surface the panes sit on.
         assert!(lum(t.stage) > lum(t.base) && lum(t.stage) > lum(t.selected));
     }
