@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"sync/atomic"
 )
 
 // Detaching other clients.
@@ -52,9 +53,18 @@ const DetachedByAttachMessage = "Another client attached to this session."
 const DetachedByCommandMessage = "The tuios detach-client command detached this client."
 
 // detachOthers takes every TUI client fully attached to sess, other than
-// keep, off the session, and returns their ids. With before above zero only
-// clients that attached before that attachSeq are taken.
+// keep, off the session and tells each why. It returns their ids. With before
+// above zero only clients that attached before that attachSeq are taken.
 func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string, before uint64) []string {
+	return d.noticeDetached(d.markOthers(sess, keep, before), sess, reason)
+}
+
+// markOthers takes the clients detachOthers names off sess, and returns them
+// without telling them. An attach calls it under Session.attachMu, and sends
+// the notices once the lock is free (noticeDetached), so a client that is slow
+// to read does not hold up the next attach. Each victim got its reply before
+// it was marked (repliedSession), so the notice still comes after it.
+func (d *Daemon) markOthers(sess *Session, keep *connState, before uint64) []*connState {
 	var targets []*connState
 	d.clientsMu.RLock()
 	for _, c := range d.clients {
@@ -70,11 +80,22 @@ func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string, bef
 		}
 	}
 	d.clientsMu.RUnlock()
-	ids := make([]string, 0, len(targets))
+	victims := targets[:0]
 	for _, c := range targets {
-		if d.ejectDetached(c, sess, reason) {
-			ids = append(ids, c.clientID)
+		if d.detachClientFrom(c, sess.ID) {
+			victims = append(victims, c)
 		}
+	}
+	return victims
+}
+
+// noticeDetached tells each victim why it was taken off sess, and returns
+// their ids, sorted.
+func (d *Daemon) noticeDetached(victims []*connState, sess *Session, reason string) []string {
+	ids := make([]string, 0, len(victims))
+	for _, c := range victims {
+		d.sendDetachedNotice(c, sess, reason)
+		ids = append(ids, c.clientID)
 	}
 	slices.Sort(ids)
 	return ids
@@ -101,21 +122,36 @@ func (d *Daemon) ejectIfSuperseded(cs *connState, sess *Session) {
 }
 
 // ejectDetached takes a client off sess and tells it why. It reports whether
-// the client was attached to sess.
+// the client was fully attached to sess. The check and the detach are one
+// step (detachClientFrom), so a client that moves to another session in
+// between is left alone.
 func (d *Daemon) ejectDetached(cs *connState, sess *Session, reason string) bool {
-	cs.mu.Lock()
-	on := cs.sessionID == sess.ID && cs.repliedSession == sess.ID
-	cs.mu.Unlock()
-	if !on || !d.detachClient(cs) {
+	if !d.detachClientFrom(cs, sess.ID) {
 		return false
 	}
+	d.sendDetachedNotice(cs, sess, reason)
+	return true
+}
+
+// sendDetachedNotice tells a client it was taken off sess, and why.
+func (d *Daemon) sendDetachedNotice(cs *connState, sess *Session, reason string) {
 	LogBasic("Detached client %s (pid %d) from session %s: %s", cs.clientID, cs.peerPID, sess.Name(), reason)
 	_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
 		SessionName: sess.Name(),
 		Reason:      reason,
 		Detached:    true,
 	})
-	return true
+}
+
+// storeMax raises a to v when v is larger, so a slower attach that writes its
+// sequence late never lowers it.
+func storeMax(a *atomic.Uint64, v uint64) {
+	for {
+		cur := a.Load()
+		if v <= cur || a.CompareAndSwap(cur, v) {
+			return
+		}
+	}
 }
 
 // detachClientParams are the detach-client verb's parameters.

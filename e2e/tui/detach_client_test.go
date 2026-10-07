@@ -377,16 +377,27 @@ func TestDetachClientAllOther(t *testing.T) {
 	}
 	alive(t, b, "the client --all-other keeps")
 
-	// The shim keeps the client used last. d attaches after b and nobody
-	// types in either, so d is the newer and b goes.
-	d, _ := attachedClient(t, base, sess)
+	// The shim's -a with -t keeps the client used last. d attaches after b
+	// and nobody types in either, so d is the newer and b goes.
+	d, dLog := attachedClient(t, base, sess)
 	dID := clientIDOf(t, base, d.Pid(), sess)
-	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-a", "-s", sess); err != nil {
-		t.Fatalf("tuios tmux detach-client -a: %v\n%s", err, out)
+	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-a", "-t", "tuios-"+sess); err != nil {
+		t.Fatalf("tuios tmux detach-client -a -t: %v\n%s", err, out)
 	}
-	exitedDetached(t, b, bLog, sess, detachedByCommand, "the older client after the shim's -a")
+	exitedDetached(t, b, bLog, sess, detachedByCommand, "the older client after the shim's -a -t")
 	if rows := clientRows(t, base); len(rows) != 1 || rows[0].ClientID != dID {
-		t.Fatalf("after the shim's -a the clients are %+v, want only %s", rows, dID)
+		t.Fatalf("after the shim's -a -t the clients are %+v, want only %s", rows, dID)
 	}
 	alive(t, d, "the client the shim's -a keeps")
+
+	// -s wins over -a, as in tmux 3.7c: every client of the session goes.
+	e, eLog := attachedClient(t, base, sess)
+	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-a", "-s", sess); err != nil {
+		t.Fatalf("tuios tmux detach-client -a -s: %v\n%s", err, out)
+	}
+	exitedDetached(t, d, dLog, sess, detachedByCommand, "the older client after the shim's -a -s")
+	exitedDetached(t, e, eLog, sess, detachedByCommand, "the newer client after the shim's -a -s")
+	if rows := clientRows(t, base); len(rows) != 0 {
+		t.Fatalf("after the shim's -a -s the clients are %+v, want none", rows)
+	}
 }

@@ -200,9 +200,21 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// and attachSeq orders them the way they took the lock. See
 	// detach_client.go.
 	session.attachMu.Lock()
+	// Released after the reply below, or here when anything in between
+	// panics: the connection's recover would otherwise leave the session
+	// locked, and every later attach to it would hang.
+	attachLocked := true
+	defer func() {
+		if attachLocked {
+			session.attachMu.Unlock()
+		}
+	}()
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
+	// A re-attach to the same session is not fully attached again until its
+	// new reply goes. See detach_client.go.
+	cs.repliedSession = ""
 	cs.sessionName = session.Name()
 	cs.width = payload.Width
 	cs.height = payload.Height
@@ -218,10 +230,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// tuios attach -d, or single_client: the other clients leave before this
 	// one is counted, so the session takes this client's size alone. See
 	// detach_client.go.
-	exclusive := d.exclusiveAttach(&payload)
-	if exclusive {
-		session.exclusiveSeq.Store(cs.attachSeq)
-		d.detachOthers(session, cs, DetachedByAttachMessage, cs.attachSeq)
+	// The victims are marked here and told once the lock is free.
+	var victims []*connState
+	if d.exclusiveAttach(&payload) {
+		storeMax(&session.exclusiveSeq, cs.attachSeq)
+		victims = d.markOthers(session, cs, cs.attachSeq)
 	}
 	// A client can now see a pull request's state, so an open one is polled
 	// again. With none recorded this is a scan of the sessions and no more.
@@ -324,7 +337,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		HumanNonce:  humanNonce,
 		Policy:      session.WindowSizePolicy(),
 	})
+	attachLocked = false
 	session.attachMu.Unlock()
+	d.noticeDetached(victims, session, DetachedByAttachMessage)
 	if err != nil {
 		return err
 	}
@@ -423,6 +438,13 @@ func (d *Daemon) handleDetach(cs *connState, msg *Message) error {
 // size and its place in the session's broadcasts. It reports false when the
 // client was not attached.
 func (d *Daemon) detachClient(cs *connState) bool {
+	return d.detachClientFrom(cs, "")
+}
+
+// detachClientFrom is detachClient for a client fully attached to the session
+// with the given id, "" for any session. The check and the detach are made
+// under one hold of cs.mu.
+func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 	clientID := cs.clientID
 
 	// Snapshot the subscriptions and session, then clear the fields, all under
@@ -430,7 +452,7 @@ func (d *Daemon) detachClient(cs *connState) bool {
 	cs.mu.Lock()
 	sessionID := cs.sessionID
 	sessionName := cs.sessionName
-	if sessionID == "" {
+	if sessionID == "" || (want != "" && (sessionID != want || cs.repliedSession != want)) {
 		cs.mu.Unlock()
 		return false
 	}

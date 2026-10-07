@@ -62,13 +62,18 @@ func (s *Shim) listClients(name string, args []string) (string, []string, error)
 	return outcomeFor(detail), detail, nil
 }
 
-// detachClient detaches tuios clients through the detach-client verb. The
-// shim lists one client per session, named tuios-SESSION, so a client given
-// with -t is the clients of that session, and -s names the session directly.
-// With neither, the client used last in the caller's session is detached, as
-// tmux detaches the current client. -a keeps the client used last in the
-// session and detaches the others. A session out of the shim's reach is not
-// found, as for every other command.
+// detachClient detaches tuios clients through the detach-client verb, with
+// tmux 3.7c's precedence. -s names a session, and every client of it is
+// detached: -a and -t are ignored, as tmux ignores them with -s. Otherwise the
+// shim lists one client per session, named tuios-SESSION, so -t names the
+// clients of that session, and with neither the target is the caller's
+// session. Without -a, -t detaches every client of its session, since the
+// shim's one client stands for all of them, and with no target the client
+// used last in the caller's session is detached, as tmux detaches the current
+// client. With -a the client used last is kept and the others of the session
+// go. In tmux, -a acts on every client of the server. Here it acts
+// on one session. A session out of the shim's reach is not found, as for
+// every other command.
 func (s *Shim) detachClient(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -81,32 +86,39 @@ func (s *Shim) detachClient(name string, args []string) (string, []string, error
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	ref := ""
-	if tv, ok := p.Value('t'); ok && tv != "" {
-		sessName, isClient := strings.CutPrefix(tv, "tuios-")
-		if !isClient {
-			return OutcomeError, nil, fmt.Errorf("can't find client: %s", tv)
-		}
-		ref = sessName
-	}
-	if sv, ok := p.Value('s'); ok && sv != "" {
-		ref = strings.TrimSuffix(sv, ":")
-	}
 	params := map[string]any{}
-	if ref != "" {
-		sv, found := v.sessionOf(ref)
+	if sv, ok := p.Value('s'); ok && sv != "" {
+		ref := strings.TrimSuffix(sv, ":")
+		target, found := v.sessionOf(ref)
 		if !found {
 			return OutcomeError, nil, fmt.Errorf("can't find session: %s", ref)
 		}
-		params["session"] = sv.name
-	} else if cp := s.callerPane(v); cp == nil {
-		if v.def == nil {
-			return OutcomeError, nil, errors.New("no current client")
+		params["session"] = target.name
+	} else {
+		ref := ""
+		if tv, ok := p.Value('t'); ok && tv != "" {
+			sessName, isClient := strings.CutPrefix(tv, "tuios-")
+			if !isClient {
+				return OutcomeError, nil, fmt.Errorf("can't find client: %s", tv)
+			}
+			ref = sessName
 		}
-		params["session"] = v.def.name
-	}
-	if p.Has('a') {
-		params["all_other"] = true
+		switch {
+		case ref != "":
+			target, found := v.sessionOf(ref)
+			if !found {
+				return OutcomeError, nil, fmt.Errorf("can't find client: tuios-%s", ref)
+			}
+			params["session"] = target.name
+		case s.callerPane(v) == nil:
+			if v.def == nil {
+				return OutcomeError, nil, errors.New("no current client")
+			}
+			params["session"] = v.def.name
+		}
+		if p.Has('a') {
+			params["all_other"] = true
+		}
 	}
 	if _, err := s.Caller.Call("detach-client", params); err != nil {
 		return OutcomeError, nil, err

@@ -491,8 +491,14 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// the two apart and picks the message the user sees.
 	killed := false
 	exitHost := host
+	// The client the app ended on, which is not this one after a switch to a
+	// session on a host: that switch opens a new client.
+	exitClient := client
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		reason = finalOS.ExitReason
+		if finalOS.DaemonClient != nil {
+			exitClient = finalOS.DaemonClient
+		}
 		if name := finalOS.SessionName; name != "" {
 			exitSession = name
 		}
@@ -531,8 +537,12 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// detach-client named this client. The session runs on, and nothing
 	// failed here, so the reason is printed and the exit status is 0.
 	if reason == app.ExitDetached {
-		fmt.Println(client.DetachedReason())
-		fmt.Printf("Detached from session '%s'.\n", exitSession)
+		fmt.Println(exitClient.DetachedReason())
+		where := ""
+		if exitHost != "" {
+			where = " on " + exitHost
+		}
+		fmt.Printf("Detached from session '%s'%s.\n", exitSession, where)
 		return nil
 	}
 

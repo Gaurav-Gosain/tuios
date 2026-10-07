@@ -230,13 +230,14 @@ or 10000, the shipped default, when nothing set it.
 session continues to run, and each detached client exits with a message.
 `list-clients` names one client for each session, `tuios-SESSION`.
 
-- `-t tuios-SESSION` and `-s SESSION` detach every client of that session.
+- `-s SESSION` detaches every client of that session. As in tmux 3.7c,
+  `-s` wins: `-a` and `-t` are ignored with it.
+- `-t tuios-SESSION` detaches every client of that session.
 - With neither, the client used last in the caller's session detaches, as
   tmux detaches the current client.
 - `-a` keeps the client used last in the session and detaches the others.
   In tmux, `-a` acts on every client of the server. In the shim, `-a` acts
-  on one session only: the session of `-t` or `-s`, else the caller's
-  session.
+  on one session only: the session of `-t`, else the caller's session.
 - `-P` and `-E` fail with `unknown flag`.
 
 A session out of the shim's reach is not found. From a pane, the command

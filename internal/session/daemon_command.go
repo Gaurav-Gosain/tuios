@@ -364,28 +364,44 @@ func (d *Daemon) findTargetSession(sessionName string) *Session {
 // It used to be whichever client the map gave first, so tuios xpanes turned
 // multifocus on at the other client half the time, and Enter at the client
 // that ran it reached one pane.
+//
+// A view-only client, such as a read-only web viewer, is not the person: it
+// is picked only when no other client shows the session.
 func (d *Daemon) findTUIClient(sessionID string) *connState {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
-	var best *connState
-	var bestInput time.Time
-	var bestSeq uint64
+	type pick struct {
+		cs    *connState
+		input time.Time
+		seq   uint64
+	}
+	var person, viewer pick
 	for _, cs := range d.clients {
 		cs.mu.Lock()
 		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
-		input, seq := cs.lastActivity, cs.attachSeq
+		input, seq, viewOnly := cs.lastActivity, cs.attachSeq, cs.viewOnly
 		cs.mu.Unlock()
 		if !match {
 			continue
 		}
-		input = cs.newestInput(input)
-		if best == nil || input.After(bestInput) || (input.Equal(bestInput) && seq > bestSeq) {
-			best, bestInput, bestSeq = cs, input, seq
+		if in := cs.lastInput.Load(); in != 0 {
+			if t := time.Unix(0, in); t.After(input) {
+				input = t
+			}
+		}
+		best := &person
+		if viewOnly {
+			best = &viewer
+		}
+		if best.cs == nil || input.After(best.input) || (input.Equal(best.input) && seq > best.seq) {
+			*best = pick{cs, input, seq}
 		}
 	}
-
-	return best
+	if person.cs != nil {
+		return person.cs
+	}
+	return viewer.cs
 }
 
 // sendCommandResult sends a command result to a client.

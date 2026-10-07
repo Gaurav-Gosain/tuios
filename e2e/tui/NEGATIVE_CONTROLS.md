@@ -2571,3 +2571,29 @@ and keeps the newest with the shim's `detach-client -a -s`.
 | A notice before the handler is lost | `OnSessionEnded`: the pending notice never delivered | none | **not caught**: the window between the read loop and the wiring is too short to hit here |
 | A viewer counts as exclusive | `exclusiveAttach`: the `ViewOnly` test cut | `TestSingleClientIgnoresAViewOnlyClient` | **caught** |
 | `all_other` is not read | `verbDetachClient`: `p.AllOther = false` | `TestDetachClientAllOther` (the first client never exits) | **caught** |
+
+### Second review: the attach lock, the reply check and the shim's -s
+
+These deterministic regressions live in `internal/session/detach_client_test.go`.
+Each lands one event inside an attach through the `attachSnapshotTaken` hook.
+
+- `TestAPanicInsideAnAttachLeavesTheSessionUnlocked` panics once inside an
+  attach. The next attach to the session must return.
+- `TestADetachInsideAnAttachLeavesTheAttachingClientAlone` runs
+  `detach-client -s` inside a second client's attach. The fully attached first
+  client goes. The attaching client gets its session and stays attached.
+- `TestADetachNoticeBeforeTheHandlerIsDelivered` detaches a client after its
+  read loop starts and before its handler is set. The handler must still get
+  the notice.
+- `TestDetachClientAllOther` now checks the shim against tmux 3.7c, which was
+  checked by hand on a private tmux server. `-a -t tuios-S` keeps the newest
+  client. `-a -s S` detaches every client of S.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The lock is released only after the reply | `handleAttach`: `attachLocked` starts false, so only the plain unlock runs | `TestAPanicInsideAnAttachLeavesTheSessionUnlocked` (the second attach never returns) | **caught** |
+| No reply check | `repliedSession` cut from both `markOthers` and `detachClientFrom` | `TestADetachInsideAnAttachLeavesTheAttachingClientAlone` ("unexpected response: 30") | **caught** |
+| No reply check in `markOthers` only | that one check cut | none | **not caught**: `detachClientFrom` checks again |
+| No reply check in `detachClientFrom` only | that one check cut | none | **not caught**: `markOthers` checks first |
+| A notice before the handler is lost | `OnSessionEnded`: the pending notice never delivered | `TestADetachNoticeBeforeTheHandlerIsDelivered` | **caught** |
+| The shim's `-s` honours `-a` | `detachClient` in the shim: `all_other` set with `-s` | `TestDetachClientAllOther` (the newest client is kept after `-a -s`) | **caught** |
