@@ -2332,3 +2332,19 @@ shell two cells smaller each way.
 | The option is never read | `ApplyAppearanceConfig`: the `s.ZoomBorderless` line cut | all 7 borderless runs ("the zoomed shell is 98x26, want the whole region 100x28"; shared: 91x28, the camera; max-width: 58x26) | **caught** (7 of 7 run) |
 | The zoom box keeps the border | `applyZoomRectAnimated`: the line that drops the border under the option cut | 6 of 7 borderless runs (98x26). `borderless/shared` passes: shared borders already drop the border, and the zoom is still the whole region | **caught** |
 | Zooming out keeps the pane borderless | `ToggleZoom`: the `settleUnzoomedBorder` call cut | `borderless/floating` ("no border after zooming out"). The tiled runs pass: the retile gives a tiled pane its border back on its own | **caught** |
+
+## Mode pill icons from the config
+
+`TestDockModeIconsFollowTheConfig` sets `appearance.dock_mode_icon_window`,
+`_terminal` and `_tiling`, and reads the dock row of the real binary. It
+checks the configured icon in place of the default, a four-cell icon that
+grows the pill by its width and moves the workspace readout by the same
+amount, an empty icon that draws no pill, a nine-cell icon that falls back to
+the default, and the same wide icon in the compact dock. The unset row is the
+positive half of the hidden and too-wide cases.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The config never reaches the dock | cut the three assignments in `ApplyAppearanceConfig` | `/custom`, `/terminal`, `/hidden`, `/compact`. `/too-wide` passes, which is correct: it expects the default | **caught** |
+| An empty label still draws a pill | `buildDockLeftText`: the empty label padded to two spaces | `/hidden` (6 caps on the row, want 4) | **caught** |
+| No width limit | `DockModeIconUsable`: the width check cut | `/too-wide` (the nine-cell icon is drawn) | **caught** |

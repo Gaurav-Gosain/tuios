@@ -310,6 +310,9 @@ type AppearanceConfig struct {
 	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
 	DockWorkspaceLabelMax  *int     `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
+	DockModeIconWindow     *string  `toml:"dock_mode_icon_window"`     // Mode pill icon in window mode; "" draws none (default: the glyph set's)
+	DockModeIconTerminal   *string  `toml:"dock_mode_icon_terminal"`   // Mode pill icon in terminal mode; "" draws none (default: the glyph set's)
+	DockModeIconTiling     *string  `toml:"dock_mode_icon_tiling"`     // Mode pill icon while tiling is on; "" draws none (default: the glyph set's)
 	DockCompact            bool     `toml:"dock_compact"`              // One-row dock with no rule (default: false)
 	SessionColors          *bool    `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool    `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
@@ -2013,6 +2016,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps
 	}
 	s.DockCompact = cfg.Appearance.DockCompact
+	// The mode icons are pointers so an empty string can hide the icon, which is
+	// different from unset. They are assigned unconditionally so a key removed
+	// from the file goes back to the built-in on reload.
+	s.DockModeIconWindow = cfg.Appearance.DockModeIconWindow
+	s.DockModeIconTerminal = cfg.Appearance.DockModeIconTerminal
+	s.DockModeIconTiling = cfg.Appearance.DockModeIconTiling
 	if cfg.Appearance.SessionColors != nil {
 		s.SessionColors = *cfg.Appearance.SessionColors
 	}

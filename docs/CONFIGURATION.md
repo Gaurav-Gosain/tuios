@@ -445,6 +445,44 @@ dock_pill_caps = false
 Under ASCII glyphs the workspace tabs have no caps. The rail's pills do not
 change with this option.
 
+## Mode pill icons
+
+The mode pill at the start of the dock shows an icon for the mode. Three
+options set the icons:
+
+| Option | Mode |
+| --- | --- |
+| `appearance.dock_mode_icon_window` | Window mode |
+| `appearance.dock_mode_icon_terminal` | Terminal mode |
+| `appearance.dock_mode_icon_tiling` | Window mode and terminal mode while tiling is on |
+
+```toml
+[appearance]
+dock_mode_icon_window = "WM"
+dock_mode_icon_terminal = ">_"
+dock_mode_icon_tiling = ""
+```
+
+- When an option is not set, the pill shows the icon of the glyph set. With
+  `use_ascii_only`, that icon is `W`, `T` or `#`.
+- An empty string shows no icon. If the mode has no other text, the dock shows
+  no pill in that mode.
+- An icon can be at most 8 cells wide. A wide character, such as `終`, counts
+  as two cells. The dock does not accept control characters. For an icon that
+  it does not accept, the dock shows the default icon and the config check
+  shows a warning.
+- The pill adds one space on each side of the icon. You do not need to add
+  spaces.
+- While tiling is on, the pill also shows the next split direction, `V` or
+  `H`.
+
+To remove the whole mode pill, remove `"mode"` from the `left` list in the
+`[dock]` table. See [The dock's components](#the-docks-components).
+
+You can also set the icons on the settings page, in the Dock section, or with
+`tuios set-config dock_mode_icon_window WM`. The word `default` puts an icon
+back to the icon of the glyph set. The change applies at once.
+
 ## Workspace label cap
 
 `appearance.dock_workspace_label_max` caps a workspace tab's label in cells,

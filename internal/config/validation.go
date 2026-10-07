@@ -383,6 +383,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
+	validateDockModeIcons(cfg, result)
 	validateBackgrounds(cfg, result)
 }
 
@@ -523,6 +524,31 @@ func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 			Field:   "appearance",
 			Key:     c.key,
 			Message: fmt.Sprintf("'%s' is not a colour (expected #RRGGBB); the theme's border colour is used instead", c.value),
+		})
+	}
+}
+
+// validateDockModeIcons warns about a mode pill icon the dock cannot lay out:
+// one with a control character, or one wider than DockModeIconMaxWidth cells.
+// The pill draws the built-in icon instead, so the dock row keeps its shape.
+func validateDockModeIcons(cfg *UserConfig, result *ValidationResult) {
+	a := cfg.Appearance
+	for _, icon := range [...]struct {
+		key   string
+		value *string
+	}{
+		{"dock_mode_icon_window", a.DockModeIconWindow},
+		{"dock_mode_icon_terminal", a.DockModeIconTerminal},
+		{"dock_mode_icon_tiling", a.DockModeIconTiling},
+	} {
+		if icon.value == nil || DockModeIconUsable(*icon.value) {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance",
+			Key:   icon.key,
+			Message: fmt.Sprintf("%q is not a usable icon. Use at most %d cells and no control characters. The dock shows the default icon",
+				*icon.value, DockModeIconMaxWidth),
 		})
 	}
 }

@@ -59,6 +59,12 @@ one more row. It works with the dock at the top and at the bottom.
 no border and no title bar. The pane's program gets the full size. With it on,
 `zoom_size` and `zoom_max_width` have no effect.
 
+`appearance.dock_mode_icon_window`, `dock_mode_icon_terminal` and
+`dock_mode_icon_tiling` set the icon in the dock's mode pill. An empty value
+shows no icon, and `default` puts back the icon of the glyph set. An icon can
+be at most 8 cells wide, with no control characters. To remove the whole pill,
+remove `"mode"` from `[dock] left`.
+
 `daemon.window_size` sets the size of a session with more than one client:
 `smallest` (the default), `largest`, or `latest`, the client that last had
 input. `tuios set-config daemon.window_size latest` applies it to the session

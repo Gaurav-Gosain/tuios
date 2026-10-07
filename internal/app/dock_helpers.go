@@ -655,7 +655,15 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// split direction, the zoom flag) landed after the trailing space, leaving
 	// the fill flush against the last glyph; the rail's label had none at all.
 	// One cell either side, applied once, whatever the label ended up being.
-	modeLabel = " " + strings.TrimSpace(modeLabel) + " "
+	//
+	// A label with nothing in it draws no pill at all: a person who set the
+	// mode's icon to the empty string asked for no icon, and an empty filled
+	// pill with caps would be an icon of its own.
+	if trimmed := strings.TrimSpace(modeLabel); trimmed != "" {
+		modeLabel = " " + trimmed + " "
+	} else {
+		modeLabel = ""
+	}
 
 	// What is left of the "2:3 • 5  3 " stats blob. The totals went: the strip
 	// two cells to the right names every occupied workspace and marks the
@@ -679,7 +687,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// Only the components the plan placed claim any room. Rendered width, not
 	// byte length: Nerd Font glyphs and the caps are wider than their bytes.
 	// The +4 is the margins and padding the block has always carried.
-	if m.dockPlan.Has(config.DockComponentMode) {
+	if m.dockPlan.Has(config.DockComponentMode) && modeLabel != "" {
 		width += lipgloss.Width(m.Settings.GetDockModeCapLeft()) +
 			lipgloss.Width(modeLabel) +
 			lipgloss.Width(m.Settings.GetDockModeCapRight())

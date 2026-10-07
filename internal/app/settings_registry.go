@@ -46,6 +46,9 @@ var settingLabels = map[string]string{
 	"agents.enabled":                      "Agent features",
 	"appearance.sidebar.editor":           "File editor",
 	"appearance.dock_workspace_label_max": "Workspace label cap",
+	"appearance.dock_mode_icon_window":    "Window mode icon",
+	"appearance.dock_mode_icon_terminal":  "Terminal mode icon",
+	"appearance.dock_mode_icon_tiling":    "Tiling mode icon",
 	"appearance.dockbar_position":         "Dock position",
 	"appearance.glyphs":                   "Glyph set",
 	"appearance.hide_clock":               "Clock in the badge",
@@ -186,6 +189,9 @@ var settingUnset = map[string]string{
 	"appearance.preferred_shell":           "(auto-detect)",
 	"appearance.clock_format":              config.DefaultClockFormat,
 	"dock.clock.format":                    "(appearance.clock_format)",
+	"appearance.dock_mode_icon_window":     "(no icon)",
+	"appearance.dock_mode_icon_terminal":   "(no icon)",
+	"appearance.dock_mode_icon_tiling":     "(no icon)",
 }
 
 // settingSteps is the stride an int row moves by, for the ranges where one is

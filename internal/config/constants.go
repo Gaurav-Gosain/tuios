@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -762,28 +764,63 @@ func (s *Settings) GetDockWorkspaceCapRight() string {
 	return s.GetSidebarPillRightChar()
 }
 
-// GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
+// DockModeIconMaxWidth is the widest icon, in cells, the mode pill takes from
+// appearance.dock_mode_icon_*. The pill shares the dock's left block with the
+// workspace strip, and an icon wider than this would take the strip's room.
+const DockModeIconMaxWidth = 8
+
+// DockModeIconDefault is the word that puts a mode icon back to the built-in
+// for the glyph set. The empty string cannot do it, because an empty icon is
+// a value: it hides the icon.
+const DockModeIconDefault = "default"
+
+// DockModeIconUsable reports whether value can stand as a mode pill icon: no
+// control characters, which would move the cursor or start an escape sequence
+// in the middle of the dock row, and at most DockModeIconMaxWidth cells. The
+// width is the one the dock layout measures with, so a wide glyph is counted
+// as the two cells it takes. The empty string is usable: it hides the icon.
+func DockModeIconUsable(value string) bool {
+	if !utf8.ValidString(value) {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return lipgloss.Width(value) <= DockModeIconMaxWidth
+}
+
+// dockModeIcon is the icon for one mode: the configured one when it is set
+// and usable, and otherwise the built-in for the glyph set. The configured
+// value wins over use_ascii_only, since the person wrote it for the terminal
+// they have.
+func (s *Settings) dockModeIcon(set *string, nerd, ascii string) string {
+	if set != nil && DockModeIconUsable(*set) {
+		return *set
+	}
+	if s.NerdFontsOff() {
+		return ascii
+	}
+	return nerd
+}
+
+// GetDockModeIconWindow returns the window mode icon: appearance.dock_mode_icon_window
+// when set, and otherwise the built-in for the glyph set.
 func (s *Settings) GetDockModeIconWindow() string {
-	if s.NerdFontsOff() {
-		return DockModeIconWindowASCII
-	}
-	return DockModeIconWindow
+	return s.dockModeIcon(s.DockModeIconWindow, DockModeIconWindow, DockModeIconWindowASCII)
 }
 
-// GetDockModeIconTerminal returns the appropriate terminal mode icon based on UseASCIIOnly
+// GetDockModeIconTerminal returns the terminal mode icon: appearance.dock_mode_icon_terminal
+// when set, and otherwise the built-in for the glyph set.
 func (s *Settings) GetDockModeIconTerminal() string {
-	if s.NerdFontsOff() {
-		return DockModeIconTerminalASCII
-	}
-	return DockModeIconTerminal
+	return s.dockModeIcon(s.DockModeIconTerminal, DockModeIconTerminal, DockModeIconTerminalASCII)
 }
 
-// GetDockModeIconTiling returns the appropriate tiling mode icon based on UseASCIIOnly
+// GetDockModeIconTiling returns the tiling mode icon: appearance.dock_mode_icon_tiling
+// when set, and otherwise the built-in for the glyph set.
 func (s *Settings) GetDockModeIconTiling() string {
-	if s.NerdFontsOff() {
-		return DockModeIconTilingASCII
-	}
-	return DockModeIconTiling
+	return s.dockModeIcon(s.DockModeIconTiling, DockModeIconTiling, DockModeIconTilingASCII)
 }
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.

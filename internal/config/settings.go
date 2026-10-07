@@ -307,6 +307,14 @@ type Settings struct {
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
 	DockPillCaps bool
 
+	// DockModeIconWindow, DockModeIconTerminal and DockModeIconTiling are the
+	// mode pill's icons from appearance.dock_mode_icon_*. Nil is unset, which
+	// draws the built-in for the glyph set. An empty string draws no icon.
+	// Read them through GetDockModeIconWindow and its siblings.
+	DockModeIconWindow   *string
+	DockModeIconTerminal *string
+	DockModeIconTiling   *string
+
 	// DockCompact draws the dock as one row: the pills without the rule above
 	// or below them. The panes get the row back. Off by default.
 	DockCompact bool

@@ -1505,6 +1505,9 @@ name alone. Some of them:
 |------|--------|-------------|
 | `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
 | `dock_compact` | `true`, `false` | Draw the dock as one row with no rule (default `false`) |
+| `dock_mode_icon_window` | text, `""` or `default` | Icon in the mode pill in window mode. An empty value shows no icon. `default` uses the icon of the glyph set |
+| `dock_mode_icon_terminal` | text, `""` or `default` | Icon in the mode pill in terminal mode |
+| `dock_mode_icon_tiling` | text, `""` or `default` | Icon in the mode pill while tiling is on |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `dim_unfocused` | `0` to `90` | Percent the content of a pane you are not in is dimmed (default `0`, off) |

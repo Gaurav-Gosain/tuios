@@ -69,6 +69,16 @@ type Option struct {
 	// Such an option takes the empty string as a value, which clears it, so
 	// it can go back to following once it has been set.
 	Follows string `json:"follows,omitempty"`
+	// DefaultClears marks a string option whose Default is a word rather than
+	// a value. Writing that word clears the field back to unset, and an unset
+	// field reads back as it. It is for an option where the empty string is a
+	// value of its own: an empty mode icon hides the icon, so the empty string
+	// cannot also be the way back to the built-in.
+	DefaultClears bool `json:"default_clears,omitempty"`
+	// Icon marks a string option whose value is drawn in the dock as an icon.
+	// A value with a control character, or wider than DockModeIconMaxWidth
+	// cells, is refused, because it would break the dock row's layout.
+	Icon bool `json:"icon,omitempty"`
 	// BoxSize marks a string option whose value is a size in cells (60) or
 	// percent (80%), read by ParseBoxSize. An empty value means the default.
 	BoxSize bool `json:"box_size,omitempty"`
@@ -563,6 +573,21 @@ var optionSpecs = []Option{
 		Path: "appearance.dock_pill_caps", Type: OptionBool, Section: "dock",
 		Description: "Draw rounded caps on every dock pill: the mode chip, the workspace tabs and the minimized windows. Off draws flat pills",
 		Default:     "true",
+	},
+	{
+		Path: "appearance.dock_mode_icon_window", Type: OptionString, Section: "dock",
+		Description: "Icon in the mode pill in window mode. An empty value shows no icon. default uses the icon of the glyph set",
+		Default:     DockModeIconDefault, DefaultClears: true, Icon: true,
+	},
+	{
+		Path: "appearance.dock_mode_icon_terminal", Type: OptionString, Section: "dock",
+		Description: "Icon in the mode pill in terminal mode. An empty value shows no icon. default uses the icon of the glyph set",
+		Default:     DockModeIconDefault, DefaultClears: true, Icon: true,
+	},
+	{
+		Path: "appearance.dock_mode_icon_tiling", Type: OptionString, Section: "dock",
+		Description: "Icon in the mode pill while tiling is on. An empty value shows no icon. default uses the icon of the glyph set",
+		Default:     DockModeIconDefault, DefaultClears: true, Icon: true,
 	},
 	{
 		Path: "appearance.dock_compact", Type: OptionBool, Section: "dock",
@@ -1361,6 +1386,10 @@ func (o Option) checkValue(value string) error {
 		return fmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
 			"or write %s.json in the glyphs directory first", o.Path, value, value)
 	}
+	if o.Icon && value != o.Default && !DockModeIconUsable(value) {
+		return fmt.Errorf("%s: %q is not a usable icon; use at most %d cells and no control characters",
+			o.Path, value, DockModeIconMaxWidth)
+	}
 	if o.BoxSize && strings.TrimSpace(value) != "" {
 		if _, _, err := ParseBoxSize(value); err != nil {
 			return fmt.Errorf("%s: %w", o.Path, err)
@@ -1392,6 +1421,12 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 	// An option that follows another clears on the empty string, back to
 	// following it.
 	if opt.Follows != "" && strings.TrimSpace(value) == "" && field.Kind() == reflect.Pointer {
+		field.SetZero()
+		return nil
+	}
+
+	// An option whose default is a word clears on that word, back to unset.
+	if opt.DefaultClears && strings.TrimSpace(value) == opt.Default && field.Kind() == reflect.Pointer {
 		field.SetZero()
 		return nil
 	}
