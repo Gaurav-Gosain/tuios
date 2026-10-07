@@ -78,6 +78,8 @@ impl PaneInfo {
             (false, false) => format!("{} · {}", self.harness, self.message),
             (false, true) => self.harness.clone(),
             (true, false) if self.status.is_agent() => self.message.clone(),
+            // A place that only repeats the name says nothing.
+            _ if self.place == self.name => String::new(),
             _ => self.place.clone(),
         }
     }
@@ -175,6 +177,15 @@ pub fn tilde(path: &str, home: &str) -> String {
 
 static HOME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// The short name of the shell a pane at its prompt runs: "bash", "fish".
+/// The daemon starts panes with its own `$SHELL`, which is this process's
+/// in the usual case. The bridge does not report the shell.
+fn shell_name() -> String {
+    let full = std::env::var("SHELL").unwrap_or_default();
+    let base = full.rsplit('/').find(|p| !p.is_empty()).unwrap_or("").to_string();
+    if base.is_empty() { "shell".into() } else { base }
+}
+
 /// The home folder the daemon's panes see, when it is not this process's
 /// own (a private daemon under `--isolate`). Paths under it show as `~`.
 pub fn set_home(home: &str) {
@@ -203,6 +214,10 @@ struct Raw<'a> {
 
 /// The name, harness, message and place of a pane.
 fn describe(r: &Raw, status: Status, homes: &[String]) -> (String, String, String, String) {
+    describe_with(r, status, homes, &shell_name())
+}
+
+fn describe_with(r: &Raw, status: Status, homes: &[String], shell: &str) -> (String, String, String, String) {
     let folder = tilde_any(r.cwd, homes);
     let place = match (folder.is_empty(), r.branch.is_empty()) {
         (false, false) => format!("{folder} · {}", r.branch),
@@ -219,6 +234,9 @@ fn describe(r: &Raw, status: Status, homes: &[String]) -> (String, String, Strin
         (_, false) if !r.foreground.is_empty() => r.foreground.to_string(),
         (Some(t), false) => t.clone(),
         (None, true) if !r.foreground.is_empty() && r.foreground != harness => r.foreground.to_string(),
+        // A shell at its prompt is named after the shell. The folder goes
+        // on line two, so a shell at home never reads "~ / ~".
+        (None, false) => shell.to_string(),
         _ if !folder.is_empty() => folder_name(&folder),
         _ if !harness.is_empty() => harness.clone(),
         _ => "shell".into(),
@@ -250,9 +268,25 @@ pub fn from_rows(rows: &serde_json::Value) -> (Vec<PaneInfo>, std::collections::
     (rows_to_panes(&list), unread)
 }
 
+/// Twins in one session, with the same name and place, become "bash 1",
+/// "bash 2": numbered by workspace, then by the order the daemon lists them.
+pub fn number_twins(panes: &mut [PaneInfo]) {
+    use std::collections::HashMap;
+    let mut groups: HashMap<(String, String, String), Vec<usize>> = HashMap::new();
+    for (i, p) in panes.iter().enumerate() {
+        groups.entry((p.session.clone(), p.name.clone(), p.place.clone())).or_default().push(i);
+    }
+    for (_, mut idx) in groups.into_iter().filter(|(_, v)| v.len() > 1) {
+        idx.sort_by_key(|&i| (panes[i].workspace, i));
+        for (n, i) in idx.into_iter().enumerate() {
+            panes[i].name = format!("{} {}", panes[i].name, n + 1);
+        }
+    }
+}
+
 fn rows_to_panes(list: &AgentList) -> Vec<PaneInfo> {
     let home = home();
-    list.agents
+    let mut panes: Vec<PaneInfo> = list.agents
         .iter()
         .map(|a| {
             let status = Status::from_agent(&a.state, a.finished_unread);
@@ -272,7 +306,9 @@ fn rows_to_panes(list: &AgentList) -> Vec<PaneInfo> {
                 seen: !a.finished_unread,
             }
         })
-        .collect()
+        .collect();
+    number_twins(&mut panes);
+    panes
 }
 
 /// Runs `tuios list-agents --all --all-sessions --json`: every pane, and the
@@ -299,7 +335,8 @@ pub fn fetch(tuios: &std::path::Path, env: &[(String, String)]) -> Option<(Vec<P
 /// Panes of the attached session, from the bridge.
 pub fn from_state(st: &State, focused: Option<&str>, unseen: impl Fn(&str) -> bool) -> Vec<PaneInfo> {
     let home = home();
-    st.windows
+    let mut panes: Vec<PaneInfo> = st
+        .windows
         .iter()
         .map(|w| {
             let state = w.agent.as_deref().unwrap_or("");
@@ -328,7 +365,9 @@ pub fn from_state(st: &State, focused: Option<&str>, unseen: impl Fn(&str) -> bo
                 seen: !unseen(&w.id),
             }
         })
-        .collect()
+        .collect();
+    number_twins(&mut panes);
+    panes
 }
 
 /// Sidebar order inside a session: by state, then oldest first for states
@@ -380,11 +419,43 @@ mod tests {
         let (name, harness, _, _) = describe(&r("✳ api retries", "claude-code", "", "/home/me/api"), Status::Working, home);
         assert_eq!((name.as_str(), harness.as_str()), ("api retries", "claude"));
         assert_eq!(describe(&r("Terminal 7c87b868", "codex", "", "/home/me/api"), Status::Idle, home).0, "api");
-        assert_eq!(describe(&r("Terminal 7c87b868", "", "", "/home/me"), Status::Terminal, home).0, "~");
-        assert_eq!(describe(&r("Terminal 7c87b868", "", "nvim", "/home/me"), Status::Terminal, home).0, "nvim");
-        let (name, _, _, place) = describe(&r("Terminal 7c87b868", "", "", "/home/me/dev/tuios"), Status::Terminal, home);
-        assert_eq!(name, "tuios");
+        // A shell at its prompt is named after the shell, never "~".
+        assert_eq!(describe_with(&r("Terminal 7c87b868", "", "", "/home/me"), Status::Terminal, home, "bash").0, "bash");
+        assert_eq!(describe_with(&r("Terminal 7c87b868", "", "nvim", "/home/me"), Status::Terminal, home, "bash").0, "nvim");
+        let (name, _, _, place) = describe_with(&r("Terminal 7c87b868", "", "", "/home/me/dev/tuios"), Status::Terminal, home, "fish");
+        assert_eq!(name, "fish");
         assert_eq!(place, "~/dev/tuios · main");
+    }
+
+    fn pane(session: &str, workspace: u32, name: &str, place: &str) -> PaneInfo {
+        PaneInfo {
+            session: session.into(),
+            window: String::new(),
+            workspace,
+            status: Status::Terminal,
+            name: name.into(),
+            harness: String::new(),
+            message: String::new(),
+            place: place.into(),
+            since_ms: 0,
+            focused: false,
+            seen: true,
+        }
+    }
+
+    #[test]
+    fn twin_shells_get_a_number() {
+        let mut v = vec![pane("dot", 2, "bash", "~"), pane("dot", 1, "bash", "~"), pane("api", 1, "bash", "~"), pane("dot", 1, "bash", "~/x")];
+        number_twins(&mut v);
+        let names: Vec<&str> = v.iter().map(|p| p.name.as_str()).collect();
+        // Workspace 1 comes first. Another session or another folder is no twin.
+        assert_eq!(names, vec!["bash 2", "bash 1", "bash", "bash"]);
+    }
+
+    #[test]
+    fn a_place_that_repeats_the_name_is_dropped() {
+        assert_eq!(pane("s", 1, "~", "~").detail(), "");
+        assert_eq!(pane("s", 1, "bash", "~").detail(), "~");
     }
 
     #[test]
