@@ -47,10 +47,21 @@ const maxHostConnectReply = 64 * 1024
 // connection is, from here on, a connection to the host's daemon. br must be
 // the only reader of conn and is left holding nothing past the reply.
 func openHostConnectionOn(conn net.Conn, br *bufio.Reader, host string) (HostConnectionInfo, error) {
+	return openHostConnectionAgent(conn, br, host, "")
+}
+
+// openHostConnectionAgent is openHostConnectionOn that also tells this
+// machine's daemon the client's agent socket, so the link's ssh forwards the
+// agent of the person attached here. See ssh_agent_follow.go.
+func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string) (HostConnectionInfo, error) {
+	params := map[string]string{"host": host}
+	if agent != "" {
+		params["ssh_auth_sock"] = agent
+	}
 	req, err := json.Marshal(verbRequest{
 		ID:     json.RawMessage(`1`),
 		Verb:   "open-host-connection",
-		Params: json.RawMessage(fmt.Sprintf(`{"host":%q}`, host)),
+		Params: mustJSON(params),
 	})
 	if err != nil {
 		return HostConnectionInfo{}, err
@@ -86,6 +97,12 @@ func openHostConnectionOn(conn net.Conn, br *bufio.Reader, host string) (HostCon
 		return HostConnectionInfo{}, fmt.Errorf("the daemon on this machine sent a reply this build cannot read: %w", err)
 	}
 	if resp.Error != nil {
+		// A daemon from before ssh_agent follow refuses the parameter it does
+		// not know, and refuses before it touches the connection. The same
+		// request without it is what that daemon always took.
+		if agent != "" && refusesParam(resp.Error, "ssh_auth_sock") {
+			return openHostConnectionAgent(conn, br, host, "")
+		}
 		e := &HostConnectError{Host: host, Code: resp.Error.Code, Message: resp.Error.Message, Hint: resp.Error.Hint}
 		if resp.Error.Code == ErrVerbUnknownVerb {
 			e.Message = "The daemon on this machine is older than this tuios and cannot open a connection to " + host + ". Restart it with 'tuios kill-server'."

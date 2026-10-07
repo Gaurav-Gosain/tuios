@@ -368,7 +368,12 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.SymbolImages = caps.SymbolImages
 	}
 
-	hello.SSHAuthSock = c.SSHAuthSock
+	// A hello through a host goes to the other machine, where this path
+	// means nothing. That daemon follows the agent the link forwards, and
+	// open-host-connection told this machine's daemon this socket.
+	if c.viaHost == "" {
+		hello.SSHAuthSock = c.SSHAuthSock
+	}
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
 	hello.WindowSize = !legacyWindowSize()

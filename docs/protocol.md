@@ -1955,6 +1955,14 @@ Response:
 `target` is absent when there is no link. The verb reads one session: a pane
 needs `read` and the session in reach. Over a link it needs `list`.
 
+The hub side: `open-host-connection` takes `ssh_auth_sock`, the caller's
+socket, because the caller's hello goes to the host and not to this daemon.
+While `ssh_agent` is `"follow"`, this daemon keeps a second link,
+`agent-link.sock`, to the socket of the person who attached or used any
+session last, and starts the link ssh to every host with `SSH_AUTH_SOCK`
+naming it. A daemon too old to know `ssh_auth_sock` refuses it with
+`invalid_params`, and the client asks again without it.
+
 ### session-info
 
 Report details about one session.
@@ -4705,6 +4713,13 @@ it. If the link sockets cannot be reached, the proxy asks `hello` on the main
 socket and refuses the stream when the daemon reports `link_policy`, so a
 daemon that failed to open its link sockets is not reached on a socket with no
 policy.
+
+When the link's ssh forwards an agent, the proxy also sends the
+`SSH_AUTH_SOCK` it runs with as `ssh_auth_sock`. With `[daemon] ssh_agent =
+"follow"`, a client attached through the link moves the session's agent link
+to that socket, under the same checks as a local client's socket. A daemon
+too old to know the parameter refuses it with `invalid_params`, and the proxy
+sends `link-peer` again without it.
 
 Only a pinned name is a boundary. A hub whose ssh key may run any command can
 run a shell, and can claim any name. Pin it in `authorized_keys` on this

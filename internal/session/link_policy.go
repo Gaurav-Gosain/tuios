@@ -386,6 +386,10 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 	var p struct {
 		Peer   string `json:"peer"`
 		Pinned bool   `json:"pinned"`
+		// SSHAuthSock is the SSH_AUTH_SOCK tuios stdio-proxy runs with: the
+		// agent the link's ssh forwards, when it forwards one. See
+		// ssh_agent_follow.go.
+		SSHAuthSock string `json:"ssh_auth_sock"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -405,6 +409,7 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 	cs.linkPeerSet = true
 	cs.linkPeer = peer
 	cs.linkPinned = p.Pinned
+	cs.linkAgentSock = p.SSHAuthSock
 	// The connection goes back to being read from its first byte, JSON or
 	// binary, so an attach can follow the handshake on the same connection.
 	cs.takeover = func(br *bufio.Reader) { d.serveConnection(cs, br) }

@@ -45,7 +45,7 @@ func (c *TUIClient) ConnectThroughHost(host, version string, width, height int, 
 	c.conn = conn
 	c.br = nil
 
-	info, err := openHostConnectionOn(conn, c.reader(), host)
+	info, err := openHostConnectionAgent(conn, c.reader(), host, c.SSHAuthSock)
 	if err != nil {
 		_ = conn.Close()
 		return HostConnectionInfo{}, err

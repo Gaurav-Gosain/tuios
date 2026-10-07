@@ -2761,3 +2761,19 @@ of a daemon on another socket in the same folder is kept.
 | No sweep at start | `startSSHAgent`: the `sweepAgentLinks` call cut | `TestSSHAgentLinkFallsBackToTheDaemonsSocket` (the stale link stays) | **caught** |
 | No sweep at stop | shutdown: the `sweepAgentLinks` call cut | `TestSSHAgentLinkFallsBackToTheDaemonsSocket` (the link stays after `kill-server`) | **caught** |
 | Only the socket's own folder is checked | `ownedSocket`: the walk stops after the first folder | `TestSSHAgentLinkFollowsTheNewestClient` (the socket under a folder anyone can write to moves the link) | **caught** |
+
+`TestSSHAgentFollowsThroughAHost` runs a hub and a remote daemon on one
+machine. Both have `ssh_agent = "follow"`, and the link has
+`ssh_options = ["-A"]`. Neither daemon has an agent of its own. The ssh
+stand-in forwards the agent the way `ssh -A` does: the far command gets a
+relay socket, and each connection to the relay reaches the socket that the
+stand-in's own `SSH_AUTH_SOCK` names. A person attaches the far session from
+the hub with a real `ssh-agent` that holds one key. `ssh-add -L` in the far
+pane must print that key's comment.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The link ssh gets the daemon's own environment | `setupFederation`: `SSHDialer` in place of `SSHDialerEnv(..., d.linkSSHEnv)` | `TestSSHAgentFollowsThroughAHost` (the link's ssh has no `SSH_AUTH_SOCK`) | **caught** |
+| The hub does not note the person's socket | `verbOpenHostConnection`: the `agentNote` call cut | `TestSSHAgentFollowsThroughAHost` | **caught** |
+| The proxy does not report the forwarded socket | `DialForLink`: `agent` left empty | `TestSSHAgentFollowsThroughAHost` | **caught** |
+| A client over a link offers no socket | `agentSockOf`: `""` for a link connection | `TestSSHAgentFollowsThroughAHost` | **caught** |

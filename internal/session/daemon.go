@@ -537,7 +537,10 @@ type connState struct {
 	linkPeer    string
 	linkPeerSet bool
 	linkPinned  bool
-	linkServed  bool
+	// linkAgentSock is the agent socket stdio-proxy reported in the
+	// link-peer handshake, "" when the link forwards none.
+	linkAgentSock string
+	linkServed    bool
 
 	// peerPID is the pid of the process on the other end, as the kernel
 	// recorded it at connect time, or 0 where the platform does not say. For
@@ -870,7 +873,7 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		// TUIOS_SSH names the ssh program to run. It exists for a machine where
 		// ssh is not on the daemon's PATH, and it is what lets the link layer be
 		// exercised end to end without an ssh server.
-		dial = federation.SSHDialer(os.Getenv("TUIOS_SSH"))
+		dial = federation.SSHDialerEnv(os.Getenv("TUIOS_SSH"), d.linkSSHEnv)
 	}
 	d.federation = federation.New(table, federation.Options{
 		Dial:            dial,
@@ -1730,6 +1733,9 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		d.clientsMu.Lock()
 		delete(d.clients, clientID)
 		d.clientsMu.Unlock()
+		// A connection to a host carries the person's agent with no
+		// session here, so it is forgotten on close whatever it showed.
+		d.agentForget(hubAgentKey, clientID)
 
 		// Snapshot subscriptions and session under cs.mu before unsubscribing.
 		cs.mu.Lock()

@@ -94,7 +94,10 @@ socket of the client that attached or used it last. New panes get
 `SSH_AUTH_SOCK` set to the link. A shell that started earlier keeps its old
 value: `p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"` points
 it at the link, and leaves the value alone when the option is off.
-The option is in the file only. Do not change it unless the person asks.
+Through a host, it needs the option on both machines and agent forwarding
+on the link (`ssh_options = ["-A"]` or `ForwardAgent yes`), which tuios never
+turns on by itself. The option is in the file only. Do not change it, or the
+forwarding, unless the person asks.
 
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
 addresses in the focused pane, and a typed label copies one. The

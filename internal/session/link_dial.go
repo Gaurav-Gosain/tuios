@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -46,16 +47,20 @@ var ErrLinkSocketMissing = errors.New("the daemon here holds links to a policy a
 // link_policy is refused rather than reached on a socket that would give the
 // hub everything.
 func DialForLink(socketPath string, open federation.StreamOpen, pinnedPeer string) (net.Conn, error) {
+	// The agent the link's ssh forwarded here, when it forwards one. The
+	// daemon follows it for a client attached through this link, under the
+	// same checks as a local client's. See ssh_agent_follow.go.
+	agent := os.Getenv("SSH_AUTH_SOCK")
 	peer, pinned := open.From, false
 	if pinnedPeer != "" {
 		peer, pinned = pinnedPeer, true
 	}
 	if open.Human {
-		if conn, err := dialLinkSocket(LinkHumanSocketPath(socketPath), peer, pinned); err == nil {
+		if conn, err := dialLinkSocket(LinkHumanSocketPath(socketPath), peer, pinned, agent); err == nil {
 			return conn, nil
 		}
 	}
-	conn, err := dialLinkSocket(LinkSocketPath(socketPath), peer, pinned)
+	conn, err := dialLinkSocket(LinkSocketPath(socketPath), peer, pinned, agent)
 	if err == nil {
 		return conn, nil
 	}
@@ -75,12 +80,17 @@ type linkHandshakeError struct{ verr *verbError }
 func (e *linkHandshakeError) Error() string { return "link-peer refused: " + e.verr.Error() }
 
 // dialLinkSocket dials one link socket and runs the handshake on it.
-func dialLinkSocket(path, peer string, pinned bool) (net.Conn, error) {
+func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, error) {
 	conn, err := net.DialTimeout("unix", path, linkDialTimeout)
 	if err != nil {
 		return nil, err
 	}
-	verr, err := linkHandshake(conn, peer, pinned)
+	verr, err := linkHandshake(conn, peer, pinned, agent)
+	if err == nil && agent != "" && refusesParam(verr, "ssh_auth_sock") {
+		// A daemon from before ssh_agent follow. It refused before it
+		// named the peer, so the handshake is sent again without the socket.
+		verr, err = linkHandshake(conn, peer, pinned, "")
+	}
 	switch {
 	case err != nil:
 		_ = conn.Close()
@@ -102,11 +112,11 @@ func dialLinkSocket(path, peer string, pinned bool) (net.Conn, error) {
 // a byte at a time, so no byte past the reply line is taken from the
 // connection: the daemon may start the next reply only after the hub's first
 // request, but a read-ahead buffer here would still be the wrong owner of it.
-func linkHandshake(conn net.Conn, peer string, pinned bool) (*verbError, error) {
+func linkHandshake(conn net.Conn, peer string, pinned bool, agent string) (*verbError, error) {
 	req, err := json.Marshal(verbRequest{
 		ID:     json.RawMessage(`0`),
 		Verb:   linkPolicyVerb,
-		Params: mustJSON(map[string]any{"peer": peer, "pinned": pinned}),
+		Params: mustJSON(linkPeerParams(peer, pinned, agent)),
 	})
 	if err != nil {
 		return nil, err
@@ -127,6 +137,16 @@ func linkHandshake(conn net.Conn, peer string, pinned bool) (*verbError, error) 
 		return nil, fmt.Errorf("the daemon's answer to link-peer cannot be read: %w", err)
 	}
 	return resp.Error, nil
+}
+
+// linkPeerParams are the link-peer parameters. ssh_auth_sock is left out when
+// there is none, and an older daemon ignores it.
+func linkPeerParams(peer string, pinned bool, agent string) map[string]any {
+	p := map[string]any{"peer": peer, "pinned": pinned}
+	if agent != "" {
+		p["ssh_auth_sock"] = agent
+	}
+	return p
 }
 
 // readLineUnbuffered reads up to and not past the next newline.

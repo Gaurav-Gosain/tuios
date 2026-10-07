@@ -745,6 +745,7 @@ func init() {
 			description: "Turn this connection into a connection to the daemon on one host. After the reply, every byte written here reaches that daemon and every byte it writes comes back. Send nothing until the reply has arrived.",
 			params: []verbParam{
 				{Name: "host", Type: "string", Description: "A host by name from the [hosts] config table."},
+				{Name: "ssh_auth_sock", Type: "string", Description: "The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = \"follow\", the agent link the link's ssh forwards points at it while this caller is the newest person attached."},
 			},
 			returns: []verbParam{
 				{Name: "host", Type: "string", Description: "The host the connection reaches."},
@@ -797,6 +798,7 @@ func init() {
 			params: []verbParam{
 				{Name: "peer", Type: "string", Description: "The machine's name: the one the hub gave for itself, or the one the proxy was pinned to with --as. Empty for none."},
 				{Name: "pinned", Type: "bool", Description: "The name came from stdio-proxy --as on this machine, not from the hub."},
+				{Name: "ssh_auth_sock", Type: "string", Description: "The SSH_AUTH_SOCK stdio-proxy runs with: the agent the link's ssh forwards. A client attached through the link uses it for ssh_agent = \"follow\"."},
 			},
 			returns: []verbParam{
 				{Name: "peer", Type: "string", Description: "The name the connection is held to."},

@@ -57,11 +57,23 @@ type Dialer func(ctx context.Context, h Host) (Transport, error)
 // it obtains for a keyword, so a user who sets ServerAliveInterval themselves
 // still wins.
 func SSHDialer(sshBinary string) Dialer {
+	return SSHDialerEnv(sshBinary, nil)
+}
+
+// SSHDialerEnv is SSHDialer with the ssh's environment read from env at each
+// dial. A nil env, or one that returns nil, runs ssh with this process's
+// environment. The daemon uses it to point SSH_AUTH_SOCK at the agent link
+// it keeps, so an agent the link forwards follows the person here.
+func SSHDialerEnv(sshBinary string, env func() []string) Dialer {
 	if sshBinary == "" {
 		sshBinary = "ssh"
 	}
 	return func(ctx context.Context, h Host) (Transport, error) {
-		return CommandDialer(sshBinary, linkArgs(h)...)(ctx, h)
+		var e []string
+		if env != nil {
+			e = env()
+		}
+		return commandDialerEnv(e, sshBinary, linkArgs(h)...)(ctx, h)
 	}
 }
 
@@ -172,11 +184,18 @@ const KeepaliveWindow = sshServerAliveInterval * sshServerAliveCountMax * time.S
 // directly, which exercises the framing, the proxy and the daemon socket
 // without needing an ssh server or touching the user's ssh configuration.
 func CommandDialer(name string, args ...string) Dialer {
+	return commandDialerEnv(nil, name, args...)
+}
+
+// commandDialerEnv is CommandDialer with the child's environment. Nil keeps
+// this process's.
+func commandDialerEnv(env []string, name string, args ...string) Dialer {
 	return func(ctx context.Context, _ Host) (Transport, error) {
 		// The context is not attached to the command: a dial context expires
 		// once the handshake is done, and CommandContext would kill the child
 		// at that moment. Close ends the process.
 		cmd := exec.Command(name, args...)
+		cmd.Env = env
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			return nil, err

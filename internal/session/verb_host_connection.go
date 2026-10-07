@@ -41,6 +41,10 @@ const ErrVerbHostRefused = "host_refused"
 func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
+		// SSHAuthSock is the client's agent socket. The client's hello goes
+		// to the host, not here, so this is how this daemon's link follows a
+		// person who attached a session on a host. See ssh_agent_follow.go.
+		SSHAuthSock string `json:"ssh_auth_sock"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -54,6 +58,8 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 	if verr := d.checkHostParam(p.Host); verr != nil {
 		return nil, verr
 	}
+
+	d.agentNote(cs, p.SSHAuthSock, hubAgentKey)
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()

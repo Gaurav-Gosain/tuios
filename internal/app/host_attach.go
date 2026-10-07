@@ -64,14 +64,18 @@ type hostDial struct {
 	version        string
 	width, height  int
 	caps           *session.ClientCapabilities
+	// sshAuthSock is the agent socket of the client the dial replaces. See
+	// session.TUIClient.SSHAuthSock.
+	sshAuthSock string
 }
 
 func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
 	return hostDial{
 		host: host, name: name, create: create, global: global,
-		reserve: m.DaemonClient.OwnLayoutReserve(),
-		version: m.DaemonClient.ClientVersion(),
-		width:   m.Width, height: m.Height,
+		reserve:     m.DaemonClient.OwnLayoutReserve(),
+		version:     m.DaemonClient.ClientVersion(),
+		sshAuthSock: m.DaemonClient.SSHAuthSock,
+		width:       m.Width, height: m.Height,
 		caps: m.clientCapabilities(),
 	}
 }
@@ -83,6 +87,7 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	client := session.NewTUIClient()
 	client.SetOwnLayoutReserve(d.reserve)
 	client.StartDir = d.cwd
+	client.SSHAuthSock = d.sshAuthSock
 	var err error
 	if d.host == federation.LocalHostName {
 		err = client.ConnectWithCapabilities(d.version, d.width, d.height, d.caps)

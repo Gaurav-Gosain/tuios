@@ -141,6 +141,7 @@ func (d *Daemon) startSSHAgent() {
 	if !d.sshAgentFollowing() {
 		return
 	}
+	d.agentEnsureSession(hubAgentKey)
 	if n := len(SSHAgentLinkPath(d.manager.SocketPath(), "00000000-")); n > sunPathMax() {
 		log.Printf("Warning: the ssh agent links are %d characters long, and a Unix socket path can be at most %d. ssh in a pane cannot reach the agent. Set XDG_RUNTIME_DIR to a shorter folder.", n, sunPathMax())
 	}
@@ -164,6 +165,7 @@ func (d *Daemon) SetSSHAgent(mode string) {
 		d.sshAgent.mu.Unlock()
 		d.sweepAgentLinks()
 	case !was && on:
+		d.agentEnsureSession(hubAgentKey)
 		for _, info := range d.manager.ListSessions() {
 			d.agentEnsureSession(info.ID)
 		}
@@ -186,44 +188,97 @@ func (d *Daemon) agentLinkPath(sessionID string) string {
 	return SSHAgentLinkPath(d.manager.SocketPath(), sessionID)
 }
 
+// hubAgentKey is the key of the daemon-wide link in agentFollow: the socket
+// of the client that attached or used any session last. The link ssh to every
+// host is started with it as SSH_AUTH_SOCK, so an agent the link forwards
+// follows the person on this machine. See linkSSHEnv.
+const hubAgentKey = ""
+
+// hubAgentLinkPath is the daemon-wide link.
+func (d *Daemon) hubAgentLinkPath() string {
+	return SSHAgentLinkPath(d.manager.SocketPath(), "link")
+}
+
+// agentLinkFor is the link kept under key: a session's, or the daemon-wide
+// one.
+func (d *Daemon) agentLinkFor(key string) string {
+	if key == hubAgentKey {
+		return d.hubAgentLinkPath()
+	}
+	return d.agentLinkPath(key)
+}
+
+// agentSockOf is the agent socket the connection offers. A local client sends
+// it in its hello. A connection over a link from another machine has the one
+// tuios stdio-proxy saw there, which is the agent the link's ssh forwarded:
+// the hello's would be a path on the other machine.
+func agentSockOf(cs *connState) string {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	if cs.viaLink {
+		return cs.linkAgentSock
+	}
+	if cs.hello != nil {
+		return cs.hello.SSHAuthSock
+	}
+	return ""
+}
+
 // agentNoteUse records that the client on cs attached to or used the session
-// with the given id, and points the session's link at its socket.
+// with the given id, and points the session's link, and the daemon-wide one,
+// at its socket.
 func (d *Daemon) agentNoteUse(cs *connState, sessionID string) {
-	if sessionID == "" || !d.sshAgentFollowing() || cs.viaLink || !d.mayActAsHuman(cs) {
+	if sessionID == "" {
 		return
 	}
-	cs.mu.Lock()
-	sock := ""
-	if cs.hello != nil {
-		sock = cs.hello.SSHAuthSock
-	}
-	cs.mu.Unlock()
-	if sock == "" {
+	d.agentNote(cs, agentSockOf(cs), sessionID, hubAgentKey)
+}
+
+// agentNote points the links under keys at sock, the socket of the client on
+// cs, when the client may act as the person and the socket passes the checks.
+func (d *Daemon) agentNote(cs *connState, sock string, keys ...string) {
+	if sock == "" || !d.sshAgentFollowing() || !d.mayActAsHuman(cs) {
 		return
 	}
 	f := &d.sshAgent
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	list := f.bySession[sessionID]
-	if len(list) > 0 && list[0].clientID == cs.clientID && f.target[sessionID] == list[0].sock {
-		return
-	}
-	resolved, ok := resolveAgentSocket(sock)
-	if !ok {
-		// Said once per connection: a client that is refused keeps
-		// reporting use once a second.
-		if cs.agentRefused.CompareAndSwap(false, true) {
-			LogBasic("Client %s (pid %d) sent an ssh agent socket that is not followed: it must resolve to a socket this user owns, in folders no other user can write to", cs.clientID, cs.peerPID)
+	for _, key := range keys {
+		list := f.bySession[key]
+		if len(list) > 0 && list[0].clientID == cs.clientID && f.target[key] == list[0].sock {
+			continue
 		}
-		return
+		resolved, ok := resolveAgentSocket(sock)
+		if !ok {
+			// Said once per connection: a client that is refused keeps
+			// reporting use once a second.
+			if cs.agentRefused.CompareAndSwap(false, true) {
+				LogBasic("Client %s (pid %d) sent an ssh agent socket that is not followed: it must resolve to a socket this user owns, in folders no other user can write to", cs.clientID, cs.peerPID)
+			}
+			return
+		}
+		list = slices.DeleteFunc(list, func(c agentCandidate) bool { return c.clientID == cs.clientID })
+		list = append([]agentCandidate{{clientID: cs.clientID, sock: resolved}}, list...)
+		if f.bySession == nil {
+			f.bySession = make(map[string][]agentCandidate)
+		}
+		f.bySession[key] = list
+		d.relinkAgentLocked(key)
 	}
-	list = slices.DeleteFunc(list, func(c agentCandidate) bool { return c.clientID == cs.clientID })
-	list = append([]agentCandidate{{clientID: cs.clientID, sock: resolved}}, list...)
-	if f.bySession == nil {
-		f.bySession = make(map[string][]agentCandidate)
+}
+
+// linkSSHEnv is the environment the link ssh to a host runs with. While
+// ssh_agent is follow it is this daemon's, with SSH_AUTH_SOCK naming the
+// daemon-wide link, so an agent the link forwards (ForwardAgent yes, or -A in
+// ssh_options) is the agent of the person attached here now. The path is read
+// at connect time, and the link moving does the rest. Nil means the daemon's
+// own environment.
+func (d *Daemon) linkSSHEnv() []string {
+	if !d.sshAgentFollowing() {
+		return nil
 	}
-	f.bySession[sessionID] = list
-	d.relinkAgentLocked(sessionID)
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "SSH_AUTH_SOCK=") })
+	return append(env, "SSH_AUTH_SOCK="+d.hubAgentLinkPath())
 }
 
 // agentForget drops the client with the given id from the session's
@@ -232,17 +287,23 @@ func (d *Daemon) agentForget(sessionID, clientID string) {
 	f := &d.sshAgent
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	list, ok := f.bySession[sessionID]
-	if !ok {
-		return
+	keys := []string{sessionID}
+	if sessionID != hubAgentKey {
+		keys = append(keys, hubAgentKey)
 	}
-	list = slices.DeleteFunc(list, func(c agentCandidate) bool { return c.clientID == clientID })
-	if len(list) == 0 {
-		delete(f.bySession, sessionID)
-	} else {
-		f.bySession[sessionID] = list
+	for _, key := range keys {
+		list, ok := f.bySession[key]
+		if !ok {
+			continue
+		}
+		list = slices.DeleteFunc(list, func(c agentCandidate) bool { return c.clientID == clientID })
+		if len(list) == 0 {
+			delete(f.bySession, key)
+		} else {
+			f.bySession[key] = list
+		}
+		d.relinkAgentLocked(key)
 	}
-	d.relinkAgentLocked(sessionID)
 }
 
 // agentForgetSession removes the session's link when the session ends.
@@ -271,7 +332,7 @@ func (d *Daemon) relinkAgentLocked(sessionID string) {
 	} else {
 		f.bySession[sessionID] = list
 	}
-	link := d.agentLinkPath(sessionID)
+	link := d.agentLinkFor(sessionID)
 	want, from := "", "the daemon's own socket"
 	if len(list) > 0 {
 		want, from = list[0].sock, "the socket of client "+list[0].clientID
