@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 33,034,402 | 33,100,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 31,077,826 | 31,140,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 33,136,802 | 33,172,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 31,162,594 | 31,198,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2439,6 +2439,14 @@ three-way save that edits the lines of the changed key in the file that holds
 it, the watcher that follows every file, and the config files, origin and
 prune commands. That brought the build to 33,034,402 and 31,077,826 bytes
 (Go 1.26.6) on main at 01d72efb, about 209 KB and 203 KB over the old budgets.
+
+The budgets went to 33,172,000 (linux/amd64) and 31,198,000 (darwin/arm64)
+for images drawn as block glyphs on a host without graphics: the glyph
+encoder (`internal/mosaic`), its glyph tables, the 16-colour floor, the
+drawing pass and the `image_symbols` option. It links no new package. On Go
+1.26.6 the build measured 33,136,802 and 31,162,594 bytes, 69,632 and 51,248
+over origin/main at ebeee191. On linux/amd64, 64 KiB of that is a section
+crossing an alignment boundary, not code.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
