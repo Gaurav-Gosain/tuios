@@ -2727,8 +2727,11 @@ to their own output.
 `TestSSHAgentLinkFollowsTheNewestClient` runs with `[daemon] ssh_agent =
 "follow"` and fake agent sockets in folders the test makes. Two clients
 attach with different sockets, and the link on disk follows the attach order.
-Clients with a socket in a folder anyone can write to, a symlink to a socket,
-and a path that is not there leave the link where it was. A new pane prints
+A client whose `SSH_AUTH_SOCK` is a symlink moves the link to the socket the
+symlink names. Clients with a socket in a folder anyone can write to, a
+symlink to such a socket, a socket in a private folder under a folder anyone
+can write to, and a path that is not there leave the link where it was. The
+daemon has no socket of its own here. A new pane prints
 the link's name from `SSH_AUTH_SOCK` and finds a socket there. A client that
 runs inside a pane attaches a second session and makes no link, and the same
 socket from a client outside every pane does: that is the positive half. A
@@ -2742,3 +2745,19 @@ drops, the link is gone.
 | A client in a pane counts | `agentNoteUse`: the `mayActAsHuman` test cut | the client in the pane links `e2e-agent-other` | **caught** |
 | A leave does not move the link | `notifyClientLeft`: the `agentForget` call cut | the link of `e2e-agent-other` stays after its last client leaves | **caught** |
 | New panes do not get the link | `Manager.CreateSession`: the `cfg.AgentEnv` stamp cut | the new pane never prints the link's name | **caught** |
+
+The rows above were run on the first version of the pull request. The rows
+below were run on the review fixes, with
+`TestSSHAgentLinkFallsBackToTheDaemonsSocket` added. That test starts the
+daemon with a socket of its own. The link points at it before any client
+attaches and after the last client leaves. `kill-server` removes the link. A
+stale link in the folder is swept when the daemon starts again, and the link
+of a daemon on another socket in the same folder is kept.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Symlinks are not resolved | `resolveAgentSocket`: `filepath.EvalSymlinks` replaced by the path as given | `TestSSHAgentLinkFollowsTheNewestClient` (the client with a symlink does not move the link) | **caught** |
+| No fallback to the daemon's socket | `relinkAgentLocked`: the `f.fallback` branch cut | `TestSSHAgentLinkFallsBackToTheDaemonsSocket` (no link before any client) | **caught** |
+| No sweep at start | `startSSHAgent`: the `sweepAgentLinks` call cut | `TestSSHAgentLinkFallsBackToTheDaemonsSocket` (the stale link stays) | **caught** |
+| No sweep at stop | shutdown: the `sweepAgentLinks` call cut | `TestSSHAgentLinkFallsBackToTheDaemonsSocket` (the link stays after `kill-server`) | **caught** |
+| Only the socket's own folder is checked | `ownedSocket`: the walk stops after the first folder | `TestSSHAgentLinkFollowsTheNewestClient` (the socket under a folder anyone can write to moves the link) | **caught** |

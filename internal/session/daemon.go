@@ -495,6 +495,9 @@ type connState struct {
 	// client fully attached is detached by another: one that has not read
 	// its reply would read the notice as the answer. See detach_client.go.
 	repliedSession string
+	// agentRefused says this connection's ssh agent socket was refused and
+	// the refusal logged, so it is not logged again. See ssh_agent_follow.go.
+	agentRefused atomic.Bool
 	// viewOnly says the client's attach marked it as sending no input. Under
 	// largest and latest it does not count toward the session's size.
 	// Guarded by mu.
@@ -888,6 +891,9 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 // onSessionCreated installs a session's event and state sinks and publishes a
 // session-created event. It runs on the manager's create hook.
 func (d *Daemon) onSessionCreated(s *Session) {
+	// A new or restored session's panes start with the link, so it has to
+	// point somewhere from the start. See ssh_agent_follow.go.
+	d.agentEnsureSession(s.ID)
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
 	// change the daemon made itself shows up in a live TUI without the verb that
@@ -1242,6 +1248,9 @@ func (d *Daemon) Start() error {
 	// is where they go. A restored session does not get its old stash back, for
 	// the same reason it does not get its old mail: its panes are new processes.
 	d.stash.sweep()
+	// ssh agent links a killed daemon left go before a session is restored.
+	// See ssh_agent_follow.go.
+	d.startSSHAgent()
 	// Pasted images a killed daemon left behind go once they are past their
 	// TTL. A standalone client may share the directory, so only expired
 	// ones are taken.
@@ -1402,6 +1411,8 @@ func (cs *connState) drop() {
 func (d *Daemon) shutdown() error {
 	d.shutdownOnce.Do(func() {
 		log.Println("Shutting down daemon...")
+		// No pane outlives the daemon to use them.
+		d.sweepAgentLinks()
 
 		// The Inbox is saved first and not again. Everything below closes
 		// panes, and a pane closing on shutdown is not the person dealing

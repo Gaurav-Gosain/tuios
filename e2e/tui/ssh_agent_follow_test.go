@@ -36,6 +36,37 @@ func fakeAgent(t *testing.T, mode os.FileMode) string {
 	if err := os.Chmod(dir, mode); err != nil {
 		t.Fatal(err)
 	}
+	// The daemon links to the resolved path, so the test compares with it.
+	resolved, err := filepath.EvalSymlinks(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
+// fakeAgentUnder is fakeAgent in a private folder whose parent anyone can
+// write to, which is not sticky. Another user could rename the private folder
+// away and put their own in its place.
+func fakeAgentUnder(t *testing.T) string {
+	t.Helper()
+	parent, err := os.MkdirTemp("", "agp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(parent) })
+	dir := filepath.Join(parent, "s")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(dir, "agent.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen on %s: %v", sock, err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	if err := os.Chmod(parent, 0o777); err != nil {
+		t.Fatal(err)
+	}
 	return sock
 }
 
@@ -143,6 +174,9 @@ func agentClient(t *testing.T, base, session, sock string) *tuitest.Terminal {
 func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
+	// No socket of the daemon's own, so the link is removed, not moved to a
+	// fallback, when the last client leaves. See the fallback test.
+	t.Setenv("SSH_AUTH_SOCK", "")
 	writeConfig(t, base, "[daemon]\nssh_agent = \"follow\"\n")
 	const sess = "e2e-agent"
 	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
@@ -151,8 +185,13 @@ func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
 	sockA := fakeAgent(t, 0o700)
 	sockB := fakeAgent(t, 0o700)
 	open := fakeAgent(t, 0o777)
+	// ~/.ssh/agent.sock and the 1Password agent are links to the socket.
 	linked := filepath.Join(filepath.Dir(sockA), "linked.sock")
 	if err := os.Symlink(sockA, linked); err != nil {
+		t.Fatal(err)
+	}
+	linkedOpen := filepath.Join(filepath.Dir(sockA), "linked-open.sock")
+	if err := os.Symlink(open, linkedOpen); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,10 +206,19 @@ func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
 	second := agentClient(t, base, sess, sockB)
 	waitLinkTo(t, link, sockB, "after the second client attached")
 
+	// A symlink is resolved once: the link points at the socket it names.
+	viaLink := agentClient(t, base, sess, linked)
+	waitLinkTo(t, link, sockA, "after a client with a symlink to the first socket attached")
+	if err := viaLink.Close(); err != nil {
+		t.Logf("close the client with a symlink: %v", err)
+	}
+	waitLinkTo(t, link, sockB, "after the client with a symlink left")
+
 	// Refused sockets: the link stays on the second client.
 	for _, bad := range []struct{ name, sock string }{
 		{"a socket in a folder anyone can write to", open},
-		{"a symlink to a socket", linked},
+		{"a symlink to a socket in a folder anyone can write to", linkedOpen},
+		{"a socket under a folder anyone can write to", fakeAgentUnder(t)},
 		{"a path that is not there", filepath.Join(filepath.Dir(sockA), "missing.sock")},
 	} {
 		c := agentClient(t, base, sess, bad.sock)
@@ -248,4 +296,58 @@ func TestSSHAgentLinkFollowsTheNewestClient(t *testing.T) {
 		t.Logf("close the first client: %v", err)
 	}
 	waitLinkTo(t, link, "", "after the last client left")
+}
+
+// TestSSHAgentLinkFallsBackToTheDaemonsSocket starts the daemon with an
+// SSH_AUTH_SOCK of its own. A new session's link points at it before any
+// client attaches, moves to a client's socket, and comes back to the
+// daemon's when the client leaves, so a pane never has a dead path. A stale
+// link a killed daemon left is swept at start, and kill-server removes the
+// daemon's links.
+//
+// Negative controls: see NEGATIVE_CONTROLS.md, "The ssh agent link".
+func TestSSHAgentLinkFallsBackToTheDaemonsSocket(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	own := fakeAgent(t, 0o700)
+	t.Setenv("SSH_AUTH_SOCK", own)
+	writeConfig(t, base, "[daemon]\nssh_agent = \"follow\"\n")
+	const sess = "e2e-agent-own"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	link := readAgentLink(t, base, sess).Path
+	waitLinkTo(t, link, own, "before any client attached")
+
+	sockA := fakeAgent(t, 0o700)
+	a := agentClient(t, base, sess, sockA)
+	waitLinkTo(t, link, sockA, "after a client attached")
+	if err := a.Close(); err != nil {
+		t.Logf("close the client: %v", err)
+	}
+	waitLinkTo(t, link, own, "after the client left")
+
+	// Stop: the daemon's links go with it.
+	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+		t.Fatalf("kill-server: %v\n%s", err, out)
+	}
+	waitLinkTo(t, link, "", "after kill-server")
+
+	// Start: a link left by a daemon that was killed is swept. One of
+	// another socket's daemon in the same folder is not.
+	stale := filepath.Join(filepath.Dir(link), "agent-deadbeef.sock")
+	other := filepath.Join(filepath.Dir(link), "other-agent-deadbeef.sock")
+	for _, p := range []string{stale, other} {
+		if err := os.Symlink(own, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "new", sess+"-2", "--detach"); err != nil {
+		t.Fatalf("start the daemon again: %v: %s", err, out)
+	}
+	waitLinkTo(t, stale, "", "after the daemon started again")
+	if _, err := os.Lstat(other); err != nil {
+		t.Fatalf("the sweep removed the link of another socket's daemon: %v", err)
+	}
+	waitLinkTo(t, readAgentLink(t, base, sess+"-2").Path, own, "a session made after the restart")
 }

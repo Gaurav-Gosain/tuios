@@ -100,9 +100,11 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 }
 
 // ownedSocket reports whether path is an absolute path to a Unix socket, not
-// a link, owned by the user the daemon runs as, in a folder that user owns
-// and no one else may write to. Another user could otherwise put a socket of
-// their own where the name points.
+// a link, owned by the user the daemon runs as, where no other user can put a
+// socket of their own in its place. Every folder from the socket's up to the
+// root is checked, as OpenSSH's safe_path does: each must be owned by this
+// user or by root, and no other user may write to it, unless it is sticky
+// (/tmp), where nobody can remove or rename what another user made.
 func ownedSocket(path string) bool {
 	if !filepath.IsAbs(path) || hasControl(path) {
 		return false
@@ -115,12 +117,28 @@ func ownedSocket(path string) bool {
 	if uid, ok := fileOwner(fi); !ok || uid != me {
 		return false
 	}
-	dir, err := os.Lstat(filepath.Dir(path))
-	if err != nil || !dir.IsDir() || dir.Mode().Perm()&0o022 != 0 {
+	for dir := filepath.Dir(filepath.Clean(path)); ; dir = filepath.Dir(dir) {
+		if !safeFolder(dir, me) {
+			return false
+		}
+		if dir == filepath.Dir(dir) {
+			return true
+		}
+	}
+}
+
+// safeFolder reports whether dir is a real folder, owned by me or by root,
+// that no other user can write to unless it is sticky.
+func safeFolder(dir string, me int) bool {
+	fi, err := os.Lstat(dir)
+	if err != nil || !fi.IsDir() {
 		return false
 	}
-	uid, ok := fileOwner(dir)
-	return ok && uid == me
+	uid, ok := fileOwner(fi)
+	if !ok || (uid != me && uid != 0) {
+		return false
+	}
+	return fi.Mode().Perm()&0o022 == 0 || fi.Mode()&os.ModeSticky != 0
 }
 
 // findRemoteLogin finds the ssh or mosh client in the foreground of the pane

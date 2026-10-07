@@ -302,8 +302,10 @@ ssh_agent = "follow"
 - The link is `agent-<id>.sock` in the folder of the daemon socket, for example `$XDG_RUNTIME_DIR/tuios/agent-3f2a9c1d.sock`. `tuios ssh-agent-path` prints it.
 - Each new pane of the session gets `SSH_AUTH_SOCK` set to the link.
 - A shell that started before you set the option keeps its old value. To use the link in that shell and in every shell, add this line to your shell rc: `p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"`
-- When the client that the link points at detaches, the link moves to the socket of the client before it. When no attached client has a socket, tuios removes the link.
-- tuios uses the `SSH_AUTH_SOCK` of `tuios attach` and `tuios new` only. A client that runs inside a pane does not count. tuios refuses a socket that is not a Unix socket that you own, a symbolic link, or a socket in a folder that other users can write to.
+- When the client that the link points at detaches, the link moves to the socket of the client before it. When no attached client has a socket, the link points at the `SSH_AUTH_SOCK` of the daemon, if the daemon has one that passes the checks below. Otherwise tuios removes the link.
+- The daemon removes its links when it stops and when you set the option to `"off"`. At start, it removes the links that a stopped daemon left.
+- tuios uses the `SSH_AUTH_SOCK` of `tuios attach` and `tuios new` only. A client that runs inside a pane does not count. tuios finds such a client by its process, so a process that leaves its pane on purpose (for example, with `setsid` and a clean environment) can still move the link. This check stops mistakes and agents, not a local process that wants to get past it.
+- tuios resolves a symbolic link once, so `~/.ssh/agent.sock` and the 1Password agent work. The link then points at the real socket. The real socket must be a Unix socket that you own. Every folder above it must be owned by you or by root, and no other user can write to it, unless it is sticky like `/tmp`. tuios refuses other sockets.
 - A client of the tuios SSH server or of `tuios-web` has no agent socket, so it does not move the link. To follow your agent, ssh to the machine with `ssh -A` and run `tuios attach`.
 
 A change in the config file applies to the next attach. New panes get the link while the option is on.

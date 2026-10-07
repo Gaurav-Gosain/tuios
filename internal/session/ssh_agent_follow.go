@@ -4,8 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -30,17 +32,25 @@ import (
 //   - A client sends its SSH_AUTH_SOCK in its hello. The link points at the
 //     socket of the client that attached to the session or used it last.
 //   - When that client leaves, the link points at the socket of the client
-//     before it, and with none left the link is removed.
+//     before it. With no client left, it points at the daemon's own
+//     SSH_AUTH_SOCK when that one passes the same checks, and otherwise the
+//     link is removed.
+//   - Links are swept at start and stop, and when the option is turned off,
+//     so a link never outlives the daemon that kept it.
 //
 // Which sockets count:
 //
 //   - Only a client that may act as the person (human_origin.go). A client
 //     that runs inside a pane of this daemon does not, and neither does one
-//     over a link: its socket is a path on another machine.
-//   - Only a socket ownedSocket accepts: an absolute path to a Unix socket,
-//     not a link, owned by this user, in a folder this user owns and nobody
-//     else may write to. A socket in /tmp itself, or one another user could
-//     put in place, is refused.
+//     over a link: its socket is a path on another machine. A process that
+//     leaves its pane on purpose is not found in it, as human_origin.go says,
+//     so this bounds accidents and agents, not a determined local process.
+//   - The path is resolved once (filepath.EvalSymlinks): ~/.ssh/agent.sock
+//     and the 1Password agent are links to the real socket. The resolved
+//     socket must pass ownedSocket: a Unix socket this user owns, in folders
+//     owned by this user or root that no other user can write to, unless
+//     sticky. The link points at the resolved path, and the resolved path is
+//     what later checks and the dedupe use.
 //
 // A client served by tuios's own SSH server or by tuios-web sends no socket:
 // that server holds no agent of the person's, so there is nothing to follow.
@@ -57,6 +67,22 @@ type agentFollow struct {
 	mu        sync.Mutex
 	bySession map[string][]agentCandidate
 	target    map[string]string
+	// fallback is the daemon's own SSH_AUTH_SOCK, resolved, or "" when it
+	// has none that passes ownedSocket. Read once at start.
+	fallback string
+}
+
+// resolveAgentSocket resolves sock once and checks the result with
+// ownedSocket. It returns the resolved path and whether it may be followed.
+func resolveAgentSocket(sock string) (string, bool) {
+	if sock == "" || !filepath.IsAbs(sock) || hasControl(sock) {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(sock)
+	if err != nil || !ownedSocket(resolved) {
+		return "", false
+	}
+	return resolved, true
 }
 
 // SSHAgentLinkPath is the stable agent link of the session with the given id,
@@ -67,27 +93,92 @@ func SSHAgentLinkPath(socketPath, sessionID string) string {
 	if len(short) > 12 {
 		short = short[:12]
 	}
-	return filepath.Join(filepath.Dir(socketPath), "agent-"+short+".sock")
+	return filepath.Join(filepath.Dir(socketPath), agentLinkPrefix(socketPath)+short+".sock")
+}
+
+// agentLinkPrefix is how the links of the daemon on socketPath start. The
+// default socket's are agent-, and a daemon on another socket in the same
+// folder names its own after the socket, so a sweep takes only its own.
+func agentLinkPrefix(socketPath string) string {
+	base := filepath.Base(socketPath)
+	if base == "tuios.sock" {
+		return "agent-"
+	}
+	return strings.TrimSuffix(base, ".sock") + "-agent-"
+}
+
+// sweepAgentLinks removes every agent link of this daemon in the socket
+// folder: the ones a killed daemon left, at start, and its own, at stop.
+// Only symlinks are removed.
+func (d *Daemon) sweepAgentLinks() {
+	sock := d.manager.SocketPath()
+	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(sock), agentLinkPrefix(sock)+"*.sock"))
+	for _, m := range matches {
+		if fi, err := os.Lstat(m); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			_ = os.Remove(m)
+		}
+	}
+}
+
+// sunPathMax is the longest Unix socket path the platform takes, without the
+// terminating zero.
+func sunPathMax() int {
+	if runtime.GOOS == "linux" {
+		return 107
+	}
+	return 103
+}
+
+// startSSHAgent sweeps what an earlier daemon left, reads the daemon's own
+// socket for the fallback, and warns when a link path is too long for a
+// client to connect to. It runs once, before any session is restored.
+func (d *Daemon) startSSHAgent() {
+	d.sweepAgentLinks()
+	fallback, _ := resolveAgentSocket(os.Getenv("SSH_AUTH_SOCK"))
+	d.sshAgent.mu.Lock()
+	d.sshAgent.fallback = fallback
+	d.sshAgent.mu.Unlock()
+	if !d.sshAgentFollowing() {
+		return
+	}
+	if n := len(SSHAgentLinkPath(d.manager.SocketPath(), "00000000-")); n > sunPathMax() {
+		log.Printf("Warning: the ssh agent links are %d characters long, and a Unix socket path can be at most %d. ssh in a pane cannot reach the agent. Set XDG_RUNTIME_DIR to a shorter folder.", n, sunPathMax())
+	}
 }
 
 // sshAgentFollowing reports whether [daemon] ssh_agent is follow.
 func (d *Daemon) sshAgentFollowing() bool { return d.manager.SSHAgentFollow() }
 
 // SetSSHAgent applies [daemon] ssh_agent. Turning it off removes every link,
-// so no pane is left with a socket that stops moving.
+// so no pane is left with a socket that stops moving. Turning it on gives
+// every session its link to the daemon's own socket until a client counts.
 func (d *Daemon) SetSSHAgent(mode string) {
 	on := strings.TrimSpace(mode) == config.SSHAgentFollow
 	was := d.manager.SSHAgentFollow()
 	d.manager.SetSSHAgentFollow(on)
-	if was && !on {
+	switch {
+	case was && !on:
 		d.sshAgent.mu.Lock()
-		for id := range d.sshAgent.target {
-			_ = os.Remove(d.agentLinkPath(id))
-		}
 		d.sshAgent.bySession = nil
 		d.sshAgent.target = nil
 		d.sshAgent.mu.Unlock()
+		d.sweepAgentLinks()
+	case !was && on:
+		for _, info := range d.manager.ListSessions() {
+			d.agentEnsureSession(info.ID)
+		}
 	}
+}
+
+// agentEnsureSession makes the session's link when it has none, for a session
+// that was just created or restored.
+func (d *Daemon) agentEnsureSession(sessionID string) {
+	if !d.sshAgentFollowing() {
+		return
+	}
+	d.sshAgent.mu.Lock()
+	defer d.sshAgent.mu.Unlock()
+	d.relinkAgentLocked(sessionID)
 }
 
 // agentLinkPath is the link of the session with the given id.
@@ -114,15 +205,20 @@ func (d *Daemon) agentNoteUse(cs *connState, sessionID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	list := f.bySession[sessionID]
-	if len(list) > 0 && list[0].clientID == cs.clientID && list[0].sock == sock && f.target[sessionID] == sock {
+	if len(list) > 0 && list[0].clientID == cs.clientID && f.target[sessionID] == list[0].sock {
 		return
 	}
-	if !ownedSocket(sock) {
-		LogBasic("Client %s (pid %d) sent an ssh agent socket that is not followed: it must be a socket this user owns, in a folder no other user can write to", cs.clientID, cs.peerPID)
+	resolved, ok := resolveAgentSocket(sock)
+	if !ok {
+		// Said once per connection: a client that is refused keeps
+		// reporting use once a second.
+		if cs.agentRefused.CompareAndSwap(false, true) {
+			LogBasic("Client %s (pid %d) sent an ssh agent socket that is not followed: it must resolve to a socket this user owns, in folders no other user can write to", cs.clientID, cs.peerPID)
+		}
 		return
 	}
 	list = slices.DeleteFunc(list, func(c agentCandidate) bool { return c.clientID == cs.clientID })
-	list = append([]agentCandidate{{clientID: cs.clientID, sock: sock}}, list...)
+	list = append([]agentCandidate{{clientID: cs.clientID, sock: resolved}}, list...)
 	if f.bySession == nil {
 		f.bySession = make(map[string][]agentCandidate)
 	}
@@ -176,29 +272,34 @@ func (d *Daemon) relinkAgentLocked(sessionID string) {
 		f.bySession[sessionID] = list
 	}
 	link := d.agentLinkPath(sessionID)
-	if len(list) == 0 {
+	want, from := "", "the daemon's own socket"
+	if len(list) > 0 {
+		want, from = list[0].sock, "the socket of client "+list[0].clientID
+	} else if f.fallback != "" && ownedSocket(f.fallback) {
+		want = f.fallback
+	}
+	if want == "" {
 		if _, ok := f.target[sessionID]; ok {
 			_ = os.Remove(link)
 			delete(f.target, sessionID)
-			LogBasic("Removed the ssh agent link of session %s: no attached client has an agent", shortID(sessionID))
+			LogBasic("Removed the ssh agent link of session %s: no attached client has an agent, and the daemon has none", shortID(sessionID))
 		}
 		return
 	}
-	want := list[0].sock
 	if f.target[sessionID] == want {
 		if cur, err := os.Readlink(link); err == nil && cur == want {
 			return
 		}
 	}
 	if err := replaceSymlink(want, link); err != nil {
-		LogBasic("Could not point the ssh agent link of session %s at the client's socket: %v", shortID(sessionID), err)
+		LogBasic("Could not point the ssh agent link of session %s at %s: %v", shortID(sessionID), from, err)
 		return
 	}
 	if f.target == nil {
 		f.target = make(map[string]string)
 	}
 	f.target[sessionID] = want
-	LogBasic("Pointed the ssh agent link of session %s at the socket of client %s", shortID(sessionID), list[0].clientID)
+	LogBasic("Pointed the ssh agent link of session %s at %s", shortID(sessionID), from)
 }
 
 // replaceSymlink makes link point at target in one step: a new link under a

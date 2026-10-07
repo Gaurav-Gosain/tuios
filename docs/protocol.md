@@ -1932,10 +1932,13 @@ Params: `session` (required).
 
 The client sends its socket as `ssh_auth_sock` in its hello. Only `tuios
 attach` and `tuios new` send it. The daemon follows it only for a client that
-may act as the person, and only for an absolute path to a Unix socket, not a
-link, owned by the user, in a folder that the user owns and no other user can
-write to. When the client leaves, the link moves to the client before it, or
-is removed.
+may act as the person. The path is resolved once with its symbolic links,
+and the result must be a Unix socket that the user owns. Every folder above it
+must be owned by the user or by root, and no other user may write to it unless
+it is sticky. The link points at the resolved path. When the client leaves,
+the link moves to the client before it. With none left, it points at the
+daemon's own `SSH_AUTH_SOCK` when that passes the same checks, or is removed.
+The daemon removes its links at start, at stop and when the option is off.
 
 Request:
 
