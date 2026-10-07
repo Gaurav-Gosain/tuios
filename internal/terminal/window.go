@@ -548,11 +548,9 @@ type SearchCache struct {
 	// internal/input. CaseSensitive is the setting it ran with. Capped is
 	// set when it stopped at MaxSearchMatches, so Matches may not be all
 	// of them. HistoryGen and HistoryLen are the history's generation and
-	// length, and HistoryKnown is false when the terminal keeps no
-	// generation.
+	// length.
 	CaseSensitive bool
 	Capped        bool
-	HistoryKnown  bool
 	HistoryGen    uint64
 	HistoryLen    int
 }

@@ -161,16 +161,6 @@ func searchPad(query string, width int) int {
 	return utf8.RuneCountInString(query)
 }
 
-// scrollbackGeneration is the terminal's history generation, when it keeps
-// one. See vt.Emulator.ScrollbackGeneration.
-func scrollbackGeneration(t vt.Terminal) (uint64, bool) {
-	g, ok := t.(interface{ ScrollbackGeneration() uint64 })
-	if !ok {
-		return 0, false
-	}
-	return g.ScrollbackGeneration(), true
-}
-
 // narrowedLines returns the history lines a search for cm.SearchQuery has to
 // read, newest first, when the last search can tell, and ok false when every
 // line has to be read. A line that holds a query holds every prefix of it.
@@ -178,9 +168,9 @@ func scrollbackGeneration(t vt.Terminal) (uint64, bool) {
 // history, and found every match rather than stopping at the limit, only the
 // lines it matched can match now. That is the search a person typing one more
 // letter makes.
-func narrowedLines(cm *terminal.CopyMode, gen uint64, genOK bool, sbLen int) ([]int, bool) {
+func narrowedLines(cm *terminal.CopyMode, gen uint64, sbLen int) ([]int, bool) {
 	c := &cm.SearchCache
-	if !genOK || !c.Valid || !c.HistoryKnown || c.Capped ||
+	if !c.Valid || c.Capped ||
 		c.HistoryGen != gen || c.HistoryLen != sbLen || c.CaseSensitive != cm.CaseSensitive ||
 		c.Query == "" || !strings.HasPrefix(cm.SearchQuery, c.Query) {
 		return nil, false
@@ -220,7 +210,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 	term := window.Terminal
 	scrollbackLen := window.ScrollbackLen()
 	screenHeight := term.Height()
-	gen, genOK := scrollbackGeneration(term)
+	gen := term.ScrollbackGeneration()
 
 	// The buffer is scanned newest line first, the screen and then the
 	// scrollback, so when the match limit is reached the matches kept are the
@@ -245,7 +235,7 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 		line.fromHistory(cells, width, searchPad(query, width), fold)
 		return line.find(q, i, nil)
 	}
-	if only, ok := narrowedLines(cm, gen, genOK, scrollbackLen); ok {
+	if only, ok := narrowedLines(cm, gen, scrollbackLen); ok {
 		for _, i := range only {
 			if total >= maxSearchMatches {
 				break
@@ -288,7 +278,6 @@ func executeSearch(cm *terminal.CopyMode, window *terminal.Window) {
 		Valid:         true,
 		CaseSensitive: cm.CaseSensitive,
 		Capped:        total >= maxSearchMatches,
-		HistoryKnown:  genOK,
 		HistoryGen:    gen,
 		HistoryLen:    scrollbackLen,
 	}

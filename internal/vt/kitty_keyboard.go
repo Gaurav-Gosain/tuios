@@ -52,13 +52,19 @@ func (k *kittyKeyboardState) Stack() []int {
 // SetStack replaces the active screen's stack, keeping the newest entries
 // when there are more than the limit allows. An empty stack is the base entry.
 func (k *kittyKeyboardState) SetStack(stack []int) {
+	setKittyStack(k.active(), stack)
+}
+
+// setKittyStack stores a copy of stack in dst, keeping the newest entries
+// past the limit, and the base entry for an empty stack.
+func setKittyStack(dst *[]int, stack []int) {
 	if len(stack) > maxKittyKeyboardStack {
 		stack = stack[len(stack)-maxKittyKeyboardStack:]
 	}
 	if len(stack) == 0 {
 		stack = []int{0}
 	}
-	*k.active() = slices.Clone(stack)
+	*dst = slices.Clone(stack)
 }
 
 // MainStack returns the main screen's stack while the alternate screen is in
@@ -75,13 +81,7 @@ func (k *kittyKeyboardState) MainStack() []int {
 // SetMainStack replaces the main screen's stack, with the limits SetStack
 // applies, whichever screen is in use.
 func (k *kittyKeyboardState) SetMainStack(stack []int) {
-	if len(stack) > maxKittyKeyboardStack {
-		stack = stack[len(stack)-maxKittyKeyboardStack:]
-	}
-	if len(stack) == 0 {
-		stack = []int{0}
-	}
-	k.main = slices.Clone(stack)
+	setKittyStack(&k.main, stack)
 }
 
 // SetAltScreen follows a switch between the main and the alternate screen.

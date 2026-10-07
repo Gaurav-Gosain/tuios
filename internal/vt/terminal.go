@@ -100,6 +100,11 @@ type Terminal interface {
 
 	// Scrollback.
 	ScrollbackLen() int
+	// ScrollbackGeneration changes whenever the main screen's history does:
+	// a line pushed, the ring trimmed, cleared or resized. A reader that
+	// derived something from the history can keep it while the number
+	// stays the same.
+	ScrollbackGeneration() uint64
 	ScrollbackLine(index int) uv.Line
 	// ScrollbackRows, ScrollbackText and CopyScrollback are for a reader of
 	// many history lines at once. ScrollbackLine decodes each line into a
