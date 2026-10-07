@@ -3144,3 +3144,35 @@ Each control below was run on 2026-10-08 on branch `chore/sip-0.8.5`.
 | --- | --- | --- | --- |
 | tuios-web does not hand the names to sip | `webAccess.apply`: the `cfg.AllowedHosts = a.allowHosts` line cut | `TestWebAllowHostLetsAProxyNameIn` (Host `term.example` gets 403, want 101), and the unit test `TestAllowHostAddsAName` | **caught** |
 | The Host check is off | `webAccess.apply`: `"*"` added to `cfg.AllowedHosts` | `TestWebAllowHostLetsAProxyNameIn` (Host `evil.example` gets 101, want 403) | **caught** |
+
+## The GUI bridge: layout ops, actions, keys and sizes
+
+`gui_bridge_test.go` runs a real `tuios gui-bridge` against a real daemon and
+speaks its frame protocol. Each layout test checks the bridge's own state, a
+second client that attaches afterwards and reads the tree from the daemon,
+and for swap and move a terminal client whose screen shows each pane's marker
+inside the rectangle the bridge gives the pane. Set `TUIOS_E2E_FRAMES` to keep
+the terminal frames and a JSON transcript of every command, result and the
+last state.
+
+On 2026-10-08 each control below was built from `83d95938` with one cut, and
+the named tests were run against it. Each cut is the wiring, not the function
+under it: a `case` in the dispatch, a call site, or a field in the export.
+The unbroken binary passed all eleven tests on the same day.
+
+| Wiring cut | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The `swap`, `move`, `move-root` and `float-geometry` ops | drop their `case` lines from `runLayout` in `internal/guibridge/layout.go` | `TestGUIBridgeSwap`, `TestGUIBridgeMove`, `TestGUIBridgeMoveRoot`, `TestGUIBridgeFloatGeometry`, each on its own op ("layout op \"swap\" is not known") | **caught** (4 of 4) |
+| The `set-ratio` and `toggle-float` ops | drop their `case` lines from `runLayout` | `TestGUIBridgeSetRatio`, `TestGUIBridgeToggleFloat`, each on its own op | **caught** (2 of 2) |
+| The `equalize` op | drop its `case` from `runLayout` | `TestGUIBridgeEqualize` ("layout op \"equalize\" is not known") | **caught** |
+| Insert-beside and insert-at-root in the tiler | `MovePaneBeside` and `MovePaneToRoot` in `internal/app/gui_layout.go` skip the `tree.MoveWindow` and `tree.MoveWindowToRoot` calls | `TestGUIBridgeMove` ("cannot move beside itself"), `TestGUIBridgeMoveRoot` ("is the only tiled pane") | **caught** (2 of 2) |
+| The `action` command | rename its `case` in `model.handle` in `internal/guibridge/bridge.go` | `TestGUIBridgeAction` (no result for `new_window` within 10 s) | **caught** |
+| The keybinds event again after a config reload | drop the `sendKeybinds` call from `model.Update` | `TestGUIBridgeKeybinds` ("keybinds event 2 never came (saw 1)") | **caught** |
+| The `gui` scope | drop the `ScopeGUI` entry from `Scopes` in `internal/config/keybind_scopes.go` | `TestGUIBridgeKeybinds` ("the gui scope's default chords are missing", "the list rows have no gui scope") | **caught** |
+| `session_size` and the session name in the state | drop the `SessionSize` field from `export`, and keep the name the bridge attached with | `TestGUIBridgeSessionSize` (never shows the session at the bridge's width), `TestGUIBridgeSessionName` (still "first" after `next_session`) | **caught** (2 of 2) |
+| Leaf names from the forward map | revert `a7afa9b1` | `TestGUIBridgeSetRatio`, `TestGUIBridgeMove` (the second client's tree names no leaf) | **caught**, and the tests found this bug |
+
+The tests do not cover the `viewport` field with a session larger than the
+bridge, because the daemon's default `window_size = smallest` never makes one.
+`TestGUIBridgeSessionSize` asserts only that `viewport` stays unset while the
+session is the smaller.
