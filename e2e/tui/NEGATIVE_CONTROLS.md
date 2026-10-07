@@ -2348,3 +2348,4 @@ positive half of the hidden and too-wide cases.
 | The config never reaches the dock | cut the three assignments in `ApplyAppearanceConfig` | `/custom`, `/terminal`, `/hidden`, `/compact`. `/too-wide` passes, which is correct: it expects the default | **caught** |
 | An empty label still draws a pill | `buildDockLeftText`: the empty label padded to two spaces | `/hidden` (6 caps on the row, want 4) | **caught** |
 | No width limit | `DockModeIconUsable`: the width check cut | `/too-wide` (the nine-cell icon is drawn) | **caught** |
+| The word `default` in config.toml drawn as text | `dockModeIcon`: the `DockModeIconDefault` check cut | `/default-word` (the dock row shows `default`) | **caught** |

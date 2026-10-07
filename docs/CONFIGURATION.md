@@ -481,7 +481,8 @@ To remove the whole mode pill, remove `"mode"` from the `left` list in the
 
 You can also set the icons on the settings page, in the Dock section, or with
 `tuios set-config dock_mode_icon_window WM`. The word `default` puts an icon
-back to the icon of the glyph set. The change applies at once.
+back to the icon of the glyph set, in the settings, with set-config and in
+`config.toml`. The change applies at once.
 
 ## Workspace label cap
 

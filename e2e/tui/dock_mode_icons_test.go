@@ -202,6 +202,17 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
+	// The word default, written in the file by hand, is the built-in icon,
+	// as it is on the settings page and for set-config.
+	t.Run("default-word", func(t *testing.T) {
+		term := startDockModeIcons(t, "dock_mode_icon_window = \"default\"\n")
+		s := term.Screen()
+		line := s.Line(dockStatusRow(s))
+		if strings.Contains(line, "default") || !strings.Contains(line, defaultWindowModeIcon) {
+			t.Fatalf("the word default must draw the default icon\n%s", line)
+		}
+	})
+
 	// The settings page lists the three rows: an empty icon reads as no icon,
 	// and an unset one as the word that puts it back.
 	t.Run("settings", func(t *testing.T) {

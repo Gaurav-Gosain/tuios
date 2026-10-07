@@ -794,9 +794,10 @@ func DockModeIconUsable(value string) bool {
 // dockModeIcon is the icon for one mode: the configured one when it is set
 // and usable, and otherwise the built-in for the glyph set. The configured
 // value wins over use_ascii_only, since the person wrote it for the terminal
-// they have.
+// they have. The word default, written in config.toml by hand, reads as
+// unset, the way the settings page and set-config treat it.
 func (s *Settings) dockModeIcon(set *string, nerd, ascii string) string {
-	if set != nil && DockModeIconUsable(*set) {
+	if set != nil && strings.TrimSpace(*set) != DockModeIconDefault && DockModeIconUsable(*set) {
 		return *set
 	}
 	if s.NerdFontsOff() {
