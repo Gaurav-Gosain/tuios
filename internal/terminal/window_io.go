@@ -9,7 +9,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
@@ -293,30 +292,26 @@ func (w *Window) outputWriter() {
 	}
 }
 
-// frameInterval is the coalescer's floor in nanoseconds: one frame at the
-// client's max_fps. The app sets it with SetFrameInterval when the frame rate
-// is known or changes; until then it is minCoalesceInterval.
+// SetFrameInterval sets the shortest interval between two render signals from
+// this pane: one frame at the frame rate of the client that owns it. A value
+// of zero or less restores the default, minCoalesceInterval.
 //
 // It used to be the constant 8 ms, about 120 frames a second, whatever
 // max_fps said. A pane could then never be drawn more than 125 times a
-// second, so max_fps 240 drew 125 frames of an animating pane, and a
-// guest that drew at exactly 120 raced a floor 0.33 ms shorter than its own
-// period.
-var frameInterval atomic.Int64
-
-// SetFrameInterval sets the shortest interval between two render signals from
-// one pane: one frame at the client's frame rate. A value of zero or less
-// restores the default.
-func SetFrameInterval(d time.Duration) {
+// second, so max_fps 240 drew 125 frames of an animating pane, and a guest
+// that drew at exactly 120 raced a floor 0.33 ms shorter than its own period.
+// It is kept per pane because a server holds one client per connection, each
+// with its own panes and its own max_fps.
+func (w *Window) SetFrameInterval(d time.Duration) {
 	if d <= 0 {
 		d = minCoalesceInterval
 	}
-	frameInterval.Store(int64(d))
+	w.frameInterval.Store(int64(d))
 }
 
 // minFrameInterval is the coalescer's floor now.
-func minFrameInterval() time.Duration {
-	if d := frameInterval.Load(); d > 0 {
+func (w *Window) minFrameInterval() time.Duration {
+	if d := w.frameInterval.Load(); d > 0 {
 		return time.Duration(d)
 	}
 	return minCoalesceInterval
@@ -360,7 +355,7 @@ const (
 // drawn at 10 to 15 frames a second. At two frames it is drawn at about 68 a
 // second, and the guest wrote as many lines in the same time (1.28 million in
 // 5 s either way), so the writer did not lose to the renderer.
-func catchUpCoalesceInterval() time.Duration { return catchUpFrames * minFrameInterval() }
+func (w *Window) catchUpCoalesceInterval() time.Duration { return catchUpFrames * w.minFrameInterval() }
 
 // coalesceInterval is how long this pane must wait between render signals,
 // derived from what the client's last frame actually cost.
@@ -390,9 +385,9 @@ func catchUpCoalesceInterval() time.Duration { return catchUpFrames * minFrameIn
 // frames that were never going to be looked at.
 func (w *Window) coalesceInterval() time.Duration {
 	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
-	interval := min(max(cost, minFrameInterval()), maxCoalesceInterval)
+	interval := min(max(cost, w.minFrameInterval()), maxCoalesceInterval)
 	if w.queuedBytes.Load() >= catchUpBacklog {
-		return max(interval, catchUpCoalesceInterval())
+		return max(interval, w.catchUpCoalesceInterval())
 	}
 	return interval
 }
@@ -426,7 +421,7 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 // bursts instead of ticking also means an idle pane costs no wakeups at all,
 // where before every open pane woke 125 times a second forever.
 func (w *Window) renderCoalescer() {
-	timer := time.NewTimer(minFrameInterval())
+	timer := time.NewTimer(w.minFrameInterval())
 	if !timer.Stop() {
 		<-timer.C
 	}
