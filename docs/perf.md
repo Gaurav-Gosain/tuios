@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 32,792,738 | 32,825,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,842,578 | 30,875,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 33,034,402 | 33,100,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 31,077,826 | 31,140,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2432,6 +2432,13 @@ rail and Inbox display, the reports to the host terminal, and `tuios status`.
 It links no new package. On Go 1.26.6 the build measured 32,792,738 and
 30,842,578 bytes: linux/amd64 was 92,738 over its budget of 32,700,000, and
 darwin/arm64 82,578 over its 30,760,000.
+
+The budgets went to 33,100,000 (linux/amd64) and 31,140,000 (darwin/arm64)
+for config includes and config.d (#518): the merge of several files, the
+three-way save that edits the lines of the changed key in the file that holds
+it, the watcher that follows every file, and the config files, origin and
+prune commands. That brought the build to 33,034,402 and 31,077,826 bytes
+(Go 1.26.6) on main at 01d72efb, about 209 KB and 203 KB over the old budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
