@@ -2266,3 +2266,8 @@ of at least one row. Both run alone and through a daemon.
 | A line selection starts at the first printed cell | `enterVisualLine` takes `startX` from `getLineContentBounds` | `TestCopyKeepsPrintedWhitespace`, both modes. The wrapped test passes, which is correct: `j` moves the start to the first column | **caught** |
 | The wrap flag ignored | `selectionRowWraps` returns false | `TestCopyKeepsSpacesAtASoftWrap`, both modes (a newline at every wrap). `TestCopyKeepsPrintedWhitespace` passes, which is its positive half: none of its lines wrap | **caught** |
 | Screen rows read at the window's width | `selectionRowCells` sized by `window.Width`, which counts the border | `TestCopyKeepsSpacesAtASoftWrap`, both modes (two extra spaces at every wrap) | **caught** |
+| The pad a wide character leaves at a wrap copied as a space | `extractVisualText` keeps the last cell of a padded row | `TestCopyKeepsSpacesAtASoftWrap`, both modes ("the line wrapped before a wide character copied as" a space before the wide character). The pure Go build and the ghostty build both fail | **caught** |
+| The ghostty backend reports no pad | `ghosttySpacerHead` returns false, as `RowPadded` did before | `TestCopyKeepsSpacesAtASoftWrap` on a `-tags ghostty` build, both modes. The same test passes on the ghostty build with the fix | **caught** |
+
+The wide case prints a line that fills the pane to one column short of its
+width, then a wide character, so the character wraps early on any pane width.
