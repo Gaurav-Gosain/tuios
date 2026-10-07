@@ -109,6 +109,16 @@ fn main() {
     // about 5 MB of heap and 100 MB of mappings. `gpu = "any"` keeps every
     // driver. Panes keep the user's own setting.
     let gpu = file.gpu.as_deref().unwrap_or("auto");
+    // GPUI asks wgpu for Vulkan and OpenGL both. Probing OpenGL loads every
+    // EGL driver (NVIDIA's EGL and GL cores, Mesa with LLVM): about 8 MB of
+    // heap and 150 MB of mappings for a backend that is never used while a
+    // Vulkan driver is installed. An empty EGL vendor list skips the probe.
+    // `gpu = "any"` keeps it. Panes keep the user's own setting.
+    if gpu != "any" && std::env::var_os("__EGL_VENDOR_LIBRARY_FILENAMES").is_none() && config::has_vulkan_driver() {
+        // SAFETY: nothing else runs yet.
+        unsafe { std::env::set_var("__EGL_VENDOR_LIBRARY_FILENAMES", "/dev/null") };
+        cfg.env.push(("__EGL_VENDOR_LIBRARY_FILENAMES".into(), String::new()));
+    }
     if (gpu == "integrated" || gpu == "auto") && std::env::var_os("VK_DRIVER_FILES").is_none() {
         let drivers = config::integrated_vulkan_drivers(gpu == "auto");
         if drivers.is_empty() {

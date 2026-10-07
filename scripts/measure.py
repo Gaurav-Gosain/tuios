@@ -21,6 +21,7 @@ paint times, memory) and /proc for CPU. It stops every process it started.
 GUI_CONFIG_HOME, when set, is the XDG_CONFIG_HOME the app reads its own
 config.toml from (to measure a setting such as gpu = "integrated").
 SCENARIOS, when set, is a comma-separated list of the scenarios to run.
+BUSY_SECONDS, when set, is how long busy4 runs (default 15).
 """
 import json, os, shutil, signal, socket, subprocess, sys, time
 
@@ -198,7 +199,7 @@ def main():
         if wanted("idle-spin"):
             results.append(run("idle-spin", "tuios", 15))
         if wanted("busy4"):
-            results.append(run("busy4", "busy4", 15))
+            results.append(run("busy4", "busy4", int(os.environ.get("BUSY_SECONDS", "15"))))
         if wanted("busy1"):
             results.append(run("busy1", "busy1", 15))
         if wanted("scroll"):

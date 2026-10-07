@@ -17,6 +17,7 @@
 //!                                  # displays, which saves memory;
 //!                                  # "integrated" uses it whenever there is
 //!                                  # one; "any" loads every Vulkan driver
+//!                                  # and the OpenGL ones
 //! theme = "tokyonight"             # overrides tuios's own [appearance] theme
 //! ```
 //!
@@ -81,6 +82,18 @@ pub fn integrated_vulkan_drivers(auto: bool) -> Vec<std::path::PathBuf> {
     }
     out.sort();
     out
+}
+
+/// Whether any Vulkan driver is installed, so the OpenGL fallback is not
+/// needed.
+pub fn has_vulkan_driver() -> bool {
+    let dirs = std::env::var("VK_DRIVER_FILES").ok().filter(|v| !v.is_empty());
+    if let Some(files) = dirs {
+        return std::env::split_paths(&files).any(|p| p.exists());
+    }
+    ["/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d", "/usr/local/share/vulkan/icd.d"].iter().any(|d| {
+        std::fs::read_dir(d).is_ok_and(|mut it| it.any(|e| e.is_ok_and(|e| e.file_name().to_string_lossy().ends_with(".json"))))
+    })
 }
 
 /// The PCI vendor ids of the GPUs the kernel knows, and of those with a

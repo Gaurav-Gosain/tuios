@@ -1,0 +1,41 @@
+[
+ {
+  "scenario": "idle-quiet",
+  "seconds": 15.0,
+  "app_cpu_pct": 0.2,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 0.2,
+  "frames_per_s": 1.0,
+  "grid_paints_per_s": 1.0,
+  "paint_p50_ms": 0.24,
+  "paint_p95_ms": 0.257,
+  "rss_mb": 174.5,
+  "anon_mb": 26.9
+ },
+ {
+  "scenario": "busy4",
+  "seconds": 15.0,
+  "app_cpu_pct": 8.07,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 2.2,
+  "frames_per_s": 49.07,
+  "grid_paints_per_s": 42.27,
+  "paint_p50_ms": 0.772,
+  "paint_p95_ms": 0.851,
+  "rss_mb": 179.7,
+  "anon_mb": 32.1
+ },
+ {
+  "scenario": "busy1",
+  "seconds": 15.0,
+  "app_cpu_pct": 5.33,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 1.0,
+  "frames_per_s": 43.33,
+  "grid_paints_per_s": 35.33,
+  "paint_p50_ms": 0.478,
+  "paint_p95_ms": 0.53,
+  "rss_mb": 175.6,
+  "anon_mb": 28.5
+ }
+]
