@@ -563,12 +563,11 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect, 
 	}
 
 	// Neither subtree may be squeezed below what its own leaves need, and a
-	// subtree split along the same axis needs the sum of its children.
-	lo := origin + minExtent(node.Left, e.vertical(), gap)
-	hi := origin + extent - gap - minExtent(node.Right, e.vertical(), gap)
-	if lo > hi {
-		return false
-	}
+	// subtree split along the same axis needs the sum of its children. A side
+	// that is already under that (a window resize can put it there) keeps the
+	// room it has: the bounds widen to take in the current line, so the line
+	// moves smoothly from where it is and never jumps to the far bound.
+	lo, hi := lineBounds(node, rect, gap, e.vertical())
 	line = max(lo, min(line, hi))
 
 	// Aim at the middle of the target cell. applyLayoutRecursive truncates
@@ -576,6 +575,50 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect, 
 	// to the previous cell and make a drag lose a step, or creep on re-apply.
 	node.SplitRatio = (float64(line-origin) + 0.5) / float64(extent)
 	return true
+}
+
+// lineBounds is where a split's divider line may go, in the coordinates of
+// rect, the split's own box: far enough in that neither side goes under the
+// space its panes need (see minExtent), widened to take in the line where it
+// is now. A side that is already too small may grow and may stay as it is, but
+// does not shrink further, and a line is never moved by a bound it was already
+// past.
+func lineBounds(node *TileNode, rect Rect, gap int, vertical bool) (lo, hi int) {
+	origin, extent := rect.X, rect.W
+	if !vertical {
+		origin, extent = rect.Y, rect.H
+	}
+	near, _ := childBounds(node, rect, gap)
+	cur := near.X + near.W
+	if !vertical {
+		cur = near.Y + near.H
+	}
+	lo = origin + minExtent(node.Left, vertical, gap)
+	hi = origin + extent - gap - minExtent(node.Right, vertical, gap)
+	return min(lo, cur), max(hi, cur)
+}
+
+// CanSplit reports whether splitting windowID's pane along dir at ratio leaves
+// both halves at least the smallest pane size (config.DefaultWindowWidth by
+// config.DefaultWindowHeight). A window that is not in the tree has no tile to
+// split, so it reports true and leaves the decision to the caller.
+func (t *BSPTree) CanSplit(windowID int, dir SplitType, ratio float64, bounds Rect, gap int) bool {
+	leaf := t.WindowToNode[windowID]
+	if leaf == nil {
+		return true
+	}
+	rect, ok := t.nodeBounds(leaf, bounds, gap)
+	if !ok {
+		return true
+	}
+	if ratio <= 0 || ratio >= 1 {
+		ratio = t.DefaultRatio
+	}
+	near, far := childBounds(&TileNode{SplitType: dir, SplitRatio: ratio}, rect, gap)
+	if dir == SplitVertical {
+		return near.W >= config.DefaultWindowWidth && far.W >= config.DefaultWindowWidth
+	}
+	return near.H >= config.DefaultWindowHeight && far.H >= config.DefaultWindowHeight
 }
 
 // minExtent is the smallest width (or height) a subtree can be laid out in

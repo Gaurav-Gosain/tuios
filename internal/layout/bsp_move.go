@@ -121,7 +121,8 @@ func (t *BSPTree) FindSplit(id uint64) *TileNode {
 
 // SetSplitRatio sets the ratio of the split with the given ID. The ratio is
 // held where neither side goes under the space its panes need (see
-// minExtent), the rule a divider drag follows. It returns the ratio the split
+// lineBounds), the rule a divider drag follows. A side that is already under
+// it keeps its line as a bound, so a drag from there never jumps. It returns the ratio the split
 // now has, and false when no split has the ID.
 //
 // bounds and gap are the ones the layout is applied with, because the space a
@@ -146,10 +147,14 @@ func (t *BSPTree) SetSplitRatio(id uint64, ratio float64, bounds Rect, gap int) 
 		node.SplitRatio = ratio
 		return ratio, true
 	}
-	lo := minExtent(node.Left, vertical, gap)
-	hi := extent - gap - minExtent(node.Right, vertical, gap)
+	lo, hi := lineBounds(node, rect, gap, vertical)
+	origin := rect.X
+	if !vertical {
+		origin = rect.Y
+	}
+	lo, hi = lo-origin, hi-origin
 	line := int(float64(extent) * ratio)
-	if lo <= hi && (line < lo || line > hi) {
+	if line < lo || line > hi {
 		// Aim at the middle of the cell, as ResizeSplit does, so the layout's
 		// truncation lands the divider on the cell the clamp chose.
 		ratio = (float64(max(lo, min(line, hi))) + 0.5) / float64(extent)
