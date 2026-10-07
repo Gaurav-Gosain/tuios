@@ -723,6 +723,9 @@ func (m *OS) composeFrame() string {
 		}
 	}
 	canvas := m.GetCanvas(true)
+	// Image glyphs before the spotlight, so the beam shades them like text.
+	// A frame with a modal had them drawn before its scrim (compose.go).
+	m.drawImageSymbols(canvas)
 	// The spotlight goes here and nowhere else: after every pane's cached layer
 	// has been consumed, before the canvas becomes a string. The saver owns the
 	// whole screen while it runs, so the two never draw in one frame.

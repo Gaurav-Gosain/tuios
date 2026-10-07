@@ -1,11 +1,10 @@
 package mosaic
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"sync"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The sixteen-colour floor.
@@ -29,14 +28,6 @@ var vga16 = [16]color.RGBA{
 	{85, 85, 85, 255}, {255, 85, 85, 255}, {85, 255, 85, 255}, {255, 255, 85, 255},
 	{85, 85, 255, 255}, {255, 85, 255, 255}, {85, 255, 255, 255}, {255, 255, 255, 255},
 }
-
-// ansiColors are the indices as colours, boxed once.
-var ansiColors = func() (c [16]color.Color) {
-	for i := range c {
-		c[i] = ansi.BasicColor(i)
-	}
-	return c
-}()
 
 var (
 	ansiOnce    sync.Once
@@ -92,14 +83,14 @@ func dither16(lab [3]float32, x, y int) int {
 	return int(ansiTable()[shift(c.R)<<10|shift(c.G)<<5|shift(c.B)])
 }
 
-// encodeANSI16 draws img as half blocks in the sixteen colours.
-func encodeANSI16(img Indexed, cellW, cellH, rows, cols int) []Cell {
+// encodeANSI16 draws the cells of region as half blocks in the sixteen
+// colours.
+func encodeANSI16(dst []Cell, img Indexed, cellW, cellH, cols int, region image.Rectangle) {
 	lin := linearPalette(img)
 	ansiTable()
 	half := cellH / 2
-	out := make([]Cell, rows*cols)
-	for r := range rows {
-		for c := range cols {
+	for r := region.Min.Y; r < region.Max.Y; r++ {
+		for c := region.Min.X; c < region.Max.X; c++ {
 			x0, y0 := c*cellW, r*cellH
 			top := average(img, lin, x0, y0, x0+cellW, y0+half)
 			bot := average(img, lin, x0, y0+half, x0+cellW, y0+cellH)
@@ -110,10 +101,21 @@ func encodeANSI16(img Indexed, cellW, cellH, rows, cols int) []Cell {
 			if !bot.clear {
 				b = dither16(bot.lab, c, 2*r+1)
 			}
-			out[r*cols+c] = halfCell16(top.clear, bot.clear, t, b)
+			dst[r*cols+c] = halfCell16(top.clear, bot.clear, t, b)
 		}
 	}
-	return out
+}
+
+// cell16 is a cell in ANSI colours: fg, and bg unless it is negative.
+func cell16(glyph string, fg, bg int) Cell {
+	c := Cell{Glyph: glyph}
+	if fg >= 0 {
+		c.Fg, c.FgIndex = vga16[fg], uint8(fg)
+	}
+	if bg >= 0 {
+		c.Bg, c.BgIndex = vga16[bg], uint8(bg)
+	}
+	return c
 }
 
 // halfCell16 is the cell for a top and a bottom colour, either of which may
@@ -123,21 +125,21 @@ func halfCell16(topClear, botClear bool, t, b int) Cell {
 	case topClear && botClear:
 		return Cell{Clear: true}
 	case topClear:
-		return Cell{Glyph: "▄", Fg: ansiColors[b]}
+		return cell16("▄", b, -1)
 	case botClear:
-		return Cell{Glyph: "▀", Fg: ansiColors[t]}
+		return cell16("▀", t, -1)
 	case t == b && t < 8:
-		return Cell{Glyph: " ", Bg: ansiColors[t]}
+		return cell16(" ", -1, t)
 	case t == b:
-		return Cell{Glyph: "█", Fg: ansiColors[t]}
+		return cell16("█", t, -1)
 	case b < 8:
-		return Cell{Glyph: "▀", Fg: ansiColors[t], Bg: ansiColors[b]}
+		return cell16("▀", t, b)
 	case t < 8:
-		return Cell{Glyph: "▄", Fg: ansiColors[b], Bg: ansiColors[t]}
+		return cell16("▄", b, t)
 	}
 	// Both bright: the one that loses least becomes its dark neighbour.
 	if darkCost[b] <= darkCost[t] {
-		return Cell{Glyph: "▀", Fg: ansiColors[t], Bg: ansiColors[darkNearest[b]]}
+		return cell16("▀", t, int(darkNearest[b]))
 	}
-	return Cell{Glyph: "▄", Fg: ansiColors[b], Bg: ansiColors[darkNearest[t]]}
+	return cell16("▄", b, int(darkNearest[t]))
 }

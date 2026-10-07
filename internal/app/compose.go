@@ -333,6 +333,8 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			continue
 		}
 		if !scrimmed && scrimBehind(cl.layer.GetID()) {
+			// Image glyphs first, so the scrim fades them like text.
+			m.drawImageSymbols(canvas)
 			m.applyScrim(canvas)
 			scrimmed = true
 		}

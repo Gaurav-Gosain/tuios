@@ -85,11 +85,11 @@ func ditherToPalette(lab [3]float32, x, y int) [3]float32 {
 
 // snap replaces a chosen colour with its nearest palette entry. A group of
 // sub-pixels that all hold one entry averages back to that entry, up to
-// rounding, so this undoes the rounding.
-func snap(c color.Color) color.Color {
-	rgba, ok := c.(color.RGBA)
-	if !ok {
+// rounding, so this undoes the rounding. A colour with alpha 0 is no colour
+// and stays as it is.
+func snap(c color.RGBA) color.RGBA {
+	if c.A == 0 {
 		return c
 	}
-	return xtermPalette[nearestIndex(rgba)]
+	return xtermPalette[nearestIndex(c)]
 }

@@ -2,6 +2,7 @@ package mosaic
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"testing"
 )
@@ -31,7 +32,7 @@ func BenchmarkEncode(b *testing.B) {
 	b.Run("half-16", func(b *testing.B) {
 		for b.Loop() {
 			cells := Encode(img, 10, 20, 24, 80, Half, ANSI16)
-			Fidelity(img, 10, 20, 24, 80, cells)
+			Fidelity(img, 10, 20, 80, image.Rect(0, 0, 80, 24), cells)
 		}
 	})
 }

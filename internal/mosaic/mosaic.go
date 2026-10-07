@@ -16,6 +16,7 @@
 package mosaic
 
 import (
+	"image"
 	"image/color"
 	"math"
 )
@@ -76,15 +77,21 @@ func (k Kind) grid() (gx, gy int) {
 }
 
 // Cell is one drawn cell: Glyph in Fg on Bg. A cell with Clear set is
-// transparent, so the pane's own background shows. A cell with a nil Bg is
-// drawn on the pane's own background.
+// transparent, so the pane's own background shows. A cell whose Bg has alpha
+// 0 is drawn on the pane's own background, and so is the space of a cell
+// whose Fg has alpha 0.
 //
-// The glyph is a string and the colours are interfaces, made once here, so
-// putting a cell on every frame allocates nothing.
+// The colours are values, not interfaces: a picture holds thousands of cells,
+// and a boxed colour is a pointer and an allocation each. The glyph is one of
+// the strings of a fixed table, so it costs nothing either.
 type Cell struct {
 	Glyph  string
-	Fg, Bg color.Color
-	Clear  bool
+	Fg, Bg color.RGBA
+	// FgIndex and BgIndex are Fg and Bg as ANSI indices, 0 to 15, in cells
+	// drawn for ANSI16. The terminal paints those from its own palette, so
+	// they are sent as indices; Fg and Bg are the VGA colours they stand for.
+	FgIndex, BgIndex uint8
+	Clear            bool
 }
 
 // Indexed is a paletted picture, the form a decoded sixel image is kept in.
@@ -122,16 +129,40 @@ const (
 // At ANSI16 the cells are always half blocks, whatever k is: see
 // encodeANSI16.
 func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, colors Colors) []Cell {
-	if colors == ANSI16 {
-		if k == Off || rows <= 0 || cols <= 0 || cellW <= 0 || cellH <= 0 {
+	if k == Off || rows <= 0 || cols <= 0 || cellW <= 0 || cellH <= 0 {
+		return nil
+	}
+	if colors != ANSI16 {
+		if gx, _ := k.grid(); gx == 0 {
 			return nil
 		}
-		return encodeANSI16(img, cellW, cellH, rows, cols)
+	}
+	out := make([]Cell, rows*cols)
+	EncodeRegion(out, img, cellW, cellH, cols, image.Rect(0, 0, cols, rows), k, colors)
+	return out
+}
+
+// EncodeRegion draws the cells of region (in cells: X is the column, Y the
+// row) into dst, which holds the whole picture row by row, cols cells a row.
+// The cells outside region are left as they are. The dither is ordered, so a
+// cell comes out the same whichever region it was drawn in, and a picture can
+// be drawn a part at a time, as its parts come into view.
+func EncodeRegion(dst []Cell, img Indexed, cellW, cellH, cols int, region image.Rectangle, k Kind, colors Colors) {
+	if k == Off || cols <= 0 || cellW <= 0 || cellH <= 0 {
+		return
+	}
+	region = region.Intersect(image.Rect(0, 0, cols, len(dst)/cols))
+	if region.Empty() {
+		return
+	}
+	if colors == ANSI16 {
+		encodeANSI16(dst, img, cellW, cellH, cols, region)
+		return
 	}
 	xterm256 := colors == XTerm256
 	gx, gy := k.grid()
-	if gx == 0 || rows <= 0 || cols <= 0 || cellW <= 0 || cellH <= 0 {
-		return nil
+	if gx == 0 {
+		return
 	}
 	n := gx * gy
 	// The palette in linear light, once: the average of a sub-pixel is
@@ -139,19 +170,17 @@ func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, colors Colors) []
 	// grey the eye sees from a distance.
 	lin := linearPalette(img)
 	// Sub-pixel bounds inside a cell, the same for every cell.
-	xs := make([]int, gx+1)
-	ys := make([]int, gy+1)
-	for i := range xs {
+	var xs, ys [5]int
+	for i := range gx + 1 {
 		xs[i] = i * cellW / gx
 	}
-	for i := range ys {
+	for i := range gy + 1 {
 		ys[i] = i * cellH / gy
 	}
 	glyphs := glyphStrings(k)
-	out := make([]Cell, rows*cols)
 	var sub [8]sample
-	for r := range rows {
-		for c := range cols {
+	for r := region.Min.Y; r < region.Max.Y; r++ {
+		for c := region.Min.X; c < region.Max.X; c++ {
 			x0, y0 := c*cellW, r*cellH
 			for sy := range gy {
 				for sx := range gx {
@@ -167,10 +196,9 @@ func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, colors Colors) []
 			if xterm256 {
 				cell.Fg, cell.Bg = snap(cell.Fg), snap(cell.Bg)
 			}
-			out[r*cols+c] = cell
+			dst[r*cols+c] = cell
 		}
 	}
-	return out
 }
 
 // linearPalette is img's palette in linear light.

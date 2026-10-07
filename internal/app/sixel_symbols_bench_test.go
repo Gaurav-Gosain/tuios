@@ -5,14 +5,20 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // BenchmarkSymbolImageFrame is the keystroke frame of a pane that shows a
 // 60x16-cell sixel image on a host without graphics, drawn as the placeholder
 // box (the cost before image_symbols) and as each glyph set. The glyphs are
-// drawn once, when the image arrives; a frame only looks them up, so the
-// sets should cost the same as the box.
+// drawn when the image arrives; a frame only looks them up.
 func BenchmarkSymbolImageFrame(b *testing.B) {
+	// The test binary's stdout is not a terminal, and a frame with no colour
+	// draws the box (symbolColors).
+	was := theme.ColorProfile()
+	theme.SetColorProfile(colorprofile.TrueColor)
+	b.Cleanup(func() { theme.SetColorProfile(was) })
 	for _, k := range []mosaic.Kind{mosaic.Off, mosaic.Quadrant, mosaic.Octant} {
 		name := k.String()
 		if k == mosaic.Off {

@@ -316,20 +316,46 @@ func imageGlyphCells(s tuitest.Screen, y0, y1 int) int {
 // set to colorterm, and opens a pane at a shell prompt.
 func startSymbolPane(t *testing.T, host *sixelHost, kind, colorterm string, daemon bool, extra ...string) (*tuitest.Terminal, string) {
 	t.Helper()
+	return startSymbolPaneWith(t, host, symbolConfig{kind: kind, daemon: daemon}, colorterm, extra...)
+}
+
+// symbolConfig is the config a symbol pane boots with.
+type symbolConfig struct {
+	kind   string
+	daemon bool
+	// appearance is more lines for the [appearance] section, and tiled
+	// turns startup.tiled on.
+	appearance string
+	tiled      bool
+}
+
+func startSymbolPaneWith(t *testing.T, host *sixelHost, cfg symbolConfig, colorterm string, extra ...string) (*tuitest.Terminal, string) {
+	t.Helper()
 	env := append([]string{"TUIOS_CELL_SIZE=10x20", "TUIOS_SIXEL_GRAPHICS=0", "TUIOS_KITTY_GRAPHICS=0", "COLORTERM=" + colorterm}, extra...)
-	if kind != "" {
+	if cfg.kind != "" || cfg.appearance != "" || cfg.tiled {
 		home := t.TempDir()
-		body := "[appearance]\nimage_symbols = \"" + kind + "\"\n"
-		if daemon {
+		body := "[appearance]\n"
+		if cfg.kind != "" {
+			body += "image_symbols = \"" + cfg.kind + "\"\n"
+		}
+		body += cfg.appearance
+		startup := ""
+		if cfg.daemon {
 			// A config of its own has no startup.daemon, which the
 			// first-run file turns on.
-			body += "\n[startup]\ndaemon = true\n"
+			startup += "daemon = true\n"
+		}
+		if cfg.tiled {
+			startup += "tiled = true\n"
+		}
+		if startup != "" {
+			body += "\n[startup]\n" + startup
 		}
 		writeConfigIn(t, home, body)
 		env = append(env, "XDG_CONFIG_HOME="+home)
 	}
-	term, base := start(t, startOpts{cols: 120, rows: 40, out: host, daemonDefault: daemon, env: env})
-	if daemon {
+	term, base := start(t, startOpts{cols: 120, rows: 40, out: host, daemonDefault: cfg.daemon, env: env})
+	if cfg.daemon {
 		t.Cleanup(func() { killDaemon(t, base) })
 	}
 	host.answer(term)
@@ -498,6 +524,11 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 // tuios shows the picture, and the picture is on the host as octants. With
 // image_symbols off, the pane is told no sixel and chafa prints its own text,
 // saved as a frame to compare.
+//
+// chafa draws octants of its own when it does not pick sixel, so glyphs on
+// the host do not show which output it picked. The passthrough's debug log
+// does: it records every sixel image a pane draws ("Register:"). The octant
+// run must log one, drawn as glyphs, and the off run none.
 func TestImageSymbolsWithChafa(t *testing.T) {
 	if _, err := exec.LookPath("chafa"); err != nil {
 		t.Skip("chafa is not installed")
@@ -524,7 +555,8 @@ func TestImageSymbolsWithChafa(t *testing.T) {
 	for _, kind := range []string{"octant", "off"} {
 		t.Run(kind, func(t *testing.T) {
 			host := newSixelHost(false, false)
-			term, _ := startSymbolPane(t, host, kind, "truecolor", false)
+			term, _ := startSymbolPane(t, host, kind, "truecolor", false, "TUIOS_DEBUG_INTERNAL=1")
+			logFrom := debugLogSize()
 			typeLine(t, term, "clear; chafa -s 40x12 "+pic+"; echo DO''NE")
 			if err := term.WaitForText("DONE", shellTimeout); err != nil {
 				t.Fatalf("chafa did not finish: %v\n%s", err, term.Snapshot())
@@ -537,15 +569,206 @@ func TestImageSymbolsWithChafa(t *testing.T) {
 			if bytes.Contains(host.bytes(), []byte(vt.SixelMarkerLead)) {
 				t.Errorf("an image marker reached the host as text")
 			}
-			// With symbols off the frame is chafa's own text, kept to set
-			// beside tuios's: it may use octants too, so it is not checked.
-			if kind == "octant" && n < 100 {
-				t.Errorf("chafa did not draw through tuios's octants (%d glyph cells)\n%s", n, s.Text())
+			registered := registerLines(debugLogSince(t, logFrom))
+			t.Logf("%s: %d octant or sextant cells on the host; images registered: %q", kind, n, registered)
+			switch kind {
+			case "octant":
+				if len(registered) == 0 {
+					t.Errorf("the pane got no sixel image: chafa printed its own text")
+				}
+				for _, l := range registered {
+					if !strings.Contains(l, "mode=symbols") {
+						t.Errorf("an image was not drawn as glyphs: %s", l)
+					}
+				}
+				if n < 100 {
+					t.Errorf("chafa did not draw through tuios's octants (%d glyph cells)\n%s", n, s.Text())
+				}
+			case "off":
+				// The frame is chafa's own text, kept to set beside
+				// tuios's: it may use octants too, so it is not checked.
+				if len(registered) > 0 {
+					t.Errorf("the pane got a sixel image with image_symbols off: %q", registered)
+				}
 			}
-			t.Logf("%s: %d octant or sextant cells on the host", kind, n)
 		})
 	}
 }
+
+// tuiosDebugLog is the log TUIOS_DEBUG_INTERNAL=1 writes (debuglog.Path). Its
+// name is fixed, so a test reads only what was added after it started.
+const tuiosDebugLog = "/tmp/tuios-debug.log"
+
+func debugLogSize() int64 {
+	fi, err := os.Stat(tuiosDebugLog)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+func debugLogSince(t *testing.T, from int64) string {
+	t.Helper()
+	raw, err := os.ReadFile(tuiosDebugLog)
+	if err != nil {
+		t.Fatalf("read the debug log: %v", err)
+	}
+	if from > int64(len(raw)) {
+		from = 0
+	}
+	return string(raw[from:])
+}
+
+// registerLines are the passthrough's records of the sixel images panes drew.
+func registerLines(log string) []string {
+	var out []string
+	for _, l := range strings.Split(log, "\n") {
+		if strings.Contains(l, "SIXEL-PASSTHROUGH: Register:") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// TestImageSymbolsAreShaded draws a picture as glyphs and then shades the
+// screen: a modal's scrim, and the dim of an unfocused pane. The glyphs are
+// ordinary cells, so each must come back darker like the text around it.
+// They used to be put on the frame after every shading pass, so a modal or a
+// focus change left the picture at full brightness.
+//
+// How this could pass wrongly, written down first:
+//   - The shaded read could be taken before the shade is drawn: it waits for
+//     the palette's title, or for the focus to move, and then for a stable
+//     screen.
+//   - A cell could be read under the palette, which is drawn after the scrim:
+//     cells inside its rectangle are skipped.
+//   - The cells could be dark already, so darker cannot be told from noise:
+//     only cells whose background is light enough count, and there must be
+//     many of them.
+//   - The cells read could be text, not the picture: they are the picture's
+//     rectangle, found from the line printed above it, and must hold glyphs.
+func TestImageSymbolsAreShaded(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  symbolConfig
+	}{
+		// Tiled, so the pane fills the screen and the picture sits left of
+		// the palette, which is drawn in the middle.
+		{"modal", symbolConfig{kind: "octant", tiled: true, appearance: "modal_dim = 30\n"}},
+		{"unfocused", symbolConfig{kind: "octant", tiled: true, appearance: "theme = \"catppuccin_mocha\"\ndim_unfocused = 40\n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host := newSixelHost(false, false)
+			term, _ := startSymbolPaneWith(t, host, tc.cfg, "truecolor")
+			dir := t.TempDir()
+			_, path := writeSymbolPicture(t, dir)
+			typeLine(t, term, "clear; printf '%s\\n' 'IMG''TOP'; cat "+path+"; echo; echo SH''OWN")
+			if err := term.WaitForText("SHOWN", shellTimeout); err != nil {
+				t.Fatalf("the picture did not print: %v\n%s", err, term.Snapshot())
+			}
+			windowManagementMode(t, term)
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("screen never settled: %v", err)
+			}
+			art := artifactDir(t)
+			before := term.Screen()
+			savePNG(t, before, shot.XTermPalette(), art, "before")
+
+			var skip image.Rectangle
+			switch tc.name {
+			case "modal":
+				if err := term.SendKeys(legacyCtrlP); err != nil {
+					t.Fatalf("open the palette: %v", err)
+				}
+				waitPaletteOpen(t, term, "over the picture")
+			case "unfocused":
+				// A second pane takes the focus. With tiling on, the
+				// first pane narrows and the picture moves, so the
+				// picture's cells are compared where it is in each read.
+				newWindow(t, term)
+			}
+			if err := term.WaitStable(uiTimeout); err != nil {
+				t.Fatalf("screen never settled shaded: %v", err)
+			}
+			after := term.Screen()
+			savePNG(t, after, shot.XTermPalette(), art, "shaded")
+			if tc.name == "modal" {
+				p := findPalette(t, term)
+				skip = image.Rect(p.left, p.titleRow-1, p.right, paletteBottom(after, p)+1)
+			}
+
+			// The palette may cover the line above the picture; the
+			// picture does not move under it.
+			from := symbolOriginIn(t, before)
+			to := from
+			if tc.name == "unfocused" {
+				to = symbolOriginIn(t, after)
+			}
+			var light, darker, glyphs int
+			for r := range symPicRows {
+				for c := range symPicCols {
+					a, b := before.Cell(from.X+c, from.Y+r), after.Cell(to.X+c, to.Y+r)
+					if image.Pt(to.X+c, to.Y+r).In(skip) {
+						continue
+					}
+					if rs := []rune(b.Content); len(rs) > 0 {
+						if _, _, _, ok := mosaic.Shape(rs[0]); ok {
+							glyphs++
+						}
+					}
+					was, ok1 := rgbOf(a.Bg)
+					now, ok2 := rgbOf(b.Bg)
+					if !ok1 || !ok2 || rgbLuma(was) < 60 {
+						continue
+					}
+					light++
+					if rgbLuma(now) < 0.9*rgbLuma(was) {
+						darker++
+					}
+				}
+			}
+			// The shade's positive half: the pane's border, which is
+			// chrome and not picture, is darker too, so the shade was on.
+			if was, ok1 := rgbOf(before.Cell(0, from.Y).Fg); ok1 {
+				now, ok2 := rgbOf(after.Cell(0, from.Y).Fg)
+				if tc.name == "modal" && (!ok2 || rgbLuma(now) >= 0.9*rgbLuma(was)) {
+					t.Fatalf("the pane border is not darker under the palette: no scrim was drawn (%v then %v)", was, now)
+				}
+			}
+			t.Logf("%s: %d light picture cells, %d darker, %d glyphs in the shaded read", tc.name, light, darker, glyphs)
+			if glyphs < 50 {
+				t.Fatalf("the shaded read holds %d picture glyphs: the picture is not where it was looked for\n%s", glyphs, after.Text())
+			}
+			if light < 100 {
+				t.Fatalf("only %d light picture cells to compare", light)
+			}
+			if darker < light*9/10 {
+				t.Errorf("%d of %d light picture cells are darker under the %s shade: the picture was drawn over it", darker, light, tc.name)
+			}
+		})
+	}
+}
+
+// symbolOriginIn finds the picture's top-left cell on s: the start of the
+// row under the line that reads IMGTOP.
+func symbolOriginIn(t *testing.T, s tuitest.Screen) image.Point {
+	t.Helper()
+	_, rows := s.Size()
+	for y := range rows {
+		line := s.Line(y)
+		if strings.Contains(line, "printf") {
+			continue
+		}
+		if i := strings.Index(line, "IMGTOP"); i >= 0 {
+			return image.Pt(len([]rune(line[:i])), y+1)
+		}
+	}
+	t.Fatalf("IMGTOP not on screen\n%s", s.Text())
+	return image.Point{}
+}
+
+// rgbLuma is a colour's luma on the 0 to 255 scale.
+func rgbLuma(c [3]float64) float64 { return 0.299*c[0] + 0.587*c[1] + 0.114*c[2] }
 
 // vgaPalette is the Linux console's default palette, which the sixteen-colour
 // cells are chosen against.
@@ -743,5 +966,91 @@ func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
 				t.Errorf("a host with no graphics was sent graphics")
 			}
 		})
+	}
+}
+
+// TestImageSymbolsFlood has a pane send large pictures faster than they can
+// be drawn as glyphs, then stop. Past the pane's drawing budget a picture
+// shows the image box, and the last one has to be drawn once the budget is
+// back, although the pane writes nothing more to ask for a frame.
+//
+// How this could pass wrongly, written down first:
+//   - The flood could fit in the budget, so nothing waits. The debug log must
+//     record a picture that waited, and the budget coming back.
+//   - The last picture could be read before the flood ends: the read waits
+//     for the line printed after it.
+func TestImageSymbolsFlood(t *testing.T) {
+	host := newSixelHost(false, false)
+	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1")
+	logFrom := debugLogSize()
+	const cols, rows = 100, 30
+	img := floodPicture(cols, rows)
+	seq := vt.EncodeSixel(img, image.Rect(0, 0, img.Width, img.Height), img.Width, img.Height)
+	path := filepath.Join(t.TempDir(), "big.six")
+	if err := os.WriteFile(path, seq, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	typeLine(t, term, "clear; for i in $(seq 150); do printf '\\033[H'; cat "+path+"; done; echo FL''OOD")
+	if err := term.WaitForText("FLOOD", shellTimeout); err != nil {
+		t.Fatalf("the flood did not finish: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("the flood took %v", time.Since(start))
+	_, screenRows := term.Screen().Size()
+	flooded := time.Now()
+	defer func() { t.Logf("the last picture took %v after the flood", time.Since(flooded)) }()
+	var n int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		n = imageGlyphCells(s, 0, screenRows)
+		return n > cols*rows/4 && !strings.Contains(s.Text(), "image")
+	}, 5*time.Second); err != nil {
+		t.Errorf("the last picture was not drawn after the flood: %d glyph cells\n%s", n, term.Screen().Text())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "after-flood")
+	log := debugLogSince(t, logFrom)
+	if !strings.Contains(log, "over its drawing budget") || !strings.Contains(log, "drawing budget is back") {
+		t.Errorf("no picture waited for the drawing budget: the flood did not test it")
+	}
+}
+
+// floodPicture is a picture of cols by rows cells with an edge in most
+// cells, so most of them draw as octants.
+func floodPicture(cols, rows int) *vt.SixelImage {
+	w, h := cols*cellW, rows*cellH
+	img := &vt.SixelImage{Width: w, Height: h, Pix: make([]uint16, w*h), Palette: []color.RGBA{{230, 60, 40, 255}, {30, 80, 200, 255}}}
+	for y := range h {
+		for x := range w {
+			v := uint16(1)
+			if (x/7+y/9)%2 == 0 {
+				v = 2
+			}
+			img.Pix[y*w+x] = v
+		}
+	}
+	return img
+}
+
+// TestImageSymbolsWithoutColour runs on a host that asked for no colour
+// (NO_COLOR). Glyphs without their colours are no picture, so the pane is
+// told no sixel and an image it sends anyway shows the box. The positive
+// half is TestImageSymbolsOnAHostWithoutGraphics, where the same setting
+// with colour draws glyphs and lists sixel.
+func TestImageSymbolsWithoutColour(t *testing.T) {
+	host := newSixelHost(false, false)
+	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "NO_COLOR=1")
+	dir := t.TempDir()
+	if da1 := paneDA1(t, term, dir); strings.Contains(";"+da1+";", ";4;") {
+		t.Errorf("pane DA1 = %q: sixel listed on a host with no colour", da1)
+	}
+	_, path := writeSymbolPicture(t, dir)
+	typeLine(t, term, "clear; cat "+path+"; echo; echo SH''OWN")
+	if err := term.WaitForText("SHOWN", shellTimeout); err != nil {
+		t.Fatalf("the picture did not print: %v\n%s", err, term.Snapshot())
+	}
+	_, rows := term.Screen().Size()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "image") && imageGlyphCells(s, 0, rows) == 0
+	}, uiTimeout); err != nil {
+		t.Errorf("no image box, or glyphs drawn without colour: %d glyph cells\n%s", imageGlyphCells(term.Screen(), 0, rows), term.Screen().Text())
 	}
 }

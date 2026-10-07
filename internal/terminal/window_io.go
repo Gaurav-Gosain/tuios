@@ -143,6 +143,11 @@ func (w *Window) noteGraphicsOutput() {
 	}
 }
 
+// NoteRedraw asks for the pane to be drawn again although the program wrote
+// nothing: something drawn from its cells, a picture shown as glyphs that
+// waited for its drawing budget, is ready now. Safe from any goroutine.
+func (w *Window) NoteRedraw() { w.noteOutput() }
+
 // noteOutput records that the pane has produced something worth drawing and
 // wakes the coalescer.
 //

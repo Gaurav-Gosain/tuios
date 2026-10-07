@@ -1,10 +1,9 @@
 package mosaic
 
 import (
+	"image"
 	"image/color"
 	"math"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // Fidelity says how much of a picture's shape survives in its cells: the
@@ -15,14 +14,23 @@ import (
 //
 // A picture with almost no change in lightness has no shape to keep. It
 // scores by how close the cells' mean lightness is to the picture's.
-func Fidelity(img Indexed, cellW, cellH, rows, cols int, cells []Cell) float64 {
-	if rows <= 0 || cols <= 0 || len(cells) < rows*cols {
+//
+// Only the cells of region are measured (in cells, as EncodeRegion takes
+// it). cells holds the whole picture, row by row, stride cells a row.
+func Fidelity(img Indexed, cellW, cellH, stride int, region image.Rectangle, cells []Cell) float64 {
+	if stride <= 0 {
+		return 0
+	}
+	region = region.Intersect(image.Rect(0, 0, stride, len(cells)/stride))
+	rows, cols := region.Dy(), region.Dx()
+	if rows <= 0 || cols <= 0 {
 		return 0
 	}
 	src := make([]float64, rows*cols)
 	shown := make([]float64, rows*cols)
-	for r := range rows {
-		for c := range cols {
+	for rr := range rows {
+		for cc := range cols {
+			r, c := region.Min.Y+rr, region.Min.X+cc
 			var sum float64
 			n := 0
 			for y := r * cellH; y < (r+1)*cellH; y += max(1, cellH/8) {
@@ -36,13 +44,13 @@ func Fidelity(img Indexed, cellW, cellH, rows, cols int, cells []Cell) float64 {
 					}
 				}
 			}
-			src[r*cols+c] = sum / float64(max(n, 1))
-			cell := cells[r*cols+c]
+			src[rr*cols+cc] = sum / float64(max(n, 1))
+			cell := cells[r*stride+c]
 			if cell.Clear {
 				continue
 			}
 			f := coverage(cell.Glyph)
-			shown[r*cols+c] = f*colorLightness(cell.Fg) + (1-f)*colorLightness(cell.Bg)
+			shown[rr*cols+cc] = f*colorLightness(cell.Fg) + (1-f)*colorLightness(cell.Bg)
 		}
 	}
 	bs := blocks(src, rows, cols)
@@ -90,17 +98,12 @@ func lightness(c color.RGBA) float64 {
 	return (0.299*float64(c.R) + 0.587*float64(c.G) + 0.114*float64(c.B)) / 255
 }
 
-func colorLightness(c color.Color) float64 {
-	switch v := c.(type) {
-	case nil:
+// colorLightness is lightness, with no colour (alpha 0) counted as black.
+func colorLightness(c color.RGBA) float64 {
+	if c.A == 0 {
 		return 0
-	case ansi.BasicColor:
-		return lightness(vga16[int(v)&15])
-	case color.RGBA:
-		return lightness(v)
 	}
-	r, g, b, _ := c.RGBA()
-	return lightness(color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 255})
+	return lightness(c)
 }
 
 // coverage is the part of a cell a glyph's foreground covers.

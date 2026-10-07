@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -537,6 +536,9 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 	if sp == nil {
 		return
 	}
+	// Image glyphs, for a marker drawn after the pass that ran before the
+	// shading. Usually there is none left.
+	m.drawImageSymbols(canvas)
 	sp.mu.Lock()
 	mode := sp.mode
 	sp.mu.Unlock()
@@ -566,22 +568,10 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 				blankCellKeepGround(c)
 				continue
 			}
-			if mode == sixelSymbols && info.cells != nil {
-				// An empty set is a picture too poor to show at
-				// sixteen colours: it gets the box.
-				if len(info.cells) == 0 {
-					if dim == nil {
-						dim = theme.UI().FgDim
-					}
-					placeholderCell(c, row, col, info.rows, info.cols, dim)
-				} else if i := row*info.cols + col; row >= 0 && col >= 0 && col < info.cols && i < len(info.cells) {
-					symbolCell(c, &info.cells[i])
-				} else {
-					blankCellKeepGround(c)
-				}
-				continue
-			}
-			if mode == sixelPlaceholder || !info.picture {
+			// A marker left in symbols mode is an image that cannot be
+			// drawn as glyphs: one never decoded, or a frame without
+			// colour.
+			if mode == sixelPlaceholder || mode == sixelSymbols || !info.picture {
 				// The theme's dim text colour, read once a frame.
 				if dim == nil {
 					dim = theme.UI().FgDim
@@ -650,8 +640,6 @@ func groundHash(canvas *frameCanvas, r sixelRect) uint64 {
 type sixelInfo struct {
 	picture    bool
 	rows, cols int
-	// cells is the image as glyphs, in symbols mode.
-	cells []mosaic.Cell
 }
 
 func (sp *SixelPassthrough) info(id uint32) sixelInfo {
@@ -662,11 +650,7 @@ func (sp *SixelPassthrough) info(id uint32) sixelInfo {
 		return sixelInfo{}
 	}
 	info := sixelInfo{picture: e.img != nil, rows: e.rows, cols: e.cols}
-	symbols := sp.mode == sixelSymbols && e.img != nil
 	sp.mu.Unlock()
-	if symbols {
-		info.cells = sp.symbolCellsOf(id)
-	}
 	return info
 }
 

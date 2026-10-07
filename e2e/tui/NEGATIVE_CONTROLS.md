@@ -2614,6 +2614,9 @@ cell on the cells with an edge in them. It then scrolls the picture partly out
 of the pane and clears it. `TestSixelFallbacks/plain` checks the default (the
 picture is drawn) and `plain-off` the positive half (the box, and no sixel in
 DA1). `TestImageSymbolsWithChafa` runs chafa, which picks sixel from the DA1.
+chafa draws octants of its own when it does not pick sixel, so the test reads
+the passthrough's debug log: the octant run must register a sixel image drawn
+as glyphs, and the `off` run none.
 
 The daemon variant first ran standalone without anyone noticing: its config
 file had no `startup.daemon`, and the controls on the daemon wiring passed. The
@@ -2622,11 +2625,12 @@ controls below fail.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The frame scan draws no glyphs | `scanSixelFrame`: the symbols branch cut | `octant-standalone` (error 377 against a ceiling of 10, nothing to clear) | **caught** |
+| The glyph pass draws nothing | `drawImageSymbols`: returns at once | `octant-standalone` (error 377 against a ceiling of 10, nothing to clear) | **caught** |
 | The daemon does not count a glyph client | `refreshTreeOps`: `cs.symbolImages` cut | `octant-daemon` (pane DA1 is `62;22`) | **caught** |
 | The hello does not carry it | `Connect`: `hello.SymbolImages` cut | `octant-daemon` (pane DA1 is `62;22`) | **caught** |
 | The sextant table is off by one | `buildSextants`: first code point U+1FB01 | `sextant-standalone` (error 15.3, edge cells 49.9 against a flat 32.8) | **caught** |
 | Default off | `imageSymbolKind`: auto gives `Off` | `TestSixelFallbacks/plain` (DA1 has no 4, the box is shown) | **caught** |
+| The pane is not told sixel | `Advertised`: false in symbols mode | `TestImageSymbolsWithChafa/octant` (no image registered, 20 glyph cells) | **caught** |
 
 The octant and sextant tables were also checked once against the Unicode 16
 character names (Python's `unicodedata`): every one of the 256 and 64 shapes
@@ -2663,7 +2667,41 @@ also checks that the sixel and kitty hosts' image cells are not drawn as text.
 
 Not caught end to end: the dither itself. Without it the test picture, which
 is at full contrast, still correlates above 0.8; the loss shows only on
-low-contrast pictures, measured in KMSCON-GRAPHICS.md.
+low-contrast pictures.
+
+### Shading, the drawing budget and colour
+
+The glyphs used to be put on the frame after every shading pass, so a modal's
+scrim and an unfocused pane's dim left the picture at full brightness.
+`TestImageSymbolsAreShaded/modal` opens the command palette over a picture
+(`modal_dim = 30`) and requires at least 90% of the picture's light cells
+outside the palette to be darker; the pane border must be darker too, which is
+the positive half. `unfocused` opens a second pane with `dim_unfocused = 40`
+under a theme and requires the same of the first pane's picture.
+
+`TestImageSymbolsFlood` sends 150 pictures of 100x30 cells back to back. The
+debug log must show a picture that waited for the pane's drawing budget and
+the budget coming back, and the last picture must be drawn after the flood.
+
+`TestImageSymbolsWithoutColour` runs with `NO_COLOR=1`: the pane's DA1 must
+not list sixel and a picture shows the box. The positive half is
+`TestImageSymbolsOnAHostWithoutGraphics`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Glyphs drawn after the scrim | `composeLayersIn`: `drawImageSymbols` before `applyScrim` cut | `TestImageSymbolsAreShaded/modal` (0 of 420 light cells darker) | **caught** |
+| Glyphs not given the pane's dim | `drawImageSymbols`: the `dimCell` step cut | `TestImageSymbolsAreShaded/unfocused` (0 of 480 light cells darker) | **caught** |
+| No colour still draws glyphs | `symbolColors`: ASCII and NoTTY reported as coloured | `TestImageSymbolsWithoutColour` (DA1 `62;4;22`, 234 glyph cells) | **caught** |
+| No frame when the budget is back | `wakeWhenBudgetLocked`: the wake cut | `TestImageSymbolsFlood` | **not caught**: another frame comes within about 300 ms and draws the waiting picture |
+
+A run with the reader drawing only one cell of each picture, so the frame pass
+draws the rest, passes `TestImageSymbolsOnAHostWithoutGraphics`: the part drawn
+later meets the part drawn first.
+
+Not covered end to end: a local terminal that answers the startup DA1 after the
+probe gave up. The test terminal answers DA1 itself, at once, so the late
+answer cannot be staged. Nor is `symbol_images` in an SSH client's hello: no
+e2e test runs an SSH client on a host without graphics.
 
 Not covered: a real kmscon. It needs a free VT and DRM master, which this
 machine's test run must not take. A kitty graphics image on such a host is not

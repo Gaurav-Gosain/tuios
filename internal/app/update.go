@@ -1921,6 +1921,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// every cached row built for another depth is dropped.
 		if theme.ColorProfile() != msg.Profile {
 			theme.SetColorProfile(msg.Profile)
+			// A profile with no colour shows images as the box, not glyphs.
+			m.refreshImageSymbols()
 			m.MarkAllDirty()
 		}
 		return m, nil
