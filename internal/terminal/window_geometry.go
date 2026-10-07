@@ -1,6 +1,39 @@
 package terminal
 
-import "github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+import (
+	"sync/atomic"
+
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+)
+
+// PixelInsets is the room a pixel renderer keeps around each pane's text for
+// its own chrome: a header above, and padding on the other sides. Each inset
+// is in device pixels and is measured from the pane's slot, which is the
+// pane's cells plus the gap after it on each axis (half a gap column on each
+// side, and the gap row above). The renderer draws its splits on the slot
+// edges, so the insets are the distance from a split to the text.
+type PixelInsets struct {
+	CellWidth, CellHeight    int
+	Top, Left, Right, Bottom int
+}
+
+var pixelInsets atomic.Pointer[PixelInsets]
+
+// SetPixelInsets makes every pane's guest size the room the insets leave
+// inside its slot. Nil, or a zero cell size, turns it off. Only a process
+// that serves a pixel renderer (tuios gui-bridge) sets it.
+func SetPixelInsets(in *PixelInsets) {
+	if in != nil && (in.CellWidth <= 0 || in.CellHeight <= 0) {
+		in = nil
+	}
+	pixelInsets.Store(in)
+}
+
+// InsetCells is the number of whole cells left in a slot of n cells plus
+// one gap cell once the two insets are taken off.
+func InsetCells(n, cell, before, after int) int {
+	return max(((n+1)*cell-before-after)/cell, 1)
+}
 
 // contentSize is the drawable box inside an outer rectangle of the given
 // dimensions. Every consumer of a pane's inner size derives it from here: the
@@ -9,7 +42,12 @@ import "github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 // and what it gets to draw in cannot drift apart.
 func (w *Window) contentSize(width, height int) (int, int) {
 	d := 2 * w.BorderOffset()
-	return max(width-d, 1), max(height-d, 1)
+	cw, ch := max(width-d, 1), max(height-d, 1)
+	if in := pixelInsets.Load(); in != nil {
+		cw = InsetCells(cw, in.CellWidth, in.Left, in.Right)
+		ch = InsetCells(ch, in.CellHeight, in.Top, in.Bottom)
+	}
+	return cw, ch
 }
 
 // ContentWidth returns the usable content width (excluding borders if not tiled).

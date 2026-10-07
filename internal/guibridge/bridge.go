@@ -49,6 +49,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 )
@@ -74,7 +75,10 @@ type Options struct {
 	// cell size in pixels.
 	Cols, Rows            int
 	CellWidth, CellHeight int
-	Version               string
+	// Insets is the renderer's room around each pane's text: top, left,
+	// right, bottom, in device pixels. See terminal.PixelInsets.
+	Insets  []int
+	Version string
 	// Theme overrides the theme the user's config names. Empty keeps it.
 	Theme string
 	In    io.Reader
@@ -150,6 +154,10 @@ type Command struct {
 	Rows       int `json:"rows,omitempty"`
 	CellWidth  int `json:"cell_width,omitempty"`
 	CellHeight int `json:"cell_height,omitempty"`
+	// Insets is the room the renderer keeps around each pane's text, in
+	// device pixels: top, left, right, bottom. See terminal.PixelInsets.
+	// Absent keeps the panes at their full cell size.
+	Insets []int `json:"insets,omitempty"`
 	// focus
 	Window string `json:"window,omitempty"`
 	// workspace
@@ -167,6 +175,8 @@ func Run(opts Options) error {
 	if opts.Cols <= 0 || opts.Rows <= 0 {
 		opts.Cols, opts.Rows = 120, 40
 	}
+	// Before the first layout, so the panes start at the size they keep.
+	setInsets(opts.Insets, opts.CellWidth, opts.CellHeight)
 	out := newFrameWriter(opts.Out)
 	defer out.Close()
 
@@ -338,9 +348,20 @@ func (m *model) handle(c Command) tea.Cmd {
 				w.CellPixelWidth, w.CellPixelHeight = c.CellWidth, c.CellHeight
 			}
 		}
+		changed := setInsets(c.Insets, c.CellWidth, c.CellHeight)
 		next, cmd := m.os.Update(tea.WindowSizeMsg{Width: c.Cols, Height: c.Rows})
 		if o, ok := next.(*app.OS); ok {
 			m.os = o
+		}
+		if changed {
+			// The layout may not move when only the insets change, so each
+			// pane is told its new size here. Resize sends nothing for a
+			// pane whose size stays the same.
+			for _, w := range m.os.Windows {
+				if w != nil {
+					w.Resize(w.Width, w.Height)
+				}
+			}
 		}
 		return cmd
 	case "focus":
@@ -417,6 +438,27 @@ func (m *model) export() {
 	}
 	m.last = b
 	m.out.Frame(KindJSON, b)
+}
+
+var insetsNow terminal.PixelInsets
+
+// setInsets applies the renderer's insets and reports whether they changed.
+// Anything other than four values turns them off.
+func setInsets(v []int, cellW, cellH int) bool {
+	var in terminal.PixelInsets
+	if len(v) == 4 && cellW > 0 && cellH > 0 {
+		in = terminal.PixelInsets{CellWidth: cellW, CellHeight: cellH, Top: v[0], Left: v[1], Right: v[2], Bottom: v[3]}
+	}
+	if in == insetsNow {
+		return false
+	}
+	insetsNow = in
+	if in.CellWidth == 0 {
+		terminal.SetPixelInsets(nil)
+	} else {
+		terminal.SetPixelInsets(&in)
+	}
+	return true
 }
 
 // tap forwards the panes' streams to the renderer, in order.
