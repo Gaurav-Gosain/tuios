@@ -173,7 +173,7 @@ pub fn plan_row(row: &Row, colors: &PlanColors) -> RowPlan {
         }
         let mut chars = text.chars();
         if let (Some(ch), None) = (chars.next(), chars.next()) {
-            if boxdraw::is_box(ch) {
+            if boxdraw::is_box(ch) || boxdraw::is_powerline(ch) {
                 plan.boxes.push(BoxCell { col, ch, color: fg });
                 flush(&mut run, &mut plan);
                 continue;

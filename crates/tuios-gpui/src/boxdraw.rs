@@ -1,6 +1,8 @@
-//! Box-drawing and block characters drawn as rectangles snapped to the cell
-//! grid, so lines join across cells with no gaps whatever the font. Characters
-//! not listed here fall back to the font.
+//! Cell-filling characters drawn as shapes on the pixel grid instead of font
+//! glyphs, so they join across cells with no gaps whatever the font: box
+//! drawing, blocks and braille as rectangles, Powerline separators as
+//! polygons (docs/design/FINAL.md section 9, rule 6). All sizes are device
+//! pixels. Characters not listed here fall back to the font.
 
 /// Line weight on one side of a cell: none, light, heavy or double.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -66,8 +68,77 @@ pub struct Rect {
     pub alpha: f32,
 }
 
+/// Characters drawn as rectangles by [`rects`].
 pub fn is_box(ch: char) -> bool {
-    arms(ch).is_some() || block(ch).is_some()
+    arms(ch).is_some() || block(ch).is_some() || is_braille(ch)
+}
+
+fn is_braille(ch: char) -> bool {
+    ('\u{2801}'..='\u{28FF}').contains(&ch)
+}
+
+/// Powerline separators (U+E0B0 to U+E0BF), drawn by [`powerline`].
+pub fn is_powerline(ch: char) -> bool {
+    ('\u{E0B0}'..='\u{E0BF}').contains(&ch)
+}
+
+/// Braille: a 2 x 4 grid of square dots, each a whole number of pixels.
+fn braille(ch: char, cw: f32, chh: f32) -> Vec<Rect> {
+    let bits = ch as u32 - 0x2800;
+    // Dot order of the Unicode braille block: 1 2 3 down the left, 4 5 6 down
+    // the right, then 7 and 8 on the bottom row.
+    const DOTS: [(u32, u32); 8] = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 3), (1, 3)];
+    let size = (cw / 4.).round().max(1.);
+    let mut out = Vec::new();
+    for (i, (col, row)) in DOTS.iter().enumerate() {
+        if bits & (1 << i) == 0 {
+            continue;
+        }
+        let x = (cw * (1. + 2. * *col as f32) / 4. - size / 2.).round();
+        let y = (chh * (1. + 2. * *row as f32) / 8. - size / 2.).round();
+        out.push(Rect { x0: x, y0: y, x1: x + size, y1: y + size, alpha: 1. });
+    }
+    out
+}
+
+/// The polygons for a Powerline separator, in pixels from the cell's
+/// top-left corner. `t` is the stroke of the thin variants.
+pub fn powerline(ch: char, w: f32, h: f32, t: f32) -> Vec<Vec<(f32, f32)>> {
+    let mid = h / 2.;
+    // A line from a to b of width t, as a quad.
+    let line = |a: (f32, f32), b: (f32, f32)| {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+        let (nx, ny) = (-dy / len * t / 2., dx / len * t / 2.);
+        vec![(a.0 + nx, a.1 + ny), (b.0 + nx, b.1 + ny), (b.0 - nx, b.1 - ny), (a.0 - nx, a.1 - ny)]
+    };
+    // Half a disc: the flat side at x0, bulging toward x1.
+    let half_disc = |x0: f32, x1: f32| {
+        let mut p = vec![(x0, 0.)];
+        for i in 0..=16 {
+            let a = std::f32::consts::PI * (i as f32 / 16. - 0.5);
+            p.push((x0 + (x1 - x0) * a.cos(), mid + mid * a.sin()));
+        }
+        p.push((x0, h));
+        p
+    };
+    match ch {
+        '\u{E0B0}' => vec![vec![(0., 0.), (w, mid), (0., h)]],
+        '\u{E0B2}' => vec![vec![(w, 0.), (0., mid), (w, h)]],
+        '\u{E0B1}' => vec![line((0., 0.), (w, mid)), line((w, mid), (0., h))],
+        '\u{E0B3}' => vec![line((w, 0.), (0., mid)), line((0., mid), (w, h))],
+        '\u{E0B4}' => vec![half_disc(0., w)],
+        '\u{E0B6}' => vec![half_disc(w, 0.)],
+        '\u{E0B5}' => vec![line((0., 0.), (w, mid)), line((w, mid), (0., h))],
+        '\u{E0B7}' => vec![line((w, 0.), (0., mid)), line((0., mid), (w, h))],
+        '\u{E0B8}' => vec![vec![(0., 0.), (w, h), (0., h)]],
+        '\u{E0BA}' => vec![vec![(w, 0.), (w, h), (0., h)]],
+        '\u{E0BC}' => vec![vec![(0., 0.), (w, 0.), (0., h)]],
+        '\u{E0BE}' => vec![vec![(0., 0.), (w, 0.), (w, h)]],
+        '\u{E0B9}' | '\u{E0BF}' => vec![line((0., 0.), (w, h))],
+        '\u{E0BB}' | '\u{E0BD}' => vec![line((0., h), (w, 0.))],
+        _ => Vec::new(),
+    }
 }
 
 fn block(ch: char) -> Option<Vec<Rect>> {
@@ -110,6 +181,9 @@ fn block(ch: char) -> Option<Vec<Rect>> {
 /// thickness. Positions are relative to the cell's top-left corner and
 /// rounded to whole pixels so neighbouring cells meet exactly.
 pub fn rects(ch: char, cw: f32, ch_h: f32, light: f32) -> Vec<Rect> {
+    if is_braille(ch) {
+        return braille(ch, cw, ch_h);
+    }
     if let Some(b) = block(ch) {
         return b
             .into_iter()
@@ -187,6 +261,27 @@ mod tests {
         // One arm to the right, one down; both reach past the centre.
         assert!(r.iter().any(|r| r.x1 == 9. && r.x0 <= 4.));
         assert!(r.iter().any(|r| r.y1 == 18. && r.y0 <= 9.));
+    }
+
+    #[test]
+    fn braille_dots_are_whole_pixels() {
+        let r = rects('⣿', 9., 20., 1.);
+        assert_eq!(r.len(), 8);
+        for d in &r {
+            assert_eq!(d.x0, d.x0.round());
+            assert_eq!(d.y1 - d.y0, 2.);
+            assert!(d.x1 <= 9. && d.y1 <= 20.);
+        }
+        assert_eq!(rects('⠁', 9., 20., 1.).len(), 1);
+        assert!(is_box('⠁') && !is_box('\u{2800}'));
+    }
+
+    #[test]
+    fn powerline_arrows_fill_the_cell() {
+        let p = powerline('\u{E0B0}', 9., 20., 1.);
+        assert_eq!(p, vec![vec![(0., 0.), (9., 10.), (0., 20.)]]);
+        assert!(is_powerline('\u{E0B6}') && !is_powerline('a'));
+        assert_eq!(powerline('\u{E0B4}', 9., 20., 1.)[0].len(), 19);
     }
 
     #[test]
