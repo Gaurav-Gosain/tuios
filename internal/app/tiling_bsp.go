@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -583,6 +584,10 @@ func (m *OS) splitFocused(dir layout.PreselectionDir, followSSH bool) {
 	if focusedWin == nil {
 		return
 	}
+	if err := m.SplitRefusal(dir); err != nil {
+		m.ShowNotification("This pane is too small to split.", "warning", m.Settings.NotificationDuration)
+		return
+	}
 
 	// In a daemon session the new pane is created daemon-side and arrives through
 	// a later state sync, so the preselection set here would never be consumed
@@ -622,6 +627,35 @@ func (m *OS) splitFocused(dir layout.PreselectionDir, followSSH bool) {
 
 	// Clear the split target
 	m.SplitTargetWindowID = ""
+}
+
+// ErrPaneTooSmall is why a split is refused: one of the two panes it makes
+// would be under the smallest pane size.
+var ErrPaneTooSmall = errors.New("the pane is too small to split")
+
+// SplitRefusal says why a split of the focused pane toward dir would not run,
+// or nil. A split that leaves either pane under the smallest size
+// (config.DefaultWindowWidth by config.DefaultWindowHeight cells) is refused,
+// because a pane that small cannot be resized back up without a jump and no
+// program in it fits. Only the split tree is checked: the other tilers place
+// panes by their own rules.
+func (m *OS) SplitRefusal(dir layout.PreselectionDir) error {
+	if !m.AutoTiling || m.LayoutName() != LayoutModeBSP {
+		return nil
+	}
+	focused := m.GetFocusedWindow()
+	tree := m.WorkspaceTrees[m.CurrentWorkspace]
+	if focused == nil || tree == nil || focused.IsFloating {
+		return nil
+	}
+	split := layout.SplitHorizontal
+	if dir == layout.PreselectionLeft || dir == layout.PreselectionRight {
+		split = layout.SplitVertical
+	}
+	if !tree.CanSplit(m.GetWindowIntID(focused.ID), split, tree.DefaultRatio, m.GetBSPBounds(), m.separatorGap()) {
+		return ErrPaneTooSmall
+	}
+	return nil
 }
 
 // SmartSplitFocused splits the focused window using the smart split algorithm:
