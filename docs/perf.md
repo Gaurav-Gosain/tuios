@@ -2163,7 +2163,7 @@ a binary is over its budget.
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
 | linux/amd64 | 25,182,370 | 26,681,504 | 32,600,226 | 32,700,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,673,362 | 30,690,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,690,498 | 30,760,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2187,12 +2187,6 @@ when the master position and master count (issue #321) brought the build to
 room before it, and the feature adds about 74 KB and 68 KB: the tiler, the
 MsgMasterLayout op, ten actions with their palette rows, and seven run-command
 commands.
-
-The linux/amd64 budget went from 32,600,000 to 32,700,000 when the rail's
-opt-in switch numbers brought the build to 32,600,226 bytes (Go 1.26.6). Main
-had 226 bytes of room before it, so the feature could not fit. The
-darwin/arm64 budget stays at 30,690,000: the feature brought that build to
-30,673,362 bytes, inside the room it already had.
 
 The budgets went to 27,670,000 (linux/amd64) and 26,130,000 (darwin/arm64)
 when the window_size policy (the daemon's size policy and the view a client
@@ -2417,6 +2411,19 @@ that a sign-in link is on a Tailscale login origin, the `retry-host` verb, and
 `tuios hosts signin`. It links no new package. On Go 1.26.6 the build measured
 32,571,554 and 30,639,922 bytes: linux/amd64 was 46,554 over its budget of
 32,525,000, and darwin/arm64 had 10,078 left of its 30,650,000.
+
+The linux/amd64 budget went from 32,600,000 to 32,700,000 when the rail's
+opt-in switch numbers brought the build to 32,600,226 bytes (Go 1.26.6). Main
+had 226 bytes of room before it, so the feature could not fit. The
+darwin/arm64 budget stays at 30,690,000: the feature brought that build to
+30,673,362 bytes, inside the room it already had.
+
+The darwin/arm64 budget went from 30,690,000 to 30,760,000 for the
+borderless zoom: the option, its settings row, and the zoom path that drops
+the border. With the copy-mode help order before it, the build measured
+30,690,498 bytes on Go 1.26.6, 498 over the old budget. The which-key menus
+and the dock mode icons come next and add about 20 KB, which fits in the room
+this leaves.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
