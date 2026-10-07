@@ -2505,12 +2505,15 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 		s.tokens = append(s.tokens, railToken{Cost: sidebarFigureCost(f), Right: true})
 	}
 	titleW := lipgloss.Width(title)
-	// The session index leads the name while it is drawn state: the option
-	// says it at rest, the armed chord asks for it otherwise. A muted number,
+	// With show_numbers on, the session index leads the name: a muted number,
 	// the one switch_session_N opens, styled like the other chrome the row
-	// carries. Remote sessions have no number on this machine and wear none.
+	// carries. Only switch_session_1..9 exist, so a tenth session wears none,
+	// and remote sessions have no number on this machine either. The armed
+	// prefix does not ask for the numbers: the default keys bind the digits
+	// under the prefix to select_window_N, so a session number there would
+	// name a key that opens something else.
 	mark, markW := "", 0
-	if sessionIdx > 0 && (m.Settings.SidebarShowNumbers || m.PrefixActive) {
+	if m.Settings.SidebarShowNumbers && sessionIdx > 0 && sessionIdx <= 9 {
 		mark = sidebarStyle(rowBg, pal.FgMute).Bold(node.IsCurrent).
 			Render(strconv.Itoa(sessionIdx) + " ")
 		markW = len(strconv.Itoa(sessionIdx)) + 1

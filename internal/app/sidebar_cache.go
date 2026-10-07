@@ -231,10 +231,8 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.SidebarFocused)
 	mixI(m.SidebarCursor)
 
-	// The switch numbers are drawn state: the option says them at rest, an
-	// armed prefix asks for them otherwise.
+	// The switch numbers are drawn state, on while show_numbers is set.
 	mixB(m.Settings.SidebarShowNumbers)
-	mixB(m.PrefixActive)
 
 	// Which terminal rows carry a workspace tag turns on which workspace is
 	// current; the per-window workspaces themselves are folded in below. The
