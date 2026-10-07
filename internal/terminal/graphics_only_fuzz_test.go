@@ -23,7 +23,7 @@ func FuzzGraphicsOnlyChangesNoCell(f *testing.F) {
 		f.Add([]byte(seed))
 	}
 	f.Fuzz(func(t *testing.T, b []byte) {
-		if !graphicsOnly(b) {
+		if !graphicsOnly(true, b) {
 			return
 		}
 		e := vt.NewEmulator(20, 6)
@@ -32,6 +32,28 @@ func FuzzGraphicsOnlyChangesNoCell(f *testing.F) {
 		_, _ = e.Write(b)
 		if after := e.Render(); after != before {
 			t.Fatalf("graphicsOnly accepted %q, and it changed the screen\nbefore:\n%s\nafter:\n%s", b, before, after)
+		}
+	})
+}
+
+// FuzzGraphicsOnlyAfterAWrite is FuzzGraphicsOnlyChangesNoCell with another
+// write before the one under test, which is how the chunks of one kitty
+// command arrive when they are read apart.
+func FuzzGraphicsOnlyAfterAWrite(f *testing.F) {
+	f.Add([]byte("\x1b_Ga=T,f=32,s=1,v=1,i=7,q=2,m=1;/wAA\x1b\\"), []byte("\x1b_Gm=0;/w==\x1b\\"))
+	f.Add([]byte("\x1b_Ga=t,f=32,s=1,v=1,i=7,q=2,m=1;/wAA\x1b\\"), []byte("\x1b_Gm=0;/w==\x1b\\"))
+	f.Add([]byte("\x1b_Ga=T,f=32,s=1,v=1,i=7,q=2,m=1;/w"), []byte("AA\x1b\\"))
+	f.Fuzz(func(t *testing.T, before, b []byte) {
+		e := vt.NewEmulator(20, 6)
+		_, _ = e.Write([]byte("abc\r\ndef\r\n\x1b[1;31mghi\x1b[m"))
+		_, _ = e.Write(before)
+		if !graphicsOnly(e.AtGround(), b) {
+			return
+		}
+		screen := e.Render()
+		_, _ = e.Write(b)
+		if after := e.Render(); after != screen {
+			t.Fatalf("graphicsOnly accepted %q after %q, and it changed the screen\nbefore:\n%s\nafter:\n%s", b, before, screen, after)
 		}
 	})
 }

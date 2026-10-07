@@ -129,14 +129,6 @@ func (w *Window) applyStreamResize(chunk outputChunk) {
 	w.noteOutput()
 }
 
-// noteOutput records that the pane has produced something worth drawing and
-// wakes the coalescer.
-//
-// HasNewOutput is the UI goroutine's flag, consumed by
-// MarkTerminalsWithNewContent. coalesceSignal is the coalescer's own, kept
-// separate so consuming one does not consume the other. The wake is what lets
-// the coalescer sleep between bursts rather than poll a flag that is false
-// almost every time it looks.
 // noteGraphicsOutput is noteOutput for a write graphicsOnly accepted: the
 // render signal goes out, so the passthrough's queued commands are drawn, but
 // the pane is not marked as having new cells.
@@ -151,6 +143,14 @@ func (w *Window) noteGraphicsOutput() {
 	}
 }
 
+// noteOutput records that the pane has produced something worth drawing and
+// wakes the coalescer.
+//
+// HasNewOutput is the UI goroutine's flag, consumed by
+// MarkTerminalsWithNewContent. coalesceSignal is the coalescer's own, kept
+// separate so consuming one does not consume the other. The wake is what lets
+// the coalescer sleep between bursts rather than poll a flag that is false
+// almost every time it looks.
 func (w *Window) noteOutput() {
 	w.HasNewOutput.Store(true)
 	w.coalesceSignal.Store(true)
@@ -263,6 +263,10 @@ func (w *Window) outputWriter() {
 		// chunking hands the renderer a turn between chunks and bounds the
 		// stall at one chunk's parse instead of one batch's.
 		var t vt.Terminal
+		// Whether the parser was between sequences before this batch, for
+		// graphicsOnly. Only this goroutine writes, so it holds until the
+		// batch is written.
+		ground := w.parserAtGround()
 		for off := 0; off < len(batch); off += maxVTChunk {
 			end := min(off+maxVTChunk, len(batch))
 			w.ioMu.Lock()
@@ -301,7 +305,7 @@ func (w *Window) outputWriter() {
 			// Don't signal PTYDataChan here. The renderCoalescer
 			// goroutine holds the rate cap and signals on its own,
 			// which is what prevents partial-frame renders.
-			if !resize.isResize() && graphicsOnly(batch) && w.cursorHidden() {
+			if !resize.isResize() && graphicsOnly(ground, batch) && w.cursorHidden() {
 				w.noteGraphicsOutput()
 			} else {
 				w.noteOutput()
@@ -528,6 +532,15 @@ func NextFrameTime(last time.Time, interval time.Duration, now time.Time) time.T
 		return end
 	}
 	return now
+}
+
+// parserAtGround reports whether the emulator's parser is between sequences.
+// A backend that cannot tell answers false.
+func (w *Window) parserAtGround() bool {
+	w.ioMu.RLock()
+	defer w.ioMu.RUnlock()
+	g, ok := w.Terminal.(interface{ AtGround() bool })
+	return ok && g.AtGround()
 }
 
 // cursorHidden reports whether the guest has hidden its cursor.
