@@ -359,7 +359,12 @@ func newModel(opts app.OSOptions) *app.OS {
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
 	opts.UserConfig = userConfig
 	opts.Settings = &seed
-	return app.NewOS(opts)
+	o := app.NewOS(opts)
+	// The renderer draws a zoom itself, over the other panes, and they keep
+	// their sizes. A zoom of part of the screen would resize them for every
+	// client of the session.
+	o.FullZoom = true
+	return o
 }
 
 // cmdMsg carries a renderer command into the Update loop.
@@ -514,6 +519,9 @@ func (m *model) handle(c Command) tea.Cmd {
 		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
 		var cmd tea.Cmd
 		err := checkAction(c.Name)
+		if err == nil {
+			err = m.splitRefusal(c.Name)
+		}
 		if err == nil {
 			cmd, err = m.os.RunActionCmd(c.Name)
 		}

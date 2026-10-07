@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
 // The action command runs a keybinding action by its registry name, the way
@@ -98,4 +99,22 @@ func checkAction(name string) error {
 		return fmt.Errorf("%s shows something only a screen can show, so the bridge does not run it", name)
 	}
 	return fmt.Errorf("%q is not an action the bridge runs", name)
+}
+
+// splitActions are the actions that split the focused pane, and the side the
+// new pane goes on.
+var splitActions = map[string]layout.PreselectionDir{
+	"split_vertical": layout.PreselectionRight, "prefix_split_vertical": layout.PreselectionRight,
+	"split_horizontal": layout.PreselectionDown, "prefix_split_horizontal": layout.PreselectionDown,
+}
+
+// splitRefusal says why a split action will not run, or nil. The model
+// refuses a split that leaves a pane under the smallest size and only shows a
+// notification, which the renderer never sees, so the result says it.
+func (m *model) splitRefusal(name string) error {
+	dir, ok := splitActions[name]
+	if !ok {
+		return nil
+	}
+	return m.os.SplitRefusal(dir)
 }
