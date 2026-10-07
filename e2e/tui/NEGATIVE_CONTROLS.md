@@ -2386,8 +2386,7 @@ ran, and four smaller faults. `program_status_rules_test.go` adds
 `TestProgramStatusOutlivesTheShellCheck` (a pane whose own process is the
 script, and a background job: both keep their working record past two
 detector readings), `TestProgramStatusYieldsToAHook` (a hook's state keeps the
-pane against a report and survives the records ending, and the screen tier's
-state comes back after the program held the pane), and
+pane against a report and survives the records ending), and
 `TestProgramStatusAuthIsAnsweredInThePane`. The host test now also detaches
 and wants a clear for the record it left. Step 6 of the rail test is the
 positive half of the first: a script that reported from the foreground and
@@ -2398,7 +2397,6 @@ exited loses its working record.
 | The released branch (`8910b204`) | build the pull request before the fixes | `TestProgramStatusOutlivesTheShellCheck`, both cases (the record gone within 2 seconds), `TestProgramStatusYieldsToAHook` (the program took the pane from the hook), `TestProgramStatusAuthIsAnsweredInThePane` (the reason named no login), and the host test (no clear on detach) | **caught** |
 | Every report arms the exit rule | `armProgramStatusExit` stores the flag without reading the foreground group | `TestProgramStatusOutlivesTheShellCheck`, both cases | **caught** |
 | `program` ranks with `report` | the rank back to 40 | `TestProgramStatusYieldsToAHook` (the hook's state taken) | **caught** |
-| The weaker state is not given back | `releaseProgramStatusClaim` ignores the saved prior | `TestProgramStatusYieldsToAHook`, second half (the screen tier's state never came back) | **caught** |
 | A detach leaves the records | the `HostProgramStatusClear` write in the attach path cut | the host test, `supported` (no second clear) | **caught** |
 | An auth block offers an answer | the `PromptKindAuth` check in `lookAtPrompt` cut | `TestProgramStatusAuthIsAnsweredInThePane` | **caught** |
 | The ghostty scanner keeps C0 controls | the C0 skip in the scanner's OSC state cut | `TestGhosttyDiffProgramStatus/C0_inside` (unit, `-tags ghostty`) | **caught** |
@@ -2408,9 +2406,33 @@ and ASCII-only trimming by `TestParse` and the oracle in `FuzzParse`, and the
 control bytes inside the string by `TestConform_ProgramStatusReports` on both
 backends.
 
+### Second review fixes
+
+The second review found that one foreground exit ended a background job's
+record too, that the alert limit dropped a real change of state, and that a
+released pane got back a weaker source's state that might be stale.
+`TestProgramStatusOutlivesTheShellCheck` gains a background job that reports
+first and a foreground program beside it, whose exit must end only its own
+record, and a program that lives a fifth of a second. The new
+`TestProgramStatusAlertAfterTheGap` blocks a pane on a login and makes it done
+three seconds later: the done notification must not reach the stand-in host
+terminal inside the 30 seconds and must reach it after.
+`TestProgramStatusYieldsToAHook` now wants the pane left with no state when
+the program lets go of a pane it took from the screen tier.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| One flag for the pane | any ended group drops every working, blocked and idle record, as the single flag did | `TestProgramStatusOutlivesTheShellCheck/a_foreground_program_beside_a_background_job` (the job's record gone) | **caught** |
+| A change inside the gap dropped | `programAlertOutside` holds nothing back | `TestProgramStatusAlertAfterTheGap` (the done alert never came) | **caught** |
+| No limit | `fireAgentAlert` skips `programAlertOutside` | `TestProgramStatusAlertAfterTheGap` (the done alert inside the gap) | **caught** |
+
+Not covered end to end: a program that reports and exits in the same instant
+(the race the docs describe: on an idle machine 0 of 20 such programs kept
+their record with the read in the PTY reader, and 0 of 20 on the build that
+read it at parse time; the review saw 2 of 10 under load), and the exit
+rule for a pane on another machine, which needs a second host.
+
 Not covered end to end: the exit of the pane's own process (`noteExit`),
 because the pane closes with it; OSC 9;4 being ignored after OSC 7501, since
 the `program` claim outranks OSC 9;4 while records exist, so no screen differs;
 and a full reset, which the vt conformance test covers on both backends.
-The 30-second limit on alerts outside tuios from a pane that reports over OSC
-7501 has no end-to-end test.

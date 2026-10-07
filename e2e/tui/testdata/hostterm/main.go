@@ -345,6 +345,11 @@ func csiEnd(b []byte) int {
 
 // oscQuery answers a colour question and reports whether it did.
 func (f *filter) oscQuery(body string) bool {
+	if strings.HasPrefix(body, "9;") && !strings.HasPrefix(body, "9;4;") {
+		// A desktop notification: logged, and passed on.
+		f.h.note("notify %s", strings.TrimPrefix(body, "9;"))
+		return false
+	}
 	if strings.HasPrefix(body, "7501;") {
 		f.h.note("7501 %s", strings.TrimPrefix(body, "7501;"))
 		if body == "7501;?" && f.h.programStatus {
