@@ -237,6 +237,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		storeMax(&session.exclusiveSeq, cs.attachSeq)
 		victims = d.markOthers(session, cs, cs.attachSeq)
 	}
+	// The newest client's agent socket, when ssh_agent is follow. A client
+	// that moved here without a detach no longer counts where it was.
+	if previousSession != "" && previousSession != session.ID {
+		d.agentForget(previousSession, cs.clientID)
+	}
+	d.agentNoteUse(cs, session.ID)
 	// A client can now see a pull request's state, so an open one is polled
 	// again. With none recorded this is a scan of the sessions and no more.
 	d.kickPRPoll()

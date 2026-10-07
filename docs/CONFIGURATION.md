@@ -292,6 +292,22 @@ To change the value of one session while it runs, use `tuios set-config daemon.w
 single_client = true
 ```
 
+`ssh_agent` in `[daemon]` (default `"off"`) can be `"follow"`. Then each session has a stable link to the ssh agent socket of the client that attached to the session or used it last. When you ssh to the machine with agent forwarding and run `tuios attach`, your panes use the agent of that ssh connection.
+
+```toml
+[daemon]
+ssh_agent = "follow"
+```
+
+- The link is `agent-<id>.sock` in the folder of the daemon socket, for example `$XDG_RUNTIME_DIR/tuios/agent-3f2a9c1d.sock`. `tuios ssh-agent-path` prints it.
+- Each new pane of the session gets `SSH_AUTH_SOCK` set to the link.
+- A shell that started before you set the option keeps its old value. To use the link in that shell and in every shell, add this line to your shell rc: `p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"`
+- When the client that the link points at detaches, the link moves to the socket of the client before it. When no attached client has a socket, tuios removes the link.
+- tuios uses the `SSH_AUTH_SOCK` of `tuios attach` and `tuios new` only. A client that runs inside a pane does not count. tuios refuses a socket that is not a Unix socket that you own, a symbolic link, or a socket in a folder that other users can write to.
+- A client of the tuios SSH server or of `tuios-web` has no agent socket, so it does not move the link. To follow your agent, ssh to the machine with `ssh -A` and run `tuios attach`.
+
+A change in the config file applies to the next attach. New panes get the link while the option is on.
+
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).

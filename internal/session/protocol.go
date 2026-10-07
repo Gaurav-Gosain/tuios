@@ -254,6 +254,11 @@ type HelloPayload struct {
 	// session takes the smallest client's size whatever window_size says,
 	// which is what that client expects. See window_size.go.
 	WindowSize bool `json:"window_size,omitzero"`
+	// SSHAuthSock is the client's SSH_AUTH_SOCK. With [daemon] ssh_agent =
+	// "follow", the session's agent link points at it while this client is
+	// the newest to attach or use the session. Only the tuios attach and new
+	// commands send it. See ssh_agent_follow.go.
+	SSHAuthSock string `json:"ssh_auth_sock,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

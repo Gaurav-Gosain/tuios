@@ -64,5 +64,6 @@ func (d *Daemon) handleSessionUsed(cs *connState) error {
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		session.TouchUsed()
 	}
+	d.agentNoteUse(cs, sessionID)
 	return nil
 }

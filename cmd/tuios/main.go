@@ -3137,6 +3137,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
 	rootCmd.AddCommand(newDetachClientCmd())
+	rootCmd.AddCommand(newSSHAgentPathCmd())
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)

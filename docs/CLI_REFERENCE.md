@@ -376,6 +376,10 @@ To do this on every attach, set `single_client = true` in `[daemon]`. See
 [CONFIGURATION.md](CONFIGURATION.md). To detach clients without an attach,
 use [`tuios detach-client`](#tuios-detach-client).
 
+With `ssh_agent = "follow"` in `[daemon]`, `tuios attach` points the ssh
+agent link of the session at the `SSH_AUTH_SOCK` of this client. See
+[`tuios ssh-agent-path`](#tuios-ssh-agent-path).
+
 Inside a tuios pane, `tuios attach` refuses to attach the session that holds
 the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
 it does not name a session. To show a different session in the pane, name
@@ -567,6 +571,30 @@ tuios detach-client -s work --all-other   # Keep the client used last in work
 
 ```json
 {"detached":["client-1790941960197517900"]}
+```
+
+### `tuios ssh-agent-path`
+
+Print the ssh agent link of a session. With `ssh_agent = "follow"` in
+`[daemon]`, the link points at the agent socket of the client that attached
+to the session or used it last. New panes get `SSH_AUTH_SOCK` set to the link.
+See [CONFIGURATION.md](CONFIGURATION.md).
+
+**Usage:**
+```bash
+tuios ssh-agent-path [-s NAME] [--json]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session whose link to print. In a pane, the default is the session of the pane
+- `--json`: Output as JSON, with `follow` and the socket the link points at (`target`)
+
+The command fails when `ssh_agent` is not `"follow"`. A shell that started
+before the option was set keeps its old `SSH_AUTH_SOCK`. Add this line to
+your shell rc:
+
+```bash
+p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"
 ```
 
 ### `tuios kill-session`

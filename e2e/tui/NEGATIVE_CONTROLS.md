@@ -2721,3 +2721,24 @@ Not covered: a real kmscon. It needs a free VT and DRM master, which this
 machine's test run must not take. A kitty graphics image on such a host is not
 drawn: the pane is still told kitty graphics are absent, and programs fall back
 to their own output.
+
+## The ssh agent link (#549)
+
+`TestSSHAgentLinkFollowsTheNewestClient` runs with `[daemon] ssh_agent =
+"follow"` and fake agent sockets in folders the test makes. Two clients
+attach with different sockets, and the link on disk follows the attach order.
+Clients with a socket in a folder anyone can write to, a symlink to a socket,
+and a path that is not there leave the link where it was. A new pane prints
+the link's name from `SSH_AUTH_SOCK` and finds a socket there. A client that
+runs inside a pane attaches a second session and makes no link, and the same
+socket from a client outside every pane does: that is the positive half. A
+detach moves the link back to the first client, and when the last client
+drops, the link is gone.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| An attach does not move the link | `handleAttach`: the `agentNoteUse` call cut | the first attach ("no such file or directory") | **caught** |
+| Sockets are not checked | `ssh_agent_follow.go`: both `ownedSocket` calls made to pass | the client with a socket in a folder anyone can write to moves the link | **caught** |
+| A client in a pane counts | `agentNoteUse`: the `mayActAsHuman` test cut | the client in the pane links `e2e-agent-other` | **caught** |
+| A leave does not move the link | `notifyClientLeft`: the `agentForget` call cut | the link of `e2e-agent-other` stays after its last client leaves | **caught** |
+| New panes do not get the link | `Manager.CreateSession`: the `cfg.AgentEnv` stamp cut | the new pane never prints the link's name | **caught** |

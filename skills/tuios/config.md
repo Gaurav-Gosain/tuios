@@ -89,6 +89,12 @@ client smaller than the session shows the part around the focused pane's
 cursor, so a pane can be wider than a person's screen. Change it only when the
 person asks.
 
+`daemon.ssh_agent = "follow"` keeps a link for each session to the ssh agent
+socket of the client that attached or used it last. New panes get
+`SSH_AUTH_SOCK` set to the link. A shell that started earlier keeps its old
+value: `export SSH_AUTH_SOCK="$(tuios ssh-agent-path)"` points it at the link.
+The option is in the file only. Do not change it unless the person asks.
+
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
 addresses in the focused pane, and a typed label copies one. The
 `hints_all_panes` action, or the `hints.all_panes` option, labels every pane

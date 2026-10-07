@@ -354,6 +354,13 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	client.AllowNested = nestedAllowed()
 	client.DetachOthers = attachDetachOthers
 	client.SetNestProbe(probe)
+	if host == "" {
+		// This process runs where the person is, so its agent socket is
+		// theirs. The daemon decides whether to follow it: see
+		// internal/session/ssh_agent_follow.go. A session on a host is on
+		// another machine, where this path means nothing.
+		client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
+	}
 	if host == "" && createNew {
 		// Only tuios new sets it. A session the attach finds is not moved.
 		client.StartDir = newSessionDir

@@ -516,6 +516,22 @@ func init() {
 			},
 			handler: (*Daemon).verbDetachClient,
 		},
+		"ssh-agent-path": {
+			description: "Report the session's ssh agent link: the path that new panes get as SSH_AUTH_SOCK while [daemon] ssh_agent is follow, and the client socket it points at now.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Required: true, Description: "Session whose link to report."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "Session name."},
+				{Name: "path", Type: "string", Description: "The link. It exists only while an attached client has an agent socket."},
+				{Name: "follow", Type: "bool", Description: "True when [daemon] ssh_agent is follow."},
+				{Name: "target", Type: "string", Description: "The client socket the link points at. Absent when there is no link."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"ssh-agent-path","params":{"session":"work"}}`,
+			},
+			handler: (*Daemon).verbSSHAgentPath,
+		},
 		"new-worktree": {
 			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",
 			params: append([]verbParam{

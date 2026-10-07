@@ -77,6 +77,8 @@ type Daemon struct {
 	// singleClient is [daemon] single_client: every attach takes the other
 	// clients off its session. See detach_client.go.
 	singleClient atomic.Bool
+	// sshAgent keeps each session's ssh agent link. See ssh_agent_follow.go.
+	sshAgent agentFollow
 	// latest is each session's latest client, for the latest policy.
 	latest latestState
 	// attachCount hands out connState.attachSeq.
@@ -749,6 +751,10 @@ type DaemonConfig struct {
 	// SingleClient is [daemon] single_client: one client per session, and
 	// the newest attach wins. See detach_client.go.
 	SingleClient bool
+	// SSHAgent is [daemon] ssh_agent: "follow" keeps a link per session to
+	// the agent socket of the client that attached or used it last, and
+	// gives new panes SSH_AUTH_SOCK naming it. See ssh_agent_follow.go.
+	SSHAgent string
 	// QueueMax is [agents.queue] max: how many messages one pane's delivery
 	// queue holds. Zero means the default. See agent_queue.go.
 	QueueMax int
@@ -791,6 +797,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		windowSize:         windowSizePolicy(cfg.WindowSize),
 	}
 	d.singleClient.Store(cfg.SingleClient)
+	d.SetSSHAgent(cfg.SSHAgent)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
@@ -1115,6 +1122,8 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 // PTYs are closed and their windows are gone, but the socket stays open, so the
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
+	// The session's ssh agent link goes with it.
+	d.agentForgetSession(s.ID)
 	d.forgetLatest(s.ID)
 	d.herdrWorkspaceMeta.forget(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})

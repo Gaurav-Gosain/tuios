@@ -61,6 +61,10 @@ type TUIClient struct {
 	// Reconnect marks the attach as the client getting back a session it
 	// lost, not the person attaching. See AttachPayload.Reconnect.
 	Reconnect bool
+	// SSHAuthSock is sent in the hello as HelloPayload.SSHAuthSock. Only a
+	// client that runs where the person is sets it: tuios attach and tuios
+	// new. A server that serves a remote viewer leaves it empty.
+	SSHAuthSock string
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -364,6 +368,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		hello.SymbolImages = caps.SymbolImages
 	}
 
+	hello.SSHAuthSock = c.SSHAuthSock
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
 	hello.WindowSize = !legacyWindowSize()

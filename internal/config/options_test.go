@@ -17,6 +17,7 @@ var optionWalkSkips = map[string]string{
 	"daemon.agent_binaries":        "a list, which a value arriving as one string cannot spell",
 	"daemon.respond_from_shell":    "a grant to act as the person, which set-option, a verb any pane can call, must not be able to switch",
 	"daemon.single_client":         "detaches the person's other clients on every attach, which set-option, a verb any pane can call, must not be able to switch; detach-client needs admin for the same reason",
+	"daemon.ssh_agent":             "points every new pane's SSH_AUTH_SOCK at a link the daemon keeps, which set-option, a verb any pane can call, must not be able to switch",
 	"notifications.agent.sounds":   "file paths, which no accepted set or range can check",
 	"dock.left":                    "an ordered list of component names, not a scalar path",
 	"dock.center":                  "an ordered list of component names, not a scalar path",

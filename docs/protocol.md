@@ -1603,7 +1603,7 @@ What a restricted connection may call:
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
@@ -1921,6 +1921,36 @@ Response:
 
 An unknown `client` fails with `invalid_params`. A pane needs the `admin`
 grant. Over a link the verb needs `write`.
+
+### ssh-agent-path
+
+Report the ssh agent link of a session. With `[daemon] ssh_agent = "follow"`,
+the link points at the agent socket of the client that attached to the
+session or used it last, and new panes get `SSH_AUTH_SOCK` set to it.
+
+Params: `session` (required).
+
+The client sends its socket as `ssh_auth_sock` in its hello. Only `tuios
+attach` and `tuios new` send it. The daemon follows it only for a client that
+may act as the person, and only for an absolute path to a Unix socket, not a
+link, owned by the user, in a folder that the user owns and no other user can
+write to. When the client leaves, the link moves to the client before it, or
+is removed.
+
+Request:
+
+```json
+{"verb": "ssh-agent-path", "params": {"session": "work"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "ssh_agent_path", "session": "work", "path": "/run/user/1000/tuios/agent-3f2a9c1d.sock", "follow": true, "target": "/tmp/ssh-XXXXabc/agent.4242"}}
+```
+
+`target` is absent when there is no link. The verb reads one session: a pane
+needs `read` and the session in reach. Over a link it needs `list`.
 
 ### session-info
 
@@ -4634,7 +4664,7 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |

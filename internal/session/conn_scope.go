@@ -129,6 +129,7 @@ var verbScopes = map[string]scopeKind{
 	"wait-for":             scopeRead,
 	"subscribe":            scopeRead,
 	"peek-prompt":          scopeRead,
+	"ssh-agent-path":       scopeRead,
 	"read-agent-messages":  scopeRead,
 	"explain-agent-screen": scopeRead,
 	"list-options":         scopeRead,

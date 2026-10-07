@@ -45,6 +45,9 @@ type Manager struct {
 	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
 	// is the default, on. Every session reads it through ReturnWhenEmpty.
 	stayOnEmpty atomic.Bool
+	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
+	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
+	sshAgentFollow atomic.Bool
 	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
 	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
 	// spawn time through HerdrEnv. See herdr_compat.go.
@@ -294,6 +297,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv
+	}
+	if cfg.AgentEnv == nil {
+		cfg.AgentEnv = m.agentEnv
 	}
 	if cfg.history == nil {
 		cfg.history = m.history

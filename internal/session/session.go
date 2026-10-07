@@ -1428,6 +1428,10 @@ type SessionConfig struct {
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.
 	HerdrEnv func(sessionID, windowID string, workspace int, command []string) []string
+	// AgentEnv returns SSH_AUTH_SOCK naming the session's ssh agent link
+	// while [daemon] ssh_agent is follow, nil otherwise. The manager stamps
+	// it. See ssh_agent_follow.go.
+	AgentEnv func(sessionID string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -3151,6 +3155,16 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 			}
 		}
 		env = append(kept, extra...)
+	}
+	// The session's agent link replaces the daemon's SSH_AUTH_SOCK, unless the
+	// caller gave the pane one of its own (a split that follows ssh does).
+	if s.config != nil && s.config.AgentEnv != nil && !slices.ContainsFunc(extra, func(kv string) bool {
+		return strings.HasPrefix(kv, "SSH_AUTH_SOCK=")
+	}) {
+		if agent := s.config.AgentEnv(s.ID); len(agent) > 0 {
+			env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "SSH_AUTH_SOCK=") })
+			env = append(env, agent...)
+		}
 	}
 
 	// The TERM the session's first client named, checked against this

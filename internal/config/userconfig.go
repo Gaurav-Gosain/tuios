@@ -246,6 +246,11 @@ type DaemonConfig struct {
 	// every attach: a client that attaches takes the other clients off the
 	// session, and each of them exits with a message. Off by default.
 	SingleClient bool `toml:"single_client"`
+	// SSHAgent is "follow" to keep, for each session, a link to the ssh
+	// agent socket of the client that attached or used it last, and give
+	// new panes SSH_AUTH_SOCK naming the link. "off", the default, or empty
+	// leaves SSH_AUTH_SOCK as the daemon has it.
+	SSHAgent string `toml:"ssh_agent"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
@@ -257,6 +262,15 @@ const (
 
 // ResumeAgentsModes lists the valid values for daemon.resume_agents.
 var ResumeAgentsModes = []string{ResumeAgentsAsk, ResumeAgentsAuto, ResumeAgentsOff}
+
+// SSH agent modes. See DaemonConfig.SSHAgent.
+const (
+	SSHAgentOff    = "off"
+	SSHAgentFollow = "follow"
+)
+
+// SSHAgentModes lists the valid values for daemon.ssh_agent.
+var SSHAgentModes = []string{SSHAgentOff, SSHAgentFollow}
 
 // Window size policies. See DaemonConfig.WindowSize.
 const (
