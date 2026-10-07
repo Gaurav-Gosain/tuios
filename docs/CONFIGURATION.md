@@ -649,7 +649,7 @@ and `Ctrl+B #` shows them all (see [KEYBINDINGS.md](KEYBINDINGS.md#paste-buffers
 ```toml
 [paste_buffers]
 limit = 20     # how many buffers to keep. 0 keeps none.
-max_kb = 4096  # most KiB all buffers hold together. 0 uses 4096.
+max_kb = 16384 # most KiB all buffers hold together. 0 uses 16384.
 ```
 
 When a new buffer goes past `limit` or `max_kb`, the oldest buffers go. tuios
@@ -662,9 +662,12 @@ shares them. They go when the daemon stops. The daemon reads the setting when
 it starts and when the file changes. A smaller limit drops the oldest buffers
 at once.
 
-A buffer can hold a secret that you copied. From inside a pane, reading the
-buffers needs the `read` grant and changing them needs `write`. Pasting a
-buffer needs both. See [What a pane may do](#what-a-pane-may-do).
+Each buffer records the session that you copied it in. A buffer can hold a
+secret that you copied, so from inside a pane, reading the buffers needs the
+`read` grant and changing them needs `write`. Pasting a buffer needs both. A
+pane without `admin` sees only the buffers of the sessions it may read, and
+not the buffers that you set from outside every pane. See
+[What a pane may do](#what-a-pane-may-do).
 
 ## Master-stack layout
 

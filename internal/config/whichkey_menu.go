@@ -204,9 +204,9 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	}
 	// With multifocus on, the copy-mode key enters multi copy mode, and the
 	// menu says so: this is where a multifocus user finds out it exists.
-	copyRow := pair("Copy mode/paste image", part("prefix_selection", "Copy mode"), part("paste_image", "Paste image"))
+	copyRow := pair("Copy/paste image/buffer", part("prefix_selection", "Copy mode"), part("paste_image", "Paste image"), part("paste_buffer", "Paste buffer"))
 	if st.MultiCopy > 0 {
-		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image", st.MultiCopy)
+		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image/buffer", st.MultiCopy)
 		copyRow.parts[0].desc = fmt.Sprintf("Multi copy (%d)", st.MultiCopy)
 	}
 	sidebarRow := pair("Sidebar/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_spotlight", "Spotlight"))
@@ -216,12 +216,12 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		sidebarRow.parts[1].desc = "Spotlight off"
 	}
 	modes.rows = append(modes.rows,
-		// Copy mode and the image paste share a line: the leader's menu
+		// Copy mode and the two pastes share a line: the leader's menu
 		// fills an 80x24 screen, and a line more pushes it off the bottom.
 		copyRow,
-		// The two paste buffer keys share a line for the same reason.
-		pair("Paste/choose buffer", part("paste_buffer", "Paste buffer"), part("choose_buffer", "Choose buffer")),
-		row("prefix_scrollback", "Scrollback browser"),
+		// The scrollback browser and the paste buffer list share one for
+		// the same reason.
+		pair("Scrollback/buffers", part("prefix_scrollback", "Scrollback browser"), part("choose_buffer", "Paste buffers")),
 		// One row for two keys: the leader's menu fills an 80x24 screen,
 		// and a row more pushes it off the bottom.
 		sidebarRow,

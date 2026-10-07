@@ -42,9 +42,10 @@ test enters the code below the fault, and the fault is what nobody is testing.
 
 ## Paste buffers (#514)
 
-`paste_buffers_test.go` has four tests. On 2026-10-07 each control below cut
-one piece of wiring, built a binary, and ran the named test against it. Every
-control failed where shown, and the same tests passed on the branch build.
+`paste_buffers_test.go` and `paste_buffers_scope_test.go` have seven tests. On
+2026-10-07 each control below cut one piece of wiring, built a binary, and ran
+the named test against it. Every control failed where shown, and the same
+tests passed on the branch build.
 
 | Control: what was cut | Test | Where it failed |
 | --- | --- | --- |
@@ -55,19 +56,25 @@ control failed where shown, and the same tests passed on the branch build.
 | `daemonBuffers` in the tmux shim always false | `TestPasteBuffersKeepYanksAndPasteThem` | `tmux show-buffer` does not see the CLI's buffer |
 | The `readsBuffers` read-grant check in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with no grants reads the buffer, and `NONE_SHOW=1` never prints |
 | `d.buffers.SetLimits` in `applyUserConfig` | `TestPasteBufferLimitFollowsTheConfig` | after `limit = 1` two buffers stay, with limit 2 |
-| The local store's `Add` in `SaveToPasteBuffers` | `TestPasteBuffersWithoutADaemon` | prefix `]` shows no "Pasted" |
+| The `GrantWrite` check for `set-buffer` in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with read alone sets a buffer, and `READ_SET=1` never prints |
+| The local store's `Add` in `saveLocalBuffer` | `TestPasteBuffersWithoutADaemon` | prefix `]` shows no "Pasted" |
+| The session filter in `bufferAccess` | `TestPasteBuffersStayInTheirSession` | the pane with read reads another session's buffer, and `OTHER_SHOW=1` never prints |
+| `for_session` in `pasteBufferNamed` | `TestPasteKeyIgnoresABufferPlantedFromAnotherSession` | prefix `]` pastes the buffer a pane of another session set |
+| The byte test in the store's `trim` | `TestPasteBufferByteCap` | both 600-byte buffers stay under `max_kb = 1` |
 
 The grant test carries its positive halves: each refused call is served once
-the grant it names is given. The bracketed check pastes once with bracketed
+the grant it names is given. The session test reads the other session's
+buffer once the pane holds `admin`. The bracketed check pastes once with bracketed
 paste off, where no marks may show, before the paste where they must.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames go test \
-  -run 'TestPasteBuffer' -count=1 -timeout 5m .
+  -run 'TestPasteBuffer|TestPasteKey' -count=1 -timeout 5m .
 ```
 
 With `TUIOS_E2E_FRAMES` set, the run writes `paste-buffers-chooser`,
-`paste-buffers-pasted`, `paste-buffers-bracketed` and `paste-buffers-grants`.
+`paste-buffers-pasted`, `paste-buffers-bracketed`, `paste-buffers-grants`,
+`paste-buffers-own-session` and `paste-buffers-planted`.
 
 ## OpenCode V2 plugin loading and session isolation
 

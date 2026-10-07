@@ -100,6 +100,12 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		return json.Marshal(f.grants)
 	}
+	switch verb {
+	case "list-buffers", "show-buffer", "set-buffer", "delete-buffer":
+		// The fake is a daemon from before the buffer verbs, so the shim
+		// keeps its own buffers. The e2e suite covers the daemon's.
+		return nil, codedErr{code: "unknown_verb"}
+	}
 	if verb == "list-sessions" {
 		if f.noAdmin {
 			return nil, codedErr{code: "forbidden"}

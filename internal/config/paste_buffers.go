@@ -12,7 +12,7 @@ type PasteBuffersConfig struct {
 	// file that never mentions it (default: 20).
 	Limit *int `toml:"limit"`
 	// MaxKB is how many KiB all buffers hold together. When a new buffer
-	// passes it, the oldest go. 0 uses 4096.
+	// passes it, the oldest go. 0 uses 16384 (16 MiB).
 	MaxKB int `toml:"max_kb"`
 }
 

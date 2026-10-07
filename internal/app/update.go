@@ -2007,12 +2007,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.handleCopyPipeDone(msg)
 
 	case PasteBufferSaveFailedMsg:
-		m.LogInfo("Paste buffer not kept: %v", msg.Err)
+		m.handlePasteBufferSaveFailed(msg)
 		return m, nil
 
 	case PasteBufferFetchedMsg:
-		m.handlePasteBufferFetched(msg)
-		return m, nil
+		return m, m.handlePasteBufferFetched(msg)
 
 	case PasteBuffersLoadedMsg:
 		m.handlePasteBuffersLoaded(msg)

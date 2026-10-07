@@ -1323,7 +1323,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "paste_buffers.max_kb", Type: OptionInt, Section: "selection",
-		Description: "Most KiB all paste buffers hold together. When it is full, the oldest go. 0 uses 4096.",
+		Description: "Most KiB all paste buffers hold together. When it is full, the oldest go. 0 uses 16384.",
 		Default:     "0", Min: 0, Max: 1048576,
 	},
 	// Read by the client on each switch, so a change applies at once.

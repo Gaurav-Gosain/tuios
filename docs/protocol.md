@@ -2420,15 +2420,22 @@ first, that every client and session shares. A client adds a buffer for each
 yank in copy mode. `[paste_buffers]` `limit` and `max_kb` bound the list, and
 the oldest buffers go first. Nothing is written to disk.
 
-- `list-buffers`: no params. Returns `buffers` (each with `name`, `bytes`,
-  `created` in Unix nanoseconds, `automatic` and `sample`), `total`, `bytes`,
-  `limit` and `max_bytes`.
-- `show-buffer`: `name` (optional, default the newest). Returns the row and
-  `data`, the whole text.
-- `set-buffer`: `data` (required), `name` (optional), `append` (optional).
-  With no name a new buffer named `bufferNNNN` is made, unless `append` is
-  set, which adds to the newest. The buffer goes on top.
-- `delete-buffer`: `name` (optional, default the newest).
+- `list-buffers`: `for_session` (optional). Returns `buffers` (each with
+  `name`, `bytes`, `created` in Unix nanoseconds, `automatic`, `sample`,
+  `session`, and `pane` when a process in a pane set it), `total`, `bytes`,
+  `limit` and `max_bytes`. `sample` is escaped already.
+- `show-buffer`: `name` (optional, default the newest), `for_session`
+  (optional). Returns the row and `data`, the whole text. With
+  `for_session`, only the person's own buffers and the ones a pane of that
+  session set count: this is what the paste key asks for.
+- `set-buffer`: `data` (required), `name` (optional), `append` (optional),
+  `session` (optional). With no name a new buffer named `bufferNNNN` is made,
+  unless `append` is set, which adds to the newest. The buffer goes on top.
+  `session` is the session a caller outside every pane copied the text in; a
+  pane's own session is used for a pane.
+- `delete-buffer`: `name` (optional, default the newest), `created`
+  (optional). With `created`, the buffer is deleted only while its text is
+  the one set at that time.
 - `paste-buffer`: `session`, `window`, `name` (all optional), `delete`
   (optional). Types the buffer as `send-text` with `paste` does: sanitized,
   and bracketed when the pane's program turned bracketed paste on. Returns
@@ -2437,7 +2444,9 @@ the oldest buffers go first. Nothing is written to disk.
 A name that no buffer has, or the newest when there is none, answers
 `no_buffer`. From a pane, `list-buffers` and `show-buffer` need the `read`
 grant, `set-buffer` and `delete-buffer` need `write`, and `paste-buffer` needs
-both and is held to the same target rules as `send-text`. Over a link,
+both and is held to the same target rules as `send-text`. A pane without
+`admin` reaches only the buffers of the sessions it may read, as if no other
+buffer were there. A buffer set from outside every pane belongs to no session. Over a link,
 reading needs the `list` capability and the rest need `write`.
 
 ```json

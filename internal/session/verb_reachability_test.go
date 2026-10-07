@@ -424,7 +424,7 @@ func freshWorkSession(t *testing.T, d *Daemon) {
 	// since delete-buffer and paste-buffer with delete remove one.
 	d.buffers = pastebuf.New(pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes)
 	for _, name := range []string{"buffer0001", "buffer0003", "deploy"} {
-		if _, err := d.buffers.Set(name, "echo "+name, false); err != nil {
+		if _, err := d.buffers.Set(name, "echo "+name, false, pastebuf.Owner{}, nil); err != nil {
 			t.Fatalf("set buffer %q: %v", name, err)
 		}
 	}

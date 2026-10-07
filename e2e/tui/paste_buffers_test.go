@@ -293,7 +293,7 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	base := t.TempDir()
 	term := startPasteBufferClient(t, base, "")
-	if out, err := tuiosCLI(t, base, "set-buffer", "-b", "secret", "hunter"+"2"); err != nil {
+	if out, err := tuiosCLI(t, base, "set-buffer", "-s", pbSession, "-b", "secret", "hunter"+"2"); err != nil {
 		t.Fatalf("set-buffer from outside every pane: %v\n%s", err, out)
 	}
 	out, err := tuiosCLI(t, base, "list-windows", "-s", pbSession, "--json")

@@ -3,6 +3,8 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -12,16 +14,20 @@ import (
 // paste-buffer, after tmux's commands of the same names.
 //
 // The daemon holds one store (internal/pastebuf), so every client and every
-// session sees the same buffers, as tmux's server does. A client adds a
+// session can share the buffers, as tmux's server does. A client adds a
 // buffer for each yank it makes, and the person pastes one back with the
 // prefix keys or the CLI. Nothing reaches disk: the buffers end with the
 // daemon.
 //
-// A buffer can hold whatever the person copied, a secret included, so a pane
-// is held to its grants (pane_grants.go): reading the buffers needs read, and
-// changing them needs write. A paste needs both, because the text it types
-// into the caller's own pane is the text's way back to the caller. The paste
-// is also a typing verb, held to the same target rules as send-text.
+// Each buffer records the session it came from and, when a process in a pane
+// set it, that pane. A buffer can hold whatever the person copied, a secret
+// included, so a pane is held to its grants (pane_grants.go): reading needs
+// read, and changing needs write. A pane without admin sees only the buffers
+// of the sessions it may read (sessionInScope), and a buffer from no session,
+// which the person set from outside every pane, is not one of them. A paste
+// needs read and write, because the text it types into the caller's own pane
+// is the text's way back to the caller. The paste is also a typing verb, held
+// to the same target rules as send-text.
 
 // ErrVerbNoBuffer is the code of a call naming a buffer there is not, or of a
 // call on the newest buffer when there is none.
@@ -54,49 +60,123 @@ func (d *Daemon) bufferStore() *pastebuf.Store {
 	return d.buffers
 }
 
+// bufferAccess says who the caller on cs is to the buffers: the owner a
+// buffer it sets gets, and the filter of the buffers it may see. session is
+// the session a caller outside every pane names, which a yank from a client
+// does; a pane's own session is used for a pane whatever it names.
+func (d *Daemon) bufferAccess(cs *connState, session string) (pastebuf.Owner, pastebuf.Filter) {
+	if cs != nil && cs.viaLink {
+		// The link policy already held the call (list to read, write to
+		// change). The buffer is marked as the link's.
+		return pastebuf.Owner{Pane: "link"}, nil
+	}
+	pa := d.paneAuthority(cs)
+	if pa == nil {
+		owner := pastebuf.Owner{}
+		if session != "" {
+			if s, _ := d.manager.ResolveSession(session); s != nil {
+				owner.Session = s.ID
+			}
+		}
+		return owner, nil
+	}
+	owner := pastebuf.Owner{Session: pa.sessionID, Pane: pa.window}
+	if pa.grants.Has(GrantAdmin) {
+		return owner, nil
+	}
+	own := pa.session
+	if pa.sessionID != "" {
+		own = d.sessionNameByID(pa.sessionID)
+	}
+	return owner, func(b pastebuf.Buffer) bool {
+		name := d.sessionNameByID(b.Owner.Session)
+		return name != "" && d.sessionInScope(own, name)
+	}
+}
+
+// forSession narrows f to what the paste key takes for session: the
+// person's own buffers, and the ones a pane of that session set. A buffer a
+// pane of another session set is left out, so no pane can plant what the
+// person pastes somewhere else.
+func (d *Daemon) forSession(f pastebuf.Filter, session string) pastebuf.Filter {
+	s, _ := d.manager.ResolveSession(session)
+	id := ""
+	if s != nil {
+		id = s.ID
+	}
+	return func(b pastebuf.Buffer) bool {
+		if f != nil && !f(b) {
+			return false
+		}
+		return b.Owner.Pane == "" || (id != "" && b.Owner.Session == id)
+	}
+}
+
 // bufferError maps a store error to the verb error for it.
-func bufferError(verb string, err error) *verbError {
+func (d *Daemon) bufferError(verb string, err error) *verbError {
 	switch {
 	case errors.Is(err, pastebuf.ErrNotFound), errors.Is(err, pastebuf.ErrNone):
 		return hintedVerbError(ErrVerbNoBuffer, verb+": "+err.Error(), &VerbHint{
 			Verb:    "list-buffers",
 			Command: "tuios list-buffers",
-			Detail:  "A yank in copy mode adds a buffer, and so does set-buffer. list-buffers shows the names.",
+			Detail:  "A yank in copy mode adds a buffer, and so does set-buffer. list-buffers shows the names this caller may see.",
+		})
+	case errors.Is(err, pastebuf.ErrChanged):
+		return hintedVerbError(ErrVerbNoBuffer, verb+": "+err.Error(), &VerbHint{
+			Detail: "Nothing was deleted. Read the buffer again to see its new text.",
 		})
 	case errors.Is(err, pastebuf.ErrBadName):
 		return invalidParam("name", verb+": "+err.Error())
-	case errors.Is(err, pastebuf.ErrEmpty), errors.Is(err, pastebuf.ErrTooLarge):
+	case errors.Is(err, pastebuf.ErrEmpty):
 		return invalidParam("data", verb+": "+err.Error())
+	case errors.Is(err, pastebuf.ErrTooLarge):
+		_, maxBytes := d.bufferStore().Limits()
+		return hintedVerbError(ErrVerbInvalidParams, verb+": "+err.Error(), &VerbHint{
+			Param: "data",
+			Detail: "Nothing was stored. All paste buffers together hold at most " + strconv.Itoa(maxBytes>>10) +
+				" KiB, so one buffer can hold no more. Set max_kb under [paste_buffers] in config.toml to keep larger text.",
+		})
 	case errors.Is(err, pastebuf.ErrOff):
 		return hintedVerbError(ErrVerbInvalidParams, verb+": "+err.Error(), &VerbHint{
-			Detail: "Set limit under [paste_buffers] in config.toml to keep buffers.",
+			Detail: "Nothing was stored. Set limit under [paste_buffers] in config.toml to keep buffers.",
 		})
 	}
 	return newVerbError(ErrVerbInternal, verb+": "+err.Error())
 }
 
 // bufferRow is one buffer in a listing.
-func bufferRow(b pastebuf.Buffer) map[string]any {
-	return map[string]any{
+func (d *Daemon) bufferRow(b pastebuf.Buffer) map[string]any {
+	row := map[string]any{
 		"name":      b.Name,
 		"bytes":     len(b.Data),
 		"created":   b.Created.UnixNano(),
 		"automatic": b.Automatic,
 		"sample":    pastebuf.Sample(b.Data, bufferSampleRunes),
+		"session":   d.sessionNameByID(b.Owner.Session),
 	}
+	if b.Owner.Pane != "" {
+		row["pane"] = shortWindowID(b.Owner.Pane)
+	}
+	return row
 }
 
-// verbListBuffers lists the paste buffers, newest first.
-func (d *Daemon) verbListBuffers(_ *connState, params json.RawMessage) (any, *verbError) {
-	var p struct{}
+// verbListBuffers lists the paste buffers the caller may see, newest first.
+func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		ForSession string `json:"for_session"`
+	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	_, f := d.bufferAccess(cs, "")
+	if p.ForSession != "" {
+		f = d.forSession(f, p.ForSession)
+	}
 	store := d.bufferStore()
-	list := store.List()
+	list := store.List(f)
 	rows := make([]map[string]any, 0, len(list))
 	for _, b := range list {
-		rows = append(rows, bufferRow(b))
+		rows = append(rows, d.bufferRow(b))
 	}
 	limit, maxBytes := store.Limits()
 	return map[string]any{
@@ -110,60 +190,74 @@ func (d *Daemon) verbListBuffers(_ *connState, params json.RawMessage) (any, *ve
 }
 
 // verbShowBuffer returns one buffer's text.
-func (d *Daemon) verbShowBuffer(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Name string `json:"name"`
+		Name       string `json:"name"`
+		ForSession string `json:"for_session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	b, err := d.bufferStore().Get(p.Name)
-	if err != nil {
-		return nil, bufferError("show-buffer", err)
+	_, f := d.bufferAccess(cs, "")
+	if p.ForSession != "" {
+		f = d.forSession(f, p.ForSession)
 	}
-	row := bufferRow(b)
+	b, err := d.bufferStore().Get(p.Name, f)
+	if err != nil {
+		return nil, d.bufferError("show-buffer", err)
+	}
+	row := d.bufferRow(b)
 	row["type"] = "buffer"
 	row["data"] = b.Data
 	return row, nil
 }
 
 // verbSetBuffer stores text in a buffer.
-func (d *Daemon) verbSetBuffer(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Name   string `json:"name"`
-		Data   string `json:"data"`
-		Append bool   `json:"append"`
+		Name    string `json:"name"`
+		Data    string `json:"data"`
+		Append  bool   `json:"append"`
+		Session string `json:"session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	b, err := d.bufferStore().Set(p.Name, p.Data, p.Append)
+	owner, f := d.bufferAccess(cs, p.Session)
+	b, err := d.bufferStore().Set(p.Name, p.Data, p.Append, owner, f)
 	if err != nil {
-		return nil, bufferError("set-buffer", err)
+		return nil, d.bufferError("set-buffer", err)
 	}
-	row := bufferRow(b)
+	row := d.bufferRow(b)
 	row["type"] = "buffer_set"
 	return row, nil
 }
 
 // verbDeleteBuffer removes a buffer.
-func (d *Daemon) verbDeleteBuffer(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Name string `json:"name"`
+		Name    string `json:"name"`
+		Created int64  `json:"created"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	b, err := d.bufferStore().Delete(p.Name)
+	var created time.Time
+	if p.Created != 0 {
+		created = time.Unix(0, p.Created)
+	}
+	_, f := d.bufferAccess(cs, "")
+	b, err := d.bufferStore().Delete(p.Name, created, f)
 	if err != nil {
-		return nil, bufferError("delete-buffer", err)
+		return nil, d.bufferError("delete-buffer", err)
 	}
 	return map[string]any{"type": "buffer_deleted", "name": b.Name}, nil
 }
 
 // verbPasteBuffer types a buffer into a pane as a paste: sanitized as every
 // paste is, and in the bracketed paste delimiters when the pane's program
-// turned bracketed paste on.
+// turned bracketed paste on. With delete it removes the buffer it pasted, and
+// not a newer text set under the same name meanwhile.
 func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -175,9 +269,10 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 		return nil, verr
 	}
 	store := d.bufferStore()
-	b, err := store.Get(p.Name)
+	_, f := d.bufferAccess(cs, "")
+	b, err := store.Get(p.Name, f)
 	if err != nil {
-		return nil, bufferError("paste-buffer", err)
+		return nil, d.bufferError("paste-buffer", err)
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -199,15 +294,17 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 	if _, err := pty.Write([]byte(text)); err != nil {
 		return nil, ptyWriteError(err)
 	}
+	deleted := false
 	if p.Delete {
-		_, _ = store.Delete(b.Name)
+		_, derr := store.Delete(b.Name, b.Created, f)
+		deleted = derr == nil
 	}
 	return map[string]any{
 		"type":      "buffer_pasted",
 		"name":      b.Name,
 		"bytes":     len(b.Data),
 		"bracketed": bracketed,
-		"deleted":   p.Delete,
+		"deleted":   deleted,
 	}, nil
 }
 
@@ -221,13 +318,17 @@ func bufferVerbs() map[string]verbEntry {
 		{Name: "bytes", Type: "int", Description: "How many bytes the buffer holds."},
 		{Name: "created", Type: "int", Description: "Unix-nano time the text was last set."},
 		{Name: "automatic", Type: "bool", Description: "True when tuios named the buffer."},
-		{Name: "sample", Type: "string", Description: "The start of the text on one line, with control characters shown as escapes."},
+		{Name: "sample", Type: "string", Description: "The start of the text on one line, with control characters shown as escapes. Print it as it is."},
+		{Name: "session", Type: "string", Description: "The session the text was copied or set in. Empty when the person set it from outside every pane."},
+		{Name: "pane", Type: "string", Description: "The pane whose process set the buffer. Absent when the person set it, with a yank or from outside every pane."},
 	}
+	forSession := verbParam{Name: "for_session", Type: "string", Description: "Keep only the buffers the paste key takes in this session: the person's own, and the ones a pane of this session set."}
 	return map[string]verbEntry{
 		"list-buffers": {
-			description: "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. Every client and session shares them. From a pane this needs the read grant.",
+			description: "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. From a pane this needs the read grant, and a pane without admin sees only the buffers of the sessions it may read.",
+			params:      []verbParam{forSession},
 			returns: []verbParam{
-				{Name: "buffers", Type: "[]object", Description: "One entry per buffer, newest first: name, bytes, created, automatic, sample."},
+				{Name: "buffers", Type: "[]object", Description: "One entry per buffer, newest first: name, bytes, created, automatic, sample, session, pane."},
 				{Name: "total", Type: "int", Description: "How many buffers there are."},
 				{Name: "bytes", Type: "int", Description: "How many bytes they hold together."},
 				{Name: "limit", Type: "int", Description: "How many buffers the daemon keeps, from [paste_buffers] limit."},
@@ -237,8 +338,8 @@ func bufferVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbListBuffers,
 		},
 		"show-buffer": {
-			description: "Return the text of one paste buffer. From a pane this needs the read grant.",
-			params:      []verbParam{nameParam("show")},
+			description: "Return the text of one paste buffer. From a pane this needs the read grant, and reaches only the buffers of the sessions the pane may read.",
+			params:      []verbParam{nameParam("show"), forSession},
 			returns: append(append([]verbParam{}, rowReturns...),
 				verbParam{Name: "data", Type: "string", Description: "The whole text."}),
 			examples: []string{
@@ -251,8 +352,9 @@ func bufferVerbs() map[string]verbEntry {
 			description: "Store text in a paste buffer and put it on top. With no name a new buffer is made, unless append is set. When the buffers pass the limit or the byte cap, the oldest go. From a pane this needs the write grant.",
 			params: []verbParam{
 				{Name: "data", Type: "string", Required: true, Description: "The text. It may not be empty or larger than the byte cap."},
-				{Name: "name", Type: "string", Description: "The buffer to set: 1 to 64 printable characters with no spaces. Omit for a new buffer, or for the newest with append."},
+				{Name: "name", Type: "string", Description: "The buffer to set: 1 to 64 printable characters. Omit for a new buffer, or for the newest with append."},
 				{Name: "append", Type: "bool", Description: "Add the text to the end of the buffer instead of replacing it.", Default: "false"},
+				{Name: "session", Type: "string", Description: "The session the text comes from, for a caller outside every pane such as a client's yank. A pane's own session is used for a pane."},
 			},
 			returns: rowReturns,
 			examples: []string{
@@ -262,8 +364,11 @@ func bufferVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSetBuffer,
 		},
 		"delete-buffer": {
-			description: "Delete a paste buffer. From a pane this needs the write grant.",
-			params:      []verbParam{nameParam("delete")},
+			description: "Delete a paste buffer. From a pane this needs the write grant, and reaches only the buffers of the sessions the pane may read.",
+			params: []verbParam{
+				nameParam("delete"),
+				{Name: "created", Type: "int", Description: "Delete only when the buffer's text is still the one set at this Unix-nano time, as show-buffer gave it."},
+			},
 			returns: []verbParam{
 				{Name: "name", Type: "string", Description: "The buffer that was deleted."},
 			},
@@ -276,7 +381,7 @@ func bufferVerbs() map[string]verbEntry {
 				sessionParam,
 				windowParam,
 				nameParam("paste"),
-				{Name: "delete", Type: "bool", Description: "Delete the buffer after the paste.", Default: "false"},
+				{Name: "delete", Type: "bool", Description: "Delete the buffer after the paste, unless its text was set again meanwhile.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "name", Type: "string", Description: "The buffer that was pasted."},

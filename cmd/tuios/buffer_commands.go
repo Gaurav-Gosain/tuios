@@ -87,7 +87,7 @@ func newShowBufferCommand() *cobra.Command {
 }
 
 func newSetBufferCommand() *cobra.Command {
-	var name string
+	var name, sessionName string
 	var appendTo, jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "set-buffer [text]",
@@ -98,6 +98,9 @@ text comes from the standard input.
 With no --buffer a new buffer is made, named bufferNNNN. With --buffer the
 buffer of that name is set, and made when there is none. --append adds the text
 to the end of the buffer, or of the newest buffer when there is no --buffer.
+
+A buffer you set from outside every pane is yours only. With --session, the
+panes of that session that hold the read grant may read it too.
 
 ` + bufferGrantsNote,
 		Example: `  # Keep a command to paste later
@@ -118,10 +121,12 @@ to the end of the buffer, or of the newest buffer when there is no --buffer.
 				}
 				text = string(data)
 			}
-			return runSetBuffer(name, text, appendTo, jsonOutput)
+			return runSetBuffer(name, sessionName, text, appendTo, jsonOutput)
 		},
 	}
 	cmd.Flags().StringVarP(&name, "buffer", "b", "", "The buffer to set (default: a new buffer)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "The session the text belongs to, so its panes may read it (default: none, only you)")
+	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	cmd.Flags().BoolVarP(&appendTo, "append", "a", false, "Add the text to the end of the buffer")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("buffer", completeBufferNames)
@@ -197,6 +202,7 @@ type bufferListing struct {
 		Name   string `json:"name"`
 		Bytes  int    `json:"bytes"`
 		Sample string `json:"sample"`
+		Pane   string `json:"pane"`
 	} `json:"buffers"`
 }
 
@@ -261,7 +267,12 @@ func runListBuffers(jsonOutput bool) error {
 		return nil
 	}
 	for _, b := range res.Buffers {
-		fmt.Printf("%s: %s: %q\n", plainLine(b.Name), plural.Count(b.Bytes, "byte"), b.Sample)
+		// The daemon escaped the sample already, so it is printed as it is.
+		line := fmt.Sprintf("%s: %s: \"%s\"", plainLine(b.Name), plural.Count(b.Bytes, "byte"), plainLine(b.Sample))
+		if b.Pane != "" {
+			line += " (set by pane " + plainLine(b.Pane) + ")"
+		}
+		fmt.Println(line)
 	}
 	return nil
 }
@@ -284,9 +295,12 @@ func runShowBuffer(name string, jsonOutput bool) error {
 	return err
 }
 
-func runSetBuffer(name, text string, appendTo, jsonOutput bool) error {
+func runSetBuffer(name, sessionName, text string, appendTo, jsonOutput bool) error {
 	params := bufferNameParams(name)
 	params["data"] = text
+	if sessionName != "" {
+		params["session"] = sessionName
+	}
 	if appendTo {
 		params["append"] = true
 	}
@@ -339,8 +353,9 @@ func runPasteBuffer(name, sessionName, window string, del, jsonOutput bool) erro
 		return reportVerbError(err, jsonOutput)
 	}
 	var buf struct {
-		Name string `json:"name"`
-		Data string `json:"data"`
+		Name    string `json:"name"`
+		Data    string `json:"data"`
+		Created int64  `json:"created"`
 	}
 	if err := json.Unmarshal(raw, &buf); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -350,7 +365,10 @@ func runPasteBuffer(name, sessionName, window string, del, jsonOutput bool) erro
 		return reportVerbError(t.explain("send-text", err), jsonOutput)
 	}
 	if del {
-		if _, err := callBufferVerb("delete-buffer", bufferNameParams(buf.Name)); err != nil {
+		// Only the text that was pasted: a buffer set again meanwhile stays.
+		params := bufferNameParams(buf.Name)
+		params["created"] = buf.Created
+		if _, err := callBufferVerb("delete-buffer", params); err != nil {
 			return reportVerbError(err, jsonOutput)
 		}
 	}

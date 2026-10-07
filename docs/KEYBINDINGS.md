@@ -850,9 +850,16 @@ goes to the clipboard, as before.
 | `Ctrl+B ]` | `paste_buffer` | Paste the newest buffer into the focused pane |
 | `Ctrl+B #` | `choose_buffer` | Show the buffers, newest first, to choose one |
 
+`Ctrl+B ]` takes the newest text that you copied, or that a pane of the same
+session set with `tuios set-buffer`. A pane of another session cannot set what
+the key pastes. The paste goes to the pane that was focused when you pressed
+the key, also when the focus moves before the text arrives.
+
 In the list, `Enter` or a click pastes the buffer, `d` deletes it, and `Esc`
-or `q` closes the list. A paste goes in the bracketed paste marks when the
-program in the pane asks for them, as a clipboard paste does.
+or `q` closes the list. The list shows "from pane" and the pane id on a buffer
+that a program in a pane set, because you did not copy that text. A paste goes
+in the bracketed paste marks when the program in the pane asks for them, as a
+clipboard paste does.
 
 tmux shows the list on `=`. In tuios, `Ctrl+B =` makes the splits equal, so
 the list is on `#`, the tmux key for `list-buffers`. To use the tmux keys, move

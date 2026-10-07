@@ -189,7 +189,7 @@ func newestAfter(list []buffer) time.Time {
 // removeBuffer deletes buffer name.
 func (s *Shim) removeBuffer(name string) error {
 	if s.daemonBuffers() {
-		return s.daemonBufferRemove(name)
+		return s.daemonBufferRemove(name, 0)
 	}
 	dir := s.bufferDir()
 	if dir == "" {
@@ -391,7 +391,14 @@ func (s *Shim) pasteBuffer(name string, args []string) (string, []string, error)
 		}
 	}
 	if p.Has('d') {
-		if err := s.removeBuffer(buf); err != nil {
+		// Only the text that was pasted goes: a buffer set again meanwhile
+		// stays.
+		remove := s.removeBuffer
+		if s.daemonBuffers() {
+			created := s.readCreated
+			remove = func(name string) error { return s.daemonBufferRemove(name, created) }
+		}
+		if err := remove(buf); err != nil {
 			return OutcomeError, detail, err
 		}
 	}

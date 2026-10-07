@@ -1153,7 +1153,7 @@ many to keep.
 ```bash
 tuios list-buffers [--json]
 tuios show-buffer [-b <name>] [--json]
-tuios set-buffer [-b <name>] [-a] [<text> | -] [--json]
+tuios set-buffer [-b <name>] [-s <session>] [-a] [<text> | -] [--json]
 tuios delete-buffer [-b <name>] [--json]
 tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [--json]
 ```
@@ -1161,6 +1161,7 @@ tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [--json]
 **Flags:**
 - `-b, --buffer <name>`: The buffer (default: the newest). For `set-buffer`, the default is a new buffer named `bufferNNNN`
 - `-a, --append`: `set-buffer` adds the text to the end of the buffer
+- `-s, --session` on `set-buffer`: The session the text belongs to. A pane of that session with the `read` grant may then read it. Without it, the buffer is yours only
 - `-s, --session`, `-w, --window`: The pane `paste-buffer` pastes into (default: the focused pane)
 - `-d, --delete`: `paste-buffer` deletes the buffer after the paste
 - `--json`: Output the result as JSON

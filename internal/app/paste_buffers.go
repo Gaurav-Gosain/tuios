@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // Paste buffers: the yanks tuios keeps to paste again, after tmux's.
@@ -36,6 +37,10 @@ type PasteBufferItem struct {
 	Name   string `json:"name"`
 	Bytes  int    `json:"bytes"`
 	Sample string `json:"sample"`
+	// Pane and Session say a process in a pane set the buffer, and where.
+	// The chooser marks such a row: the person did not copy that text.
+	Pane    string `json:"pane"`
+	Session string `json:"session"`
 }
 
 // bufferChooser is the state of the buffer chooser overlay.
@@ -47,6 +52,9 @@ type bufferChooser struct {
 	loading  bool
 	err      string
 	gen      uint64
+	// target is the pane focused when the chooser opened, which its paste
+	// goes to.
+	target string
 }
 
 // PasteBuffersLoadedMsg carries the buffer list for the chooser.
@@ -56,16 +64,27 @@ type PasteBuffersLoadedMsg struct {
 	Err   error
 }
 
-// PasteBufferFetchedMsg carries one buffer's text, to paste.
+// PasteBufferFetchedMsg carries one buffer's text, to paste into the pane
+// Window names: the pane that was focused when the key was pressed.
 type PasteBufferFetchedMsg struct {
-	Name string
-	Data string
-	Err  error
+	Name   string
+	Data   string
+	Window string
+	Err    error
+	// asked is the name the paste asked for, "" for the newest, so a
+	// fallback to the local store asks the same.
+	asked string
 }
 
 // PasteBufferDeletedMsg reports a delete from the chooser.
 type PasteBufferDeletedMsg struct {
 	Name string
+	Err  error
+}
+
+// PasteBufferSaveFailedMsg reports a yank the daemon did not keep.
+type PasteBufferSaveFailedMsg struct {
+	Text string
 	Err  error
 }
 
@@ -75,8 +94,9 @@ const (
 	bufferChooserRows  = 10
 )
 
-// localBuffers is the store of a client with no daemon, with the limits of
-// the config as it stands now.
+// localBuffers is the store of a client with no daemon, or with a daemon
+// from before the buffer verbs, with the limits of the config as it stands
+// now.
 func (m *OS) localBuffers() *pastebuf.Store {
 	limit, maxBytes := pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes
 	if m.UserConfig != nil {
@@ -91,9 +111,26 @@ func (m *OS) localBuffers() *pastebuf.Store {
 }
 
 // buffersInDaemon reports whether this client keeps its buffers in the
-// daemon.
+// daemon: it has one, and the daemon has the buffer verbs.
 func (m *OS) buffersInDaemon() bool {
-	return m.IsDaemonSession
+	return m.IsDaemonSession && !m.buffersDaemonOld
+}
+
+// isUnknownVerb reports whether err is a daemon's unknown_verb: a daemon from
+// before the buffer verbs.
+func isUnknownVerb(err error) bool {
+	var coded interface{ ErrorCode() string }
+	return errors.As(err, &coded) && coded.ErrorCode() == "unknown_verb"
+}
+
+// noteOldDaemon switches this client to its own store, for a daemon that
+// answered unknown_verb. It says so once.
+func (m *OS) noteOldDaemon() {
+	if m.buffersDaemonOld {
+		return
+	}
+	m.buffersDaemonOld = true
+	m.LogInfo("The daemon has no paste buffers. This client keeps its own until the daemon restarts on this version.")
 }
 
 // bufferCall makes one buffer verb call to this machine's daemon.
@@ -113,85 +150,127 @@ func (m *OS) SaveToPasteBuffers(text string) tea.Cmd {
 		return nil
 	}
 	if !m.buffersInDaemon() {
-		if _, err := m.localBuffers().Add(text); err != nil && !errors.Is(err, pastebuf.ErrOff) {
-			m.LogInfo("Paste buffer not kept: %v", err)
-		}
+		m.saveLocalBuffer(text)
 		return nil
 	}
 	call := m.bufferCall()
+	params := map[string]any{"data": text}
+	if m.SessionName != "" && m.AttachedHost == "" {
+		// The session the yank was made in, so a pane of it may read it.
+		params["session"] = m.SessionName
+	}
 	return func() tea.Msg {
-		if _, err := call("set-buffer", map[string]any{"data": text}); err != nil {
-			return PasteBufferSaveFailedMsg{Err: err}
+		if _, err := call("set-buffer", params); err != nil {
+			return PasteBufferSaveFailedMsg{Text: text, Err: err}
 		}
 		return nil
 	}
 }
 
-// PasteBufferSaveFailedMsg reports a yank the daemon did not keep.
-type PasteBufferSaveFailedMsg struct{ Err error }
-
-// PasteNewestBuffer is the paste_buffer action: paste the newest buffer into
-// the focused pane.
-func (m *OS) PasteNewestBuffer() tea.Cmd {
-	return m.pasteBufferNamed("")
+// saveLocalBuffer keeps text in this client's own store.
+func (m *OS) saveLocalBuffer(text string) {
+	if _, err := m.localBuffers().Add(text, pastebuf.Owner{}); err != nil && !errors.Is(err, pastebuf.ErrOff) {
+		m.LogInfo("Paste buffer not kept: %v", err)
+	}
 }
 
-// pasteBufferNamed pastes the buffer called name, or the newest for "".
-func (m *OS) pasteBufferNamed(name string) tea.Cmd {
-	if m.GetFocusedWindow() == nil {
+// handlePasteBufferSaveFailed logs a yank the daemon did not keep, and keeps
+// it here when the daemon is too old to keep it.
+func (m *OS) handlePasteBufferSaveFailed(msg PasteBufferSaveFailedMsg) {
+	if isUnknownVerb(msg.Err) {
+		m.noteOldDaemon()
+		m.saveLocalBuffer(msg.Text)
+		return
+	}
+	m.LogInfo("Paste buffer not kept: %v", msg.Err)
+}
+
+// PasteNewestBuffer is the paste_buffer action: paste the newest buffer into
+// the focused pane. The newest is the newest the person copied, or one a pane
+// of this session set: a pane of another session cannot plant what this key
+// pastes.
+func (m *OS) PasteNewestBuffer() tea.Cmd {
+	w := m.GetFocusedWindow()
+	if w == nil {
 		m.ShowNotification("No pane to paste into", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	return m.pasteBufferNamed("", w.ID)
+}
+
+// pasteBufferNamed pastes the buffer called name, or the newest for "", into
+// the pane with the id window. The id is taken when the key is pressed, so a
+// pane that takes focus while the text is read does not get the paste.
+func (m *OS) pasteBufferNamed(name, window string) tea.Cmd {
 	if !m.buffersInDaemon() {
-		b, err := m.localBuffers().Get(name)
-		m.handlePasteBufferFetched(PasteBufferFetchedMsg{Name: b.Name, Data: b.Data, Err: err})
+		b, err := m.localBuffers().Get(name, nil)
+		m.handlePasteBufferFetched(PasteBufferFetchedMsg{Name: b.Name, Data: b.Data, Window: window, Err: err, asked: name})
 		return nil
 	}
 	call := m.bufferCall()
 	params := map[string]any{}
 	if name != "" {
 		params["name"] = name
+	} else {
+		params["for_session"] = m.pasteSession()
 	}
 	return func() tea.Msg {
 		raw, err := call("show-buffer", params)
 		if err != nil {
-			return PasteBufferFetchedMsg{Name: name, Err: err}
+			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name}
 		}
 		var res struct {
 			Name string `json:"name"`
 			Data string `json:"data"`
 		}
 		if err := json.Unmarshal(raw, &res); err != nil {
-			return PasteBufferFetchedMsg{Name: name, Err: err}
+			return PasteBufferFetchedMsg{Name: name, Window: window, Err: err, asked: name}
 		}
-		return PasteBufferFetchedMsg{Name: res.Name, Data: res.Data}
+		return PasteBufferFetchedMsg{Name: res.Name, Data: res.Data, Window: window}
 	}
 }
 
-// handlePasteBufferFetched pastes a fetched buffer into the focused pane.
-func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) {
+// pasteSession is the session the paste key takes buffers for: this
+// client's session on this machine. A session on another machine has no
+// buffers here, so only the person's own count there.
+func (m *OS) pasteSession() string {
+	if m.AttachedHost != "" {
+		return ""
+	}
+	return m.SessionName
+}
+
+// handlePasteBufferFetched pastes a fetched buffer into the pane it was asked
+// for.
+func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 	d := m.Settings.NotificationDuration
 	if msg.Err != nil {
+		if isUnknownVerb(msg.Err) && m.buffersInDaemon() {
+			m.noteOldDaemon()
+			return m.pasteBufferNamed(msg.asked, msg.Window)
+		}
 		if isNoBufferErr(msg.Err) {
 			m.ShowNotification("There are no paste buffers. A yank in copy mode adds one.", "info", d)
-			return
+			return nil
 		}
 		m.ShowNotification("Could not read the paste buffer: "+msg.Err.Error(), "error", d)
-		return
+		return nil
 	}
-	w := m.GetFocusedWindow()
+	w := m.windowByID(msg.Window)
 	if w == nil {
-		return
+		m.ShowNotification("The pane to paste into is gone", "warning", d)
+		return nil
 	}
 	if w.CopyModeVisible() && !w.InImplicitCopyMode() {
 		m.ShowNotification("Cannot paste in copy mode. Exit copy mode first.", "warning", d)
-		return
+		return nil
 	}
-	if !m.PasteIntoFocused(msg.Data) {
+	if !m.PasteIntoWindow(w, msg.Data) {
 		m.ShowNotification("Paste failed", "error", d)
-		return
+		return nil
 	}
 	m.ShowNotification(fmt.Sprintf("Pasted %s (%d chars)", msg.Name, len(msg.Data)), "success", d)
+	return nil
 }
 
 // isNoBufferErr reports whether err says there is no such buffer, from the
@@ -206,6 +285,16 @@ func isNoBufferErr(err error) bool {
 
 // PasteIntoFocused pastes text into the focused pane, and into the panes
 // multifocus types into with it. It reports whether the focused pane took it.
+func (m *OS) PasteIntoFocused(text string) bool {
+	w := m.GetFocusedWindow()
+	if w == nil {
+		return false
+	}
+	return m.PasteIntoWindow(w, text)
+}
+
+// PasteIntoWindow pastes text into w, and, when w is the focused pane, into
+// the panes multifocus types into with it. It reports whether w took it.
 //
 // A scroll gesture leaves the pane in an implicit copy mode. A paste, like a
 // typed key, means the reading is over: the pane snaps back to live output
@@ -219,11 +308,7 @@ func isNoBufferErr(err error) bool {
 // Each pane gets the text through Window.Paste, which drops control
 // characters, so text holding ESC[201~ cannot end the bracketed paste early
 // and have the rest run as typed input.
-func (m *OS) PasteIntoFocused(text string) bool {
-	w := m.GetFocusedWindow()
-	if w == nil {
-		return false
-	}
+func (m *OS) PasteIntoWindow(w *terminal.Window, text string) bool {
 	if w.InImplicitCopyMode() {
 		w.ExitCopyMode()
 	}
@@ -231,18 +316,24 @@ func (m *OS) PasteIntoFocused(text string) bool {
 		return false
 	}
 	ok := w.Paste(text) == nil
-	for _, peer := range m.MultifocusPeers() {
-		_ = peer.Paste(text)
+	if w == m.GetFocusedWindow() {
+		for _, peer := range m.MultifocusPeers() {
+			_ = peer.Paste(text)
+		}
 	}
 	return ok
 }
 
 // OpenBufferChooser is the choose_buffer action: list the paste buffers to
-// pick one to paste.
+// pick one to paste into the focused pane.
 func (m *OS) OpenBufferChooser() tea.Cmd {
-	m.buffers = bufferChooser{open: true, gen: m.buffers.gen + 1, loading: true}
+	target := ""
+	if w := m.GetFocusedWindow(); w != nil {
+		target = w.ID
+	}
+	m.buffers = bufferChooser{open: true, gen: m.buffers.gen + 1, loading: true, target: target}
 	if !m.buffersInDaemon() {
-		m.handlePasteBuffersLoaded(PasteBuffersLoadedMsg{Gen: m.buffers.gen, Items: bufferItems(m.localBuffers().List())})
+		m.handlePasteBuffersLoaded(PasteBuffersLoadedMsg{Gen: m.buffers.gen, Items: bufferItems(m.localBuffers().List(nil))})
 		return nil
 	}
 	call, gen := m.bufferCall(), m.buffers.gen
@@ -274,6 +365,10 @@ func bufferItems(list []pastebuf.Buffer) []PasteBufferItem {
 func (m *OS) handlePasteBuffersLoaded(msg PasteBuffersLoadedMsg) {
 	if !m.buffers.open || msg.Gen != m.buffers.gen {
 		return
+	}
+	if msg.Err != nil && isUnknownVerb(msg.Err) && m.buffersInDaemon() {
+		m.noteOldDaemon()
+		msg = PasteBuffersLoadedMsg{Gen: msg.Gen, Items: bufferItems(m.localBuffers().List(nil))}
 	}
 	m.buffers.loading = false
 	m.buffers.err = ""
@@ -316,9 +411,13 @@ func (m *OS) BufferChooserActivate(idx int) tea.Cmd {
 	if idx < 0 || idx >= len(m.buffers.items) {
 		return nil
 	}
-	name := m.buffers.items[idx].Name
+	name, target := m.buffers.items[idx].Name, m.buffers.target
 	m.CloseBufferChooser()
-	return m.pasteBufferNamed(name)
+	if target == "" {
+		m.ShowNotification("No pane to paste into", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	return m.pasteBufferNamed(name, target)
 }
 
 // BufferChooserDelete deletes the buffer on the selected row.
@@ -331,7 +430,7 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 	m.buffers.items = append(m.buffers.items[:idx:idx], m.buffers.items[idx+1:]...)
 	m.buffers.selected = clampInt(idx, 0, max(len(m.buffers.items)-1, 0))
 	if !m.buffersInDaemon() {
-		_, err := m.localBuffers().Delete(name)
+		_, err := m.localBuffers().Delete(name, time.Time{}, nil)
 		m.handlePasteBufferDeleted(PasteBufferDeletedMsg{Name: name, Err: err})
 		return nil
 	}
@@ -383,16 +482,22 @@ func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 }
 
 // bufferChooserRow draws one buffer: its name, the start of its text, and its
-// size.
+// size. A buffer a process in a pane set says so before its size, since the
+// person did not copy that text.
 func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(byteSize(b.Bytes))
+	tag := ""
+	if b.Pane != "" {
+		tag = "from pane " + b.Pane + "  "
+		right = overlay.Style(rowBg).Foreground(pal.Warning).Render(tag) + right
+	}
 	nameColor, sampleColor := pal.FgMute, pal.FgDim
 	if selected {
 		nameColor, sampleColor = pal.Accent, pal.Fg
 	}
 	name := overlay.Truncate(printableTitle(b.Name), 16)
 	left := overlay.Style(rowBg).Foreground(nameColor).Bold(true).Render(name)
-	room := width - len([]rune(name)) - len(byteSize(b.Bytes)) - 8
+	room := width - len([]rune(name)) - len(byteSize(b.Bytes)) - len([]rune(tag)) - 8
 	if room > 0 {
 		left += overlay.Style(rowBg).Foreground(sampleColor).Render("  " + overlay.Truncate(printableTitle(b.Sample), room))
 	}

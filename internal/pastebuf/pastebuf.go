@@ -7,6 +7,11 @@
 // is passed, the oldest buffer goes. A single text larger than MaxBytes is
 // refused rather than stored by dropping every other buffer.
 //
+// Each buffer records where it came from (Owner): the session it was copied
+// or set in, and the pane that set it when a process in a pane did. A caller
+// that may see only some sessions passes a Filter, and the store then acts as
+// if the other buffers were not there.
+//
 // The daemon holds one store, so every client and every session sees the
 // same buffers, as tmux's server does. A client with no daemon behind it holds
 // its own. Nothing is written to disk: buffers often hold what a person copied
@@ -28,8 +33,10 @@ import (
 const (
 	// DefaultLimit is how many buffers the store keeps.
 	DefaultLimit = 20
-	// DefaultMaxBytes is how many bytes all buffers hold together.
-	DefaultMaxBytes = 4 << 20
+	// DefaultMaxBytes is how many bytes all buffers hold together. It is the
+	// 16 MiB a tmux shim buffer could always hold, so a load-buffer that
+	// worked before the daemon kept the buffers still works.
+	DefaultMaxBytes = 16 << 20
 	// MaxLimit bounds the count a config may ask for.
 	MaxLimit = 1000
 	// MaxNameBytes bounds a buffer name.
@@ -42,15 +49,29 @@ var (
 	ErrOff = errors.New("paste buffers are off: paste_buffers.limit is 0")
 	// ErrEmpty is the error of an add with no text.
 	ErrEmpty = errors.New("the text is empty")
-	// ErrNotFound is the error of a name no buffer has.
+	// ErrNotFound is the error of a name no buffer has, or none the caller
+	// may see.
 	ErrNotFound = errors.New("no such buffer")
 	// ErrNone is the error of a call on the newest buffer when there is none.
 	ErrNone = errors.New("there are no paste buffers")
 	// ErrTooLarge is the error of a text larger than the byte cap.
 	ErrTooLarge = errors.New("the text is larger than the byte cap")
 	// ErrBadName is the error of a name that is too long or not printable.
-	ErrBadName = errors.New("a buffer name is 1 to 64 printable characters with no spaces")
+	ErrBadName = errors.New("a buffer name is 1 to 64 printable characters")
+	// ErrChanged is the error of a delete of a buffer that was set again
+	// after the caller read it.
+	ErrChanged = errors.New("the buffer was set again after it was read")
 )
+
+// Owner says where a buffer came from.
+type Owner struct {
+	// Session is the session the text was copied or set in, "" for none:
+	// the person's own command line, outside every session.
+	Session string
+	// Pane is the pane whose process set the buffer, "" when the person did
+	// with a yank or from outside every pane.
+	Pane string
+}
 
 // Buffer is one paste buffer.
 type Buffer struct {
@@ -63,7 +84,14 @@ type Buffer struct {
 	Created time.Time
 	// Automatic says the store named the buffer.
 	Automatic bool
+	// Owner says where the text came from.
+	Owner Owner
 }
+
+// Filter says which buffers a caller may see. A nil Filter sees them all.
+type Filter func(Buffer) bool
+
+func (f Filter) sees(b Buffer) bool { return f == nil || f(b) }
 
 // Store is a bounded list of paste buffers, newest first. It is safe for
 // concurrent use.
@@ -127,30 +155,33 @@ func (s *Store) trim() int {
 	return dropped
 }
 
-// ValidName reports whether name may name a buffer.
+// ValidName reports whether name may name a buffer: 1 to 64 bytes of
+// printable characters. A space is allowed, as tmux allows it.
 func ValidName(name string) bool {
 	if name == "" || len(name) > MaxNameBytes || !utf8.ValidString(name) {
 		return false
 	}
 	for _, r := range name {
-		if !unicode.IsPrint(r) || unicode.IsSpace(r) {
+		if !unicode.IsPrint(r) {
 			return false
 		}
 	}
 	return true
 }
 
-// Add stores data as a new automatic buffer on top. A text equal to the
-// newest buffer's is not stored twice: that buffer comes back instead.
-func (s *Store) Add(data string) (Buffer, error) {
-	return s.Set("", data, false)
+// Add stores data as a new automatic buffer on top, owned by owner. A text
+// equal to the newest buffer's, from the same owner, is not stored twice:
+// that buffer comes back instead.
+func (s *Store) Add(data string, owner Owner) (Buffer, error) {
+	return s.Set("", data, false, owner, nil)
 }
 
 // Set stores data in the buffer called name, or in a new automatic buffer
 // when name is "". With appendTo the data goes after the buffer's text, and a
-// name of "" means the newest buffer. The buffer goes on top. It returns the
-// buffer as stored.
-func (s *Store) Set(name, data string, appendTo bool) (Buffer, error) {
+// name of "" means the newest buffer f sees. The buffer goes on top and is
+// owner's from now on. A name held by a buffer f does not see is refused
+// with ErrNotFound, so a caller cannot take over a buffer it may not read.
+func (s *Store) Set(name, data string, appendTo bool, owner Owner, f Filter) (Buffer, error) {
 	if name != "" && !ValidName(name) {
 		return Buffer{}, ErrBadName
 	}
@@ -163,8 +194,11 @@ func (s *Store) Set(name, data string, appendTo bool) (Buffer, error) {
 	switch {
 	case name != "":
 		idx = s.index(name)
-	case appendTo && len(s.bufs) > 0:
-		idx = 0
+		if idx >= 0 && !f.sees(s.bufs[idx]) {
+			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
+		}
+	case appendTo:
+		idx = s.newest(f)
 	}
 	if appendTo && idx >= 0 {
 		data = s.bufs[idx].Data + data
@@ -175,11 +209,11 @@ func (s *Store) Set(name, data string, appendTo bool) (Buffer, error) {
 	if len(data) > s.maxBytes {
 		return Buffer{}, fmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
 	}
-	if name == "" && !appendTo && len(s.bufs) > 0 && s.bufs[0].Automatic && s.bufs[0].Data == data {
+	if name == "" && !appendTo && len(s.bufs) > 0 && s.bufs[0].Automatic && s.bufs[0].Owner == owner && s.bufs[0].Data == data {
 		// The same yank twice adds nothing.
 		return s.bufs[0], nil
 	}
-	b := Buffer{Name: name, Data: data, Created: time.Now()}
+	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner}
 	if idx >= 0 {
 		b.Name, b.Automatic = s.bufs[idx].Name, s.bufs[idx].Automatic
 		s.bytes -= len(s.bufs[idx].Data)
@@ -215,51 +249,80 @@ func (s *Store) index(name string) int {
 	return -1
 }
 
-// Get returns the buffer called name, or the newest when name is "".
-func (s *Store) Get(name string) (Buffer, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// newest is the position of the newest buffer f sees, -1 for none. s.mu is
+// held.
+func (s *Store) newest(f Filter) int {
+	for i, b := range s.bufs {
+		if f.sees(b) {
+			return i
+		}
+	}
+	return -1
+}
+
+// find is the position of the buffer called name that f sees, or of the
+// newest f sees when name is "". s.mu is held.
+func (s *Store) find(name string, f Filter) (int, error) {
 	if name == "" {
-		if len(s.bufs) == 0 {
-			return Buffer{}, ErrNone
+		if i := s.newest(f); i >= 0 {
+			return i, nil
 		}
-		return s.bufs[0], nil
+		return -1, ErrNone
 	}
-	if i := s.index(name); i >= 0 {
-		return s.bufs[i], nil
+	if i := s.index(name); i >= 0 && f.sees(s.bufs[i]) {
+		return i, nil
 	}
-	return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
+	return -1, fmt.Errorf("%w: %s", ErrNotFound, name)
 }
 
-// List returns every buffer, newest first.
-func (s *Store) List() []Buffer {
+// Get returns the buffer called name, or the newest when name is "", among
+// the buffers f sees.
+func (s *Store) Get(name string, f Filter) (Buffer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]Buffer(nil), s.bufs...)
+	i, err := s.find(name, f)
+	if err != nil {
+		return Buffer{}, err
+	}
+	return s.bufs[i], nil
 }
 
-// Delete removes the buffer called name, or the newest when name is "", and
-// returns it.
-func (s *Store) Delete(name string) (Buffer, error) {
+// List returns the buffers f sees, newest first.
+func (s *Store) List(f Filter) []Buffer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	idx := 0
-	if name != "" {
-		idx = s.index(name)
-		if idx < 0 {
-			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
+	out := make([]Buffer, 0, len(s.bufs))
+	for _, b := range s.bufs {
+		if f.sees(b) {
+			out = append(out, b)
 		}
-	} else if len(s.bufs) == 0 {
-		return Buffer{}, ErrNone
 	}
-	b := s.bufs[idx]
+	return out
+}
+
+// Delete removes the buffer called name, or the newest when name is "",
+// among the buffers f sees, and returns it. A nonzero created deletes the
+// buffer only when its text is still the one set at that time, so a delete
+// after a paste never removes text set after the paste read it.
+func (s *Store) Delete(name string, created time.Time, f Filter) (Buffer, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, err := s.find(name, f)
+	if err != nil {
+		return Buffer{}, err
+	}
+	b := s.bufs[i]
+	if !created.IsZero() && !b.Created.Equal(created) {
+		return Buffer{}, fmt.Errorf("%w: %s", ErrChanged, b.Name)
+	}
 	s.bytes -= len(b.Data)
-	s.bufs = append(s.bufs[:idx], s.bufs[idx+1:]...)
+	s.bufs = append(s.bufs[:i], s.bufs[i+1:]...)
 	return b, nil
 }
 
 // Sample is a buffer's text as one short line for a listing: control
 // characters shown as escapes, cut to at most width runes with an ellipsis.
+// The result is already escaped, so a caller prints it as it is.
 func Sample(data string, width int) string {
 	var b strings.Builder
 	n := 0
