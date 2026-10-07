@@ -571,7 +571,7 @@ func (w *Window) terminalRef() vt.Terminal {
 // FocusReportingOn reports whether the guest requested DECSET 1004.
 func (w *Window) FocusReportingOn() bool {
 	term := w.terminalRef()
-	return term != nil && term.GetModes()[1004]
+	return term != nil && term.FocusReportingEnabled()
 }
 
 // StartDaemonResponseReader starts a goroutine to read and DRAIN responses from

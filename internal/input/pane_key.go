@@ -26,17 +26,18 @@ import (
 // repeated it until the next key came.
 func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused bool) (raw []byte, released bool) {
 	flags, modifyOtherKeys := 0, 0
-	appCursorKeys := false
 	if w.Terminal != nil {
 		flags = w.Terminal.KittyKeyboardFlags()
 		modifyOtherKeys = w.Terminal.ModifyOtherKeys()
-		appCursorKeys = w.Terminal.ApplicationCursorKeys()
 	}
 	key := vtKeyFromBubbletea(host)
 	if encoded := vt.EncodePaneKey(key, flags, modifyOtherKeys); encoded != "" {
 		raw = []byte(encoded)
 	}
 	if len(raw) == 0 {
+		// Only the legacy encoding reads the cursor key mode, and on the
+		// ghostty backend reading it takes the emulator's lock.
+		appCursorKeys := w.Terminal != nil && w.Terminal.ApplicationCursorKeys()
 		raw = getRawKeyBytesWithMode(host, appCursorKeys)
 	}
 	if len(raw) == 0 || flags&ansi.KittyReportEventTypes == 0 {

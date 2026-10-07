@@ -222,9 +222,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if handleTerminalModeBinds(msg, o) {
 		return o, nil
 	}
+	// The key's terminal-mode action, looked up once for the checks below.
+	// It depends on the key and the registry alone.
+	terminalAction := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
 	nvimNavigation := false
-	if action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction); isTerminalFocusAction(action) {
-		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(action))
+	if isTerminalFocusAction(terminalAction) {
+		nvimNavigation = o.NvimNavigationForwarding(nvimNavigationDirection(terminalAction))
 	}
 
 	// alt+left/right used to navigate the scrolling layout's columns from here,
@@ -242,7 +245,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
 	// through to the passthrough block and reaches the child PTY as 0x16 (needed
 	// for vim visual-block, etc.), matching the tmux/zellij convention.
-	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
+	if terminalAction == "terminal_paste_host" {
 		// Recorded here for the same reason the scroll binds above are. See
 		// NoteAction.
 		o.NoteAction("terminal_paste_host")
