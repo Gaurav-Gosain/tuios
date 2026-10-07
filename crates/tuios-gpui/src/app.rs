@@ -147,6 +147,9 @@ pub struct PaletteUi {
     query: String,
     selected: usize,
     entries: Vec<Entry>,
+    /// The first row in view. The list scrolls only as far as it must to
+    /// keep the chosen row in view.
+    top: usize,
     /// When the palette began to close; it fades out, then goes.
     closing: Option<Instant>,
 }
@@ -408,7 +411,8 @@ impl TuiosApp {
     /// Starts or stops the timers that animate: the working icon, the
     /// cursor blink, and the fallback fleet poll.
     fn update_timers(&mut self, cx: &mut Context<Self>) {
-        let spin = self.any_working && self.window_active && !self.cfg.reduce_motion;
+        // Under the palette's scrim the arcs hold at 100 %.
+        let spin = self.any_working && self.window_active && !self.cfg.reduce_motion && self.palette.is_none();
         if spin && self.spin_task.is_none() {
             self.spin_task = Some(cx.spawn(async move |this, cx| {
                 loop {
@@ -416,7 +420,7 @@ impl TuiosApp {
                     cx.background_executor().timer(Duration::from_millis(100)).await;
                     let go = this.update(cx, |this, cx| {
                         this.refresh_spin(cx);
-                        this.any_working && this.window_active && !this.cfg.reduce_motion
+                        this.any_working && this.window_active && !this.cfg.reduce_motion && this.palette.is_none()
                     });
                     if !matches!(go, Ok(true)) {
                         let _ = this.update(cx, |this, cx| {
@@ -490,6 +494,10 @@ impl TuiosApp {
                     for (pty, p) in this.panes.iter_mut() {
                         if focused.as_deref() != Some(pty.as_str()) && p.changed_at.elapsed() >= IDLE_CACHE {
                             p.painter.clear();
+                        } else {
+                            // A pane that keeps printing drops the rows that
+                            // scrolled out of view more than 30 s ago.
+                            p.painter.trim(IDLE_CACHE);
                         }
                     }
                 });
@@ -1253,8 +1261,7 @@ impl TuiosApp {
         let panes = self.all_panes();
         let sessions = self.session_names();
         let entries = palette::entries(&panes, &sessions, &self.current_session(), &self.theme_names, &self.theme.name);
-        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries, closing: None });
-        self.spin_slots.borrow_mut().hidden = true;
+        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries, top: 0, closing: None });
         self.update_timers(cx);
         cx.notify();
     }
@@ -1265,7 +1272,6 @@ impl TuiosApp {
         if p.closing.is_some() {
             return;
         }
-        self.spin_slots.borrow_mut().hidden = false;
         if self.cfg.reduce_motion {
             self.palette = None;
             self.update_timers(cx);

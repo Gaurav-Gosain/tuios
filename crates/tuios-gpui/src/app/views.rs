@@ -7,7 +7,7 @@
 //! keys) notify only their own part.
 //!
 //! [`Spin`] draws the arcs of the working icons over everything but the
-//! palette. The sidebar and the pane headers draw the static ring and
+//! palette, whose scrim draws over them. The sidebar and the pane headers draw the static ring and
 //! record where each arc goes; the spinner timer redraws only this view, so
 //! a working agent never redraws the sidebar or the stage.
 
@@ -52,8 +52,6 @@ pub struct SpinSlots {
     pub sidebar: Vec<Slot>,
     pub grid: Vec<Slot>,
     accent: u32,
-    /// The palette is open: its scrim covers the arcs.
-    pub hidden: bool,
     /// The sidebar over the stage, in a narrow window: it covers the arcs
     /// of the pane headers under it.
     pub cover: Option<Bounds<Pixels>>,
@@ -63,7 +61,7 @@ pub struct SpinSlots {
 
 impl SpinSlots {
     pub fn new(theme: &Theme, reduce_motion: bool) -> Self {
-        SpinSlots { sidebar: Vec::new(), grid: Vec::new(), accent: theme.accent, hidden: false, cover: None, reduce_motion, start: Instant::now() }
+        SpinSlots { sidebar: Vec::new(), grid: Vec::new(), accent: theme.accent, cover: None, reduce_motion, start: Instant::now() }
     }
 
     pub fn set_theme(&mut self, theme: &Theme) {
@@ -92,9 +90,6 @@ impl Render for Spin {
             |_, _, _| {},
             move |_, _, window, cx| {
                 let s = slots.borrow();
-                if s.hidden {
-                    return;
-                }
                 let alpha = if moving && !s.reduce_motion { pulse(s.start.elapsed()) } else { 1. };
                 let color = crate::theme::with_alpha(s.accent, alpha);
                 let covered = |b: &Bounds<Pixels>| s.cover.is_some_and(|c| c.intersects(b));
