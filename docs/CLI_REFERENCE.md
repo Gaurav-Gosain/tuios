@@ -521,6 +521,10 @@ tuios list-clients [--json]
 ]
 ```
 
+`client-session-changed` carries the session a client entered or left and sets
+`attached` to `true` or `false`. A session rename sends one with the new name
+and `attached: true` for each client in the session.
+
 ### `tuios detach-client`
 
 Detach attached clients from their sessions, as `tmux detach-client` does.
@@ -564,10 +568,6 @@ tuios detach-client -s work --all-other   # Keep the client used last in work
 ```json
 {"detached":["client-1790941960197517900"]}
 ```
-
-`client-session-changed` carries the session a client entered or left and sets
-`attached` to `true` or `false`. A session rename sends one with the new name
-and `attached: true` for each client in the session.
 
 ### `tuios kill-session`
 
