@@ -371,27 +371,8 @@ func (lc *LayeredConfig) Bytes() ([]byte, error) {
 	return data, nil
 }
 
-// Files are the paths of every file read, in merge order.
-func (lc *LayeredConfig) Files() []string {
-	out := make([]string, 0, len(lc.Layers))
-	for _, l := range lc.Layers {
-		out = append(out, l.Path)
-	}
-	return out
-}
-
 func (lc *LayeredConfig) mainLayer() *ConfigLayer {
 	return &lc.Layers[len(lc.Layers)-1]
-}
-
-// layerIndex finds the layer for path, or -1.
-func (lc *LayeredConfig) layerIndex(path string) int {
-	for i := range lc.Layers {
-		if lc.Layers[i].Path == path {
-			return i
-		}
-	}
-	return -1
 }
 
 // Origin is the file the value at key comes from: the last file in merge order
