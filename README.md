@@ -30,9 +30,11 @@ More screenshots: [the command palette](docs/screenshots/dark-palette.png),
   agent or a session changes, so the sidebar never polls. In a narrow window
   the sidebar becomes a rail of state icons.
 - Draws the panes of the active workspace where tuios's own layout puts them.
-  Each pane has a header in the row tuios leaves between panes: its state, its
-  name (the agent, then the program, then the folder), and its folder and git
-  branch. A pane that needs you gets the one coloured frame in the app.
+  Each pane has a 28 px header: its state, its name (the agent, then the
+  program, then the folder), and its folder and git branch. The text sits
+  12 px from every split, and the padding takes the colour of the cells next
+  to it, so nvim fills its pane. A pane that needs you gets the one coloured
+  frame in the app.
 - Feeds each pane's byte stream into its own libghostty-vt instance and paints
   the cells on the GPU: wide characters, grapheme clusters, colour emoji,
   bold, italic, five underline styles, strikethrough, overline, truecolour,
@@ -82,7 +84,9 @@ The bridge is on the local tuios branch `exp/gpui-bridge` (worktree
   when they change;
 - `internal/app/stream_tap.go`: a hook that sees each pane's stream in the
   order the model applies it;
-- `cmd/tuios/gui_bridge_command.go`: the `tuios gui-bridge` command.
+- `cmd/tuios/gui_bridge_command.go`: the `tuios gui-bridge` command;
+- `internal/terminal/window_geometry.go`: the pixel insets, so each pane's
+  PTY is the size of the text area inside the GUI's padding.
 
 ## Build
 
@@ -135,7 +139,8 @@ text_antialias = "grayscale"     # or "subpixel"
 text_contrast = 2.0              # 0 to 4: stem weight of grayscale text
 scrollback = 3000                # lines of history per pane
 reduce_motion = false            # no animations
-gpu = "auto"                     # or "integrated": less memory on a laptop
+gpu = "auto"                     # the integrated GPU when it drives the
+                                 # displays; "integrated" or "any"
 theme = "tokyonight"             # instead of tuios's theme
 ```
 

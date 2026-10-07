@@ -77,6 +77,22 @@ Against the budget in FINAL.md section 10:
 | Paint p95 under 2 ms with 4 busy panes | Met: 0.94 ms. |
 | Anonymous memory under 40 MB with 4 panes | Met with `gpu = "integrated"` (37.0 MB). With the NVIDIA driver it is 42.4 MB, about 5 MB of which the driver allocates. |
 
+After the padded layout (section 11 of FINAL.md: each pane's body is one
+view with its padding), `perf/measure-after-insets.json`, where the
+integrated GPU run is marked as such:
+
+| Case | App CPU | Frames/s | Paint p50 / p95 | RSS | Anonymous |
+| --- | --- | --- | --- | --- | --- |
+| busy4 | 9.9 % | 57 | 0.59 / 0.82 ms | 180 MB | 42.2 MB |
+| busy1 | 6.3 % | 43 | 0.49 / 0.80 ms | 175 MB | 38.0 MB |
+| busy4, `gpu = "integrated"` | 10.3 % | 55 | 0.64 / 0.87 ms | 144 MB | 36.6 MB |
+
+`gpu = "auto"` now picks the integrated GPU by itself, but only when that
+GPU drives every connected display. On this machine both displays are on
+the NVIDIA card, and a window drawn on the Intel GPU comes up black in a
+compositor that runs on NVIDIA, so "auto" keeps every driver here and
+anonymous memory stays 2 MB over the budget.
+
 ## The painter, before and after
 
 `--perf`, milliseconds, p50 / p95. Interval is capped at 16.7 ms by the

@@ -40,7 +40,7 @@ one bordered quad per frame.
 8. The speed and memory budget, and 3,000 lines of default scrollback.
 9. Empty states for "connecting" (after 400 ms) and "session ended".
 10. The narrow-window rules, with the rail hidden below 720 px.
-11. Unfocused panes dim 20 % on light themes, 30 % on dark.
+11. Unfocused panes dim 12 % on light themes, 30 % on dark.
 12. The overlay scrollbar.
 
 ## 1. Principles
@@ -115,17 +115,17 @@ Everything else is derived, once per theme change, never per frame.
 | Token | Dark theme | Light theme |
 | --- | --- | --- |
 | `stage` (panes, pane headers) | `bg` | `bg` |
-| `base` (sidebar, title band) | mix(bg, #000, 0.30) | mix(bg, #fff, 0.55) |
-| `field` (search, segmented control) | mix(base, fg, 0.045) | mix(base, #000, 0.035) |
+| `base` (sidebar, title band) | mix(bg, #000, 0.30) | mix(bg, #000, 0.04) |
+| `field` (search, segmented control) | mix(base, fg, 0.045) | mix(base, #fff, 0.5) |
 | `hover` | mix(base, fg, 0.04) | mix(base, #000, 0.03) |
-| `selected` | mix(base, fg, 0.09) | mix(base, #000, 0.08) |
-| `raised` (palette) | mix(bg, fg, 0.045) | mix(bg, #fff, 0.75) |
+| `selected` | mix(base, fg, 0.09) | mix(base, #000, 0.07) |
+| `raised` (palette) | mix(bg, fg, 0.045) | mix(bg, #fff, 0.85) |
 | `raised_sel` (chosen palette row) | mix(raised, fg, 0.075) | mix(raised, #000, 0.06) |
-| `border` (stage edge, chips, buttons) | fg at 10 % | #000 at 12 % |
-| `hairline` (splits, palette dividers) | fg at 7 % | #000 at 9 % |
+| `border` (stage edge, chips, buttons) | fg at 13 % | #000 at 16 % |
+| `hairline` (splits, palette dividers) | fg at 12 % | #000 at 14 % |
 | `scrim` | #000 at 45 % | #000 at 18 % |
-| `dim` (unfocused pane content) | `stage` at 30 % | `stage` at 20 % |
-| `ink` | desaturate(fg, 0.45) | desaturate(fg, 0.12), then mix toward #000 in 2 % steps until 11:1 on `worst` |
+| `dim` (unfocused pane content) | `stage` at 30 % | `stage` at 12 % |
+| `ink` | desaturate(fg, 0.45) | desaturate(fg, 0.12), then mix toward #000 in 2 % steps until 10.5:1 on `worst` |
 | `text` | `ink` | `ink` |
 | `text2` | mix(ink, worst, t), largest t that keeps 4.6:1 on `worst` | same |
 | `text3` | the same, for 3.1:1 | same |
@@ -138,9 +138,14 @@ Everything else is derived, once per theme change, never per frame.
 - `worst` is whichever of `base`, `stage`, `hover`, `selected`, `field` and
   `raised` gives `ink` the lowest contrast. Text passes on all of them.
 - `raised_sel` is left out of `worst`. On the chosen palette row the muted
-  fragment uses `text2`, not `text3` (3.9:1 dark, 5.1:1 light).
+  fragment uses `text2`, not `text3`.
 - Light themes start the state colours from the dark agent hues, so amber
-  stays amber (`#aa7304`), never brown.
+  stays amber (`#976602`), never brown.
+- In both themes the stage is the brightest surface the panes sit on. In a
+  light theme the shell is a step darker than the stage, and the search
+  field and the palette are lighter than both.
+- The light ink stops at 10.5:1, not 11: with the shell darker than the
+  stage, 2 % steps toward black stall just under 11 on `selected`.
 
 ### 3.3 Resolved values
 
@@ -150,23 +155,23 @@ Alpha tokens are shown composited on `stage`.
 | Token | Dark | Light | Contrast on `worst` (dark / light) |
 | --- | --- | --- | --- |
 | `stage` | #1a1b26 | #e1e2e7 | |
-| `base` | #12131b | #f2f2f4 | |
-| `field` | #1a1b25 | #eaeaeb | |
-| `hover` | #191a24 | #ebebed | |
-| `selected` | #22232f | #dfdfe0 | |
-| `raised` | #21232f | #f8f8f9 | |
-| `raised_sel` | #2d303e | #e9e9ea | |
-| `border` | #2b2c3b | #c6c7cb | |
-| `border` on `raised` | #313443 | #dadadb | |
-| `hairline` | #262734 | #cdced2 | |
-| `text` | #c6cbde | #26282e | 9.6 / 11.1 |
-| `text2` | #888b9b | #606166 | 4.6 / 4.6 (5.5 / 5.5 on `base`) |
-| `text3` | #6c6f7e | #7b7c80 | 3.1 / 3.1 |
-| `accent` | #7aa2f7 | #2e7de9 | 6.2 / 3.0 |
-| `need` / fill / ink | #e0af68 / #2f2926 / #e0af68 | #aa7304 / #e8e0d2 / #885b06 | 7.8 / 3.1, ink 4.5 on fill |
-| `done` / fill | #9ece6a / #262d26 | #5f8b24 / #dde4d7 | 8.5 / 3.0 |
-| `err` / fill | #f7768e / #32212b | #d0536d / #eddce1 | 5.9 / 3.1 |
-| `selection` | #354161 | #bacce7 | |
+| `base` | #12131b | #d8d9de | |
+| `field` | #1a1b25 | #ececee | |
+| `hover` | #191a24 | #d2d2d7 | |
+| `selected` | #22232f | #c9cace | |
+| `raised` | #21232f | #fafbfb | |
+| `raised_sel` | #2d303e | #ebecec | |
+| `border` | #303241 | #bdbec2 | |
+| `border` on `raised` | #363949 | #d2d3d3 | |
+| `hairline` | #2e303f | #c2c2c7 | |
+| `text` | #c6cbde | #191b21 | 9.6 / 10.5 |
+| `text2` | #888b9b | #53545a | 4.6 / 4.6 |
+| `text3` | #6c6f7e | #6d6e74 | 3.1 / 3.1 |
+| `accent` | #7aa2f7 | #1a6cd6 | 6.2 / 3.1 |
+| `need` / fill / ink | #e0af68 / #2f2926 / #e0af68 | #976602 / #cfc9bf / #744d01 | 7.8 / 3.0, ink 4.5 on fill |
+| `done` / fill | #9ece6a / #262d26 | #517c0c / #c5ccc1 | 8.5 / 3.0 |
+| `err` / fill | #f7768e / #32212b | #bf435f / #d4c4cc | 5.9 / 3.1 |
+| `selection` | #354161 | #b5c8e3 | |
 | `on_state` | #1a1b26 | #ffffff | |
 
 ### 3.4 Where colour goes
@@ -208,8 +213,8 @@ Alpha tokens are shown composited on `stage`.
   | Sidebar row | 44 tall, 2 px gap (46 pitch), inset 8 |
   | Group header | 28 tall. Section label 24 tall |
   | Stage margin | 8 right and bottom, 0 left and top |
-  | Stage inner padding | at least 12 on every side |
-  | Pane header | one cell row (20 px). 28 px once the bridge has insets (section 11) |
+  | Pane padding | 12 from each slot edge to the text, 32 at the top (section 11) |
+  | Pane header | 28 tall (section 11) |
   | Split hit area | 8 |
   | Palette | 680 wide, query row 52, row 40, section label 28, footer 40 |
   | Keycap chip | 18 tall, 6 px side padding |
@@ -242,14 +247,22 @@ Reference: 1440 x 900 at scale 1, cell 9 x 20.
 - **Stage:** x = sidebar width, y = 40, right margin 8, bottom margin 8,
   radius 10, fill `stage`, 1 px `border` drawn inside. The sidebar and the
   band have no edge lines. The stage edge separates them.
-- **Grid:** `cols = floor((stage_w - 24) / cell_w)`,
-  `rows = floor((stage_h - 24) / cell_h)`. The origin is the stage origin
-  plus `floor(leftover / 2)` on each axis. At the reference size: 128 x 41
-  cells at (268, 56).
+- **Grid:** tuios lays the panes out in cells with a one-cell gap. A pane's
+  **slot** is its cells plus the gap after them: half a gap column on each
+  side and the gap row above. `cols = floor(stage_w / cell_w) - 1` and
+  `rows = floor(stage_h / cell_h) - 1`, so the slots fill the stage, and the
+  leftover is split evenly around them.
 - All padding and leftover is `stage`. A pane whose program set its own
-  background (OSC 11) fills its content rect grown by 4 px into the gaps, and
-  out to the stage edge where it touches it, clipped by the stage radius. Its
-  header row stays `stage`.
+  background (OSC 11) fills its slot below the header, out to the stage
+  edge where it touches it, clipped by the stage radius. Its header stays
+  `stage`.
+- **Padding takes the edge colour,** as Ghostty's
+  `window-padding-color = extend`: each row's first and last cell run their
+  background out to the slot's sides, and the first and last rows run theirs
+  up and down. A side runs on only when at least half the rows have a
+  background on it, so a coloured shell prompt leaves the padding alone. A
+  box-drawing or Powerline cell never runs on. The `dim` quad covers the
+  padding too.
 - The stage, grid origin, hairlines and ring snap to device pixels at every
   scale.
 
@@ -270,9 +283,14 @@ Reference: 1440 x 900 at scale 1, cell 9 x 20.
     0 1 0 shadow at 25 %. An unnamed workspace shows its number only, at
     least 28 wide. A workspace with a pane that needs you shows a 6 px `need`
     dot 6 px after its name.
+  - A session with one unnamed workspace shows no segmented control.
   - Right: split right, split down, zoom. 28 x 28 icon buttons, 16 px
     outline icons with 1.5 px strokes in `text3`, 4 px apart, the last one
     ending at the stage's right edge.
+  - When the app draws its own decorations and the window floats (GNOME,
+    for example), minimize, maximize and close follow, 8 px after zoom:
+    the same icon buttons. Close fills `err` under the pointer, its icon
+    `on_state`. A tiled window, or one the compositor frames, shows none.
 - All band baselines sit at y 25.
 
 ### 5.3 Sidebar (256 px, `base`)
@@ -308,40 +326,41 @@ From the top, after the band:
   folder. The harness goes on line 2, never in the title.
 - Fill: `selected` for the focused pane, `hover` under the pointer.
 - A pane that needs you appears in "Needs you" and in its session, on
-  purpose. Both rows look the same.
+  purpose. In its session it is a 28 px row: the icon and the title, no
+  second line, since "Needs you" shows the message.
 - Drag the stage edge to resize, 220 to 360. A double click on it resets
   256. `Ctrl+Shift+B` hides the sidebar.
 
 ### 5.4 Panes, headers and splits
 
-- **Header** (the cell row tuios reserves above each pane, 20 px):
+- **Header** (the top 28 px of the pane's slot):
   - No fill and no line. It sits on `stage`.
-  - State icon centred at (content.x + 8, row_top + 10).
-  - Title at content.x + 22, baseline row_top + 14: `small-strong` 500
+  - State icon centred at (text.x + 7, slot_top + 14).
+  - Title at text.x + 22, baseline slot_top + 18: `small-strong` 500
     `text` when focused, 400 `text2` when not.
   - Detail 10 px after the title in `small` `text3`: harness and activity
     for an agent, or file, folder and branch for a program.
-  - Right: the "Needs you" pill, 4 px in from content.right + 4.
+  - Right: the "Needs you" pill, 18 tall, radius 9, 8 px side padding,
+    ending 12 px in from the slot's right edge.
   - No age. The sidebar shows it.
   - When space runs out, cut the detail first, then the title, with an
     ellipsis. Hide the detail when less than 40 px remain. The icon and the
     pill are never cut.
-- **Splits:** 1 px `hairline` on the gap centre line, both directions. A
-  vertical split runs from the top of the header row to the bottom of the
-  grid. A horizontal split runs the width of the two panes it divides.
+- **Splits:** 1 px `hairline` on the slot edges, which are the gap centre
+  lines, both directions. Each pane draws the line on its left and the line
+  above it, the full length of its slot.
   During a drag the line is 2 px `accent` at 60 %. 8 px hit area.
 - **Unfocused panes:** the `dim` quad over the content rows only. The header
   keeps full strength, so state marks never fade. Only its title colour
   changes.
-- **Needs-you ring:** 1 px `need`, radius 6, on the gap centre lines around
-  the pane, top 3 px above the header row. Where the pane touches the stage
-  edge, the ring sits 4 px inside the edge. Outside it, a 3 px stroke of
+- **Needs-you ring:** 1 px `need`, radius 6, on the slot edges. Where the
+  pane touches the stage edge, the ring sits 4 px inside the edge. Outside it, a 3 px stroke of
   `need` at 16 % gives the glow. The ring replaces the hairline on its sides.
   It is drawn after `dim`. It is the only coloured frame in the app.
 - **Zoom:** the zoomed pane fills the grid. The zoom button shows its icon
   in `text`.
-- **Inner padding:** with tuios's one-cell gap, text sits 4 px from the
-  hairline. That is the limit until the bridge has insets (section 11).
+- **Inner padding:** text sits 12 px from a split and from the ring, and
+  4 px below the header (section 11).
 
 ### 5.5 Command palette
 
@@ -365,8 +384,9 @@ From the top, after the band:
   folder, never both. The key chip right aligned 20 px in.
 - **Chosen row:** `raised_sel` fill. No accent bar. Hover moves the choice.
 - **Names:** a plain terminal is named after its running program or title,
-  then its folder and session. Three rows that read "env-dark/home" must not
-  happen.
+  then its folder's own name ("tuios-gpui", or "~" at home). A title is
+  never two path parts. Two rows with one title show the session as their
+  fragment ("~ · api"), and the workspace too when that is what differs.
 - **Footer, 40,** a `hairline` above: "5 results" in `small` `text3` at
   x 20. Right: "Open" (`small` 500 `text`) with an `Enter` chip, then "Close"
   (`small` 500 `text2`) with an `Esc` chip.
@@ -400,10 +420,12 @@ icon in `text3` above the title is allowed. 12 px between title and line,
 
 ### 5.8 Light theme
 
-Same layout and sizes. The shell is lighter than the stage, so the panes
-read as the inset work area. Ink is a neutral near-black, never the theme's
-blue. State colours follow 3.2. `dim` is 20 %. The scrim is 18 % and the
-palette shadow is lighter.
+Same layout and sizes. The shell is a step darker than the stage, so the
+stage stays the brightest surface, as the editor is in Zed's light themes.
+The search field and the palette are lighter than both. Ink is a neutral
+near-black, never the theme's blue. State colours follow 3.2. `dim` is
+12 %, so text in an unfocused pane stays readable. The scrim is 18 % and
+the palette shadow is lighter.
 
 ### 5.9 Narrow windows
 
@@ -428,7 +450,7 @@ pixels.
 | --- | --- | --- | --- |
 | 1 | Needs you | ring r 6.25 with a filled centre r 2.5 | `need` |
 | 2 | Error | filled disc r 7, an X of 4.8 px | `err`, mark `on_state` |
-| 3 | Working | ring r 6.25 in `text3` at 50 %, a 120° arc | arc `accent` |
+| 3 | Working | ring r 6.25 in `text3` at 35 %, a 120° arc | arc `accent` |
 | 4 | Done, not seen | filled disc r 7, a check | `done`, mark `on_state` |
 | 5 | Idle agent | ring r 6.25 | `text3` |
 | 6 | Plain terminal | dot r 2.5 | `text3` |
@@ -486,7 +508,7 @@ pixels.
 | Palette and scrim close | 80 ms | opacity only | `exit` |
 | Needs you arrives | 400 ms | pill and ring opacity 0 to 1, glow 0 to 40 % to 16 %. No size change | `decelerate` |
 | Needs you clears | 160 ms | opacity 1 to 0 | `exit` |
-| Working icon | 2.4 s loop | the arc's opacity 100 % to 45 % and back, sine, drawn at 10 fps | |
+| Working icon | 2.4 s loop | the arc's opacity 100 % to 70 % and back, sine, drawn at 10 fps. It never dims far enough to read as the idle ring | |
 | Resize badge | in at once, out 150 ms after 750 ms without change | opacity | `exit` |
 | Cursor blink | 600 / 600 ms | step | |
 | Hover, press, focus, workspace switch, pane focus, row reorder, sidebar hide | instant | | |
@@ -571,8 +593,13 @@ What the design needs from the code (no visible features):
   segment.
 - **Memory.** Plain JetBrains Mono plus one lazy symbols font. A 1 byte per
   pixel grayscale atlas. Scrollback defaults to 3,000 lines (`scrollback`
-  setting). Hidden panes keep their history but drop shaped-row caches.
-  The GPU driver choice from the perf audit is separate work.
+  setting). Hidden panes keep their history but drop shaped-row caches. So
+  does a pane without focus that has not changed for 30 s.
+- **GPU.** `gpu = "auto"` (the default) loads only the integrated GPU's
+  Vulkan driver when that GPU drives every connected display and a second
+  GPU is present. A window drawn on one GPU and shown by a compositor on
+  another can come up black. `"integrated"` forces it, `"any"` loads every
+  driver.
 
 ### Config keys
 
@@ -586,21 +613,23 @@ What the design needs from the code (no visible features):
 | `text_contrast` | 2.0 |
 | `scrollback` | 3000 |
 | `reduce_motion` | false |
+| `gpu` | "auto" |
 
-## 11. Bridge insets (open, not blocking)
+## 11. Bridge insets
 
-With tuios's one-cell gap, text sits 4 px from a split and the header is one
-cell tall. The target layout needs per-pane pixel insets in
-`tuios gui-bridge` (Go, branch `exp/gpui-bridge`): the GUI sends the space
-each pane loses to chrome (top 32, sides 12, bottom 12) and the bridge sizes
-each pane to the inner rect. Then:
+`tuios gui-bridge` (Go, branch `exp/gpui-bridge`) takes per-pane pixel
+insets: `--insets` at start and `insets` on every `resize` command, in
+device pixels, top, left, right, bottom. The GUI sends 32, 12, 12, 12. Each
+inset is measured from the pane's slot (section 5.1). The bridge sizes each
+pane's PTY to the whole cells left inside:
+`cols = floor(((w + 1) × cell_w - left - right) / cell_w)`, and the same
+for rows. The GUI lays out the text with the same formula
+(`Window::inset_cells`, `terminal.InsetCells` in tuios).
 
 - Header 28 tall: icon centre y + 14, title baseline y + 18, pill 18 tall,
   radius 9, 8 px side padding.
 - 12 px pane padding, 4 px between header and grid.
-- The ring sits on the gap centre line as before.
-
-Everything else in this file ships without it.
+- The ring sits on the slot edges.
 
 ## 12. Do not
 
@@ -633,7 +662,8 @@ Everything else in this file ships without it.
 - `final/palette-dark.png`: the palette with the query "re".
 - `final/main-light.png`: tokyonight_day.
 
-They use the bridge-free layout (one-cell headers). Rebuild:
+They use the older layout with one-cell headers, from before the bridge had
+insets. The screenshots in `docs/screenshots` show the current one. Rebuild:
 
 ```sh
 # fonts.conf adds crates/tuios-gpui/assets/fonts to the system fonts
