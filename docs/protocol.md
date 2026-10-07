@@ -1957,10 +1957,12 @@ needs `read` and the session in reach. Over a link it needs `list`.
 
 The hub side: `open-host-connection` takes `ssh_auth_sock`, the caller's
 socket, because the caller's hello goes to the host and not to this daemon.
-While `ssh_agent` is `"follow"`, this daemon keeps a second link,
-`agent-link.sock`, to the socket of the person who attached or used any
-session last, and starts the link ssh to every host with `SSH_AUTH_SOCK`
-naming it. A daemon too old to know `ssh_auth_sock` refuses it with
+While `ssh_agent` is `"follow"`, this daemon keeps one link for each host
+whose link forwards the agent, `agent-link-<host>.sock`. It points at the
+socket of the client that opened a connection to that host, or sent input
+through one, last. Input counts at most once a second. The link ssh to such a
+host starts with `SSH_AUTH_SOCK` naming that host's link. The link ssh to any
+other host starts with the daemon's environment, unchanged. A daemon too old to know `ssh_auth_sock` refuses it with
 `invalid_params`, and the client asks again without it.
 
 ### session-info

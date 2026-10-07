@@ -60,18 +60,18 @@ func SSHDialer(sshBinary string) Dialer {
 	return SSHDialerEnv(sshBinary, nil)
 }
 
-// SSHDialerEnv is SSHDialer with the ssh's environment read from env at each
-// dial. A nil env, or one that returns nil, runs ssh with this process's
-// environment. The daemon uses it to point SSH_AUTH_SOCK at the agent link
-// it keeps, so an agent the link forwards follows the person here.
-func SSHDialerEnv(sshBinary string, env func() []string) Dialer {
+// SSHDialerEnv is SSHDialer with the ssh's environment read from env for the
+// host at each dial. A nil env, or one that returns nil, runs ssh with this
+// process's environment. The daemon uses it to point SSH_AUTH_SOCK at the
+// agent link it keeps for a host whose link forwards the agent.
+func SSHDialerEnv(sshBinary string, env func(Host) []string) Dialer {
 	if sshBinary == "" {
 		sshBinary = "ssh"
 	}
 	return func(ctx context.Context, h Host) (Transport, error) {
 		var e []string
 		if env != nil {
-			e = env()
+			e = env(h)
 		}
 		return commandDialerEnv(e, sshBinary, linkArgs(h)...)(ctx, h)
 	}

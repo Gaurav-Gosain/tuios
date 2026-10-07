@@ -1230,8 +1230,9 @@ const unixSocketPathMax = 103
 // tuios.sock and its link sockets (tuios.sock.link-human is the longest) are
 // shorter. A runtime directory is measured against this one, since measuring
 // it against tuios.sock alone let a root through whose daemon bound and whose
-// pane holders could not.
-var longestRuntimeSocket = filepath.Join("tuios", "tmux", "w", "ffffffff", "l1y2p0ij32e8e7")
+// pane holders could not. A session's ssh agent link, named by the whole
+// session id, is longer still: ssh in a pane connects to it by that path.
+var longestRuntimeSocket = filepath.Join("tuios", "agent-00000000-0000-0000-0000-000000000000.sock")
 
 // shortRuntimeRoot is where a runtime directory goes when the isolation root
 // is too long to hold one. Per user and per test process. It was per user

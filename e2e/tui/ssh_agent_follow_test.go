@@ -333,11 +333,14 @@ func TestSSHAgentLinkFallsBackToTheDaemonsSocket(t *testing.T) {
 	}
 	waitLinkTo(t, link, "", "after kill-server")
 
-	// Start: a link left by a daemon that was killed is swept. One of
-	// another socket's daemon in the same folder is not.
-	stale := filepath.Join(filepath.Dir(link), "agent-deadbeef.sock")
-	other := filepath.Join(filepath.Dir(link), "other-agent-deadbeef.sock")
-	for _, p := range []string{stale, other} {
+	// Start: links left by a daemon that was killed are swept, a session's
+	// and a host's. The links of a daemon on another socket in the same
+	// folder are not, even one whose socket is called agent.sock.
+	const id = "0c0ffee0-0000-4000-8000-000000000549"
+	dir := filepath.Dir(link)
+	stale := []string{filepath.Join(dir, "agent-"+id+".sock"), filepath.Join(dir, "agent-link-build.sock")}
+	others := []string{filepath.Join(dir, "other-agent-"+id+".sock"), filepath.Join(dir, "agent-agent-"+id+".sock")}
+	for _, p := range append(append([]string{}, stale...), others...) {
 		if err := os.Symlink(own, p); err != nil {
 			t.Fatal(err)
 		}
@@ -345,9 +348,13 @@ func TestSSHAgentLinkFallsBackToTheDaemonsSocket(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", sess+"-2", "--detach"); err != nil {
 		t.Fatalf("start the daemon again: %v: %s", err, out)
 	}
-	waitLinkTo(t, stale, "", "after the daemon started again")
-	if _, err := os.Lstat(other); err != nil {
-		t.Fatalf("the sweep removed the link of another socket's daemon: %v", err)
+	for _, p := range stale {
+		waitLinkTo(t, p, "", "after the daemon started again")
+	}
+	for _, p := range others {
+		if _, err := os.Lstat(p); err != nil {
+			t.Fatalf("the sweep removed %s, a link of another socket's daemon: %v", filepath.Base(p), err)
+		}
 	}
 	waitLinkTo(t, readAgentLink(t, base, sess+"-2").Path, own, "a session made after the restart")
 }

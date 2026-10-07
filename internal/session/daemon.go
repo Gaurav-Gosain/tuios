@@ -1414,8 +1414,6 @@ func (cs *connState) drop() {
 func (d *Daemon) shutdown() error {
 	d.shutdownOnce.Do(func() {
 		log.Println("Shutting down daemon...")
-		// No pane outlives the daemon to use them.
-		d.sweepAgentLinks()
 
 		// The Inbox is saved first and not again. Everything below closes
 		// panes, and a pane closing on shutdown is not the person dealing
@@ -1518,6 +1516,11 @@ func (d *Daemon) shutdown() error {
 		// outlive the daemon that owns them.
 		d.stash.sweep()
 		d.pastes.removeWritten()
+
+		// The ssh agent links go once every client has dropped, since a
+		// client leaving moves a link, and no pane outlives the daemon to
+		// use one. See ssh_agent_follow.go.
+		d.stopSSHAgent()
 
 		// Unlinking the socket is deliberately the last thing the daemon does,
 		// after the final resurrection saves and after the pid file. It is the
@@ -1733,9 +1736,9 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		d.clientsMu.Lock()
 		delete(d.clients, clientID)
 		d.clientsMu.Unlock()
-		// A connection to a host carries the person's agent with no
-		// session here, so it is forgotten on close whatever it showed.
-		d.agentForget(hubAgentKey, clientID)
+		// A connection to a host carries the person's agent for that
+		// host's link, with no session here, so it is forgotten on close.
+		d.agentForgetHosts(clientID)
 
 		// Snapshot subscriptions and session under cs.mu before unsubscribing.
 		cs.mu.Lock()

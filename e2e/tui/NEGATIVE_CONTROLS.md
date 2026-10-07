@@ -2777,3 +2777,28 @@ pane must print that key's comment.
 | The hub does not note the person's socket | `verbOpenHostConnection`: the `agentNote` call cut | `TestSSHAgentFollowsThroughAHost` | **caught** |
 | The proxy does not report the forwarded socket | `DialForLink`: `agent` left empty | `TestSSHAgentFollowsThroughAHost` | **caught** |
 | A client over a link offers no socket | `agentSockOf`: `""` for a link connection | `TestSSHAgentFollowsThroughAHost` | **caught** |
+
+The rows below were run on the second review's fixes. Each host now has its
+own link, and only a host that forwards gets it.
+
+- `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` uses three real
+  ssh-agents. A attaches the far session through the link, and B attaches a
+  session of the hub. The far pane must still reach A. C then attaches the
+  far session, and the far pane reaches C, which is the positive half. A
+  types in the far pane, and the hub's link for the host moves back to A.
+- `TestSSHAgentLinkLeavesANonForwardingHostAlone` starts the hub with an
+  agent of its own and three hosts: `-A`, `ssh -G` saying `forwardagent yes`,
+  and neither. The two that forward start with their own host link. The
+  third starts with the daemon's `SSH_AUTH_SOCK`.
+- `TestSSHAgentFollowWithAnOlderDaemon` needs `TUIOS_E2E_OLD_BIN`, a build of
+  main from before the feature. It was run with main at 01d72efb. The client
+  must draw the far session with an old far daemon and with an old hub
+  daemon.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A session of the hub moves a host's link | `agentNoteUse`: also notes `hostAgentKey("build")` | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` (after B attached, the far pane reaches B) | **caught** |
+| Input through the relay does not count | `usedReader`: never calls `used` | `TestSSHAgentHostLinkFollowsOnlyThatHostsClients` (the link stays on C after A typed) | **caught** |
+| Every host gets the link | `hostForwardsAgent`: always yes | `TestSSHAgentLinkLeavesANonForwardingHostAlone` (plain starts with its host link) | **caught** |
+| No retry against an old hub daemon | `openHostConnectionAgent`: the retry cut | `TestSSHAgentFollowWithAnOlderDaemon/hub` (the client exits 1) | **caught** |
+| No retry against an old far daemon | `dialLinkSocket`: the retry cut | `TestSSHAgentFollowWithAnOlderDaemon/far` (the client exits 1) | **caught** |

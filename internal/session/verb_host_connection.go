@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -59,7 +60,10 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 		return nil, verr
 	}
 
-	d.agentNote(cs, p.SSHAuthSock, hubAgentKey)
+	// This host's agent link follows the clients attached to a session on
+	// it, and nobody else. See ssh_agent_follow.go.
+	hostKey := hostAgentKey(p.Host)
+	d.agentNote(cs, p.SSHAuthSock, hostKey)
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
@@ -83,7 +87,16 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 
 	LogBasic("Client %s connected through to host %s", cs.clientID, p.Host)
 	cs.takeover = func(br *bufio.Reader) {
-		d.relayHostConnection(cs, br, conn)
+		d.relayHostConnection(cs, br, conn, func() {
+			// A note that comes after the connection closed would bring
+			// back a client the close already forgot.
+			select {
+			case <-cs.done:
+				return
+			default:
+			}
+			d.agentNote(cs, p.SSHAuthSock, hostKey)
+		})
 		LogBasic("Client %s left host %s", cs.clientID, p.Host)
 	}
 	return map[string]any{
@@ -127,7 +140,11 @@ func hostConnectionError(host string, err error) *verbError {
 // Nothing in here decodes a byte. The bounds on what crosses are the link's
 // own, a megabyte per frame and a dropped stream for a reader that stalls, and
 // the client's, which caps a message at what it caps a local daemon's at.
-func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser) {
+//
+// onInput runs when bytes cross from the client, at most once a second: the
+// client sends only what the person does (keys, a paste, a resize), so it is
+// the person using the host, and the host's agent link follows them.
+func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser, onInput func()) {
 	conn := cs.conn
 	// Both deadlines are cleared, and the write one is the whole reason this
 	// feature was unusable.
@@ -156,7 +173,7 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 		// the client sends nothing until the reply has arrived, and it is
 		// used rather than the bare connection so a byte it did buffer is not
 		// lost.
-		_, _ = io.Copy(remote, br)
+		_, _ = io.Copy(remote, &usedReader{r: br, every: time.Second, used: onInput})
 		_ = remote.Close()
 	}()
 	go func() {
@@ -186,4 +203,33 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 	// reads sees the end at once.
 	_ = conn.Close()
 	<-done
+}
+
+// usedReader calls used when bytes are read through it, at most once per
+// every. Input inside the window is not dropped: one more call is made when
+// the window ends, so the last keystroke always counts. A nil used is never
+// called.
+type usedReader struct {
+	r       io.Reader
+	every   time.Duration
+	used    func()
+	last    time.Time
+	pending atomic.Bool
+}
+
+func (u *usedReader) Read(b []byte) (int, error) {
+	n, err := u.r.Read(b)
+	if n > 0 && u.used != nil {
+		now := time.Now()
+		if wait := u.every - now.Sub(u.last); wait <= 0 {
+			u.last = now
+			u.used()
+		} else if u.pending.CompareAndSwap(false, true) {
+			time.AfterFunc(wait, func() {
+				u.pending.Store(false)
+				u.used()
+			})
+		}
+	}
+	return n, err
 }

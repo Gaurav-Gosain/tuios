@@ -140,7 +140,8 @@ func linkHandshake(conn net.Conn, peer string, pinned bool, agent string) (*verb
 }
 
 // linkPeerParams are the link-peer parameters. ssh_auth_sock is left out when
-// there is none, and an older daemon ignores it.
+// there is none. A daemon older than ssh_agent follow refuses it with
+// invalid_params, and dialLinkSocket sends the handshake again without it.
 func linkPeerParams(peer string, pinned bool, agent string) map[string]any {
 	p := map[string]any{"peer": peer, "pinned": pinned}
 	if agent != "" {
