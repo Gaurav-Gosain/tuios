@@ -110,6 +110,13 @@ type OS struct {
 	// through herdr's client.window_title.set. Empty sets none.
 	ClientTitle string
 
+	// FullZoom makes every zoom take the whole pane region, as zoom_size = 100
+	// does, whatever the config says. A zoom of part of the screen is a camera
+	// over the whole layout, which resizes the hidden panes' PTYs for every
+	// client of the session. A renderer that draws the zoom itself (the GUI
+	// bridge) sets it, so a zoom there resizes the zoomed pane alone.
+	FullZoom bool
+
 	// frameRate drives the program's frame ticker from NormalFPS and finds the
 	// display's rate for max_fps = "auto". See frame_rate.go.
 	frameRate frameRate

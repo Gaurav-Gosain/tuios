@@ -738,7 +738,7 @@ func (m *OS) ZoomWindowByID(id string, on bool) error {
 // borderless zoom is always the whole region, so it reads as 100 to every
 // caller that decides between a box and a camera.
 func (m *OS) zoomSize() int {
-	if m.Settings.ZoomBorderless {
+	if m.Settings.ZoomBorderless || m.FullZoom {
 		return 100
 	}
 	return m.Settings.GetZoomSize()
