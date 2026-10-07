@@ -2683,6 +2683,18 @@ under a theme and requires the same of the first pane's picture.
 `TestImageSymbolsFlood` sends 150 pictures of 100x30 cells back to back. The
 debug log must show a picture that waited for the pane's drawing budget and
 the budget coming back, and the last picture must be drawn after the flood.
+The test first waits until tuios has sent the host nothing for a second: its
+startup hint draws a frame every 300 ms for about six seconds, and one of
+those frames drew the waiting picture, which hid a cut wake. Each draw is made
+to cost 300 ms (`TUIOS_E2E_SYMBOL_DRAW_COST`), so the debt at the end of the
+flood takes over a second to pay back on any machine.
+
+`TestImageSymbolsKeepAPictureOnScreen` draws picture A (20x10 cells), then
+redraws a 25x12 picture beside it 160 times, which is past the pane's 16 MiB
+image budget. A is the oldest image and on screen throughout, so it must still
+be drawn. The glyph pass used to swap every marker before the scan, so the
+frame's visible set stayed empty and the eviction took A. The debug log must
+record all 161 images, so the budget was really filled.
 
 `TestImageSymbolsWithoutColour` runs with `NO_COLOR=1`: the pane's DA1 must
 not list sixel and a picture shows the box. The positive half is
@@ -2693,7 +2705,8 @@ not list sixel and a picture shows the box. The positive half is
 | Glyphs drawn after the scrim | `composeLayersIn`: `drawImageSymbols` before `applyScrim` cut | `TestImageSymbolsAreShaded/modal` (0 of 420 light cells darker) | **caught** |
 | Glyphs not given the pane's dim | `drawImageSymbols`: the `dimCell` step cut | `TestImageSymbolsAreShaded/unfocused` (0 of 480 light cells darker) | **caught** |
 | No colour still draws glyphs | `symbolColors`: ASCII and NoTTY reported as coloured | `TestImageSymbolsWithoutColour` (DA1 `62;4;22`, 234 glyph cells) | **caught** |
-| No frame when the budget is back | `wakeWhenBudgetLocked`: the wake cut | `TestImageSymbolsFlood` | **not caught**: another frame comes within about 300 ms and draws the waiting picture |
+| No frame when the budget is back | `wakeWhenBudgetLocked`: the wake cut | `TestImageSymbolsFlood` (0 glyph cells after 10 s) | **caught**; it was not before the test waited out the startup frames |
+| Glyph images not counted as on screen | `SetFrame`: the images drawn as glyphs left out of `visible` | `TestImageSymbolsKeepAPictureOnScreen` (A has 0 glyph cells and no box) | **caught** |
 
 A run with the reader drawing only one cell of each picture, so the frame pass
 draws the rest, passes `TestImageSymbolsOnAHostWithoutGraphics`: the part drawn

@@ -147,7 +147,26 @@ func Encode(img Indexed, cellW, cellH, rows, cols int, k Kind, colors Colors) []
 // The cells outside region are left as they are. The dither is ordered, so a
 // cell comes out the same whichever region it was drawn in, and a picture can
 // be drawn a part at a time, as its parts come into view.
+//
+// It converts the palette each call. A caller that draws a picture in many
+// parts uses Prepare once and Picture.EncodeRegion for each part.
 func EncodeRegion(dst []Cell, img Indexed, cellW, cellH, cols int, region image.Rectangle, k Kind, colors Colors) {
+	Prepare(img).EncodeRegion(dst, cellW, cellH, cols, region, k, colors)
+}
+
+// Picture is a picture made ready to draw: its palette in linear light.
+type Picture struct {
+	img Indexed
+	lin [][3]float32
+}
+
+// Prepare converts img's palette once, for drawing it in parts.
+func Prepare(img Indexed) *Picture {
+	return &Picture{img: img, lin: linearPalette(img)}
+}
+
+// EncodeRegion is the package's EncodeRegion for a prepared picture.
+func (p *Picture) EncodeRegion(dst []Cell, cellW, cellH, cols int, region image.Rectangle, k Kind, colors Colors) {
 	if k == Off || cols <= 0 || cellW <= 0 || cellH <= 0 {
 		return
 	}
@@ -155,8 +174,9 @@ func EncodeRegion(dst []Cell, img Indexed, cellW, cellH, cols int, region image.
 	if region.Empty() {
 		return
 	}
+	img, lin := p.img, p.lin
 	if colors == ANSI16 {
-		encodeANSI16(dst, img, cellW, cellH, cols, region)
+		encodeANSI16(dst, img, lin, cellW, cellH, cols, region)
 		return
 	}
 	xterm256 := colors == XTerm256
@@ -165,10 +185,6 @@ func EncodeRegion(dst []Cell, img Indexed, cellW, cellH, cols int, region image.
 		return
 	}
 	n := gx * gy
-	// The palette in linear light, once: the average of a sub-pixel is
-	// taken there, so a fine pattern of black and white averages to the
-	// grey the eye sees from a distance.
-	lin := linearPalette(img)
 	// Sub-pixel bounds inside a cell, the same for every cell.
 	var xs, ys [5]int
 	for i := range gx + 1 {
@@ -201,7 +217,9 @@ func EncodeRegion(dst []Cell, img Indexed, cellW, cellH, cols int, region image.
 	}
 }
 
-// linearPalette is img's palette in linear light.
+// linearPalette is img's palette in linear light. The average of a sub-pixel
+// is taken there, so a fine pattern of black and white averages to the grey
+// the eye sees from a distance.
 func linearPalette(img Indexed) [][3]float32 {
 	lin := make([][3]float32, len(img.Palette))
 	for i, c := range img.Palette {

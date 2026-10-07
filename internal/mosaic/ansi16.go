@@ -85,8 +85,7 @@ func dither16(lab [3]float32, x, y int) int {
 
 // encodeANSI16 draws the cells of region as half blocks in the sixteen
 // colours.
-func encodeANSI16(dst []Cell, img Indexed, cellW, cellH, cols int, region image.Rectangle) {
-	lin := linearPalette(img)
+func encodeANSI16(dst []Cell, img Indexed, lin [][3]float32, cellW, cellH, cols int, region image.Rectangle) {
 	ansiTable()
 	half := cellH / 2
 	for r := region.Min.Y; r < region.Max.Y; r++ {

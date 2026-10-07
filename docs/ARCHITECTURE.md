@@ -867,7 +867,9 @@ the frame's text in the same write:
   pixels under it in linear light, and the sub-cells are split into the two
   groups whose OKLab means leave the least error. The part a pane shows when
   the image arrives is drawn on its PTY reader, and the rest by the frame pass
-  as it comes into view, within a drawing budget per pane. The frame pass puts
+  as it comes into view, within a drawing budget per pane and, on the frame
+  pass, one budget shared by every pane. The images the pass draws count as on
+  screen, so eviction spares them. The frame pass puts
   the glyphs on the canvas before the scrim and the spotlight, and gives them
   the pane's dim, so they shade like text. At 256 colours the
   sub-cells are dithered with a 4x4 Bayer matrix and snapped to the xterm

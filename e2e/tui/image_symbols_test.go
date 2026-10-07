@@ -977,11 +977,21 @@ func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
 // How this could pass wrongly, written down first:
 //   - The flood could fit in the budget, so nothing waits. The debug log must
 //     record a picture that waited, and the budget coming back.
+//   - Another frame could draw the last picture, so the wake would go
+//     untested. For a few seconds after it starts, tuios draws a frame every
+//     300 ms for its startup hint, so the test waits until the host has been
+//     sent nothing for a second. And a draw on this machine costs a few
+//     milliseconds, which the budget pays back before the shell's last
+//     frames anyway, so each draw is made to cost 300 ms
+//     (TUIOS_E2E_SYMBOL_DRAW_COST). The debt at the end of the flood then
+//     takes over a second to pay back, and only the wake asks for the frame
+//     that draws the last picture.
 //   - The last picture could be read before the flood ends: the read waits
 //     for the line printed after it.
 func TestImageSymbolsFlood(t *testing.T) {
 	host := newSixelHost(false, false)
-	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1")
+	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1", "TUIOS_E2E_SYMBOL_DRAW_COST=300ms")
+	waitHostQuiet(t, host, time.Second, 20*time.Second)
 	logFrom := debugLogSize()
 	const cols, rows = 100, 30
 	img := floodPicture(cols, rows)
@@ -1003,7 +1013,7 @@ func TestImageSymbolsFlood(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		n = imageGlyphCells(s, 0, screenRows)
 		return n > cols*rows/4 && !strings.Contains(s.Text(), "image")
-	}, 5*time.Second); err != nil {
+	}, 10*time.Second); err != nil {
 		t.Errorf("the last picture was not drawn after the flood: %d glyph cells\n%s", n, term.Screen().Text())
 	}
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "after-flood")
@@ -1052,5 +1062,83 @@ func TestImageSymbolsWithoutColour(t *testing.T) {
 		return strings.Contains(s.Text(), "image") && imageGlyphCells(s, 0, rows) == 0
 	}, uiTimeout); err != nil {
 		t.Errorf("no image box, or glyphs drawn without colour: %d glyph cells\n%s", imageGlyphCells(term.Screen(), 0, rows), term.Screen().Text())
+	}
+}
+
+// TestImageSymbolsKeepAPictureOnScreen draws picture A, then redraws another
+// picture beside it 160 times. Each redraw adds to the pane's image budget,
+// and past it the pane's oldest images are evicted, but never one on screen.
+// A is the oldest and on screen the whole time, so it must still be drawn at
+// the end. The glyph pass used to tell the eviction nothing, so A went.
+//
+// How this could pass wrongly, written down first:
+//   - The redraws could fit in the budget, so nothing is evicted. The debug
+//     log must record the redraws registered, 160 of them at about 130 KB
+//     each against a 16 MiB budget.
+//   - A could be read before the redraws end: the read waits for the line
+//     printed after them.
+func TestImageSymbolsKeepAPictureOnScreen(t *testing.T) {
+	host := newSixelHost(false, false)
+	term, _ := startSymbolPane(t, host, "octant", "truecolor", false, "TUIOS_DEBUG_INTERNAL=1")
+	logFrom := debugLogSize()
+	dir := t.TempDir()
+	write := func(name string, cols, rows int) string {
+		img := floodPicture(cols, rows)
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, vt.EncodeSixel(img, image.Rect(0, 0, img.Width, img.Height), img.Width, img.Height), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	a, b := write("a.six", 20, 10), write("b.six", 25, 12)
+	typeLine(t, term, "clear; printf '%s\\n' 'AT''OP'; cat "+a+"; for i in $(seq 160); do printf '\\033[1;31H'; cat "+b+"; done; printf '\\033[16;1H'; echo DO''NE")
+	if err := term.WaitForText("DONE", 2*shellTimeout); err != nil {
+		t.Fatalf("the pictures did not print: %v\n%s", err, term.Snapshot())
+	}
+	origin := imageOrigin(t, term, "ATOP")
+	countA := func(s tuitest.Screen) (glyphs, box int) {
+		for r := range 10 {
+			for c := range 20 {
+				cell := s.Cell(origin.X+c, origin.Y+r)
+				rs := []rune(cell.Content)
+				if len(rs) == 0 {
+					continue
+				}
+				if _, _, _, ok := mosaic.Shape(rs[0]); ok || strings.ContainsRune("▘▝▖▗▚▞▛▜▙▟▀▄▌▐█", rs[0]) {
+					glyphs++
+				}
+				if strings.ContainsRune("┌┐└┘─│", rs[0]) {
+					box++
+				}
+			}
+		}
+		return glyphs, box
+	}
+	var glyphs, box int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		glyphs, box = countA(s)
+		return glyphs >= 150
+	}, uiTimeout); err != nil {
+		t.Errorf("picture A is gone after the redraws beside it: %d glyph cells, %d box cells of 200\n%s", glyphs, box, term.Screen().Text())
+	}
+	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "after-redraws")
+	if n := len(registerLines(debugLogSince(t, logFrom))); n < 161 {
+		t.Errorf("%d pictures registered, want 161: the redraws did not fill the budget", n)
+	}
+}
+
+// waitHostQuiet waits until tuios has sent the host nothing for quiet.
+func waitHostQuiet(t *testing.T, host *sixelHost, quiet, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	last, since := len(host.bytes()), time.Now()
+	for time.Since(since) < quiet {
+		if time.Now().After(deadline) {
+			t.Fatalf("tuios never stopped drawing for %v", quiet)
+		}
+		time.Sleep(20 * time.Millisecond)
+		if n := len(host.bytes()); n != last {
+			last, since = n, time.Now()
+		}
 	}
 }

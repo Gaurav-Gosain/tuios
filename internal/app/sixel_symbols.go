@@ -3,7 +3,9 @@ package app
 import (
 	"image"
 	"image/color"
+	"os"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -63,9 +65,9 @@ type symbolImage struct {
 	// have says which of its cells are drawn.
 	cells []mosaic.Cell
 	have  []bool
-	// measured says the 16-colour check has run, on the first part drawn,
-	// and poor that the picture failed it (mosaic.MinFidelity): it shows
-	// the image box.
+	// measured says the 16-colour check has run, and poor that the picture
+	// failed it (mosaic.MinFidelity): it shows the image box. See
+	// fidelityRegion for what is measured.
 	measured, poor bool
 	// waiting says the pane's budget was spent when the image came: the
 	// image box is shown until the budget is back.
@@ -82,16 +84,30 @@ func (s *symbolImage) bytes() int {
 
 // draw draws the cells of region that are not drawn yet. It reports whether
 // it had any to draw.
+//
+// At sixteen colours the first draw also draws fidelityRegion, which the
+// 16-colour check measures, so the check judges the picture and not whatever
+// part of it was on screen first.
 func (s *symbolImage) draw(e *sixelEntry, region image.Rectangle) bool {
-	region = region.Intersect(image.Rect(0, 0, e.cols, e.rows))
+	bounds := image.Rect(0, 0, e.cols, e.rows)
+	region = region.Intersect(bounds)
 	if region.Empty() || e.img == nil {
 		return false
+	}
+	var measure image.Rectangle
+	if !s.measured {
+		s.measured = true
+		if s.colors == mosaic.ANSI16 {
+			measure = fidelityRegion(e.rows, e.cols)
+			region = region.Union(measure)
+		}
 	}
 	if s.cells == nil {
 		s.cells = make([]mosaic.Cell, e.rows*e.cols)
 		s.have = make([]bool, e.rows*e.cols)
 	}
 	img := mosaic.Indexed{Width: e.img.Width, Height: e.img.Height, Pix: e.img.Pix, Palette: e.img.Palette}
+	pic := mosaic.Prepare(img)
 	drew := false
 	for r := region.Min.Y; r < region.Max.Y; r++ {
 		// Each run of cells this row still lacks, drawn as one region.
@@ -104,7 +120,7 @@ func (s *symbolImage) draw(e *sixelEntry, region image.Rectangle) bool {
 			for end < region.Max.X && !s.have[r*e.cols+end] {
 				end++
 			}
-			mosaic.EncodeRegion(s.cells, img, e.cellW, e.cellH, e.cols, image.Rect(c, r, end, r+1), s.kind, s.colors)
+			pic.EncodeRegion(s.cells, e.cellW, e.cellH, e.cols, image.Rect(c, r, end, r+1), s.kind, s.colors)
 			for i := c; i < end; i++ {
 				s.have[r*e.cols+i] = true
 			}
@@ -112,13 +128,40 @@ func (s *symbolImage) draw(e *sixelEntry, region image.Rectangle) bool {
 			c = end
 		}
 	}
-	if drew && !s.measured {
-		s.measured = true
-		s.poor = s.colors == mosaic.ANSI16 &&
-			mosaic.Fidelity(img, e.cellW, e.cellH, e.cols, region, s.cells) < mosaic.MinFidelity
+	if !measure.Empty() {
+		s.poor = mosaic.Fidelity(img, e.cellW, e.cellH, e.cols, measure, s.cells) < mosaic.MinFidelity
+	}
+	if d := symbolDrawCost(); drew && d > 0 {
+		time.Sleep(d)
 	}
 	return drew
 }
+
+// fidelityRegion is the part of a picture of rows by cols cells that the
+// 16-colour check measures: the whole picture up to fidelityCells, and past
+// that a window of about that many cells in its middle, which is enough to
+// judge whether the shapes survive.
+func fidelityRegion(rows, cols int) image.Rectangle {
+	if rows*cols <= fidelityCells {
+		return image.Rect(0, 0, cols, rows)
+	}
+	w := min(cols, 100)
+	h := min(rows, max(2, fidelityCells/w))
+	x0, y0 := (cols-w)/2, (rows-h)/2
+	return image.Rect(x0, y0, x0+w, y0+h)
+}
+
+const fidelityCells = 5000
+
+// symbolDrawCost is time added to every glyph draw, read once from
+// TUIOS_E2E_SYMBOL_DRAW_COST (a Go duration). It exists for the end-to-end
+// tests alone: a draw on a fast machine costs too little to spend the drawing
+// budget the way a slow one does, and the test of the budget needs it spent.
+// Ordinary runs never set it.
+var symbolDrawCost = sync.OnceValue(func() time.Duration {
+	d, _ := time.ParseDuration(os.Getenv("TUIOS_E2E_SYMBOL_DRAW_COST"))
+	return max(d, 0)
+})
 
 // symbolView is the part of an image a pane shows when the image arrives: the
 // image's columns up to the pane's right edge, and its last rows, as many as
@@ -142,6 +185,10 @@ func symbolView(rows, cols, cursorX, paneW, paneH int) image.Rectangle {
 // pictures faster than they can be drawn, and drawing them would put its
 // reader further behind the program. Its cells show the image box until the
 // budget is back, and then the frame pass draws the part on screen.
+//
+// The frame pass runs on the UI goroutine for every pane, so its draws also
+// spend one budget shared by all panes (SixelPassthrough.frameBudget). Without
+// it, N panes that flood would take N quarters of the UI goroutine.
 const (
 	symbolBudgetRate  = 0.25
 	symbolBudgetBurst = 100 * time.Millisecond
@@ -157,40 +204,77 @@ type symbolBudget struct {
 }
 
 func (b *symbolBudget) refill(now time.Time) {
-	b.tokens = min(symbolBudgetBurst, b.tokens+time.Duration(float64(now.Sub(b.at))*symbolBudgetRate))
+	if b.at.IsZero() {
+		b.tokens = symbolBudgetBurst
+	} else {
+		b.tokens = min(symbolBudgetBurst, b.tokens+time.Duration(float64(now.Sub(b.at))*symbolBudgetRate))
+	}
 	b.at = now
 }
 
-// symbolBudgetLocked is a pane's budget, refilled to now.
-func (sp *SixelPassthrough) symbolBudgetLocked(windowID string, now time.Time) *symbolBudget {
-	if sp.budgets == nil {
-		sp.budgets = make(map[string]*symbolBudget)
+// wait is how long the budget takes to be positive again.
+func (b *symbolBudget) wait() time.Duration {
+	if b.tokens > 0 {
+		return 0
 	}
+	return time.Duration(float64(-b.tokens) / symbolBudgetRate)
+}
+
+// symbolBudgetLocked is a pane's budget, refilled to now. Only a pane the
+// passthrough knows (setupSixelPassthrough, until ClearWindow) keeps its
+// budget: an image a pane registers after it closed gets a full one that is
+// not stored, so nothing is left behind for a pane that is gone.
+func (sp *SixelPassthrough) symbolBudgetLocked(windowID string, now time.Time) *symbolBudget {
 	b := sp.budgets[windowID]
 	if b == nil {
-		b = &symbolBudget{tokens: symbolBudgetBurst, at: now}
-		sp.budgets[windowID] = b
+		b = &symbolBudget{}
+		if sp.wakers[windowID] != nil {
+			if sp.budgets == nil {
+				sp.budgets = make(map[string]*symbolBudget)
+			}
+			sp.budgets[windowID] = b
+		}
 	}
 	b.refill(now)
 	return b
 }
 
-// spendSymbolsLocked charges a pane's budget for a draw.
-func (sp *SixelPassthrough) spendSymbolsLocked(windowID string, d time.Duration) {
-	sp.symbolBudgetLocked(windowID, time.Now()).tokens -= d
+// canDrawLocked says a pane may draw glyphs now: its budget is positive, and
+// for a draw on the frame pass (onFrame) the shared frame budget is too.
+func (sp *SixelPassthrough) canDrawLocked(windowID string, onFrame bool) bool {
+	now := time.Now()
+	if sp.symbolBudgetLocked(windowID, now).tokens <= 0 {
+		return false
+	}
+	if onFrame {
+		sp.frameBudget.refill(now)
+		return sp.frameBudget.tokens > 0
+	}
+	return true
 }
 
-// wakeWhenBudgetLocked asks the pane for a frame once its budget is back, so
-// the images that wait for it are drawn even when the pane has gone quiet.
+// spendSymbolsLocked charges a pane's budget for a draw, and the shared frame
+// budget for a draw on the frame pass.
+func (sp *SixelPassthrough) spendSymbolsLocked(windowID string, d time.Duration, onFrame bool) {
+	now := time.Now()
+	sp.symbolBudgetLocked(windowID, now).tokens -= d
+	if onFrame {
+		sp.frameBudget.refill(now)
+		sp.frameBudget.tokens -= d
+	}
+}
+
+// wakeWhenBudgetLocked asks the pane for a frame once its budget and the
+// frame budget are back, so the images that wait for them are drawn even when
+// the pane has gone quiet.
 func (sp *SixelPassthrough) wakeWhenBudgetLocked(windowID string) {
-	b := sp.symbolBudgetLocked(windowID, time.Now())
+	now := time.Now()
+	b := sp.symbolBudgetLocked(windowID, now)
 	if b.timer != nil {
 		return
 	}
-	wait := time.Millisecond
-	if b.tokens <= 0 {
-		wait += time.Duration(float64(-b.tokens) / symbolBudgetRate)
-	}
+	sp.frameBudget.refill(now)
+	wait := time.Millisecond + max(b.wait(), sp.frameBudget.wait())
 	b.timer = time.AfterFunc(wait, func() {
 		sp.mu.Lock()
 		b.timer = nil
@@ -210,7 +294,7 @@ func (sp *SixelPassthrough) drawSymbolsOnReader(e *sixelEntry, k mosaic.Kind, co
 	s := &symbolImage{kind: k, colors: colors}
 	e.sym = s
 	sp.mu.Lock()
-	ok := sp.symbolBudgetLocked(e.windowID, time.Now()).tokens > 0
+	ok := sp.canDrawLocked(e.windowID, false)
 	sp.mu.Unlock()
 	if !ok {
 		s.waiting = true
@@ -221,7 +305,7 @@ func (sp *SixelPassthrough) drawSymbolsOnReader(e *sixelEntry, k mosaic.Kind, co
 	s.draw(e, view)
 	spent := time.Since(start)
 	sp.mu.Lock()
-	sp.spendSymbolsLocked(e.windowID, spent)
+	sp.spendSymbolsLocked(e.windowID, spent, false)
 	sp.mu.Unlock()
 	e.bytes += s.bytes()
 }
@@ -237,7 +321,7 @@ func (sp *SixelPassthrough) symbolsOfLocked(e *sixelEntry, colors mosaic.Colors)
 		e.sym = &symbolImage{kind: sp.symbols, colors: colors}
 	}
 	if e.sym.waiting {
-		if sp.symbolBudgetLocked(e.windowID, time.Now()).tokens > 0 {
+		if sp.canDrawLocked(e.windowID, true) {
 			e.sym.waiting = false
 		} else {
 			sp.wakeWhenBudgetLocked(e.windowID)
@@ -354,6 +438,9 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 		dimResolved    bool
 		missing        image.Rectangle
 		missingPresent bool
+		// held says the budget stopped this frame from drawing the
+		// cells it lacks: the image box is shown for now.
+		held bool
 	}
 	var images map[uint32]*paneImage
 	look := func(id uint32) *paneImage {
@@ -399,8 +486,30 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 			}
 		}
 	}
+	// Every image met is on screen this frame, drawn or boxed, and must not
+	// be evicted. The scan sees no marker of these, so it is told here.
+	sp.mu.Lock()
+	if sp.frame.drawn == nil {
+		sp.frame.drawn = make(map[uint32]bool)
+	}
+	for id, pi := range images {
+		if pi != nil {
+			sp.frame.drawn[id] = true
+		}
+	}
+	sp.mu.Unlock()
 	for _, pi := range images {
 		if pi == nil || !pi.missingPresent {
+			continue
+		}
+		sp.mu.Lock()
+		ok := sp.canDrawLocked(pi.e.windowID, true)
+		if !ok {
+			sp.wakeWhenBudgetLocked(pi.e.windowID)
+		}
+		sp.mu.Unlock()
+		if !ok {
+			pi.held = true
 			continue
 		}
 		before := pi.sym.bytes()
@@ -408,7 +517,7 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 		pi.sym.draw(pi.e, pi.missing)
 		spent := time.Since(start)
 		sp.mu.Lock()
-		sp.spendSymbolsLocked(pi.e.windowID, spent)
+		sp.spendSymbolsLocked(pi.e.windowID, spent, true)
 		if grown := pi.sym.bytes() - before; grown > 0 && pi.e.sym == pi.sym {
 			pi.e.bytes += grown
 			sp.byWindow[pi.e.windowID] += grown
@@ -436,7 +545,7 @@ func (m *OS) drawImageSymbols(canvas *frameCanvas) {
 			if pi == nil {
 				continue
 			}
-			if pi.sym.waiting || pi.sym.poor {
+			if pi.sym.waiting || pi.sym.poor || pi.held {
 				if dim == nil {
 					dim = theme.UI().FgDim
 				}

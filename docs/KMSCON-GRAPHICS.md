@@ -56,7 +56,8 @@ without a seam. The glyphs are kept with the image and count toward the pane's
 Drawing has a budget per pane: a quarter of wall time, with a 100 ms burst. A
 pane that sends pictures faster than that, such as a video played as sixel,
 gets the image box for the pictures past the budget. When the budget is back,
-the frame pass draws the part on screen.
+the frame pass draws the part on screen. The frame pass runs on the UI for all
+panes, so its draws also spend one budget that every pane shares.
 
 A frame with no colour (`NO_COLOR`, or output that is not a terminal) shows the
 box, and its panes are not told sixel.
@@ -101,7 +102,8 @@ to its nearest dark colour.
 Below a measured fidelity the box is shown instead. Fidelity
 (`mosaic.Fidelity`) is the correlation between the picture's lightness and the
 cells' lightness, each averaged over 2x2-cell blocks so a dither pattern counts
-as the shade it makes. It is measured on the first part of the picture drawn.
+as the shade it makes. It is measured on the whole picture, or on a window of
+about 5,000 cells in the middle of a larger one.
 The threshold is `mosaic.MinFidelity = 0.5`. Dithered half blocks scored 0.62
 and above on every picture measured, so the box is a safety net.
 

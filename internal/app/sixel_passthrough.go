@@ -103,6 +103,8 @@ type SixelPassthrough struct {
 	// pane for a frame. See sixel_symbols.go.
 	budgets map[string]*symbolBudget
 	wakers  map[string]func()
+	// frameBudget is the drawing budget the frame pass shares across panes.
+	frameBudget symbolBudget
 	// boxes is the frame pass's boxed colours. Used on the UI goroutine
 	// only, without the lock.
 	boxes *colorBoxes
@@ -322,7 +324,7 @@ func (sp *SixelPassthrough) evictLocked(windowID string) {
 			if !overCount && e.windowID != windowID {
 				continue
 			}
-			if sp.frame.visible[id] {
+			if sp.frame.visible[id] || sp.frame.drawn[id] {
 				continue
 			}
 			if victim == 0 || e.seq < oldest {

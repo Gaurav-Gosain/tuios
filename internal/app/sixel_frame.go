@@ -75,8 +75,13 @@ type sixelFrameState struct {
 	gen uint64
 	// rects is the latest frame's visible rectangles.
 	rects []sixelRect
-	// visible is the set of ids in rects, which eviction spares.
+	// visible is the set of ids in rects, which eviction spares, and of the
+	// images the latest frame drew as glyphs.
 	visible map[uint32]bool
+	// drawn is the images drawn as glyphs on the frame being composed
+	// (drawImageSymbols). SetFrame moves them into visible. Eviction spares
+	// them too, since it can run before SetFrame.
+	drawn map[uint32]bool
 	// hostW and hostH are the host's cell size in pixels, and hostRows its
 	// height in cells, as of the latest frame.
 	hostW, hostH, hostRows int
@@ -151,6 +156,10 @@ func (sp *SixelPassthrough) SetFrame(rects []sixelRect, hostW, hostH, hostCols, 
 	for _, r := range rects {
 		f.visible[r.id] = true
 	}
+	for id := range f.drawn {
+		f.visible[id] = true
+	}
+	clear(f.drawn)
 	if hostW != f.hostW || hostH != f.hostH || hostRows != f.hostRows || hostCols != f.hostCols {
 		f.hostW, f.hostH, f.hostRows, f.hostCols = hostW, hostH, hostRows, hostCols
 		f.force = true
