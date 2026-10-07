@@ -258,6 +258,29 @@ func TestTheRailOfOneMachineIsUnchanged(t *testing.T) {
 	alive(t, term, "after the one-machine rail")
 }
 
+// TestTheRailWithNumbersOn is the opt-in half of the switch numbers: with
+// appearance.sidebar.show_numbers on, the session's row carries the number
+// switch_session_N opens, and the name steps two cells past the quiet rail's
+// name column to make the room.
+func TestTheRailWithNumbersOn(t *testing.T) {
+	cfg := strings.Replace(railConfig(28), "[appearance.sidebar]\n",
+		"[appearance.sidebar]\nshow_numbers = true\n", 1)
+	term, _ := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 30})
+	railShows(t, term, "sessions")
+
+	s := term.Screen()
+	row := railRowOf(s, "1 e2e")
+	if row < 0 {
+		t.Fatalf("ASSERTION: the rail with numbers on drew no numbered session row\n%s", term.Snapshot())
+	}
+	if col := nameColOf(s, row, "e2e"); col != railNameCol+2 {
+		t.Errorf("ASSERTION: the numbered session's name starts at column %d, want %d\n%s",
+			col, railNameCol+2, term.Snapshot())
+	}
+	saveFrame(t, term, "hier-after-numbers-on")
+	alive(t, term, "after the numbered rail")
+}
+
 // TestAMachineHeaderOffersItsMoveRows is the reachability proof for the second
 // half of the report: reordering machines already worked by drag, and nothing
 // on screen said so. A right-click on a machine's header now opens a menu with
