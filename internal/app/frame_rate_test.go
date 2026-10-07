@@ -95,20 +95,27 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 		<-done
 	}()
 
-	// Wait for Run to start the ticker, and for its first frame to go out.
+	// Wait for the first frame to go out. Only the ticker writes frames, so
+	// Run has started it by then, and the output buffer's lock orders that
+	// start before the read of the ticker field below. Polling the field
+	// itself raced Run's write of it.
 	deadline := time.Now().Add(3 * time.Second)
-	for programTicker(p) == nil || out.String() == "" {
+	for out.String() == "" {
 		if time.Now().After(deadline) {
-			t.Fatal("the program never started its frame ticker")
+			t.Fatal("the program never wrote a frame")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+	ticker := programTicker(p)
+	if ticker == nil {
+		t.Fatal("tea.Program has no ticker after its first frame")
 	}
 	// At one frame a second, the next tick is up to a second away.
 	time.Sleep(50 * time.Millisecond)
 	p.Send("kicked-frame")
 	time.Sleep(20 * time.Millisecond)
 	start := time.Now()
-	sendTick(programTicker(p))
+	sendTick(ticker)
 	for !strings.Contains(out.String(), "kicked-frame") {
 		if time.Since(start) > 300*time.Millisecond {
 			t.Fatalf("one value on the ticker's channel did not write the frame within %v; output so far %q",

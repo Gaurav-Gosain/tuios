@@ -749,6 +749,24 @@ type foreignSessionsChangedMsg struct{}
 // one somebody writes. One comparison, once, is the whole cost, and it answers
 // nil without allocating for a client whose rail has no files section.
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The frame the last View composed is stored now: write it. Nothing
+	// else changes, so the View after this message serves the same frame.
+	if _, ok := msg.(flushMsg); ok {
+		m.handleFlush()
+		m.renderSkipped = true
+		return m, nil
+	}
+	model, cmd := m.update(msg)
+	// The View after this message may compose a frame, or move the cursor
+	// for input; flushCmd brings the write back once that frame is stored.
+	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg)) {
+		cmd = tea.Batch(cmd, flushCmd)
+	}
+	return model, cmd
+}
+
+// update is Update's body for every message but flushMsg.
+func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyScrollAnchors()
 	// ProcessingRemoteKeys stays set from the first key of a send-keys or
 	// tape run to its last, across messages. A key or click from the

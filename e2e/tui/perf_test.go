@@ -315,6 +315,13 @@ func TestPerfAttach(t *testing.T) {
 // inside the pane, or the prefix acquires a newline and stops matching.
 func typeLatency(t *testing.T, term *tuitest.Terminal) dist {
 	t.Helper()
+	return typeLatencyEvery(t, term, 0)
+}
+
+// typeLatencyEvery is typeLatency with a pause of gap before each key, the
+// pace of a person typing rather than of a held key.
+func typeLatencyEvery(t *testing.T, term *tuitest.Terminal, gap time.Duration) dist {
+	t.Helper()
 	const alphabet = "abcdefghijklmnopqrstuvwxyz"
 
 	var d dist
@@ -345,6 +352,9 @@ func typeLatency(t *testing.T, term *tuitest.Terminal) dist {
 
 		ch := string(alphabet[i%len(alphabet)])
 		line += ch
+		if gap > 0 {
+			time.Sleep(gap)
+		}
 		t0 := time.Now()
 		if err := term.SendKeys(ch); err != nil {
 			t.Fatalf("send %q: %v", ch, err)
@@ -383,6 +393,45 @@ func TestPerfInputLatency(t *testing.T) {
 			}
 			enterTerminalMode(t, term)
 			report(t, typeLatency(t, term), fmt.Sprintf("input latency/%d panes", panes))
+			report(t, typeLatencyEvery(t, term, typingGap), fmt.Sprintf("input latency/%d panes, typed", panes))
+		})
+	}
+}
+
+// typingGap is the pause between keys in the typed measurements: a fast
+// typist, slow enough that each echo is drawn before the next key.
+const typingGap = 60 * time.Millisecond
+
+// TestTypingLatencyStaysLow asserts the echo of a typed key at the default 60
+// frames a second, with one pane and with eight, under TUIOS_E2E_PERF. A frame
+// written on a timer could go out before Bubble Tea stored it, and the key then
+// waited a whole tick: p99 13 to 20 ms against 7.3 to 7.5 ms on main.
+func TestTypingLatencyStaysLow(t *testing.T) {
+	if os.Getenv("TUIOS_E2E_PERF") == "" {
+		t.Skip("set TUIOS_E2E_PERF=1 to measure typing latency")
+	}
+	for _, panes := range []int{1, 8} {
+		t.Run(fmt.Sprintf("panes%d", panes), func(t *testing.T) {
+			term, _ := start(t, startOpts{
+				cols: perfCols, rows: perfRows,
+				args: []string{"new", fmt.Sprintf("typed%d", panes)},
+				env:  perfEnvVars(),
+			})
+			waitBoot(t, term)
+			for range panes {
+				newWindow(t, term)
+			}
+			if panes > 1 {
+				if err := term.SendKeys(tuitest.Tab); err != nil {
+					t.Fatalf("tab: %v", err)
+				}
+			}
+			enterTerminalMode(t, term)
+			d := typeLatencyEvery(t, term, typingGap)
+			report(t, d, fmt.Sprintf("typed latency/%d panes", panes))
+			if st := d.Stats(); st.P99 > 10*time.Millisecond {
+				t.Errorf("a typed key took %v to echo at p99, want at most 10ms (p50 %v)", st.P99, st.P50)
+			}
 		})
 	}
 }

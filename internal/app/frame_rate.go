@@ -48,6 +48,9 @@ type frameRate struct {
 	lastAnswered time.Time
 	// lastCursor is the cursor of the last frame kickFlush was asked for.
 	lastCursor tea.Cursor
+	// kickWanted is set by kickFlush and cleared when flushMsg writes the
+	// frame. Only the Update goroutine touches it.
+	kickWanted bool
 }
 
 // cursorState is a cursor as a value, the zero value for none.
@@ -108,9 +111,7 @@ func (m *OS) BindProgram(p *tea.Program) {
 // panes' render signals to the same rate.
 func (m *OS) applyFrameRate() {
 	fps := m.Settings.NormalFPS
-	if fps > 0 && m.frameRate.program != nil {
-		terminal.SetFrameInterval(time.Second / time.Duration(fps))
-	}
+	m.setPaneFrameInterval()
 	if m.frameRate.program == nil || fps <= 0 || fps == m.frameRate.applied {
 		return
 	}
@@ -188,6 +189,22 @@ func (m *OS) noteFrame() {
 			ticker.Reset(time.Second / time.Duration(fps))
 		}
 	})
+}
+
+// setPaneFrameInterval gives every pane of this client its render floor: one
+// frame at this client's rate. MarkTerminalsWithNewContent repeats it for
+// panes made since. Each served client has its own panes, so one client's
+// max_fps never sets another's.
+func (m *OS) setPaneFrameInterval() {
+	if m.frameRate.program == nil {
+		return
+	}
+	period := m.framePeriod()
+	for _, w := range m.Windows {
+		if w != nil {
+			w.SetFrameInterval(period)
+		}
+	}
 }
 
 // framePeriod is one frame at NormalFPS.
@@ -277,14 +294,9 @@ func (m *OS) armFrameDue(wait time.Duration) tea.Cmd {
 	return tea.Tick(wait, func(time.Time) tea.Msg { return frameDueMsg{} })
 }
 
-// flushKickDelay is how long after View returns a composed frame the
-// renderer is asked to write it. View runs before Bubble Tea stores the view
-// it returns, so the request waits a moment for the store; asking at once
-// would sometimes write the frame before it.
-const flushKickDelay = 100 * time.Microsecond
-
-// kickFlush asks Bubble Tea to write the frame View is about to return now,
-// rather than at its next tick.
+// kickFlush asks Bubble Tea to write the frame View is returning now, rather
+// than at its next tick. View calls it; the write happens when flushMsg comes
+// back (see flushCmd).
 //
 // Bubble Tea writes frames only from its ticker. A frame composed just after a
 // tick waited almost a whole period to go out, and since pane output and the
@@ -298,14 +310,34 @@ const flushKickDelay = 100 * time.Microsecond
 // Bubble Tea release that renames the field makes this do nothing: frames go
 // out on the tick as before. TestKickFlushWritesTheFrame fails on that release.
 func (m *OS) kickFlush() {
-	if m.frameRate.program == nil {
+	if m.frameRate.program != nil {
+		m.frameRate.kickWanted = true
+	}
+}
+
+// flushMsg is the request kickFlush made, back on the Update goroutine.
+type flushMsg struct{}
+
+// flushCmd is the command Update returns with every message whose View may
+// compose a frame or move the cursor.
+//
+// The frame is written when flushMsg comes back, not when View runs. View runs
+// before Bubble Tea stores the frame it returns, and a tick sent from View, or
+// on a timer from it, could reach the renderer first: the renderer then wrote
+// the frame before, and the new one waited a whole tick. Bubble Tea takes the
+// next message only after it has stored the view of the last one, so by the
+// time flushMsg is handled the frame is in place.
+func flushCmd() tea.Msg { return flushMsg{} }
+
+// handleFlush writes the frame kickFlush asked for, if it asked.
+func (m *OS) handleFlush() {
+	if !m.frameRate.kickWanted {
 		return
 	}
-	ticker := programTicker(m.frameRate.program)
-	if ticker == nil {
-		return
+	m.frameRate.kickWanted = false
+	if ticker := programTicker(m.frameRate.program); ticker != nil {
+		sendTick(ticker)
 	}
-	time.AfterFunc(flushKickDelay, func() { sendTick(ticker) })
 }
 
 // sendTick delivers one tick on ticker's channel, unless one is already
