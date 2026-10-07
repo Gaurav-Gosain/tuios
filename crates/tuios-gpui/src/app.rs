@@ -60,6 +60,8 @@ const SCROLLBAR: Duration = Duration::from_millis(600);
 const SCROLLBAR_FADE: Duration = Duration::from_millis(150);
 /// Nothing shows for a connection faster than this.
 const CONNECT_QUIET: Duration = Duration::from_millis(400);
+/// A pane without focus drops its row caches after this long unchanged.
+const IDLE_CACHE: Duration = Duration::from_secs(30);
 /// Cursor blink, on and off.
 const BLINK: Duration = Duration::from_millis(600);
 
@@ -471,7 +473,10 @@ impl TuiosApp {
         !self.cursor_blinks() || (self.last_input.elapsed().as_millis() / BLINK.as_millis()) % 2 == 0
     }
 
-    /// Redraws the sidebar once a minute, when an age label may change.
+    /// Redraws the sidebar once a minute, when an age label may change, and
+    /// drops the row caches of panes that are not focused and have not
+    /// changed for `IDLE_CACHE`. They keep their history, and a later paint
+    /// builds the rows again.
     fn tick_ages(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             loop {
@@ -480,6 +485,12 @@ impl TuiosApp {
                 let alive = this.update(cx, |this, cx| {
                     if this.attached.iter().chain(this.fleet.iter()).any(|p| p.status.is_agent() && p.since_ms > 0) {
                         this.refresh_sidebar(cx);
+                    }
+                    let focused = this.focused_pty();
+                    for (pty, p) in this.panes.iter_mut() {
+                        if focused.as_deref() != Some(pty.as_str()) && p.changed_at.elapsed() >= IDLE_CACHE {
+                            p.painter.clear();
+                        }
                     }
                 });
                 if alive.is_err() {

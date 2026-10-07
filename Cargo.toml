@@ -22,4 +22,13 @@ opt-level = 1
 opt-level = 2
 
 [profile.release]
-debug = "line-tables-only"
+# No debug info in the shipped binary: it was 242 MB with line tables. The
+# symbol table stays, so profilers still name functions.
+debug = false
+strip = "debuginfo"
+
+# Full debug info, for profiling: cargo build --profile profiling
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"

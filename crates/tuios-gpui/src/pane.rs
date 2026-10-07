@@ -28,13 +28,16 @@ pub struct Pane {
     /// Whether the last frame drew the pane. A hidden pane drops its row
     /// caches; it keeps its history.
     pub shown: bool,
+    /// When output last changed the pane. A pane without focus that has not
+    /// changed for a while drops its row caches too.
+    pub changed_at: Instant,
 }
 
 impl Pane {
     pub fn new(cols: u16, rows: u16, theme: &Theme, scrollback: usize) -> Self {
         let mut term = Terminal::new(cols.max(1), rows.max(1), scrollback).expect("ghostty terminal");
         apply_theme(&mut term, theme);
-        Pane { term, painter: PanePainter::default(), scroll_px: 0., scroll_pending: 0., bytes_in: 0, scrollback, scrolled_at: None, shown: false }
+        Pane { term, painter: PanePainter::default(), scroll_px: 0., scroll_pending: 0., bytes_in: 0, scrollback, scrolled_at: None, shown: false, changed_at: Instant::now() }
     }
 
     /// Starts over from a snapshot: a blank emulator of the given size, then
@@ -47,12 +50,14 @@ impl Pane {
         term.write(bytes);
         self.term = term;
         self.painter.clear();
+        self.changed_at = Instant::now();
         self.scroll_px = 0.;
         self.scroll_pending = 0.;
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
         self.bytes_in += bytes.len() as u64;
+        self.changed_at = Instant::now();
         self.term.write(bytes);
     }
 

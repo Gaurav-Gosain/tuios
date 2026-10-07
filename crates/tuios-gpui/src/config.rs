@@ -13,8 +13,10 @@
 //! text_contrast = 2.0              # 0 to 4, extra stem weight for grayscale
 //! scrollback = 3000                # lines of history per pane
 //! reduce_motion = false
-//! gpu = "auto"                     # or "integrated": the integrated GPU's
-//!                                  # Vulkan driver only, which saves memory
+//! gpu = "auto"                     # the integrated GPU when it drives the
+//!                                  # displays, which saves memory;
+//!                                  # "integrated" uses it whenever there is
+//!                                  # one; "any" loads every Vulkan driver
 //! theme = "tokyonight"             # overrides tuios's own [appearance] theme
 //! ```
 //!
@@ -46,24 +48,67 @@ pub struct GuiFile {
     pub gpu: Option<String>,
 }
 
-/// The Vulkan driver manifests of integrated GPUs on this machine, for
-/// `gpu = "integrated"`: Intel's and AMD's open drivers. On a machine with
-/// a discrete GPU, loading only these keeps the discrete driver (about
-/// 100 MB of mappings) out of the process.
-pub fn integrated_vulkan_drivers() -> Vec<std::path::PathBuf> {
+/// The Vulkan driver manifests of the integrated GPUs on this machine:
+/// Intel's and AMD's open drivers, each only when a GPU of that vendor is
+/// present. On a machine with a discrete GPU, loading only these keeps the
+/// discrete driver (about 100 MB of mappings) out of the process.
+///
+/// With `auto` set, they are returned only when the integrated GPU drives
+/// every connected display and a second GPU is present. A window drawn on
+/// one GPU and shown by a compositor on another can come up black, as it
+/// does with an NVIDIA card driving the displays.
+pub fn integrated_vulkan_drivers(auto: bool) -> Vec<std::path::PathBuf> {
+    let integrated = |v: &u32| *v == 0x8086 || *v == 0x1002;
+    let (vendors, displays) = gpu_vendors();
+    if auto && (displays.is_empty() || !displays.iter().all(integrated) || vendors.iter().all(integrated)) {
+        return Vec::new();
+    }
     let mut out = Vec::new();
     for dir in ["/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d"] {
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_lowercase();
+            if !name.ends_with(".json") {
+                continue;
+            }
             // Intel's current driver, not the old hasvk one for pre-Gen8.
-            if (name.starts_with("intel_icd") || name.starts_with("radeon_icd")) && name.ends_with(".json") {
+            let intel = name.starts_with("intel_icd") && vendors.contains(&0x8086);
+            let amd = name.starts_with("radeon_icd") && vendors.contains(&0x1002);
+            if intel || amd {
                 out.push(e.path());
             }
         }
     }
     out.sort();
     out
+}
+
+/// The PCI vendor ids of the GPUs the kernel knows, and of those with a
+/// connected display.
+fn gpu_vendors() -> (Vec<u32>, Vec<u32>) {
+    let (mut all, mut displays) = (Vec::new(), Vec::new());
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else { return (all, displays) };
+    let names: Vec<String> = entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    for card in names.iter().filter(|n| n.starts_with("card") && !n.contains('-')) {
+        let base = std::path::Path::new("/sys/class/drm").join(card);
+        let Some(vendor) = std::fs::read_to_string(base.join("device/vendor")).ok().and_then(|v| u32::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok()) else {
+            continue;
+        };
+        all.push(vendor);
+        let prefix = format!("{card}-");
+        let connected = names
+            .iter()
+            .filter(|n| n.starts_with(&prefix))
+            .any(|n| std::fs::read_to_string(std::path::Path::new("/sys/class/drm").join(n).join("status")).is_ok_and(|s| s.trim() == "connected"));
+        if connected {
+            displays.push(vendor);
+        }
+    }
+    for v in [&mut all, &mut displays] {
+        v.sort();
+        v.dedup();
+    }
+    (all, displays)
 }
 
 #[derive(Debug, Default, Deserialize)]

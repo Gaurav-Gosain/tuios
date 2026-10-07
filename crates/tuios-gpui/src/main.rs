@@ -104,12 +104,17 @@ fn main() {
     if !user_contrast {
         cfg.env.push((CONTRAST_VAR.into(), String::new()));
     }
-    // The integrated GPU only, when asked: the Vulkan loader then never
-    // loads the discrete GPU's driver. Panes keep the user's own setting.
-    if file.gpu.as_deref() == Some("integrated") && std::env::var_os("VK_DRIVER_FILES").is_none() {
-        let drivers = config::integrated_vulkan_drivers();
+    // The integrated GPU only, by default when it drives the displays: the
+    // Vulkan loader then never loads the discrete GPU's driver, which saves
+    // about 5 MB of heap and 100 MB of mappings. `gpu = "any"` keeps every
+    // driver. Panes keep the user's own setting.
+    let gpu = file.gpu.as_deref().unwrap_or("auto");
+    if (gpu == "integrated" || gpu == "auto") && std::env::var_os("VK_DRIVER_FILES").is_none() {
+        let drivers = config::integrated_vulkan_drivers(gpu == "auto");
         if drivers.is_empty() {
-            eprintln!("tuios-gpui: gpu = \"integrated\", but no integrated Vulkan driver is installed");
+            if gpu == "integrated" {
+                eprintln!("tuios-gpui: gpu = \"integrated\", but no integrated GPU with a Vulkan driver was found");
+            }
         } else {
             let list = std::env::join_paths(&drivers).unwrap_or_default();
             // SAFETY: nothing else runs yet.
