@@ -997,11 +997,7 @@ func (m *OS) View() tea.View {
 		return m.crashView()
 	}
 
-	// Fast path: return cached content when frame-skip determined nothing changed.
-	// This avoids the expensive GetCanvas → ultraviolet render pipeline on idle ticks.
-	if m.renderSkipped && m.cachedViewContent != "" {
-		view.SetContent(m.cachedViewContent)
-	} else {
+	compose := func() bool {
 		// A resize drag applies the new geometry to the windows immediately but
 		// defers the matching BSP ratio sync, because the sync is whole-tree
 		// work and motion events outnumber frames. The separator overlay reads
@@ -1022,12 +1018,14 @@ func (m *OS) View() tea.View {
 			// the next one: the panic is in the compositor, so the next frame
 			// would fail the same way and the user would sit in front of a
 			// screen that never changed.
-			return m.crashView()
+			return false
 		}
 		// A frame to flush: the frame ticker runs at the frame rate again.
 		// It goes out now rather than at its next tick, unless it equals the
 		// last one; see below.
-		composed = content != m.cachedViewContent
+		if content != m.cachedViewContent {
+			composed = true
+		}
 		m.cachedViewContent = content
 		m.noteFrame()
 		// This frame carries the beam at the pointer's newest position, so the
@@ -1037,6 +1035,20 @@ func (m *OS) View() tea.View {
 		m.spotlightMotionPending = false
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
+		return true
+	}
+
+	// Fast path: return cached content when frame-skip determined nothing changed.
+	// This avoids the expensive GetCanvas → ultraviolet render pipeline on idle ticks.
+	//
+	// The cursor is read fresh on every frame, the skipped ones too, so a
+	// cached frame can carry a picture-in-picture box placed for where the
+	// cursor was. Such a frame is composed again rather than reused: the box
+	// must never cover the cursor the same frame shows.
+	if m.renderSkipped && m.cachedViewContent != "" && !m.pipCoversCursor(m.getRealCursor()) {
+		view.SetContent(m.cachedViewContent)
+	} else if !compose() {
+		return m.crashView()
 	}
 
 	view.AltScreen = true
@@ -1060,6 +1072,16 @@ func (m *OS) View() tea.View {
 	view.DisableBracketedPasteMode = false
 	view.KeyboardEnhancements = m.keyboardEnhancements()
 	view.Cursor = m.getRealCursor()
+	// The emulator's cursor can move between the read the composed frame
+	// placed the picture-in-picture box by and the read above, since pane
+	// output is written on another goroutine. When the move took it under the
+	// box, the frame is composed once more, around the cursor it will show.
+	if m.pipCoversCursor(view.Cursor) {
+		if !compose() {
+			return m.crashView()
+		}
+		view.Cursor = m.getRealCursor()
+	}
 	// The title of the terminal tuios runs in, when a tool set one through
 	// herdr's client.window_title.set. Empty leaves the title alone.
 	view.WindowTitle = m.ClientTitle

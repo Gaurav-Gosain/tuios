@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -216,7 +217,12 @@ func (m *OS) pipRegion() image.Rectangle {
 // edge. It is empty when no cursor is drawn, which is the case in window mode
 // and under an open panel.
 func (m *OS) pipKeepClear() image.Rectangle {
-	c := m.getRealCursor()
+	return m.pipKeepClearAt(m.getRealCursor())
+}
+
+// pipKeepClearAt is pipKeepClear for the cursor c, as getRealCursor returned
+// it.
+func (m *OS) pipKeepClearAt(c *tea.Cursor) image.Rectangle {
 	if c == nil {
 		return image.Rectangle{}
 	}
@@ -231,6 +237,16 @@ func (m *OS) pipKeepClear() image.Rectangle {
 		left = min(left, c.X)
 	}
 	return image.Rect(left, c.Y, c.X+1, c.Y+1)
+}
+
+// pipCoversCursor reports whether the box, where the last composed frame drew
+// it, covers what the view keeps clear around the cursor c. View composes a
+// frame again when it does, rather than show c under the box.
+func (m *OS) pipCoversCursor(c *tea.Cursor) bool {
+	if m.pip.rect.Empty() || c == nil {
+		return false
+	}
+	return m.pip.rect.Overlaps(m.pipKeepClearAt(c))
 }
 
 // PinPiP pins the pane with this id as the picture-in-picture view, in place
