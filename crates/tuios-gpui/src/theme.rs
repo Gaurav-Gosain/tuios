@@ -220,13 +220,15 @@ impl Theme {
         let (border_c, border_a, hair_a, scrim_a, dim);
         let mut ink;
         if light {
-            base = mix32(bg, 0xffffff, 0.55);
+            // The stage is the brightest surface: the shell is a step darker,
+            // and the field and the palette are lighter still.
+            base = mix32(bg, 0x000000, 0.04);
             hover = mix32(base, 0x000000, 0.03);
-            selected = mix32(base, 0x000000, 0.08);
-            field = mix32(base, 0x000000, 0.035);
-            raised = mix32(bg, 0xffffff, 0.75);
+            selected = mix32(base, 0x000000, 0.07);
+            field = mix32(base, 0xffffff, 0.5);
+            raised = mix32(bg, 0xffffff, 0.85);
             raised_sel = mix32(raised, 0x000000, 0.06);
-            (border_c, border_a, hair_a, scrim_a, dim) = (0x000000, 0.12, 0.09, 0.18, 0.20);
+            (border_c, border_a, hair_a, scrim_a, dim) = (0x000000, 0.16, 0.14, 0.18, 0.12);
             ink = desaturate(fg, 0.12);
         } else {
             base = mix32(bg, 0x000000, 0.30);
@@ -235,14 +237,19 @@ impl Theme {
             field = mix32(base, fg, 0.045);
             raised = mix32(bg, fg, 0.045);
             raised_sel = mix32(raised, fg, 0.075);
-            (border_c, border_a, hair_a, scrim_a, dim) = (fg, 0.10, 0.07, 0.45, 0.30);
+            (border_c, border_a, hair_a, scrim_a, dim) = (fg, 0.13, 0.12, 0.45, 0.30);
             ink = desaturate(fg, 0.45);
         }
         let grounds = [base, stage, hover, selected, field, raised];
         let worst = grounds.iter().copied().min_by(|a, b| contrast(ink, *a).total_cmp(&contrast(ink, *b))).unwrap_or(stage);
         if light {
-            while contrast(ink, worst) < 11. {
-                ink = mix32(ink, 0x000000, 0.02);
+            // 10.5: on the darker shell, 2 % steps stall just under 11.
+            while contrast(ink, worst) < 10.5 {
+                let next = mix32(ink, 0x000000, 0.02);
+                if next == ink {
+                    break;
+                }
+                ink = next;
             }
         }
         let fill = |c: u32| mix32(base, c, 0.14);
@@ -372,13 +379,13 @@ mod tests {
     fn light_tokens_match_the_spec() {
         let t = light();
         for (got, want, name) in [
-            (t.base, 0xf2f2f4, "base"),
-            (t.field, 0xeaeaeb, "field"),
-            (t.selected, 0xdfdfe0, "selected"),
-            (t.raised, 0xf8f8f9, "raised"),
-            (t.text, 0x26282e, "text"),
-            (t.text2, 0x606166, "text2"),
-            (t.text3, 0x7b7c80, "text3"),
+            (t.base, 0xd8d9de, "base"),
+            (t.field, 0xececee, "field"),
+            (t.selected, 0xc9cace, "selected"),
+            (t.raised, 0xfafbfb, "raised"),
+            (t.text, 0x191b21, "text"),
+            (t.text2, 0x53545a, "text2"),
+            (t.text3, 0x6d6e74, "text3"),
         ] {
             assert!(near(got, want), "{name}: {got:06x}, spec {want:06x}");
         }
@@ -389,10 +396,12 @@ mod tests {
             for (c, n) in [(t.need, "need"), (t.done, "done"), (t.err, "err")] {
                 assert!(contrast(c, g) >= 2.9, "{n} {c:06x} on {g:06x}");
             }
-            assert!(contrast(t.text, g) >= 10.9);
+            assert!(contrast(t.text, g) >= 10.4);
             assert!(contrast(t.text2, g) >= 4.5);
         }
         assert!(contrast(t.need_ink, t.need_fill) >= 4.5);
+        // The stage is the brightest surface the panes sit on.
+        assert!(lum(t.stage) > lum(t.base) && lum(t.stage) > lum(t.selected));
     }
 
     #[test]

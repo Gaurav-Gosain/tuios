@@ -28,17 +28,18 @@ def tokens(bg, fg, accent, need, done, err, light):
         T["field"] = mix(T["base"], fg, 0.045)
         T["raised"] = mix(bg, fg, 0.045)
         T["raised_sel"] = mix(T["raised"], fg, 0.075)
-        border_c, border_a, hair_a, scrim_a = fg, 0.10, 0.07, 0.45
+        border_c, border_a, hair_a, scrim_a = fg, 0.13, 0.12, 0.45
         ink = desaturate(fg, 0.45)
     else:
-        T["base"] = mix(bg, "#ffffff", 0.55)
+        # The stage is the brightest surface: the shell is a step darker.
+        T["base"] = mix(bg, "#000000", 0.04)
         T["stage"] = bg
         T["hover"] = mix(T["base"], "#000000", 0.03)
-        T["selected"] = mix(T["base"], "#000000", 0.08)
-        T["field"] = mix(T["base"], "#000000", 0.035)
-        T["raised"] = mix(bg, "#ffffff", 0.75)
+        T["selected"] = mix(T["base"], "#000000", 0.07)
+        T["field"] = mix(T["base"], "#ffffff", 0.5)
+        T["raised"] = mix(bg, "#ffffff", 0.85)
         T["raised_sel"] = mix(T["raised"], "#000000", 0.06)
-        border_c, border_a, hair_a, scrim_a = "#000000", 0.12, 0.09, 0.18
+        border_c, border_a, hair_a, scrim_a = "#000000", 0.16, 0.14, 0.18
         ink = desaturate(fg, 0.12)
     T["border"] = over(border_c, T["stage"], border_a)
     T["border_raised"] = over(border_c, T["raised"], border_a)
@@ -47,7 +48,9 @@ def tokens(bg, fg, accent, need, done, err, light):
     grounds = [T[k] for k in ("base", "stage", "hover", "selected", "field", "raised")]
     worst = min(grounds, key=lambda g: contrast(ink, g))
     if light:
-        while contrast(ink, worst) < 11:
+        # 10.5, not 11: with the shell darker than the stage, 2 % steps
+        # stall just under 11 on `selected`.
+        while contrast(ink, worst) < 10.5 and mix(ink, "#000000", 0.02) != ink:
             ink = mix(ink, "#000000", 0.02)
     T["text"] = ink
     T["text2"] = toward_target(ink, worst, 4.6)
