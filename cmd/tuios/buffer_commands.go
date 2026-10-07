@@ -126,9 +126,14 @@ panes of that session that hold the read grant may read it too.
 				if len(args) == 0 && term.IsTerminal(int(os.Stdin.Fd())) {
 					return errors.New("set-buffer: give the text as an argument, or pipe it in: echo hi | tuios set-buffer")
 				}
-				data, err := io.ReadAll(io.LimitReader(os.Stdin, maxSetBufferInput))
+				// One byte past the limit says the input was longer, so it
+				// is refused and never stored cut short.
+				data, err := io.ReadAll(io.LimitReader(os.Stdin, maxSetBufferInput+1))
 				if err != nil {
 					return fmt.Errorf("read the standard input: %w", err)
+				}
+				if len(data) > maxSetBufferInput {
+					return fmt.Errorf("set-buffer: the standard input is longer than %d MiB. Nothing was stored", maxSetBufferInput>>20)
 				}
 				text = string(data)
 			}
@@ -316,7 +321,11 @@ func bufferContent(raw json.RawMessage) (name, data string, version uint64, err 
 }
 
 func runShowBuffer(name string, jsonOutput bool) error {
-	raw, err := callBufferVerb("show-buffer", bufferNameParams(name))
+	params := bufferNameParams(name)
+	if !jsonOutput {
+		params["encoding"] = "base64"
+	}
+	raw, err := callBufferVerb("show-buffer", params)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}
@@ -416,7 +425,9 @@ func runPasteBuffer(name, sessionName, window string, del, rawText, jsonOutput b
 	}
 	// The buffers are this machine's, and the pane is on another one: the
 	// text goes there as a paste.
-	raw, err := callBufferVerb("show-buffer", bufferNameParams(name))
+	params := bufferNameParams(name)
+	params["encoding"] = "base64"
+	raw, err := callBufferVerb("show-buffer", params)
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
 	}

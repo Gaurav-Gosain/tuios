@@ -670,7 +670,9 @@ Each buffer records the session that you copied it in. A buffer can hold a
 secret that you copied, so from inside a pane, reading the buffers needs the
 `read` grant and changing them needs `write`. Pasting a buffer needs both. A
 pane without `admin` sees only the buffers of the sessions it may read, and
-not the buffers that you set from outside every pane. See
+not the buffers that you set from outside every pane. It cannot change or
+replace a buffer that you set, and it cannot make a named buffer, so a name
+you keep a command under stays yours. See
 [What a pane may do](#what-a-pane-may-do).
 
 ## Master-stack layout

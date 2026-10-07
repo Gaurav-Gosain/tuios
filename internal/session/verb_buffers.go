@@ -68,37 +68,45 @@ func (d *Daemon) bufferStore() *pastebuf.Store {
 }
 
 // bufferAccess says who the caller on cs is to the buffers: the owner a
-// buffer it sets gets, and the filter of the buffers it may see. session is
-// the session a caller outside every pane names, which a yank from a client
-// does; a pane's own session is used for a pane whatever it names.
-func (d *Daemon) bufferAccess(cs *connState, session string) (pastebuf.Owner, pastebuf.Filter) {
+// buffer it sets gets, the filter of the buffers it may see, and the filter
+// of the buffers it may change. session is the session a caller outside every
+// pane names, which a yank from a client does; a pane's own session is used
+// for a pane whatever it names.
+//
+// A pane without admin sees the buffers of the sessions it may read. It may
+// change only the ones a pane set there, never one the person set, and it
+// may not make a named buffer: pastebuf.Store.Set answers a name it may not
+// change exactly as it answers a missing one, so it learns nothing of a
+// buffer it cannot see, and the person's buffer of that name stays theirs.
+func (d *Daemon) bufferAccess(cs *connState, session string) (owner pastebuf.Owner, see, change pastebuf.Filter) {
 	if cs != nil && cs.viaLink {
 		// The link policy already held the call (list to read, write to
 		// change). The buffer is marked as the link's.
-		return pastebuf.Owner{Pane: "link"}, nil
+		return pastebuf.Owner{Pane: "link"}, nil, nil
 	}
 	pa := d.paneAuthority(cs)
 	if pa == nil {
-		owner := pastebuf.Owner{}
 		if session != "" {
 			if s, _ := d.manager.ResolveSession(session); s != nil {
 				owner.Session = s.ID
 			}
 		}
-		return owner, nil
+		return owner, nil, nil
 	}
-	owner := pastebuf.Owner{Session: pa.sessionID, Pane: pa.window}
+	owner = pastebuf.Owner{Session: pa.sessionID, Pane: pa.window}
 	if pa.grants.Has(GrantAdmin) {
-		return owner, nil
+		return owner, nil, nil
 	}
 	own := pa.session
 	if pa.sessionID != "" {
 		own = d.sessionNameByID(pa.sessionID)
 	}
-	return owner, func(b pastebuf.Buffer) bool {
+	see = func(b pastebuf.Buffer) bool {
 		name := d.sessionNameByID(b.Owner.Session)
 		return name != "" && d.sessionInScope(own, name)
 	}
+	change = func(b pastebuf.Buffer) bool { return b.Owner.Pane != "" && see(b) }
+	return owner, see, change
 }
 
 // forSession narrows f to what the paste key takes for session: the
@@ -134,8 +142,6 @@ func (d *Daemon) bufferError(verb string, err error) *verbError {
 		})
 	case errors.Is(err, pastebuf.ErrBadName):
 		return invalidParam("name", verb+": "+err.Error())
-	case errors.Is(err, pastebuf.ErrEmpty):
-		return invalidParam("data", verb+": "+err.Error())
 	case errors.Is(err, pastebuf.ErrTooLarge):
 		_, maxBytes := d.bufferStore().Limits()
 		return hintedVerbError(ErrVerbInvalidParams, verb+": "+err.Error(), &VerbHint{
@@ -180,7 +186,7 @@ func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *v
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	_, f := d.bufferAccess(cs, "")
+	_, f, _ := d.bufferAccess(cs, "")
 	if p.ForSession != "" {
 		f = d.forSession(f, p.ForSession)
 	}
@@ -225,11 +231,15 @@ func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *ve
 		Name       string `json:"name"`
 		ForSession string `json:"for_session"`
 		Version    uint64 `json:"version"`
+		Encoding   string `json:"encoding"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	_, f := d.bufferAccess(cs, "")
+	if p.Encoding != "" && p.Encoding != "base64" {
+		return nil, invalidParam("encoding", "encoding is base64, or left out for both data and data_b64", "base64")
+	}
+	_, f, _ := d.bufferAccess(cs, "")
 	if p.ForSession != "" {
 		f = d.forSession(f, p.ForSession)
 	}
@@ -239,7 +249,11 @@ func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *ve
 	}
 	row := d.bufferRow(b)
 	row["type"] = "buffer"
-	row["data"] = b.Data
+	if p.Encoding == "" {
+		// The text too, for a caller from before data_b64. A caller that
+		// reads data_b64 asks for it alone, and the reply is not doubled.
+		row["data"] = b.Data
+	}
 	row["data_b64"] = base64.StdEncoding.EncodeToString([]byte(b.Data))
 	return row, nil
 }
@@ -248,6 +262,7 @@ func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *ve
 // until the last part, so a half-sent buffer is never pasted, and a part is
 // never added to some older buffer.
 type bufferUpload struct {
+	id      string
 	data    []byte
 	touched time.Time
 }
@@ -255,44 +270,72 @@ type bufferUpload struct {
 // bufferUploadTTL is how long an upload waits for its next part.
 const bufferUploadTTL = time.Minute
 
-// maxBufferUploads bounds the uploads in progress across every connection.
-const maxBufferUploads = 16
-
-// uploadPart adds part to the upload id on cs, and returns the whole content
-// when this is the last part. The key holds cs, so one connection cannot add
-// to another's upload.
+// uploadPart adds part to the upload id of the connection cs, and returns
+// the whole content when this is the last part.
+//
+// The memory unfinished uploads hold is bounded. A connection has at most
+// one: a part with another id starts over and drops the first. All of them
+// together hold at most maxBytes, the byte cap of the buffers, and a part past
+// it is refused and drops its own upload, never another connection's. An
+// upload is dropped when its connection closes (dropUploads) and after
+// bufferUploadTTL without a part.
 func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, maxBytes int) ([]byte, *verbError) {
-	key := fmt.Sprintf("%p/%s", cs, id)
 	d.uploadsMu.Lock()
 	defer d.uploadsMu.Unlock()
 	if d.uploads == nil {
-		d.uploads = map[string]*bufferUpload{}
+		d.uploads = map[*connState]*bufferUpload{}
 	}
 	now := time.Now()
-	for k, u := range d.uploads {
+	total := 0
+	for c, u := range d.uploads {
 		if now.Sub(u.touched) > bufferUploadTTL {
-			delete(d.uploads, k)
+			delete(d.uploads, c)
+			continue
+		}
+		if c != cs {
+			total += len(u.data)
 		}
 	}
-	u := d.uploads[key]
-	if u == nil {
-		if len(d.uploads) >= maxBufferUploads {
-			return nil, newVerbError(ErrVerbInvalidParams, "set-buffer: too many uploads in progress; try again in a minute")
-		}
-		u = &bufferUpload{}
-		d.uploads[key] = u
+	u := d.uploads[cs]
+	if u == nil || u.id != id {
+		u = &bufferUpload{id: id}
+		d.uploads[cs] = u
 	}
 	u.touched = now
 	if len(u.data)+len(part) > maxBytes {
-		delete(d.uploads, key)
+		delete(d.uploads, cs)
 		return nil, d.bufferError("set-buffer", fmt.Errorf("%w: more than %d bytes", pastebuf.ErrTooLarge, maxBytes))
+	}
+	if total+len(u.data)+len(part) > maxBytes {
+		delete(d.uploads, cs)
+		return nil, hintedVerbError(ErrVerbInvalidParams, "set-buffer: other uploads in progress hold as much as the paste buffers may", &VerbHint{
+			Detail: "Nothing was stored. Send the content again when the other uploads end.",
+		})
 	}
 	u.data = append(u.data, part...)
 	if !last {
 		return nil, nil
 	}
-	delete(d.uploads, key)
+	delete(d.uploads, cs)
 	return u.data, nil
+}
+
+// dropUploads drops the unfinished upload of a connection that closed.
+func (d *Daemon) dropUploads(cs *connState) {
+	d.uploadsMu.Lock()
+	delete(d.uploads, cs)
+	d.uploadsMu.Unlock()
+}
+
+// uploadBytes reports how many bytes unfinished uploads hold.
+func (d *Daemon) uploadBytes() int {
+	d.uploadsMu.Lock()
+	defer d.uploadsMu.Unlock()
+	n := 0
+	for _, u := range d.uploads {
+		n += len(u.data)
+	}
+	return n
 }
 
 // verbSetBuffer stores content in a buffer. The content comes as text in
@@ -337,13 +380,18 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 	} else if p.More {
 		return nil, invalidParam("more", "set-buffer: more needs upload, the id of the upload the part belongs to")
 	}
-	owner, f := d.bufferAccess(cs, p.Session)
-	b, err := store.Set(p.Name, data, p.Append, owner, f)
+	owner, _, change := d.bufferAccess(cs, p.Session)
+	b, err := store.Set(p.Name, data, p.Append, owner, change)
 	if err != nil {
 		return nil, d.bufferError("set-buffer", err)
 	}
+	if b.Name == "" {
+		// Empty content stores nothing and is no error, as in tmux.
+		return map[string]any{"type": "buffer_set", "stored": false}, nil
+	}
 	row := d.bufferRow(b)
 	row["type"] = "buffer_set"
+	row["stored"] = true
 	return row, nil
 }
 
@@ -359,8 +407,8 @@ func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	_, f := d.bufferAccess(cs, "")
-	b, err := d.bufferStore().Delete(p.Name, p.Version, f)
+	_, _, change := d.bufferAccess(cs, "")
+	b, err := d.bufferStore().Delete(p.Name, p.Version, change)
 	if err != nil {
 		return nil, d.bufferError("delete-buffer", err)
 	}
@@ -388,7 +436,7 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 		return nil, verr
 	}
 	store := d.bufferStore()
-	_, f := d.bufferAccess(cs, "")
+	_, f, change := d.bufferAccess(cs, "")
 	b, err := store.Get(p.Name, p.Version, f)
 	if err != nil {
 		return nil, d.bufferError("paste-buffer", err)
@@ -415,7 +463,7 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 	}
 	deleted := false
 	if p.Delete {
-		_, derr := store.Delete(b.Name, b.Version, f)
+		_, derr := store.Delete(b.Name, b.Version, change)
 		deleted = derr == nil
 	}
 	return map[string]any{
@@ -461,7 +509,9 @@ func bufferVerbs() map[string]verbEntry {
 		},
 		"show-buffer": {
 			description: "Return the content of one paste buffer. A buffer can hold any bytes: data_b64 carries them all, and data carries them as text. From a pane this needs the read grant, and reaches only the buffers of the sessions the pane may read.",
-			params:      []verbParam{nameParam("show"), forSession, version},
+			params: []verbParam{nameParam("show"), forSession, version,
+				{Name: "encoding", Type: "string", Description: "base64 to get data_b64 alone, without the text in data.", Accepted: []string{"base64"}},
+			},
 			returns: append(append([]verbParam{}, rowReturns...),
 				verbParam{Name: "data", Type: "string", Description: "The whole content as text. A byte that is not UTF-8 reads as U+FFFD here."},
 				verbParam{Name: "data_b64", Type: "string", Description: "The whole content, every byte, as base64."}),
@@ -472,7 +522,7 @@ func bufferVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbShowBuffer,
 		},
 		"set-buffer": {
-			description: "Store content in a paste buffer and put it on top. With no name a new buffer is made, append or not, as tmux does. When the buffers tuios named pass the limit, the oldest of them go; past the byte cap the oldest go whatever their name. From a pane this needs the write grant.",
+			description: "Store content in a paste buffer and put it on top. With no name a new buffer is made, append or not, as tmux does; a name makes the buffer a named one. Empty content stores nothing and is no error. When the buffers tuios named pass the limit, the oldest of them go; past the byte cap the oldest go whatever their name. From a pane this needs the write grant, and a pane without admin may set only a buffer a pane of its sessions set, or make a new one with no name.",
 			params: []verbParam{
 				{Name: "data", Type: "string", Description: "The content as text. Give data or data_b64. It may not be empty or larger than the byte cap."},
 				{Name: "data_b64", Type: "string", Description: "The content as base64, for any bytes. It wins over data."},
@@ -482,7 +532,8 @@ func bufferVerbs() map[string]verbEntry {
 				{Name: "append", Type: "bool", Description: "Add the text to the end of the buffer instead of replacing it.", Default: "false"},
 				{Name: "session", Type: "string", Description: "The session the text comes from, for a caller outside every pane such as a client's yank. A pane's own session is used for a pane."},
 			},
-			returns: rowReturns,
+			returns: append(append([]verbParam{}, rowReturns...),
+				verbParam{Name: "stored", Type: "bool", Description: "False when the content was empty and nothing was stored. The other fields are then absent."}),
 			examples: []string{
 				`{"id":1,"verb":"set-buffer","params":{"data":"make test"}}`,
 				`{"id":1,"verb":"set-buffer","params":{"name":"deploy","data":"kubectl rollout restart deploy/api"}}`,
@@ -490,7 +541,7 @@ func bufferVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSetBuffer,
 		},
 		"delete-buffer": {
-			description: "Delete a paste buffer. From a pane this needs the write grant, and reaches only the buffers of the sessions the pane may read.",
+			description: "Delete a paste buffer. From a pane this needs the write grant, and a pane without admin may delete only a buffer a pane of its sessions set.",
 			params: []verbParam{
 				nameParam("delete"),
 				version,

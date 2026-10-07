@@ -148,11 +148,15 @@ func (s *Shim) readBuffer(name string) (string, bool, error) {
 // is a new buffer the daemon names, and comes only from newBufferName when
 // the daemon holds the buffers.
 func (s *Shim) writeBuffer(name, data string) error {
+	if data == "" {
+		// tmux stores nothing for empty data, and says nothing.
+		return nil
+	}
 	if len(data) > maxBufferBytes {
 		return fmt.Errorf("buffer is too large: %d bytes, the limit is %d", len(data), maxBufferBytes)
 	}
 	if s.daemonBuffers() {
-		return s.daemonBufferWrite(name, data)
+		return s.daemonBufferWrite(name, data, false)
 	}
 	dir := s.bufferDir()
 	if dir == "" {
@@ -235,7 +239,10 @@ func (s *Shim) newBufferName() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	next := 0
+	// The number only goes up, as in tmux, so a deleted buffer's name is not
+	// given again. The count is kept beside the buffers, since every call is
+	// a process of its own.
+	next := s.loadBufferCount()
 	for _, b := range list {
 		if n, ok := strings.CutPrefix(b.name, "buffer"); ok {
 			if i, err := strconv.Atoi(n); err == nil && i >= next {
@@ -243,7 +250,43 @@ func (s *Shim) newBufferName() (string, error) {
 			}
 		}
 	}
+	s.saveBufferCount(next + 1)
 	return fmt.Sprintf("buffer%d", next), nil
+}
+
+// bufferCountFile holds the number of the next buffer name. Its name is not
+// hex, so buffers never takes it for a buffer.
+const bufferCountFile = "next"
+
+// loadBufferCount is the number the next buffer name starts from.
+func (s *Shim) loadBufferCount() int {
+	dir := s.bufferDir()
+	if dir == "" {
+		return s.memNext
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, bufferCountFile))
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// saveBufferCount keeps the number the next buffer name starts from. It is
+// best effort: losing it only lets a name come back after a delete.
+func (s *Shim) saveBufferCount(n int) {
+	dir := s.bufferDir()
+	if dir == "" {
+		s.memNext = n
+		return
+	}
+	if EnsureDir(s.Dir) != nil || EnsureDir(dir) != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, bufferCountFile), []byte(strconv.Itoa(n)), 0o600)
 }
 
 // topBuffer is the name of the newest automatic buffer, "" when there is
@@ -338,6 +381,14 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 		return OutcomeError, detail, err
 	}
 	if p.Has('a') && !newBuf {
+		if s.daemonBuffers() {
+			// The daemon appends in one step, so nothing set between a
+			// read and a write here is lost.
+			if err := s.daemonBufferWrite(buf, data, true); err != nil {
+				return OutcomeError, detail, fmt.Errorf("set-buffer: %w", err)
+			}
+			return outcomeFor(detail), detail, nil
+		}
 		old, _, err := s.readBuffer(buf)
 		if err != nil {
 			return OutcomeError, detail, err

@@ -2433,10 +2433,13 @@ content read.
   `buffers` (each with `name`, `bytes`, `created` in Unix nanoseconds,
   `version`, `automatic`, `sample`, `session`, and `pane` when a process in a
   pane set it), `total`, `bytes`, `limit` and `max_bytes`. `sample` is escaped
-  already, shows bytes that are not UTF-8 as `\xNN`, and never cuts a
-  character. `sample_width` is at most 200, and 60 when left out.
-- `show-buffer`: `name`, `for_session`, `version` (all optional). Returns the
-  row, `data` and `data_b64`. With `for_session`, only the person's own
+  already, the way tmux escapes it: `\n`, `\t`, `\r` and `\\`, and any other
+  byte that is not part of a printable character in octal, such as `\001`
+  and `\377`. It never cuts a character. `sample_width` is at most 200, and
+  60 when left out.
+- `show-buffer`: `name`, `for_session`, `version`, `encoding` (all
+  optional). Returns the row, `data` and `data_b64`. With `encoding` set to
+  `base64`, `data` is left out, so the reply is not doubled. With `for_session`, only the person's own
   buffers and the ones a pane of that session set count: this is what the
   paste key asks for.
 - `set-buffer`: `data` or `data_b64`, `name`, `append`, `session`, `upload`
@@ -2447,7 +2450,11 @@ content read.
   16 MiB, so a larger content goes as an upload: every part carries the same
   `upload` id on one connection, every part but the last has `more`, and the
   buffer is set once, from all parts, when the last arrives. Cut the parts
-  from the bytes before they are encoded.
+  from the bytes before they are encoded. A connection has one unfinished
+  upload at a time, all unfinished uploads together hold at most `max_bytes`,
+  and an upload goes when its connection closes. Empty content stores nothing
+  and is no error, and the result then has `stored` false. A name makes the
+  buffer a named one, also a name that was automatic.
 - `delete-buffer`: `name`, `version` (both optional). With `version`, the
   buffer is deleted only while it holds that content.
 - `paste-buffer`: `session`, `window`, `name`, `delete`, `raw` and `version`
@@ -2461,8 +2468,10 @@ A name that no buffer has, or the newest when there is none, answers
 grant, `set-buffer` and `delete-buffer` need `write`, and `paste-buffer` needs
 both and is held to the same target rules as `send-text`. A pane without
 `admin` reaches only the buffers of the sessions it may read, as if no other
-buffer were there, and names are unique among the buffers one caller sees: a
-name a hidden buffer holds makes a new buffer. A buffer set from outside every
+buffer were there. It may change only a buffer a pane of those sessions set,
+and it may not make a named buffer: `set-buffer` with any other name answers
+`no_buffer`, the same answer for a name the person holds as for a missing one.
+Names are unique, so no buffer can stand in for another. A buffer set from outside every
 pane belongs to no session. Over a link,
 reading needs the `list` capability and the rest need `write`.
 

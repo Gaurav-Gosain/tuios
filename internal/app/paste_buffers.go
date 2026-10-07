@@ -215,7 +215,7 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 		return m.handlePasteBufferFetched(PasteBufferFetchedMsg{Name: b.Name, Data: b.Data, Window: window, Err: err, asked: name, version: version})
 	}
 	call := m.bufferCall()
-	params := map[string]any{}
+	params := map[string]any{"encoding": "base64"}
 	if name != "" {
 		params["name"] = name
 	} else {

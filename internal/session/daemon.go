@@ -233,7 +233,7 @@ type Daemon struct {
 	buffersOnce sync.Once
 	// uploads are the buffers being sent in parts. See verb_buffers.go.
 	uploadsMu sync.Mutex
-	uploads   map[string]*bufferUpload
+	uploads   map[*connState]*bufferUpload
 
 	// bundles holds the worktree transfers bundle-worktree has open. Its zero
 	// value is ready. See verb_bundle_worktree.go.

@@ -57,8 +57,6 @@ const (
 var (
 	// ErrOff is the error of a store whose limit is 0.
 	ErrOff = errors.New("paste buffers are off: paste_buffers.limit is 0")
-	// ErrEmpty is the error of an add with no text.
-	ErrEmpty = errors.New("the text is empty")
 	// ErrNotFound is the error of a name no buffer has, or none the caller
 	// may see.
 	ErrNotFound = errors.New("no such buffer")
@@ -228,35 +226,47 @@ func (s *Store) Add(data string, owner Owner) (Buffer, error) {
 	return s.set("", data, false, owner, nil)
 }
 
-// Set stores data in the buffer called name that f sees, or in a new
-// automatic buffer when name is "". With appendTo the data goes after the
-// named buffer's content; with no name, appendTo makes a new buffer, as
-// tmux's set-buffer -a does. A name f sees no buffer of makes a new named
-// buffer, whatever f does not see. The buffer goes on top and is owner's from
-// now on.
-func (s *Store) Set(name, data string, appendTo bool, owner Owner, f Filter) (Buffer, error) {
+// Set stores data in the buffer called name, or in a new automatic buffer
+// when name is "". Names are unique: there is never a second buffer of one
+// name, so no buffer can stand in for another. A name set by a call is a
+// named buffer from then on, as in tmux, even when it was automatic.
+//
+// change says which buffers the caller may change. A nil change may change
+// any buffer and make a named one. A non-nil change may set only an existing
+// buffer it passes: any other name, one that is missing as well as one it may
+// not change, answers ErrNotFound, so the answer says nothing about a buffer
+// it cannot see. It may always make a new automatic buffer.
+//
+// With appendTo the data goes after the named buffer's content; with no
+// name, appendTo makes a new buffer, as tmux's set-buffer -a does. Empty data
+// stores nothing and is no error, as in tmux: the Buffer returned then has no
+// name. The buffer goes on top and is owner's from now on.
+func (s *Store) Set(name, data string, appendTo bool, owner Owner, change Filter) (Buffer, error) {
 	if name != "" && !ValidName(name) {
 		return Buffer{}, ErrBadName
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.set(name, data, appendTo, owner, f)
+	return s.set(name, data, appendTo, owner, change)
 }
 
 // set is Set with s.mu held.
-func (s *Store) set(name, data string, appendTo bool, owner Owner, f Filter) (Buffer, error) {
+func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter) (Buffer, error) {
 	if s.limit == 0 {
 		return Buffer{}, ErrOff
 	}
 	idx := -1
 	if name != "" {
-		idx = s.index(name, f)
+		idx = s.index(name)
+		if change != nil && (idx < 0 || !change(s.bufs[idx])) {
+			return Buffer{}, fmt.Errorf("%w: %s", ErrNotFound, name)
+		}
+	}
+	if data == "" {
+		return Buffer{}, nil
 	}
 	if appendTo && idx >= 0 {
 		data = s.bufs[idx].Data + data
-	}
-	if data == "" {
-		return Buffer{}, ErrEmpty
 	}
 	if len(data) > s.maxBytes {
 		return Buffer{}, fmt.Errorf("%w: %d bytes, the cap is %d", ErrTooLarge, len(data), s.maxBytes)
@@ -264,7 +274,6 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, f Filter) (Bu
 	s.version++
 	b := Buffer{Name: name, Data: data, Created: time.Now(), Owner: owner, Version: s.version}
 	if idx >= 0 {
-		b.Automatic = s.bufs[idx].Automatic
 		s.remove(idx)
 	} else if name == "" {
 		b.Name, b.Automatic = s.newName(), true
@@ -275,31 +284,33 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, f Filter) (Bu
 	return b, nil
 }
 
-// newName is the next free automatic name, bufferN as tmux names them.
+// newName is the next automatic name, bufferN as tmux names them. The
+// number only goes up, so a deleted buffer's name is not given again.
 // s.mu is held.
 func (s *Store) newName() string {
 	for {
 		name := fmt.Sprintf("buffer%d", s.next)
 		s.next++
-		if s.index(name, nil) < 0 {
+		if s.index(name) < 0 {
 			return name
 		}
 	}
 }
 
-// index is the position of the newest buffer called name that f sees, -1
-// for none. s.mu is held.
-func (s *Store) index(name string, f Filter) int {
+// index is the position of the buffer called name, -1 for none. s.mu is
+// held.
+func (s *Store) index(name string) int {
 	for i, b := range s.bufs {
-		if b.Name == name && f.sees(b) {
+		if b.Name == name {
 			return i
 		}
 	}
 	return -1
 }
 
-// find is the position of the buffer called name that f sees, or of the
-// newest automatic buffer f sees when name is "". s.mu is held.
+// find is the position of the buffer called name, when f sees it, or of the
+// newest automatic buffer f sees when name is "". A name f does not see
+// answers as a missing one. s.mu is held.
 func (s *Store) find(name string, f Filter) (int, error) {
 	if name == "" {
 		for i, b := range s.bufs {
@@ -309,7 +320,7 @@ func (s *Store) find(name string, f Filter) (int, error) {
 		}
 		return -1, ErrNone
 	}
-	if i := s.index(name, f); i >= 0 {
+	if i := s.index(name); i >= 0 && f.sees(s.bufs[i]) {
 		return i, nil
 	}
 	return -1, fmt.Errorf("%w: %s", ErrNotFound, name)
@@ -346,13 +357,13 @@ func (s *Store) List(f Filter) []Buffer {
 }
 
 // Delete removes the buffer called name, or the newest automatic one when
-// name is "", among the buffers f sees, and returns it. A nonzero version
+// name is "", among the buffers change passes, and returns it. A nonzero version
 // deletes the buffer only while its content is the one of that version, so
 // a delete after a paste never removes content set after the paste read it.
-func (s *Store) Delete(name string, version uint64, f Filter) (Buffer, error) {
+func (s *Store) Delete(name string, version uint64, change Filter) (Buffer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i, err := s.find(name, f)
+	i, err := s.find(name, change)
 	if err != nil {
 		return Buffer{}, err
 	}
@@ -364,22 +375,22 @@ func (s *Store) Delete(name string, version uint64, f Filter) (Buffer, error) {
 	return b, nil
 }
 
-// Sample is a buffer's content as one short line for a listing: control
-// characters and bytes that are not UTF-8 shown as escapes, cut to at most
-// width characters with an ellipsis. It never cuts a character. The result is
-// already escaped, so a caller prints it as it is.
+// Sample is a buffer's content as one short line for a listing, escaped the
+// way tmux escapes a sample: a line feed, tab, carriage return and backslash
+// in C style, and every other byte that is not part of a printable character
+// in octal, such as \001 and \377. It is cut to at most width characters with
+// "...", and never inside a character. The result is already escaped, so a
+// caller prints it as it is.
 func Sample(data string, width int) string {
 	var b strings.Builder
 	n := 0
 	for i := 0; i < len(data); {
 		if n >= width {
-			b.WriteString("…")
+			b.WriteString("...")
 			break
 		}
 		r, size := utf8.DecodeRuneInString(data[i:])
 		switch {
-		case r == utf8.RuneError && size == 1:
-			fmt.Fprintf(&b, `\x%02x`, data[i])
 		case r == '\n':
 			b.WriteString(`\n`)
 		case r == '\t':
@@ -388,11 +399,9 @@ func Sample(data string, width int) string {
 			b.WriteString(`\r`)
 		case r == '\\':
 			b.WriteString(`\\`)
-		case !unicode.IsPrint(r) && r != ' ':
-			if r < 0x10000 {
-				fmt.Fprintf(&b, `\u%04x`, r)
-			} else {
-				fmt.Fprintf(&b, `\U%08x`, r)
+		case (r == utf8.RuneError && size == 1) || (!unicode.IsPrint(r) && r != ' '):
+			for _, c := range []byte(data[i : i+size]) {
+				fmt.Fprintf(&b, `\%03o`, c)
 			}
 		default:
 			b.WriteRune(r)

@@ -66,8 +66,10 @@ type Shim struct {
 
 	// respawn delivers a respawn-pane request. Nil means RequestRespawn.
 	respawn func(dir, windowID string, req RespawnRequest) error
-	// memBuffers are the paste buffers of a shim with no runtime directory.
+	// memBuffers are the paste buffers of a shim with no runtime directory,
+	// and memNext the number of its next buffer name.
 	memBuffers []buffer
+	memNext    int
 	// bufMode says where the paste buffers are: in the daemon or the shim's
 	// own (buffers_daemon.go). It is found on first use.
 	bufMode int8

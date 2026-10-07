@@ -43,8 +43,10 @@ test enters the code below the fault, and the fault is what nobody is testing.
 ## Paste buffers (#514)
 
 `paste_buffers_test.go`, `paste_buffers_scope_test.go`,
-`paste_buffers_config_test.go` and `paste_buffers_bytes_test.go` have twelve
-tests, and eighteen controls. On
+`paste_buffers_config_test.go`, `paste_buffers_bytes_test.go` and
+`paste_buffers_rules_test.go` have sixteen tests and twenty-four controls. Two
+unit tests in `internal/session/verb_buffers_test.go` bound the memory of
+unfinished uploads, a security boundary, with three controls of their own. On
 2026-10-07 each control below cut one piece of wiring, built a binary, and ran
 the named test against it. Every control failed where shown, and the same
 tests passed on the branch build.
@@ -69,6 +71,15 @@ tests passed on the branch build.
 | `SanitizePaste` in `verbPasteBuffer` | `TestPasteBufferSendsNoEscapeSequences` | `^[[201~evil` reaches the pane inside the paste |
 | `BufferChooserActivate` pastes into the focused pane, not the one the chooser opened on | `TestPasteBufferChooserPastesWhereItOpened` | the paste lands in the pane that took the focus later |
 | The local save in `handlePasteBufferSaveFailed` | `TestPasteBuffersWithAnOldDaemon` | with a daemon that answers `unknown_verb`, prefix `]` shows no "Pasted" |
+| The change filter of `bufferAccess` (a pane may set any name) | `TestAPaneCannotReplaceThePersonsNamedBuffer` | the pane's `set-buffer -b deploy` exits 0, and `SHADOW=1` never prints |
+| `find` takes the newest buffer of any kind for no name | `TestPasteBufferNamesFollowTmux` | `show-buffer` prints `named-x`, not `auto-y` |
+| `trim` counts every buffer against the limit | `TestPasteBufferNamesFollowTmux` | under `limit = 2` the named buffer goes at the third buffer, so the `-a` check finds two |
+| `set-buffer -a` with no name appends to the newest buffer | `TestPasteBufferNamesFollowTmux` | `-a extra` lands in `named-x`, and no new buffer appears |
+| `PasteText` keeps every line feed | `TestPasteBufferTurnsLineFeedsIntoReturns` | `LFa^MLFb` never shows in `cat -v` |
+| The version cut from `pasteBufferNamed` | `TestPasteBufferChooserSkipsAChangedBuffer` | Enter pastes the new text, and "changed after the list" never shows |
+| The total check in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | two connections hold 1800 bytes under a cap of 1000 |
+| One upload per connection in `uploadPart` | `TestBufferUploadsHoldBoundedMemory` (unit) | after a second id the connection holds 902 bytes, want 2 |
+| `defer d.dropUploads(cs)` in `handleJSONConnection` | `TestAClosedConnectionDropsItsUpload` (unit) | the daemon still holds 4096 bytes 5 seconds after the connection closed |
 
 The grant test carries its positive halves: each refused call is served once
 the grant it names is given. The session test reads the other session's

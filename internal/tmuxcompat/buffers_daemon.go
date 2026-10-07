@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -81,12 +80,8 @@ func (s *Shim) daemonBufferList() ([]buffer, error) {
 	}
 	out := make([]buffer, 0, len(res.Buffers))
 	for _, b := range res.Buffers {
-		sample := b.Sample
-		if s, ok := strings.CutSuffix(sample, "…"); ok {
-			// The daemon cut it; tmux shows dots.
-			sample = s + "..."
-		}
-		out = append(out, buffer{name: b.Name, at: time.Unix(0, b.Created), size: b.Bytes, sample: sample, sampled: true, auto: b.Automatic})
+		// The daemon escapes and cuts the sample the way tmux does.
+		out = append(out, buffer{name: b.Name, at: time.Unix(0, b.Created), size: b.Bytes, sample: b.Sample, sampled: true, auto: b.Automatic})
 	}
 	return out, nil
 }
@@ -98,7 +93,7 @@ const sampleWidth = 200
 // daemonBufferRead reads one of the daemon's buffers, every byte: data_b64
 // carries them, where data would turn a byte that is not UTF-8 into U+FFFD.
 func (s *Shim) daemonBufferRead(name string) (string, bool, error) {
-	raw, err := s.Caller.Call("show-buffer", map[string]any{"name": name})
+	raw, err := s.Caller.Call("show-buffer", map[string]any{"name": name, "encoding": "base64"})
 	if isNoBuffer(err) {
 		return "", false, nil
 	}
@@ -126,46 +121,40 @@ func (s *Shim) daemonBufferRead(name string) (string, bool, error) {
 }
 
 // daemonBufferWrite sets one of the daemon's buffers, every byte, as base64.
-// An empty name makes a new buffer the daemon names. Content larger than one
-// part goes as an upload: the daemon sets the buffer once, when the last part
+// An empty name makes a new buffer the daemon names. With appendTo the
+// daemon adds the content to the named buffer. Content larger than one part
+// goes as an upload: the daemon sets the buffer once, when the last part
 // arrives, so a half-sent buffer is never there to paste. A part is cut from
 // the bytes before they are encoded, so no cut can split a character.
-func (s *Shim) daemonBufferWrite(name, data string) error {
-	if len(data) <= bufferChunk {
-		params := map[string]any{"data_b64": base64.StdEncoding.EncodeToString([]byte(data))}
-		if name != "" {
-			params["name"] = name
-		}
-		return s.daemonSet(params, data)
+func (s *Shim) daemonBufferWrite(name, data string, appendTo bool) error {
+	id := ""
+	if len(data) > bufferChunk {
+		id = strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
-	id := strconv.FormatInt(time.Now().UnixNano(), 36)
-	for rest := data; rest != ""; {
+	for rest := data; ; {
 		part := rest[:min(len(rest), bufferChunk)]
 		rest = rest[len(part):]
-		params := map[string]any{"data_b64": base64.StdEncoding.EncodeToString([]byte(part)), "upload": id}
+		params := map[string]any{"data_b64": base64.StdEncoding.EncodeToString([]byte(part))}
+		if id != "" {
+			params["upload"] = id
+		}
 		if rest != "" {
 			params["more"] = true
-		} else if name != "" {
-			params["name"] = name
+		} else {
+			if name != "" {
+				params["name"] = name
+			}
+			if appendTo {
+				params["append"] = true
+			}
 		}
 		if _, err := s.Caller.Call("set-buffer", params); err != nil {
 			return err
 		}
+		if rest == "" {
+			return nil
+		}
 	}
-	return nil
-}
-
-// daemonSet makes one set-buffer call. A daemon that does not read data_b64
-// sees no content and answers invalid_params; it gets the content as text,
-// which is all it can hold.
-func (s *Shim) daemonSet(params map[string]any, data string) error {
-	_, err := s.Caller.Call("set-buffer", params)
-	if isCode(err, "invalid_params") && strings.Contains(err.Error(), "empty") {
-		delete(params, "data_b64")
-		params["data"] = data
-		_, err = s.Caller.Call("set-buffer", params)
-	}
-	return err
 }
 
 // daemonBufferRemove deletes one of the daemon's buffers. A nonzero version

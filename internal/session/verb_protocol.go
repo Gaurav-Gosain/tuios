@@ -2203,6 +2203,8 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 	_ = cs.conn.SetReadDeadline(time.Time{})
 
 	LogBasic("Client %s using JSON verb protocol", cs.clientID)
+	// A buffer upload the connection did not finish goes with it.
+	defer d.dropUploads(cs)
 
 	sc := bufio.NewScanner(br)
 	// Cap a single request line at the same 16MB ceiling as a binary frame so a

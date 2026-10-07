@@ -1175,7 +1175,10 @@ turned them on. With a session on another machine, `paste-buffer` sends the
 text of a buffer from this machine.
 
 From inside a pane, reading the buffers needs the `read` grant, changing them
-needs `write`, and `paste-buffer` needs both.
+needs `write`, and `paste-buffer` needs both. A pane without `admin` changes
+only buffers a pane set, and cannot make a named buffer. `set-buffer` with
+empty text stores nothing and exits 0, as tmux does. Input longer than 64 MiB
+is refused, and nothing is stored.
 
 **Examples:**
 ```bash

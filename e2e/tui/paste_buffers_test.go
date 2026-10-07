@@ -338,7 +338,7 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 
 	// write alone: setting is served, reading and pasting are refused.
 	grant("write")
-	runInShell(t, term, "clear; "+bin+" set-buffer -b mine x; echo WRITE_SET=$?; "+bin+" paste-buffer -b secret; echo WRITE_PASTE=$?", "WRITE_PASTE=1", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; "+bin+" paste-buffer -b secret; echo WRITE_PASTE=$?", "WRITE_PASTE=1", shellTimeout)
 	text = term.Screen().Text()
 	if !strings.Contains(text, "WRITE_SET=0") {
 		t.Fatalf("a pane with write could not set a buffer\n%s", term.Snapshot())
@@ -349,7 +349,7 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 
 	// read and write: the paste is served.
 	grant("read,write")
-	runInShell(t, term, "clear; "+bin+" set-buffer -b cmd 'echo PASTE'\"\"'_OK'; "+bin+" paste-buffer -b cmd; echo", "PASTE_OK", shellTimeout)
+	runInShell(t, term, "clear; "+bin+" set-buffer 'echo PASTE'\"\"'_OK'; "+bin+" paste-buffer; echo", "PASTE_OK", shellTimeout)
 	saveFrame(t, term, "paste-buffers-grants")
 	alive(t, term, "after the grant checks")
 }
