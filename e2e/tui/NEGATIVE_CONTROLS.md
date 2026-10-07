@@ -3192,3 +3192,29 @@ The tests do not cover the `viewport` field with a session larger than the
 bridge, because the daemon's default `window_size = smallest` never makes one.
 `TestGUIBridgeSessionSize` asserts only that `viewport` stays unset while the
 session is the smaller.
+
+## The GUI bridge: the verb proxy, the Inbox and alerts
+
+`gui_bridge_inbox_test.go` runs a real `tuios gui-bridge` against a real
+daemon, with agents made of shell scripts in real panes. It checks the verb
+proxy and its nonce, the `attention`, `notify` and `detached` events, and
+that a process in a pane cannot answer an agent's prompt: not with
+`tuios respond`, and not through a bridge it starts itself. Set
+`TUIOS_E2E_FRAMES` to keep a JSON transcript of every verb and its result.
+
+On 2026-10-08 each control below was built from the commit that added the
+tests with one cut, and the named tests were run against it. The unbroken
+binary passed all three tests on the same day.
+
+| Wiring cut | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The bridge's nonce on a person verb | drop `params["human_nonce"] = nonce` from `verbParams` in `internal/guibridge/verb.go` | `TestGUIBridgeVerbAnswersOnlyFromTheRenderer` ("respond through the renderer pipe failed: not_human") | **caught** |
+| The `attention` event | drop the `m.exportAttention()` call from `model.Update` | `TestGUIBridgeAttentionCarriesARiskyApproval` (never sends the held approval) | **caught** |
+| Marking the renderer's own reply | drop the `m.os.NoteInboxReplied(id)` call from the `verb` case in `model.handle` | `TestGUIBridgeAttentionCarriesARiskyApproval` ("cleaner was answered from another client") | **caught** |
+| The `notify` event | drop the `m.exportNotify()` call from `model.Update` | `TestGUIBridgeNotifyAndDetached` (never sends the error's alert) | **caught** |
+| The `detached` event | drop the `out.JSON(Event{Type: "detached"...})` after `program.Run` in `Run` | `TestGUIBridgeNotifyAndDetached` (the bridge closed while waiting for it) | **caught** |
+
+A bridge started inside a pane gets no attach nonce from the daemon, so its
+proxy refuses a person verb before it sends it. No control cuts that refusal:
+it is the daemon's, and the daemon's own tests cover it. The test checks only
+that the result is `not_human` and that the agent got no key.

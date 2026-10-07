@@ -152,8 +152,11 @@ type guiBridge struct {
 	keybinds     *wireKeybinds
 	keybindsSeen int
 	results      map[int64]wireResult
-	closed       bool
-	req          int64
+	// events holds every event of another type, in the order it came, for
+	// the Inbox tests (gui_bridge_inbox_test.go).
+	events []json.RawMessage
+	closed bool
+	req    int64
 	// log is every command sent and every result, kept as the test's
 	// artifact.
 	log []string
@@ -274,6 +277,8 @@ func (b *guiBridge) read(r io.Reader) {
 			if ev.Result != nil {
 				b.results[ev.Result.Req] = *ev.Result
 			}
+		default:
+			b.events = append(b.events, body)
 		}
 		b.cond.Broadcast()
 		b.mu.Unlock()
