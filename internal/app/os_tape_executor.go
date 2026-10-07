@@ -1310,7 +1310,7 @@ func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 // parseKeyToMessage parses a single key or key combo into a tea.KeyPressMsg.
 func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	var mod tea.KeyMod
-	var code rune
+	var code, shifted rune
 	var text string
 
 	// Check if it's a key combo (contains +)
@@ -1419,6 +1419,14 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 			// Only set Text if there are no modifiers (otherwise String() ignores modifiers)
 			if mod == 0 {
 				text = string(code)
+				// A capital letter is the shifted key, as a terminal
+				// reports it: its text keeps the case, so "PREFIX P"
+				// reaches the binding for P and not the one for p.
+				if code != char {
+					text = string(char)
+					shifted = char
+					mod = tea.ModShift
+				}
 			}
 		} else {
 			// Unknown key, try as-is
@@ -1432,9 +1440,10 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	}
 
 	return tea.KeyPressMsg{
-		Code: code,
-		Text: text,
-		Mod:  mod,
+		Code:        code,
+		ShiftedCode: shifted,
+		Text:        text,
+		Mod:         mod,
 	}
 }
 

@@ -74,7 +74,8 @@ func TestParseKeyToMessage(t *testing.T) {
 	}{
 		// Basic keys
 		{"single letter", "a", "a", 0},
-		{"uppercase letter", "A", "a", 0}, // normalized to lowercase
+		// A capital is the shifted key, so it reaches the binding for A.
+		{"uppercase letter", "A", "A", tea.ModShift},
 		{"number", "5", "5", 0},
 
 		// Modifier combos

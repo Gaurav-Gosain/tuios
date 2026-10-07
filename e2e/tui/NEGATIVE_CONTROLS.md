@@ -2838,3 +2838,13 @@ It was run on 2026-10-07.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A glyph's foreground dims toward its own background | `drawImageSymbols`: `dimCell` in place of `dimGlyphCell` | `TestImageSymbolsDimEvenly`, all four subtests. The unfocused spread is 191 to 222 against a focused spread of 12 to 47, white (251,251,251) next to grey (129,130,135) at truecolor | **caught** |
+
+## Send-keys with a capital letter
+
+`TestSendKeysCapitalAfterPrefix` sends `PREFIX p` and then `PREFIX P` with
+`tuios send-keys`. The first must not open the command palette, and the
+second must open it.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The client's key parser lowercases a capital | `parseKeyToMessage`: the capital branch cut, so `P` is sent as `p` | `TestSendKeysCapitalAfterPrefix` (the palette does not open after `PREFIX P`) | **caught** |
