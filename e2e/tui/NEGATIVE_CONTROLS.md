@@ -2227,3 +2227,24 @@ component records its starts; unchanged sampler membership must not restart it.
 The same fixture then enables or places CPU: its sampler must start and the
 custom component must restart exactly once. Both layout cases pass on the fixed
 build. This patch does not change the clock's sampler lifecycle.
+
+## Home and End in copy mode (#515)
+
+`copy_mode_home_end_test.go` puts the copy cursor on the middle of a line.
+`TestCopyModeHomeAndEnd` requires `Home` and `End` to reach the columns `0`
+and `$` reach, and reads the clipboard after `v Home y` and `v End y`.
+`TestCopyModeEndRebinds` moves `copy_mode_line_end` to `ctrl+e`. `End` must
+then leave the cursor on the match, and `ctrl+e` must move it to the column
+`$` reaches. The unit test `TestEveryDefaultBindingReachesItsAction` presses
+both default keys in both modes.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`a9a54261`) | `TestCopyModeHomeAndEnd` ("Home: the copy cursor did not move off column 42"), `TestCopyModeEndRebinds` ("ctrl+e: the copy cursor did not move"). The unbound `End` check passes, which is correct: `End` did nothing before | **caught** |
+| Copy mode never looks the key up | `HandleCopyModeKey` passes `""` for the action | both tests, as the released build | **caught** |
+| A selection's end does not move | `runCopyModeAction`: the `updateVisualEnd` call cut | `TestCopyModeHomeAndEnd` (`v Home y copied "m", want "HOME-start m"`) | **caught** |
+| No default keys | `getDefaultCopyModeKeybinds` binds nothing | `TestCopyModeHomeAndEnd`. `TestCopyModeEndRebinds` passes, which is its positive half: the config still binds `ctrl+e` | **caught** |
+| A config without the section gets no defaults | the `fillMapDefaults` call for `CopyMode` cut | `TestCopyModeHomeAndEnd`, whose config has no `copy_mode` section | **caught** |
+
+Not covered end to end: multi copy mode looks the action up at its own call
+site in `handleMultiCopyKey`, and no test presses `Home` there.
