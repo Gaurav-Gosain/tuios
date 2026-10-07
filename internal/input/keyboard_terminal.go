@@ -59,6 +59,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleWorkspaceSwitcherInput(msg, o)
 	}
 
+	// The paste buffer chooser, the same way.
+	if o.BufferChooserOpen() {
+		return handleBufferChooserInput(msg, o)
+	}
+
 	// Handle aggregate view
 	if o.ShowAggregateView {
 		return handleAggregateViewInput(msg, o)

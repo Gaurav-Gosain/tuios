@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -1164,6 +1165,10 @@ type OS struct {
 	WorkspaceSwitcherSelected int
 	WorkspaceSwitcherScroll   int
 	WorkspaceSwitcherItems    []WorkspaceItem
+	// buffers is the paste buffer chooser, and pasteBufs the store of a
+	// client with no daemon. See paste_buffers.go.
+	buffers   bufferChooser
+	pasteBufs *pastebuf.Store
 	// Aggregate view overlay (all windows across workspaces)
 	ShowAggregateView     bool
 	AggregateViewQuery    string

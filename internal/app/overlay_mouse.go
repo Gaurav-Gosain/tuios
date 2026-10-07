@@ -203,6 +203,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.InboxSelect(idx)
 	case "workspace":
 		m.WorkspaceSwitcherSelected = idx
+	case overlayKindBuffers:
+		m.BufferChooserSelect(idx)
 	case "navigator":
 		m.NavigatorSelect(idx)
 	case "aggregate":
@@ -279,6 +281,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		m.WorkspaceSwitcherMove(wheelDelta(up), n)
+	case overlayKindBuffers:
+		m.BufferChooserMove(wheelDelta(up))
 	case "navigator":
 		m.NavigatorMove(wheelDelta(up))
 	case "layout":
@@ -439,6 +443,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
 		m.WorkspaceSwitcherActivate(row.Idx)
+	case overlayKindBuffers:
+		return m.BufferChooserActivate(row.Idx)
 	case "navigator":
 		// A click on a session or a workspace row folds it, and a click on
 		// a pane goes to it, as enter does.
@@ -565,6 +571,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseInbox()
 	case "workspace":
 		m.CloseWorkspaceSwitcher()
+	case overlayKindBuffers:
+		m.CloseBufferChooser()
 	case "navigator":
 		m.CloseNavigator()
 	case overlayKindShot:

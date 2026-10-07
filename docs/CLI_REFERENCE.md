@@ -1142,6 +1142,51 @@ tuios send-text -w build 'partial input'
 tuios send-text -w build 'git commit -m "fix: cache, retries"'
 ```
 
+### `tuios list-buffers`, `show-buffer`, `set-buffer`, `delete-buffer`, `paste-buffer`
+
+Read and change the paste buffers, as the tmux commands of the same names do.
+A yank in copy mode adds a buffer. The daemon keeps the buffers, so every
+client and session on this machine shares them. `[paste_buffers]` sets how
+many to keep.
+
+**Usage:**
+```bash
+tuios list-buffers [--json]
+tuios show-buffer [-b <name>] [--json]
+tuios set-buffer [-b <name>] [-a] [<text> | -] [--json]
+tuios delete-buffer [-b <name>] [--json]
+tuios paste-buffer [-b <name>] [-s <session>] [-w <window>] [-d] [--json]
+```
+
+**Flags:**
+- `-b, --buffer <name>`: The buffer (default: the newest). For `set-buffer`, the default is a new buffer named `bufferNNNN`
+- `-a, --append`: `set-buffer` adds the text to the end of the buffer
+- `-s, --session`, `-w, --window`: The pane `paste-buffer` pastes into (default: the focused pane)
+- `-d, --delete`: `paste-buffer` deletes the buffer after the paste
+- `--json`: Output the result as JSON
+
+`show-buffer` prints the text with no line feed added. `set-buffer` with no
+text, or with `-`, reads the standard input. `paste-buffer` removes control
+characters and uses the bracketed paste marks when the program in the pane
+turned them on. With a session on another machine, `paste-buffer` sends the
+text of a buffer from this machine.
+
+From inside a pane, reading the buffers needs the `read` grant, changing them
+needs `write`, and `paste-buffer` needs both.
+
+**Examples:**
+```bash
+# What can be pasted again
+tuios list-buffers
+
+# Keep a command, and paste it into the ops pane later
+tuios set-buffer -b deploy 'kubectl rollout restart deploy/api'
+tuios paste-buffer -b deploy -w ops
+
+# Store the output of a command
+git log -1 --format=%H | tuios set-buffer
+```
+
 ### `tuios new-window`
 
 Open a new window in a session and print its id.

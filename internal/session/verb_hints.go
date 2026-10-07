@@ -116,6 +116,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbGhUnavailable, "ship-pr or ship-status needs the gh CLI, and it is not installed or not logged in. Nothing was pushed or opened. Install gh and run gh auth login."},
 	{ErrVerbNoCheckpoint, "The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the checkpoints it has. list-checkpoints lists them too."},
 	{ErrVerbNoNotes, "send-review found no unsent review notes for the pane, so nothing was sent. Add one with review-note first."},
+	{ErrVerbNoBuffer, "No paste buffer has the name given, or there are no paste buffers when none was named. Nothing was read, pasted or deleted. list-buffers shows the names."},
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},

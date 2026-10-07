@@ -92,6 +92,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleWorkspaceSwitcherInput(msg, o)
 	}
 
+	// The paste buffer chooser, the same way.
+	if o.BufferChooserOpen() {
+		return handleBufferChooserInput(msg, o)
+	}
+
 	// Handle aggregate view overlay
 	if o.ShowAggregateView {
 		return handleAggregateViewInput(msg, o)

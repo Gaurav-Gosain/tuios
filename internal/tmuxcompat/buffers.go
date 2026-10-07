@@ -16,8 +16,10 @@ import (
 
 // Paste buffers: load-buffer, set-buffer, paste-buffer and delete-buffer.
 //
-// tmux keeps its buffers in the server. The shim has no server, so a buffer
-// is a file in the shim's runtime directory, which only the user can read.
+// tmux keeps its buffers in the server. A daemon with the paste buffer verbs
+// is that server, and holds them (buffers_daemon.go). With an older daemon
+// the shim has no server, so a buffer is a file in the shim's runtime
+// directory, which only the user can read.
 // That lets `tmux load-buffer x` and a later `tmux paste-buffer` work across
 // two calls, as they do with tmux. A shim with no runtime directory keeps its
 // buffers for the one call.
@@ -56,6 +58,9 @@ func bufferFile(dir, name string) string {
 
 // buffers lists the buffers, in no order. See topBuffer for the newest.
 func (s *Shim) buffers() ([]buffer, error) {
+	if s.daemonBuffers() {
+		return s.daemonBufferList()
+	}
 	dir := s.bufferDir()
 	if dir == "" {
 		return s.memBuffers, nil
@@ -96,6 +101,9 @@ func withoutBuffer(list []buffer, name string) []buffer {
 
 // readBuffer returns the data of buffer name.
 func (s *Shim) readBuffer(name string) (string, bool, error) {
+	if s.daemonBuffers() {
+		return s.daemonBufferRead(name)
+	}
 	dir := s.bufferDir()
 	if dir == "" {
 		for _, b := range s.memBuffers {
@@ -115,10 +123,15 @@ func (s *Shim) readBuffer(name string) (string, bool, error) {
 	return string(data), true, nil
 }
 
-// writeBuffer stores data as buffer name and puts it on top.
+// writeBuffer stores data as buffer name and puts it on top. A name of ""
+// is a new buffer the daemon names, and comes only from newBufferName when
+// the daemon holds the buffers.
 func (s *Shim) writeBuffer(name, data string) error {
 	if len(data) > maxBufferBytes {
 		return fmt.Errorf("buffer is too large: %d bytes, the limit is %d", len(data), maxBufferBytes)
+	}
+	if s.daemonBuffers() {
+		return s.daemonBufferWrite(name, data)
 	}
 	dir := s.bufferDir()
 	if dir == "" {
@@ -175,6 +188,9 @@ func newestAfter(list []buffer) time.Time {
 
 // removeBuffer deletes buffer name.
 func (s *Shim) removeBuffer(name string) error {
+	if s.daemonBuffers() {
+		return s.daemonBufferRemove(name)
+	}
 	dir := s.bufferDir()
 	if dir == "" {
 		s.memBuffers = withoutBuffer(s.memBuffers, name)
@@ -188,8 +204,12 @@ func (s *Shim) removeBuffer(name string) error {
 }
 
 // newBufferName is the name tmux gives a buffer made without -b:
-// bufferNNNN, one past the highest in use.
+// bufferNNNN, one past the highest in use. With the daemon holding the
+// buffers it is "", and the daemon names the buffer as it names a yank.
 func (s *Shim) newBufferName() (string, error) {
+	if s.daemonBuffers() {
+		return "", nil
+	}
 	list, err := s.buffers()
 	if err != nil {
 		return "", err
@@ -286,13 +306,14 @@ func (s *Shim) setBuffer(name string, args []string) (string, []string, error) {
 	if !named && p.Has('a') {
 		buf, err = s.topBuffer()
 	}
-	if buf == "" && err == nil {
+	newBuf := buf == "" && err == nil
+	if newBuf {
 		buf, err = s.newBufferName()
 	}
 	if err != nil {
 		return OutcomeError, detail, err
 	}
-	if p.Has('a') {
+	if p.Has('a') && !newBuf {
 		old, _, err := s.readBuffer(buf)
 		if err != nil {
 			return OutcomeError, detail, err

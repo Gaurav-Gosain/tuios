@@ -180,6 +180,15 @@ report what it does with the Program Status Protocol (see
   `program_status`, omitted when empty and taken from the daemon's own state on
   every client push. An older peer drops it.
 
+**The daemon keeps paste buffers.** The new verbs `list-buffers`,
+`show-buffer`, `set-buffer`, `delete-buffer` and `paste-buffer` read and
+change one list of buffers that every client and session shares (see
+[list-buffers](#list-buffers-show-buffer-set-buffer-delete-buffer-paste-buffer)).
+A client now calls `set-buffer` for each yank. The tmux shim's buffer
+commands use these verbs when the daemon has them, so a buffer the shim set
+before is no longer read from its file. The error code `no_buffer` is in the
+catalog.
+
 **A host that waits for a Tailscale sign-in can be dialed again on request.**
 The new verb `retry-host` takes `host` and makes that link dial again now
 instead of after its backoff. While the host is in `tailscale_check`, the link
@@ -1437,6 +1446,7 @@ catalog.
 | `no_remote` | `ship-push` or `ship-pr` found no remote to push to, or not the one named. Nothing was pushed. |
 | `gh_unavailable` | `ship-pr` or `ship-status` with `refresh` needs the gh CLI, and it is not installed or not logged in. Nothing was pushed or opened. |
 | `queue_full` | The pane's delivery queue holds `[agents.queue] max` messages. Nothing was queued. |
+| `no_buffer` | No paste buffer has the name given, or there are no buffers when none was named. Nothing was read, pasted or deleted. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 | `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
 
@@ -1608,6 +1618,9 @@ What a restricted connection may call:
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
+| read the paste buffers | `list-buffers`, `show-buffer` | `forbidden` | allowed |
+| change the paste buffers | `set-buffer`, `delete-buffer` | `forbidden` | `forbidden` |
+| paste a buffer | `paste-buffer` | `forbidden`: it reads the buffers | `forbidden` |
 | everything else | | `forbidden` | `forbidden` |
 
 Under `own`:
@@ -2398,6 +2411,38 @@ Response:
 
 ```json
 {"result": {"type": "ok"}}
+```
+
+### list-buffers, show-buffer, set-buffer, delete-buffer, paste-buffer
+
+The paste buffers, after tmux's. The daemon keeps one list of buffers, newest
+first, that every client and session shares. A client adds a buffer for each
+yank in copy mode. `[paste_buffers]` `limit` and `max_kb` bound the list, and
+the oldest buffers go first. Nothing is written to disk.
+
+- `list-buffers`: no params. Returns `buffers` (each with `name`, `bytes`,
+  `created` in Unix nanoseconds, `automatic` and `sample`), `total`, `bytes`,
+  `limit` and `max_bytes`.
+- `show-buffer`: `name` (optional, default the newest). Returns the row and
+  `data`, the whole text.
+- `set-buffer`: `data` (required), `name` (optional), `append` (optional).
+  With no name a new buffer named `bufferNNNN` is made, unless `append` is
+  set, which adds to the newest. The buffer goes on top.
+- `delete-buffer`: `name` (optional, default the newest).
+- `paste-buffer`: `session`, `window`, `name` (all optional), `delete`
+  (optional). Types the buffer as `send-text` with `paste` does: sanitized,
+  and bracketed when the pane's program turned bracketed paste on. Returns
+  `bracketed`.
+
+A name that no buffer has, or the newest when there is none, answers
+`no_buffer`. From a pane, `list-buffers` and `show-buffer` need the `read`
+grant, `set-buffer` and `delete-buffer` need `write`, and `paste-buffer` needs
+both and is held to the same target rules as `send-text`. Over a link,
+reading needs the `list` capability and the rest need `write`.
+
+```json
+{"verb": "set-buffer", "params": {"name": "deploy", "data": "make deploy"}}
+{"verb": "paste-buffer", "params": {"session": "work", "window": "ops", "name": "deploy"}}
 ```
 
 ### paste-image

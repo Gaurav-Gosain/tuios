@@ -204,7 +204,9 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 	}
 
 	if o.SelectionDragged || window.ClickCount < 2 {
-		return o.CopyToClipboard(text)
+		// A copied selection is also kept as a paste buffer. The deferred
+		// write keeps it when it lands (app.HandlePendingCopy).
+		return tea.Batch(o.CopyToClipboard(text), o.SaveToPasteBuffers(text))
 	}
 	return o.DeferCopyToClipboard(text, remainingClickWindow(window))
 }

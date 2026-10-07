@@ -112,9 +112,13 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 	}
 	if fx.setClipboard {
 		if o != nil && o.Settings.CopyCommand != "" {
+			// Yank keeps the paste buffer itself.
 			cmd = o.Yank(fx.clipboard)
 		} else {
 			cmd = tea.SetClipboard(fx.clipboard)
+			if o != nil {
+				cmd = tea.Batch(cmd, o.SaveToPasteBuffers(fx.clipboard))
+			}
 		}
 	}
 	return o, cmd

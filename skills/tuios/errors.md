@@ -18,7 +18,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
-`risk_unacknowledged`, `agents_disabled`, `internal`. `internal` is a failure inside the daemon
+`no_buffer`, `risk_unacknowledged`, `agents_disabled`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
 
@@ -38,6 +38,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `rate_limited` | Stop sending. Two agents are probably answering each other. |
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
 | `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
+| `no_buffer` | From the paste buffer verbs: no buffer has that name, or there are no buffers. Nothing was read, pasted or deleted. `tuios list-buffers` shows the names. |
 | `agents_disabled` | The person turned the agent features off with `[agents] enabled = false`, and the verb is one of them. Nothing was done. Do not retry. Tell the person. |
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
 | `no_notes` | From `send-review`: no unsent notes. Add one with `tuios review note`, or name sent ones with `--id` to send them again. |

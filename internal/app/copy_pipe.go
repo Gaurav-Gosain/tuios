@@ -62,7 +62,8 @@ var errCopyPipeTimeout = errors.New("timeout")
 var errCopyPipeTooLarge = errors.New("output too large")
 
 // Yank puts a copy-mode selection on the clipboard: through
-// appearance.selection.copy_command when it is set, else as it is.
+// appearance.selection.copy_command when it is set, else as it is. It also
+// keeps the selection as a paste buffer (paste_buffers.go).
 func (m *OS) Yank(text string) tea.Cmd {
 	if text == "" {
 		return nil
@@ -70,7 +71,7 @@ func (m *OS) Yank(text string) tea.Cmd {
 	if cmd := m.Settings.CopyCommand; cmd != "" {
 		return m.PipeYank(text, cmd, config.CopyCommandLabel(cmd))
 	}
-	return m.clipboardWriteCmd(text)
+	return tea.Batch(m.clipboardWriteCmd(text), m.SaveToPasteBuffers(text))
 }
 
 // PipeYank runs command with text on stdin, off the update loop. The
@@ -82,10 +83,12 @@ func (m *OS) PipeYank(text, command, label string) tea.Cmd {
 	m.CancelPendingCopy()
 	dir := m.scratchDir()
 	argv := commandArgv(command, m.commandEnv(dir))
-	return func() tea.Msg {
+	// The buffer keeps the selection, as tmux's copy-pipe does, whatever the
+	// command makes of it.
+	return tea.Batch(m.SaveToPasteBuffers(text), func() tea.Msg {
 		out, err := copyPipeRunner(argv, dir, text, CopyPipeTimeout)
 		return CopyPipeDoneMsg{Label: label, Selection: text, Output: copyPipeOutput(out, text), Err: err}
-	}
+	})
 }
 
 // copyPipeOutput is the text the clipboard gets from a command's stdout. A

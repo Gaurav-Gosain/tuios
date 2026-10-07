@@ -839,6 +839,38 @@ variables of a command key: `TUIOS_SESSION`, `TUIOS_SOCKET`,
 `TUIOS_ACTIVE_PANE_ID` and `TUIOS_ACTIVE_PANE_CWD`. You can use tuios while
 the command runs.
 
+### Paste buffers
+
+tuios keeps your recent yanks as paste buffers, as tmux does. A yank in copy
+mode adds a buffer, and so does a mouse selection that you copy. The yank also
+goes to the clipboard, as before.
+
+| Key | Action | What it does |
+| --- | --- | --- |
+| `Ctrl+B ]` | `paste_buffer` | Paste the newest buffer into the focused pane |
+| `Ctrl+B #` | `choose_buffer` | Show the buffers, newest first, to choose one |
+
+In the list, `Enter` or a click pastes the buffer, `d` deletes it, and `Esc`
+or `q` closes the list. A paste goes in the bracketed paste marks when the
+program in the pane asks for them, as a clipboard paste does.
+
+tmux shows the list on `=`. In tuios, `Ctrl+B =` makes the splits equal, so
+the list is on `#`, the tmux key for `list-buffers`. To use the tmux keys, move
+the splits key and give `=` to the list:
+
+```toml
+[keybindings.prefix_mode]
+prefix_equalize_splits = ["E"]
+choose_buffer = ["="]
+```
+
+The daemon keeps the buffers, so every client and every session shares them.
+A client with no daemon keeps its own. The buffers are in memory only, and
+they go when the daemon stops. `[paste_buffers]` in `config.toml` sets how
+many to keep. The commands `tuios list-buffers`, `show-buffer`, `set-buffer`,
+`delete-buffer` and `paste-buffer` read and change the same buffers, and so
+does `tmux` under the tmux shim.
+
 ## Screenshots over a panel
 
 `Ctrl+B C` opens capture mode over any panel or overlay too: the Inbox, the

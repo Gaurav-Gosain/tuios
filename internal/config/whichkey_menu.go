@@ -219,6 +219,8 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// Copy mode and the image paste share a line: the leader's menu
 		// fills an 80x24 screen, and a line more pushes it off the bottom.
 		copyRow,
+		// The two paste buffer keys share a line for the same reason.
+		pair("Paste/choose buffer", part("paste_buffer", "Paste buffer"), part("choose_buffer", "Choose buffer")),
 		row("prefix_scrollback", "Scrollback browser"),
 		// One row for two keys: the leader's menu fills an 80x24 screen,
 		// and a row more pushes it off the bottom.

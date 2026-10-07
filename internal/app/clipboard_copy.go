@@ -86,7 +86,9 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return m.clipboardWriteCmd(text)
+	// Only a mouse selection is deferred, and it is kept as a paste buffer
+	// like a drag's (input/mouse_select.go).
+	return tea.Batch(m.clipboardWriteCmd(text), m.SaveToPasteBuffers(text))
 }
 
 // PendingCopyText reports the text a deferred write is holding, for tests and

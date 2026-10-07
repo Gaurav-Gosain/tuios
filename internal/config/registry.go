@@ -684,6 +684,8 @@ var ActionDescriptions = map[string]string{
 	"copy_selection":  "Copy selection to clipboard",
 	"paste_clipboard": "Paste from clipboard",
 	"paste_image":     "Paste the clipboard image as a file path",
+	"paste_buffer":    "Paste the newest paste buffer",
+	"choose_buffer":   "Choose a paste buffer to paste",
 	"clear_selection": "Clear the text selection",
 	"hints":           "Label the text on the pane to copy it",
 	"display_panes":   "Label the panes and focus one by its label",

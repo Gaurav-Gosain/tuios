@@ -2150,6 +2150,8 @@ func init() {
 	maps.Copy(verbRegistry, checkpointVerbs())
 	// The ship verbs. See verb_ship.go.
 	maps.Copy(verbRegistry, shipVerbs())
+	// The paste buffer verbs. See verb_buffers.go.
+	maps.Copy(verbRegistry, bufferVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

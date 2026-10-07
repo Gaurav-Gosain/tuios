@@ -1314,6 +1314,18 @@ var optionSpecs = []Option{
 		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
 		Default:     "true",
 	},
+	// [paste_buffers]. The daemon reads it when it starts and when the file
+	// changes, and so does a client with no daemon.
+	{
+		Path: "paste_buffers.limit", Type: OptionInt, Section: "selection",
+		Description: "How many yanks to keep to paste again. When it is full, the oldest goes. 0 keeps none.",
+		Default:     "20", Min: 0, Max: 1000,
+	},
+	{
+		Path: "paste_buffers.max_kb", Type: OptionInt, Section: "selection",
+		Description: "Most KiB all paste buffers hold together. When it is full, the oldest go. 0 uses 4096.",
+		Default:     "0", Min: 0, Max: 1048576,
+	},
 	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",

@@ -696,9 +696,20 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		}
 		return nil, deny("the pane runs here for another machine and has no session on this one; its reports go to that machine")
 	}
+	if readsBuffers(verb) && !pa.grants.Has(GrantRead) {
+		return nil, deny(verb + " reads the paste buffers, which needs the read grant")
+	}
 	var reach func(target string) string
 	switch kind {
 	case scopeOpen:
+		return params, nil
+	case scopeBufferRead:
+		// Checked above. The buffers belong to no session.
+		return params, nil
+	case scopeBufferWrite:
+		if !pa.grants.Has(GrantWrite) {
+			return nil, deny(verb + " changes the paste buffers, which needs the write grant")
+		}
 		return params, nil
 	case scopeDeny, scopeGlobal:
 		return nil, deny(verb + " needs the admin grant")
@@ -823,6 +834,7 @@ var typingVerbs = map[string]bool{
 	"run":          true,
 	"queue-prompt": true,
 	"send-review":  true,
+	"paste-buffer": true,
 }
 
 // holdTypingTarget holds a typing call from a pane without admin to the pane

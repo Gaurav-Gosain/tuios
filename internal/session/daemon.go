@@ -21,6 +21,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/google/uuid"
 )
 
@@ -226,6 +227,10 @@ type Daemon struct {
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
+	// buffers holds the paste buffers every client and session shares. See
+	// verb_buffers.go.
+	buffers     *pastebuf.Store
+	buffersOnce sync.Once
 
 	// bundles holds the worktree transfers bundle-worktree has open. Its zero
 	// value is ready. See verb_bundle_worktree.go.
@@ -682,6 +687,13 @@ type DaemonConfig struct {
 	// session stays on a workspace that loses its last pane. The zero value
 	// is the default, which returns. See empty_workspace.go.
 	StayOnEmptyWorkspace bool
+	// PasteBufferLimit and PasteBufferMaxBytes are [paste_buffers]: how many
+	// paste buffers the daemon keeps and how many bytes they hold together.
+	// Zero takes the default, so a daemon made from a hand-built config keeps
+	// buffers. PasteBuffersOff is limit = 0 in the file. See verb_buffers.go.
+	PasteBufferLimit    int
+	PasteBufferMaxBytes int
+	PasteBuffersOff     bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -817,6 +829,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
+	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
 	d.manager.SetHistoryPolicy(cfg.History)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)

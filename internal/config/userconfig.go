@@ -61,6 +61,10 @@ type UserConfig struct {
 	// on screen loses its last pane. See workspaces.go.
 	Workspaces WorkspacesConfig `toml:"workspaces"`
 
+	// PasteBuffers is the [paste_buffers] table: how many yanks tuios keeps
+	// to paste again. See paste_buffers.go.
+	PasteBuffers PasteBuffersConfig `toml:"paste_buffers"`
+
 	// YieldedDefaults are the new default bindings left off because the key
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
@@ -1143,6 +1147,11 @@ func DefaultConfig() *UserConfig {
 				// file on the pane's machine. Capital, one shift from the v
 				// that reviews.
 				"paste_image": {"V"},
+				// ] pastes the newest paste buffer, as in tmux. tmux lists
+				// the buffers on =, which is equalize splits here, so the
+				// list takes #, the key tmux gives list-buffers.
+				"paste_buffer":  {"]"},
+				"choose_buffer": {"#"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -2952,6 +2961,9 @@ var yieldingDefaults = map[string]bool{
 	"toggle_pip": true,
 	// V after the prefix, new in the release after v0.8.2.
 	"paste_image": true,
+	// ] and # after the prefix, new in the release after v0.8.5.
+	"paste_buffer":  true,
+	"choose_buffer": true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,

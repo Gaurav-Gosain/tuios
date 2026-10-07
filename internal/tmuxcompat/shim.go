@@ -68,6 +68,9 @@ type Shim struct {
 	respawn func(dir, windowID string, req RespawnRequest) error
 	// memBuffers are the paste buffers of a shim with no runtime directory.
 	memBuffers []buffer
+	// bufMode says where the paste buffers are: in the daemon or the shim's
+	// own (buffers_daemon.go). It is found on first use.
+	bufMode int8
 	// memEnv is the set-environment state of a shim with no runtime
 	// directory, by scope (see envScope).
 	memEnv map[string][]envVar

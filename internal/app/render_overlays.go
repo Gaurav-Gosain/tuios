@@ -227,6 +227,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "workspace", content, geo, rows)
 	}
 
+	if m.buffers.open {
+		content, geo, rows := m.renderBufferChooser()
+		layers = m.placeOverlayPanel(layers, overlayKindBuffers, content, geo, rows)
+	}
+
 	if m.navigator.open {
 		content, geo, rows := m.renderNavigator()
 		layers = m.placeOverlayPanel(layers, "navigator", content, geo, rows)

@@ -90,6 +90,13 @@ const (
 	// scopeLaunch starts new sessions. Refused under read_only, and under
 	// scope own for a caller in no pane, whose launches it could not reach.
 	scopeLaunch
+	// scopeBufferRead reads the paste buffers, which every session shares
+	// and which hold whatever the person copied. Refused under scope own; a
+	// pane needs the read grant.
+	scopeBufferRead
+	// scopeBufferWrite changes the paste buffers. Refused under read_only
+	// and under scope own; a pane needs the write grant.
+	scopeBufferWrite
 )
 
 // verbScopes classifies every verb. A verb missing here is treated as
@@ -263,6 +270,23 @@ var verbScopes = map[string]scopeKind{
 	"ship-push":   scopeWrite,
 	"ship-pr":     scopeWrite,
 	"ship-status": scopeRead,
+
+	// The paste buffers (verb_buffers.go). They are shared by every session,
+	// so a caller restricted to its own session reaches none of them.
+	// paste-buffer types into a pane, and it also reads a buffer: see
+	// readsBuffers.
+	"list-buffers":  scopeBufferRead,
+	"show-buffer":   scopeBufferRead,
+	"set-buffer":    scopeBufferWrite,
+	"delete-buffer": scopeBufferWrite,
+	"paste-buffer":  scopeWrite,
+}
+
+// readsBuffers reports whether a verb reads the paste buffers. paste-buffer
+// does: it types a buffer's text into a pane, and the caller can read that
+// pane back.
+func readsBuffers(verb string) bool {
+	return verbScopes[verb] == scopeBufferRead || verb == "paste-buffer"
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.
@@ -550,11 +574,17 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	if sc.readOnly && (kind == scopeWrite || kind == scopeLaunch) {
 		return nil, scopeForbidden(verb, "the connection is read-only, and "+verb+" types into a pane or starts one")
 	}
+	if sc.readOnly && kind == scopeBufferWrite {
+		return nil, scopeForbidden(verb, "the connection is read-only, and "+verb+" changes the paste buffers")
+	}
 	if !sc.own {
 		return params, nil
 	}
 	if kind == scopeGlobal {
 		return nil, scopeForbidden(verb, "it reads every session, and the connection is restricted to its own")
+	}
+	if kind == scopeBufferWrite || readsBuffers(verb) {
+		return nil, scopeForbidden(verb, "every session shares the paste buffers, and the connection is restricted to its own")
 	}
 	own := d.sessionNameByID(sc.sessionID)
 	if own == "" {

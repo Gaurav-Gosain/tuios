@@ -40,6 +40,35 @@ because all eight cut the handler and the fault was the switch above it.
 Cut the wiring, run the named test, and watch it fail. If it does not fail, the
 test enters the code below the fault, and the fault is what nobody is testing.
 
+## Paste buffers (#514)
+
+`paste_buffers_test.go` has four tests. On 2026-10-07 each control below cut
+one piece of wiring, built a binary, and ran the named test against it. Every
+control failed where shown, and the same tests passed on the branch build.
+
+| Control: what was cut | Test | Where it failed |
+| --- | --- | --- |
+| The `SaveToPasteBuffers` call in `copyModeEffects.apply` | `TestPasteBuffersKeepYanksAndPasteThem` | after two yanks the daemon holds 0 buffers |
+| `d.Register("paste_buffer", ...)` | `TestPasteBuffersKeepYanksAndPasteThem` | prefix `]` shows no "Pasted" |
+| `d.Register("choose_buffer", ...)` | `TestPasteBuffersKeepYanksAndPasteThem` | prefix `#` never lists the buffers |
+| The bracketed wrap in `verbPasteBuffer` | `TestPasteBuffersKeepYanksAndPasteThem` | no marks with bracketed paste on, after the paste with it off passed |
+| `daemonBuffers` in the tmux shim always false | `TestPasteBuffersKeepYanksAndPasteThem` | `tmux show-buffer` does not see the CLI's buffer |
+| The `readsBuffers` read-grant check in `checkGrants` | `TestPasteBufferVerbsFollowPaneGrants` | the pane with no grants reads the buffer, and `NONE_SHOW=1` never prints |
+| `d.buffers.SetLimits` in `applyUserConfig` | `TestPasteBufferLimitFollowsTheConfig` | after `limit = 1` two buffers stay, with limit 2 |
+| The local store's `Add` in `SaveToPasteBuffers` | `TestPasteBuffersWithoutADaemon` | prefix `]` shows no "Pasted" |
+
+The grant test carries its positive halves: each refused call is served once
+the grant it names is given. The bracketed check pastes once with bracketed
+paste off, where no marks may show, before the paste where they must.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames go test \
+  -run 'TestPasteBuffer' -count=1 -timeout 5m .
+```
+
+With `TUIOS_E2E_FRAMES` set, the run writes `paste-buffers-chooser`,
+`paste-buffers-pasted`, `paste-buffers-bracketed` and `paste-buffers-grants`.
+
 ## OpenCode V2 plugin loading and session isolation
 
 `TestOpenCodeV2PluginReportsOnlyItsSession` installs the shipped plugin, loads

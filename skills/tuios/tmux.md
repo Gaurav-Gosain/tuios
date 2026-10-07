@@ -22,7 +22,8 @@ answers `split-window`, `new-window`, `send-keys`, `capture-pane -p`,
 `last-pane`, `select-window`, `next-window`, `previous-window`,
 `rename-window`, `rename-session`, `break-pane`, `join-pane`, `move-pane`,
 `respawn-pane -k`, `display-popup` (so `fzf --tmux` works), `run-shell`,
-`if-shell`, `wait-for` (channels and locks), the paste buffer commands,
+`if-shell`, `wait-for` (channels and locks), the paste buffer commands (on the
+daemon's buffers, so `tmux paste-buffer` pastes the person's last yank),
 `show-environment`, `set-environment` and `show-options`. A command can be
 shortened to any prefix that names one command, and formats take tmux 3.4's
 modifiers (`#{=10:pane_title}`, `#{?cond,a,b}`, `#{s/a/b/:...}`).

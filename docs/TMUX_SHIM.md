@@ -329,11 +329,18 @@ A line may hold several commands separated by `;` (`tmux a \; b`).
 
 ### Paste buffers
 
-A paste buffer is a file in `tmux/buffers/` beside the daemon socket. Only
-you can read it. So a buffer stays between two calls, as in tmux:
-`tmux load-buffer notes.txt` and then `tmux paste-buffer`. Without `-b`,
-`paste-buffer` and `delete-buffer` use the newest buffer. A new buffer
-without `-b` is named `buffer0000`, `buffer0001` and so on.
+The daemon keeps the paste buffers, as the tmux server does. They are the
+same buffers that a yank in copy mode adds and that `tuios list-buffers`
+shows. So `tmux paste-buffer` pastes your last yank, and a buffer stays
+between two calls, as in tmux: `tmux load-buffer notes.txt` and then
+`tmux paste-buffer`. Without `-b`, `paste-buffer` and `delete-buffer` use the
+newest buffer. A new buffer without `-b` is named `buffer0000`, `buffer0001`
+and so on. The daemon holds the caller to its pane grants: reading the
+buffers needs `read`, and changing them needs `write`.
+
+A daemon from before the paste buffers has no buffers of its own. With such a
+daemon, a buffer is a file in `tmux/buffers/` beside the daemon socket, which
+only you can read.
 
 `paste-buffer` types the buffer into the target pane:
 

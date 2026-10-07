@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -417,6 +418,14 @@ func freshWorkSession(t *testing.T, d *Daemon) {
 	for _, name := range []string{"build", "review"} {
 		if _, err := sess.AddDaemonWindow(name, nil); err != nil {
 			t.Fatalf("add window %q: %v", name, err)
+		}
+	}
+	// The paste buffers the buffer examples name, fresh for each example
+	// since delete-buffer and paste-buffer with delete remove one.
+	d.buffers = pastebuf.New(pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes)
+	for _, name := range []string{"buffer0001", "buffer0003", "deploy"} {
+		if _, err := d.buffers.Set(name, "echo "+name, false); err != nil {
+			t.Fatalf("set buffer %q: %v", name, err)
 		}
 	}
 }

@@ -442,3 +442,11 @@ line of stderr on the dock. The command runs on the machine of the tuios
 client, with the command-key variables (`TUIOS_SESSION`,
 `TUIOS_ACTIVE_PANE_ID`, `TUIOS_ACTIVE_PANE_CWD`). In multi copy mode it runs
 once, on the text `y` copies in the current format.
+
+tmux paste buffers are tuios paste buffers. Each yank is also kept as a buffer
+in the daemon, which every client and session shares. `PREFIX ]` pastes the
+newest (`paste_buffer`), and `PREFIX #` lists them to choose one
+(`choose_buffer`): tmux's `=` is equalize splits here. `[paste_buffers]`
+`limit` (default 20, 0 keeps none) and `max_kb` (default 4096) bound them.
+`tuios list-buffers`, `show-buffer`, `set-buffer`, `delete-buffer` and
+`paste-buffer` work on the same buffers, as does `tmux` under the shim.

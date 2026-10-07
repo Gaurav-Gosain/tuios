@@ -226,6 +226,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
 	d.Register("paste_image", handlePasteImage)
+	d.Register("paste_buffer", handlePasteBuffer)
+	d.Register("choose_buffer", handleChooseBuffer)
 	d.Register("clear_selection", handleClearSelection)
 
 	// Session lifecycle actions (context menu rows; the quit menu's kill rows
@@ -1088,7 +1090,8 @@ func handleCopySelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if focusedWindow == nil {
 		return o, nil
 	}
-	return o, o.CopyToClipboard(selectionText(focusedWindow))
+	text := selectionText(focusedWindow)
+	return o, tea.Batch(o.CopyToClipboard(text), o.SaveToPasteBuffers(text))
 }
 
 func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

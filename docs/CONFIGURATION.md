@@ -641,6 +641,31 @@ once. The settings page has it under Daemon, and
 `tuios set-config workspaces.new_window_when_empty true` changes it while
 tuios runs.
 
+## Paste buffers
+
+tuios keeps your recent yanks as paste buffers. `Ctrl+B ]` pastes the newest,
+and `Ctrl+B #` shows them all (see [KEYBINDINGS.md](KEYBINDINGS.md#paste-buffers)).
+
+```toml
+[paste_buffers]
+limit = 20     # how many buffers to keep. 0 keeps none.
+max_kb = 4096  # most KiB all buffers hold together. 0 uses 4096.
+```
+
+When a new buffer goes past `limit` or `max_kb`, the oldest buffers go. tuios
+does not keep a yank that is larger than `max_kb` as a buffer, but the yank
+still goes to the clipboard. With `limit = 0`, a yank goes only to the
+clipboard.
+
+The daemon keeps the buffers in memory, so every client and every session
+shares them. They go when the daemon stops. The daemon reads the setting when
+it starts and when the file changes. A smaller limit drops the oldest buffers
+at once.
+
+A buffer can hold a secret that you copied. From inside a pane, reading the
+buffers needs the `read` grant and changing them needs `write`. Pasting a
+buffer needs both. See [What a pane may do](#what-a-pane-may-do).
+
 ## Master-stack layout
 
 These options shape the master-stack layout. Each workspace starts with them.
@@ -1403,7 +1428,9 @@ daemon logs it, and `tuios pane-grants` says so. When a start finds that
 panes hold more than at the last run, it says so in the log, in
 `tuios pane-grants` and in the Inbox. Like
 `[agents.approvals]`, it is not in `list-options` and `tuios set-config` cannot
-change it, so no pane can loosen it.
+change it, so no pane can loosen it. The [paste buffers](#paste-buffers) hold
+what you copied, so a pane needs `read` to read them, `write` to change them,
+and both to paste one.
 [AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
 
 ## What another machine may do here
