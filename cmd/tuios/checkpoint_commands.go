@@ -200,17 +200,9 @@ func printCheckpointList(w io.Writer, sess, window, root, on string, enabled boo
 			more = fmt.Sprintf(", and %d more", n-len(names))
 		}
 		fmt.Fprintf(w, "Checkpoint %d left out %d untracked %s over agents.checkpoints.max_untracked_mb: %s%s\n",
-			cp.N, n, fileWord(n), strings.Join(names, ", "), more)
+			cp.N, n, plural.Word(n, "file", "files"), strings.Join(names, ", "), more)
 	}
 	return nil
-}
-
-// fileWord is "file" or "files" for n.
-func fileWord(n int) string {
-	if n == 1 {
-		return "file"
-	}
-	return "files"
 }
 
 // newCheckpointDiffCommand builds `tuios checkpoint diff`.

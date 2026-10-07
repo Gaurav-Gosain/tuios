@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -546,10 +547,10 @@ func flushAtTurnEnd(out agentHookOutcome, res hookReportResult, client verbCalle
 // session and its ancestors.
 func resolveHookPane(o agentHookOptions, hio agentHookIO, client verbCaller, sid int, ancestors []int) (sess, window, by string, err error) {
 	if o.window != "" {
-		return firstNonEmptyString(o.session, hio.getenv("TUIOS_SESSION")), o.window, "flag", nil
+		return cmp.Or(o.session, hio.getenv("TUIOS_SESSION")), o.window, "flag", nil
 	}
 	if id := hio.getenv("TUIOS_PANE_ID"); id != "" {
-		return firstNonEmptyString(o.session, hio.getenv("TUIOS_SESSION")), id, "env", nil
+		return cmp.Or(o.session, hio.getenv("TUIOS_SESSION")), id, "env", nil
 	}
 	if sid <= 1 && len(ancestors) == 0 {
 		return "", "", "", errors.New("no pane: TUIOS_PANE_ID is unset")
@@ -744,13 +745,4 @@ func reportHookSession(client verbCaller, sess, window, harness string, harnessP
 		return hookReportResult{}, err
 	}
 	return res, nil
-}
-
-func firstNonEmptyString(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

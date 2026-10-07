@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
 // Tailscale SSH in check mode, for the commands that run ssh on a host.
@@ -102,7 +104,7 @@ func (d *approvalDesk) await(host string, g federation.SSHGate) bool {
 		wait := d.waitFor
 		d.mu.Unlock()
 		if wait {
-			fmt.Fprintf(d.out, "%s: Tailscale needs you to approve the login. Open %s\n", host, orUnknown(g.URL))
+			fmt.Fprintf(d.out, "%s: Tailscale needs you to approve the login. Open %s\n", host, cmp.Or(g.URL, "unknown"))
 		}
 		return wait
 	}
@@ -140,10 +142,10 @@ func (d *approvalDesk) decide() {
 	for _, r := range reqs {
 		width = max(width, len(r.host))
 	}
-	fmt.Fprintf(d.out, "Tailscale needs you to approve the ssh login to %s.\n", hostCountWords(len(reqs)))
+	fmt.Fprintf(d.out, "Tailscale needs you to approve the ssh login to %s.\n", plural.Count(len(reqs), "host"))
 	fmt.Fprintln(d.out, "Open each link in a browser and approve the login:")
 	for _, r := range reqs {
-		fmt.Fprintf(d.out, "  %-*s  %s\n", width, r.host, orUnknown(r.url))
+		fmt.Fprintf(d.out, "  %-*s  %s\n", width, r.host, cmp.Or(r.url, "unknown"))
 	}
 	minutes := int(d.wait / time.Minute)
 	fmt.Fprintf(d.out, "Wait up to %d minutes for the approvals? Each host continues when you approve it. [Y/n] ", minutes)
@@ -170,13 +172,6 @@ func (d *approvalDesk) approved(host string) {
 		return
 	}
 	fmt.Fprintf(d.out, "%s: Tailscale approved the login.\n", host)
-}
-
-func hostCountWords(n int) string {
-	if n == 1 {
-		return "1 host"
-	}
-	return strconv.Itoa(n) + " hosts"
 }
 
 // gateBuffer is ssh's stderr, kept bounded and safe to read while ssh still

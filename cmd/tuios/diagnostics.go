@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -315,7 +316,7 @@ func explainVerbError(verb string, err error) error {
 	}
 	if len(hint.Accepted) > 0 {
 		d.Extra = append(d.Extra, fmt.Sprintf("Accepted values for %s: %s.",
-			nonEmpty(hint.Param, "this parameter"), strings.Join(hint.Accepted, ", ")))
+			cmp.Or(hint.Param, "this parameter"), strings.Join(hint.Accepted, ", ")))
 	}
 	if len(hint.Available) > 0 {
 		d.Extra = append(d.Extra, "Available: "+strings.Join(truncateList(hint.Available, 12), ", ")+".")
@@ -371,14 +372,6 @@ func refuseAgentCallHere(verb string, params any) error {
 	}
 	path, _ := config.GetConfigPath()
 	return &session.AgentsOffHereError{Path: path}
-}
-
-// nonEmpty returns s, or fallback when s is empty.
-func nonEmpty(s, fallback string) string {
-	if s == "" {
-		return fallback
-	}
-	return s
 }
 
 // truncateList caps a list for display so a hundred window ids do not bury the

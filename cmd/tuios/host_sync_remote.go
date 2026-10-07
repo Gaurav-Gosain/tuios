@@ -48,11 +48,7 @@ func (r sshSyncRunner) run(ctx context.Context, script string, args []string, st
 			return "", "", fmt.Errorf("the argument %q is not safe to send to the remote shell", a)
 		}
 	}
-	bin := os.Getenv("TUIOS_SSH")
-	if bin == "" {
-		bin = "ssh"
-	}
-	cmd := exec.Command(bin, federation.SSHArgs(r.host, federation.ShellCommand(script, args...))...)
+	cmd := exec.Command(federation.SSHBinary(), federation.SSHArgs(r.host, federation.ShellCommand(script, args...))...)
 	return runGatedSSH(ctx, cmd, stdin, r.host.Name, r.desk)
 }
 

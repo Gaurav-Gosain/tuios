@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -249,7 +250,7 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 			stampDir = dir
 		}
 	}
-	out.Session = firstNonEmptyString(o.session, getenv("TUIOS_SESSION"))
+	out.Session = cmp.Or(o.session, getenv("TUIOS_SESSION"))
 	switch {
 	case o.window != "":
 		out.Window, out.PaneBy = o.window, "flag"

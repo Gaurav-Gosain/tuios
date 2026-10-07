@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -386,7 +387,7 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 			}
 			// Every name here was written on another machine.
 			rows = append(rows, []string{
-				plainLine(firstNonEmptyString(a.Session, h.Session)),
+				plainLine(cmp.Or(a.Session, h.Session)),
 				shortWindowID(a.WindowID),
 				plainLine(a.Name),
 				plainLine(a.State),

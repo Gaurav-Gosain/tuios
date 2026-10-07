@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -858,7 +859,7 @@ func syncIsTTY(opts syncOptions) bool {
 // writeRestartCost writes what a restart of one daemon ends.
 func writeRestartCost(w io.Writer, t *syncTarget) {
 	d := t.res.Daemon
-	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.name, orUnknown(d.Version), plural.Count(d.SessionCount, "session"))
+	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.name, cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"))
 	if d.Unread {
 		fmt.Fprintln(w, "  The sessions could not be read.")
 		return
@@ -874,13 +875,6 @@ func writeRestartCost(w io.Writer, t *syncTarget) {
 		}
 		fmt.Fprintf(w, "  session %s: %s. Running: %s\n", s.Name, plural.Count(s.Panes, "pane"), strings.Join(progs, ", "))
 	}
-}
-
-func orUnknown(s string) string {
-	if s == "" {
-		return "unknown"
-	}
-	return s
 }
 
 // applySyncTarget installs and restarts on one host.
@@ -1065,10 +1059,10 @@ func finishSyncTarget(t *syncTarget, src *syncSource, opts syncOptions) {
 		parts = append(parts, "daemon restart needed")
 		if !t.restart {
 			if d.SessionCount == 0 && !d.Unread {
-				t.note(fmt.Sprintf("The daemon still runs %s and holds no sessions. A restart loses nothing. Run: %s", orUnknown(d.Version), r.RestartCommand))
+				t.note(fmt.Sprintf("The daemon still runs %s and holds no sessions. A restart loses nothing. Run: %s", cmp.Or(d.Version, "unknown"), r.RestartCommand))
 			} else {
 				t.note(fmt.Sprintf("The daemon still runs %s. Its %s %s running. A client of the new version can refuse to connect to it if the protocol changed. To restart it, run: %s. A restart ends the programs in its panes.",
-					orUnknown(d.Version), plural.Count(d.SessionCount, "session"), plural.Word(d.SessionCount, "keeps", "keep"), r.RestartCommand))
+					cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"), plural.Word(d.SessionCount, "keeps", "keep"), r.RestartCommand))
 			}
 		}
 	}
@@ -1149,7 +1143,7 @@ func daemonCell(d syncDaemon) string {
 	case daemonStopped:
 		return "not running"
 	case daemonRunning:
-		v := orUnknown(d.Version)
+		v := cmp.Or(d.Version, "unknown")
 		if d.Started {
 			return "started"
 		}
