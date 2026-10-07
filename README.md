@@ -141,6 +141,7 @@ scrollback = 3000                # lines of history per pane
 reduce_motion = false            # no animations
 gpu = "auto"                     # the integrated GPU when it drives the
                                  # displays; "integrated" or "any"
+                                 # ("any" also loads the OpenGL drivers)
 theme = "tokyonight"             # instead of tuios's theme
 ```
 

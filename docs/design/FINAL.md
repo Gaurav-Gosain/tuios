@@ -115,17 +115,17 @@ Everything else is derived, once per theme change, never per frame.
 | Token | Dark theme | Light theme |
 | --- | --- | --- |
 | `stage` (panes, pane headers) | `bg` | `bg` |
-| `base` (sidebar, title band) | mix(bg, #000, 0.30) | mix(bg, #000, 0.04) |
+| `base` (sidebar, title band) | mix(bg, #000, 0.30) | mix(bg, #000, 0.06) |
 | `field` (search, segmented control) | mix(base, fg, 0.045) | mix(base, #fff, 0.5) |
 | `hover` | mix(base, fg, 0.04) | mix(base, #000, 0.03) |
 | `selected` | mix(base, fg, 0.09) | mix(base, #000, 0.07) |
 | `raised` (palette) | mix(bg, fg, 0.045) | mix(bg, #fff, 0.85) |
 | `raised_sel` (chosen palette row) | mix(raised, fg, 0.075) | mix(raised, #000, 0.06) |
-| `border` (stage edge, chips, buttons) | fg at 13 % | #000 at 16 % |
+| `border` (stage edge, chips, buttons) | fg at 13 % | #000 at 18 % |
 | `hairline` (splits, palette dividers) | fg at 12 % | #000 at 14 % |
 | `scrim` | #000 at 45 % | #000 at 18 % |
 | `dim` (unfocused pane content) | `stage` at 30 % | `stage` at 12 % |
-| `ink` | desaturate(fg, 0.45) | desaturate(fg, 0.12), then mix toward #000 in 2 % steps until 10.5:1 on `worst` |
+| `ink` | desaturate(fg, 0.45) | desaturate(fg, 0.12), then mix toward #000 in 2 % steps (one step per channel once 2 % rounds to nothing) until 10.5:1 on `worst` |
 | `text` | `ink` | `ink` |
 | `text2` | mix(ink, worst, t), largest t that keeps 4.6:1 on `worst` | same |
 | `text3` | the same, for 3.1:1 | same |
@@ -140,12 +140,12 @@ Everything else is derived, once per theme change, never per frame.
 - `raised_sel` is left out of `worst`. On the chosen palette row the muted
   fragment uses `text2`, not `text3`.
 - Light themes start the state colours from the dark agent hues, so amber
-  stays amber (`#976602`), never brown.
+  stays amber (`#916208`), never brown.
 - In both themes the stage is the brightest surface the panes sit on. In a
   light theme the shell is a step darker than the stage, and the search
   field and the palette are lighter than both.
 - The light ink stops at 10.5:1, not 11: with the shell darker than the
-  stage, 2 % steps toward black stall just under 11 on `selected`.
+  stage, a near-neutral ink cannot reach 11 on `selected`.
 
 ### 3.3 Resolved values
 
@@ -155,23 +155,23 @@ Alpha tokens are shown composited on `stage`.
 | Token | Dark | Light | Contrast on `worst` (dark / light) |
 | --- | --- | --- | --- |
 | `stage` | #1a1b26 | #e1e2e7 | |
-| `base` | #12131b | #d8d9de | |
-| `field` | #1a1b25 | #ececee | |
-| `hover` | #191a24 | #d2d2d7 | |
-| `selected` | #22232f | #c9cace | |
+| `base` | #12131b | #d4d4d9 | |
+| `field` | #1a1b25 | #eaeaec | |
+| `hover` | #191a24 | #ceced2 | |
+| `selected` | #22232f | #c5c5ca | |
 | `raised` | #21232f | #fafbfb | |
 | `raised_sel` | #2d303e | #ebecec | |
-| `border` | #303241 | #bdbec2 | |
-| `border` on `raised` | #363949 | #d2d3d3 | |
+| `border` | #303241 | #b8b9bd | |
+| `border` on `raised` | #363949 | #cdcece | |
 | `hairline` | #2e303f | #c2c2c7 | |
-| `text` | #c6cbde | #191b21 | 9.6 / 10.5 |
-| `text2` | #888b9b | #53545a | 4.6 / 4.6 |
-| `text3` | #6c6f7e | #6d6e74 | 3.1 / 3.1 |
-| `accent` | #7aa2f7 | #1a6cd6 | 6.2 / 3.1 |
-| `need` / fill / ink | #e0af68 / #2f2926 / #e0af68 | #976602 / #cfc9bf / #744d01 | 7.8 / 3.0, ink 4.5 on fill |
-| `done` / fill | #9ece6a / #262d26 | #517c0c / #c5ccc1 | 8.5 / 3.0 |
-| `err` / fill | #f7768e / #32212b | #bf435f / #d4c4cc | 5.9 / 3.1 |
-| `selection` | #354161 | #b5c8e3 | |
+| `text` | #c6cbde | #161616 | 9.6 / 10.5 |
+| `text2` | #888b9b | #515153 | 4.6 / 4.6 |
+| `text3` | #6c6f7e | #6a6a6d | 3.1 / 3.1 |
+| `accent` | #7aa2f7 | #1569d3 | 6.2 / 3.1 |
+| `need` / fill / ink | #e0af68 / #2f2926 / #e0af68 | #916208 / #cbc4bc / #704b07 | 7.8 / 3.1, ink 4.5 on fill |
+| `done` / fill | #9ece6a / #262d26 | #4d7802 / #c1c7bb | 8.5 / 3.1 |
+| `err` / fill / ink | #f7768e / #32212b / #f7768e | #ba3f5b / #d0bfc7 / #9a1e41 | 5.9 / 3.1, ink 4.5 on fill |
+| `selection` | #354161 | #b4c7e3 | |
 | `on_state` | #1a1b26 | #ffffff | |
 
 ### 3.4 Where colour goes
@@ -300,8 +300,9 @@ From the top, after the band:
 1. 8 px space.
 2. **Needs you**, only when not empty. 24 px label row: "Needs you" in
    `small-strong` 600 `text2` at x 20, 8 px, then a count badge (16 tall,
-   radius 8, `need_fill`, `label-strong` `need_ink`, tnum). This is the only
-   count of waiting agents in the app. Rows: every pane in any session that
+   radius 8, `need_fill`, `label-strong` `need_ink`, tnum). It counts every
+   row in the section. With errors only, it is `err_fill` with `err_ink`.
+   This is the only count of waiting agents in the app. Rows: every pane in any session that
    needs you or has an error, oldest first.
 3. **Session groups**, the attached session first. 14 px above each. 28 px
    header: a 12 px fold chevron in `text3` at x 22, the name in
@@ -323,7 +324,11 @@ From the top, after the band:
 | Second line | x 44, baseline top + 36 | `small`: harness in `text3`, " · ", then the message in `text2` for needs-you and error rows, `text3` for the rest. A plain terminal shows folder and branch in `text3` |
 
 - A row is named after the agent's task, then the running program, then the
-  folder. The harness goes on line 2, never in the title.
+  shell for a plain terminal or the folder for an agent. The harness goes on
+  line 2, never in the title.
+- In "Needs you", a pane in another session names its session on line 2,
+  after the harness: "codex · api · Migration failed". The slot before the
+  age is for the workspace number only.
 - Fill: `selected` for the focused pane, `hover` under the pointer.
 - A pane that needs you appears in "Needs you" and in its session, on
   purpose. In its session it is a 28 px row: the icon and the title, no
@@ -354,8 +359,10 @@ From the top, after the band:
   keeps full strength, so state marks never fade. Only its title colour
   changes.
 - **Needs-you ring:** 1 px `need`, radius 6, on the slot edges. Where the
-  pane touches the stage edge, the ring sits 4 px inside the edge. Outside it, a 3 px stroke of
-  `need` at 16 % gives the glow. The ring replaces the hairline on its sides.
+  pane touches the stage edge, the ring sits 2 px inside the edge, and a
+  corner that meets a stage corner has radius 8. Outside it, a 3 px stroke
+  of `need` at 16 % gives the glow, on the sides away from the stage edge
+  only, so the glow never tints the stage border. The ring replaces the hairline on its sides.
   It is drawn after `dim`. It is the only coloured frame in the app.
 - **Zoom:** the zoomed pane fills the grid. The zoom button shows its icon
   in `text`.
@@ -384,9 +391,15 @@ From the top, after the band:
   folder, never both. The key chip right aligned 20 px in.
 - **Chosen row:** `raised_sel` fill. No accent bar. Hover moves the choice.
 - **Names:** a plain terminal is named after its running program or title,
-  then its folder's own name ("tuios-gpui", or "~" at home). A title is
-  never two path parts. Two rows with one title show the session as their
-  fragment ("~ · api"), and the workspace too when that is what differs.
+  then its shell ("bash"). The folder goes on line 2 and in the header
+  detail, and is left out when it equals the name. A title is never two
+  path parts. Twins in one session with the same name and folder are
+  numbered by workspace: "bash 1", "bash 2". Two rows with one title show
+  the session as their fragment ("~ · api"), and the workspace too when
+  that is what differs.
+- **Scrolling:** while the list has more rows than fit, the overlay
+  scrollbar (section 7) shows at its right. Up and Down scroll only as far
+  as needed to keep the chosen row in view.
 - **Footer, 40,** a `hairline` above: "5 results" in `small` `text3` at
   x 20. Right: "Open" (`small` 500 `text`) with an `Enter` chip, then "Close"
   (`small` 500 `text2`) with an `Esc` chip.
@@ -514,7 +527,8 @@ pixels.
 | Hover, press, focus, workspace switch, pane focus, row reorder, sidebar hide | instant | | |
 
 - When the window is not active or hidden, every loop stops. The working
-  arc holds at 100 %.
+  arc holds at 100 %. It holds too while the palette is open, under the
+  scrim, and keeps its colour.
 - `reduce_motion = true`, or the desktop's "animations off" setting, makes
   every duration 0 and the working arc still.
 - An animation redraws only its own cached view (section 10). The working
@@ -594,12 +608,14 @@ What the design needs from the code (no visible features):
 - **Memory.** Plain JetBrains Mono plus one lazy symbols font. A 1 byte per
   pixel grayscale atlas. Scrollback defaults to 3,000 lines (`scrollback`
   setting). Hidden panes keep their history but drop shaped-row caches. So
-  does a pane without focus that has not changed for 30 s.
+  does a pane without focus that has not changed for 30 s. A pane that
+  keeps printing drops the rows that scrolled out of view 30 s before.
 - **GPU.** `gpu = "auto"` (the default) loads only the integrated GPU's
   Vulkan driver when that GPU drives every connected display and a second
   GPU is present. A window drawn on one GPU and shown by a compositor on
   another can come up black. `"integrated"` forces it, `"any"` loads every
-  driver.
+  driver. Unless `gpu = "any"`, the OpenGL drivers are not loaded while a
+  Vulkan driver is installed (about 10 MB of memory).
 
 ### Config keys
 

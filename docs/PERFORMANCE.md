@@ -75,7 +75,7 @@ Against the budget in FINAL.md section 10:
 | Agents working: 10 frames/s, only the icon views, under 1 % CPU | 10 frames/s, and the stage and sidebar do not redraw. CPU is 1.1 %, of which about 0.2 % is the timer pane. |
 | One pane streaming: only that pane redraws | Met: each pane is a cached view. |
 | Paint p95 under 2 ms with 4 busy panes | Met: 0.94 ms. |
-| Anonymous memory under 40 MB with 4 panes | Met with `gpu = "integrated"` (37.0 MB). With the NVIDIA driver it is 42.4 MB, about 5 MB of which the driver allocates. |
+| Anonymous memory under 40 MB with 4 panes | Met with `gpu = "integrated"` (37.0 MB). With the NVIDIA driver it is 42.4 MB, about 5 MB of which the driver allocates. Met on every driver since the OpenGL probe was dropped: 32.1 MB (see below). |
 
 After the padded layout (section 11 of FINAL.md: each pane's body is one
 view with its padding), `perf/measure-after-insets.json`, where the
@@ -92,6 +92,32 @@ GPU drives every connected display. On this machine both displays are on
 the NVIDIA card, and a window drawn on the Intel GPU comes up black in a
 compositor that runs on NVIDIA, so "auto" keeps every driver here and
 anonymous memory stays 2 MB over the budget.
+
+### The OpenGL probe
+
+A later run of busy4 on the same build measured 41.8 MB anonymous and
+223 MB RSS (`perf/measure-before-egl.json`). A 90 s run, long enough for
+the row pool to drop rows that scrolled out of view 30 s before, measured
+42.3 MB. The row caches were not the cost.
+
+`/proc/PID/smaps` showed where the memory went: 22.8 MB of heap, and about
+10 MB of relocated pages in driver libraries. GPUI asks wgpu for Vulkan and
+OpenGL both, and the OpenGL probe loads every EGL driver: NVIDIA's EGL and
+GL cores, and Mesa's gallium with LLVM. The window never uses them.
+
+Now the GUI sets an empty EGL vendor list before GPUI starts, when a Vulkan
+driver is installed and `gpu` is not "any". Panes do not inherit it.
+`perf/measure-after-egl.json`:
+
+| Case | App CPU | Frames/s | Paint p50 / p95 | RSS | Anonymous |
+| --- | --- | --- | --- | --- | --- |
+| idle-quiet | 0.2 % | 1.0 | 0.24 / 0.26 ms | 175 MB | 26.9 MB |
+| busy4, before | 9.7 % | 59 | 0.61 / 0.81 ms | 223 MB | 41.8 MB |
+| busy4 | 8.1 % | 49 | 0.77 / 0.85 ms | 180 MB | 32.1 MB |
+| busy1 | 5.3 % | 43 | 0.48 / 0.53 ms | 176 MB | 28.5 MB |
+
+The budget of 40 MB with 4 busy panes is met with every driver loaded,
+with 8 MB to spare. Most of the remaining RSS is mapped driver files.
 
 ## The painter, before and after
 
