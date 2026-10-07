@@ -16,6 +16,14 @@ type PasteBuffersConfig struct {
 	MaxKB int `toml:"max_kb"`
 }
 
+// defaultPasteBuffersConfig is [paste_buffers] as DefaultConfig holds it: the
+// values a file that leaves the table out resolves to, written out, so a
+// config.toml that repeats them is pruned.
+func defaultPasteBuffersConfig() PasteBuffersConfig {
+	limit := pastebuf.DefaultLimit
+	return PasteBuffersConfig{Limit: &limit, MaxKB: pastebuf.DefaultMaxBytes >> 10}
+}
+
 // Resolved returns the count limit and the byte cap the store runs with.
 func (c PasteBuffersConfig) Resolved() (limit, maxBytes int) {
 	limit = pastebuf.DefaultLimit

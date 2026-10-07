@@ -42,7 +42,8 @@ test enters the code below the fault, and the fault is what nobody is testing.
 
 ## Paste buffers (#514)
 
-`paste_buffers_test.go` and `paste_buffers_scope_test.go` have seven tests. On
+`paste_buffers_test.go`, `paste_buffers_scope_test.go` and
+`paste_buffers_config_test.go` have eight tests. On
 2026-10-07 each control below cut one piece of wiring, built a binary, and ran
 the named test against it. Every control failed where shown, and the same
 tests passed on the branch build.
@@ -61,6 +62,7 @@ tests passed on the branch build.
 | The session filter in `bufferAccess` | `TestPasteBuffersStayInTheirSession` | the pane with read reads another session's buffer, and `OTHER_SHOW=1` never prints |
 | `for_session` in `pasteBufferNamed` | `TestPasteKeyIgnoresABufferPlantedFromAnotherSession` | prefix `]` pastes the buffer a pane of another session set |
 | The byte test in the store's `trim` | `TestPasteBufferByteCap` | both 600-byte buffers stay under `max_kb = 1` |
+| `[paste_buffers]` left out of `DefaultConfig` | `TestPasteBufferKeysLiveInTheirFile` | `config prune --dry-run` does not list `paste_buffers.max_kb` |
 
 The grant test carries its positive halves: each refused call is served once
 the grant it names is given. The session test reads the other session's

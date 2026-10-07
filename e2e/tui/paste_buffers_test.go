@@ -55,7 +55,8 @@ type pbListing struct {
 		Bytes  int    `json:"bytes"`
 		Sample string `json:"sample"`
 	} `json:"buffers"`
-	Limit int `json:"limit"`
+	Limit    int `json:"limit"`
+	MaxBytes int `json:"max_bytes"`
 }
 
 // listBuffers reads the daemon's buffers with the CLI.
