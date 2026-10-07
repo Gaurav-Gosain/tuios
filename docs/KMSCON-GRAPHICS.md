@@ -20,6 +20,14 @@ The default, `auto`, picks the glyphs from `TERM`:
 | `linux` | Half blocks (1x2) | Console fonts hold 256 or 512 glyphs: the CP437 block set and nothing finer. |
 | anything else | Quadrants (2x2) | In the Basic Multilingual Plane; every font with block elements has them. |
 
+![The glyph sets: octant, sextant, quadrant and half in 24-bit colour, octant at 256 colours, and half blocks at 16 colours](images/kmscon-glyph-sets.png)
+
+![auto with TERM=kmscon, TERM=linux and TERM=xterm-256color](images/kmscon-auto.png)
+
+These are the host's frames from the e2e tests, drawn by `internal/shot`. The
+16-colour frame is drawn in the xterm palette; the Linux console shows the VGA
+colours.
+
 At 16 colours the glyphs are always half blocks, dithered to the 16 colours.
 `appearance.image_symbols` names a set outright, or `off`. See
 [CONFIGURATION.md](CONFIGURATION.md#images-on-a-terminal-without-graphics).
@@ -170,6 +178,11 @@ Without the dither, low-contrast pictures fall to flat bands with no shape
 left; 0.5 sits under every dithered result and over those. With the dither, no
 measured picture fell under it, so the box is a safety net. It is shown by the
 e2e control that raises the threshold (below).
+
+chafa in a pane, through tuios's octants (left) and with
+`image_symbols = "off"`, its own text output (right):
+
+![chafa through tuios's octants, and chafa's own text](images/kmscon-chafa.png)
 
 ## Measured
 
