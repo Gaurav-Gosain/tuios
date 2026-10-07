@@ -942,8 +942,7 @@ func shortenDockItemNames(available int, allItems []DockItem) bool {
 	for _, item := range allItems {
 		longest = max(longest, lipgloss.Width(item.Name))
 	}
-	budget := 0
-	for b := longest; b >= dockItemMinNameCells; b-- {
+	totalAt := func(b int) int {
 		total := 0
 		for i, item := range allItems {
 			if i > 0 {
@@ -951,14 +950,25 @@ func shortenDockItemNames(available int, allItems []DockItem) bool {
 			}
 			total += entryWidthAt(item, b)
 		}
-		if total <= available {
-			budget = b
-			break
-		}
+		return total
 	}
-	if budget == 0 {
+	// A name cut to more cells is never drawn narrower, so the total only
+	// grows with the budget, and the largest budget that fits is found by
+	// bisection. Trying every budget from the longest name down cost 3.5 ms
+	// a frame with twelve named entries on a bar too narrow for them.
+	lo, hi := dockItemMinNameCells, longest
+	if hi < lo || totalAt(lo) > available {
 		return false
 	}
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		if totalAt(mid) <= available {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	budget := lo
 	for i := range allItems {
 		item := &allItems[i]
 		name := item.Name
