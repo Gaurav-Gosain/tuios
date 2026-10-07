@@ -263,8 +263,19 @@ func (m *OS) persistSettings() tea.Cmd {
 	// file this writes. See agents_off.go.
 	agents := m.applyAgentsSwitch()
 	save := func() tea.Msg {
-		if err := write(); err != nil {
+		note, err := write()
+		if err != nil {
 			return settingsSaveFailedMsg{err: err}
+		}
+		if !note.Empty() {
+			// The change is saved, in config.toml rather than the read-only
+			// file that holds the key. That is said, and a changed host still
+			// applies.
+			said := func() tea.Msg { return settingsSaveRedirectedMsg{note: note} }
+			if apply != nil {
+				return tea.Batch(said, apply)()
+			}
+			return said()
 		}
 		// A host the person changed here applies now. The daemon's own
 		// reload of the file waits for the person on a new host.
@@ -282,6 +293,10 @@ func (m *OS) persistSettings() tea.Cmd {
 // settingsSaveFailedMsg carries a failed config write back to the Update
 // goroutine, which is the only place a notification can be raised from.
 type settingsSaveFailedMsg struct{ err error }
+
+// settingsSaveRedirectedMsg says a save went to config.toml because the file
+// that holds the key is read-only, such as a file a Nix store link provides.
+type settingsSaveRedirectedMsg struct{ note config.WriteNote }
 
 // setAppearance runs fn against the held config's appearance section when a
 // config is present, so live changes can be persisted.

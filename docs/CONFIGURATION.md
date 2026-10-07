@@ -25,6 +25,99 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 `tuios list-options` describes every settable path with its type, default, and accepted values, straight from the registry the validator uses. The in-app settings page (`Ctrl+B ,`) edits and persists the same options, and its rows are derived from that same registry: an option an agent can set is an option a person can reach, and a test fails the build if one is not.
 
+## Split the config into several files
+
+You can keep part of the config in other files. Use this to share one
+config.toml between machines and keep the settings for one machine, such as
+its hosts, in a separate file.
+
+There are two ways to add files. Use one or both.
+
+1. Put an `include` list at the top of config.toml:
+
+   ```toml
+   include = ["hosts.toml", "~/.config/tuios/local.toml"]
+   ```
+
+   A relative path is relative to the file that has the `include` line. `~`
+   is your home directory. An included file can have its own `include` list.
+
+2. Put `*.toml` files in a `config.d` directory next to config.toml. tuios
+   reads them in name order, so `10-theme.toml` comes before `50-hosts.toml`.
+
+### Which value wins
+
+tuios reads the files in this order. A later file wins over an earlier file.
+
+1. The files in the `include` list, in list order. An included file's own
+   includes come before it.
+2. The files in `config.d`, in name order.
+3. config.toml.
+
+config.toml always wins, because it is the file that tuios writes. A config.toml
+that tuios made on the first start sets every key. Remove a key from
+config.toml when you want another file to set it.
+
+The files merge with these rules:
+
+- Tables merge key by key, at every depth. `[hosts.NAME]` tables merge by
+  name, so each file can add its own hosts.
+- For a single value, the later file wins.
+- An array replaces the earlier array. It does not add to it.
+- An array of tables, such as `[[keybindings.command]]`, merges by entry. Two
+  entries with the same `name` merge, and a later file wins for each key. When
+  the entries have no `name`, `key` identifies them. A new entry goes at the
+  end.
+
+These are not errors:
+
+- An include that names a file that does not exist. tuios shows a warning and
+  skips it, so one machine can include a file that only it has.
+- An include cycle. tuios shows a warning and reads each file once.
+
+A file that exists and has a TOML error stops the load, the same as an error in
+config.toml.
+
+### Find where a key comes from
+
+```sh
+tuios config files                     # every file, in merge order
+tuios config origin                    # every key and the file that sets it
+tuios config origin appearance.theme   # one key
+```
+
+`tuios config origin` also names the earlier files that set the same key. Their
+values lose.
+
+### Hot reload
+
+tuios watches every file it reads: config.toml, each included file, each file
+in `config.d`, and the `config.d` directory itself. A save to any of them takes
+effect at once. An included file that was missing applies when you make it.
+
+### Where tuios writes a change
+
+The settings page, `tuios set-config`, the keybind manager,
+`tuios keybinds unbind`, `tuios hosts add` and `tuios plugins` write the config.
+They do not copy the other files into config.toml. Each change goes to one
+file:
+
+- A key that a file sets goes to the last file that sets it.
+- A new entry in a table of entries, such as a new `[hosts.NAME]`, goes to the
+  last file that has entries in that table.
+- Any other new key goes to config.toml.
+- A removed key is removed from each file that sets it.
+
+tuios never writes a read-only file. This includes a file that Nix or
+home-manager links in from the store. When a read-only file sets the key, tuios
+writes the change to config.toml, which wins over that file, and tells you. It
+cannot remove a host or a key from a read-only file. Remove it in the source of
+that file.
+
+When tuios writes a file, it keeps the `include` list. A save from the settings
+page writes the whole file again, without its comments. `tuios hosts add` and
+`tuios plugins` change only their own lines.
+
 ## Opening links
 
 tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a

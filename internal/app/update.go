@@ -2302,7 +2302,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Apply the config parsed by the watcher goroutine here, on the Bubble
 		// Tea goroutine, so the render loop never reads this session's settings
 		// mid-write.
-		return m, m.ApplyReloadedConfig(msg.Config)
+		cmd := m.ApplyReloadedConfig(msg.Config)
+		// An include that names a missing file, or makes a cycle, is skipped
+		// and the rest applies. The person is told, because a file they meant
+		// to include and that does nothing looks like a broken setting.
+		if msg.Config != nil && len(msg.Config.LoadWarnings) > 0 {
+			for _, w := range msg.Config.LoadWarnings {
+				m.LogWarn("Config: %s", w)
+			}
+			m.ShowNotification(msg.Config.LoadWarnings[0], "warning", m.Settings.NotificationWarningDuration)
+		}
+		return m, cmd
 
 	case ConfigReloadFailedMsg:
 		// The file on disk cannot be used and the running config stands. The
@@ -2357,6 +2367,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// to be said out loud: the change is live either way, and the user needs
 		// to know it will not outlive the session.
 		m.ShowNotification("Could not save settings: "+msg.err.Error(), "error", 0)
+		return m, nil
+
+	case settingsSaveRedirectedMsg:
+		m.ShowNotification(msg.note.Message(), "warning", m.Settings.NotificationWarningDuration)
 		return m, nil
 
 	case tapeLayoutRefreshMsg:

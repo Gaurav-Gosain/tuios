@@ -44,7 +44,7 @@ func TestHostsAddKeepsReposRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.SetHostInFile(path, "build", config.HostConfig{Addr: "old", ReposRoot: "~/src"}); err != nil {
+	if _, err := config.SetHostInFile(path, "build", config.HostConfig{Addr: "old", ReposRoot: "~/src"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TUIOS_SSH", "/nonexistent-ssh")

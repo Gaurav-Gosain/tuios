@@ -41,6 +41,20 @@ and status line feed, and `meta` leaves those keys out), `[dock]`, `[appearance.
 `[agents.permissions]`, `[agents] herdr_protocol` and the keybindings. The file is watched; a hook the
 daemon runs needs `tuios kill-server` to take effect.
 
+The config can be more than one file. config.toml can name more files in a
+top-level `include = [...]` list, and the `*.toml` files in `config.d` next to
+it are read too. config.toml wins over all of them. Before you edit a table by
+hand, find the file that sets it:
+
+```sh
+tuios config files                     # every file, in merge order, read-only ones marked
+tuios config origin hosts              # the file that sets each key under [hosts]
+```
+
+Edit that file, not config.toml. `set-config`, `tuios hosts add` and
+`tuios keybinds unbind` already write to the file that holds the key. They
+never write a read-only file: the change goes to config.toml, and they say so.
+
 A change to `[agents.permissions]` or `[hosts]` that gives panes or other
 machines more waits for the person, and the Inbox says so. The person applies
 it with `tuios config apply` in a terminal outside tuios. From a pane that

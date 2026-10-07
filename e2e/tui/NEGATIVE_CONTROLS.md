@@ -2436,3 +2436,48 @@ Not covered end to end: the exit of the pane's own process (`noteExit`),
 because the pane closes with it; OSC 9;4 being ignored after OSC 7501, since
 the `program` claim outranks OSC 9;4 while records exist, so no screen differs;
 and a full reset, which the vt conformance test covers on both backends.
+
+## A config split over several files
+
+`config_include_test.go` drives #518 through the real binary and real files.
+
+- `TestIncludedConfigFilesLoadAndReload` starts a client whose only binding is
+  in an included file, then saves that file, makes a `config.d` directory with
+  a file in it, and makes an included file that was missing at start. Each step
+  adds a `[[keybindings.command]]` chord that touches a marker, so a fired chord
+  proves the file was read. The positive half: the second chord does not fire
+  before its file is saved.
+- `TestSetConfigWritesTheFileThatHoldsTheKey` runs `set-config` against an
+  attached client. `border_style` must go to the included `look.toml` and not
+  to config.toml, and config.toml must keep its `include` list.
+  `hide_window_buttons` is set in a read-only (0444) file, so it must go to
+  config.toml, the read-only file must be byte for byte the same, and the
+  client must show "cannot write". `tuios config origin` must name each file.
+- `TestConfigCommandsWriteTheFileThatHoldsTheKey` runs `config files`,
+  `hosts add`, `hosts remove` and `keybinds unbind` from a shell. A host in
+  `hosts.toml` is edited there with its comment kept. A host in a read-only file
+  goes to config.toml with a notice, and its remove is refused with the file
+  named. An unbind of an action set in `keys.toml` writes `keys.toml`.
+
+Artifacts: the screen after the four reloads, the notice frame, the files after
+`set-config`, and a transcript of every command with the files it left, under
+`$TUIOS_E2E_FRAMES/<test name>/`.
+
+Run on 2026-10-07, each control on its own binary, all three tests each time:
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The watcher follows config.toml alone | `Watcher.relevant`: the files set cut, `name == cw.path` only | `LoadAndReload` ("a binding saved in an included file never reached the running client") | **caught** |
+| config.d is not watched | `Watcher.relevant`: the two `cw.dropIn` checks cut | `LoadAndReload` ("a binding in a config.d file made after start never reached the running client") | **caught** |
+| Includes are never read | `LoadLayered`: `lc.Layered` forced false | all three (the first chord never fires; set-config does not write look.toml; hosts add does not edit hosts.toml) | **caught** |
+| A save flattens into config.toml | `saveConfigData`: the `saveLayered` call cut, the whole render written | `SetConfig` (look.toml not written), `ConfigCommands` (keys.toml not written) | **caught** |
+| Every file is writable | `ConfigLayer.Writable` returns true | `SetConfig` (the change did not go to config.toml), `ConfigCommands` (no read-only mark) | **caught** |
+| Line edits skip the read-only check | `WriteTarget`: the `Writable` branch cut | `ConfigCommands` ("hosts add did not say locked.toml is read-only") | **caught** |
+| Whole saves skip the read-only check | `saveLayered`: the `writable` branch cut | `SetConfig` ("a setting held by a read-only file did not go to config.toml") | **caught** |
+| hosts add is not routed | `SetHostInFile`: writes `path` in place of the target | `ConfigCommands` ("hosts add did not edit hosts.toml in place") | **caught** |
+
+```sh
+go build -o /tmp/tuios ./cmd/tuios
+cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
+  -run 'TestIncludedConfigFilesLoadAndReload|TestSetConfigWritesTheFileThatHoldsTheKey|TestConfigCommandsWriteTheFileThatHoldsTheKey' .
+```

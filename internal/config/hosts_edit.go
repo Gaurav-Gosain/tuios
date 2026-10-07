@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -25,18 +27,49 @@ import (
 // one starts, and it is what lets an unparseable line elsewhere in the file
 // survive the edit rather than being rewritten into something else.
 
-// SetHostInFile writes the [hosts.NAME] table at path, replacing the table that
-// is there or appending one at the end. It creates the file and its directory
-// when neither exists.
-func SetHostInFile(path, name string, h HostConfig) error {
+// SetHostInFile writes the [hosts.NAME] table of the config whose main file is
+// at path. A config split over several files is written where the host is: the
+// file that sets [hosts.NAME], or for a new host the file that holds the other
+// hosts, or config.toml. A read-only file is not written: the table goes to
+// config.toml, and the WriteNote says so. It creates the file and its
+// directory when neither exists.
+func SetHostInFile(path, name string, h HostConfig) (WriteNote, error) {
 	if err := federation.ValidHostName(name); err != nil {
-		return err
+		return WriteNote{}, err
 	}
 	if strings.TrimSpace(h.Addr) == "" {
-		return fmt.Errorf("host %q needs an address. Give the name ssh uses, for example user@machine", name)
+		return WriteNote{}, fmt.Errorf("host %q needs an address. Give the name ssh uses, for example user@machine", name)
 	}
 	h.Addr = strings.TrimSpace(h.Addr)
 
+	target, note, err := writeTargetFor(path, []string{"hosts", name})
+	if err != nil {
+		return note, err
+	}
+	return note, setHostInOneFile(target, name, h)
+}
+
+// writeTargetFor is the file a change to key goes to, for the config whose main
+// file is at path. A config that is one file, or is not there yet, is written
+// at path.
+func writeTargetFor(path string, key []string) (string, WriteNote, error) {
+	lc, err := LoadLayered(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return path, WriteNote{}, nil
+	}
+	if err != nil {
+		return "", WriteNote{}, fmt.Errorf("the config files have an error, so tuios did not save: %w", err)
+	}
+	if !lc.Layered {
+		return path, WriteNote{}, nil
+	}
+	target, note := lc.WriteTarget(key)
+	return target, note, nil
+}
+
+// setHostInOneFile replaces the [hosts.NAME] table in one file, or appends one
+// at the end.
+func setHostInOneFile(path, name string, h HostConfig) error {
 	data, err := readConfigForEdit(path)
 	if err != nil {
 		return err
@@ -61,10 +94,41 @@ func SetHostInFile(path, name string, h HostConfig) error {
 	return writeConfigBytes([]byte(joinLines(out)), path)
 }
 
-// RemoveHostFromFile deletes the [hosts.NAME] table at path. It reports whether
-// a table was there to delete, so the caller can say "no host is named that"
-// rather than reporting a success that removed nothing.
+// RemoveHostFromFile deletes the [hosts.NAME] table from every file of the
+// config whose main file is at path. It reports whether a table was there to
+// delete, so the caller can say "no host is named that" rather than reporting
+// a success that removed nothing. A host that a read-only file sets is not
+// removed from any file, and the error names that file.
 func RemoveHostFromFile(path, name string) (bool, error) {
+	lc, err := LoadLayered(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("the config files have an error, so tuios did not save: %w", err)
+	}
+	if !lc.Layered {
+		return removeHostFromOneFile(path, name)
+	}
+	holders := lc.Holders([]string{"hosts", name})
+	for _, h := range holders {
+		if h.Kind != LayerMain && !h.Writable() {
+			return false, fmt.Errorf("host %q is set in %s, and tuios cannot write that file. Remove the host there", name, lc.DisplayPath(h.Path))
+		}
+	}
+	removed := false
+	for _, h := range holders {
+		ok, err := removeHostFromOneFile(h.Path, name)
+		if err != nil {
+			return removed, err
+		}
+		removed = removed || ok
+	}
+	return removed, nil
+}
+
+// removeHostFromOneFile deletes the [hosts.NAME] table in one file.
+func removeHostFromOneFile(path, name string) (bool, error) {
 	data, err := readConfigForEdit(path)
 	if err != nil {
 		return false, err
@@ -83,7 +147,7 @@ func RemoveHostFromFile(path, name string) (bool, error) {
 // read from the file rather than from a running daemon, so `tuios hosts add`
 // works with no daemon running.
 func HostsInFile(path string) (map[string]HostConfig, error) {
-	data, err := readConfigForEdit(path)
+	data, err := readConfigMerged(path)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +170,7 @@ func HostsInFile(path string) (map[string]HostConfig, error) {
 // file as a side effect of asking. A caller on a background goroutine makes
 // that a race as well as a surprise.
 func TailscaleInFile(path string) (TailscaleConfig, error) {
-	data, err := readConfigForEdit(path)
+	data, err := readConfigMerged(path)
 	if err != nil {
 		return TailscaleConfig{}, err
 	}

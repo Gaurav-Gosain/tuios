@@ -40,7 +40,7 @@ command = "/opt/tuios"
 addr = "lab-01"
 `
 	path := writeTemp(t, body)
-	if err := SetHostInFile(path, "build", HostConfig{Addr: "new-address"}); err != nil {
+	if _, err := SetHostInFile(path, "build", HostConfig{Addr: "new-address"}); err != nil {
 		t.Fatalf("replace a host: %v", err)
 	}
 	got := readFile(t, path)
@@ -64,7 +64,7 @@ addr = "lab-01"
 // thing if the key is not quoted.
 func TestAHostNameWithADotIsQuoted(t *testing.T) {
 	path := writeTemp(t, "")
-	if err := SetHostInFile(path, "lab.local", HostConfig{Addr: "lab-01"}); err != nil {
+	if _, err := SetHostInFile(path, "lab.local", HostConfig{Addr: "lab-01"}); err != nil {
 		t.Fatalf("add a host: %v", err)
 	}
 	got := readFile(t, path)
@@ -109,7 +109,7 @@ key = "x"
 
 func TestAddingTheFirstHostToAFileThatDoesNotExist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
-	if err := SetHostInFile(path, "build", HostConfig{Addr: "buildbox"}); err != nil {
+	if _, err := SetHostInFile(path, "build", HostConfig{Addr: "buildbox"}); err != nil {
 		t.Fatalf("add the first host: %v", err)
 	}
 	got := readFile(t, path)
@@ -136,7 +136,7 @@ func TestAddedHostRoundTripsThroughTheParser(t *testing.T) {
 		SSHOptions:     []string{"-J", "bastion", "-o", "StrictHostKeyChecking=yes"},
 		ReposRoot:      "~/src",
 	}
-	if err := SetHostInFile(path, "build", entry); err != nil {
+	if _, err := SetHostInFile(path, "build", entry); err != nil {
 		t.Fatalf("add a host: %v", err)
 	}
 	cfg, err := ParseUserConfig([]byte(readFile(t, path)))

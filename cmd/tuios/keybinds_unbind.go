@@ -53,9 +53,11 @@ func keybindsUnbind(action, key string) error {
 		return nil
 	}
 
-	if err := config.SaveUserConfig(cfg); err != nil {
+	note, err := config.SaveUserConfig(cfg)
+	if err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
+	printWriteNote(note)
 
 	var keys []string
 	for _, r := range removed {
@@ -63,7 +65,7 @@ func keybindsUnbind(action, key string) error {
 	}
 	fmt.Printf("Took %s off %s in [keybindings.%s].\n", strings.Join(keys, ", "), action, section)
 	if left := cfg.Keybindings.SectionFor(section)[action]; len(left) == 0 {
-		fmt.Printf("config.toml now says %s = [], so the default stays off.\n", action)
+		fmt.Printf("The config now says %s = [], so the default stays off.\n", action)
 	} else {
 		fmt.Printf("%s is still on %s.\n", action, strings.Join(left, ", "))
 	}
@@ -82,9 +84,11 @@ func keybindsFree(key string) error {
 	removed := cfg.Keybindings.FreeKey(key)
 
 	if len(removed) > 0 {
-		if err := config.SaveUserConfig(cfg); err != nil {
+		note, err := config.SaveUserConfig(cfg)
+		if err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}
+		printWriteNote(note)
 		fmt.Printf("Took %s off %s:\n", key, plural.Count(len(removed), "action"))
 		for _, r := range removed {
 			fmt.Printf("  %-28s [keybindings.%s]%s\n", r.Action, r.Section, unboundNote(r))

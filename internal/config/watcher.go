@@ -2,9 +2,13 @@ package config
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,10 +91,14 @@ type WatcherOptions struct {
 	DeliverUnchanged bool
 }
 
-// Watcher watches the config file for changes and triggers reloads.
+// Watcher watches the config file for changes and triggers reloads. A config
+// split over several files is watched as a whole: every included file, every
+// file in config.d, and config.d itself, so a drop-in file added or removed is
+// a change too.
 type Watcher struct {
 	watcher  *fsnotify.Watcher
 	path     string
+	dropIn   string
 	callback ConfigReloadCallback
 	opts     WatcherOptions
 	stopCh   chan struct{}
@@ -98,9 +106,15 @@ type Watcher struct {
 
 	mu            sync.Mutex
 	debounceTimer *time.Timer
-	// lastHash is the content the running config was built from, so a file that
-	// says what is already in force is not delivered again.
-	lastHash [sha256.Size]byte
+	// lastHashes is the content the running config was built from, file by
+	// file, so a set of files that says what is already in force is not
+	// delivered again.
+	lastHashes map[string][sha256.Size]byte
+	// files are the paths whose events count: every file read, and every
+	// included file that was not there.
+	files map[string]bool
+	// dirs are the directories under watch.
+	dirs map[string]bool
 }
 
 // NewWatcher creates a file watcher for the config file.
@@ -116,29 +130,97 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 		return nil, err
 	}
 
+	main := absPath(configPath)
 	cw := &Watcher{
 		watcher:  w,
-		path:     filepath.Clean(configPath),
+		path:     main,
+		dropIn:   filepath.Join(filepath.Dir(main), DropInDirName),
 		callback: callback,
 		opts:     opts,
 		stopCh:   make(chan struct{}),
-	}
-	// The file as it stands is what the client is already running, so the first
-	// event that finds it unchanged is dropped rather than delivered.
-	if data, err := os.ReadFile(cw.path); err == nil {
-		cw.lastHash = sha256.Sum256(data)
+		files:    map[string]bool{main: true},
+		dirs:     map[string]bool{},
 	}
 
 	// The directory, not the file: see the note at the top of this file. Added
 	// before the goroutine starts so a failure is reported to the caller rather
 	// than logged into a watcher that then watches nothing.
-	if err := w.Add(filepath.Dir(cw.path)); err != nil {
+	if err := w.Add(filepath.Dir(main)); err != nil {
 		_ = w.Close()
 		return nil, err
+	}
+	cw.dirs[filepath.Dir(main)] = true
+
+	// The files as they stand are what the client is already running, so the
+	// first event that finds them unchanged is dropped rather than delivered.
+	if lc, err := LoadLayered(main); err == nil {
+		cw.lastHashes = layerHashes(lc)
+		cw.follow(lc)
+	} else if data, err := os.ReadFile(main); err == nil { //nolint:gosec // the user's own config file
+		cw.lastHashes = map[string][sha256.Size]byte{main: sha256.Sum256(data)}
 	}
 
 	go cw.run()
 	return cw, nil
+}
+
+// layerHashes is the content hash of every file of the config.
+func layerHashes(lc *LayeredConfig) map[string][sha256.Size]byte {
+	out := make(map[string][sha256.Size]byte, len(lc.Layers))
+	for _, l := range lc.Layers {
+		out[l.Path] = sha256.Sum256(l.Data)
+	}
+	return out
+}
+
+// follow brings the watch set in line with the files lc read. A directory
+// added stays watched until Stop: the set is small, and dropping one that an
+// include returns to a moment later would lose its events.
+func (cw *Watcher) follow(lc *LayeredConfig) {
+	files := map[string]bool{cw.path: true}
+	for _, l := range lc.Layers {
+		files[l.Path] = true
+	}
+	for _, m := range lc.Missing {
+		files[m] = true
+	}
+	want := []string{cw.dropIn}
+	for p := range files {
+		want = append(want, filepath.Dir(p))
+	}
+	cw.mu.Lock()
+	cw.files = files
+	cw.mu.Unlock()
+	for _, dir := range want {
+		cw.mu.Lock()
+		have := cw.dirs[dir]
+		cw.mu.Unlock()
+		if have {
+			continue
+		}
+		// A directory that is not there cannot be watched. An include in a
+		// directory made later is seen on the next reload of a file that is
+		// watched.
+		if err := cw.watcher.Add(dir); err != nil {
+			continue
+		}
+		cw.mu.Lock()
+		cw.dirs[dir] = true
+		cw.mu.Unlock()
+	}
+}
+
+// relevant reports whether an event on name can change the config.
+func (cw *Watcher) relevant(name string) bool {
+	if name == cw.dropIn {
+		return true
+	}
+	if filepath.Dir(name) == cw.dropIn && strings.HasSuffix(name, ".toml") {
+		return true
+	}
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	return cw.files[name]
 }
 
 // run drains the event channel and arms the debounce.
@@ -149,7 +231,7 @@ func (cw *Watcher) run() {
 			if !ok {
 				return
 			}
-			if filepath.Clean(event.Name) != cw.path {
+			if !cw.relevant(filepath.Clean(event.Name)) {
 				continue
 			}
 			// Chmod alone is not a content change. Rename and Remove are: an
@@ -185,8 +267,8 @@ func (cw *Watcher) arm() {
 	cw.debounceTimer = time.AfterFunc(configDebounce, cw.reload)
 }
 
-// reload reads the file and calls the callback, unless the file says what is
-// already in force or tuios wrote it itself.
+// reload reads the files and calls the callback, unless they say what is
+// already in force or tuios wrote the changed ones itself.
 func (cw *Watcher) reload() {
 	select {
 	case <-cw.stopCh:
@@ -194,37 +276,67 @@ func (cw *Watcher) reload() {
 	default:
 	}
 
-	data, err := os.ReadFile(cw.path)
-	if err != nil {
+	lc, err := LoadLayered(cw.path)
+	if errors.Is(err, fs.ErrNotExist) {
 		// A file that is not there right now is an editor mid-save, not a
 		// change. The create that follows brings its own event.
 		return
 	}
-	sum := sha256.Sum256(data)
+	if err != nil {
+		// A file that does not parse. The running config stands, and the
+		// hashes are not recorded, so the fix is delivered.
+		cw.callback(nil, err)
+		return
+	}
+	cw.follow(lc)
+
+	sums := layerHashes(lc)
 	cw.mu.Lock()
-	same := sum == cw.lastHash && !cw.opts.DeliverUnchanged
+	same := maps.Equal(sums, cw.lastHashes) && !cw.opts.DeliverUnchanged
+	self := !cw.opts.DeliverSelfWrites && onlySelfWrites(cw.lastHashes, sums)
 	cw.mu.Unlock()
-	if same || (!cw.opts.DeliverSelfWrites && isSelfWrite(sum)) {
-		// Either the file says what is already in force, or tuios wrote it
-		// itself from a settings row. Both are already applied.
+	if same || self {
+		// Either the files say what is already in force, or tuios wrote the
+		// changed ones itself from a settings row. Both are already applied.
 		cw.mu.Lock()
-		cw.lastHash = sum
+		cw.lastHashes = sums
 		cw.mu.Unlock()
 		return
 	}
 
-	cfg, err := parseAndValidate(data)
+	cfg, err := validateLayered(lc)
 	if err != nil {
-		// The hash is not recorded: a file that could not be used is not what
-		// the client is running, so the next save is delivered even if the user
-		// only fixed the syntax and changed nothing else.
+		// The hashes are not recorded: files that could not be used are not
+		// what the client is running, so the next save is delivered even if
+		// the user only fixed the syntax and changed nothing else.
 		cw.callback(nil, err)
 		return
 	}
 	cw.mu.Lock()
-	cw.lastHash = sum
+	cw.lastHashes = sums
 	cw.mu.Unlock()
 	cw.callback(cfg, nil)
+}
+
+// onlySelfWrites reports whether every file that differs from before is one
+// tuios wrote itself. A file that went away is nobody's save.
+func onlySelfWrites(before, after map[string][sha256.Size]byte) bool {
+	changed := false
+	for p := range before {
+		if _, ok := after[p]; !ok {
+			return false
+		}
+	}
+	for p, sum := range after {
+		if old, ok := before[p]; ok && old == sum {
+			continue
+		}
+		if !isSelfWrite(sum) {
+			return false
+		}
+		changed = true
+	}
+	return changed
 }
 
 // Stop stops the file watcher.
@@ -240,13 +352,31 @@ func (cw *Watcher) Stop() {
 	})
 }
 
-// ReloadConfig loads and validates a config from the given path.
+// ReloadConfig loads and validates a config from the given path, with every
+// file it includes.
 func ReloadConfig(path string) (*UserConfig, error) {
-	data, err := os.ReadFile(path)
+	lc, err := LoadLayered(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+		return nil, err
 	}
-	return parseAndValidate(data)
+	return validateLayered(lc)
+}
+
+// validateLayered is the reload path's parse of a loaded config.
+func validateLayered(lc *LayeredConfig) (*UserConfig, error) {
+	data, err := lc.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := parseAndValidate(data)
+	if err != nil {
+		return nil, err
+	}
+	cfg.LoadWarnings = append([]string(nil), lc.Warnings...)
+	return cfg, nil
 }
 
 // parseAndValidate is the reload path's parse: every section filled from the

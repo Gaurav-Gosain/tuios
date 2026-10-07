@@ -3,7 +3,9 @@ package config
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"slices"
@@ -61,6 +63,10 @@ type UserConfig struct {
 	// was already the user's for another action in the same table. It is
 	// worked out on load and never written. See yieldingDefaults.
 	YieldedDefaults []YieldedDefault `toml:"-"`
+	// LoadWarnings say what the load of a config split over several files
+	// skipped: an included file that is not there, or an include cycle. It is
+	// worked out on load and never written. See include.go.
+	LoadWarnings []string `toml:"-"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -1653,15 +1659,13 @@ func LoadUserConfig() (*UserConfig, error) {
 		return createDefaultConfig()
 	}
 
-	// Read and parse config file
-	// #nosec G304 - configPath is from XDG search, reading user config is intentional
-	data, err := os.ReadFile(configPath)
+	// Read and parse the config file, with the files it includes and the
+	// config.d files merged in.
+	cfg, _, err := loadConfigFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	cfg, err := ParseUserConfig(data)
-	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
 		return nil, err
 	}
 
@@ -1733,6 +1737,14 @@ func createDefaultConfig() (*UserConfig, error) {
 		return nil, err
 	}
 
+	// A config.d directory can be there before config.toml is: a machine
+	// whose dotfiles bring only the drop-in files. Its files apply from the
+	// first start.
+	if lc, err := LoadLayered(configPath); err == nil && lc.Layered {
+		if merged, _, err := loadConfigFile(configPath); err == nil {
+			return merged, nil
+		}
+	}
 	return cfg, nil
 }
 
@@ -3005,7 +3017,8 @@ func ConfigWarnings(cfg *UserConfig) []string {
 		return nil
 	}
 	validation := ValidateConfig(cfg)
-	lines := make([]string, 0, len(validation.Errors)+len(validation.Warnings))
+	lines := make([]string, 0, len(cfg.LoadWarnings)+len(validation.Errors)+len(validation.Warnings))
+	lines = append(lines, cfg.LoadWarnings...)
 	for _, issue := range validation.Errors {
 		lines = append(lines, fmt.Sprintf("[%s] %s: %s", issue.Field, issue.Key, issue.Message))
 	}

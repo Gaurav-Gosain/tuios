@@ -9,6 +9,12 @@ mode. The pane gets the leader that `leader_key` names, such as `ctrl+a`,
 encoded as the pane expects: CSI u for a pane using the Kitty keyboard
 protocol, legacy bytes otherwise. A leader with no legacy encoding is dropped.
 
+The `[keybindings]` sections can also be in a file that config.toml includes,
+or in a file in `config.d`. The tables merge key by key, and
+`[[keybindings.command]]` entries merge by `name`. The keybind manager and
+`tuios keybinds unbind` write a change to the file that sets the action. See
+[Split the config into several files](CONFIGURATION.md#split-the-config-into-several-files).
+
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
 ## The full list

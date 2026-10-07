@@ -256,8 +256,7 @@ func loadKeybindConfig() *config.UserConfig {
 	if err != nil {
 		return config.DefaultConfig()
 	}
-	// #nosec G304 - the path is the user's own config file
-	data, err := os.ReadFile(path)
+	data, err := config.ReadConfigFile(path)
 	if err != nil {
 		return config.DefaultConfig()
 	}

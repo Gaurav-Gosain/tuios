@@ -79,7 +79,7 @@ func TestHostedGraceParses(t *testing.T) {
 func TestRewritingAHostKeepsItsLinkPolicy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	hold := true
-	if err := SetHostInFile(path, "build", HostConfig{Addr: "a", Allow: []string{"list"}, HoldMail: &hold, HostedGrace: "5m"}); err != nil {
+	if _, err := SetHostInFile(path, "build", HostConfig{Addr: "a", Allow: []string{"list"}, HoldMail: &hold, HostedGrace: "5m"}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)

@@ -210,9 +210,11 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	if entry.ReposRoot == "" {
 		entry.ReposRoot = prev.ReposRoot
 	}
-	if err := config.SetHostInFile(path, name, entry); err != nil {
+	note, err := config.SetHostInFile(path, name, entry)
+	if err != nil {
 		return err
 	}
+	printWriteNote(note)
 
 	if replaced {
 		fmt.Printf("Host %s now points at %s.\n", name, addr)

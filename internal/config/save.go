@@ -293,36 +293,43 @@ var (
 // The returned function is safe to call from anywhere and from several places at
 // once. Writes are serialised and stamped, so when two saves are in flight the
 // older one gives way rather than overwriting the newer.
-func RenderUserConfig(cfg *UserConfig) (func() error, error) {
+//
+// A config split over several files is not rendered whole into config.toml.
+// The function writes each changed key to the file that holds it (see
+// include_write.go), and its WriteNote says when a read-only file sent a
+// change to config.toml instead.
+func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve config path: %w", err)
 	}
-	data, err := renderConfigFile(cfg, configPath)
+	data, err := MarshalUserConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
+	full := append([]byte(configFileHeader(configPath)), data...)
 	gen := saveSeq.Add(1)
-	return func() error {
+	return func() (WriteNote, error) {
 		saveMu.Lock()
 		defer saveMu.Unlock()
 		if gen < saveDone.Load() {
-			return nil
+			return WriteNote{}, nil
 		}
-		if err := writeConfigBytes(data, configPath); err != nil {
-			return err
+		note, err := saveConfigData(configPath, data, full)
+		if err != nil {
+			return note, err
 		}
 		saveDone.Store(gen)
-		return nil
+		return note, nil
 	}, nil
 }
 
 // SaveUserConfig persists cfg to the user's config file at the standard XDG
-// location. Used by the in-app settings page to make live changes durable.
-func SaveUserConfig(cfg *UserConfig) error {
-	configPath, err := xdg.ConfigFile("tuios/config.toml")
+// location, the same way the settings page does.
+func SaveUserConfig(cfg *UserConfig) (WriteNote, error) {
+	write, err := RenderUserConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to resolve config path: %w", err)
+		return WriteNote{}, err
 	}
-	return WriteConfigFile(cfg, configPath)
+	return write()
 }

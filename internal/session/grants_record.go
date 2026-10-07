@@ -2,7 +2,9 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"maps"
 	"os"
@@ -138,8 +140,8 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	if d.configPath == "" {
 		return nil, newVerbError(ErrVerbCommandFailed, "this daemon reads no config file")
 	}
-	data, err := os.ReadFile(d.configPath)
-	if err != nil && !os.IsNotExist(err) {
+	data, err := config.ReadConfigFile(d.configPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml could not be read: "+err.Error())
 	}
 	cfg, err := config.ParseUserConfig(data)

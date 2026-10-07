@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 
@@ -29,7 +30,7 @@ var pluginsTable = []string{"plugins"}
 // PluginsInFile reads the [plugins] table of the file at path. A missing
 // file is an empty table.
 func PluginsInFile(path string) (PluginsConfig, error) {
-	data, err := readConfigForEdit(path)
+	data, err := readConfigMerged(path)
 	if err != nil {
 		return PluginsConfig{}, err
 	}
@@ -93,6 +94,16 @@ func RemovePluginDirInFile(path, dir string) (bool, error) {
 // lines the key had, adding the key after the header, or adding the table at
 // the end of the file.
 func setPluginsKey(path, key string, values []string) error {
+	// A config split over several files is written where the key is. A
+	// read-only file sends it to config.toml, which wins over it.
+	target, note, err := writeTargetFor(path, []string{"plugins", key})
+	if err != nil {
+		return err
+	}
+	if !note.Empty() {
+		log.Printf("Config: %s", note.Message())
+	}
+	path = target
 	data, err := readConfigForEdit(path)
 	if err != nil {
 		return err

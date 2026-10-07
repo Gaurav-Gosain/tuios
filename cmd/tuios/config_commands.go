@@ -86,6 +86,11 @@ func resetConfigToDefaults() error {
 
 	var sb strings.Builder
 	sb.WriteString(config.ConfigFileHeader(configPath))
+	// The include list is where the rest of the config is, not a setting.
+	// A reset keeps it, so the files it names still apply.
+	if line := config.IncludeLine(configPath); line != "" {
+		sb.WriteString(line + "\n\n")
+	}
 
 	data, err := config.MarshalUserConfig(defaultCfg)
 	if err != nil {

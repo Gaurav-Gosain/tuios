@@ -325,7 +325,49 @@ The daemon applies a change to the file at once only where it gives less. A chan
 		},
 	}
 
-	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd)
+	var configFilesJSON bool
+	configFilesCmd := &cobra.Command{
+		Use:   "files",
+		Short: "List the files the config is read from",
+		Long: `List the files the config is read from, from lowest to highest precedence.
+
+config.toml can name more files in a top-level include list. Every *.toml file
+in the config.d directory next to config.toml is read too. A later file wins
+over an earlier one, and config.toml wins over all of them. The list marks a
+file that tuios cannot write as read-only, and shows a warning for an include
+that names a missing file or makes a cycle.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runConfigFiles(cmd.OutOrStdout(), configFilesJSON)
+		},
+	}
+	configFilesCmd.Flags().BoolVar(&configFilesJSON, "json", false, "Print the files as JSON")
+
+	var configOriginJSON bool
+	configOriginCmd := &cobra.Command{
+		Use:   "origin [key]",
+		Short: "Show which config file sets each key",
+		Long: `Show which config file sets each key.
+
+Each line gives a key, the file whose value is in force, and the other files
+that set the same key. Give a key, such as appearance.theme or hosts, to show
+that key and the keys under it only. A key that no file sets has its default
+value.`,
+		Example: `  tuios config origin
+  tuios config origin appearance.theme
+  tuios config origin hosts`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := ""
+			if len(args) == 1 {
+				key = args[0]
+			}
+			return runConfigOrigin(cmd.OutOrStdout(), key, configOriginJSON)
+		},
+	}
+	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
+
+	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd, configFilesCmd, configOriginCmd)
 
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",

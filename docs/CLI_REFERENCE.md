@@ -3964,6 +3964,8 @@ Manage TUIOS configuration file.
 - `tuios config reset`: Reset configuration to defaults
 - `tuios config apply`: Apply `config.toml` to the running daemon now
 - `tuios config browse`: Search the settable options and set one, in an explorer
+- `tuios config files`: List the files the config is read from
+- `tuios config origin`: Show which file sets each key
 
 #### `tuios config apply`
 
@@ -4022,11 +4024,36 @@ click on a tab to show one group. `J` and `K` scroll the detail pane. `q` or
 because the output is a terminal, so a script or an agent in a pane always gets
 the plain output.
 
+#### `tuios config files`
+
+List the files the config is read from, from lowest to highest precedence:
+the files in the `include` list, the files in `config.d`, then config.toml. A
+file that tuios cannot write shows as read-only. An include that names a
+missing file or makes a cycle shows as a warning.
+
+```bash
+tuios config files [--json]
+```
+
+#### `tuios config origin`
+
+Show which file sets each key, and the earlier files that set the same key.
+Give a key to show that key and the keys under it only. A key that no file sets
+has its default value.
+
+```bash
+tuios config origin [key] [--json]
+tuios config origin hosts
+```
+
+See [Split the config into several files](CONFIGURATION.md#split-the-config-into-several-files).
+
 #### `tuios config reset`
 
 Reset the configuration file to default settings.
 
 **Warning:** This will overwrite your existing configuration after confirmation.
+It keeps the `include` list of config.toml.
 
 **Example:**
 ```bash

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"strconv"
 
 	"github.com/adrg/xdg"
@@ -22,8 +21,7 @@ func EffectiveDefault(opt Option) string {
 	if err != nil {
 		return opt.Default
 	}
-	// #nosec G304 - path is from XDG search, reading user config is intentional
-	data, err := os.ReadFile(path)
+	data, err := ReadConfigFile(path)
 	if err != nil {
 		return opt.Default
 	}
