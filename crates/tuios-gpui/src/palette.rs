@@ -222,7 +222,8 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
         let word_start = pos == 0 || !t[pos - 1].is_alphanumeric();
         let run = prev.is_some_and(|p| p + 1 == pos);
         n += 1;
-        if word_start || run {
+        // The first letter may land anywhere ("re" in "Previous").
+        if word_start || run || n == 1 {
             good += 1;
         }
         s += 1;
@@ -238,7 +239,8 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
         prev = Some(pos);
         ti = pos + 1;
     }
-    if n >= 3 && good * 4 < n * 3 {
+    // Two letters must both land well; longer queries may miss a quarter.
+    if n >= 2 && good * 4 < n * 3 {
         return None;
     }
     Some(s * 100 - t.len() as i32)
@@ -256,6 +258,13 @@ fn haystack(e: &Entry) -> String {
     }
 }
 
+/// Themes show only for a query that says "theme" or starts a theme's name
+/// with at least three letters: there are hundreds of them.
+fn wants_themes(q: &str, title: &str) -> bool {
+    let q = q.to_lowercase();
+    q.contains("theme") || (q.len() >= 3 && title.to_lowercase().split(' ').any(|w| w.starts_with(&q)))
+}
+
 /// The entries matching `query`, in section order and best first inside a
 /// section. With no query, themes stay hidden: there are hundreds.
 pub fn filter<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
@@ -263,19 +272,15 @@ pub fn filter<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
     let mut v: Vec<(Section, i32, usize, &Entry)> = entries
         .iter()
         .enumerate()
-        .filter(|(_, e)| !(q.is_empty() && e.section == Section::Themes))
+        .filter(|(_, e)| e.section != Section::Themes || wants_themes(q, &e.title))
         .filter_map(|(i, e)| score(q, &haystack(e)).map(|s| (e.section, s, i, e)))
         .collect();
+    // Sections keep their order (needs you, panes, sessions, commands,
+    // themes); inside a section the best match comes first.
     if q.is_empty() {
         v.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
     } else {
-        // The best match decides which section leads; the rest follow in order.
-        let best = v.iter().max_by_key(|x| x.1).map(|x| x.0);
-        v.sort_by(|a, b| {
-            let ka = (Some(a.0) != best, a.0);
-            let kb = (Some(b.0) != best, b.0);
-            ka.cmp(&kb).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2))
-        });
+        v.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
     }
     v.into_iter().map(|(_, _, _, e)| e).collect()
 }
@@ -318,9 +323,13 @@ mod tests {
     }
 
     #[test]
-    fn the_best_match_leads() {
+    fn the_best_match_leads_its_section() {
         let e = sample();
         assert!(filter(&e, "split")[0].title.starts_with("Split"));
+        assert!(filter(&e, "re").iter().all(|e| e.title != "Rotate split"), "scattered letters do not match");
+        assert!(filter(&e, "re").iter().any(|e| e.title == "Previous pane"), "the first letter may sit inside a word");
+        assert!(!filter(&e, "se").iter().any(|e| e.section == Section::Themes), "two letters show no themes");
+        assert!(filter(&e, "seaf").iter().any(|e| e.section == Section::Themes));
         assert_eq!(filter(&e, "theme seafoam")[0].act, Act::Theme("seafoam_pastel".into()));
         assert_eq!(filter(&e, "session play")[0].act, Act::Session("play".into()));
         assert_eq!(filter(&e, "nvim")[0].title, "nvim");

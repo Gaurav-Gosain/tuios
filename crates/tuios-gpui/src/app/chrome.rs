@@ -480,7 +480,9 @@ impl TuiosApp {
             }
             for p in ps.iter().filter(|p| attached || p.status.is_agent()) {
                 let selected = attached && focused.as_deref() == Some(p.window.as_str());
-                list = list.child(self.pane_row(p, selected, self.row_place(p), cx));
+                // Inside its own group a row needs no session name.
+                let place = if attached { self.row_place(p) } else { None };
+                list = list.child(self.pane_row(p, selected, place, cx));
             }
         }
 

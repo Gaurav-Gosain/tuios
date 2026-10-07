@@ -998,6 +998,9 @@ impl TuiosApp {
         let cell = self.cell_px();
         let debug = std::env::var_os("TUIOS_GPUI_DEBUG").is_some();
         let mut all = false;
+        // Output to a pane on another workspace changes nothing on screen.
+        let mut seen = false;
+        let shown = |this: &Self, pty: &str| this.state.as_ref().is_some_and(|s| s.visible().iter().any(|w| w.pty == pty));
         for msg in batch {
             if debug {
                 match &msg {
@@ -1018,6 +1021,7 @@ impl TuiosApp {
                     "state" => {
                         if let Some(st) = ev.state {
                             self.on_state(st, cx);
+                            seen = true;
                         }
                     }
                     "theme" => {
@@ -1036,18 +1040,21 @@ impl TuiosApp {
                     _ => {}
                 },
                 Message::Snapshot { pty, cols, rows, bytes } => {
+                    seen |= shown(self, &pty);
                     let theme = self.theme.clone();
                     let sb = self.cfg.scrollback;
                     let pane = self.panes.entry(pty).or_insert_with(|| Pane::new(cols.max(1), rows.max(1), &theme, sb));
                     pane.restore(cols, rows, &bytes, &theme, cell);
                 }
                 Message::Output { pty, bytes } => {
+                    seen |= shown(self, &pty);
                     let (c, r) = self.layout_size(&pty);
                     let theme = self.theme.clone();
                     let sb = self.cfg.scrollback;
                     self.panes.entry(pty).or_insert_with(|| Pane::new(c, r, &theme, sb)).write(&bytes);
                 }
                 Message::Resized { pty, cols, rows } => {
+                    seen |= shown(self, &pty);
                     if let Some(p) = self.panes.get_mut(&pty) {
                         p.term.resize(cols, rows, cell.0, cell.1);
                     }
@@ -1062,7 +1069,7 @@ impl TuiosApp {
         }
         if all {
             cx.notify();
-        } else {
+        } else if seen {
             self.refresh_grid(cx);
         }
     }

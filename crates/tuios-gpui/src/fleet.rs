@@ -82,9 +82,16 @@ impl PaneInfo {
         }
     }
 
-    /// The one fragment a palette row shows: the message or the folder.
+    /// The one fragment a palette row shows: the message, or the folder
+    /// when the name is not the folder already.
     pub fn fragment(&self) -> &str {
-        if !self.message.is_empty() && self.status.is_agent() { &self.message } else { &self.place }
+        if !self.message.is_empty() && self.status.is_agent() {
+            &self.message
+        } else if self.place.starts_with(self.name.as_str()) || self.place.contains(&format!("/{}", self.name)) {
+            ""
+        } else {
+            &self.place
+        }
     }
 }
 
@@ -198,6 +205,7 @@ fn describe(r: &Raw, status: Status, home: &str) -> (String, String, String, Str
         (_, false) if !r.foreground.is_empty() => r.foreground.to_string(),
         (Some(t), false) => t.clone(),
         (None, true) if !r.foreground.is_empty() && r.foreground != harness => r.foreground.to_string(),
+        _ if folder == "~" => "~".into(),
         _ if !folder.is_empty() => short_folder(&folder),
         _ if !harness.is_empty() => harness.clone(),
         _ => "shell".into(),
