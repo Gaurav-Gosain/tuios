@@ -895,10 +895,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// output waits for the frame at the end of the period, and the panes
 		// keep their new-output flags until it comes. See paneFrameWait.
 		listen := ListenForPTYData(m.PTYDataChan)
-		_, changed, due := m.takePaneOutput(time.Now())
+		open, changed, due := m.takePaneOutput(time.Now())
 		// Nothing marked means nothing to draw: the output was on a hidden
 		// pane, or it was kitty graphics the passthrough already wrote.
-		m.renderSkipped = !changed
+		//
+		// Except during a drag or a resize, when MarkTerminalsWithNewContent
+		// marks nothing on purpose. The frames the output drew then are the
+		// ones that show the gesture between motion events, as they did
+		// before graphics output stopped composing frames, so they stay.
+		gesture := m.InteractionMode || m.Dragging || m.Resizing
+		m.renderSkipped = !changed && !(open && gesture)
 		if due != nil {
 			return m, tea.Batch(listen, due)
 		}
