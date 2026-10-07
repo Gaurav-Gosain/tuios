@@ -227,12 +227,34 @@ func (s *ghosttyScanner) Scan(p []byte) {
 				s.endOsc(b)
 			case 0x1b:
 				s.state = gsOscEsc
+			case 0x18, 0x1a:
+				// CAN and SUB cancel the string, as in the DEC parser the
+				// pure emulator and libghostty both follow: nothing is
+				// dispatched, and what follows is ordinary text.
+				s.resetSeq()
+				s.emit(b)
+				s.state = gsGround
 			default:
+				if b < 0x20 {
+					// Any other C0 control inside an OSC string is ignored,
+					// as in the DEC parser, so a hook reads the payload the
+					// pure emulator reads.
+					continue
+				}
 				s.buffer(b)
 			}
 		case gsOscEsc:
 			if b == '\\' {
 				s.endOsc('\\')
+			} else if oscNumber(s.seq) == 7501 { // progstatus.Command
+				// The pure emulator's parser ends the string at the ESC and
+				// dispatches it, then reads the ESC as a new sequence. An
+				// OSC 7501 report is read the same way here, so the two
+				// backends agree on which reports apply. The OSC is never
+				// forwarded, so nothing changes for libghostty.
+				s.endOsc('\\')
+				s.state = gsEsc
+				i--
 			} else {
 				// ESC aborts the string and starts a new sequence. The
 				// withheld payload is dropped on both sides: the sink never

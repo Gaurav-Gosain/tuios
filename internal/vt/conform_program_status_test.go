@@ -109,6 +109,29 @@ func TestConform_ProgramStatusReports(t *testing.T) {
 			chunks: []string{"\x1b]7501;state=idle:x=" + strings.Repeat("a", 4096) + "\x1b\\"},
 			want:   nil,
 		},
+		// Control bytes inside the string, where both backends must agree:
+		// a C0 control is ignored, CAN and SUB cancel the report, and ESC
+		// followed by anything but \ starts a new sequence instead.
+		{
+			name:   "a C0 control inside the body is ignored",
+			chunks: []string{"\x1b]7501;state=wor\nki\x01ng:app=car\tgo\x1b\\"},
+			want:   []progstatus.Event{{Report: progstatus.Report{State: progstatus.Working, App: "cargo", Progress: -1}}},
+		},
+		{
+			name:   "CAN cancels the report",
+			chunks: []string{"\x1b]7501;state=working\x18:app=x\x1b\\"},
+			want:   nil,
+		},
+		{
+			name:   "SUB cancels the report",
+			chunks: []string{"\x1b]7501;state=working\x1a\x07"},
+			want:   nil,
+		},
+		{
+			name:   "ESC [ inside the body ends the report and starts a CSI",
+			chunks: []string{"\x1b]7501;state=working\x1b[m:app=x\x1b\\"},
+			want:   []progstatus.Event{{Report: progstatus.Report{State: progstatus.Working, Progress: -1}}},
+		},
 		{
 			name:   "RIS removes every record",
 			chunks: []string{"\x1bc"},
