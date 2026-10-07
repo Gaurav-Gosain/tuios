@@ -2140,3 +2140,34 @@ is on its spine, and that a click on it makes a pane.
 
 Width 16 passes the two narrow controls because no name fits there. The first
 control covers it.
+
+## Live CPU and RAM settings leave the samplers off
+
+Enabling `appearance.show_cpu` or `appearance.show_ram` changed the rendered
+meter but did not add its sampler to the dock engine. The settings page's save
+is a self-write, so the config watcher correctly ignores it and cannot repair
+the missing schedule. `DockMetersSyncCmd`, called after the message handler,
+now reloads the dock only when a placed meter's enabled state differs from its
+sampler membership. It uses the existing engine cancellation and listener path.
+
+`TestDockMetersFollowLiveSettings` drives both the settings page and
+`set-config` on a real attached client. It checks sampled text, the two-second
+interval and advancing `last_run`, then disables, re-enables and disables both
+meters. Frames and JSON listings are written through `TUIOS_E2E_FRAMES`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Missing post-handler hook | build on `f3d89294` with a Go overlay cutting the `DockMetersSyncCmd` call from `Update` and its unused batch variable; helper left intact | `TestDockMetersFollowLiveSettings/settings`, `/set-config`, and `TestDockMeterSyncDoesNotReloadAnUnchangedPlan/placed=true`: enabled CPU has `refresh=render` and empty interval, text and last_run | **caught** (3 subtests) |
+
+The negative run used `-count=1`; both settings paths and the placed meter's
+positive half timed out at the sampler assertion, not at the settings control.
+The omitted meter's positive half passes the control because adding it through
+the config watcher already rebuilds the engine. All four subtests pass with
+the post-handler hook wired in.
+
+`TestDockMeterSyncDoesNotReloadAnUnchangedPlan` checks enabled meters omitted
+from the dock, disabled placed meters, and repeated settings. A custom `once`
+component records its starts; unchanged sampler membership must not restart it.
+The same fixture then enables or places CPU: its sampler must start and the
+custom component must restart exactly once. Both layout cases pass on the fixed
+build. This patch does not change the clock's sampler lifecycle.

@@ -83,6 +83,29 @@ func (m *OS) ReloadDockComponents(cfg *config.UserConfig) tea.Cmd {
 	return m.InitDockComponents()
 }
 
+// DockMetersSyncCmd keeps the CPU and RAM samplers in step with their live
+// settings. Update calls it after each handler, so settings, remote commands
+// and tape actions all use the existing dock reload path. An unchanged meter
+// set costs no timer or reload; a meter omitted from the plan never polls.
+func (m *OS) DockMetersSyncCmd() tea.Cmd {
+	if m.dockEngine == nil {
+		return nil
+	}
+	for _, meter := range []struct {
+		name string
+		on   bool
+	}{
+		{config.DockComponentCPU, m.Settings.ShowCPU},
+		{config.DockComponentRAM, m.Settings.ShowRAM},
+	} {
+		_, running := m.dockEngine.Component(meter.name)
+		if running != (m.dockPlan.Has(meter.name) && meter.on) {
+			return m.ReloadDockComponents(nil)
+		}
+	}
+	return nil
+}
+
 // dockSocketPath is the socket a component's command talks back through, so a
 // component can call tuios verbs without working out where the session lives.
 // Empty when there is no daemon, which is the honest answer for a standalone
