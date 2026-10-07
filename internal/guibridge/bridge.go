@@ -16,7 +16,9 @@
 //
 // Bridge to renderer:
 //
-//	1 JSON    one JSON object, see Event
+//	1 JSON    one JSON object, see Event. Besides the attached session's
+//	          state, a "fleet" event carries every session and agent on the
+//	          daemon whenever they change (see watchFleet).
 //	2 OUTPUT  u8 id length, pane PTY id, then the bytes the pane produced
 //	3 SNAP    u8 id length, PTY id, u16 cols, u16 rows, then VT bytes that
 //	          rebuild the pane in a reset emulator of that size; with no
@@ -87,6 +89,9 @@ type Event struct {
 	State *State `json:"state,omitempty"`
 	// Theme is set on "theme" events.
 	Theme *Theme `json:"theme,omitempty"`
+	// Fleet is set on "fleet" events: every session and every pane's agent
+	// state on the daemon, sent when they change.
+	Fleet *Fleet `json:"fleet,omitempty"`
 }
 
 // State is the session as the renderer draws it. Positions are cells.
@@ -226,6 +231,10 @@ func Run(opts Options) error {
 	out.JSON(Event{Type: "attached", Message: name})
 	th := CurrentTheme()
 	out.JSON(Event{Type: "theme", Theme: &th})
+	// Runs before out closes: deferred calls run last first.
+	stopFleet := make(chan struct{})
+	defer close(stopFleet)
+	go watchFleet(stopFleet, out, opts.Version)
 
 	go func() {
 		err := readCommands(opts.In, client, program)
