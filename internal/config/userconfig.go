@@ -8,9 +8,11 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -67,6 +69,9 @@ type UserConfig struct {
 	// skipped: an included file that is not there, or an include cycle. It is
 	// worked out on load and never written. See include.go.
 	LoadWarnings []string `toml:"-"`
+	// baseline is this config as TOML when it was parsed, or when it was last
+	// saved. A save writes the difference from it to now and nothing else.
+	baseline []byte
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -1702,6 +1707,25 @@ func LoadUserConfig() (*UserConfig, error) {
 // gets back, for example, an empty [spotlight], [tape], [screenshot] and
 // [screensaver], and a beam whose radius reads as zero.
 func ParseUserConfig(data []byte) (*UserConfig, error) {
+	cfg, err := parseUserConfigOnce(data)
+	if err != nil {
+		return nil, err
+	}
+	// A key the file leaves out has its default value, the same as in
+	// DefaultConfig. For most keys the fills below already do that. The keys
+	// they cannot tell apart from a zero the person chose are put in the file
+	// before a second parse, as if the person had written the default.
+	if seeded, ok := seedDefaults(data, cfg); ok {
+		if again, err := parseUserConfigOnce(seeded); err == nil {
+			cfg = again
+		}
+	}
+	cfg.baseline, _ = MarshalUserConfig(cfg)
+	return cfg, nil
+}
+
+// parseUserConfigOnce is the parse and the fills, without the seeding.
+func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	var cfg UserConfig
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
@@ -1724,28 +1748,122 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	return &cfg, nil
 }
 
-// createDefaultConfig creates a default config file in the user's config directory
-func createDefaultConfig() (*UserConfig, error) {
-	cfg := DefaultConfig()
+// legacyEmptyKeys keep the value an empty file gives them, not the value of
+// DefaultConfig. A config without [startup] is an install from before the
+// table existed, and it keeps its floating, standalone session. A first start
+// writes the two keys on (see FirstRunConfig).
+var legacyEmptyKeys = map[string]bool{"startup.tiled": true, "startup.daemon": true}
 
+// seedTables holds what seeding compares against: the defaults, and what an
+// empty file parses to.
+var seedTables = sync.OnceValues(func() (map[string]any, [][]string) {
+	empty, err := parseUserConfigOnce(nil)
+	if err != nil {
+		return nil, nil
+	}
+	ed, _ := MarshalUserConfig(empty)
+	dd, _ := MarshalUserConfig(DefaultConfig())
+	e, err1 := parseLayer(ed)
+	d, err2 := parseLayer(dd)
+	if err1 != nil || err2 != nil {
+		return nil, nil
+	}
+	var leaves [][]string
+	collectLeaves(d, nil, &leaves)
+	collectLeaves(e, nil, &leaves)
+	seen := map[string]bool{}
+	var paths [][]string
+	for _, p := range leaves {
+		k := strings.Join(p, ".")
+		if seen[k] || legacyEmptyKeys[k] {
+			continue
+		}
+		seen[k] = true
+		ev, eok := lookupPath(e, p)
+		dv, dok := lookupPath(d, p)
+		if !dok || (eok && reflect.DeepEqual(ev, dv)) {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	// Each path holds the empty-file value too, to tell "nothing in the file
+	// touched this" from "the file changed it", which a legacy key can do.
+	out := map[string]any{"default": d, "empty": e}
+	return out, paths
+})
+
+// seedDefaults puts the default of every key in seedTables that the file
+// does not set, and that nothing in the file changed, into the file's table.
+// ok is false when there is nothing to seed.
+func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
+	tables, paths := seedTables()
+	if tables == nil || len(paths) == 0 {
+		return nil, false
+	}
+	raw, err := parseLayer(data)
+	if err != nil {
+		return nil, false
+	}
+	gotData, err := MarshalUserConfig(parsed)
+	if err != nil {
+		return nil, false
+	}
+	got, err := parseLayer(gotData)
+	if err != nil {
+		return nil, false
+	}
+	d, e := tables["default"].(map[string]any), tables["empty"].(map[string]any)
+	seeded := false
+	for _, p := range paths {
+		if _, ok := lookupPath(raw, p); ok {
+			continue
+		}
+		ev, eok := lookupPath(e, p)
+		gv, gok := lookupPath(got, p)
+		if eok != gok || !reflect.DeepEqual(ev, gv) {
+			continue
+		}
+		dv, _ := lookupPath(d, p)
+		setPath(raw, p, dv)
+		seeded = true
+	}
+	if !seeded {
+		return nil, false
+	}
+	out, err := toml.Marshal(raw)
+	if err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+// createDefaultConfig writes the first-start config.toml and loads the config
+// it makes with the other files. The first-start file holds no settings, so
+// a config.d directory or an include from a dotfiles repo applies in full. A
+// config.toml that cannot be written is not an error: the config loads
+// without it.
+func createDefaultConfig() (*UserConfig, error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config path: %w", err)
 	}
-
-	if err := WriteConfigFile(cfg, configPath); err != nil {
+	first := FirstRunConfig(configPath, "")
+	if err := writeConfigBytes(first, configPath); err != nil {
+		log.Printf("Warning: tuios could not write %s: %v", configPath, err)
+	}
+	lc, err := loadLayered(configPath, true)
+	if err != nil {
 		return nil, err
 	}
-
-	// A config.d directory can be there before config.toml is: a machine
-	// whose dotfiles bring only the drop-in files. Its files apply from the
-	// first start.
-	if lc, err := LoadLayered(configPath); err == nil && lc.Layered {
-		if merged, _, err := loadConfigFile(configPath); err == nil {
-			return merged, nil
+	if lc.MainMissing {
+		main := lc.mainLayer()
+		main.Data = first
+		if main.Values, err = parseLayer(first); err != nil {
+			return nil, err
 		}
+		lc.Layered = true
 	}
-	return cfg, nil
+	return parseLayered(lc)
 }
 
 // fillMissingAppearance fills in any missing appearance settings with defaults.

@@ -53,18 +53,11 @@ func SetHostInFile(path, name string, h HostConfig) (WriteNote, error) {
 // file is at path. A config that is one file, or is not there yet, is written
 // at path.
 func writeTargetFor(path string, key []string) (string, WriteNote, error) {
-	lc, err := LoadLayered(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return path, WriteNote{}, nil
-	}
+	lc, err := loadLayered(path, true)
 	if err != nil {
-		return "", WriteNote{}, fmt.Errorf("the config files have an error, so tuios did not save: %w", err)
+		return "", WriteNote{}, fmt.Errorf("%s: %w", errSaveFailed, err)
 	}
-	if !lc.Layered {
-		return path, WriteNote{}, nil
-	}
-	target, note := lc.WriteTarget(key)
-	return target, note, nil
+	return lc.WriteTarget(key)
 }
 
 // setHostInOneFile replaces the [hosts.NAME] table in one file, or appends one
@@ -112,7 +105,7 @@ func RemoveHostFromFile(path, name string) (bool, error) {
 	}
 	holders := lc.Holders([]string{"hosts", name})
 	for _, h := range holders {
-		if h.Kind != LayerMain && !h.Writable() {
+		if !h.Writable() {
 			return false, fmt.Errorf("host %q is set in %s, and tuios cannot write that file. Remove the host there", name, lc.DisplayPath(h.Path))
 		}
 	}

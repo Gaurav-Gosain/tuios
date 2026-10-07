@@ -82,26 +82,10 @@ func resetConfigToDefaults() error {
 		}
 	}
 
-	defaultCfg := config.DefaultConfig()
-
-	var sb strings.Builder
-	sb.WriteString(config.ConfigFileHeader(configPath))
-	// The include list is where the rest of the config is, not a setting.
-	// A reset keeps it, so the files it names still apply.
-	if line := config.IncludeLine(configPath); line != "" {
-		sb.WriteString(line + "\n\n")
-	}
-
-	data, err := config.MarshalUserConfig(defaultCfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if _, err := sb.Write(data); err != nil {
-		return fmt.Errorf("failed to write config data: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, []byte(sb.String()), 0o600); err != nil {
+	// The reset file holds no settings, so every key has its default and
+	// every file the config includes applies. The include list stays: it is
+	// where the rest of the config is, not a setting.
+	if err := config.ResetConfig(configPath); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

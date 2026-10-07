@@ -2439,45 +2439,75 @@ and a full reset, which the vt conformance test covers on both backends.
 
 ## A config split over several files
 
-`config_include_test.go` drives #518 through the real binary and real files.
+`config_include_test.go` and `config_layers_test.go` drive #518 through the
+real binary and real files. A store file is a 0444 file in a 0555 directory,
+linked into the config directory, the way Nix and home-manager put it there.
 
-- `TestIncludedConfigFilesLoadAndReload` starts a client whose only binding is
-  in an included file, then saves that file, makes a `config.d` directory with
-  a file in it, and makes an included file that was missing at start. Each step
-  adds a `[[keybindings.command]]` chord that touches a marker, so a fired chord
-  proves the file was read. The positive half: the second chord does not fire
-  before its file is saved.
-- `TestSetConfigWritesTheFileThatHoldsTheKey` runs `set-config` against an
-  attached client. `border_style` must go to the included `look.toml` and not
-  to config.toml, and config.toml must keep its `include` list.
-  `hide_window_buttons` is set in a read-only (0444) file, so it must go to
-  config.toml, the read-only file must be byte for byte the same, and the
-  client must show "cannot write". `tuios config origin` must name each file.
-- `TestConfigCommandsWriteTheFileThatHoldsTheKey` runs `config files`,
-  `hosts add`, `hosts remove` and `keybinds unbind` from a shell. A host in
-  `hosts.toml` is edited there with its comment kept. A host in a read-only file
-  goes to config.toml with a notice, and its remove is refused with the file
-  named. An unbind of an action set in `keys.toml` writes `keys.toml`.
+- `TestIncludedConfigFilesLoadAndReload`: a binding in an included file works at
+  start. Saves to the included file, to a new `config.d` file and to an include
+  that was missing at start each reach the running client. The positive half:
+  the second chord does not fire before its file is saved.
+- `TestSetConfigWritesTheFileThatHoldsTheKey`: `set-config` writes the included
+  file that holds the key, and config.toml keeps its include list. A key that a
+  0444 file holds goes to config.toml, the file stays byte for byte the same,
+  and the client shows "cannot write".
+- `TestConfigCommandsWriteTheFileThatHoldsTheKey`: `config files`,
+  `hosts add`, `hosts remove`, `keybinds unbind` and `config origin` against
+  includes, a cycle, a missing file and a 0444 file.
+- `TestFirstStartWithNixStyleConfigD`: no config.toml, and a store link in
+  `config.d`. The first start writes a config.toml with no setting but
+  `[startup]`, the store file's binding works, and `set-config` of a key the
+  store holds adds exactly one line to config.toml.
+- `TestReadOnlyConfigTomlLink`: config.toml is a store link that includes a
+  writable `local.toml`. A new key goes to `local.toml` with its comment kept. A
+  key the store config.toml holds fails with "cannot save". With `local.toml`
+  read-only too, the save fails with "cannot write" and changes nothing.
+- `TestSymlinkedIncludeEditedInPlace`: an include is a link to a file in
+  another directory, and an edit in place to the target reaches the client.
+- `TestMixedNamedAndUnnamedCommandEntries`: an unnamed `[[keybindings.command]]`
+  entry changes the named entry with its key, a named entry the later file does
+  not mention stays, a `disabled = true` entry removes its match, and a new
+  entry is added.
+- `TestMergeOrderIncludeThenConfigDThenMain`: one chord in three files.
+  config.toml wins, then `config.d`, then the include.
+- `TestConfigPruneLetsIncludesApply`: `config prune` removes the keys at their
+  default, keeps comments, the include list, a chosen value and `[startup]`, and
+  the included file's value then applies.
+- `TestSaveDoesNotPinValuesTheModelHasNotSeen`: an included file changes where
+  the client cannot see it. A save of another key writes neither the client's
+  old value into config.toml nor back into the file.
+- `TestIncludeMistakesAreNamed`: a missing `?` include is silent, a missing
+  plain include warns, an include below a table warns, and a directory include
+  fails with a message that names `config.d`.
 
-Artifacts: the screen after the four reloads, the notice frame, the files after
-`set-config`, and a transcript of every command with the files it left, under
-`$TUIOS_E2E_FRAMES/<test name>/`.
+Artifacts: frames, the files after each save, and the command transcripts,
+under `$TUIOS_E2E_FRAMES/<test name>/`.
 
-Run on 2026-10-07, each control on its own binary, all three tests each time:
+Run on 2026-10-07, each control on its own binary, all eleven tests each time:
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The watcher follows config.toml alone | `Watcher.relevant`: the files set cut, `name == cw.path` only | `LoadAndReload` ("a binding saved in an included file never reached the running client") | **caught** |
-| config.d is not watched | `Watcher.relevant`: the two `cw.dropIn` checks cut | `LoadAndReload` ("a binding in a config.d file made after start never reached the running client") | **caught** |
-| Includes are never read | `LoadLayered`: `lc.Layered` forced false | all three (the first chord never fires; set-config does not write look.toml; hosts add does not edit hosts.toml) | **caught** |
-| A save flattens into config.toml | `saveConfigData`: the `saveLayered` call cut, the whole render written | `SetConfig` (look.toml not written), `ConfigCommands` (keys.toml not written) | **caught** |
-| Every file is writable | `ConfigLayer.Writable` returns true | `SetConfig` (the change did not go to config.toml), `ConfigCommands` (no read-only mark) | **caught** |
-| Line edits skip the read-only check | `WriteTarget`: the `Writable` branch cut | `ConfigCommands` ("hosts add did not say locked.toml is read-only") | **caught** |
-| Whole saves skip the read-only check | `saveLayered`: the `writable` branch cut | `SetConfig` ("a setting held by a read-only file did not go to config.toml") | **caught** |
-| hosts add is not routed | `SetHostInFile`: writes `path` in place of the target | `ConfigCommands` ("hosts add did not edit hosts.toml in place") | **caught** |
+| The watcher follows config.toml alone | `Watcher.relevant`: `name == cw.path` only | `LoadAndReload`, `SymlinkedInclude` | **caught** |
+| config.d is not watched | `Watcher.relevant`: the two `cw.dropIn` checks cut | `LoadAndReload` | **caught** |
+| A link target is not watched | `Watcher.follow`: the `l.Real` line cut | `SymlinkedInclude` | **caught** |
+| Includes are never read | `loadLayered`: `Layered` forced false, and `Bytes` returns config.toml | nine of eleven | **caught** |
+| Merge order reversed | `loadLayered`: config.d read before the includes | `MixedNamed`, `MergeOrder` | **caught** |
+| An array of tables replaced whole | `mergeTables`: the `mergeEntries` call cut | `LoadAndReload`, `MixedNamed` | **caught** |
+| Tombstones ignored | `mergeEntries`: the tombstone case cut, and the `stripTombstones` call cut | `MixedNamed` ("the tombstone did not remove beta") | **caught** |
+| A save renders the whole config | `saveConfigData` writes the header and the whole model | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink`, `SaveDoesNotPin` | **caught** |
+| A two-way save | `RenderUserConfig`: the baseline cut | `SaveDoesNotPin` ("wrote the client's old window_button_style back into look.toml") | **caught** |
+| A full first-start file | `createDefaultConfig` writes `DefaultConfig()` | `FirstStart` | **caught** |
+| Every file is writable | `ConfigLayer.Writable` returns true | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink` | **caught** |
+| A read-only holder is written | `layerWriter.target`: the owner's `writable` check cut | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink` | **caught** |
+| The fallback is always config.toml | `layerWriter.target`: `lastWritable` cut | `ReadOnlyConfigTomlLink` | **caught** |
+| No line edit | `editLayer`: the line edit result never used | `SetConfig`, `FirstStart`, `ReadOnlyConfigTomlLink` ("lost its comment"), `SaveDoesNotPin` | **caught** |
+| hosts add is not routed | `SetHostInFile` writes the main path | `ConfigCommands` | **caught** |
+
+Cutting only one of the two tombstone paths is not caught, and that is by
+design: the matched entry merges the `disabled` key and the strip removes it.
 
 ```sh
 go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
-  -run 'TestIncludedConfigFilesLoadAndReload|TestSetConfigWritesTheFileThatHoldsTheKey|TestConfigCommandsWriteTheFileThatHoldsTheKey' .
+  -run 'TestIncludedConfigFiles|TestSetConfigWritesTheFile|TestConfigCommandsWrite|TestFirstStartWithNix|TestReadOnlyConfigTomlLink|TestSymlinkedInclude|TestMixedNamed|TestMergeOrder|TestConfigPrune|TestSaveDoesNotPin|TestIncludeMistakes' .
 ```

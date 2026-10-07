@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"os"
 	"slices"
 	"strings"
 
@@ -95,13 +95,13 @@ func RemovePluginDirInFile(path, dir string) (bool, error) {
 // the end of the file.
 func setPluginsKey(path, key string, values []string) error {
 	// A config split over several files is written where the key is. A
-	// read-only file sends it to config.toml, which wins over it.
+	// read-only file sends it to the last file tuios can write.
 	target, note, err := writeTargetFor(path, []string{"plugins", key})
 	if err != nil {
 		return err
 	}
 	if !note.Empty() {
-		log.Printf("Config: %s", note.Message())
+		fmt.Fprintln(os.Stderr, note.Message())
 	}
 	path = target
 	data, err := readConfigForEdit(path)

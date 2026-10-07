@@ -367,7 +367,27 @@ value.`,
 	}
 	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
 
-	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd, configFilesCmd, configOriginCmd)
+	var configPruneDryRun bool
+	configPruneCmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Remove the keys of config.toml that have their default value",
+		Long: `Remove the keys of config.toml that have their default value.
+
+An older tuios wrote every key into config.toml. config.toml wins over the
+files it includes and the files in config.d, so those keys hide the same keys
+in the other files. This command removes each key that has its default value.
+A key that another file sets then takes the value of that file, and the command
+lists it. The [startup] keys stay, because a config.toml without them means the
+old floating session. The command keeps comments and the include list. Use
+--dry-run to see the keys first.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runConfigPrune(cmd.OutOrStdout(), configPruneDryRun)
+		},
+	}
+	configPruneCmd.Flags().BoolVar(&configPruneDryRun, "dry-run", false, "Show the keys and change nothing")
+
+	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd, configFilesCmd, configOriginCmd, configPruneCmd)
 
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",

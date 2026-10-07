@@ -180,6 +180,12 @@ func (cw *Watcher) follow(lc *LayeredConfig) {
 	files := map[string]bool{cw.path: true}
 	for _, l := range lc.Layers {
 		files[l.Path] = true
+		// A file that is a link is edited where the link points. An edit
+		// in place there changes the file and not the link, so the
+		// directory of the target is watched too.
+		if l.Real != "" {
+			files[l.Real] = true
+		}
 	}
 	for _, m := range lc.Missing {
 		files[m] = true

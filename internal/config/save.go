@@ -273,31 +273,34 @@ func WriteConfigFile(cfg *UserConfig, configPath string) error {
 	return writeConfigBytes(data, configPath)
 }
 
-// saveSeq numbers renders and saveDone the newest one that has landed, so a
-// write held up behind another cannot put an older config back.
+// saveSeq numbers renders, and keyGen holds the number of the newest save
+// that wrote each key, so a write held up behind another cannot put an older
+// value of a key back. saveMu guards keyGen and serialises the writes.
 var (
-	saveMu   sync.Mutex
-	saveSeq  atomic.Uint64
-	saveDone atomic.Uint64
+	saveMu  sync.Mutex
+	saveSeq atomic.Uint64
+	keyGen  = map[string]uint64{}
 )
 
-// RenderUserConfig reads cfg into the bytes of a config file and hands back the
-// function that writes them. The split exists because the caller is the Update
-// goroutine: rendering is memory and can happen there, the file write cannot.
+// RenderUserConfig reads cfg into the change a save makes and hands back the
+// function that writes it. The split exists because the caller is the Update
+// goroutine: reading the model is memory and can happen there, the file write
+// cannot.
 //
 // Reading cfg here rather than in the returned function is also what makes this
 // safe without a deep copy. The config is the model's own and goes on being
 // edited; a writer holding the pointer would be marshalling a struct changing
 // underneath it.
 //
+// The change is the difference between the config cfg was loaded from and cfg
+// now, so a save writes the keys the person changed and nothing else (see
+// include_write.go). The next save starts from here, so a change is written
+// once.
+//
 // The returned function is safe to call from anywhere and from several places at
 // once. Writes are serialised and stamped, so when two saves are in flight the
-// older one gives way rather than overwriting the newer.
-//
-// A config split over several files is not rendered whole into config.toml.
-// The function writes each changed key to the file that holds it (see
-// include_write.go), and its WriteNote says when a read-only file sent a
-// change to config.toml instead.
+// older one gives way rather than overwriting the newer. Its WriteNote says
+// when a read-only file sent a change to another file.
 func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
@@ -307,20 +310,16 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
-	full := append([]byte(configFileHeader(configPath)), data...)
+	base := cfg.baseline
+	cfg.baseline = data
 	gen := saveSeq.Add(1)
 	return func() (WriteNote, error) {
 		saveMu.Lock()
 		defer saveMu.Unlock()
-		if gen < saveDone.Load() {
-			return WriteNote{}, nil
-		}
-		note, err := saveConfigData(configPath, data, full)
-		if err != nil {
-			return note, err
-		}
-		saveDone.Store(gen)
-		return note, nil
+		// An older save that lost the race is not dropped: it carries a change
+		// of its own, which the newer one does not repeat. It skips only the
+		// keys a newer save already wrote.
+		return saveConfigData(configPath, base, data, gen)
 	}, nil
 }
 

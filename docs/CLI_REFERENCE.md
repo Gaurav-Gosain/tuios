@@ -3966,6 +3966,7 @@ Manage TUIOS configuration file.
 - `tuios config browse`: Search the settable options and set one, in an explorer
 - `tuios config files`: List the files the config is read from
 - `tuios config origin`: Show which file sets each key
+- `tuios config prune`: Remove the keys of config.toml that have their default value
 
 #### `tuios config apply`
 
@@ -4048,12 +4049,26 @@ tuios config origin hosts
 
 See [Split the config into several files](CONFIGURATION.md#split-the-config-into-several-files).
 
+#### `tuios config prune`
+
+Remove the keys of config.toml that have their default value. An older tuios
+wrote every key into config.toml, and config.toml wins over the files it
+includes and the files in `config.d`. After the prune, a key that another file
+sets takes the value of that file, and the command lists it. The `[startup]`
+keys stay. The command keeps comments and the `include` list.
+
+```bash
+tuios config prune --dry-run   # show the keys, change nothing
+tuios config prune
+```
+
 #### `tuios config reset`
 
 Reset the configuration file to default settings.
 
 **Warning:** This will overwrite your existing configuration after confirmation.
-It keeps the `include` list of config.toml.
+The new config.toml is the one a first start writes: comments, `[startup]`
+tiled and daemon on, and no other setting. It keeps the `include` list.
 
 **Example:**
 ```bash

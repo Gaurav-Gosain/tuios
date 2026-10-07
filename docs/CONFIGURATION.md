@@ -29,18 +29,21 @@ It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `
 
 You can keep part of the config in other files. Use this to share one
 config.toml between machines and keep the settings for one machine, such as
-its hosts, in a separate file.
+its hosts, in a separate file. A Nix or home-manager setup can also put its
+settings in a file that it manages, and leave config.toml to tuios.
 
 There are two ways to add files. Use one or both.
 
-1. Put an `include` list at the top of config.toml:
+1. Put an `include` list at the top of config.toml, before the first table:
 
    ```toml
-   include = ["hosts.toml", "~/.config/tuios/local.toml"]
+   include = ["hosts.toml", "~/.config/tuios/local.toml", "?work.toml"]
    ```
 
    A relative path is relative to the file that has the `include` line. `~`
-   is your home directory. An included file can have its own `include` list.
+   is your home directory. A name that starts with `?` is optional: when the
+   file is not there, tuios says nothing. An included file can have its own
+   `include` list.
 
 2. Put `*.toml` files in a `config.d` directory next to config.toml. tuios
    reads them in name order, so `10-theme.toml` comes before `50-hosts.toml`.
@@ -54,29 +57,50 @@ tuios reads the files in this order. A later file wins over an earlier file.
 2. The files in `config.d`, in name order.
 3. config.toml.
 
-config.toml always wins, because it is the file that tuios writes. A config.toml
-that tuios made on the first start sets every key. Remove a key from
-config.toml when you want another file to set it.
+config.toml wins, and it holds only what you changed. On the first start,
+tuios writes a config.toml with comments and no settings. The one exception
+is `[startup]`: tuios writes `tiled = true` and `daemon = true` there, unless
+another file sets them. Each change from tuios adds or changes only the key
+you changed. So an included file applies everywhere except where you chose a
+value of your own.
+
+A config.toml from an older tuios sets every key, and so it hides every other
+file. Run `tuios config prune` to remove the keys that have their default
+value. Run `tuios config prune --dry-run` first to see the keys.
 
 The files merge with these rules:
 
 - Tables merge key by key, at every depth. `[hosts.NAME]` tables merge by
   name, so each file can add its own hosts.
 - For a single value, the later file wins.
-- An array replaces the earlier array. It does not add to it.
-- An array of tables, such as `[[keybindings.command]]`, merges by entry. Two
-  entries with the same `name` merge, and a later file wins for each key. When
-  the entries have no `name`, `key` identifies them. A new entry goes at the
-  end.
+- An array of values replaces the earlier array. It does not add to it.
+- An array of tables, such as `[[keybindings.command]]`, merges entry by entry.
+  It is never replaced whole. A later entry matches an earlier entry by `name`
+  when both have a name, and by `key` when they do not. A matched entry merges
+  key by key. An entry that matches nothing goes at the end.
+- To remove an entry that an earlier file sets, add an entry with the same
+  `name` or `key` and `disabled = true`:
+
+  ```toml
+  [[keybindings.command]]
+  name = "deploy"
+  disabled = true
+  ```
+
+A relative file path in an included file, such as a `[plugins] dirs` entry or
+a `token_file`, is relative to that file.
 
 These are not errors:
 
 - An include that names a file that does not exist. tuios shows a warning and
   skips it, so one machine can include a file that only it has.
 - An include cycle. tuios shows a warning and reads each file once.
+- An `include` key below a table header. TOML puts it in that table, so it
+  includes nothing. tuios shows a warning.
 
-A file that exists and has a TOML error stops the load, the same as an error in
-config.toml.
+An include that names a directory stops the load. Put a directory of files in
+`config.d`. A file that exists and has a TOML error also stops the load, the
+same as an error in config.toml.
 
 ### Find where a key comes from
 
@@ -92,31 +116,40 @@ values lose.
 ### Hot reload
 
 tuios watches every file it reads: config.toml, each included file, each file
-in `config.d`, and the `config.d` directory itself. A save to any of them takes
-effect at once. An included file that was missing applies when you make it.
+in `config.d`, and the `config.d` directory itself. When a file is a link,
+tuios also watches the file that the link points to. A save to any of them
+takes effect at once. An included file that was missing applies when you make
+it, if its directory exists.
 
 ### Where tuios writes a change
 
 The settings page, `tuios set-config`, the keybind manager,
 `tuios keybinds unbind`, `tuios hosts add` and `tuios plugins` write the config.
-They do not copy the other files into config.toml. Each change goes to one
-file:
+They write only the keys you changed, and never copy the other files into
+config.toml. A change made while a file changed on disk keeps the new values
+of that file. Each change goes to one file:
 
 - A key that a file sets goes to the last file that sets it.
 - A new entry in a table of entries, such as a new `[hosts.NAME]`, goes to the
-  last file that has entries in that table.
+  last writable file that has entries in that table.
 - Any other new key goes to config.toml.
 - A removed key is removed from each file that sets it.
 
-tuios never writes a read-only file. This includes a file that Nix or
-home-manager links in from the store. When a read-only file sets the key, tuios
-writes the change to config.toml, which wins over that file, and tells you. It
-cannot remove a host or a key from a read-only file. Remove it in the source of
-that file.
+tuios changes only the lines of the key, so the comments and the layout of
+the file stay. If it cannot edit the lines, it writes the file again from its
+values, without the comments.
 
-When tuios writes a file, it keeps the `include` list. A save from the settings
-page writes the whole file again, without its comments. `tuios hosts add` and
-`tuios plugins` change only their own lines.
+tuios never writes a read-only file. This includes a file that Nix or
+home-manager links in from the store. When a read-only file sets the key,
+tuios writes the change to config.toml and tells you. When config.toml is
+read-only too, tuios writes the change to the last writable file that config.toml
+includes. The change must go to a file that comes after every file that sets
+the key. If there is no such file, the save fails and the message names the
+file to change. tuios cannot remove a key from a read-only file. It removes an
+array entry with a `disabled = true` entry in a writable file.
+
+`tuios config reset` writes the first-start config.toml again, with your
+`include` list.
 
 ## Opening links
 

@@ -52,8 +52,10 @@ tuios config origin hosts              # the file that sets each key under [host
 ```
 
 Edit that file, not config.toml. `set-config`, `tuios hosts add` and
-`tuios keybinds unbind` already write to the file that holds the key. They
-never write a read-only file: the change goes to config.toml, and they say so.
+`tuios keybinds unbind` already write only the changed key, to the file that
+holds it. They never write a read-only file: the change goes to the last
+writable file, and they say so. config.toml wins over every other file, so do
+not copy a value into it that another file already sets.
 
 A change to `[agents.permissions]` or `[hosts]` that gives panes or other
 machines more waits for the person, and the Inbox says so. The person applies

@@ -94,6 +94,41 @@ func runConfigFiles(w io.Writer, asJSON bool) error {
 	return nil
 }
 
+// runConfigPrune removes the keys of config.toml that have their default
+// value.
+func runConfigPrune(w io.Writer, dryRun bool) error {
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return fmt.Errorf("could not determine config path: %w", err)
+	}
+	res, err := config.PruneConfig(path, dryRun)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
+	}
+	if err != nil {
+		return err
+	}
+	if len(res.Keys) == 0 {
+		fmt.Fprintln(w, "config.toml has no key with its default value.")
+		return nil
+	}
+	verb := "Removed"
+	if dryRun {
+		verb = "Would remove"
+	}
+	fmt.Fprintf(w, "%s %d keys that have their default value from %s:\n", verb, len(res.Keys), path)
+	for _, k := range res.Keys {
+		fmt.Fprintln(w, "  "+k)
+	}
+	if len(res.Uncovered) > 0 {
+		fmt.Fprintln(w, "These keys now come from another file:")
+		for _, o := range res.Uncovered {
+			fmt.Fprintf(w, "  %s  %s\n", o.Key, o.File)
+		}
+	}
+	return nil
+}
+
 // runConfigOrigin prints the file each set key comes from. With a key, it
 // prints that key and the keys under it only.
 func runConfigOrigin(w io.Writer, key string, asJSON bool) error {

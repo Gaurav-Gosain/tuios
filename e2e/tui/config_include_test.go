@@ -158,7 +158,7 @@ func TestSetConfigWritesTheFileThatHoldsTheKey(t *testing.T) {
 	waitBoot(t, term)
 
 	setLive(t, base, "border_style", "rounded")
-	waitForFileText(t, look, func(s string) bool { return strings.Contains(s, "border_style = 'rounded'") },
+	waitForFileText(t, look, func(s string) bool { return strings.Contains(s, `border_style = "rounded"`) },
 		"set-config did not write border_style to look.toml, the file that sets it")
 	main := readFileString(t, configPathIn(base))
 	if strings.Contains(main, "border_style") {
