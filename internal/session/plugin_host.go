@@ -79,6 +79,9 @@ type pluginHost struct {
 	cache   []herdrplugin.Entry
 	cacheAt time.Time
 	running bool
+	// fresh is a translator apply made as the first plugin was enabled,
+	// for followEvents to take up. See followEvents.
+	fresh *herdrTranslator
 }
 
 // pluginPane is a pane a plugin opened.
@@ -190,6 +193,14 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	h.dirs = dirs
 	h.cache = nil
 	running := h.running
+	// The event follower reads nothing while no plugin is enabled. The first
+	// plugin enabled gets a translator that knows the panes as they are now,
+	// so an event after it is told against that, and not against whatever
+	// the follower would find when the next event came.
+	wake := running && len(old) == 0 && len(next) > 0
+	if len(next) == 0 {
+		h.fresh = nil
+	}
 	var stopped []string
 	for _, id := range old {
 		if !slices.Contains(next, id) {
@@ -201,6 +212,14 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	for _, id := range stopped {
 		log.Printf("[PLUGINS] %s is disabled. Its processes are stopped", id)
 		h.runner.StopPlugin(id)
+	}
+	if wake {
+		tr := h.d.newHerdrTranslator()
+		h.mu.Lock()
+		if len(h.enabled) > 0 {
+			h.fresh = tr
+		}
+		h.mu.Unlock()
 	}
 	if running {
 		h.runStartups()
@@ -295,6 +314,11 @@ func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []str
 // followEvents runs the event hooks of the enabled plugins, for as long as
 // the daemon runs. It reads the stream every herdr client reads, through
 // the same translator, so a hook sees what events.subscribe would send.
+//
+// While no plugin is enabled no hook can run, so an event is not translated.
+// Translating reads the session's whole state, and a harness that animates
+// its title raises an event several times a second: with four of them it was
+// over a third of an idle daemon's CPU, all of it thrown away.
 func (h *pluginHost) followEvents() {
 	sub, _, err := h.d.events.subscribeFrom(eventFilter{types: herdrHubTypes}, herdrEventQueue, nil)
 	if err != nil {
@@ -302,7 +326,10 @@ func (h *pluginHost) followEvents() {
 		return
 	}
 	defer h.d.events.unsubscribe(sub)
-	tr := h.d.newHerdrTranslator()
+	var tr *herdrTranslator
+	if on, _ := h.hooksOn(); on {
+		tr = h.d.newHerdrTranslator()
+	}
 	for {
 		select {
 		case <-h.d.ctx.Done():
@@ -310,8 +337,20 @@ func (h *pluginHost) followEvents() {
 		case <-sub.stop:
 			return
 		case ev := <-sub.ch:
-			if sub.dropped.Swap(0) > 0 {
+			dropped := sub.dropped.Swap(0) > 0
+			on, fresh := h.hooksOn()
+			if !on {
+				tr = nil
+				continue
+			}
+			if fresh != nil {
+				tr = fresh
+			}
+			if dropped {
 				log.Printf("[PLUGINS] event hooks fell behind and some events were lost")
+				tr = nil
+			}
+			if tr == nil {
 				tr = h.d.newHerdrTranslator()
 			}
 			for _, e := range tr.translate(ev) {
@@ -319,6 +358,18 @@ func (h *pluginHost) followEvents() {
 			}
 		}
 	}
+}
+
+// hooksOn reports whether any plugin is enabled, and hands over the
+// translator apply made for the first one, if there is one.
+func (h *pluginHost) hooksOn() (on bool, fresh *herdrTranslator) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.enabled) == 0 {
+		return false, nil
+	}
+	fresh, h.fresh = h.fresh, nil
+	return true, fresh
 }
 
 // fireHooks runs every enabled plugin's hooks on one herdr event.
