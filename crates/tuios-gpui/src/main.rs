@@ -16,7 +16,7 @@ mod rowplan;
 mod stats;
 mod theme;
 
-use gpui::{App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Bounds, TextRenderingMode, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use std::path::PathBuf;
 
 fn usage() -> ! {
@@ -27,10 +27,11 @@ Options:
   --tuios PATH        The tuios binary (default: tuios on PATH)
   --session NAME      The session to attach, created when missing
   --isolate DIR       Run against a private daemon whose files live in DIR
-  --font FAMILY       Terminal font (default: JetBrainsMono Nerd Font Mono)
-  --font-size N       Terminal font size in points (default: 14)
+  --font FAMILY       Terminal font (default: JetBrains Mono, bundled)
+  --font-size N       Terminal font size in pixels (default: 15)
   --theme NAME        A tuios theme (default: the one tuios's config names)
-  --no-ligatures      Turn off programming ligatures
+  --ligatures         Turn on programming ligatures
+  --no-ligatures      Turn off programming ligatures (the default)
   --show-fps          Show paint timings in the status bar
   --control PATH      Accept test commands on a unix socket at PATH
   --perf              Run the performance harness and print the results
@@ -39,6 +40,11 @@ Options:
     std::process::exit(2)
 }
 
+/// GPUI reads this once, when it builds the renderer: extra stem weight for
+/// grayscale text, so it looks as solid as subpixel text without the colour
+/// fringes (docs/PERF-AUDIT.md, finding 1).
+const CONTRAST_VAR: &str = "ZED_FONTS_GRAYSCALE_ENHANCED_CONTRAST";
+
 fn main() {
     let file = config::load_gui();
     let mut cfg = app::Config {
@@ -46,14 +52,24 @@ fn main() {
         session: None,
         env: Vec::new(),
         font_family: file.font_family.clone().unwrap_or_else(|| config::TERMINAL_FONTS[0].into()),
-        font_size: file.font_size.unwrap_or(14.),
-        line_height: file.line_height.unwrap_or(1.3),
-        ligatures: file.ligatures.unwrap_or(true),
+        font_size: file.font_size.unwrap_or(15.),
+        line_height: file.line_height.unwrap_or(1.333),
+        ligatures: file.ligatures.unwrap_or(false),
         theme: file.theme.clone().or_else(config::tuios_theme),
         ui_font: file.ui_font_family.clone().unwrap_or_else(|| config::UI_FONTS[0].into()),
+        scrollback: file.scrollback.unwrap_or(pane::SCROLLBACK).clamp(100, 100_000),
+        reduce_motion: file.reduce_motion.unwrap_or(false),
         show_fps: false,
         control: None,
     };
+    let subpixel = file.text_antialias.as_deref() == Some("subpixel");
+    // The user's own setting of the variable wins over the config.
+    let user_contrast = std::env::var_os(CONTRAST_VAR).is_some();
+    if !user_contrast {
+        let contrast = file.text_contrast.unwrap_or(2.0).clamp(0., 4.);
+        // SAFETY: nothing else runs yet; GPUI and the bridge start below.
+        unsafe { std::env::set_var(CONTRAST_VAR, contrast.to_string()) };
+    }
     let mut perf = false;
     let mut perf_out: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
@@ -62,11 +78,12 @@ fn main() {
         match a.as_str() {
             "--tuios" => cfg.tuios = PathBuf::from(val()),
             "--session" => cfg.session = Some(val()),
-            "--isolate" => cfg.env = isolated_env(&PathBuf::from(val())),
+            "--isolate" => cfg.env.extend(isolated_env(&PathBuf::from(val()))),
             "--font" => cfg.font_family = val(),
             "--font-size" => cfg.font_size = val().parse().unwrap_or_else(|_| usage()),
             "--theme" => cfg.theme = Some(val()),
             "--no-ligatures" => cfg.ligatures = false,
+            "--ligatures" => cfg.ligatures = true,
             "--show-fps" => cfg.show_fps = true,
             "--perf" => perf = true,
             "--control" => cfg.control = Some(PathBuf::from(val())),
@@ -76,10 +93,16 @@ fn main() {
         }
     }
 
+    // Programs in panes must not inherit the GUI's own text setting.
+    if !user_contrast {
+        cfg.env.push((CONTRAST_VAR.into(), String::new()));
+    }
+
     gpui_platform::application().with_assets(assets::Assets).run(move |cx: &mut App| {
+        cx.set_text_rendering_mode(if subpixel { TextRenderingMode::Subpixel } else { TextRenderingMode::Grayscale });
         let fonts = assets::FONTS.iter().map(|b| std::borrow::Cow::Borrowed(*b)).collect();
         if let Err(e) = cx.text_system().add_fonts(fonts) {
-            eprintln!("tuios-gpui: cannot load the bundled UI font: {e}");
+            eprintln!("tuios-gpui: cannot load the bundled fonts: {e}");
         }
         let bounds = Bounds::centered(None, size(px(1440.), px(900.)), cx);
         let options = WindowOptions {

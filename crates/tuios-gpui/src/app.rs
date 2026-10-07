@@ -1,34 +1,63 @@
-//! The main window: the sidebar of every session and agent, the top bar, the
-//! pane grid with its headers, and the command palette. The design is in
-//! docs/DESIGN-RESEARCH.md.
+//! The main window: the title band, the sidebar of every session and agent,
+//! the stage with the panes and their headers, and the command palette. The
+//! design is docs/design/FINAL.md.
+//!
+//! `TuiosApp` holds the model and renders the root. Each part of the window
+//! is a view of its own (views.rs), cached by GPUI and redrawn only when it
+//! is told to: pane output redraws the stage, an agent state change redraws
+//! the sidebar, a key in the palette redraws the palette. A notify on
+//! `TuiosApp` itself redraws every part.
 
 mod chrome;
+mod grid;
+mod views;
 
 use crate::control;
 use crate::fleet::{self, PaneInfo, Status};
 use crate::keys;
-use crate::painter::{CursorPaint, Metrics};
+use crate::painter::Metrics;
 use crate::palette::{self, Act, Entry};
 use crate::pane::{Pane, apply_theme};
 use crate::stats::FrameStats;
-use crate::theme::{self, Theme};
-use ghostty_vt::{KeyAction, MouseAction, MouseGeometry, MouseTracking, Rgb};
+use crate::theme::Theme;
+use ghostty_vt::{KeyAction, MouseAction, MouseGeometry, MouseTracking};
 use gpui::*;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 use tuios_proto::{Bridge, Command, Launch, Message, Sender, SessionSummary, State};
+pub use views::SpinSlots;
 
-pub const SIDEBAR_W: f32 = 264.;
-pub const TOPBAR_H: f32 = 38.;
-/// Space at the left and right of the grid, and below it.
-const PAD_X: f32 = 10.;
-const PAD_B: f32 = 6.;
-const PAD_T: f32 = 4.;
-/// How long a pane that starts to need you pulses.
-const FLASH: Duration = Duration::from_millis(900);
-/// How long the grid size shows after a resize.
-const OVERLAY: Duration = Duration::from_millis(750);
+/// The title band across the top of the window.
+pub const BAND_H: f32 = 40.;
+/// The sidebar's default width, and its limits when dragged.
+pub const SIDEBAR_W: f32 = 256.;
+pub const SIDEBAR_MIN: f32 = 220.;
+pub const SIDEBAR_MAX: f32 = 360.;
+/// The rail that replaces the sidebar in a narrow window.
+pub const RAIL_W: f32 = 52.;
+/// Window widths below which the sidebar becomes a rail, and the rail hides.
+const RAIL_BELOW: f32 = 1000.;
+const HIDE_RAIL_BELOW: f32 = 720.;
+/// The stage's margin at the right and bottom, and at the left without a
+/// sidebar.
+const STAGE_MARGIN: f32 = 8.;
+/// Space between the stage edge and the grid, at least, on every side.
+const STAGE_PAD: f32 = 12.;
+/// How long "Needs you" takes to arrive.
+const ARRIVE: Duration = Duration::from_millis(400);
+/// The resize badge shows this long after the last change, then fades.
+const BADGE: Duration = Duration::from_millis(750);
+const BADGE_FADE: Duration = Duration::from_millis(150);
+/// The scrollbar shows this long after the last scroll, then fades.
+const SCROLLBAR: Duration = Duration::from_millis(600);
+const SCROLLBAR_FADE: Duration = Duration::from_millis(150);
+/// Nothing shows for a connection faster than this.
+const CONNECT_QUIET: Duration = Duration::from_millis(400);
+/// Cursor blink, on and off.
+const BLINK: Duration = Duration::from_millis(600);
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -42,10 +71,42 @@ pub struct Config {
     /// A theme to use instead of the one the bridge's tuios config names.
     pub theme: Option<String>,
     pub ui_font: String,
+    /// Lines of history per pane.
+    pub scrollback: usize,
+    /// No animations: every duration is zero and the working icon is still.
+    pub reduce_motion: bool,
     /// Show frame timings over the grid.
     pub show_fps: bool,
     /// A control socket for tests (see control.rs).
     pub control: Option<PathBuf>,
+}
+
+/// Where the sidebar is.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Side {
+    /// The full sidebar, in the window's flow.
+    #[default]
+    Full,
+    /// A 52 px rail of state icons.
+    Rail,
+    /// Nothing.
+    Hidden,
+}
+
+/// The window's geometry, worked out once per frame from its size.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Layout {
+    pub width: f32,
+    pub height: f32,
+    pub side: Side,
+    /// The width the sidebar or rail takes in the flow.
+    pub side_w: f32,
+    /// The full sidebar over the stage, in a narrow window.
+    pub overlay: bool,
+    pub stage: Bounds<Pixels>,
+    /// The grid's top left corner: the top of the header row of the top
+    /// panes.
+    pub grid_origin: Point<Pixels>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -53,7 +114,6 @@ struct Grid {
     /// The top left of cell (0, 0). One cell row above it holds the headers
     /// of the panes at the top.
     origin: Point<Pixels>,
-    size: Size<Pixels>,
     cols: u16,
     rows: u16,
 }
@@ -65,6 +125,8 @@ enum Drag {
     Select { pty: String, anchor: (u16, u16) },
     /// Reporting to the program in a pane, which asked for mouse events.
     Report { pty: String, button: u8 },
+    /// Moving the sidebar's edge.
+    Sidebar,
 }
 
 /// What a control command turns into.
@@ -75,10 +137,12 @@ enum Plan {
     Reply(String),
 }
 
-struct PaletteUi {
+pub struct PaletteUi {
     query: String,
     selected: usize,
     entries: Vec<Entry>,
+    /// When the palette began to close; it fades out, then goes.
+    closing: Option<Instant>,
 }
 
 /// A pane to show once its session is attached.
@@ -89,28 +153,51 @@ struct Jump {
     workspace: u32,
 }
 
+/// How the connection to the daemon stands, for the empty states.
+#[derive(Clone, Debug, PartialEq)]
+enum Link {
+    Connecting(Instant),
+    Attached,
+    /// The bridge could not start or attach.
+    Failed(String),
+    /// The session the bridge was attached to went away.
+    Ended,
+}
+
 pub struct TuiosApp {
     cfg: Config,
     focus: FocusHandle,
+    views: Option<views::Views>,
     bridge: Option<Bridge>,
     sender: Option<Sender>,
     generation: u64,
     state: Option<State>,
+    /// The attached session's panes, worked out when its state changes.
+    attached: Vec<PaneInfo>,
     panes: HashMap<String, Pane>,
     metrics: Option<Metrics>,
     epoch: u64,
-    theme: Theme,
+    theme: Rc<Theme>,
+    layout: Layout,
     grid: Grid,
     sent_size: (u16, u16),
     resize_task: Option<Task<()>>,
+    /// The full sidebar in a wide window.
     sidebar: bool,
+    /// The full sidebar over the stage in a narrow window.
+    sidebar_overlay: bool,
+    sidebar_w: f32,
+    /// Session groups the person folded or opened, over the default.
+    folded: HashMap<String, bool>,
     palette: Option<PaletteUi>,
     sessions: Vec<SessionSummary>,
-    /// Panes of every session, from `tuios list-agents`.
+    /// Panes of every session, from the bridge's fleet events.
     fleet: Vec<PaneInfo>,
+    /// The bridge sends fleet events; no need to poll.
+    fleet_pushed: bool,
     /// Windows whose finished turn nobody has looked at.
     unread: HashSet<String>,
-    connected: bool,
+    link: Link,
     status: SharedString,
     drag: Option<Drag>,
     /// The focused window as this client last asked for it, ahead of the
@@ -121,23 +208,28 @@ pub struct TuiosApp {
     asked_tiling: bool,
     pub stats: FrameStats,
     last_title: String,
-    /// Smooth scrolling and other animations ask for frames while running.
+    /// Animations ask for frames while running.
     animating: bool,
-    /// Blink phase of the focused pane's cursor, when its program asked for
-    /// a blinking cursor. Typing restarts the phase.
-    blink_on: bool,
+    window_active: bool,
+    /// Typing restarts the cursor blink.
     last_input: Instant,
+    blink_task: Option<Task<()>>,
+    spin_task: Option<Task<()>>,
+    poll_task: Option<Task<()>>,
+    wake_task: Option<(Instant, Task<()>)>,
+    any_working: bool,
     /// Text an input method is composing, drawn at the cursor until committed.
     marked: Option<String>,
     /// Themes tuios knows, for the palette, and the one last picked there.
     theme_names: Vec<String>,
     theme_wanted: Option<String>,
-    /// When each window started to need you, for the one pulse it gets.
+    /// When each window started to need you, for its arrival.
     need_since: HashMap<String, Instant>,
-    /// The grid size shows until then.
-    overlay_until: Option<Instant>,
-    /// The step the working glyphs are at.
-    spin: u32,
+    /// When the grid size last changed, for the resize badge.
+    resized_at: Option<Instant>,
+    /// Shaped header text per window, rebuilt when what it shows changes.
+    headers: HashMap<String, grid::HeaderLines>,
+    spin_slots: Rc<RefCell<SpinSlots>>,
     /// Frames drawn (root renders), for the `stats` control command.
     frames: u64,
 }
@@ -146,7 +238,7 @@ impl TuiosApp {
     pub fn new(cfg: Config, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        let theme = Theme::fallback();
+        let theme = Rc::new(Theme::fallback());
         let mut cfg = cfg;
         let installed = window.text_system().all_font_names();
         let mut wanted: Vec<&str> = vec![cfg.font_family.as_str()];
@@ -155,26 +247,36 @@ impl TuiosApp {
         let mut wanted: Vec<&str> = vec![cfg.ui_font.as_str()];
         wanted.extend(crate::config::UI_FONTS);
         cfg.ui_font = crate::config::pick_font(&wanted, &installed, false);
+        let spin_slots = Rc::new(RefCell::new(SpinSlots::new(&theme, cfg.reduce_motion)));
+        let me = cx.entity();
+        let views = views::Views::new(&me, spin_slots.clone(), cx);
         let mut this = TuiosApp {
             cfg,
             focus,
+            views: Some(views),
             bridge: None,
             sender: None,
             generation: 0,
             state: None,
+            attached: Vec::new(),
             panes: HashMap::new(),
             metrics: None,
             epoch: 1,
             theme,
+            layout: Layout::default(),
             grid: Grid::default(),
             sent_size: (0, 0),
             resize_task: None,
             sidebar: true,
+            sidebar_overlay: false,
+            sidebar_w: SIDEBAR_W,
+            folded: HashMap::new(),
             palette: None,
             sessions: Vec::new(),
             fleet: Vec::new(),
+            fleet_pushed: false,
             unread: HashSet::new(),
-            connected: false,
+            link: Link::Connecting(Instant::now()),
             status: "Starting".into(),
             drag: None,
             focus_wanted: None,
@@ -184,42 +286,161 @@ impl TuiosApp {
             stats: FrameStats::default(),
             last_title: String::new(),
             animating: false,
-            blink_on: true,
+            window_active: window.is_window_active(),
             last_input: Instant::now(),
+            blink_task: None,
+            spin_task: None,
+            poll_task: None,
+            wake_task: None,
+            any_working: false,
             marked: None,
             theme_names: Vec::new(),
             theme_wanted: None,
             need_since: HashMap::new(),
-            overlay_until: None,
-            spin: 0,
+            resized_at: None,
+            headers: HashMap::new(),
+            spin_slots,
             frames: 0,
         };
         this.connect(this.cfg.session.clone(), window, cx);
-        this.poll_fleet(cx);
-        this.blink(cx);
-        this.spinner(cx);
+        this.tick_ages(cx);
+        cx.observe_window_activation(window, |this, window, cx| {
+            this.window_active = window.is_window_active();
+            this.update_timers(cx);
+            this.refresh_grid(cx);
+            this.refresh_spin(cx);
+        })
+        .detach();
         if let Some(path) = this.cfg.control.clone() {
             this.serve_control(path, window, cx);
         }
         this
     }
 
-    fn blink(&mut self, cx: &mut Context<Self>) {
+    // ---- redraws -----------------------------------------------------------
+
+    fn views(&self) -> &views::Views {
+        self.views.as_ref().expect("views")
+    }
+
+    /// Redraws the stage: panes, headers, splits.
+    fn refresh_grid(&self, cx: &mut Context<Self>) {
+        self.views().grid.update(cx, |_, cx| cx.notify());
+    }
+
+    /// Redraws the sidebar and the title band.
+    fn refresh_chrome(&self, cx: &mut Context<Self>) {
+        self.views().sidebar.update(cx, |_, cx| cx.notify());
+        self.views().band.update(cx, |_, cx| cx.notify());
+    }
+
+    fn refresh_sidebar(&self, cx: &mut Context<Self>) {
+        self.views().sidebar.update(cx, |_, cx| cx.notify());
+    }
+
+    fn refresh_palette(&self, cx: &mut Context<Self>) {
+        self.views().palette.update(cx, |_, cx| cx.notify());
+    }
+
+    /// Redraws the working icons, and nothing else.
+    fn refresh_spin(&self, cx: &mut Context<Self>) {
+        self.views().spin.update(cx, |_, cx| cx.notify());
+    }
+
+    /// Redraws the stage at `at`, for something that changes then: a fade
+    /// that starts, a delayed state. One timer serves the earliest wish.
+    fn wake_grid_at(&mut self, at: Instant, cx: &mut Context<Self>) {
+        if self.wake_task.as_ref().is_some_and(|(t, _)| *t <= at && *t > Instant::now()) {
+            return;
+        }
+        let wait = at.saturating_duration_since(Instant::now());
+        let task = cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = this.update(cx, |this, cx| {
+                this.wake_task = None;
+                this.refresh_grid(cx);
+            });
+        });
+        self.wake_task = Some((at, task));
+    }
+
+    /// Starts or stops the timers that animate: the working icon, the
+    /// cursor blink, and the fallback fleet poll.
+    fn update_timers(&mut self, cx: &mut Context<Self>) {
+        let spin = self.any_working && self.window_active && !self.cfg.reduce_motion;
+        if spin && self.spin_task.is_none() {
+            self.spin_task = Some(cx.spawn(async move |this, cx| {
+                loop {
+                    // 10 frames a second, the working icon's own rate.
+                    cx.background_executor().timer(Duration::from_millis(100)).await;
+                    let go = this.update(cx, |this, cx| {
+                        this.refresh_spin(cx);
+                        this.any_working && this.window_active && !this.cfg.reduce_motion
+                    });
+                    if !matches!(go, Ok(true)) {
+                        let _ = this.update(cx, |this, cx| {
+                            this.spin_task = None;
+                            this.refresh_spin(cx);
+                        });
+                        break;
+                    }
+                }
+            }));
+        }
+        let blink = self.cursor_blinks();
+        if blink && self.blink_task.is_none() {
+            self.blink_task = Some(cx.spawn(async move |this, cx| {
+                loop {
+                    let wait = this
+                        .update(cx, |this, _| {
+                            let ms = this.last_input.elapsed().as_millis() as u64 % BLINK.as_millis() as u64;
+                            Duration::from_millis(BLINK.as_millis() as u64 - ms)
+                        })
+                        .unwrap_or(BLINK);
+                    cx.background_executor().timer(wait).await;
+                    let go = this.update(cx, |this, cx| {
+                        this.refresh_grid(cx);
+                        this.cursor_blinks()
+                    });
+                    if !matches!(go, Ok(true)) {
+                        let _ = this.update(cx, |this, _| this.blink_task = None);
+                        break;
+                    }
+                }
+            }));
+        }
+        let poll = !self.fleet_pushed && self.window_active && matches!(self.link, Link::Attached);
+        if poll && self.poll_task.is_none() {
+            self.poll_fleet(cx);
+        } else if !poll {
+            self.poll_task = None;
+        }
+    }
+
+    /// Whether the focused pane's cursor blinks now.
+    fn cursor_blinks(&self) -> bool {
+        self.window_active
+            && self.palette.is_none()
+            && self.focused_pty().and_then(|p| self.panes.get(&p)).is_some_and(|p| {
+                let c = p.term.screen().cursor;
+                c.blinking && c.visible
+            })
+    }
+
+    /// Whether the cursor shows in this frame of its blink.
+    fn blink_on(&self) -> bool {
+        !self.cursor_blinks() || (self.last_input.elapsed().as_millis() / BLINK.as_millis()) % 2 == 0
+    }
+
+    /// Redraws the sidebar once a minute, when an age label may change.
+    fn tick_ages(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_millis(530)).await;
+                let wait = 60_000 - (fleet::now_ms() % 60_000) as u64 + 50;
+                cx.background_executor().timer(Duration::from_millis(wait)).await;
                 let alive = this.update(cx, |this, cx| {
-                    let blinking = this
-                        .focused_pty()
-                        .and_then(|p| this.panes.get(&p))
-                        .is_some_and(|p| p.term.screen().cursor.blinking && p.term.screen().cursor.visible);
-                    let next = if this.last_input.elapsed() < Duration::from_millis(600) { true } else { !this.blink_on };
-                    if blinking && next != this.blink_on {
-                        this.blink_on = next;
-                        cx.notify();
-                    } else if !blinking && !this.blink_on {
-                        this.blink_on = true;
-                        cx.notify();
+                    if this.attached.iter().chain(this.fleet.iter()).any(|p| p.status.is_agent() && p.since_ms > 0) {
+                        this.refresh_sidebar(cx);
                     }
                 });
                 if alive.is_err() {
@@ -229,6 +450,8 @@ impl TuiosApp {
         })
         .detach();
     }
+
+    // ---- control socket ----------------------------------------------------
 
     fn serve_control(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let (tx, rx) = async_channel::unbounded::<control::Request>();
@@ -280,7 +503,7 @@ impl TuiosApp {
         ))
     }
 
-    fn control_plan(&mut self, line: &str, _window: &mut Window, _cx: &mut Context<Self>) -> Result<Plan, String> {
+    fn control_plan(&mut self, line: &str, _window: &mut Window, cx: &mut Context<Self>) -> Result<Plan, String> {
         let mut it = line.split_whitespace();
         let cmd = it.next().ok_or("empty command")?;
         let mut num = |name: &str| -> Result<f32, String> { it.next().ok_or(format!("missing {name}"))?.parse::<f32>().map_err(|e| e.to_string()) };
@@ -309,6 +532,10 @@ impl TuiosApp {
                 let p = point(px(x), px(y));
                 Plan::Events(vec![control::down(p, b, count), control::up(p, b, count)])
             }
+            "move" => {
+                let (x, y) = (num("x")?, num("y")?);
+                Plan::Events(vec![control::moved(point(px(x), px(y)), None)])
+            }
             "cellclick" => {
                 let (n, c, r) = (num("pane")? as usize, num("col")?, num("row")?);
                 let count = line.split_whitespace().nth(4).and_then(|c| c.parse().ok()).unwrap_or(1);
@@ -332,6 +559,16 @@ impl TuiosApp {
                 let p = self.cell_pos(n, 2., 2.)?;
                 let delta = if cmd == "wheel" { ScrollDelta::Pixels(point(px(0.), px(amount))) } else { ScrollDelta::Lines(point(0., amount)) };
                 Plan::Events(vec![control::wheel(p, delta)])
+            }
+            "palette" => {
+                // Opens the palette with a query, for screenshots.
+                let q = line.get(8..).unwrap_or("").to_string();
+                self.open_palette(cx);
+                if let Some(p) = self.palette.as_mut() {
+                    p.query = q;
+                }
+                cx.notify();
+                Plan::Reply("ok".into())
             }
             "dump" => Plan::Reply(self.dump()),
             "stats" => Plan::Reply(self.stats_json()),
@@ -358,13 +595,14 @@ impl TuiosApp {
 
     fn dump(&mut self) -> String {
         let (cw, ch) = self.metrics.as_ref().map(|m| (f32::from(m.cell_w), f32::from(m.cell_h))).unwrap_or((0., 0.));
+        let scale = self.metrics.as_ref().map(|m| m.scale).unwrap_or(1.);
         let mut out = format!(
-            "{{\"cols\":{},\"rows\":{},\"cell\":[{cw},{ch}],\"origin\":[{},{}],\"connected\":{},\"palette\":{},",
+            "{{\"cols\":{},\"rows\":{},\"cell\":[{cw},{ch}],\"scale\":{scale},\"origin\":[{},{}],\"connected\":{},\"palette\":{},",
             self.grid.cols,
             self.grid.rows,
             f32::from(self.grid.origin.x),
             f32::from(self.grid.origin.y),
-            self.connected,
+            self.link == Link::Attached,
             self.palette.is_some()
         );
         let focused = self.focused_id().unwrap_or_default();
@@ -408,14 +646,66 @@ impl TuiosApp {
         out
     }
 
-    // ---- connection -------------------------------------------------------
+    // ---- geometry ----------------------------------------------------------
 
+    /// The font metrics for the window's current scale. A new scale (the
+    /// window moved to another screen) builds new metrics and starts every
+    /// row cache over.
     fn ensure_metrics(&mut self, window: &mut Window) -> Metrics {
+        let scale = window.scale_factor();
+        if self.metrics.as_ref().is_some_and(|m| m.scale != scale) {
+            self.epoch += 1;
+            self.metrics = None;
+            self.headers.clear();
+        }
         if self.metrics.is_none() {
             self.metrics = Some(Metrics::new(&self.cfg.font_family, self.cfg.font_size, self.cfg.line_height, self.cfg.ligatures, window, self.epoch));
+            for p in self.panes.values_mut() {
+                p.painter.clear();
+            }
         }
         self.metrics.clone().expect("metrics")
     }
+
+    /// Works out the window's geometry: the sidebar, the stage and the grid,
+    /// every edge on a whole device pixel (docs/design/FINAL.md section 5).
+    fn compute_layout(&mut self, window: &mut Window, m: &Metrics) -> Layout {
+        let vp = window.viewport_size();
+        let (w, h) = (f32::from(vp.width), f32::from(vp.height));
+        let s = m.scale;
+        let snap = |v: f32| (v * s).round() / s;
+        let side = if w >= RAIL_BELOW {
+            Side::Full
+        } else if w >= HIDE_RAIL_BELOW {
+            Side::Rail
+        } else {
+            Side::Hidden
+        };
+        let (side_w, overlay) = match side {
+            Side::Full if self.sidebar => (snap(self.sidebar_w), false),
+            Side::Full => (0., false),
+            Side::Rail => (RAIL_W, self.sidebar_overlay),
+            Side::Hidden => (0., self.sidebar_overlay),
+        };
+        let x = if side_w > 0. { side_w } else { STAGE_MARGIN };
+        let stage = Bounds::new(point(px(x), px(BAND_H)), size(px(snap(w - x - STAGE_MARGIN).max(40.)), px(snap(h - BAND_H - STAGE_MARGIN).max(40.))));
+        // The grid in device pixels: as many whole cells as fit inside the
+        // padding, and the rest split evenly around it.
+        let (cwd, chd) = (m.cell_w_dev as f32, m.cell_h_dev as f32);
+        let sw = (f32::from(stage.size.width) * s).round();
+        let sh = (f32::from(stage.size.height) * s).round();
+        let pad = (STAGE_PAD * s).round();
+        let cols = ((sw - 2. * pad) / cwd).floor().max(1.);
+        let rows = ((sh - 2. * pad) / chd).floor().max(2.);
+        let gx = (x * s).round() + ((sw - cols * cwd) / 2.).floor();
+        let gy = (BAND_H * s).round() + ((sh - rows * chd) / 2.).floor();
+        let grid_origin = point(px(gx / s), px(gy / s));
+        // One row of the grid holds the top panes' headers.
+        self.grid = Grid { origin: point(px(gx / s), px((gy + chd) / s)), cols: cols as u16, rows: rows as u16 - 1 };
+        Layout { width: w, height: h, side, side_w, overlay, stage, grid_origin }
+    }
+
+    // ---- connection --------------------------------------------------------
 
     fn connect(&mut self, session: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.generation += 1;
@@ -423,10 +713,12 @@ impl TuiosApp {
         self.bridge = None;
         self.sender = None;
         self.state = None;
+        self.attached.clear();
         self.panes.clear();
+        self.headers.clear();
         self.asked_first_window = false;
         self.asked_tiling = false;
-        self.connected = false;
+        self.link = Link::Connecting(Instant::now());
         self.sent_size = (0, 0);
         let m = self.ensure_metrics(window);
         let (cols, rows) = if self.grid.cols > 0 { (self.grid.cols, self.grid.rows) } else { (120, 40) };
@@ -435,8 +727,8 @@ impl TuiosApp {
             session: session.clone(),
             cols,
             rows,
-            cell_width: f32::from(m.cell_w).round() as u32,
-            cell_height: f32::from(m.cell_h).round() as u32,
+            cell_width: m.cell_w_dev,
+            cell_height: m.cell_h_dev,
             theme: self.theme_wanted.clone().or_else(|| self.cfg.theme.clone()),
             env: self.cfg.env.clone(),
         };
@@ -451,7 +743,7 @@ impl TuiosApp {
                 self.sent_size = (cols, rows);
             }
             Err(e) => {
-                self.status = format!("Cannot start tuios: {e}").into();
+                self.link = Link::Failed(e.to_string());
                 cx.notify();
                 return;
             }
@@ -471,17 +763,27 @@ impl TuiosApp {
             }
         })
         .detach();
+        // "Connecting" shows only for a slow connection.
+        self.wake_grid_at(Instant::now() + CONNECT_QUIET, cx);
         cx.notify();
     }
 
     // ---- the fleet ---------------------------------------------------------
 
-    /// Reads the daemon's sessions and every pane in them, every 1.5 s.
+    /// Reads the daemon's sessions and every pane in them, every 5 s, for a
+    /// bridge too old to send fleet events. Stops when one arrives, and while
+    /// the window is not active.
     fn poll_fleet(&mut self, cx: &mut Context<Self>) {
         let tuios = self.cfg.tuios.clone();
         let env = self.cfg.env.clone();
-        cx.spawn(async move |this, cx| {
+        self.poll_task = Some(cx.spawn(async move |this, cx| {
+            // Give the bridge a moment to send its first fleet event.
+            cx.background_executor().timer(Duration::from_secs(3)).await;
             loop {
+                let still = this.update(cx, |this, _| !this.fleet_pushed).unwrap_or(false);
+                if !still {
+                    break;
+                }
                 let (t, e) = (tuios.clone(), env.clone());
                 let read = cx
                     .background_executor()
@@ -491,53 +793,78 @@ impl TuiosApp {
                         (sessions, agents)
                     })
                     .await;
-                let alive = this
-                    .update(cx, |this, cx| {
-                        let (sessions, agents) = read;
-                        let mut changed = false;
-                        if let Some(list) = sessions {
-                            if this.sessions != list {
-                                this.sessions = list;
-                                changed = true;
-                            }
-                        }
-                        if let Some((panes, unread)) = agents {
-                            if this.fleet != panes || this.unread != unread {
-                                this.fleet = panes;
-                                this.unread = unread;
-                                changed = true;
-                            }
-                        }
-                        // Ages tick, so the sidebar redraws at least this often.
-                        if changed || this.fleet.iter().any(|p| p.status.is_agent()) {
-                            cx.notify();
-                        }
-                    })
-                    .is_ok();
-                if !alive {
+                let alive = this.update(cx, |this, cx| {
+                    if this.fleet_pushed {
+                        return;
+                    }
+                    let (sessions, agents) = read;
+                    this.on_fleet(sessions, agents, cx);
+                });
+                if alive.is_err() {
                     break;
                 }
-                cx.background_executor().timer(Duration::from_millis(1500)).await;
+                cx.background_executor().timer(Duration::from_secs(5)).await;
             }
-        })
-        .detach();
+        }));
+    }
+
+    /// New sessions and fleet rows: redraws the sidebar only when they
+    /// changed.
+    fn on_fleet(&mut self, sessions: Option<Vec<SessionSummary>>, agents: Option<(Vec<PaneInfo>, HashSet<String>)>, cx: &mut Context<Self>) {
+        let mut changed = false;
+        if let Some(list) = sessions {
+            if self.sessions != list {
+                self.sessions = list;
+                changed = true;
+            }
+        }
+        if let Some((panes, unread)) = agents {
+            if self.fleet != panes || self.unread != unread {
+                self.fleet = panes;
+                if self.unread != unread {
+                    self.unread = unread;
+                    self.rebuild_attached();
+                }
+                changed = true;
+            }
+        }
+        if changed {
+            self.recount_working(cx);
+            self.refresh_chrome(cx);
+            if self.palette.is_some() {
+                self.refresh_palette(cx);
+            }
+        }
+    }
+
+    fn recount_working(&mut self, cx: &mut Context<Self>) {
+        let current = self.current_session();
+        let working = self.attached.iter().chain(self.fleet.iter().filter(|p| p.session != current)).any(|p| p.status == Status::Working);
+        if working != self.any_working {
+            self.any_working = working;
+            self.update_timers(cx);
+        }
     }
 
     fn current_session(&self) -> String {
         self.state.as_ref().map(|s| s.session.clone()).unwrap_or_default()
     }
 
-    /// Panes of the attached session, live from the bridge.
-    fn attached_panes(&self) -> Vec<PaneInfo> {
-        let Some(st) = &self.state else { return Vec::new() };
-        let focused = self.focused_id();
-        fleet::from_state(st, focused.as_deref(), |id| self.unread.contains(id))
+    fn rebuild_attached(&mut self) {
+        self.attached = match &self.state {
+            Some(st) => {
+                let focused = self.focused_id();
+                fleet::from_state(st, focused.as_deref(), |id| self.unread.contains(id))
+            }
+            None => Vec::new(),
+        };
     }
 
-    /// Every pane in every session: the attached one live, the rest polled.
+    /// Every pane in every session: the attached one live, the rest from the
+    /// fleet.
     fn all_panes(&self) -> Vec<PaneInfo> {
         let current = self.current_session();
-        let mut v = self.attached_panes();
+        let mut v = self.attached.clone();
         v.extend(self.fleet.iter().filter(|p| p.session != current).cloned());
         v
     }
@@ -589,9 +916,23 @@ impl TuiosApp {
         self.connect(Some(next), window, cx);
     }
 
-    fn on_state(&mut self, st: State) {
+    /// What the sidebar and band show of the attached session. A change in
+    /// a window's title alone (agents animate theirs) changes nothing here.
+    fn chrome_key(&self) -> (Vec<PaneInfo>, u32, Vec<u32>, Vec<(String, String)>) {
+        let st = self.state.as_ref();
+        (
+            self.attached.clone(),
+            st.map(|s| s.workspace).unwrap_or(0),
+            st.map(|s| s.occupied.clone()).unwrap_or_default(),
+            st.map(|s| s.workspace_names.iter().map(|(a, b)| (a.clone(), b.clone())).collect()).unwrap_or_default(),
+        )
+    }
+
+    fn on_state(&mut self, st: State, cx: &mut Context<Self>) {
+        let before = self.chrome_key();
         // Panes whose window is gone are dropped with it.
         self.panes.retain(|pty, _| st.windows.iter().any(|w| &w.pty == pty));
+        self.headers.retain(|id, _| st.windows.iter().any(|w| &w.id == id));
         if st.windows.is_empty() && !self.asked_first_window {
             self.asked_first_window = true;
             self.send(Command::tape("NewWindow", &[]));
@@ -605,19 +946,19 @@ impl TuiosApp {
                 self.focus_wanted = None;
             }
         }
-        // A pane that starts to need you gets one pulse.
+        // A pane that starts to need you gets its arrival.
         let was: HashSet<String> = self
             .state
             .as_ref()
             .map(|s| s.windows.iter().filter(|w| w.agent.as_deref() == Some("needs_input")).map(|w| w.id.clone()).collect())
             .unwrap_or_default();
         for w in &st.windows {
-            if w.agent.as_deref() == Some("needs_input") && !was.contains(&w.id) && self.state.is_some() {
+            if w.agent.as_deref() == Some("needs_input") && !was.contains(&w.id) && self.state.is_some() && !self.cfg.reduce_motion {
                 self.need_since.insert(w.id.clone(), Instant::now());
                 self.animating = true;
             }
         }
-        self.need_since.retain(|_, t| t.elapsed() < FLASH);
+        self.need_since.retain(|_, t| t.elapsed() < ARRIVE);
         if let Some(j) = self.jump.clone().filter(|j| j.session == st.session) {
             if st.workspace != j.workspace {
                 self.send(Command::workspace(j.workspace));
@@ -628,7 +969,14 @@ impl TuiosApp {
             }
             self.jump = None;
         }
+        let first = self.state.is_none();
         self.state = Some(st);
+        self.rebuild_attached();
+        if first || self.chrome_key() != before {
+            self.recount_working(cx);
+            self.refresh_chrome(cx);
+        }
+        self.update_timers(cx);
     }
 
     fn send(&self, cmd: Command) {
@@ -649,10 +997,11 @@ impl TuiosApp {
         }
         let cell = self.cell_px();
         let debug = std::env::var_os("TUIOS_GPUI_DEBUG").is_some();
+        let mut all = false;
         for msg in batch {
             if debug {
                 match &msg {
-                    Message::Event(e) => eprintln!("[gpui] event {} {:?}", e.kind, e.state.as_ref().map(|s| (s.workspace, s.tiling, s.windows.iter().map(|w| (w.x, w.y, w.w, w.h, w.border)).collect::<Vec<_>>()))),
+                    Message::Event(e) => eprintln!("[gpui] event {}", e.kind),
                     Message::Snapshot { pty, cols, rows, bytes } => eprintln!("[gpui] snapshot {pty} {cols}x{rows} {} bytes", bytes.len()),
                     Message::Output { pty, bytes } => eprintln!("[gpui] output {pty} {} bytes", bytes.len()),
                     Message::Resized { pty, cols, rows } => eprintln!("[gpui] resized {pty} {cols}x{rows}"),
@@ -662,30 +1011,41 @@ impl TuiosApp {
             match msg {
                 Message::Event(ev) => match ev.kind.as_str() {
                     "attached" => {
-                        self.connected = true;
+                        self.link = Link::Attached;
                         self.status = format!("Attached to {}", ev.message.unwrap_or_default()).into();
+                        all = true;
                     }
                     "state" => {
                         if let Some(st) = ev.state {
-                            self.on_state(st);
+                            self.on_state(st, cx);
                         }
                     }
                     "theme" => {
                         if let Some(t) = ev.theme {
-                            self.set_theme(Theme::from_export(&t), t.names);
+                            all |= self.set_theme(Theme::from_export(&t), t.names);
+                        }
+                    }
+                    "fleet" => {
+                        if let Some(f) = ev.fleet {
+                            self.fleet_pushed = true;
+                            self.poll_task = None;
+                            let agents = fleet::from_rows(&f.agents);
+                            self.on_fleet(Some(f.sessions), Some(agents), cx);
                         }
                     }
                     _ => {}
                 },
                 Message::Snapshot { pty, cols, rows, bytes } => {
                     let theme = self.theme.clone();
-                    let pane = self.panes.entry(pty).or_insert_with(|| Pane::new(cols.max(1), rows.max(1), &theme));
+                    let sb = self.cfg.scrollback;
+                    let pane = self.panes.entry(pty).or_insert_with(|| Pane::new(cols.max(1), rows.max(1), &theme, sb));
                     pane.restore(cols, rows, &bytes, &theme, cell);
                 }
                 Message::Output { pty, bytes } => {
                     let (c, r) = self.layout_size(&pty);
                     let theme = self.theme.clone();
-                    self.panes.entry(pty).or_insert_with(|| Pane::new(c, r, &theme)).write(&bytes);
+                    let sb = self.cfg.scrollback;
+                    self.panes.entry(pty).or_insert_with(|| Pane::new(c, r, &theme, sb)).write(&bytes);
                 }
                 Message::Resized { pty, cols, rows } => {
                     if let Some(p) = self.panes.get_mut(&pty) {
@@ -693,13 +1053,18 @@ impl TuiosApp {
                     }
                 }
                 Message::Closed(why) => {
-                    self.connected = false;
+                    self.link = if self.link == Link::Attached { Link::Ended } else { Link::Failed(why.clone()) };
                     self.status = why.into();
                     self.sender = None;
+                    all = true;
                 }
             }
         }
-        cx.notify();
+        if all {
+            cx.notify();
+        } else {
+            self.refresh_grid(cx);
+        }
     }
 
     fn layout_size(&self, pty: &str) -> (u16, u16) {
@@ -713,8 +1078,9 @@ impl TuiosApp {
             .unwrap_or((80, 24))
     }
 
+    /// The cell in device pixels, for programs that ask for it.
     fn cell_px(&self) -> (u32, u32) {
-        self.metrics.as_ref().map(|m| (f32::from(m.cell_w).round() as u32, f32::from(m.cell_h).round() as u32)).unwrap_or((9, 18))
+        self.metrics.as_ref().map(|m| (m.cell_w_dev, m.cell_h_dev)).unwrap_or((9, 20))
     }
 
     fn focused_id(&self) -> Option<String> {
@@ -734,7 +1100,9 @@ impl TuiosApp {
         if self.focused_id().as_deref() != Some(id) {
             self.focus_wanted = Some((id.to_string(), Instant::now()));
             self.send(Command::focus(id));
-            cx.notify();
+            self.rebuild_attached();
+            self.refresh_grid(cx);
+            self.refresh_chrome(cx);
         }
     }
 
@@ -773,10 +1141,17 @@ impl TuiosApp {
             }
             Act::Copy => self.copy(cx),
             Act::Paste => self.paste(cx, false),
-            Act::FontBigger => self.set_font_size(self.cfg.font_size + 1., cx),
-            Act::FontSmaller => self.set_font_size(self.cfg.font_size - 1., cx),
-            Act::FontReset => self.set_font_size(14., cx),
-            Act::ToggleSidebar => self.sidebar = !self.sidebar,
+            Act::FontBigger => self.step_font(1, cx),
+            Act::FontSmaller => self.step_font(-1, cx),
+            Act::FontReset => self.set_font_size(15., cx),
+            Act::ToggleSidebar => {
+                if self.layout.width >= RAIL_BELOW {
+                    self.sidebar = !self.sidebar;
+                } else {
+                    self.sidebar_overlay = !self.sidebar_overlay;
+                }
+                self.spin_slots.borrow_mut().sidebar.clear();
+            }
             Act::Theme(name) => {
                 self.theme_wanted = Some(name.clone());
                 self.send(Command::theme(&name));
@@ -790,31 +1165,83 @@ impl TuiosApp {
         let panes = self.all_panes();
         let sessions = self.session_names();
         let entries = palette::entries(&panes, &sessions, &self.current_session(), &self.theme_names, &self.theme.name);
-        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries });
+        self.palette = Some(PaletteUi { query: String::new(), selected: 0, entries, closing: None });
+        self.spin_slots.borrow_mut().hidden = true;
+        self.update_timers(cx);
         cx.notify();
     }
 
-    fn set_theme(&mut self, theme: Theme, names: Vec<String>) {
+    /// Fades the palette out, then removes it.
+    fn close_palette(&mut self, cx: &mut Context<Self>) {
+        let Some(p) = self.palette.as_mut() else { return };
+        if p.closing.is_some() {
+            return;
+        }
+        self.spin_slots.borrow_mut().hidden = false;
+        if self.cfg.reduce_motion {
+            self.palette = None;
+            self.update_timers(cx);
+            cx.notify();
+            return;
+        }
+        p.closing = Some(Instant::now());
+        self.refresh_palette(cx);
+        self.refresh_spin(cx);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(Duration::from_millis(80)).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.palette.as_ref().is_some_and(|p| p.closing.is_some()) {
+                    this.palette = None;
+                    this.update_timers(cx);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The palette is open and takes keys.
+    fn palette_open(&self) -> bool {
+        self.palette.as_ref().is_some_and(|p| p.closing.is_none())
+    }
+
+    /// Returns whether everything must redraw.
+    fn set_theme(&mut self, theme: Theme, names: Vec<String>) -> bool {
         if !names.is_empty() {
             self.theme_names = names;
         }
-        if theme == self.theme {
-            return;
+        if theme == *self.theme {
+            return false;
         }
-        self.theme = theme;
+        self.theme = Rc::new(theme);
         let t = self.theme.clone();
         for p in self.panes.values_mut() {
             apply_theme(&mut p.term, &t);
         }
+        self.spin_slots.borrow_mut().set_theme(&t);
         // Row caches hold resolved colours; new metrics start them over.
         self.epoch += 1;
         self.metrics = None;
+        self.headers.clear();
+        true
+    }
+
+    /// The text sizes the size keys step through.
+    const SIZES: [f32; 7] = [12., 13., 14., 15., 16., 18., 20.];
+
+    fn step_font(&mut self, by: i32, cx: &mut Context<Self>) {
+        let cur = self.cfg.font_size;
+        let next = if by > 0 { Self::SIZES.iter().find(|s| **s > cur + 0.01) } else { Self::SIZES.iter().rev().find(|s| **s < cur - 0.01) };
+        if let Some(s) = next {
+            self.set_font_size(*s, cx);
+        }
     }
 
     fn set_font_size(&mut self, size: f32, cx: &mut Context<Self>) {
-        self.cfg.font_size = size.clamp(7., 40.);
+        self.cfg.font_size = size.round().clamp(7., 40.);
         self.epoch += 1;
         self.metrics = None;
+        self.headers.clear();
         cx.notify();
     }
 
@@ -847,14 +1274,14 @@ impl TuiosApp {
         // dead keys and compose sequences work; it arrives in
         // replace_text_in_range. Programs that asked the kitty protocol to
         // report every key as an escape code (flag 8) get key events instead.
-        if self.palette.is_none() && keys::is_text(k) && !ev.is_held {
+        if !self.palette_open() && keys::is_text(k) && !ev.is_held {
             let report_all = self.focused_pty().and_then(|p| self.panes.get(&p)).is_some_and(|p| p.term.kitty_keyboard_flags() & 8 != 0);
             if !report_all {
                 return;
             }
         }
         cx.stop_propagation();
-        if self.palette.is_some() {
+        if self.palette_open() {
             self.palette_key(k, window, cx);
             return;
         }
@@ -869,12 +1296,13 @@ impl TuiosApp {
         }
         if m.shift && !m.control && !m.alt && (k.key == "pageup" || k.key == "pagedown") {
             if let Some(pty) = self.focused_pty() {
-                let ch = self.metrics.as_ref().map(|m| f32::from(m.cell_h)).unwrap_or(18.);
+                let ch = self.metrics.as_ref().map(|m| f32::from(m.cell_h)).unwrap_or(20.);
                 if let Some(p) = self.panes.get_mut(&pty) {
                     let page = p.term.rows().saturating_sub(2) as f32 * ch;
-                    p.scroll_pending += if k.key == "pageup" { page } else { -page };
-                    self.animating = true;
-                    cx.notify();
+                    p.scroll_pixels(if k.key == "pageup" { page } else { -page }, ch);
+                    p.scrolled_at = Some(Instant::now());
+                    self.wake_grid_at(Instant::now() + SCROLLBAR, cx);
+                    self.refresh_grid(cx);
                 }
             }
             return;
@@ -889,8 +1317,7 @@ impl TuiosApp {
             p.term.clear_selection();
             self.input(&pty, &bytes);
             self.last_input = Instant::now();
-            self.blink_on = true;
-            cx.notify();
+            self.refresh_grid(cx);
         }
     }
 
@@ -914,13 +1341,14 @@ impl TuiosApp {
         let Some(p) = self.palette.as_mut() else { return };
         let n = palette::filter(&p.entries, &p.query).len();
         match k.key.as_str() {
-            "escape" => self.palette = None,
+            "escape" => return self.close_palette(cx),
             "enter" => {
                 let act = palette::filter(&p.entries, &p.query).get(p.selected).map(|e| e.act.clone());
-                self.palette = None;
+                self.close_palette(cx);
                 if let Some(act) = act {
                     self.run(act, window, cx);
                 }
+                return;
             }
             "up" => p.selected = p.selected.saturating_sub(1),
             "down" => p.selected = (p.selected + 1).min(n.saturating_sub(1)),
@@ -930,14 +1358,14 @@ impl TuiosApp {
             }
             _ => {
                 if k.modifiers.control && k.key == "p" && k.modifiers.shift {
-                    self.palette = None;
+                    return self.close_palette(cx);
                 } else if let Some(c) = k.key_char.as_ref().filter(|_| !k.modifiers.control && !k.modifiers.alt) {
                     p.query.push_str(c);
                     p.selected = 0;
                 }
             }
         }
-        cx.notify();
+        self.refresh_palette(cx);
     }
 
     // ---- mouse -------------------------------------------------------------
@@ -982,6 +1410,17 @@ impl TuiosApp {
     }
 
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        // The stage's left edge moves the sidebar.
+        if self.layout.side == Side::Full && self.sidebar && (f32::from(ev.position.x) - self.layout.side_w).abs() <= 4. && ev.button == MouseButton::Left {
+            if ev.click_count >= 2 {
+                self.sidebar_w = SIDEBAR_W;
+                cx.notify();
+            } else {
+                self.drag = Some(Drag::Sidebar);
+                cx.notify();
+            }
+            return;
+        }
         let Some((id, pty, _, _)) = self.hit(ev.position) else {
             // A click on a pane's header focuses the pane.
             if let Some(id) = self.header_hit(ev.position) {
@@ -1023,11 +1462,23 @@ impl TuiosApp {
             3 => self.paste(cx, true),
             _ => {}
         }
-        cx.notify();
+        self.refresh_grid(cx);
     }
 
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
         match self.drag.clone() {
+            Some(Drag::Sidebar) => {
+                if ev.pressed_button != Some(MouseButton::Left) {
+                    self.drag = None;
+                    cx.notify();
+                    return;
+                }
+                let w = f32::from(ev.position.x).round().clamp(SIDEBAR_MIN, SIDEBAR_MAX);
+                if w != self.sidebar_w {
+                    self.sidebar_w = w;
+                    cx.notify();
+                }
+            }
             Some(Drag::Select { pty, anchor }) => {
                 if ev.pressed_button != Some(MouseButton::Left) {
                     return;
@@ -1036,7 +1487,7 @@ impl TuiosApp {
                     if let Some(p) = self.panes.get_mut(&pty) {
                         if cell != anchor {
                             p.term.select(anchor, cell, ev.modifiers.alt);
-                            cx.notify();
+                            self.refresh_grid(cx);
                         }
                     }
                 }
@@ -1084,13 +1535,14 @@ impl TuiosApp {
                     }
                 }
             }
+            Some(Drag::Sidebar) => cx.notify(),
             None => {}
         }
     }
 
     fn on_scroll(&mut self, ev: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let Some((_, pty, _, _)) = self.hit(ev.position) else { return };
-        let ch = self.metrics.as_ref().map(|m| f32::from(m.cell_h)).unwrap_or(18.);
+        let ch = self.metrics.as_ref().map(|m| f32::from(m.cell_h)).unwrap_or(20.);
         let (dy, lines) = match ev.delta {
             ScrollDelta::Pixels(p) => (f32::from(p.y), false),
             ScrollDelta::Lines(l) => (l.y * ch * 3., true),
@@ -1125,399 +1577,85 @@ impl TuiosApp {
             self.input(&pty, &bytes);
             return;
         }
+        // A wheel step moves whole rows at once; a touchpad follows the
+        // finger in whole device pixels.
         if lines {
-            p.scroll_pending += dy;
-            self.animating = true;
+            let rows = (dy / ch).round();
+            p.scroll_pixels(rows * ch - p.scroll_px, ch);
         } else {
             p.scroll_pixels(dy, ch);
         }
-        cx.notify();
+        p.scrolled_at = Some(Instant::now());
+        self.wake_grid_at(Instant::now() + SCROLLBAR, cx);
+        self.refresh_grid(cx);
     }
 
-    // ---- painting ----------------------------------------------------------
-
-    /// Each visible pane with its content rectangle and its header, the cell
-    /// row above the content. tuios leaves one cell row between stacked
-    /// panes and the grid reserves one above the top panes, so every pane has
-    /// a header row without the layout giving up a row of content.
-    fn pane_rects(&self) -> Vec<(tuios_proto::Window, Bounds<Pixels>, Bounds<Pixels>)> {
-        let (Some(m), Some(st)) = (self.metrics.as_ref(), self.state.as_ref()) else { return Vec::new() };
+    /// The pane whose header row is under `pos`.
+    fn header_hit(&self, pos: Point<Pixels>) -> Option<String> {
+        let (m, st) = (self.metrics.as_ref()?, self.state.as_ref()?);
         let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
         let o = self.grid.origin;
-        st.visible()
-            .into_iter()
-            .map(|w| {
-                let (x, y, c, r) = w.content();
-                let content = Bounds::new(point(o.x + px(x as f32 * cw), o.y + px(y as f32 * ch)), size(px(c as f32 * cw), px(r as f32 * ch)));
-                let header = Bounds::new(point(content.origin.x, content.origin.y - px(ch)), size(content.size.width, px(ch)));
-                (w.clone(), content, header)
-            })
-            .collect()
-    }
-
-    fn header_hit(&self, pos: Point<Pixels>) -> Option<String> {
-        self.pane_rects().into_iter().rev().find(|(_, _, h)| h.contains(&pos)).map(|(w, _, _)| w.id)
-    }
-
-    /// Shapes `text` in the UI font, cut with an ellipsis to fit `max`.
-    fn ui_line(&self, text: &str, size: f32, weight: FontWeight, color: impl Into<Hsla>, max: f32, window: &mut Window) -> Option<ShapedLine> {
-        let color: Hsla = color.into();
-        if text.is_empty() || max < 12. {
-            return None;
-        }
-        let mut f = gpui::font(SharedString::from(self.cfg.ui_font.clone()));
-        f.weight = weight;
-        let shape = |s: String, window: &mut Window| {
-            let run = TextRun { len: s.len(), font: f.clone(), color, background_color: None, underline: None, strikethrough: None };
-            window.text_system().shape_line(SharedString::from(s), px(size), &[run], None)
-        };
-        let line = shape(text.to_string(), window);
-        if f32::from(line.width) <= max {
-            return Some(line);
-        }
-        let chars: Vec<char> = text.chars().collect();
-        let mut keep = ((chars.len() as f32) * max / f32::from(line.width)) as usize;
-        while keep > 0 {
-            let s: String = chars[..keep].iter().collect::<String>().trim_end().to_string() + "…";
-            let l = shape(s, window);
-            if f32::from(l.width) <= max {
-                return Some(l);
-            }
-            keep -= 1.max(keep / 8);
-        }
-        None
-    }
-
-    /// The angle of the working glyph, which turns in twelve steps.
-    fn spin_angle(&self) -> f32 {
-        (self.spin % 12) as f32 * std::f32::consts::TAU / 12.
-    }
-
-    fn paint_glyph(&self, status: Status, center: Point<Pixels>, side: f32, window: &mut Window, cx: &mut App) {
-        let t = &self.theme;
-        let b = Bounds::new(point(center.x - px(side / 2.), center.y - px(side / 2.)), size(px(side), px(side)));
-        let color = chrome::status_color(t, status);
-        let unit = TransformationMatrix::unit();
-        if status == Status::Working {
-            let _ = window.paint_svg(b, "icons/state-ring.svg".into(), None, unit, Theme::alpha(color, 0x40).into(), cx);
-            let s = window.scale_factor();
-            let c = point(ScaledPixels(f32::from(center.x) * s), ScaledPixels(f32::from(center.y) * s));
-            let m = unit.translate(c).rotate(radians(self.spin_angle())).translate(point(ScaledPixels(-c.x.0), ScaledPixels(-c.y.0)));
-            let _ = window.paint_svg(b, "icons/state-working.svg".into(), None, m, rgb(color).into(), cx);
-        } else {
-            let _ = window.paint_svg(b, chrome::status_icon(status).into(), None, unit, rgb(color).into(), cx);
-        }
-    }
-
-    /// A pane's header: state glyph, name, folder and branch, and at the
-    /// right either "Needs you" or how long the agent has been at it.
-    fn paint_header(&self, info: &PaneInfo, rect: Bounds<Pixels>, focused: bool, window: &mut Window, cx: &mut App) {
-        let t = self.theme.clone();
-        let h = f32::from(rect.size.height);
-        let x0 = f32::from(rect.origin.x);
-        let mid = f32::from(rect.origin.y) + h / 2.;
-        let right = x0 + f32::from(rect.size.width);
-        self.paint_glyph(info.status, point(px(x0 + 7.), px(mid)), 13., window, cx);
-        let size = 12.;
-        let baseline_y = px(mid - (size * 1.25) / 2.);
-        let lh = px(size * 1.25);
-        // The right side first, so the name knows how much room it has.
-        let mut limit = right - 4.;
-        if matches!(info.status, Status::NeedsYou | Status::Errored) {
-            let word = info.status.word();
-            if let Some(l) = self.ui_line(word, 11., FontWeight::SEMIBOLD, rgb(chrome::status_color(&t, info.status)), 200., window) {
-                let w = f32::from(l.width) + 14.;
-                let ph = (h - 4.).min(17.);
-                let pill = Bounds::new(point(px(right - w - 2.), px(mid - ph / 2.)), size_px(w, ph));
-                window.paint_quad(fill(pill, Theme::alpha(chrome::status_color(&t, info.status), 0x26)).corner_radii(px(ph / 2.)));
-                let _ = l.paint(point(px(right - w + 5.), px(mid - 11. * 1.25 / 2.)), px(11. * 1.25), TextAlign::Left, None, window, cx);
-                limit = right - w - 10.;
-            }
-        } else if let Some(l) = self.ui_line(&fleet::age(info.since_ms, fleet::now_ms()), 11., FontWeight::MEDIUM, rgb(t.text3), 60., window) {
-            if info.status.is_agent() {
-                let w = f32::from(l.width);
-                let _ = l.paint(point(px(right - w - 4.), px(mid - 11. * 1.25 / 2.)), px(11. * 1.25), TextAlign::Left, None, window, cx);
-                limit = right - w - 14.;
-            }
-        }
-        let name_x = x0 + 18.;
-        let (name_color, weight) = if focused { (t.text, FontWeight::MEDIUM) } else { (t.text2, FontWeight::NORMAL) };
-        let Some(name) = self.ui_line(&info.name, size, weight, rgb(name_color), limit - name_x, window) else { return };
-        let nw = f32::from(name.width);
-        let _ = name.paint(point(px(name_x), baseline_y), lh, TextAlign::Left, None, window, cx);
-        let detail_x = name_x + nw + 10.;
-        if let Some(d) = self.ui_line(&info.detail, size, FontWeight::NORMAL, rgb(t.text3), limit - detail_x, window) {
-            let _ = d.paint(point(px(detail_x), baseline_y), lh, TextAlign::Left, None, window, cx);
-        }
-    }
-
-    fn paint_grid(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
-        let started = Instant::now();
-        let m = self.ensure_metrics(window);
-        let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        let width = f32::from(bounds.size.width);
-        let cols = ((width - 2. * PAD_X) / cw).floor().max(1.) as u16;
-        // One row above the grid holds the headers of the top panes.
-        let rows = ((f32::from(bounds.size.height) - PAD_B - PAD_T) / ch - 1.).floor().max(1.) as u16;
-        let side = ((width - cols as f32 * cw) / 2.).floor();
-        let origin = point(bounds.origin.x + px(side), bounds.origin.y + px(PAD_T + ch));
-        if (self.grid.cols, self.grid.rows) != (cols, rows) && self.grid.cols > 0 && self.connected {
-            self.overlay_until = Some(Instant::now() + OVERLAY);
-        }
-        self.grid = Grid { origin, size: bounds.size, cols, rows };
-        if self.connected {
-            self.schedule_resize(cols, rows, cx);
-        }
-
-        let theme = self.theme.clone();
-        window.paint_quad(fill(bounds, theme::hsla(Rgb::from_u32(theme.bg))));
-        let Some(st) = self.state.clone() else {
-            self.paint_center_note(bounds, &self.status.to_string(), window, cx);
-            return;
-        };
-        let focused = self.focused_id();
-        let infos: HashMap<String, PaneInfo> = self.attached_panes().into_iter().map(|p| (p.window.clone(), p)).collect();
-        let rects = self.pane_rects();
-        let multi = rects.len() > 1;
-        let mut more_frames = false;
-
-        for (w, rect, header) in &rects {
-            let is_focused = focused.as_deref() == Some(w.id.as_str());
-            if let Some(info) = infos.get(&w.id) {
-                self.paint_header(info, *header, is_focused || !multi, window, cx);
-            }
-            let Some(pane) = self.panes.get_mut(&w.pty) else { continue };
-            // Animated scrolling: move a share of what is left each frame.
-            if pane.scroll_pending != 0. {
-                let step = if pane.scroll_pending.abs() < 1. { pane.scroll_pending } else { pane.scroll_pending * 0.28 };
-                pane.scroll_pending -= step;
-                pane.scroll_pixels(step, ch);
-                if pane.scroll_pending.abs() < 0.5 {
-                    pane.scroll_pending = 0.;
-                }
-                more_frames |= pane.scroll_pending != 0.;
-            }
-            let y_off = pane.scroll_px;
-            let screen_bg = pane.term.snapshot().bg;
-            {
-                let Pane { term, painter, .. } = pane;
-                let s = term.snapshot();
-                painter.prepare(s, &m, &theme, window);
-            }
-            if y_off > 0. {
-                let above = pane.term.row_above().cloned();
-                pane.painter.prepare_above(above.as_ref(), screen_bg, &m, &theme, window);
-            }
-            let Pane { term, painter, .. } = pane;
-            let screen = term.screen();
-            window.with_content_mask(Some(ContentMask { bounds: *rect }), |window| {
-                painter.paint(
-                    screen,
-                    rect.origin,
-                    &m,
-                    CursorPaint { visible: y_off == 0. && term.at_bottom() && (self.blink_on || !is_focused), focused: is_focused, color: Rgb::from_u32(theme.cursor) },
-                    y_off,
-                    window,
-                    cx,
-                );
-            });
-            if multi && !is_focused {
-                // Panes without focus sit back a little, as in Ghostty.
-                window.paint_quad(fill(*rect, Theme::alpha(theme.bg, if theme.light { 0x30 } else { 0x40 })));
-            }
-            if !term.at_bottom() || y_off > 0. {
-                paint_scrollbar(term, *rect, &theme, window);
-            }
-        }
-
-        // Hairlines in the gaps tuios leaves between panes.
-        let line = rgb(theme.hairline);
-        for (w, rect, header) in &rects {
-            let (x, y, _, _) = w.content();
-            let left = f32::from(rect.origin.x);
-            let top = f32::from(header.origin.y);
-            let bottom = f32::from(rect.origin.y + rect.size.height);
-            if x > 0 {
-                let gx = (left - cw / 2.).round();
-                window.paint_quad(fill(Bounds::new(point(px(gx), px(top)), size(px(1.), px(bottom - top))), line));
-            }
-            if y > 0 {
-                let x0 = if x > 0 { left - cw / 2. } else { left - side + 1. };
-                let x1 = f32::from(rect.origin.x + rect.size.width) + cw / 2.;
-                window.paint_quad(fill(Bounds::new(point(px(x0.round()), px(top.round())), size(px((x1 - x0).round()), px(1.))), line));
-            }
-        }
-
-        // The one coloured frame: around a pane that needs you.
-        for (w, rect, header) in &rects {
-            let Some(info) = infos.get(&w.id) else { continue };
-            if info.status != Status::NeedsYou {
-                continue;
-            }
-            let c = theme.needs_input;
-            let ring = Bounds::new(
-                point(rect.origin.x - px(4.), header.origin.y),
-                size(rect.size.width + px(8.), rect.size.height + header.size.height + px(2.)),
-            );
-            if let Some(t0) = self.need_since.get(&w.id) {
-                let p = t0.elapsed().as_secs_f32() / FLASH.as_secs_f32();
-                if p < 1. {
-                    let a = ((1. - p) * 0.5 * 255.) as u8;
-                    let grow = px(3. * p);
-                    window.paint_quad(quad(ring.dilate(grow), px(8.), transparent_black(), px(2.), Theme::alpha(c, a), BorderStyle::Solid));
-                    more_frames = true;
-                }
-            }
-            window.paint_quad(quad(ring, px(6.), transparent_black(), px(1.5), rgb(c), BorderStyle::Solid));
-        }
-
-        if let Some(until) = self.overlay_until {
-            let now = Instant::now();
-            if now < until {
-                let left = (until - now).as_secs_f32();
-                let a = (left / 0.25).min(1.);
-                self.paint_size_badge(bounds, a, window, cx);
-                more_frames = true;
-            } else {
-                self.overlay_until = None;
-            }
-        }
-        if self.cfg.show_fps {
-            if let Some((p50, p95)) = self.stats.paint_percentiles() {
-                let s = format!("paint p50 {p50:.2} ms  p95 {p95:.2} ms");
-                if let Some(l) = self.ui_line(&s, 11., FontWeight::MEDIUM, rgb(theme.text3), 400., window) {
-                    let x = bounds.origin.x + bounds.size.width - l.width - px(12.);
-                    let _ = l.paint(point(x, bounds.origin.y + bounds.size.height - px(18.)), px(14.), TextAlign::Left, None, window, cx);
-                }
-            }
-        }
-
-        let title = rects
-            .iter()
-            .find(|(w, _, _)| focused.as_deref() == Some(w.id.as_str()))
-            .and_then(|(w, _, _)| infos.get(&w.id))
-            .map(|i| format!("{} - {} - tuios", i.name, st.session))
-            .unwrap_or_else(|| "tuios".into());
-        if title != self.last_title {
-            window.set_window_title(&title);
-            self.last_title = title;
-        }
-
-        self.paint_preedit(window, cx);
-        window.handle_input(&self.focus, ElementInputHandler::new(bounds, cx.entity()), cx);
-
-        if more_frames || self.animating {
-            self.animating = more_frames;
-            window.request_animation_frame();
-        }
-        self.stats.record_paint(started.elapsed());
-    }
-
-    /// "120 × 40" in the middle of the grid while the window resizes.
-    fn paint_size_badge(&self, bounds: Bounds<Pixels>, alpha: f32, window: &mut Window, cx: &mut App) {
-        let t = &self.theme;
-        let text = format!("{} × {}", self.grid.cols, self.grid.rows);
-        let a = (alpha * 255.) as u8;
-        let Some(l) = self.ui_line(&text, 13., FontWeight::MEDIUM, Theme::alpha(t.text, a), 300., window) else { return };
-        let (w, h) = (f32::from(l.width) + 28., 32.);
-        let c = bounds.center();
-        let b = Bounds::new(point(c.x - px(w / 2.), c.y - px(h / 2.)), size_px(w, h));
-        window.paint_quad(quad(b, px(8.), Theme::alpha(t.raised, a), px(1.), Theme::alpha(t.hairline, a), BorderStyle::Solid));
-        let _ = l.paint(point(b.origin.x + px(14.), c.y - px(13. * 1.25 / 2.)), px(13. * 1.25), TextAlign::Left, None, window, cx);
-    }
-
-    /// A line of text in the middle of the grid, before anything is attached.
-    fn paint_center_note(&self, bounds: Bounds<Pixels>, text: &str, window: &mut Window, cx: &mut App) {
-        let t = &self.theme;
-        if let Some(l) = self.ui_line(text, 13., FontWeight::NORMAL, rgb(t.text3), f32::from(bounds.size.width) - 40., window) {
-            let c = bounds.center();
-            let _ = l.paint(point(c.x - l.width / 2., c.y - px(10.)), px(16.), TextAlign::Left, None, window, cx);
-        }
-    }
-
-    /// Turns the working glyphs in twelve steps a second and a bit, while any
-    /// agent works. A timer, not an animation frame loop, so a busy fleet does
-    /// not repaint at the display's rate.
-    fn spinner(&mut self, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(Duration::from_millis(100)).await;
-                let alive = this.update(cx, |this, cx| {
-                    if this.all_panes().iter().any(|p| p.status == Status::Working) {
-                        this.spin = this.spin.wrapping_add(1);
-                        cx.notify();
-                    }
-                });
-                if alive.is_err() {
-                    break;
-                }
-            }
+        st.visible().into_iter().rev().find_map(|w| {
+            let (x, y, c, _) = w.content();
+            let b = Bounds::new(point(o.x + px(x as f32 * cw), o.y + px((y - 1) as f32 * ch)), size(px(c as f32 * cw), px(ch)));
+            b.contains(&pos).then(|| w.id.clone())
         })
-        .detach();
     }
 }
 
 impl Render for TuiosApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.frames += 1;
+        let m = self.ensure_metrics(window);
+        let before = (self.grid.cols, self.grid.rows);
+        let lay = self.compute_layout(window, &m);
+        self.layout = lay;
+        if before != (self.grid.cols, self.grid.rows) && before.0 > 0 && self.link == Link::Attached {
+            self.resized_at = Some(Instant::now());
+            self.wake_grid_at(Instant::now() + BADGE, cx);
+        }
+        if self.link == Link::Attached {
+            let (c, r) = (self.grid.cols, self.grid.rows);
+            self.schedule_resize(c, r, cx);
+        }
         let t = self.theme.clone();
-        let entity = cx.entity();
-        let grid = canvas(
-            |_, _, _| {},
-            move |bounds, _, window, cx| {
-                entity.update(cx, |this, cx| this.paint_grid(bounds, window, cx));
-            },
-        )
-        .size_full();
-        let sidebar = self.sidebar.then(|| self.render_sidebar(cx).into_any_element());
-        let topbar = self.render_topbar(cx);
-        let palette = self.render_palette(window, cx);
-        div()
+        let v = self.views().clone();
+        let (w, h) = (lay.width, lay.height);
+        let abs = |x: f32, y: f32, w: f32, h: f32| StyleRefinement::default().absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h));
+        let side = match (lay.side, lay.overlay) {
+            (_, true) => Some(abs(0., BAND_H, self.sidebar_w.min(w - 40.), h - BAND_H)),
+            (_, false) if lay.side_w > 0. => Some(abs(0., BAND_H, lay.side_w, h - BAND_H)),
+            _ => None,
+        };
+        let grid_x = if lay.overlay || lay.side_w == 0. { 0. } else { lay.side_w };
+        let mut root = div()
             .id("root")
             .size_full()
-            .flex()
-            .flex_row()
             .relative()
-            .bg(rgb(t.bg))
+            .bg(rgb(t.base))
             .text_color(rgb(t.text))
             .font_family(SharedString::from(self.cfg.ui_font.clone()))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
             .on_key_up(cx.listener(Self::on_key_up))
-            .children(sidebar)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .h_full()
-                    .min_w_0()
-                    .child(topbar)
-                    .child(
-                        div()
-                            .id("grid")
-                            .flex_1()
-                            .min_h_0()
-                            .relative()
-                            .overflow_hidden()
-                            .cursor(CursorStyle::IBeam)
-                            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-                            .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_mouse_down))
-                            .on_mouse_down(MouseButton::Right, cx.listener(Self::on_mouse_down))
-                            .on_mouse_move(cx.listener(Self::on_mouse_move))
-                            .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-                            .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_mouse_up))
-                            .on_mouse_up(MouseButton::Right, cx.listener(Self::on_mouse_up))
-                            .on_scroll_wheel(cx.listener(Self::on_scroll))
-                            .child(grid),
-                    ),
-            )
-            .children(palette)
+            .child(v.band.clone().cached(abs(0., 0., w, BAND_H)))
+            .child(v.grid.clone().cached(abs(grid_x, BAND_H, w - grid_x, h - BAND_H)));
+        if let Some(style) = side {
+            root = root.child(v.sidebar.clone().cached(style));
+        }
+        root = root.child(v.spin.clone());
+        if self.palette.is_some() {
+            root = root.child(v.palette.clone().cached(abs(0., 0., w, h)));
+        }
+        if matches!(self.drag, Some(Drag::Sidebar)) {
+            // Keeps the drag going when the pointer leaves the edge.
+            root = root
+                .on_mouse_move(cx.listener(Self::on_mouse_move))
+                .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+                .cursor(CursorStyle::ResizeLeftRight);
+        }
+        root
     }
-}
-
-fn size_px(w: f32, h: f32) -> Size<Pixels> {
-    size(px(w), px(h))
 }
 
 /// App shortcuts. Everything else goes to the focused pane.
@@ -1581,20 +1719,6 @@ fn mouse_mods(m: &Modifiers) -> u16 {
     v as u16
 }
 
-fn paint_scrollbar(term: &ghostty_vt::Terminal, rect: Bounds<Pixels>, t: &Theme, window: &mut Window) {
-    let (total, offset, len) = term.scrollbar();
-    if total <= len || total == 0 {
-        return;
-    }
-    let h = f32::from(rect.size.height);
-    let thumb = (len as f32 / total as f32 * h).max(24.);
-    let top = offset as f32 / (total - len) as f32 * (h - thumb);
-    let x = rect.origin.x + rect.size.width - px(6.);
-    window.paint_quad(
-        fill(Bounds::new(point(x, rect.origin.y + px(top)), size(px(4.), px(thumb))), Theme::alpha(t.text3, 0x90)).corner_radii(px(2.)),
-    );
-}
-
 impl EntityInputHandler for TuiosApp {
     fn text_for_range(&mut self, _: std::ops::Range<usize>, _: &mut Option<std::ops::Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
         None
@@ -1611,19 +1735,21 @@ impl EntityInputHandler for TuiosApp {
 
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.marked = None;
-        cx.notify();
+        self.refresh_grid(cx);
     }
 
     fn replace_text_in_range(&mut self, _: Option<std::ops::Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
         self.marked = None;
         if text.is_empty() {
-            cx.notify();
+            self.refresh_grid(cx);
             return;
         }
-        if let Some(p) = self.palette.as_mut() {
-            p.query.push_str(text);
-            p.selected = 0;
-            cx.notify();
+        if self.palette_open() {
+            if let Some(p) = self.palette.as_mut() {
+                p.query.push_str(text);
+                p.selected = 0;
+            }
+            self.refresh_palette(cx);
             return;
         }
         let Some(pty) = self.focused_pty() else { return };
@@ -1633,8 +1759,7 @@ impl EntityInputHandler for TuiosApp {
         }
         self.input(&pty, text.as_bytes());
         self.last_input = Instant::now();
-        self.blink_on = true;
-        cx.notify();
+        self.refresh_grid(cx);
     }
 
     fn replace_and_mark_text_in_range(
@@ -1646,7 +1771,7 @@ impl EntityInputHandler for TuiosApp {
         cx: &mut Context<Self>,
     ) {
         self.marked = (!new_text.is_empty()).then(|| new_text.to_string());
-        cx.notify();
+        self.refresh_grid(cx);
     }
 
     fn bounds_for_range(&mut self, _: std::ops::Range<usize>, _: Bounds<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<Bounds<Pixels>> {
@@ -1682,8 +1807,9 @@ impl TuiosApp {
         let run = TextRun { len: text.len(), font: m.fonts[0].clone(), color: rgb(t.text).into(), background_color: None, underline: None, strikethrough: None };
         let line = window.text_system().shape_line(text.clone().into(), m.font_size, &[run], None);
         let w = line.width.max(m.cell_w);
+        let two = px(2. / m.scale);
         window.paint_quad(fill(Bounds::new(b.origin, size(w, m.cell_h)), rgb(t.selected)));
-        window.paint_quad(fill(Bounds::new(point(b.origin.x, b.origin.y + m.cell_h - px(2.)), size(w, px(1.5))), rgb(t.accent)));
-        let _ = line.paint(b.origin, m.cell_h, TextAlign::Left, None, window, cx);
+        window.paint_quad(fill(Bounds::new(point(b.origin.x, b.origin.y + m.cell_h - two), size(w, two)), rgb(t.accent)));
+        let _ = line.paint(point(b.origin.x, b.origin.y + m.baseline - line.ascent), line.ascent + line.descent, TextAlign::Left, None, window, cx);
     }
 }

@@ -4,8 +4,10 @@
 use crate::painter::PanePainter;
 use crate::theme::Theme;
 use ghostty_vt::{Rgb, Terminal};
+use std::time::Instant;
 
-pub const SCROLLBACK: usize = 10_000;
+/// Lines of history per pane unless the config says otherwise.
+pub const SCROLLBACK: usize = 3_000;
 
 pub struct Pane {
     pub term: Terminal,
@@ -18,20 +20,28 @@ pub struct Pane {
     pub scroll_pending: f32,
     /// Bytes received, for the status bar.
     pub bytes_in: u64,
+    /// Lines of history the emulator keeps.
+    pub scrollback: usize,
+    /// When the person last scrolled the pane; the scrollbar shows for a
+    /// moment after.
+    pub scrolled_at: Option<Instant>,
+    /// Whether the last frame drew the pane. A hidden pane drops its row
+    /// caches; it keeps its history.
+    pub shown: bool,
 }
 
 impl Pane {
-    pub fn new(cols: u16, rows: u16, theme: &Theme) -> Self {
-        let mut term = Terminal::new(cols.max(1), rows.max(1), SCROLLBACK).expect("ghostty terminal");
+    pub fn new(cols: u16, rows: u16, theme: &Theme, scrollback: usize) -> Self {
+        let mut term = Terminal::new(cols.max(1), rows.max(1), scrollback).expect("ghostty terminal");
         apply_theme(&mut term, theme);
-        Pane { term, painter: PanePainter::default(), scroll_px: 0., scroll_pending: 0., bytes_in: 0 }
+        Pane { term, painter: PanePainter::default(), scroll_px: 0., scroll_pending: 0., bytes_in: 0, scrollback, scrolled_at: None, shown: false }
     }
 
     /// Starts over from a snapshot: a blank emulator of the given size, then
     /// the bytes that rebuild the screen. A zero size keeps the current one.
     pub fn restore(&mut self, cols: u16, rows: u16, bytes: &[u8], theme: &Theme, cell: (u32, u32)) {
         let (c, r) = if cols == 0 || rows == 0 { (self.term.cols(), self.term.rows()) } else { (cols, rows) };
-        let mut term = Terminal::new(c, r, SCROLLBACK).expect("ghostty terminal");
+        let mut term = Terminal::new(c, r, self.scrollback).expect("ghostty terminal");
         apply_theme(&mut term, theme);
         let _ = cell;
         term.write(bytes);

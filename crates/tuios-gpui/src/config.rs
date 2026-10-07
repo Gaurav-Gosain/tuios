@@ -4,12 +4,16 @@
 //! optional):
 //!
 //! ```toml
-//! font_family = "JetBrainsMono Nerd Font Mono"
-//! font_size = 14
-//! line_height = 1.3
-//! ui_font_family = "Inter"
-//! ligatures = true
-//! theme = "tokyonight"   # overrides tuios's own [appearance] theme
+//! font_family = "JetBrains Mono"   # bundled
+//! font_size = 15                   # pixels
+//! line_height = 1.333
+//! ui_font_family = "Inter"         # bundled
+//! ligatures = false
+//! text_antialias = "grayscale"     # or "subpixel"
+//! text_contrast = 2.0              # 0 to 4, extra stem weight for grayscale
+//! scrollback = 3000                # lines of history per pane
+//! reduce_motion = false
+//! theme = "tokyonight"             # overrides tuios's own [appearance] theme
 //! ```
 //!
 //! The theme otherwise comes from `[appearance] theme` in tuios's
@@ -20,8 +24,8 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 /// Terminal font families tried in order when the configured one is missing.
-pub const TERMINAL_FONTS: [&str; 4] =
-    ["JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono"];
+/// The first is bundled, so it is always there.
+pub const TERMINAL_FONTS: [&str; 3] = [crate::assets::TERMINAL_FONT, "JetBrainsMono Nerd Font Mono", "DejaVu Sans Mono"];
 /// Chrome font families tried in order.
 pub const UI_FONTS: [&str; 4] = [crate::assets::UI_FONT, "Adwaita Sans", "Cantarell", "DejaVu Sans"];
 
@@ -33,6 +37,10 @@ pub struct GuiFile {
     pub ui_font_family: Option<String>,
     pub ligatures: Option<bool>,
     pub theme: Option<String>,
+    pub text_antialias: Option<String>,
+    pub text_contrast: Option<f32>,
+    pub scrollback: Option<usize>,
+    pub reduce_motion: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -105,9 +113,11 @@ mod tests {
 
     #[test]
     fn gui_file_keys_are_optional() {
-        let g = parse_gui("font_size = 15\nligatures = false\n");
+        let g = parse_gui("font_size = 15\nligatures = false\nscrollback = 500\ntext_antialias = 'subpixel'\n");
         assert_eq!(g.font_size, Some(15.));
         assert_eq!(g.ligatures, Some(false));
+        assert_eq!(g.scrollback, Some(500));
+        assert_eq!(g.text_antialias.as_deref(), Some("subpixel"));
         assert_eq!(g.font_family, None);
     }
 
@@ -115,6 +125,8 @@ mod tests {
     fn font_fallback_order() {
         let installed: Vec<String> = ["Adwaita Mono", "JetBrains Mono"].iter().map(|s| s.to_string()).collect();
         assert_eq!(pick_font(&TERMINAL_FONTS, &installed, true), "JetBrains Mono");
+        let installed: Vec<String> = ["Adwaita Mono", "JetBrainsMono Nerd Font Mono"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(pick_font(&TERMINAL_FONTS, &installed, true), "JetBrainsMono Nerd Font Mono");
         let none: Vec<String> = vec!["Foo Mono".into()];
         assert_eq!(pick_font(&TERMINAL_FONTS, &none, true), "Foo Mono");
         assert_eq!(pick_font(&["Wanted"], &[], true), "Wanted");

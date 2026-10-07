@@ -170,7 +170,7 @@ impl PerfView {
         let m = self.metrics.clone().expect("metrics");
         let t = theme::Theme::fallback();
         let pane = self.pane.get_or_insert_with(|| {
-            let mut p = Pane::new(COLS, ROWS, &t);
+            let mut p = Pane::new(COLS, ROWS, &t, crate::pane::SCROLLBACK);
             // History for the scroll phase.
             p.write(b"\x1b[2J\x1b[H");
             p

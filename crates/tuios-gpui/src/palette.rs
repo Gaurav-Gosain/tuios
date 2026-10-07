@@ -77,21 +77,33 @@ pub fn entries(panes: &[PaneInfo], sessions: &[String], current: &str, themes: &
     let mut v = Vec::new();
     let mut ps: Vec<&PaneInfo> = panes.iter().collect();
     ps.sort_by(|a, b| crate::fleet::order(a, b));
+    let mut first_waiting = true;
     for p in ps {
-        let section = if matches!(p.status, Status::NeedsYou | Status::Errored) { Section::NeedsYou } else { Section::Panes };
-        let place = if p.session == current { format!("workspace {}", p.workspace) } else { format!("{} · workspace {}", p.session, p.workspace) };
-        let subtitle = if p.detail.is_empty() { place } else { format!("{place} · {}", p.detail) };
+        let waiting = matches!(p.status, Status::NeedsYou | Status::Errored);
+        let section = if waiting { Section::NeedsYou } else { Section::Panes };
+        // One fragment: the harness and the message, or where the pane is.
+        let mut parts: Vec<&str> = Vec::new();
+        if !p.harness.is_empty() {
+            parts.push(&p.harness);
+        }
+        let fragment = p.fragment();
+        if !fragment.is_empty() && (p.status.is_agent() && !p.message.is_empty() || p.harness.is_empty()) {
+            parts.push(fragment);
+        }
+        if p.session != current && parts.len() < 2 {
+            parts.push(&p.session);
+        }
         v.push(Entry {
             section,
             icon: Icon::State(p.status),
             title: p.name.clone(),
-            subtitle,
-            hint: "",
+            subtitle: parts.join(" · "),
+            hint: if waiting && std::mem::take(&mut first_waiting) { "ctrl+shift+j" } else { "" },
             act: Act::Jump { session: p.session.clone(), window: p.window.clone(), workspace: p.workspace },
         });
     }
     for s in sessions.iter().filter(|s| *s != current) {
-        v.push(Entry { section: Section::Sessions, icon: Icon::Session, title: s.clone(), subtitle: "Attach".into(), hint: "", act: Act::Session(s.clone()) });
+        v.push(Entry { section: Section::Sessions, icon: Icon::Session, title: s.clone(), subtitle: String::new(), hint: "", act: Act::Session(s.clone()) });
     }
     v.extend([
         cmd("Jump to the next pane that needs you", "ctrl+shift+j", Act::NextNeedsYou),
@@ -135,6 +147,29 @@ pub fn entries(panes: &[PaneInfo], sessions: &[String], current: &str, themes: &
 const WS_ARGS: [&[&str]; 9] = [&["1"], &["2"], &["3"], &["4"], &["5"], &["6"], &["7"], &["8"], &["9"]];
 const WS_KEYS: [&str; 9] = ["alt+1", "alt+2", "alt+3", "alt+4", "alt+5", "alt+6", "alt+7", "alt+8", "alt+9"];
 
+/// A hint as the one chip shows it: "ctrl+shift+d" is "Ctrl+Shift+D".
+pub fn chip(hint: &str) -> String {
+    keycaps(hint).join("+")
+}
+
+/// The byte offsets in `title` of the characters `query` matches, first
+/// match after the one before, as [`score`] reads them.
+pub fn matches(query: &str, title: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let lower: Vec<(usize, char)> = title.char_indices().map(|(i, c)| (i, c.to_lowercase().next().unwrap_or(c))).collect();
+    let mut at = 0usize;
+    for qc in query.chars().flat_map(char::to_lowercase).filter(|c| *c != ' ') {
+        match lower[at..].iter().position(|(_, c)| *c == qc) {
+            Some(p) => {
+                out.push(lower[at + p].0);
+                at += p + 1;
+            }
+            None => return Vec::new(),
+        }
+    }
+    out
+}
+
 /// The keycaps of a hint: "ctrl+shift+d" is ["Ctrl", "Shift", "D"].
 pub fn keycaps(hint: &str) -> Vec<String> {
     if hint.is_empty() {
@@ -154,6 +189,8 @@ pub fn keycaps(hint: &str) -> Vec<String> {
             "shift" => "Shift".into(),
             "alt" => "Alt".into(),
             "tab" => "Tab".into(),
+            "enter" => "Enter".into(),
+            "escape" | "esc" => "Esc".into(),
             "left" => "←".into(),
             "right" => "→".into(),
             "up" => "↑".into(),
@@ -212,9 +249,9 @@ fn haystack(e: &Entry) -> String {
     match e.section {
         Section::Themes => format!("theme {}", e.title),
         Section::Sessions => format!("session {}", e.title),
-        // The name and where it is; not the agent's message, whose letters
-        // would match almost anything.
-        Section::NeedsYou | Section::Panes => format!("{} {}", e.title, e.subtitle.split(" · ").take(2).collect::<Vec<_>>().join(" ")),
+        // The name and the harness or folder; not the agent's message, whose
+        // letters would match almost anything.
+        Section::NeedsYou | Section::Panes => format!("{} {}", e.title, e.subtitle.split(" · ").next().unwrap_or("")),
         Section::Commands => e.title.clone(),
     }
 }
@@ -254,9 +291,12 @@ mod tests {
             workspace: 1,
             status,
             name: name.into(),
-            detail: String::new(),
+            harness: String::new(),
+            message: String::new(),
+            place: String::new(),
             since_ms: 1,
             focused: false,
+            seen: false,
         };
         entries(&[p("claude · api", Status::NeedsYou), p("nvim", Status::Terminal)], &["work".into(), "play".into()], "work", &["seafoam_pastel".into()], "dracula")
     }
@@ -285,6 +325,14 @@ mod tests {
         assert_eq!(filter(&e, "session play")[0].act, Act::Session("play".into()));
         assert_eq!(filter(&e, "nvim")[0].title, "nvim");
         assert!(!filter(&e, "split").iter().any(|e| e.section != Section::Commands), "scattered letters do not match");
+    }
+
+    #[test]
+    fn matched_characters_follow_the_query() {
+        assert_eq!(matches("re", "api retries"), vec![4, 5]);
+        assert_eq!(matches("re", "Previous pane"), vec![1, 2]);
+        assert!(matches("zz", "readme").is_empty());
+        assert_eq!(chip("ctrl+shift+p"), "Ctrl+Shift+P");
     }
 
     #[test]
