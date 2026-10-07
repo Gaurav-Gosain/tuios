@@ -2379,7 +2379,38 @@ build and on a `-tags ghostty` build.
 | No app on the rail | the summary record's app is not used by the `harness` token | the rail test, step 1 (`cargo` never shown) | **caught** |
 | No progress on the rail | `progress` left out of the shipped token list | the rail test, step 1 (`40%` never shown) | **caught** |
 
+### Review fixes
+
+The review of #546 found that a working record went while its program still
+ran, and four smaller faults. `program_status_rules_test.go` adds
+`TestProgramStatusOutlivesTheShellCheck` (a pane whose own process is the
+script, and a background job: both keep their working record past two
+detector readings), `TestProgramStatusYieldsToAHook` (a hook's state keeps the
+pane against a report and survives the records ending, and the screen tier's
+state comes back after the program held the pane), and
+`TestProgramStatusAuthIsAnsweredInThePane`. The host test now also detaches
+and wants a clear for the record it left. Step 6 of the rail test is the
+positive half of the first: a script that reported from the foreground and
+exited loses its working record.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released branch (`8910b204`) | build the pull request before the fixes | `TestProgramStatusOutlivesTheShellCheck`, both cases (the record gone within 2 seconds), `TestProgramStatusYieldsToAHook` (the program took the pane from the hook), `TestProgramStatusAuthIsAnsweredInThePane` (the reason named no login), and the host test (no clear on detach) | **caught** |
+| Every report arms the exit rule | `armProgramStatusExit` stores the flag without reading the foreground group | `TestProgramStatusOutlivesTheShellCheck`, both cases | **caught** |
+| `program` ranks with `report` | the rank back to 40 | `TestProgramStatusYieldsToAHook` (the hook's state taken) | **caught** |
+| The weaker state is not given back | `releaseProgramStatusClaim` ignores the saved prior | `TestProgramStatusYieldsToAHook`, second half (the screen tier's state never came back) | **caught** |
+| A detach leaves the records | the `HostProgramStatusClear` write in the attach path cut | the host test, `supported` (no second clear) | **caught** |
+| An auth block offers an answer | the `PromptKindAuth` check in `lookAtPrompt` cut | `TestProgramStatusAuthIsAnsweredInThePane` | **caught** |
+| The ghostty scanner keeps C0 controls | the C0 skip in the scanner's OSC state cut | `TestGhosttyDiffProgramStatus/C0_inside` (unit, `-tags ghostty`) | **caught** |
+
+The rest of the review is held by unit tests: a malformed id, strict base64
+and ASCII-only trimming by `TestParse` and the oracle in `FuzzParse`, and the
+control bytes inside the string by `TestConform_ProgramStatusReports` on both
+backends.
+
 Not covered end to end: the exit of the pane's own process (`noteExit`),
 because the pane closes with it; OSC 9;4 being ignored after OSC 7501, since
 the `program` claim outranks OSC 9;4 while records exist, so no screen differs;
 and a full reset, which the vt conformance test covers on both backends.
+The 30-second limit on alerts outside tuios from a pane that reports over OSC
+7501 has no end-to-end test.

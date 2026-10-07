@@ -448,7 +448,11 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 			}
 			id := regexp.MustCompile(`id=(fwd/[A-Za-z0-9_.+-]+)`).FindStringSubmatch(blocked)[1]
 			// The pane's own working report becomes tuios's record for the
-			// pane, with the app the pane named.
+			// pane, with the app the pane named, once the hook's state is
+			// gone: a hook's report outranks the program's.
+			if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "-w", "deploy", "none"); err != nil {
+				t.Fatalf("set-agent-state none: %v\n%s", err, out)
+			}
 			paneReport()
 			waitHost("the pane's own report", regexp.MustCompile(`7501 state=working:id=`+regexp.QuoteMeta(id)+`:app=rawapp`))
 			if strings.Contains(hostLines(), "id=evil") {
@@ -461,6 +465,25 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 			}
 			waitHost("the clear", regexp.MustCompile(`7501 state=clear:id=`+regexp.QuoteMeta(id)))
 			saveArtifact(t, term, artifactDir(t), "host-forwarding")
+
+			// A client that detaches clears what it left on the host, before
+			// the reset that would also remove it.
+			if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "-w", "deploy", "working"); err != nil {
+				t.Fatalf("set-agent-state: %v\n%s", err, out)
+			}
+			waitHost("the second report", regexp.MustCompile(`7501 state=working:id=`+regexp.QuoteMeta(id)+`:title=`))
+			clears := func() int { return strings.Count(hostLines(), "7501 state=clear:id="+id) }
+			before := clears()
+			if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
+				t.Fatalf("detach: %v", err)
+			}
+			deadline := time.Now().Add(uiTimeout)
+			for clears() <= before {
+				if time.Now().After(deadline) {
+					t.Fatalf("ASSERTION: the detached client left its record on the host:\n%s", hostLines())
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
 			if err := os.WriteFile(filepath.Join(artifactDir(t), "host.log"), []byte(hostLines()), 0o644); err != nil {
 				t.Logf("save the host log: %v", err)
 			}
