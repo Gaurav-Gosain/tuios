@@ -55,6 +55,10 @@ agents-off` says what still works.
 `appearance.dock_compact` draws the dock as one row with no rule. The panes get
 one more row. It works with the dock at the top and at the bottom.
 
+`appearance.zoom_borderless` shows a zoomed pane on the whole pane region with
+no border and no title bar. The pane's program gets the full size. With it on,
+`zoom_size` and `zoom_max_width` have no effect.
+
 `daemon.window_size` sets the size of a session with more than one client:
 `smallest` (the default), `largest`, or `latest`, the client that last had
 input. `tuios set-config daemon.window_size latest` applies it to the session

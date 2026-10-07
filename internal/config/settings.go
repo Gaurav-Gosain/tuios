@@ -635,6 +635,12 @@ type Settings struct {
 	// another, where two panes change at once and neither says so.
 	ZoomAnimation bool
 
+	// ZoomBorderless makes a zoom the whole pane region with no chrome: the
+	// zoomed pane drops its border and title bar, and its guest is told the
+	// full size of the region. zoom_size and zoom_max_width do not apply while
+	// it is on, since a pane with no border has nothing to show around it.
+	ZoomBorderless bool
+
 	// DimUnfocused is how far an unfocused pane's content is carried toward the
 	// pane's own ground, as a percentage. Zero, the default, draws every pane's
 	// content the same.

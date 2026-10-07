@@ -169,6 +169,10 @@ func (m *OS) toggleZoom() {
 			m.MarkAllDirty()
 			return
 		}
+		// A borderless zoom took the border off a pane that keeps one outside
+		// the zoom. It is put back before the slide, so the pane slides home
+		// with the border it will land with.
+		m.settleUnzoomedBorder(fw)
 		// The slide back to the tile, when it is on. The pane is left where it
 		// is and the snap walks it home, landing it and resizing the guest once
 		// at the destination, exactly as the way in does.
@@ -265,8 +269,10 @@ func (m *OS) zoomRect() (x, y, w, h int) {
 	leftMargin := m.PaneLeft()
 	contentWidth := m.PaneWidth()
 	zoomWidth := contentWidth
-	// If ZoomMaxWidth is set, cap width and center horizontally
-	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
+	// If ZoomMaxWidth is set, cap width and center horizontally. Not for a
+	// borderless zoom, which is the whole region by definition: a capped pane
+	// with no border would float in the middle of empty ground.
+	if !m.Settings.ZoomBorderless && m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
 		zoomWidth = m.Settings.ZoomMaxWidth
 	}
 	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.PaneHeight()
@@ -307,8 +313,20 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 	// default under shared borders, and ran its guest two columns and two rows
 	// smaller than every client that had seen it tiled first. Each client then
 	// announced its own size for the same PTY.
+	//
+	// A borderless zoom drops the border whatever the layout's own border mode
+	// is, floating panes included: the pane is the whole region and nothing
+	// else is drawn there, so there is nothing for a border to separate it from.
 	borderChanged := false
-	if borderless := m.panesBorderless(); !w.IsFloating && w.Tiled != borderless {
+	borderless, settle := m.panesBorderless(), !w.IsFloating
+	if m.Settings.ZoomBorderless {
+		borderless, settle = true, true
+	} else if w.IsFloating && w.Tiled {
+		// The option was turned off while a floating pane held the zoom. A
+		// floating pane is never borderless otherwise.
+		borderless, settle = false, true
+	}
+	if settle && w.Tiled != borderless {
 		w.Tiled = borderless
 		borderChanged = true
 	}
@@ -400,7 +418,7 @@ func (m *OS) takeZoomRelayout() bool {
 // so it takes the region the way it always has. Nor is a floating pane, which
 // is not in a layout to be zoomed inside of.
 func (m *OS) zoomUsesLayout(w *terminal.Window) bool {
-	return m.Settings.GetZoomSize() < 100 &&
+	return m.zoomSize() < 100 &&
 		m.AutoTiling && w != nil && !w.IsFloating
 }
 
@@ -622,6 +640,7 @@ func (m *OS) retireOtherZooms(keep *terminal.Window) bool {
 // rectangle is the only record there is and it is restored.
 func (m *OS) unzoomPane(w *terminal.Window) bool {
 	w.Zoomed = false
+	m.settleUnzoomedBorder(w)
 	if m.AutoTiling && !w.IsFloating {
 		return true
 	}
@@ -713,4 +732,27 @@ func (m *OS) ZoomWindowByID(id string, on bool) error {
 		return fmt.Errorf("the pane could not be zoomed %s", state)
 	}
 	return nil
+}
+
+// zoomSize is the share of the pane region a zoom takes, as a percent. A
+// borderless zoom is always the whole region, so it reads as 100 to every
+// caller that decides between a box and a camera.
+func (m *OS) zoomSize() int {
+	if m.Settings.ZoomBorderless {
+		return 100
+	}
+	return m.Settings.GetZoomSize()
+}
+
+// settleUnzoomedBorder gives a pane that has just left the zoom the border mode
+// it has outside the zoom: none under shared borders when tiled, its own box
+// otherwise. A borderless zoom is the one thing that takes a floating pane's
+// border off, so without this an unzoomed float kept drawing without one.
+func (m *OS) settleUnzoomedBorder(w *terminal.Window) {
+	want := !w.IsFloating && m.panesBorderless()
+	if w.Tiled == want {
+		return
+	}
+	w.Tiled = want
+	w.InvalidateCache()
 }

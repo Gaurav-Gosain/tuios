@@ -610,6 +610,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.copy_on_select"),
 			opt("appearance.word_characters"),
 			opt("appearance.zoom_size"),
+			opt("appearance.zoom_borderless"),
 			opt("appearance.zoom_animation"),
 			opt("appearance.zoom_follows_focus"),
 			opt("appearance.window_button_zoom"),

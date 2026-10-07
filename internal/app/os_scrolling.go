@@ -81,10 +81,10 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	// the rest of the strip goes on running off the edges, which is the peek
 	// the other layouts build a canvas for.
 	sl.ZoomedCol, sl.ZoomProportion = -1, 0
-	if zw := m.zoomedWindow(); zw != nil && m.Settings.GetZoomSize() < 100 {
+	if zw := m.zoomedWindow(); zw != nil && m.zoomSize() < 100 {
 		if i := sl.ColumnContaining(m.GetWindowIntID(zw.ID)); i >= 0 {
 			sl.ZoomedCol = i
-			sl.ZoomProportion = float64(m.Settings.GetZoomSize()) / 100
+			sl.ZoomProportion = float64(m.zoomSize()) / 100
 		}
 	}
 	// Revealed after the geometry above, because the reveal measures columns

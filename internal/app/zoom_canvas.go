@@ -109,7 +109,7 @@ func (c zoomCanvas) applySplit(s layout.SplitLine) layout.SplitLine {
 // tile is the rectangle the tiler chose before any of this, which is the only
 // one that says how big a share of the layout the pane holds.
 func (m *OS) zoomCanvasBounds(zoomed *terminal.Window, tile layout.Rect) (layout.Rect, bool) {
-	pct := m.Settings.GetZoomSize()
+	pct := m.zoomSize()
 	region := layout.Rect{
 		X: m.PaneLeft(), Y: m.PaneTop(),
 		W: m.PaneWidth(), H: m.PaneHeight(),

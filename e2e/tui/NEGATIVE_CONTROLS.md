@@ -2286,3 +2286,22 @@ of at least one row. Both run alone and through a daemon.
 
 The wide case prints a line that fills the pane to one column short of its
 width, then a wide character, so the character wraps early on any pane width.
+
+## Borderless zoom
+
+`TestZoomBorderless` zooms one of two panes with `appearance.zoom_borderless`
+on. It asserts the shell's size is the whole pane region, that no border cell
+is drawn there, that a drag from the region's first cell copies the text there,
+and that the pane's edge is back after zooming out. On the daemon run it also
+turns the option off and on with `set-config` while the pane is zoomed, and
+the border follows. It runs standalone, on a
+daemon, under shared borders at zoom_size 90, with zoom_max_width 60, in a
+light theme, on a floating pane and beside the rail. The boxed run is the
+positive half: with the option off, the same probe finds the border and a
+shell two cells smaller each way.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The option is never read | `ApplyAppearanceConfig`: the `s.ZoomBorderless` line cut | all 7 borderless runs ("the zoomed shell is 98x26, want the whole region 100x28"; shared: 91x28, the camera; max-width: 58x26) | **caught** (7 of 7 run) |
+| The zoom box keeps the border | `applyZoomRectAnimated`: the line that drops the border under the option cut | 6 of 7 borderless runs (98x26). `borderless/shared` passes: shared borders already drop the border, and the zoom is still the whole region | **caught** |
+| Zooming out keeps the pane borderless | `ToggleZoom`: the `settleUnzoomedBorder` call cut | `borderless/floating` ("no border after zooming out"). The tiled runs pass: the retile gives a tiled pane its border back on its own | **caught** |

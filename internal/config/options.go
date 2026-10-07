@@ -416,6 +416,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.zoom_borderless", Type: OptionBool, Section: "appearance",
+		Description: "Show a zoomed pane on the whole pane region with no border or title bar. Zoom size and zoom max width do not apply.",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.zoom_animation", Type: OptionBool, Section: "appearance",
 		Description: "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
 		Default:     "true",

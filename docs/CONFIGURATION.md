@@ -486,6 +486,25 @@ When clients with different docks share a session, the panes keep the
 largest dock height. A client with a compact dock shows a blank row in that
 case.
 
+## Borderless zoom
+
+`z` zooms the focused pane. By default the zoomed pane keeps its border, and
+`appearance.zoom_size` sets how much of the screen it takes.
+`appearance.zoom_borderless` shows the zoomed pane on the whole pane region
+with no border and no title bar. The program in the pane gets the full size.
+The dock and the rail stay on the screen. The default is `false`.
+
+```toml
+[appearance]
+zoom_borderless = true
+```
+
+With this option on, `zoom_size` and `zoom_max_width` have no effect. The
+option also applies to a floating pane. When you zoom out, the pane gets its
+border back. You can also set it on the settings page, in the Advanced section,
+or with `tuios set-config appearance.zoom_borderless true`. The change applies
+at once.
+
 ## Splits that follow ssh
 
 The actions `split_ssh_horizontal`, `split_ssh_vertical` and `new_window_ssh`
