@@ -518,7 +518,7 @@ func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
 		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
-		len(m.pendingAgentAlerts) > 0 || m.spotlightMotionPending {
+		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.spotlightMotionPending {
 		return true
 	}
 	// A gesture's announcement hold that nothing is holding any more. The sweep
@@ -1085,6 +1085,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// sweep below so an alert about a pane that exited this tick is dropped
 		// by its own re-validation rather than by a nil window.
 		m.flushDueAgentAlerts(time.Time(msg))
+		m.flushProgramAlerts(time.Time(msg))
 
 		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {

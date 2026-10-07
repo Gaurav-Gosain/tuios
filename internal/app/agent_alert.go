@@ -6,6 +6,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -135,16 +136,7 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	if word == "" {
 		return
 	}
-	name := printableTitle(m.railTitleShown(w))
-	if name == "" {
-		name = "pane"
-	}
-	// A pane that reports over OSC 7501 also sets its own title, so the
-	// alert names it by its id as well, which no program can set.
-	program := len(w.ProgramStatus) > 0
-	if program {
-		name += " [" + shortWindowLabel(w.ID) + "]"
-	}
+	name := m.agentAlertName(w)
 	text := name + " " + word
 	// The reason, when the pane gave one: the question a blocked agent asked,
 	// or the note a report carried. Without it the alert says that the agent
@@ -158,11 +150,18 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
 	}
 	// What reaches outside tuios is rate limited for a pane whose state
-	// comes from OSC 7501: a program can change state as fast as it writes.
-	if program && !m.programAlertDue(w.ID, time.Now()) {
+	// comes from its OSC 7501 report: a program can change state as fast as
+	// it writes. See programAlertOutside.
+	if m.programSourced(w) {
+		m.programAlertOutside(w, from, to, name, text, policy, time.Now())
 		return
 	}
+	m.fireAgentAlertOutside(w, from, to, name, text, policy)
+}
 
+// fireAgentAlertOutside writes the parts of an alert that leave tuios: the
+// terminal notification, the bell, the sound and the client hook.
+func (m *OS) fireAgentAlertOutside(w *terminal.Window, from, to, name, text string, policy config.AgentAlertPolicy) {
 	// One write for both, so a terminal that treats BEL as "raise the window"
 	// does not race the notification it belongs to.
 	var seq []byte
@@ -204,17 +203,137 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 // from one pane whose state comes from OSC 7501. The dock still shows each.
 const programAlertGap = 30 * time.Second
 
-// programAlertDue reports whether the pane may raise an alert outside tuios
-// now, and if so records that it did.
-func (m *OS) programAlertDue(windowID string, now time.Time) bool {
-	if last, ok := m.programAlertAt[windowID]; ok && now.Sub(last) < programAlertGap {
+// programAlert is the alert record of one such pane: when an alert last went
+// outside tuios and for which state, and the alert held back since, if any.
+type programAlert struct {
+	at      time.Time
+	to      string
+	pending *pendingAgentAlert
+}
+
+// programSourced reports whether the pane's agent state is its own OSC 7501
+// report, rather than a hook's or a rule's: the pane holds records, and the
+// state and message are the ones its summary record maps to. A hook that
+// reports for the same pane outranks the program, and its alerts are not
+// limited here.
+func (m *OS) programSourced(w *terminal.Window) bool {
+	sum, ok := programSummary(w.ProgramStatus)
+	if !ok {
 		return false
 	}
-	if m.programAlertAt == nil {
-		m.programAlertAt = make(map[string]time.Time)
+	return programAgentState(sum.State) == w.AgentState && programRecordMessage(sum) == w.AgentMessage
+}
+
+// programAgentState is the agent state a record's state maps to, as the
+// daemon maps it.
+func programAgentState(state string) string {
+	switch state {
+	case "blocked":
+		return "needs_input"
+	case "error":
+		return "errored"
 	}
-	m.programAlertAt[windowID] = now
-	return true
+	return state
+}
+
+// programRecordMessage is the message the daemon makes of a record: title and
+// msg joined, as session.ProgramStatusMessage does.
+func programRecordMessage(r sessiontree.ProgramRecord) string {
+	switch {
+	case r.Title != "" && r.Msg != "":
+		return r.Title + ": " + r.Msg
+	case r.Msg != "":
+		return r.Msg
+	}
+	return r.Title
+}
+
+// programAlertOutside sends an OSC 7501 pane's alert outside tuios at most
+// once in programAlertGap. Within the gap, an alert for the state last sent
+// is a repeat and is dropped; an alert for another state is held, and the
+// newest one held goes out when the gap ends, if the pane is still in that
+// state (flushProgramAlerts). So a program that flips between two states
+// costs one notification in 30 seconds, and a real change is never lost.
+func (m *OS) programAlertOutside(w *terminal.Window, from, to, name, text string, policy config.AgentAlertPolicy, now time.Time) {
+	if m.programAlerts == nil {
+		m.programAlerts = make(map[string]*programAlert)
+	}
+	m.pruneProgramAlerts()
+	pa := m.programAlerts[w.ID]
+	switch {
+	case pa == nil || now.Sub(pa.at) >= programAlertGap:
+		m.programAlerts[w.ID] = &programAlert{at: now, to: to}
+		m.fireAgentAlertOutside(w, from, to, name, text, policy)
+	case to == pa.to:
+		pa.pending = nil
+	default:
+		pa.pending = &pendingAgentAlert{windowID: w.ID, from: from, to: to, due: pa.at.Add(programAlertGap)}
+	}
+}
+
+// flushProgramAlerts sends the held alerts whose gap has ended and whose pane
+// is still in the state they were held for. It runs from the maintenance
+// tick, which tickNeedsWork keeps awake while one is held.
+func (m *OS) flushProgramAlerts(now time.Time) {
+	if !m.programAlertHeld() {
+		return
+	}
+	policy := m.agentAlertPolicy()
+	for id, pa := range m.programAlerts {
+		p := pa.pending
+		if p == nil || now.Before(p.due) {
+			continue
+		}
+		pa.pending = nil
+		w := m.windowByID(id)
+		if w == nil || w.AgentState != p.to || !policy.Alerts(p.to) || policy.Quiet(now) {
+			continue
+		}
+		word, _ := agentTransitionNotice(p.to)
+		if word == "" {
+			continue
+		}
+		name := m.agentAlertName(w)
+		text := name + " " + word
+		if note := printableTitle(w.AgentMessage); note != "" {
+			text += agentAlertSep() + note
+		}
+		pa.at, pa.to = now, p.to
+		m.fireAgentAlertOutside(w, p.from, p.to, name, text, policy)
+	}
+}
+
+// programAlertHeld reports whether an alert is held back.
+func (m *OS) programAlertHeld() bool {
+	for _, pa := range m.programAlerts {
+		if pa.pending != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneProgramAlerts forgets the panes that have closed.
+func (m *OS) pruneProgramAlerts() {
+	for id := range m.programAlerts {
+		if m.windowByID(id) == nil {
+			delete(m.programAlerts, id)
+		}
+	}
+}
+
+// agentAlertName is how an alert names a pane: its title, and for a pane
+// that reports over OSC 7501, which can set its own title, its id as well,
+// which no program can set.
+func (m *OS) agentAlertName(w *terminal.Window) string {
+	name := printableTitle(m.railTitleShown(w))
+	if name == "" {
+		name = "pane"
+	}
+	if len(w.ProgramStatus) > 0 {
+		name += " [" + shortWindowLabel(w.ID) + "]"
+	}
+	return name
 }
 
 // agentAlertSep joins an alert's headline to the reason behind it, in the
