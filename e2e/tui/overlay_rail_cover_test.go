@@ -1,12 +1,18 @@
 package tuie2e
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
+
+// The armed prefix asks the rail for the sessions' switch numbers, so the
+// session row gains its number while the which-key overlay is open. The
+// number is the rail answering the chord, not the overlay drawing over it.
+var switchMarkRe = regexp.MustCompile(`^(▎· )\d+ `)
 
 // TestWhichKeySitsBesideTheRail presses the prefix at 120 columns with the
 // shipped looks. The which-key overlay is anchored to the bottom-right corner,
@@ -53,7 +59,7 @@ func TestWhichKeySitsBesideTheRail(t *testing.T) {
 		if railX-1 >= len(runes) {
 			return ""
 		}
-		return string(runes[railX-1:])
+		return switchMarkRe.ReplaceAllString(string(runes[railX-1:]), "$1")
 	}
 
 	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
