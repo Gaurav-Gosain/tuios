@@ -173,8 +173,22 @@ pub fn tilde(path: &str, home: &str) -> String {
     path.to_string()
 }
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_default()
+static HOME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The home folder the daemon's panes see, when it is not this process's
+/// own (a private daemon under `--isolate`). Paths under it show as `~`.
+pub fn set_home(home: &str) {
+    let _ = HOME.set(home.trim_end_matches('/').to_string());
+}
+
+/// The private daemon's home, if any, then this process's own.
+fn home() -> Vec<String> {
+    HOME.get().cloned().into_iter().chain(std::env::var("HOME").ok()).filter(|h| !h.is_empty()).collect()
+}
+
+/// `path` with the first home it is under shown as `~`.
+fn tilde_any(path: &str, homes: &[String]) -> String {
+    homes.iter().map(|h| tilde(path, h)).find(|p| p.starts_with('~')).unwrap_or_else(|| path.to_string())
 }
 
 struct Raw<'a> {
@@ -188,8 +202,8 @@ struct Raw<'a> {
 }
 
 /// The name, harness, message and place of a pane.
-fn describe(r: &Raw, status: Status, home: &str) -> (String, String, String, String) {
-    let folder = tilde(r.cwd, home);
+fn describe(r: &Raw, status: Status, homes: &[String]) -> (String, String, String, String) {
+    let folder = tilde_any(r.cwd, homes);
     let place = match (folder.is_empty(), r.branch.is_empty()) {
         (false, false) => format!("{folder} · {}", r.branch),
         (false, true) => folder.clone(),
@@ -205,8 +219,7 @@ fn describe(r: &Raw, status: Status, home: &str) -> (String, String, String, Str
         (_, false) if !r.foreground.is_empty() => r.foreground.to_string(),
         (Some(t), false) => t.clone(),
         (None, true) if !r.foreground.is_empty() && r.foreground != harness => r.foreground.to_string(),
-        _ if folder == "~" => "~".into(),
-        _ if !folder.is_empty() => short_folder(&folder),
+        _ if !folder.is_empty() => folder_name(&folder),
         _ if !harness.is_empty() => harness.clone(),
         _ => "shell".into(),
     };
@@ -214,10 +227,13 @@ fn describe(r: &Raw, status: Status, home: &str) -> (String, String, String, Str
     (name, harness, message, place)
 }
 
-/// The last two parts of a folder, which say where a shell is.
-fn short_folder(f: &str) -> String {
-    let parts: Vec<&str> = f.split('/').filter(|p| !p.is_empty()).collect();
-    if parts.len() <= 2 { f.to_string() } else { parts[parts.len() - 2..].join("/") }
+/// A folder's own name, which names a shell: "tuios-gpui", or "~" at home.
+/// The full path goes on line two.
+fn folder_name(f: &str) -> String {
+    if f == "~" || f == "/" {
+        return f.to_string();
+    }
+    f.rsplit('/').find(|p| !p.is_empty()).unwrap_or(f).to_string()
 }
 
 /// Panes from `list-agents --all --all-sessions --json`.
@@ -359,14 +375,15 @@ mod tests {
     #[test]
     fn names_follow_task_then_program_then_folder() {
         let r = |title, harness, fg, cwd| Raw { custom: None, title, harness, foreground: fg, cwd, branch: "main", message: "" };
-        let home = "/home/me";
+        let home = &["/home/me".to_string()];
         // The harness goes on line two, never in the name.
         let (name, harness, _, _) = describe(&r("✳ api retries", "claude-code", "", "/home/me/api"), Status::Working, home);
         assert_eq!((name.as_str(), harness.as_str()), ("api retries", "claude"));
-        assert_eq!(describe(&r("Terminal 7c87b868", "codex", "", "/home/me/api"), Status::Idle, home).0, "~/api");
+        assert_eq!(describe(&r("Terminal 7c87b868", "codex", "", "/home/me/api"), Status::Idle, home).0, "api");
+        assert_eq!(describe(&r("Terminal 7c87b868", "", "", "/home/me"), Status::Terminal, home).0, "~");
         assert_eq!(describe(&r("Terminal 7c87b868", "", "nvim", "/home/me"), Status::Terminal, home).0, "nvim");
         let (name, _, _, place) = describe(&r("Terminal 7c87b868", "", "", "/home/me/dev/tuios"), Status::Terminal, home);
-        assert_eq!(name, "dev/tuios");
+        assert_eq!(name, "tuios");
         assert_eq!(place, "~/dev/tuios · main");
     }
 

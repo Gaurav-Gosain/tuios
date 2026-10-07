@@ -78,7 +78,14 @@ fn main() {
         match a.as_str() {
             "--tuios" => cfg.tuios = PathBuf::from(val()),
             "--session" => cfg.session = Some(val()),
-            "--isolate" => cfg.env.extend(isolated_env(&PathBuf::from(val()))),
+            "--isolate" => {
+                let env = isolated_env(&PathBuf::from(val()));
+                if let Some((_, h)) = env.iter().find(|(k, _)| k == "HOME") {
+                    // Paths under the private daemon's home show as `~`.
+                    fleet::set_home(h);
+                }
+                cfg.env.extend(env);
+            }
             "--font" => cfg.font_family = val(),
             "--font-size" => cfg.font_size = val().parse().unwrap_or_else(|_| usage()),
             "--theme" => cfg.theme = Some(val()),

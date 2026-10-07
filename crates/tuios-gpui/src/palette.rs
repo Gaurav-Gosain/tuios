@@ -1,6 +1,7 @@
 //! The command palette: panes in every session, sessions, tuios actions and
 //! themes, filtered by a fuzzy subsequence match.
 
+use std::collections::HashMap;
 use crate::fleet::{PaneInfo, Status};
 
 /// What a palette entry does.
@@ -101,6 +102,25 @@ pub fn entries(panes: &[PaneInfo], sessions: &[String], current: &str, themes: &
             hint: if waiting && std::mem::take(&mut first_waiting) { "ctrl+shift+j" } else { "" },
             act: Act::Jump { session: p.session.clone(), window: p.window.clone(), workspace: p.workspace },
         });
+    }
+    // Two panes with one title tell themselves apart by their session, then
+    // their workspace: "~ · api".
+    let pane_rows = v.len();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    for e in &v[..pane_rows] {
+        *seen.entry(e.title.clone()).or_default() += 1;
+    }
+    for e in v[..pane_rows].iter_mut() {
+        if seen[&e.title] < 2 {
+            continue;
+        }
+        if let Act::Jump { session, workspace, .. } = &e.act {
+            // The workspace only when it tells two panes of one session apart.
+            let mut spaces = panes.iter().filter(|p| p.name == e.title && &p.session == session).map(|p| p.workspace);
+            let first = spaces.next();
+            let mixed = spaces.any(|w| Some(w) != first);
+            e.subtitle = if mixed { format!("{session} · workspace {workspace}") } else { session.clone() };
+        }
     }
     for s in sessions.iter().filter(|s| *s != current) {
         v.push(Entry { section: Section::Sessions, icon: Icon::Session, title: s.clone(), subtitle: String::new(), hint: "", act: Act::Session(s.clone()) });
