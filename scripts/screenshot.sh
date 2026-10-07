@@ -7,7 +7,9 @@
 #
 # Environment: TUIOS (the bridge-branch tuios), BASE (the daemon's private
 # directory, seeded with scripts/demo/seed.sh), SESSION (default tuios),
-# WAIT (seconds before the shot, default 3), KEEP=1 leaves Hyprland running.
+# WAIT (seconds before the shot, default 3), SIZE (default 1440x900), SCALE
+# (default 1), KEEP=1 leaves Hyprland running. A control command "dump:FILE"
+# writes the app's dump to FILE.
 set -e
 OUT=$1
 THEME=$2
@@ -45,7 +47,7 @@ HLPID=$(cat "$WORK/hl.pid")
 INST=$(hyprctl instances -j | python3 -c "import json,sys; print([i['instance'] for i in json.load(sys.stdin) if i['pid']==$HLPID][0])")
 SOCK=$(hyprctl instances -j | python3 -c "import json,sys; print([i['wl_socket'] for i in json.load(sys.stdin) if i['pid']==$HLPID][0])")
 # The nested output takes the host window's size at start; set it here.
-hyprctl -i "$INST" eval "hl.monitor({ output = \"WAYLAND-1\", mode = \"${SIZE:-1440x900}@60\", position = \"0x0\", scale = 1 })" >/dev/null
+hyprctl -i "$INST" eval "hl.monitor({ output = \"WAYLAND-1\", mode = \"${SIZE:-1440x900}@60\", position = \"0x0\", scale = ${SCALE:-1} })" >/dev/null
 
 WAYLAND_DISPLAY=$SOCK nohup "$ROOT/target/release/tuios-gpui" --tuios "$TUIOS" --isolate "$BASE" \
 	--session "${SESSION:-tuios}" --theme "$THEME" --control "$WORK/ctl.sock" >"$WORK/app.log" 2>&1 &
@@ -54,6 +56,7 @@ sleep "${WAIT:-3}"
 for c in "$@"; do
 	case "$c" in
 	sleep:*) sleep "${c#sleep:}" ;;
+	dump:*) python3 "$ROOT/scripts/ctl.py" "$WORK/ctl.sock" dump >"${c#dump:}" ;;
 	*) python3 "$ROOT/scripts/ctl.py" "$WORK/ctl.sock" "$c" >/dev/null ;;
 	esac
 done
