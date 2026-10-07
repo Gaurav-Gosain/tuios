@@ -138,8 +138,8 @@ func TestWindowSizeHiddenCursorInView(t *testing.T) {
 // payload far larger than the message has, and expects it refused unread.
 //
 // NEGATIVE CONTROL: with the MsgClientActivity case removed from
-// daemonFrameLimit, the frame falls to the 16 MiB limit, the daemon reads it
-// and answers nothing.
+// daemonFrameLimit, the frame falls to the 64 KiB limit of a short request,
+// which this payload is under, so the daemon reads it and answers nothing.
 // The wire numbers of the two message types, from internal/session's iota
 // block. This module does not import that package, whose dependencies it
 // does not carry. Neither number can change: both are appended values of the
@@ -162,7 +162,7 @@ func TestWindowSizeActivityFrameLimit(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	const payload = 64 * 1024
+	const payload = 32 * 1024
 	frame := make([]byte, 6+payload)
 	binary.BigEndian.PutUint32(frame, uint32(2+payload))
 	frame[4] = wireMsgClientActivity

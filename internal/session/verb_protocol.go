@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
 	"os"
 	"slices"
 	"time"
@@ -2162,34 +2161,28 @@ func init() {
 // connection should be handled as JSON. On any read error it returns false and
 // lets the (short) binary path observe the same error and clean up.
 func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) bool {
-	conn := cs.conn
-	for {
-		select {
-		case <-d.ctx.Done():
-			return false
-		case <-cs.done:
-			return false
-		default:
-		}
-
-		_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		peeked, err := br.Peek(1)
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
-			// EOF or hard error: not JSON; the binary loop will re-observe it.
-			_ = conn.SetReadDeadline(time.Time{})
-			return false
-		}
-
-		_ = conn.SetReadDeadline(time.Time{})
-		switch peeked[0] {
-		case '{', ' ', '\t', '\n', '\r':
-			return true
-		default:
-			return false
-		}
+	select {
+	case <-d.ctx.Done():
+		return false
+	case <-cs.done:
+		return false
+	default:
+	}
+	// No deadline on the wait for the first byte. It used to poll every
+	// 100 ms to see the daemon stop, which cost each connection that had not
+	// spoken yet ten wakeups a second. Shutdown and drop close the
+	// connection, which ends the wait as well.
+	_ = cs.conn.SetReadDeadline(time.Time{})
+	peeked, err := br.Peek(1)
+	if err != nil {
+		// EOF or hard error: not JSON; the binary loop will re-observe it.
+		return false
+	}
+	switch peeked[0] {
+	case '{', ' ', '\t', '\n', '\r':
+		return true
+	default:
+		return false
 	}
 }
 

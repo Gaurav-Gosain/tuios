@@ -2934,3 +2934,27 @@ on the same eight cores during each run. The "before" build is main at
 The chrome flake did not show on this machine. A hook that always misses its
 deadline (`--timeout 1ns`) gives the CI failure exactly:
 `chrome_looks_test.go:211: inbox never drew`.
+## Frame memory and the connection cap
+
+`TestDaemonBoundsStalledFrames` opens 32 connections. Each one announces a
+16 MiB input frame, sends 15 MiB of it and stops. The daemon must grow by
+less than 200 MB. A 1 MiB hello must get a refusal, and the next frame on
+the same connection must get its answer. Of 1100 idle connections, the
+daemon must close at least the 76 over its cap and log the refusal. `tuios
+ls` must answer after. The measurements are in `frame-memory.txt` under the
+test's artifact directory.
+
+The controls were run on 2026-10-08 against af79c927 with the change applied.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The build before the change | main at af79c927 | `TestDaemonBoundsStalledFrames`: the daemon grew by 517 MB, and the 1 MiB hello was decoded and answered "invalid hello payload" | **caught** |
+| No read budget | `serveConnection`: `nil` in place of `d.readBudget()` | `TestDaemonBoundsStalledFrames`: the daemon grew by 877 MB | **caught** |
+| No connection cap | `acceptLoop`: the `admitConnection` call cut | `TestDaemonBoundsStalledFrames`: the daemon closed 0 of 1100 connections and logged nothing | **caught** |
+| No short limit | `daemonFrameLimit`: the default case returns `maxFrameBytes` | `TestDaemonBoundsStalledFrames`: the 1 MiB hello was read and answered "invalid hello payload" | **caught** |
+
+The unit tests in `internal/session/frame_budget_test.go` have their own
+controls, each run once: the body allocated whole from the header, no
+charge to the budget, a charge for every frame, no release on a failed
+read, no short limit, and no cap in `admitConnection`. Each one fails at
+least one of them.

@@ -106,10 +106,24 @@ const maxMasterLayoutFrame = 4 * 1024
 // field a later build might add.
 const maxClientActivityFrame = 16
 
+// maxRequestFrame bounds a frame of any message type whose payload is a few
+// fields: names, ids, sizes, flags and paths. The longest field any of them
+// carries is a path, 4 KiB at most on Linux, so this is room for several.
+const maxRequestFrame = 64 * 1024
+
 // daemonFrameLimit is the largest frame the daemon reads for a message type:
 // the payload plus the type and codec bytes.
+//
+// Two types carry what a person or a script gives a client, with no smaller
+// bound on the client: MsgInput is a paste, and MsgExecuteCommand a tape
+// file read whole. They keep the 16 MB any frame may have. A state push and
+// a command result carry a session's layout, bounded above. Every other type
+// a client sends is a short request. A type the daemon does not read, such as
+// one it only sends, gets the same short limit: it is refused in any case.
 func daemonFrameLimit(t MessageType) uint32 {
 	switch t {
+	case MsgInput, MsgExecuteCommand:
+		return maxFrameBytes
 	case MsgUpdateState, MsgLayoutTree:
 		return uint32(maxStateUpdateBytes) + 2
 	case MsgCommandResult:
@@ -121,7 +135,7 @@ func daemonFrameLimit(t MessageType) uint32 {
 	case MsgClientActivity, MsgSessionUsed:
 		return maxClientActivityFrame
 	}
-	return maxFrameBytes
+	return maxRequestFrame
 }
 
 // ClampDisplayText cuts s to maxDisplayTextBytes on a rune boundary. Session
@@ -162,6 +176,23 @@ type FrameTooLargeError struct {
 func (e *FrameTooLargeError) Error() string {
 	return fmt.Sprintf("%s message of %d bytes is over the %d byte limit for that type and was not read",
 		MessageTypeName(e.Type), e.Size, e.Limit)
+}
+
+// FrameBusyError is a frame the daemon had no memory for: other large frames
+// held the read budget (see frame_budget.go) for longer than it waits. The
+// reader has skipped its body, so the stream is still in step, and the sender
+// may send it again.
+type FrameBusyError struct {
+	Type MessageType
+	Size uint32
+	// ReqID is the request id the frame carried, so the refusal can be sent
+	// as the answer to it. Zero for an untagged frame.
+	ReqID uint64
+}
+
+func (e *FrameBusyError) Error() string {
+	return fmt.Sprintf("%s message of %d bytes was not read because the daemon is busy with other large messages",
+		MessageTypeName(e.Type), e.Size)
 }
 
 // errLayoutTooDeep, errLayoutTooLarge and errResultTooDeep refuse what no

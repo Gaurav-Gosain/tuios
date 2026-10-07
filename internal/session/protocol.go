@@ -5,6 +5,7 @@ package session
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -936,22 +937,25 @@ func ReadMessage(r io.Reader) (*Message, error) {
 // and the client wraps its connection so a frame is one read rather than
 // three; neither may read conn directly once the reader holds bytes.
 func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, error) {
-	return readMessageBufferedLimit(conn, r, boundaryTimeout, bodyTimeout, nil)
+	msg, _, err := readMessageBufferedLimit(conn, r, boundaryTimeout, bodyTimeout, nil, nil)
+	return msg, err
 }
 
 // readMessageBufferedLimit is ReadMessageBuffered with a frame limit per
-// message type. A frame over its type's limit is skipped unread and reported
-// as a *FrameTooLargeError, after which the stream is still in step. A nil
-// limit allows every type the 16 MB any frame may have.
-func readMessageBufferedLimit(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration, limit func(MessageType) uint32) (*Message, error) {
+// message type and a memory budget. A frame over its type's limit is skipped
+// unread and reported as a *FrameTooLargeError, after which the stream is
+// still in step. A nil limit allows every type the 16 MB any frame may have.
+// A nil budget charges nothing. It returns the budget chunks the frame holds,
+// which the caller gives back once it is done with the message.
+func readMessageBufferedLimit(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration, limit func(MessageType) uint32, budget memBudget) (*Message, int, error) {
 	setBoundaryDeadline(conn, boundaryTimeout)
 
 	var totalLen uint32
 	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
 		if err == io.EOF {
-			return nil, err
+			return nil, 0, err
 		}
-		return nil, fmt.Errorf("failed to read message length: %w", err)
+		return nil, 0, fmt.Errorf("failed to read message length: %w", err)
 	}
 
 	if bodyTimeout > 0 {
@@ -960,7 +964,7 @@ func readMessageBufferedLimit(conn net.Conn, r io.Reader, boundaryTimeout, bodyT
 		_ = conn.SetReadDeadline(time.Time{})
 	}
 
-	return readMessageBody(r, totalLen, limit)
+	return readFrameBody(r, totalLen, limit, budget)
 }
 
 // setBoundaryDeadline arms the deadline for the wait between frames, or
@@ -983,21 +987,28 @@ func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 // already been consumed from r. limit, when not nil, is the largest frame
 // accepted for each message type; see readMessageBufferedLimit.
 func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint32) (*Message, error) {
+	msg, _, err := readFrameBody(r, totalLen, limit, nil)
+	return msg, err
+}
+
+// readFrameBody is readMessageBody with a memory budget; see frame_budget.go.
+// It returns the budget chunks the payload holds.
+func readFrameBody(r io.Reader, totalLen uint32, limit func(MessageType) uint32, budget memBudget) (*Message, int, error) {
 	// Sanity check length (max 16MB). A frame past this is not skipped: a
 	// length that large is more likely a stream out of step than a frame.
 	if totalLen > maxFrameBytes {
-		return nil, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
+		return nil, 0, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
 	}
 
 	if totalLen < 2 {
-		return nil, fmt.Errorf("message too small: %d bytes", totalLen)
+		return nil, 0, fmt.Errorf("message too small: %d bytes", totalLen)
 	}
 
 	// Read type and codec. The codec byte is gob, with or without a request
 	// id in front of the payload.
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
+		return nil, 0, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
 	}
 
 	msgType := MessageType(header[0])
@@ -1008,14 +1019,14 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 	if tagged && payloadLen < reqIDLen {
 		// Too short to hold the id it says it carries, which no sender writes:
 		// the same fault as a frame too small for its header.
-		return nil, fmt.Errorf("tagged message too small: %d bytes", totalLen)
+		return nil, 0, fmt.Errorf("tagged message too small: %d bytes", totalLen)
 	}
 
 	var reqID uint64
 	if tagged {
 		var id [reqIDLen]byte
 		if _, err := io.ReadFull(r, id[:]); err != nil {
-			return nil, fmt.Errorf("failed to read request id (len=%d, type=%d): %w", payloadLen, msgType, err)
+			return nil, 0, fmt.Errorf("failed to read request id (len=%d, type=%d): %w", payloadLen, msgType, err)
 		}
 		reqID = binary.BigEndian.Uint64(id[:])
 		if reqID == 0 {
@@ -1023,7 +1034,7 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 			// message goes out untagged. A tagged zero would read as the
 			// same Message as an untagged frame, so the frame a relay writes
 			// back would not be the one it read. No sender writes one.
-			return nil, fmt.Errorf("tagged message with request id 0 (type=%d)", msgType)
+			return nil, 0, fmt.Errorf("tagged message with request id 0 (type=%d)", msgType)
 		}
 		payloadLen -= reqIDLen
 	}
@@ -1034,18 +1045,18 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 	if limit != nil {
 		if typeMax := limit(msgType); totalLen > typeMax {
 			if _, err := io.CopyN(io.Discard, r, int64(payloadLen)); err != nil {
-				return nil, fmt.Errorf("failed to skip oversized message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
+				return nil, 0, fmt.Errorf("failed to skip oversized message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
 			}
-			return nil, &FrameTooLargeError{Type: msgType, Size: totalLen, Limit: typeMax, ReqID: reqID}
+			return nil, 0, &FrameTooLargeError{Type: msgType, Size: totalLen, Limit: typeMax, ReqID: reqID}
 		}
 	}
 
-	var payload []byte
-	if payloadLen > 0 {
-		payload = make([]byte, payloadLen)
-		if _, err := io.ReadFull(r, payload); err != nil {
-			return nil, fmt.Errorf("failed to read message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
+	payload, held, err := readFramePayload(r, int(payloadLen), budget)
+	if err != nil {
+		if errors.Is(err, errFrameBudget) {
+			return nil, 0, &FrameBusyError{Type: msgType, Size: totalLen, ReqID: reqID}
 		}
+		return nil, 0, fmt.Errorf("failed to read message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
 	}
 
 	msg := &Message{
@@ -1057,7 +1068,71 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 	// Debug logging
 	LogMessage("RECV", msg)
 
-	return msg, nil
+	return msg, held, nil
+}
+
+// errFrameBudget is a frame whose memory the budget could not give in time.
+// readFramePayload has skipped the rest of it.
+var errFrameBudget = errors.New("the frame budget is spent")
+
+// readFramePayload reads n payload bytes into memory that grows as they
+// arrive: it starts at firstFrameChunk at most and doubles, by frameGrowStep
+// at most, up to n. A sender that announces more than it sends costs what it
+// sent, not what it announced.
+//
+// With a budget, every byte of the buffer past largeFrame is charged to it,
+// frameCopies times. When the budget cannot give its share within
+// readBudgetWait, the rest of the payload is read and dropped, so the stream
+// stays in step, and the error is errFrameBudget. The chunks taken are
+// returned for the caller to give back.
+func readFramePayload(r io.Reader, n int, budget memBudget) (payload []byte, held int, err error) {
+	if n == 0 {
+		return nil, 0, nil
+	}
+	defer func() {
+		if err != nil && held > 0 {
+			budget.release(held)
+			held = 0
+		}
+	}()
+	charged := 0 // buffer bytes charged to the budget, before frameCopies
+	grow := func(want int) bool {
+		if budget == nil || want <= largeFrame {
+			return true
+		}
+		extra := want - max(charged, largeFrame)
+		if extra <= 0 {
+			return true
+		}
+		got, ok := budget.acquire(extra*frameCopies, time.Now().Add(readBudgetWait))
+		if !ok {
+			return false
+		}
+		held += got
+		charged = want
+		return true
+	}
+	payload = make([]byte, 0, min(n, firstFrameChunk))
+	for len(payload) < n {
+		if len(payload) == cap(payload) {
+			want := min(n, cap(payload)+min(cap(payload), frameGrowStep))
+			if !grow(want) {
+				if _, err := io.CopyN(io.Discard, r, int64(n-len(payload))); err != nil {
+					return nil, held, err
+				}
+				return nil, held, errFrameBudget
+			}
+			next := make([]byte, len(payload), want)
+			copy(next, payload)
+			payload = next
+		}
+		k, err := io.ReadFull(r, payload[len(payload):cap(payload)])
+		payload = payload[:len(payload)+k]
+		if err != nil {
+			return nil, held, err
+		}
+	}
+	return payload, held, nil
 }
 
 // NewMessage creates a message with a gob-encoded payload. A nil payload
