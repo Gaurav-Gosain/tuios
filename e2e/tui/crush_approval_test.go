@@ -51,10 +51,15 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	if err := term.SendKeys(" "); err != nil {
 		t.Fatalf("peek: %v", err)
 	}
+	// Crush's own dialog in the pane behind the Inbox shows the same words, so
+	// they can be on the screen before the peek has read the prompt. A key
+	// pressed while the read is out does nothing. The answer hints are drawn
+	// only from a finished read, so the wait is on them.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "Tool bash") && strings.Contains(text, shown) &&
-			strings.Contains(text, "Allow for Session")
+			strings.Contains(text, "Allow for Session") &&
+			strings.Contains(text, "Approval: ") && strings.Contains(text, "A always")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the peek never showed Crush's dialog: %v\n%s", err, term.Snapshot())
 	}
@@ -378,10 +383,17 @@ func TestCrushCrashAtItsDialogClearsThePane(t *testing.T) {
 	pid := startFakeCrushIn(t, base, win, buildFakeCrush(t))
 	log := &stateLog{name: "crush-crash"}
 	typeIn(t, base, win, "dialog")
-	st := waitAgentState(t, base, crushSession, win, "needs_input", "crush", log, "dialog up")
-	if st.Source != "screen" {
-		t.Fatalf("the dialog's claim is from %s, want the screen's override", st.Source)
+	// The blocked report puts the pane on needs_input for a moment, before
+	// the working report takes it off and the screen puts it back. The
+	// kill must come after the screen's claim, so the wait is on its source.
+	deadline := time.Now().Add(uiTimeout)
+	for st := waitAgentState(t, base, crushSession, win, "needs_input", "crush", log, "dialog up"); st.State != "needs_input" || st.Source != "screen"; st = readAgentState(t, base, crushSession, win) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the dialog's claim is %s from %s, want needs_input from the screen's override", st.State, st.Source)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+	log.add("%-44s source=screen", "the screen's override")
 	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
 		t.Fatalf("kill: %v", err)
 	}
