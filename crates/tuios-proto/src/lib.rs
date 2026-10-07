@@ -43,6 +43,9 @@ pub struct Launch {
     pub rows: u16,
     pub cell_width: u32,
     pub cell_height: u32,
+    /// The room around each pane's text, in device pixels: top, left,
+    /// right, bottom. Empty keeps the panes at their full cell size.
+    pub insets: Vec<u32>,
     /// A theme for the bridge to use instead of the one its config names.
     pub theme: Option<String>,
     /// Extra environment for the bridge (and the daemon it may start).
@@ -98,6 +101,9 @@ impl Bridge {
             .arg(launch.cell_width.to_string())
             .arg("--cell-height")
             .arg(launch.cell_height.to_string());
+        if launch.insets.len() == 4 {
+            cmd.arg("--insets").arg(launch.insets.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
+        }
         if let Some(s) = &launch.session {
             cmd.arg("--session").arg(s);
         }

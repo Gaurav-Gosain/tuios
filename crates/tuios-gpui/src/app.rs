@@ -44,8 +44,12 @@ const HIDE_RAIL_BELOW: f32 = 720.;
 /// The stage's margin at the right and bottom, and at the left without a
 /// sidebar.
 const STAGE_MARGIN: f32 = 8.;
-/// Space between the stage edge and the grid, at least, on every side.
-const STAGE_PAD: f32 = 12.;
+/// The pane header, and the room the bridge keeps around each pane's text
+/// (docs/design/FINAL.md section 11): from the top of the pane's slot to
+/// its text, and from each other slot edge to the text.
+const HEADER_H: f32 = 28.;
+const PANE_TOP: f32 = 32.;
+const PANE_PAD: f32 = 12.;
 /// How long "Needs you" takes to arrive.
 const ARRIVE: Duration = Duration::from_millis(400);
 /// The resize badge shows this long after the last change, then fades.
@@ -530,12 +534,9 @@ impl TuiosApp {
         // Reading order, so an index names the same pane whatever the stacking.
         vis.sort_by_key(|w| (w.y, w.x));
         let w = vis.get(n).ok_or_else(|| format!("no pane {n}"))?;
-        let (x, y, _, _) = w.content();
+        let o = self.pane_rect(m, w).content.origin;
         let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        Ok(point(
-            self.grid.origin.x + px((x as f32 + col + 0.5) * cw),
-            self.grid.origin.y + px((y as f32 + row + 0.5) * ch),
-        ))
+        Ok(point(o.x + px((col + 0.5) * cw), o.y + px((row + 0.5) * ch)))
     }
 
     fn control_plan(&mut self, line: &str, _window: &mut Window, cx: &mut Context<Self>) -> Result<Plan, String> {
@@ -724,20 +725,31 @@ impl TuiosApp {
         };
         let x = if side_w > 0. { side_w } else { STAGE_MARGIN };
         let stage = Bounds::new(point(px(x), px(BAND_H)), size(px(snap(w - x - STAGE_MARGIN).max(40.)), px(snap(h - BAND_H - STAGE_MARGIN).max(40.))));
-        // The grid in device pixels: as many whole cells as fit inside the
-        // padding, and the rest split evenly around it.
+        // The grid in device pixels. Each pane's slot is its cells plus the
+        // gap after it: half a gap column on each side and the gap row
+        // above. The slots of the edge panes reach the stage edge, give or
+        // take the leftover, which is split evenly; the bridge keeps the
+        // padding inside each slot.
         let (cwd, chd) = (m.cell_w_dev as f32, m.cell_h_dev as f32);
         let sw = (f32::from(stage.size.width) * s).round();
         let sh = (f32::from(stage.size.height) * s).round();
-        let pad = (STAGE_PAD * s).round();
-        let cols = ((sw - 2. * pad) / cwd).floor().max(1.);
-        let rows = ((sh - 2. * pad) / chd).floor().max(2.);
-        let gx = (x * s).round() + ((sw - cols * cwd) / 2.).floor();
-        let gy = (BAND_H * s).round() + ((sh - rows * chd) / 2.).floor();
-        let grid_origin = point(px(gx / s), px(gy / s));
-        // One row of the grid holds the top panes' headers.
-        self.grid = Grid { origin: point(px(gx / s), px((gy + chd) / s)), cols: cols as u16, rows: rows as u16 - 1 };
+        let cols = ((sw / cwd).floor() - 1.).max(1.);
+        let rows = ((sh / chd).floor() - 1.).max(1.);
+        let half = (cwd / 2.).floor();
+        let gx = (x * s).round() + ((sw - (cols + 1.) * cwd) / 2.).floor() + half;
+        let gy = (BAND_H * s).round() + ((sh - (rows + 1.) * chd) / 2.).floor() + chd;
+        // Where the text of a pane at the top left starts.
+        let grid_origin = point(px((gx - half + (PANE_PAD * s).round()) / s), px((gy - chd + (PANE_TOP * s).round()) / s));
+        self.grid = Grid { origin: point(px(gx / s), px(gy / s)), cols: cols as u16, rows: rows as u16 };
         Layout { width: w, height: h, side, side_w, overlay, stage, grid_origin }
+    }
+
+    /// The room around each pane's text, in device pixels, as the bridge
+    /// gets it: top, left, right, bottom.
+    fn insets_dev(&self) -> [u32; 4] {
+        let s = self.metrics.as_ref().map(|m| m.scale).unwrap_or(1.);
+        let d = |v: f32| (v * s).round() as u32;
+        [d(PANE_TOP), d(PANE_PAD), d(PANE_PAD), d(PANE_PAD)]
     }
 
     // ---- connection --------------------------------------------------------
@@ -764,6 +776,7 @@ impl TuiosApp {
             rows,
             cell_width: m.cell_w_dev,
             cell_height: m.cell_h_dev,
+            insets: self.insets_dev().to_vec(),
             theme: self.theme_wanted.clone().or_else(|| self.cfg.theme.clone()),
             env: self.cfg.env.clone(),
         };
@@ -1132,7 +1145,9 @@ impl TuiosApp {
             .and_then(|s| s.windows.iter().find(|w| w.pty == pty))
             .map(|w| {
                 let (_, _, c, r) = w.content();
-                (c as u16, r as u16)
+                let (cw, ch) = self.cell_px();
+                let [t, l, rt, b] = self.insets_dev();
+                (tuios_proto::Window::inset_cells(c, cw, l, rt) as u16, tuios_proto::Window::inset_cells(r, ch, t, b) as u16)
             })
             .unwrap_or((80, 24))
     }
@@ -1170,11 +1185,12 @@ impl TuiosApp {
             return;
         }
         let (cw, ch) = self.cell_px();
+        let insets = self.insets_dev();
         self.resize_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_millis(40)).await;
             let _ = this.update(cx, |this, _| {
                 this.sent_size = (cols, rows);
-                this.send(Command::resize(cols, rows, cw, ch));
+                this.send(Command::resize(cols, rows, cw, ch, insets));
             });
         }));
     }
@@ -1436,14 +1452,16 @@ impl TuiosApp {
         let m = self.metrics.as_ref()?;
         let st = self.state.as_ref()?;
         let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        let gx = (f32::from(pos.x) - f32::from(self.grid.origin.x)) / cw;
-        let gy = (f32::from(pos.y) - f32::from(self.grid.origin.y)) / ch;
         let mut vis = st.visible();
         vis.reverse();
+        // The padding around a pane's text belongs to the pane.
         for w in vis {
-            let (x, y, c, r) = w.content();
-            if gx >= x as f32 && gx < (x + c) as f32 && gy >= y as f32 && gy < (y + r) as f32 {
-                return Some((w.id.clone(), w.pty.clone(), (gx - x as f32) as i32, (gy - y as f32) as i32));
+            let r = self.pane_rect(m, w);
+            if r.body.contains(&pos) {
+                let c = r.content;
+                let gx = ((f32::from(pos.x) - f32::from(c.origin.x)) / cw).floor() as i32;
+                let gy = ((f32::from(pos.y) - f32::from(c.origin.y)) / ch).floor() as i32;
+                return Some((w.id.clone(), w.pty.clone(), gx, gy));
             }
         }
         None
@@ -1454,12 +1472,10 @@ impl TuiosApp {
         let m = self.metrics.as_ref()?;
         let st = self.state.as_ref()?;
         let w = st.windows.iter().find(|w| w.pty == pty)?;
-        let (x, y, c, r) = w.content();
+        let c = self.pane_rect(m, w).content;
         let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        let ox = f32::from(self.grid.origin.x) + x as f32 * cw;
-        let oy = f32::from(self.grid.origin.y) + y as f32 * ch;
-        let geo = MouseGeometry { width: (c as f32 * cw) as u32, height: (r as f32 * ch) as u32, cell_width: cw as u32, cell_height: ch as u32 };
-        Some((f32::from(pos.x) - ox, f32::from(pos.y) - oy, geo))
+        let geo = MouseGeometry { width: f32::from(c.size.width) as u32, height: f32::from(c.size.height) as u32, cell_width: cw as u32, cell_height: ch as u32 };
+        Some((f32::from(pos.x) - f32::from(c.origin.x), f32::from(pos.y) - f32::from(c.origin.y), geo))
     }
 
     fn cell_in(&self, pty: &str, pos: Point<Pixels>) -> Option<(u16, u16)> {
@@ -1654,12 +1670,10 @@ impl TuiosApp {
     /// The pane whose header row is under `pos`.
     fn header_hit(&self, pos: Point<Pixels>) -> Option<String> {
         let (m, st) = (self.metrics.as_ref()?, self.state.as_ref()?);
-        let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        let o = self.grid.origin;
         st.visible().into_iter().rev().find_map(|w| {
-            let (x, y, c, _) = w.content();
-            let b = Bounds::new(point(o.x + px(x as f32 * cw), o.y + px((y - 1) as f32 * ch)), size(px(c as f32 * cw), px(ch)));
-            b.contains(&pos).then(|| w.id.clone())
+            let r = self.pane_rect(m, w);
+            let band = Bounds::new(r.outer.origin, size(r.outer.size.width, r.body.origin.y - r.outer.origin.y));
+            band.contains(&pos).then(|| w.id.clone())
         })
     }
 }
@@ -1856,12 +1870,9 @@ impl TuiosApp {
         let w = st.window(&id)?;
         let p = self.panes.get(&w.pty)?;
         let cur = p.term.screen().cursor;
-        let (x, y, _, _) = w.content();
+        let o = self.pane_rect(m, w).content.origin;
         let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        Some(Bounds::new(
-            point(self.grid.origin.x + px((x as f32 + cur.x as f32) * cw), self.grid.origin.y + px((y as f32 + cur.y as f32) * ch)),
-            size(px(cw), px(ch)),
-        ))
+        Some(Bounds::new(point(o.x + px(cur.x as f32 * cw), o.y + px(cur.y as f32 * ch)), size(px(cw), px(ch))))
     }
 
     /// Draws the text an input method is composing over the cursor.

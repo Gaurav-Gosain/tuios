@@ -175,6 +175,15 @@ pub struct Window {
 
 impl Window {
     /// The content rectangle in cells: (x, y, cols, rows).
+    /// Whole cells left in a slot of `n` cells plus one gap cell, once
+    /// `before` and `after` device pixels are taken off. The bridge works
+    /// out each pane's size with the same formula
+    /// (terminal.InsetCells in tuios).
+    pub fn inset_cells(n: i32, cell: u32, before: u32, after: u32) -> i32 {
+        let cell = cell.max(1) as i64;
+        ((((n as i64) + 1) * cell - before as i64 - after as i64) / cell).max(1) as i32
+    }
+
     pub fn content(&self) -> (i32, i32, i32, i32) {
         let b = self.border.max(0);
         (self.x + b, self.y + b, (self.w - 2 * b).max(1), (self.h - 2 * b).max(1))
@@ -205,6 +214,10 @@ pub struct Command {
     pub cell_width: u32,
     #[serde(skip_serializing_if = "is_zero32")]
     pub cell_height: u32,
+    /// The room around each pane's text, in device pixels: top, left,
+    /// right, bottom. The bridge sizes each pane to what is left.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub insets: Vec<u32>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub window: String,
     #[serde(skip_serializing_if = "is_zero32")]
@@ -225,8 +238,8 @@ fn is_zero32(v: &u32) -> bool {
 }
 
 impl Command {
-    pub fn resize(cols: u16, rows: u16, cell_width: u32, cell_height: u32) -> Self {
-        Command { cmd: "resize".into(), cols, rows, cell_width, cell_height, ..Default::default() }
+    pub fn resize(cols: u16, rows: u16, cell_width: u32, cell_height: u32, insets: [u32; 4]) -> Self {
+        Command { cmd: "resize".into(), cols, rows, cell_width, cell_height, insets: insets.to_vec(), ..Default::default() }
     }
     pub fn focus(window: &str) -> Self {
         Command { cmd: "focus".into(), window: window.into(), ..Default::default() }

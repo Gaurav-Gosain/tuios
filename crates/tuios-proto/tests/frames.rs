@@ -58,9 +58,9 @@ fn encodes_what_the_bridge_reads() {
     let c = encode_command(&Command::tape("SplitVertical", &[]));
     let json: serde_json::Value = serde_json::from_slice(&c[5..]).unwrap();
     assert_eq!(json, serde_json::json!({"cmd":"tape","command":"SplitVertical"}));
-    let c = encode_command(&Command::resize(80, 24, 9, 18));
+    let c = encode_command(&Command::resize(80, 24, 9, 18, [32, 12, 12, 12]));
     let json: serde_json::Value = serde_json::from_slice(&c[5..]).unwrap();
-    assert_eq!(json, serde_json::json!({"cmd":"resize","cols":80,"rows":24,"cell_width":9,"cell_height":18}));
+    assert_eq!(json, serde_json::json!({"cmd":"resize","cols":80,"rows":24,"cell_width":9,"cell_height":18,"insets":[32,12,12,12]}));
 }
 
 #[test]

@@ -16,17 +16,25 @@ pub struct HeaderLines {
     pill: Option<ShapedLine>,
 }
 
-/// One visible pane this frame.
-struct PaneRect {
-    id: String,
-    pty: String,
-    /// Content rectangle and the header row above it.
-    content: Bounds<Pixels>,
-    header: Bounds<Pixels>,
+/// One visible pane this frame. Every rectangle is on whole device pixels.
+pub(super) struct PaneRect {
+    pub id: String,
+    pub pty: String,
+    /// The pane's cells plus the gap after them: half a gap column on each
+    /// side and the gap row above. Splits run along its edges.
+    pub slot: Bounds<Pixels>,
+    /// The slot, out to the stage edge on the sides where the pane touches
+    /// it.
+    pub outer: Bounds<Pixels>,
+    /// The header: from the text's left edge to the slot's right padding,
+    /// 28 tall at the top of the slot.
+    pub header: Bounds<Pixels>,
+    /// `outer` below the header: what the pane's view paints.
+    pub body: Bounds<Pixels>,
+    /// The text grid.
+    pub content: Bounds<Pixels>,
     /// Which stage edges the pane touches: left, top, right, bottom.
-    edges: [bool; 4],
-    x: i32,
-    y: i32,
+    pub edges: [bool; 4],
 }
 
 /// `cubic-bezier(0.2, 0, 0, 1)`, the curve things arrive on.
@@ -84,7 +92,7 @@ impl TuiosApp {
                         })
                     })
                     .clone();
-                let c = r.content;
+                let c = r.body;
                 let style = StyleRefinement::default().absolute().left(c.origin.x - px(x0)).top(c.origin.y - px(BAND_H)).w(c.size.width).h(c.size.height);
                 panes.push(view.cached(style).into_any_element());
             }
@@ -181,18 +189,48 @@ impl TuiosApp {
     /// The visible panes with their rectangles, in stacking order.
     fn pane_rects(&self, m: &Metrics) -> Vec<PaneRect> {
         let Some(st) = self.state.as_ref() else { return Vec::new() };
-        let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
-        let o = self.grid.origin;
+        st.visible().into_iter().map(|w| self.pane_rect(m, w)).collect()
+    }
+
+    /// One pane's rectangles (docs/design/FINAL.md section 11). The text
+    /// sits `PANE_TOP` below the slot's top and `PANE_PAD` in from its other
+    /// edges, and the bridge sizes the pane to the whole cells that fit
+    /// there, by the same formula.
+    pub(super) fn pane_rect(&self, m: &Metrics, w: &tuios_proto::Window) -> PaneRect {
+        let s = m.scale;
+        let (cwd, chd) = (m.cell_w_dev as f32, m.cell_h_dev as f32);
+        let half = (cwd / 2.).floor();
+        let (ox, oy) = ((f32::from(self.grid.origin.x) * s).round(), (f32::from(self.grid.origin.y) * s).round());
         let (gc, gr) = (self.grid.cols as i32, self.grid.rows as i32);
-        st.visible()
-            .into_iter()
-            .map(|w| {
-                let (x, y, c, r) = w.content();
-                let content = Bounds::new(point(o.x + px(x as f32 * cw), o.y + px(y as f32 * ch)), size(px(c as f32 * cw), px(r as f32 * ch)));
-                let header = Bounds::new(point(content.origin.x, content.origin.y - px(ch)), size(content.size.width, px(ch)));
-                PaneRect { id: w.id.clone(), pty: w.pty.clone(), content, header, edges: [x <= 0, y <= 0, x + c >= gc, y + r >= gr], x, y }
-            })
-            .collect()
+        let (x, y, c, r) = w.content();
+        let [it, il, ir, ib] = self.insets_dev();
+        let (cols, rows) = (tuios_proto::Window::inset_cells(c, m.cell_w_dev, il, ir), tuios_proto::Window::inset_cells(r, m.cell_h_dev, it, ib));
+        let sl = ox + x as f32 * cwd - half;
+        let sr = ox + (x + c) as f32 * cwd + (cwd - half);
+        let st = oy + (y - 1) as f32 * chd;
+        let sb = oy + (y + r) as f32 * chd;
+        let edges = [x <= 0, y <= 0, x + c >= gc, y + r >= gr];
+        // The stage's inside, past its 1 px edge.
+        let stage = self.layout.stage;
+        let one = 1.;
+        let (gl, gt) = ((f32::from(stage.origin.x) * s).round() + one, (f32::from(stage.origin.y) * s).round() + one);
+        let (gri, gb) = ((f32::from(stage.right()) * s).round() - one, (f32::from(stage.bottom()) * s).round() - one);
+        let (ol, ot) = (if edges[0] { gl } else { sl }, if edges[1] { gt } else { st });
+        let (or, ob) = (if edges[2] { gri } else { sr }, if edges[3] { gb } else { sb });
+        let hh = (HEADER_H * s).round();
+        let tl = sl + il as f32;
+        let tt = st + it as f32;
+        let b = |x0: f32, y0: f32, x1: f32, y1: f32| Bounds::new(point(px(x0 / s), px(y0 / s)), size(px((x1 - x0).max(0.) / s), px((y1 - y0).max(0.) / s)));
+        PaneRect {
+            id: w.id.clone(),
+            pty: w.pty.clone(),
+            slot: b(sl, st, sr, sb),
+            outer: b(ol, ot, or, ob),
+            header: b(tl, st, sr - ir as f32, st + hh),
+            body: b(ol, st + hh, or, ob),
+            content: b(tl, tt, tl + cols as f32 * cwd, tt + rows as f32 * chd),
+            edges,
+        }
     }
 
     /// Shapes `text` in the UI font, cut with an ellipsis to fit `max`.
@@ -244,7 +282,7 @@ impl TuiosApp {
                 svg("icons/mark-x.svg", rgb(t.on_state));
             }
             Status::Working => {
-                svg("icons/state-ring.svg", with_alpha(t.text3, 0.5));
+                svg("icons/state-ring.svg", with_alpha(t.text3, 0.35));
                 self.spin_slots.borrow_mut().grid.push(views::Slot { bounds: b, mask });
             }
             Status::Done => {
@@ -262,19 +300,19 @@ impl TuiosApp {
         let t = self.theme.clone();
         let m = self.metrics.clone().expect("metrics");
         let snap = |v: f32| m.snap(v);
-        let ch = f32::from(rect.size.height);
+        // Section 11: icon centre y + 14, title baseline y + 18.
         let x0 = f32::from(rect.origin.x);
         let top = f32::from(rect.origin.y);
         let right = x0 + f32::from(rect.size.width);
-        self.paint_state(info.status, point(px(x0 + 8.), px(snap(top + ch / 2.))), mask, window, cx);
-        let baseline = snap(top + (ch * 0.7).round());
+        self.paint_state(info.status, point(px(snap(x0 + 7.)), px(snap(top + 14.))), mask, window, cx);
+        let baseline = snap(top + 18.);
         let needs = info.status == Status::NeedsYou;
         let width = f32::from(rect.size.width).round() as u32;
         let detail_text = info.detail();
         let key = (info.name.clone(), detail_text.clone(), focused, width, info.status, self.epoch);
         if self.headers.get(&info.window).is_none_or(|h| h.key != key) {
             let pill = needs.then(|| self.ui_line("Needs you", chrome::LABEL.0, FontWeight::SEMIBOLD, rgb(t.need_ink), 200., window)).flatten();
-            let pill_w = pill.as_ref().map(|p| f32::from(p.width) + 12.).unwrap_or(0.);
+            let pill_w = pill.as_ref().map(|p| f32::from(p.width) + 16.).unwrap_or(0.);
             let limit = right - x0 - 22. - if pill_w > 0. { pill_w + 8. } else { 4. };
             let (tc, tw) = if focused { (t.text, FontWeight::MEDIUM) } else { (t.text2, FontWeight::NORMAL) };
             // The detail goes first when space runs out, then the title.
@@ -299,14 +337,15 @@ impl TuiosApp {
             paint_line(l, x, window, cx);
         }
         if let Some(l) = h.pill.clone() {
-            let w = (f32::from(l.width) + 12.).round();
-            let pill = Bounds::new(point(px(snap(right - w)), px(snap(top + (ch - 16.) / 2.))), size(px(w), px(16.)));
+            // 18 tall, radius 9, 8 px each side.
+            let w = (f32::from(l.width) + 16.).round();
+            let pill = Bounds::new(point(px(snap(right - w)), px(snap(top + 5.))), size(px(w), px(18.)));
             // While it arrives, the pill fades in: its text is shaped again
             // at the frame's alpha, for those few frames only.
             let l = if arrive < 1. { self.ui_line("Needs you", chrome::LABEL.0, FontWeight::SEMIBOLD, with_alpha(t.need_ink, arrive), 200., window).unwrap_or(l) } else { l };
-            window.paint_quad(fill(pill, with_alpha(t.need_fill, arrive)).corner_radii(px(8.)));
-            let base = f32::from(pill.origin.y) + 12.;
-            let _ = l.paint(point(pill.origin.x + px(6.), px(base) - l.ascent), l.ascent + l.descent, TextAlign::Left, None, window, cx);
+            window.paint_quad(fill(pill, with_alpha(t.need_fill, arrive)).corner_radii(px(9.)));
+            let base = f32::from(pill.origin.y) + 13.;
+            let _ = l.paint(point(pill.origin.x + px(8.), px(base) - l.ascent), l.ascent + l.descent, TextAlign::Left, None, window, cx);
         }
     }
 
@@ -330,32 +369,11 @@ impl TuiosApp {
         let multi = rects.len() > 1;
         let focused = self.focused_id();
         let infos: HashMap<String, PaneInfo> = self.attached.iter().map(|p| (p.window.clone(), p.clone())).collect();
-        let inner = lay.stage.dilate(-one);
         for r in &rects {
             let is_focused = focused.as_deref() == Some(r.id.as_str());
             let arrive = self.need_since.get(&r.id).map(|t0| decelerate(t0.elapsed().as_secs_f32() / ARRIVE.as_secs_f32())).unwrap_or(1.);
             if let Some(info) = infos.get(&r.id) {
                 self.paint_header(info, r.header, is_focused || !multi, arrive, stage_mask, window, cx);
-            }
-            let Some(pane) = self.panes.get(&r.pty) else { continue };
-            // A program that set its own background fills its content grown
-            // into the gaps, and out to the stage edge where it touches it.
-            let screen_bg = pane.term.screen().bg;
-            if screen_bg.to_u32() != t.stage {
-                let grow = 4.;
-                let c = r.content;
-                let x0 = if r.edges[0] { f32::from(inner.origin.x) } else { f32::from(c.origin.x) - grow };
-                let x1 = if r.edges[2] { f32::from(inner.right()) } else { f32::from(c.right()) + grow };
-                let y1 = if r.edges[3] { f32::from(inner.bottom()) } else { f32::from(c.bottom()) + grow };
-                let y0 = f32::from(c.origin.y);
-                let rad = px(9.);
-                let corners = Corners {
-                    top_left: px(0.),
-                    top_right: px(0.),
-                    bottom_left: if r.edges[0] && r.edges[3] { rad } else { px(0.) },
-                    bottom_right: if r.edges[2] && r.edges[3] { rad } else { px(0.) },
-                };
-                window.paint_quad(fill(Bounds::new(point(px(x0), px(y0)), size(px(x1 - x0), px(y1 - y0))), hsla(screen_bg)).corner_radii(corners));
             }
         }
         // Panes out of sight drop their row caches; they keep their history.
@@ -369,14 +387,16 @@ impl TuiosApp {
         self.frame_ms += started.elapsed().as_secs_f64() * 1000.;
     }
 
-    /// One pane's content, in its own view: the cells, the cursor, the dim
-    /// of a pane without focus and the scrollbar.
+    /// One pane's body, in its own view: the padding, the cells, the cursor,
+    /// the dim of a pane without focus and the scrollbar. `bounds` is the
+    /// pane's body: everything in its slot below the header.
     pub(super) fn paint_pane(&mut self, pty: &str, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let started = Instant::now();
         let Some(m) = self.metrics.clone() else { return };
         let t = self.theme.clone();
         let Some(st) = self.state.as_ref() else { return };
         let Some(w) = st.windows.iter().find(|w| w.pty == pty) else { return };
+        let rect = self.pane_rect(&m, w);
         let id = w.id.clone();
         let multi = st.visible().len() > 1;
         let is_focused = self.focused_id().as_deref() == Some(id.as_str());
@@ -396,19 +416,25 @@ impl TuiosApp {
             pane.painter.prepare_above(above.as_ref(), screen_bg, &m, &t, window);
         }
         let Pane { term, painter, scrolled_at, .. } = pane;
+        let content = rect.content;
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            paint_padding(term.screen(), &rect, bounds, t.stage, y_off == 0., &m, window);
+        });
         let cursor = CursorPaint {
             visible: y_off == 0. && term.at_bottom() && (blink_on || !is_focused),
             focused: is_focused && active,
             color: Rgb::from_u32(t.cursor),
         };
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            painter.paint(term.screen(), bounds.origin, &m, cursor, y_off, window, cx);
+        window.with_content_mask(Some(ContentMask { bounds: content.intersect(&bounds) }), |window| {
+            painter.paint(term.screen(), content.origin, &m, cursor, y_off, window, cx);
         });
         if multi && !is_focused {
-            // Panes without focus sit back; the header keeps its marks.
-            window.paint_quad(fill(bounds, with_alpha(t.stage, t.dim)));
+            // Panes without focus sit back, padding and all; the header
+            // keeps its marks.
+            window.paint_quad(fill(bounds, with_alpha(t.stage, t.dim)).corner_radii(stage_corners(&rect)));
         }
-        // The scrollbar shows while scrolling, then fades.
+        // The scrollbar shows while scrolling, then fades. It sits in the
+        // padding, 6 px in from the slot's right edge.
         if let Some(at) = *scrolled_at {
             let age = now.saturating_duration_since(at);
             if age < SCROLLBAR + SCROLLBAR_FADE {
@@ -416,7 +442,8 @@ impl TuiosApp {
                 if age > SCROLLBAR {
                     window.request_animation_frame();
                 }
-                paint_scrollbar(term, bounds, &t, fade, m.scale, window);
+                let track = Bounds::new(content.origin, size(rect.slot.right() - content.origin.x, content.size.height));
+                paint_scrollbar(term, track, &t, fade, m.scale, window);
             } else {
                 *scrolled_at = None;
             }
@@ -436,24 +463,17 @@ impl TuiosApp {
         let now = Instant::now();
         let rects = self.pane_rects(&m);
         let focused = self.focused_id();
-        let cw = f32::from(m.cell_w);
-        let inner = lay.stage.dilate(-one);
 
-        // Splits: 1 px hairlines on the gap centre lines.
+        // Splits: 1 px hairlines on the slot edges, which are the gap
+        // centre lines. A pane draws the one on its left and the one above.
         let line = t.hairline;
         for r in &rects {
-            let left = f32::from(r.content.origin.x);
-            let top = f32::from(r.header.origin.y);
-            let bottom = f32::from(r.content.bottom());
-            if r.x > 0 {
-                let gx = m.snap(left - cw / 2.);
-                window.paint_quad(fill(Bounds::new(point(px(gx), px(top)), size(one, px(bottom - top))), line));
+            let o = r.outer;
+            if !r.edges[0] {
+                window.paint_quad(fill(Bounds::new(o.origin, size(one, o.size.height)), line));
             }
-            if r.y > 1 {
-                let x0 = if r.x > 0 { left - cw / 2. } else { f32::from(inner.origin.x) };
-                let x1 = if r.edges[2] { f32::from(inner.right()) } else { f32::from(r.content.right()) + cw / 2. };
-                let (x0, x1) = (m.snap(x0), m.snap(x1));
-                window.paint_quad(fill(Bounds::new(point(px(x0), px(m.snap(top))), size(px(x1 - x0), one)), line));
+            if !r.edges[1] {
+                window.paint_quad(fill(Bounds::new(o.origin, size(o.size.width, one)), line));
             }
         }
 
@@ -462,11 +482,12 @@ impl TuiosApp {
             if self.attached.iter().find(|p| p.window == r.id).is_none_or(|i| i.status != Status::NeedsYou) {
                 continue;
             }
-            let c = &r.content;
-            let x0 = if r.edges[0] { f32::from(lay.stage.origin.x) + 4. } else { f32::from(c.origin.x) - cw / 2. };
-            let x1 = if r.edges[2] { f32::from(lay.stage.right()) - 4. } else { f32::from(c.right()) + cw / 2. };
-            let y0 = f32::from(r.header.origin.y) - 3.;
-            let y1 = if r.edges[3] { f32::from(lay.stage.bottom()) - 4. } else { f32::from(c.bottom()) + 3. };
+            // On the slot edges, or 4 px inside the stage edge.
+            let sl = &r.slot;
+            let x0 = if r.edges[0] { f32::from(lay.stage.origin.x) + 4. } else { f32::from(sl.origin.x) };
+            let x1 = if r.edges[2] { f32::from(lay.stage.right()) - 4. } else { f32::from(sl.right()) + 1. };
+            let y0 = if r.edges[1] { f32::from(lay.stage.origin.y) + 4. } else { f32::from(sl.origin.y) };
+            let y1 = if r.edges[3] { f32::from(lay.stage.bottom()) - 4. } else { f32::from(sl.bottom()) + 1. };
             let ring = Bounds::new(point(px(m.snap(x0)), px(m.snap(y0))), size(px(m.snap(x1 - x0)), px(m.snap(y1 - y0))));
             let arrive = self.need_since.get(&r.id).map(|t0| (t0.elapsed().as_secs_f32() / ARRIVE.as_secs_f32()).min(1.)).unwrap_or(1.);
             if arrive < 1. {
@@ -535,6 +556,117 @@ impl TuiosApp {
         window.paint_quad(quad(b, px(8.), with_alpha(t.raised, alpha), px(1.), Theme::fade(t.border, alpha), BorderStyle::Solid));
         let base = f32::from(b.origin.y) + 20.;
         let _ = l.paint(point(b.origin.x + px(12.), px(base) - l.ascent), l.ascent + l.descent, TextAlign::Left, None, window, cx);
+    }
+}
+
+/// The rounded corners of a pane's body: the stage's own, where the body
+/// reaches the stage's bottom corners.
+fn stage_corners(r: &PaneRect) -> Corners<Pixels> {
+    let rad = px(9.);
+    let bottom = r.edges[3];
+    Corners {
+        top_left: px(0.),
+        top_right: px(0.),
+        bottom_left: if r.edges[0] && bottom { rad } else { px(0.) },
+        bottom_right: if r.edges[2] && bottom { rad } else { px(0.) },
+    }
+}
+
+/// The colour a padding next to `cell` takes, if any: the cell's own
+/// background, unless it has none or the cell is a box-drawing or
+/// Powerline glyph, which would look cut off if it ran on.
+fn edge_bg(row: &ghostty_vt::Row, cell: Option<&ghostty_vt::Cell>) -> Option<Rgb> {
+    let c = cell?;
+    let bg = c.bg?;
+    let start = c.text_start as usize;
+    let ch = row.text.get(start..start + c.text_len as usize).and_then(|s| s.chars().next());
+    if ch.is_some_and(|ch| crate::boxdraw::is_box(ch) || crate::boxdraw::is_powerline(ch)) {
+        return None;
+    }
+    Some(bg)
+}
+
+/// The padding around a pane's text, as Ghostty's
+/// `window-padding-color = extend` paints it. A program that set its own
+/// background (OSC 11) fills the whole body. Each row's first and last cell
+/// then run their background out to the body's sides, and the first and
+/// last rows run theirs up and down, so a program that paints its
+/// background cell by cell (nvim) does not sit in a box inside the pane.
+/// A side runs on only when at least half the rows have a background on
+/// it, so a coloured shell prompt leaves the padding alone.
+fn paint_padding(screen: &ghostty_vt::Screen, r: &PaneRect, body: Bounds<Pixels>, stage: u32, extend: bool, m: &Metrics, window: &mut Window) {
+    let corners = stage_corners(r);
+    if screen.bg.to_u32() != stage {
+        window.paint_quad(fill(body, hsla(screen.bg)).corner_radii(corners));
+    }
+    let rows = &screen.rows;
+    if !extend || rows.is_empty() {
+        return;
+    }
+    let (cw, ch) = (f32::from(m.cell_w), f32::from(m.cell_h));
+    let c = r.content;
+    let (bl, bt, br, bb) = (f32::from(body.origin.x), f32::from(body.origin.y), f32::from(body.right()), f32::from(body.bottom()));
+    let (cl, ct) = (f32::from(c.origin.x), f32::from(c.origin.y));
+    let cr = cl + screen.cols as f32 * cw;
+    let cb = ct + rows.len() as f32 * ch;
+    let left: Vec<Option<Rgb>> = rows.iter().map(|row| edge_bg(row, row.cells.first())).collect();
+    let right: Vec<Option<Rgb>> = rows.iter().map(|row| edge_bg(row, row.cells.last())).collect();
+    let enough = |side: &[Option<Rgb>]| side.iter().filter(|c| c.is_some()).count() * 2 >= side.len();
+    let (do_left, do_right) = (enough(&left), enough(&right));
+    if !do_left && !do_right {
+        return;
+    }
+    let last = rows.len() - 1;
+    let quad = |x0: f32, y0: f32, x1: f32, y1: f32, color: Rgb, radii: Corners<Pixels>, window: &mut Window| {
+        if x1 > x0 && y1 > y0 {
+            window.paint_quad(fill(Bounds::new(point(px(x0), px(y0)), size(px(x1 - x0), px(y1 - y0))), hsla(color)).corner_radii(radii));
+        }
+    };
+    // The sides, a quad per run of rows with the same colour.
+    for (side, on, x0, x1) in [(&left, do_left, bl, cl), (&right, do_right, cr, br)] {
+        if !on {
+            continue;
+        }
+        let mut i = 0;
+        while i <= last {
+            let Some(color) = side[i] else {
+                i += 1;
+                continue;
+            };
+            let mut j = i;
+            while j < last && side[j + 1] == Some(color) {
+                j += 1;
+            }
+            let y0 = if i == 0 { bt } else { ct + i as f32 * ch };
+            let y1 = if j == last { bb } else { ct + (j + 1) as f32 * ch };
+            let mut radii = Corners::default();
+            if j == last {
+                if x0 == bl {
+                    radii.bottom_left = corners.bottom_left;
+                } else {
+                    radii.bottom_right = corners.bottom_right;
+                }
+            }
+            quad(x0, y0, x1, y1, color, radii, window);
+            i = j + 1;
+        }
+    }
+    // Above the first row and below the last, a quad per run of cells.
+    for (row, y0, y1) in [(&rows[0], bt, ct), (&rows[last], cb, bb)] {
+        let mut i = 0;
+        let n = row.cells.len();
+        while i < n {
+            let Some(color) = edge_bg(row, Some(&row.cells[i])) else {
+                i += 1;
+                continue;
+            };
+            let mut j = i;
+            while j + 1 < n && edge_bg(row, Some(&row.cells[j + 1])) == Some(color) {
+                j += 1;
+            }
+            quad(cl + i as f32 * cw, y0, cl + (j + 1) as f32 * cw, y1, color, Corners::default(), window);
+            i = j + 1;
+        }
     }
 }
 
