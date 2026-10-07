@@ -83,7 +83,14 @@ func readPSState(t *testing.T, base, session, window string) psState {
 // answer when it never does.
 func waitPSState(t *testing.T, base, session, window, what string, ok func(psState) bool) psState {
 	t.Helper()
-	deadline := time.Now().Add(shellTimeout)
+	return waitPSStateWithin(t, base, session, window, what, shellTimeout, ok)
+}
+
+// waitPSStateWithin is waitPSState with its own deadline, for a step that
+// must happen before something else could cause it.
+func waitPSStateWithin(t *testing.T, base, session, window, what string, within time.Duration, ok func(psState) bool) psState {
+	t.Helper()
+	deadline := time.Now().Add(within)
 	var st psState
 	for {
 		st = readPSState(t, base, session, window)
@@ -95,6 +102,17 @@ func waitPSState(t *testing.T, base, session, window, what string, ok func(psSta
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// capturePS takes a full screen PNG into the artifacts as name. The shot
+// directory is emptied first, because captureScreenTo copies the last file by
+// name and capture file names do not sort by time.
+func capturePS(t *testing.T, term *tuitest.Terminal, shots, artifacts, name string) {
+	t.Helper()
+	for _, f := range shotFiles(t, shots) {
+		_ = os.Remove(f)
+	}
+	captureScreenTo(t, term, shots, artifacts, name)
 }
 
 func b64e(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
@@ -137,7 +155,8 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	killDaemon(t, base)
 	useShippedLooks(base)
 	host := buildHostTerm(t)
-	writeConfig(t, base, "[appearance.sidebar]\nwidth = 44\n")
+	shots := shotDir(t, base)
+	writeConfig(t, base, "[appearance.sidebar]\nwidth = 44\n\n[screenshot]\ndirectory = \""+shots+"\"\nformat = \"png\"\n")
 	work := workDirIn(t, base)
 	if err := os.WriteFile(filepath.Join(work, "psdemo"), []byte(psDemo), 0o755); err != nil {
 		t.Fatalf("write psdemo: %v", err)
@@ -188,6 +207,7 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	}
 	rail("step 1", "cargo", "40%", "Compiling 12 crates")
 	saveArtifact(t, term, frames, "1-working")
+	capturePS(t, term, shots, frames, "1-working")
 
 	// 2. Blocked on a permission, reported with tuios status.
 	next("1")
@@ -203,6 +223,7 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	}
 	rail("the Inbox", "Approvals", "Publish the crate?")
 	saveArtifact(t, term, frames, "2-blocked-inbox")
+	capturePS(t, term, shots, frames, "2-blocked-inbox")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("close the Inbox: %v", err)
 	}
@@ -269,7 +290,16 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 		t.Errorf("ASSERTION: after the script exited the state is %+v, want done", st)
 	}
 	rail("step 6", "Built 12 crates")
+	// The dock, on the top row, says the unfocused pane finished, with its
+	// message.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		top, _, _ := strings.Cut(s.Text(), "\n")
+		return strings.Contains(top, pane) && strings.Contains(top, "Built 12 crates")
+	}, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the dock never said the pane finished: %v\n%s", err, term.Snapshot())
+	}
 	saveArtifact(t, term, frames, "6-done")
+	capturePS(t, term, shots, frames, "6-done")
 	time.Sleep(3 * time.Second)
 	if st = readPSState(t, base, session, pane); st.records() != "report=done" {
 		t.Errorf("ASSERTION: the done record did not survive: %s", st.records())
@@ -280,18 +310,20 @@ func TestProgramStatusDrivesTheRailAndInbox(t *testing.T) {
 	// them, and a done record reported with them survives it. Before the
 	// mark, the working record stays while the program runs.
 	sendText(`sh -c 'r() { printf "\033]7501;%s\033\134" "$1"; }; r state=working:id=w; echo W""-ON; sleep 4; ` +
-		`r state=blocked:id=b; r state=idle:id=i; r state=done:id=d2; printf "\033]133;A\007"; echo A""-SENT; sleep 4'` + "\n")
+		`r state=blocked:id=b; r state=idle:id=i; r state=done:id=d2; printf "\033]133;A\007"; echo A""-SENT; sleep 8'` + "\n")
 	waitCapture(t, base, session, pane, "W-ON")
 	time.Sleep(2500 * time.Millisecond)
 	if st = readPSState(t, base, session, pane); st.records() != "report=done w=working" {
 		t.Fatalf("ASSERTION: while the program runs its working record should stay: %s", st.records())
 	}
 	waitCapture(t, base, session, pane, "A-SENT")
-	st = waitPSState(t, base, session, pane, "the prompt mark", func(s psState) bool { return !strings.Contains(s.records(), "w=working") })
+	// Within 3 seconds: the program sleeps 8 more, so its exit cannot be
+	// what ends the records.
+	st = waitPSStateWithin(t, base, session, pane, "the prompt mark", 3*time.Second, func(s psState) bool { return !strings.Contains(s.records(), "w=working") })
 	if got := st.records(); got != "d2=done report=done" {
 		t.Errorf("ASSERTION: after OSC 133 A the records are %s, want only the done ones", got)
 	}
-	time.Sleep(5 * time.Second) // the program exits
+	time.Sleep(9 * time.Second) // the program exits
 	if st = readPSState(t, base, session, pane); st.records() != "d2=done report=done" {
 		t.Errorf("ASSERTION: the done records did not survive the exit: %s", st.records())
 	}
