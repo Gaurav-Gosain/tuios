@@ -56,16 +56,24 @@ jobs:
           pipx install fonttools
           pipx inject fonttools brotli
 
-      - name: Tests of the browser build's Go side
-        run: go test -count=1 ./internal/webshell/ ./internal/learn/
+      # The build is the long step. The Go tests and the browser download run
+      # beside it, because neither needs its output. The browser download comes
+      # after the tools step on purpose: both call apt-get, and two apt-get
+      # processes at once fail on the dpkg lock.
+      - parallel:
+          - name: Tests of the browser build's Go side
+            run: go test -count=1 ./internal/webshell/ ./internal/learn/
 
-      - name: Build
-        run: cmd/tuios-wasm/build.sh learn-web
+          - name: Build
+            run: cmd/tuios-wasm/build.sh learn-web
+
+          - name: Headless Chromium for the smoke test
+            run: |
+              npm install --prefix "$RUNNER_TEMP/pw" playwright-core
+              "$RUNNER_TEMP/pw/node_modules/.bin/playwright-core" install --with-deps chromium
 
       - name: Smoke test in headless Chromium
         run: |
-          npm install --prefix "$RUNNER_TEMP/pw" playwright-core
-          "$RUNNER_TEMP/pw/node_modules/.bin/playwright-core" install --with-deps chromium
           PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
             node cmd/tuios-wasm/smoke.mjs learn-web "$RUNNER_TEMP/smoke.png"
 

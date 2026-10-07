@@ -71,48 +71,55 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          # The workflow file is in the key so this cgo build gets a cache of
-          # its own rather than whichever workflow saved the go.sum key first.
-          cache-dependency-path: |
-            go.sum
-            .github/workflows/ghostty-vt.yml
+      # The three setup steps download and unpack, and none reads what another
+      # writes, so they run at the same time.
+      - parallel:
+          - uses: actions/setup-go@v7
+            with:
+              go-version-file: go.mod
+              # The workflow file is in the key so this cgo build gets a cache of
+              # its own rather than whichever workflow saved the go.sum key first.
+              cache-dependency-path: |
+                go.sum
+                .github/workflows/ghostty-vt.yml
 
-      # setup-zig has no release on the Node 24 runtime yet, so the runner
-      # warns that it forces it onto Node 24. It works there.
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: 0.16.0
+          # setup-zig has no release on the Node 24 runtime yet, so the runner
+          # warns that it forces it onto Node 24. It works there.
+          - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+            with:
+              version: 0.16.0
 
-      - name: Cache libghostty-vt
-        uses: actions/cache@v6
-        with:
-          path: .ghostty-vt
-          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
+          - name: Cache libghostty-vt
+            uses: actions/cache@v6
+            with:
+              path: .ghostty-vt
+              key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
 
       - name: Build libghostty-vt
         run: ./scripts/ghostty-lib.sh
 
-      - name: Tagged build compiles everywhere
-        run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
+      # The two builds run in the slack of the test step, which spends most of
+      # its time in a few long packages. A failure in any of the three fails
+      # the job at the end of the group.
+      - parallel:
+          - name: Tagged build compiles everywhere
+            run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 
-      # Every package whose tests link the emulator, found from the import
-      # graph so a new one is covered without editing this list: the
-      # differential and wire fidelity tests in internal/vt and
-      # internal/session, and the renderer, input and CLI tests above them.
-      - name: Tests on the ghostty backend
-        run: |
-          pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... |
-            awk '$1 ~ /^github.com\/Gaurav-Gosain\/tuios\// &&
-                 / github.com\/Gaurav-Gosain\/tuios\/internal\/vt( |$)/ {print $1}' |
-            sort -u)
-          echo "$pkgs"
-          # $pkgs is split on purpose: one argument per package.
-          # shellcheck disable=SC2086
-          PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
-            go test -tags ghostty -count=1 -short $pkgs
+          # Every package whose tests link the emulator, found from the import
+          # graph so a new one is covered without editing this list: the
+          # differential and wire fidelity tests in internal/vt and
+          # internal/session, and the renderer, input and CLI tests above them.
+          - name: Tests on the ghostty backend
+            run: |
+              pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... |
+                awk '$1 ~ /^github.com\/Gaurav-Gosain\/tuios\// &&
+                     / github.com\/Gaurav-Gosain\/tuios\/internal\/vt( |$)/ {print $1}' |
+                sort -u)
+              echo "$pkgs"
+              # $pkgs is split on purpose: one argument per package.
+              # shellcheck disable=SC2086
+              PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
+                go test -tags ghostty -count=1 -short $pkgs
 
-      - name: Pure build unaffected
-        run: CGO_ENABLED=0 go build ./...
+          - name: Pure build unaffected
+            run: CGO_ENABLED=0 go build ./...
