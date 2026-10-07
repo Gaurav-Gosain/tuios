@@ -2918,3 +2918,19 @@ second must open it.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The client's key parser lowercases a capital | `parseKeyToMessage`: the capital branch cut, so `P` is sent as `p` | `TestSendKeysCapitalAfterPrefix` (the palette does not open after `PREFIX P`) | **caught** |
+
+## Three flakes under load (2026-10-08)
+
+Each test ran 30 times in a row on one machine. Eight busy loops ran at nice 19
+on the same eight cores during each run. The "before" build is main at
+`af79c927`, which is the control for each code fix.
+
+| Test | Cause | Before | After |
+| --- | --- | --- | --- |
+| `TestProgramStatusDrivesTheRailAndInbox` | The script reports a working root record and exits. The PTY reader can read the foreground group after the shell has it back. The read found no group, and the report then disarmed a record that had a group. The record outlived the script. A record now keeps its group when the read finds none. | 9 of 30 fail at step 6 (`the script exited: never held`, root `working` left) | 0 of 30 |
+| `TestPiPWatchesAPaneFromTheCorner` | `View` reused a cached frame when the frame was skipped, but it read the cursor fresh. The cached frame had the box where the cursor was before. `View` now composes again when the box covers the cursor it shows. | 3 of 30 fail (`the view covered the cursor in 1 samples`, cursor (79,36)) | 0 of 30 |
+| `TestChromeLooksAndFooters/dark-120x40-16` | The fixture started the approval hook and did not wait for it. The hook has a 500 ms deadline, and a hook that misses it exits and holds nothing. `startHookIn` now waits until the daemon holds the prompt, and runs a hook that exits first again. | 0 of 30 | 0 of 30, and no hook needed a second run |
+
+The chrome flake did not show on this machine. A hook that always misses its
+deadline (`--timeout 1ns`) gives the CI failure exactly:
+`chrome_looks_test.go:211: inbox never drew`.
