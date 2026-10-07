@@ -5,6 +5,8 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 )
 
 // Callbacks represents a set of callbacks for a terminal.
@@ -75,6 +77,14 @@ type Callbacks struct {
 	// Progress callback. Called when a guest app reports its progress via the
 	// OSC 9;4 sequence. percent is 0 for the states that carry no percentage.
 	Progress func(state ProgressState, percent int)
+
+	// ProgramStatus callback. Called for every OSC 7501 report that passed
+	// every check of the Program Status Protocol, and with Reset set on a full
+	// reset (RIS), which removes every record. The feature detection query is
+	// answered by the emulator and never reaches it. Like SemanticMark it fires
+	// with the emulator's lock held on backends that have one, so it must only
+	// record.
+	ProgramStatus func(ev progstatus.Event)
 
 	// SemanticMark callback. Called for every OSC 133 mark a shell sends (A
 	// prompt start, B input start, C command executed, D command finished),

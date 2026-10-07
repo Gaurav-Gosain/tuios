@@ -83,6 +83,8 @@ jobs:
             targets: FuzzURLs
           - pkg: internal/herdrcli
             targets: FuzzParse
+          - pkg: internal/progstatus
+            targets: FuzzParse
 
     steps:
       - uses: actions/checkout@v7

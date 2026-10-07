@@ -10,6 +10,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	gh "go.mitchellh.com/libghostty"
+
+	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 )
 
 // This file holds the scanner hooks: the sequences tuios observes or owns on
@@ -67,6 +69,12 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 		case 'c': // RIS resets to the main screen among everything else.
 			t.cachedAltScreen.Store(false)
 			t.resetShadowState()
+			// A full reset removes every OSC 7501 record.
+			t.queue(func(cb Callbacks) {
+				if cb.ProgramStatus != nil {
+					cb.ProgramStatus(progstatus.Event{Reset: true})
+				}
+			})
 		case '7': // DECSC saves the charset selection with the cursor
 			t.savedCharsets = t.charsetIDs
 			t.savedGL, t.savedGR = t.gl, t.gr
@@ -417,6 +425,22 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 			t.queue(func(cb Callbacks) {
 				if cb.NvimNavigatorState != nil {
 					cb.NvimNavigatorState(active)
+				}
+			})
+		}
+		return false
+	case progstatus.Command:
+		// libghostty-vt has no OSC 7501, so the Program Status Protocol is
+		// read here the way the pure emulator reads it, and never forwarded.
+		bel := t.scanner.oscBEL
+		r, query, ok := parseProgramStatusOSC(payload, bel)
+		switch {
+		case query:
+			_, _ = t.pipe.Write([]byte(programStatusReply(bel)))
+		case ok:
+			t.queue(func(cb Callbacks) {
+				if cb.ProgramStatus != nil {
+					cb.ProgramStatus(progstatus.Event{Report: r})
 				}
 			})
 		}

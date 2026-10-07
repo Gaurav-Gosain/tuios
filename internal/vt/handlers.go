@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -380,6 +381,12 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		return e.handleTuiosNavigation(data)
 	})
 
+	// OSC 7501: Program Status Protocol
+	e.RegisterOscHandler(progstatus.Command, func(data []byte) bool {
+		e.handleProgramStatus(data)
+		return true
+	})
+
 	// OSC 99: kitty desktop notification
 	e.RegisterOscHandler(99, func(data []byte) bool {
 		return e.handleNotify99(data)
@@ -498,6 +505,10 @@ func (e *Emulator) registerDefaultEscHandlers() {
 	e.RegisterEscHandler('c', func() bool {
 		// Reset Initial State [ansi.RIS]
 		e.fullReset()
+		// A full reset removes every OSC 7501 record. A soft reset does not.
+		if e.cb.ProgramStatus != nil {
+			e.cb.ProgramStatus(progstatus.Event{Reset: true})
+		}
 		return true
 	})
 
