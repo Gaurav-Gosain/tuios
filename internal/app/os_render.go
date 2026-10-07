@@ -55,6 +55,8 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 	hasChanges := false
 	activeTerminals := 0
+	// A pane made since the last pass takes this client's frame rate.
+	m.setPaneFrameInterval()
 
 	for i := range m.Windows {
 		window := m.Windows[i]

@@ -359,6 +359,10 @@ type Window struct {
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
 
+	// frameInterval is the coalescer's floor in nanoseconds, 0 for the
+	// default. See SetFrameInterval.
+	frameInterval atomic.Int64
+
 	// coalesceSignal is the renderCoalescer's own render-trigger flag.
 	// outputWriter (daemon panes) or the PTY reader (local panes) sets it after
 	// each write; renderCoalescer consumes it at a

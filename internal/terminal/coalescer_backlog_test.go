@@ -54,8 +54,8 @@ func TestCoalescerPacesDownAPaneThatIsBehind(t *testing.T) {
 	}
 
 	w.queuedBytes.Store(catchUpBacklog)
-	if got := w.coalesceInterval(); got != catchUpCoalesceInterval() {
-		t.Errorf("a pane at the backlog paced at %v, want %v", got, catchUpCoalesceInterval())
+	if got := w.coalesceInterval(); got != w.catchUpCoalesceInterval() {
+		t.Errorf("a pane at the backlog paced at %v, want %v", got, w.catchUpCoalesceInterval())
 	}
 
 	// An expensive frame keeps its own, longer interval while the pane is
@@ -113,7 +113,7 @@ func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 	}
 	lastNote := time.Now()
 
-	time.Sleep(catchUpCoalesceInterval() + 400*time.Millisecond)
+	time.Sleep(w.catchUpCoalesceInterval() + 400*time.Millisecond)
 	close(done)
 	<-drained
 
