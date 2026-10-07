@@ -111,6 +111,9 @@ tuios gets an agent's state in one of these ways, best first:
 
 - **Hook**: a hook or plugin that `tuios integration install` writes reports
   each state. "Session" means that the hook reports only the conversation id.
+- **OSC 7501**: the program writes the Program Status Protocol sequence, or
+  calls `tuios status`. Any program can do this, not only an agent. See
+  [PROGRAM_STATUS.md](PROGRAM_STATUS.md).
 - **herdr**: the agent reports by itself over
   [herdr's pane state protocol](#herdrs-pane-state-protocol). You install
   nothing.
@@ -139,6 +142,7 @@ tuios gets an agent's state in one of these ways, best first:
 | Grok CLI, Hermes Agent | session hook, screen, title | working, needs_input, idle | screen fixtures |
 | Cline, Goose, Maki | screen | working, needs_input, idle | screen fixtures |
 | Aider | process | working, idle | unit |
+| Any program that writes OSC 7501 (a build, a deploy script, `tuios status`) | OSC 7501 | working, needs_input, idle, done, errored | E2E with a script |
 
 An agent that herdr supports through its own hook scripts, such as Letta Code
 or MastraCode, reports to tuios too when you install herdr's integration for it.
@@ -149,6 +153,7 @@ Those scripts send herdr's protocol to `HERDR_SOCKET_PATH`.
 | To | Read |
 | --- | --- |
 | Understand the states and who decides them | [States](#states), [Sources and precedence](#sources-and-precedence) |
+| Let any program or script report its state | [PROGRAM_STATUS.md](PROGRAM_STATUS.md) |
 | Make a harness report, or see why a pane is or is not an agent | [Harness integrations](#harness-integrations), [Recognising a harness](#recognising-a-harness), [Screen rules](#screen-rules) |
 | Use the Inbox and answer prompts | [The Inbox](#the-inbox), [Answering a prompt without attaching](#answering-a-prompt-without-attaching), [Approvals from the Inbox](#approvals-from-the-inbox), [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox) |
 | Let agents ask you something | [Questions an agent asks you](#questions-an-agent-asks-you) |
@@ -255,8 +260,11 @@ and `explain-agent-detect` also report `needs_you`, true for `needs_input` and
 `errored`, so a consumer that only wants "does a person have to act" does not
 have to know which states mean it.
 
-`get-agent-state` and `list-agents` also report `blocked_by`, `approval` or
-`question`, for a pane on `needs_input`. A screen, title or notify rule
+`get-agent-state` and `list-agents` also report `blocked_by`, `approval`,
+`question` or `auth`, for a pane on `needs_input`. Only an explicit report says
+`auth` (a login, a token or a credential): `set-agent-state --kind auth`, or an
+OSC 7501 report with `kind=auth`. An OSC 7501 report with no kind gives an
+empty `blocked_by`, and its message is never read for one. A screen, title or notify rule
 supplies it from its `kind` (named in the manifest, or guessed from the rule's
 words), and a report supplies it with the `kind` param of `set-agent-state`, as
 `tuios agent-hook` does. A report that carries no kind has it guessed from the
@@ -995,6 +1003,7 @@ decide which opinion wins:
 | Source   | Meaning                                          |
 | -------- | ------------------------------------------------ |
 | `report` | The agent reporting for itself (default)         |
+| `program` | The pane's own OSC 7501 report ([PROGRAM_STATUS.md](PROGRAM_STATUS.md)) |
 | `osc`    | An escape sequence the pane emitted              |
 | `screen` | A rule matched against the pane's rendered text  |
 | `stall`  | The silence timer                                |
@@ -1005,6 +1014,9 @@ ranked above it, so a screen rule cannot overwrite what an agent reported for
 itself. A source updating its own claim is always allowed. A report that loses
 comes back with `"applied": false` and the state that stands, rather than an
 error.
+
+`program` ranks with `report`: both are the program saying what it does. Only
+the pane's emulator sets it, so `set-agent-state` does not accept it.
 
 Omitting `source` means `report`, so a caller that never sets it behaves exactly
 as it always has. `get-agent-state` reports the winning `source` and, when one
@@ -1878,10 +1890,13 @@ worktree branch and its checks, such as `PR #12 open pass`, see
 [Shipping a worktree](#shipping-a-worktree)) and `prompt` (the first line of
 the last prompt you gave the agent, not shipped on the row), beside `$model`,
 `$cost`, `$plan` and `$key` for any key, which draw a value on any row. The
-shipped order is `session, need, harness, name, elapsed, context, subagents,
-pr, meta, now, message`: `now` comes last so a long command loses its tail
-before anything else does. A `tokens` list you wrote keeps its own order, and draws the count
-once you add `subagents` to it.
+shipped order is `session, need, harness, name, progress, elapsed, context,
+subagents, pr, meta, now, message`: `now` comes last so a long command loses
+its tail before anything else does. A `tokens` list you wrote keeps its own
+order, and draws the count once you add `subagents` to it. `progress` (`40%`)
+is the progress of a pane's OSC 7501 report while it works or waits, and its
+number is the percent; add it to a list you wrote to see it (see
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md)).
 
 ### Agent metadata
 

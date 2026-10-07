@@ -203,7 +203,18 @@ tuios integration install claude-code    # or codex, gemini-cli, opencode, --all
 tuios doctor agents
 ```
 
-`tuios --skill state` has the hook wiring, metadata, detection and resume.
+A script or a tool without a harness can report with OSC 7501, the Program
+Status Protocol, through `tuios status`. It needs no session or pane id, and
+it works in other terminals that read the protocol too:
+
+```sh
+tuios status working --app build --msg 'Compiling' --progress 40
+tuios status blocked --kind permission --app deploy --msg 'Approve deploy to production?'
+tuios status done --app build --msg 'Built 12 crates'
+```
+
+`tuios --skill state` has the hook wiring, OSC 7501, metadata, detection and
+resume.
 
 ## Other agents and the person
 

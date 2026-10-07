@@ -39,6 +39,7 @@ What changed in v0.8.5 is in the [release notes](docs/release-notes/v0.8.5.md).
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)**: Automate workflows
 - **[Sessions](docs/SESSIONS.md)**: Daemon mode, attach/detach, other machines, and what survives
 - **[Agents](docs/AGENT_STATE.md)**: Running coding agents in tuios: state, the Inbox, approvals, fleets, other machines, grants and MCP
+- **[Program Status](docs/PROGRAM_STATUS.md)**: OSC 7501 from any program, `tuios status`, and the reports tuios sends to its own terminal
 - **[tmux Shim](docs/TMUX_SHIM.md)**: Run tools that drive tmux, such as Claude Code agent teams
 - **[Control Protocol](docs/protocol.md)**: JSON verb protocol for driving the daemon
 - **[Architecture](docs/ARCHITECTURE.md)**: Technical design
@@ -129,6 +130,7 @@ and prints the right command rather than overwriting it.
 ### Agents
 The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
 - **Agent State**: Panes running a coding agent show whether it is working, waiting for you, done or errored, as a shape in the title and a row on the rail. `tuios integration install` wires 19 harnesses (Claude Code, Codex, Gemini CLI, opencode and more) to report it, and tuios detects 24 agent CLIs by their process and screen
+- **Program Status (OSC 7501)**: Any program can say what it is doing with the Program Status Protocol, or with `tuios status working --app build --progress 40`. A build, a deploy script or `brew` then shows on the rail and in the Inbox like an agent. tuios also reports its panes to a terminal that reads the protocol, such as Ghostty ([docs](docs/PROGRAM_STATUS.md))
 - **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode, Kilo and Qwen Code permission requests with one key
 - **Questions and Messages**: `tuios ask-human` puts a question with fixed answers in your Inbox. Agents mail each other with `tuios send-agent-message`, and `tuios ask-agent` asks one and waits for its answer. It never types into a pane waiting on a prompt, and replies from you are marked verified
 - **Fleets**: `tuios fan` starts one prompt in several agents, mixed harnesses allowed, each in its own git worktree. `tuios start-agent` starts one helper beside you, in its TUI or headless over ACP or the Codex app-server. Selectors such as `group:fan/retry needs:you` address a whole group

@@ -961,6 +961,22 @@ when it starts and again when the file changes. A change applies to the next
 pane. [AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
 accepted.
 
+## Report pane states to your terminal
+
+When tuios runs in a terminal that reads OSC 7501, the Program Status
+Protocol (Ghostty and Rex do), it reports the agent state of each pane there.
+`host_program_status` in `[agents]` turns this off:
+
+```toml
+[agents]
+host_program_status = "auto"   # auto (default), off
+```
+
+`auto` asks the terminal when a client starts, and reports only when the
+terminal answers. `off` never asks. A client reads the value when it starts.
+An unknown value reads as `auto`, with a warning. See
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md#tuios-inside-a-terminal-that-reads-osc-7501).
+
 ## herdr plugins
 
 tuios runs herdr plugins: folders with a `herdr-plugin.toml`. The `[plugins]`
@@ -1096,8 +1112,10 @@ the error ink for failing checks, the warning ink for pending ones and the
 success ink for passing ones and a merge, see
 [Shipping a worktree](AGENT_STATE.md#shipping-a-worktree)) and `prompt` (the
 first line of the last prompt, not shipped on the row). The shipped `tokens`
-list is now `["session", "need", "harness", "name", "elapsed", "context",
-"subagents", "pr", "meta", "now", "message"]`. A list you wrote keeps its own
+list is now `["session", "need", "harness", "name", "progress", "elapsed",
+"context", "subagents", "pr", "meta", "now", "message"]`. `progress` (`40%`)
+is the progress a program reported with OSC 7501, drawn while it works or
+waits (see [PROGRAM_STATUS.md](PROGRAM_STATUS.md)). A list you wrote keeps its own
 order and gains nothing. Add `subagents` or `pr` to it to see them. The `meta` token no longer
 draws the fed keys (`now`, `prompt`, `model`, `context`, `cost`, `plan`,
 `subagents`), so place any of them you want with its own token. See

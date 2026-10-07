@@ -21,6 +21,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
   - [tuios notify test](#tuios-notify-test)
+  - [tuios status](#tuios-status)
   - [tuios update](#tuios-update)
   - [tuios layout](#tuios-layout)
   - [tuios completion](#tuios-completion)
@@ -2144,7 +2145,7 @@ tuios set-agent-state <state> [flags]
 - `-m, --message <text>`: Short note reported with the state
 - `--source <source>`: Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
 - `--harness <id>`: Id of the harness the state is about, e.g. `claude-code`
-- `--kind <kind>`: What a `needs_input` state waits for: `approval` or `question`. Only valid with `needs_input`
+- `--kind <kind>`: What a `needs_input` state waits for: `approval`, `question` or `auth`. Only valid with `needs_input`
 - `--agent-session-id <id>`: The harness's own conversation id. Stored on the pane, and turns on the nested-session guard (below)
 - `--transcript-path <path>`: The transcript file the harness writes. For a harness whose manifest has a transcript reader, the pane is joined to this exact file
 - `--if-state <states>`: Apply only when the pane is in one of these comma-separated states
@@ -4201,6 +4202,42 @@ webhook (hooks.example.com): failed. The server answered 401 Unauthorized. Check
 
 **Flags:**
 - `--json`: Output a list with `provider`, `host`, `ok` and `error` for each provider
+
+---
+
+### `tuios status`
+
+Write one OSC 7501 report, the Program Status Protocol, for a script. tuios
+shows it as the pane's agent state, in the rail and in the Inbox. Other
+terminals that read the protocol show it too. The command needs no daemon. See
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md).
+
+**Usage:**
+```bash
+tuios status [idle|working|done|blocked|error] [flags]
+```
+
+The report goes to the controlling terminal, so it is not lost when the
+output of the script goes to a file or a pipe. The command refuses a report
+that a terminal must discard, and says why.
+
+**Flags:**
+- `--kind <kind>`: What a blocked program waits for: `permission`, `question` or `auth`. Only with `blocked`
+- `--progress <n>`: Progress from 0 to 100. Only with `working` or `blocked`
+- `--app <name>`: The program's name, such as `cargo`. 1 to 32 letters, digits, `.`, `_`, `+` or `-`
+- `--title <text>`: A short label for the record, at most 192 bytes
+- `--msg <text>`: One line that says what the program does or waits for, at most 2048 bytes
+- `--id <id>`: The record to address, such as `build/test`. Empty for the main record
+- `--clear`: Remove the record and the records under it. Without `--id`, remove all records
+- `--stdout`: Write the report to standard output, not to the terminal
+
+**Examples:**
+```bash
+tuios status working --app build --msg 'Compiling' --progress 40
+tuios status blocked --kind permission --app deploy --msg 'Approve deploy to production?'
+tuios status done --app build --msg 'Built 12 crates'
+tuios status --clear --id eu-west
+```
 
 ---
 

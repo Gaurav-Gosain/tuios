@@ -20,8 +20,8 @@ do not type into it. With no `-w` the report lands on the focused window, which
 is wrong when you are not the focused pane.
 
 `get-agent-state` and `list-agents` also report `needs_you` (true for
-`needs_input` and `errored`), `blocked_by` (`approval` or `question`, from
-`--kind`), `completion_seq` (turns the pane has finished), `finished_unread`
+`needs_input` and `errored`), `blocked_by` (`approval`, `question` or `auth`,
+from `--kind`), `completion_seq` (turns the pane has finished), `finished_unread`
 (true while a pane rests after a turn nobody has looked at since), `queued`
 (messages waiting to be typed to the agent when it comes to rest) and
 `subagents` (subagents its agent started that have not stopped).
@@ -60,6 +60,29 @@ it ends.
 tuios integration install claude-code --statusline                        # opt in
 tuios integration install claude-code --statusline --then '~/.claude/sl.sh' # keep your own status line
 ```
+
+## OSC 7501 from any program
+
+A program can write the Program Status Protocol sequence itself, or call
+`tuios status`, which writes it to the terminal and handles the base64. The
+pane is the one the sequence is written in, so no `-s` or `-w` is needed:
+
+```sh
+tuios status working --app build --msg 'Compiling' --progress 40
+tuios status blocked --kind question --app build --msg 'Which target?'
+tuios status error --app build --msg 'Linker failed'
+tuios status working --id tests --title Tests --msg 'Running 40 tests'
+tuios status --clear --id tests
+```
+
+`blocked` reads as `needs_input` with `blocked_by` from `--kind`
+(`permission` is `approval`), `done` as `done`, `error` as `errored`. The
+source is `program`, which ranks with `report`. Each report replaces its
+record, so send `--app` every time. A shell prompt or your exit ends `working`,
+`blocked` and `idle` records. `done` and `error` stay until the person types in
+the pane. `get-agent-state` lists the records as `program_status`. Report
+`done` or `error` before you exit, or the person finds nothing. A harness
+already wired with a hook needs nothing more.
 
 ## What an agent has been doing
 
@@ -162,8 +185,9 @@ state arrived. A file in `~/.config/tuios/harnesses` (or
 
 ## Who wins when reports disagree
 
-`--source` says where a state came from. Highest first, the ranks are `report`, `transcript`,
-`osc`, `screen`, `detect`, then `stall`. A source cannot overwrite a claim from
+`--source` says where a state came from. Highest first, the ranks are `report`
+and `program` (an OSC 7501 report, equal to `report`), `transcript`, `osc`,
+`screen`, `detect`, then `stall`. A source cannot overwrite a claim from
 a higher-ranked one. Only `report`, `osc`, `screen` and `stall` are accepted
 over the socket. Leave `--source` alone unless you are writing a detector.
 

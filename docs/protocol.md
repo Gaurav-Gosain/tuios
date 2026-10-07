@@ -166,6 +166,20 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A pane's OSC 7501 reports are part of its state.** A program in a pane can
+report what it does with the Program Status Protocol (see
+[PROGRAM_STATUS.md](PROGRAM_STATUS.md)). What changes for a caller:
+
+- `get-agent-state` and every `list-agents` entry gain `program_status`, the
+  pane's records, the root first: `id` (absent for the root), `state`, `kind`,
+  `progress` (always present, -1 for none), `app` (the record's own or its
+  nearest parent's), `title`, `msg` and `at`. It is an empty list for none.
+- `source` can be `program`. `set-agent-state` does not accept it.
+- `blocked_by` and the `kind` param of `set-agent-state` can be `auth`.
+- The synced window state and a session's window summary gain
+  `program_status`, omitted when empty and taken from the daemon's own state on
+  every client push. An older peer drops it.
+
 **A host that waits for a Tailscale sign-in can be dialed again on request.**
 The new verb `retry-host` takes `host` and makes that link dial again now
 instead of after its backoff. While the host is in `tailscale_check`, the link

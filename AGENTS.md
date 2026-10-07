@@ -154,6 +154,7 @@ tuios/
 │   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
+│   ├── progstatus/         # OSC 7501, the Program Status Protocol: parser, record store, encoder (docs/PROGRAM_STATUS.md)
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── tmuxcompat/         # The opt-in tmux shim (tuios tmux-shim) and its pane holder; see docs/TMUX_SHIM.md
 │   ├── shimlink/           # The tmux and herdr links that run tuios as another program
