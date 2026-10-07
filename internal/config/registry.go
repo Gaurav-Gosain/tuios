@@ -40,6 +40,9 @@ type KeybindRegistry struct {
 	// rebound key shows as soon as the Reload that follows every edit runs.
 	pressesMu sync.Mutex
 	presses   map[string][]string
+	// live is each scope's keys that run, for the which-key menus, kept
+	// under pressesMu and dropped with presses. See liveScope.
+	live map[string]*liveScope
 }
 
 // sectionMaps is the resolved form of every section the registry reads on its
@@ -67,6 +70,7 @@ func (r *KeybindRegistry) buildMappings() {
 	r.keyToAction = make(map[string]string)
 	r.pressesMu.Lock()
 	r.presses = nil
+	r.live = nil
 	r.pressesMu.Unlock()
 
 	// Build mappings for normal mode sections

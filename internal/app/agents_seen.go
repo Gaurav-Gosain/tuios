@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"slices"
@@ -70,20 +69,19 @@ func (m *OS) noteAgentsSeen() {
 // is left out on a daemon that cannot review, where the key does what an
 // unbound key does.
 func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
-	groups := config.GetPrefixKeybindingGroups("", m.IsDaemonSession)
-	seen, review, agentsTab := m.agentsSeen(), m.reviewSupported(), m.agentsPageAvailable()
-	// With multifocus on, the copy-mode key enters multi copy mode, and the
-	// menu says so: this is where a multifocus user finds out it exists.
 	multi, multiOK := m.MultiCopyEligible()
+	if !multiOK {
+		multi = 0
+	}
+	groups := config.PrefixMenuGroups(m.KeybindRegistry, "", config.MenuState{
+		Daemon:    m.IsDaemonSession,
+		MultiCopy: multi,
+		Spotlight: m.spotlight.on,
+		Minimized: -1,
+	})
+	seen, review, agentsTab := m.agentsSeen(), m.reviewSupported(), m.agentsPageAvailable()
 	out := groups[:0]
 	for _, g := range groups {
-		if multiOK {
-			for i := range g.Bindings {
-				if g.Bindings[i].Key == config.WhichKeyCopyPasteKey {
-					g.Bindings[i].Description = fmt.Sprintf("Multi copy (%d)/paste image", multi)
-				}
-			}
-		}
 		if !seen {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentPrefixKeybinding)
 		}
@@ -92,14 +90,6 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		}
 		if !agentsTab {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentsSettingsPrefixKeybinding)
-		}
-		// While the beam is on, its row says the key turns it off.
-		if m.spotlight.on {
-			for i := range g.Bindings {
-				if g.Bindings[i].Key == config.WhichKeySidebarSpotlightKey {
-					g.Bindings[i].Description = "Sidebar/spotlight off"
-				}
-			}
 		}
 		if len(g.Bindings) > 0 {
 			out = append(out, g)

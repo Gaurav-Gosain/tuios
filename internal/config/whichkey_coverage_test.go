@@ -1,62 +1,12 @@
 package config
 
 import (
-	"strings"
+	"slices"
 	"testing"
 )
 
-// whichKeyRowKeys expands one which-key row's key column into the keys it
-// stands for. The rows are written for a reader, so they use ranges ("0-9"),
-// alternates ("|/\\", "d/Esc") and shift notation that the keymap spells out.
-func whichKeyRowKeys(key string) []string {
-	switch key {
-	case "0-9":
-		return []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	case "1-9":
-		return []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	case "1-4":
-		return []string{"1", "2", "3", "4"}
-	case "5-9":
-		return []string{"5", "6", "7", "8", "9"}
-	case "Shift+5-9":
-		return []string{"shift+5", "shift+6", "shift+7", "shift+8", "shift+9"}
-	case "Shift+1-9":
-		return strings.Split("!@#$%^&*(", "")
-	case "Shift+M":
-		return []string{"M"}
-	case "/":
-		// The key itself, which is also how a row writes two keys.
-		return []string{"/"}
-	case "Shift+Tab":
-		return []string{"shift+tab"}
-	case "\u2190\u2191\u2193\u2192":
-		// The panel draws the arrows as arrows, which is what a person reads
-		// on a key. The registry spells them out.
-		return []string{"left", "right", "up", "down"}
-	}
-	var keys []string
-	for k := range strings.SplitSeq(key, "/") {
-		keys = append(keys, normalizeWhichKey(k))
-	}
-	return keys
-}
-
-// normalizeWhichKey folds a key the way the registry's lookup does: a single
-// letter keeps its case, so M (restore all) stays distinct from m (minimize),
-// and everything else is compared lowercased.
-func normalizeWhichKey(k string) string {
-	if len([]rune(k)) == 1 {
-		return k
-	}
-	return strings.ToLower(k)
-}
-
-// prefixTables pairs every which-key panel with the config section it claims to
-// describe.
-//
-// "layout" was left out while its rows were handled inline, which meant its
-// panel was the one prefix nothing checked. It binds corner snapping now, so it
-// is checked like the rest.
+// prefixTables pairs every which-key panel with the config section it
+// describes.
 var prefixTables = []struct {
 	name    string
 	section func(*UserConfig) map[string][]string
@@ -70,78 +20,35 @@ var prefixTables = []struct {
 	{"layout", func(c *UserConfig) map[string][]string { return c.Keybindings.LayoutPrefix }},
 }
 
-// TestWhichKeyTablesMatchTheKeymap is the guard that keeps the which-key panels
-// honest. They are hand-written tables, so a command added to a prefix section
-// is invisible until someone remembers to add a row; ctrl+b b and ctrl+b o
-// shipped and stayed unlisted for exactly that reason. Every action a prefix
-// binds must have a row, and every row must name a key that prefix binds.
+// TestWhichKeyTablesMatchTheKeymap keeps the which-key layouts honest. The
+// keys come from the registry, but which actions a menu shows, and what each
+// row says, is written by hand. An action added to a prefix section with no
+// row falls to the menu's untitled end with the registry's generic text;
+// ctrl+b b and ctrl+b o once shipped unlisted for exactly that reason. Every
+// action a prefix binds by default must have a row, and every row must name
+// an action that prefix binds, in both the local and the daemon layout.
 func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 	cfg := DefaultConfig()
-
 	for _, table := range prefixTables {
 		name := table.name
 		if name == "" {
 			name = "leader"
 		}
-		t.Run(name, func(t *testing.T) {
-			section := table.section(cfg)
-
-			listed := map[string]bool{}
-			for _, row := range GetPrefixKeybindings(table.name) {
-				for _, k := range whichKeyRowKeys(row.Key) {
-					listed[k] = true
-				}
-			}
-
-			bound := map[string]string{}
-			for action, keys := range section {
-				for _, k := range keys {
-					bound[normalizeWhichKey(k)] = action
-				}
-			}
-
-			for action, keys := range section {
-				covered := false
-				for _, k := range keys {
-					if listed[normalizeWhichKey(k)] {
-						covered = true
-						break
+		for _, daemon := range []bool{false, true} {
+			t.Run(name, func(t *testing.T) {
+				section := table.section(cfg)
+				rows := PrefixMenuActions(table.name, MenuState{Daemon: daemon})
+				for action := range section {
+					if !slices.Contains(rows, action) {
+						t.Errorf("%s prefix (daemon %v) binds %q, and the which-key layout has no row for it", name, daemon, action)
 					}
 				}
-				if !covered {
-					t.Errorf("%s prefix binds %q to %v, and the which-key panel lists none of them",
-						name, action, keys)
-				}
-			}
-
-			for _, row := range GetPrefixKeybindings(table.name) {
-				for _, k := range whichKeyRowKeys(row.Key) {
-					if bound[k] == "" {
-						t.Errorf("the %s which-key panel offers %q (%q), which that prefix does not bind",
-							name, row.Key, row.Description)
+				for _, action := range rows {
+					if _, ok := section[action]; !ok {
+						t.Errorf("the %s which-key layout (daemon %v) has a row for %q, which that prefix does not bind", name, daemon, action)
 					}
 				}
-			}
-		})
-	}
-}
-
-// TestWhichKeyLeaderCoversTheDaemonRows checks the daemon variant of the leader
-// panel, which swaps the detach and quit rows, still names only real keys.
-func TestWhichKeyLeaderCoversTheDaemonRows(t *testing.T) {
-	cfg := DefaultConfig()
-	bound := map[string]bool{}
-	for _, keys := range cfg.Keybindings.PrefixMode {
-		for _, k := range keys {
-			bound[normalizeWhichKey(k)] = true
-		}
-	}
-	for _, row := range GetPrefixKeybindings("", true) {
-		for _, k := range whichKeyRowKeys(row.Key) {
-			if !bound[k] {
-				t.Errorf("the daemon leader panel offers %q (%q), which the leader does not bind",
-					row.Key, row.Description)
-			}
+			})
 		}
 	}
 }

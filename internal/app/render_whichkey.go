@@ -437,35 +437,32 @@ func whichKeySignature(title string, groups []config.KeybindingGroup, sizes ...i
 	return h
 }
 
-// whichKeyMenu is the title and sections of the prefix menu in force.
+// whichKeyMenu is the title and sections of the prefix menu in force. Every
+// menu reads its keys from the keybind registry, so a key rebound in the
+// config shows here as soon as the config reloads.
 func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
+	menu := func(prefixType string) []config.KeybindingGroup {
+		return config.PrefixMenuGroups(m.KeybindRegistry, prefixType, config.MenuState{Daemon: m.IsDaemonSession, Minimized: -1})
+	}
 	switch {
 	case m.WorkspacePrefixActive:
-		return "Workspace", config.GetPrefixKeybindingGroups("workspace")
+		return "Workspace", menu("workspace")
 	case m.MinimizePrefixActive:
-		groups := config.GetPrefixKeybindingGroups("minimize")
 		minimizedCount := 0
 		for _, win := range m.Windows {
 			if win.Minimized && win.Workspace == m.CurrentWorkspace && !win.IsScratch {
 				minimizedCount++
 			}
 		}
-		for gi := range groups {
-			for i := range groups[gi].Bindings {
-				if groups[gi].Bindings[i].Key == "1-9" {
-					groups[gi].Bindings[i].Description = fmt.Sprintf("Restore window (%d minimized)", minimizedCount)
-				}
-			}
-		}
-		return "Minimize", groups
+		return "Minimize", config.PrefixMenuGroups(m.KeybindRegistry, "minimize", config.MenuState{Minimized: minimizedCount})
 	case m.TilingPrefixActive:
-		return "Window", config.GetPrefixKeybindingGroups("window")
+		return "Window", menu("window")
 	case m.DebugPrefixActive:
-		return "Debug", config.GetPrefixKeybindingGroups("debug")
+		return "Debug", menu("debug")
 	case m.TapePrefixActive:
-		return "Tape", config.GetPrefixKeybindingGroups("tape")
+		return "Tape", menu("tape")
 	case m.LayoutPrefixActive:
-		return "Layout", config.GetPrefixKeybindingGroups("layout")
+		return "Layout", menu("layout")
 	}
 	return "Prefix", m.prefixMenuGroups()
 }

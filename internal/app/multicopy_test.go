@@ -124,7 +124,7 @@ func TestPrefixMenuNamesMultiCopyMode(t *testing.T) {
 
 	describe := func() string {
 		for _, bnd := range m.prefixMenuBindings() {
-			if bnd.Key == config.WhichKeyCopyPasteKey {
+			if bnd.Action == "prefix_selection" {
 				return bnd.Description
 			}
 		}
