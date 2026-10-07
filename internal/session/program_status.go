@@ -74,12 +74,21 @@ func (p *PTY) noteProgramStatus(ev progstatus.Event) {
 //
 // The group is read by the PTY reader, as the chunk holding the report comes
 // off the terminal (see readerReportGroup), because by the time the emulator
-// parses the chunk a fast program may have exited. A record already armed
-// keeps its group. Only a report the reader did not see whole, split across
-// two reads, is read here, late.
+// parses the chunk a fast program may have exited. Only a report the reader
+// did not see whole, split across two reads, is read here, late.
+//
+// A record already armed keeps its group when the read finds none. Even the
+// reader's read can come too late: a program that reports and exits at once
+// may have handed the foreground back to the shell before the chunk is off the
+// terminal. That read finds the shell, and taking it as the answer disarmed the
+// record, which then outlived its program for good. A report that replaces an
+// armed record is taken as coming from the same program.
 func (p *PTY) reportGroup(id string) int {
-	if g := p.chunkGroup.Load(); g > 0 {
-		return int(g - 1)
+	if c := p.chunkGroup.Load(); c > 0 {
+		if g := int(c - 1); g != 0 {
+			return g
+		}
+		return p.progStatus.GroupOf(id)
 	}
 	if g := p.progStatus.GroupOf(id); g != 0 {
 		return g
