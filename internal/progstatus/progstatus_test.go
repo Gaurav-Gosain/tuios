@@ -85,12 +85,22 @@ func TestParse(t *testing.T) {
 		{"leading slash discards", "state=idle:id=/a", false, Report{}},
 		{"id with = discards", "state=idle:id=a=b", false, Report{}},
 		{"id with , discards", "state=idle:id=a,b", false, Report{}},
+		{"id with a space inside discards", "state=idle:id=a b", false, Report{}},
+		{"id with a non-ASCII letter discards", "state=idle:id=caf\u00e9", false, Report{}},
+		{"id with ; discards", "state=idle:id=x;y", false, Report{}},
+		{"a malformed id discards even before a valid one", "state=idle:id=a b:id=x", false, Report{}},
+		{"NBSP around a value is not trimmed", "state=idle:app=\u00a0cargo", true, Report{State: Idle, Progress: -1}},
+		{"NEL around a value is not trimmed", "state=idle:app=cargo\u0085", true, Report{State: Idle, Progress: -1}},
 
 		{"padding is optional", "state=idle:msg=aGk", true, Report{State: Idle, Msg: "hi", Progress: -1}},
 		{"padded", "state=idle:msg=aGk=", true, Report{State: Idle, Msg: "hi", Progress: -1}},
 		{"bad base64 discards", "state=idle:msg=a", false, Report{}},
 		{"padding in the middle discards", "state=idle:msg=aG=k", false, Report{}},
 		{"three padding bytes discard", "state=idle:msg=aGk===", false, Report{}},
+		{"too much padding discards", "state=idle:msg=aGk==", false, Report{}},
+		{"a non-canonical tail discards", "state=idle:msg=aGl=", false, Report{}},
+		{"a non-canonical tail without padding discards", "state=idle:msg=aGl", false, Report{}},
+		{"a length of 4n+1 discards", "state=idle:msg=aGkhY", false, Report{}},
 		{"empty msg", "state=idle:msg=", true, Report{State: Idle, Progress: -1}},
 		{"newline in msg discards", "state=idle:msg=" + b64("a\nb"), false, Report{}},
 		{"escape in title discards", "state=idle:title=" + b64("\x1b[31m"), false, Report{}},
@@ -352,6 +362,29 @@ func FuzzParse(f *testing.F) {
 		}
 		if len(body)+len("7501;")+4 > MaxSequence {
 			t.Fatalf("kept a report of %d bytes", len(body))
+		}
+		// The discard rules, worked out again from the raw pairs: a key over
+		// the limit, a malformed id anywhere, or a last id outside the grammar
+		// must each have thrown the report away.
+		lastID, hasID := "", false
+		for pair := range strings.SplitSeq(string(body), ":") {
+			k, v, found := strings.Cut(pair, "=")
+			if !found {
+				continue
+			}
+			k, v = strings.Trim(k, " \t"), strings.Trim(v, " \t")
+			if len(k) > MaxKey {
+				t.Fatalf("kept a report with a %d-byte key: %q", len(k), body)
+			}
+			if k == "id" {
+				if !validValue(v) {
+					t.Fatalf("kept a report with the malformed id %q: %q", v, body)
+				}
+				lastID, hasID = v, true
+			}
+		}
+		if hasID && (!ValidID(lastID) || r.ID != lastID) {
+			t.Fatalf("kept id %q as %q", lastID, r.ID)
 		}
 		switch r.State {
 		case Idle, Working, Done, Blocked, Error, Clear:

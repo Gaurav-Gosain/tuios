@@ -107,7 +107,15 @@ const QueryReply = "\x1b]7501;?"
 // IsQuery reports whether body, the bytes after "7501;", is the feature
 // detection query.
 func IsQuery(body []byte) bool {
-	return strings.TrimSpace(string(body)) == "?"
+	return trimBlank(string(body)) == "?"
+}
+
+// trimBlank removes the whitespace the specification means around a key or a
+// value: ASCII space and tab. Not unicode.IsSpace: a value never holds more
+// than ASCII, and NBSP or U+0085 around one is a byte outside the value set,
+// which makes the pair malformed rather than something to trim.
+func trimBlank(s string) string {
+	return strings.Trim(s, " \t")
 }
 
 // SequenceLen is the length of a whole sequence, OSC through ST, whose payload
@@ -141,12 +149,21 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 		if eq < 0 {
 			continue // no "=": malformed, skipped
 		}
-		key := strings.TrimSpace(pair[:eq])
-		value := strings.TrimSpace(pair[eq+1:])
+		key := trimBlank(pair[:eq])
+		value := trimBlank(pair[eq+1:])
 		if len(key) > MaxKey {
 			return r, false // a limit: the whole report goes
 		}
-		if !validKey(key) || !validValue(value) {
+		if !validKey(key) {
+			continue // malformed: skipped
+		}
+		if !validValue(value) {
+			if key == "id" {
+				// An id outside the grammar ignores the report. Skipping the
+				// pair would land the report on the root record, which is
+				// what the specification says a malformed id must not do.
+				return r, false
+			}
 			continue // malformed: skipped
 		}
 		switch key {
@@ -314,13 +331,18 @@ func decodeText(v string, maxEncoded, maxDecoded int) (string, bool) {
 	if len(v) > maxEncoded {
 		return "", false
 	}
-	// Padding is optional. Padding in the middle is still an error, because
-	// only the trailing run is removed.
-	raw := strings.TrimRight(v, "=")
-	if len(v)-len(raw) > 2 {
-		return "", false
+	// Padding is optional. A value without it is padded here; a value with
+	// it must have it right. Strict decoding refuses non-zero bits in the
+	// unused tail, so each text has exactly one encoding.
+	if !strings.Contains(v, "=") {
+		switch len(v) % 4 {
+		case 2:
+			v += "=="
+		case 3:
+			v += "="
+		}
 	}
-	b, err := base64.RawStdEncoding.DecodeString(raw)
+	b, err := base64.StdEncoding.Strict().DecodeString(v)
 	if err != nil || len(b) > maxDecoded || !utf8.Valid(b) {
 		return "", false
 	}
