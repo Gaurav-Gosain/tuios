@@ -1508,6 +1508,7 @@ divider survived, so a fixture that resizes nothing cannot pass.
 | A covered divider is grabbed | `armTiledBorderResize`: the `paneOver` check cut | `TestSharedBorderPressInsideAZoomedPane` ("the panes moved under the zoomed pane"). The test runs in BSP: in master-stack a resize under a zoom is not recorded, and the retile at the end of the zoom hides it | **caught** |
 | A click records a fixed width | `handleMouseRelease`: the width check on the scrolling capture cut | `TestScrollingDividerClickKeepsAProportionalColumn` ("the first column is 48 columns wide after the client grew, want 60") | **caught** |
 
+
 ## Pane labels (display_panes)
 
 The tests are in `pane_labels_test.go`. They read each label's block glyphs

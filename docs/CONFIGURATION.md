@@ -405,7 +405,7 @@ If your font has octants, set `"octant"` for the best picture.
   It mixes the 16 colours in a dither pattern. It uses only the 8 dark
   colours as a background, because the Linux console uses bright
   backgrounds for blink. If a picture keeps too little of its shape in 16
-  colours, tuios shows the box instead. On the pictures we measured, this
+  colours, tuios shows the box instead. On the pictures measured, this
   did not happen. See [KMSCON-GRAPHICS.md](KMSCON-GRAPHICS.md).
 
 **What the program sees.** With block characters on, tuios tells the

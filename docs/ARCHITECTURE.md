@@ -865,8 +865,11 @@ the frame's text in the same write:
   image cell. Each cell is split into sub-cells (2x4 for octants, 2x3 for
   sextants, 2x2 for quadrants, 1x2 for half blocks), each the average of the
   pixels under it in linear light, and the sub-cells are split into the two
-  groups whose OKLab means leave the least error. The glyphs are drawn once,
-  on the pane's PTY reader, and a frame only looks them up. At 256 colours the
+  groups whose OKLab means leave the least error. The part a pane shows when
+  the image arrives is drawn on its PTY reader, and the rest by the frame pass
+  as it comes into view, within a drawing budget per pane. The frame pass puts
+  the glyphs on the canvas before the scrim and the spotlight, and gives them
+  the pane's dim, so they shade like text. At 256 colours the
   sub-cells are dithered with a 4x4 Bayer matrix and snapped to the xterm
   palette. At 16 colours they are always half blocks, dithered to the ANSI
   colours with dark backgrounds only, and a picture whose fidelity falls
