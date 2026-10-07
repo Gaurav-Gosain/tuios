@@ -482,21 +482,47 @@ impl TuiosApp {
             if self.attached.iter().find(|p| p.window == r.id).is_none_or(|i| i.status != Status::NeedsYou) {
                 continue;
             }
-            // On the slot edges, or 4 px inside the stage edge.
+            // On the slot edges, or 2 px inside the stage edge. Further in,
+            // the stage border and the ring read as a double frame.
             let sl = &r.slot;
-            let x0 = if r.edges[0] { f32::from(lay.stage.origin.x) + 4. } else { f32::from(sl.origin.x) };
-            let x1 = if r.edges[2] { f32::from(lay.stage.right()) - 4. } else { f32::from(sl.right()) + 1. };
-            let y0 = if r.edges[1] { f32::from(lay.stage.origin.y) + 4. } else { f32::from(sl.origin.y) };
-            let y1 = if r.edges[3] { f32::from(lay.stage.bottom()) - 4. } else { f32::from(sl.bottom()) + 1. };
+            let e = r.edges;
+            let x0 = if e[0] { f32::from(lay.stage.origin.x) + 2. } else { f32::from(sl.origin.x) };
+            let x1 = if e[2] { f32::from(lay.stage.right()) - 2. } else { f32::from(sl.right()) + 1. };
+            let y0 = if e[1] { f32::from(lay.stage.origin.y) + 2. } else { f32::from(sl.origin.y) };
+            let y1 = if e[3] { f32::from(lay.stage.bottom()) - 2. } else { f32::from(sl.bottom()) + 1. };
             let ring = Bounds::new(point(px(m.snap(x0)), px(m.snap(y0))), size(px(m.snap(x1 - x0)), px(m.snap(y1 - y0))));
+            // A corner that meets a stage corner follows the stage's radius,
+            // 2 px in: 10 - 2.
+            let corner = |a: bool, b: bool| if a && b { 8. } else { 6. };
+            let radii = Corners {
+                top_left: px(corner(e[0], e[1])),
+                top_right: px(corner(e[2], e[1])),
+                bottom_right: px(corner(e[2], e[3])),
+                bottom_left: px(corner(e[0], e[3])),
+            };
             let arrive = self.need_since.get(&r.id).map(|t0| (t0.elapsed().as_secs_f32() / ARRIVE.as_secs_f32()).min(1.)).unwrap_or(1.);
             if arrive < 1. {
                 more_frames = true;
             }
-            // The glow peaks at 40 % on the way in, then rests at 16 %.
+            // The glow peaks at 40 % on the way in, then rests at 16 %. It
+            // stays off the sides on the stage edge, so it never tints the
+            // stage border.
             let glow = if arrive < 1. { if arrive < 0.5 { 0.4 * arrive * 2. } else { 0.4 - 0.24 * (arrive - 0.5) * 2. } } else { 0.16 };
-            window.paint_quad(quad(ring.dilate(px(3.)), px(9.), transparent_black(), px(3.), with_alpha(t.need, glow), BorderStyle::Solid));
-            window.paint_quad(quad(ring, px(6.), transparent_black(), one, with_alpha(t.need, decelerate(arrive)), BorderStyle::Solid));
+            let g = |on_edge: bool| if on_edge { 0. } else { 3. };
+            let outer = Bounds::new(
+                point(ring.origin.x - px(g(e[0])), ring.origin.y - px(g(e[1]))),
+                size(ring.size.width + px(g(e[0]) + g(e[2])), ring.size.height + px(g(e[1]) + g(e[3]))),
+            );
+            let grow = |a: bool, b: bool, r: Pixels| if a && b { r } else { r + px(3.) };
+            let glow_radii = Corners {
+                top_left: grow(e[0], e[1], radii.top_left),
+                top_right: grow(e[2], e[1], radii.top_right),
+                bottom_right: grow(e[2], e[3], radii.bottom_right),
+                bottom_left: grow(e[0], e[3], radii.bottom_left),
+            };
+            let widths = Edges { top: px(g(e[1])), right: px(g(e[2])), bottom: px(g(e[3])), left: px(g(e[0])) };
+            window.paint_quad(quad(outer, glow_radii, transparent_black(), widths, with_alpha(t.need, glow), BorderStyle::Solid));
+            window.paint_quad(quad(ring, radii, transparent_black(), one, with_alpha(t.need, decelerate(arrive)), BorderStyle::Solid));
         }
 
         if let Some(at) = self.resized_at {
