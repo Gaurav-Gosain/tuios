@@ -154,8 +154,15 @@ func TestFocusedPaneOSC52WriteReachesHostWithMessage(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the dock did not say the pane copied: %v\n%s", err, term.Snapshot())
 	}
-	if !strings.Contains(host.String(), "]52;c;"+payload) {
-		t.Fatalf("the focused pane's clipboard write never reached the host")
+	// The message can reach the screen before the clipboard write reaches
+	// the host: the frame that carries it is written as soon as it is
+	// composed. Wait for the write itself.
+	deadline := time.Now().Add(shellTimeout)
+	for !strings.Contains(host.String(), "]52;c;"+payload) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the focused pane's clipboard write never reached the host")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
