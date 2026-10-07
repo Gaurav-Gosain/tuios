@@ -10,7 +10,7 @@ pub mod frame;
 pub mod types;
 
 pub use frame::{Decoded, FrameReader, encode_command, encode_input};
-pub use types::{Command, Event, SessionSummary, State, ThemeExport, Window, parse_hex};
+pub use types::{Command, Event, Fleet, SessionSummary, State, ThemeExport, Window, parse_hex};
 
 use std::io::{BufReader, Write};
 use std::path::PathBuf;

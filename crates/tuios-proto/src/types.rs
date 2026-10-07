@@ -18,6 +18,21 @@ pub struct Event {
     pub state: Option<State>,
     #[serde(default)]
     pub theme: Option<ThemeExport>,
+    /// Set on "fleet" events: every session and every pane's agent state on
+    /// the daemon, sent when they change.
+    #[serde(default)]
+    pub fleet: Option<Fleet>,
+}
+
+/// Every session on the daemon and the rows of `tuios list-agents --all
+/// --all-sessions --json`, as the bridge reads them from its own daemon
+/// connection.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Fleet {
+    #[serde(default, deserialize_with = "null_default")]
+    pub sessions: Vec<SessionSummary>,
+    #[serde(default)]
+    pub agents: serde_json::Value,
 }
 
 /// A theme as tuios works it out (internal/guibridge/theme.go). Colours are
