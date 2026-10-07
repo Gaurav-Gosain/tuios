@@ -45,6 +45,14 @@ There are two ways to add files. Use one or both.
    file is not there, tuios says nothing. An included file can have its own
    `include` list.
 
+   On Windows, write an include path with forward slashes, or put it in a
+   single-quoted literal string. In a double-quoted TOML string, a backslash
+   starts an escape:
+
+   ```toml
+   include = ["C:/Users/me/tuios/local.toml", 'C:\Users\me\tuios\work.toml']
+   ```
+
 2. Put `*.toml` files in a `config.d` directory next to config.toml. tuios
    reads them in name order, so `10-theme.toml` comes before `50-hosts.toml`.
 
@@ -66,7 +74,10 @@ value of your own.
 
 A config.toml from an older tuios sets every key, and so it hides every other
 file. Run `tuios config prune` to remove the keys that have their default
-value. Run `tuios config prune --dry-run` first to see the keys.
+value. When another file sets one of those keys, its value then applies. The
+command lists those keys and asks before it changes the file. Use
+`tuios config prune --dry-run` to see the keys and `--yes` to skip the
+question. A run with no terminal needs `--yes`.
 
 The files merge with these rules:
 
@@ -94,7 +105,11 @@ These are not errors:
 
 - An include that names a file that does not exist. tuios shows a warning and
   skips it, so one machine can include a file that only it has.
-- An include cycle. tuios shows a warning and reads each file once.
+- An include cycle, or a file that includes itself. tuios shows a warning and
+  reads each file once.
+- An optional include or a `config.d` file that tuios cannot read, such as a
+  link that points to itself. tuios shows a warning and skips it. A required
+  include that tuios cannot read stops the load.
 - An `include` key below a table header. TOML puts it in that table, so it
   includes nothing. tuios shows a warning.
 
@@ -135,9 +150,13 @@ of that file. Each change goes to one file:
 - Any other new key goes to config.toml.
 - A removed key is removed from each file that sets it.
 
-tuios changes only the lines of the key, so the comments and the layout of
-the file stay. If it cannot edit the lines, it writes the file again from its
-values, without the comments.
+tuios changes only the lines of the key, so the comments, the blank lines and
+the line endings of the file stay. A comment above a table stays with that
+table. tuios never writes a file you wrote again from its values. When it
+cannot express a change in the lines of an included file, it writes the change
+to config.toml and tells you. When it cannot remove a key that way, the save
+fails and the message names the file. Only config.toml itself is written again
+whole in that case, without its comments.
 
 tuios never writes a read-only file. This includes a file that Nix or
 home-manager links in from the store. When a read-only file sets the key,
@@ -146,10 +165,13 @@ read-only too, tuios writes the change to the last writable file that config.tom
 includes. The change must go to a file that comes after every file that sets
 the key. If there is no such file, the save fails and the message names the
 file to change. tuios cannot remove a key from a read-only file. It removes an
-array entry with a `disabled = true` entry in a writable file.
+array entry with a `disabled = true` entry in a writable file. When an entry
+that tuios writes must not take keys back from an earlier file's entry, tuios
+writes a `disabled = true` entry first and the new entry after it.
 
 `tuios config reset` writes the first-start config.toml again, with your
-`include` list.
+`include` list, and lists the other files that still apply. When config.toml
+has an error, the reset still keeps an `include` list that it can read.
 
 ## Opening links
 

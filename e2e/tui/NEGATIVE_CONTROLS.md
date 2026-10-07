@@ -2477,13 +2477,22 @@ linked into the config directory, the way Nix and home-manager put it there.
   the client cannot see it. A save of another key writes neither the client's
   old value into config.toml nor back into the file.
 - `TestIncludeMistakesAreNamed`: a missing `?` include is silent, a missing
-  plain include warns, an include below a table warns, and a directory include
-  fails with a message that names `config.d`.
+  plain include warns, an include below a table warns, a self include says so,
+  a link loop in a `?` include or in `config.d` is skipped with a warning, and
+  a directory include fails with a message that names `config.d`.
+- `TestRemovingAHostKeepsTheNextTablesComment`: a host cleared on the settings
+  page leaves config.toml without its table. The comment above the next table
+  stays, one blank line below the table before it.
+- `TestIncludedFileIsNeverRewrittenWhole`: an included file sets the key in an
+  inline table, which the line editor cannot change. The file stays byte for
+  byte the same, the change goes to config.toml, and the client says so.
+- `TestConfigCommandsWriteTheFileThatHoldsTheKey` also checks that a write to a
+  file with CR LF line endings keeps them.
 
 Artifacts: frames, the files after each save, and the command transcripts,
 under `$TUIOS_E2E_FRAMES/<test name>/`.
 
-Run on 2026-10-07, each control on its own binary, all eleven tests each time:
+Run on 2026-10-07, each control on its own binary, all thirteen tests each time:
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
@@ -2494,20 +2503,30 @@ Run on 2026-10-07, each control on its own binary, all eleven tests each time:
 | Merge order reversed | `loadLayered`: config.d read before the includes | `MixedNamed`, `MergeOrder` | **caught** |
 | An array of tables replaced whole | `mergeTables`: the `mergeEntries` call cut | `LoadAndReload`, `MixedNamed` | **caught** |
 | Tombstones ignored | `mergeEntries`: the tombstone case cut, and the `stripTombstones` call cut | `MixedNamed` ("the tombstone did not remove beta") | **caught** |
-| A save renders the whole config | `saveConfigData` writes the header and the whole model | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink`, `SaveDoesNotPin` | **caught** |
+| A save renders the whole config | `saveConfigData` writes the header and the whole model | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink`, `SaveDoesNotPin`, `RemovingAHost`, `NeverRewrittenWhole` | **caught** |
 | A two-way save | `RenderUserConfig`: the baseline cut | `SaveDoesNotPin` ("wrote the client's old window_button_style back into look.toml") | **caught** |
 | A full first-start file | `createDefaultConfig` writes `DefaultConfig()` | `FirstStart` | **caught** |
 | Every file is writable | `ConfigLayer.Writable` returns true | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink` | **caught** |
 | A read-only holder is written | `layerWriter.target`: the owner's `writable` check cut | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink` | **caught** |
 | The fallback is always config.toml | `layerWriter.target`: `lastWritable` cut | `ReadOnlyConfigTomlLink` | **caught** |
-| No line edit | `editLayer`: the line edit result never used | `SetConfig`, `FirstStart`, `ReadOnlyConfigTomlLink` ("lost its comment"), `SaveDoesNotPin` | **caught** |
+| No line edit | `editMain` and `flush`: the line edit result never used | `SetConfig`, `ConfigCommands`, `FirstStart`, `ReadOnlyConfigTomlLink` ("lost its comment"), `SaveDoesNotPin`, `RemovingAHost`, `NeverRewrittenWhole` | **caught** |
+| A removal takes the next table's comment | `tomlEdit.remove`: the cut runs to the next header | `RemovingAHost` | **caught** |
+| An included file is rewritten whole | `flush`: a failed line edit on an include writes the file from its values | `NeverRewrittenWhole` ("tuios wrote look.toml again") | **caught** |
+| CR LF line endings dropped | `newTOMLEdit`: `crlf` forced false | `ConfigCommands` ("did not keep the CR LF line endings") | **caught** |
+| A link loop stops the load | `visit`: the skip for an optional include and config.d cut | `IncludeMistakes` | **caught** |
 | hosts add is not routed | `SetHostInFile` writes the main path | `ConfigCommands` | **caught** |
 
 Cutting only one of the two tombstone paths is not caught, and that is by
 design: the matched entry merges the `disabled` key and the strip removes it.
 
+Not covered here: the tombstones a save writes when it removes an entry that a
+read-only file holds, and the tombstone it writes before an entry that must
+not merge with an earlier file's entry. No screen and no command in tuios
+writes an array of tables today, so no end-to-end test can reach these paths.
+They wait for the first one that does.
+
 ```sh
 go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
-  -run 'TestIncludedConfigFiles|TestSetConfigWritesTheFile|TestConfigCommandsWrite|TestFirstStartWithNix|TestReadOnlyConfigTomlLink|TestSymlinkedInclude|TestMixedNamed|TestMergeOrder|TestConfigPrune|TestSaveDoesNotPin|TestIncludeMistakes' .
+  -run 'TestIncludedConfigFiles|TestSetConfigWritesTheFile|TestConfigCommandsWrite|TestFirstStartWithNix|TestReadOnlyConfigTomlLink|TestSymlinkedInclude|TestMixedNamed|TestMergeOrder|TestConfigPrune|TestSaveDoesNotPin|TestIncludeMistakes|TestRemovingAHost|TestIncludedFileIsNeverRewrittenWhole' .
 ```

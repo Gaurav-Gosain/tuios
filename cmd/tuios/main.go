@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/skills"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // Version information (set by goreleaser)
@@ -367,7 +368,7 @@ value.`,
 	}
 	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
 
-	var configPruneDryRun bool
+	var configPruneDryRun, configPruneYes bool
 	configPruneCmd := &cobra.Command{
 		Use:   "prune",
 		Short: "Remove the keys of config.toml that have their default value",
@@ -376,16 +377,21 @@ value.`,
 An older tuios wrote every key into config.toml. config.toml wins over the
 files it includes and the files in config.d, so those keys hide the same keys
 in the other files. This command removes each key that has its default value.
-A key that another file sets then takes the value of that file, and the command
-lists it. The [startup] keys stay, because a config.toml without them means the
-old floating session. The command keeps comments and the include list. Use
---dry-run to see the keys first.`,
+A key that another file sets then takes the value of that file. The command
+lists those keys and asks first. Use --yes to skip the question. A run with no
+terminal needs --yes. The [startup] keys stay, because a config.toml without
+them means the old floating session. The command keeps comments and the
+include list. Use --dry-run to see the keys first.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigPrune(cmd.OutOrStdout(), configPruneDryRun)
+			return runConfigPrune(cmd.OutOrStdout(), pruneOptions{
+				dryRun: configPruneDryRun, yes: configPruneYes,
+				tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin,
+			})
 		},
 	}
 	configPruneCmd.Flags().BoolVar(&configPruneDryRun, "dry-run", false, "Show the keys and change nothing")
+	configPruneCmd.Flags().BoolVar(&configPruneYes, "yes", false, "Do not ask when another file then sets a key")
 
 	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd, configFilesCmd, configOriginCmd, configPruneCmd)
 

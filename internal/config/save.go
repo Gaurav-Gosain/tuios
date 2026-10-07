@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -319,8 +320,35 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 		// An older save that lost the race is not dropped: it carries a change
 		// of its own, which the newer one does not repeat. It skips only the
 		// keys a newer save already wrote.
-		return saveConfigData(configPath, base, data, gen)
+		note, err := saveConfigData(configPath, base, data, gen)
+		if err != nil {
+			return note, &SaveError{Err: err, cfg: cfg, base: base}
+		}
+		return note, nil
 	}, nil
+}
+
+// SaveError is a save that failed. The change it carried is not in any file,
+// so RewindSave puts the config's baseline back and the next save writes the
+// change again.
+type SaveError struct {
+	Err  error
+	cfg  *UserConfig
+	base []byte
+}
+
+func (e *SaveError) Error() string { return e.Err.Error() }
+func (e *SaveError) Unwrap() error { return e.Err }
+
+// RewindSave undoes what RenderUserConfig did to cfg's baseline when the save
+// err came from failed. Call it on the goroutine that owns cfg. It does
+// nothing for another config or another error.
+func RewindSave(cfg *UserConfig, err error) {
+	var se *SaveError
+	if cfg == nil || !errors.As(err, &se) || se.cfg != cfg {
+		return
+	}
+	cfg.baseline = se.base
 }
 
 // SaveUserConfig persists cfg to the user's config file at the standard XDG
@@ -330,5 +358,7 @@ func SaveUserConfig(cfg *UserConfig) (WriteNote, error) {
 	if err != nil {
 		return WriteNote{}, err
 	}
-	return write()
+	note, err := write()
+	RewindSave(cfg, err)
+	return note, err
 }

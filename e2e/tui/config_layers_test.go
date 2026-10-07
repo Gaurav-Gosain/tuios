@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // More of #518: the cases a Nix or home-manager setup meets. A store file is a
@@ -330,9 +332,20 @@ daemon = true
 		t.Fatalf("ASSERTION: prune --dry-run changed config.toml")
 	}
 
-	pruned, err := tuiosCLI(t, base, "config", "prune")
+	// The prune lets inc.toml set border_style, which changes the config. A
+	// run with no terminal must not do that without --yes.
+	before := readFileString(t, configPathIn(base))
+	refused, err := tuiosCLI(t, base, "config", "prune")
+	if err == nil || !strings.Contains(refused, "--yes") {
+		t.Fatalf("ASSERTION: prune with no terminal and no --yes did not refuse: %v\n%s", err, refused)
+	}
+	if readFileString(t, configPathIn(base)) != before {
+		t.Fatalf("ASSERTION: the refused prune changed config.toml")
+	}
+
+	pruned, err := tuiosCLI(t, base, "config", "prune", "--yes")
 	if err != nil {
-		t.Fatalf("tuios config prune: %v\n%s", err, pruned)
+		t.Fatalf("tuios config prune --yes: %v\n%s", err, pruned)
 	}
 	after := readFileString(t, configPathIn(base))
 	for _, gone := range []string{"border_style", "window_button_style"} {
@@ -345,14 +358,14 @@ daemon = true
 			t.Fatalf("ASSERTION: prune removed %q:\n%s", kept, after)
 		}
 	}
-	if !strings.Contains(pruned, "now come from another file") || !strings.Contains(pruned, "inc.toml") {
+	if !strings.Contains(pruned, "take the value of another file") || !strings.Contains(pruned, "inc.toml") {
 		t.Fatalf("ASSERTION: prune did not say border_style now comes from inc.toml:\n%s", pruned)
 	}
 	out, err = tuiosCLI(t, base, "config", "origin", "appearance.border_style")
 	if err != nil || !originLine(out, "appearance.border_style", "inc.toml") {
 		t.Fatalf("ASSERTION: after the prune inc.toml does not set border_style: %v\n%s", err, out)
 	}
-	saveSyncArtifact(t, "prune.txt", dry+"\n"+pruned+"\n--- config.toml\n"+after)
+	saveSyncArtifact(t, "prune.txt", dry+"\n"+refused+"\n"+pruned+"\n--- config.toml\n"+after)
 }
 
 // TestSaveDoesNotPinValuesTheModelHasNotSeen: a save writes only what the
@@ -392,11 +405,15 @@ func TestSaveDoesNotPinValuesTheModelHasNotSeen(t *testing.T) {
 // message that says what to do.
 func TestIncludeMistakesAreNamed(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, `include = ["?maybe.toml", "absent.toml"]
+	writeConfig(t, base, `include = ["?maybe.toml", "absent.toml", "config.toml", "?loop.toml"]
 
 [appearance]
 include = ["lost.toml"]
 `)
+	// Two links that point at themselves: one an optional include, one in
+	// config.d. Neither may stop the load.
+	linkConfigPart(t, base, "loop.toml", "loop.toml")
+	linkConfigPart(t, base, filepath.Join("config.d", "50-loop.toml"), "50-loop.toml")
 	out, err := tuiosCLI(t, base, "config", "files")
 	if err != nil {
 		t.Fatalf("tuios config files: %v\n%s", err, out)
@@ -410,6 +427,12 @@ include = ["lost.toml"]
 	if !strings.Contains(out, "include in [appearance], so it includes nothing") {
 		t.Fatalf("ASSERTION: an include below a table header was not reported:\n%s", out)
 	}
+	if !strings.Contains(out, "config.toml includes itself") {
+		t.Fatalf("ASSERTION: a self include was not reported as one:\n%s", out)
+	}
+	if !strings.Contains(out, "cannot read loop.toml") || !strings.Contains(out, "cannot read config.d/50-loop.toml") {
+		t.Fatalf("ASSERTION: a link loop in an optional include or in config.d was not skipped with a warning:\n%s", out)
+	}
 
 	if err := os.MkdirAll(filepath.Join(configDirIn(base), "parts"), 0o700); err != nil {
 		t.Fatal(err)
@@ -420,4 +443,81 @@ include = ["lost.toml"]
 		t.Fatalf("ASSERTION: an include of a directory did not fail with a clear message: %v\n%s", err, dirOut)
 	}
 	saveSyncArtifact(t, "files.txt", out+"\n"+dirOut)
+}
+
+// TestRemovingAHostKeepsTheNextTablesComment: a host removed on the settings
+// page takes its own lines out of config.toml and nothing else. The comment
+// above the next table is about that table, and it stays, one blank line
+// below what comes before it.
+func TestRemovingAHostKeepsTheNextTablesComment(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `[screenshot]
+font_family = "Mono"
+
+[hosts.alpha]
+addr = "me@alpha"
+
+# notes about my appearance, keep me
+[appearance]
+border_style = "rounded"
+`)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	if err := term.SendKeys(",", "/", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return selectedSettingsRow(s, "alpha") != ""
+	}, uiTimeout); err != nil {
+		t.Fatalf("the settings search did not find the alpha host row: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	for range len("me@alpha") + 4 {
+		if err := term.SendKeys(tuitest.Backspace); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	got := waitForFileText(t, configPathIn(base), func(s string) bool { return !strings.Contains(s, "hosts.alpha") },
+		"clearing the host's address on the settings page did not remove it from config.toml")
+	if !strings.Contains(got, "font_family = \"Mono\"\n\n# notes about my appearance, keep me\n[appearance]\n") {
+		t.Fatalf("ASSERTION: the comment above [appearance] did not survive the host's removal in place:\n%s", got)
+	}
+	if strings.Contains(got, "\n\n\n") {
+		t.Fatalf("ASSERTION: the removal left a run of blank lines:\n%s", got)
+	}
+	saveSyncArtifact(t, "config.toml", got)
+	saveArtifact(t, term, artifactDir(t), "after-remove")
+}
+
+// TestIncludedFileIsNeverRewrittenWhole: look.toml sets the key in an inline
+// table, which the line editor cannot change in place. tuios must not write
+// look.toml again from its values, which would drop its comment. The change
+// goes to config.toml, and the client says so.
+func TestIncludedFileIsNeverRewrittenWhole(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `include = ["look.toml"]`+"\n")
+	lookBody := "# my look, by hand\nappearance = { border_style = \"double\" }\n"
+	look := writeConfigPart(t, base, "look.toml", lookBody)
+
+	term := startIn(t, base, startOpts{args: []string{"new", "inline"}})
+	waitBoot(t, term)
+
+	setLive(t, base, "border_style", "thick")
+	main := waitForFileText(t, configPathIn(base), func(s string) bool { return strings.Contains(s, `border_style = "thick"`) },
+		"a change tuios could not make in look.toml's lines did not go to config.toml")
+	if got := readFileString(t, look); got != lookBody {
+		t.Fatalf("ASSERTION: tuios wrote look.toml again:\n%s", got)
+	}
+	if err := term.WaitForText("cannot change the lines", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the client did not say where the change went: %v\n%s", err, term.Snapshot())
+	}
+	saveSyncArtifact(t, "config.toml", main)
+	saveArtifact(t, term, artifactDir(t), "notice")
 }

@@ -219,7 +219,8 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 	env := []string{"TUIOS_SSH=/bin/false"}
 	writeConfig(t, base, `include = ["hosts.toml", "keys.toml", "locked.toml", "loop.toml", "absent.toml"]`+"\n")
 	hosts := writeConfigPart(t, base, "hosts.toml", "# hosts for this machine only\n[hosts.alpha]\naddr = \"me@alpha\"\n")
-	keys := writeConfigPart(t, base, "keys.toml", "[keybindings.window_management]\nclose_window = [\"w\"]\n")
+	// keys.toml uses CR LF line endings, as a file saved on Windows does.
+	keys := writeConfigPart(t, base, "keys.toml", "# keys\r\n[keybindings.window_management]\r\nclose_window = [\"w\"]\r\n")
 	lockedBody := "[hosts.beta]\naddr = \"me@beta\"\n"
 	locked := writeConfigPart(t, base, "locked.toml", lockedBody)
 	if err := os.Chmod(locked, 0o444); err != nil {
@@ -288,6 +289,8 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 	}
 	if got := readFileString(t, keys); !strings.Contains(got, "close_window = []") {
 		t.Fatalf("ASSERTION: keybinds unbind did not write keys.toml:\n%s", got)
+	} else if strings.Count(got, "\n") != strings.Count(got, "\r\n") || !strings.HasPrefix(got, "# keys\r\n") {
+		t.Fatalf("ASSERTION: keybinds unbind did not keep the CR LF line endings of keys.toml:\n%q", got)
 	}
 	if main := readFileString(t, configPathIn(base)); strings.Contains(main, "close_window") {
 		t.Fatalf("ASSERTION: keybinds unbind wrote close_window into config.toml:\n%s", main)

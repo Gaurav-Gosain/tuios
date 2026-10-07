@@ -94,37 +94,64 @@ func runConfigFiles(w io.Writer, asJSON bool) error {
 	return nil
 }
 
+// pruneOptions are the flags of tuios config prune, and where it asks.
+type pruneOptions struct {
+	dryRun bool
+	yes    bool
+	tty    bool
+	in     io.Reader
+}
+
 // runConfigPrune removes the keys of config.toml that have their default
-// value.
-func runConfigPrune(w io.Writer, dryRun bool) error {
+// value. A key that another file also sets then takes that file's value,
+// which changes the config, so the command lists those keys first and asks.
+func runConfigPrune(w io.Writer, opts pruneOptions) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
 		return fmt.Errorf("could not determine config path: %w", err)
 	}
-	res, err := config.PruneConfig(path, dryRun)
+	plan, err := config.PruneConfig(path, true)
 	if errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("there is no config file at %s. tuios uses the defaults", path)
 	}
 	if err != nil {
 		return err
 	}
-	if len(res.Keys) == 0 {
+	if len(plan.Keys) == 0 {
 		fmt.Fprintln(w, "config.toml has no key with its default value.")
 		return nil
 	}
+	if len(plan.Uncovered) > 0 {
+		fmt.Fprintln(w, "After the prune, these keys take the value of another file:")
+		for _, o := range plan.Uncovered {
+			fmt.Fprintf(w, "  %s  %s\n", o.Key, o.File)
+		}
+	}
+	if !opts.dryRun && len(plan.Uncovered) > 0 && !opts.yes {
+		if !opts.tty {
+			return fmt.Errorf("the prune changes %d keys. Run tuios config prune --dry-run to see them, then run it again with --yes", len(plan.Uncovered))
+		}
+		fmt.Fprint(w, "Remove the keys? (yes/no): ")
+		var answer string
+		_, _ = fmt.Fscanln(opts.in, &answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "yes" && a != "y" {
+			fmt.Fprintln(w, "Nothing was removed.")
+			return nil
+		}
+	}
+	res := plan
+	if !opts.dryRun {
+		if res, err = config.PruneConfig(path, false); err != nil {
+			return err
+		}
+	}
 	verb := "Removed"
-	if dryRun {
+	if opts.dryRun {
 		verb = "Would remove"
 	}
 	fmt.Fprintf(w, "%s %d keys that have their default value from %s:\n", verb, len(res.Keys), path)
 	for _, k := range res.Keys {
 		fmt.Fprintln(w, "  "+k)
-	}
-	if len(res.Uncovered) > 0 {
-		fmt.Fprintln(w, "These keys now come from another file:")
-		for _, o := range res.Uncovered {
-			fmt.Fprintf(w, "  %s  %s\n", o.Key, o.File)
-		}
 	}
 	return nil
 }

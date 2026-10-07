@@ -88,10 +88,26 @@ func resetConfigToDefaults() error {
 	if err := config.ResetConfig(configPath); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
-
 	fmt.Printf("Configuration reset to defaults\n")
 	fmt.Printf("  Location: %s\n", configPath)
 	fmt.Println("\nYou can customize it with: tuios config edit")
+	// The reset is of config.toml alone. Say which other files still set
+	// keys, so a setting that did not go back is not a surprise.
+	if lc, err := config.LoadLayered(configPath); err == nil {
+		var others []string
+		for _, l := range lc.Layers {
+			if l.Kind != config.LayerMain {
+				others = append(others, lc.DisplayPath(l.Path))
+			}
+		}
+		if len(others) > 0 {
+			fmt.Println("These files still apply:")
+			for _, o := range others {
+				fmt.Println("  " + o)
+			}
+		}
+	}
+
 	return nil
 }
 

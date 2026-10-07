@@ -29,6 +29,9 @@ import (
 // tomlEdit is a file being edited.
 type tomlEdit struct {
 	lines []string
+	// crlf is true for a file whose lines end in CR LF. The lines are held
+	// without the CR and get it back when the file is written.
+	crlf bool
 }
 
 // docHeader is one table header in a file.
@@ -60,10 +63,22 @@ type docScan struct {
 }
 
 func newTOMLEdit(data []byte) *tomlEdit {
-	return &tomlEdit{lines: splitLines(string(data))}
+	s := string(data)
+	e := &tomlEdit{crlf: strings.Contains(s, "\r\n")}
+	if e.crlf {
+		s = strings.ReplaceAll(s, "\r\n", "\n")
+	}
+	e.lines = splitLines(s)
+	return e
 }
 
-func (e *tomlEdit) bytes() []byte { return []byte(joinLines(e.lines)) }
+func (e *tomlEdit) bytes() []byte {
+	s := joinLines(e.lines)
+	if e.crlf {
+		s = strings.ReplaceAll(s, "\n", "\r\n")
+	}
+	return []byte(s)
+}
 
 // scan finds every header and key.
 func (e *tomlEdit) scan() docScan {
@@ -196,6 +211,35 @@ func (d docScan) blockEnd(e *tomlEdit, h int) int {
 	return len(e.lines)
 }
 
+// lastCode is the line after the last line in [from, to) that is neither
+// blank nor a comment, or from when there is none. The comments and blank
+// lines after it belong to whatever comes next: a comment above a [table]
+// header is about that table.
+func (e *tomlEdit) lastCode(from, to int) int {
+	for i := to; i > from; i-- {
+		s := strings.TrimSpace(e.lines[i-1])
+		if s != "" && !strings.HasPrefix(s, "#") {
+			return i
+		}
+	}
+	return from
+}
+
+// cut removes the lines [from, to) and closes the gap: when the lines on both
+// sides of it are blank, one of them goes, so two blocks stay one blank line
+// apart.
+func (e *tomlEdit) cut(from, to int) {
+	e.splice(from, to, nil)
+	if from >= len(e.lines) || strings.TrimSpace(e.lines[from]) != "" {
+		return
+	}
+	// At the top of the file a blank line leads nowhere; between two
+	// blocks one blank line is enough.
+	if from == 0 || strings.TrimSpace(e.lines[from-1]) == "" {
+		e.splice(from, from+1, nil)
+	}
+}
+
 // lastContent is the line after the last line in [from, to) that is not
 // blank, or from when there is none.
 func (e *tomlEdit) lastContent(from, to int) int {
@@ -284,7 +328,7 @@ func (e *tomlEdit) remove(path []string) {
 		for h := len(d.headers) - 1; h >= 0; h-- {
 			hd := d.headers[h]
 			if len(hd.path) >= len(path) && slices.Equal(hd.path[:len(path)], path) {
-				e.splice(hd.line, d.blockEnd(e, h), nil)
+				e.cut(hd.line, e.lastCode(hd.line+1, d.blockEnd(e, h)))
 				done = false
 				break
 			}
@@ -295,7 +339,7 @@ func (e *tomlEdit) remove(path []string) {
 		for i := len(d.keys) - 1; i >= 0; i-- {
 			k := d.keys[i]
 			if !k.inArray && len(k.path) >= len(path) && slices.Equal(k.path[:len(path)], path) {
-				e.splice(k.start, k.end, nil)
+				e.cut(k.start, k.end)
 				done = false
 				break
 			}
@@ -307,7 +351,8 @@ func (e *tomlEdit) remove(path []string) {
 }
 
 // entryAt finds the [[array]] header whose entry the segment names, or -1.
-func (e *tomlEdit) entryAt(d docScan, arr []string, seg string) int {
+// With tomb it finds a tombstone for the entry instead of the entry.
+func (e *tomlEdit) entryAt(d docScan, arr []string, seg string, tomb bool) int {
 	name, key, _ := elemOf(seg)
 	for h, hd := range d.headers {
 		if !hd.array || !slices.Equal(hd.path, arr) {
@@ -315,20 +360,41 @@ func (e *tomlEdit) entryAt(d docScan, arr []string, seg string) int {
 		}
 		body := strings.Join(e.lines[hd.line+1:d.blockEnd(e, h)], "\n")
 		m, err := parseLayer([]byte(body))
-		if err == nil && entryMatches(m, name, key) {
+		if err == nil && entryMatches(m, name, key) && isTombstone(m) == tomb {
 			return h
 		}
 	}
 	return -1
 }
 
+// tombstoneBlock is the [[array]] entry that removes the entry seg names.
+func tombstoneBlock(arr []string, seg string) []string {
+	return append([]string{"[[" + dottedKey(arr) + "]]"}, renderEntryBody(tombstoneFor(seg))...)
+}
+
 // setEntry replaces the entry of the array at arr that seg names, or adds it.
-func (e *tomlEdit) setEntry(arr []string, seg string, entry map[string]any) {
+// With shadow, a tombstone for the entry comes first in the file, so the
+// entry does not merge with the one an earlier file holds.
+func (e *tomlEdit) setEntry(arr []string, seg string, entry map[string]any, shadow bool) {
 	d := e.scan()
+	h := e.entryAt(d, arr, seg, false)
+	if shadow {
+		t := e.entryAt(d, arr, seg, true)
+		if t < 0 || (h >= 0 && d.headers[t].line > d.headers[h].line) {
+			block := tombstoneBlock(arr, seg)
+			if h >= 0 {
+				e.splice(d.headers[h].line, d.headers[h].line, append(block, ""))
+			} else {
+				e.appendBlock(block)
+			}
+			d = e.scan()
+			h = e.entryAt(d, arr, seg, false)
+		}
+	}
 	body := renderEntryBody(entry)
-	if h := e.entryAt(d, arr, seg); h >= 0 {
+	if h >= 0 {
 		hd := d.headers[h]
-		end := e.lastContent(hd.line+1, d.blockEnd(e, h))
+		end := e.lastCode(hd.line+1, d.blockEnd(e, h))
 		e.splice(hd.line+1, end, body)
 		return
 	}
@@ -338,8 +404,8 @@ func (e *tomlEdit) setEntry(arr []string, seg string, entry map[string]any) {
 // removeEntry deletes the entry of the array at arr that seg names.
 func (e *tomlEdit) removeEntry(arr []string, seg string) {
 	d := e.scan()
-	if h := e.entryAt(d, arr, seg); h >= 0 {
-		e.splice(d.headers[h].line, d.blockEnd(e, h), nil)
+	if h := e.entryAt(d, arr, seg, false); h >= 0 {
+		e.cut(d.headers[h].line, e.lastCode(d.headers[h].line+1, d.blockEnd(e, h)))
 	}
 }
 
@@ -358,12 +424,11 @@ func (e *tomlEdit) dropEmptyTables() {
 			if h+1 < len(d.headers) {
 				end = d.headers[h+1].line
 			}
-			empty := true
-			for _, l := range e.lines[hd.line+1 : end] {
-				if strings.TrimSpace(l) != "" {
-					empty = false
-					break
-				}
+			// Empty means no key, and no comment that sits under the
+			// header. Comments after a blank line belong to what follows.
+			empty := e.lastCode(hd.line+1, end) == hd.line+1
+			if empty && hd.line+1 < end && strings.HasPrefix(strings.TrimSpace(e.lines[hd.line+1]), "#") {
+				empty = false
 			}
 			if !empty {
 				continue
@@ -378,7 +443,7 @@ func (e *tomlEdit) dropEmptyTables() {
 			if sub {
 				continue
 			}
-			e.splice(hd.line, end, nil)
+			e.cut(hd.line, e.lastCode(hd.line+1, end))
 			removed = true
 			break
 		}
@@ -399,7 +464,7 @@ func (e *tomlEdit) apply(ch configChange) {
 			return
 		}
 		m, _ := ch.value.(map[string]any)
-		e.setEntry(arr, last, m)
+		e.setEntry(arr, last, m, ch.shadow)
 		return
 	}
 	switch v := ch.value.(type) {
@@ -442,12 +507,47 @@ func editFile(data []byte, changes []configChange) (out []byte, want map[string]
 			e.apply(configChange{path: ch.path})
 			continue
 		}
+		if ch.shadow {
+			shadowEntry(want, ch.path)
+		}
 		setPath(want, ch.path, ch.value)
 		e.apply(ch)
 	}
 	out = e.bytes()
 	got, perr := parseLayer(out)
 	return out, want, perr == nil && reflect.DeepEqual(got, want), nil
+}
+
+// shadowEntry puts a tombstone for the entry at path into the parsed file,
+// before the entry, unless one is already there: the same thing setEntry does
+// to the lines.
+func shadowEntry(m map[string]any, path []string) {
+	arrPath, seg := path[:len(path)-1], path[len(path)-1]
+	v, _ := lookupPath(m, arrPath)
+	arr, _ := v.([]any)
+	at := entryIndexOf(arr, seg, false)
+	if t := entryIndexOf(arr, seg, true); t >= 0 && (at < 0 || t < at) && isTombstone(arr[t].(map[string]any)) {
+		return
+	}
+	tomb := tombstoneFor(seg)
+	if at < 0 {
+		setPath(m, arrPath, append(slices.Clone(arr), tomb))
+		return
+	}
+	setPath(m, arrPath, slices.Insert(slices.Clone(arr), at, any(tomb)))
+}
+
+// tombstoneFor is the entry that removes the entry seg names.
+func tombstoneFor(seg string) map[string]any {
+	name, key, _ := elemOf(seg)
+	entry := map[string]any{tombstoneKey: true}
+	if name != "" {
+		entry["name"] = name
+	}
+	if key != "" {
+		entry["key"] = key
+	}
+	return entry
 }
 
 // dottedKey writes a path as a TOML dotted key.

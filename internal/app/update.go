@@ -2366,6 +2366,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The write happens in a command now, so a failure has to come back here
 		// to be said out loud: the change is live either way, and the user needs
 		// to know it will not outlive the session.
+		// The change is in no file, so the next save carries it again.
+		config.RewindSave(m.UserConfig, msg.err)
 		m.ShowNotification("Could not save settings: "+msg.err.Error(), "error", 0)
 		return m, nil
 

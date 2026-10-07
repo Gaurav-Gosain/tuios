@@ -4054,12 +4054,15 @@ See [Split the config into several files](CONFIGURATION.md#split-the-config-into
 Remove the keys of config.toml that have their default value. An older tuios
 wrote every key into config.toml, and config.toml wins over the files it
 includes and the files in `config.d`. After the prune, a key that another file
-sets takes the value of that file, and the command lists it. The `[startup]`
-keys stay. The command keeps comments and the `include` list.
+sets takes the value of that file. The command lists those keys first and asks
+before it changes the file. `--yes` skips the question, and a run with no
+terminal needs it. The `[startup]` keys stay. The command keeps comments and
+the `include` list.
 
 ```bash
 tuios config prune --dry-run   # show the keys, change nothing
 tuios config prune
+tuios config prune --yes       # do not ask
 ```
 
 #### `tuios config reset`
@@ -4068,7 +4071,8 @@ Reset the configuration file to default settings.
 
 **Warning:** This will overwrite your existing configuration after confirmation.
 The new config.toml is the one a first start writes: comments, `[startup]`
-tiled and daemon on, and no other setting. It keeps the `include` list.
+tiled and daemon on, and no other setting. It keeps the `include` list, and
+lists the other files that still apply.
 
 **Example:**
 ```bash

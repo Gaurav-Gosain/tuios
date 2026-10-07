@@ -52,6 +52,9 @@ type WriteNote struct {
 	// Kept are read-only files that hold a key the save removed. The key is
 	// still there.
 	Kept []string
+	// Moved are the changes that went to config.toml because tuios could not
+	// change the lines of the file that holds the key without rewriting it.
+	Moved []Redirect
 }
 
 // Redirect is one read-only file and the file its change went to.
@@ -60,7 +63,9 @@ type Redirect struct {
 }
 
 // Empty reports whether the note has nothing to say.
-func (n WriteNote) Empty() bool { return len(n.Redirected) == 0 && len(n.Kept) == 0 }
+func (n WriteNote) Empty() bool {
+	return len(n.Redirected) == 0 && len(n.Kept) == 0 && len(n.Moved) == 0
+}
 
 // Message is the note as text for a person, empty when there is nothing to
 // say.
@@ -71,6 +76,9 @@ func (n WriteNote) Message() string {
 	}
 	for _, f := range n.Kept {
 		parts = append(parts, fmt.Sprintf("tuios cannot write %s. Remove the setting there by hand.", displayPath(n.Main, f)))
+	}
+	for _, r := range n.Moved {
+		parts = append(parts, fmt.Sprintf("tuios cannot change the lines of %s. It wrote the change to %s.", displayPath(n.Main, r.From), displayPath(n.Main, r.To)))
 	}
 	return strings.Join(parts, " ")
 }
@@ -83,6 +91,16 @@ func (n *WriteNote) addRedirected(from, to string) {
 		}
 	}
 	n.Redirected = append(n.Redirected, r)
+}
+
+func (n *WriteNote) addMoved(from, to string) {
+	r := Redirect{From: from, To: to}
+	for _, e := range n.Moved {
+		if e == r {
+			return
+		}
+	}
+	n.Moved = append(n.Moved, r)
 }
 
 func (n *WriteNote) addKept(p string) {
@@ -228,9 +246,10 @@ func applyChanges(lc *LayeredConfig, changes []configChange) (WriteNote, error) 
 		if err != nil {
 			return note, err
 		}
+		ch.shadow = w.needsShadow(i, ch.path, ch.value)
 		w.add(i, ch)
 	}
-	return note, w.flush()
+	return note, w.flush(&note)
 }
 
 // errNoWritableFile is the save failure when no file of the config can be
@@ -273,11 +292,45 @@ func (w *layerWriter) lastWritable() int {
 func (w *layerWriter) holders(path []string) []int {
 	var out []int
 	for i := range w.lc.Layers {
-		if _, ok := lookupPath(w.lc.Layers[i].Values, path); ok {
+		// A tombstone counts: the change has to come after it, or the
+		// tombstone removes it again.
+		if _, ok := lookupPathOf(w.lc.Layers[i].Values, path, true); ok {
 			out = append(out, i)
 		}
 	}
 	return out
+}
+
+// needsShadow reports whether an entry written to layer t would merge with an
+// entry the layers before t hold and take keys back that it does not have.
+// The entry is then written after a tombstone (see configChange.shadow).
+func (w *layerWriter) needsShadow(t int, path []string, value any) bool {
+	if _, _, ok := elemOf(path[len(path)-1]); !ok {
+		return false
+	}
+	entry, ok := value.(map[string]any)
+	if !ok || isTombstone(entry) {
+		return false
+	}
+	before := map[string]any{}
+	for _, l := range w.lc.Layers[:t] {
+		mergeTables(before, l.Values)
+	}
+	stripTombstones(before)
+	v, ok := lookupPath(before, path)
+	if !ok {
+		return false
+	}
+	old, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	for k := range old {
+		if _, has := entry[k]; !has {
+			return true
+		}
+	}
+	return false
 }
 
 // target is the layer a change to path is written to. The rules are at the
@@ -338,14 +391,7 @@ func (w *layerWriter) planDelete(ch configChange, note *WriteNote) error {
 	if !tomb {
 		return nil
 	}
-	name, key, _ := elemOf(ch.path[len(ch.path)-1])
-	entry := map[string]any{tombstoneKey: true}
-	if name != "" {
-		entry["name"] = name
-	}
-	if key != "" {
-		entry["key"] = key
-	}
+	entry := tombstoneFor(ch.path[len(ch.path)-1])
 	t := w.lastWritable()
 	if t < 0 || t < holders[len(holders)-1] {
 		return fmt.Errorf("tuios cannot remove %s. A file that tuios cannot write sets it. Remove it there", displayKey(ch.path))
@@ -362,31 +408,91 @@ func (w *layerWriter) add(i int, ch configChange) {
 }
 
 // flush writes every file that has a change.
-func (w *layerWriter) flush() error {
+//
+// Every file is edited line by line. An included file is never written again
+// from its values: it is the person's own, and a rewrite drops their comments.
+// When the lines of one cannot express a change, the change goes to
+// config.toml, which comes after every other file, and the note says so. A
+// removal cannot go elsewhere, so it fails the save. Only config.toml, the
+// file tuios writes, falls back to a full rewrite.
+func (w *layerWriter) flush(note *WriteNote) error {
+	main := len(w.lc.Layers) - 1
+	type planned struct {
+		i   int
+		out []byte
+	}
+	var ready []planned
 	for _, i := range w.order {
+		if i == main {
+			continue
+		}
 		layer := w.lc.Layers[i]
+		out, _, ok, err := editFile(layer.Data, w.changes[i])
+		if err != nil {
+			return fmt.Errorf("failed to parse %s: %w", layer.Path, err)
+		}
+		if ok {
+			ready = append(ready, planned{i, out})
+			continue
+		}
+		if err := w.moveToMain(i, note); err != nil {
+			return err
+		}
+	}
+	if _, ok := w.changes[main]; ok {
+		layer := w.lc.Layers[main]
 		data := layer.Data
-		if layer.Kind == LayerMain && w.lc.MainMissing {
+		if w.lc.MainMissing {
 			data = []byte(configFileHeader(layer.Path))
 		}
-		out, err := editLayer(data, w.changes[i], layer.Path, layer.Kind == LayerMain)
+		out, err := editMain(data, w.changes[main], layer.Path)
 		if err != nil {
 			return err
 		}
-		if string(out) == string(layer.Data) && !(layer.Kind == LayerMain && w.lc.MainMissing) {
+		if string(out) != string(layer.Data) || w.lc.MainMissing {
+			ready = append(ready, planned{main, out})
+		}
+	}
+	for _, p := range ready {
+		if string(p.out) == string(w.lc.Layers[p.i].Data) && p.i != main {
 			continue
 		}
-		if err := writeConfigBytes(out, layer.Path); err != nil {
+		if err := writeConfigBytes(p.out, w.lc.Layers[p.i].Path); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// editLayer makes changes to one file's text, line by line. When the line edit
-// cannot say what the changes ask for, the file is written again from its
-// parsed values, which is correct and drops its comments.
-func editLayer(data []byte, changes []configChange, path string, main bool) ([]byte, error) {
+// moveToMain sends the changes for layer i to config.toml, because the lines
+// of layer i cannot express them.
+func (w *layerWriter) moveToMain(i int, note *WriteNote) error {
+	main := len(w.lc.Layers) - 1
+	layer := w.lc.Layers[i]
+	var keys []string
+	for _, ch := range w.changes[i] {
+		keys = append(keys, displayKey(ch.path))
+		if ch.deleted {
+			return fmt.Errorf("tuios cannot remove %s from %s without writing the whole file again, and it does not rewrite a file you wrote. Remove it there by hand", displayKey(ch.path), displayPath(w.lc.Main, layer.Path))
+		}
+	}
+	if !w.writable(main) {
+		return fmt.Errorf("tuios cannot change %s in %s without writing the whole file again, and it cannot write config.toml. Change it there by hand", strings.Join(keys, ", "), displayPath(w.lc.Main, layer.Path))
+	}
+	for _, ch := range w.changes[i] {
+		ch.shadow = w.needsShadow(main, ch.path, ch.value)
+		w.add(main, ch)
+	}
+	note.addMoved(layer.Path, w.lc.Layers[main].Path)
+	log.Printf("Config: tuios could not edit the lines of %s, so it wrote the change to %s", layer.Path, w.lc.Main)
+	return nil
+}
+
+// editMain makes changes to config.toml line by line. When the line edit
+// cannot say what the changes ask for, config.toml is written again from its
+// values, which is correct and drops its comments. tuios does that only to
+// config.toml, the file it writes.
+func editMain(data []byte, changes []configChange, path string) ([]byte, error) {
 	out, want, ok, err := editFile(data, changes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
@@ -399,10 +505,7 @@ func editLayer(data []byte, changes []configChange, path string, main bool) ([]b
 	if err != nil {
 		return nil, fmt.Errorf("failed to write %s: %w", path, err)
 	}
-	if main {
-		full = append([]byte(configFileHeader(path)), full...)
-	}
-	return full, nil
+	return append([]byte(configFileHeader(path)), full...), nil
 }
 
 // isEntryCollection reports whether v holds named entries: a table whose
@@ -481,13 +584,53 @@ func IncludeLine(path string) string {
 	}
 	values, err := parseLayer(data)
 	if err != nil {
-		return ""
+		// A file with an error elsewhere can still hold a good include
+		// list. A reset is often how a person gets out of a broken file,
+		// so the list is found by its lines and kept when it parses alone.
+		return scanIncludeLine(data)
 	}
 	inc, ok := values[IncludeKey]
 	if !ok {
 		return ""
 	}
 	return IncludeKey + " = " + encodeValue(inc)
+}
+
+// scanIncludeLine finds the include key above the first table header by its
+// lines, and returns its text when that text parses on its own.
+func scanIncludeLine(data []byte) string {
+	e := newTOMLEdit(data)
+	for i := 0; i < len(e.lines); i++ {
+		s := strings.TrimSpace(e.lines[i])
+		if strings.HasPrefix(s, "[") {
+			return ""
+		}
+		k, rest, ok := cutOutsideQuotes(e.lines[i], '=')
+		if !ok || strings.TrimSpace(k) != IncludeKey {
+			continue
+		}
+		var st valueScan
+		st.feed(rest)
+		end := i + 1
+		for !st.done() && end < len(e.lines) {
+			st.feed(e.lines[end])
+			end++
+		}
+		text := strings.Join(e.lines[i:end], "\n")
+		values, err := parseLayer([]byte(text))
+		if err != nil {
+			return ""
+		}
+		inc, ok := values[IncludeKey]
+		if !ok {
+			return ""
+		}
+		if _, err := includeList(inc); err != nil {
+			return ""
+		}
+		return IncludeKey + " = " + encodeValue(inc)
+	}
+	return ""
 }
 
 // FirstRunConfig is the config.toml tuios writes when there is none: the

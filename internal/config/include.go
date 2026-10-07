@@ -225,6 +225,10 @@ func (l *layerLoader) includes(from string, values map[string]any, stack []strin
 // visit reads one file, merges its own includes first, and then adds it.
 func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from string, stack []string, depth int) error {
 	real := realPath(path)
+	if from != "" && real == realPath(from) {
+		l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("%s includes itself. tuios skips the include.", l.show(from)))
+		return nil
+	}
 	if slices.Contains(stack, real) {
 		l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("%s includes %s, which includes it again. tuios skips the second include.", l.show(from), l.show(path)))
 		return nil
@@ -246,6 +250,13 @@ func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from str
 			if !optional {
 				l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("%s includes %s, which does not exist. tuios skips it.", l.show(from), l.show(path)))
 			}
+			return nil
+		}
+		// A file that cannot be read, such as a link that points at itself,
+		// stops the load only when the config needs it. An optional include
+		// and a config.d file are skipped.
+		if optional || kind == LayerDropIn {
+			l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("tuios cannot read %s, so it skips it: %v", l.show(path), err))
 			return nil
 		}
 		return fmt.Errorf("failed to read %s: %w", path, err)
@@ -436,7 +447,7 @@ func dropInFiles(dir string) ([]string, bool) {
 			continue
 		}
 		p := filepath.Join(dir, name)
-		if info, err := os.Stat(p); err != nil || info.IsDir() {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			continue
 		}
 		out = append(out, p)
@@ -671,15 +682,25 @@ func entrySegs(a []any) ([]string, bool) {
 }
 
 // entryIndex finds the entry of arr the segment names, or -1.
-func entryIndex(arr []any, seg string) int {
+func entryIndex(arr []any, seg string) int { return entryIndexOf(arr, seg, false) }
+
+// entryIndexOf is entryIndex. With tombs, a tombstone that matches counts as
+// the entry too: a file that holds one still has a say in where the entry
+// goes.
+func entryIndexOf(arr []any, seg string, tombs bool) int {
 	name, key, ok := elemOf(seg)
 	if !ok {
 		return -1
 	}
 	for i, e := range arr {
-		if m, ok := e.(map[string]any); ok && entryMatches(m, name, key) {
-			return i
+		m, ok := e.(map[string]any)
+		if !ok || !entryMatches(m, name, key) {
+			continue
 		}
+		if isTombstone(m) && !tombs {
+			continue
+		}
+		return i
 	}
 	return -1
 }
@@ -801,6 +822,12 @@ func deepCopy(v any) any {
 
 // lookupPath finds the value at path in a parsed table.
 func lookupPath(m map[string]any, path []string) (any, bool) {
+	return lookupPathOf(m, path, false)
+}
+
+// lookupPathOf is lookupPath. With tombs, an entry segment also finds a
+// tombstone.
+func lookupPathOf(m map[string]any, path []string, tombs bool) (any, bool) {
 	var cur any = m
 	for _, seg := range path {
 		if _, _, ok := elemOf(seg); ok {
@@ -808,7 +835,7 @@ func lookupPath(m map[string]any, path []string) (any, bool) {
 			if !ok {
 				return nil, false
 			}
-			i := entryIndex(arr, seg)
+			i := entryIndexOf(arr, seg, tombs)
 			if i < 0 {
 				return nil, false
 			}
@@ -876,7 +903,13 @@ func deletePath(m map[string]any, path []string) bool {
 		if j < 0 {
 			return false
 		}
-		setPath(m, parentPath, slices.Delete(slices.Clone(arr), j, j+1))
+		rest := slices.Delete(slices.Clone(arr), j, j+1)
+		if len(rest) == 0 {
+			// A file with no [[entry]] left has no key at all.
+			deletePath(m, parentPath)
+			return true
+		}
+		setPath(m, parentPath, rest)
 		return true
 	}
 	parent := any(m)
@@ -902,6 +935,10 @@ type configChange struct {
 	path    []string
 	value   any
 	deleted bool
+	// shadow is set on an array entry that an earlier file also holds with
+	// keys the new entry does not have. The entry is written after a
+	// tombstone, so it does not take those keys back in the merge.
+	shadow bool
 }
 
 // diffTables lists what changed from cur to next, at the deepest level a
@@ -919,9 +956,18 @@ func diffTables(cur, next map[string]any, prefix []string, out *[]configChange) 
 		n, nok := next[k]
 		switch {
 		case !nok:
+			// An array of tables the model no longer has is every entry
+			// removed. The TOML of a config leaves out an empty array, so
+			// the key is gone rather than empty.
+			if ca, ok := c.([]any); ok && diffEntries(ca, nil, p, out) {
+				continue
+			}
 			*out = append(*out, configChange{path: p, deleted: true})
 			continue
 		case !cok:
+			if na, ok := n.([]any); ok && diffEntries(nil, na, p, out) {
+				continue
+			}
 			*out = append(*out, configChange{path: p, value: n})
 			continue
 		}

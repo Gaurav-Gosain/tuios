@@ -1752,7 +1752,15 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 // DefaultConfig. A config without [startup] is an install from before the
 // table existed, and it keeps its floating, standalone session. A first start
 // writes the two keys on (see FirstRunConfig).
-var legacyEmptyKeys = map[string]bool{"startup.tiled": true, "startup.daemon": true}
+var legacyEmptyKeys = map[string]bool{
+	"startup.tiled":  true,
+	"startup.daemon": true,
+	// An empty text colour keeps the colour the text already has. A config
+	// from before these keys had defaults reads that way, and keeps it.
+	"appearance.selection.search_fg": true,
+	"appearance.selection.match_fg":  true,
+	"appearance.selection.cursor_fg": true,
+}
 
 // seedTables holds what seeding compares against: the defaults, and what an
 // empty file parses to.
