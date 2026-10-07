@@ -340,8 +340,9 @@ impl TuiosApp {
 
     /// One pane as a sidebar row: state icon, title, age, and one line below.
     /// A `compact` row is 28 tall with no second line: a pane already shown
-    /// with its message under "Needs you".
-    fn pane_row(&self, p: &PaneInfo, selected: bool, right: Option<String>, compact: bool, cx: &mut Context<Self>) -> Stateful<Div> {
+    /// with its message under "Needs you". A `mixed` row sits in a list of
+    /// several sessions and names its session on line two.
+    fn pane_row(&self, p: &PaneInfo, selected: bool, right: Option<String>, compact: bool, mixed: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = &self.theme;
         let now = fleet::now_ms();
         let (session, window, workspace) = (p.session.clone(), p.window.clone(), p.workspace);
@@ -349,12 +350,31 @@ impl TuiosApp {
         let quiet = p.status == Status::Terminal || (p.status == Status::Done && p.seen);
         let loud = matches!(p.status, Status::NeedsYou | Status::Errored);
         let mut line2 = div().h(px(16.)).flex().items_center().overflow_hidden().text_size(px(SMALL.0)).line_height(px(SMALL.1)).whitespace_nowrap();
-        if p.harness.is_empty() || p.message.is_empty() {
-            line2 = line2.child(div().truncate().text_color(rgb(t.text3)).child(SharedString::from(p.detail())));
+        // In a list that mixes sessions ("Needs you"), a pane in another
+        // session names its session on line two, after the harness:
+        // "codex · api · Migration failed". The slot before the age is for
+        // the workspace only. Under its own session header it says nothing.
+        let other = mixed && self.state.as_ref().is_some_and(|st| st.session != p.session);
+        let mut lead: Vec<&str> = Vec::new();
+        if !p.harness.is_empty() {
+            lead.push(&p.harness);
+        }
+        if other {
+            lead.push(&p.session);
+        }
+        let (lead, rest, rest_ink) = if p.harness.is_empty() || p.message.is_empty() {
+            let detail = p.detail();
+            let lead = if other { p.session.clone() } else { String::new() };
+            (lead, if detail == p.session { String::new() } else { detail }, t.text3)
         } else {
-            line2 = line2
-                .child(div().flex_none().text_color(rgb(t.text3)).child(SharedString::from(format!("{} · ", p.harness))))
-                .child(div().min_w_0().truncate().text_color(rgb(if loud { t.text2 } else { t.text3 })).child(SharedString::from(p.message.clone())));
+            (lead.join(" · "), p.message.clone(), if loud { t.text2 } else { t.text3 })
+        };
+        let sep = if !lead.is_empty() && !rest.is_empty() { " · " } else { "" };
+        if !lead.is_empty() {
+            line2 = line2.child(div().flex_none().text_color(rgb(t.text3)).child(SharedString::from(format!("{lead}{sep}"))));
+        }
+        if !rest.is_empty() {
+            line2 = line2.child(div().min_w_0().truncate().text_color(rgb(rest_ink)).child(SharedString::from(rest)));
         }
         div()
             .id(SharedString::from(format!("row-{}-{}", p.session, p.window)))
@@ -393,12 +413,13 @@ impl TuiosApp {
             )
     }
 
-    /// A pane's place for the right of its row: its session when not the
-    /// attached one, its workspace when not the shown one.
+    /// A pane's workspace for the right of its row, when the pane is in the
+    /// attached session on a workspace other than the shown one. A pane in
+    /// another session names its session on line two instead.
     fn row_place(&self, p: &PaneInfo) -> Option<String> {
         let st = self.state.as_ref()?;
         if p.session != st.session {
-            Some(p.session.clone())
+            None
         } else if p.workspace != st.workspace {
             Some(p.workspace.to_string())
         } else {
@@ -426,7 +447,10 @@ impl TuiosApp {
         let mut waiting: Vec<&PaneInfo> = all.iter().filter(|p| matches!(p.status, Status::NeedsYou | Status::Errored)).collect();
         waiting.sort_by(|a, b| fleet::order(a, b));
         if !waiting.is_empty() {
+            // One count for the whole section: needs-you rows and errors.
             let need = waiting.iter().filter(|p| p.status == Status::NeedsYou).count();
+            let count = waiting.len();
+            let (badge_fill, badge_ink) = if need > 0 { (t.need_fill, t.need_ink) } else { (t.err_fill, t.err_ink) };
             list = list.child(
                 div()
                     .h(px(24.))
@@ -437,13 +461,11 @@ impl TuiosApp {
                     .pl(px(20.))
                     .mb(px(2.))
                     .child(text("Needs you".into(), SMALL, FontWeight::SEMIBOLD, t.text2))
-                    .when(need > 0, |el| {
-                        el.child(div().h(px(16.)).px(px(6.)).flex().items_center().rounded(px(8.)).bg(rgb(t.need_fill)).child(num(need.to_string(), LABEL, FontWeight::SEMIBOLD, t.need_ink)))
-                    }),
+                    .child(div().h(px(16.)).px(px(6.)).flex().items_center().rounded(px(8.)).bg(rgb(badge_fill)).child(num(count.to_string(), LABEL, FontWeight::SEMIBOLD, badge_ink))),
             );
             for p in waiting {
                 let selected = p.session == current && focused.as_deref() == Some(p.window.as_str());
-                list = list.child(self.pane_row(p, selected, self.row_place(p), false, cx));
+                list = list.child(self.pane_row(p, selected, self.row_place(p), false, true, cx));
             }
         }
 
@@ -527,7 +549,7 @@ impl TuiosApp {
                 let place = if attached { self.row_place(p) } else { None };
                 // Its message already shows under "Needs you".
                 let compact = matches!(p.status, Status::NeedsYou | Status::Errored);
-                list = list.child(self.pane_row(p, selected, place, compact, cx));
+                list = list.child(self.pane_row(p, selected, place, compact, false, cx));
             }
         }
 
@@ -622,19 +644,27 @@ impl TuiosApp {
     // ---- palette -----------------------------------------------------------
 
     pub(super) fn render_palette(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let p = self.palette.as_ref()?;
-        let t = self.theme.clone();
         let lay = self.layout;
-        let list = palette::filter(&p.entries, &p.query);
+        let p = self.palette.as_mut()?;
+        let t = self.theme.clone();
+        let list = palette::filter_marked(&p.entries, &p.query);
         let selected = p.selected.min(list.len().saturating_sub(1));
         // As many rows as fit in 60 % of the window.
         let budget = (lay.height * 0.6 - 52. - 40. - 12.).max(80.);
         let shown = ((budget - 2. * 28.) / 40.).floor().clamp(3., 12.) as usize;
-        let start = selected.saturating_sub(shown - 1);
+        // Scroll only as far as needed to keep the chosen row in view.
+        let mut start = p.top.min(list.len().saturating_sub(shown));
+        if selected < start {
+            start = selected;
+        } else if selected >= start + shown {
+            start = selected + 1 - shown;
+        }
+        p.top = start;
+        let p = &*p;
         let q = p.query.trim().to_string();
-        let mut items = div().flex().flex_col().px(px(6.)).py(px(6.));
-        let mut last: Option<Section> = if start > 0 { list.get(start - 1).map(|e| e.section) } else { None };
-        for (i, e) in list.iter().enumerate().skip(start).take(shown) {
+        let mut items = div().relative().flex().flex_col().px(px(6.)).py(px(6.));
+        let mut last: Option<Section> = if start > 0 { list.get(start - 1).map(|(e, _)| e.section) } else { None };
+        for (i, (e, marks)) in list.iter().enumerate().skip(start).take(shown) {
             if last != Some(e.section) {
                 items = items.child(div().h(px(28.)).pl(px(14.)).flex().items_center().child(text(e.section.label().into(), SMALL, FontWeight::SEMIBOLD, t.text3)));
                 last = Some(e.section);
@@ -647,16 +677,20 @@ impl TuiosApp {
                 Icon::Command => icon("icons/chevron-right.svg", rgb(t.text3), 14.).into_any_element(),
                 Icon::Theme => icon("icons/palette.svg", rgb(t.text3), 14.).into_any_element(),
             };
-            // Matched characters in 600, the rest in 400.
-            let marks = palette::matches(&q, &e.title);
-            let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> = marks
-                .iter()
-                .filter_map(|&b| {
-                    let len = e.title[b..].chars().next()?.len_utf8();
-                    Some((b..b + len, HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() }))
-                })
-                .collect();
-            let title = StyledText::new(SharedString::from(e.title.clone())).with_highlights(highlights);
+            // Matched characters in 600, the rest in 400: the characters
+            // that ranked the row, from the same matcher.
+            // Each run of one weight is its own element: the text system
+            // drops a weight change that starts inside a word ("re" in
+            // "Previous").
+            let mut runs: Vec<(String, bool)> = Vec::new();
+            for (i, c) in e.title.char_indices() {
+                let bold = marks.contains(&i);
+                match runs.last_mut() {
+                    Some((s, b)) if *b == bold => s.push(c),
+                    _ => runs.push((c.to_string(), bold)),
+                }
+            }
+            let title = runs.into_iter().map(|(s, bold)| div().flex_none().font_weight(if bold { FontWeight::SEMIBOLD } else { FontWeight::NORMAL }).child(SharedString::from(s)));
             items = items.child(
                 div()
                     .id(("pal", i))
@@ -687,15 +721,30 @@ impl TuiosApp {
                             .ml(px(10.))
                             .flex_none()
                             .max_w(px(320.))
-                            .truncate()
+                            .flex()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
                             .text_size(px(ITEM.0))
                             .line_height(px(ITEM.1))
-                            .font_weight(FontWeight::NORMAL)
                             .text_color(rgb(t.text))
-                            .child(title),
+                            .children(title),
                     )
                     .child(text(e.subtitle.clone(), SMALL, FontWeight::NORMAL, if is_sel { t.text2 } else { t.text3 }).ml(px(12.)).flex_1().min_w_0().truncate())
                     .children(chip(&t, e.hint).map(|c| c.ml(px(12.)))),
+            );
+        }
+        // The overlay scrollbar, while the list has more rows than fit.
+        if list.len() > shown {
+            let n = list.len() as f32;
+            items = items.child(
+                div()
+                    .absolute()
+                    .right(px(2.))
+                    .top(relative(start as f32 / n))
+                    .h(relative(shown as f32 / n))
+                    .w(px(4.))
+                    .rounded(px(2.))
+                    .bg(with_alpha(t.text3, 0.5)),
             );
         }
         if list.is_empty() {

@@ -172,22 +172,11 @@ pub fn chip(hint: &str) -> String {
     keycaps(hint).join("+")
 }
 
-/// The byte offsets in `title` of the characters `query` matches, first
-/// match after the one before, as [`score`] reads them.
+/// The byte offsets in `title` of the characters `query` matches, as
+/// [`score`] reads them; empty when it does not match.
+#[cfg(test)]
 pub fn matches(query: &str, title: &str) -> Vec<usize> {
-    let mut out = Vec::new();
-    let lower: Vec<(usize, char)> = title.char_indices().map(|(i, c)| (i, c.to_lowercase().next().unwrap_or(c))).collect();
-    let mut at = 0usize;
-    for qc in query.chars().flat_map(char::to_lowercase).filter(|c| *c != ' ') {
-        match lower[at..].iter().position(|(_, c)| *c == qc) {
-            Some(p) => {
-                out.push(lower[at + p].0);
-                at += p + 1;
-            }
-            None => return Vec::new(),
-        }
-    }
-    out
+    score_marks(query, title).map(|(_, m)| m).unwrap_or_default()
 }
 
 /// The keycaps of a hint: "ctrl+shift+d" is ["Ctrl", "Shift", "D"].
@@ -223,11 +212,21 @@ pub fn keycaps(hint: &str) -> Vec<String> {
 /// Scores `title` against `query`: None when the query's characters do not
 /// all appear in order. Higher is better: matches at word starts and runs of
 /// consecutive characters score more, and shorter titles break ties.
+#[cfg(test)]
 pub fn score(query: &str, title: &str) -> Option<i32> {
-    if query.is_empty() {
-        return Some(0);
+    score_marks(query, title).map(|(s, _)| s)
+}
+
+/// [`score`], with the byte offsets in `title` of the characters it
+/// matched. The palette bolds exactly these, so a row never looks like it
+/// matches for no reason.
+pub fn score_marks(query: &str, title: &str) -> Option<(i32, Vec<usize>)> {
+    if query.trim().is_empty() {
+        return Some((0, Vec::new()));
     }
-    let t: Vec<char> = title.chars().flat_map(char::to_lowercase).collect();
+    // One lower-case character per title character, with its byte offset.
+    let t: Vec<(usize, char)> = title.char_indices().map(|(i, c)| (i, c.to_lowercase().next().unwrap_or(c))).collect();
+    let mut marks = Vec::new();
     let mut s = 0i32;
     let mut ti = 0usize;
     let mut prev: Option<usize> = None;
@@ -238,8 +237,8 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
         if qc == ' ' {
             continue;
         }
-        let pos = t[ti..].iter().position(|&c| c == qc)? + ti;
-        let word_start = pos == 0 || !t[pos - 1].is_alphanumeric();
+        let pos = t[ti..].iter().position(|&(_, c)| c == qc)? + ti;
+        let word_start = pos == 0 || !t[pos - 1].1.is_alphanumeric();
         let run = prev.is_some_and(|p| p + 1 == pos);
         n += 1;
         // The first letter may land anywhere ("re" in "Previous").
@@ -256,6 +255,7 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
         if pos == 0 {
             s += 10;
         }
+        marks.push(t[pos].0);
         prev = Some(pos);
         ti = pos + 1;
     }
@@ -263,10 +263,10 @@ pub fn score(query: &str, title: &str) -> Option<i32> {
     if n >= 2 && good * 4 < n * 3 {
         return None;
     }
-    Some(s * 100 - t.len() as i32)
+    Some((s * 100 - t.len() as i32, marks))
 }
 
-/// The text an entry is matched on.
+/// The text an entry is matched on. The title starts at byte `prefix(e)`.
 fn haystack(e: &Entry) -> String {
     match e.section {
         Section::Themes => format!("theme {}", e.title),
@@ -275,6 +275,15 @@ fn haystack(e: &Entry) -> String {
         // letters would match almost anything.
         Section::NeedsYou | Section::Panes => format!("{} {}", e.title, e.subtitle.split(" · ").next().unwrap_or("")),
         Section::Commands => e.title.clone(),
+    }
+}
+
+/// Where the title starts in [`haystack`].
+fn prefix(e: &Entry) -> usize {
+    match e.section {
+        Section::Themes => "theme ".len(),
+        Section::Sessions => "session ".len(),
+        _ => 0,
     }
 }
 
@@ -288,12 +297,22 @@ fn wants_themes(q: &str, title: &str) -> bool {
 /// The entries matching `query`, in section order and best first inside a
 /// section. With no query, themes stay hidden: there are hundreds.
 pub fn filter<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
+    filter_marked(entries, query).into_iter().map(|(e, _)| e).collect()
+}
+
+/// [`filter`], with the byte offsets in each title that the query matched.
+pub fn filter_marked<'a>(entries: &'a [Entry], query: &str) -> Vec<(&'a Entry, Vec<usize>)> {
     let q = query.trim();
-    let mut v: Vec<(Section, i32, usize, &Entry)> = entries
+    let mut v: Vec<(Section, i32, usize, &Entry, Vec<usize>)> = entries
         .iter()
         .enumerate()
         .filter(|(_, e)| e.section != Section::Themes || wants_themes(q, &e.title))
-        .filter_map(|(i, e)| score(q, &haystack(e)).map(|s| (e.section, s, i, e)))
+        .filter_map(|(i, e)| {
+            let (s, marks) = score_marks(q, &haystack(e))?;
+            let (start, end) = (prefix(e), prefix(e) + e.title.len());
+            let marks = marks.into_iter().filter(|m| (start..end).contains(m)).map(|m| m - start).collect();
+            Some((e.section, s, i, e, marks))
+        })
         .collect();
     // Sections keep their order (needs you, panes, sessions, commands,
     // themes); inside a section the best match comes first.
@@ -302,7 +321,7 @@ pub fn filter<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
     } else {
         v.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
     }
-    v.into_iter().map(|(_, _, _, e)| e).collect()
+    v.into_iter().map(|(_, _, _, e, m)| (e, m)).collect()
 }
 
 #[cfg(test)]
@@ -361,6 +380,13 @@ mod tests {
         assert_eq!(matches("re", "api retries"), vec![4, 5]);
         assert_eq!(matches("re", "Previous pane"), vec![1, 2]);
         assert!(matches("zz", "readme").is_empty());
+        // Every row the palette shows carries the characters that ranked it.
+        let e = sample();
+        for (row, marks) in filter_marked(&e, "re") {
+            assert_eq!(marks.len(), 2, "{} shows no match", row.title);
+        }
+        let marked = filter_marked(&e, "session play");
+        assert_eq!(marked[0].1, vec![0, 1, 2, 3], "the session prefix maps onto the title");
         assert_eq!(chip("ctrl+shift+p"), "Ctrl+Shift+P");
     }
 
