@@ -1209,7 +1209,9 @@ impl TuiosApp {
                 } else {
                     self.sidebar_overlay = !self.sidebar_overlay;
                 }
-                self.spin_slots.borrow_mut().sidebar.clear();
+                let mut slots = self.spin_slots.borrow_mut();
+                slots.sidebar.clear();
+                slots.cover = None;
             }
             Act::Theme(name) => {
                 self.theme_wanted = Some(name.clone());

@@ -370,7 +370,12 @@ impl TuiosApp {
     }
 
     pub(super) fn render_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        self.spin_slots.borrow_mut().sidebar.clear();
+        {
+            let lay = self.layout;
+            let mut slots = self.spin_slots.borrow_mut();
+            slots.sidebar.clear();
+            slots.cover = lay.overlay.then(|| Bounds::new(point(px(0.), px(BAND_H)), size(px(self.sidebar_w), px(lay.height - BAND_H))));
+        }
         if self.layout.side == Side::Rail && !self.layout.overlay {
             return self.render_rail(window, cx).into_any_element();
         }
@@ -664,7 +669,6 @@ impl TuiosApp {
             div().flex().items_center().child(text(p.query.clone(), QUERY, FontWeight::NORMAL, t.text)).child(caret)
         };
         let shadow = |y: f32, blur: f32, a: f32| BoxShadow { color: hsla(0., 0., 0., a), offset: point(px(0.), px(y)), blur_radius: px(blur), spread_radius: px(0.), inset: false };
-        let open_label = list.get(selected).map(|e| if matches!(e.act, Act::Jump { .. } | Act::Session(_)) { "Open" } else { "Run" }).unwrap_or("Open");
         let footer_key = |label: &'static str, color: u32, key: &'static str| {
             div().flex().items_center().gap(px(8.)).child(text(label.into(), SMALL, FontWeight::MEDIUM, color)).children(chip(&t, key))
         };
@@ -708,7 +712,7 @@ impl TuiosApp {
                     .border_t_1()
                     .border_color(t.hairline)
                     .child(num(format!("{count} {}", if count == 1 { "result" } else { "results" }), SMALL, FontWeight::NORMAL, t.text3))
-                    .child(div().flex().items_center().gap(px(16.)).child(footer_key(open_label, t.text, "enter")).child(footer_key("Close", t.text2, "esc"))),
+                    .child(div().flex().items_center().gap(px(16.)).child(footer_key("Open", t.text, "enter")).child(footer_key("Close", t.text2, "esc"))),
             );
         let top = (lay.height * 0.14).round();
         let left = ((lay.width - width) / 2.).round();

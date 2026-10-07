@@ -54,13 +54,16 @@ pub struct SpinSlots {
     accent: u32,
     /// The palette is open: its scrim covers the arcs.
     pub hidden: bool,
+    /// The sidebar over the stage, in a narrow window: it covers the arcs
+    /// of the pane headers under it.
+    pub cover: Option<Bounds<Pixels>>,
     reduce_motion: bool,
     start: Instant,
 }
 
 impl SpinSlots {
     pub fn new(theme: &Theme, reduce_motion: bool) -> Self {
-        SpinSlots { sidebar: Vec::new(), grid: Vec::new(), accent: theme.accent, hidden: false, reduce_motion, start: Instant::now() }
+        SpinSlots { sidebar: Vec::new(), grid: Vec::new(), accent: theme.accent, hidden: false, cover: None, reduce_motion, start: Instant::now() }
     }
 
     pub fn set_theme(&mut self, theme: &Theme) {
@@ -93,7 +96,8 @@ impl Render for Spin {
                 }
                 let alpha = if moving && !s.reduce_motion { pulse(s.start.elapsed()) } else { 1. };
                 let color = crate::theme::with_alpha(s.accent, alpha);
-                for slot in s.sidebar.iter().chain(s.grid.iter()) {
+                let covered = |b: &Bounds<Pixels>| s.cover.is_some_and(|c| c.intersects(b));
+                for slot in s.sidebar.iter().chain(s.grid.iter().filter(|g| !covered(&g.bounds))) {
                     window.with_content_mask(Some(slot.mask), |window| {
                         let _ = window.paint_svg(slot.bounds, "icons/state-arc.svg".into(), None, TransformationMatrix::unit(), color.into(), cx);
                     });
