@@ -1,0 +1,28 @@
+[
+ {
+  "scenario": "idle-quiet",
+  "seconds": 15.0,
+  "app_cpu_pct": 0.13,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 0.27,
+  "frames_per_s": 1.0,
+  "grid_paints_per_s": 1.0,
+  "paint_p50_ms": 0.238,
+  "paint_p95_ms": 0.304,
+  "rss_mb": 142.2,
+  "anon_mb": 32.1
+ },
+ {
+  "scenario": "busy4",
+  "seconds": 15.0,
+  "app_cpu_pct": 9.13,
+  "children_cpu_pct": 0.0,
+  "bridge_cpu_pct": 3.0,
+  "frames_per_s": 48.2,
+  "grid_paints_per_s": 42.6,
+  "paint_p50_ms": 0.712,
+  "paint_p95_ms": 1.099,
+  "rss_mb": 147.5,
+  "anon_mb": 37.5
+ }
+]

@@ -16,6 +16,10 @@ history), then starts BIN in gamescope's headless backend at 1440x900 and
 
 For each it reads the app's own `stats` control command (frames drawn, grid
 paint times, memory) and /proc for CPU. It stops every process it started.
+
+GUI_CONFIG_HOME, when set, is the XDG_CONFIG_HOME the app reads its own
+config.toml from (to measure a setting such as gpu = "integrated").
+SCENARIOS, when set, is a comma-separated list of the scenarios to run.
 """
 import json, os, shutil, signal, socket, subprocess, sys, time
 
@@ -91,12 +95,24 @@ class Ctl:
         return self.f.readline().strip()
 
 
+def gui_env():
+    e = dict(os.environ)
+    if os.environ.get("GUI_CONFIG_HOME"):
+        e["XDG_CONFIG_HOME"] = os.environ["GUI_CONFIG_HOME"]
+    return e
+
+
+def wanted(name):
+    only = os.environ.get("SCENARIOS")
+    return not only or name in only.split(",")
+
+
 def run(name, session, seconds, action=None, setup=None):
     sock = os.path.join(WORK, f"{name}.sock")
     gs = subprocess.Popen(
         ["gamescope", "--backend", "headless", "-W", "1440", "-H", "900", "-r", "60", "--expose-wayland", "--",
          BIN, "--tuios", TUIOS, "--isolate", BASE, "--session", session, "--theme", "tokyonight", "--control", sock],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, env=gui_env())
     try:
         ctl = Ctl(sock)
         if setup:
@@ -168,11 +184,15 @@ def main():
     results = []
     try:
         working = quiet()
-        results.append(run("idle-quiet", "tuios", 15))
+        if wanted("idle-quiet"):
+            results.append(run("idle-quiet", "tuios", 15))
         spin(working)
-        results.append(run("idle-spin", "tuios", 15))
-        results.append(run("busy4", "busy4", 15))
-        results.append(run("scroll", "hist", 8, action=scroll))
+        if wanted("idle-spin"):
+            results.append(run("idle-spin", "tuios", 15))
+        if wanted("busy4"):
+            results.append(run("busy4", "busy4", 15))
+        if wanted("scroll"):
+            results.append(run("scroll", "hist", 8, action=scroll))
     finally:
         t("kill-server")
     for r in results:

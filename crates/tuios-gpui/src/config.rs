@@ -13,6 +13,8 @@
 //! text_contrast = 2.0              # 0 to 4, extra stem weight for grayscale
 //! scrollback = 3000                # lines of history per pane
 //! reduce_motion = false
+//! gpu = "auto"                     # or "integrated": the integrated GPU's
+//!                                  # Vulkan driver only, which saves memory
 //! theme = "tokyonight"             # overrides tuios's own [appearance] theme
 //! ```
 //!
@@ -41,6 +43,27 @@ pub struct GuiFile {
     pub text_contrast: Option<f32>,
     pub scrollback: Option<usize>,
     pub reduce_motion: Option<bool>,
+    pub gpu: Option<String>,
+}
+
+/// The Vulkan driver manifests of integrated GPUs on this machine, for
+/// `gpu = "integrated"`: Intel's and AMD's open drivers. On a machine with
+/// a discrete GPU, loading only these keeps the discrete driver (about
+/// 100 MB of mappings) out of the process.
+pub fn integrated_vulkan_drivers() -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    for dir in ["/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d"] {
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_lowercase();
+            // Intel's current driver, not the old hasvk one for pre-Gen8.
+            if (name.starts_with("intel_icd") || name.starts_with("radeon_icd")) && name.ends_with(".json") {
+                out.push(e.path());
+            }
+        }
+    }
+    out.sort();
+    out
 }
 
 #[derive(Debug, Default, Deserialize)]

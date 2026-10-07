@@ -97,6 +97,19 @@ fn main() {
     if !user_contrast {
         cfg.env.push((CONTRAST_VAR.into(), String::new()));
     }
+    // The integrated GPU only, when asked: the Vulkan loader then never
+    // loads the discrete GPU's driver. Panes keep the user's own setting.
+    if file.gpu.as_deref() == Some("integrated") && std::env::var_os("VK_DRIVER_FILES").is_none() {
+        let drivers = config::integrated_vulkan_drivers();
+        if drivers.is_empty() {
+            eprintln!("tuios-gpui: gpu = \"integrated\", but no integrated Vulkan driver is installed");
+        } else {
+            let list = std::env::join_paths(&drivers).unwrap_or_default();
+            // SAFETY: nothing else runs yet.
+            unsafe { std::env::set_var("VK_DRIVER_FILES", &list) };
+            cfg.env.push(("VK_DRIVER_FILES".into(), String::new()));
+        }
+    }
 
     gpui_platform::application().with_assets(assets::Assets).run(move |cx: &mut App| {
         cx.set_text_rendering_mode(if subpixel { TextRenderingMode::Subpixel } else { TextRenderingMode::Grayscale });
