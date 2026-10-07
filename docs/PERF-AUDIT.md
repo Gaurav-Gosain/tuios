@@ -4,6 +4,27 @@ Audit of `ba69b2c` on 2026-10-07. Every number here was measured on this
 machine against a private demo daemon (`scripts/demo/seed.sh`). The findings
 are ranked by impact inside each group. Each finding has a concrete fix.
 
+## Status after the redesign
+
+The redesign (docs/design/FINAL.md) acted on these findings. The numbers
+are in [PERFORMANCE.md](PERFORMANCE.md).
+
+| Finding | Status |
+| --- | --- |
+| 1. Subpixel fringes | Fixed: grayscale text with contrast 2.0, settings `text_antialias` and `text_contrast`. |
+| 2. Fractional scale | Fixed: the metrics follow the scale, and the grid, stage and lines sit on device pixels. |
+| 3. 14 px, not 14 pt | Fixed: the default is 15 px JetBrains Mono, and the docs say px. |
+| 4. One view for the window | Fixed: band, sidebar, stage and each pane are cached views. |
+| 5. Scrolling rebuilds every row | Fixed: rows are cached by content hash. `row_above` still marks the screen dirty, so the rows are copied, not planned. |
+| 6. Spinner redraws the window | Fixed: the arcs have a view of their own, and the timer stops when no agent works. |
+| 7. Two processes every 1.5 s | Fixed: the bridge sends fleet events. A 5 s poll remains for older bridges. |
+| 8. Shape cache | Fixed: maps per style without a key allocation, two generations, and ASCII without the shaper. |
+| 9. Per-frame copies | Mostly fixed: no `State` or `Theme` clone, header text cached, one snapshot per pane. |
+| 10. Stable sort in GPUI | Open: needs a patched `gpui-pre`. |
+| 11. GPU driver memory | Partly: `gpu = "integrated"`. The Vulkan-only patch to `gpui-pre-wgpu` is open. |
+| 12. 10,000 lines per pane | Fixed: 3,000 by default, `scrollback` setting. Hidden panes drop their row caches. |
+| 13. Smaller items | The atlas is grayscale. The binary size is unchanged. |
+
 ## How it was measured
 
 - Machine: i7-10700, Intel UHD 630 and RTX 3070 (driver 615.71), Linux 7.2.
