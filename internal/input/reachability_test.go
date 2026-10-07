@@ -155,7 +155,22 @@ func reachSections(t *testing.T) []bindingSection {
 		{name: "inbox", binds: k.Inbox, modes: bothModes, newOS: reachInboxOS},
 		{name: "inbox_peek", binds: k.InboxPeek, modes: bothModes, newOS: reachInboxPeekOS},
 		{name: "mail", binds: k.Mail, modes: bothModes, newOS: reachMailOS},
+		// Copy mode owns the keyboard in either mode while a pane is in it.
+		{name: "copy_mode", binds: k.CopyMode, modes: bothModes, newOS: reachCopyModeOS},
 	}
+}
+
+// reachCopyModeOS is a client whose focused pane is in copy mode, which is the
+// only state the copy_mode section answers in.
+func reachCopyModeOS(t *testing.T) *app.OS {
+	t.Helper()
+	o, _ := osWithFocusedPane(t, config.DefaultConfig(), app.WindowManagementMode)
+	w := o.GetFocusedWindow()
+	w.EnterCopyMode()
+	if !w.InCopyMode() {
+		t.Fatal("copy mode did not start on the test pane")
+	}
+	return o
 }
 
 // reachInboxOS is a client with the Inbox open on an approval and a question.
@@ -681,7 +696,7 @@ func modeName(m app.Mode) string {
 func TestEveryDescribedActionIsHandled(t *testing.T) {
 	handled := map[string]bool{app.HoldModeAction: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode} {
 		for action := range section {
 			handled[action] = true
 		}

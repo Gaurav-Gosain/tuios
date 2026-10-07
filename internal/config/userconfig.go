@@ -791,6 +791,10 @@ type KeybindingsConfig struct {
 	// Mail binds are live while the mailbox is open and no reply is being
 	// written.
 	Mail map[string][]string `toml:"mail"`
+	// CopyMode binds are live while a pane is in copy mode, in normal and
+	// visual selection. Copy mode's vim motions are fixed keys and are not
+	// here. See getDefaultCopyModeKeybinds.
+	CopyMode map[string][]string `toml:"copy_mode"`
 }
 
 // defaultPrefixRepeatTime is addressable so DefaultConfig can point at it.
@@ -1204,6 +1208,7 @@ func DefaultConfig() *UserConfig {
 			Inbox:         getDefaultInboxKeybinds(),
 			InboxPeek:     getDefaultInboxPeekKeybinds(),
 			Mail:          getDefaultMailKeybinds(),
+			CopyMode:      getDefaultCopyModeKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -2680,6 +2685,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Mail == nil {
 		cfg.Keybindings.Mail = make(map[string][]string)
 	}
+	if cfg.Keybindings.CopyMode == nil {
+		cfg.Keybindings.CopyMode = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
@@ -2741,6 +2749,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
+	// Copy mode's section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
 
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		dropStaleDuplicateKeys(section.target, section.defaults)
@@ -2912,6 +2922,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.Inbox, d.Inbox},
 		{c.InboxPeek, d.InboxPeek},
 		{c.Mail, d.Mail},
+		{c.CopyMode, d.CopyMode},
 		{c.Global, d.Global},
 		{c.Script, d.Script},
 	}

@@ -72,6 +72,7 @@ const (
 	SectionInbox            = "inbox"
 	SectionInboxPeek        = "inbox_peek"
 	SectionMail             = "mail"
+	SectionCopyMode         = "copy_mode"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 )
@@ -87,6 +88,7 @@ const (
 	ScopeInbox          = "inbox"
 	ScopeInboxPeek      = "inbox.peek"
 	ScopeMail           = "mail"
+	ScopeCopyMode       = "copy"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -173,6 +175,14 @@ func Scopes(leader string) []Scope {
 		{
 			ID: ScopeMail, Name: "Mailbox",
 			Sections: []string{SectionMail},
+			Reaches:  ReachModal,
+		},
+		{
+			// Live only while a pane is in copy mode, which owns the keyboard
+			// until it ends. home moving the copy cursor there and doing
+			// nothing in window mode is a resolution, not a clash.
+			ID: ScopeCopyMode, Name: "Copy mode",
+			Sections: []string{SectionCopyMode},
 			Reaches:  ReachModal,
 		},
 		{
@@ -269,6 +279,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.InboxPeek
 	case SectionMail:
 		return k.Mail
+	case SectionCopyMode:
+		return k.CopyMode
 	}
 	return nil
 }

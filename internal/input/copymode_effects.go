@@ -35,6 +35,9 @@ type copyModeEffects struct {
 	// visual selection it came from. See Flash.
 	flash                bool
 	flashStart, flashEnd terminal.Position
+	// action is the [keybindings.copy_mode] action the key ran, for the
+	// recent actions list.
+	action string
 }
 
 type copyModeNotification struct {
@@ -94,6 +97,7 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 		window.InvalidateCache()
 	}
 	if o != nil {
+		o.NoteAction(fx.action)
 		for _, n := range fx.notifications {
 			o.ShowNotification(n.message, n.notyType, n.duration)
 		}

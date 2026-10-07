@@ -112,7 +112,7 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 			}
 		}
 		fx := &copyModeEffects{}
-		dispatchCopyModeKey(msg, w, fx, &o.Settings)
+		dispatchCopyModeKey(msg, copyModeAction(msg, o), w, fx, &o.Settings)
 		if w == lead {
 			leadFx = fx
 			continue

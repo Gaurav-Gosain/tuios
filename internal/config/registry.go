@@ -48,7 +48,7 @@ type sectionMaps struct {
 	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
-	sidebarAgents, inbox, inboxPeek, mail                 map[string]string
+	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -104,6 +104,7 @@ func (r *KeybindRegistry) buildMappings() {
 		inbox:           r.sectionKeyMap(kb.Inbox),
 		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
 		mail:            r.sectionKeyMap(kb.Mail),
+		copyMode:        r.sectionKeyMap(kb.CopyMode),
 	}
 }
 
@@ -271,6 +272,17 @@ func (r *KeybindRegistry) GetMailAction(key string) string {
 	return r.lookupKey(key, r.sections.mail)
 }
 
+// GetCopyModeAction returns the action a key runs in copy mode, or "" for a
+// key the section does not bind. Copy mode reads its vim motions itself.
+func (r *KeybindRegistry) GetCopyModeAction(key string) string {
+	return r.lookupKey(key, r.sections.copyMode)
+}
+
+// GetCopyModeKeys is GetKeys for the copy_mode section, for the help overlay.
+func (r *KeybindRegistry) GetCopyModeKeys(action string) []string {
+	return r.config.Keybindings.CopyMode[action]
+}
+
 // GetInboxKeys is GetKeys for the Inbox, its peek and the mailbox, whose
 // action names are their own: the key hints of those overlays read what the
 // config binds rather than a letter written into the renderer.
@@ -419,7 +431,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeCopyMode:
 		return true
 	}
 	return false
@@ -677,6 +689,8 @@ var ActionDescriptions = map[string]string{
 	// Copy mode search (no default keybinding)
 	ActionCopyModeSearchForward:  "Enter copy mode and search forward",
 	ActionCopyModeSearchBackward: "Enter copy mode and search backward",
+	ActionCopyModeLineStart:      "Copy mode: go to the start of the line",
+	ActionCopyModeLineEnd:        "Copy mode: go to the end of the line",
 
 	// Session lifecycle (context menu rows; no default keybinding)
 	"settings_sidebar":  "Sidebar settings",

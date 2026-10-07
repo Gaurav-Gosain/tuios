@@ -50,16 +50,26 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 	}
 
 	fx := &copyModeEffects{}
-	dispatchCopyModeKey(msg, window, fx, &o.Settings)
+	dispatchCopyModeKey(msg, copyModeAction(msg, o), window, fx, &o.Settings)
 	return fx.apply(o, window)
 }
 
+// copyModeAction is the [keybindings.copy_mode] action msg is bound to, or "".
+func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
+	return lookupAction(msg, overlayKeys(o).GetCopyModeAction)
+}
+
 // dispatchCopyModeKey runs one copy-mode key against one pane, under that
-// pane's I/O read lock, and records what it wants done in fx.
-func dispatchCopyModeKey(msg tea.KeyPressMsg, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
+// pane's I/O read lock, and records what it wants done in fx. action is the
+// [keybindings.copy_mode] action the key is bound to, or "".
+func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
 	cm := window.CopyMode
 	window.RLockIO()
 	defer window.RUnlockIO()
+
+	if action != "" && runCopyModeAction(action, cm, window, fx) {
+		return
+	}
 
 	switch cm.State {
 	case terminal.CopyModeSearch:
@@ -69,6 +79,35 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, window *terminal.Window, fx *copyM
 	case terminal.CopyModeNormal:
 		handleNormalInput(msg, cm, window, fx, s)
 	}
+}
+
+// runCopyModeAction runs a bound copy-mode motion in normal mode or in a
+// visual selection, and reports whether it ran. The search prompt and a
+// pending f/t character take the key as text, so the action does not run
+// there. A count typed before the key is dropped: the line motions ignore it,
+// as 0 and $ do.
+func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) bool {
+	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+		return false
+	}
+	switch action {
+	case config.ActionCopyModeLineStart:
+		cm.CursorX = 0
+	case config.ActionCopyModeLineEnd:
+		cm.CursorX = window.LastContentCol()
+	default:
+		return false
+	}
+	if cm.PendingCount != 0 {
+		cm.PendingCount = 0
+		fx.ShowNotification("", "info", 0)
+	}
+	if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
+		updateVisualEnd(cm, window)
+	}
+	fx.InvalidateCache()
+	fx.action = action
+	return true
 }
 
 // handleNormalInput handles keys in normal navigation mode

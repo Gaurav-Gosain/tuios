@@ -88,7 +88,7 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			// Hints mode's keys ride along here rather than in a tab of their
 			// own, for the reason the list keys ride in Modes below.
 			Name:     HelpCategoryCopyMode,
-			Bindings: append(generateCopyModeBindings(s), generateHintsBindings(registry, s)...),
+			Bindings: append(generateCopyModeBindings(registry, s), generateHintsBindings(registry, s)...),
 		},
 		{
 			Name: "Modes",
@@ -550,9 +550,22 @@ func generateListBindings() []HelpBinding {
 	}
 }
 
-// generateCopyModeBindings generates copy mode keybindings
-func generateCopyModeBindings(s *config.Settings) []HelpBinding {
-	return copyModeKeys(s.LeaderKey)
+// generateCopyModeBindings lists copy mode's fixed keys, then the keys the
+// [keybindings.copy_mode] section binds, read from the config.
+func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
+	bindings := copyModeKeys(s.LeaderKey)
+	if registry == nil {
+		return bindings
+	}
+	for _, row := range []struct{ action, desc string }{
+		{config.ActionCopyModeLineStart, "Line start"},
+		{config.ActionCopyModeLineEnd, "Line end"},
+	} {
+		if keys := registry.GetCopyModeKeys(row.action); len(keys) > 0 {
+			bindings = append(bindings, HelpBinding{Action: row.action, Keys: keys, Description: row.desc, Category: HelpCategoryCopyMode})
+		}
+	}
+	return bindings
 }
 
 // copyModeKeys are copy mode's keys. They are not bindings: copy mode reads

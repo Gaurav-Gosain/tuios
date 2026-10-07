@@ -111,6 +111,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("inbox", cfg.Keybindings.Inbox)
 	validateSection("inbox_peek", cfg.Keybindings.InboxPeek)
 	validateSection("mail", cfg.Keybindings.Mail)
+	validateSection("copy_mode", cfg.Keybindings.CopyMode)
 	validateSection("global", cfg.Keybindings.Global)
 	validateSection("script", cfg.Keybindings.Script)
 

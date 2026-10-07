@@ -2,7 +2,7 @@
 
 The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindings
 
-Every binding lives in one of the 23 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
+Every binding lives in one of the 24 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
 To send the leader to the program in the pane, press it two times in terminal
 mode. The pane gets the leader that `leader_key` names, such as `ctrl+a`,
@@ -16,7 +16,7 @@ To inspect your own effective bindings, use the binary rather than any document:
 `tuios keybinds list` shows every action and the keys that run it, as your
 `config.toml` sets them. It has one table for each scope: global, window mode,
 terminal mode, the sidebar and its files and agent rows, the Inbox, its prompt,
-the mailbox, the prefix and each prefix menu, and tape playback. A key in a
+the mailbox, copy mode, the prefix and each prefix menu, and tape playback. A key in a
 prefix menu shows with its chord, such as `ctrl+b L 5`. The command keys have a
 table of their own.
 
@@ -718,6 +718,31 @@ copy mode uses `Ctrl+B` for page up. In copy mode, `/` and `?` open the same
 prompts.
 
 When a search finds more than 1000 matches, the prompt shows `1000+`.
+
+### Line start and line end
+
+`Home` moves the copy cursor to the start of the line, as `0` does. `End`
+moves it to the end of the line, as `$` does. Both keys also move the end of a
+`v` or `V` selection.
+
+| Action | Default key |
+| --- | --- |
+| `copy_mode_line_start` | `Home` |
+| `copy_mode_line_end` | `End` |
+
+The keys are in the `copy_mode` section. They work only in copy mode. In the
+search prompt, they do not move the cursor. `0` and `$` are fixed keys, and
+you cannot rebind them.
+
+`Ctrl+A` and `Ctrl+E` are not defaults. `Ctrl+A` is a common leader key, and
+`Ctrl+E` scrolls one line in tmux copy mode. To use them, add them to the
+section:
+
+```toml
+[keybindings.copy_mode]
+copy_mode_line_start = ["home", "ctrl+a"]
+copy_mode_line_end = ["end", "ctrl+e"]
+```
 
 tuios cannot put two actions on one key. `tuios send-keys` cannot do it either,
 because a key from `send-keys` does not go to copy mode.
