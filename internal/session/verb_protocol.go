@@ -499,6 +499,23 @@ func init() {
 			},
 			handler: (*Daemon).verbSwitchSession,
 		},
+		"detach-client": {
+			description: "Detach attached clients from their sessions, as tmux detach-client does. The session keeps running, and each detached client exits with a message. With client, that client. With session, every client of the session. With neither, the client used last in the caller's pane's session, else in the only session with a client. all_other keeps that one client and detaches the rest of its session.",
+			params: []verbParam{
+				{Name: "client", Type: "string", Description: "Id of the client to detach, from list-clients."},
+				{Name: "session", Type: "string", Description: "Session whose clients to detach."},
+				{Name: "all_other", Type: "bool", Description: "Keep the named client, or the client used last, and detach every other client of its session.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "detached", Type: "array", Description: "Ids of the clients that were detached."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"detach-client","params":{"client":"c3"}}`,
+				`{"id":1,"verb":"detach-client","params":{"session":"work"}}`,
+				`{"id":1,"verb":"detach-client","params":{"session":"work","all_other":true}}`,
+			},
+			handler: (*Daemon).verbDetachClient,
+		},
 		"new-worktree": {
 			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",
 			params: append([]verbParam{

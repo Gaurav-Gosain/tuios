@@ -352,6 +352,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	clientLogf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
 	client.AllowNested = nestedAllowed()
+	client.DetachOthers = attachDetachOthers
 	client.SetNestProbe(probe)
 	if host == "" && createNew {
 		// Only tuios new sets it. A session the attach finds is not moved.
@@ -518,6 +519,15 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// as the refusal an attach gets.
 	if reason == app.ExitNestedRefused {
 		return &diagnosticError{What: client.NestedRefusal()}
+	}
+
+	// Another client attached with -d, single_client is on, or
+	// detach-client named this client. The session runs on, and nothing
+	// failed here, so the reason is printed and the exit status is 0.
+	if reason == app.ExitDetached {
+		fmt.Println(client.DetachedReason())
+		fmt.Printf("Detached from session '%s'.\n", exitSession)
+		return nil
 	}
 
 	return reportSessionExit(exitSession, exitHost, reason, killed)

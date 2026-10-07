@@ -345,12 +345,14 @@ tuios attach [session-name] [flags]
 - `--ssh`: With `--host`, run ssh to the host and its own tuios instead of attaching here
 - `--hold`: After a failure, wait for enter before the command exits
 - `--terminal-mode`: Start in terminal mode, whatever `startup.start_in_terminal_mode` says
+- `-d, --detach-others`: Detach every other client of the session, as `tmux attach -d` does
 - Same as `tuios new` (theme, ascii-only, etc.)
 
 **Examples:**
 ```bash
 tuios attach                   # Attach to most recent session (or only session)
 tuios attach mysession         # Attach to session named "mysession"
+tuios attach -d mysession      # Attach and detach the other clients of mysession
 tuios attach mysession -c      # Attach or create if doesn't exist
 tuios attach mysession --theme nord  # Attach with different theme
 tuios attach --host build api  # Attach the session api on the host build
@@ -360,6 +362,19 @@ When the session already has a client, `tuios attach` says so and names the
 `window_size` policy of the session. For example: "The session uses the size of
 the client that last had input (window_size latest)." See
 [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client).
+
+With `-d`, each other client of the session detaches as this client attaches.
+The session continues to run. Each detached client exits with status 0 and
+prints this message:
+
+```
+Another client attached to this session.
+Detached from session 'mysession'.
+```
+
+To do this on every attach, set `single_client = true` in `[daemon]`. See
+[CONFIGURATION.md](CONFIGURATION.md). To detach clients without an attach,
+use [`tuios detach-client`](#tuios-detach-client).
 
 Inside a tuios pane, `tuios attach` refuses to attach the session that holds
 the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
@@ -504,6 +519,50 @@ tuios list-clients [--json]
 [
   {"client_id":"client-1790941960197517900","pid":4242,"session":"work"}
 ]
+```
+
+### `tuios detach-client`
+
+Detach attached clients from their sessions, as `tmux detach-client` does.
+The sessions continue to run. Each detached client exits with status 0 and
+prints "The tuios detach-client command detached this client."
+
+**Usage:**
+```bash
+tuios detach-client [--client ID | --session NAME] [--all-other] [--json]
+```
+
+**Flags:**
+- `--client <id>`: Detach the client with this id, from `tuios list-clients`
+- `-s, --session <name>`: Detach every client of this session
+- `-a, --all-other`: Keep one client and detach every other client of its session
+- `--json`: Output as JSON
+
+The command detaches:
+
+1. The client that `--client` names.
+2. Else every client of the session that `-s` names.
+3. Else, from a pane, the client used last in the session of the pane.
+4. Else the client used last in the only session with a client.
+
+With `--all-other`, the command keeps the client that `--client` names, or
+the client used last in the session. It detaches every other client of that
+session.
+
+From a pane, the command needs the `admin` grant. See
+[`tuios pane-grants`](#tuios-pane-grants).
+
+**Examples:**
+```bash
+tuios detach-client --client client-1790941960197517900
+tuios detach-client -s work               # Detach every client of work
+tuios detach-client -s work --all-other   # Keep the client used last in work
+```
+
+`--json` prints the ids of the detached clients:
+
+```json
+{"detached":["client-1790941960197517900"]}
 ```
 
 `client-session-changed` carries the session a client entered or left and sets

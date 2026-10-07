@@ -50,6 +50,25 @@ windows start. `HOST:` names a machine from `[hosts]`. It moves what the
 person sees, so it needs the `admin` grant. Do not switch the person's client
 unless they asked for it.
 
+## Detaching clients
+
+`tuios detach-client` takes clients off their sessions, as tmux
+`detach-client` does. The session continues to run. Each detached client
+exits with a message.
+
+```sh
+tuios detach-client --client client-1790941960197517900
+tuios detach-client -s work
+tuios detach-client -s work --all-other
+```
+
+`--client` names one client from `list-clients`. `-s` names a session, and
+every client of it detaches. `--all-other` keeps the client used last and
+detaches the rest. `tuios attach -d NAME` attaches and detaches the other
+clients of NAME. `[daemon] single_client = true` does that on every attach.
+Detaching takes the screen away from the person, so it needs the `admin`
+grant. Do not detach the person's client unless they asked for it.
+
 ## Following clients as they move
 
 `tuios subscribe` carries `client-session-changed` when a client attaches,

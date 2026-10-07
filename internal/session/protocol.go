@@ -336,6 +336,10 @@ type AttachPayload struct {
 	// and no session by that name). See NewPayload.Cwd. An attach to a
 	// session that exists ignores it.
 	Cwd string `json:"cwd,omitempty"`
+	// DetachOthers takes every other client off the session as this one
+	// attaches, as tuios attach -d asks. See detach_client.go. An older
+	// daemon ignores it.
+	DetachOthers bool `json:"detach_others,omitzero"`
 }
 
 // LayoutReserve is the rows and columns a client keeps for its own chrome (the
@@ -569,6 +573,11 @@ type SessionEndedPayload struct {
 	// it, because its output turned out to reach a pane of the session it
 	// shows. Reason is the refusal. See nested_attach.go.
 	Nested bool `json:"nested,omitempty"`
+	// Detached says the session did not end: the daemon took this client off
+	// it because another client attached with -d, single_client is on, or
+	// detach-client named it. Reason is what the client shows. See
+	// detach_client.go.
+	Detached bool `json:"detached,omitzero"`
 }
 
 // ResizePayload notifies of terminal resize.

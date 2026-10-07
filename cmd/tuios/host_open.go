@@ -133,6 +133,9 @@ func runAttachOnHost(host, name string, create, hold, ssh bool) error {
 		if create {
 			remote = append(remote, "--create")
 		}
+		if attachDetachOthers {
+			remote = append(remote, "-d")
+		}
 		return runOnHost(host, hold, true, remote...)
 	}
 	if err := ensureDaemon(); err != nil {

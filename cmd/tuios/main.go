@@ -635,6 +635,10 @@ then opens one of those. With nothing saved and no
 name given, a new session is opened instead. A name that matches no session
 is an error unless -c is given.
 
+With -d every other client of the session detaches as this one attaches,
+as tmux attach -d does. Each of them exits with a message. To do this on
+every attach, set single_client = true in [daemon].
+
 With --host the session is on another machine. tuios runs ssh to the host
 named in the [hosts] table and attaches with the tuios on that machine. The
 client you see is the remote one. Press the prefix key twice to send it to
@@ -647,6 +651,9 @@ the remote client. See 'tuios hosts --help'.`,
 
   # Attach and create if session doesn't exist
   tuios attach mysession -c
+
+  # Attach and detach every other client of the session
+  tuios attach -d mysession
 
   # Attach to a session on the machine named build
   tuios attach --host build mysession`,
@@ -670,6 +677,7 @@ the remote client. See 'tuios hosts --help'.`,
 	attachCmd.Flags().BoolVar(&attachSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
 	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
 	attachCmd.Flags().BoolVar(&attachForce, "force", false, "Attach even from a pane of the same session")
+	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session, as tmux attach -d does")
 	attachCmd.Flags().BoolVar(&attachTerminalMode, "terminal-mode", false, "Start in terminal mode, whatever startup.start_in_terminal_mode says")
 	registerHostNameCompletion(attachCmd, "host")
 
@@ -3128,6 +3136,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
+	rootCmd.AddCommand(newDetachClientCmd())
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)

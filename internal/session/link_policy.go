@@ -143,6 +143,7 @@ var verbCapabilities = map[string][]string{
 	"set-layout":          {config.LinkAllowWrite},
 	"run-command":         {config.LinkAllowWrite},
 	"switch-session":      {config.LinkAllowWrite},
+	"detach-client":       {config.LinkAllowWrite},
 	"close-window":        {config.LinkAllowWrite},
 	"close-workspace":     {config.LinkAllowWrite},
 	"send-keys":           {config.LinkAllowWrite},

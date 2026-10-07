@@ -242,6 +242,10 @@ type DaemonConfig struct {
 	// client that last had input. A client smaller than the session shows
 	// the part of it around the focused pane's cursor.
 	WindowSize string `toml:"window_size"`
+	// SingleClient keeps one client per session, like tmux's attach -d on
+	// every attach: a client that attaches takes the other clients off the
+	// session, and each of them exits with a message. Off by default.
+	SingleClient bool `toml:"single_client"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.

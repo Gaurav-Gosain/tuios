@@ -18,7 +18,7 @@ and every `tmux` call from that shell goes to the shim.
 A tmux window is a workspace (`@N`) and a pane is a tuios window (`%N`). It
 answers `split-window`, `new-window`, `send-keys`, `capture-pane -p`,
 `display-message -p`, `list-panes`, `list-windows`, `list-sessions`,
-`list-clients`, `has-session`, `kill-pane`, `kill-window`, `select-pane`,
+`list-clients`, `detach-client` (needs `admin`), `has-session`, `kill-pane`, `kill-window`, `select-pane`,
 `last-pane`, `select-window`, `next-window`, `previous-window`,
 `rename-window`, `rename-session`, `break-pane`, `join-pane`, `move-pane`,
 `respawn-pane -k`, `display-popup` (so `fzf --tmux` works), `run-shell`,

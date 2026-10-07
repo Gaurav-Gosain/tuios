@@ -53,6 +53,10 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
+	// DetachOthers is sent with the first attach only, as tuios attach -d
+	// asks: the other clients of the session are detached. A session switch
+	// later on does not detach anybody. See AttachPayload.DetachOthers.
+	DetachOthers bool
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -60,6 +64,10 @@ type TUIClient struct {
 	// nestedRefusal is the daemon's reason when it took this client off its
 	// session for showing the session inside itself. See NestedRefusal.
 	nestedRefusal atomic.Pointer[string]
+	// detachedReason is the daemon's reason when it detached this client
+	// because another client attached or detach-client named it. See
+	// DetachedReason.
+	detachedReason atomic.Pointer[string]
 
 	conn net.Conn
 	// br is the only reader of conn. A frame is read in three pieces, the
@@ -449,16 +457,17 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
 	probe := c.nestProbe
 	msg, err := NewMessage(MsgAttach, &AttachPayload{
-		SessionName: name,
-		CreateNew:   createNew,
-		Width:       width,
-		Height:      height,
-		Reserve:     c.OwnLayoutReserve(),
-		Served:      c.Served,
-		AllowNested: c.AllowNested,
-		NestProbe:   probe,
-		ViewOnly:    c.viewOnly(),
-		Cwd:         c.StartDir,
+		SessionName:  name,
+		CreateNew:    createNew,
+		Width:        width,
+		Height:       height,
+		Reserve:      c.OwnLayoutReserve(),
+		Served:       c.Served,
+		AllowNested:  c.AllowNested,
+		NestProbe:    probe,
+		ViewOnly:     c.viewOnly(),
+		Cwd:          c.StartDir,
+		DetachOthers: c.DetachOthers,
 	})
 	if err != nil {
 		return nil, err
@@ -1627,6 +1636,13 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		if payload.Nested {
 			reason := payload.Reason
 			c.nestedRefusal.Store(&reason)
+		}
+		if payload.Detached {
+			reason := payload.Reason
+			if reason == "" {
+				reason = DetachedByAttachMessage
+			}
+			c.detachedReason.Store(&reason)
 		}
 		c.sessionEndedOnce.Do(func() {
 			c.multiClientMu.RLock()

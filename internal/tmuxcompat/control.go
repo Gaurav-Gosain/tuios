@@ -166,12 +166,16 @@ func (c *control) command(argv []string, flags int) bool {
 	switch {
 	case name == "attach-session":
 		outcome, err = c.attach(argv[1:])
-	case name == "detach-client":
+	case name == "detach-client" && len(argv) == 1:
+		// With no flags it is the control client detaching itself. With
+		// flags it names tuios clients, which the default case detaches.
 		c.quit = true
 		outcome = OutcomeOK
 	case name == "refresh-client":
 		outcome = OutcomeIgnored
-	case c.readOnly && !slices.Contains(readOnlyCommands, name):
+	case c.readOnly && (name == "detach-client" || !slices.Contains(readOnlyCommands, name)):
+		// A bare detach-client was answered above. One that names clients
+		// changes who is attached, which a read-only client may not.
 		outcome, err = OutcomeError, errors.New("client is read-only")
 	default:
 		s.created = ""

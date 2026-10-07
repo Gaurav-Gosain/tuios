@@ -187,6 +187,7 @@ Some values come from tuios facts:
 | `display-message` | With `-p`, prints a format for the target pane. Without `-p` there is no status line to show it on, so it does nothing |
 | `list-panes`, `list-windows`, `list-sessions` | List the panes of a workspace (`-s`: of the session, `-a`: of every session), the workspaces that hold panes (`-a`: in every session), and the sessions |
 | `list-clients` | Lists one client for each session that a tuios client shows |
+| `detach-client` | Detaches tuios clients (`detach-client` verb). See below |
 | `has-session` | Succeeds for a session the shim serves, fails for any other |
 | `new-session -d` | Outside a pane, starts a tuios session (`new-session` verb). `-s` names it, `-n` names its first window, `-c` sets the directory, `-P -F` prints the new pane. Without `-d` it fails, because the shim attaches no terminal. In a pane it is refused |
 | `load-buffer`, `set-buffer` | Store text in a paste buffer: from a file, from standard input (`-`), or from the argument. `-b` names the buffer, `set-buffer -a` appends |
@@ -215,14 +216,35 @@ Some values come from tuios facts:
 `set-hook`, `refresh-client`, `select-layout`, `resize-pane` and
 `start-server` succeed and do nothing.
 tuios owns the layout, the styling and the options. `kill-session`,
-`kill-server`, `attach-session` (outside control mode), `switch-client` and
-`detach-client` are refused. The shim never attaches a terminal or ends a
-session. Every other command fails with `unknown command`. Every flag not
+`kill-server`, `attach-session` (outside control mode) and `switch-client`
+are refused. The shim never attaches a terminal or ends a session. Every other command fails with `unknown command`. Every flag not
 listed for a command fails with `unknown flag`. The shim does not accept a
 flag and then ignore it.
 
 `show-options history-limit` is the session's `appearance.scrollback_lines`,
 or 10000, the shipped default, when nothing set it.
+
+### detach-client
+
+`detach-client` detaches tuios clients through the `detach-client` verb. The
+session continues to run, and each detached client exits with a message.
+`list-clients` names one client for each session, `tuios-SESSION`.
+
+- `-t tuios-SESSION` and `-s SESSION` detach every client of that session.
+- With neither, the client used last in the caller's session detaches, as
+  tmux detaches the current client.
+- `-a` keeps the client used last in the session and detaches the others.
+- `-P` and `-E` fail with `unknown flag`.
+
+A session out of the shim's reach is not found. From a pane, the command
+needs the `admin` grant. In control mode, `detach-client` with no flags ends
+the control client, as in tmux. With flags, it detaches tuios clients as
+above. A read-only control client cannot detach tuios clients.
+
+`attach-session -d` in control mode attaches the control client and
+detaches no tuios client. A control client is not a tuios client, and an
+app that attaches with `-d` must not take the screen from the person. To
+detach the other clients when you attach, use `tuios attach -d`.
 
 ### display-popup
 
@@ -359,7 +381,7 @@ event stream (`subscribe`) and reads the sessions again every 2 seconds:
 | `%unlinked-window-add`, `-close`, `-renamed` | The same, in another session the shim serves |
 | `%sessions-changed` | A session starts or ends, outside a pane |
 | `%session-renamed $N name` | The session gets a new name |
-| `%exit` | Standard input closes, `detach-client` runs, the session ends, or the daemon stops |
+| `%exit` | Standard input closes, `detach-client` with no flags runs, the session ends, or the daemon stops |
 
 The shim does not send these notifications: `%pause`, `%continue`,
 `%extended-output`, `%subscription-changed`, `%pane-mode-changed`,

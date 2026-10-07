@@ -102,6 +102,14 @@ func (m *OS) ExitNotice() string {
 		}
 		return ""
 
+	case ExitDetached:
+		if m.DaemonClient != nil {
+			return m.DaemonClient.DetachedReason() + "\n" +
+				"The session continues to run.\n" +
+				"Connect again to attach to it."
+		}
+		return ""
+
 	case ExitDaemonLost:
 		return "tuios lost the connection to the daemon.\n" +
 			"The daemon stopped, or it failed.\n" +

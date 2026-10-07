@@ -208,6 +208,12 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.missedStateSync = false
 	cs.mu.Unlock()
 	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name(), Attached: ptr(true)})
+	// tuios attach -d, or single_client: the other clients leave before this
+	// one is counted, so the session takes this client's size alone. See
+	// detach_client.go.
+	if payload.DetachOthers || d.singleClient.Load() {
+		d.detachOthers(session, cs, DetachedByAttachMessage)
+	}
 	// A client can now see a pull request's state, so an open one is polled
 	// again. With none recorded this is a scan of the sessions and no more.
 	d.kickPRPoll()

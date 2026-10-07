@@ -59,6 +59,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"switch-session#0":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
 	"switch-session#1":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
 	"switch-session#2":       {errCode: ErrVerbNeedsClient, why: "switch-session moves an attached client"},
+	"detach-client#0":        {errCode: ErrVerbInvalidParams, why: "the example names a client id, and the fixture has no attached client"},
 	"refresh-dock#1":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"pip#0":                  {errCode: ErrVerbNeedsClient, why: "the picture-in-picture view is drawn by a client"},
 	"pip#1":                  {errCode: ErrVerbNeedsClient, why: "the picture-in-picture view is drawn by a client"},

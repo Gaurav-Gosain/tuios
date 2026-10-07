@@ -114,6 +114,7 @@ var commands = map[string]handler{
 	"paste-buffer":        (*Shim).pasteBuffer,
 	"delete-buffer":       (*Shim).deleteBuffer,
 	"list-clients":        (*Shim).listClients,
+	"detach-client":       (*Shim).detachClient,
 	"show-options":        (*Shim).showOptions,
 	"show-window-options": (*Shim).showOptions,
 	"new-session":         (*Shim).newSession,
@@ -159,6 +160,7 @@ var specs = map[string]spec{
 	"paste-buffer":        {bools: "dpr", values: "bst"},
 	"delete-buffer":       {values: "b"},
 	"list-clients":        {values: "Ft"},
+	"detach-client":       {bools: "a", values: "st"},
 	"show-options":        {bools: "AgHpqsvw", values: "t"},
 	"show-window-options": {bools: "gv", values: "t"},
 	"set-option":          {bools: "aFgopqsuUw", values: "t"},
@@ -273,7 +275,7 @@ var ignoredCommands = []string{
 // refusedCommands end or replace tuios sessions, which the shim never does:
 // the caller's session is not the shim's to end, and another session is out
 // of its reach.
-var refusedCommands = []string{"kill-session", "kill-server", "attach-session", "switch-client", "detach-client"}
+var refusedCommands = []string{"kill-session", "kill-server", "attach-session", "switch-client"}
 
 // Run answers one tmux invocation. args is argv without the program name. It
 // returns the exit status tmux would.

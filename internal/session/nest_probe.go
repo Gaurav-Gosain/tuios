@@ -187,6 +187,16 @@ func watchNestProbe(nonce string, d time.Duration, fn func(sessionID string)) {
 	})
 }
 
+// DetachedReason is the daemon's reason when it took this client off its
+// session because another client attached with -d, single_client is on, or
+// detach-client named it. It is "" otherwise. See detach_client.go.
+func (c *TUIClient) DetachedReason() string {
+	if r := c.detachedReason.Load(); r != nil {
+		return *r
+	}
+	return ""
+}
+
 // NestedRefusal is the daemon's reason when it took this client off its
 // session after the attach, because the client's output reached a pane of the
 // session it shows. It is "" otherwise.

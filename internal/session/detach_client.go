@@ -1,0 +1,225 @@
+package session
+
+import (
+	"encoding/json"
+	"slices"
+	"strings"
+)
+
+// Detaching other clients.
+//
+// tmux has attach -d and detach-client, and people who run one client per
+// session (discussion #549) want the same here. Three paths take a client off
+// its session while the session keeps running:
+//
+//   - tuios attach -d: the attach asks for it (AttachPayload.DetachOthers),
+//     and every other client of the session is detached as this one joins.
+//   - [daemon] single_client: the daemon does the same for every attach, so
+//     the newest attach always wins.
+//   - the detach-client verb: detach a client by id, every client of a
+//     session, or every client of a session but the one used last.
+//
+// A detached client is told with MsgSessionEnded and Detached set, the way a
+// nested client is ejected, and it exits with the reason as its last words
+// rather than as an error. The connection stays open and the client closes it.
+//
+// Taking another person's client away is an admin action. From a pane the
+// verb needs the admin grant (scopeDeny in verbScopes), and an attach from a
+// pane already needs it for the binary protocol (checkGrantMessage).
+
+// DetachedByAttachMessage is what a client detached by a newer attach shows.
+const DetachedByAttachMessage = "Another client attached to this session."
+
+// DetachedByCommandMessage is what a client detached by detach-client shows.
+const DetachedByCommandMessage = "The tuios detach-client command detached this client."
+
+// detachOthers takes every TUI client of sess other than keep off the session,
+// and returns their ids.
+func (d *Daemon) detachOthers(sess *Session, keep *connState, reason string) []string {
+	var targets []*connState
+	d.clientsMu.RLock()
+	for _, c := range d.clients {
+		if c == keep {
+			continue
+		}
+		c.mu.Lock()
+		ok := c.isTUIClient && c.sessionID == sess.ID
+		c.mu.Unlock()
+		if ok {
+			targets = append(targets, c)
+		}
+	}
+	d.clientsMu.RUnlock()
+	ids := make([]string, 0, len(targets))
+	for _, c := range targets {
+		if d.ejectDetached(c, sess, reason) {
+			ids = append(ids, c.clientID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// ejectDetached takes a client off sess and tells it why. It reports whether
+// the client was attached to sess.
+func (d *Daemon) ejectDetached(cs *connState, sess *Session, reason string) bool {
+	cs.mu.Lock()
+	on := cs.sessionID == sess.ID
+	cs.mu.Unlock()
+	if !on || !d.detachClient(cs) {
+		return false
+	}
+	LogBasic("Detached client %s (pid %d) from session %s: %s", cs.clientID, cs.peerPID, sess.Name(), reason)
+	_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
+		SessionName: sess.Name(),
+		Reason:      reason,
+		Detached:    true,
+	})
+	return true
+}
+
+// detachClientParams are the detach-client verb's parameters.
+type detachClientParams struct {
+	Client   string `json:"client"`
+	Session  string `json:"session"`
+	AllOther bool   `json:"all_other"`
+}
+
+// verbDetachClient detaches clients from their sessions. See the top of this
+// file, and the verb's entry in verb_protocol.go for which clients it picks.
+func (d *Daemon) verbDetachClient(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p detachClientParams
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	p.Client = strings.TrimSpace(p.Client)
+	p.Session = strings.TrimSpace(p.Session)
+	if p.Client != "" && p.Session != "" {
+		return nil, invalidParam("session", "name a client or a session, not both")
+	}
+
+	var detached []string
+	switch {
+	case p.Client != "":
+		target, verr := d.attachedClientByID(p.Client)
+		if verr != nil {
+			return nil, verr
+		}
+		sess := d.manager.GetSessionByID(connSessionID(target))
+		if sess == nil {
+			return nil, newVerbError(ErrVerbNeedsClient, "client "+echoName(p.Client)+" is not attached to a session")
+		}
+		if p.AllOther {
+			detached = d.detachOthers(sess, target, DetachedByCommandMessage)
+		} else if d.ejectDetached(target, sess, DetachedByCommandMessage) {
+			detached = []string{target.clientID}
+		}
+	case p.Session != "":
+		sess, verr := d.resolveVerbSession(p.Session)
+		if verr != nil {
+			return nil, verr
+		}
+		// A session with no client has nothing to detach, which is not an
+		// error: the session is already in the state the caller asked for.
+		var keep *connState
+		if p.AllOther {
+			keep = d.findTUIClient(sess.ID)
+		}
+		if !p.AllOther || keep != nil {
+			detached = d.detachOthers(sess, keep, DetachedByCommandMessage)
+		}
+	default:
+		sess, verr := d.detachDefaultSession(cs)
+		if verr != nil {
+			return nil, verr
+		}
+		newest := d.findTUIClient(sess.ID)
+		if newest == nil {
+			return nil, noClientOn(sess)
+		}
+		if p.AllOther {
+			detached = d.detachOthers(sess, newest, DetachedByCommandMessage)
+		} else if d.ejectDetached(newest, sess, DetachedByCommandMessage) {
+			detached = []string{newest.clientID}
+		}
+	}
+	if detached == nil {
+		detached = []string{}
+	}
+	return map[string]any{
+		"type":     "clients_detached",
+		"detached": detached,
+	}, nil
+}
+
+// detachDefaultSession is the session detach-client acts on when the call
+// names neither a client nor a session: the caller's pane's session, else the
+// only session with a client.
+func (d *Daemon) detachDefaultSession(cs *connState) (*Session, *verbError) {
+	if fromPane, window := d.peerPane(cs); fromPane && window != "" {
+		if sess := d.sessionHoldingWindow(window); sess != nil {
+			return sess, nil
+		}
+	}
+	shown := map[string]bool{}
+	d.clientsMu.RLock()
+	for _, c := range d.clients {
+		c.mu.Lock()
+		if c.isTUIClient && c.attached && c.sessionID != "" {
+			shown[c.sessionID] = true
+		}
+		c.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
+	if len(shown) == 1 {
+		for id := range shown {
+			if sess := d.manager.GetSessionByID(id); sess != nil {
+				return sess, nil
+			}
+		}
+	}
+	if len(shown) == 0 {
+		return nil, newVerbError(ErrVerbNeedsClient, "no client is attached")
+	}
+	return nil, hintedVerbError(ErrVerbInvalidParams, "clients are attached to several sessions, so the session or the client must be named", &VerbHint{
+		Param:   "session",
+		Command: "tuios list-clients",
+		Detail:  "Name the session with -s, or the client with --client.",
+	})
+}
+
+// attachedClientByID finds the attached TUI client with the given id.
+func (d *Daemon) attachedClientByID(id string) (*connState, *verbError) {
+	var ids []string
+	var found *connState
+	d.clientsMu.RLock()
+	for _, c := range d.clients {
+		c.mu.Lock()
+		ok := c.isTUIClient && c.attached
+		c.mu.Unlock()
+		if !ok {
+			continue
+		}
+		ids = append(ids, c.clientID)
+		if c.clientID == id {
+			found = c
+		}
+	}
+	d.clientsMu.RUnlock()
+	if found == nil {
+		slices.Sort(ids)
+		return nil, hintedVerbError(ErrVerbInvalidParams, "no attached client has id "+echoName(id), &VerbHint{
+			Param:     "client",
+			Command:   "tuios list-clients",
+			Available: ids,
+		})
+	}
+	return found, nil
+}
+
+// noClientOn is the refusal for a session no client shows.
+func noClientOn(sess *Session) *verbError {
+	return hintedVerbError(ErrVerbNeedsClient, "no client is attached to session "+sess.Name(), &VerbHint{
+		Command: "tuios list-clients",
+	})
+}

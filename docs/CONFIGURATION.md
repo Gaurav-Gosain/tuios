@@ -285,6 +285,13 @@ focus-key mappings and protocol behaviour.
 
 To change the value of one session while it runs, use `tuios set-config daemon.window_size latest -s NAME`. The value is not saved to the config file. A change in the config file applies when the daemon starts again.
 
+`single_client` in `[daemon]` (default `false`) keeps one client for each session. When a client attaches, every other client of that session detaches. The newest attach wins. Each detached client exits with status 0 and prints "Another client attached to this session." The session continues to run. This is `tuios attach -d` on every attach. A change in the config file applies to the next attach.
+
+```toml
+[daemon]
+single_client = true
+```
+
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).

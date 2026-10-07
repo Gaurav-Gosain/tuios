@@ -2,7 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -155,31 +154,7 @@ func (d *Daemon) switchToHost(tui *connState, p switchSessionParams) (any, *verb
 // switchTarget picks the client a switch moves. See verbSwitchSession.
 func (d *Daemon) switchTarget(cs *connState, p switchSessionParams) (*connState, *verbError) {
 	if p.Client != "" {
-		var ids []string
-		var found *connState
-		d.clientsMu.RLock()
-		for _, c := range d.clients {
-			c.mu.Lock()
-			ok := c.isTUIClient && c.attached
-			c.mu.Unlock()
-			if !ok {
-				continue
-			}
-			ids = append(ids, c.clientID)
-			if c.clientID == p.Client {
-				found = c
-			}
-		}
-		d.clientsMu.RUnlock()
-		if found == nil {
-			slices.Sort(ids)
-			return nil, hintedVerbError(ErrVerbInvalidParams, "no attached client has id "+echoName(p.Client), &VerbHint{
-				Param:     "client",
-				Command:   "tuios list-clients",
-				Available: ids,
-			})
-		}
-		return found, nil
+		return d.attachedClientByID(p.Client)
 	}
 	if p.Session != "" {
 		sess, verr := d.resolveVerbSession(p.Session)

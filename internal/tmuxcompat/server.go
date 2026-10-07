@@ -62,6 +62,58 @@ func (s *Shim) listClients(name string, args []string) (string, []string, error)
 	return outcomeFor(detail), detail, nil
 }
 
+// detachClient detaches tuios clients through the detach-client verb. The
+// shim lists one client per session, named tuios-SESSION, so a client given
+// with -t is the clients of that session, and -s names the session directly.
+// With neither, the client used last in the caller's session is detached, as
+// tmux detaches the current client. -a keeps the client used last in the
+// session and detaches the others. A session out of the shim's reach is not
+// found, as for every other command.
+func (s *Shim) detachClient(name string, args []string) (string, []string, error) {
+	p, err := parseFlags(name, specs[name], args)
+	if err != nil {
+		return OutcomeUnsupported, nil, err
+	}
+	if len(p.Args) > 0 {
+		return OutcomeUnsupported, nil, errors.New("detach-client: the shim does not run a command on detach")
+	}
+	v, err := s.loadView()
+	if err != nil {
+		return OutcomeError, nil, err
+	}
+	ref := ""
+	if tv, ok := p.Value('t'); ok && tv != "" {
+		sessName, isClient := strings.CutPrefix(tv, "tuios-")
+		if !isClient {
+			return OutcomeError, nil, fmt.Errorf("can't find client: %s", tv)
+		}
+		ref = sessName
+	}
+	if sv, ok := p.Value('s'); ok && sv != "" {
+		ref = strings.TrimSuffix(sv, ":")
+	}
+	params := map[string]any{}
+	if ref != "" {
+		sv, found := v.sessionOf(ref)
+		if !found {
+			return OutcomeError, nil, fmt.Errorf("can't find session: %s", ref)
+		}
+		params["session"] = sv.name
+	} else if cp := s.callerPane(v); cp == nil {
+		if v.def == nil {
+			return OutcomeError, nil, errors.New("no current client")
+		}
+		params["session"] = v.def.name
+	}
+	if p.Has('a') {
+		params["all_other"] = true
+	}
+	if _, err := s.Caller.Call("detach-client", params); err != nil {
+		return OutcomeError, nil, err
+	}
+	return OutcomeOK, nil, nil
+}
+
 // option is one tmux option show-options answers, with the value that says
 // how tuios behaves.
 type option struct {

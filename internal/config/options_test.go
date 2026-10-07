@@ -16,6 +16,7 @@ var optionWalkSkips = map[string]string{
 	"hooks":                        "a free-form map of event to command",
 	"daemon.agent_binaries":        "a list, which a value arriving as one string cannot spell",
 	"daemon.respond_from_shell":    "a grant to act as the person, which set-option, a verb any pane can call, must not be able to switch",
+	"daemon.single_client":         "detaches the person's other clients on every attach, which set-option, a verb any pane can call, must not be able to switch; detach-client needs admin for the same reason",
 	"notifications.agent.sounds":   "file paths, which no accepted set or range can check",
 	"dock.left":                    "an ordered list of component names, not a scalar path",
 	"dock.center":                  "an ordered list of component names, not a scalar path",

@@ -72,7 +72,7 @@ func (d *Daemon) stopHostsWatch() {
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
 // [notify], appearance.preferred_shell, workspaces.return_when_empty, [agents]
-// enabled and herdr_protocol, the
+// enabled and herdr_protocol, [daemon] single_client, the
 // [agents.approvals], [agents.permissions] and [agents.queue] tables and
 // [agents.recap] test_patterns, and reads nothing else out of the file. A new
 // approval policy applies to the next request; a hold already running keeps
@@ -101,6 +101,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// every daemon runs in by default, so neither widens what a pane may do
 	// beyond what the shipped daemon allows.
 	d.SetAgentsEnabled(cfg.Agents.On())
+	// It narrows who is attached and widens nothing, so a file change
+	// applies it at once.
+	d.singleClient.Store(cfg.Daemon.SingleClient)
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())

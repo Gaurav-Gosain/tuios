@@ -10,6 +10,10 @@ import (
 // attachForce is tuios attach --force: attach even from a pane of the session.
 var attachForce bool
 
+// attachDetachOthers is tuios attach -d: detach every other client of the
+// session as this one attaches.
+var attachDetachOthers bool
+
 // nestedAllowed reports whether this attach may go through from a pane of its
 // own session: --force, or TUIOS_ALLOW_NESTED=1.
 func nestedAllowed() bool {

@@ -262,6 +262,10 @@ const (
 	// because the client's output reached a pane of that session. The
 	// session keeps running.
 	ExitNestedRefused
+	// ExitDetached means the daemon took this client off its session because
+	// another client attached with -d, single_client is on, or detach-client
+	// named it. The session keeps running, and this is not a failure.
+	ExitDetached
 )
 
 // InputHandler is a function type that handles input messages.
@@ -2285,6 +2289,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// showing the session inside itself.
 		if m.DaemonClient != nil && m.DaemonClient.NestedRefusal() != "" {
 			m.ExitReason = ExitNestedRefused
+		}
+		// Nor here: another client or detach-client took this client off.
+		if m.DaemonClient != nil && m.DaemonClient.DetachedReason() != "" {
+			m.ExitReason = ExitDetached
 		}
 		return m, tea.Quit
 

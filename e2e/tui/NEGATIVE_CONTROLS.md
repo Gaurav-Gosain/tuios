@@ -2530,3 +2530,23 @@ go build -o /tmp/tuios ./cmd/tuios
 cd e2e/tui && TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 \
   -run 'TestIncludedConfigFiles|TestSetConfigWritesTheFile|TestConfigCommandsWrite|TestFirstStartWithNix|TestReadOnlyConfigTomlLink|TestSymlinkedInclude|TestMixedNamed|TestMergeOrder|TestConfigPrune|TestSaveDoesNotPin|TestIncludeMistakes|TestRemovingAHost|TestIncludedFileIsNeverRewrittenWhole' .
 ```
+
+## Single-client attach and detach-client (#549)
+
+`detach_client_test.go` runs real clients against one daemon.
+`TestAttachDetachOthersEndsTheOtherClients` attaches two clients the plain
+way, which is the positive half: both stay attached. A third client with
+`attach -d` then makes the first two exit 0 with "Another client attached to
+this session." `TestSingleClientOptionDetachesOnEveryAttach` does the same
+with `[daemon] single_client = true` and a plain attach.
+`TestDetachClientByIDAndSession` detaches one of two clients by its id, while
+the other stays. A pane with read, write and fan is refused the command, and
+the tmux shim's `detach-client -s` takes the last client off. Each session
+still runs at the end.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `attach -d` is not read | `handleAttach`: `payload.DetachOthers` cut from the gate | `TestAttachDetachOthersEndsTheOtherClients` ("tuios never exited") | **caught** |
+| `single_client` is not read | `handleAttach`: `d.singleClient.Load()` cut from the gate | `TestSingleClientOptionDetachesOnEveryAttach` ("tuios never exited") | **caught** |
+| A pane needs no grant | `verbScopes`: `detach-client` classed `scopeOpen` | `TestDetachClientByIDAndSession` (the client exits, and `DC_EXIT=1` never shows) | **caught** |
+| The shim does not answer `detach-client` | `commands` in `internal/tmuxcompat/shim.go`: the entry cut | `TestDetachClientByIDAndSession` (`tuios tmux detach-client -s` exits 1) | **caught** |

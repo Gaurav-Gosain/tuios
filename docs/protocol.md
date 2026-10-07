@@ -1888,6 +1888,40 @@ session without `create` fails with `session_not_found`. No client to switch
 fails with `needs_client`. `already: true` says the client showed the session
 already. A pane needs the `admin` grant. Over a link the verb needs `write`.
 
+### detach-client
+
+Detach attached clients from their sessions, as tmux `detach-client` does.
+The sessions continue to run.
+
+Params: `client`, `session`, `all_other`.
+
+- `client` names one client from `list-clients`. `session` names a session,
+  and every client of it detaches. Give one of the two, or neither.
+- With neither, the verb acts on the client used last in the caller's
+  pane's session, else in the only session with a client.
+- `all_other` keeps the named client, or the client used last, and detaches
+  every other client of its session.
+
+Each detached client gets `MsgSessionEnded` with `detached` set and a
+`reason`, and exits with status 0. An attach with `detach_others` set
+(`tuios attach -d`), or any attach while `[daemon] single_client` is on,
+detaches the other clients of the session in the same way.
+
+Request:
+
+```json
+{"verb": "detach-client", "params": {"session": "work", "all_other": true}}
+```
+
+Response:
+
+```json
+{"result": {"type": "clients_detached", "detached": ["client-1790941960197517900"]}}
+```
+
+An unknown `client` fails with `invalid_params`. A pane needs the `admin`
+grant. Over a link the verb needs `write`.
+
 ### session-info
 
 Report details about one session.
@@ -4603,7 +4637,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
-| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway) |

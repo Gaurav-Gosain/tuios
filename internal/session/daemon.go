@@ -74,6 +74,9 @@ type Daemon struct {
 	// windowSize is [daemon] window_size, resolved. A session's own override
 	// from set-option wins over it. See window_size.go.
 	windowSize string
+	// singleClient is [daemon] single_client: every attach takes the other
+	// clients off its session. See detach_client.go.
+	singleClient atomic.Bool
 	// latest is each session's latest client, for the latest policy.
 	latest latestState
 	// attachCount hands out connState.attachSeq.
@@ -735,6 +738,9 @@ type DaemonConfig struct {
 	// WindowSize is [daemon] window_size: smallest, largest or latest. An
 	// empty or unknown value is smallest. See window_size.go.
 	WindowSize string
+	// SingleClient is [daemon] single_client: one client per session, and
+	// the newest attach wins. See detach_client.go.
+	SingleClient bool
 	// QueueMax is [agents.queue] max: how many messages one pane's delivery
 	// queue holds. Zero means the default. See agent_queue.go.
 	QueueMax int
@@ -776,6 +782,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
 		windowSize:         windowSizePolicy(cfg.WindowSize),
 	}
+	d.singleClient.Store(cfg.SingleClient)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)

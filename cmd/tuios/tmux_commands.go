@@ -230,7 +230,7 @@ tmux pane is a tuios window (%N, a number derived from its id).
 
 Supported: split-window, new-window, send-keys, capture-pane -p,
 display-message, display-popup, list-panes, list-windows, list-sessions,
-list-clients, has-session, kill-pane, kill-window, select-pane, last-pane,
+list-clients, detach-client, has-session, kill-pane, kill-window, select-pane, last-pane,
 select-window, next-window, previous-window, rename-window, rename-session,
 break-pane, join-pane, move-pane, swap-pane, respawn-pane -k, load-buffer,
 set-buffer, show-buffer, save-buffer, list-buffers, paste-buffer,
@@ -241,8 +241,8 @@ to any prefix that names one command.
 
 set-option, set-window-option, set-hook, refresh-client, select-layout,
 resize-pane and start-server succeed and do nothing. kill-session,
-kill-server, attach-session, switch-client and detach-client are refused,
-because the shim never ends or replaces a tuios session. Any other command
+kill-server, attach-session and switch-client are refused, because the
+shim never ends or replaces a tuios session. Any other command
 fails and is recorded in the shim log.`,
 		Example: `  tuios tmux display-message -p '#{pane_id} #{window_id}'
   tuios tmux split-window -d -P -F '#{pane_id}'
