@@ -138,6 +138,8 @@ pub struct TuiosApp {
     overlay_until: Option<Instant>,
     /// The step the working glyphs are at.
     spin: u32,
+    /// Frames drawn (root renders), for the `stats` control command.
+    frames: u64,
 }
 
 impl TuiosApp {
@@ -190,6 +192,7 @@ impl TuiosApp {
             need_since: HashMap::new(),
             overlay_until: None,
             spin: 0,
+            frames: 0,
         };
         this.connect(this.cfg.session.clone(), window, cx);
         this.poll_fleet(cx);
@@ -331,8 +334,26 @@ impl TuiosApp {
                 Plan::Events(vec![control::wheel(p, delta)])
             }
             "dump" => Plan::Reply(self.dump()),
+            "stats" => Plan::Reply(self.stats_json()),
+            "resetstats" => {
+                self.stats = FrameStats::default();
+                self.frames = 0;
+                Plan::Reply("ok".into())
+            }
             _ => return Err(format!("unknown command {cmd}")),
         })
+    }
+
+    /// Frame and memory counters for the `stats` control command.
+    fn stats_json(&self) -> String {
+        let (p50, p95) = self.stats.paint_percentiles().unwrap_or((0., 0.));
+        let (rss, anon) = crate::stats::memory_kb();
+        format!(
+            "{{\"pid\":{},\"frames\":{},\"grid_paints\":{},\"paint_p50_ms\":{p50:.3},\"paint_p95_ms\":{p95:.3},\"rss_kb\":{rss},\"anon_kb\":{anon}}}",
+            std::process::id(),
+            self.frames,
+            self.stats.count()
+        )
     }
 
     fn dump(&mut self) -> String {
@@ -1438,6 +1459,7 @@ impl TuiosApp {
 
 impl Render for TuiosApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.frames += 1;
         let t = self.theme.clone();
         let entity = cx.entity();
         let grid = canvas(

@@ -12,6 +12,8 @@
 //!   wheel PANE PIXELS            a pixel scroll over a pane (positive goes back)
 //!   lines PANE LINES             a line scroll over a pane
 //!   dump                         JSON: grid, panes, screens, selection
+//!   stats                        JSON: frames drawn, grid paint times, memory
+//!   resetstats                   start the counters over
 //!
 //! Each command is answered with one line: `ok`, `err ...` or the JSON.
 
