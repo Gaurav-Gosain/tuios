@@ -167,7 +167,11 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 			// terminal only after it, as TestSGRPixelMouseCarriesTheHostPixel
 			// covers, and the hovers after that are in host pixels.
 			col, row := paneCell(t, term)
-			x0 := lastPixelX(t, term, "the first hover", -1, func() { mouseHover(t, term, col, row) })
+			// Sent once. A resend would be a cell report reaching tuios after
+			// it has turned 1016 on in its terminal, and it would read the
+			// cell as pixels.
+			mouseHover(t, term, col, row)
+			x0 := lastPixelX(t, term, "the first hover", -1, func() {})
 			// The first hover is a cell report, so the guest is told the
 			// centre of the pane cell under it: the pane's first column is
 			// where the guest's SIZES line starts on the screen.
