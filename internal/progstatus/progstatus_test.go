@@ -98,7 +98,7 @@ func TestParse(t *testing.T) {
 		{"C1 control discards", "state=idle:msg=" + b64("a\u0085"), false, Report{}},
 		{"CSI as C1 discards", "state=idle:msg=" + b64("\u009b31m"), false, Report{}},
 		{"invalid UTF-8 discards", "state=idle:msg=" + b64("\xff"), false, Report{}},
-		{"bidi override is kept for the display to disarm", "state=idle:msg=" + b64("a‮b"), true, Report{State: Idle, Msg: "a‮b", Progress: -1}},
+		{"bidi override is kept for the display to disarm", "state=idle:msg=" + b64("a\u202eb"), true, Report{State: Idle, Msg: "a\u202eb", Progress: -1}},
 		{"markup is text", "state=idle:msg=" + b64("<b>x</b>"), true, Report{State: Idle, Msg: "<b>x</b>", Progress: -1}},
 
 		{"msg of 2048 bytes", "state=idle:msg=" + b64(strings.Repeat("m", 2048)), true, Report{State: Idle, Msg: strings.Repeat("m", 2048), Progress: -1}},
