@@ -2349,3 +2349,37 @@ positive half of the hidden and too-wide cases.
 | An empty label still draws a pill | `buildDockLeftText`: the empty label padded to two spaces | `/hidden` (6 caps on the row, want 4) | **caught** |
 | No width limit | `DockModeIconUsable`: the width check cut | `/too-wide` (the nine-cell icon is drawn) | **caught** |
 | The word `default` in config.toml drawn as text | `dockModeIcon`: the `DockModeIconDefault` check cut | `/default-word` (the dock row shows `default`) | **caught** |
+
+## OSC 7501, the Program Status Protocol
+
+`program_status_test.go` runs a script in a shell pane that reports through
+OSC 7501 and `tuios status`. `TestProgramStatusDrivesTheRailAndInbox` follows
+each report to `get-agent-state`, the rail, the Inbox and the dock, and covers
+the `?` reply, child records, a clear, a hostile message, the script's exit,
+OSC 133 A while the program still runs, and typing.
+`TestProgramStatusQueryStandalone` asks the query without a daemon.
+`TestProgramStatusReachesTheHostTerminal` reads what tuios reports to
+`hostterm -program-status`. Its subtests for a host that does not answer and a
+config that turns the reports off are the negative halves, in the same
+fixture. Each control cuts one call site. All three tests pass on the pure Go
+build and on a `-tags ghostty` build.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`86cac4e1`) | all three (`HOSTTERM-7501=?` never printed, the host never asked) | **caught** |
+| The emulator does not read OSC 7501 | the `RegisterOscHandler(progstatus.Command, ...)` call cut | all three: no reply, and the pane's own report never reaches the host | **caught** |
+| The daemon drops the change | the `applyProgramStatus` call in the event sink cut | the rail test (`working with progress: never held`, no records), the host test | **caught** |
+| Records but no agent state | the `ApplyAgentReport` call in `applyProgramStatus` cut | the rail test (records present, state `none`), the host test | **caught** |
+| The prompt mark is ignored | the `noteProgramStatusMark` call in the `SemanticMark` callback cut | the rail test, step 7 (`the prompt mark: never held` within 3 seconds, while the program still runs) | **caught** |
+| A program's exit is ignored | the `endProgramStatusAtShell` call in the agent detector cut | the rail test, step 6 (the root `working` record outlives the script) | **caught** |
+| Typing is ignored | the `noteProgramStatusInput` call in `handleInput` cut | the rail test, step 8 (the done records stay) | **caught** |
+| Invisible characters kept | `programStatusWire` copies title and msg without `programStatusText` | the rail test, step 5 (the record keeps U+202E and U+200B). The rail still drew the text inert, through `printableTitle` | **caught** |
+| The host is never asked | the `hostProgramStatusProbe` call in `Init` cut | the host test, `supported` and `host does not answer` (the host was not asked) | **caught** |
+| The config cannot turn it off | `hostProgramStatusOn` reads `""` in place of the setting | the host test, `off in the config` (asked and reported to). `supported` passes, its positive half | **caught** |
+| No app on the rail | the summary record's app is not used by the `harness` token | the rail test, step 1 (`cargo` never shown) | **caught** |
+| No progress on the rail | `progress` left out of the shipped token list | the rail test, step 1 (`40%` never shown) | **caught** |
+
+Not covered end to end: the exit of the pane's own process (`noteExit`),
+because the pane closes with it; OSC 9;4 being ignored after OSC 7501, since
+the `program` claim outranks OSC 9;4 while records exist, so no screen differs;
+and a full reset, which the vt conformance test covers on both backends.
