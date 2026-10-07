@@ -71,10 +71,11 @@ impl SpinSlots {
     }
 }
 
-/// The 2.4 s pulse of the working arc: 100 % to 45 % and back, a sine.
+/// The 2.4 s pulse of the working arc: 100 % to 70 % and back, a sine. It
+/// never dims far enough to read as the idle ring.
 pub fn pulse(elapsed: Duration) -> f32 {
     let phase = (elapsed.as_secs_f32() / 2.4) * std::f32::consts::TAU;
-    0.725 + 0.275 * phase.cos()
+    0.85 + 0.15 * phase.cos()
 }
 
 pub struct Spin {

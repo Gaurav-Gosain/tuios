@@ -31,6 +31,9 @@ icons!(
     "palette.svg",
     "layers.svg",
     "x.svg",
+    "win-minus.svg",
+    "win-square.svg",
+    "win-close.svg",
 );
 
 pub const FONTS: [&[u8]; 7] = [

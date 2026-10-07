@@ -110,6 +110,27 @@ fn icon_button(t: &Theme, id: &'static str, path: &'static str, on: bool) -> Sta
         .child(icon(path, rgb(if on { t.text } else { t.text3 }), 16.).group_hover(group, |s| s.text_color(rgb(t.text2))))
 }
 
+/// The window's close button: an icon button whose fill turns `err` under
+/// the pointer, with the icon on it in `on_state`.
+fn close_button(t: &Theme) -> Stateful<Div> {
+    let group: SharedString = "win-close-g".into();
+    div()
+        .id("win-close")
+        .group(group.clone())
+        .size(px(28.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .rounded(px(6.))
+        .cursor_pointer()
+        .hover(|s| s.bg(rgb(t.err)))
+        .active(|s| s.bg(rgb(t.err)))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(|_, w, _| w.remove_window())
+        .child(icon("icons/win-close.svg", rgb(t.text3), 16.).group_hover(group, |s| s.text_color(rgb(t.on_state))))
+}
+
 /// The 16 px state slot of section 6. A working icon's arc is drawn by the
 /// spin view when `slots` is given, so it can pulse without redrawing the
 /// sidebar; otherwise it is drawn here, still.
@@ -123,7 +144,7 @@ pub fn state_icon(t: &Theme, s: Status, slots: Option<Rc<RefCell<SpinSlots>>>) -
         Status::Idle => slot.child(layer("icons/state-ring.svg", rgb(t.text3))),
         Status::Terminal => slot.child(layer("icons/state-dot.svg", rgb(t.text3))),
         Status::Working => {
-            let slot = slot.child(layer("icons/state-ring.svg", with_alpha(t.text3, 0.5)));
+            let slot = slot.child(layer("icons/state-ring.svg", with_alpha(t.text3, 0.35)));
             match slots {
                 Some(slots) => slot.child(
                     canvas(
@@ -145,7 +166,7 @@ pub fn state_icon(t: &Theme, s: Status, slots: Option<Rc<RefCell<SpinSlots>>>) -
 impl TuiosApp {
     // ---- title band --------------------------------------------------------
 
-    pub(super) fn render_band(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn render_band(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = self.theme.clone();
         let lay = self.layout;
         let st = self.state.clone().unwrap_or_default();
@@ -201,6 +222,11 @@ impl TuiosApp {
             shown.push(st.workspace);
         }
         shown.sort();
+        // One unnamed workspace is no choice: no control.
+        let lone = shown.len() == 1 && st.workspace_name(shown[0]).is_none_or(|n| n.is_empty());
+        if lone {
+            shown.clear();
+        }
         let mut seg = div().flex().flex_none().items_center().h(px(28.)).p(px(2.)).rounded(px(7.)).bg(rgb(t.field));
         for ws in shown {
             let active = ws == st.workspace;
@@ -263,6 +289,9 @@ impl TuiosApp {
             .child(icon("icons/chevron-down.svg", rgb(t.text3), 12.));
         let zoomed = self.focused_id().and_then(|id| st.window(&id).map(|w| w.zoomed)).unwrap_or(false);
         let right_gap = (lay.width - f32::from(lay.stage.right())).max(0.);
+        // A floating window drawn by the app itself needs its own window
+        // buttons. A tiled one, or one the compositor frames, does not.
+        let controls = matches!(window.window_decorations(), Decorations::Client { tiling } if !tiling.is_tiled());
         div()
             .id("band")
             .size_full()
@@ -286,7 +315,7 @@ impl TuiosApp {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .when(self.state.is_some(), |el| el.child(switcher).child(seg)),
+                    .when(self.state.is_some(), |el| el.child(switcher).when(!lone, |el| el.child(seg))),
             )
             .child(
                 div()
@@ -297,14 +326,22 @@ impl TuiosApp {
                     .gap(px(4.))
                     .child(icon_button(&t, "split-right", "icons/columns-2.svg", false).on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["vertical"]), w, cx))))
                     .child(icon_button(&t, "split-down", "icons/rows-2.svg", false).on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("Split", &["horizontal"]), w, cx))))
-                    .child(icon_button(&t, "zoom", "icons/maximize-2.svg", zoomed).on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("ToggleZoom", &[]), w, cx)))),
+                    .child(icon_button(&t, "zoom", "icons/maximize-2.svg", zoomed).on_click(cx.listener(|this, _, w, cx| this.run(Act::Tape("ToggleZoom", &[]), w, cx))))
+                    .when(controls, |el| {
+                        el.child(div().w(px(8.)))
+                            .child(icon_button(&t, "win-minimize", "icons/win-minus.svg", false).on_click(|_, w, _| w.minimize_window()))
+                            .child(icon_button(&t, "win-maximize", "icons/win-square.svg", false).on_click(|_, w, _| w.zoom_window()))
+                            .child(close_button(&t))
+                    }),
             )
     }
 
     // ---- sidebar -----------------------------------------------------------
 
     /// One pane as a sidebar row: state icon, title, age, and one line below.
-    fn pane_row(&self, p: &PaneInfo, selected: bool, right: Option<String>, cx: &mut Context<Self>) -> Stateful<Div> {
+    /// A `compact` row is 28 tall with no second line: a pane already shown
+    /// with its message under "Needs you".
+    fn pane_row(&self, p: &PaneInfo, selected: bool, right: Option<String>, compact: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let t = &self.theme;
         let now = fleet::now_ms();
         let (session, window, workspace) = (p.session.clone(), p.window.clone(), p.workspace);
@@ -322,7 +359,7 @@ impl TuiosApp {
         div()
             .id(SharedString::from(format!("row-{}-{}", p.session, p.window)))
             .mx(px(8.))
-            .h(px(44.))
+            .h(px(if compact { 28. } else { 44. }))
             .mb(px(2.))
             .flex_none()
             .relative()
@@ -333,13 +370,13 @@ impl TuiosApp {
             .on_click(cx.listener(move |this, _, window_, cx| {
                 this.jump_to(session.clone(), window.clone(), workspace, window_, cx);
             }))
-            .child(div().absolute().left(px(12.)).top(px(7.)).child(state_icon(t, p.status, Some(self.spin_slots.clone()))))
+            .child(div().absolute().left(px(12.)).top(px(if compact { 6. } else { 7. })).child(state_icon(t, p.status, Some(self.spin_slots.clone()))))
             .child(
                 div()
                     .absolute()
                     .left(px(36.))
                     .right(px(12.))
-                    .top(px(6.))
+                    .top(px(if compact { 5. } else { 6. }))
                     .flex()
                     .flex_col()
                     .child(
@@ -352,7 +389,7 @@ impl TuiosApp {
                             .children(right.map(|r| num(r, LABEL, FontWeight::MEDIUM, t.text3)))
                             .when(!age.is_empty(), |el| el.child(num(age, LABEL, FontWeight::MEDIUM, t.text3))),
                     )
-                    .child(line2),
+                    .when(!compact, |el| el.child(line2)),
             )
     }
 
@@ -406,7 +443,7 @@ impl TuiosApp {
             );
             for p in waiting {
                 let selected = p.session == current && focused.as_deref() == Some(p.window.as_str());
-                list = list.child(self.pane_row(p, selected, self.row_place(p), cx));
+                list = list.child(self.pane_row(p, selected, self.row_place(p), false, cx));
             }
         }
 
@@ -488,7 +525,9 @@ impl TuiosApp {
                 let selected = attached && focused.as_deref() == Some(p.window.as_str());
                 // Inside its own group a row needs no session name.
                 let place = if attached { self.row_place(p) } else { None };
-                list = list.child(self.pane_row(p, selected, place, cx));
+                // Its message already shows under "Needs you".
+                let compact = matches!(p.status, Status::NeedsYou | Status::Errored);
+                list = list.child(self.pane_row(p, selected, place, compact, cx));
             }
         }
 
