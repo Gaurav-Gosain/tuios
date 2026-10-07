@@ -42,14 +42,8 @@ func updateVisualEnd(cm *terminal.CopyMode, window *terminal.Window) {
 		// Start Y stays fixed, we only update end Y
 		cm.VisualEnd.Y = absY
 
-		// Determine which line is earlier and which is later
-		startY := cm.VisualStart.Y
-		endY := cm.VisualEnd.Y
-
-		// Normalize: make sure startY <= endY for bounds calculation
-		if startY > endY {
-			startY, endY = endY, startY
-		}
+		// The lower of the two lines sets where the selection ends.
+		endY := max(cm.VisualStart.Y, cm.VisualEnd.Y)
 
 		// The upper line is taken from its first column, indent included,
 		// and the lower line to its last printed cell.
