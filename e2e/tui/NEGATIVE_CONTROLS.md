@@ -2249,6 +2249,21 @@ both default keys in both modes.
 Not covered end to end: multi copy mode looks the action up at its own call
 site in `handleMultiCopyKey`, and no test presses `Home` there.
 
+### Help order and the doctor for copy_mode keys
+
+`TestHelpListsHomeAndEndWithTheLineKeys` opens the help overlay, unfiltered,
+on its copy mode section and wants the `home` and `end` rows right after the
+`0, ^, $` row. `TestKeybindsDoctorNamesACopyModeKeyUsedTwice` binds
+`copy_mode_line_start` to `v` and `copy_mode_line_end` to a copy pipe's `p`,
+and wants the doctor to name both and not the default `home` and `end`. Its
+positive half runs the defaults and wants no copy mode problem.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The released behaviour | build origin/main (`26469546`) | both tests (the doctor "reports 0 copy mode keys, want 2", and the rows after `0, ^, $` are `gg, G` and `ctrl+u, ctrl+d`) | **caught** |
+| The report never carries the problems | `Report`: `CopyModeProblems` set to nil | `TestKeybindsDoctorNamesACopyModeKeyUsedTwice/clashes` | **caught** |
+| The bound rows at the end of the section | `generateCopyModeBindings` appends them, as before | `TestHelpListsHomeAndEndWithTheLineKeys` | **caught** |
+
 ## A copy trims the whitespace it covers (#516)
 
 `copy_whitespace_test.go` prints indented lines and reads each copy off the

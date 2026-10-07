@@ -734,6 +734,11 @@ The keys are in the `copy_mode` section. They work only in copy mode. In the
 search prompt, they do not move the cursor. `0` and `$` are fixed keys, and
 you cannot rebind them.
 
+Do not bind a key here that copy mode already uses, such as `y` or `v`, or a
+key of a `[[keybindings.copy_pipe]]` entry. `tuios keybinds doctor` and the
+config check warn about such a key. A copy pipe key runs the pipe, and the
+binding does not run. A key that copy mode uses loses its copy mode action.
+
 `Ctrl+A` and `Ctrl+E` are not defaults. `Ctrl+A` is a common leader key, and
 `Ctrl+E` scrolls one line in tmux copy mode. To use them, add them to the
 section:
