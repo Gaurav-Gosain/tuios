@@ -21,11 +21,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/adrg/xdg"
 )
 
@@ -132,13 +132,13 @@ func PathFor(dir, repoRoot, branch string) string {
 	return filepath.Join(dir, filepath.Base(repoRoot), Slug(branch))
 }
 
-var slugStrip = regexp.MustCompile(`[^A-Za-z0-9._]+`)
+var slugStrip = lazyre.New(`[^A-Za-z0-9._]+`)
 
 // Slug turns a branch name into one path component and one session-name
 // component: every run of characters outside [A-Za-z0-9._] becomes one
 // hyphen. "feat/retry" reads as "feat-retry".
 func Slug(branch string) string {
-	s := slugStrip.ReplaceAllString(branch, "-")
+	s := slugStrip().ReplaceAllString(branch, "-")
 	s = strings.Trim(s, "-.")
 	if s == "" {
 		return "branch"

@@ -51,7 +51,7 @@ func TestProbeReadsALateReplyToItsEnd(t *testing.T) {
 		_, _ = w.WriteString(tail)
 	}()
 
-	got := readTTYResponse(r, 5*time.Second, da1Response.MatchString)
+	got := readTTYResponse(r, 5*time.Second, da1Response().MatchString)
 	if got != head+tail {
 		t.Fatalf("the probe read %q, want the whole late reply %q", got, head+tail)
 	}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // JSONBlock represents a JSON object or array found in command output.
@@ -102,7 +104,7 @@ func ExtractJSON(output string) []JSONBlock {
 }
 
 // pathRegex matches filesystem paths and URLs.
-var pathRegex = lazyRegexp(
+var pathRegex = lazyre.New(
 	`(?:` +
 		// URLs
 		`https?://[^\s"'<>]+|` +
@@ -114,7 +116,7 @@ var pathRegex = lazyRegexp(
 )
 
 // lineColRegex extracts :line and optional :col from a path suffix.
-var lineColRegex = lazyRegexp(`:(\d+)(?::(\d+))?$`)
+var lineColRegex = lazyre.New(`:(\d+)(?::(\d+))?$`)
 
 // ExtractPaths finds file paths and URLs in the output text.
 func ExtractPaths(output string) []PathBlock {

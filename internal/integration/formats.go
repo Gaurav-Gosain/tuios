@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // fileFormat is how tuios's part of one file is written, found and removed.
@@ -230,7 +231,7 @@ func isManagedFile(data []byte) bool {
 	if bytes.Contains(data, []byte("TUIOS_INTEGRATION_ID=")) {
 		return true
 	}
-	for _, m := range managedCommandRe.FindAll(data, -1) {
+	for _, m := range managedCommandRe().FindAll(data, -1) {
 		if isManagedCommand(string(m)) {
 			return true
 		}
@@ -239,7 +240,7 @@ func isManagedFile(data []byte) bool {
 }
 
 // managedCommandRe finds an agent-hook command with its version marker.
-var managedCommandRe = regexp.MustCompile(` agent-hook [a-z-]+ ` + managedMarker + ` \d+`)
+var managedCommandRe = lazyre.New(` agent-hook [a-z-]+ ` + managedMarker + ` \d+`)
 
 func (f ownedFile) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
 	if have != nil && !isManagedFile(have) {
@@ -418,7 +419,7 @@ func splitTOMLBlock(text string) (outside, block string, err error) {
 
 // inlineHooksRe finds a top-level hooks = [...] key, which [[hooks]] tables
 // cannot be added to.
-var inlineHooksRe = regexp.MustCompile(`(?m)^\s*hooks\s*=`)
+var inlineHooksRe = lazyre.New(`(?m)^\s*hooks\s*=`)
 
 func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]byte, bool, bool, error) {
 	if !install && have == nil {
@@ -430,7 +431,7 @@ func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]
 	}
 	out := outside
 	if install {
-		if inlineHooksRe.MatchString(outside) {
+		if inlineHooksRe().MatchString(outside) {
 			return nil, false, false, errors.New("it sets hooks as an inline array, which tuios's [[hooks]] tables cannot join. Move your hooks to [[hooks]] tables and install again")
 		}
 		trimmed := strings.TrimRight(outside, "\n")

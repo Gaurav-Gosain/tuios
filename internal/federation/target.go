@@ -39,7 +39,7 @@ func (t Target) Remote() bool {
 // IsHostName reports whether s could be a host name: what the [hosts] table
 // accepts, plus the reserved name for this machine.
 func IsHostName(s string) bool {
-	return s == LocalHostName || hostNamePattern.MatchString(s)
+	return s == LocalHostName || hostNamePattern().MatchString(s)
 }
 
 // ParseSessionTarget reads `[host:]session`.

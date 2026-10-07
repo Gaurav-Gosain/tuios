@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -40,7 +40,7 @@ const (
 
 // hexPattern is the literal every one of these formats writes a colour as,
 // with or without the leading hash.
-var hexPattern = regexp.MustCompile(`^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+var hexPattern = lazyre.New(`^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // Import reads a terminal colour scheme and returns it as a tuios theme.
 //
@@ -329,7 +329,7 @@ func isDark(bg *tint.Color) bool {
 
 // isHex reports whether a value is one of these formats' colour literals.
 func isHex(v string) bool {
-	return hexPattern.MatchString(strings.TrimSpace(strings.Trim(v, `"'`)))
+	return hexPattern().MatchString(strings.TrimSpace(strings.Trim(v, `"'`)))
 }
 
 // normalizeHex trims the quoting the toml formats add and restores the hash the

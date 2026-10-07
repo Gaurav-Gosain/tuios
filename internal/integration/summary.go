@@ -3,7 +3,10 @@ package integration
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // MaxMessage is the longest message a hook reports, in runes. The message is
@@ -15,23 +18,28 @@ const MaxMessage = 100
 // to every attached client, shown in alerts, passed to after-agent-state hooks
 // and read over links. So a value that looks like a credential is replaced
 // before it goes anywhere.
-var secretPatterns = []struct {
+var secretPatterns = sync.OnceValue(func() []secretPattern {
+	return []secretPattern{
+		// NAME=value where the name says what it is.
+		{regexp.MustCompile(`(?i)\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?|AUTH)[A-Z0-9_]*)=\S+`), "$1=***"},
+		// --token value, --password=value and the like.
+		{regexp.MustCompile(`(?i)(--?(?:token|password|passwd|secret|api-?key|auth)[= ])\S+`), "$1***"},
+		// Authorization headers.
+		{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}`), "$1 ***"},
+		// Credentials in a URL.
+		{regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`), "://***@"},
+	}
+})
+
+// secretPattern is one replacement secretPatterns makes.
+type secretPattern struct {
 	re   *regexp.Regexp
 	repl string
-}{
-	// NAME=value where the name says what it is.
-	{regexp.MustCompile(`(?i)\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?|AUTH)[A-Z0-9_]*)=\S+`), "$1=***"},
-	// --token value, --password=value and the like.
-	{regexp.MustCompile(`(?i)(--?(?:token|password|passwd|secret|api-?key|auth)[= ])\S+`), "$1***"},
-	// Authorization headers.
-	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}`), "$1 ***"},
-	// Credentials in a URL.
-	{regexp.MustCompile(`://[^/\s:@]+:[^/\s@]+@`), "://***@"},
 }
 
 // longRun is a candidate key: a long run with no separator a path or a
 // sentence would have. keyLike decides whether it is one.
-var longRun = regexp.MustCompile(`[A-Za-z0-9+=_-]{32,}`)
+var longRun = lazyre.New(`[A-Za-z0-9+=_-]{32,}`)
 
 // keyLike reports whether a long run reads as a key rather than a name: it
 // mixes digits with letters, the way a token, a hash or a base64 blob does and
@@ -43,10 +51,10 @@ func keyLike(s string) bool {
 
 // Redact replaces what looks like a secret in s.
 func Redact(s string) string {
-	for _, p := range secretPatterns {
+	for _, p := range secretPatterns() {
 		s = p.re.ReplaceAllString(s, p.repl)
 	}
-	return longRun.ReplaceAllStringFunc(s, func(run string) string {
+	return longRun().ReplaceAllStringFunc(s, func(run string) string {
 		if keyLike(run) {
 			return "***"
 		}

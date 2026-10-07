@@ -3,11 +3,10 @@
 package scrollback
 
 import (
-	"regexp"
 	"strings"
-	"sync"
 	"unicode"
 
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -236,17 +235,9 @@ func endLineForBlock(d, c, b *vt.SemanticMarker, term vt.Terminal) int {
 	return b.AbsLine
 }
 
-// lazyRegexp compiles expr the first time the returned function is called.
-// Every tuios process links this package, and only the scrollback browser uses
-// its patterns, so compiling them at init cost every one-shot CLI command about
-// 0.1 ms and 600 allocations for nothing.
-func lazyRegexp(expr string) func() *regexp.Regexp {
-	return sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(expr) })
-}
-
 // promptPattern matches common shell prompts at the start of a line.
 // Very conservative to avoid false positives on command output.
-var promptPattern = lazyRegexp(
+var promptPattern = lazyre.New(
 	`^(\s*)` +
 		`(` +
 		`\w+@[\w.-]+\s*[$#]\s+|` + // user@host$ or user@host# (ssh, bash default)
@@ -256,7 +247,7 @@ var promptPattern = lazyRegexp(
 )
 
 // looksLikeOutput detects lines that are clearly command output, not prompts.
-var looksLikeOutput = lazyRegexp(
+var looksLikeOutput = lazyre.New(
 	`^(?:` +
 		`[\s]*[drwx.\-lbcps]{10}|` + // ls -l permissions
 		`[\s]*total\s+\d|` + // "total 48" from ls -l
@@ -267,7 +258,7 @@ var looksLikeOutput = lazyRegexp(
 )
 
 // looksLikeFileEntry detects "commands" that are really file listing entries.
-var looksLikeFileEntry = lazyRegexp(
+var looksLikeFileEntry = lazyre.New(
 	`(?:` +
 		`\d+\.?\d*\s*[KMGT]i?B|` + // file sizes: "29.1 MB", "4.0K", "10KiB"
 		`\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s|` + // dates in file listings

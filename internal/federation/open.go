@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Opening a session on another machine, the way a person does it by hand.
@@ -32,7 +33,7 @@ func SSHBinary() string {
 
 // remoteArgPattern is what a remote argument may be without quoting. It is
 // the set every shell on the far side reads literally.
-var remoteArgPattern = regexp.MustCompile(`^[A-Za-z0-9._@%+=:,/-]+$`)
+var remoteArgPattern = lazyre.New(`^[A-Za-z0-9._@%+=:,/-]+$`)
 
 // ErrUnsafeRemoteArg reports an argument the remote shell could read as more
 // than one word or as a command.
@@ -52,7 +53,7 @@ func QuoteRemoteArg(arg string) (string, error) {
 	if arg == "" {
 		return "''", nil
 	}
-	if remoteArgPattern.MatchString(arg) {
+	if remoteArgPattern().MatchString(arg) {
 		return arg, nil
 	}
 	for _, r := range arg {

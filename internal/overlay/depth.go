@@ -162,9 +162,8 @@ func To256(c color.Color) color.Color {
 }
 
 // xterm256Lab is entries 16 to 255 of the xterm palette in OKLab. It is
-// built on first use rather than at package initialisation, because toLab
-// reads a table oklab.go's init fills, and that runs after this file's
-// variables are set.
+// built on first use rather than at package initialisation, like the
+// transfer tables toLab reads.
 var xterm256Lab = sync.OnceValue(func() (t [240]lab) {
 	for i := range t {
 		t[i] = toLab(ansi.IndexedColor(uint8(16 + i))) // #nosec G115 -- i is within [0, 239].

@@ -17,6 +17,7 @@ import (
 	"github.com/adrg/xdg"
 
 	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // HostCapabilities holds information about the host terminal's capabilities.
@@ -298,7 +299,7 @@ const probeTimeout = 300 * time.Millisecond
 // contain neither of the bytes that were being counted, so both of their reads
 // always ran to the timeout, and a terminal without kitty graphics never sent
 // the kitty terminators the graphics read was waiting for either.
-var da1Response = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+var da1Response = lazyre.New(`\x1b\[\?[0-9;]*c`)
 
 // probeTerminal asks the host terminal what it can do, in one round trip.
 //
@@ -360,7 +361,7 @@ func probeTerminal(caps *HostCapabilities) {
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = tty.WriteString(q.String())
 
-	response := readTTYResponse(tty, probeTimeout, da1Response.MatchString)
+	response := readTTYResponse(tty, probeTimeout, da1Response().MatchString)
 
 	parsePixelGeometry(caps, response)
 	parseGraphicsSupport(caps, response, probeFileErr == nil)
@@ -391,12 +392,11 @@ func writePaletteQuery(q *strings.Builder) {
 // colour name and terminals differ on how many they use: xterm and ghostty
 // answer four, some answer two. String terminator or BEL, because both are in
 // use and a reply that came back is worth reading whichever it ended with.
-var oscColorReply = regexp.MustCompile(
-	`\x1b\](4;(\d+)|10|11);rgb:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})(?:\x1b\\|\x07)`)
+var oscColorReply = lazyre.New(`\x1b\](4;(\d+)|10|11);rgb:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})(?:\x1b\\|\x07)`)
 
 // parseHostPalette reads the terminal's own colours out of a probe response.
 func parseHostPalette(caps *HostCapabilities, response string) {
-	for _, m := range oscColorReply.FindAllStringSubmatch(response, -1) {
+	for _, m := range oscColorReply().FindAllStringSubmatch(response, -1) {
 		packed := packOSCColor(m[3], m[4], m[5])
 		switch {
 		case strings.HasPrefix(m[1], "4;"):
@@ -455,11 +455,11 @@ func writeFontQuery(q *strings.Builder) {
 // xtgettcapReply matches one successful XTGETTCAP answer: DCS 1 + r
 // hexkey=hexvalue ST. The leading 1 is the terminal saying it knew the key; a 0
 // there is a refusal and matches nothing here, which is the point.
-var xtgettcapReply = regexp.MustCompile(`\x1bP1\+r([0-9a-fA-F]+)=([0-9a-fA-F]*)\x1b\\`)
+var xtgettcapReply = lazyre.New(`\x1bP1\+r([0-9a-fA-F]+)=([0-9a-fA-F]*)\x1b\\`)
 
 // parseHostFont reads the host's own font names out of a probe response.
 func parseHostFont(caps *HostCapabilities, response string) {
-	for _, m := range xtgettcapReply.FindAllStringSubmatch(response, -1) {
+	for _, m := range xtgettcapReply().FindAllStringSubmatch(response, -1) {
 		key, kerr := hex.DecodeString(m[1])
 		value, verr := hex.DecodeString(m[2])
 		if kerr != nil || verr != nil || len(value) == 0 {
@@ -571,7 +571,7 @@ func kittyProbeRefused(response string, id int) bool {
 
 // kittyProbeResponse matches one graphics reply: its parameters and its
 // message. Compiled once because the probe walks it several times.
-var kittyProbeResponse = regexp.MustCompile(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`)
+var kittyProbeResponse = lazyre.New(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`)
 
 // kittyProbeAnswer returns the message the host sent for the given image id,
 // and whether it answered at all. The first answer for an id wins: a terminal
@@ -579,7 +579,7 @@ var kittyProbeResponse = regexp.MustCompile(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`
 // command.
 func kittyProbeAnswer(response string, id int) (string, bool) {
 	want := fmt.Sprintf("i=%d", id)
-	for _, m := range kittyProbeResponse.FindAllStringSubmatch(response, -1) {
+	for _, m := range kittyProbeResponse().FindAllStringSubmatch(response, -1) {
 		if !slices.Contains(strings.Split(m[1], ","), want) {
 			continue
 		}
@@ -789,19 +789,19 @@ func applyCellSizeOverride(caps *HostCapabilities, spec string) {
 // windowPixels and cellPixels match the two XTWINOPS replies the probe asks
 // for: the window's size in pixels and one cell's, both height before width.
 var (
-	windowPixels = regexp.MustCompile(`\x1b\[4;(\d+);(\d+)t`)
-	cellPixels   = regexp.MustCompile(`\x1b\[6;(\d+);(\d+)t`)
+	windowPixels = lazyre.New(`\x1b\[4;(\d+);(\d+)t`)
+	cellPixels   = lazyre.New(`\x1b\[6;(\d+);(\d+)t`)
 )
 
 // parsePixelGeometry reads the window and cell pixel sizes out of a probe
 // response, falling back to a derived or default cell size when the host
 // answered with neither.
 func parsePixelGeometry(caps *HostCapabilities, response string) {
-	if matches := windowPixels.FindStringSubmatch(response); len(matches) == 3 {
+	if matches := windowPixels().FindStringSubmatch(response); len(matches) == 3 {
 		caps.PixelHeight, _ = strconv.Atoi(matches[1])
 		caps.PixelWidth, _ = strconv.Atoi(matches[2])
 	}
-	if matches := cellPixels.FindStringSubmatch(response); len(matches) == 3 {
+	if matches := cellPixels().FindStringSubmatch(response); len(matches) == 3 {
 		caps.CellHeight, _ = strconv.Atoi(matches[1])
 		caps.CellWidth, _ = strconv.Atoi(matches[2])
 	}

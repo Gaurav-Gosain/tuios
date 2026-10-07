@@ -9,10 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Reports from a pane on another machine.
@@ -117,7 +118,7 @@ const (
 
 // hostedWindowIDPattern is what an owner's window id may be. It becomes an
 // environment variable here, so it is a token and nothing else.
-var hostedWindowIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+var hostedWindowIDPattern = lazyre.New(`^[A-Za-z0-9._-]{1,64}$`)
 
 // newHostedCallsToken is a fresh secret for one pane's report channel.
 func newHostedCallsToken() string {

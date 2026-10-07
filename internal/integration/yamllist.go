@@ -4,6 +4,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // yamlListItem is one item tuios adds to a list two keys deep in a YAML file:
@@ -17,8 +19,8 @@ type yamlListItem struct {
 }
 
 var (
-	yamlTopKeyRe = regexp.MustCompile(`^([A-Za-z0-9_-]+):[ \t]*(.*)$`)
-	yamlItemRe   = regexp.MustCompile(`^([ \t]*)-[ \t]+(.*)$`)
+	yamlTopKeyRe = lazyre.New(`^([A-Za-z0-9_-]+):[ \t]*(.*)$`)
+	yamlItemRe   = lazyre.New(`^([ \t]*)-[ \t]+(.*)$`)
 )
 
 // yamlValue strips a trailing comment and quotes from a scalar.
@@ -58,7 +60,7 @@ type yamlListPlace struct {
 func (f yamlListItem) locate(lines []string) (yamlListPlace, error) {
 	p := yamlListPlace{key: -1, sub: -1, childIndent: 2}
 	for i, line := range lines {
-		m := yamlTopKeyRe.FindStringSubmatch(line)
+		m := yamlTopKeyRe().FindStringSubmatch(line)
 		if m == nil || m[1] != f.key {
 			continue
 		}
@@ -109,7 +111,7 @@ func (f yamlListItem) locate(lines []string) (yamlListPlace, error) {
 			continue
 		}
 		ind := yamlIndent(line)
-		isItem := yamlItemRe.MatchString(line)
+		isItem := yamlItemRe().MatchString(line)
 		if ind < p.childIndent || (ind == p.childIndent && !isItem) {
 			break
 		}
@@ -122,7 +124,7 @@ func (f yamlListItem) locate(lines []string) (yamlListPlace, error) {
 
 func (f yamlListItem) has(lines []string, p yamlListPlace) int {
 	for _, i := range p.items {
-		m := yamlItemRe.FindStringSubmatch(lines[i])
+		m := yamlItemRe().FindStringSubmatch(lines[i])
 		if m != nil && yamlValue(m[2]) == f.item {
 			return i
 		}

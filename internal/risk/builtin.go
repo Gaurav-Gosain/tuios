@@ -1,9 +1,10 @@
 package risk
 
 import (
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Names of the shipped rules, as the Inbox shows them.
@@ -210,7 +211,7 @@ func baseName(p string) string {
 }
 
 // diskDevice matches a whole-disk device path.
-var diskDevice = regexp.MustCompile(`^/dev/(sd[a-z]|nvme\d|disk\d|rdisk\d|hd[a-z]|vd[a-z]|xvd[a-z]|mmcblk\d)`)
+var diskDevice = lazyre.New(`^/dev/(sd[a-z]|nvme\d|disk\d|rdisk\d|hd[a-z]|vd[a-z]|xvd[a-z]|mmcblk\d)`)
 
 func disk(c command, _ Call) bool {
 	name := c.name()
@@ -224,7 +225,7 @@ func disk(c command, _ Call) bool {
 			}
 		}
 	}
-	return slices.ContainsFunc(c.writes, diskDevice.MatchString)
+	return slices.ContainsFunc(c.writes, diskDevice().MatchString)
 }
 
 func widePermissions(c command, call Call) bool {
@@ -252,10 +253,10 @@ func widePermissions(c command, call Call) bool {
 }
 
 // dropTable matches the SQL that removes or empties a table.
-var dropTable = regexp.MustCompile(`(?i)\bDROP\s+(TABLE|DATABASE|SCHEMA)\b|\bTRUNCATE\s+(TABLE\b|[A-Za-z_"` + "`" + `])`)
+var dropTable = lazyre.New(`(?i)\bDROP\s+(TABLE|DATABASE|SCHEMA)\b|\bTRUNCATE\s+(TABLE\b|[A-Za-z_"` + "`" + `])`)
 
 func database(c command, _ Call) bool {
-	return dropTable.MatchString(c.raw)
+	return dropTable().MatchString(c.raw)
 }
 
 func infrastructure(c command, _ Call) bool {

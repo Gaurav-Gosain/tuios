@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -216,11 +216,11 @@ const xpanesHoldMessage = "The command stopped. Press Enter to close the pane."
 var xpanesHold = `printf '\n\033[7m %s \033[0m\n' '` + xpanesHoldMessage + `' >&2; read _`
 
 // shellSafe matches a word sh reads as itself.
-var shellSafe = regexp.MustCompile(`^[A-Za-z0-9@%+=:,./_-]+$`)
+var shellSafe = lazyre.New(`^[A-Za-z0-9@%+=:,./_-]+$`)
 
 // xpanesQuote quotes s for sh, so sh -c reads it back as one word.
 func xpanesQuote(s string) string {
-	if shellSafe.MatchString(s) {
+	if shellSafe().MatchString(s) {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"

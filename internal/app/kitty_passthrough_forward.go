@@ -11,6 +11,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -1890,7 +1891,7 @@ func (kp *KittyPassthrough) forwardFileFrameIsNew(
 // pixels advertised at a different size are a different picture, and dropping
 // that frame would leave the pane at the old one.
 func hashFileFrame(r io.Reader, cmd *vt.KittyCommand, buf []byte) (uint32, error) {
-	h := crc32.New(frameHashTable)
+	h := crc32.New(frameHashTable())
 	var header [16]byte
 	binary.LittleEndian.PutUint32(header[0:], uint32(cmd.Width))
 	binary.LittleEndian.PutUint32(header[4:], uint32(cmd.Height))
@@ -1921,4 +1922,7 @@ func (kp *KittyPassthrough) forgetFrameHashes(windowID string) {
 // one. Mapping the object instead of reading it saved a further 8% and was
 // not taken: the guest can shrink a mapped object, and the read past its end
 // is a SIGBUS.
-var frameHashTable = crc32.MakeTable(crc32.Castagnoli)
+//
+// The table is made on first use. Making it sets up the instruction's tables
+// too, and at package init that cost every tuios process about 0.15 ms.
+var frameHashTable = sync.OnceValue(func() *crc32.Table { return crc32.MakeTable(crc32.Castagnoli) })

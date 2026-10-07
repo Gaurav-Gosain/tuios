@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // MCP registration: the entry that makes a harness start tuios mcp.
@@ -387,7 +388,7 @@ func splitBlock(text, begin, end string) (outside, block string, err error) {
 }
 
 // codexTableRe finds a [mcp_servers.tuios] table header, however quoted.
-var codexTableRe = regexp.MustCompile(`(?m)^\s*\[\s*mcp_servers\s*\.\s*(?:tuios|"tuios"|'tuios')\s*\]`)
+var codexTableRe = lazyre.New(`(?m)^\s*\[\s*mcp_servers\s*\.\s*(?:tuios|"tuios"|'tuios')\s*\]`)
 
 // codexForeignTable reports whether a tuios server table sits outside tuios's
 // block.
@@ -396,7 +397,7 @@ func codexForeignTable(text string) bool {
 	if err != nil {
 		return false
 	}
-	return codexTableRe.MatchString(outside)
+	return codexTableRe().MatchString(outside)
 }
 
 func mcpTOMLBlock(tuios string, write bool) string {
@@ -415,15 +416,15 @@ func mcpTOMLBlock(tuios string, write bool) string {
 }
 
 var (
-	tomlCommandRe = regexp.MustCompile(`(?m)^command = "((?:[^"\\]|\\.)*)"$`)
-	tomlArgsRe    = regexp.MustCompile(`(?m)^args = \[(.*)\]$`)
-	tomlItemRe    = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
+	tomlCommandRe = lazyre.New(`(?m)^command = "((?:[^"\\]|\\.)*)"$`)
+	tomlArgsRe    = lazyre.New(`(?m)^args = \[(.*)\]$`)
+	tomlItemRe    = lazyre.New(`"((?:[^"\\]|\\.)*)"`)
 )
 
 // parseMCPTOMLBlock reads back the command and args of a block tuios wrote.
 func parseMCPTOMLBlock(block string) (string, []string, bool) {
-	cm := tomlCommandRe.FindStringSubmatch(block)
-	am := tomlArgsRe.FindStringSubmatch(block)
+	cm := tomlCommandRe().FindStringSubmatch(block)
+	am := tomlArgsRe().FindStringSubmatch(block)
 	if cm == nil || am == nil {
 		return "", nil, false
 	}
@@ -435,7 +436,7 @@ func parseMCPTOMLBlock(block string) (string, []string, bool) {
 		return v
 	}
 	var args []string
-	for _, m := range tomlItemRe.FindAllStringSubmatch(am[1], -1) {
+	for _, m := range tomlItemRe().FindAllStringSubmatch(am[1], -1) {
 		args = append(args, unquote(m[1]))
 	}
 	return unquote(cm[1]), args, true
@@ -454,7 +455,7 @@ func editMCPTOML(have []byte, tuios string, write, install bool) ([]byte, error)
 		}
 		return []byte(outside), nil
 	}
-	if codexTableRe.MatchString(outside) {
+	if codexTableRe().MatchString(outside) {
 		return nil, fmt.Errorf("it defines [mcp_servers.%s] itself, so tuios leaves it alone", MCPServerName)
 	}
 	trimmed := strings.TrimRight(outside, "\n")

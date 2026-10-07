@@ -21,11 +21,12 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Runner runs a program and returns its standard output. Detect reaches the
@@ -243,13 +244,13 @@ func parseXrandr(out []byte) float64 {
 
 // systemProfilerRate matches the rate macOS prints for a display, as in
 // "UI Looks like: 2560 x 1440 @ 144.00Hz" or "Resolution: 1920 x 1080 @ 60Hz".
-var systemProfilerRate = regexp.MustCompile(`@\s*([0-9]+(?:\.[0-9]+)?)\s*Hz`)
+var systemProfilerRate = lazyre.New(`@\s*([0-9]+(?:\.[0-9]+)?)\s*Hz`)
 
 // parseSystemProfiler reads `system_profiler SPDisplaysDataType`. A display
 // that prints no rate, which some built-in panels do, adds nothing.
 func parseSystemProfiler(out []byte) float64 {
 	best := 0.0
-	for _, m := range systemProfilerRate.FindAllSubmatch(out, -1) {
+	for _, m := range systemProfilerRate().FindAllSubmatch(out, -1) {
 		if hz, err := strconv.ParseFloat(string(m[1]), 64); err == nil {
 			best = max(best, hz)
 		}

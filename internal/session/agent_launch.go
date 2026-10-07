@@ -4,10 +4,11 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Starting an agent: what fan and start-agent share.
@@ -46,7 +47,7 @@ const (
 )
 
 // envNameRE is a portable environment variable name.
-var envNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var envNameRE = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // agentLaunch is one agent to start: the argv to exec and the harness it is,
 // when a manifest recognises it.
@@ -233,7 +234,7 @@ func callerEnv(cs *connState, env map[string]string) ([]string, string, *verbErr
 	for _, k := range names {
 		v := env[k]
 		switch {
-		case !envNameRE.MatchString(k):
+		case !envNameRE().MatchString(k):
 			return nil, "", invalidParam("env", "env: "+echoName(k)+" is not a variable name")
 		case strings.HasPrefix(k, "TUIOS_") || k == "TUIOS":
 			return nil, "", invalidParam("env", "env: "+echoName(k)+" is set by tuios for every pane and cannot be passed")

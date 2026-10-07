@@ -1,11 +1,11 @@
 package app
 
 import (
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -44,7 +44,7 @@ var placeholderMinimum = map[string][3]int{
 
 // xtversionReply matches the DCS a terminal answers CSI > q with, which is
 // "ESC P > | <name> <version> ESC \".
-var xtversionReply = regexp.MustCompile(`\x1bP>\|([^\x1b]*)\x1b\\`)
+var xtversionReply = lazyre.New(`\x1bP>\|([^\x1b]*)\x1b\\`)
 
 // xtversionQuery is the request itself. It rides in the capability probe's
 // existing round trip, so it costs no extra latency.
@@ -54,7 +54,7 @@ const xtversionQuery = "\x1b[>q"
 // response. The name is lowercased and the version is whatever digits follow
 // it; both are empty when the terminal did not answer.
 func parseHostIdentity(response string) (name string, version [3]int, ok bool) {
-	m := xtversionReply.FindStringSubmatch(response)
+	m := xtversionReply().FindStringSubmatch(response)
 	if m == nil {
 		return "", version, false
 	}

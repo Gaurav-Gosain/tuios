@@ -35,7 +35,7 @@ func probeReply(t *testing.T, reply string, timeout time.Duration) (string, time
 	}
 
 	start := time.Now()
-	got := readTTYResponse(r, timeout, da1Response.MatchString)
+	got := readTTYResponse(r, timeout, da1Response().MatchString)
 	return got, time.Since(start)
 }
 

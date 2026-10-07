@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // A session has one name, and the daemon owns it. rename-session changes it:
@@ -23,7 +24,7 @@ func RenamedSessionMessage(old, current string) string {
 	return fmt.Sprintf("session '%s' was renamed to '%s'", old, current)
 }
 
-var renamedSessionRE = regexp.MustCompile(`session '(.*)' was renamed to '(.*)'`)
+var renamedSessionRE = lazyre.New(`session '(.*)' was renamed to '(.*)'`)
 
 // RenamedSessionTarget reads the new name out of an error that carries
 // RenamedSessionMessage. ok is false for every other error.
@@ -31,7 +32,7 @@ func RenamedSessionTarget(err error) (current string, ok bool) {
 	if err == nil {
 		return "", false
 	}
-	m := renamedSessionRE.FindStringSubmatch(err.Error())
+	m := renamedSessionRE().FindStringSubmatch(err.Error())
 	if m == nil {
 		return "", false
 	}

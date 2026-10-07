@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"regexp"
 	"strings"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // What a machine linked to this one may do here.
@@ -392,7 +392,7 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 		return nil, newVerbError(ErrVerbForbidden, "link-peer is only for a connection that arrived over a link")
 	}
 	peer := strings.TrimSpace(p.Peer)
-	if peer != "" && (len(peer) > 64 || !linkPeerPattern.MatchString(peer)) {
+	if peer != "" && (len(peer) > 64 || !linkPeerPattern().MatchString(peer)) {
 		return nil, invalidParam("peer", "a peer name accepts only letters, digits, dot, dash and underscore")
 	}
 	cs.mu.Lock()
@@ -412,7 +412,7 @@ func (d *Daemon) verbLinkPeer(cs *connState, params json.RawMessage) (any, *verb
 
 // linkPeerPattern is what a peer name may be: the same shape as a host name,
 // since it is matched against the [hosts] table's keys.
-var linkPeerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var linkPeerPattern = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // linkSelfName is the name this machine gives for itself on a link: its host
 // name up to the first dot, lowered, since that is the name a person writes as
@@ -421,7 +421,7 @@ var linkPeerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 func linkSelfName(host string) string {
 	name, _, _ := strings.Cut(strings.TrimSpace(host), ".")
 	name = strings.ToLower(name)
-	if name == "" || len(name) > 64 || !linkPeerPattern.MatchString(name) {
+	if name == "" || len(name) > 64 || !linkPeerPattern().MatchString(name) {
 		return ""
 	}
 	return name

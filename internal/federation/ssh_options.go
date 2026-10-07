@@ -2,8 +2,9 @@ package federation
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // The ssh options of a host are read from config.toml, which any process of
@@ -51,29 +52,29 @@ var sshSafeOptions = map[string]bool{
 // plainSSHOption is an -o value written plainly: a keyword of letters and
 // digits, then = or one space, then the value. The value is checked on its
 // own (checkSSHOptionValue).
-var plainSSHOption = regexp.MustCompile(`^([A-Za-z0-9]+)(?:=| )(.*)$`)
+var plainSSHOption = lazyre.New(`^([A-Za-z0-9]+)(?:=| )(.*)$`)
 
 // plainSSHValue is a value as one plain token: letters, digits and the
 // punctuation paths, algorithm lists and addresses need. No space, quote,
 // backslash, control character or shell character such as ; { } $ ` |, so
 // a value ssh writes into a file (a host key alias in known_hosts, say) is
 // never a line a shell would run.
-var plainSSHValue = regexp.MustCompile(`^[A-Za-z0-9_.,:@+=/~%\[\]-]+$`)
+var plainSSHValue = lazyre.New(`^[A-Za-z0-9_.,:@+=/~%\[\]-]+$`)
 
 // sshNameValue is a host name, host key alias or user: letters, digits, dot,
 // dash, underscore, @, colon and brackets for IPv6, not starting with a dash.
-var sshNameValue = regexp.MustCompile(`^[A-Za-z0-9_.@:\[\]][A-Za-z0-9_.@:\[\]-]*$`)
+var sshNameValue = lazyre.New(`^[A-Za-z0-9_.@:\[\]][A-Za-z0-9_.@:\[\]-]*$`)
 
 // sshNameOptions are the -o keywords whose value is a name (sshNameValue).
 var sshNameOptions = map[string]bool{"hostkeyalias": true, "hostname": true, "user": true}
 
 // sshPortValue is a port number.
-var sshPortValue = regexp.MustCompile(`^[0-9]{1,5}$`)
+var sshPortValue = lazyre.New(`^[0-9]{1,5}$`)
 
 // jumpHopPattern is one ProxyJump hop: [user@]host[:port], with no part
 // starting with a dash. ssh runs a hop as another ssh, so a host part such as
 // -Fc would be read as an option there.
-var jumpHopPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*@)?(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$`)
+var jumpHopPattern = lazyre.New(`^(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*@)?(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$`)
 
 // validJump reports whether a ProxyJump value is only hosts, comma separated.
 func validJump(value string) bool {
@@ -81,7 +82,7 @@ func validJump(value string) bool {
 		return false
 	}
 	for hop := range strings.SplitSeq(value, ",") {
-		if !jumpHopPattern.MatchString(hop) {
+		if !jumpHopPattern().MatchString(hop) {
 			return false
 		}
 	}
@@ -135,7 +136,7 @@ func checkSSHFlagValue(flag byte, value string) error {
 			return fmt.Errorf("ssh_options: -J %q is not a list of hosts", value)
 		}
 	case 'o':
-		m := plainSSHOption.FindStringSubmatch(value)
+		m := plainSSHOption().FindStringSubmatch(value)
 		if m == nil {
 			return fmt.Errorf("ssh_options: -o %q is not written as Keyword=value with plain text", value)
 		}
@@ -145,15 +146,15 @@ func checkSSHFlagValue(flag byte, value string) error {
 		}
 		return checkSSHOptionValue(m[1], key, m[2])
 	case 'l':
-		if !sshNameValue.MatchString(value) {
+		if !sshNameValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: -l %q is not a user name", value)
 		}
 	case 'p':
-		if !sshPortValue.MatchString(value) {
+		if !sshPortValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: -p %q is not a port", value)
 		}
 	default:
-		if !plainSSHValue.MatchString(value) {
+		if !plainSSHValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: -%c %q is not one plain value", flag, value)
 		}
 	}
@@ -172,15 +173,15 @@ func checkSSHOptionValue(name, key, value string) error {
 			return fmt.Errorf("ssh_options: %s takes yes or no", name)
 		}
 	case key == "port":
-		if !sshPortValue.MatchString(value) {
+		if !sshPortValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: Port %q is not a port", value)
 		}
 	case sshNameOptions[key]:
-		if !sshNameValue.MatchString(value) {
+		if !sshNameValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: %s %q is not a plain name: use letters, digits, dot, dash, underscore, @ and colon", name, value)
 		}
 	default:
-		if !plainSSHValue.MatchString(value) {
+		if !plainSSHValue().MatchString(value) {
 			return fmt.Errorf("ssh_options: %s %q is not one plain value", name, value)
 		}
 	}

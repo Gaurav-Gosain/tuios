@@ -166,7 +166,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 		hp.grace = grace
 		hp.resumeToken = newHostedCallsToken()
 	}
-	if hostedWindowIDPattern.MatchString(spec.Window) {
+	if hostedWindowIDPattern().MatchString(spec.Window) {
 		hp.window = spec.Window
 		hp.callsToken = newHostedCallsToken()
 	}

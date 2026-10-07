@@ -282,7 +282,7 @@ func (m *OS) handleHostColorMsg(msg tea.Msg) (tea.Cmd, bool) {
 
 // parseHostSlotReply reads an OSC 4 answer for one of the sixteen.
 func parseHostSlotReply(s string) (int, color.Color, bool) {
-	m := oscColorReply.FindStringSubmatch(s)
+	m := oscColorReply().FindStringSubmatch(s)
 	if m == nil || !strings.HasPrefix(m[1], "4;") {
 		return 0, nil, false
 	}

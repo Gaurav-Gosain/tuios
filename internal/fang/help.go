@@ -7,13 +7,13 @@ import (
 	"iter"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
@@ -157,7 +157,7 @@ func writeLongShort(w *colorprofile.Writer, styles Styles, longShort string) {
 	_, _ = fmt.Fprintln(w, styles.Text.Width(width()).PaddingLeft(shortPad).Render(longShort))
 }
 
-var otherArgsRe = regexp.MustCompile(`(\[.*\])`)
+var otherArgsRe = lazyre.New(`(\[.*\])`)
 
 // styleUsage stylized styleUsage line for a given command.
 func styleUsage(c *cobra.Command, styles Program, complete bool) string {
@@ -177,7 +177,7 @@ func styleUsage(c *cobra.Command, styles Program, complete bool) string {
 	}
 
 	var otherArgs []string //nolint:prealloc
-	for _, arg := range otherArgsRe.FindAllString(u, -1) {
+	for _, arg := range otherArgsRe().FindAllString(u, -1) {
 		u = strings.ReplaceAll(u, arg, "")
 		otherArgs = append(otherArgs, arg)
 	}

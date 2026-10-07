@@ -2,11 +2,12 @@ package harness
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Answers: how a person answers a prompt a needs_input rule reads, without
@@ -416,7 +417,7 @@ func (r *Registry) TitlePrompt(id, title string) (Prompt, bool) {
 
 // optionLine matches one numbered option: an optional cursor mark, the
 // number, a dot or a parenthesis, and the label.
-var optionLine = regexp.MustCompile(`^(?:[❯›>▶→*]\s*)?([0-9]{1,2})[.)]\s+(\S.*)$`)
+var optionLine = lazyre.New(`^(?:[❯›>▶→*]\s*)?([0-9]{1,2})[.)]\s+(\S.*)$`)
 
 // maxOptionGap is how many lines that are not options may sit between two
 // options of one menu: a label that wraps, or a description under it.
@@ -470,7 +471,7 @@ func parseOptionLine(line string) (int, string, bool) {
 	trimmed := strings.TrimFunc(line, func(r rune) bool {
 		return unicode.IsSpace(r) || (r >= 0x2500 && r <= 0x259f)
 	})
-	m := optionLine.FindStringSubmatch(trimmed)
+	m := optionLine().FindStringSubmatch(trimmed)
 	if m == nil {
 		return 0, "", false
 	}

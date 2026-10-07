@@ -3,10 +3,11 @@ package federation
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // LocalHostName is the reserved name for the daemon a caller is already talking
@@ -77,7 +78,7 @@ func (h Host) command() string {
 // name becomes a qualifier in `host:target` addresses, so a name carrying a
 // colon or a space would make an address ambiguous, and an address that can be
 // read two ways is how a caller reaches the wrong machine.
-var hostNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var hostNamePattern = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // ErrUnknownHost reports a name that is not in the configured table. It is
 // final: section 3 refuses fuzzy matching across hosts, because silently
@@ -105,7 +106,7 @@ func NewTable(hosts []Host) (*Table, []error) {
 		case name == LocalHostName:
 			problems = append(problems, fmt.Errorf("host %q was ignored, because %q is the reserved name for this machine", name, LocalHostName))
 			continue
-		case !hostNamePattern.MatchString(name):
+		case !hostNamePattern().MatchString(name):
 			problems = append(problems, fmt.Errorf("host %q was ignored, because a host name accepts only letters, digits, dot, dash and underscore", name))
 			continue
 		case strings.TrimSpace(h.Addr) == "":

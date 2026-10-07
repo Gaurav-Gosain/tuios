@@ -2,13 +2,13 @@ package config
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 	"unicode"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -499,12 +499,12 @@ func validateClockFormat(format string, result *ValidationResult) {
 }
 
 // hexColorPattern matches the one colour literal the config accepts.
-var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+var hexColorPattern = lazyre.New(`^#[0-9a-fA-F]{6}$`)
 
 // IsHexColor reports whether s is a colour literal the config can hold. One
 // spelling, so a value written by the settings panel, typed at the CLI or put in
 // the file by hand is the same string either way.
-func IsHexColor(s string) bool { return hexColorPattern.MatchString(s) }
+func IsHexColor(s string) bool { return hexColorPattern().MatchString(s) }
 
 // validateBorderColors warns about a border override that is not a colour.
 //
@@ -591,10 +591,10 @@ var knownTitlePlaceholders = []string{"{title}", "{index}", "{cwd}"}
 
 // titlePlaceholderPattern matches anything written as a placeholder, so a typo
 // like {name} can be reported instead of being rendered literally in the title.
-var titlePlaceholderPattern = regexp.MustCompile(`\{[^{}]*\}`)
+var titlePlaceholderPattern = lazyre.New(`\{[^{}]*\}`)
 
 func validateTitleFormat(format string, result *ValidationResult) {
-	for _, placeholder := range titlePlaceholderPattern.FindAllString(format, -1) {
+	for _, placeholder := range titlePlaceholderPattern().FindAllString(format, -1) {
 		if slices.Contains(knownTitlePlaceholders, placeholder) {
 			continue
 		}

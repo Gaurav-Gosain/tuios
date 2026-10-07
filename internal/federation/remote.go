@@ -189,7 +189,7 @@ func ShellCommand(script string, args ...string) string {
 // SafeRemoteArg reports whether s can be sent to the remote shell as one
 // plain word.
 func SafeRemoteArg(s string) bool {
-	return remoteArgPattern.MatchString(s)
+	return remoteArgPattern().MatchString(s)
 }
 
 // cacheableRemotePath reports whether a path the probe found can be sent back
@@ -197,7 +197,7 @@ func SafeRemoteArg(s string) bool {
 // command, so only a path made of plain characters is safe to send bare; any
 // other path is simply found again by the next probe.
 func cacheableRemotePath(p string) bool {
-	return p != "" && p[0] == '/' && remoteArgPattern.MatchString(p)
+	return p != "" && p[0] == '/' && remoteArgPattern().MatchString(p)
 }
 
 // preambleNote is what the hub learned from the lines ahead of the preamble.

@@ -3,6 +3,7 @@ package overlay
 import (
 	"image/color"
 	"math"
+	"sync"
 )
 
 // Blending is done in OKLab, a perceptual space: equal steps of a blend look
@@ -15,23 +16,31 @@ import (
 // transfer curves are tables: decoding is exact for the 256 channel values,
 // and encoding interpolates a 4096-entry table, which is within a quarter of
 // one 8-bit step everywhere. Nothing here allocates.
+//
+// The tables are built on first use. Built at package init they cost every
+// tuios process about 0.2 ms, the largest single item of init, and a one-shot
+// CLI command never blends a colour.
 
-// srgbToLinear decodes one 8-bit channel.
-var srgbToLinear [256]float64
-
-// linearToSRGBTable encodes linear light at 4096 even steps from 0 to 1.
-var linearToSRGBTable [linearSteps + 1]float64
+// oklabTables holds both transfer curves.
+type oklabTables struct {
+	// toLinear decodes one 8-bit channel.
+	toLinear [256]float64
+	// toSRGB encodes linear light at linearSteps even steps from 0 to 1.
+	toSRGB [linearSteps + 1]float64
+}
 
 const linearSteps = 4096
 
-func init() {
-	for i := range srgbToLinear {
-		srgbToLinear[i] = linearize(float64(i) / 255)
+var transfer = sync.OnceValue(func() *oklabTables {
+	t := new(oklabTables)
+	for i := range t.toLinear {
+		t.toLinear[i] = linearize(float64(i) / 255)
 	}
-	for i := range linearToSRGBTable {
-		linearToSRGBTable[i] = delinearize(float64(i) / linearSteps)
+	for i := range t.toSRGB {
+		t.toSRGB[i] = delinearize(float64(i) / linearSteps)
 	}
-}
+	return t
+})
 
 // encodeChannel turns linear light into an 8-bit channel, rounded.
 func encodeChannel(v float64) uint8 {
@@ -41,10 +50,11 @@ func encodeChannel(v float64) uint8 {
 	if v >= 1 {
 		return 255
 	}
+	t := &transfer().toSRGB
 	x := v * linearSteps
 	i := int(x)
 	f := x - float64(i)
-	s := linearToSRGBTable[i]*(1-f) + linearToSRGBTable[min(i+1, linearSteps)]*f
+	s := t[i]*(1-f) + t[min(i+1, linearSteps)]*f
 	return uint8(math.Round(s * 255))
 }
 
@@ -54,7 +64,8 @@ type lab struct{ l, a, b float64 }
 // toLab converts c to OKLab.
 func toLab(c color.Color) lab {
 	r16, g16, b16, _ := c.RGBA()
-	r, g, b := srgbToLinear[r16>>8], srgbToLinear[g16>>8], srgbToLinear[b16>>8]
+	t := &transfer().toLinear
+	r, g, b := t[r16>>8], t[g16>>8], t[b16>>8]
 	l := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
 	m := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
 	s := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)

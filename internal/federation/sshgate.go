@@ -3,8 +3,9 @@ package federation
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Tailscale SSH can stand between ssh and the machine. Two of the things it
@@ -63,11 +64,11 @@ var (
 	tailscaleApprovedLine = "Authentication checked with Tailscale SSH"
 	// The URL is on the same line as the words. \s would cross a line break
 	// and take the first word of whatever the far side printed next.
-	tailscaleVisitPattern = regexp.MustCompile(`To authenticate, visit:[ \t]*(\S+)`)
+	tailscaleVisitPattern = lazyre.New(`To authenticate, visit:[ \t]*(\S+)`)
 	// The URL is repeated to the person, so it is held to the characters a
 	// URL has. A far side that prints anything else gets no URL shown.
-	tailscaleURLPattern    = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/?=&+-]*)?$`)
-	tailscalePolicyPattern = regexp.MustCompile(`tailnet policy does not permit you to SSH (?:as user "?([A-Za-z0-9._@+-]{1,64})"?|to this node)`)
+	tailscaleURLPattern    = lazyre.New(`^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/?=&+-]*)?$`)
+	tailscalePolicyPattern = lazyre.New(`tailnet policy does not permit you to SSH (?:as user "?([A-Za-z0-9._@+-]{1,64})"?|to this node)`)
 )
 
 // maxGateURL bounds the URL. Tailscale's are about fifty characters.
@@ -87,7 +88,7 @@ var DefaultLoginOrigins = []string{"https://login.tailscale.com", "https://contr
 // check one click would open any address it chose, a page on this machine's
 // localhost included.
 func SignInURLAllowed(raw string, origins ...string) bool {
-	if len(raw) > maxGateURL || !tailscaleURLPattern.MatchString(raw) {
+	if len(raw) > maxGateURL || !tailscaleURLPattern().MatchString(raw) {
 		return false
 	}
 	u, err := url.Parse(raw)
@@ -110,14 +111,14 @@ func SignInURLAllowed(raw string, origins ...string) bool {
 // there is none. origins are the sign-in origins allowed besides Tailscale's
 // own; see SignInURLAllowed.
 func ParseSSHGate(stderr string, origins ...string) *SSHGate {
-	if m := tailscalePolicyPattern.FindStringSubmatch(stderr); m != nil {
+	if m := tailscalePolicyPattern().FindStringSubmatch(stderr); m != nil {
 		return &SSHGate{Kind: GateTailscalePolicy, User: m[1]}
 	}
 	if !strings.Contains(stderr, tailscaleCheckLine) {
 		return nil
 	}
 	g := &SSHGate{Kind: GateTailscaleCheck}
-	if m := tailscaleVisitPattern.FindStringSubmatch(stderr); m != nil {
+	if m := tailscaleVisitPattern().FindStringSubmatch(stderr); m != nil {
 		u := strings.TrimRight(m[1], "\r")
 		if SignInURLAllowed(u, origins...) {
 			g.URL = u

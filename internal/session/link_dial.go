@@ -175,7 +175,7 @@ func daemonHoldsLinkPolicy(socketPath string) bool {
 // ValidLinkPeerName reports whether name can be a peer name, for stdio-proxy's
 // --as flag.
 func ValidLinkPeerName(name string) error {
-	if name == "" || len(name) > 64 || !linkPeerPattern.MatchString(name) {
+	if name == "" || len(name) > 64 || !linkPeerPattern().MatchString(name) {
 		return fmt.Errorf("%q is not a machine name: use letters, digits, dot, dash and underscore", name)
 	}
 	return nil

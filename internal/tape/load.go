@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // maxSourceDepth bounds how deep Source lines may nest, which also stops a
@@ -149,13 +150,13 @@ func (s *Script) origin(line int) (lineOrigin, bool) {
 }
 
 // linePrefix matches the place an error message starts with.
-var linePrefix = regexp.MustCompile(`^line (\d+), column (\d+)`)
+var linePrefix = lazyre.New(`^line (\d+), column (\d+)`)
 
 // Locate rewrites the "line N, column C" an error message starts with, which
 // counts lines of Text, to the file and line the line came from. A message
 // with no such place is returned unchanged.
 func (s *Script) Locate(msg string) string {
-	m := linePrefix.FindStringSubmatchIndex(msg)
+	m := linePrefix().FindStringSubmatchIndex(msg)
 	if m == nil {
 		return msg
 	}

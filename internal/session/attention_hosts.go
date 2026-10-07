@@ -2,9 +2,10 @@ package session
 
 import (
 	"cmp"
-	"regexp"
 	"slices"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Inbox items from other machines.
@@ -39,7 +40,7 @@ const hostAttentionMaxOptions = 16
 // hostItemIDPattern is what a host's own item id may be. A daemon issues plain
 // numbers; the pattern is wider than that so a later id scheme still mirrors,
 // and narrow enough that an id is never more than a token.
-var hostItemIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+var hostItemIDPattern = lazyre.New(`^[A-Za-z0-9._-]{1,64}$`)
 
 // hostItemID is the id a mirrored item has here.
 func hostItemID(host, id string) string { return host + ":" + id }
@@ -57,7 +58,7 @@ var hostCloseReasons = []string{
 func sanitizeHostItem(host string, in AttentionItem, now time.Time) (AttentionItem, bool) {
 	// An item the host mirrors from a machine of its own is that machine's to
 	// report, so only the host's own items are taken.
-	if in.Host != "" || AttentionKindRank(in.Kind) == len(AttentionKindNames) || !hostItemIDPattern.MatchString(in.ID) {
+	if in.Host != "" || AttentionKindRank(in.Kind) == len(AttentionKindNames) || !hostItemIDPattern().MatchString(in.ID) {
 		return AttentionItem{}, false
 	}
 	// Mail waiting to leave that machine is about its links, not about
