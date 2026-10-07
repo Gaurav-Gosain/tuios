@@ -28,50 +28,6 @@ const homeEndLine = "HOME-start middle END-tail"
 
 const homeEndCmd = `clear; printf 'HOME%sstart middle END%stail\n' - -`
 
-// homeEndClient starts tuios with one pane in terminal mode and its host
-// output captured.
-func homeEndClient(t *testing.T) (*tuitest.Terminal, *lockedBuffer) {
-	t.Helper()
-	base := t.TempDir()
-	writeConfig(t, base, copyCursorConfig)
-	out := &lockedBuffer{}
-	term := startIn(t, base, startOpts{out: out, env: copyColorOpts.env})
-	waitBoot(t, term)
-	newWindow(t, term)
-	enterTerminalMode(t, term)
-	return term, out
-}
-
-// homeEndWrite waits for exactly one clipboard write after the first from,
-// and returns it untrimmed.
-func homeEndWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int, what string) string {
-	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for len(clipboardWrites(out)) <= from {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s: nothing reached the clipboard\n%s", what, term.Snapshot())
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	time.Sleep(clipboardSettle)
-	writes := clipboardWrites(out)[from:]
-	if len(writes) != 1 {
-		t.Fatalf("%s: %d clipboard writes, want 1: %q", what, len(writes), writes)
-	}
-	return writes[0]
-}
-
-// homeEndPress sends keys one at a time, with a beat between.
-func homeEndPress(t *testing.T, term *tuitest.Terminal, keys ...any) {
-	t.Helper()
-	for _, k := range keys {
-		if err := term.SendKeys(k); err != nil {
-			t.Fatalf("send %q: %v", k, err)
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-}
-
 // copyCursorMoved waits until the copy cursor is on row and its column is not
 // from, and returns the column.
 func copyCursorMoved(t *testing.T, term *tuitest.Terminal, row, from int, what string) int {
@@ -110,7 +66,7 @@ func toMiddle(t *testing.T, term *tuitest.Terminal, row int) int {
 }
 
 func TestCopyModeHomeAndEnd(t *testing.T) {
-	term, out := homeEndClient(t)
+	term, out := startWhitespaceClient(t, false)
 	runInShell(t, term, homeEndCmd, "END-tail", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 	row := lastRowWith(term.Screen(), homeEndLine)
@@ -124,20 +80,20 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 
 	// The columns 0 and $ reach, each from the middle of the line.
 	mid := toMiddle(t, term, row)
-	homeEndPress(t, term, "0")
+	sendEach(t, term, "0")
 	zero := copyCursorMoved(t, term, row, mid, "0")
 	mid = toMiddle(t, term, row)
-	homeEndPress(t, term, "$")
+	sendEach(t, term, "$")
 	dollar := copyCursorMoved(t, term, row, mid, "$")
 
 	// Home and End reach the same columns.
 	mid = toMiddle(t, term, row)
-	homeEndPress(t, term, tuitest.Home)
+	sendEach(t, term, tuitest.Home)
 	if got := copyCursorMoved(t, term, row, mid, "Home"); got != zero {
 		t.Fatalf("Home put the copy cursor on column %d, want column %d where 0 puts it", got, zero)
 	}
 	mid = toMiddle(t, term, row)
-	homeEndPress(t, term, tuitest.End)
+	sendEach(t, term, tuitest.End)
 	if got := copyCursorMoved(t, term, row, mid, "End"); got != dollar {
 		t.Fatalf("End put the copy cursor on column %d, want column %d where $ puts it", got, dollar)
 	}
@@ -145,14 +101,14 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 	// In a v selection, Home and End move its end.
 	toMiddle(t, term, row)
 	from := len(clipboardWrites(out))
-	homeEndPress(t, term, "v", tuitest.Home, "y")
-	if got, want := homeEndWrite(t, term, out, from, "v Home y"), "HOME-start m"; got != want {
+	sendEach(t, term, "v", tuitest.Home, "y")
+	if got, want := rawWrite(t, term, out, from, "v Home y"), "HOME-start m"; got != want {
 		t.Fatalf("v Home y copied %q, want %q", got, want)
 	}
 	toMiddle(t, term, row)
 	from = len(clipboardWrites(out))
-	homeEndPress(t, term, "v", tuitest.End, "y")
-	if got, want := homeEndWrite(t, term, out, from, "v End y"), "middle END-tail"; got != want {
+	sendEach(t, term, "v", tuitest.End, "y")
+	if got, want := rawWrite(t, term, out, from, "v End y"), "middle END-tail"; got != want {
 		t.Fatalf("v End y copied %q, want %q", got, want)
 	}
 	alive(t, term, "after Home and End in copy mode")
@@ -175,18 +131,18 @@ func TestCopyModeEndRebinds(t *testing.T) {
 	waitCopyCursor(t, term, "prefix+[")
 
 	mid := toMiddle(t, term, row)
-	homeEndPress(t, term, "$")
+	sendEach(t, term, "$")
 	dollar := copyCursorMoved(t, term, row, mid, "$")
 
 	// End is no longer bound: the cursor stays on the match.
 	mid = toMiddle(t, term, row)
-	homeEndPress(t, term, tuitest.End)
+	sendEach(t, term, tuitest.End)
 	time.Sleep(500 * time.Millisecond)
 	if r, c, ok := copyCursorCell(term.Screen()); !ok || r != row || c != mid {
 		t.Fatalf("End moved the copy cursor to row %d column %d after it was unbound, want it on column %d\n%s", r, c, mid, term.Snapshot())
 	}
 	// ctrl+e is.
-	homeEndPress(t, term, tuitest.Ctrl('e'))
+	sendEach(t, term, tuitest.Ctrl('e'))
 	if got := copyCursorMoved(t, term, row, mid, "ctrl+e"); got != dollar {
 		t.Fatalf("ctrl+e put the copy cursor on column %d, want column %d where $ puts it", got, dollar)
 	}

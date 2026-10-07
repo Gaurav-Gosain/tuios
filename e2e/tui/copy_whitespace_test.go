@@ -41,7 +41,7 @@ var whitespaceLines = []string{
 }
 
 // rawWrite waits for exactly one clipboard write after the first from, and
-// returns it untrimmed.
+// returns it untrimmed. The copy-mode tests share it.
 func rawWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int, what string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -60,7 +60,7 @@ func rawWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int,
 }
 
 // sendEach sends keys one at a time, with a beat between, as a person types.
-func sendEach(t *testing.T, term *tuitest.Terminal, keys ...string) {
+func sendEach(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	for _, k := range keys {
 		if err := term.SendKeys(k); err != nil {
@@ -211,7 +211,7 @@ func TestCopyKeepsSpacesAtASoftWrap(t *testing.T) {
 
 			copySearch(t, term, "WRAP-S0", first)
 			from := len(clipboardWrites(out))
-			keys := []string{"V"}
+			keys := []any{"V"}
 			for range last - first {
 				keys = append(keys, "j")
 			}
