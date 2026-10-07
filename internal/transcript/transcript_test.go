@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -365,5 +366,59 @@ func TestIncrementalReadsOnlyConsumeWhatWasAppended(t *testing.T) {
 	obs, ok, err := r.Read()
 	if err != nil || !ok || obs.Turn != TurnDone {
 		t.Fatalf("third read: %v ok=%v turn=%v", err, ok, obs.Turn)
+	}
+}
+
+// The session reads one pane's transcript from more than one goroutine: the
+// debounce callback, the synchronous read when a pane joins, and the
+// output-driven fallback. Two reads in flight share buf, and one zeroing or
+// refilling it while the other decodes is a panic inside encoding/json that
+// takes the whole daemon down.
+func TestConcurrentReadsShareOneReaderSafely(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	write(t, path, noiseLines()+assistantLine("tool_use"))
+	r := NewReader(path)
+
+	// The writer appends a bounded amount and the readers run until it is done,
+	// so every read races a live append without the file growing for as long as
+	// the readers take.
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = f.Close() }()
+		turn := noiseLines() + userToolResultLine() + assistantLine("tool_use")
+		for range 3000 {
+			if _, err := f.WriteString(turn); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for {
+				select {
+				case <-writerDone:
+					return
+				default:
+				}
+				if _, _, err := r.Read(); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+
+	if r.Skipped() != 0 {
+		t.Fatalf("skipped = %d: a line read while another read reused the buffer", r.Skipped())
 	}
 }

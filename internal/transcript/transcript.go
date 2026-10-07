@@ -38,6 +38,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 )
 
 // Turn is what the transcript says about the agent's current turn. It is
@@ -128,10 +129,15 @@ const tailWindow = 128 << 10
 // distinguished from any other read failure.
 var ErrNoFile = errors.New("transcript: file does not exist")
 
-// Reader tails one transcript. It is not safe for concurrent use; one reader
-// belongs to one joined pane and is driven by that pane's watcher.
+// Reader tails one transcript. One reader belongs to one joined pane, and it is
+// safe for concurrent use: the session reads a pane from more than one goroutine
+// (the debounce callback, the read on join, the output-driven fallback), and
+// those reads share buf and off, so Read serializes them.
 type Reader struct {
 	path string
+	// mu serializes Read. A second read refilling or zeroing buf while the first
+	// decodes from it is a panic inside encoding/json.
+	mu sync.Mutex
 	// off is where the last read stopped, always immediately after a newline, so
 	// a resumed read never begins inside a record.
 	off int64
@@ -151,7 +157,11 @@ func NewReader(path string) *Reader { return &Reader{path: path} }
 func (r *Reader) Path() string { return r.path }
 
 // Skipped returns how many lines have failed to parse over this reader's life.
-func (r *Reader) Skipped() int { return r.skipped }
+func (r *Reader) Skipped() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.skipped
+}
 
 // Read consumes whatever has been appended since the last call and reports what
 // the newest usable record says.
@@ -170,6 +180,9 @@ func (r *Reader) Skipped() int { return r.skipped }
 //   - A read that begins mid-file begins mid-record. Everything up to and
 //     including the first newline is dropped in that case.
 func (r *Reader) Read() (Observation, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	f, err := os.Open(r.path) //nolint:gosec // the path came from the agent's own hook or from the manifest's directory
 	if err != nil {
 		if os.IsNotExist(err) {
