@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 32,571,554 | 32,600,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 30,639,922 | 30,690,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 32,600,226 | 32,700,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 30,673,362 | 30,690,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2187,6 +2187,12 @@ when the master position and master count (issue #321) brought the build to
 room before it, and the feature adds about 74 KB and 68 KB: the tiler, the
 MsgMasterLayout op, ten actions with their palette rows, and seven run-command
 commands.
+
+The linux/amd64 budget went from 32,600,000 to 32,700,000 when the rail's
+opt-in switch numbers brought the build to 32,600,226 bytes (Go 1.26.6). Main
+had 226 bytes of room before it, so the feature could not fit. The
+darwin/arm64 budget stays at 30,690,000: the feature brought that build to
+30,673,362 bytes, inside the room it already had.
 
 The budgets went to 27,670,000 (linux/amd64) and 26,130,000 (darwin/arm64)
 when the window_size policy (the daemon's size policy and the view a client

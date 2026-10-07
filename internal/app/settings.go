@@ -448,6 +448,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
 			opt("appearance.sidebar.show_glyphs"),
 			opt("appearance.sidebar.show_counts"),
+			opt("appearance.sidebar.show_numbers"),
 			opt("appearance.sidebar.file_icons"),
 			opt("appearance.sidebar.file_icon_colors"),
 			opt("appearance.sidebar.folder_click"),
