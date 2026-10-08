@@ -3279,3 +3279,45 @@ Each control below was run on 2026-10-08 on branch
 | A host with no path gets no sharing options | `sharingOptions`: `return reuseOptions()` replaced by `return nil` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (the link's ssh names no master) | **caught** |
 | A folder others can write is trusted | `reuseOptions`: the mode check cut | `TestLinkRidesTheSharedSSHMaster/a_master_folder_others_can_write` (the link's ssh names the folder) | **caught** |
 | The link may open a master of its own | `reuseOptions`: `ControlMaster=auto` in place of `no` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (`ControlMaster=no` missing) | **caught** |
+
+## The GUI bridge, wave 4: reopen, kept emulators and machines
+
+`e2e/tui/gui_bridge_wave4_test.go` has four tests:
+
+- `TestGUIBridgeAttachesByIDThenLastUsed` makes `alpha` and then `zeta`. A
+  bridge with no session named must attach `zeta`, the newer one, while
+  `alpha` is listed first. After a terminal client types in `alpha`, the
+  bridge must attach `alpha`. `--session-id` must find `zeta` after a rename
+  to `omega`, and an unknown id must fall back to the session used last.
+- `TestGUIBridgeResumesKeptEmulators` notes the renderer's stream position
+  of a pane (the last `seq` event plus the OUTPUT bytes after it) and stops
+  the bridge. A bridge started with that position must send a kept `seq`
+  event and no snapshot. After the pane prints while no bridge runs, the
+  next bridge must send the missed echo as output, no snapshot, and not the
+  echo before it. Positions with another daemon pid, and positions the ring
+  has moved past (30000 lines printed), must get a snapshot.
+- `TestGUIBridgeKilledLeavesTheSession` kills the bridge with SIGKILL. The
+  session must stay, and with a newer session made, `--session-id` must lead
+  back to it.
+- `TestGUIBridgeOnAHostAndItsLink` gives the hub one host, `build`, through
+  the ssh stand-in. The `hosts` event must list `build` as up and good with a
+  round trip over 0 and its session `far`. A bridge with `--host build
+  --session far` must attach `far` on `build`, echo through the far shell,
+  and leave this machine's daemon without `far`.
+
+Each control below was run on 2026-10-08 on branch `exp/gpui-bridge`. The log
+is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The first session listed, as before | `pickSession`: the first listed when no name is given | `TestGUIBridgeAttachesByIDThenLastUsed` (attached `alpha`, want `zeta`) | **caught** |
+| The snapshot is always sent | `tap.keep`: `kept` forced false | `TestGUIBridgeResumesKeptEmulators` (a current emulator was not kept) | **caught** |
+| No seq events and no keeping | `tap.Snapshot`: the call to `keep` cut | `TestGUIBridgeResumesKeptEmulators` (no seq event) | **caught** |
+| A kept emulator is not caught up | `subscribeToPTY`: the resume position not used | `TestGUIBridgeResumesKeptEmulators` (the missed output never came) | **caught** |
+| Positions from another daemon are trusted | `Run`: the daemon pid check cut | `TestGUIBridgeResumesKeptEmulators` (no snapshot for another daemon's positions) | **caught** |
+| No round trip is measured | `watchHosts`: the prober not started | `TestGUIBridgeOnAHostAndItsLink` (`rtt_ms` 0, no sessions) | **caught** |
+| `--host` attaches this machine | `Run`: always `ConnectWithCapabilities` | `TestGUIBridgeOnAHostAndItsLink` | **caught** |
+| The session id is ignored | `pickSession`: the id loop cut | `TestGUIBridgeAttachesByIDThenLastUsed` (attached `alpha`, want `omega`), `TestGUIBridgeKilledLeavesTheSession` (attached `other`, want `crash`) | **caught** |
+
+All 37 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
+pass on the branch.
