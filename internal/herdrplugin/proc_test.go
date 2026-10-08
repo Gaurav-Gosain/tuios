@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // The ways stopping a plugin can fail, which these tests hold it to:
@@ -26,7 +28,7 @@ const helperEnv = "TUIOS_HERDRPLUGIN_HELPER"
 func TestMain(m *testing.M) {
 	switch os.Getenv(helperEnv) {
 	case "":
-		os.Exit(m.Run())
+		os.Exit(testutil.RunIsolated(m))
 	case "parent", "parent-exits":
 		// Start a child that sleeps, write its pid, then sleep or exit.
 		child := exec.Command(os.Args[0])
