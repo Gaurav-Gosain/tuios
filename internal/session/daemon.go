@@ -240,6 +240,8 @@ type Daemon struct {
 	// which is why the daemon deletes them on session deletion, on shutdown, and
 	// again on the next start. See stash.go.
 	stash *stashStore
+	// transfers holds the copies this daemon runs. See transfer.go.
+	transfers *transferManager
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
@@ -856,6 +858,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
+	d.transfers = newTransferManager(d)
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
