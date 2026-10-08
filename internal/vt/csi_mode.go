@@ -85,10 +85,8 @@ func (e *Emulator) setAltScreenMode(on bool) {
 func (e *Emulator) saveCursor() {
 	e.scr.SaveCursor()
 	e.saveCharsets()
-	e.scr.savedExtra = savedExtras{
-		phantom: e.atPhantom,
-		origin:  e.isModeSet(ansi.ModeOrigin),
-	}
+	e.scr.savedExtra.phantom = e.atPhantom
+	e.scr.savedExtra.origin = e.isModeSet(ansi.ModeOrigin)
 }
 
 // restoreCursor is the DECRC half of saveCursor.

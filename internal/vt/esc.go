@@ -47,16 +47,23 @@ func (e *Emulator) screenAlignmentPattern() {
 // saveCharsets records the character set selection alongside the cursor, which
 // is where DEC puts it: DECSC saves it and DECRC brings it back.
 func (e *Emulator) saveCharsets() {
-	e.savedCharsetIDs = e.charsetIDs
-	e.savedCharsets = e.charsets
-	e.savedGL, e.savedGR = e.gl, e.gr
+	x := &e.scr.savedExtra
+	x.charsetIDs = e.charsetIDs
+	x.charsets = e.charsets
+	x.gl, x.gr = e.gl, e.gr
 }
 
 // restoreCharsets is the DECRC half of saveCharsets.
 func (e *Emulator) restoreCharsets() {
-	e.charsetIDs = e.savedCharsetIDs
-	e.charsets = e.savedCharsets
-	e.gl, e.gr = e.savedGL, e.savedGR
+	x := &e.scr.savedExtra
+	e.charsetIDs = x.charsetIDs
+	for i, id := range e.charsetIDs {
+		if id == 0 {
+			e.charsetIDs[i] = 'B'
+		}
+	}
+	e.charsets = x.charsets
+	e.gl, e.gr = x.gl, x.gr
 	e.gsingle = 0
 }
 

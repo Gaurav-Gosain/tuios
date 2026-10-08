@@ -63,6 +63,7 @@ func (s *Screen) Reset() {
 	s.buf.Clear()
 	s.cur = Cursor{}
 	s.saved = Cursor{}
+	s.savedExtra = savedExtras{}
 	s.scroll = s.buf.Bounds()
 }
 
@@ -343,9 +344,17 @@ func (s *Screen) SaveCursor() {
 // the pending-wrap flag and origin mode. xterm's DECSC documentation lists both
 // among what is saved, and they are per-screen because the alternate screen has
 // its own saved cursor.
+//
+// The character set selection is saved here too, once per screen. It used to
+// be held once for the emulator, so a DECSC on the alternate screen replaced
+// the shell's selection, and leaving with 1049 gave the program's sets to the
+// shell. Zero designator bytes read as US ASCII.
 type savedExtras struct {
-	phantom bool
-	origin  bool
+	phantom    bool
+	origin     bool
+	charsets   [4]CharSet
+	charsetIDs [4]byte
+	gl, gr     int
 }
 
 // RestoreCursor restores the cursor.

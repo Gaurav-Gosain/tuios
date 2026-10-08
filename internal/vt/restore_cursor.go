@@ -49,14 +49,14 @@ func (e *Emulator) RestoreLastPrinted(cluster string) {
 }
 
 // SavedCursor is what DECSC saved on the active screen, or with main set on
-// the main screen. The character set selection DECSC saves is held once for
-// the emulator rather than once per screen, so both report it.
+// the main screen.
 func (e *Emulator) SavedCursor(main bool) SavedCursor {
 	s := e.scr
 	if main {
 		s = &e.scrs[0]
 	}
-	ids := e.savedCharsetIDs
+	x := s.savedExtra
+	ids := x.charsetIDs
 	for i, id := range ids {
 		if id == 0 {
 			ids[i] = 'B'
@@ -67,18 +67,17 @@ func (e *Emulator) SavedCursor(main bool) SavedCursor {
 		Y:           s.saved.Y,
 		Pen:         s.saved.Pen,
 		Link:        s.saved.Link,
-		PendingWrap: s.savedExtra.phantom,
-		Origin:      s.savedExtra.origin,
+		PendingWrap: x.phantom,
+		Origin:      x.origin,
 		Protected:   s.saved.Protected,
 		Charsets:    ids,
-		GL:          e.savedGL,
-		GR:          e.savedGR,
+		GL:          x.gl,
+		GR:          x.gr,
 	}
 }
 
 // RestoreSavedCursor puts back what DECSC saved on the active screen, or with
-// main set on the main screen. The character set selection is taken from the
-// active screen's only, because this emulator holds one for both.
+// main set on the main screen.
 func (e *Emulator) RestoreSavedCursor(main bool, c SavedCursor) {
 	s := e.scr
 	if main {
@@ -90,26 +89,23 @@ func (e *Emulator) RestoreSavedCursor(main bool, c SavedCursor) {
 		Position:  uv.Pos(max(c.X, 0), max(c.Y, 0)),
 		Protected: c.Protected,
 	}
-	s.savedExtra = savedExtras{phantom: c.PendingWrap, origin: c.Origin}
-	if main && s != e.scr {
-		return
-	}
+	x := savedExtras{phantom: c.PendingWrap, origin: c.Origin}
 	for i, id := range c.Charsets {
 		switch id {
 		case 'A':
-			e.savedCharsets[i] = UK
+			x.charsets[i] = UK
 		case '0':
-			e.savedCharsets[i] = SpecialDrawing
+			x.charsets[i] = SpecialDrawing
 		default:
-			e.savedCharsets[i] = nil
 			id = 'B'
 		}
-		e.savedCharsetIDs[i] = id
+		x.charsetIDs[i] = id
 	}
 	if c.GL >= 0 && c.GL < 4 {
-		e.savedGL = c.GL
+		x.gl = c.GL
 	}
 	if c.GR >= 0 && c.GR < 4 {
-		e.savedGR = c.GR
+		x.gr = c.GR
 	}
+	s.savedExtra = x
 }

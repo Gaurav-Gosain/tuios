@@ -50,6 +50,20 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "─",
 		},
 		{
+			// Each screen has its own saved cursor, character sets included.
+			// A DECSC on the alternate screen used to replace the one slot
+			// both screens shared, so leaving with 1049 gave the program's
+			// sets to the shell.
+			name: "a save on the alternate screen leaves the primary screen's character sets",
+			in:   "\x1b[?1049h\x1b(0\x1b7\x1b(B\x1b[?1049lq",
+			want: "q",
+		},
+		{
+			name: "a save on the alternate screen leaves the primary screen's line drawing",
+			in:   "\x1b(0\x1b[?1049h\x1b(B\x1b7\x1b[?1049lq",
+			want: "─",
+		},
+		{
 			name: "the alternate screen starts empty",
 			in:   "main\x1b[?1049h",
 			want: "",
