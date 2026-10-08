@@ -309,7 +309,12 @@ Two things had to be true for that rule to hold, and neither was:
   libghostty backend reads it off the library's cells, and its restore sends
   DECSCA around the cells that have it. Protection is replaced whole on every
   route, so a snapshot from an older daemon, which sends none, leaves no cell
-  protected.
+  protected. The wire says only whether a cell is protected, not by which
+  form. On libghostty, ISO protection (SPA, ESC V) also protects a cell, and
+  it also makes ED, EL and ECH keep the cell. A libghostty client restores
+  such a cell with DECSCA, which is DEC protection, so after a reattach a
+  plain erase clears it where the daemon keeps it. The pure emulator
+  implements neither SPA nor EPA.
 - **The character REP repeats is carried.** `CSI b` repeats the last
   character the guest printed, as it sent it, before a character set maps
   it. A client restored without it printed nothing for the next REP, or the
@@ -322,7 +327,12 @@ Two things had to be true for that rule to hold, and neither was:
   under the cursor last, so when that cell holds the character the reprint
   sets it instead, through the character set when the set maps it. A
   combining mark or a joiner joins the character before it and is not
-  recorded, on either backend.
+  recorded, on either backend. A C1 control sent as UTF-8 (U+0080 to
+  U+009F) is a control, and it is not recorded either. The print and erase
+  needs a row with a blank cell in column 0 that does not wrap. When every
+  row holds text there, a libghostty client keeps the character the restore
+  printed last, which is the last cell it painted, and the next REP repeats
+  that character.
 - **The cursor DECSC saved is carried, on each screen.** It is the position,
   the pen, the pending wrap, origin mode, DECSCA and the character set
   selection, which DECRC, SCORC and 1048 put back. `SavedCursor` is the
@@ -335,8 +345,14 @@ Two things had to be true for that rule to hold, and neither was:
   character sets in force after it; it restores it now. The library keeps
   the saved cursor where no query reaches it, so the libghostty backend
   records the cursor at each save as the stream goes past, and its restore
-  puts the live cursor into the saved state and saves it, before 1049 for
-  the main screen. A peer from before these fields sends neither, and the
+  puts the live cursor into the saved state and saves it, before the switch
+  to the alternate screen for the main screen. That switch uses the mode the
+  guest used: the library keeps a screen entered with 1049 marked as the
+  alternate one after 1047 is reset, so a guest that entered with 1047 and
+  left with 1047 after a reattach stayed on it. Each screen keeps its own
+  saved character sets on the pure emulator too; they were held once for
+  both, so a save on the alternate screen gave the program's sets to the
+  shell when it left. A peer from before these fields sends neither, and the
   client keeps the saved cursor it has.
 - **The scroll region is carried, and only when a guest set one.** A region that
   is simply the whole screen says nothing, and sending it pinned a pane that had
@@ -558,16 +574,19 @@ to fit: how much room a pane has is the client's layout to decide and it
 resizes the emulator on the next pass regardless, so growing is transient
 where dropping content is permanent.
 
-A client wider than the snapshot is brought down to the snapshot's width. The
+A client bigger than the snapshot is brought down to the snapshot's size. The
 snapshot's rows, and the stream that resumes on top of it, were laid out at
-that width until the stream says otherwise, so the client has to wrap where
-the daemon wraps. Left wider, a wrap pending at the snapshot's last column was
-not at the client's margin: the pure client kept it pending one column short
-of its edge, the libghostty client's reprint moved the cursor one column
-right, and the next character and every line that reached the edge after it
-landed somewhere the daemon did not put it. A client taller than the snapshot
-is left taller, because extra rows below the snapshot change nowhere a line
-wraps. `TestWireNarrowsAWiderClient` holds this on both backends.
+that size until the stream says otherwise, so the client has to wrap and
+scroll where the daemon does. Left wider, a wrap pending at the snapshot's
+last column was not at the client's margin: the pure client kept it pending
+one column short of its edge, the libghostty client's reprint moved the cursor
+one column right, and the next character and every line that reached the edge
+after it landed somewhere the daemon did not put it. Left taller, a line feed
+on the snapshot's last row moved the client's cursor down where the daemon
+scrolled. `primePaneFromDaemon` and `RestoreTerminalStates` both size the
+emulator to the snapshot before they apply it, and `ApplyTerminalState` does
+it for any other caller. `TestWireNarrowsAWiderClient` holds this for a wider,
+a taller and a bigger client, on both backends.
 
 A pane can be resized while it is hidden, by another client or by the daemon.
 `Window.Resize` measures against what this client last announced, so it cannot

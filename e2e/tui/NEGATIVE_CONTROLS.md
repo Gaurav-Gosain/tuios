@@ -3225,3 +3225,27 @@ fail pure to ghostty, ghostty to pure and ghostty to ghostty.
 | The DECSC hook in the ghostty scanner | 28 subtests: seven `saved-*` cases from a ghostty daemon |
 | The pure emulator's cursor restore when 1049 is reset | 2 pure, 4 ghostty: `saved-under-alt` into a pure client |
 | The narrowing resize in `ApplyTerminalState` | 8 pure, 32 ghostty: every wider-client case |
+
+### Review fixes
+
+The review found a regression, a cost and untested paths. Each new test was run
+against the code it covers with that code cut, on 2026-10-08.
+
+| Control: what was cut | Test | Where it failed |
+| --- | --- | --- |
+| The per-screen saved character sets (the branch before this fix, one slot for both screens) | `TestConform_AlternateScreen` | both cases where a save on the alternate screen must leave the primary screen's sets |
+| The C1 check in the scanner's record of REP's character | `TestLastPrintedSkipsControls`, ghostty build | NEL and CSI sent as UTF-8 |
+| The protection rotation in `rotateExt` | `TestConform_SelectiveErase` | IL, DL, and RI in a region |
+| `moveProtected` | `TestConform_SelectiveErase` | IL and DL inside side margins |
+| The protection clear in `FillArea` | `TestConform_SelectiveErase` | an erase in line unprotects the cells it erases |
+| The protection clear in `blankRows` | `TestConform_SelectiveErase` | a line scrolled in at the bottom is not protected |
+| The protection scroll in `scrollWindow` | `TestConform_SelectiveErase` | protection scrolls with its row |
+| The protection shift in ICH, then in DCH | `TestConform_SelectiveErase` | protection moves with an insert, and with a delete |
+| The height in `ApplyTerminalState`'s sizing (width only) | `TestWireNarrowsAWiderClient`, `TestGhosttyWireNarrowsAWiderClient` | every taller and bigger case, `line-feed-on-the-last-row` among them |
+| `liveScreenLocked` always the main screen | `TestGhosttyWireCarriesTheCursorState` | `saved-on-each-screen` from a ghostty daemon, 4 subtests |
+| The ghostty restore's switch always 1049 | `TestGhosttyWireCarriesTheCursorState` | `saved-on-each-screen` into a ghostty client, 4 subtests |
+| `ResizeEmulatorToSnapshot` in `RestoreTerminalStates` | `TestRehydrationMatrix` | **not caught**: `ApplyTerminalState` sizes the emulator too, so the call only mirrors `primePaneFromDaemon` |
+
+`TestGhosttyDivergence_ProtectionLost` pins two places the backends still
+differ: a reflow drops protection on the pure emulator, and DECSTR stops it
+there. Each case fails when the backends start to agree.
