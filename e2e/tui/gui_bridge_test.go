@@ -182,24 +182,53 @@ type guiBridge struct {
 	events []json.RawMessage
 	// snaps counts the SNAP frames of each PTY, for an in-place session
 	// switch, which sends a snapshot of every pane of the new session.
-	snaps  map[string]int
-	closed bool
-	req    int64
+	snaps map[string]int
+	// outputs holds each PTY's OUTPUT bytes, for the kept emulators of wave
+	// 4 (gui_bridge_wave4_test.go).
+	outputs map[string][]byte
+	closed  bool
+	req     int64
 	// log is every command sent and every result, kept as the test's
 	// artifact.
 	log []string
+	// pid is the bridge process, to stop it as a crash does.
+	pid int
 }
 
 // startBridge runs a bridge on session under the isolation root base, sized
 // cols by rows, and waits for its first state.
 func startBridge(t *testing.T, base, session string, cols, rows int) *guiBridge {
 	t.Helper()
-	killDaemon(t, base)
+	return startBridgeWith(t, base, bridgeOpts{args: []string{"--session", session}, cols: cols, rows: rows, name: session})
+}
+
+// bridgeOpts are the flags and environment of one bridge. keepDaemon leaves
+// a daemon an earlier bridge started running, for a bridge that comes back.
+type bridgeOpts struct {
+	args       []string
+	env        []string
+	cols, rows int
+	keepDaemon bool
+	// name labels the bridge's artifact.
+	name string
+	// noWait returns before the first state, for a bridge that is expected
+	// to stop.
+	noWait bool
+}
+
+// startBridgeWith runs a bridge with opts under the isolation root base.
+func startBridgeWith(t *testing.T, base string, opts bridgeOpts) *guiBridge {
+	t.Helper()
+	if !opts.keepDaemon {
+		killDaemon(t, base)
+	}
 	pinPreV080Looks(t, base)
-	cmd := exec.Command(tuiosBin, "gui-bridge", "--session", session,
-		"--cols", fmt.Sprint(cols), "--rows", fmt.Sprint(rows))
+	session := opts.name
+	args := append([]string{"gui-bridge", "--cols", fmt.Sprint(opts.cols), "--rows", fmt.Sprint(opts.rows)}, opts.args...)
+	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh", "ENV=", "PS1=$ ")
+	cmd.Env = append(cmd.Env, opts.env...)
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
@@ -220,7 +249,7 @@ func startBridge(t *testing.T, base, session string, cols, rows int) *guiBridge 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start bridge: %v", err)
 	}
-	b := &guiBridge{t: t, in: in, results: map[int64]wireResult{}}
+	b := &guiBridge{t: t, in: in, results: map[int64]wireResult{}, pid: cmd.Process.Pid}
 	bridgeCount++
 	logName := fmt.Sprintf("bridge-%d-%s", bridgeCount, session)
 	b.cond = sync.NewCond(&b.mu)
@@ -249,7 +278,9 @@ func startBridge(t *testing.T, base, session string, cols, rows int) *guiBridge 
 			t.Logf("bridge stderr tail:\n%s", data)
 		}
 	})
-	b.waitState(func(*wireState) bool { return true }, "the first state")
+	if !opts.noWait {
+		b.waitState(func(*wireState) bool { return true }, "the first state")
+	}
 	return b
 }
 
@@ -293,6 +324,17 @@ func (b *guiBridge) read(r io.Reader) {
 				b.snaps = map[string]int{}
 			}
 			b.snaps[string(body[1:1+int(body[0])])]++
+			b.cond.Broadcast()
+			b.mu.Unlock()
+			continue
+		}
+		if hdr[4] == 2 && len(body) > 0 && len(body) >= 1+int(body[0]) {
+			pty := string(body[1 : 1+int(body[0])])
+			b.mu.Lock()
+			if b.outputs == nil {
+				b.outputs = map[string][]byte{}
+			}
+			b.outputs[pty] = append(b.outputs[pty], body[1+int(body[0]):]...)
 			b.cond.Broadcast()
 			b.mu.Unlock()
 			continue
