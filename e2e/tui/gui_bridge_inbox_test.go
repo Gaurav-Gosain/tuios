@@ -110,11 +110,20 @@ func (b *guiBridge) eventsOf(typ string) []wireInboxEvent {
 // verb proxies one daemon verb through the bridge and returns its result.
 func (b *guiBridge) verb(verb string, params map[string]any) wireVerbResult {
 	b.t.Helper()
+	return b.verbOn("", verb, params)
+}
+
+// verbOn is verb on a host's daemon. An empty host is this machine.
+func (b *guiBridge) verbOn(host, verb string, params map[string]any) wireVerbResult {
+	b.t.Helper()
 	b.mu.Lock()
 	b.req++
 	req := b.req
 	b.mu.Unlock()
 	cmd := map[string]any{"cmd": "verb", "req": req, "verb": verb, "params": params}
+	if host != "" {
+		cmd["host"] = host
+	}
 	if sent, err := json.Marshal(map[string]any{"sent": cmd}); err == nil {
 		b.mu.Lock()
 		b.log = append(b.log, string(sent))
