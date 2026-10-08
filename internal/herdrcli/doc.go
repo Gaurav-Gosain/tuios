@@ -7,11 +7,12 @@
 // --direction right`, reads the JSON line it prints, and acts on it.
 //
 // In a tuios pane HERDR_BIN_PATH names a link called herdr that points at the
-// tuios binary. tuios run under that name is this package: it parses herdr's
-// CLI as herdr 0.9.3 does (src/cli in herdr's source, flag for flag), sends
-// each call to the herdr socket tuios already answers (HERDR_SOCKET_PATH, see
-// internal/session/herdr_api.go), and prints what herdr's CLI prints, with
-// herdr's exit codes:
+// tuios binary (on Windows, herdr.exe: a hardlink to the binary, or a copy
+// of it where a hardlink cannot be made). tuios run under that name is this
+// package: it parses herdr's CLI as herdr 0.9.3 does (src/cli in herdr's
+// source, flag for flag), sends each call to the herdr socket tuios already
+// answers (HERDR_SOCKET_PATH, see internal/session/herdr_api.go), and prints
+// what herdr's CLI prints, with herdr's exit codes:
 //
 //   - a usage error: the message on stderr, exit 2;
 //   - an answer with an error: the response line on stderr, exit 1;

@@ -2,14 +2,13 @@
 
 package herdrcli
 
-import "errors"
+import "github.com/Gaurav-Gosain/tuios/internal/shimlink"
 
 // LinkName is the name a link to tuios must have for tuios to run as herdr.
 const LinkName = "herdr.exe"
 
-// InstallLink is not supported on Windows, where a link needs a privilege a
-// person rarely holds. A pane there is given the tuios binary itself as
-// HERDR_BIN_PATH, which answers herdr's pane and notification commands.
+// InstallLink makes <dir>/bin/herdr.exe run exe and returns its path: a
+// hardlink, or a copy when exe is on another volume. See shimlink.Install.
 func InstallLink(dir, exe string) (string, error) {
-	return "", errors.New("the herdr link is not supported on Windows")
+	return shimlink.Install(dir, LinkName, exe)
 }

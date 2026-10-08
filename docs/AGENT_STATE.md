@@ -503,9 +503,13 @@ continue. The other `plugin` commands go to the plugin host (see [herdr
 plugins](#herdr-plugins)). `plugin config-dir` prints the plugin's config
 folder.
 
-When the daemon cannot make the link, for example on Windows,
-`HERDR_BIN_PATH` names the tuios binary. Then only `pane` and `notification`
-answer, as `tuios pane ...` and `tuios notification ...`.
+On Windows the link is `herdr.exe`. It is a hardlink to the tuios binary.
+When the binary is on another volume, it is a copy of the binary. The
+daemon makes the link again when it starts and the binary has changed.
+
+When the daemon cannot make the link, `HERDR_BIN_PATH` names the tuios
+binary. Then only `pane` and `notification` answer, as `tuios pane ...` and
+`tuios notification ...`.
 
 Use `set-agent-state` and `set-agent-meta` in your own scripts. herdr's
 commands are there for tools that already speak herdr.
