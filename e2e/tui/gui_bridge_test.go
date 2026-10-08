@@ -86,6 +86,7 @@ type wireWindow struct {
 	Stack      string `json:"stack"`
 	StackIndex int    `json:"stack_index"`
 	URI        string `json:"uri"`
+	Host       string `json:"host"`
 }
 
 type wireSize struct {

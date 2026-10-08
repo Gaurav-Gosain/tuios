@@ -21,7 +21,8 @@ import (
 
 // TestGUIBridgeVerbOnAHost lists a folder that exists only on build, through
 // the bridge, then copies a file from build with a transfer this machine's
-// daemon runs, and refuses a person verb with a host.
+// daemon runs, sees a pane held for build named as build's, and refuses a
+// person verb with a host.
 func TestGUIBridgeVerbOnAHost(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -96,6 +97,20 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	// A pane this session holds for build says so, so the explorer and a
+	// drop on it use build's files.
+	if res := b.verb("new-window", map[string]any{"session": "here", "host": "build"}); !res.OK {
+		t.Fatalf("make a pane on build: %s %s", res.Code, res.Error)
+	}
+	b.waitState(func(s *wireState) bool {
+		for _, w := range s.Windows {
+			if w.Host == "build" {
+				return true
+			}
+		}
+		return false
+	}, "a window whose host is build")
 
 	// The nonce is for this machine's daemon only.
 	refused := b.verbOn("build", "respond", map[string]any{"session": "far", "action": "choose", "value": "1"})
