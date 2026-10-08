@@ -17,6 +17,9 @@ type Fleet struct {
 	// Agents are the rows of list-agents with all and all_sessions set, the
 	// same rows `tuios list-agents --all --all-sessions --json` prints.
 	Agents json.RawMessage `json:"agents"`
+	// Saved are the sessions saved on disk, live or not, as `tuios
+	// resurrect --json` lists them.
+	Saved []SavedSession `json:"saved"`
 }
 
 // fleetEvents are the daemon events that can change what a fleet shows.
@@ -165,7 +168,7 @@ func readFleet(c *session.VerbClient) ([]byte, error) {
 	if err := json.Unmarshal(rawAgents, &a); err != nil {
 		return nil, err
 	}
-	return json.Marshal(Event{Type: "fleet", Fleet: &Fleet{Sessions: orEmpty(s.Sessions), Agents: orEmpty(a.Agents)}})
+	return json.Marshal(Event{Type: "fleet", Fleet: &Fleet{Sessions: orEmpty(s.Sessions), Agents: orEmpty(a.Agents), Saved: savedSessions()}})
 }
 
 // orEmpty turns a missing or null list into an empty one.
