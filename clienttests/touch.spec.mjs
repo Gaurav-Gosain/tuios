@@ -355,8 +355,12 @@ test.describe('a finger on tuios itself', () => {
 
     const g = await geom(page);
     const inside = cell(g, frame.left + 4, frame.top + 6);
+    await clearWire(page);
+    const t0 = Date.now();
     await doubleTap(page, cdp, inside.x, inside.y);
+    const tapMs = Date.now() - t0;
     await page.waitForTimeout(900);
+    const afterTap = await wire(page);
 
     // Click-to-type: the double tap hands the keyboard to the pane, so what the
     // software keyboard sends next is the pane's, not a window-management key.
@@ -368,7 +372,8 @@ test.describe('a finger on tuios itself', () => {
 
     const lines = await screen(page);
     const hit = lines.findIndex((l) => l.includes('zqtap'));
-    expect(hit, 'what was typed after the tap never reached a pane').toBeGreaterThan(-1);
+    expect(hit, `what was typed after the tap never reached a pane. The double tap took ${tapMs} ms `
+      + `and sent ${JSON.stringify(afterTap)}. The screen:\n${lines.join('\n')}`).toBeGreaterThan(-1);
     expect(hit, 'it landed outside the pane the tap was in').toBeGreaterThan(frame.top);
     expect(hit).toBeLessThan(frame.bottom);
   });
