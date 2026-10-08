@@ -178,7 +178,7 @@ func (m *OS) fireAgentAlertOutside(w *terminal.Window, from, to, name, text stri
 	// The cue plays from the client process, not the daemon, so a local attach
 	// plays it where the human sits. A served client is the exception: under
 	// `tuios ssh` this code runs on the server, the audio comes out of the
-	// server's speakers, and the startup warning (sshAlertWarnings) already
+	// server's speakers, and the startup notice (sshAlertNotices) already
 	// said so. Play returns before anything is spawned, so the Update
 	// goroutine this runs on is not waiting on an audio device.
 	if policy.PlaysAudio() {

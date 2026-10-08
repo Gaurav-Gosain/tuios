@@ -27,7 +27,7 @@ func TestBrowserSessionNamesTheSinksItCannotDeliver(t *testing.T) {
 	cfg.Notifications.Agent.Sound = &on
 	cfg.Notifications.Agent.SoundMode = "audio"
 
-	got := browserAlertWarnings(cfg)
+	got := browserAlertNotices(cfg)
 	if !hasWarning(got, "notify") {
 		t.Errorf("nothing said the OSC 9 notification will not arrive: %v", got)
 	}
@@ -47,7 +47,7 @@ func TestBrowserWarningsStayQuietForSinksThatWork(t *testing.T) {
 	cfg.Notifications.Agent.SoundMode = "bell"
 	cfg.Notifications.Agent.Dock = &on
 
-	if got := browserAlertWarnings(cfg); len(got) != 0 {
+	if got := browserAlertNotices(cfg); len(got) != 0 {
 		t.Errorf("warned about sinks a browser can deliver: %v", got)
 	}
 
@@ -55,7 +55,7 @@ func TestBrowserWarningsStayQuietForSinksThatWork(t *testing.T) {
 	cfg.Notifications.Agent.Enabled = &off
 	cfg.Notifications.Agent.Notify = &on
 	cfg.Notifications.Agent.SoundMode = "audio"
-	if got := browserAlertWarnings(cfg); len(got) != 0 {
+	if got := browserAlertNotices(cfg); len(got) != 0 {
 		t.Errorf("warned although agent alerts are disabled: %v", got)
 	}
 }
@@ -68,13 +68,13 @@ func TestBrowserWarningsReachTheSession(t *testing.T) {
 	cfg.Notifications.Agent.Notify = &on
 
 	web := NewOS(OSOptions{UserConfig: cfg, BrowserClient: true})
-	if !hasWarning(web.ConfigWarnings, "notify") {
-		t.Errorf("a browser session was not told: %v", web.ConfigWarnings)
+	if !hasWarning(web.ConfigNotices, "notify") {
+		t.Errorf("a browser session was not told: %v", web.ConfigNotices)
 	}
 
 	// A terminal session delivers OSC 9 perfectly well and must not be warned.
 	local := NewOS(OSOptions{UserConfig: cfg})
-	if hasWarning(local.ConfigWarnings, "notify") {
-		t.Errorf("a terminal session was warned about a sink that works: %v", local.ConfigWarnings)
+	if hasWarning(local.ConfigNotices, "notify") {
+		t.Errorf("a terminal session was warned about a sink that works: %v", local.ConfigNotices)
 	}
 }

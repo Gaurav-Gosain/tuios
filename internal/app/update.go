@@ -309,7 +309,22 @@ func (m *OS) reportConfigWarnings() {
 			}
 		}
 	}
+	for _, notice := range m.ConfigNotices {
+		// Logged at INFO whatever the verbosity, because the notification
+		// below sends the user to the log to read it.
+		m.Log("INFO", "Config: %s", notice)
+	}
 	if len(m.ConfigWarnings) == 0 {
+		// Notices get their own, milder line, and only when there is no
+		// problem to report: the log holds both either way.
+		if n := len(m.ConfigNotices); n > 0 {
+			m.ShowNotification(
+				plural.Count(n, "setting")+" "+plural.Word(n, "works", "work")+
+					" differently here, see the log viewer",
+				"info",
+				5*time.Second,
+			)
+		}
 		return
 	}
 	for _, warning := range m.ConfigWarnings {

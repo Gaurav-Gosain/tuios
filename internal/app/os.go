@@ -876,6 +876,11 @@ type OS struct {
 	// ConfigWarnings holds the problems found in the loaded config, reported to
 	// the user once the TUI is up (see reportConfigWarnings).
 	ConfigWarnings []string
+	// ConfigNotices holds settings the file asks for that this client cannot
+	// carry out, such as desktop notifications in a browser. The file is not
+	// wrong, so they are logged and announced as notices, never counted as
+	// config problems.
+	ConfigNotices []string
 	// ConfigReadOnly stops the settings page writing the config file. Set by
 	// entrypoints that serve someone else's session; see OSOptions.
 	ConfigReadOnly bool

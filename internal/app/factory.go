@@ -320,19 +320,18 @@ func NewOS(opts OSOptions) *OS {
 		// Collected here and reported from Init, once there is a TUI to report
 		// them in.
 		os.ConfigWarnings = config.ConfigWarnings(cfg)
-		// A sink the client cannot deliver is a config problem like any other,
-		// and it is only knowable here, where the client is known.
+		// A setting the client cannot carry out is a notice, not a problem:
+		// the file is valid and the setting works on another client. It is
+		// only knowable here, where the client is known.
 		if opts.BrowserClient {
-			os.ConfigWarnings = append(os.ConfigWarnings, browserAlertWarnings(cfg)...)
-			os.ConfigWarnings = append(os.ConfigWarnings,
-				remoteDockComponentWarning(cfg, "tuios-web")...)
+			os.ConfigNotices = append(os.ConfigNotices, browserAlertNotices(cfg)...)
+			os.ConfigNotices = append(os.ConfigNotices,
+				remoteDockComponentNotice(cfg, "tuios-web")...)
 		}
 		if opts.IsSSHMode {
-			os.ConfigWarnings = append(os.ConfigWarnings,
-				remoteDockComponentWarning(cfg, "over SSH")...)
-		}
-		if opts.IsSSHMode {
-			os.ConfigWarnings = append(os.ConfigWarnings, sshAlertWarnings(cfg)...)
+			os.ConfigNotices = append(os.ConfigNotices,
+				remoteDockComponentNotice(cfg, "over SSH")...)
+			os.ConfigNotices = append(os.ConfigNotices, sshAlertNotices(cfg)...)
 		}
 		if cfg.Debug.ShowKeyEvents {
 			os.ShowKeys = true
