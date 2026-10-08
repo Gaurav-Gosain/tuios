@@ -344,6 +344,9 @@ type Command struct {
 	// "verb_result" event with the same req. See verb.go.
 	Verb   string         `json:"verb,omitempty"`
 	Params map[string]any `json:"params,omitempty"`
+	// Host runs the verb on that machine's daemon, through this machine's
+	// daemon and its link, as `tuios --host` does. Empty is this machine.
+	Host string `json:"host,omitempty"`
 	// switch-session: Create makes the session when it is missing, and
 	// Restore restores it from its saved state first.
 	Create  bool `json:"create,omitempty"`
