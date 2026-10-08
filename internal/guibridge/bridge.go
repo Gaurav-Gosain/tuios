@@ -185,6 +185,8 @@ type State struct {
 	// ScratchBox is the box the scratch panes show in, frame included, while
 	// a scratch group is on screen.
 	ScratchBox *Rect `json:"scratch_box,omitempty"`
+	// ScratchOver is the workspace the scratch box shows over.
+	ScratchOver int `json:"scratch_over,omitempty"`
 	// Strip is the scrolling layout's strip, while layout is "scrolling".
 	Strip *Strip `json:"strip,omitempty"`
 }
@@ -742,6 +744,7 @@ func (m *model) export() {
 	if box, ok := o.ScratchBox(); ok {
 		r := rectOf(box)
 		st.ScratchBox = &r
+		st.ScratchOver = o.ScratchOver()
 	}
 	if vp, width, panes, ok := o.ScrollStrip(); ok {
 		strip := &Strip{Viewport: vp, Width: width, Panes: make([]StripPane, 0, len(panes))}
