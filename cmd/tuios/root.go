@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newRootCommandBase initializes the root command of this CLI application (tuios) and configures its flags and subcommands.
+// newRootCommandBase builds the root command and its own flags.
+// newRootCommand adds the subcommands.
 func newRootCommandBase() *cobra.Command {
-
 	rootCmd := &cobra.Command{
 		Use:   "tuios",
 		Short: "Terminal UI Operating System",

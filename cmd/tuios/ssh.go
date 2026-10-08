@@ -4,7 +4,6 @@ import "github.com/spf13/cobra"
 
 // newSSHCommand creates a new "ssh" Cobra command for running TUIOS as an SSH server with configurable options.
 func newSSHCommand() *cobra.Command {
-
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession, sshAuthorizedKeys string
 	var sshEphemeral, sshNoAuth bool
 
