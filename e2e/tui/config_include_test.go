@@ -318,3 +318,54 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		t.Logf("save the transcript: %v", err)
 	}
 }
+
+// TestAThemeInAConfigDFileReachesThePanes: a theme saved in a new config.d
+// file reaches the panes of a running client, not only its chrome.
+//
+// The reload switched the theme package, which recolours the borders, and
+// never pushed the new palette into the panes' emulators. Only the theme
+// picker did that. So a theme from any config file left every pane, and all
+// output after the save, in the colours it had at start.
+//
+// How this could pass wrongly, written down first:
+//   - The reload could arrive after the probe, so the probe would read the old
+//     palette for a reason that is not the bug. The same file sets a double
+//     border, and the test waits for that border before it probes.
+//   - The pane could already be themed at start, so a themed probe would
+//     prove nothing. The first probe must reach the host as palette index 1.
+//   - The probe could read the command line instead of the output. probeCmd
+//     builds the marker in the shell, so only the output carries it.
+func TestAThemeInAConfigDFileReachesThePanes(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "")
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	runInShell(t, term, probeCmd("A"), "INKA", shellTimeout)
+	if got := probeInk(t, term, "INKA"); got.Kind != tuitest.ColorIndexed || got.Index != 1 {
+		t.Fatalf("with no theme, SGR 31 reached the host as %+v, want palette index 1", got)
+	}
+	if strings.Contains(term.Screen().Text(), "╔") {
+		t.Fatalf("a double border is on screen before the save, so it cannot mark the "+
+			"reload\n%s", term.Snapshot())
+	}
+
+	writeConfigPart(t, base, filepath.Join("config.d", "10-theme.toml"),
+		"[appearance]\ntheme = \"dracula\"\nborder_style = \"double\"\n")
+	if err := term.WaitForText("╔", configWatchTimeout); err != nil {
+		t.Fatalf("the config.d file never reached the running client: %v\n%s", err, term.Snapshot())
+	}
+
+	runInShell(t, term, probeCmd("B"), "INKB", shellTimeout)
+	if got := probeInk(t, term, "INKB"); got.Kind == tuitest.ColorIndexed && got.Index == 1 {
+		t.Fatalf("ASSERTION: the theme in config.d reached the chrome but not the pane: "+
+			"SGR 31 still reached the host as %+v, want the theme's own colour\n%s",
+			got, term.Snapshot())
+	}
+
+	saveArtifact(t, term, artifactDir(t), "theme-from-config-d")
+	alive(t, term, "after a theme reloaded from config.d")
+}

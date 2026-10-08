@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
@@ -50,7 +51,16 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	}
 	// Runs on the Bubble Tea goroutine, so applying it to this session's
 	// settings is single-threaded and reaches nobody else's session.
+	themeBefore := theme.CurrentThemeID()
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	// ApplyAppearanceConfig switches the theme package, which recolours the
+	// chrome, but each pane's emulator holds its own copy of the palette. The
+	// theme picker pushes the new one into every pane (applyTheme); this path
+	// did not, so a theme saved in any config file recoloured the borders and
+	// left every pane, and all output after the save, in the old colours.
+	if theme.CurrentThemeID() != themeBefore {
+		m.UpdateAllWindowThemes()
+	}
 	// A reload is the one time the display's rate is looked for again, after
 	// startup: the person may have changed the monitor's mode. Started before
 	// applyAppearanceLive below, which would otherwise keep the first answer.

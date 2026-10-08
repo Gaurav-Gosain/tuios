@@ -3083,3 +3083,22 @@ With the fix, tuios-web held 55 MB before the oversized resize and 59 MB after
 it. The unit test `TestSaverClockRunsAtTheRateThePaintingDoes` in
 `internal/app` holds the clock to the tick at 10, 30, 60, 120 and 240 fps, and
 fails on the second control too.
+
+## A theme from a config file reaches the panes
+
+`TestAThemeInAConfigDFileReachesThePanes` saves a new config.d file that sets
+`theme = "dracula"` and `border_style = "double"`. The double border is the
+positive half: it shows that the reload reached the client. The test then
+prints SGR 31 in the pane, and that colour must no longer reach the host as
+palette index 1.
+
+The control was run on 2026-10-08.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The reload does not push the palette into the panes | `ApplyReloadedConfig`: the `m.UpdateAllWindowThemes()` call cut (main at `b9522fb7`) | `TestAThemeInAConfigDFileReachesThePanes` (the double border appears, and SGR 31 still reaches the host as index 1) | **caught** |
+
+A probe on the same build showed the bug for every kind of file: a new
+config.d file, an edit to a config.d file, an included file and config.toml,
+with and without a daemon. In each case the border took the new theme's colour
+and the pane kept its old palette.
