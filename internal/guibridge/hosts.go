@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,6 +54,8 @@ type HostRow struct {
 	ApprovalURL string `json:"approval_url,omitempty"`
 	// Sessions are the host's sessions, from the last answer.
 	Sessions []HostSession `json:"sessions,omitempty"`
+	// detail is ssh's own last line, which linkHealth reads.
+	detail string
 }
 
 // HostSession is one session on a host.
@@ -229,15 +232,29 @@ func hostSessions(raw []byte) []HostSession {
 	return rows
 }
 
-// linkHealth is the health word of a host whose link is not up.
-func linkHealth(status string) string {
+// linkHealth is the health word of a host whose link is not up. detail is
+// ssh's own last line. The links run ssh with BatchMode, so a key with a
+// passphrase, a password or a second factor fails with "Permission denied"
+// once the master the person opened is gone: that host waits for the person
+// to sign in again, which the renderer offers.
+func linkHealth(status, detail string) string {
 	switch status {
 	case "connecting", "reconnecting":
 		return "reconnecting"
 	case "tailscale_check":
 		return "signin"
 	}
+	if needsSignIn(detail) {
+		return "signin"
+	}
 	return "down"
+}
+
+// needsSignIn says whether ssh's words mean that it reached the host and
+// could not sign in without a person.
+func needsSignIn(detail string) bool {
+	d := strings.ToLower(detail)
+	return strings.Contains(d, "permission denied") || strings.Contains(d, "no more authentication methods") || strings.Contains(d, "too many authentication failures")
 }
 
 // watchHosts keeps the renderer's machines current until stop closes.
@@ -279,7 +296,7 @@ func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
 		for i := range ev.Hosts {
 			r := &ev.Hosts[i]
 			if r.Status != "up" {
-				r.Health = linkHealth(r.Status)
+				r.Health = linkHealth(r.Status, r.detail)
 				if p := running[r.Name]; p != nil {
 					close(p.stop)
 					delete(running, r.Name)
@@ -335,6 +352,7 @@ func hostRows(raw []byte) []HostRow {
 			Addr        string `json:"addr"`
 			Status      string `json:"status"`
 			Reason      string `json:"reason"`
+			Detail      string `json:"detail"`
 			ApprovalURL string `json:"approval_url"`
 		} `json:"hosts"`
 	}
@@ -343,7 +361,7 @@ func hostRows(raw []byte) []HostRow {
 	}
 	rows := make([]HostRow, 0, len(out.Hosts))
 	for _, h := range out.Hosts {
-		rows = append(rows, HostRow{Name: h.Host, Addr: h.Addr, Status: h.Status, Reason: h.Reason, ApprovalURL: h.ApprovalURL})
+		rows = append(rows, HostRow{Name: h.Host, Addr: h.Addr, Status: h.Status, Reason: h.Reason, ApprovalURL: h.ApprovalURL, detail: h.Detail})
 	}
 	return rows
 }
