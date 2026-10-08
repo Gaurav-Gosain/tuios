@@ -206,6 +206,13 @@ type KeyFate struct {
 	Ambiguity string `json:"ambiguity,omitempty"`
 	// GuestWants is every curated program that binds this key.
 	GuestWants []GuestClash `json:"guest_wants,omitempty"`
+	// USLayoutActs is every scope where the key runs a binding written for
+	// another key, because the two are one key on a US layout: alt+& runs a
+	// binding on alt+shift+7. That happens when the terminal does not report
+	// the layout, and never with keybindings.keyboard_layout = "other". A
+	// scope where the key has a binding of its own is not listed, since that
+	// binding wins.
+	USLayoutActs []Binding `json:"us_layout_acts,omitempty"`
 	// Free is true when nothing in tuios claims the key in any scope.
 	Free bool `json:"free"`
 }
@@ -221,6 +228,22 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 		}
 	}
 
+	if r.config.Keybindings.KeyboardLayout != KeyboardLayoutOther {
+		aliases := map[string]bool{}
+		for _, a := range r.normalizer.USAliasKeys(key) {
+			aliases[lookupForm(a)] = true
+		}
+		own := map[string]bool{}
+		for _, a := range fate.Acts {
+			own[a.Scope] = true
+		}
+		for _, b := range r.Bindings() {
+			if !b.Unbound && !b.Shadowed && !own[b.Scope] && aliases[lookupForm(b.Key)] {
+				fate.USLayoutActs = append(fate.USLayoutActs, b)
+			}
+		}
+	}
+
 	for _, s := range r.TerminalModeSwallowed() {
 		if lookupForm(s.Key) != want {
 			continue
@@ -231,6 +254,16 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 			fate.SwallowReason += " (built in, not configurable)"
 		}
 		break
+	}
+
+	if !fate.SwallowedInTerminal && reservedTerminalChord(key) {
+		for _, a := range fate.USLayoutActs {
+			if a.Scope == ScopeWindowMode && terminalSafeAction(a.Action) {
+				fate.SwallowedInTerminal = true
+				fate.SwallowReason = a.Desc + " (on a US layout)"
+				break
+			}
+		}
 	}
 
 	fate.Ambiguity = AmbiguityVerdict(want, facts.HostDisambiguates)
@@ -263,7 +296,7 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 		})
 	}
 
-	fate.Free = len(fate.Acts) == 0 && !fate.SwallowedInTerminal
+	fate.Free = len(fate.Acts) == 0 && len(fate.USLayoutActs) == 0 && !fate.SwallowedInTerminal
 	return fate
 }
 

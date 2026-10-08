@@ -56,7 +56,7 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 
 // copyModeAction is the [keybindings.copy_mode] action msg is bound to, or "".
 func copyModeAction(msg tea.KeyPressMsg, o *app.OS) string {
-	return lookupAction(msg, overlayKeys(o).GetCopyModeAction)
+	return lookupAction(o, msg, overlayKeys(o).GetCopyModeAction)
 }
 
 // dispatchCopyModeKey runs one copy-mode key against one pane, under that

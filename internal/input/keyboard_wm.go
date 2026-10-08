@@ -144,7 +144,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	if key == "esc" && o.FocusedPopup() != nil {
 		action := ""
 		if o.KeybindRegistry != nil {
-			action = lookupAction(msg, o.KeybindRegistry.GetAction)
+			action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 		}
 		if action == "" || action == "enter_window_mode" {
 			o.CloseFocusedPopup()
@@ -160,7 +160,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	if key == "esc" && o.SpotlightOn() {
 		action := ""
 		if o.KeybindRegistry != nil {
-			action = lookupAction(msg, o.KeybindRegistry.GetAction)
+			action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 		}
 		if action == "" || action == "enter_window_mode" {
 			save, _ := o.TurnOffSpotlight()
@@ -170,7 +170,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
-		action := lookupAction(msg, o.KeybindRegistry.GetAction)
+		action := lookupAction(o, msg, o.KeybindRegistry.GetAction)
 		if action != "" {
 			dispatcher := GetDispatcher()
 			if dispatcher.HasAction(action) {

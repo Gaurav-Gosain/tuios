@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -267,31 +268,6 @@ func MacOSOptionChord(r rune) (string, bool) {
 	return chord, ok
 }
 
-// macOptionLetterGlyph returns the composed glyph for an "opt+x"/"alt+x" chord
-// spelled in lower case, or "" when the chord is not an Option+letter one.
-func macOptionLetterGlyph(keyLower string) string {
-	base, ok := cutOptionPrefix(keyLower)
-	if !ok {
-		return ""
-	}
-	if shifted, ok := strings.CutPrefix(base, "shift+"); ok {
-		return macOptionShiftLetters[shifted]
-	}
-	return macOptionLetters[base]
-}
-
-// cutOptionPrefix strips a leading alt+/opt+/option+ and reports whether one was
-// there. Only that single modifier counts: ctrl+alt+n is not a chord macOS
-// composes a character for.
-func cutOptionPrefix(keyLower string) (string, bool) {
-	for _, prefix := range []string{"alt+", "opt+", "option+"} {
-		if base, ok := strings.CutPrefix(keyLower, prefix); ok {
-			return base, true
-		}
-	}
-	return "", false
-}
-
 // shiftedDigits maps a digit to the character a US layout produces when it is
 // typed with Shift. Terminals disagree about which of the two spellings they
 // report for the same physical chord: some send the shifted character ("!"),
@@ -316,29 +292,56 @@ var shiftedDigitsReverse = func() map[string]string {
 // shiftAliases returns the alternate spellings of a shifted key: the shifted
 // character for a "shift+x" chord and the "shift+x" chord for a shifted
 // character. Returns nil when key is not a shifted key in either spelling.
+//
+// It is the union of letterShiftAliases, which hold on every layout, and
+// usShiftAliases, which hold only on a US layout.
 func shiftAliases(key, keyLower string) []string {
-	if after, ok := strings.CutPrefix(keyLower, "shift+"); ok {
-		base := after
-		if symbol, ok := shiftedDigits[base]; ok {
-			return []string{symbol}
-		}
+	if out := letterShiftAliases(key, keyLower); out != nil {
+		return out
+	}
+	return usShiftAliases(key, keyLower)
+}
+
+// letterShiftAliases returns the other spelling of a shifted letter: "A" for
+// "shift+a" and "shift+a" for "A". A letter and its capital are one key on
+// every layout, so these are read as the key itself.
+func letterShiftAliases(key, keyLower string) []string {
+	if base, ok := strings.CutPrefix(keyLower, "shift+"); ok {
 		if isSingleRuneLetter(base) {
 			return []string{strings.ToUpper(base)}
+		}
+		return nil
+	}
+	// An uppercase letter is the shifted spelling of its lowercase self.
+	if isSingleRuneLetter(key) && key != keyLower {
+		return []string{"shift+" + keyLower}
+	}
+	return nil
+}
+
+// usShiftAliases returns the spellings a shifted digit has on a US layout:
+// "!" for "shift+1", "shift+1" for "!", and the same with other modifiers.
+//
+// These hold only where the key sits as it does on a US keyboard. On French
+// AZERTY "&" is an unshifted key and the digits are shifted, so reading "&" as
+// shift+7 ran move_and_follow_7 for Option and the 1 key (issue #575). The
+// registry keeps them in a tier of their own (see USLayoutKey), and the input
+// path asks that tier only when the key event does not contradict a US layout.
+func usShiftAliases(key, keyLower string) []string {
+	if base, ok := strings.CutPrefix(keyLower, "shift+"); ok {
+		if symbol, ok := shiftedDigits[base]; ok {
+			return []string{symbol}
 		}
 		return nil
 	}
 	if digit, ok := shiftedDigitsReverse[key]; ok {
 		return []string{"shift+" + digit}
 	}
-	// An uppercase letter is the shifted spelling of its lowercase self.
-	if isSingleRuneLetter(key) && key != keyLower {
-		return []string{"shift+" + keyLower}
-	}
 	return modifiedShiftAliases(keyLower)
 }
 
 // modifiedShiftAliases does for a chord carrying other modifiers what
-// shiftAliases does for a bare one: "alt+shift+1" also answers to "alt+!"
+// usShiftAliases does for a bare one: "alt+shift+1" also answers to "alt+!"
 // (what a terminal without the Kitty protocol sends) and to "alt+shift+!"
 // (what xterm's modifyOtherKeys sends).
 //
@@ -366,6 +369,79 @@ func modifiedShiftAliases(keyLower string) []string {
 	return nil
 }
 
+// usLayoutTier and optionGlyphTier mark the registry keys that only match
+// under an assumption about the keyboard. A key event never spells either, so
+// a key in a tier can only be reached by asking for it with USLayoutKey or
+// OptionGlyphKey, and a binding written for the key itself always wins.
+const (
+	usLayoutTier    = "\x00us:"
+	optionGlyphTier = "\x00glyph:"
+)
+
+// USLayoutKey is the registry key that matches key only on a US layout: a
+// shifted-digit alias ("alt+&" for a binding on alt+shift+7), or the chord a
+// composed macOS Option character stands for on a US layout. The input path
+// asks for it after every plain spelling of a key event has missed, and only
+// when the event does not contradict a US layout (see KeyFitsUSLayout).
+func USLayoutKey(key string) string { return usLayoutTier + key }
+
+// OptionGlyphKey is the registry key that matches chord when it arrives as the
+// character macOS composed for it, with no Alt modifier. The registry fills
+// that tier only when keybindings.option_glyphs is "bind".
+func OptionGlyphKey(chord string) string { return optionGlyphTier + chord }
+
+// KeyFitsUSLayout reports whether a key event is consistent with a US layout,
+// from what the terminal reported about it. code is the key's code, shifted
+// the character it gives with Shift and base the key at the same position on
+// a US layout (both from the Kitty protocol, zero when not reported), and
+// shift whether Shift was held.
+//
+// It answers true when nothing contradicts a US layout, which includes every
+// terminal that reports none of this. Then the US tables are the best guess
+// there is, and keybindings.keyboard_layout = "other" turns them off.
+func KeyFitsUSLayout(code, shifted, base rune, shift bool) bool {
+	if base != 0 && base != code && base != unicode.ToLower(code) {
+		return false
+	}
+	if shifted == 0 || !shift {
+		return true
+	}
+	// A symbol a US layout types only with Shift is never the unshifted code
+	// of a US key, and the protocol reports the unshifted code.
+	if _, ok := shiftedDigitsReverse[string(code)]; ok {
+		return false
+	}
+	if symbol, ok := shiftedDigits[string(code)]; ok && symbol != string(shifted) {
+		return false
+	}
+	return true
+}
+
+// Keyboard layout values for keybindings.keyboard_layout.
+const (
+	// KeyboardLayoutUS reads a key the terminal does not describe as if it
+	// came from a US layout. The default.
+	KeyboardLayoutUS = "us"
+	// KeyboardLayoutOther never applies the US tables.
+	KeyboardLayoutOther = "other"
+)
+
+// KeyboardLayouts is every value keybindings.keyboard_layout accepts.
+var KeyboardLayouts = []string{KeyboardLayoutUS, KeyboardLayoutOther}
+
+// Option glyph values for keybindings.option_glyphs.
+const (
+	// OptionGlyphsType sends a character composed with Option to the pane. The
+	// default.
+	OptionGlyphsType = "type"
+	// OptionGlyphsBind reads a character composed with Option as the Option
+	// binding it stands for on a US layout.
+	OptionGlyphsBind = "bind"
+)
+
+// OptionGlyphModes is every value keybindings.option_glyphs accepts.
+var OptionGlyphModes = []string{OptionGlyphsType, OptionGlyphsBind}
+
 // NormalizeKey converts a key string to its canonical form for the current platform
 // For example, on macOS: "opt+1" → "¡" or "alt+1" depending on context
 func (kn *KeyNormalizer) NormalizeKey(key string) []string {
@@ -392,34 +468,17 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	canonical := CanonicalKey(key)
 	result = append(result, canonical)
 
-	// Accept both spellings of a shifted key, on every platform.
-	result = append(result, shiftAliases(key, keyLower)...)
-	result = append(result, shiftAliases(canonical, strings.ToLower(canonical))...)
+	// Accept both spellings of a shifted letter, on every platform. A shifted
+	// digit's US spellings are not here: see USAliasKeys.
+	result = append(result, letterShiftAliases(key, keyLower)...)
+	result = append(result, letterShiftAliases(canonical, strings.ToLower(canonical))...)
 
-	// On macOS, expand opt+N and option+N to unicode and alt+N
+	// The character macOS composes for an Option chord is not a spelling of
+	// the binding. A terminal that composes sends it as text with no Alt
+	// modifier, and a user who composes on purpose (issue #566) types it. The
+	// input path reads it through MacOSOptionChord instead, into the tiers
+	// USLayoutKey and OptionGlyphKey name.
 	if kn.isMacOS {
-		// Check for opt+shift+number combinations first
-		if unicode, ok := macOptionShiftNumberMap[keyLower]; ok {
-			// Add the unicode character
-			result = append(result, strings.ToLower(unicode))
-			// Also map to alt+shift+N (use replacer for efficiency)
-			result = append(result, optionToAltReplacer.Replace(keyLower))
-		} else if unicode, ok := macOptionNumberMap[keyLower]; ok {
-			// Add the unicode character
-			result = append(result, strings.ToLower(unicode))
-			// Also map to alt+N
-			result = append(result, optionToAltReplacer.Replace(keyLower))
-		} else if unicode, ok := macOptionTabMap[keyLower]; ok {
-			// Add the unicode character for opt+tab variants
-			result = append(result, unicode)
-			// Also map to alt+tab variant
-			result = append(result, optionToAltReplacer.Replace(keyLower))
-		} else if glyph := macOptionLetterGlyph(keyLower); glyph != "" {
-			// Case is preserved: å (opt+a) and Å (opt+shift+a) are different keys.
-			result = append(result, glyph)
-			result = append(result, optionToAltReplacer.Replace(keyLower))
-		}
-
 		// Option reaches a terminal as the Alt modifier whatever key it is
 		// held with, so the alt+ spelling is always one of the ways an opt+
 		// binding actually arrives.
@@ -451,6 +510,25 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	}
 
 	return unique
+}
+
+// USAliasKeys returns the spellings key has only on a US layout: the US
+// spellings of a shifted digit, for the key as written and for its canonical
+// form. NormalizeKey leaves these out, and the registry puts them in the tier
+// USLayoutKey names.
+func (kn *KeyNormalizer) USAliasKeys(key string) []string {
+	key = strings.TrimSpace(key)
+	canonical := CanonicalKey(key)
+	plain := kn.NormalizeKey(key)
+	var out []string
+	for _, k := range append(usShiftAliases(key, strings.ToLower(key)),
+		usShiftAliases(canonical, strings.ToLower(canonical))...) {
+		k = strings.ToLower(k)
+		if !slices.Contains(out, k) && !slices.Contains(plain, k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // ExpandKeys takes a slice of user-provided keys and expands them to all platform-specific variants
@@ -591,8 +669,7 @@ var leaderCache atomic.Pointer[leaderSet]
 // key event has (see CanonicalKey); it is not normalized here, because this
 // runs on every key press. The leader goes through the same
 // normalizer as every binding table, so opt+f12 and option+f12 match the
-// alt+f12 a terminal sends, and on macOS opt+1 also matches the ¡ that Option
-// composes. An empty leader means the default.
+// alt+f12 a terminal sends. An empty leader means the default.
 func IsLeaderPress(pressed, leader string) bool {
 	if leader == "" {
 		leader = DefaultLeaderKey

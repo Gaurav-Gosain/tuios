@@ -22,7 +22,7 @@ func TestLatinChordMatchesTheKeyProduced(t *testing.T) {
 		t.Fatalf("the pane got %q for Dvorak Ctrl+X, want %q", got, "\x18")
 	}
 
-	keys := bindingKeys(tea.KeyPressMsg{Code: 'z', BaseCode: 'y', Mod: tea.ModCtrl})
+	keys := bindingKeys(tea.KeyPressMsg{Code: 'z', BaseCode: 'y', Mod: tea.ModCtrl}, 'y')
 	if len(keys) == 0 || keys[0] != "ctrl+z" || slices.Contains(keys, "ctrl+y") {
 		t.Fatalf("German Ctrl+Z is spelled %v, want ctrl+z and never ctrl+y", keys)
 	}
@@ -32,11 +32,11 @@ func TestLatinChordMatchesTheKeyProduced(t *testing.T) {
 // after the key produced has had its chance.
 func TestNonLatinChordFallsBackToBaseLayoutKey(t *testing.T) {
 	ctrlEs := tea.KeyPressMsg{Code: 'с', BaseCode: 'c', Mod: tea.ModCtrl}
-	keys := bindingKeys(ctrlEs)
+	keys := bindingKeys(ctrlEs, ctrlEs.BaseCode)
 	if len(keys) < 2 || keys[0] != "ctrl+с" || keys[len(keys)-1] != "ctrl+c" {
 		t.Fatalf("Ctrl+с is spelled %v, want ctrl+с first and ctrl+c last", keys)
 	}
-	got := lookupAction(ctrlEs, func(k string) string {
+	got := lookupAction(nil, ctrlEs, func(k string) string {
 		if k == "ctrl+c" {
 			return "bound"
 		}
@@ -66,10 +66,10 @@ func TestUnboundLatinLetterDoesNothing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o := twoPaneWM(t)
-			if got := lookupAction(tc.msg, o.KeybindRegistry.GetAction); got != "" {
+			if got := lookupAction(nil, tc.msg, o.KeybindRegistry.GetAction); got != "" {
 				t.Fatalf("%s resolves to %q in window mode", tc.msg.Text, got)
 			}
-			if got := lookupAction(tc.msg, o.KeybindRegistry.GetPrefixAction); got != "" {
+			if got := lookupAction(nil, tc.msg, o.KeybindRegistry.GetPrefixAction); got != "" {
 				t.Fatalf("%s resolves to %q after the leader", tc.msg.Text, got)
 			}
 			before := len(o.Windows)

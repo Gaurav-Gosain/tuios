@@ -7,11 +7,11 @@
 package input
 
 import (
-	"runtime"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -26,7 +26,9 @@ func runtimeIsDarwin() bool {
 
 // darwinHost is the answer runtimeIsDarwin gives. A variable so a test can put
 // the macOS-only paths under test on the machine that runs CI.
-var darwinHost = runtime.GOOS == "darwin"
+// It reads the platform the way the config package does, so the defaults and
+// the key paths agree on one platform.
+var darwinHost = config.PlatformIsMacOS()
 
 // Ctrl key combinations mapping
 // Maps the character code to its control code equivalent

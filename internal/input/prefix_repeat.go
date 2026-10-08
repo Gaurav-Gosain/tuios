@@ -77,7 +77,7 @@ func tryPrefixRepeat(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 		o.ClearPrefixRepeat()
 		return o, nil, false
 	}
-	action := lookupAction(msg, o.KeybindRegistry.GetPrefixAction)
+	action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
 	if !repeatablePrefixActions[action] {
 		o.ClearPrefixRepeat()
 		return o, nil, false

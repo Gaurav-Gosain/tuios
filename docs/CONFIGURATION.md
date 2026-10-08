@@ -179,6 +179,22 @@ You can share one `config.toml` between a Mac and a Linux machine, for example w
 
 tuios ignores a key that it cannot read and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. tuios shows a config problem when it starts, and the log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` and `tuios config apply` list these keys too.
 
+## Keyboard layout and Option characters
+
+```toml
+[keybindings]
+keyboard_layout = "us"   # us, other
+option_glyphs = "type"   # type, bind
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `keyboard_layout` | `us` | `us` lets a binding on `opt+shift+7` also match `opt+&`, as on a US keyboard. Set `other` for AZERTY, QWERTZ and other layouts. A key that the terminal reports through the Kitty keyboard protocol uses that report. |
+| `option_glyphs` | `type` | What a character that macOS Option typed does when it arrives with no Alt modifier. `type` sends it to the pane. `bind` runs the Option binding that the character stands for on a US layout. |
+
+See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
+[One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).
+
 ## Opening links
 
 tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a

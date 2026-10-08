@@ -38,7 +38,7 @@ func handleAgentMailInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	action := lookupAction(msg, overlayKeys(o).GetMailAction)
+	action := lookupAction(o, msg, overlayKeys(o).GetMailAction)
 	if action == "" {
 		return o, nil
 	}

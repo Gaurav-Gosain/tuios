@@ -44,7 +44,7 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 		if got := tc.msg.String(); got != tc.key {
 			t.Fatalf("%s: terminal spells the chord %q, want %q", tc.what, got, tc.key)
 		}
-		if got := registry.GetAction(tc.key); got != tc.want {
+		if got := lookupAction(nil, tc.msg, registry.GetAction); got != tc.want {
 			t.Errorf("%s spelling %q resolved to %q, want %q", tc.what, tc.key, got, tc.want)
 		}
 		if !GetDispatcher().HasAction(tc.want) {

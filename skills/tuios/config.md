@@ -389,6 +389,13 @@ typed, with or without `ctrl`: Dvorak `ctrl+b` is the leader, and showkeys and
 the recorder name it `ctrl+b`.
 `keybinds explain` checks the key as written, so give it the Latin key.
 
+A shifted digit has US aliases: `opt+shift+7` also matches `opt+&`. A binding
+written for the key itself wins over an alias, and `explain` lists an alias
+match as `on a US layout`. Set `keybindings.keyboard_layout = "other"` to turn
+the aliases off on AZERTY and other layouts. On macOS a character that Option
+composed, with no Alt modifier, goes to the pane as text. Set
+`keybindings.option_glyphs = "bind"` to run the Option binding instead.
+
 ```sh
 tuios keybinds unbind close_window w   # one key off one action
 tuios keybinds free alt+left           # hand the key back to the pane

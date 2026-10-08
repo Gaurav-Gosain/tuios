@@ -28,7 +28,9 @@ func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			got := normalizer.NormalizeKey(tc.input)
+			// A shifted digit's other spelling holds on a US layout only, so
+			// it is a US alias rather than a spelling of the key itself.
+			got := append(normalizer.NormalizeKey(tc.input), normalizer.USAliasKeys(tc.input)...)
 			for _, want := range tc.want {
 				if !slices.Contains(got, want) {
 					t.Errorf("NormalizeKey(%q) = %v, want to contain %q", tc.input, got, want)

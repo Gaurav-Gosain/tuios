@@ -3110,6 +3110,39 @@ config.d file, an edit to a config.d file, an included file and config.toml,
 with and without a daemon. In each case the border took the new theme's colour
 and the pane kept its old palette.
 
+## Option characters and keyboard layouts (#566, #575)
+
+`option_layout_keys_test.go` has six tests. Each one sends the bytes that a
+terminal writes for the key: WezTerm with a composing right Option key, iTerm2
+with Esc+ on US and on French AZERTY, and Kitty protocol reports for AZERTY.
+`OSTYPE=darwin` puts tuios on its macOS defaults and its macOS key paths.
+Every test that says a key does nothing also presses a key that does
+something, in the same session. Each control below cut one piece of wiring,
+built a binary, and ran the named test against it, on 2026-10-08 on branch
+`fix/option-composition-layouts`.
+
+| Control: what was cut | Test | Where it failed |
+| --- | --- | --- |
+| `bindingKeys` asks for a bare character's chord as a plain key, not in the Option-glyph tier | `TestComposedOptionCharacterReachesThePane` | the shell never prints `x2•y` |
+| `expandInto` skips the `OptionGlyphKey` claim | `TestComposedOptionCharacterRunsTheBindingWhenAsked` | the session stays on workspace 1, want 8 |
+| `bindingKeys` never asks for the US-layout tier | `TestEscPlusOptionChordsOnAUSLayout` | ESC # leaves the session on workspace 1, want 3 |
+| `expandInto` ignores `keyboard_layout = "other"` | `TestAzertyEscPlusWithLayoutOther` | ESC & moves the pane to workspace 7 |
+| `expandInto` claims a US alias as a plain key | `TestOwnBindingBeatsTheUSAlias` | ESC & moves the pane to workspace 7, want workspace 2 |
+| `bindingKeys` asks for the US-layout tier without `KeyFitsUSLayout` | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |
+| `bindingKeys` drops the `shiftedKey` spelling | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option, Shift and the 1 key leaves the session on workspace 3, want 1 |
+| `lookupAction` does not hand back the host's base-layout key | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |
+
+The same six tests against a build of main at `797ea69e`:
+
+| Test | Verdict on main |
+| --- | --- |
+| `TestComposedOptionCharacterRunsTheBindingWhenAsked` | fails: the option does not exist |
+| `TestAzertyEscPlusWithLayoutOther` | fails: ESC & moves the pane to workspace 7 |
+| `TestOwnBindingBeatsTheUSAlias` | fails: ESC & moves the pane to workspace 7 |
+| `TestAzertyKittyReportsPickTheRightWorkspace` | fails: AZERTY Option and the 1 key moves the pane to workspace 7 |
+| `TestComposedOptionCharacterReachesThePane` | **passes**. On main the input path reads the platform from `runtime.GOOS` only, so `OSTYPE=darwin` does not turn on the code that ate the character. The first control above is the evidence for this test. |
+| `TestEscPlusOptionChordsOnAUSLayout` | passes, as it should: it is the positive half, and US Esc+ worked before |
+
 ## A default config in a browser session (clienttests)
 
 The two tests are in `clienttests/config.spec.mjs`. They read the log viewer

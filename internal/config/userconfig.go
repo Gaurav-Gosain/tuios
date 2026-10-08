@@ -774,7 +774,20 @@ type HooksConfig map[string]any
 
 // KeybindingsConfig holds all keybinding configurations
 type KeybindingsConfig struct {
-	LeaderKey        string              `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b)
+	LeaderKey string `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b)
+	// KeyboardLayout is the layout tuios assumes for a key the terminal does
+	// not describe: "us" (the default when empty) or "other". With "us" a
+	// binding on opt+shift+7 also matches opt+&, because & is Shift+7 on a US
+	// keyboard. "other" turns that off, for AZERTY, QWERTZ and other layouts
+	// where those keys sit elsewhere (issue #575). A terminal that reports the
+	// layout under the Kitty protocol is read from that report either way.
+	KeyboardLayout string `toml:"keyboard_layout,omitempty"`
+	// OptionGlyphs is what a character composed with macOS Option does when it
+	// arrives with no Alt modifier: "type" sends it to the pane (the default
+	// when empty), "bind" runs the Option binding it stands for on a US layout.
+	// Empty is "type" with a one-time hint when such a character would have
+	// matched a binding; either value written out turns the hint off.
+	OptionGlyphs     string              `toml:"option_glyphs,omitempty"`
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`
 	Layout           map[string][]string `toml:"layout"`

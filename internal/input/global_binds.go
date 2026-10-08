@@ -23,7 +23,7 @@ func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string 
 	if o.KeybindRegistry == nil {
 		return ""
 	}
-	return lookupAction(msg, func(key string) string {
+	return lookupAction(o, msg, func(key string) string {
 		return lookup(o.KeybindRegistry, key)
 	})
 }

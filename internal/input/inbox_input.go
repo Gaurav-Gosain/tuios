@@ -51,7 +51,7 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		return o, o.InboxNumber(int(key[0] - '0'))
 	}
-	action := lookupAction(msg, overlayKeys(o).GetInboxAction)
+	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
 	if action == "" {
 		return o, nil
 	}
@@ -204,7 +204,7 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		return o, o.InboxAnswer(harness.ActionChoose, key)
 	}
-	action := lookupAction(msg, overlayKeys(o).GetInboxPeekAction)
+	action := lookupAction(o, msg, overlayKeys(o).GetInboxPeekAction)
 	if action == "" {
 		return o, nil
 	}

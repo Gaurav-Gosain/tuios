@@ -40,6 +40,11 @@ var keySeeds = []string{
 	"Shift+É",
 	"shift+0", "shift+9", "shift+-", "shift+=",
 	"!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
+	// The French AZERTY number row with Option, unshifted and shifted, and the
+	// US Option characters (issues #566 and #575).
+	"opt+&", "opt+shift+&", "opt+é", "opt+\"", "opt+'", "opt+(", "opt+§",
+	"opt+è", "opt+!", "opt+ç", "opt+à", "alt+shift+(", "alt+shift+!",
+	"•", "¡", "˜", "π", "opt+•", "alt+shift+•",
 }
 
 // FuzzNormalizeKey checks the key normalizer's invariants. It runs on strings
@@ -102,6 +107,24 @@ func FuzzNormalizeKey(f *testing.F) {
 			again := kn.NormalizeKey(got[0])
 			if len(again) == 0 || again[0] != got[0] {
 				t.Fatalf("NormalizeKey not idempotent for %q: %q then %q", key, got, again)
+			}
+		}
+
+		// The US aliases are other keys, never a spelling of the key itself:
+		// one in NormalizeKey would match on every layout, which is how opt+&
+		// ran move_and_follow_7 on AZERTY (issue #575).
+		aliases := kn.USAliasKeys(key)
+		if len(aliases) > maxAliases {
+			t.Fatalf("USAliasKeys(%q) returned %d aliases: %q", key, len(aliases), aliases)
+		}
+		for _, a := range aliases {
+			if seen[a] {
+				t.Fatalf("USAliasKeys(%q) returned %q, which NormalizeKey also returns", key, a)
+			}
+		}
+		for _, k := range got {
+			if strings.HasPrefix(k, usLayoutTier) || strings.HasPrefix(k, optionGlyphTier) {
+				t.Fatalf("NormalizeKey(%q) returned the tier key %q", key, k)
 			}
 		}
 
@@ -172,6 +195,15 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 		"[keybindings]\nleader_key = \"\"\n",
 		"[keybindings]\nleader_key = \"ctrl+a\"\n",
 		"[keybindings]\nleader_key = \"\xff\"\n",
+		"[keybindings]\nkeyboard_layout = \"other\"\noption_glyphs = \"bind\"\n",
+		"[keybindings]\nkeyboard_layout = \"us\"\noption_glyphs = \"type\"\n",
+		"[keybindings]\nkeyboard_layout = \"azerty\"\noption_glyphs = \"\xff\"\n",
+		"[keybindings]\nkeyboard_layout = 1\n",
+		"[keybindings]\nkeyboard_layout = \"other\"\n[keybindings.workspaces]\n" +
+			"move_and_follow_1 = [\"opt+&\"]\nmove_and_follow_3 = ['opt+\"']\n" +
+			"move_and_follow_4 = [\"opt+'\"]\nmove_and_follow_6 = [\"opt+§\"]\n",
+		"[keybindings.workspaces]\nswitch_workspace_1 = [\"opt+&\"]\nmove_and_follow_1 = [\"opt+shift+&\"]\n",
+		"[keybindings]\noption_glyphs = \"bind\"\n[keybindings.terminal_mode]\nterminal_next_window = [\"˜\", \"opt+n\"]\n",
 		"[keybindings.terminal_mode]\nquit = [\"ctrl+q\", \"ctrl+q\"]\n",
 		"[keybindings.terminal_mode]\nquit = []\n",
 		"[keybindings.workspace]\nnext = [\"\", \"\", \"\"]\n",
@@ -246,6 +278,11 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 				t.Fatalf("validation warning on %s/%s has no message", w.Field, w.Key)
 			}
 		}
+
+		// The registry builds its layout tiers from these keys and both
+		// keyboard options, whatever they hold.
+		registry := NewKeybindRegistry(cfg)
+		_ = registry.Fate("opt+&", PaneFacts{})
 
 		// Validating twice must agree: a second load of the same file cannot
 		// suddenly start rejecting it.

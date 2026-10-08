@@ -212,6 +212,12 @@ func keybindsExplain(key string, asJSON bool, guest string) error {
 		}
 		fmt.Printf("  %-16s %s [%s]%s\n", a.Scope, a.Desc, a.Section, dead)
 	}
+	for _, a := range fate.USLayoutActs {
+		fmt.Printf("  %-16s %s [%s] (as %s, on a US layout)\n", a.Scope, a.Desc, a.Section, a.Key)
+	}
+	if len(fate.USLayoutActs) > 0 {
+		fmt.Println("  To stop this on another layout, set keybindings.keyboard_layout = \"other\".")
+	}
 	if fate.SwallowedInTerminal {
 		fmt.Printf("  %-16s kept from the pane: %s\n", "pane", fate.SwallowReason)
 	} else if !fate.Free {

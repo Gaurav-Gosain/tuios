@@ -140,13 +140,49 @@ func (r *KeybindRegistry) sectionKeyMap(section map[string][]string) map[string]
 
 	keyMap := make(map[string]string, len(section))
 	for _, action := range actions {
-		for _, key := range r.normalizer.ExpandKeys(section[action]) {
-			if _, taken := keyMap[key]; !taken {
-				keyMap[key] = action
-			}
-		}
+		r.expandInto(keyMap, action, section[action])
 	}
 	return keyMap
+}
+
+// expandInto adds the keys of one action to keyMap: every plain spelling of
+// each key, then the spellings that hold only under an assumption about the
+// keyboard, each in its own tier (see USLayoutKey and OptionGlyphKey). A key
+// already in keyMap keeps the action that claimed it first.
+//
+// The tiers are why a binding the user writes for a key wins over a US alias
+// of another binding. On AZERTY a binding on opt+& now runs, where before the
+// alt+& alias of the default opt+shift+7 took it (issue #575).
+func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, keys []string) {
+	claim := func(key string) {
+		if _, taken := keyMap[key]; !taken {
+			keyMap[key] = action
+		}
+	}
+	plain := r.normalizer.ExpandKeys(keys)
+	for _, key := range plain {
+		claim(key)
+	}
+	kb := &r.config.Keybindings
+	if kb.KeyboardLayout == KeyboardLayoutOther {
+		return
+	}
+	for _, key := range keys {
+		for _, alias := range r.normalizer.USAliasKeys(key) {
+			claim(USLayoutKey(alias))
+		}
+	}
+	// An Option chord the terminal sent as the character a US layout composes
+	// for it is looked up by the chord, in these tiers.
+	for _, key := range plain {
+		if !strings.HasPrefix(key, "alt+") {
+			continue
+		}
+		claim(USLayoutKey(key))
+		if kb.OptionGlyphs == OptionGlyphsBind {
+			claim(OptionGlyphKey(key))
+		}
+	}
 }
 
 // withCommands adds the [[keybindings.command]] keys of one section to its
@@ -161,11 +197,7 @@ func (r *KeybindRegistry) withCommands(keyMap map[string]string, section string)
 		if c.Section() != section || kb.isLeader(c.BareKey()) {
 			continue
 		}
-		for _, key := range r.normalizer.ExpandKeys([]string{c.BareKey()}) {
-			if _, taken := keyMap[key]; !taken {
-				keyMap[key] = c.Action()
-			}
-		}
+		r.expandInto(keyMap, c.Action(), []string{c.BareKey()})
 	}
 	return keyMap
 }

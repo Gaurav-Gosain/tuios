@@ -34,7 +34,7 @@ func runPrefix(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) (*app.OS, t
 	if o.KeybindRegistry == nil {
 		return o, nil
 	}
-	action := lookupAction(msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
+	action := lookupAction(o, msg, func(key string) string { return lookup(o.KeybindRegistry, key) })
 	m, cmd, _ := dispatchAction(action, msg, o)
 	return m, cmd
 }
@@ -47,7 +47,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.PrefixActive = false
 
 	if o.KeybindRegistry != nil {
-		action := lookupAction(msg, o.KeybindRegistry.GetPrefixAction)
+		action := lookupAction(o, msg, o.KeybindRegistry.GetPrefixAction)
 		if app.PrefixWorkActions[action] {
 			if cmd, handled := runPrefixWork(action, o); handled {
 				armIfRepeatable(o, action)
@@ -143,7 +143,7 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	if o.KeybindRegistry == nil {
 		return false
 	}
-	action := lookupAction(msg, o.KeybindRegistry.GetTerminalModeAction)
+	action := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
 	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
 		return false
 	}
@@ -159,7 +159,7 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	if !isReservedTerminalChord(msg) {
 		return false
 	}
-	action = lookupAction(msg, o.KeybindRegistry.GetAction)
+	action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 	if !isTerminalSafeAction(action) {
 		return false
 	}

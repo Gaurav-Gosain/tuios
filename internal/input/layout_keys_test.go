@@ -168,7 +168,7 @@ func TestLatinLayoutLetterDoesNotRunUSPositionBinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			o := twoPaneWM(t)
 			o.AutoTiling = false
-			if got := lookupAction(tc.msg, o.KeybindRegistry.GetAction); got != "" {
+			if got := lookupAction(nil, tc.msg, o.KeybindRegistry.GetAction); got != "" {
 				t.Fatalf("%q resolves to %q, want nothing", tc.msg.Text, got)
 			}
 			o, _ = HandleKeyPress(tc.msg, o)

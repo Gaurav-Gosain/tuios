@@ -1141,6 +1141,58 @@ This needs a terminal that sends the US-layout key through the Kitty keyboard
 protocol: Ghostty, kitty, WezTerm or foot. Other terminals send only the typed
 character. With those, switch to a Latin layout for tuios commands.
 
+### Shifted digits and AZERTY
+
+On a US keyboard `&` is `shift+7`. Some terminals send the chord and others send
+the character. By default, a binding on `opt+shift+7` therefore also matches
+`opt+&`, and a binding on `!` also matches `shift+1`. These US aliases apply
+only when no binding names the key itself. A binding that you write for a key
+always wins over an alias.
+
+On other layouts these keys are in other places. On a French Mac, `&` is the
+unshifted 1 key and the digits need Shift. tuios turns off the US aliases for a
+key when the terminal reports that the key is not where a US layout has it.
+Terminals that send this through the Kitty keyboard protocol include Ghostty,
+kitty, WezTerm and foot. Other terminals do not report the layout. To turn off
+the US aliases for every key, set this:
+
+```toml
+[keybindings]
+keyboard_layout = "other"   # the default is "us"
+```
+
+`tuios keybinds explain opt+&` shows a binding that the key runs through a US
+alias.
+
+#### A recipe for French AZERTY on macOS
+
+Set the left Option key to send Alt. In iTerm2 this is "Esc+". In WezTerm it
+is `send_composed_key_when_left_alt_is_pressed = false`. Then:
+
+- Option and Shift with a number key types the digit. The default `opt+1` to
+  `opt+9` switch workspaces with it.
+- The default `opt+shift+1` to `opt+shift+9` need Shift and a digit together,
+  which AZERTY cannot type. Bind the move to the unshifted keys:
+
+```toml
+[keybindings]
+keyboard_layout = "other"
+
+[keybindings.workspaces]
+move_and_follow_1 = ["opt+&"]
+move_and_follow_2 = ["opt+é"]
+move_and_follow_3 = ['opt+"']
+move_and_follow_4 = ["opt+'"]
+move_and_follow_5 = ["opt+("]
+move_and_follow_6 = ["opt+§"]
+move_and_follow_7 = ["opt+è"]
+move_and_follow_8 = ["opt+!"]
+move_and_follow_9 = ["opt+ç"]
+```
+
+To type `[ ] { } |` with Option, set the right Option key to compose. See
+[One Option key for typing](#one-option-key-for-typing).
+
 In window mode tuios tells the terminal to send every key as a code. tuios
 resets this when it stops. If tuios cannot stop correctly, the terminal can
 stay in this mode. This occurs when you use `kill -9` on tuios, or when an ssh
@@ -1186,9 +1238,19 @@ To change the keys, set `terminal_scroll_up` and `terminal_scroll_down` in
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an
-Option chord usually arrives as a character rather than as Alt. tuios reads the
-composed characters back into the chord they stand for, which covers most of
-them, but two kinds cannot be recovered:
+Option chord usually arrives as a character rather than as Alt. A character
+that arrives with no Alt modifier is text. tuios sends it to the pane and does
+not run a binding. So when Option+8 types `•`, you get `•`, and not workspace 8.
+
+To read these characters as the Option chord that types them on a US layout,
+set this:
+
+```toml
+[keybindings]
+option_glyphs = "bind"   # the default is "type"
+```
+
+Even with `bind`, two kinds of chord cannot be read:
 
 - **Dead keys.** Option+e, i, n, u and backtick emit nothing at all until a
   second key ends the composition. `alt+n` is bound to "next pane" in terminal
@@ -1224,7 +1286,24 @@ keybind = alt+right=unbind
 ```
 
 tuios says all of this on screen the first time it sees a chord that did not
-arrive as it was meant to.
+arrive as it was meant to. When the chord arrived as typed text, set
+`option_glyphs` to `"type"` or `"bind"` to stop this note.
+
+### One Option key for typing
+
+Some terminals let you set the two Option keys differently. Use the left Option
+key for tuios and the right Option key to type characters such as `#`, `•` or
+`{`. In WezTerm:
+
+```lua
+config.send_composed_key_when_left_alt_is_pressed = false
+config.send_composed_key_when_right_alt_is_pressed = true
+```
+
+In iTerm2, set Left Option key to "Esc+" and Right Option key to "Normal".
+The left Option key then runs tuios bindings. The right Option key types
+characters into the pane. To stop the note about composed characters, set
+`option_glyphs = "type"` under `[keybindings]`.
 
 ### What works without changing anything
 
