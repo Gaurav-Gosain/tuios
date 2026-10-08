@@ -3334,5 +3334,5 @@ is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
 | The bridge asks for the daemon's default history | `Run`: `--scrollback` not passed to the model | `TestGUIBridgeSnapshotCarriesTheRenderersHistory` (row 100 of 2500 missing with `--scrollback 3000`) | **caught** |
 | The reloaded config is put in force as the file says | `newModel`: `ReloadFilter` not set | `TestGUIBridgeKeepsItsChromeAcrossAReload` (the pane at row 2, 28 rows high, after the file put the dock at the top) | **caught** |
 
-All 37 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
+All 40 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch.
