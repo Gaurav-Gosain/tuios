@@ -1739,6 +1739,53 @@ func (s *Session) publishState(snap *SessionState) {
 	fn(snap)
 }
 
+// resendState hands the session's current state to one client that missed a
+// broadcast of it, in the same order as publishState delivers, so the copy can
+// never arrive behind a newer state the client was already sent.
+//
+// The attach repair used to take a snapshot and queue it with no order
+// against publishState. A mutation published between the two reached the
+// client first, and the older snapshot followed it. The client adopted the
+// older state last: a client attaching beside a current one put the current
+// one's tree ops back on, at a Version below the one that turned them off.
+//
+// The snapshot is taken outside pushMu, because fillLiveFacts takes the pane
+// locks and publishState never holds pushMu across those. Under pushMu it is
+// checked against what was delivered. Older than that, it is taken again.
+// Newer, it is a mutation whose own publish has not run yet, so it goes to
+// every client through the sink and the late publish is dropped as stale. The
+// same, it goes to send alone.
+func (s *Session) resendState(send func(*SessionState)) {
+	s.stateSinkMu.RLock()
+	fn := s.stateSink
+	s.stateSinkMu.RUnlock()
+	for {
+		snap := s.GetState()
+		if hook := stateResendSnapshotTaken.Load(); hook != nil {
+			(*hook)()
+		}
+		s.pushMu.Lock()
+		if snap.Version < s.pushedVersion {
+			s.pushMu.Unlock()
+			continue
+		}
+		if snap.Version > s.pushedVersion && fn != nil {
+			s.pushedVersion = snap.Version
+			s.forgetBroadcastFingerprint()
+			fn(snap)
+		} else {
+			send(snap)
+		}
+		s.pushMu.Unlock()
+		return
+	}
+}
+
+// stateResendSnapshotTaken runs in resendState between the snapshot and the
+// check against what was delivered. It is unset outside tests, which use it
+// to land a mutation in that window on purpose.
+var stateResendSnapshotTaken atomic.Pointer[func()]
+
 // NoteBroadcastFingerprint records fp as the state about to be forwarded to
 // this session's peers, and reports whether that forward is worth making.
 //

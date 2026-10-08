@@ -403,8 +403,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// the state moved. A change made after the reply reached this client by
 	// its own broadcast, and sending it again gave the client the same state
 	// twice. See connState.missedStateSync. The repair is queued behind the
-	// broadcasts already on their way to this client, so it cannot overtake
-	// them either.
+	// broadcasts already on their way to this client, and in order with the
+	// ones still to come, so it can neither overtake them nor fall behind
+	// one. See Session.resendState.
 	cs.mu.Lock()
 	missed := cs.missedStateSync
 	cs.missedStateSync = false
@@ -412,12 +413,14 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if missed {
 		LogBasic("Session %s state moved while %s was attaching; telling it directly",
 			session.Name(), cs.clientID)
-		if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
-			State:       session.GetState(),
-			TriggerType: "update",
-		}); err == nil {
-			d.queueBroadcast(cs, msg, "attach state repair")
-		}
+		session.resendState(func(state *SessionState) {
+			if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
+				State:       state,
+				TriggerType: "update",
+			}); err == nil {
+				d.queueBroadcast(cs, msg, "attach state repair")
+			}
+		})
 	}
 	if w, h := session.Size(); w > 0 && h > 0 {
 		if r := session.LayoutReserve(); w != effectiveWidth || h != effectiveHeight || r != effectiveReserve {

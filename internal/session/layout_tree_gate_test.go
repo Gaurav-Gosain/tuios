@@ -2,6 +2,7 @@ package session
 
 import (
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,17 +28,39 @@ func dialTreeOpsClient(t *testing.T, socketPath, session string, treeOps bool) (
 	return c, attached.State
 }
 
+// stateReader reads one client's state broadcasts and fails the test when one
+// carries a Version below a state the client already read: a client adopts
+// the state it reads last, so a late older state moves it backwards.
+type stateReader struct {
+	c    *boundsClient
+	seen int
+}
+
+// next reads the next state broadcast.
+func (r *stateReader) next(t *testing.T) *SessionState {
+	t.Helper()
+	var sync StateSyncPayload
+	if err := r.c.await(t, MsgStateSync).ParsePayload(&sync); err != nil {
+		t.Fatalf("parse state sync: %v", err)
+	}
+	if sync.State == nil {
+		t.Fatal("a state sync carried no state")
+	}
+	if sync.State.Version < r.seen {
+		t.Fatalf("a state at Version %d (tree ops on = %v) arrived after one at Version %d",
+			sync.State.Version, sync.State.LayoutTreeOps, r.seen)
+	}
+	r.seen = sync.State.Version
+	return sync.State
+}
+
 // awaitTreeOps reads state broadcasts until one says the tree ops are on or
 // off as wanted, and returns its Version.
-func (c *boundsClient) awaitTreeOps(t *testing.T, want bool) int {
+func (r *stateReader) awaitTreeOps(t *testing.T, want bool) int {
 	t.Helper()
 	for {
-		var sync StateSyncPayload
-		if err := c.await(t, MsgStateSync).ParsePayload(&sync); err != nil {
-			t.Fatalf("parse state sync: %v", err)
-		}
-		if sync.State != nil && sync.State.LayoutTreeOps == want {
-			return sync.State.Version
+		if st := r.next(t); st.LayoutTreeOps == want {
+			return st.Version
 		}
 	}
 }
@@ -47,21 +70,63 @@ func (c *boundsClient) awaitTreeOps(t *testing.T, want bool) int {
 // mid-session turns them off for everyone, in one broadcast at one Version,
 // and its leaving turns them on again the same way.
 //
+// The older client attaches inside the current client's attach repair, after
+// the repair took its snapshot. The current client always misses a state on
+// its attach: its hello offers no scratch workspaces, so the refresh in that
+// attach turns them off and broadcasts while the client is not yet in the
+// broadcast set. The repair used to queue its snapshot with no order against
+// the broadcasts, so the older client's "off" reached the current client
+// first and the older snapshot, still "on", followed it. On CI this failed
+// now and then as "tree ops came back on at Version 2, not after they went
+// off at 3".
+//
 // Negative control: with refreshTreeOps a no-op, the older client's attach
 // reply says the ops are on and the current client never hears them go off.
+// With handleAttach queueing a session.GetState() taken before the hook
+// instead of calling resendState, the repair arrives at Version 2 after the
+// "off" at Version 3.
 func TestTreeOpsOffWhileAnOlderClientIsAttached(t *testing.T) {
 	_, socketPath := startTestDaemon(t)
 
-	current, st := dialTreeOpsClient(t, socketPath, "gate", true)
+	// The hook runs on the daemon's connection goroutine. It hands the
+	// attach to the test goroutine and waits for it, so t is used there only.
+	repairing := make(chan struct{})
+	olderAttached := make(chan struct{})
+	var once sync.Once
+	hook := func() {
+		once.Do(func() {
+			close(repairing)
+			select {
+			case <-olderAttached:
+			case <-time.After(10 * time.Second * testDeadlineScale):
+			}
+		})
+	}
+	stateResendSnapshotTaken.Store(&hook)
+	t.Cleanup(func() { stateResendSnapshotTaken.Store(nil) })
+
+	currentConn, st := dialTreeOpsClient(t, socketPath, "gate", true)
+	current := &stateReader{c: currentConn, seen: st.Version}
 	if !st.LayoutTreeOps {
 		t.Fatal("a session with only a current client attached has tree ops off")
 	}
+	select {
+	case <-repairing:
+	case <-time.After(10 * time.Second * testDeadlineScale):
+		t.Fatal("the current client's attach sent no repair, so the older attach cannot land inside one")
+	}
 
 	older, st := dialTreeOpsClient(t, socketPath, "gate", false)
+	close(olderAttached)
 	if st.LayoutTreeOps {
 		t.Fatal("the older client's attach reply says tree ops are on")
 	}
 	off := current.awaitTreeOps(t, false)
+	// The repair is the next state. Nothing else changes the session until
+	// the detach below, and the repair is queued before that detach can be.
+	if repair := current.next(t); repair.LayoutTreeOps {
+		t.Fatalf("the attach repair at Version %d says tree ops are on beside the older client", repair.Version)
+	}
 
 	older.send(t, MsgDetach, struct{}{})
 	on := current.awaitTreeOps(t, true)
