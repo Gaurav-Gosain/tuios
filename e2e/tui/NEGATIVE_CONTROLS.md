@@ -645,15 +645,19 @@ Version, and the forward of a push to its peers ran outside `pushMu` with no
 check. A peer push forwarded inside a repair let the repair's older snapshot
 follow it, and of two pushes at once the older forward could reach the peers
 last. The fix counts every change in `noteStateChangeLocked` and orders every
-delivery by that count under `pushMu` (`Session.forwardPush`). The tests are
-unit tests in `internal/session/state_push_order_test.go`. Each lands the
-second change inside the first through a hook, so each fails on every run.
+delivery by that count under `pushMu` (`Session.deliverPush`). The reconcile
+reply to the pushing client goes the same way, through that client's
+broadcast queue, so it can no longer overtake an older state queued ahead of
+it. The tests are unit tests in `internal/session/state_push_order_test.go`.
+Each lands the second change inside the first through a hook, so each fails
+on every run.
 
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A repair sent an older state behind a peer push, and the client ended on the workspace it had left | whole change | `session.go`, `daemon_handlers.go` and `state_wait.go` as on `fix/tree-ops-gate-flake` (#561), with only the push hook added | `TestAttachRepairDoesNotFollowAPeerPush` ("B read workspace 1 after workspace 7 (states in order: [7 1 7])") | **caught**, 50 of 50 runs; 0 of 50 with the fix |
 | Of two pushes at once, the older forward reached the peers last | whole change | as above | `TestConcurrentPushesForwardInOrder` ("C read workspace 2 after workspace 3 (states in order: [3 2 3])") | **caught**, 50 of 50 runs; 0 of 50 with the fix |
-| The forward is not checked against what was delivered | n/a, injected, cuts the check | `forwardPush` skips the change count check and always sends to the peers | both tests above, with the same messages | **caught**, 50 of 50 runs each |
+| The forward is not checked against what was delivered | n/a, injected, cuts the check | `deliverPush` skips the change count check and always sends to the peers | both tests above, with the same messages | **caught**, 50 of 50 runs each; `TestReconcileReplyDoesNotOvertakeAQueuedState` passes, because the queue alone orders the reply |
+| The reconcile reply overtook an older state queued to the same client, which adopted the older state last | n/a, injected, cuts the call site | `handleUpdateState` writes the reply with `sendMessage` before `deliverPush` again, and passes no `toSender` | `TestReconcileReplyDoesNotOvertakeAQueuedState` ("A ended on workspace 3 before the marker, the session is on 2 (states in order: [2 1 3 2])") | **caught**, 50 of 50 runs; 0 of 50 with the fix |
 
 ## Why the two-client chrome test catches nothing
 

@@ -3,6 +3,7 @@ package session
 import (
 	"log"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 )
 
@@ -375,6 +376,11 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 	}
 }
 
+// broadcastSendHeld runs in each queued broadcast after its turn comes and
+// before it is written. It is unset outside tests, which use it to hold the
+// queue while something else is sent.
+var broadcastSendHeld atomic.Pointer[func()]
+
 // queueBroadcast writes one already encoded broadcast to one client, off this
 // goroutine and in turn.
 //
@@ -394,6 +400,9 @@ func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 			}
 		}()
 		client.awaitBroadcastTurn(ticket)
+		if hook := broadcastSendHeld.Load(); hook != nil {
+			(*hook)()
+		}
 		if err := d.sendEncoded(client, msg); err != nil {
 			debugLog("[DEBUG] %s: failed to send to client %s: %v", what, client.clientID, err)
 		}

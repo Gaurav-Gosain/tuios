@@ -110,7 +110,7 @@ func checkNoStepBack(t *testing.T, who string, seen []int, want int) {
 // Version the same. The older snapshot passed as the same state and went out
 // last, and the client ended on the workspace it had left.
 //
-// Negative control: with resendState and forwardPush comparing Version
+// Negative control: with resendState and deliverPush comparing Version
 // instead of the change count, B reads workspace 1 after workspace 7.
 func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
@@ -177,7 +177,7 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 // forward delayed past a later push's forward reached the peers last, and a
 // peer adopted the older push.
 //
-// Negative control: with forwardPush sending to the peers without the change
+// Negative control: with deliverPush sending to the peers without the change
 // count check, C reads workspace 2 after workspace 3, and B reads A's older
 // push after its own.
 func TestConcurrentPushesForwardInOrder(t *testing.T) {
@@ -240,5 +240,88 @@ func TestConcurrentPushesForwardInOrder(t *testing.T) {
 	}
 	if ws := sess.GetState().CurrentWorkspace; ws != newer {
 		t.Fatalf("the session is on workspace %d, want %d", ws, newer)
+	}
+}
+
+// TestReconcileReplyDoesNotOvertakeAQueuedState: a client whose push was
+// reconciled is sent the merged state. A peer's older state can already be
+// queued to that client when the reply is made. The reply must reach the
+// client after it, or the client adopts the older state last.
+//
+// The reply was written straight to the socket, ahead of the client's
+// broadcast queue. The test holds the queue, so the queued states are still
+// waiting when the reply is made.
+//
+// Negative control: with handleUpdateState writing the reply with sendMessage
+// before deliverPush, A reads B's workspace last.
+func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+
+	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	b, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	for _, cl := range []*boundsClient{a, b} {
+		pingClient(t, cl)
+	}
+	sess := d.manager.GetSession("order")
+	if sess == nil {
+		t.Fatal("the session is not there")
+	}
+	const mine, peers = 2, 3
+	if ws := sess.GetState().CurrentWorkspace; ws == mine || ws == peers {
+		t.Fatalf("the session starts on workspace %d, which the pushes use", ws)
+	}
+	// A builds its push now, so a daemon-side change below makes it stale.
+	stale := sess.GetState()
+
+	// Every queued broadcast waits here until released. A pong is written
+	// straight to the socket, so it is not held.
+	release := make(chan struct{})
+	var once sync.Once
+	releaseQueue := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(releaseQueue)
+	hold := func() {
+		select {
+		case <-release:
+		case <-time.After(10 * time.Second * testDeadlineScale):
+		}
+	}
+	broadcastSendHeld.Store(&hold)
+	t.Cleanup(func() { broadcastSendHeld.Store(nil) })
+
+	if err := sess.mutateState(func(st *SessionState) error {
+		opts := maps.Clone(st.Options)
+		if opts == nil {
+			opts = map[string]string{}
+		}
+		opts["order-daemon-change"] = "1"
+		st.Options = opts
+		return nil
+	}); err != nil {
+		t.Fatalf("daemon-side change: %v", err)
+	}
+	// B pushes from the current state. Its forward is queued to A.
+	pushWorkspace(t, b, sess, peers)
+	pingClient(t, b)
+
+	// A pushes from before the daemon-side change, so it is reconciled.
+	stale.CurrentWorkspace = mine
+	stale.BaseVersion = stale.Version
+	stale.PushOrigin, stale.PushSeq, stale.PushSeen, stale.SnapshotSeq = "", 0, nil, 0
+	a.send(t, MsgUpdateState, stale)
+	seen := pingClient(t, a)
+
+	want := sess.GetState().CurrentWorkspace
+	if want == peers {
+		t.Fatalf("the reconciled push left the session on B's workspace %d, so the test cannot tell the states apart", want)
+	}
+	broadcastSendHeld.Store(nil)
+	releaseQueue()
+	publishMarker(t, sess)
+	seen = statesUntilMarker(t, a, seen)
+	if len(seen) < 2 {
+		t.Fatalf("A read no state before the marker (states in order: %v)", seen)
+	}
+	if last := seen[len(seen)-2]; last != want {
+		t.Fatalf("A ended on workspace %d before the marker, the session is on %d (states in order: %v)", last, want, seen)
 	}
 }

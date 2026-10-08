@@ -1221,7 +1221,7 @@ type Session struct {
 
 	// broadcastFP is the fingerprint of the state last forwarded to this
 	// session's peers on a client sync, and broadcastFPSet says whether there
-	// is one. See forwardPush.
+	// is one. See deliverPush.
 	broadcastFP    uint64
 	broadcastFPSet bool
 
@@ -1802,32 +1802,40 @@ func (s *Session) resendState(send func(*SessionState)) {
 // to land a mutation in that window on purpose.
 var stateResendSnapshotTaken atomic.Pointer[func()]
 
-// forwardPush hands the state after a client push to the session's other
-// clients, in the same order as publishState and resendState deliver. snap is
-// the merged state, taken after the push, and pushSeq is the change count the
-// push itself made. fp is snap's fingerprint. toPeers sends to every client
-// but the one that pushed. senderHolds says that client was already sent snap
-// (the reconcile reply).
+// deliverPush hands the state after a client push to the clients that need
+// it, in the same order as publishState and resendState deliver. snap is the
+// merged state, taken after the push, and pushSeq is the change count the
+// push itself made. toSender, when set, answers the client that pushed: its
+// push was reconciled, so it does not hold snap. toPeers, when set, sends to
+// every client but the one that pushed.
 //
-// The forward used to run outside pushMu with no check. Two clients pushing
-// at once could forward in the opposite order to the one their pushes landed
-// in, and a peer adopted the older state last. A push forwarded inside an
-// attach repair let the repair's older snapshot follow it, because a push
-// keeps Version the same and the repair compared Version.
+// Both used to run outside pushMu with no check. Two clients pushing at once
+// could forward in the opposite order to the one their pushes landed in, and
+// a peer adopted the older state last. A push forwarded inside an attach
+// repair let the repair's older snapshot follow it, because a push keeps
+// Version the same and the repair compared Version. The reply to the sender
+// was written straight to its socket, ahead of an older state already queued
+// to it, and the older state landed last.
 //
 // Under pushMu, a snapshot no newer than what was delivered is dropped: every
-// client already holds a state at least as new. A snapshot newer than the
-// push carries a later change whose own delivery has not run yet. It goes to
-// every client through the sink, the client that pushed included, unless that
-// client already holds it, and the late delivery is dropped as stale.
-// Otherwise it goes to the peers, unless fp says they already hold it.
-func (s *Session) forwardPush(snap *SessionState, pushSeq, fp uint64, senderHolds bool, toPeers func(*SessionState)) {
-	if snap == nil {
+// client, the sender included, already has a state at least as new on its
+// way. A snapshot newer than the push carries a later change whose own
+// delivery has not run yet. When the sender does not already hold it, it goes
+// to every client through the sink, the sender included, and the late
+// delivery is dropped as stale. Otherwise the reply goes to the sender, and
+// the snapshot goes to the peers unless they already hold it.
+func (s *Session) deliverPush(snap *SessionState, pushSeq uint64, toSender, toPeers func(*SessionState)) {
+	if snap == nil || (toSender == nil && toPeers == nil) {
 		return
 	}
 	s.stateSinkMu.RLock()
 	fn := s.stateSink
 	s.stateSinkMu.RUnlock()
+	// Taken outside pushMu: it walks the whole state.
+	var fp uint64
+	if toPeers != nil {
+		fp = StateFingerprint(snap)
+	}
 
 	s.pushMu.Lock()
 	defer s.pushMu.Unlock()
@@ -1835,9 +1843,15 @@ func (s *Session) forwardPush(snap *SessionState, pushSeq, fp uint64, senderHold
 		return
 	}
 	s.deliveredSeq = snap.changeSeq
-	if snap.changeSeq > pushSeq && !senderHolds && fn != nil {
+	if snap.changeSeq > pushSeq && fn != nil {
 		s.forgetBroadcastFingerprint()
 		fn(snap)
+		return
+	}
+	if toSender != nil {
+		toSender(snap)
+	}
+	if toPeers == nil {
 		return
 	}
 	// A merge that landed on the state already forwarded is not sent again.

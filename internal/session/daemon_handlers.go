@@ -951,22 +951,14 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 
 	// A sync built before a daemon-side mutation was reconciled against it, so
 	// what is canonical now is not what this client pushed. Send the merged state
-	// straight back: without it the client keeps rendering its stale view and
-	// pushes it again on the next sync.
+	// back: without it the client keeps rendering its stale view and pushes it
+	// again on the next sync.
 	//
 	// A push that was accepted but built before a tree op it had not seen is
 	// answered the same way. The op's own broadcast reached this client before
 	// the push landed, so the client dropped it as older than the push, and
 	// nothing else would ever tell it about that tree.
 	reconciled := !accepted || behind
-	if reconciled {
-		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
-			State:       mergedState(),
-			TriggerType: "reconcile",
-		}); err != nil {
-			return err
-		}
-	}
 
 	// Broadcast state change to other clients in the session. Peers get the
 	// merged state, not the raw push, so every client converges on the same view.
@@ -981,23 +973,39 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// joined is never taken as one it holds. Nothing else rides on the
 	// message, so there is nothing for a suppressed one to have delivered.
 	//
-	// The reconcile reply above is deliberately outside this: it goes to the
+	// The reconcile reply is deliberately outside that check: it goes to the
 	// sender, whose state is by definition not the merged one.
 	//
-	// The forward is ordered with every other state delivery, under the
-	// session's pushMu. See Session.forwardPush.
+	// The reply and the forward are ordered with every other state delivery,
+	// under the session's pushMu, and both go through the client's broadcast
+	// queue. The reply used to be written straight to the socket, so it could
+	// overtake an older state already queued to the same client, which then
+	// adopted the older state last. See Session.deliverPush.
 	clientCount := d.getSessionClientCount(cs.sessionID)
-	if clientCount > 1 {
-		snap := mergedState()
-		if hook := statePushSnapshotTaken.Load(); hook != nil {
-			(*hook)()
-		}
-		fp := StateFingerprint(snap)
-		session.forwardPush(snap, pushSeq, fp, reconciled, func(state *SessionState) {
-			d.broadcastStateSync(cs.sessionID, state, "update", cs.clientID)
-		})
+	if !reconciled && clientCount <= 1 {
+		return nil
 	}
-
+	snap := mergedState()
+	if hook := statePushSnapshotTaken.Load(); hook != nil {
+		(*hook)()
+	}
+	var toSender, toPeers func(*SessionState)
+	if reconciled {
+		toSender = func(state *SessionState) {
+			if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
+				State:       state,
+				TriggerType: "reconcile",
+			}); err == nil {
+				d.queueBroadcast(cs, msg, "reconcile reply")
+			}
+		}
+	}
+	if clientCount > 1 {
+		toPeers = func(state *SessionState) {
+			d.broadcastStateSync(cs.sessionID, state, "update", cs.clientID)
+		}
+	}
+	session.deliverPush(snap, pushSeq, toSender, toPeers)
 	return nil
 }
 
