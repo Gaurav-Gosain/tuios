@@ -3260,3 +3260,22 @@ all eleven tests, and every other `TestGUIBridge` test, on the same day.
 
 The run log is kept outside the repository:
 `~/.cache/agent-tmp/proof/v2/wave3b/e2e/negative-controls.txt`.
+
+## A link rides the ssh master a person opened
+
+`TestLinkRidesTheSharedSSHMaster` gives the hub daemon one host, `build`,
+reached through an ssh stand-in that records every argv it runs. With a
+folder `$XDG_RUNTIME_DIR/tuios/cm` of mode 0700, the link's ssh and the ssh
+of `tuios hosts test` must carry `ControlMaster=no` and
+`ControlPath=<folder>/%C`, and the link must still come up. With no folder,
+and with a folder of mode 0777, neither ssh may name the folder.
+
+Each control below was run on 2026-10-08 on branch
+`feat/link-shares-gui-ssh-master`. The log is
+`~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-master.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A host with no path gets no sharing options | `sharingOptions`: `return reuseOptions()` replaced by `return nil` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (the link's ssh names no master) | **caught** |
+| A folder others can write is trusted | `reuseOptions`: the mode check cut | `TestLinkRidesTheSharedSSHMaster/a_master_folder_others_can_write` (the link's ssh names the folder) | **caught** |
+| The link may open a master of its own | `reuseOptions`: `ControlMaster=auto` in place of `no` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (`ControlMaster=no` missing) | **caught** |

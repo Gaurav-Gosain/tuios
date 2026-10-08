@@ -1535,6 +1535,16 @@ dash. A host with a refused entry is ignored, and `tuios hosts` and the Inbox
 name the reason. Put such options in `~/.ssh/config`. [protocol.md](protocol.md#what-a-linked-machine-may-do-here) has
 the verb by verb table.
 
+The daemon's links never ask for a password, a passphrase or a code. They
+run ssh with `BatchMode=yes`. A client that can ask you, such as tuios-gpui,
+signs in to a machine itself and keeps that connection open as an ssh master
+in `$XDG_RUNTIME_DIR/tuios/cm`. While that folder exists and only you can
+open it, each link runs ssh with `-o ControlMaster=no` and
+`-o ControlPath=$XDG_RUNTIME_DIR/tuios/cm/%C`. The link then uses the master
+when one is open for that machine, and connects as usual when none is. A
+machine that needs a password or a second factor then works for as long as
+the master is open. No secret is stored.
+
 `tailscale_login` is the origin of a Headscale server that sends the Tailscale
 SSH check for this host, for example `"https://headscale.example"`. tuios
 shows and opens a sign-in link only on `login.tailscale.com`,
