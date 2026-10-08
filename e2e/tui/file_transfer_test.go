@@ -454,6 +454,9 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 	if got := fileSHA(t, dst); got != want {
 		t.Fatalf("ASSERTION: the file in place is not the original: %s, want %s", got, want)
 	}
+	if fi, err := os.Stat(dst); err != nil || fi.Mode().Perm() != 0o644 {
+		t.Fatalf("ASSERTION: the copy does not keep the original's permissions (0644): %v %v", fi.Mode(), err)
+	}
 	if _, err := os.Stat(filepath.Join(base, ".copy of big.bin.tuios-part")); !os.IsNotExist(err) {
 		t.Fatalf("ASSERTION: the part file was left behind: %v", err)
 	}
