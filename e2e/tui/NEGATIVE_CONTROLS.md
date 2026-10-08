@@ -3359,3 +3359,6 @@ is `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-bridge.txt`.
 | The focus stays in the bridge's model | `focus` command: the `SyncStateToDaemon` call cut | `TestGUIBridgeKeepsTheRenderersFocus` (the new bridge attached on another pane) | **caught** |
 | ssh's words are not read | `linkHealth`: the `needsSignIn` branch turned off | `TestGUIBridgeHostThatNeedsASignIn/permission_denied` (`down`, want `signin`) | **caught** |
 | Input goes to the first daemon client | `model.Update`: the store of the client in force cut | `TestGUIBridgeTypesAfterTheLinkComesBack` (no key reached the far shell for 40 s) | **caught** |
+
+All 43 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
+pass on the branch (`~/.cache/agent-tmp/proof/v2/wave4/review/bridge-suite.txt`).
