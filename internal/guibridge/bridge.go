@@ -96,8 +96,11 @@ type Options struct {
 	// ResumePID is the daemon the positions in Resume came from. A daemon
 	// with another pid has new streams, and Resume is not used.
 	ResumePID int
-	In        io.Reader
-	Out       io.Writer
+	// Scrollback is how many history rows each pane's snapshot carries: the
+	// renderer's own history. 0 is the daemon's default.
+	Scrollback int
+	In         io.Reader
+	Out        io.Writer
 }
 
 // Event is the JSON the bridge sends.
@@ -427,6 +430,7 @@ func Run(opts Options) error {
 		streams.resume = opts.Resume
 	}
 	osModel.SetStreamTap(streams)
+	osModel.SnapshotScrollback = max(opts.Scrollback, 0)
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
 

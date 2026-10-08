@@ -52,5 +52,6 @@ func newGUIBridgeCommand() *cobra.Command {
 	f.StringVar(&opts.Host, "host", "", "Attach a session on this host from the [hosts] table, through this machine's daemon")
 	f.StringVar(&resume, "resume", "", "Stream position the renderer holds per pane: pty=seq,pty=seq")
 	f.IntVar(&opts.ResumePID, "resume-pid", 0, "The daemon pid the --resume positions came from")
+	f.IntVar(&opts.Scrollback, "scrollback", 0, "History rows each pane's snapshot carries (default: the daemon's, 1000)")
 	return cmd
 }
