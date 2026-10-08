@@ -365,8 +365,7 @@ test.describe('a finger on tuios itself', () => {
     // Click-to-type: the double tap hands the keyboard to the pane, so what the
     // software keyboard sends next is the pane's, not a window-management key.
     // "m" would minimize the pane if the tap had not landed. The marker is
-    // short because a floating pane on this viewport is 24 columns and the
-    // prompt has already spent ten of them.
+    // short because a floating pane on this viewport is about 20 columns wide.
     const beforeType = await screen(page);
     await clearWire(page);
     await page.keyboard.type('zqtap');

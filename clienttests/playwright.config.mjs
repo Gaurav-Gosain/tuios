@@ -238,7 +238,11 @@ export default defineConfig({
     },
   ],
   webServer: [
-    server(PORT, BASE_URL, touch.env),
+    // The touch tests type into a pane and read the shell's echo back. A
+    // narrow pane, a long prompt and an interactive rc file made readline
+    // redraw the line out of place on the CI runner, so this server runs a
+    // plain sh. The other servers do not read a shell's echo.
+    server(PORT, BASE_URL, { ...touch.env, SHELL: '/bin/sh' }),
     server(CONFIG_PORT, CONFIG_BASE_URL, cfg.env),
     server(MULTI_PORT, MULTI_BASE_URL, multi.env),
     server(APPEARANCE_PORT, APPEARANCE_BASE_URL, appearance.env),
