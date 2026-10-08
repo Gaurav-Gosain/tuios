@@ -92,7 +92,9 @@ func NewRunner() *Runner {
 // ResolveProgram finds a command's program as herdr does: a relative path
 // with a separator is taken from the plugin root, a bare name is looked up
 // on PATH, and an absolute path is used as written. The program must exist,
-// so a missing build fails here with a message that names it.
+// so a missing build fails here with a message that names it. On Windows a
+// path without one of the PATHEXT extensions is also tried with each of
+// them, as herdr and Windows itself do.
 func ResolveProgram(program, root string) (string, *Error) {
 	switch {
 	case filepath.IsAbs(program):
@@ -105,7 +107,7 @@ func ResolveProgram(program, root string) (string, *Error) {
 		}
 		return found, nil
 	}
-	info, err := os.Stat(program)
+	program, info, err := statProgram(program, pathExts(), os.Stat)
 	if err != nil {
 		return "", errf("plugin_command_not_found", "%s does not exist. If the plugin has a build step, run tuios plugins build", program)
 	}
