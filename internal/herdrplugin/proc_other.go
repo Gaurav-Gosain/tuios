@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package herdrplugin
 
@@ -8,10 +8,17 @@ import "os/exec"
 // no console of tuios's to draw on, since its output goes to the log.
 func detach(*exec.Cmd) {}
 
-// killGroup kills the process. Windows has no process group to kill with
-// one call, so a child the command started may outlive it.
-func killGroup(cmd *exec.Cmd) {
-	if cmd.Process != nil {
-		_ = cmd.Process.Kill()
+// procGroup is the command alone: there is no group to kill with one call.
+type procGroup struct{ cmd *exec.Cmd }
+
+func track(cmd *exec.Cmd) (*procGroup, error) { return &procGroup{cmd: cmd}, nil }
+
+func (g *procGroup) kill() {
+	if g.cmd.Process != nil {
+		_ = g.cmd.Process.Kill()
 	}
 }
+
+func (g *procGroup) release() bool { return true }
+
+func (g *procGroup) drop() {}
