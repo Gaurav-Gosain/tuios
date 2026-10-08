@@ -247,7 +247,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// daemon writes. It is not taken from the restored shell's folder,
 		// which the pane chose.
 		sess.noteStartDir(w.ID, w.StartDir)
-		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], w.Workspace, onExit)
+		var pty *PTY
+		var err error
+		if w.Kind != "" && w.Kind != "terminal" {
+			pty, err = sess.restorePlaceholderPTY(w.ID, ptyWidth, ptyHeight, w.Cwd, w.Kind, w.URI, w.Workspace, onExit)
+		} else {
+			pty, err = sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], w.Workspace, onExit)
+		}
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue

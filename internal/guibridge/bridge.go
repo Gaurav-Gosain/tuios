@@ -232,8 +232,10 @@ type Point struct {
 type Window struct {
 	ID  string `json:"id"`
 	PTY string `json:"pty"`
-	// Kind is what draws the pane. Only "terminal" exists today.
+	// Kind is what draws the pane: "terminal", or "view", "web" or "app"
+	// for a pane the renderer draws natively. URI names what it shows.
 	Kind      string `json:"kind"`
+	URI       string `json:"uri,omitempty"`
 	Title     string `json:"title"`
 	Name      string `json:"name,omitempty"`
 	Workspace int    `json:"workspace"`
@@ -771,7 +773,7 @@ func (m *model) export() {
 			st.Zoomed = w.ID
 		}
 		st.Windows = append(st.Windows, Window{
-			ID: w.ID, PTY: w.PTYID, Kind: "terminal", Title: w.Title(), Name: w.CustomName,
+			ID: w.ID, PTY: w.PTYID, Kind: windowKind(w.Kind), URI: w.URI, Title: w.Title(), Name: w.CustomName,
 			Popup: w.IsPopup, Scratch: w.IsScratch, Stack: w.Stack, StackIndex: w.StackIndex,
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
