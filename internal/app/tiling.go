@@ -71,6 +71,10 @@ func (m *OS) tileAllWindows() {
 	// and still has a popup to place.
 	m.applyPopupRects(deferring)
 
+	// A stack whose open pane went away opens its next member, which the
+	// tiler below then gives a tile. See stack.go.
+	m.openOrphanStacks()
+
 	// Get list of visible windows in current workspace (not minimized)
 	var visibleWindows []*terminal.Window
 	for _, w := range m.Windows {

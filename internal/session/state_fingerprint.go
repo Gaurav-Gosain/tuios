@@ -100,6 +100,8 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(w.PTYID)
 		flag(w.IsAltScreen)
 		flag(w.IsFloating)
+		str(w.Stack)
+		num(w.StackIndex)
 		flag(w.Zoomed)
 		num(w.PreZoomX)
 		num(w.PreZoomY)

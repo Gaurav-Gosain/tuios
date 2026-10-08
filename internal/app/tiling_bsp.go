@@ -195,6 +195,12 @@ func (m *OS) ApplyBSPLayout() {
 			continue
 		}
 		rect = canvas.apply(rect)
+		// The open pane of a stack gives a row to each other member, above
+		// and below it in stack order. See stack.go.
+		if above, below := m.stackRows(win); above+below > 0 && rect.H > above+below+1 {
+			rect.Y += above
+			rect.H -= above + below
+		}
 		// A zoomed pane keeps its slot in the tree and loses its rectangle to the
 		// zoom box, so the tiler leaves the rectangle alone. Zoom is shared, so
 		// a peer's sync can bring a pane, close one or move the box while
@@ -492,8 +498,12 @@ func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
 		return
 	}
 
-	windowIntID := m.GetWindowIntID(window.ID)
-	tree.RemoveWindow(windowIntID)
+	// The open pane of a stack hands its tile to the next member, so the
+	// stack keeps its place. See stack.go.
+	if !m.handOverStack(window, tree) {
+		windowIntID := m.GetWindowIntID(window.ID)
+		tree.RemoveWindow(windowIntID)
+	}
 
 	// Apply the new layout
 	m.ApplyBSPLayout()

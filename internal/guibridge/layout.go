@@ -181,6 +181,21 @@ func runLayout(o *app.OS, c Command) (*Result, error) {
 			return nil, errors.New("no pane to float")
 		}
 		return nil, o.ToggleFloatingByID(id)
+	case "stack":
+		if c.A == "" || c.B == "" {
+			return nil, errors.New("stack needs a and b: b joins the stack of a")
+		}
+		return nil, o.StackPanes(c.A, c.B)
+	case "stack-open":
+		if c.ID == "" {
+			return nil, errors.New("stack-open needs id, a pane of a stack")
+		}
+		return nil, o.OpenStacked(c.ID)
+	case "unstack":
+		if c.ID == "" {
+			return nil, errors.New("unstack needs id, a pane of a stack")
+		}
+		return nil, o.Unstack(c.ID)
 	case "":
 		return nil, errors.New("layout needs op")
 	}

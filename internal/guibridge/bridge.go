@@ -245,12 +245,17 @@ type Window struct {
 	Zoomed    bool `json:"zoomed,omitempty"`
 	// Popup marks a pane `tuios popup` opened: floating, closed by its
 	// program. Scratch marks a pane of a scratch group.
-	Popup     bool   `json:"popup,omitempty"`
-	Scratch   bool   `json:"scratch,omitempty"`
-	Agent     string `json:"agent,omitempty"`
-	AgentMsg  string `json:"agent_message,omitempty"`
-	AgentKind string `json:"agent_kind,omitempty"`
-	Cwd       string `json:"cwd,omitempty"`
+	Popup   bool `json:"popup,omitempty"`
+	Scratch bool `json:"scratch,omitempty"`
+	// Stack names the stack the pane is in, and StackIndex its place there.
+	// The stack's open member is the one that is not minimized; the others
+	// show as title rows, above or below it in order.
+	Stack      string `json:"stack,omitempty"`
+	StackIndex int    `json:"stack_index,omitempty"`
+	Agent      string `json:"agent,omitempty"`
+	AgentMsg   string `json:"agent_message,omitempty"`
+	AgentKind  string `json:"agent_kind,omitempty"`
+	Cwd        string `json:"cwd,omitempty"`
 	// Foreground is what the pane runs, empty at a shell prompt.
 	Foreground string `json:"foreground,omitempty"`
 	// Harness is the agent harness that reported the state (claude, codex).
@@ -600,7 +605,7 @@ func (m *model) handle(c Command) tea.Cmd {
 		}
 		return cmd
 	case "focus":
-		_ = m.os.FocusWindowByID(c.Window)
+		_ = m.os.FocusPane(c.Window)
 	case "workspace":
 		_ = m.os.SwitchWorkspace(c.N)
 	case "tape":
@@ -756,7 +761,7 @@ func (m *model) export() {
 		}
 		st.Windows = append(st.Windows, Window{
 			ID: w.ID, PTY: w.PTYID, Kind: "terminal", Title: w.Title(), Name: w.CustomName,
-			Popup: w.IsPopup, Scratch: w.IsScratch,
+			Popup: w.IsPopup, Scratch: w.IsScratch, Stack: w.Stack, StackIndex: w.StackIndex,
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
