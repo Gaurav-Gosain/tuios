@@ -336,6 +336,10 @@ aurs:
 
 # Homebrew tap (using casks for pre-compiled binaries)
 homebrew_casks:
+  # Deprecated. homebrew-core has a `tuios` formula, which `brew install tuios`
+  # picks. This cask installs the same `tuios` binary, so the two cannot be
+  # linked together. It is still published so that current cask users get the
+  # deprecation warning and the move to the formula on their next upgrade.
   - name: tuios
     ids:
       - tuios-archive
@@ -362,15 +366,28 @@ homebrew_casks:
     # `{{ "{{staged_path}}" }}` escapes Homebrew's own `{{staged_path}}`
     # token past GoReleaser's own template pass over the rendered cask.
     custom_block: |
+      deprecate! date: "2026-10-08", because: "is now the tuios formula in homebrew-core", replacement_formula: "tuios"
+
       postflight_steps do
         on_macos do
           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/tuios"]
         end
       end
+    caveats: |
+      The tuios cask is deprecated. Homebrew core has tuios as a formula.
+      To move to the formula, run:
+        brew uninstall --cask tuios
+        brew install tuios
 
   # The libghostty-vt build for Linux. The ghostty archive also holds Windows
-  # builds, which a cask ignores. There is no darwin ghostty build, so the cask
-  # has no macOS download. The binary inside the archive is named `tuios`.
+  # builds, which a cask ignores. The darwin ghostty archives are built later,
+  # by the ghostty-darwin job in release.yml, after GoReleaser has written this
+  # cask, so the cask has no macOS download. macOS users take the
+  # tuios-ghostty_*_Darwin_* archive from the release instead.
+  #
+  # The binary inside the archive is named `tuios`, the same name the
+  # homebrew-core formula links. Homebrew has no cask stanza for a conflict with
+  # a formula, so the caveat says to uninstall the formula first.
   - name: tuios-ghostty
     ids:
       - tuios-ghostty-archive
@@ -388,6 +405,14 @@ homebrew_casks:
       - tuios
     conflicts:
       - cask: tuios
+    caveats: |
+      tuios-ghostty installs a binary named tuios.
+      The tuios formula installs a binary with the same name.
+      Uninstall the formula before you install this cask:
+        brew uninstall tuios
+      To go back to the formula, run:
+        brew uninstall --cask tuios-ghostty
+        brew install tuios
 
   - name: tuios-web
     ids:

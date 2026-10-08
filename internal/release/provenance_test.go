@@ -133,7 +133,7 @@ func TestOnlyAReleaseBuildIsReplaceable(t *testing.T) {
 // command printed has to follow the path.
 //
 // Negative control: return "brew upgrade --cask tuios" for every Homebrew path
-// and the two Cellar rows fail.
+// and the two Cellar rows and the tuios-ghostty row fail.
 func TestHomebrewFixNamesFormulaOrCask(t *testing.T) {
 	cases := []struct {
 		path string
@@ -142,6 +142,7 @@ func TestHomebrewFixNamesFormulaOrCask(t *testing.T) {
 		{"/opt/homebrew/Cellar/tuios/0.8.0/bin/tuios", "brew upgrade tuios"},
 		{"/home/linuxbrew/.linuxbrew/Cellar/tuios/0.8.0/bin/tuios", "brew upgrade tuios"},
 		{"/opt/homebrew/Caskroom/tuios/0.8.0/tuios", "brew upgrade --cask tuios"},
+		{"/home/linuxbrew/.linuxbrew/Caskroom/tuios-ghostty/0.9.0/tuios", "brew upgrade --cask tuios-ghostty"},
 	}
 	for _, tc := range cases {
 		p := Detect(Facts{Path: tc.path, BuiltBy: "goreleaser", GOOS: "darwin"})

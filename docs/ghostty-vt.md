@@ -22,12 +22,17 @@ agree.
 ## Installing with Homebrew (Linux)
 
 ```sh
+brew uninstall tuios
 brew install gaurav-gosain/tap/tuios-ghostty
 ```
 
-The cask installs the release `tuios` built with libghostty-vt. It conflicts
-with the `tuios` cask. Uninstall one before you install the other. There is no
-macOS ghostty cask.
+The cask installs the release `tuios` built with libghostty-vt. The `tuios`
+formula installs a binary with the same name, so uninstall the formula first.
+To go back, run `brew uninstall --cask tuios-ghostty`, then `brew install tuios`.
+
+The cask is for Linux only. On macOS, download the
+`tuios-ghostty_*_Darwin_*` archive from the
+[release page](https://github.com/Gaurav-Gosain/tuios/releases).
 
 ## Installing a local build
 

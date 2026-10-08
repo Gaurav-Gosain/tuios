@@ -50,9 +50,10 @@ TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
 brew install tuios
 ```
 
-The ghostty build (the [libghostty-vt emulator](ghostty-vt.md)) is a separate cask for Linux. It conflicts with `tuios`.
+The ghostty build (the [libghostty-vt emulator](ghostty-vt.md)) is a separate cask for Linux. It installs a binary with the same name as the `tuios` formula. Uninstall the formula first.
 
 ```bash
+brew uninstall tuios
 brew install gaurav-gosain/tap/tuios-ghostty
 ```
 
@@ -4455,7 +4456,7 @@ the right command instead:
 | Installed by | `tuios update` | What to run |
 | --- | --- | --- |
 | Install script, or a release archive unpacked by hand | Updates it | `tuios update` |
-| Homebrew | Refuses | `brew upgrade --cask tuios` |
+| Homebrew | Refuses | `brew upgrade tuios`, or `brew upgrade --cask tuios-ghostty` for the ghostty cask |
 | AUR or another system package | Refuses | `yay -S tuios-bin` |
 | Nix | Refuses | `nix profile upgrade tuios` |
 | `go install` | Refuses | `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest` |
