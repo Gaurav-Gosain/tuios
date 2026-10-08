@@ -3066,9 +3066,12 @@ tuffbaby paces its clip by the clock, and its bound at max_fps 240 is 1.8 times
 its own time at max_fps 60 on the same machine. The max_fps 30 case is the
 positive half: it fails if max_fps never reaches the saver.
 
-`TestWebIgnoresAWindowPastTheLimit` sends tuios-web a resize to 300x60, then
-one to 1500x900. The first must reach the pane, which is the positive half. The
-second must leave the pane at the size it had and keep the memory where it was.
+`TestWebClampsAWindowPastTheLimit` sends tuios-web a resize to 300x60, then
+one to 1500x900. The first must reach the pane, which is the positive half.
+Since sip v0.8.5 the second is clamped to 1200 columns and 208 rows (250000
+cells), and the pane must take exactly that size less the chrome measured at
+300x60. Before v0.8.5 sip ignored the second resize, and the test was
+`TestWebIgnoresAWindowPastTheLimit`.
 
 Each control below was run on 2026-10-08 at a load average near 30.
 
@@ -3077,10 +3080,14 @@ Each control below was run on 2026-10-08 at a load average near 30.
 | The saver ticks at NormalFPS again | main at `1db4d240` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 240 hides the screen for 0.48 s, want at least 1.2 s) | **caught** |
 | The clock disagrees with the tick | `screensaverBuild`: `NewVirtualClock(s.NormalFPS)` in place of `screensaverRate(s)` | `TestScreensaverPaintsAtSixtyAtMost` (tuffbaby at max_fps 240 keeps the marker hidden for more than 16.81 s, which is 1.8 times its 9.34 s at max_fps 60. With the fix: 9.52 s at 60 and 10.08 s at 240. Rerun at a load average near 5) | **caught** |
 | max_fps never reaches the saver | `screensaverRate` always returns `screensaverFPS` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 30 hides the screen for 1.62 s, want at least 2.6 s) | **caught** |
-| No window limit | `cmd/tuios-web/main.go`: the `MaxWindowDims` line cut (main at `1db4d240`) | `TestWebIgnoresAWindowPastTheLimit` (tuios-web grows from 45 MB to 857 MB, and the shell stops answering within 10 s) | **caught** |
+| No window limit | `cmd/tuios-web/main.go`: the `MaxWindowDims` line cut (main at `1db4d240`, sip v0.8.4) | `TestWebIgnoresAWindowPastTheLimit` (tuios-web grows from 45 MB to 857 MB, and the shell stops answering within 10 s) | **caught** |
+| No window limit, sip v0.8.5 | `cmd/tuios-web/main.go`: `MaxWindowDims` 4096x4096 and `MaxWindowCells` 1 << 30 (branch `chore/sip-0.8.5`) | `TestWebClampsAWindowPastTheLimit` (the shell stops answering within 10 s of the 1500x900 resize) | **caught** |
 
-With the fix, tuios-web held 55 MB before the oversized resize and 59 MB after
-it. The unit test `TestSaverClockRunsAtTheRateThePaintingDoes` in
+With the sip v0.8.4 fix, tuios-web held 55 MB before the oversized resize and
+59 MB after it. With sip v0.8.5 and the clamp, it held 57 MB before and 240 MB
+after, at 1174x204 cells in the pane. Cutting only the `MaxWindowCells` line
+leaves sip's default of 250000 cells, which is the same limit, so no test
+fails on that change. The unit test `TestSaverClockRunsAtTheRateThePaintingDoes` in
 `internal/app` holds the clock to the tick at 10, 30, 60, 120 and 240 fps, and
 fails on the second control too.
 
@@ -3117,3 +3124,23 @@ The controls were run on 2026-10-08.
 | --- | --- | --- | --- |
 | The browser check reads the resolved default | `browserAlertNotices`: the `alerts.Notify != nil` gate cut | the default test (the log holds the notify line). The positive half still passes. | **caught** |
 | The whole fix removed | tuios-web built from main at `2fcc83a4` | both tests (the line is a WARN config problem, and the default config logs it) | **caught** |
+
+## tuios-web hands --allow-host to sip
+
+`TestWebAllowHostLetsAProxyNameIn` starts tuios-web on loopback with
+`--no-auth --allow-host term.example`. A handshake with Host `term.example`
+must get a session, which is the reverse proxy case. A handshake with Host
+`evil.example` must get a 403, which is the DNS rebinding case. The loopback
+address and `localhost` must get a session, so a server that refuses every
+name cannot pass.
+
+sip v0.8.5 checks the Host header before tuios-web's own middleware runs. A
+name that tuios-web does not put in `sip.Config.AllowedHosts` gets a 403 from
+sip, whatever tuios-web allows.
+
+Each control below was run on 2026-10-08 on branch `chore/sip-0.8.5`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| tuios-web does not hand the names to sip | `webAccess.apply`: the `cfg.AllowedHosts = a.allowHosts` line cut | `TestWebAllowHostLetsAProxyNameIn` (Host `term.example` gets 403, want 101), and the unit test `TestAllowHostAddsAName` | **caught** |
+| The Host check is off | `webAccess.apply`: `"*"` added to `cfg.AllowedHosts` | `TestWebAllowHostLetsAProxyNameIn` (Host `evil.example` gets 101, want 403) | **caught** |

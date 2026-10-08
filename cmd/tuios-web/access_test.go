@@ -172,6 +172,7 @@ func TestAllowHostRules(t *testing.T) {
 		"a URL":              {webAccessFlags{host: "localhost", allowHosts: []string{"https://term.example"}, randomPassword: true}, true},
 		"on a network bind":  {webAccessFlags{host: "0.0.0.0", allowHosts: []string{"term.example"}, randomPassword: true}, true},
 		"an IPv6 literal ok": {webAccessFlags{host: "localhost", allowHosts: []string{"[fd00::1]"}, randomPassword: true}, false},
+		"a wildcard":         {webAccessFlags{host: "localhost", allowHosts: []string{"*"}, randomPassword: true}, true},
 	} {
 		_, err := planWebAccess(&bytes.Buffer{}, tc.f)
 		if tc.fail && err == nil {
@@ -180,18 +181,6 @@ func TestAllowHostRules(t *testing.T) {
 		if !tc.fail && err != nil {
 			t.Errorf("%s: refused: %v", name, err)
 		}
-	}
-}
-
-// TestNetworkBindHasNoHostCheck: on a network bind the password is the guard.
-// A LAN client that reaches the server by its address gets a session.
-func TestNetworkBindHasNoHostCheck(t *testing.T) {
-	a, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "0.0.0.0", port: "7681", randomPassword: true})
-	if err != nil {
-		t.Fatalf("plan: %v", err)
-	}
-	if a.hosts != nil {
-		t.Fatalf("a network bind checks the Host header against %v", a.hosts)
 	}
 }
 

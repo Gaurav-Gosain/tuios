@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/user"
-	"slices"
 	"strings"
 
 	"github.com/Gaurav-Gosain/sip"
@@ -30,7 +28,7 @@ import (
 //   - A bind outside this machine needs a password, or --no-auth. TLS alone
 //     is not enough: it hides the traffic but does not say who is connecting.
 //   - A loopback bind may run with no password, for a browser on this
-//     machine. It checks the Host header, because a web page whose name the
+//     machine. sip checks the Host header, because a web page whose name the
 //     attacker points at 127.0.0.1 (DNS rebinding) passes the same-origin
 //     check: its Origin and its Host both carry the attacker's name.
 //     --allow-host adds names for a reverse proxy, and needs a password or
@@ -68,10 +66,10 @@ type webAccessFlags struct {
 type webAccess struct {
 	user     string
 	password string
-	// hosts is the Host allowlist for the session handshake. Nil turns the
-	// check off, which only a network bind with no --allow-host does: such a
-	// server answers on names this process cannot know.
-	hosts []string
+	// allowHosts holds the names that --allow-host adds to sip's Host check.
+	// The check runs on a loopback bind only. A network bind answers on
+	// names this process cannot know, and its password keeps strangers out.
+	allowHosts []string
 	// loopback is whether the bind stays on this machine.
 	loopback bool
 	// announce holds the text that shows a generated password. It is printed
@@ -135,12 +133,7 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 			return nil, err
 		}
 	}
-	// The Host check is for loopback binds only. A network bind answers on
-	// names and addresses this process cannot list, and its password is
-	// what keeps strangers out.
-	if loopback {
-		a.hosts = append([]string{"localhost"}, f.allowHosts...)
-	}
+	a.allowHosts = f.allowHosts
 
 	switch {
 	case a.password != "":
@@ -170,6 +163,11 @@ func checkAllowHosts(f webAccessFlags, hasPassword bool) error {
 		if h == "" {
 			return errors.New("an --allow-host value is empty. Give a host name, such as term.example.com")
 		}
+		// sip reads "*" as "turn the Host check off". --allow-host only adds
+		// names, so tuios-web does not pass that switch through.
+		if h == "*" {
+			return errors.New("the allowed host * is not a host name. Give --allow-host a host name only, such as term.example.com")
+		}
 		if _, _, err := net.SplitHostPort(h); err == nil {
 			return fmt.Errorf("the allowed host %s has a port. Give it to --allow-host with no port", h)
 		}
@@ -196,46 +194,10 @@ func (a *webAccess) apply(cfg *sip.Config) {
 			cfg.AllowInsecureNoTLS = true
 		}
 	}
-	if a.hosts != nil {
-		cfg.ConnectMiddleware = append(cfg.ConnectMiddleware, hostCheckMiddleware(a.hosts))
-	}
-}
-
-// hostCheckMiddleware refuses a session handshake whose Host header is not on
-// the list. Loopback addresses always pass. It runs on the WebSocket and the
-// WebTransport handshake, which are the only ways to a session. The page and
-// its static files carry nothing a rebinding page could use.
-func hostCheckMiddleware(allowed []string) sip.ConnectMiddleware {
-	return func(next sip.ConnectHandler) sip.ConnectHandler {
-		return func(r *http.Request) error {
-			if !hostAllowed(r.Host, allowed) {
-				return &sip.ConnectError{
-					Status: http.StatusForbidden,
-					Body:   "tuios-web does not answer to this host name. Start it with --allow-host to add the name.",
-				}
-			}
-			return next(r)
-		}
-	}
-}
-
-// hostAllowed reports whether a Host header names this machine or a name on
-// the list. The port is ignored.
-func hostAllowed(hostHeader string, allowed []string) bool {
-	host := hostHeader
-	if h, _, err := net.SplitHostPort(hostHeader); err == nil {
-		host = h
-	}
-	host = strings.ToLower(strings.TrimSuffix(strings.Trim(host, "[]"), "."))
-	if host == "" {
-		return false
-	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		return true
-	}
-	return slices.ContainsFunc(allowed, func(a string) bool {
-		return strings.EqualFold(strings.TrimSuffix(strings.Trim(a, "[]"), "."), host)
-	})
+	// sip checks the Host header of every session handshake on a loopback
+	// bind, and allows localhost, loopback addresses and the bind host.
+	// --allow-host adds the names a reverse proxy forwards.
+	cfg.AllowedHosts = a.allowHosts
 }
 
 // readPasswordFile reads the password from the first line of path. A file

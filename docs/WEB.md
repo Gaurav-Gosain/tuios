@@ -41,6 +41,8 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
   Use `--random-password` to stop this.
 - On `localhost`, tuios-web accepts a session only when the Host header names
   this machine. This stops DNS rebinding.
+- Only a page from tuios-web itself can show tuios-web in a frame. Other sites
+  cannot put it in a frame.
 
 ### Behind a reverse proxy
 
@@ -60,13 +62,15 @@ tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-pass
 
 ## Window size limit
 
-A browser window can be 1200 columns wide and 500 rows high at most. Each cell
-costs tuios-web memory. A window at the limit costs about half a gigabyte.
-Several windows at the limit can still use gigabytes together.
+A browser window can be 1200 columns wide and 500 rows high at most. It can
+also have 250000 cells at most. Each cell costs tuios-web memory. A window at
+the limit costs up to about 325 MB. Several windows at the limit can still use
+gigabytes together.
 
-- tuios-web ignores a resize past the limit. The session keeps the size it had.
-- A browser that connects with a larger window gets no session. Make the font
-  larger or the window smaller, then connect again.
+- tuios-web cuts a window that is too large down to the limit. The browser
+  shows the smaller size.
+- A window with too many cells keeps its columns and loses rows. A window that
+  is 1200 columns wide gets 208 rows.
 
 ## Open the Inbox from a notification
 

@@ -23,10 +23,10 @@ import (
 	"time"
 )
 
-// tuios-web passes sip a window limit, because sip's own is 4096x4096 and each
-// cell costs tuios-web about 1.3 KB. One resize message to that size asks for
-// about 22 GB. With the limit, sip ignores a resize past it and the session
-// goes on at the size it had.
+// tuios-web passes sip a window limit: 1200x500 and 250000 cells. Each cell
+// costs tuios-web about 1.3 KB, so one resize message with no limit can ask for
+// gigabytes. sip clamps a resize past the limit, and the session goes on at the
+// clamped size.
 
 var (
 	webBinOnce sync.Once
@@ -288,18 +288,17 @@ func rssMB(t *testing.T, pid int) int {
 	return 0
 }
 
-// TestWebIgnoresAWindowPastTheLimit sends tuios-web a resize past its window
+// TestWebClampsAWindowPastTheLimit sends tuios-web a resize past its window
 // limit after one inside it.
 //
 // The resize inside the limit has to reach the pane, which is the positive
 // half: without it, a size that never changes would pass for the wrong reason.
-// The resize past the limit has to leave the pane at the size it had, keep the
-// session answering, and keep the memory where it was.
-//
-// Measured on 2026-10-08: with the limit, tuios-web held 55 MB before the
-// 1500x900 resize and 60 MB after it. See NEGATIVE_CONTROLS.md for the run
-// without it.
-func TestWebIgnoresAWindowPastTheLimit(t *testing.T) {
+// The resize to 1500x900 has to reach the pane clamped to 1200 columns and
+// 208 rows (250000 cells), keep the session answering, and keep the memory
+// near the cost of that many cells. See NEGATIVE_CONTROLS.md for the run
+// without the limit.
+func TestWebClampsAWindowPastTheLimit(t *testing.T) {
+	const maxCols, maxRows = 1200, 250_000 / 1200
 	base := t.TempDir()
 	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nstart_in_terminal_mode = true\n")
 	addr, pid := startTuiosWeb(t, base, "--ephemeral")
@@ -329,22 +328,39 @@ func TestWebIgnoresAWindowPastTheLimit(t *testing.T) {
 	}
 
 	client.send(t, '2', `{"cols":1500,"rows":900}`)
-	// Long enough for a resize that was applied to reach the pane: the one
-	// above took well under a second.
-	time.Sleep(2 * time.Second)
-	gotCols, gotRows, answerErr := client.tryPaneSize(t, 100, uiTimeout)
+	// The pane is smaller than the window by what the border and the chrome
+	// take, measured at 300x60.
+	chromeCols, chromeRows := 300-cols, 60-rows
+	wantCols, wantRows := maxCols-chromeCols, maxRows-chromeRows
+	var gotCols, gotRows int
+	deadline = time.Now().Add(uiTimeout)
+	for tag := 100; ; tag++ {
+		var err error
+		gotCols, gotRows, err = client.tryPaneSize(t, tag, uiTimeout)
+		if err != nil {
+			t.Fatalf("after a resize to 1500x900: %v", err)
+		}
+		if gotCols > cols {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a resize to 1500x900 left the pane at %dx%d, want it clamped near %dx%d",
+				gotCols, gotRows, maxCols, maxRows)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Logf("at 1500x900 the pane is %dx%d", gotCols, gotRows)
+	if gotCols != wantCols || gotRows != wantRows {
+		t.Errorf("a resize to 1500x900 gave a %dx%d pane, want %dx%d (the %dx%d limit less the chrome)",
+			gotCols, gotRows, wantCols, wantRows, maxCols, maxRows)
+	}
 	if runtime.GOOS == "linux" {
 		after := rssMB(t, pid)
 		t.Logf("tuios-web resident set: %d MB before the oversized resize, %d MB after", before, after)
-		if after-before > 200 {
+		// 250000 cells at about 1.3 KB is about 325 MB. 1500x900 with no
+		// limit is about 1.7 GB.
+		if after-before > 600 {
 			t.Errorf("a resize past the limit grew tuios-web from %d MB to %d MB", before, after)
 		}
-	}
-	if answerErr != nil {
-		t.Fatalf("after a resize to 1500x900: %v", answerErr)
-	}
-	if gotCols != cols || gotRows != rows {
-		t.Fatalf("a resize to 1500x900 moved the pane from %dx%d to %dx%d, want it ignored",
-			cols, rows, gotCols, gotRows)
 	}
 }

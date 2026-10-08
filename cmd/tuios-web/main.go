@@ -354,6 +354,7 @@ func runWebServer() error {
 	sipConfig.TLSKey = tlsKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
 	sipConfig.MaxWindowDims = sip.WindowSize{Width: webMaxCols, Height: webMaxRows}
+	sipConfig.MaxWindowCells = webMaxCells
 	access.apply(&sipConfig)
 
 	// How the page looks. Read after the config file and the flags have both
@@ -624,19 +625,25 @@ func checkTransportSecurity(w io.Writer) error {
 	return fmt.Errorf("refusing to serve %s in clear text: pass --auto-tls, or --cert and --key, or --insecure to accept it", webHost)
 }
 
-// webMaxCols and webMaxRows are the largest window a browser may ask for.
+// webMaxCols, webMaxRows and webMaxCells are the largest window a browser may
+// ask for.
 //
 // Each cell costs tuios-web about 1.3 KB: one session resized to 2000x1000
-// took the process from 41 MB to 2.6 GB. sip's own limit is 4096x4096, which
-// is about 22 GB for one resize message. sip ignores a later resize past these
-// limits and keeps the session. It refuses a first resize past them, so they
-// sit well above any real window: a 5120 pixel wide screen at a 5 pixel cell
-// is 1024 columns. The limit bounds one window and not the process: a session
-// at exactly 1200x500 still took tuios-web from 41 MB to about 510 MB, and sip
-// has no cap on the number of sessions yet.
+// took the process from 41 MB to 2.6 GB. sip clamps every resize to these
+// limits, the first one too, and the browser gets the clamped size. A resize
+// past webMaxCols or webMaxRows is cut to them. When columns times rows is
+// still past webMaxCells, the columns stay and the rows shrink: a 1200 column
+// window gets 208 rows. A 5120 pixel wide screen at a 5 pixel cell is 1024
+// columns, so real windows fit.
+//
+// webMaxCells is set here and not left to sip's default, because sip sizes
+// its default for a Bubble Tea cell of about 230 bytes. At 1.3 KB a cell,
+// 250000 cells bound one session near 325 MB. The limit bounds one window and
+// not the process: sip has no cap on the number of sessions yet.
 const (
-	webMaxCols = 1200
-	webMaxRows = 500
+	webMaxCols  = 1200
+	webMaxRows  = 500
+	webMaxCells = 250_000
 )
 
 // createTUIOSHandler creates a TUIOS instance for each web session.
