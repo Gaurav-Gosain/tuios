@@ -2246,6 +2246,12 @@ func init() {
 	maps.Copy(verbRegistry, shipVerbs())
 	// The paste buffer verbs. See verb_buffers.go.
 	maps.Copy(verbRegistry, bufferVerbs())
+	// The file verbs, transfers, the drop folder and previews. See
+	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
+	maps.Copy(verbRegistry, fileVerbs())
+	maps.Copy(verbRegistry, transferVerbs())
+	maps.Copy(verbRegistry, dropVerbs())
+	maps.Copy(verbRegistry, previewVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

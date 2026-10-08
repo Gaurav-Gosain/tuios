@@ -111,6 +111,30 @@ var verbCapabilities = map[string][]string{
 	"peek-prompt":          {config.LinkAllowList},
 	"read-dir":             {config.LinkAllowList},
 	"wait-dir":             {config.LinkAllowList},
+	// The file verbs. A listing is a listing. Reading a file's bytes out is
+	// what write already reaches through a shell, and list must not, as for
+	// bundle-worktree; changing a file is a write. See verb_files.go.
+	"file-stat":        {config.LinkAllowList},
+	"file-list":        {config.LinkAllowList},
+	"file-read":        {config.LinkAllowWrite},
+	"file-hash":        {config.LinkAllowWrite},
+	"file-walk":        {config.LinkAllowWrite},
+	"file-preview":     {config.LinkAllowWrite},
+	"open-file-stream": {config.LinkAllowWrite},
+	"file-mkdir":       {config.LinkAllowWrite},
+	"file-rename":      {config.LinkAllowWrite},
+	"file-remove":      {config.LinkAllowWrite},
+	"file-commit":      {config.LinkAllowWrite},
+	"file-abort":       {config.LinkAllowWrite},
+	"file-drop-dir":    {config.LinkAllowWrite},
+	// A transfer and a drop make this daemon open connections on its own
+	// links, as open-host-connection does, so they need every capability.
+	"transfer-start":  {capRelay},
+	"transfer-list":   {capRelay},
+	"transfer-cancel": {capRelay},
+	"transfer-pause":  {capRelay},
+	"transfer-resume": {capRelay},
+	"drop-files":      {capRelay},
 
 	"send-agent-message":  {config.LinkAllowMail},
 	"read-agent-messages": {config.LinkAllowMail},
