@@ -103,9 +103,30 @@ func screensaverArmCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return screensaverArmMsg{} })
 }
 
+// screensaverFPS caps the rate the saver and the effect picker's preview paint
+// at.
+//
+// tuiffects writes its effects for sixty frames a second, and 33 of its 36
+// effects count frames rather than read the clock. Painted at the session's
+// NormalFPS, which max_fps sets and which is 240 on a screen that will take it,
+// those effects ran four times too fast and cost four times the CPU, and at
+// 200x50 every frame also pays about 1.5 ms of parse, so the heavy ones could
+// not hold 240 anyway. celebrateFPS caps the confetti for the same reason.
+const screensaverFPS = 60
+
+// screensaverRate is the rate the saver and the preview paint at: the session's
+// NormalFPS, but never more than screensaverFPS. The tick, the engine's clock
+// and the opening bands all read it, so the three cannot disagree.
+func screensaverRate(s *config.Settings) int {
+	if s.NormalFPS <= 0 || s.NormalFPS > screensaverFPS {
+		return screensaverFPS
+	}
+	return s.NormalFPS
+}
+
 // screensaverFrameCmd schedules the next animation frame.
 func screensaverFrameCmd(s *config.Settings) tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(time.Time) tea.Msg {
+	return tea.Tick(time.Second/time.Duration(screensaverRate(s)), func(time.Time) tea.Msg {
 		return screensaverFrameMsg{}
 	})
 }
@@ -247,17 +268,16 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 	})
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
 	// The clock has to be the rate this program really paints at. NewEngine
-	// installs one that steps a sixtieth of a second per frame, and the saver
-	// ticks at the session's NormalFPS, which max_fps sets and which is 240 on a
-	// screen that will take it. Left alone, the engine's idea of time ran four
-	// times faster than the wall and every effect written in seconds ran four
-	// times too fast: matrix rained for the wrong length, thunderstorm stormed
-	// for the wrong length, and tuffbaby played its clip at forty frames a
-	// second instead of ten.
+	// installs one that steps a sixtieth of a second per frame. The saver ticks
+	// at screensaverRate, which is sixty unless max_fps asks for less. When the
+	// two differed, the engine's idea of time drifted from the wall and every
+	// effect written in seconds ran at the wrong speed: matrix rained for the
+	// wrong length, thunderstorm stormed for the wrong length, and tuffbaby
+	// played its clip at the wrong rate.
 	//
-	// screensaverFrameCmd and effectPreviewFrameCmd both tick at NormalFPS, so
-	// this one line covers the saver and the effect picker's preview alike.
-	engine.Clock = tfx.NewVirtualClock(s.NormalFPS)
+	// screensaverFrameCmd and effectPreviewFrameCmd both tick at screensaverRate,
+	// so this one line covers the saver and the effect picker's preview alike.
+	engine.Clock = tfx.NewVirtualClock(screensaverRate(s))
 	if err := effect.Build(engine); err != nil {
 		return nil, false
 	}
