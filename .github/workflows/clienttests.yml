@@ -1,0 +1,87 @@
+# Runs the browser tests in clienttests/ against real tuios-web servers in
+# headless Chrome. They cover what reaches a browser: the touch key bar, touch
+# gestures on panes, the config file in a served session, the theme, and two
+# clients at different sizes.
+name: clienttests
+
+# The paths are the code a browser session runs through: the web server, the
+# window manager and its input, the config, and the tests themselves. The
+# nightly run catches a change outside these paths that still breaks them, such
+# as one in internal/session or a dependency.
+on:
+  pull_request:
+    paths: &clienttests-paths
+      - "go.mod"
+      - "go.sum"
+      - "cmd/tuios-web/**"
+      - "internal/app/**"
+      - "internal/input/**"
+      - "internal/config/**"
+      - "clienttests/**"
+      - ".github/workflows/clienttests.yml"
+  push:
+    branches: [main]
+    paths: *clienttests-paths
+  schedule:
+    # 05:23 UTC daily, clear of the race build and the fuzz campaign.
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes the run in
+# progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clienttests:
+    runs-on: ubuntu-latest
+    # The suite takes about three minutes on a desktop. The timeout is a
+    # backstop: every wait in the suite has its own deadline.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # One build for the four servers. Without TUIOS_WEB_BIN each server
+      # compiles tuios-web with go run, which costs about a minute.
+      - name: Build tuios-web
+        run: go build -o "$RUNNER_TEMP/tuios-web" ./cmd/tuios-web
+
+      - name: Install the test runner
+        working-directory: clienttests
+        run: npm ci
+
+      # The runner ships Google Chrome, so nothing is downloaded. The fallback
+      # is for a runner image that drops it.
+      - name: Find Chrome
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [ -z "$chrome" ]; then
+            npx --prefix clienttests playwright install --with-deps chromium
+            chrome="$(find "$HOME/.cache/ms-playwright" -type f -name chrome -path '*chrome-linux*' | head -n 1)"
+          fi
+          "$chrome" --version
+          echo "TUIOS_CHROMIUM=$chrome" >> "$GITHUB_ENV"
+
+      # The servers listen on ports 7791 to 7798 on 127.0.0.1. Each one takes
+      # a port for TCP and the next one for WebTransport over UDP.
+      - name: Run the browser tests
+        working-directory: clienttests
+        env:
+          TUIOS_WEB_BIN: ${{ runner.temp }}/tuios-web
+        run: npx playwright test
+
+      - name: Upload the failure context
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: clienttests-results
+          path: clienttests/test-results/
+          if-no-files-found: ignore
