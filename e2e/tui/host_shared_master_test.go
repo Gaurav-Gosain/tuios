@@ -25,7 +25,8 @@ import (
 // in the daemon (the argv says auto), or a folder others can write that is
 // trusted (the third case's argv has a ControlPath), or a ControlPath of the
 // person's own ssh config that the link no longer uses (the fourth case's
-// argv names the folder).
+// argv names the folder), or a host that forwards the agent and loses it
+// through a master that does not (the fifth case's argv names the folder).
 
 // writeArgvSSH is writeFakeSSHTo that first appends its argv, one line per
 // run, to log. Asked for its options (-G), it prints config: the lines a
@@ -74,6 +75,7 @@ func TestLinkRidesTheSharedSSHMaster(t *testing.T) {
 		{"no master folder", 0, false, ""},
 		{"a master folder others can write", 0o777, false, ""},
 		{"the user's ssh config shares connections itself", 0o700, false, "'controlpath /home/someone/.ssh/cm-%C'"},
+		{"the host forwards the agent", 0o700, false, "'forwardagent yes'"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

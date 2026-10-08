@@ -1,24 +1,21 @@
 package session
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 	"github.com/google/uuid"
 )
 
@@ -199,15 +196,6 @@ func (d *Daemon) stopSSHAgent() {
 	d.sweepAgentLinks()
 }
 
-// sunPathMax is the longest Unix socket path the platform takes, without the
-// terminating zero.
-func sunPathMax() int {
-	if runtime.GOOS == "linux" {
-		return 107
-	}
-	return 103
-}
-
 // startSSHAgent sweeps what an earlier daemon left, reads the daemon's own
 // socket for the fallback, and warns when a link path is too long for a
 // client to connect to. It runs once, before any session is restored.
@@ -223,8 +211,8 @@ func (d *Daemon) startSSHAgent() {
 	// The longest link: a session's whole id, or a host's name at its cut.
 	n := max(len(SSHAgentLinkPath(d.manager.SocketPath(), "00000000-0000-0000-0000-000000000000")),
 		len(hostAgentLinkPath(d.manager.SocketPath(), strings.Repeat("h", hostLinkKeep))))
-	if n > sunPathMax() {
-		log.Printf("Warning: the ssh agent links are %d characters long, and a Unix socket path can be at most %d. ssh in a pane cannot reach the agent. Set XDG_RUNTIME_DIR to a shorter folder.", n, sunPathMax())
+	if n > sockpath.MaxLen() {
+		log.Printf("Warning: the ssh agent links are %d characters long, and a Unix socket path can be at most %d. ssh in a pane cannot reach the agent. Set XDG_RUNTIME_DIR to a shorter folder.", n, sockpath.MaxLen())
 	}
 }
 
@@ -410,30 +398,18 @@ func (d *Daemon) forgetHostForwards() {
 	d.sshAgent.mu.Lock()
 	d.sshAgent.forwards = nil
 	d.sshAgent.mu.Unlock()
+	federation.ForgetSSHConfig()
 }
 
 // sshConfigForwards asks ssh -G what it would do for h's address with h's
 // options, which CheckSSHOptions has passed. fwd is whether that is
 // forwardagent yes. ok is false when ssh -G failed or gave no answer.
 func sshConfigForwards(h federation.Host) (fwd, ok bool) {
-	bin := os.Getenv("TUIOS_SSH")
-	if bin == "" {
-		bin = "ssh"
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	args := append(append([]string{"-G"}, h.SSHOptions...), "--", h.Addr)
-	out, err := exec.CommandContext(ctx, bin, args...).Output()
-	if err != nil {
+	c, ok := federation.ReadSSHConfig(h)
+	if !ok || c.ForwardAgent == "" {
 		return false, false
 	}
-	for line := range strings.SplitSeq(string(out), "\n") {
-		k, v, _ := strings.Cut(strings.TrimSpace(line), " ")
-		if strings.EqualFold(k, "forwardagent") {
-			return strings.EqualFold(strings.TrimSpace(v), "yes"), true
-		}
-	}
-	return false, false
+	return strings.EqualFold(c.ForwardAgent, "yes"), true
 }
 
 // agentPruneHosts removes the link and the entries of every host that is not

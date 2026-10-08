@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 )
 
 // GetSocketPath returns the path to the daemon socket. It refuses when
@@ -25,19 +27,9 @@ func GetSocketPath() (string, error) {
 
 // defaultSocketPath is the daemon socket the environment's directories name.
 func defaultSocketPath() (string, error) {
-	// Use XDG_RUNTIME_DIR if available (preferred for sockets)
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir != "" {
-		socketDir := filepath.Join(runtimeDir, "tuios")
-		if err := ensureSocketDir(socketDir); err != nil {
-			return "", err
-		}
-		return filepath.Join(socketDir, "tuios.sock"), nil
-	}
-
-	// Fallback to /tmp/tuios-$UID/
-	uid := os.Getuid()
-	socketDir := filepath.Join("/tmp", fmt.Sprintf("tuios-%d", uid))
+	// $XDG_RUNTIME_DIR/tuios when there is a runtime directory, and
+	// /tmp/tuios-$UID otherwise.
+	socketDir := sockpath.Dir()
 	if err := ensureSocketDir(socketDir); err != nil {
 		return "", err
 	}

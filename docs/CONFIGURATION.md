@@ -1554,13 +1554,30 @@ the verb by verb table.
 The daemon's links never ask for a password, a passphrase or a code. They
 run ssh with `BatchMode=yes`. A client that can ask you, such as tuios-gpui,
 signs in to a machine itself and keeps that connection open as an ssh master
-in `$XDG_RUNTIME_DIR/tuios/cm`. While that folder exists and only you can
-open it, each link runs ssh with `-o ControlMaster=no` and
-`-o ControlPath=$XDG_RUNTIME_DIR/tuios/cm/%C`. The link then uses the master
-when one is open for that machine, and connects as usual when none is. A
-machine that needs a password or a second factor then works for as long as
-the master is open. No secret is stored. A host that your `~/.ssh/config`
-gives a `ControlPath` keeps it, so the link uses the master you open there.
+in the folder `cm` beside the daemon's socket. That folder is
+`$XDG_RUNTIME_DIR/tuios/cm`, or `/tmp/tuios-<uid>/cm` when
+`XDG_RUNTIME_DIR` is not set. When that folder and its parent exist, are not
+symbolic links, belong to you and only you can open them, each link and
+`tuios hosts test` run ssh with `-o ControlMaster=no` and `-o ControlPath=<folder>/%C`. The link then
+uses the master when one is open for that machine, and connects as usual when
+none is. A machine that needs a password or a second factor then works for
+as long as the master is open. No secret is stored.
+
+A link connects as usual and does not use the folder in these cases:
+
+- Your `~/.ssh/config` gives the host a `ControlPath`. The link uses the
+  master you open there.
+- The host forwards the agent (`ForwardAgent`). A connection through a master
+  gets the forwarding of the master, so the link would lose its agent.
+- A socket path in the folder is too long. The limit is 107 characters on
+  Linux and 103 on macOS. Set `XDG_RUNTIME_DIR` to a shorter folder.
+- tuios runs on Windows. Win32-OpenSSH has no `ControlMaster`.
+
+`%C` names a master by the local host, the remote host, the port and the
+user. It does not include a `ProxyCommand`, so a host reached through two
+different proxy commands shares one master. It includes the jump host only
+on OpenSSH 10.6 and later. On an earlier version, a host reached through two
+different jump hosts also shares one master.
 
 `tailscale_login` is the origin of a Headscale server that sends the Tailscale
 SSH check for this host, for example `"https://headscale.example"`. tuios

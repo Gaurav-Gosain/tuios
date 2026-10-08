@@ -3331,3 +3331,25 @@ Each control below was run on 2026-10-08 on branch
 | A folder others can write is trusted | `reuseOptions`: the mode check cut | `TestLinkRidesTheSharedSSHMaster/a_master_folder_others_can_write` (the link's ssh names the folder) | **caught** |
 | The link may open a master of its own | `reuseOptions`: `ControlMaster=auto` in place of `no` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (`ControlMaster=no` missing) | **caught** |
 | The person's own ControlPath is overridden | `reuseOptions`: the `configSharesConnections` check cut (run later on 2026-10-08, log `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-master.txt`) | `TestLinkRidesTheSharedSSHMaster/the_user's_ssh_config_shares_connections_itself` (the link's ssh names the folder) | **caught** |
+
+## The shared ssh master: review fixes
+
+The unit tests are in `internal/federation/reuse_unix_test.go`. They guard
+the security boundary and the timeout of the shared master folder.
+`TestLinkRidesTheSharedSSHMaster` gains the case
+`the_host_forwards_the_agent`: an ssh config that gives the host
+`forwardagent yes` must keep the link's ssh off the folder.
+
+Each control below was run on 2026-10-08 on branch
+`feat/link-shares-gui-ssh-master`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A child of ssh -G holds the pipes past the timeout | `querySSHConfig`: the `cmd.WaitDelay` line cut | `TestSSHConfigReturnsWhenAChildHoldsThePipes` (ssh -G took 30.0s, want at most 4.5s) | **caught** |
+| ssh -G runs at every dial | `ReadSSHConfig`: the cache read cut | `TestSSHConfigIsAskedOncePerHost` (ran 4 times, want 2) | **caught** |
+| A socket path too long for sun_path is used | `reuseOptions`: the length check cut | `TestReuseSkipsAControlPathTooLongForASocket` (a 67 byte folder is used, sockets of 108 bytes) | **caught** |
+| A host that forwards the agent rides the master | `reuseOptions`: the `ForwardAgent` check cut | `TestReuseSkipsAHostThatForwardsTheAgent` (`forwardagent yes` and a socket path ride), `TestLinkRidesTheSharedSSHMaster/the_host_forwards_the_agent` (the link's ssh names the folder) | **caught** |
+| A master folder that is a symbolic link is trusted | `privateDir`: `os.Stat` in place of `os.Lstat` | `TestReuseNeedsPrivateFolders` (the symbolic link is used) | **caught** |
+| The parent folder is not checked | `reuseOptions`: the `privateDir(filepath.Dir(dir))` check cut | `TestReuseNeedsPrivateFolders` (a group-writable parent is used) | **caught** |
+| A folder of another user is trusted | `privateDir`: the uid comparison cut | `TestPrivateDirRefusesAFolderOfAnotherUser` (`/proc/1/fd` counts as the user's own) | **caught** |
+| ssh's stale socket line is reported | `cmdTransport.Diagnostic`: `withoutStaleMasterLines` cut | `TestDiagnosticDropsTheStaleMasterLine` (the `Control socket connect(...)` line is kept) | **caught** |
