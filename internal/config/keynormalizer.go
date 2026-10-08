@@ -484,12 +484,9 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 		return false, "key cannot be empty"
 	}
 
-	// On non-macOS systems, error on opt/option keys
-	if !kn.isMacOS {
-		if strings.Contains(keyLower, "opt+") || strings.Contains(keyLower, "option+") {
-			return false, "opt/option keys are only valid on macOS, use alt+ instead"
-		}
-	}
+	// opt+ and option+ are valid on every platform. Off macOS they can only
+	// mean Alt, and CanonicalKey reads them as alt+, so a config.toml shared
+	// with a Mac works unchanged (issue #556).
 
 	// On macOS, suggest opt+ instead of alt+ for better UX
 	// Note: We return true (valid) but will add a warning in validation
@@ -509,10 +506,7 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 
 		// Check each modifier
 		for _, mod := range modifiers {
-			if !validModifier(mod, kn.isMacOS) {
-				if mod == "opt" || mod == "option" {
-					return false, "opt/option modifiers are only valid on macOS"
-				}
+			if !validModifier(mod) {
 				return false, "invalid modifier: " + mod
 			}
 		}
@@ -572,14 +566,12 @@ var validSpecialKeys = map[string]bool{
 // keyboard protocol, but the input path has always acted on super+v and
 // shift+super+v for the host paste, so rejecting it would make the working
 // default unwritable the moment it became a binding. control is an alias for
-// ctrl and cmd and command are aliases for super. opt and option are valid
-// only on macOS.
-func validModifier(mod string, isMacOS bool) bool {
+// ctrl, cmd and command are aliases for super, and opt and option are
+// aliases for alt on every platform.
+func validModifier(mod string) bool {
 	switch mod {
-	case "ctrl", "control", "alt", "shift", "super", "cmd", "command":
+	case "ctrl", "control", "alt", "opt", "option", "shift", "super", "cmd", "command":
 		return true
-	case "opt", "option":
-		return isMacOS
 	}
 	return false
 }

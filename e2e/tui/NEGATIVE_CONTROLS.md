@@ -2990,13 +2990,25 @@ least one of them:
 - No short limit.
 - No cap in `admitConnection`.
 
-## A Mac key in config.toml on Linux (issue #556)
+## A Mac config.toml on Linux (issue #556)
 
-`TestMacKeysInConfigKeepTheRestOfTheFile` starts a daemon session on Linux
-with `leader_key = 'ctrl+s'` and two `opt+` keys in config.toml. It waits for
-"2 config problems", then presses Ctrl+S and waits for the prefix menu.
+`TestMacConfigWorksOnLinux` loads the 25 `opt+` keys and the leader of the
+reporter's config on Linux. `tuios keybinds doctor --json` must list no key
+problem and note all 25 keys as read as `alt+`. In a daemon session, Alt+2 and
+Alt+1 switch workspaces, Ctrl+S opens the prefix menu, and the log viewer has no
+`Config:` line.
+
+`TestUnreadableKeyKeepsTheRestOfTheFile` starts a daemon session with
+`leader_key = 'ctrl+s'` and two keys that no platform can read, `ctrl+nope`
+and `hyper+esc`. It waits for "2 config problems", then presses Ctrl+S and
+waits for the prefix menu.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The load rejects the whole file again | `LoadUserConfig`: return an error when `ValidateConfig` has errors, before the call to `DropUnreadableKeys` | `TestMacKeysInConfigKeepTheRestOfTheFile` (the TUI shows "1 config problem", the load failure, and not "2 config problems") | **caught** |
-| The build before the fix | main at `d2f6277b` | `TestMacKeysInConfigKeepTheRestOfTheFile` (no config problem is shown). With that wait skipped, it fails at the prefix menu wait | **caught** |
+| `opt+` is rejected off macOS again | `ValidateKey`: the old `opt+`/`option+` rejection put back for `!isMacOS` | `TestMacConfigWorksOnLinux` (the doctor lists 25 keys tuios cannot read). With the doctor checks skipped, it fails at the log viewer, which lists the 25 keys | **caught** |
+| The load rejects the whole file again | `LoadUserConfig`: return an error when `ValidateConfig` has errors, before the call to `DropUnreadableKeys` | `TestUnreadableKeyKeepsTheRestOfTheFile` (the TUI shows "1 config problem", the load failure, and not "2 config problems") | **caught** |
+| The build before the fix | main at `d2f6277b` | `TestUnreadableKeyKeepsTheRestOfTheFile` (no config problem is shown). With that wait skipped, it fails at the prefix menu wait | **caught** |
+
+The key presses alone cannot catch the first control. A dropped `opt+1` falls
+back to the default `alt+1`, which is the same key on Linux. The doctor and the
+log viewer are what tell the two builds apart.

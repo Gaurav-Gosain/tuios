@@ -100,13 +100,15 @@ A key in `config.toml` can spell a modifier in more than one way. tuios reads ea
 
 | Write | tuios reads it as | Where |
 |---|---|---|
-| `opt+`, `option+` | `alt+` | macOS only |
+| `opt+`, `option+` | `alt+` | all platforms |
 | `cmd+`, `command+` | `super+` | all platforms |
 | `control+` | `ctrl+` | all platforms |
 
 The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`. This applies to `leader_key`, to every binding table, and to `tuios keybinds explain`, `free` and `unbind`. `tuios keybinds explain opt+f12` shows `opt+f12 (tuios reads it as alt+f12)`. `tuios keybinds doctor` lists each key that tuios cannot read.
 
-tuios ignores a key that it cannot read and loads the rest of the file. For example, it ignores an `opt+` key on Linux. The binding goes back to its default when no other key is left for that action. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key.
+You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
+
+tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key.
 
 A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
 

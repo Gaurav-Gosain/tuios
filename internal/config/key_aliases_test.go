@@ -193,19 +193,34 @@ func TestDoctorNamesTheLeaderSpellingAndBadKeys(t *testing.T) {
 			t.Errorf("doctor finds problems in a valid config: %+v", rep.KeyProblems)
 		}
 	})
-	t.Run("linux does not read opt", func(t *testing.T) {
-		// opt+ is valid only on macOS. The doctor and explain must not say
-		// tuios reads it as alt+f12 while also listing it as unreadable.
+	t.Run("linux reads opt as alt", func(t *testing.T) {
+		// Issue #556: a config.toml shared with a Mac works on Linux. opt+
+		// can only mean Alt there, so the doctor and explain say so, and the
+		// key is not a problem.
 		restore := config.ForceMacOSHost(false)
 		defer restore()
 		cfg := config.DefaultConfig()
 		cfg.Keybindings.LeaderKey = "opt+f12"
+		cfg.Keybindings.Workspaces["switch_workspace_1"] = []string{"opt+1"}
 		reg := config.NewKeybindRegistry(cfg)
-		if got := reg.Report(config.PaneFacts{}).LeaderReadAs; got != "" {
-			t.Errorf("doctor on Linux reads the leader opt+f12 as %q, want no note", got)
+		rep := reg.Report(config.PaneFacts{})
+		if rep.LeaderReadAs != "alt+f12" {
+			t.Errorf("doctor on Linux reads the leader opt+f12 as %q, want alt+f12", rep.LeaderReadAs)
 		}
-		if got := reg.Fate("opt+f12", config.PaneFacts{}).ReadAs; got != "" {
-			t.Errorf("explain opt+f12 on Linux reads as %q, want no note", got)
+		if len(rep.KeyProblems) != 0 {
+			t.Errorf("doctor on Linux lists opt+ keys as problems: %+v", rep.KeyProblems)
+		}
+		found := false
+		for _, k := range rep.OptionKeys {
+			if k.Key == "opt+1" && k.ReadAs == "alt+1" && k.Action == "switch_workspace_1" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("doctor on Linux does not note opt+1 as read as alt+1: %+v", rep.OptionKeys)
+		}
+		if got := reg.Fate("opt+f12", config.PaneFacts{}).ReadAs; got != "alt+f12" {
+			t.Errorf("explain opt+f12 on Linux reads as %q, want alt+f12", got)
 		}
 		if got := reg.Fate("cmd+f12", config.PaneFacts{}).ReadAs; got != "super+f12" {
 			t.Errorf("explain cmd+f12 on Linux reads as %q, want super+f12", got)
@@ -215,14 +230,14 @@ func TestDoctorNamesTheLeaderSpellingAndBadKeys(t *testing.T) {
 		restore := config.ForceMacOSHost(false)
 		defer restore()
 		cfg := config.DefaultConfig()
-		cfg.Keybindings.LeaderKey = "opt+f12"
+		cfg.Keybindings.LeaderKey = "ctrl+nope"
 		cfg.Keybindings.PrefixMode["prefix_new_window"] = []string{"hyper+x"}
 		rep := config.NewKeybindRegistry(cfg).Report(config.PaneFacts{})
 		got := map[string]bool{}
 		for _, p := range rep.KeyProblems {
 			got[p.Section+"."+p.Action+"="+p.Key] = true
 		}
-		for _, want := range []string{"keybindings.leader_key=opt+f12", "prefix_mode.prefix_new_window=hyper+x"} {
+		for _, want := range []string{"keybindings.leader_key=ctrl+nope", "prefix_mode.prefix_new_window=hyper+x"} {
 			if !got[want] {
 				t.Errorf("doctor does not report %s; got %+v", want, rep.KeyProblems)
 			}
@@ -246,8 +261,8 @@ func TestValidateKeyAcceptsModifierAliases(t *testing.T) {
 		if ok, _ := n.ValidateKey("ctrl+control+b"); ok {
 			t.Error("ctrl+control+b is not reported as a duplicate modifier")
 		}
-		if ok, _ := n.ValidateKey("opt+f12"); ok != mac {
-			t.Errorf("ValidateKey(opt+f12) = %v on macOS=%v", ok, mac)
+		if ok, _ := n.ValidateKey("opt+f12"); !ok {
+			t.Errorf("ValidateKey(opt+f12) rejected on macOS=%v", mac)
 		}
 	})
 }

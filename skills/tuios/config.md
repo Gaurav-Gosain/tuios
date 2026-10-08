@@ -375,8 +375,8 @@ fact about the person's config). `collisions` are keys bound twice in one scope;
 Tab, Ctrl+M and Enter, and Ctrl+[ and Esc are the same byte unless the terminal
 disambiguates them.
 
-A modifier has more than one spelling. `opt+` and `option+` mean `alt+` (macOS
-only), `cmd+` and `command+` mean `super+`, and `control+` means `ctrl+`. The
+A modifier has more than one spelling. `opt+` and `option+` mean `alt+` on every
+platform, `cmd+` and `command+` mean `super+`, and `control+` means `ctrl+`. The
 leader, every binding table, `explain`, `free` and `unbind` read all spellings
 as one key. `explain` and `doctor` show the spelling tuios matches, for example
 `opt+f12 (tuios reads it as alt+f12)`.

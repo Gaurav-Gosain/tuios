@@ -173,6 +173,12 @@ writes a `disabled = true` entry first and the new entry after it.
 `include` list, and lists the other files that still apply. When config.toml
 has an error, the reset still keeps an `include` list that it can read.
 
+## One config on macOS and Linux
+
+You can share one `config.toml` between a Mac and a Linux machine, for example with a dotfiles repo. tuios reads `opt+` and `option+` as `alt+` on every platform. On Linux, a key such as `opt+1` is `alt+1`.
+
+tuios ignores a key that it cannot read and loads the rest of the file. The action gets its default key when it has no other key. tuios shows a config problem when it starts, and the log viewer (leader `D` `l`) names each key. `tuios keybinds doctor` lists these keys too.
+
 ## Opening links
 
 tuios finds two kinds of link in a pane. An OSC 8 hyperlink is a link that a

@@ -62,6 +62,14 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
+	if len(rep.OptionKeys) > 0 {
+		fmt.Printf("\nOPT KEYS READ AS ALT (%s)\n", config.EvidenceCertain)
+		fmt.Println("  For information. tuios reads opt+ as alt+ on this system. Nothing needs a change.")
+		for _, k := range rep.OptionKeys {
+			fmt.Printf("  %-22s read as %s [%s.%s]\n", k.Key, k.ReadAs, k.Section, k.Action)
+		}
+	}
+
 	if len(rep.CommandProblems) > 0 {
 		fmt.Printf("\nCOMMAND ENTRIES (%s)\n", config.EvidenceCertain)
 		fmt.Println("  These [[keybindings.command]] entries need a change in config.toml.")

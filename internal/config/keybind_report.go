@@ -277,6 +277,10 @@ type KeybindReport struct {
 	LeaderReadAs string `json:"leader_read_as,omitempty"`
 	// KeyProblems are the keys in config.toml that tuios cannot read.
 	KeyProblems []KeyProblem `json:"key_problems"`
+	// OptionKeys are the opt+ and option+ keys tuios reads as alt+ off
+	// macOS. They are information, not problems: a config.toml shared with a
+	// Mac works as it is.
+	OptionKeys []KeyReadAs `json:"option_keys_read_as_alt,omitempty"`
 	// CommandProblems are the [[keybindings.command]] entries tuios ignores
 	// or warns about, in the validator's words.
 	CommandProblems []CommandProblem `json:"command_problems"`
@@ -332,6 +336,7 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 		GuestClashes: r.GuestClashes(facts.Command),
 		LeaderReadAs: readAs(leader),
 		KeyProblems:  r.KeyProblems(),
+		OptionKeys:   r.OptionKeys(),
 
 		CommandProblems:  r.config.Keybindings.CommandProblems(),
 		CopyModeProblems: r.config.Keybindings.CopyModeProblems(),
@@ -399,8 +404,7 @@ func (rep KeybindReport) Summary() string {
 
 // readAs returns the canonical spelling of key when it differs from what the
 // user wrote by more than case, and "" when it does not. A key the validator
-// rejects on this platform gets "" too: opt+f12 on Linux is not read as
-// anything, and the doctor lists it as a key tuios cannot read.
+// rejects gets "" too, and the doctor lists it as a key tuios cannot read.
 func readAs(key string) string {
 	trimmed := strings.TrimSpace(key)
 	if ok, _ := (&KeyNormalizer{isMacOS: macOSHost}).ValidateKey(trimmed); !ok {
@@ -424,6 +428,53 @@ type KeyProblem struct {
 	// Problem is what is wrong, in the validator's words.
 	Problem  string   `json:"problem"`
 	Evidence Evidence `json:"evidence"`
+}
+
+// KeyReadAs is one key that tuios reads in another spelling.
+type KeyReadAs struct {
+	// Section is the config table, or "keybindings" for the leader.
+	Section string `json:"section"`
+	// Action is the action the key is bound to, or "leader_key".
+	Action string `json:"action"`
+	Key    string `json:"key"`
+	ReadAs string `json:"read_as"`
+}
+
+// OptionKeys returns every opt+ or option+ key in the leader and the binding
+// tables, with the alt+ spelling tuios reads it as. It is empty on macOS,
+// where opt+ is the native name of the key and needs no note.
+func (r *KeybindRegistry) OptionKeys() []KeyReadAs {
+	if macOSHost {
+		return nil
+	}
+	kb := &r.config.Keybindings
+	var out []KeyReadAs
+	check := func(section, action, key string) {
+		lower := strings.ToLower(strings.TrimSpace(key))
+		if !strings.Contains(lower, "opt+") && !strings.Contains(lower, "option+") {
+			return
+		}
+		if as := readAs(key); as != "" {
+			out = append(out, KeyReadAs{Section: section, Action: action, Key: key, ReadAs: as})
+		}
+	}
+	if kb.LeaderKey != "" {
+		check("keybindings", "leader_key", kb.LeaderKey)
+	}
+	for _, name := range SectionNames() {
+		section := kb.section(name)
+		actions := make([]string, 0, len(section))
+		for action := range section {
+			actions = append(actions, action)
+		}
+		sort.Strings(actions)
+		for _, action := range actions {
+			for _, key := range section[action] {
+				check(name, action, key)
+			}
+		}
+	}
+	return out
 }
 
 // KeyProblems returns every key in the leader and the binding tables that the
