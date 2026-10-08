@@ -148,10 +148,9 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	if err != nil {
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml has an error, so nothing was applied: "+err.Error())
 	}
-	if v := config.ValidateConfig(cfg); v.HasErrors() {
-		first := v.Errors[0]
-		return nil, newVerbError(ErrVerbCommandFailed, "config.toml has an error, so nothing was applied: ["+first.Field+"] "+first.Key+": "+first.Message)
-	}
+	// A key this platform cannot read is dropped, the same as on load, so a
+	// config shared with a Mac still applies.
+	config.DropUnreadableKeys(cfg)
 
 	before := d.configSnapshot()
 	if p.Host != "" {

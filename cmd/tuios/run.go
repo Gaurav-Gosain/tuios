@@ -30,6 +30,10 @@ func loadAndApplyConfig() *config.UserConfig {
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
+		// The log line above is wiped by the first frame. LoadWarnings reach
+		// the TUI, so the person learns why none of the file applies.
+		userConfig.LoadWarnings = append(userConfig.LoadWarnings,
+			fmt.Sprintf("tuios cannot load config.toml and uses the default settings: %v", err))
 	}
 
 	// What this terminal can draw, from its locale and TERM. It only decides

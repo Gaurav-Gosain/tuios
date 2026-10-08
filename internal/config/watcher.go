@@ -381,25 +381,21 @@ func validateLayered(lc *LayeredConfig) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.LoadWarnings = append([]string(nil), lc.Warnings...)
+	cfg.LoadWarnings = append(append([]string(nil), lc.Warnings...), cfg.LoadWarnings...)
 	return cfg, nil
 }
 
 // parseAndValidate is the reload path's parse: every section filled from the
-// defaults, then validated. It is the same fill LoadUserConfig does, which is
+// defaults, then the keys tuios cannot read taken out. It is the same fill LoadUserConfig does, which is
 // the point of ParseUserConfig holding the list.
 func parseAndValidate(data []byte) (*UserConfig, error) {
 	cfg, err := ParseUserConfig(data)
 	if err != nil {
 		return nil, err
 	}
-	if v := ValidateConfig(cfg); v.HasErrors() {
-		first := v.Errors[0]
-		if len(v.Errors) == 1 {
-			return nil, fmt.Errorf("[%s] %s: %s", first.Field, first.Key, first.Message)
-		}
-		return nil, fmt.Errorf("[%s] %s: %s (and %d more)",
-			first.Field, first.Key, first.Message, len(v.Errors)-1)
-	}
+	// The same rule as LoadUserConfig: a bad key costs that key. Rejecting
+	// the reload kept the old config, so a file that started fine with the
+	// keys dropped could then never reload.
+	cfg.LoadWarnings = DropUnreadableKeys(cfg)
 	return cfg, nil
 }

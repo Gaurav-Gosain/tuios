@@ -2934,6 +2934,7 @@ on the same eight cores during each run. The "before" build is main at
 The chrome flake did not show on this machine. A hook that always misses its
 deadline (`--timeout 1ns`) gives the CI failure exactly:
 `chrome_looks_test.go:211: inbox never drew`.
+
 ## Frame memory and the connection cap
 
 `TestDaemonBoundsStalledFrames` opens 32 connections. Each one announces a
@@ -2988,3 +2989,14 @@ least one of them:
 - The body allocated whole from the header.
 - No short limit.
 - No cap in `admitConnection`.
+
+## A Mac key in config.toml on Linux (issue #556)
+
+`TestMacKeysInConfigKeepTheRestOfTheFile` starts a daemon session on Linux
+with `leader_key = 'ctrl+s'` and two `opt+` keys in config.toml. It waits for
+"2 config problems", then presses Ctrl+S and waits for the prefix menu.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The load rejects the whole file again | `LoadUserConfig`: return an error when `ValidateConfig` has errors, before the call to `DropUnreadableKeys` | `TestMacKeysInConfigKeepTheRestOfTheFile` (the TUI shows "1 config problem", the load failure, and not "2 config problems") | **caught** |
+| The build before the fix | main at `d2f6277b` | `TestMacKeysInConfigKeepTheRestOfTheFile` (no config problem is shown). With that wait skipped, it fails at the prefix menu wait | **caught** |

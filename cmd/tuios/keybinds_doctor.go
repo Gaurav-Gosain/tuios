@@ -23,14 +23,10 @@ import (
 // program marks the rows that would be live if it were running, without
 // promoting them out of the reference tier.
 func keybindsDoctor(asJSON bool, guest string) error {
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		// A config the validator rejects is still the one to report on: the
-		// keys it cannot read are the finding. Only a file that does not
-		// parse at all falls back to the defaults.
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		userConfig = loadKeybindConfig()
-	}
+	// The file as written, not as LoadUserConfig leaves it: the load drops
+	// the keys tuios cannot read, and those keys are the finding. Only a
+	// file that does not parse at all falls back to the defaults.
+	userConfig := loadKeybindConfig()
 	registry := config.NewKeybindRegistry(userConfig)
 	report := registry.Report(config.PaneFacts{Command: guest})
 

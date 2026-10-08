@@ -90,31 +90,9 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 
 	// Validate all sections
-	validateSection("window_management", cfg.Keybindings.WindowManagement)
-	validateSection("workspaces", cfg.Keybindings.Workspaces)
-	validateSection("layout", cfg.Keybindings.Layout)
-	validateSection("mode_control", cfg.Keybindings.ModeControl)
-	validateSection("system", cfg.Keybindings.System)
-	validateSection("navigation", cfg.Keybindings.Navigation)
-	validateSection("restore_minimized", cfg.Keybindings.RestoreMinimized)
-	validateSection("prefix_mode", cfg.Keybindings.PrefixMode)
-	validateSection("window_prefix", cfg.Keybindings.WindowPrefix)
-	validateSection("minimize_prefix", cfg.Keybindings.MinimizePrefix)
-	validateSection("workspace_prefix", cfg.Keybindings.WorkspacePrefix)
-	validateSection("debug_prefix", cfg.Keybindings.DebugPrefix)
-	validateSection("tape_prefix", cfg.Keybindings.TapePrefix)
-	validateSection("tape_prefix", cfg.Keybindings.TapePrefix)
-	validateSection("layout_prefix", cfg.Keybindings.LayoutPrefix)
-	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
-	validateSection("sidebar", cfg.Keybindings.Sidebar)
-	validateSection("sidebar_files", cfg.Keybindings.SidebarFiles)
-	validateSection("sidebar_agents", cfg.Keybindings.SidebarAgents)
-	validateSection("inbox", cfg.Keybindings.Inbox)
-	validateSection("inbox_peek", cfg.Keybindings.InboxPeek)
-	validateSection("mail", cfg.Keybindings.Mail)
-	validateSection("copy_mode", cfg.Keybindings.CopyMode)
-	validateSection("global", cfg.Keybindings.Global)
-	validateSection("script", cfg.Keybindings.Script)
+	for _, section := range keySections(&cfg.Keybindings) {
+		validateSection(section.name, section.keys)
+	}
 
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)
@@ -645,6 +623,102 @@ func findConflicts(cfg *UserConfig, _ *KeyNormalizer) map[string][]string {
 		conflicts[c.Press] = actions
 	}
 	return conflicts
+}
+
+// keySection is one keybinding table of config.toml, by its name there.
+type keySection struct {
+	name string
+	keys map[string][]string
+}
+
+// keySections are the keybinding tables ValidateConfig checks key by key.
+func keySections(kb *KeybindingsConfig) []keySection {
+	return []keySection{
+		{"window_management", kb.WindowManagement},
+		{"workspaces", kb.Workspaces},
+		{"layout", kb.Layout},
+		{"mode_control", kb.ModeControl},
+		{"system", kb.System},
+		{"navigation", kb.Navigation},
+		{"restore_minimized", kb.RestoreMinimized},
+		{"prefix_mode", kb.PrefixMode},
+		{"window_prefix", kb.WindowPrefix},
+		{"minimize_prefix", kb.MinimizePrefix},
+		{"workspace_prefix", kb.WorkspacePrefix},
+		{"debug_prefix", kb.DebugPrefix},
+		{"tape_prefix", kb.TapePrefix},
+		{"layout_prefix", kb.LayoutPrefix},
+		{"terminal_mode", kb.TerminalMode},
+		{"sidebar", kb.Sidebar},
+		{"sidebar_files", kb.SidebarFiles},
+		{"sidebar_agents", kb.SidebarAgents},
+		{"inbox", kb.Inbox},
+		{"inbox_peek", kb.InboxPeek},
+		{"mail", kb.Mail},
+		{"copy_mode", kb.CopyMode},
+		{"global", kb.Global},
+		{"script", kb.Script},
+	}
+}
+
+// DropUnreadableKeys takes out of cfg every key that ValidateConfig calls an
+// error, and returns one line for each key it took out.
+//
+// Without it one such key cost the whole file: the load failed, tuios ran on
+// the defaults, and the error went to a stderr the first frame wiped. A file
+// shared with a Mac is the usual case, since opt+ keys are valid only there
+// (issue #556). An action left with no key gets its default back, because an
+// empty list in the file means "unbound" and nobody wrote that. A leader that
+// cannot be read goes back to the default leader.
+//
+// The baseline is taken again afterwards, so a later save does not write the
+// dropped keys out of the file. The file stays as the user wrote it.
+func DropUnreadableKeys(cfg *UserConfig) []string {
+	if cfg == nil {
+		return nil
+	}
+	normalizer := NewKeyNormalizer()
+	defaults := DefaultConfig().Keybindings
+	var dropped []string
+	note := func(section, key, msg string) {
+		dropped = append(dropped, fmt.Sprintf("[%s] %s: %s. tuios ignores this key.", section, key, msg))
+	}
+
+	kb := &cfg.Keybindings
+	if kb.LeaderKey != "" {
+		if ok, msg := normalizer.ValidateKey(kb.LeaderKey); !ok {
+			note("keybindings", "leader_key = "+kb.LeaderKey, msg)
+			kb.LeaderKey = defaults.LeaderKey
+		}
+	}
+
+	defaultTables := map[string]map[string][]string{}
+	for _, section := range keySections(&defaults) {
+		defaultTables[section.name] = section.keys
+	}
+	for _, section := range keySections(kb) {
+		for action, keys := range section.keys {
+			kept := keys[:0:0]
+			for _, key := range keys {
+				if ok, msg := normalizer.ValidateKey(key); !ok {
+					note(section.name, key, msg)
+					continue
+				}
+				kept = append(kept, key)
+			}
+			if len(kept) == len(keys) {
+				continue
+			}
+			if len(kept) == 0 {
+				kept = slices.Clone(defaultTables[section.name][action])
+			}
+			section.keys[action] = kept
+		}
+	}
+	if len(dropped) > 0 {
+		cfg.baseline, _ = MarshalUserConfig(cfg)
+	}
+	return dropped
 }
 
 // hasKeybinding checks if an action has at least one keybinding in a specific section

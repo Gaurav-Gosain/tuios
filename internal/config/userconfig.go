@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -1704,15 +1702,9 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, err
 	}
 
-	// Validate configuration
-	validation := ValidateConfig(cfg)
-	if validation.HasErrors() {
-		// Log all errors
-		for _, err := range validation.Errors {
-			fmt.Fprintf(os.Stderr, "Config error in [%s]: %s: %s\n", err.Field, err.Key, err.Message)
-		}
-		return nil, fmt.Errorf("configuration has %s, please fix and restart", plural.Count(len(validation.Errors), "error"))
-	}
+	// A key tuios cannot read on this platform costs that key, not the file.
+	// The lines reach the TUI through ConfigWarnings.
+	cfg.LoadWarnings = append(cfg.LoadWarnings, DropUnreadableKeys(cfg)...)
 
 	// Warnings are deliberately not printed here. Loading happens before the
 	// alternate screen is entered, so anything written to stdout or stderr at
