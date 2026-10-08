@@ -87,8 +87,8 @@ func runSeamCases(t *testing.T, cases []seamCase, newDaemon, newClient func() vt
 				if got, want := client.CursorPendingWrap(), daemon.CursorPendingWrap(); got != want {
 					t.Errorf("pending wrap after the restore: client %v, daemon %v", got, want)
 				}
-				if got, want := client.Width(), daemon.Width(); got != want {
-					t.Errorf("width after the restore: client %d, daemon %d", got, want)
+				if gw, gh, ww, wh := client.Width(), client.Height(), daemon.Width(), daemon.Height(); gw != ww || gh != wh {
+					t.Errorf("size after the restore: client %dx%d, daemon %dx%d", gw, gh, ww, wh)
 				}
 
 				for _, e := range []vt.Terminal{daemon, client} {

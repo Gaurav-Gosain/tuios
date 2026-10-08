@@ -4360,17 +4360,18 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if state.Width > t.Width() || state.Height > t.Height() {
 		t.Resize(max(state.Width, t.Width()), max(state.Height, t.Height()))
 	}
-	// A client wider than the snapshot is brought down to its width. The
-	// snapshot's columns, and the stream that resumes on top of it, were laid
-	// out at that width until the stream says otherwise (MsgPTYResized), so
-	// the client has to wrap where the daemon wraps. Left wider, a pending
-	// wrap at the snapshot's last column was not at the client's margin: the
-	// next character went one column right instead of to the next row, and
-	// every line after it wrapped somewhere else. Extra rows below the
-	// snapshot change nowhere a line wraps, so the height is left to the
-	// layout, as above.
-	if state.Width > 0 && state.Width < t.Width() {
-		t.Resize(state.Width, t.Height())
+	// A client bigger than the snapshot is brought down to its size. The
+	// snapshot's cells, and the stream that resumes on top of it, were laid
+	// out at that size until the stream says otherwise (MsgPTYResized), so the
+	// client has to wrap and scroll where the daemon does. Left wider, a
+	// pending wrap at the snapshot's last column was not at the client's
+	// margin: the next character went one column right instead of to the next
+	// row, and every line after it wrapped somewhere else. Left taller, a line
+	// feed on the snapshot's last row moved the cursor down instead of
+	// scrolling. primePaneFromDaemon sizes the emulator to the snapshot before
+	// it gets here; this covers every other caller.
+	if state.Width > 0 && state.Height > 0 && (state.Width < t.Width() || state.Height < t.Height()) {
+		t.Resize(state.Width, state.Height)
 	}
 
 	// Sending ESC[?1049h instead would clear the buffer it is switching to.

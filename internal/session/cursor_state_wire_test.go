@@ -63,6 +63,9 @@ var cursorStateCases = []seamCase{
 	{"saved-protected", "\x1b[1\"q\x1b7\x1b[0\"q", "\x1b8P\x1b[0\"q\x1b[H\x1b[?2J"},
 	{"saved-under-alt", "\x1b[4;7Hshell\x1b[?1049h\x1b[2;2Hvim", "\x1b[?1049lX"},
 	{"saved-in-alt", "\x1b[?1049h\x1b[3;3H\x1b7\x1b[1;1H", "\x1b8A"},
+	// Each screen saved its own, and 1047 switches without saving, so the
+	// main screen's is the one from before the switch.
+	{"saved-on-each-screen", "\x1b[2;2H\x1b7\x1b[?1047h\x1b[5;5H\x1b7\x1b[1;1H", "\x1b8A\x1b[?1047l\x1b8M"},
 	{"saved-by-scosc", "\x1b[6;2H\x1b[s\x1b[1;1H", "\x1b[uS"},
 }
 
@@ -71,22 +74,38 @@ func TestWireCarriesTheCursorState(t *testing.T) {
 	runSeamCases(t, cursorStateCases, newPure, newPure)
 }
 
-// Gap 5: a client wider than the snapshot. ApplyTerminalState grew a client
-// that was too small and left one that was too big, so the snapshot's last
-// column was not the client's: a wrap pending there went one column right on
-// the client and to the next row on the daemon, and so did every line that
-// reached the edge after it.
+// Gap 5: a client bigger than the snapshot. ApplyTerminalState grew a client
+// that was too small and left one that was too big. Wider, the snapshot's
+// last column was not the client's: a wrap pending there went one column
+// right on the client and to the next row on the daemon, and so did every
+// line that reached the edge after it. Taller, a line feed on the snapshot's
+// last row moved the client's cursor down where the daemon scrolled.
 var widerClientCases = []seamCase{
 	{"pending", "$ " + strings.Repeat("x", fidelityCols-3) + "Z", "NEXT\r\n"},
 	{"pending-wide", strings.Repeat("x", fidelityCols-2) + "日", "NEXT"},
 	{"line-reaches-the-edge", "$ ", strings.Repeat("y", fidelityCols+5) + "\r\n"},
 	{"scrolls", strings.Repeat("line\r\n", fidelityRows), strings.Repeat("z", fidelityCols) + "!"},
+	{"line-feed-on-the-last-row", "top\x1b[8;1Hbottom", "\r\nnext"},
+}
+
+// biggerClients are the client sizes the cases run against.
+var biggerClients = []struct {
+	name       string
+	cols, rows int
+}{
+	{"wider", fidelityCols + 10, fidelityRows},
+	{"taller", fidelityCols, fidelityRows + 4},
+	{"wider-and-taller", fidelityCols + 10, fidelityRows + 4},
 }
 
 func TestWireNarrowsAWiderClient(t *testing.T) {
 	newDaemon := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
-	newClient := func() vt.Terminal { return vt.NewEmulator(fidelityCols+10, fidelityRows) }
-	runSeamCases(t, widerClientCases, newDaemon, newClient)
+	for _, size := range biggerClients {
+		t.Run(size.name, func(t *testing.T) {
+			newClient := func() vt.Terminal { return vt.NewEmulator(size.cols, size.rows) }
+			runSeamCases(t, widerClientCases, newDaemon, newClient)
+		})
+	}
 }
 
 // TestCursorStateFieldsAreOptionalOnTheWire: a peer from before these fields

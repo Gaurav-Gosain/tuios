@@ -1740,6 +1740,10 @@ func (m *OS) RestoreTerminalStates() error {
 
 			if state != nil && w.Terminal != nil {
 				// Restore IsAltScreen flag and emulator state
+				// The snapshot's own bounds, before any of it is written,
+				// as primePaneFromDaemon does. A window built at the layout's
+				// size is wider or taller than the snapshot as often as not.
+				w.ResizeEmulatorToSnapshot(state.Width, state.Height)
 				m.restoreTerminalContent(w, state)
 				// Remembered for the subscribe that SetupPTYOutputHandlers is
 				// about to make, so the stream resumes where this snapshot

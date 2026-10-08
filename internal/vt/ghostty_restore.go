@@ -200,14 +200,29 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		if n, err := t.term.ScrollbackRows(); err == nil {
 			t.mainSbLen = int(n)
 		}
-		// Entering with 1049 saves the main screen's cursor, so the main
-		// screen's saved cursor is put into the live one first and the
-		// switch saves it. The scroll region is not set yet, so origin mode
+		// The switch uses the mode the guest used. Leaving answers to the
+		// mode: a guest that entered with 1047 leaves with 1047, and the
+		// library keeps a screen entered with 1049 marked as the alternate
+		// one after 1047 is reset.
+		altMode := 1049
+		switch {
+		case r.modes[1049]:
+		case r.modes[1047]:
+			altMode = 1047
+		case r.modes[47]:
+			altMode = 47
+		}
+		// The main screen's saved cursor is put into the live one first and
+		// saved: entering with 1049 saves it, and the other two modes are
+		// sent a DECSC. The scroll region is not set yet, so origin mode
 		// addresses the whole screen.
 		if sc := r.saved[0]; sc != nil {
 			appendSavedCursor(&seq, *sc, r.grids[0], mainProt, 0, 0)
+			if altMode != 1049 {
+				seq.WriteString("\x1b7")
+			}
 		}
-		seq.WriteString("\x1b[?1049h\x1b[?6l\x1b[0m\x1b[0\"q\x1b[2J\x1b[H")
+		fmt.Fprintf(&seq, "\x1b[?%dh\x1b[?6l\x1b[0m\x1b[0\"q\x1b[2J\x1b[H", altMode)
 		appendGridPaint(&seq, r.grids[1], protRows(r.prot[1], t.width, t.height), t.width, t.height, r.screenWraps)
 	}
 	active := 0
