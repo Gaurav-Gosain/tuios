@@ -111,9 +111,9 @@ jobs:
     runs-on: windows-latest
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
-    # object for plugin processes, and the stop event kill-server sets. The
-    # whole suite does not run here. The packages under internal/testutil's
-    # isolation treat USERPROFILE as a home outside the test tree and fail.
+    # object for plugin processes, the stop event kill-server sets, and the
+    # herdr command line the link runs. The whole suite has never run on
+    # Windows and does not run here.
     timeout-minutes: 15
 
     steps:
@@ -127,7 +127,7 @@ jobs:
             .github/workflows/go-test.yml
 
       - name: Test
-        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/
+        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
 
   race:
     name: go test -race ./...
