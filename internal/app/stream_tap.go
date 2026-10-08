@@ -22,6 +22,21 @@ type StreamTap interface {
 	Resized(ptyID string, width, height int)
 }
 
+// StreamResumer is a StreamTap whose renderer may still hold a pane's
+// emulator from an earlier connection, fed up to some stream position. A
+// bridge that respawns behind a renderer that kept its emulators is the case:
+// the renderer needs only the bytes it missed, not a new snapshot that throws
+// its history away.
+//
+// ResumeFrom is asked when a pane restored from a snapshot ending at snapSeq
+// is about to be subscribed. It returns the position the renderer holds, when
+// that is before snapSeq and the stream is to start there, or 0 to start at
+// snapSeq as usual. The model's own emulator still starts at snapSeq: the
+// bytes between the two go to the tap only.
+type StreamResumer interface {
+	ResumeFrom(ptyID string, snapSeq int64) int64
+}
+
 // SetStreamTap installs t. Set it before the session is attached, so the
 // panes restored on attach are seen too.
 func (m *OS) SetStreamTap(t StreamTap) { m.streamTap = t }

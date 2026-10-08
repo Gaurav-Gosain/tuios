@@ -38,13 +38,25 @@ func (m *model) switchSession(c Command) error {
 	if name == m.os.SessionName {
 		return nil
 	}
-	return m.os.SwitchToSession(name)
+	// The renderer may hold the new session's emulators from the last time
+	// it showed it. The snapshots of the switch then catch them up.
+	m.tap.setResume(c.Resume)
+	if err := m.os.SwitchToSession(name); err != nil {
+		m.tap.setResume(nil)
+		return err
+	}
+	info := Attached{Host: m.host, SessionID: m.sessionID(name)}
+	if m.host == "" {
+		info.DaemonPID = session.GetDaemonPID()
+	}
+	m.out.JSON(Event{Type: "attached", Message: name, Attached: &info})
+	return nil
 }
 
 // sessionExists says whether the daemon holds a session of that name. It
 // asks the daemon, since the client's list of sessions can be old.
 func (m *model) sessionExists(name string) bool {
-	c, err := session.DialVerbClientAs(m.version)
+	c, err := m.dialVerb()
 	if err != nil {
 		return false
 	}

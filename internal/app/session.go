@@ -2060,9 +2060,26 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	// rolled catch-up must replay the tail on top of the snapshot, not clear
 	// it (issue #123). The only path that subscribes with fromSeq zero is the
 	// no-snapshot fallback, so fromSeq > 0 is exactly "a snapshot was applied".
-	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, fromSeq > 0, func(data []byte) {
+	// A tap whose renderer kept the pane's emulator asks for the stream from
+	// where that emulator stopped. The bytes up to fromSeq are already in this
+	// model's emulator, by the snapshot, so they go to the tap only.
+	from, skip := fromSeq, int64(0)
+	if r, ok := tap.(StreamResumer); ok && fromSeq > 0 {
+		if at := r.ResumeFrom(ptyID, fromSeq); at > 0 && at < fromSeq {
+			from, skip = at, fromSeq-at
+		}
+	}
+	err := m.DaemonClient.SubscribePTY(ptyID, from, from > 0, func(data []byte) {
 		if tap != nil {
 			tap.Output(ptyID, data)
+		}
+		if skip > 0 {
+			n := min(skip, int64(len(data)))
+			skip -= n
+			data = data[n:]
+			if len(data) == 0 {
+				return
+			}
 		}
 		window.WriteOutputAsync(data)
 	})
