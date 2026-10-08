@@ -989,23 +989,31 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if hook := statePushSnapshotTaken.Load(); hook != nil {
 		(*hook)()
 	}
-	var toSender, toPeers func(*SessionState)
-	if reconciled {
-		toSender = func(state *SessionState) {
+	// The messages are encoded here, outside the session's pushMu, which is
+	// then held only to queue them.
+	prepare := func(state *SessionState, withPeers bool) pushSends {
+		var sends pushSends
+		if reconciled {
 			if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
 				State:       state,
 				TriggerType: "reconcile",
 			}); err == nil {
-				d.queueBroadcast(cs, msg, "reconcile reply")
+				sends.toSender = func() { d.queueBroadcast(cs, msg, "reconcile reply") }
 			}
 		}
-	}
-	if clientCount > 1 {
-		toPeers = func(state *SessionState) {
-			d.broadcastStateSync(cs.sessionID, state, "update", cs.clientID)
+		if withPeers && clientCount > 1 {
+			if msg, err := NewMessage(MsgStateSync, &StateSyncPayload{
+				State:       state,
+				TriggerType: "update",
+				SourceID:    cs.clientID,
+			}); err == nil {
+				sends.fp = StateFingerprint(state)
+				sends.toPeers = func() { d.broadcastEncodedToSession(cs.sessionID, msg, cs.clientID) }
+			}
 		}
+		return sends
 	}
-	session.deliverPush(snap, pushSeq, toSender, toPeers)
+	session.deliverPush(snap, pushSeq, prepare)
 	return nil
 }
 

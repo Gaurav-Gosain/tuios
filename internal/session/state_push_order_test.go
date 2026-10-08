@@ -325,3 +325,120 @@ func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
 		t.Fatalf("A ended on workspace %d before the marker, the session is on %d (states in order: %v)", last, want, seen)
 	}
 }
+
+// TestReconcileReplySurvivesASuppressedForward: a client whose push was
+// reconciled drops every state built before its push (see PredatesOwnPush),
+// so the reply is the state it waits for. A peer push that changes nothing
+// lands between the reply's snapshot and its delivery. Its forward is
+// suppressed, because the peers already hold that state, but it still counts
+// as delivered. The reply must still reach the client that pushed.
+//
+// The reply was dropped as no newer than what was delivered, and no state
+// that counts the push reached that client until the next change.
+//
+// Negative control: with deliverPush dropping a snapshot no newer than what
+// was delivered whether or not it has a reply to send, A reads no state that
+// counts its push.
+func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+
+	a, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	b, _ := dialTreeOpsClient(t, socketPath, "order", true)
+	for _, cl := range []*boundsClient{a, b} {
+		pingClient(t, cl)
+	}
+	sess := d.manager.GetSession("order")
+	if sess == nil {
+		t.Fatal("the session is not there")
+	}
+	stale := sess.GetState()
+
+	// A daemon-side change makes a push built from stale reconciled.
+	if err := sess.mutateState(func(st *SessionState) error {
+		opts := maps.Clone(st.Options)
+		if opts == nil {
+			opts = map[string]string{}
+		}
+		opts["order-daemon-change"] = "1"
+		st.Options = opts
+		return nil
+	}); err != nil {
+		t.Fatalf("daemon-side change: %v", err)
+	}
+	// B moves the session, and its forward records what the peers hold.
+	const ws = 3
+	pushWorkspace(t, b, sess, ws)
+	pingClient(t, b)
+	pingClient(t, a)
+
+	// Inside A's push, after its snapshot, B pushes the same state again.
+	var armed atomic.Bool
+	inside := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	releaseHook := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(releaseHook)
+	hook := func() {
+		if !armed.CompareAndSwap(true, false) {
+			return
+		}
+		close(inside)
+		select {
+		case <-release:
+		case <-time.After(10 * time.Second * testDeadlineScale):
+		}
+	}
+	statePushSnapshotTaken.Store(&hook)
+	t.Cleanup(func() { statePushSnapshotTaken.Store(nil) })
+	armed.Store(true)
+
+	// A's push carries the session's content, built before the daemon-side
+	// change, so it is reconciled to the same state.
+	push := sess.GetState()
+	push.BaseVersion = stale.Version
+	push.PushOrigin, push.PushSeq, push.PushSeen, push.SnapshotSeq = "a", 1, nil, 0
+	a.send(t, MsgUpdateState, push)
+	select {
+	case <-inside:
+	case <-time.After(10 * time.Second * testDeadlineScale):
+		t.Fatal("A's push reached no delivery, so B's push cannot land inside it")
+	}
+	pushWorkspace(t, b, sess, ws)
+	pingClient(t, b)
+	releaseHook()
+
+	// Every state A was sent for its push is queued before the pong is
+	// written, and the marker after it. The pong is written straight to the
+	// socket, so a state can arrive on either side of it.
+	seen := 0
+	a.send(t, MsgPing, struct{}{})
+	ponged, marked := false, false
+	deadline := time.Now().Add(10 * time.Second * testDeadlineScale)
+	for !marked {
+		_ = a.conn.SetReadDeadline(deadline)
+		msg, err := ReadMessage(a.conn)
+		if err != nil {
+			t.Fatalf("reading A: %v", err)
+		}
+		switch msg.Type {
+		case MsgPong:
+			ponged = true
+			publishMarker(t, sess)
+		case MsgStateSync:
+			var sync StateSyncPayload
+			if err := msg.ParsePayload(&sync); err != nil || sync.State == nil {
+				t.Fatalf("parse state sync: %v", err)
+			}
+			if ponged && sync.State.Options["order-marker"] == "1" {
+				marked = true
+				continue
+			}
+			if sync.State.PushSeen["a"] >= 1 {
+				seen++
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("A's push was reconciled, and A read no state that counts it before the next change")
+	}
+}

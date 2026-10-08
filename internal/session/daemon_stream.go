@@ -352,7 +352,13 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 		debugLog("[DEBUG] broadcastToSession: encode: %v", err)
 		return
 	}
+	d.broadcastEncodedToSession(sessionID, msg, excludeClientID)
+}
 
+// broadcastEncodedToSession is broadcastToSession for a message already
+// encoded, so a caller can encode it before it takes a lock.
+func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, excludeClientID string) {
+	msgType := msg.Type
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
