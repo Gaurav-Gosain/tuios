@@ -29,7 +29,6 @@ package tuie2e
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -74,7 +73,6 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 		tuitest.WithSize(inW, inH),
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv("PS1=$ ", "ENV=", "TERM=xterm-256color", "COLORTERM=truecolor"),
-		tuitest.WithLog(io.Discard),
 	)
 	time.Sleep(500 * time.Millisecond)
 
