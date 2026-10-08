@@ -638,6 +638,23 @@ The general lesson is that end-to-end screen assertions are the right tool for
 bugs whose symptom is a wrong screen that persists, and the wrong tool for bugs
 whose symptom is a narrow timing window or a memory race.
 
+## State deliveries ordered by change count
+
+A client push keeps the state Version the same. The attach repair compared
+Version, and the forward of a push to its peers ran outside `pushMu` with no
+check. A peer push forwarded inside a repair let the repair's older snapshot
+follow it, and of two pushes at once the older forward could reach the peers
+last. The fix counts every change in `noteStateChangeLocked` and orders every
+delivery by that count under `pushMu` (`Session.forwardPush`). The tests are
+unit tests in `internal/session/state_push_order_test.go`. Each lands the
+second change inside the first through a hook, so each fails on every run.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A repair sent an older state behind a peer push, and the client ended on the workspace it had left | whole change | `session.go`, `daemon_handlers.go` and `state_wait.go` as on `fix/tree-ops-gate-flake` (#561), with only the push hook added | `TestAttachRepairDoesNotFollowAPeerPush` ("B read workspace 1 after workspace 7 (states in order: [7 1 7])") | **caught**, 50 of 50 runs; 0 of 50 with the fix |
+| Of two pushes at once, the older forward reached the peers last | whole change | as above | `TestConcurrentPushesForwardInOrder` ("C read workspace 2 after workspace 3 (states in order: [3 2 3])") | **caught**, 50 of 50 runs; 0 of 50 with the fix |
+| The forward is not checked against what was delivered | n/a, injected, cuts the check | `forwardPush` skips the change count check and always sends to the peers | both tests above, with the same messages | **caught**, 50 of 50 runs each |
+
 ## Why the two-client chrome test catches nothing
 
 Since the rail became session state, a current second client shows the rail
