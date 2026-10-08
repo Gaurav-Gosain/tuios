@@ -3218,3 +3218,45 @@ A bridge started inside a pane gets no attach nonce from the daemon, so its
 proxy refuses a person verb before it sends it. No control cuts that refusal:
 it is the daemon's, and the daemon's own tests cover it. The test checks only
 that the result is `not_human` and that the agent got no key.
+
+## The GUI bridge: palette, sessions, settings, stacks and the rest (wave 3b)
+
+`gui_bridge_wave3b_test.go` runs a real `tuios gui-bridge` against a real
+daemon. It checks the palette and launcher events, the in-place session
+switch and the restore of a saved session, the options and the theme kept
+in the config file, the typing group, stacks (also on a terminal client's
+screen), the scrolling strip, picture in picture, the scratch box, saved
+layouts and the window kind (also on a terminal client's screen, and across
+a restart of the daemon).
+
+On 2026-10-08 each control below was built from `72664c2e` with one cut, and
+the named test was run against it. Each cut is the wiring: a `case` in the
+dispatch, a call site, or a field in the export. The unbroken binary passed
+all eleven tests, and every other `TestGUIBridge` test, on the same day.
+
+| Wiring cut | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The `palette` command | rename its `case` in `model.handle` in `internal/guibridge/bridge.go` | `TestGUIBridgePaletteRows` (no result for the palette command within 10 s) | **caught** |
+| The `palette` event | drop the `m.sendPalette()` call from `model.Update` | `TestGUIBridgePaletteRows` (never sends the palette event) | **caught** |
+| The in-place switch | `switchSession` in `internal/guibridge/session.go` returns before `m.os.SwitchToSession` | `TestGUIBridgeSwitchSessionInPlace` (never shows session other) | **caught** |
+| The restore before a switch | drop the `resurrect` call from `switchSession` | `TestGUIBridgeRestoreSavedSession` (session keep comes back with no panes) | **caught** |
+| Saved sessions in the fleet | drop `Saved: savedSessions()` from `readFleet` in `internal/guibridge/fleet.go` | `TestGUIBridgeRestoreSavedSession` (never lists keep) | **caught** |
+| The `option` command's write | answer the `option` case without calling `writeOption` | `TestGUIBridgeOptionsAndTheme` (gap 0 in the options event and in the file, the unknown path accepted) | **caught** |
+| The theme's persist | drop the `writeOption("appearance.theme", ...)` call from the `theme` case | `TestGUIBridgeOptionsAndTheme` (the config does not keep the theme) | **caught** |
+| The `launcher` event | drop the `sendLauncher` call after a scan in `model.Update` | `TestGUIBridgeLauncher` (never sends the launcher event) | **caught** |
+| The `launch` command | rename its `case` in `model.handle` | `TestGUIBridgeLauncher` (no result within 10 s) | **caught** |
+| The `group` command | rename its `case` in `model.handle` | `TestGUIBridgeGroup` (no result within 10 s) | **caught** |
+| The group in the state | drop `st.Multifocus = ids` from `export` | `TestGUIBridgeGroup` (never shows panes A and C in the group) | **caught** |
+| The `stack` op | rename its `case` in `runLayout` in `internal/guibridge/layout.go` | `TestGUIBridgeStack` ("layout op \"stack\" is not known") | **caught** |
+| The rows a stack's open pane gives up | the `stackRows` adjustment in `ApplyBSPLayout` in `internal/app/tiling_bsp.go` never applies | `TestGUIBridgeStack` (bravo keeps the whole leaf; the terminal client shows no title row) | **caught** |
+| The terminal client's title rows | drop `layers = append(layers, m.renderStackRows()...)` from `internal/app/render.go` | `TestGUIBridgeStack` (the terminal client shows no title row) | **caught** |
+| The strip's own coordinates | `ScrollStrip` in `internal/app/gui_export.go` leaves out `sl.ViewportX` | `TestGUIBridgeScrollStrip` (the first column starts at -147) | **caught** |
+| The pinned pane in the state | drop `st.PiP = ...` from `export` | `TestGUIBridgePiPAndScratch` (never shows pane A pinned) | **caught** |
+| The workspace a scratch box shows over | drop `st.ScratchOver = o.ScratchOver()` from `export` | `TestGUIBridgePiPAndScratch` (over workspace 0) | **caught** |
+| The `layouts` command | rename its `case` in `model.handle` | `TestGUIBridgeSavedLayouts` (never lists the layout) | **caught** |
+| The window kind from `new-window` | drop `Kind: p.Kind` from `verbNewWindow` in `internal/session/verb_handlers.go` | `TestGUIBridgeWindowKind` (the window is a terminal) | **caught** |
+| The placeholder of a view window | drop the `PlaceholderCommand` default in `AddDaemonWindowWith` | `TestGUIBridgeWindowKind` (the terminal client shows no placeholder line) | **caught** |
+| The kind across a restart | drop the `sess.markRestoredViews(views)` call in `internal/session/daemon_resurrect.go` | `TestGUIBridgeWindowKind` (after a restart the window is a terminal) | **caught** |
+
+The run log is kept outside the repository:
+`~/.cache/agent-tmp/proof/v2/wave3b/e2e/negative-controls.txt`.
