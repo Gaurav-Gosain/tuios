@@ -1426,6 +1426,10 @@ type OS struct {
 	// prompt, or the delete confirmation. Zero when none is up, which is every
 	// frame nobody has pressed a file action key on. See sidebar_file_ops.go.
 	filePrompt filePromptState
+	// worktreePrompt is the worktree dialog: a branch name asked over a
+	// repository, whose enter hands the daemon's new-worktree verb a command.
+	// Zero when it is closed, the way filePrompt is. See worktree_prompt.go.
+	worktreePrompt worktreePromptState
 	// fileClip is what a copy or a cut in the files section captured, waiting
 	// for a paste. It holds paths and no bytes, so it costs nothing to carry.
 	fileClip fileClipboard
@@ -1715,6 +1719,9 @@ type OS struct {
 	// menuSession carries the session a rail row's menu was opened on, the same
 	// way menuWorkspace carries a pill's. See TakeMenuSession.
 	menuSession string
+	// menuRepo carries the repository a rail group header's menu was opened
+	// on, the same way menuSession carries a session row's. See TakeMenuRepo.
+	menuRepo string
 	// menuFile carries the listing row a files-section menu was opened on, the
 	// same way menuSession carries a session row's. See fileMenuTarget.
 	menuFile fileMenuTarget

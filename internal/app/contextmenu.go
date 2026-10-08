@@ -38,6 +38,9 @@ const (
 	// CtxTargetMachine is a machine's group header on the rail. What the menu
 	// is about rides in ContextMenu.SessionID, which holds the host name.
 	CtxTargetMachine
+	// CtxTargetRepo is a repository's group header on the rail. What the menu
+	// is about rides in ContextMenu.Repo, which holds the repository's name.
+	CtxTargetRepo
 	// CtxTargetFileRow is the rail's files section: one row of the listing, or
 	// the blank space the section drew around it. Both are the same target
 	// because the two rows that need no file at all (make one, paste one) are
@@ -123,6 +126,11 @@ type ContextMenu struct {
 	// same way Workspace does, so a row acting on a session acts on the one the
 	// user pointed at rather than on the attached one.
 	SessionID string
+	// Repo is the repository whose group header the menu was opened on, or "".
+	// It carries the same way SessionID does, and is its own field because a
+	// repository is not a session: a row acting on one cannot be handed the
+	// other by mistake.
+	Repo string
 	// File is the listing row the menu was opened on, for a files-section menu.
 	// It carries exactly as far as Workspace and SessionID do, and it is read
 	// only inside this package: the actions it steers (fileActionTarget,
@@ -235,8 +243,14 @@ func (m *OS) ContextMenuSelectedAction() string {
 	if cm == nil || !cm.selectable(cm.Selected) {
 		return ""
 	}
-	m.menuWorkspace, m.menuSession, m.menuFile = cm.Workspace, cm.SessionID, cm.File
+	m.carryMenuTarget(cm)
 	return cm.Items[cm.Selected].Action
+}
+
+// carryMenuTarget hands what the menu was opened on to the dispatch of the row
+// being taken. See TakeMenuWorkspace.
+func (m *OS) carryMenuTarget(cm *ContextMenu) {
+	m.menuWorkspace, m.menuSession, m.menuRepo, m.menuFile = cm.Workspace, cm.SessionID, cm.Repo, cm.File
 }
 
 // TakeMenuWorkspace returns the workspace whose pill menu produced the action
@@ -250,10 +264,15 @@ func (m *OS) TakeMenuWorkspace() int { return m.menuWorkspace }
 // same action reached by key falls back to the attached session.
 func (m *OS) TakeMenuSession() string { return m.menuSession }
 
+// TakeMenuRepo returns the repository whose group header menu produced the
+// action being dispatched, or "". It carries exactly as far as
+// TakeMenuSession does.
+func (m *OS) TakeMenuRepo() string { return m.menuRepo }
+
 // ClearMenuTarget ends the carry. The input layer calls it after dispatching a
 // menu row.
 func (m *OS) ClearMenuTarget() {
-	m.menuWorkspace, m.menuSession, m.menuFile = 0, "", fileMenuTarget{}
+	m.menuWorkspace, m.menuSession, m.menuRepo, m.menuFile = 0, "", "", fileMenuTarget{}
 }
 
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed
@@ -291,7 +310,7 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	}
 	cm.Selected = idx
 	action = cm.Items[idx].Action
-	m.menuWorkspace, m.menuSession, m.menuFile = cm.Workspace, cm.SessionID, cm.File
+	m.carryMenuTarget(cm)
 	m.CloseContextMenu()
 	return action, true
 }

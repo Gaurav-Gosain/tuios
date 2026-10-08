@@ -64,9 +64,25 @@ func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 	return labelVerbCmd(m.verbDialer(), "Accent", verb, params)
 }
 
-// renameListingRefreshedMsg says the session listing asked for after a rename
-// has landed, so the open switcher can be rebuilt from it.
-type renameListingRefreshedMsg struct{}
+// listingRefreshedMsg says a session-listing refresh this client asked for has
+// landed, so the open switcher can be rebuilt from it. A rename and a new
+// worktree both ask for one, for the same reason: the row the user just acted
+// on is not in the cached listing yet.
+type listingRefreshedMsg struct{}
+
+// refreshListingCmd refreshes the cached session listing off the Update
+// goroutine and reports back with a listingRefreshedMsg, or is nil without a
+// daemon.
+func (m *OS) refreshListingCmd() tea.Cmd {
+	client := m.DaemonClient
+	if client == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		client.TryRefreshSessionList()
+		return listingRefreshedMsg{}
+	}
+}
 
 // refreshSwitcherItems rebuilds whichever switcher is open, so a rename (this
 // client's or another client's) shows up in the list it was made from.

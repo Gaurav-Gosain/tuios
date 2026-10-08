@@ -1496,6 +1496,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case worktreeCreatedMsg:
+		// A worktree create that finished on its own goroutine, possibly after a
+		// clone's worth of minutes. The handler attaches to the session it made,
+		// or says what failed; both touch the model, which is why they run here.
+		return m, m.handleWorktreeCreated(msg)
+
 	case tapeDebounceMsg:
 		// The focused cwd held still long enough; evaluate it for a project tape.
 		m.handleTapeDebounce(msg.gen)
@@ -2094,15 +2100,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the switcher is rebuilt again once it lands: rebuilt only now, it
 		// kept a row for the old name beside the new one.
 		m.refreshSwitcherItems()
-		if client := m.DaemonClient; client != nil {
-			return m, func() tea.Msg {
-				client.TryRefreshSessionList()
-				return renameListingRefreshedMsg{}
-			}
-		}
-		return m, nil
+		return m, m.refreshListingCmd()
 
-	case renameListingRefreshedMsg:
+	case listingRefreshedMsg:
 		m.refreshSwitcherItems()
 		return m, nil
 

@@ -4866,3 +4866,24 @@ before it types, and fails when the dock names the spotlight.
 Not covered here: the divider clip in `clipScratchSplits`. The suite pins
 the looks from before v0.8.0, so the panes keep their own borders and no
 divider is drawn.
+## The rail's worktree dialog
+
+`TestRailRightClickMakesAWorktree` opens the dialog from a repository's group
+header and makes a worktree session by a typed name.
+`TestRailWorktreeRefusals` opens it from a worktree session's row and drives
+the three ends that make nothing: an empty branch, a branch the daemon
+refuses, and esc. The daemon's `ls` and the worktree folder are the authority
+in both. With `TUIOS_E2E_FRAMES` set they write `rail-worktree-dialog`,
+`rail-worktree-created`, `rail-worktree-empty-branch` and
+`rail-worktree-daemon-refusal`.
+
+The controls were run on 2026-10-12 on branch `feat/ui-create-worktree`. Each
+cut is to the wiring, and the logs are `/tmp/wt-ctl-<name>.log`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `repo-case`: `openSidebarContextMenu` always sends a repo header to the rail settings | `TestRailRightClickMakesAWorktree` ("the repository row's menu offered no worktree") | **caught** |
+| `session-item`: the "New worktree..." row cut from `sessionMenu` | `TestRailWorktreeRefusals` ("the session row's menu offered no worktree") | **caught** |
+| `repo-carry`: `handleRepoNewWorktree` reads `TakeMenuSession` instead of `TakeMenuRepo` | `TestRailRightClickMakesAWorktree` ("the menu row did not open the dialog") | **caught** |
+| `wrap-create`: the verb's error is returned without `failed to create the worktree` | `TestRailWorktreeRefusals` ("the daemon's refusal did not say which step failed") | **caught** |
+| `route-key`: the `WorktreePromptOpen` route cut from `routeKey` | both ("did not derive the session name", "did not refuse an empty branch") | **caught** |

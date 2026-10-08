@@ -242,6 +242,13 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
 
+	// The worktree dialog's two entry points. A session row's menu names a
+	// session and a repository header's menu names a repository, so they are
+	// two actions with two carries rather than one action guessing which.
+	// Both open the same dialog; see worktree_prompt.go for the verb behind it.
+	d.Register("session_new_worktree", handleSessionNewWorktree)
+	d.Register("repo_new_worktree", handleRepoNewWorktree)
+
 	// The rail's file actions. They are dispatched by key from HandleSidebarKey,
 	// which reads its own scope, and they are registered here because the files
 	// context menu hands its rows to this dispatcher like every other menu. Both
@@ -1164,6 +1171,20 @@ func handleRenameSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // to the next one, in that order (see OS.KillSessionGoNext for why).
 func handleKillSessionNext(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.KillSessionGoNext(o.NextSessionName())
+}
+
+// handleSessionNewWorktree opens the worktree dialog on the session whose row
+// the menu was opened on, the same carry the rename and accent rows use.
+func handleSessionNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginWorktreePromptForSession(o.TakeMenuSession())
+	return o, nil
+}
+
+// handleRepoNewWorktree opens the worktree dialog on the repository whose
+// group header the menu was opened on.
+func handleRepoNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginWorktreePromptForRepo(o.TakeMenuRepo())
+	return o, nil
 }
 
 // handleKillSessionQuit kills the current session and quits this client, the

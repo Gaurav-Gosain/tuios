@@ -91,18 +91,23 @@ func (m *OS) RenameAppend(text string) {
 	}
 }
 
-// RenameBackspace drops the last rune of the buffer. It counts in runes because
-// a name may hold multi-byte text, and cutting one byte off é leaves the buffer
-// holding a broken sequence that renders as a replacement glyph.
+// RenameBackspace drops the last rune of the buffer.
 func (m *OS) RenameBackspace() {
 	if !m.Renaming() || m.RenameBuffer == "" {
 		return
 	}
-	_, size := utf8.DecodeLastRuneInString(m.RenameBuffer)
-	m.RenameBuffer = m.RenameBuffer[:len(m.RenameBuffer)-size]
+	m.RenameBuffer = dropLastRune(m.RenameBuffer)
 	if t := m.RenameTarget(); t != nil {
 		t.InvalidateCache()
 	}
+}
+
+// dropLastRune removes the last rune of s. It counts in runes because a name
+// may hold multi-byte text, and cutting one byte off é leaves the string
+// holding a broken sequence that renders as a replacement glyph.
+func dropLastRune(s string) string {
+	_, size := utf8.DecodeLastRuneInString(s)
+	return s[:len(s)-size]
 }
 
 // combiningOnly reports whether s is nothing but marks that attach to a

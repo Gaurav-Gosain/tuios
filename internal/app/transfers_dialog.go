@@ -774,14 +774,14 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 					overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(wrapped), width, bg))
 				continue
 			}
-			body = append(body, fileDialogLine(wrapped, width, ink, bg))
+			body = append(body, dialogBodyLine(wrapped, width, ink, bg))
 		}
 	}
 
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "close"}}
 	var hits []overlayRowHit
 	if d.kind == copyDialogSendDir {
-		field := renameFieldText(printableRunes(d.input), max(width-4, 1))
+		field := fieldTail(printableRunes(d.input), max(width-4, 1))
 		body = append(body, overlay.Fill(
 			overlay.Style(bg).Render(" ")+
 				overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
@@ -791,7 +791,7 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 		if d.err != "" {
 			note, ink = d.err, pal.Warn
 		}
-		body = append(body, fileDialogLine(note, width, ink, bg))
+		body = append(body, dialogBodyLine(note, width, ink, bg))
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "back"}}
 	} else {
 		body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))

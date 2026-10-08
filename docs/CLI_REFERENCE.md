@@ -651,6 +651,14 @@ A git worktree as a session. `worktree new` makes a worktree of the repository
 you are in and a session whose directory is that worktree. The rail groups these
 sessions under the repository and labels each by its branch.
 
+The same verb is reachable from the rail: right-click a repository's group
+header, or a worktree session's row, and take "New worktree...". The dialog
+asks for the branch, and for the session name, which it derives from the
+repository and branch when left empty. The folder is not asked for: the daemon
+puts the worktree under its worktree directory (`TUIOS_WORKTREE_DIR` in the
+daemon's environment, else the data home), and the notification that reports
+the create names where it went.
+
 **Usage:**
 ```bash
 tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--host <host> [--clone]] [--detach]

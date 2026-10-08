@@ -429,6 +429,8 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"kill_session_next":     "context menu row",
 	"kill_session_quit":     "context menu row",
 	"paste_clipboard":       "context menu row",
+	"repo_new_worktree":     "rail repo header menu row",
+	"session_new_worktree":  "rail session row menu row",
 	"rename_session":        "context menu row",
 	"screenshot_window":     "context menu row",
 	"set_accent":            "context menu row",

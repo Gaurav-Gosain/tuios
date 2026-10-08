@@ -1,7 +1,6 @@
 package app
 
 import (
-	"image/color"
 	"path/filepath"
 	"strings"
 
@@ -68,7 +67,7 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 	width := overlay.DialogFitWidth(fileDialogWidth, m.GetRenderWidth())
 
 	var body []string
-	body = append(body, fileDialogLine(m.filePromptContext(width), width, pal.FgDim, bg))
+	body = append(body, dialogBodyLine(m.filePromptContext(width), width, pal.FgDim, bg))
 	// A rename is the second thing here that changes a file that already
 	// exists, and the folder it acts in comes from the pane rather than from
 	// the user. So it names the whole path, the way the delete confirmation
@@ -76,12 +75,12 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 	// every folder on the disk. A create says its folder on the line above
 	// already, because that is the whole of what it has to say.
 	if m.filePrompt.Kind == filePromptRename {
-		body = append(body, fileDialogLine(m.filePromptTargetPath(width), width, pal.FgMute, bg))
+		body = append(body, dialogBodyLine(m.filePromptTargetPath(width), width, pal.FgMute, bg))
 	}
 
 	// The field windows to its tail, so a name longer than the dialog scrolls
 	// left and what you are typing stays under the cursor.
-	field := renameFieldText(printableRunes(m.filePrompt.Input), max(width-4, 1))
+	field := fieldTail(printableRunes(m.filePrompt.Input), max(width-4, 1))
 	body = append(body, overlay.Fill(
 		overlay.Style(bg).Render(" ")+
 			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
@@ -95,7 +94,7 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 	if m.filePrompt.Err != "" {
 		note, ink = m.filePrompt.Err, pal.Warn
 	}
-	body = append(body, fileDialogLine(note, width, ink, bg))
+	body = append(body, dialogBodyLine(note, width, ink, bg))
 
 	content, geo := overlay.Dialog{
 		Title: m.filePromptTitle(),
@@ -169,8 +168,8 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 		overlay.Fill(overlay.Style(bg).Render(" ")+
 			overlay.Style(bg).Foreground(pal.Fg).Bold(true).
 				Render(overlay.Truncate(m.fileConfirmQuestion(), max(width-1, 1))), width, bg),
-		fileDialogLine(path, width, pal.FgMute, bg),
-		fileDialogLine(m.fileConfirmOutcome(), width, outcomeInk, bg),
+		dialogBodyLine(path, width, pal.FgMute, bg),
+		dialogBodyLine(m.fileConfirmOutcome(), width, outcomeInk, bg),
 		overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg),
 		m.fileConfirmRow(fileConfirmRowCancel, width, pal),
 		m.fileConfirmRow(fileConfirmRowGo, width, pal),
@@ -230,10 +229,4 @@ func (m *OS) fileConfirmRow(idx, width int, pal overlay.Palette) string {
 		overlay.Style(bg).Render(" ") +
 		overlay.Style(bg).Foreground(ink).Bold(cursor).Render(label)
 	return overlay.Fill(row, width, bg)
-}
-
-// fileDialogLine is one indented, truncated, canvas-filled body line.
-func fileDialogLine(text string, width int, ink, bg color.Color) string {
-	return overlay.Fill(overlay.Style(bg).Render(" ")+
-		overlay.Style(bg).Foreground(ink).Render(overlay.Truncate(text, max(width-1, 1))), width, bg)
 }

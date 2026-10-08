@@ -399,8 +399,35 @@ func (m *OS) sessionMenu(sessionID string) (string, []ContextMenuItem) {
 		// "this session's workspaces" and opened the attached session's,
 		// which is a row naming one session and acting on another.
 		m.item(glyphSwitch, "Switch workspace...", "prefix_workspace_switcher", !attached),
+		// A worktree of the session's repository. The dialog and the verb behind
+		// it need the repository's main checkout, which the rail only knows for
+		// a session that is itself a worktree, so that is the only row it is
+		// live on — dimmed elsewhere, saying the action exists, the way the
+		// pane menu dims a paste it cannot reach.
+		m.item(glyphNew, "New worktree...", "session_new_worktree", m.sessionWorktreeInfo(sessionID) == nil),
 		separator(),
 	}, kill...)
+}
+
+// repoHeaderMenu is the menu for a repository's group header on the rail: the
+// row that names the repository, which is exactly where a person looks for
+// "make another worktree of this one".
+//
+// The header's left-click folds and unfolds the group, which the rail draws a
+// mark for and every other group header does from its own menu; this menu's
+// one row is the one thing the header offers that no click on it suggests.
+// What the menu is about rides in ContextMenu.Repo; see TakeMenuRepo.
+func (m *OS) repoHeaderMenu(repo string) (string, []ContextMenuItem) {
+	title := printableTitle(repo)
+	if title == "" {
+		title = "Repository"
+	}
+	return title, []ContextMenuItem{
+		// Live only while some cached session names the repository, which for a
+		// header on screen is every moment but the one where the listing changed
+		// since it was drawn.
+		m.item(glyphNew, "New worktree...", "repo_new_worktree", m.worktreeRepoRoot(repo) == ""),
+	}
 }
 
 // OpenSelectionMenu opens the small terminal-mode selection menu: what you can

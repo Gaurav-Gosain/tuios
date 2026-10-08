@@ -482,6 +482,13 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FilePromptOpen() {
 		return handleFilePromptInput(msg, o)
 	}
+	// The worktree dialog is the file dialog's case again: opened from the
+	// rail, owning every key while it is up, checked ahead of the rail so the
+	// key that opened it cannot answer it. See worktree_prompt_input.go.
+	if o.WorktreePromptOpen() {
+		return handleWorktreePromptInput(msg, o)
+	}
+
 	// A copy's question and the Copies panel, the same way: the rail and
 	// the dock open them, and their keys must reach them. The question is
 	// over the panel, so it is first. A panel opened over the Copies panel,

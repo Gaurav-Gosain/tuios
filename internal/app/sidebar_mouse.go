@@ -953,12 +953,27 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.Target = CtxTargetMachine
 		cm.SessionID = hit.SessionID
 		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowRepo:
-		// A session on another machine, and a repository's group header.
-		// Neither is a local session and neither has a per-row menu in this
-		// release, so the right-click opens the rail's own settings the way a
-		// click on blank rail would, rather than building a session menu for a
-		// name that is not a local session.
+	case sidebarRowRepo:
+		// A repository's group header. Its row names a repository, which is the
+		// one thing a right-click on it can act on: a worktree of that
+		// repository. Without a daemon, or when the cached listing no longer
+		// names the repository's main checkout, there is nothing for the row to
+		// offer, so the right-click opens the rail's own settings the way a
+		// click on blank rail would.
+		if !m.IsDaemonSession || m.worktreeRepoRoot(hit.SessionID) == "" {
+			m.openRailSettingsMenu(x, y)
+			return
+		}
+		cm.Target = CtxTargetRepo
+		// The hit names the repository in its session field; the menu gives it
+		// a field of its own so no session action can be handed it.
+		cm.Repo = hit.SessionID
+		cm.Title, cm.Items = m.repoHeaderMenu(hit.SessionID)
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew:
+		// A session on another machine. It is not a local session and has no
+		// per-row menu in this release, so the right-click opens the rail's own
+		// settings the way a click on blank rail would, rather than building a
+		// session menu for a name that is not a local session.
 		m.openRailSettingsMenu(x, y)
 		return
 	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:

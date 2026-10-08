@@ -1,7 +1,6 @@
 package app
 
 import (
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -16,20 +15,6 @@ func renameHints() []overlay.Hint {
 		{Key: overlay.EnterKey(), Label: "save"},
 		{Key: "esc", Label: "cancel"},
 	}
-}
-
-// renameFieldText windows the buffer so the tail is always visible: what you
-// are typing is at the end, so a name longer than the field scrolls left rather
-// than truncating away the part you are looking at.
-func renameFieldText(buf string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	r := []rune(buf)
-	for len(r) > 0 && lipgloss.Width(string(r)) > width {
-		r = r[1:]
-	}
-	return string(r)
 }
 
 // renderRenameDialog draws the rename micro-dialog and its absolute origin, or
@@ -54,7 +39,7 @@ func (m *OS) renderRenameDialog() (string, overlay.Geometry, int, int, bool) {
 
 	// Sigil, a space, the field, and one cell of right pad, so the cursor never
 	// sits against the frame.
-	field := renameFieldText(printableRunes(m.RenameBuffer), max(inner-4, 1))
+	field := fieldTail(printableRunes(m.RenameBuffer), max(inner-4, 1))
 	body := overlay.Style(pal.Canvas).Render(" ") +
 		overlay.Style(pal.Canvas).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
 		overlay.Style(pal.Canvas).Foreground(pal.Fg).Render(field) +
