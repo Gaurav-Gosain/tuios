@@ -367,13 +367,17 @@ test.describe('a finger on tuios itself', () => {
     // "m" would minimize the pane if the tap had not landed. The marker is
     // short because a floating pane on this viewport is 24 columns and the
     // prompt has already spent ten of them.
+    const beforeType = await screen(page);
+    await clearWire(page);
     await page.keyboard.type('zqtap');
     await page.waitForTimeout(900);
+    const typed = await wire(page);
 
     const lines = await screen(page);
     const hit = lines.findIndex((l) => l.includes('zqtap'));
     expect(hit, `what was typed after the tap never reached a pane. The double tap took ${tapMs} ms `
-      + `and sent ${JSON.stringify(afterTap)}. The screen:\n${lines.join('\n')}`).toBeGreaterThan(-1);
+      + `and sent ${JSON.stringify(afterTap)}. Typing sent ${JSON.stringify(typed)}. Before typing:\n`
+      + `${beforeType.join('\n')}\nAfter:\n${lines.join('\n')}`).toBeGreaterThan(-1);
     expect(hit, 'it landed outside the pane the tap was in').toBeGreaterThan(frame.top);
     expect(hit).toBeLessThan(frame.bottom);
   });
@@ -396,7 +400,9 @@ test.describe('a finger on tuios itself', () => {
     await page.waitForTimeout(1200);
 
     const text = (await screen(page)).join('\n');
-    expect(text, 'the long press opened no menu').toContain('Pane');
+    // Asked of the items, because the menu's heading is the pane title, and
+    // that is whatever the shell sets.
+    expect(text, 'the long press opened no pane menu').toContain('Split right');
     expect(text, 'the menu that opened is not the pane menu').toContain('Close pane');
   });
 
