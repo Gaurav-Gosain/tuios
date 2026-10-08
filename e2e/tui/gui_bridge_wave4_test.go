@@ -631,3 +631,55 @@ func TestGUIBridgeHostThatNeedsASignIn(t *testing.T) {
 		})
 	}
 }
+
+// A bridge on a host keeps taking keys after the link drops and comes back.
+// The model dials the far session again on a new daemon client. Before the
+// fix the bridge kept writing input to the old client: every key after the
+// link came back was lost ("use of closed network connection"), while the
+// renderer showed the pane as attached.
+func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	if out, err := tuiosCLI(t, remote, "new", "-d", "far"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	env := []string{"TUIOS_SSH=" + ssh}
+	killDaemon(t, base)
+	if out, err := tuiosCLIEnv(t, base, env, "start-server"); err != nil {
+		t.Fatalf("start-server: %v\n%s", err, out)
+	}
+	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes up")
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--host", "build", "--session", "far"}, env: env, cols: 100, rows: 30, keepDaemon: true, name: "far"})
+	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 1 }, "far's pane")
+	pty := st.Windows[0].PTY
+	b.input(pty, "echo BEFORE-$((6*7))\r")
+	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("BEFORE-42")) }, shellTimeout, "the far shell's echo before the drop")
+
+	// The link drops: its far end goes away, as when the network does.
+	if err := syscall.Kill(farProxy(t, remote), syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the far proxy: %v", err)
+	}
+	waitForHostListing(t, base, func(s string) bool { return !strings.Contains(s, "│ up ") }, "the link to build drops")
+	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes back")
+
+	// The bridge dials the session again on its own. Keys sent until then
+	// may be lost; one sent after it must reach the far shell.
+	deadline := time.Now().Add(40 * time.Second)
+	for n := 0; ; n++ {
+		marker := fmt.Sprintf("AFTER-%d", n)
+		b.input(pty, "echo "+marker+"\r")
+		time.Sleep(time.Second)
+		b.mu.Lock()
+		got := bytes.Contains(b.outputs[pty], []byte(marker))
+		b.mu.Unlock()
+		if got {
+			t.Logf("the far shell answered after the drop on try %d", n)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: no key reached the far shell for 40 s after the link came back")
+		}
+	}
+}
