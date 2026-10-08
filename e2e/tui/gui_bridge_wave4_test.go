@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -365,5 +367,32 @@ func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
 	// The session is the far daemon's, not this machine's.
 	if out, _ := tuiosCLI(t, base, "ls"); strings.Contains(out, "far") {
 		t.Fatalf("ASSERTION: this machine's daemon holds far:\n%s", out)
+	}
+}
+
+// A config reload keeps the bridge's own chrome off. The reload applies the
+// file's appearance whole, and before the fix it brought the dock back: the
+// panes moved down two rows and the renderer drew them short. Writing an
+// option or adding a host reloads the file.
+func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "chrome", 100, 30)
+	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
+	full := func(s *wireState) bool {
+		return len(s.Windows) == 1 && s.Windows[0].Y == 0 && s.Windows[0].H == 30
+	}
+	st := b.waitState(full, "one pane over the whole grid")
+	before, _ := json.Marshal(st.Windows[0])
+	// The person's file puts the dock at the top, as a config with no dock
+	// setting does; the watcher reloads it.
+	cfg := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	if err := os.WriteFile(cfg, []byte("[appearance]\ndockbar_position = \"top\"\n"), 0o600); err != nil {
+		t.Fatalf("write the config: %v", err)
+	}
+	time.Sleep(3 * time.Second)
+	st = b.waitState(func(*wireState) bool { return true }, "a state")
+	after, _ := json.Marshal(st.Windows[0])
+	if !full(st) {
+		t.Fatalf("ASSERTION: after a config reload the pane is not over the whole grid:\nbefore %s\nafter  %s", before, after)
 	}
 }

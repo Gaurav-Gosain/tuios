@@ -686,8 +686,13 @@ type OS struct {
 	// echoed back on every state sync so the daemon can tell a snapshot built
 	// from its current state apart from one built before a mutation of its own.
 	DaemonStateVersion int
-	streamTap          StreamTap       // See SetStreamTap; nil for every client but tuios gui-bridge
-	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	streamTap          StreamTap // See SetStreamTap; nil for every client but tuios gui-bridge
+	// ReloadFilter, when set, sees a config read from disk before it is put
+	// in force. tuios gui-bridge keeps its own chrome off with it: its
+	// renderer draws the dock and the rail itself, and a reload would bring
+	// them back above the panes for every client of the session.
+	ReloadFilter   func(*config.UserConfig) *config.UserConfig
+	SubscribedPTYs map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// RestoredStreamSeq is the stream position each pane's snapshot was taken
 	// at, from the restore that precedes the subscribe on the attach path.
 	RestoredStreamSeq map[string]int64

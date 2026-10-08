@@ -493,21 +493,41 @@ func newModel(opts app.OSOptions) *app.OS {
 		userConfig = config.DefaultConfig()
 	}
 	app.SetInputHandler(input.HandleInput)
-	seed := config.AppearanceFrom(userConfig, config.Overrides{
-		DockbarPosition: "hidden",
-		SharedBorders:   true,
-		NoAnimations:    true,
-	})
+	seed := config.AppearanceFrom(userConfig, chromeOverrides)
 	seed.SidebarEnabled = false
 	opts.KeybindRegistry = config.NewKeybindRegistry(userConfig)
 	opts.UserConfig = userConfig
 	opts.Settings = &seed
 	o := app.NewOS(opts)
+	o.ReloadFilter = withOwnChrome
 	// The renderer draws a zoom itself, over the other panes, and they keep
 	// their sizes. A zoom of part of the screen would resize them for every
 	// client of the session.
 	o.FullZoom = true
 	return o
+}
+
+// chromeOverrides turn off the chrome the renderer draws itself: the dock,
+// the borders between panes and the animations. The sidebar goes too.
+var chromeOverrides = config.Overrides{
+	DockbarPosition: "hidden",
+	SharedBorders:   true,
+	NoAnimations:    true,
+}
+
+// withOwnChrome is a reloaded config with the chrome the renderer draws
+// itself turned off. A reload applies the file's appearance to the model
+// whole, and lays the panes out and tells the daemon before anything else
+// runs: the dock came back above the panes, the session's panes moved down
+// two rows for every client, and the renderer drew them short. A change to
+// any option, or a host added, reloads the file. Only the copy changes.
+func withOwnChrome(cfg *config.UserConfig) *config.UserConfig {
+	c := *cfg
+	on, off := true, false
+	c.Appearance.DockbarPosition = chromeOverrides.DockbarPosition
+	c.Appearance.SharedBorders = &on
+	c.Appearance.Sidebar.Enabled = &off
+	return &c
 }
 
 // cmdMsg carries a renderer command into the Update loop.

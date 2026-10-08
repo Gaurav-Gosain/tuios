@@ -3282,7 +3282,7 @@ Each control below was run on 2026-10-08 on branch
 
 ## The GUI bridge, wave 4: reopen, kept emulators and machines
 
-`e2e/tui/gui_bridge_wave4_test.go` has four tests:
+`e2e/tui/gui_bridge_wave4_test.go` has five tests:
 
 - `TestGUIBridgeAttachesByIDThenLastUsed` makes `alpha` and then `zeta`. A
   bridge with no session named must attach `zeta`, the newer one, while
@@ -3304,6 +3304,9 @@ Each control below was run on 2026-10-08 on branch
   round trip over 0 and its session `far`. A bridge with `--host build
   --session far` must attach `far` on `build`, echo through the far shell,
   and leave this machine's daemon without `far`.
+- `TestGUIBridgeKeepsItsChromeAcrossAReload` writes a config file that puts
+  the dock at the top while a bridge shows one pane. After the reload the
+  pane must still start at row 0 and fill all 30 rows.
 
 Each control below was run on 2026-10-08 on branch `exp/gpui-bridge`. The log
 is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
@@ -3318,6 +3321,7 @@ is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
 | No round trip is measured | `watchHosts`: the prober not started | `TestGUIBridgeOnAHostAndItsLink` (`rtt_ms` 0, no sessions) | **caught** |
 | `--host` attaches this machine | `Run`: always `ConnectWithCapabilities` | `TestGUIBridgeOnAHostAndItsLink` | **caught** |
 | The session id is ignored | `pickSession`: the id loop cut | `TestGUIBridgeAttachesByIDThenLastUsed` (attached `alpha`, want `omega`), `TestGUIBridgeKilledLeavesTheSession` (attached `other`, want `crash`) | **caught** |
+| The reloaded config is put in force as the file says | `newModel`: `ReloadFilter` not set | `TestGUIBridgeKeepsItsChromeAcrossAReload` (the pane at row 2, 28 rows high, after the file put the dock at the top) | **caught** |
 
 All 37 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch.
