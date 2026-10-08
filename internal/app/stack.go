@@ -48,7 +48,7 @@ func (m *OS) stackMembers(key string, workspace int) []*terminal.Window {
 // stackRows returns how many title rows a stack's open member gives up above
 // it and below it: one per member before it and one per member after it.
 func (m *OS) stackRows(w *terminal.Window) (above, below int) {
-	if w == nil || w.Stack == "" || w.Minimized {
+	if w == nil || w.Stack == "" || w.Minimized || m.LayoutName() != LayoutModeBSP {
 		return 0, 0
 	}
 	members := m.stackMembers(w.Stack, w.Workspace)
@@ -284,6 +284,9 @@ func (m *OS) openOrphanStacks() {
 // renderStackRows draws the title rows of every stack on the workspace on
 // screen, in the rows the open member gave up for them.
 func (m *OS) renderStackRows() []*lipgloss.Layer {
+	if m.LayoutName() != LayoutModeBSP {
+		return nil
+	}
 	var layers []*lipgloss.Layer
 	for _, open := range m.Windows {
 		if open == nil || open.Stack == "" || open.Minimized || open.Workspace != m.CurrentWorkspace {
