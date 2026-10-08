@@ -155,6 +155,16 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 			e.saveCursor()
 		}
 		e.setAltScreenMode(setting.IsSet())
+		// Leaving restores the primary screen's cursor as DECRC does: the
+		// position, the pen, the character sets and origin mode the guest
+		// had when it entered. xterm and ghostty both do. Keeping the
+		// primary screen's own cursor instead gave back the position but
+		// left the alternate screen's character sets in force, and a client
+		// restored from a snapshot, whose primary cursor is the one it was
+		// sent, came back to the wrong place.
+		if setting.IsReset() {
+			e.restoreCursor()
+		}
 	case ansi.ModeOrigin:
 		// DECOM changes what a cursor address means, so DEC has it home the
 		// cursor on the way in and on the way out. Leaving the cursor where it

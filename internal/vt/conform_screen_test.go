@@ -41,6 +41,15 @@ func TestConform_AlternateScreen(t *testing.T) {
 			cursor: "5,1",
 		},
 		{
+			// Leaving restores the whole saved cursor, as DECRC does, and
+			// the character sets are part of it. This emulator used to keep
+			// the primary screen's position and leave the alternate screen's
+			// character sets in force, so the q came out a letter.
+			name: "leaving 1049 restores the character sets saved on entry",
+			in:   "\x1b(0\x1b[?1049h\x1b(B\x1b[?1049lq",
+			want: "─",
+		},
+		{
 			name: "the alternate screen starts empty",
 			in:   "main\x1b[?1049h",
 			want: "",
