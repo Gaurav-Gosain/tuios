@@ -27,7 +27,7 @@ import (
 //   - the restore arms it by printing the last cell again, and that print
 //     comes out wrong: a wide glyph split, a glyph translated a second time by
 //     the line-drawing set, the pen of the cell left in force, or the row
-//     addressed outside the scroll region under origin mode;
+//     addressed outside the scroll region under origin mode, top or left;
 //   - the flag survives the wire in one form of the snapshot and not the other.
 var pendingWrapCases = []struct {
 	name   string
@@ -43,6 +43,13 @@ var pendingWrapCases = []struct {
 	{"pending-line-drawing", "\x1b(0" + strings.Repeat("q", fidelityCols), "xx\x1b(Bok"},
 	{"pending-under-pen", "\x1b[1;31m" + strings.Repeat("r", fidelityCols-1) + "\x1b[32mG\x1b[4;35m", "pen"},
 	{"pending-in-origin-mode", "\x1b[3;6r\x1b[?6h\x1b[2;1H" + strings.Repeat("o", fidelityCols), "NEXT"},
+	// Left and right margins under origin mode, where a column is addressed
+	// from the left margin. A restore that addressed it from the screen edge
+	// put the cursor, and the reprint that arms the wrap, margin columns too
+	// far left: the wide glyph wrapped, its first copy was erased, and the
+	// wrap was lost.
+	{"pending-wide-in-left-margin", "\x1b[?69h\x1b[5;20s\x1b[?6h" + strings.Repeat("x", 14) + "日", "N"},
+	{"cursor-in-left-margin", "\x1b[?69h\x1b[5;20s\x1b[?6h\x1b[1;6H", "N"},
 	{"pending-on-last-row", "\x1b[" + "8;1H" + strings.Repeat("b", fidelityCols), "SCROLLED"},
 }
 

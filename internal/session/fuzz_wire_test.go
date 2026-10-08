@@ -92,6 +92,7 @@ func wireSamples() []any {
 		&ErrorPayload{Code: 3, Message: "no"},
 		&ResizePTYPayload{PTYID: "p", Width: 10, Height: 5},
 		&TerminalStatePayload{},
+		&TerminalStatePayload{PTYID: "p", State: &TerminalState{Width: 4, Height: 2, CursorX: 3, PendingWrap: true}},
 		&CommandResultPayload{Success: true, Data: map[string]any{"a": 1, "b": []string{"x"}}},
 		&StateSyncPayload{State: &SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}}, TriggerType: "window"},
 		&SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}},

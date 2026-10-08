@@ -261,7 +261,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 
 	// Scroll region. DECSTBM homes the cursor; restore order puts the
 	// cursor after it.
-	regionTop := 0
+	regionTop, regionLeft := 0, 0
 	if r.hasScrollRegion {
 		reg := r.scrollRegion.Intersect(uv.Rect(0, 0, t.width, t.height))
 		if !reg.Empty() && (reg.Min.Y > 0 || reg.Max.Y < t.height) {
@@ -275,6 +275,7 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		// not.
 		if lrmm := r.modes[69]; lrmm && !reg.Empty() && (reg.Min.X > 0 || reg.Max.X < t.width) {
 			fmt.Fprintf(&seq, "\x1b[%d;%ds", reg.Min.X+1, reg.Max.X)
+			regionLeft = reg.Min.X
 		}
 	}
 
@@ -290,16 +291,17 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 
 	// Cursor. With origin mode on, addressing is region-relative.
 	if r.hasCursor {
-		y := r.cursorY
+		y, x := r.cursorY, r.cursorX
 		if decom {
 			y -= regionTop
+			x -= regionLeft
 		}
 		if y < 0 {
 			y = 0
 		}
-		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, r.cursorX+1)
+		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, x+1)
 		if r.pendingWrap {
-			appendPendingWrap(&seq, r, altActive, y, charsets.Bytes())
+			appendPendingWrap(&seq, r, altActive, y, x-r.cursorX, charsets.Bytes())
 		}
 	}
 
@@ -519,7 +521,7 @@ func trimTrailingBlanks(line uv.Line) uv.Line {
 // in force does not translate it a second time, and the pen and the charsets
 // are then put back. row is the cursor row as addressed, which origin mode
 // makes relative to the scroll region.
-func appendPendingWrap(seq *bytes.Buffer, r *ghosttyRestore, altActive bool, row int, charsets []byte) {
+func appendPendingWrap(seq *bytes.Buffer, r *ghosttyRestore, altActive bool, row, colOff int, charsets []byte) {
 	grid := r.grids[0]
 	if altActive {
 		grid = r.grids[1]
@@ -534,7 +536,7 @@ func appendPendingWrap(seq *bytes.Buffer, r *ghosttyRestore, altActive bool, row
 	if cell == nil || cell.Content == "" {
 		cell = &uv.Cell{Content: " ", Width: 1}
 	}
-	fmt.Fprintf(seq, "\x1b[%d;%dH\x1b(B\x0f", row+1, x+1)
+	fmt.Fprintf(seq, "\x1b[%d;%dH\x1b(B\x0f", row+1, x+colOff+1)
 	appendStyledLine(seq, uv.Line{*cell})
 	seq.WriteString("\x1b[0m")
 	seq.Write(charsets)
