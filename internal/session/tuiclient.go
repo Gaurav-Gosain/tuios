@@ -240,10 +240,14 @@ type TUIClient struct {
 	hostsChangedHandler HostsChangedHandler
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
-	// by request id, under pastesMu.
+	// and pasteBarriers the pings behind them, by request id, under
+	// pastesMu. inputHolds holds input behind a paste that is not settled,
+	// by pane, under mu.
 	pasteRefusedHandler PasteRefusedHandler
 	pastes              map[uint64]*pasteRecord
+	pasteBarriers       map[uint64]*pasteRecord
 	pastesMu            sync.Mutex
+	inputHolds          map[string]*inputHold
 	sessionEndedOnce    sync.Once // gates the single session-ended notification
 	// pendingEnded holds a session-ended notice that arrived before a handler
 	// was registered: the read loop starts before the app wires itself, and
@@ -1148,23 +1152,17 @@ func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, me
 }
 
 // WritePTY sends input to a PTY. Input larger than one frame is not sent and
-// is reported to OnPasteRefused. A large input to a daemon that tags replies
-// is sent again once if the daemon is busy; see paste_retry.go.
+// is reported to OnPasteRefused. To a daemon that tags replies, a large input
+// is sent as a paste: later input to the pane waits behind it, and a busy
+// refusal is sent again once. See paste_retry.go.
 func (c *TUIClient) WritePTY(ptyID string, data []byte) error {
 	if len(data) > maxPasteBytes {
-		c.pasteRefused(ptyID)
+		c.pasteRefused(ptyID, PasteRefusedTooLarge)
 		return ErrPasteTooLarge
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	// The daemon charges a frame whose payload, the pane id and the data,
-	// is over largeFrame, so that is the input it can refuse as busy.
-	if 36+len(data) > largeFrame && c.requestIDs.Load() {
-		return c.writeLargeInput(ptyID, data, false)
-	}
-	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	return WritePTYInput(c.conn, ptyID, data)
+	return c.writeInputLocked(ptyID, data)
 }
 
 // ResizePTY resizes a PTY.

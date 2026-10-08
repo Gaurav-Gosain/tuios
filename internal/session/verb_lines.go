@@ -27,9 +27,16 @@ import (
 //     copy the request envelope's params make, and what a handler decodes
 //     from them. It is taken in one acquire, whole or not at all, so a line
 //     never holds part of the budget while it waits for the rest. A line
-//     that cannot get its charge within lineBudgetWait is refused. A large
-//     line must also arrive within largeLineDeadline, so a client that sends
-//     one slowly cannot hold its charge.
+//     that cannot get its charge within lineBudgetWait is refused with
+//     ErrVerbBusy. A large line must also arrive within largeLineDeadline,
+//     so a client that sends one slowly cannot hold its charge.
+//   - The charge is given back once the request envelope is decoded, before
+//     the verb runs (dispatchVerbLine). A verb can wait a long time, such as
+//     a send-text into a pane that does not read, and must not hold the
+//     budget while it does. What a running verb still holds is its decoded
+//     params, one request at a time on each connection, and the connection
+//     caps bound the connections. A write into a pane that does not read is
+//     bounded per pane by PTY.Write.
 //
 // The person's budget and the one every other caller shares (a pane without
 // admin, a link) are apart, so no pane can use up what the person's own
@@ -59,8 +66,9 @@ type verbLineReader struct {
 	release func() // gives back the charge of the current line, or nil
 }
 
-// done gives back the budget of the line read last. The caller calls it when
-// the request has been handled.
+// done gives back the budget of the line read last. dispatchVerbLine calls it
+// once the request envelope is decoded, before the verb runs; next calls it
+// too, so it is safe to call more than once.
 func (r *verbLineReader) done() {
 	if r.release != nil {
 		r.release()

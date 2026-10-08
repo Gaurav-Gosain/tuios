@@ -229,6 +229,7 @@ var verbCapabilities = map[string][]string{
 var msgCapabilities = map[MessageType][]string{
 	MsgHello:             nil,
 	MsgDetach:            nil,
+	MsgPing:              nil,
 	MsgList:              {config.LinkAllowList},
 	MsgSubscribePTY:      {config.LinkAllowList},
 	MsgUnsubscribePTY:    {config.LinkAllowList},

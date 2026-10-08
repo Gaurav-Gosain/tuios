@@ -1084,7 +1084,7 @@ func (d *Daemon) refuseTapeTyping(cs *connState, p *ExecuteCommandPayload) strin
 // into every pane of a session, creates and closes windows and kills
 // sessions, so only a pane holding admin may use it past the hello.
 func (d *Daemon) checkGrantMessage(cs *connState, t MessageType) *verbError {
-	if t == MsgHello || cs == nil || cs.viaLink || cs.paneOnly {
+	if t == MsgHello || t == MsgPing || cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
 	}
 	if cs.paneBound.Load() == nil && !d.manager.grants.mayMatter() {

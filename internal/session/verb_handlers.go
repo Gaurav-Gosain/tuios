@@ -959,7 +959,26 @@ func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verb
 // ptyWriteError is the verb error for a write a pane refused. A pane on
 // another machine whose link is being restored refuses writes, which is
 // host_unreachable: the text was not typed, and waiting is the remedy.
+// paneBusyError is the verb error for a large input refused because the pane
+// has not read the last one. See PTY.Write.
+func paneBusyError(err error) *verbError {
+	return newVerbError(ErrVerbBusy, err.Error()+". Nothing was typed. Try again when the pane reads its input.")
+}
+
+// promptWriteError is the verb error for a prompt or keys a pane did not
+// take: busy when the pane has not read the last large input, internal
+// otherwise.
+func promptWriteError(err error) *verbError {
+	if errors.Is(err, errPaneInputBusy) {
+		return paneBusyError(err)
+	}
+	return newVerbError(ErrVerbInternal, err.Error())
+}
+
 func ptyWriteError(err error) *verbError {
+	if errors.Is(err, errPaneInputBusy) {
+		return paneBusyError(err)
+	}
 	if errors.Is(err, errPaneReconnecting) {
 		return hintedVerbError(ErrVerbHostUnreachable, err.Error(), &VerbHint{
 			Command: "tuios list-windows",

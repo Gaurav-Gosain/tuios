@@ -2948,12 +2948,15 @@ answer after the connections close. The measurements are in
 `frame-memory.txt` under the test's artifact directory.
 
 The controls were run on 2026-10-08 on the branch fix/bound-frame-memory.
+The rows for the read budget and the connection cap were run again on the
+design that charges a frame whole from its header. Without the change, the
+test passes on that design with the daemon growing by 93 MB.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The build before the change | main at af79c927 | `TestDaemonBoundsStalledFrames`: the daemon grew by 517 MB, and the 1 MiB hello was decoded and answered "invalid hello payload" | **caught** |
-| No read budget | `serveConnection`: `nil` in place of the budget (first version of the change) | `TestDaemonBoundsStalledFrames`: the daemon grew by 877 MB | **caught** |
-| No connection cap | `acceptLoop`: the `admitConnection` call cut (first version of the change) | `TestDaemonBoundsStalledFrames`: the daemon closed 0 of 1100 connections and logged nothing | **caught** |
+| No read budget | `readClientFrame`: the acquire skipped, so no frame is charged | `TestDaemonBoundsStalledFrames`: the daemon grew by 907 MB | **caught** |
+| No connection cap | `acceptLoop`: the `admitConnection` call cut | `TestDaemonBoundsStalledFrames`: the daemon refused 0 of 1100 connections, and `tuios ls` listed the sessions where it should say the daemon has too many connections | **caught** |
 | The link sockets share the main cap | `acceptLinkOn`: `admitConnection` given `openConns` and `maxConnections` | `TestDaemonBoundsStalledFrames`: the daemon refused 0 of 300 link connections | **caught** |
 | No short limit | `daemonFrameLimit`: the default case returns `maxFrameBytes` | `TestDaemonBoundsStalledFrames`: the 1 MiB hello was read and answered "invalid hello payload" | **caught** |
 
@@ -2967,8 +2970,12 @@ least one of them:
 - A keystroke-sized frame charged to the budget.
 - A link given the person's budget.
 - An input frame's charge held while the input is written to the pane.
-- No bound of one waiting large input per pane.
+- A verb line's charge held until the verb returns. Two send-texts blocked
+  in panes that do not read make the next set-buffer fail as busy.
+- No bound of one waiting large input per pane, in `PTY.Write`.
 - No retry of a busy paste in the client.
+- No hold of later input behind a paste: Enter overtakes the retried paste.
+- The person working through a hub given the peers' budget.
 - A refused connection closed without being told why.
 - The body allocated whole from the header.
 - No short limit.

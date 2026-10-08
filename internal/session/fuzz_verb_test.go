@@ -159,7 +159,7 @@ func FuzzVerbDispatch(f *testing.F) {
 		conn := &captureConn{}
 		cs := &connState{conn: conn, clientID: "fuzz", done: make(chan struct{})}
 		errc := make(chan error, 1)
-		go func() { errc <- fuzzDaemon.dispatchVerbLine(cs, line) }()
+		go func() { errc <- fuzzDaemon.dispatchVerbLine(cs, line, nil) }()
 		select {
 		case err := <-errc:
 			if err != nil {

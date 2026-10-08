@@ -479,10 +479,10 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if reply.Text != "" {
 		if _, werr := submitPrompt(d.ctx, pty, reply.Text, d.inputProfileFor(sess, w.ID)); werr != nil {
-			return nil, newVerbError(ErrVerbInternal, werr.Error())
+			return nil, promptWriteError(werr)
 		}
 	} else if _, werr := pty.Write(reply.Keys); werr != nil {
-		return nil, newVerbError(ErrVerbInternal, werr.Error())
+		return nil, promptWriteError(werr)
 	}
 	slot.answered = look.id
 	if byPane != "" {

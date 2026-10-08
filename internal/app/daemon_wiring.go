@@ -74,8 +74,8 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	})
 	// A paste the daemon refused twice, or one too large to send. The person
 	// is told, so a paste never vanishes. See session/paste_retry.go.
-	client.OnPasteRefused(func(string) {
-		if m.QueueClientEvent(ClientEvent{Type: "paste-refused"}) {
+	client.OnPasteRefused(func(_, message string) {
+		if m.QueueClientEvent(ClientEvent{Type: "paste-refused", Reason: message}) {
 			clientLog("ClientEventChan full, displaced an event for a refused paste")
 		}
 	})

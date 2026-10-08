@@ -1991,6 +1991,10 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleCommandResult(cs, msg)
 	case MsgGetLogs:
 		return d.handleGetLogs(cs, msg)
+	case MsgPing:
+		// Frames on a connection are handled in order, so the pong says
+		// every frame before the ping has been. See paste_retry.go.
+		return d.reply(cs, msg, MsgPong, nil)
 	default:
 		return fmt.Errorf("unknown message type: %d", msg.Type)
 	}

@@ -351,7 +351,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	pty.shell.expect()
 	defer pty.shell.stopExpecting()
 	if _, err := submitPrompt(ctx, pty, p.Command, harness.DefaultInputProfile()); err != nil {
-		return nil, newVerbError(ErrVerbInternal, err.Error())
+		return nil, promptWriteError(err)
 	}
 	LogBasic("run: typed a command in %s of %s", shortID(w.ID), sess.Name())
 

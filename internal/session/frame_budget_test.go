@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -39,8 +40,11 @@ import (
 //     budget would stop typing.
 //  7. A paste into a pane that does not read holds the budget for as long as
 //     the pane does not read, or a second paste to that pane waits too, with
-//     its memory, and nobody is told.
-//  8. The connection caps are off by one, a refused connection is counted
+//     its memory, and nobody is told. The same for a large send-text, whose
+//     request line holds the verb budget while the verb runs.
+//  8. Input typed while a refused paste waits for its retry overtakes it:
+//     a paste and then Enter must reach the pane in that order.
+//  9. The connection caps are off by one, a refused connection is counted
 //     and never given back, the link sockets share the main socket's slots,
 //     or a refused client is not told why.
 
@@ -248,6 +252,9 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 		if link := d.readBudgetFor(&connState{viaLink: true}); link == person {
 			t.Fatal("a link draws on the person's budget")
 		}
+		if human := d.readBudgetFor(&connState{viaLink: true, linkHuman: true}); human != person {
+			t.Fatal("the person working through a hub does not draw on the person's budget")
+		}
 		if hosted := d.readBudgetFor(&connState{paneOnly: true}); hosted == person {
 			t.Fatal("a hosted pane call draws on the person's budget")
 		}
@@ -290,17 +297,18 @@ func TestPasteIntoAPaneThatDoesNotRead(t *testing.T) {
 	all()
 
 	second := attachTUI(t, sock, "paste")
-	refused := make(chan string, 1)
-	second.OnPasteRefused(func(ptyID string) { refused <- ptyID })
+	type refusal struct{ ptyID, message string }
+	refused := make(chan refusal, 1)
+	second.OnPasteRefused(func(ptyID, message string) { refused <- refusal{ptyID, message} })
 	second.StartReadLoop()
 	start := time.Now()
 	if err := second.WritePTY(pty.ID, paste); err != nil {
 		t.Fatalf("the second paste: %v", err)
 	}
 	select {
-	case id := <-refused:
-		if id != pty.ID {
-			t.Fatalf("the refusal names pane %s, want %s", id, pty.ID)
+	case r := <-refused:
+		if r.ptyID != pty.ID || r.message != PasteRefusedBusy {
+			t.Fatalf("the refusal names pane %s with %q, want %s with %q", r.ptyID, r.message, pty.ID, PasteRefusedBusy)
 		}
 		if waited := time.Since(start); waited < pasteRetryDelay {
 			t.Fatalf("the refusal came after %v, before the paste was sent again", waited)
@@ -390,5 +398,145 @@ func TestConnectionCaps(t *testing.T) {
 	a, _ := pipe()
 	if !d.admitConnection(a, &d.openConns, maxConnections) {
 		t.Fatal("a connection was refused after another one ended")
+	}
+}
+
+// TestSendTextIntoPanesThatDoNotRead sends 200 KiB of text into each of two
+// panes whose programs never read, so both send-texts block in the write to
+// the pane. Three 200 KiB set-buffer calls must then succeed at once: the
+// blocked verbs must not hold the read budget. A third send-text into one of
+// the blocked panes must be refused as busy at once.
+func TestSendTextIntoPanesThatDoNotRead(t *testing.T) {
+	d, sock := startTestDaemon(t)
+	sess := makeSessionWithWindow(t, d, "st")
+	setup := dialVerb(t, sock)
+	open := func() string {
+		t.Helper()
+		got := result(t, callP(setup, t, "new-window", map[string]any{
+			"session": "st", "command": []string{"sleep", "600"}, "focus": false,
+		}))
+		id, _ := got["window_id"].(string)
+		if id == "" {
+			t.Fatalf("new-window = %v", got)
+		}
+		return id
+	}
+	paneOf := func(id string) *PTY {
+		for _, w := range sess.GetState().Windows {
+			if w.ID == id {
+				return sess.GetPTY(w.PTYID)
+			}
+		}
+		return nil
+	}
+	text := strings.Repeat(strings.Repeat("s", 79)+"\n", (200<<10)/80)
+	sendText := func(window string) string {
+		raw, err := json.Marshal(map[string]any{"id": 1, "verb": "send-text", "params": map[string]any{"session": "st", "window": window, "text": text}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	for _, window := range []string{open(), open()} {
+		c := dialVerb(t, sock)
+		c.send(t, sendText(window))
+		deadline := time.Now().Add(10 * time.Second)
+		for pty := paneOf(window); pty == nil || !pty.largeInput.Load(); pty = paneOf(window) {
+			if time.Now().After(deadline) {
+				t.Fatal("the send-text never blocked in the pane")
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Cleanup(func() { _ = c.conn.Close() })
+	}
+
+	data := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("b"), 150<<10))
+	for i := range 3 {
+		c := dialVerb(t, sock)
+		start := time.Now()
+		resp := c.call(t, `{"id":1,"verb":"set-buffer","params":{"name":"b`+string(rune('0'+i))+`","data_b64":"`+data+`"}}`)
+		if e := resp["error"]; e != nil {
+			t.Fatalf("set-buffer %d with two send-texts blocked: %v", i+1, e)
+		}
+		if waited := time.Since(start); waited > readBudgetWait/2 {
+			t.Fatalf("set-buffer %d waited %v for the budget", i+1, waited)
+		}
+	}
+
+	var blocked string
+	for _, w := range sess.GetState().Windows {
+		if pty := sess.GetPTY(w.PTYID); pty != nil && pty.largeInput.Load() {
+			blocked = w.ID
+		}
+	}
+	resp := dialVerb(t, sock).call(t, sendText(blocked))
+	e, _ := resp["error"].(map[string]any)
+	if e == nil || e["code"] != ErrVerbBusy {
+		t.Fatalf("a send-text into a pane that has not read the last one got %v, want %s", resp, ErrVerbBusy)
+	}
+}
+
+// TestPasteKeepsItsPlaceWhenRetried pastes into a pane, presses Enter at once,
+// and has a stand-in daemon refuse the paste as busy the first time. The
+// pane must get the paste, then the paste again, then Enter: Enter waits
+// behind the paste and its retry.
+func TestPasteKeepsItsPlaceWhenRetried(t *testing.T) {
+	clientEnd, daemonEnd := net.Pipe()
+	defer func() { _ = clientEnd.Close(); _ = daemonEnd.Close() }()
+	c := NewTUIClient()
+	c.conn = clientEnd
+	c.requestIDs.Store(true)
+	c.StartReadLoop()
+	defer func() { _ = c.Close() }()
+
+	const pane = "11111111-2222-3333-4444-555555555555"
+	paste := bytes.Repeat([]byte("p"), 200<<10)
+
+	type input struct {
+		n    int
+		ping bool
+	}
+	got := make(chan input, 16)
+	go func() {
+		refusedOnce := false
+		for {
+			msg, err := ReadMessage(daemonEnd)
+			if err != nil {
+				return
+			}
+			switch msg.Type {
+			case MsgInput:
+				_, data, _ := ParseBinaryPTYMessage(msg.Payload)
+				got <- input{n: len(data)}
+				if len(data) == len(paste) && !refusedOnce {
+					refusedOnce = true
+					reply, _ := NewMessage(MsgError, &ErrorPayload{Code: ErrCodeBusy, Message: "busy"})
+					reply.ReqID = msg.ReqID
+					_ = WriteMessage(daemonEnd, reply)
+				}
+			case MsgPing:
+				reply, _ := NewMessage(MsgPong, nil)
+				reply.ReqID = msg.ReqID
+				_ = WriteMessage(daemonEnd, reply)
+			}
+		}
+	}()
+
+	if err := c.WritePTY(pane, paste); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WritePTY(pane, []byte("\r")); err != nil {
+		t.Fatal(err)
+	}
+	want := []int{len(paste), len(paste), 1}
+	for i, n := range want {
+		select {
+		case in := <-got:
+			if in.n != n {
+				t.Fatalf("input %d to the pane was %d bytes, want %d (want the paste, its retry, then Enter)", i+1, in.n, n)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("input %d never reached the pane", i+1)
+		}
 	}
 }

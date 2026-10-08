@@ -755,7 +755,7 @@ type paneIO interface {
 type PTY struct {
 	ID string
 	// largeInput is set while a write of more than largeFrame bytes waits on
-	// the pane. See writeLargeInput.
+	// the pane. See Write.
 	largeInput atomic.Bool
 	// sessionID is the session the pane belongs to, which a nesting probe
 	// seen in its output is recorded against. See nest_probe.go.
@@ -3580,31 +3580,32 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 }
 
 // Write sends input to the PTY.
+//
+// Input of more than largeFrame bytes, such as a paste, is refused with
+// errPaneInputBusy while another one still waits on the pane. A pane whose
+// program does not read its input blocks the write, and the write holds the
+// input's memory while it waits. One waiting write per pane bounds that memory
+// to the largest input, 16 MiB, for each pane. Every path that types into a
+// pane comes through here: client input, send-text, paste-buffer, send-keys,
+// submit-prompt and respond. Only a caller that may already write to the
+// pane can make it hold that memory. See frame_budget.go.
 func (p *PTY) Write(data []byte) (int, error) {
 	if p.pty == nil {
 		return 0, fmt.Errorf("PTY not available")
+	}
+	if len(data) > largeFrame {
+		if !p.largeInput.CompareAndSwap(false, true) {
+			return 0, errPaneInputBusy
+		}
+		defer p.largeInput.Store(false)
 	}
 	p.flushWinsize()
 	return p.pty.Write(data)
 }
 
-// writeLargeInput writes input of more than largeFrame bytes, such as a
-// paste, or refuses it with errPaneInputBusy when another one still waits on
-// the pane. A pane that does not read its input blocks the write, and the
-// write holds the input's memory while it waits, so one waiting write per
-// pane bounds that memory to maxFrameBytes for each pane. See
-// frame_budget.go.
-func (p *PTY) writeLargeInput(data []byte) (int, error) {
-	if !p.largeInput.CompareAndSwap(false, true) {
-		return 0, errPaneInputBusy
-	}
-	defer p.largeInput.Store(false)
-	return p.Write(data)
-}
-
 // errPaneInputBusy refuses a large input to a pane that has not read the
 // last one.
-var errPaneInputBusy = errors.New("the pane has not read the last paste yet")
+var errPaneInputBusy = errors.New("the pane has not read the last large input yet")
 
 // Size returns the current PTY dimensions.
 func (p *PTY) Size() (width, height int) {

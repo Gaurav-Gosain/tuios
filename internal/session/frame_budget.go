@@ -35,18 +35,20 @@ import (
 //   - The body must arrive within frameBodyDeadline, so a sender that stalls
 //     cannot hold its charge.
 //
-// There are two budgets (readBudgetFor). The person's clients draw on one.
-// Links, hosted pane calls and panes without the admin grant draw on the
-// other, so no peer and no pane can spend the budget the person's own paste
+// There are two budgets (readBudgetFor). The person's clients draw on one,
+// and so does the person working through a hub. Other links, hosted pane
+// calls and panes without the admin grant draw on the other, so no peer and no pane can spend the budget the person's own paste
 // needs. The JSON verb line reader (verb_lines.go) charges the same budgets.
 //
 // The charge is given back when the message has been handled, or for
 // MsgInput as soon as it is read: a paste into a pane that does not read its
 // input blocks in the write to the pane, and must not hold the budget there.
-// What such a write holds is bounded per pane instead: one large input may
-// wait on each pane, and the next is refused with ErrCodeBusy
-// (PTY.writeLargeInput). So the memory blocked writes hold is at most
-// maxFrameBytes for each pane.
+// A verb line gives its charge back once its envelope is decoded, for the
+// same reason (verb_lines.go). What such a write holds is bounded per pane
+// instead: one large input may wait on each pane, from the client or from
+// any verb that types, and the next is refused as busy (PTY.Write). So the
+// memory blocked writes hold is at most maxFrameBytes for each pane. That is
+// accepted: only a caller that may already write to the pane can cause it.
 //
 // And the daemon serves at most maxConnections connections on its socket and
 // maxLinkConnections on its link sockets. See admitConnection.
@@ -137,15 +139,24 @@ func (b *memBudget) acquire(n int64, wait time.Duration) (func(), bool) {
 	return func() { b.sem.Release(n) }, true
 }
 
-// readBudgetFor is the budget a large read on cs draws on: the person's, or
-// for a link, a pane without the admin grant or a hosted pane call, the
-// budget those share.
+// readBudgetFor is the budget a large read on cs draws on: the person's, for
+// the person's own clients and the person working through a hub on the
+// link-human socket, or for any other link, a pane without the admin grant or
+// a hosted pane call, the budget those share.
 func (d *Daemon) readBudgetFor(cs *connState) *memBudget {
 	d.readBudgetOnce.Do(func() {
 		d.personBudget = newMemBudget(personBudgetBytes)
 		d.peerBudget = newMemBudget(peerBudgetBytes)
 	})
-	if cs == nil || cs.viaLink || cs.paneOnly {
+	if cs == nil || cs.paneOnly {
+		return d.peerBudget
+	}
+	if cs.viaLink {
+		// The person working through a hub is the person. Any other link
+		// is a peer.
+		if cs.linkHuman {
+			return d.personBudget
+		}
 		return d.peerBudget
 	}
 	if d.manager != nil && !d.bufferAccess(cs).person() {
@@ -310,6 +321,12 @@ const connRefusedLogEvery = 10 * time.Second
 // errFirstByteTimeout is a connection that said nothing within
 // firstByteDeadline.
 var errFirstByteTimeout = errors.New("the connection sent nothing")
+
+// ErrVerbBusy refuses a verb the daemon has no room for now: its request
+// line could not get its read budget, or the pane it types into has not read
+// the last large input. Nothing was done, and the caller may try again. It is
+// the verb protocol's ErrCodeBusy.
+const ErrVerbBusy = "busy"
 
 // ErrVerbTooManyConnections is the verb error a JSON client gets when the
 // daemon refuses its connection over the cap.

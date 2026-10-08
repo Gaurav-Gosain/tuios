@@ -2211,9 +2211,12 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 	for {
 		raw, err := lr.next()
 		if err != nil {
-			if errors.Is(err, errVerbLineTooLong) || errors.Is(err, errVerbLineBusy) {
-				// The rest of the line cannot be read as a request, so the
-				// connection ends after the answer.
+			// The rest of the line cannot be read as a request, so the
+			// connection ends after the answer.
+			switch {
+			case errors.Is(err, errVerbLineBusy):
+				_ = d.writeVerbError(cs, nil, "", newVerbError(ErrVerbBusy, err.Error()+"; nothing was done. Try again."))
+			case errors.Is(err, errVerbLineTooLong):
 				_ = d.writeVerbError(cs, nil, "", newVerbError(ErrVerbInvalidRequest, err.Error()+"; nothing was done"))
 			}
 			return
@@ -2232,8 +2235,7 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 		}
 		// The line is the reader's own copy, so a routed verb that blocks
 		// (routeToTUISync) may keep a reference to its params.
-		err = d.dispatchVerbLine(cs, line)
-		lr.done()
+		err = d.dispatchVerbLine(cs, line, lr.done)
 		if err != nil {
 			// A write failure means the connection is gone; stop.
 			return
@@ -2255,9 +2257,18 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 // response. It returns an error only when writing the response fails (the
 // connection is unusable); verb-level failures are returned to the client as an
 // error envelope, not as a Go error.
-func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
+//
+// release, when not nil, gives back the read budget the line holds. It is
+// called once the request envelope is decoded, before the verb runs, so a
+// verb that waits (a send-text into a pane that does not read, a routed verb)
+// does not hold the budget while it waits. See verb_lines.go.
+func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) error {
 	var req verbRequest
-	if err := json.Unmarshal(line, &req); err != nil {
+	err := json.Unmarshal(line, &req)
+	if release != nil {
+		release()
+	}
+	if err != nil {
 		return d.writeVerbError(cs, nil, "", newVerbError(ErrVerbInvalidRequest, "malformed JSON request: "+err.Error()))
 	}
 

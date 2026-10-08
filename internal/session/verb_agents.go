@@ -1076,7 +1076,7 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	gate := d.newPromptGate(sess, target.ID)
 	submittedAt, werr := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, target.ID))
 	if werr != nil {
-		return nil, newVerbError(ErrVerbInternal, werr.Error())
+		return nil, promptWriteError(werr)
 	}
 	gate.markSubmitted(submittedAt)
 

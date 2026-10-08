@@ -26,7 +26,7 @@ const (
 	MsgKill                                    // Kill/terminate a session
 	MsgInput                                   // Keyboard/mouse input bytes
 	MsgResize                                  // Terminal resize event
-	MsgPing                                    // Reserved: keepalive ping (no sender; numbering is wire format)
+	MsgPing                                    // Asks for a MsgPong; a client sends it after a large input as a barrier (paste_retry.go)
 	MsgCreatePTY                               // Create new PTY in session
 	MsgClosePTY                                // Close a PTY
 	MsgListPTYs                                // Reserved: list PTYs (no sender)
@@ -48,7 +48,7 @@ const (
 	MsgSessionList   // List of sessions
 	MsgOutput        // Reserved: never sent
 	MsgError         // Error message
-	MsgPong          // Reserved: response to MsgPing
+	MsgPong          // Response to MsgPing
 	MsgSessionEnded  // Session terminated
 	MsgWindowChanged // Reserved: never sent
 	MsgPTYList       // Reserved: response to MsgListPTYs
