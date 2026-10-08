@@ -204,6 +204,36 @@ func (g *grid) shiftProtected(y, dst, src, n int) {
 	copy(g.prot[y][dst:dst+n], g.prot[y][src:src+n])
 }
 
+// protectedRuns lists the protected cells as runs along each row.
+func (g *grid) protectedRuns() []CellRun {
+	var runs []CellRun
+	for y, row := range g.prot {
+		for x := 0; x < len(row); {
+			if !row[x] {
+				x++
+				continue
+			}
+			start := x
+			for x < len(row) && row[x] {
+				x++
+			}
+			runs = append(runs, CellRun{X: start, Y: y, N: x - start})
+		}
+	}
+	return runs
+}
+
+// restoreProtected replaces every cell's protection with the runs given,
+// clipped to the grid.
+func (g *grid) restoreProtected(runs []CellRun) {
+	g.prot = nil
+	for _, r := range runs {
+		if r.N > 0 {
+			g.setProtected(r.X, r.Y, min(r.N, g.width), true)
+		}
+	}
+}
+
 // rowFlag is what a row records about where its text ends.
 type rowFlag uint8
 

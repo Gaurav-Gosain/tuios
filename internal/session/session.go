@@ -4044,6 +4044,25 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 	ids, gl, gr := t.Charsets()
 	state.Charsets = []int{int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]), gl, gr}
 
+	// What DECSCA protects, which only a selective erase reads, and the
+	// character REP repeats. Neither shows in a cell until the guest sends
+	// the sequence that uses it.
+	state.PenProtected = t.CursorProtected()
+	state.Protected = runsToWire(t.ProtectedCells(false))
+	if state.IsAltScreen {
+		state.MainProtected = runsToWire(t.ProtectedCells(true))
+	}
+	state.LastPrinted = t.LastPrinted()
+	state.LastPrintedKnown = true
+
+	// The cursor DECSC saved, which DECRC puts back. A shell's screen under a
+	// full-screen program has one too: entering the alternate screen with
+	// 1049 saved it, and leaving puts the shell's cursor back from it.
+	state.SavedCursor = savedCursorToWire(t.SavedCursor(false))
+	if state.IsAltScreen {
+		state.MainSavedCursor = savedCursorToWire(t.SavedCursor(true))
+	}
+
 	// The cursor shape is set once, by a shell's prompt or by an editor
 	// changing mode, and is long out of the output buffer's reach by the time
 	// anyone reattaches. Without it here a pane that asked for a bar comes back
@@ -4341,7 +4360,6 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if state.Width > t.Width() || state.Height > t.Height() {
 		t.Resize(max(state.Width, t.Width()), max(state.Height, t.Height()))
 	}
-
 	// Sending ESC[?1049h instead would clear the buffer it is switching to.
 	//
 	// Applied in both directions. Only entering was applied, so an emulator
@@ -4404,6 +4422,22 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	}
 	if state.CursorShape > 0 {
 		t.RestoreCursorStyle(decscusrStyle(state.CursorShape))
+	}
+	// DECSCA on the pen. An older daemon says nothing, which reads as off:
+	// it could not report protection, and off is what a fresh emulator has.
+	t.RestoreCursorProtected(state.PenProtected)
+	// The character REP repeats. Taken only from a daemon that reports it,
+	// so a surviving emulator keeps its own against an older one.
+	if state.LastPrintedKnown {
+		t.RestoreLastPrinted(state.LastPrinted)
+	}
+	// The cursors DECSC saved, after the alternate screen switch above, so
+	// each lands on the screen it was saved on.
+	if sc := state.SavedCursor; sc != nil {
+		t.RestoreSavedCursor(false, savedCursorFromWire(t, *sc))
+	}
+	if sc := state.MainSavedCursor; sc != nil && state.IsAltScreen {
+		t.RestoreSavedCursor(true, savedCursorFromWire(t, *sc))
 	}
 
 	// The scrollback goes back first, and it is the main screen's either way:
@@ -4484,6 +4518,15 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// vim was open across a switch came back correct and went blank the moment
 	// vim exited, because the buffer underneath had nothing in it.
 	grid(state.PackedMain, t.SetMainCell)
+
+	// Protection after the cells, because writing a cell leaves it
+	// unprotected. It is replaced whole on every route: a surviving emulator
+	// held protection for what its cells showed before, and a snapshot with
+	// none, an older daemon's included, means no cell is protected.
+	t.RestoreProtectedCells(false, runsFromWire(state.Protected))
+	if state.IsAltScreen {
+		t.RestoreProtectedCells(true, runsFromWire(state.MainProtected))
+	}
 
 	// The soft-wrap flags, last, because writing cells does not touch them.
 	// A surviving emulator's rows held flags for what they showed before, and
@@ -4790,6 +4833,103 @@ type TerminalState struct {
 	// no padding: the line keeps a blank, and no text is lost.
 	ScreenPads     []byte `json:"screen_pads,omitempty"`
 	ScrollbackPads []byte `json:"scrollback_pads,omitempty"`
+
+	// PenProtected says DECSCA protects what the guest prints next from a
+	// selective erase (DECSED, DECSEL). Protected lists the cells of the
+	// active screen it protected, as runs of three ints: row, column and
+	// length. MainProtected is the same for the screen under an active
+	// alternate one. A client without them erased protected cells the next
+	// time the guest sent a selective erase. A peer from before these fields
+	// sends none of them, which reads as nothing protected.
+	PenProtected  bool  `json:"pen_protected,omitempty"`
+	Protected     []int `json:"protected,omitempty"`
+	MainProtected []int `json:"main_protected,omitempty"`
+
+	// LastPrinted is the character REP (CSI b) repeats, as the guest sent
+	// it. LastPrintedKnown says the daemon reported it, so an empty one
+	// means nothing has been printed since a reset, and not an older daemon
+	// that says nothing.
+	LastPrinted      string `json:"last_printed,omitempty"`
+	LastPrintedKnown bool   `json:"last_printed_known,omitempty"`
+
+	// SavedCursor is what DECSC saved on the active screen, which DECRC puts
+	// back. MainSavedCursor is the main screen's, carried while the
+	// alternate one is active: entering it with 1049 saved the shell's
+	// cursor there, and leaving puts it back. A peer from before these
+	// fields sends neither, and the client keeps the saved cursor it has.
+	SavedCursor     *SavedCursorState `json:"saved_cursor,omitempty"`
+	MainSavedCursor *SavedCursorState `json:"main_saved_cursor,omitempty"`
+}
+
+// SavedCursorState is a saved cursor on the wire (vt.SavedCursor).
+type SavedCursorState struct {
+	X           int         `json:"x,omitempty"`
+	Y           int         `json:"y,omitempty"`
+	Pen         *StyleState `json:"pen,omitempty"`
+	PendingWrap bool        `json:"pending_wrap,omitempty"`
+	Origin      bool        `json:"origin,omitempty"`
+	Protected   bool        `json:"protected,omitempty"`
+	// Charsets is the character set selection DECSC saved, in the layout of
+	// TerminalState.Charsets.
+	Charsets []int `json:"charsets,omitempty"`
+}
+
+func savedCursorToWire(c vt.SavedCursor) *SavedCursorState {
+	pen := styleToWire(c.Pen, c.Link)
+	return &SavedCursorState{
+		X:           c.X,
+		Y:           c.Y,
+		Pen:         &pen,
+		PendingWrap: c.PendingWrap,
+		Origin:      c.Origin,
+		Protected:   c.Protected,
+		Charsets: []int{int(c.Charsets[0]), int(c.Charsets[1]), int(c.Charsets[2]),
+			int(c.Charsets[3]), c.GL, c.GR},
+	}
+}
+
+func savedCursorFromWire(t vt.Terminal, s SavedCursorState) vt.SavedCursor {
+	c := vt.SavedCursor{
+		X:           s.X,
+		Y:           s.Y,
+		PendingWrap: s.PendingWrap,
+		Origin:      s.Origin,
+		Protected:   s.Protected,
+		Charsets:    [4]byte{'B', 'B', 'B', 'B'},
+	}
+	if s.Pen != nil {
+		c.Pen, c.Link = styleFromWire(t, *s.Pen)
+	}
+	if len(s.Charsets) == 6 {
+		for i := range 4 {
+			c.Charsets[i] = byte(s.Charsets[i])
+		}
+		c.GL, c.GR = s.Charsets[4], s.Charsets[5]
+	}
+	return c
+}
+
+// runsToWire flattens protected runs into the wire's triples, or nil when
+// there are none.
+func runsToWire(runs []vt.CellRun) []int {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]int, 0, 3*len(runs))
+	for _, r := range runs {
+		out = append(out, r.Y, r.X, r.N)
+	}
+	return out
+}
+
+// runsFromWire reads the wire's triples back. A trailing partial triple is
+// dropped; the emulator clips each run to its own grid.
+func runsFromWire(flat []int) []vt.CellRun {
+	runs := make([]vt.CellRun, 0, len(flat)/3)
+	for i := 0; i+2 < len(flat); i += 3 {
+		runs = append(runs, vt.CellRun{Y: flat[i], X: flat[i+1], N: flat[i+2]})
+	}
+	return runs
 }
 
 // wrapBits packs soft-wrap flags into the wire's bitset, or nil when none is

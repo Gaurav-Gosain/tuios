@@ -300,3 +300,17 @@ func TestGhosttyWireCarriesThePendingWrap(t *testing.T) {
 	t.Run("ghostty-to-pure", func(t *testing.T) { runPendingWrap(t, ghostty, pure) })
 	t.Run("ghostty-to-ghostty", func(t *testing.T) { runPendingWrap(t, ghostty, ghostty) })
 }
+
+// TestGhosttyWireCarriesTheCursorState runs the cursor-state cases across
+// backends. The library holds the saved cursor, the character REP repeats and
+// the pen's hyperlink and protection where no query reaches them, so the
+// backend reads them as the stream goes past, and its restore reaches them
+// only by printing and saving as a guest would. Those are what these cases
+// check.
+func TestGhosttyWireCarriesTheCursorState(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	t.Run("pure-to-ghostty", func(t *testing.T) { runSeamCases(t, cursorStateCases, pure, ghostty) })
+	t.Run("ghostty-to-pure", func(t *testing.T) { runSeamCases(t, cursorStateCases, ghostty, pure) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runSeamCases(t, cursorStateCases, ghostty, ghostty) })
+}

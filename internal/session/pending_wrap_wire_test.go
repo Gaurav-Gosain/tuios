@@ -29,11 +29,7 @@ import (
 //     the line-drawing set, the pen of the cell left in force, or the row
 //     addressed outside the scroll region under origin mode, top or left;
 //   - the flag survives the wire in one form of the snapshot and not the other.
-var pendingWrapCases = []struct {
-	name   string
-	before string // output before the snapshot
-	after  string // output after it, arriving on the stream
-}{
+var pendingWrapCases = []seamCase{
 	{"pending", "$ " + strings.Repeat("x", fidelityCols-3) + "Z", "NEXT\r\n"},
 	{"parked-by-cup", strings.Repeat("x", fidelityCols) + "\r\n\x1b[2;40H", "Q\r\n"},
 	{"pending-then-moved", strings.Repeat("x", fidelityCols), "\x1b[1;1HHOME"},
@@ -58,11 +54,25 @@ func TestWireCarriesThePendingWrap(t *testing.T) {
 	runPendingWrap(t, newPure, newPure)
 }
 
-// runPendingWrap feeds each case's output to a daemon emulator, restores its
-// snapshot into a client, feeds both the output that follows, and compares.
+// seamCase is output a guest produced before a snapshot, and output that
+// arrives on the stream after it.
+type seamCase struct {
+	name   string
+	before string // output before the snapshot
+	after  string // output after it, arriving on the stream
+}
+
+// runPendingWrap runs the pending-wrap cases through runSeamCases.
 func runPendingWrap(t *testing.T, newDaemon, newClient func() vt.Terminal) {
+	runSeamCases(t, pendingWrapCases, newDaemon, newClient)
+}
+
+// runSeamCases feeds each case's output to a daemon emulator, restores its
+// snapshot into a client through both wire forms, feeds both the output that
+// follows, and compares.
+func runSeamCases(t *testing.T, cases []seamCase, newDaemon, newClient func() vt.Terminal) {
 	for _, form := range wireForms {
-		for _, c := range pendingWrapCases {
+		for _, c := range cases {
 			t.Run(form.name+"/"+c.name, func(t *testing.T) {
 				daemon := newDaemon()
 				defer closeEmulator(daemon)
@@ -72,10 +82,13 @@ func runPendingWrap(t *testing.T, newDaemon, newClient func() vt.Terminal) {
 				if _, err := daemon.Write([]byte(c.before)); err != nil {
 					t.Fatalf("feed the daemon: %v", err)
 				}
-				state := TerminalStateOf(daemon, fidelityCols, fidelityRows, 100, 0)
+				state := TerminalStateOf(daemon, daemon.Width(), daemon.Height(), 100, 0)
 				ApplyTerminalState(client, throughWire(t, state, form.packed))
 				if got, want := client.CursorPendingWrap(), daemon.CursorPendingWrap(); got != want {
 					t.Errorf("pending wrap after the restore: client %v, daemon %v", got, want)
+				}
+				if got, want := client.Width(), daemon.Width(); got != want {
+					t.Errorf("width after the restore: client %d, daemon %d", got, want)
 				}
 
 				for _, e := range []vt.Terminal{daemon, client} {

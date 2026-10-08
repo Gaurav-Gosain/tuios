@@ -93,6 +93,16 @@ func wireSamples() []any {
 		&ResizePTYPayload{PTYID: "p", Width: 10, Height: 5},
 		&TerminalStatePayload{},
 		&TerminalStatePayload{PTYID: "p", State: &TerminalState{Width: 4, Height: 2, CursorX: 3, PendingWrap: true}},
+		// The state no cell shows: DECSCA on the pen and on two runs of
+		// cells, REP's character, and a saved cursor on each screen.
+		&TerminalStatePayload{PTYID: "p", State: &TerminalState{
+			Width: 4, Height: 2, IsAltScreen: true,
+			PenProtected: true, Protected: []int{0, 1, 2}, MainProtected: []int{1, 0, 4},
+			LastPrinted: "日", LastPrintedKnown: true,
+			SavedCursor: &SavedCursorState{X: 3, Y: 1, PendingWrap: true, Origin: true, Protected: true,
+				Pen: &StyleState{FgColor: "a1", LinkURL: "https://example.test"}, Charsets: []int{'0', 'B', 'B', 'A', 1, 2}},
+			MainSavedCursor: &SavedCursorState{X: 1},
+		}},
 		&CommandResultPayload{Success: true, Data: map[string]any{"a": 1, "b": []string{"x"}}},
 		&StateSyncPayload{State: &SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}}, TriggerType: "window"},
 		&SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}},

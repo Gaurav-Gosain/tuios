@@ -75,12 +75,14 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 					cb.ProgramStatus(progstatus.Event{Reset: true})
 				}
 			})
-		case '7': // DECSC saves the charset selection with the cursor
-			t.savedCharsets = t.charsetIDs
-			t.savedGL, t.savedGR = t.gl, t.gr
+		case '7': // DECSC
+			t.saveCursorShadowLocked()
 		case '8': // DECRC
-			t.charsetIDs = t.savedCharsets
-			t.gl, t.gr = t.savedGL, t.savedGR
+			t.restoreCursorShadowLocked(t.liveScreenLocked())
+		case 'V': // SPA protects what is printed next, as DECSCA 1 does
+			t.penProtected = true
+		case 'W': // EPA
+			t.penProtected = false
 		case 'n': // LS2
 			t.gl = 2
 		case 'o': // LS3
@@ -100,9 +102,10 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 // expose.
 func (t *GhosttyTerminal) resetShadowState() {
 	t.charsetIDs = defaultCharsetIDs
-	t.savedCharsets = defaultCharsetIDs
 	t.gl, t.gr = 0, 0
-	t.savedGL, t.savedGR = 0, 0
+	t.savedCur = [2]SavedCursor{{Charsets: defaultCharsetIDs}, {Charsets: defaultCharsetIDs}}
+	t.penProtected = false
+	t.scanner.lastPrint = 0
 	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
 	t.savedLRMM = false // a full reset clears the saved modes too
 	t.kittyKbd.Reset()
@@ -134,7 +137,12 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			return
 		}
 		t.scanner.flushOut()
-		if on, _ := t.term.Mode(gh.ModeLeftRightMargin); on && csiParamCount(params) <= 2 {
+		on, _ := t.term.Mode(gh.ModeLeftRightMargin)
+		if !on {
+			// SCOSC saves the cursor as DECSC does.
+			t.saveCursorShadowLocked()
+		}
+		if on && csiParamCount(params) <= 2 {
 			// The library ignores a DECSLRM with more than two parameters.
 			left, right := csiTwoParams(params, 1, t.width)
 			if left < 1 {
@@ -171,6 +179,17 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			style--
 		}
 		t.cursorStyle, t.cursorSteady = CursorStyle(style), !blink
+	case final == 'u' && prefix == 0 && inter == 0 && len(params) == 0:
+		// SCORC restores the cursor as DECRC does.
+		t.restoreCursorShadowLocked(t.liveScreenLocked())
+	case final == 'q' && inter == '"' && prefix == 0:
+		// DECSCA. 1 protects; 0 and 2 stop; anything else changes nothing.
+		switch v, _ := csiFirstParam(params); v {
+		case 1:
+			t.penProtected = true
+		case 0, 2:
+			t.penProtected = false
+		}
 	case final == 'u' && prefix == '>':
 		flags := 0
 		if v, ok := csiFirstParam(params); ok {
@@ -278,6 +297,15 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 		}
 		switch n {
 		case 47, 1047, 1049:
+			// 1049 saves the cursor on the screen it leaves, even when that
+			// is the alternate one, and leaving puts back the main screen's.
+			if n == 1049 {
+				if set {
+					t.saveCursorShadowLocked()
+				} else {
+					t.restoreCursorShadowLocked(0)
+				}
+			}
 			// The cache must flip here, mid-write: a guest that enters the
 			// alternate screen and draws in the same chunk (yazi's image
 			// preview) has its kitty placement computed through
@@ -316,6 +344,12 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 					cb.AltScreen(set)
 				}
 			})
+		case 1048:
+			if set {
+				t.saveCursorShadowLocked()
+			} else {
+				t.restoreCursorShadowLocked(t.liveScreenLocked())
+			}
 		case 69:
 			// Resetting DECLRMM gives the columns back, in the library as in
 			// the pure emulator (csi_mode.go). The copy kept them, and the

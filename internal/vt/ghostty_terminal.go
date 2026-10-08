@@ -99,11 +99,16 @@ type GhosttyTerminal struct {
 	cbq []func()
 
 	// Shadow state libghostty does not expose.
-	charsetIDs       [4]byte
-	gl, gr           int
-	savedCharsets    [4]byte
-	savedGL, savedGR int
-	scrollRegion     uv.Rectangle
+	charsetIDs   [4]byte
+	gl, gr       int
+	scrollRegion uv.Rectangle
+	// savedCur is what DECSC saved on each screen, main first. The library
+	// keeps it where no query reaches, so the scanner reads the cursor as
+	// each save goes past (saveCursorShadowLocked).
+	savedCur [2]SavedCursor
+	// penProtected follows DECSCA on the pen, for savedCur. CursorProtected
+	// asks the library instead.
+	penProtected bool
 	// savedLRMM is the value XTSAVE (CSI ? 69 s) last saved for DECLRMM,
 	// which XTRESTORE (CSI ? 69 r) puts back. The library keeps its own
 	// copy. This one lets the margin copy follow a restore that turns the
@@ -199,7 +204,6 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		styleCache:      make(map[uint16]uv.Style),
 		scrollCache:     make(map[int]uv.Line),
 		charsetIDs:      defaultCharsetIDs,
-		savedCharsets:   defaultCharsetIDs,
 		pipe:            newBufPipe(),
 		kittyKbd:        newKittyKeyboardState(),
 		kittyMain:       NewKittyState(),
@@ -208,6 +212,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		cursorStyle:     defaultCursorStyle,
 		cursorSteady:    defaultCursorSteady,
 	}
+	t.savedCur = [2]SavedCursor{{Charsets: defaultCharsetIDs}, {Charsets: defaultCharsetIDs}}
 	t.bufs[0] = newGrid(w, h)
 	// bufs[1] is made by bufAt on the first switch to the alternate screen.
 	t.scrollRegion = uv.Rect(0, 0, w, h)

@@ -60,6 +60,29 @@ type Terminal interface {
 	RestoreCursorPendingWrap(pending bool)
 	RestoreCursorPen(pen uv.Style, link uv.Link)
 	RestoreCursorStyle(style CursorStyle, steady bool)
+	// CursorProtected reports whether DECSCA protects what the guest prints
+	// next. RestoreCursorProtected puts it back.
+	CursorProtected() bool
+	RestoreCursorProtected(on bool)
+	// SavedCursor is what DECSC last saved on the active screen, or with main
+	// set on the main screen under an active alternate one. A screen that
+	// never saved a cursor reports the zero SavedCursor, which is where a
+	// DECRC with nothing saved goes. RestoreSavedCursor puts one back.
+	SavedCursor(main bool) SavedCursor
+	RestoreSavedCursor(main bool, c SavedCursor)
+	// LastPrinted is the character REP repeats, as the guest sent it, before
+	// any character set maps it. It is empty when nothing has been printed
+	// since the last reset. RestoreLastPrinted puts it back.
+	LastPrinted() string
+	RestoreLastPrinted(cluster string)
+
+	// Protected cells. ProtectedCells lists the cells DECSCA protected on
+	// the active screen, or with main set on the main screen under an active
+	// alternate one, as runs along a row. RestoreProtectedCells replaces the
+	// protection on that screen with the runs given, after the cells are
+	// written: SetCell leaves a cell unprotected.
+	ProtectedCells(main bool) []CellRun
+	RestoreProtectedCells(main bool, runs []CellRun)
 
 	// Screen and mode state. The Restore* half of each pair exists for the
 	// same snapshot priming as SetCell.
@@ -220,3 +243,25 @@ type Terminal interface {
 }
 
 var _ Terminal = (*Emulator)(nil)
+
+// SavedCursor is the state DECSC saves and DECRC puts back: the position, the
+// pen, the pending-wrap flag, origin mode, DECSCA protection and the character
+// set selection. Link is the hyperlink the pen held, which the pure emulator
+// saves with it and libghostty does not.
+type SavedCursor struct {
+	X, Y        int
+	Pen         uv.Style
+	Link        uv.Link
+	PendingWrap bool
+	Origin      bool
+	Protected   bool
+	// Charsets names the set in G0 to G3 by its designator byte, as
+	// Charsets does. A zero byte reads as US ASCII.
+	Charsets [4]byte
+	GL, GR   int
+}
+
+// CellRun is N cells of row Y from column X.
+type CellRun struct {
+	X, Y, N int
+}
