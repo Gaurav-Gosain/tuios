@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 33,370,274 | 33,450,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 31,383,090 | 31,460,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 33,431,714 | 33,500,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 31,467,538 | 31,540,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2461,6 +2461,16 @@ from, the five buffer verbs and their commands, base64 content and uploads,
 the chooser, and the tmux shim's use of the daemon's buffers. It links no new
 package. On main at 1b570369 the build measured 33,370,274 and 31,383,090
 bytes on Go 1.26.6, 120,274 and 93,090 over the old budgets.
+
+The budgets went to 33,500,000 (linux/amd64) and 31,540,000 (darwin/arm64)
+for bounding the memory clients can make the daemon hold (#557): the frame
+reader that charges a frame before it reads it, the read budgets it shares
+with the verb line reader, the connection caps and their refusals, the wait
+for a pane's large write slot, and the client's hold and retry of a refused
+paste. It links golang.org/x/sync/semaphore, which was already in the module
+graph. On Go 1.26.6 the build measured 33,431,714 and 31,467,538 bytes, 45,056
+and 51,296 over origin/main at d2f6277b. darwin/arm64 was 7,538 bytes over the
+old budget.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
