@@ -183,11 +183,12 @@ type guiBridge struct {
 	// snaps counts the SNAP frames of each PTY, for an in-place session
 	// switch, which sends a snapshot of every pane of the new session.
 	snaps map[string]int
-	// outputs holds each PTY's OUTPUT bytes, for the kept emulators of wave
-	// 4 (gui_bridge_wave4_test.go).
-	outputs map[string][]byte
-	closed  bool
-	req     int64
+	// outputs holds each PTY's OUTPUT bytes, and snapBytes its last SNAP's
+	// VT bytes, for wave 4 (gui_bridge_wave4_test.go).
+	outputs   map[string][]byte
+	snapBytes map[string][]byte
+	closed    bool
+	req       int64
 	// log is every command sent and every result, kept as the test's
 	// artifact.
 	log []string
@@ -324,6 +325,12 @@ func (b *guiBridge) read(r io.Reader) {
 				b.snaps = map[string]int{}
 			}
 			b.snaps[string(body[1:1+int(body[0])])]++
+			if b.snapBytes == nil {
+				b.snapBytes = map[string][]byte{}
+			}
+			if len(body) >= 1+int(body[0])+4 {
+				b.snapBytes[string(body[1:1+int(body[0])])] = body[1+int(body[0])+4:]
+			}
 			b.cond.Broadcast()
 			b.mu.Unlock()
 			continue

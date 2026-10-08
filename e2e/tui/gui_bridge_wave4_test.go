@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -505,5 +506,45 @@ func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
 	t.Logf("good again after %v, round trip %d ms", time.Since(back).Round(10*time.Millisecond), r.RTTMs)
 	if r.RTTMs >= 1000 {
 		t.Fatalf("ASSERTION: the round trip counts the stall: %d ms", r.RTTMs)
+	}
+}
+
+// --scrollback sets how much history each snapshot carries: a renderer that
+// keeps 3000 rows gets 3000 on a reopen, not the daemon's default 1000.
+func TestGUIBridgeSnapshotCarriesTheRenderersHistory(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "deep", 100, 30)
+	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
+	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 1 }, "one pane")
+	pty := st.Windows[0].PTY
+	b.input(pty, "seq -f 'deep row %g' 1 2500\r")
+	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("deep row 2500")) }, shellTimeout, "the rows printed")
+	_ = b.in.Close()
+	b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
+
+	for _, c := range []struct {
+		args []string
+		deep bool
+	}{
+		{nil, false},
+		{[]string{"--scrollback", "3000"}, true},
+	} {
+		b := startBridgeWith(t, base, bridgeOpts{args: append([]string{"--session", "deep"}, c.args...), cols: 100, rows: 30, keepDaemon: true, name: fmt.Sprint("deep", len(c.args))})
+		b.waitFor(func() bool { return len(b.snapBytes[pty]) > 0 }, uiTimeout, "the pane's snapshot")
+		b.mu.Lock()
+		snap := b.snapBytes[pty]
+		b.mu.Unlock()
+		// Row 100 and not row 1000 or 1001: a digit may not follow.
+		has := regexp.MustCompile(`deep row 100[^0-9]`).Match(snap)
+		first := ""
+		if i := bytes.Index(snap, []byte("deep row ")); i >= 0 {
+			first = string(snap[i:min(len(snap), i+16)])
+		}
+		t.Logf("%v: snapshot %d bytes, holds row 100: %v, first %q", c.args, len(snap), has, first)
+		if has != c.deep {
+			t.Fatalf("ASSERTION: with %v the snapshot holds row 100 of 2500: %v, want %v", c.args, has, c.deep)
+		}
+		_ = b.in.Close()
+		b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
 	}
 }

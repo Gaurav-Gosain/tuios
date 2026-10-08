@@ -691,8 +691,13 @@ type OS struct {
 	// in force. tuios gui-bridge keeps its own chrome off with it: its
 	// renderer draws the dock and the rail itself, and a reload would bring
 	// them back above the panes for every client of the session.
-	ReloadFilter   func(*config.UserConfig) *config.UserConfig
-	SubscribedPTYs map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
+	ReloadFilter func(*config.UserConfig) *config.UserConfig
+	// SnapshotScrollback is how many history rows a pane's snapshot asks
+	// the daemon for; 0 is the daemon's default, 1000. tuios gui-bridge sets
+	// it to its renderer's own history, so a reopen shows as much as the
+	// renderer keeps.
+	SnapshotScrollback int
+	SubscribedPTYs     map[string]bool // Tracks which PTY IDs are currently subscribed (for visibility optimization)
 	// RestoredStreamSeq is the stream position each pane's snapshot was taken
 	// at, from the restore that precedes the subscribe on the attach path.
 	RestoredStreamSeq map[string]int64
