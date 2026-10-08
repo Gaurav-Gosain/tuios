@@ -122,6 +122,13 @@ var errorCodeCatalog = []struct {
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},
 	{ErrVerbBusy, "The daemon had no room for the request now: other large requests held its memory, or the pane has not read the last large input. Nothing was done. Try again."},
 	{ErrVerbTooManyConnections, "The daemon already serves as many connections as it takes, and closed this one. Nothing was done. Close some clients or commands, then try again."},
+	{ErrVerbNoFile, "A file verb was given a path that does not exist on that machine. Nothing was read or changed. file-list shows what is there."},
+	{ErrVerbFileExists, "The destination exists, and the call was not told to replace it. Nothing was changed. Say what to do with conflict or replace."},
+	{ErrVerbNoPermission, "The user the daemon runs as may not read or change that path. Nothing was changed."},
+	{ErrVerbHashMismatch, "A copy's bytes did not match the original's sha256, so the copy was removed and nothing was put in place. The transfer starts that file again once by itself."},
+	{ErrVerbCrossDevice, "file-rename cannot move a path to another disk. Nothing was moved. Copy it with transfer-start and move set."},
+	{ErrVerbDiskFull, "The disk had no room for the write. What was written stays in the part file. Free space, then resume the transfer."},
+	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 
