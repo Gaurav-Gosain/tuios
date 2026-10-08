@@ -34,10 +34,15 @@ type ghosttyRestore struct {
 	hasAltScreen     bool
 	cursorX, cursorY int
 	hasCursor        bool
-	pen              uv.Style
-	penLink          uv.Link
-	hasPen           bool
-	kittyKbdStack    []int
+	// pendingWrap arms a wrap at the restored cursor. The library takes no
+	// sequence that sets the flag, so the synthesis prints the cell under the
+	// cursor again, which leaves the cursor and the flag where the guest's
+	// own print of it did.
+	pendingWrap   bool
+	pen           uv.Style
+	penLink       uv.Link
+	hasPen        bool
+	kittyKbdStack []int
 	// kittyKbdMainStack is the main screen's stack, carried while the
 	// alternate screen is in use.
 	kittyKbdMainStack []int
@@ -180,7 +185,10 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		appendGridPaint(&seq, r.grids[1], t.width, t.height, r.screenWraps)
 	}
 
-	// Charsets.
+	// Charsets, kept aside as well so a pending wrap can put them back after it
+	// prints with ASCII selected.
+	var charsets bytes.Buffer
+	charsetStart := seq.Len()
 	if r.hasCharsets {
 		inters := [4]byte{'(', ')', '*', '+'}
 		for i, id := range r.charsets {
@@ -212,6 +220,8 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 			seq.WriteString("\x1b|")
 		}
 	}
+
+	charsets.Write(seq.Bytes()[charsetStart:])
 
 	// Kitty keyboard: the library only needs the effective flags for its
 	// query answers; the full stack lives in the shadow.
@@ -288,6 +298,9 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 			y = 0
 		}
 		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, r.cursorX+1)
+		if r.pendingWrap {
+			appendPendingWrap(&seq, r, altActive, y, charsets.Bytes())
+		}
 	}
 
 	// Shadow state follows the synthesized stream, which bypassed the
@@ -497,4 +510,35 @@ func trimTrailingBlanks(line uv.Line) uv.Line {
 		break
 	}
 	return line[:end]
+}
+
+// appendPendingWrap prints the cell under the restored cursor again, so the
+// library is left with the cursor on it and a wrap pending, as the guest's own
+// print left the daemon's emulator. A wide glyph is printed from its lead cell.
+// The cell goes out with its own style and with ASCII selected, so the charset
+// in force does not translate it a second time, and the pen and the charsets
+// are then put back. row is the cursor row as addressed, which origin mode
+// makes relative to the scroll region.
+func appendPendingWrap(seq *bytes.Buffer, r *ghosttyRestore, altActive bool, row int, charsets []byte) {
+	grid := r.grids[0]
+	if altActive {
+		grid = r.grids[1]
+	}
+	x := r.cursorX
+	cell := grid[[2]int{x, r.cursorY}]
+	if x > 0 && (cell == nil || cell.Width == 0) {
+		if lead := grid[[2]int{x - 1, r.cursorY}]; lead != nil && lead.Width == 2 {
+			x, cell = x-1, lead
+		}
+	}
+	if cell == nil || cell.Content == "" {
+		cell = &uv.Cell{Content: " ", Width: 1}
+	}
+	fmt.Fprintf(seq, "\x1b[%d;%dH\x1b(B\x0f", row+1, x+1)
+	appendStyledLine(seq, uv.Line{*cell})
+	seq.WriteString("\x1b[0m")
+	seq.Write(charsets)
+	if r.hasPen {
+		seq.WriteString(penStyleSequence(&r.pen))
+	}
 }

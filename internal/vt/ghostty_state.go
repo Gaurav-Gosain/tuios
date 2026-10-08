@@ -151,6 +151,25 @@ func (t *GhosttyTerminal) RestoreCursorPosition(x, y int) {
 	r.hasCursor = true
 }
 
+// CursorPendingWrap reads the pending-wrap flag straight from the library.
+func (t *GhosttyTerminal) CursorPendingWrap() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed.Load() {
+		return false
+	}
+	t.flushRestoreLocked()
+	pending, err := t.term.CursorPendingWrap()
+	return err == nil && pending
+}
+
+func (t *GhosttyTerminal) RestoreCursorPendingWrap(pending bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	r := t.pendingRestore()
+	r.pendingWrap = pending
+}
+
 func (t *GhosttyTerminal) RestoreCursorPen(pen uv.Style, link uv.Link) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

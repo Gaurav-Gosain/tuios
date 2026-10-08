@@ -50,6 +50,14 @@ type Terminal interface {
 	CursorPen() (uv.Style, uv.Link)
 	CursorStyle() (style CursorStyle, steady bool)
 	RestoreCursorPosition(x, y int)
+	// CursorPendingWrap reports whether the cursor stands on the last column
+	// with a wrap pending: the next printed character goes to the start of
+	// the next row, not over the cell the cursor is on. The cursor position
+	// alone cannot say this.
+	CursorPendingWrap() bool
+	// RestoreCursorPendingWrap arms or clears the pending wrap, after
+	// RestoreCursorPosition has put the cursor back.
+	RestoreCursorPendingWrap(pending bool)
 	RestoreCursorPen(pen uv.Style, link uv.Link)
 	RestoreCursorStyle(style CursorStyle, steady bool)
 

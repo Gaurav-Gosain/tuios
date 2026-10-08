@@ -4014,6 +4014,7 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 		Height:        height,
 		CursorX:       t.CursorPosition().X,
 		CursorY:       t.CursorPosition().Y,
+		PendingWrap:   t.CursorPendingWrap(),
 		ScrollbackLen: t.ScrollbackLen(),
 		IsAltScreen:   t.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
 		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
@@ -4475,6 +4476,7 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 		// written from wherever this client's emulator happened to be left,
 		// which on a pane rebuilt from nothing is the top left corner.
 		t.RestoreCursorPosition(state.CursorX, state.CursorY)
+		t.RestoreCursorPendingWrap(state.PendingWrap)
 	}
 
 	// The shell's screen under a running full-screen program. Quitting the
@@ -4706,11 +4708,18 @@ type TerminalState struct {
 	// has consumed exactly the first Seq bytes the pane ever produced. A client
 	// restoring this state subscribes from Seq, so it receives what came after
 	// the snapshot and not what the snapshot already shows.
-	Seq           int64       `json:"seq,omitempty"`
-	Width         int         `json:"width"`
-	Height        int         `json:"height"`
-	CursorX       int         `json:"cursor_x"`
-	CursorY       int         `json:"cursor_y"`
+	Seq     int64 `json:"seq,omitempty"`
+	Width   int   `json:"width"`
+	Height  int   `json:"height"`
+	CursorX int   `json:"cursor_x"`
+	CursorY int   `json:"cursor_y"`
+	// PendingWrap says the guest has just printed into the last column and
+	// the cursor waits there with a wrap pending, so the next character it
+	// prints starts the next row. Without it a snapshot taken at that moment
+	// restored a cursor that printed over the last cell, and everything the
+	// stream delivered after the snapshot landed one column out. Absent from
+	// an older daemon, which reads as no wrap pending, as before.
+	PendingWrap   bool        `json:"pending_wrap,omitempty"`
 	ScrollbackLen int         `json:"scrollback_len"`
 	IsAltScreen   bool        `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
 	Pen           *StyleState `json:"pen,omitempty"`           // Graphic rendition in force: what the guest's next output is painted with

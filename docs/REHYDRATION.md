@@ -268,6 +268,15 @@ Two things had to be true for that rule to hold, and neither was:
   DECSCUSR parameter the guest would have sent, so zero means the snapshot does
   not say and the client leaves the pane on its default rather than forcing a
   blinking block onto it, which is what an older daemon's snapshot gets.
+- **A pending wrap is carried.** A guest that prints into the last column leaves
+  the cursor on that cell with a wrap pending, and the next character it prints
+  starts the next row. The cursor position alone cannot say this. Without it a
+  snapshot taken at that moment, such as a reattach that caught the shell
+  echoing a command longer than the pane, restored a cursor that printed over
+  the last cell, and every byte the stream delivered after it landed one column
+  out. The libghostty backend takes no sequence that sets the flag, so its
+  restore prints the last cell again. A snapshot from an older daemon has no
+  flag, which reads as no wrap pending.
 - **The scroll region is carried, and only when a guest set one.** A region that
   is simply the whole screen says nothing, and sending it pinned a pane that had
   been resized since to whatever size the daemon was when the snapshot was taken.

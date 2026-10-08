@@ -289,3 +289,14 @@ func TestGhosttyWireGhosttyToGhostty(t *testing.T) {
 		}
 	}
 }
+
+// TestGhosttyWireCarriesThePendingWrap runs the pending-wrap cases across
+// backends. The library takes no sequence that sets the flag, so its restore
+// prints the last cell again, and that print is what these cases check.
+func TestGhosttyWireCarriesThePendingWrap(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	t.Run("pure-to-ghostty", func(t *testing.T) { runPendingWrap(t, pure, ghostty) })
+	t.Run("ghostty-to-pure", func(t *testing.T) { runPendingWrap(t, ghostty, pure) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runPendingWrap(t, ghostty, ghostty) })
+}

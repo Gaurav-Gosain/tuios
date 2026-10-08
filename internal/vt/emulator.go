@@ -882,6 +882,30 @@ func (e *Emulator) RestoreCursorPosition(x, y int) {
 	e.setCursor(x, y)
 }
 
+// CursorPendingWrap reports whether a wrap is pending at the cursor.
+func (e *Emulator) CursorPendingWrap() bool {
+	return e.atPhantom
+}
+
+// RestoreCursorPendingWrap arms or clears the pending wrap a restored snapshot
+// had at the cursor. Call it after RestoreCursorPosition, which clears it.
+//
+// The cursor is also recorded as standing on the cell it was printed into, as
+// the print that armed the wrap left it, so a combining mark that arrives next
+// joins that cell rather than the one after it.
+func (e *Emulator) RestoreCursorPendingWrap(pending bool) {
+	e.atPhantom = pending
+	if !pending {
+		return
+	}
+	pos := e.scr.Cursor().Position
+	x := pos.X
+	if c := e.scr.CellAt(x, pos.Y); x > 0 && c != nil && c.Width == 0 {
+		x--
+	}
+	e.parkedX, e.parkedY = x, pos.Y
+}
+
 // defaultCharsetIDs is US ASCII in all four slots, which is what an emulator
 // that has been sent no SCS sequence is using.
 var defaultCharsetIDs = [4]byte{'B', 'B', 'B', 'B'}
