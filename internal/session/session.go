@@ -754,9 +754,12 @@ type paneIO interface {
 // PTY represents a daemon-managed pseudo-terminal.
 type PTY struct {
 	ID string
-	// largeInput is set while a write of more than largeFrame bytes waits on
-	// the pane. See Write.
-	largeInput atomic.Bool
+	// largeSlot is the pane's one slot for a write of more than largeFrame
+	// bytes, and largeSince when the write holding it took it, in unix
+	// nanoseconds, or 0. See Write.
+	largeSlot     chan struct{}
+	largeSlotOnce sync.Once
+	largeSince    atomic.Int64
 	// sessionID is the session the pane belongs to, which a nesting probe
 	// seen in its output is recorded against. See nest_probe.go.
 	sessionID string
@@ -3581,27 +3584,72 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 
 // Write sends input to the PTY.
 //
-// Input of more than largeFrame bytes, such as a paste, is refused with
-// errPaneInputBusy while another one still waits on the pane. A pane whose
-// program does not read its input blocks the write, and the write holds the
-// input's memory while it waits. One waiting write per pane bounds that memory
-// to the largest input, 16 MiB, for each pane. Every path that types into a
-// pane comes through here: client input, send-text, paste-buffer, send-keys,
-// submit-prompt and respond. Only a caller that may already write to the
-// pane can make it hold that memory. See frame_budget.go.
+// Input of more than largeFrame bytes, such as a paste, takes the pane's one
+// slot for a large write. A second large write waits for the slot up to
+// paneWriteWait, so large writes into a pane that reads go in one after
+// another. It is refused with errPaneInputBusy when the wait runs out, or at
+// once when the write holding the slot has already waited longer than that:
+// the pane is not reading. A pane whose program does not read its input
+// blocks the write, and the write holds the input's memory while it waits,
+// so one waiting write per pane bounds that memory to the largest input, 16
+// MiB, for each pane, plus the writes waiting for the slot, each for at most
+// paneWriteWait. Every path that types into a pane comes through here:
+// client input, send-text, paste-buffer, send-keys, submit-prompt and
+// respond. Only a caller that may already write to the pane can make it hold
+// that memory. See frame_budget.go.
 func (p *PTY) Write(data []byte) (int, error) {
 	if p.pty == nil {
 		return 0, fmt.Errorf("PTY not available")
 	}
 	if len(data) > largeFrame {
-		if !p.largeInput.CompareAndSwap(false, true) {
-			return 0, errPaneInputBusy
+		if err := p.takeLargeSlot(); err != nil {
+			return 0, err
 		}
-		defer p.largeInput.Store(false)
+		defer p.giveLargeSlot()
 	}
 	p.flushWinsize()
 	return p.pty.Write(data)
 }
+
+// paneWriteWait is how long a large write waits for the pane's large write
+// slot. A variable so a test can shorten it.
+var paneWriteWait = 5 * time.Second
+
+// largeSlotCh is the pane's slot for a large write.
+func (p *PTY) largeSlotCh() chan struct{} {
+	p.largeSlotOnce.Do(func() { p.largeSlot = make(chan struct{}, 1) })
+	return p.largeSlot
+}
+
+// takeLargeSlot takes the pane's large write slot, waiting as Write says.
+func (p *PTY) takeLargeSlot() error {
+	slot := p.largeSlotCh()
+	select {
+	case slot <- struct{}{}:
+	default:
+		if since := p.largeSince.Load(); since != 0 && time.Since(time.Unix(0, since)) > paneWriteWait {
+			return errPaneInputBusy
+		}
+		timer := time.NewTimer(paneWriteWait)
+		defer timer.Stop()
+		select {
+		case slot <- struct{}{}:
+		case <-timer.C:
+			return errPaneInputBusy
+		}
+	}
+	p.largeSince.Store(time.Now().UnixNano())
+	return nil
+}
+
+// giveLargeSlot gives the slot back.
+func (p *PTY) giveLargeSlot() {
+	p.largeSince.Store(0)
+	<-p.largeSlotCh()
+}
+
+// largeWriteWaiting reports whether a large write holds the pane's slot.
+func (p *PTY) largeWriteWaiting() bool { return p.largeSince.Load() != 0 }
 
 // errPaneInputBusy refuses a large input to a pane that has not read the
 // last one.

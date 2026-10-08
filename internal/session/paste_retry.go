@@ -2,6 +2,9 @@ package session
 
 import (
 	"errors"
+	"fmt"
+	"log"
+	"net"
 	"time"
 )
 
@@ -22,6 +25,9 @@ import (
 //     reported to OnPasteRefused, which the app shows to the person, and the
 //     held input is sent.
 //   - A paste the daemon took is forgotten at its pong.
+//   - If no pong comes within pasteHoldTimeout, the held input is sent
+//     anyway and the client logs it. While the connection is gone, input to
+//     a held pane returns the connection's error.
 //
 // A daemon that does not tag replies gets every input as it comes, with no
 // hold and no retry, as before.
@@ -107,6 +113,11 @@ func (c *TUIClient) isLargeInput(n int) bool {
 // same pane that is not settled. The caller holds c.mu.
 func (c *TUIClient) writeInputLocked(ptyID string, data []byte) error {
 	if hold := c.inputHolds[ptyID]; hold != nil {
+		// Input held on a connection that is gone would never be sent.
+		if err := c.connLost(); err != nil {
+			delete(c.inputHolds, ptyID)
+			return err
+		}
 		// The caller may reuse data once this returns.
 		hold.queue = append(hold.queue, append([]byte(nil), data...))
 		return nil
@@ -116,6 +127,19 @@ func (c *TUIClient) writeInputLocked(ptyID string, data []byte) error {
 	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	return WritePTYInput(c.conn, ptyID, data)
+}
+
+// connLost returns why the connection is gone, or nil while it is up.
+func (c *TUIClient) connLost() error {
+	select {
+	case <-c.done:
+	default:
+		return nil
+	}
+	if err := c.lostErr.Load(); err != nil {
+		return fmt.Errorf("the connection to the daemon was lost: %w", *err)
+	}
+	return net.ErrClosed
 }
 
 // sendPasteLocked sends a large input with a request id and a ping behind it,
@@ -152,8 +176,33 @@ func (c *TUIClient) sendPasteLocked(ptyID string, data []byte, retried bool) err
 		delete(c.pasteBarriers, ping)
 		c.pastesMu.Unlock()
 		delete(c.inputHolds, ptyID)
+		return err
 	}
-	return err
+	time.AfterFunc(pasteHoldTimeout, func() { c.pasteHoldExpired(id, ping, rec) })
+	return nil
+}
+
+// pasteHoldTimeout is how long input waits behind a paste whose pong has not
+// come. It is a safety net: the daemon answers every ping, and a pong that
+// does not come means a daemon that is stuck or gone. A variable so a test
+// can shorten it.
+var pasteHoldTimeout = 30 * time.Second
+
+// pasteHoldExpired gives up on a paste whose pong did not come within
+// pasteHoldTimeout, and sends the input held behind it.
+func (c *TUIClient) pasteHoldExpired(id, ping uint64, rec *pasteRecord) {
+	c.pastesMu.Lock()
+	_, waiting := c.pasteBarriers[ping]
+	delete(c.pastes, id)
+	delete(c.pasteBarriers, ping)
+	c.pastesMu.Unlock()
+	if !waiting {
+		return
+	}
+	log.Printf("The daemon did not answer a paste of %d bytes within %v. The input held behind it is sent now.", len(rec.data), pasteHoldTimeout)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.releaseHoldLocked(rec.ptyID)
 }
 
 // takePasteReply takes a reply to a paste or to the ping behind it, and

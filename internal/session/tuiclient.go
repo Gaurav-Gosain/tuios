@@ -248,7 +248,10 @@ type TUIClient struct {
 	pasteBarriers       map[uint64]*pasteRecord
 	pastesMu            sync.Mutex
 	inputHolds          map[string]*inputHold
-	sessionEndedOnce    sync.Once // gates the single session-ended notification
+	// lostErr is why the connection was lost, once it was. See
+	// handleDisconnect.
+	lostErr          atomic.Pointer[error]
+	sessionEndedOnce sync.Once // gates the single session-ended notification
 	// pendingEnded holds a session-ended notice that arrived before a handler
 	// was registered: the read loop starts before the app wires itself, and
 	// the daemon can detach a client in between. OnSessionEnded delivers it.
@@ -1104,6 +1107,9 @@ func (c *TUIClient) handleDisconnect(err error) {
 		// App-initiated Close already ran; stay quiet.
 		return
 	default:
+	}
+	if err != nil {
+		c.lostErr.Store(&err)
 	}
 	_ = c.Close() // closes done + conn, idempotent
 	c.disconnectOnce.Do(func() {

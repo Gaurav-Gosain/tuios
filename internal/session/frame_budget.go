@@ -46,9 +46,12 @@ import (
 // A verb line gives its charge back once its envelope is decoded, for the
 // same reason (verb_lines.go). What such a write holds is bounded per pane
 // instead: one large input may wait on each pane, from the client or from
-// any verb that types, and the next is refused as busy (PTY.Write). So the
-// memory blocked writes hold is at most maxFrameBytes for each pane. That is
-// accepted: only a caller that may already write to the pane can cause it.
+// any verb that types (PTY.Write). The next waits for it up to
+// paneWriteWait, and is refused as busy when the pane has not read by then.
+// So the memory blocked writes hold is at most maxFrameBytes for each pane,
+// plus the writes waiting for their turn, each for at most paneWriteWait.
+// That is accepted: only a caller that may already write to the pane can
+// cause it.
 //
 // And the daemon serves at most maxConnections connections on its socket and
 // maxLinkConnections on its link sockets. See admitConnection.

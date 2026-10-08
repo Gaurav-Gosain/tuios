@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"runtime"
@@ -284,7 +285,7 @@ func TestPasteIntoAPaneThatDoesNotRead(t *testing.T) {
 		t.Fatalf("the first paste: %v", err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
-	for !pty.largeInput.Load() {
+	for !pty.largeWriteWaiting() {
 		if time.Now().After(deadline) {
 			t.Fatal("the first paste never reached the pane")
 		}
@@ -405,7 +406,7 @@ func TestConnectionCaps(t *testing.T) {
 // panes whose programs never read, so both send-texts block in the write to
 // the pane. Three 200 KiB set-buffer calls must then succeed at once: the
 // blocked verbs must not hold the read budget. A third send-text into one of
-// the blocked panes must be refused as busy at once.
+// the blocked panes must be refused as busy, after its wait for the slot.
 func TestSendTextIntoPanesThatDoNotRead(t *testing.T) {
 	d, sock := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "st")
@@ -441,7 +442,7 @@ func TestSendTextIntoPanesThatDoNotRead(t *testing.T) {
 		c := dialVerb(t, sock)
 		c.send(t, sendText(window))
 		deadline := time.Now().Add(10 * time.Second)
-		for pty := paneOf(window); pty == nil || !pty.largeInput.Load(); pty = paneOf(window) {
+		for pty := paneOf(window); pty == nil || !pty.largeWriteWaiting(); pty = paneOf(window) {
 			if time.Now().After(deadline) {
 				t.Fatal("the send-text never blocked in the pane")
 			}
@@ -465,11 +466,21 @@ func TestSendTextIntoPanesThatDoNotRead(t *testing.T) {
 
 	var blocked string
 	for _, w := range sess.GetState().Windows {
-		if pty := sess.GetPTY(w.PTYID); pty != nil && pty.largeInput.Load() {
+		if pty := sess.GetPTY(w.PTYID); pty != nil && pty.largeWriteWaiting() {
 			blocked = w.ID
 		}
 	}
-	resp := dialVerb(t, sock).call(t, sendText(blocked))
+	// The pane's slot holder has waited less than paneWriteWait, so this
+	// one waits for the slot first, then is refused.
+	third := dialVerb(t, sock)
+	_ = third.conn.SetDeadline(time.Now().Add(paneWriteWait + 10*time.Second))
+	third.send(t, sendText(blocked))
+	line, err := third.r.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read the third send-text's answer: %v", err)
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(line, &resp)
 	e, _ := resp["error"].(map[string]any)
 	if e == nil || e["code"] != ErrVerbBusy {
 		t.Fatalf("a send-text into a pane that has not read the last one got %v, want %s", resp, ErrVerbBusy)
@@ -535,5 +546,118 @@ func TestPasteKeepsItsPlaceWhenRetried(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("input %d never reached the pane", i+1)
 		}
+	}
+}
+
+// TestLargeWritesIntoAReadingPaneQueue sends six 1 MiB send-text calls at
+// once into a pane running cat, which reads. All six must succeed: a large
+// write waits for the pane's slot while the one before it goes in. Into a
+// pane that does not read, the next large write must still be refused.
+func TestLargeWritesIntoAReadingPaneQueue(t *testing.T) {
+	d, sock := startTestDaemon(t)
+	_ = makeSessionWithWindow(t, d, "q")
+	setup := dialVerb(t, sock)
+	got := result(t, callP(setup, t, "new-window", map[string]any{
+		"session": "q", "command": []string{"cat"}, "focus": false,
+	}))
+	window, _ := got["window_id"].(string)
+	text := strings.Repeat(strings.Repeat("c", 79)+"\n", (1<<20)/80)
+	raw, err := json.Marshal(map[string]any{"id": 1, "verb": "send-text", "params": map[string]any{"session": "q", "window": window, "text": text}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan string, 6)
+	for range 6 {
+		c := dialVerb(t, sock)
+		wg.Go(func() {
+			_ = c.conn.SetDeadline(time.Now().Add(30 * time.Second))
+			c.send(t, string(raw))
+			line, err := c.r.ReadBytes('\n')
+			if err != nil {
+				errs <- err.Error()
+				return
+			}
+			var resp map[string]any
+			_ = json.Unmarshal(line, &resp)
+			if e := resp["error"]; e != nil {
+				errs <- fmt.Sprint(e)
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Errorf("a 1 MiB send-text into cat failed: %s", e)
+	}
+}
+
+// TestPasteHoldIsASafetyNet has a stand-in daemon that never answers the
+// ping behind a paste. The input held behind the paste must go out after
+// pasteHoldTimeout. Once the connection is gone, input to the held pane
+// must return the connection's error.
+func TestPasteHoldIsASafetyNet(t *testing.T) {
+	old := pasteHoldTimeout
+	pasteHoldTimeout = 300 * time.Millisecond
+	defer func() { pasteHoldTimeout = old }()
+
+	clientEnd, daemonEnd := net.Pipe()
+	defer func() { _ = clientEnd.Close(); _ = daemonEnd.Close() }()
+	c := NewTUIClient()
+	c.conn = clientEnd
+	c.requestIDs.Store(true)
+	c.StartReadLoop()
+	defer func() { _ = c.Close() }()
+
+	const pane = "11111111-2222-3333-4444-555555555555"
+	got := make(chan int, 16)
+	go func() {
+		for {
+			msg, err := ReadMessage(daemonEnd)
+			if err != nil {
+				return
+			}
+			if msg.Type == MsgInput {
+				_, data, _ := ParseBinaryPTYMessage(msg.Payload)
+				got <- len(data)
+			}
+		}
+	}()
+	if err := c.WritePTY(pane, bytes.Repeat([]byte("p"), 200<<10)); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.WritePTY(pane, []byte("\r")); err != nil {
+		t.Fatal(err)
+	}
+	if n := <-got; n != 200<<10 {
+		t.Fatalf("the first input was %d bytes, want the paste", n)
+	}
+	select {
+	case n := <-got:
+		if n != 1 {
+			t.Fatalf("the held input was %d bytes, want Enter", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the input held behind a paste with no pong was never sent")
+	}
+
+	// A paste on a connection that then goes: the next input returns the
+	// connection's error, well before the hold would run out.
+	pasteHoldTimeout = time.Minute
+	if err := c.WritePTY(pane, bytes.Repeat([]byte("q"), 200<<10)); err != nil {
+		t.Fatal(err)
+	}
+	<-got
+	_ = daemonEnd.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := c.WritePTY(pane, []byte("\r"))
+		if err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("input to a held pane on a lost connection was queued with no error")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

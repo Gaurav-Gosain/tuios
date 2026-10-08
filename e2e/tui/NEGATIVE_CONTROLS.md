@@ -2973,6 +2973,14 @@ least one of them:
 - A verb line's charge held until the verb returns. Two send-texts blocked
   in panes that do not read make the next set-buffer fail as busy.
 - No bound of one waiting large input per pane, in `PTY.Write`.
+- A second large write refused at once, with no wait for the pane's slot.
+  Five of six 1 MiB send-texts into `cat` fail as busy.
+- A second large write that waits for the slot with no end. A paste or
+  send-text into a pane that does not read is never refused.
+- No time limit on the client's hold behind a paste. With no pong, Enter
+  is never sent.
+- No check for a lost connection while input is held. Input to the held
+  pane is queued with no error.
 - No retry of a busy paste in the client.
 - No hold of later input behind a paste: Enter overtakes the retried paste.
 - The person working through a hub given the peers' budget.
