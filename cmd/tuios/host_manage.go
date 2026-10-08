@@ -618,6 +618,7 @@ func describeConfigApplied(raw []byte) string {
 		Mode          string   `json:"mode"`
 		DefaultGrants []string `json:"default_grants"`
 		Changes       []string `json:"changes"`
+		DroppedKeys   []string `json:"dropped_keys"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return "The daemon applied config.toml.\n"
@@ -635,5 +636,11 @@ func describeConfigApplied(raw []byte) string {
 		grants = strings.Join(res.DefaultGrants, ", ")
 	}
 	fmt.Fprintf(&b, "Mode %s: a pane started with no grants of its own holds %s.\n", plainLine(res.Mode), plainLine(grants))
+	if len(res.DroppedKeys) > 0 {
+		fmt.Fprintf(&b, "tuios cannot read %s:\n", plural.CountAs(len(res.DroppedKeys), "key", "keys"))
+		for _, d := range res.DroppedKeys {
+			b.WriteString("  " + plainLine(d) + "\n")
+		}
+	}
 	return b.String()
 }

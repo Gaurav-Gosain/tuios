@@ -140,17 +140,26 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	if d.configPath == "" {
 		return nil, newVerbError(ErrVerbCommandFailed, "this daemon reads no config file")
 	}
-	data, err := config.ReadConfigFile(d.configPath)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	var lc *config.LayeredConfig
+	var data []byte
+	lc, err := config.LoadLayered(d.configPath)
+	switch {
+	case err == nil:
+		if data, err = lc.Bytes(); err != nil {
+			return nil, newVerbError(ErrVerbCommandFailed, "config.toml could not be read: "+err.Error())
+		}
+	case errors.Is(err, fs.ErrNotExist):
+		lc = nil
+	default:
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml could not be read: "+err.Error())
 	}
 	cfg, err := config.ParseUserConfig(data)
 	if err != nil {
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml has an error, so nothing was applied: "+err.Error())
 	}
-	// A key this platform cannot read is dropped, the same as on load, so a
-	// config shared with a Mac still applies.
-	config.DropUnreadableKeys(cfg)
+	// A key tuios cannot read is dropped, the same as on load, and the
+	// person is told which.
+	dropped := config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))
 
 	before := d.configSnapshot()
 	if p.Host != "" {
@@ -168,6 +177,7 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 		"default_grants": after.grants,
 		"changes":        describeConfigChanges(before, after),
 		"still_waiting":  d.configWaiting(),
+		"dropped_keys":   dropped,
 	}
 	if p.Host != "" {
 		out["host"] = p.Host

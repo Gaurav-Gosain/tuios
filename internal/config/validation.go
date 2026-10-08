@@ -661,33 +661,106 @@ func keySections(kb *KeybindingsConfig) []keySection {
 	}
 }
 
+// DroppedKey is one key DropUnreadableKeys took out of a config.
+type DroppedKey struct {
+	// File is the config file that sets the key, as DisplayPath writes it,
+	// or "config.toml" when the files are not known.
+	File string `json:"file"`
+	// Section is the config table, or "keybindings" for the leader.
+	Section string `json:"section"`
+	// Action is the action the key was bound to, or "leader_key".
+	Action string `json:"action"`
+	Key    string `json:"key"`
+	// Problem is what is wrong, in the validator's words.
+	Problem string `json:"problem"`
+	// Fallback is the key the action uses now: the default key when the
+	// action had no other key, or the default leader. It is empty when the
+	// action kept another key of its own, or when every default key was
+	// already another action's.
+	Fallback []string `json:"fallback,omitempty"`
+	// TakenBy is the action that holds the default key, when the action got
+	// no key back because of it.
+	TakenBy string `json:"taken_by,omitempty"`
+	// KeptOthers is true when the action still has another key of its own.
+	KeptOthers bool `json:"kept_others,omitempty"`
+}
+
+// IsLeader reports whether the dropped key was the leader.
+func (d DroppedKey) IsLeader() bool { return d.Action == "leader_key" }
+
+// Outcome says what tuios does instead of the key, in one sentence.
+func (d DroppedKey) Outcome() string {
+	switch {
+	case d.IsLeader():
+		return fmt.Sprintf("The leader is %s until you correct it.", strings.Join(d.Fallback, ", "))
+	case len(d.Fallback) > 0:
+		return fmt.Sprintf("%s uses its default key, %s.", d.Action, strings.Join(d.Fallback, ", "))
+	case d.TakenBy != "":
+		return fmt.Sprintf("%s has no key, because its default key runs %s.", d.Action, d.TakenBy)
+	case d.KeptOthers:
+		return fmt.Sprintf("%s keeps its other keys.", d.Action)
+	}
+	return fmt.Sprintf("%s has no key.", d.Action)
+}
+
+// Warning is the line the TUI logs for the dropped key.
+func (d DroppedKey) Warning() string {
+	name := d.Key
+	if d.IsLeader() {
+		name = "leader_key = " + d.Key
+	}
+	return fmt.Sprintf("%s: [%s] %s: %s. tuios ignores this key. %s", d.File, d.Section, name, d.Problem, d.Outcome())
+}
+
+// DroppedWarnings is the Warning of each dropped key.
+func DroppedWarnings(dropped []DroppedKey) []string {
+	out := make([]string, 0, len(dropped))
+	for _, d := range dropped {
+		out = append(out, d.Warning())
+	}
+	return out
+}
+
 // DropUnreadableKeys takes out of cfg every key that ValidateConfig calls an
-// error, and returns one line for each key it took out.
+// error, and returns what it took out. lc names the file each key came from;
+// it may be nil.
 //
 // Without it one such key cost the whole file: the load failed, tuios ran on
-// the defaults, and the error went to a stderr the first frame wiped. A file
-// shared with a Mac is the usual case, since opt+ keys are valid only there
-// (issue #556). An action left with no key gets its default back, because an
-// empty list in the file means "unbound" and nobody wrote that. A leader that
-// cannot be read goes back to the default leader.
+// the defaults, and the error went to a stderr the first frame wiped (issue
+// #556). An action left with no key gets its default back, because an empty
+// list in the file means "unbound" and nobody wrote that. A default key that
+// another action already holds is left out, the same yield fillMissingKeybinds
+// makes, so the fallback never takes a key from a binding the user wrote. A
+// leader that cannot be read goes back to the default leader.
 //
 // The baseline is taken again afterwards, so a later save does not write the
-// dropped keys out of the file. The file stays as the user wrote it.
-func DropUnreadableKeys(cfg *UserConfig) []string {
+// dropped keys out of the file. The file stays as the user wrote it. The
+// result is kept on cfg as DroppedKeys, for keybinds doctor.
+func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 	if cfg == nil {
 		return nil
 	}
 	normalizer := NewKeyNormalizer()
 	defaults := DefaultConfig().Keybindings
-	var dropped []string
-	note := func(section, key, msg string) {
-		dropped = append(dropped, fmt.Sprintf("[%s] %s: %s. tuios ignores this key.", section, key, msg))
+	fileOf := func(path ...string) string {
+		if lc == nil {
+			return "config.toml"
+		}
+		holders := lc.Holders(path)
+		if len(holders) == 0 {
+			return lc.DisplayPath(lc.Main)
+		}
+		return lc.DisplayPath(holders[len(holders)-1].Path)
 	}
+	var dropped []DroppedKey
 
 	kb := &cfg.Keybindings
 	if kb.LeaderKey != "" {
 		if ok, msg := normalizer.ValidateKey(kb.LeaderKey); !ok {
-			note("keybindings", "leader_key = "+kb.LeaderKey, msg)
+			dropped = append(dropped, DroppedKey{
+				File: fileOf("keybindings", "leader_key"), Section: "keybindings", Action: "leader_key",
+				Key: kb.LeaderKey, Problem: msg, Fallback: []string{defaults.LeaderKey},
+			})
 			kb.LeaderKey = defaults.LeaderKey
 		}
 	}
@@ -696,12 +769,28 @@ func DropUnreadableKeys(cfg *UserConfig) []string {
 	for _, section := range keySections(&defaults) {
 		defaultTables[section.name] = section.keys
 	}
+	type emptied struct {
+		section keySection
+		action  string
+		first   int // index of the action's first entry in dropped
+	}
+	var refill []emptied
 	for _, section := range keySections(kb) {
-		for action, keys := range section.keys {
+		actions := make([]string, 0, len(section.keys))
+		for action := range section.keys {
+			actions = append(actions, action)
+		}
+		slices.Sort(actions)
+		for _, action := range actions {
+			keys := section.keys[action]
 			kept := keys[:0:0]
+			first := len(dropped)
 			for _, key := range keys {
 				if ok, msg := normalizer.ValidateKey(key); !ok {
-					note(section.name, key, msg)
+					dropped = append(dropped, DroppedKey{
+						File: fileOf("keybindings", section.name, action), Section: section.name,
+						Action: action, Key: key, Problem: msg,
+					})
 					continue
 				}
 				kept = append(kept, key)
@@ -709,16 +798,72 @@ func DropUnreadableKeys(cfg *UserConfig) []string {
 			if len(kept) == len(keys) {
 				continue
 			}
-			if len(kept) == 0 {
-				kept = slices.Clone(defaultTables[section.name][action])
-			}
 			section.keys[action] = kept
+			if len(kept) > 0 {
+				for i := first; i < len(dropped); i++ {
+					dropped[i].KeptOthers = true
+				}
+				continue
+			}
+			refill = append(refill, emptied{section, action, first})
+		}
+	}
+	// The defaults go back once every bad key is out, so a default is only
+	// held back by a binding that works.
+	for _, e := range refill {
+		var back []string
+		takenBy := ""
+		for _, key := range defaultTables[e.section.name][e.action] {
+			if other := keyHolder(cfg, e.section, e.action, key); other != "" {
+				takenBy = other
+				continue
+			}
+			back = append(back, key)
+		}
+		e.section.keys[e.action] = back
+		for i := e.first; i < len(dropped) && dropped[i].Action == e.action && dropped[i].Section == e.section.name; i++ {
+			dropped[i].Fallback = back
+			if len(back) == 0 {
+				dropped[i].TakenBy = takenBy
+			}
 		}
 	}
 	if len(dropped) > 0 {
 		cfg.baseline, _ = MarshalUserConfig(cfg)
 	}
+	cfg.DroppedKeys = dropped
 	return dropped
+}
+
+// keyHolder is the action other than action that holds key in the scope of
+// section, or "". The window-mode tables are one keymap, so a key in any of
+// them counts, as it does for yieldTakenDefaults.
+func keyHolder(cfg *UserConfig, section keySection, action, key string) string {
+	tables := map[string][]string(section.keys)
+	if windowModeSection[section.name] {
+		tables = windowModeTables(cfg)
+	}
+	holders := make([]string, 0, 1)
+	for other, keys := range tables {
+		if other == action {
+			continue
+		}
+		if slices.ContainsFunc(keys, func(k string) bool { return sameKeyPress(k, key) }) {
+			holders = append(holders, other)
+		}
+	}
+	if len(holders) == 0 {
+		return ""
+	}
+	slices.Sort(holders)
+	return holders[0]
+}
+
+// windowModeSection are the tables windowModeTables joins.
+var windowModeSection = map[string]bool{
+	"window_management": true, "workspaces": true, "layout": true,
+	"mode_control": true, "system": true, "navigation": true,
+	"restore_minimized": true,
 }
 
 // hasKeybinding checks if an action has at least one keybinding in a specific section

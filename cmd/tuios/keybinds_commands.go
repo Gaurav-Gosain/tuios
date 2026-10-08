@@ -250,13 +250,19 @@ func formatActionName(action string) string {
 
 // loadKeybindConfig reads the user's config for a command that only reports
 // keys. Unlike config.LoadUserConfig it never writes a default config file, and
-// any failure falls back to the defaults.
+// any failure falls back to the defaults. It reads the config the way the
+// running app does: the keys tuios cannot read are dropped, and the defaults
+// come back in their place. The dropped keys are on DroppedKeys.
 func loadKeybindConfig() *config.UserConfig {
 	path, err := config.GetConfigPath()
 	if err != nil {
 		return config.DefaultConfig()
 	}
-	data, err := config.ReadConfigFile(path)
+	lc, err := config.LoadLayered(path)
+	if err != nil {
+		return config.DefaultConfig()
+	}
+	data, err := lc.Bytes()
 	if err != nil {
 		return config.DefaultConfig()
 	}
@@ -264,6 +270,7 @@ func loadKeybindConfig() *config.UserConfig {
 	if err != nil {
 		return config.DefaultConfig()
 	}
+	config.DropUnreadableKeys(cfg, lc)
 	return cfg
 }
 

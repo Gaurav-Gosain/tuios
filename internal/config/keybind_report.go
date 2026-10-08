@@ -426,7 +426,12 @@ type KeyProblem struct {
 	Action string `json:"action"`
 	Key    string `json:"key"`
 	// Problem is what is wrong, in the validator's words.
-	Problem  string   `json:"problem"`
+	Problem string `json:"problem"`
+	// File is the config file that sets the key.
+	File string `json:"file"`
+	// Outcome says what tuios does instead: the action uses its default
+	// key, the leader is the default leader, or no key press matches.
+	Outcome  string   `json:"outcome"`
 	Evidence Evidence `json:"evidence"`
 }
 
@@ -480,10 +485,19 @@ func (r *KeybindRegistry) OptionKeys() []KeyReadAs {
 // KeyProblems returns every key in the leader and the binding tables that the
 // validator rejects. Such a key is loaded but no key press ever matches it, so
 // without this the only sign of it is a binding that does nothing.
+//
+// A config that went through DropUnreadableKeys has no such key left, and its
+// DroppedKeys are reported instead, with the file and what tuios does now.
 func (r *KeybindRegistry) KeyProblems() []KeyProblem {
 	kb := &r.config.Keybindings
 	normalizer := &KeyNormalizer{isMacOS: macOSHost}
 	var out []KeyProblem
+	for _, d := range r.config.DroppedKeys {
+		out = append(out, KeyProblem{
+			Section: d.Section, Action: d.Action, Key: d.Key, Problem: d.Problem,
+			File: d.File, Outcome: d.Outcome(), Evidence: EvidenceCertain,
+		})
+	}
 	check := func(section, action, key string) {
 		if strings.TrimSpace(key) == "" {
 			return
@@ -491,7 +505,8 @@ func (r *KeybindRegistry) KeyProblems() []KeyProblem {
 		if ok, msg := normalizer.ValidateKey(key); !ok {
 			out = append(out, KeyProblem{
 				Section: section, Action: action, Key: key,
-				Problem: msg, Evidence: EvidenceCertain,
+				Problem: msg, File: "config.toml",
+				Outcome: "No key press matches this key.", Evidence: EvidenceCertain,
 			})
 		}
 	}

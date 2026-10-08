@@ -2990,7 +2990,7 @@ least one of them:
 - No short limit.
 - No cap in `admitConnection`.
 
-## A Mac config.toml on Linux (issue #556)
+## A Mac config.toml on Linux, and keys tuios cannot read (issue #556)
 
 `TestMacConfigWorksOnLinux` loads the 25 `opt+` keys and the leader of the
 reporter's config on Linux. `tuios keybinds doctor --json` must list no key
@@ -2999,15 +2999,37 @@ Alt+1 switch workspaces, Ctrl+S opens the prefix menu, and the log viewer has no
 `Config:` line.
 
 `TestUnreadableKeyKeepsTheRestOfTheFile` starts a daemon session with
-`leader_key = 'ctrl+s'` and two keys that no platform can read, `ctrl+nope`
-and `hyper+esc`. It waits for "2 config problems", then presses Ctrl+S and
-waits for the prefix menu.
+`leader_key = 'ctrl+s'`, `switch_workspace_2 = ['ctrl+nope']` and
+`terminal_exit_mode = ['hyper+esc']`. It waits for "2 config problems". Alt+2
+must switch to workspace 2 on the default key, and Ctrl+S must open the prefix
+menu.
+
+`TestDoctorMatchesTheAppWithBadKeys` is the review repro of #559: an
+unreadable leader and `switch_workspace_2 = ['alt+1']` in config.toml, and
+`switch_workspace_1 = ['hyper+1']` in `config.d/keys.toml`. The doctor must say
+the leader is `ctrl+b` and name each file. explain must say Alt+1 runs
+`switch_workspace_2`. In the app, Alt+1 goes to workspace 2, Ctrl+B opens the
+prefix menu, and the log viewer names both files.
+
+`TestReloadWithABadKeyAppliesTheRest` saves a config with a bad key into a
+running session, then saves one without it. The first reload must name
+`ctrl+nope` and apply Alt+F7. The second must apply Alt+F8.
+
+`TestConfigApplyListsTheKeysItCannotRead` runs `tuios config apply` with
+`switch_workspace_3 = ['hyper+3']` in `config.d/keys.toml`. The output must
+name the key, its file and the default key the action uses.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | `opt+` is rejected off macOS again | `ValidateKey`: the old `opt+`/`option+` rejection put back for `!isMacOS` | `TestMacConfigWorksOnLinux` (the doctor lists 25 keys tuios cannot read). With the doctor checks skipped, it fails at the log viewer, which lists the 25 keys | **caught** |
 | The load rejects the whole file again | `LoadUserConfig`: return an error when `ValidateConfig` has errors, before the call to `DropUnreadableKeys` | `TestUnreadableKeyKeepsTheRestOfTheFile` (the TUI shows "1 config problem", the load failure, and not "2 config problems") | **caught** |
 | The build before the fix | main at `d2f6277b` | `TestUnreadableKeyKeepsTheRestOfTheFile` (no config problem is shown). With that wait skipped, it fails at the prefix menu wait | **caught** |
+| No default comes back | `DropUnreadableKeys`: the emptied action is left with no key | `TestUnreadableKeyKeepsTheRestOfTheFile` (Alt+2 leaves the session on workspace 1) | **caught** |
+| The doctor reads the file as written | `loadKeybindConfig`: the call to `DropUnreadableKeys` cut | `TestDoctorMatchesTheAppWithBadKeys` (the doctor says the leader is `hyper+a`). The app half passes, as it should: the app was right | **caught** |
+| The fallback default does not yield | `DropUnreadableKeys`: the `keyHolder` check cut | `TestDoctorMatchesTheAppWithBadKeys` (explain says Alt+1 runs `switch_workspace_1`). With the doctor checks skipped, Alt+1 leaves the session on workspace 1 | **caught** |
+| Every dropped key names config.toml | `DropUnreadableKeys`: `fileOf` returns `config.toml` | `TestDoctorMatchesTheAppWithBadKeys` (the doctor names `config.toml` for `hyper+1`). With the doctor checks skipped, the log viewer does not name `config.d/keys.toml` | **caught** |
+| The reload rejects a bad key again | `validateLayered`: return an error when `ValidateConfig` has errors | `TestReloadWithABadKeyAppliesTheRest` (the TUI says "Config not reloaded" and never names `ctrl+nope`) | **caught** |
+| `config apply` lists no dropped key | `verbApplyConfig`: the `dropped_keys` field cut from the reply | `TestConfigApplyListsTheKeysItCannotRead` (the output does not say "tuios cannot read 1 key") | **caught** |
 
 The key presses alone cannot catch the first control. A dropped `opt+1` falls
 back to the default `alt+1`, which is the same key on Linux. The doctor and the

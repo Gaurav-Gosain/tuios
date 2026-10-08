@@ -108,7 +108,7 @@ The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`.
 
 You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
 
-tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key.
+tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. A leader that tuios cannot read changes to `ctrl+b`. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` shows the same information.
 
 A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
 

@@ -23,9 +23,11 @@ import (
 // program marks the rows that would be live if it were running, without
 // promoting them out of the reference tier.
 func keybindsDoctor(asJSON bool, guest string) error {
-	// The file as written, not as LoadUserConfig leaves it: the load drops
-	// the keys tuios cannot read, and those keys are the finding. Only a
-	// file that does not parse at all falls back to the defaults.
+	// The config as the running app has it: the keys tuios cannot read are
+	// dropped and the defaults are back, so the leader, the conflicts and the
+	// keys taken from the pane match what the app does. The dropped keys are
+	// the report's key problems. Only a file that does not parse at all falls
+	// back to the defaults.
 	userConfig := loadKeybindConfig()
 	registry := config.NewKeybindRegistry(userConfig)
 	report := registry.Report(config.PaneFacts{Command: guest})
@@ -56,9 +58,20 @@ func printKeybindReport(rep config.KeybindReport) {
 
 	if len(rep.KeyProblems) > 0 {
 		fmt.Printf("\nKEYS TUIOS CANNOT READ (%s)\n", config.EvidenceCertain)
-		fmt.Println("  No key press matches these keys. Correct them in config.toml.")
+		fmt.Println("  tuios ignores these keys.")
+		var files []string
+		byFile := map[string][]config.KeyProblem{}
 		for _, p := range rep.KeyProblems {
-			fmt.Printf("  %-22s %s [%s.%s]\n", p.Key, p.Problem, p.Section, p.Action)
+			if _, ok := byFile[p.File]; !ok {
+				files = append(files, p.File)
+			}
+			byFile[p.File] = append(byFile[p.File], p)
+		}
+		for _, file := range files {
+			fmt.Printf("  Correct them in %s.\n", file)
+			for _, p := range byFile[file] {
+				fmt.Printf("    %-22s %s [%s.%s]. %s\n", p.Key, p.Problem, p.Section, p.Action, p.Outcome)
+			}
 		}
 	}
 

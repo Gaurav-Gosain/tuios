@@ -371,31 +371,20 @@ func ReloadConfig(path string) (*UserConfig, error) {
 	return validateLayered(lc)
 }
 
-// validateLayered is the reload path's parse of a loaded config.
+// validateLayered is the reload path's parse of a loaded config: every
+// section filled from the defaults, then the keys tuios cannot read taken
+// out. It is the same rule as LoadUserConfig: a bad key costs that key.
+// Rejecting the reload kept the old config, so a file that started fine with
+// the keys dropped could then never reload.
 func validateLayered(lc *LayeredConfig) (*UserConfig, error) {
 	data, err := lc.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := parseAndValidate(data)
-	if err != nil {
-		return nil, err
-	}
-	cfg.LoadWarnings = append(append([]string(nil), lc.Warnings...), cfg.LoadWarnings...)
-	return cfg, nil
-}
-
-// parseAndValidate is the reload path's parse: every section filled from the
-// defaults, then the keys tuios cannot read taken out. It is the same fill LoadUserConfig does, which is
-// the point of ParseUserConfig holding the list.
-func parseAndValidate(data []byte) (*UserConfig, error) {
 	cfg, err := ParseUserConfig(data)
 	if err != nil {
 		return nil, err
 	}
-	// The same rule as LoadUserConfig: a bad key costs that key. Rejecting
-	// the reload kept the old config, so a file that started fine with the
-	// keys dropped could then never reload.
-	cfg.LoadWarnings = DropUnreadableKeys(cfg)
+	cfg.LoadWarnings = append(append([]string(nil), lc.Warnings...), DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 	return cfg, nil
 }

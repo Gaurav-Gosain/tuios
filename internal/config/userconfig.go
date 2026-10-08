@@ -71,6 +71,9 @@ type UserConfig struct {
 	// skipped: an included file that is not there, or an include cycle. It is
 	// worked out on load and never written. See include.go.
 	LoadWarnings []string `toml:"-"`
+	// DroppedKeys are the keys the load took out because tuios cannot read
+	// them. Worked out on load and never written. See DropUnreadableKeys.
+	DroppedKeys []DroppedKey `toml:"-"`
 	// baseline is this config as TOML when it was parsed, or when it was last
 	// saved. A save writes the difference from it to now and nothing else.
 	baseline []byte
@@ -1694,7 +1697,7 @@ func LoadUserConfig() (*UserConfig, error) {
 
 	// Read and parse the config file, with the files it includes and the
 	// config.d files merged in.
-	cfg, _, err := loadConfigFile(configPath)
+	cfg, lc, err := loadConfigFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -1704,7 +1707,7 @@ func LoadUserConfig() (*UserConfig, error) {
 
 	// A key tuios cannot read on this platform costs that key, not the file.
 	// The lines reach the TUI through ConfigWarnings.
-	cfg.LoadWarnings = append(cfg.LoadWarnings, DropUnreadableKeys(cfg)...)
+	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 
 	// Warnings are deliberately not printed here. Loading happens before the
 	// alternate screen is entered, so anything written to stdout or stderr at
@@ -1893,7 +1896,14 @@ func createDefaultConfig() (*UserConfig, error) {
 		}
 		lc.Layered = true
 	}
-	return parseLayered(lc)
+	cfg, err := parseLayered(lc)
+	if err != nil {
+		return nil, err
+	}
+	// A config.d file or an include can hold a key tuios cannot read on the
+	// first start too.
+	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
+	return cfg, nil
 }
 
 // fillMissingAppearance fills in any missing appearance settings with defaults.
