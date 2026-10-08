@@ -44,6 +44,15 @@ import (
 //     and never given back, the link sockets share the main socket's slots,
 //     or a refused client is not told why.
 
+// budgetWhole reports whether none of b is taken.
+func budgetWhole(b *memBudget) bool {
+	if !b.sem.TryAcquire(b.size) {
+		return false
+	}
+	b.sem.Release(b.size)
+	return true
+}
+
 // rawFrameHeader is the length prefix, type and codec of an untagged frame
 // with a payload of n bytes.
 func rawFrameHeader(t MessageType, n int) []byte {

@@ -138,11 +138,11 @@ func TestThePersonsShareSurvivesAFullPanePool(t *testing.T) {
 		}
 	}
 	// And the panes' line budget is taken whole.
-	panes := d.lineBudgetFor(false)
-	for range cap(panes) {
-		panes <- struct{}{}
+	panesFull, ok := d.readBudgetFor(&connState{viaLink: true}).acquire(peerBudgetBytes, time.Second)
+	if !ok {
+		t.Fatal("could not take the panes' budget")
 	}
-	defer panes.release(cap(panes))
+	defer panesFull()
 
 	conn, err := net.DialTimeout("unix", socketPath, 3*time.Second)
 	if err != nil {

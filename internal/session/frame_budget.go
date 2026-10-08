@@ -36,8 +36,9 @@ import (
 //     cannot hold its charge.
 //
 // There are two budgets (readBudgetFor). The person's clients draw on one.
-// Links and panes without the admin grant draw on the other, so no peer and
-// no pane can spend the budget the person's own paste needs.
+// Links, hosted pane calls and panes without the admin grant draw on the
+// other, so no peer and no pane can spend the budget the person's own paste
+// needs. The JSON verb line reader (verb_lines.go) charges the same budgets.
 //
 // The charge is given back when the message has been handled, or for
 // MsgInput as soon as it is read: a paste into a pane that does not read its
@@ -66,10 +67,12 @@ const (
 	frameGrowStep = 4 << 20
 
 	// personBudgetBytes is the read budget of the person's own clients, and
-	// peerBudgetBytes the budget links and panes without admin share. Each
-	// holds at least one frame of the largest size, charged twice.
-	personBudgetBytes = 64 << 20
-	peerBudgetBytes   = 32 << 20
+	// peerBudgetBytes the budget links and panes without admin share. The
+	// largest charges are a verb request line, maxVerbLine times lineCopies
+	// (36 MiB), and a 16 MiB frame, charged twice. The person's budget holds
+	// two of either at once, and the other budget one.
+	personBudgetBytes = 96 << 20
+	peerBudgetBytes   = 48 << 20
 
 	// readBudgetWait is how long a large frame waits for its charge. The
 	// client gives a write 5 seconds, and a frame that waits is not being
@@ -145,10 +148,8 @@ func (d *Daemon) readBudgetFor(cs *connState) *memBudget {
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return d.peerBudget
 	}
-	if d.manager != nil && (cs.paneBound.Load() != nil || d.manager.grants.mayMatter()) {
-		if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
-			return d.peerBudget
-		}
+	if d.manager != nil && !d.bufferAccess(cs).person() {
+		return d.peerBudget
 	}
 	return d.personBudget
 }

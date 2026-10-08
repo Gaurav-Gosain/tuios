@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,12 +23,15 @@ import (
 //     dry for good. After done, the budget must be whole again.
 //   - A small line could be held to the budget too, which would lock out
 //     every request while the budget is taken. A small line must still pass.
+//   - Large lines could starve each other: each holding part of the budget
+//     while it waits for the rest. Six at once must all be read in turn.
 func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 	d := &Daemon{}
 	client, server := net.Pipe()
 	defer func() { _ = client.Close() }()
 	defer func() { _ = server.Close() }()
 	lr := &verbLineReader{d: d, cs: &connState{conn: server}, br: bufio.NewReaderSize(server, 64*1024)}
+	budget := d.readBudgetFor(&connState{})
 
 	send := func(b []byte) {
 		go func() { _, _ = client.Write(b) }()
@@ -39,8 +43,8 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("a line of %d bytes read as %v, want errVerbLineTooLong", maxVerbLine+1, err)
 	}
 	lr.done()
-	if n := len(d.lineBudgetFor(true)); n != 0 {
-		t.Fatalf("after the refusal the budget still holds %d chunks", n)
+	if !budgetWhole(budget) {
+		t.Fatal("after the refusal the budget is not whole")
 	}
 
 	// The connection is spent after a refusal; a fresh one for the rest.
@@ -49,9 +53,9 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 	lr = &verbLineReader{d: d, cs: &connState{conn: server}, br: bufio.NewReaderSize(server, 64*1024)}
 
 	// With the budget taken, a large line is refused, and a small one passes.
-	budget := d.lineBudgetFor(true)
-	for range cap(budget) {
-		budget <- struct{}{}
+	full, ok := budget.acquire(personBudgetBytes, time.Second)
+	if !ok {
+		t.Fatal("could not take the budget")
 	}
 	send(append(bytes.Repeat([]byte("y"), 200<<10), '\n'))
 	start := time.Now()
@@ -68,7 +72,7 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 	if line, err := lr.next(); err != nil || !bytes.Contains(line, []byte("hello")) {
 		t.Fatalf("a small line with the budget taken read as %q, %v", line, err)
 	}
-	budget.release(cap(budget))
+	full()
 
 	// A large line under the cap is read whole, and done gives its share back.
 	send(append(bytes.Repeat([]byte("z"), 1<<20), '\n'))
@@ -76,11 +80,38 @@ func TestVerbLinesHoldBoundedMemory(t *testing.T) {
 	if err != nil || len(line) != 1<<20 {
 		t.Fatalf("a 1 MiB line read as %d bytes, %v", len(line), err)
 	}
-	if len(budget) == 0 {
+	if budgetWhole(budget) {
 		t.Fatalf("a 1 MiB line held none of the budget")
 	}
 	lr.done()
-	if n := len(budget); n != 0 {
-		t.Fatalf("after done the budget still holds %d chunks", n)
+	if !budgetWhole(budget) {
+		t.Fatal("after done the budget is not whole")
+	}
+
+	// Six large lines at once are all read, in turn.
+	var wg sync.WaitGroup
+	errs := make(chan error, 6)
+	for range 6 {
+		c, s := net.Pipe()
+		defer func() { _ = c.Close(); _ = s.Close() }()
+		r := &verbLineReader{d: d, cs: &connState{conn: s}, br: bufio.NewReaderSize(s, connReadBuffer)}
+		go func() { _, _ = c.Write(append(bytes.Repeat([]byte("w"), 1<<20), '\n')) }()
+		wg.Go(func() {
+			if _, err := r.next(); err != nil {
+				errs <- err
+				return
+			}
+			// The handler's time, with the charge held.
+			time.Sleep(100 * time.Millisecond)
+			r.done()
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("a large line was not read: %v", err)
+	}
+	if !budgetWhole(budget) {
+		t.Fatal("after six lines the budget is not whole")
 	}
 }

@@ -67,9 +67,9 @@ type Daemon struct {
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
 
-	// The read budgets large frames are charged to, and the connections
-	// served now on the main socket and the link sockets. See
-	// frame_budget.go.
+	// The read budgets large frames and large verb request lines are
+	// charged to, and the connections served now on the main socket and the
+	// link sockets. See frame_budget.go.
 	readBudgetOnce sync.Once
 	personBudget   *memBudget
 	peerBudget     *memBudget
@@ -247,11 +247,6 @@ type Daemon struct {
 	// verb_buffers.go.
 	buffers     *pastebuf.Store
 	buffersOnce sync.Once
-	// lineBudgetCh is the memory large verb request lines may hold across
-	// the daemon. See verb_lines.go.
-	lineBudgetPerson lineBudget
-	lineBudgetPanes  lineBudget
-	lineBudgetOnce   sync.Once
 	// uploads are the buffers being sent in parts. See verb_buffers.go.
 	uploadsMu sync.Mutex
 	uploads   map[*connState]*bufferUpload

@@ -2939,22 +2939,37 @@ deadline (`--timeout 1ns`) gives the CI failure exactly:
 `TestDaemonBoundsStalledFrames` opens 32 connections. Each one announces a
 16 MiB input frame, sends 15 MiB of it and stops. The daemon must grow by
 less than 200 MB. A 1 MiB hello must get a refusal, and the next frame on
-the same connection must get its answer. Of 1100 idle connections, the
-daemon must close at least the 76 over its cap and log the refusal. `tuios
-ls` must answer after. The measurements are in `frame-memory.txt` under the
-test's artifact directory.
+the same connection must get its answer. Of 300 idle connections to the link
+socket, the daemon must refuse at least the 44 over the link cap, and `tuios
+ls` must still answer. Of 1100 idle connections to the main socket, the
+daemon must refuse at least the 76 over its cap and log the refusal, and
+`tuios ls` must say the daemon has too many connections. `tuios ls` must
+answer after the connections close. The measurements are in
+`frame-memory.txt` under the test's artifact directory.
 
-The controls were run on 2026-10-08 against af79c927 with the change applied.
+The controls were run on 2026-10-08 on the branch fix/bound-frame-memory.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The build before the change | main at af79c927 | `TestDaemonBoundsStalledFrames`: the daemon grew by 517 MB, and the 1 MiB hello was decoded and answered "invalid hello payload" | **caught** |
-| No read budget | `serveConnection`: `nil` in place of `d.readBudget()` | `TestDaemonBoundsStalledFrames`: the daemon grew by 877 MB | **caught** |
-| No connection cap | `acceptLoop`: the `admitConnection` call cut | `TestDaemonBoundsStalledFrames`: the daemon closed 0 of 1100 connections and logged nothing | **caught** |
+| No read budget | `serveConnection`: `nil` in place of the budget (first version of the change) | `TestDaemonBoundsStalledFrames`: the daemon grew by 877 MB | **caught** |
+| No connection cap | `acceptLoop`: the `admitConnection` call cut (first version of the change) | `TestDaemonBoundsStalledFrames`: the daemon closed 0 of 1100 connections and logged nothing | **caught** |
+| The link sockets share the main cap | `acceptLinkOn`: `admitConnection` given `openConns` and `maxConnections` | `TestDaemonBoundsStalledFrames`: the daemon refused 0 of 300 link connections | **caught** |
 | No short limit | `daemonFrameLimit`: the default case returns `maxFrameBytes` | `TestDaemonBoundsStalledFrames`: the 1 MiB hello was read and answered "invalid hello payload" | **caught** |
 
-The unit tests in `internal/session/frame_budget_test.go` have their own
-controls, each run once: the body allocated whole from the header, no
-charge to the budget, a charge for every frame, no release on a failed
-read, no short limit, and no cap in `admitConnection`. Each one fails at
-least one of them.
+The unit tests in `internal/session/frame_budget_test.go` and
+`verb_lines_test.go` have their own controls, each run once. Each fails at
+least one of them:
+
+- The budget taken in 1 MiB pieces, each piece kept while the next waits.
+  Six concurrent 16 MiB frames and six concurrent 1 MiB verb lines all time
+  out.
+- A keystroke-sized frame charged to the budget.
+- A link given the person's budget.
+- An input frame's charge held while the input is written to the pane.
+- No bound of one waiting large input per pane.
+- No retry of a busy paste in the client.
+- A refused connection closed without being told why.
+- The body allocated whole from the header.
+- No short limit.
+- No cap in `admitConnection`.
