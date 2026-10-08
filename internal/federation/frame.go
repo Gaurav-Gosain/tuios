@@ -58,6 +58,10 @@ const (
 	frameData frameType = 2
 	// frameClose says the sender is done with the stream. Payload is empty.
 	frameClose frameType = 3
+	// frameCredit says how many bytes of a bulk stream the reader has read,
+	// in all: eight bytes, big endian. Only a bulk stream carries it, and only
+	// between peers that both opened or accepted one. See bulk.go.
+	frameCredit frameType = 4
 )
 
 func (t frameType) String() string {
@@ -68,6 +72,8 @@ func (t frameType) String() string {
 		return "data"
 	case frameClose:
 		return "close"
+	case frameCredit:
+		return "credit"
 	default:
 		return fmt.Sprintf("unknown(%d)", uint8(t))
 	}
@@ -121,7 +127,7 @@ func readFrame(r io.Reader) (frame, error) {
 	}
 	t := frameType(hdr[0])
 	switch t {
-	case frameOpen, frameData, frameClose:
+	case frameOpen, frameData, frameClose, frameCredit:
 	default:
 		return frame{}, fmt.Errorf("%w: %d", ErrBadFrameType, hdr[0])
 	}
