@@ -379,15 +379,15 @@ const (
 )
 
 // USLayoutKey is the registry key that matches key only on a US layout: a
-// shifted-digit alias ("alt+&" for a binding on alt+shift+7), or the chord a
-// composed macOS Option character stands for on a US layout. The input path
+// shifted-digit alias ("alt+&" for a binding on alt+shift+7). The input path
 // asks for it after every plain spelling of a key event has missed, and only
 // when the event does not contradict a US layout (see KeyFitsUSLayout).
 func USLayoutKey(key string) string { return usLayoutTier + key }
 
 // OptionGlyphKey is the registry key that matches chord when it arrives as the
-// character macOS composed for it, with no Alt modifier. The registry fills
-// that tier unless keybindings.option_glyphs is "type".
+// character macOS composed for it, with or without the Alt bit. The registry
+// fills that tier unless keybindings.option_glyphs is "type" or
+// keybindings.keyboard_layout is "other".
 func OptionGlyphKey(chord string) string { return optionGlyphTier + chord }
 
 // KeyFitsUSLayout reports whether a key event is consistent with a US layout,

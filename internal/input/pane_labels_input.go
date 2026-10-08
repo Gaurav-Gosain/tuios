@@ -23,7 +23,7 @@ func handleDisplayPanes(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 //   - esc, ctrl+c, ctrl+g and the leader close. q closes too, when q is not
 //     a label key.
 func handlePaneLabelsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if isLeaderKey(msg, &o.Settings) {
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		o.ClosePaneLabels()
 		return o, nil
 	}

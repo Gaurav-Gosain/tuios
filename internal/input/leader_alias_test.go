@@ -20,12 +20,12 @@ func TestLeaderKeyAcceptsModifierAliases(t *testing.T) {
 		restore := config.ForceMacOSHost(mac)
 		for _, leader := range []string{"opt+f12", "option+f12", "Opt+F12", "alt+f12"} {
 			s := &config.Settings{LeaderKey: leader}
-			if !isLeaderKey(altF12, s) {
+			if !isLeaderKey(altF12, s, 0) {
 				t.Errorf("macOS=%v: leader %q does not match %q", mac, leader, altF12.String())
 			}
 		}
 		s := &config.Settings{LeaderKey: "opt+f12"}
-		if isLeaderKey(tea.KeyPressMsg{Code: tea.KeyF12}, s) {
+		if isLeaderKey(tea.KeyPressMsg{Code: tea.KeyF12}, s, 0) {
 			t.Errorf("macOS=%v: leader opt+f12 matches a bare f12", mac)
 		}
 		restore()

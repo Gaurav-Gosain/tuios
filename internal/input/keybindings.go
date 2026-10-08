@@ -7,6 +7,7 @@
 package input
 
 import (
+	"runtime"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,9 +27,10 @@ func runtimeIsDarwin() bool {
 
 // darwinHost is the answer runtimeIsDarwin gives. A variable so a test can put
 // the macOS-only paths under test on the machine that runs CI.
-// It reads the platform the way the config package does, so the defaults and
-// the key paths agree on one platform.
-var darwinHost = config.PlatformIsMacOS()
+// It is runtime.GOOS and nothing else from the environment, so a GOOS or
+// OSTYPE exported for some other reason cannot turn on the macOS key handling.
+// The end-to-end suite alone asks for it with TUIOS_E2E_PLATFORM=darwin.
+var darwinHost = runtime.GOOS == "darwin" || config.E2EPlatformDarwin()
 
 // Ctrl key combinations mapping
 // Maps the character code to its control code equivalent

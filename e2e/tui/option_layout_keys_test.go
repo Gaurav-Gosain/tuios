@@ -12,7 +12,7 @@ import (
 //
 // Each sequence below is byte for byte what a terminal writes for the key, so
 // the tests run the same decoder and the same key path as the reports.
-// OSTYPE=darwin puts tuios on its macOS defaults (opt+N switches workspace N,
+// TUIOS_E2E_PLATFORM=darwin puts tuios on its macOS defaults (opt+N switches workspace N,
 // opt+shift+N moves the pane there) and turns on its macOS key paths on the
 // Linux machine that runs the suite.
 //
@@ -34,6 +34,22 @@ const (
 	// normalOptionPound is Terminal.app, or iTerm2 with Option on "Normal", as
 	// they ship: Option and 3 on a US layout sends the composed £ as text.
 	normalOptionPound = "£"
+
+	// normalOptionInvExcl is Option and 1 on such a terminal: the composed ¡.
+	normalOptionInvExcl = "¡"
+
+	// kittyComposedDegree is Ghostty or kitty under the Kitty protocol with
+	// Option left to compose: Option, Shift and 8 is the composed ° (176) with
+	// the Alt and Shift bits set and no base-layout key. CSI 176 ; 4 u.
+	kittyComposedDegree = "\x1b[176;4u"
+
+	// kittyAltShift8Base is the same chord reported with its base-layout key,
+	// 56 (8): the key that was pressed is known. CSI 176::56 ; 4 u.
+	kittyAltShift8Base = "\x1b[176::56;4u"
+
+	// optionNote is the start of the one-time note about Option not being
+	// sent as Alt.
+	optionNote = "Option is composing"
 
 	// escPlus8, escPlus3, escPlus1 and escPlusHash are the left Option key as
 	// Meta (WezTerm) or Esc+ (iTerm2): ESC, then the character the key types
@@ -70,7 +86,7 @@ func macSession(t *testing.T, base, session, config string) *tuitest.Terminal {
 	if config != "" {
 		writeConfig(t, base, config)
 	}
-	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", session}, env: []string{"OSTYPE=darwin"}})
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", session}, env: []string{"TUIOS_E2E_PLATFORM=darwin"}})
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "one pane")
@@ -96,6 +112,20 @@ func paneWorkspace(t *testing.T, base, session string) int {
 	return rows[0].Workspace
 }
 
+// waitPaneOn waits for the pane to be on workspace ws. A move and its follow
+// reach the daemon as two steps, so the session can show ws before the pane
+// is there.
+func waitPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws int, why string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for paneWorkspace(t, base, session) != ws {
+		if time.Now().After(deadline) {
+			wantPaneOn(t, term, base, session, ws, why)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // wantPaneOn fails unless the pane is on workspace ws.
 func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws int, why string) {
 	t.Helper()
@@ -107,8 +137,9 @@ func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws i
 // TestComposedOptionCharacterReachesThePane is issue #566. WezTerm composes with
 // the right Option key, so right Option and 8 sends "•" as text. tuios read
 // that character as opt+8 and switched to workspace 8. With
-// keybindings.option_glyphs = "type" the character must reach the shell. The
-// left Option key sends ESC 8, and that must still switch.
+// keybindings.option_glyphs = "type" the character must reach the shell, and
+// so must "¡" with the leader on opt+1. The left Option key sends ESC 8, and
+// that must still switch.
 //
 // Negative control: in bindingKeys, ask for a bare character's chord as a
 // plain key instead of in the Option-glyph tier. The "•" then switches to
@@ -116,19 +147,22 @@ func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws i
 func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	base := t.TempDir()
 	const session = "e2e-opt-compose"
-	term := macSession(t, base, session, "[keybindings]\noption_glyphs = \"type\"\n")
+	term := macSession(t, base, session, "[keybindings]\nleader_key = \"opt+1\"\noption_glyphs = \"type\"\n")
 	enterTerminalMode(t, term)
 
-	// The shell prints x2•y only if the "•" reached it between the two halves.
+	// The shell prints x2•¡y only if the "•" and the "¡" reached it between
+	// the two halves. The "¡" is the leader's composed character, so it also
+	// shows that "type" keeps it from starting the leader.
 	if err := term.SendKeys(`echo "x$((1+1))`); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}
 	press(t, term, "right Option and 8 (composed)", wezComposedBullet)
+	press(t, term, "right Option and 1 (composed)", normalOptionInvExcl)
 	if err := term.SendKeys(`y"`, tuitest.Enter); err != nil {
 		t.Fatalf("finish the command: %v", err)
 	}
-	if err := term.WaitForText("x2•y", shellTimeout); err != nil {
-		t.Fatalf("the composed character did not reach the shell: %v\n%s", err, term.Snapshot())
+	if err := term.WaitForText("x2•¡y", shellTimeout); err != nil {
+		t.Fatalf("the composed characters did not reach the shell: %v\n%s", err, term.Snapshot())
 	}
 	if ws := currentWorkspace(t, base, session); ws != 1 {
 		t.Fatalf("the composed character switched to workspace %d\n%s", ws, term.Snapshot())
@@ -157,6 +191,11 @@ func TestNormalOptionCharacterSwitchesWorkspaceByDefault(t *testing.T) {
 
 	press(t, term, "Option and 3 (composed)", normalOptionPound)
 	waitWorkspace(t, base, session, 3)
+	// The one-time note says Option is not sent as Alt. This is the positive
+	// half of the test that says it stays quiet.
+	if err := term.WaitForText(optionNote, uiTimeout); err != nil {
+		t.Fatalf("the note about Option did not show: %v\n%s", err, term.Snapshot())
+	}
 	saveFrame(t, term, "option-normal-pound-bound")
 
 	// Back on workspace 1 the shell's prompt line holds no "£". A "£" the
@@ -195,11 +234,11 @@ func TestEscPlusOptionChordsOnAUSLayout(t *testing.T) {
 
 	press(t, term, "Option, Shift and 3", escPlusHash)
 	waitWorkspace(t, base, session, 3)
-	wantPaneOn(t, term, base, session, 3, "Option, Shift and 3")
+	waitPaneOn(t, term, base, session, 3, "Option, Shift and 3")
 
 	press(t, term, "Option, Shift and 7 (alt+&)", escPlusAmp)
 	waitWorkspace(t, base, session, 7)
-	wantPaneOn(t, term, base, session, 7, "Option, Shift and 7")
+	waitPaneOn(t, term, base, session, 7, "Option, Shift and 7")
 	saveFrame(t, term, "option-escplus-us")
 }
 
@@ -232,7 +271,7 @@ move_and_follow_2 = ["opt+é"]
 	waitWorkspace(t, base, session, 1)
 	press(t, term, "Option and the 2 key (alt+é)", escPlusEacute)
 	waitWorkspace(t, base, session, 2)
-	wantPaneOn(t, term, base, session, 2, "Option and the 2 key bound to move_and_follow_2")
+	waitPaneOn(t, term, base, session, 2, "Option and the 2 key bound to move_and_follow_2")
 	saveFrame(t, term, "option-escplus-azerty")
 }
 
@@ -289,5 +328,98 @@ func TestAzertyKittyReportsPickTheRightWorkspace(t *testing.T) {
 	time.Sleep(insertGuard)
 	press(t, term, "alt+& with no layout report", kittyAltAmp)
 	waitWorkspace(t, base, session, 7)
-	wantPaneOn(t, term, base, session, 7, "alt+& with no layout report")
+	waitPaneOn(t, term, base, session, 7, "alt+& with no layout report")
+}
+
+// TestOptionLeaderFiresOnTheComposedCharacter is the leader half of the
+// default. With leader_key = "opt+1" on a terminal where Option composes,
+// Option and 1 arrives as "¡", and that has to start the leader the way it
+// runs an opt+ binding. The opt-out is in
+// TestComposedOptionCharacterReachesThePane, where the same "¡" reaches the
+// shell.
+//
+// Negative control: in isLeaderKey, drop the composedChords loop. The "¡" is
+// then typed into the pane, and this fails at the prefix menu wait.
+func TestOptionLeaderFiresOnTheComposedCharacter(t *testing.T) {
+	base := t.TempDir()
+	const session = "e2e-opt-leader"
+	term := macSession(t, base, session, "[keybindings]\nleader_key = \"opt+1\"\n")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ready-$((1+5))", "ready-6", shellTimeout)
+
+	press(t, term, "Option and 1 (composed)", normalOptionInvExcl)
+	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
+		t.Fatalf("the composed character did not start the leader: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "option-leader-composed")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the prefix menu: %v", err)
+	}
+}
+
+// TestKittyComposedCharacterFollowsOptionGlyphs is the Kitty protocol form of
+// option_glyphs = "type". Ghostty and kitty report a composed character with
+// the Alt bit set, so "type" has to cover it as well as plain text: the
+// composed ° of Option, Shift and 8 must not move the pane, and the note about
+// Option must stay quiet. The same chord reported with its base-layout key
+// names the key that was pressed, and still moves the pane.
+//
+// Negative controls:
+//   - In expandInto, fill the Option-glyph tier whatever option_glyphs says.
+//     The first ° moves the pane to workspace 8, and this fails at the first
+//     wantPaneOn.
+//   - In the input handler, drop the optionGlyphsApply check before the note.
+//     The note shows, and this fails at the note check.
+func TestKittyComposedCharacterFollowsOptionGlyphs(t *testing.T) {
+	base := t.TempDir()
+	const session = "e2e-opt-kitty-type"
+	term := macSession(t, base, session, "[keybindings]\noption_glyphs = \"type\"\n")
+
+	press(t, term, "Option, Shift and 8 (kitty, composed °, Alt bit)", kittyComposedDegree)
+	press(t, term, "Option and 3 (ESC 3)", escPlus3)
+	waitWorkspace(t, base, session, 3)
+	wantPaneOn(t, term, base, session, 1, "the composed ° with option_glyphs = \"type\"")
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the frame never settled: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), optionNote) {
+		t.Fatalf("the note about Option shows with option_glyphs = \"type\":\n%s", term.Snapshot())
+	}
+
+	// The positive half: with the base-layout key, the chord is alt+shift+8.
+	press(t, term, "Option and 1 (ESC 1)", escPlus1)
+	waitWorkspace(t, base, session, 1)
+	press(t, term, "Option, Shift and 8 (kitty, base 8)", kittyAltShift8Base)
+	waitWorkspace(t, base, session, 8)
+	waitPaneOn(t, term, base, session, 8, "alt+shift+8 with its base-layout key")
+	saveFrame(t, term, "option-kitty-type")
+}
+
+// TestAzertyCedillaIsNotOptionC: on a French AZERTY Mac the 9 key types ç with
+// no modifier. ç is also what Option and c composes on a US layout, so the
+// US table read the key as opt+c. Under the Kitty protocol the report carries
+// the base-layout key 9, which says the key was typed without Option, and
+// the character must not run opt+c. The positive half: the same ç with no
+// layout report, as Terminal.app sends it for Option and c, runs opt+c.
+//
+// Negative control: in composedChords, ignore the base-layout key. The first
+// ç then moves the pane to workspace 4, and this fails at the first
+// wantPaneOn.
+func TestAzertyCedillaIsNotOptionC(t *testing.T) {
+	base := t.TempDir()
+	const session = "e2e-opt-cedilla"
+	term := macSession(t, base, session, "[keybindings.workspaces]\nmove_and_follow_4 = [\"opt+c\"]\n")
+
+	// CSI 231 :: 57 u: ç, base-layout key 9, no modifier.
+	press(t, term, "the AZERTY 9 key (kitty, ç, base 9)", "\x1b[231::57u")
+	press(t, term, "Option and 3 (ESC 3)", escPlus3)
+	waitWorkspace(t, base, session, 3)
+	wantPaneOn(t, term, base, session, 1, "AZERTY ç with base-layout key 9")
+
+	press(t, term, "Option and 1 (ESC 1)", escPlus1)
+	waitWorkspace(t, base, session, 1)
+	press(t, term, "Option and c (composed ç, no report)", "ç")
+	waitWorkspace(t, base, session, 4)
+	waitPaneOn(t, term, base, session, 4, "Option and c composed")
+	saveFrame(t, term, "option-azerty-cedilla")
 }

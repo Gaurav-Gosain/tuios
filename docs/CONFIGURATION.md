@@ -190,7 +190,7 @@ option_glyphs = "bind"   # bind, type
 | Key | Default | What it does |
 |---|---|---|
 | `keyboard_layout` | `us` | `us` lets a binding on `opt+shift+7` also match `opt+&`, as on a US keyboard. Set `other` for AZERTY, QWERTZ and other layouts. A key that the terminal reports through the Kitty keyboard protocol uses that report. |
-| `option_glyphs` | `bind` | What a character that macOS Option typed does when it arrives with no Alt modifier. `bind` runs the Option binding that the character stands for on a US layout. `type` sends it to the pane. Set `type` if you use Option to type characters. |
+| `option_glyphs` | `bind` | What a character that macOS Option typed does. `bind` runs the Option binding that the character stands for on a US layout. `type` sends it to the pane. Set `type` if you use Option to type characters. |
 
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).

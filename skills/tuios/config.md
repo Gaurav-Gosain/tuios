@@ -393,7 +393,7 @@ A shifted digit has US aliases: `opt+shift+7` also matches `opt+&`. A binding
 written for the key itself wins over an alias, and `explain` lists an alias
 match as `on a US layout`. Set `keybindings.keyboard_layout = "other"` to turn
 the aliases off on AZERTY and other layouts. On macOS a character that Option
-composed, with no Alt modifier, runs the Option binding it stands for on a US
+composed runs the Option binding it stands for on a US
 layout. Set `keybindings.option_glyphs = "type"` to send it to the pane
 instead.
 

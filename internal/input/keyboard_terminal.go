@@ -169,7 +169,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key in terminal mode
-	if isLeaderKey(msg, &o.Settings) {
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		// Leader twice sends the leader itself to the pane, as tmux does with
 		// prefix prefix. It is encoded like any forwarded key: CSI u for a
 		// kitty pane, legacy bytes otherwise. A leader with no legacy encoding

@@ -3112,20 +3112,21 @@ and the pane kept its old palette.
 
 ## Option characters and keyboard layouts (#566, #575)
 
-`option_layout_keys_test.go` has six tests. The default is
-`option_glyphs = "bind"`, the behaviour Terminal.app and iTerm2 users already
-had, and `"type"` is the opt-in for #566. Each one sends the bytes that a
-terminal writes for the key: WezTerm with a composing right Option key, iTerm2
-with Esc+ on US and on French AZERTY, and Kitty protocol reports for AZERTY.
-`OSTYPE=darwin` puts tuios on its macOS defaults and its macOS key paths.
-Every test that says a key does nothing also presses a key that does
-something, in the same session. Each control below cut one piece of wiring,
-built a binary, and ran the named test against it, on 2026-10-08 on branch
+`option_layout_keys_test.go` has nine tests. Each one sends the bytes that a
+terminal writes for the key: WezTerm with a composing right Option key,
+Terminal.app with Option on "Normal", iTerm2 with Esc+ on US and on French
+AZERTY, and Kitty protocol reports for AZERTY and for a composing Option key.
+`TUIOS_E2E_PLATFORM=darwin` puts tuios on its macOS defaults and its macOS key
+paths. The default is `option_glyphs = "bind"`, the behaviour Terminal.app
+and iTerm2 users already had, and `"type"` is the opt-in for #566. Every test
+that says a key does nothing also presses a key that does something, in the
+same session. Each control below cut one piece of wiring, built a binary, and
+ran the named test against it, on 2026-10-08 on branch
 `fix/option-composition-layouts`.
 
 | Control: what was cut | Test | Where it failed |
 | --- | --- | --- |
-| `bindingKeys` asks for a bare character's chord as a plain key, not in the Option-glyph tier | `TestComposedOptionCharacterReachesThePane` | the shell never prints `x2•y` |
+| `bindingKeys` asks for a composed character's chord as a plain key, not in the Option-glyph tier | `TestComposedOptionCharacterReachesThePane` | the shell never prints `x2•¡y` |
 | `expandInto` skips the `OptionGlyphKey` claim | `TestNormalOptionCharacterSwitchesWorkspaceByDefault` | the default config leaves the session on workspace 1 for `£`, want 3 |
 | `bindingKeys` never asks for the US-layout tier | `TestEscPlusOptionChordsOnAUSLayout` | ESC # leaves the session on workspace 1, want 3 |
 | `expandInto` ignores `keyboard_layout = "other"` | `TestAzertyEscPlusWithLayoutOther` | ESC & moves the pane to workspace 7 |
@@ -3133,17 +3134,25 @@ built a binary, and ran the named test against it, on 2026-10-08 on branch
 | `bindingKeys` asks for the US-layout tier without `KeyFitsUSLayout` | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |
 | `bindingKeys` drops the `shiftedKey` spelling | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option, Shift and the 1 key leaves the session on workspace 3, want 1 |
 | `lookupAction` does not hand back the host's base-layout key | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |
+| `isLeaderKey` drops the `composedChords` loop | `TestOptionLeaderFiresOnTheComposedCharacter` | `¡` with `leader_key = "opt+1"` never opens the prefix menu |
+| `expandInto` fills the Option-glyph tier whatever `option_glyphs` says | `TestKittyComposedCharacterFollowsOptionGlyphs` | the Kitty `CSI 176;4u` moves the pane to workspace 8 under `"type"` |
+| The input handler drops the `optionGlyphsApply` check before the note | `TestKittyComposedCharacterFollowsOptionGlyphs` | the note about Option shows under `"type"` |
+| `composedChords` ignores the base-layout key | `TestAzertyCedillaIsNotOptionC` | AZERTY ç with base-layout key 9 moves the pane to workspace 4 |
 
-The same six tests against a build of main at `797ea69e`:
+Against main at `797ea69e`, the four AZERTY and alias tests fail as
+expected, and `TestEscPlusOptionChordsOnAUSLayout` passes, as the positive
+half should. The tests that need the macOS key paths cannot be judged on a
+build of main, because main does not read `TUIOS_E2E_PLATFORM`. The controls
+above are the evidence for those.
 
-| Test | Verdict on main |
+Against the previous head of this branch, `6a4af01e`, run in macOS mode, the
+tests the review asked for fail where they should:
+
+| Test | Where it failed on `6a4af01e` |
 | --- | --- |
-| `TestNormalOptionCharacterSwitchesWorkspaceByDefault` | fails, for a reason outside the test's subject: main reads the platform from `runtime.GOOS` only, so `OSTYPE=darwin` does not turn on its glyph path in terminal mode. On a Mac, main switches. The second control above is the evidence for this test. |
-| `TestAzertyEscPlusWithLayoutOther` | fails: ESC & moves the pane to workspace 7 |
-| `TestOwnBindingBeatsTheUSAlias` | fails: ESC & moves the pane to workspace 7 |
-| `TestAzertyKittyReportsPickTheRightWorkspace` | fails: AZERTY Option and the 1 key moves the pane to workspace 7 |
-| `TestComposedOptionCharacterReachesThePane` | **passes**. Main has no `option_glyphs`, and for the same `runtime.GOOS` reason it does not turn on the code that ate the character. The first control above is the evidence for this test. |
-| `TestEscPlusOptionChordsOnAUSLayout` | passes, as it should: it is the positive half, and US Esc+ worked before |
+| `TestOptionLeaderFiresOnTheComposedCharacter` | `¡` never opens the prefix menu |
+| `TestKittyComposedCharacterFollowsOptionGlyphs` | the Kitty `°` moves the pane to workspace 8 under `"type"` |
+| `TestAzertyCedillaIsNotOptionC` | AZERTY ç with base-layout key 9 moves the pane to workspace 4 |
 
 ## A default config in a browser session (clienttests)
 

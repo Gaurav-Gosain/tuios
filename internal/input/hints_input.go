@@ -37,7 +37,7 @@ func handleOpenHintsAllPanes(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // The leader is read first, so a leader that is Ctrl and a label letter
 // (ctrl+b with b in the alphabet) closes hints rather than opening a match.
 func handleHintsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if isLeaderKey(msg, &o.Settings) {
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		o.CloseHints()
 		return o, nil
 	}

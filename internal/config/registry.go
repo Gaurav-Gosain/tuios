@@ -173,13 +173,13 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 		}
 	}
 	// An Option chord the terminal sent as the character a US layout composes
-	// for it is looked up by the chord, in these tiers.
+	// for it is looked up by the chord, in this tier, with or without the Alt
+	// bit. "type" leaves it empty, so the character goes to the pane.
+	if kb.OptionGlyphs == OptionGlyphsType {
+		return
+	}
 	for _, key := range plain {
-		if !strings.HasPrefix(key, "alt+") {
-			continue
-		}
-		claim(USLayoutKey(key))
-		if kb.OptionGlyphs != OptionGlyphsType {
+		if strings.HasPrefix(key, "alt+") {
 			claim(OptionGlyphKey(key))
 		}
 	}

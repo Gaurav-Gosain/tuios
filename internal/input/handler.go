@@ -346,14 +346,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// A chord that only resolved because tuios recognised the character macOS
-	// composed out of it is proof the Option key is not being sent as Alt. A
-	// user who set keybindings.option_glyphs = "type" composes on purpose
-	// (issue #566): the character went to the pane, and there is nothing to say.
-	if chord, ok := macOptionChord(msg); ok && chord != msg.Keystroke() {
-		typed := msg.Mod&tea.ModAlt == 0 && o.UserConfig != nil &&
-			o.UserConfig.Keybindings.OptionGlyphs == config.OptionGlyphsType
-		if !typed {
-			o.NoteComposedOptionChord(chord)
+	// composed out of it is proof the Option key is not being sent as Alt. With
+	// option_glyphs = "type" the user composes on purpose (issue #566), and with
+	// keyboard_layout = "other" the US table is off: the character went to the
+	// pane, and there is nothing to say.
+	if optionGlyphsApply(o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
+		chords := composedChords(msg, o.HostBaseCode(msg))
+		if len(chords) > 0 && chords[len(chords)-1] != msg.Keystroke() {
+			o.NoteComposedOptionChord(chords[len(chords)-1])
 		}
 	}
 	// The other way a macOS terminal loses an Option chord, and the one that
@@ -482,7 +482,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The message view and the log viewer are the last two: ctrl+b N opens the
 	// view over the rail, and its scroll and close keys must reach it.
 	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox &&
-		!o.MessageViewOpen() && !o.ShowLogs && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
+		!o.MessageViewOpen() && !o.ShowLogs && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return HandleSidebarKey(msg, o)
 	}
 
@@ -554,7 +554,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key activation in window management mode
-	if isLeaderKey(msg, &o.Settings) {
+	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return handlePrefixKey(msg, o)
 	}
 
@@ -635,12 +635,30 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // and reading it by position took an editor's C-x for the leader. The US key
 // at the same position only counts for a non-Latin key (see usesBaseLayout),
 // so Ctrl+и on a Ukrainian layout is still Ctrl+B.
-func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings) bool {
+//
+// A leader spelled with Option (opt+1, alt+a) also fires on the character
+// Option composes for it, by the rules the binding tables follow (see
+// composedChords and optionGlyphsApply). The input path has already taken the
+// base-layout key off msg, so base hands it back; zero when there is none.
+func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 	if config.IsLeaderPress(producedKey(msg).String(), s.LeaderKey) {
 		return true
 	}
-	base, ok := baseLayoutKey(msg)
-	return ok && config.IsLeaderPress(base, s.LeaderKey)
+	if pos, ok := baseLayoutKey(msg); ok && config.IsLeaderPress(pos, s.LeaderKey) {
+		return true
+	}
+	if !optionGlyphsApply(s.KeyboardLayout, s.OptionGlyphs) {
+		return false
+	}
+	if base == 0 {
+		base = msg.BaseCode
+	}
+	for _, chord := range composedChords(msg, base) {
+		if config.IsLeaderPress(chord, s.LeaderKey) {
+			return true
+		}
+	}
+	return false
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation
@@ -692,7 +710,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // key. The leader and the chord after it are let through, so a prefix command
 // works over the viewer the way it does over the rail.
 func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
-	return !isLeaderKey(msg, &o.Settings) && !o.PrefixActive && !o.WorkspacePrefixActive &&
+	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && !o.WorkspacePrefixActive &&
 		!o.MinimizePrefixActive && !o.TilingPrefixActive && !o.DebugPrefixActive &&
 		!o.TapePrefixActive && !o.LayoutPrefixActive
 }

@@ -561,6 +561,11 @@ type Settings struct {
 	// LeaderKey is the prefix key for commands (default: ctrl+b)
 	// Set via appearance.leader_key config
 	LeaderKey string
+	// KeyboardLayout and OptionGlyphs are keybindings.keyboard_layout and
+	// keybindings.option_glyphs, for the leader check, which reads Settings
+	// rather than the binding tables. Empty is the default of each.
+	KeyboardLayout string
+	OptionGlyphs   string
 
 	// PaneGap is the cells of empty space the tiler keeps between two neighbouring
 	// panes: i3's inner gap, and about the only spacing a terminal window manager

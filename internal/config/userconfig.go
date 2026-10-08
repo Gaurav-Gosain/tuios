@@ -782,8 +782,8 @@ type KeybindingsConfig struct {
 	// where those keys sit elsewhere (issue #575). A terminal that reports the
 	// layout under the Kitty protocol is read from that report either way.
 	KeyboardLayout string `toml:"keyboard_layout,omitempty"`
-	// OptionGlyphs is what a character composed with macOS Option does when it
-	// arrives with no Alt modifier: "bind" runs the Option binding it stands
+	// OptionGlyphs is what a character composed with macOS Option does, with
+	// or without the Alt bit: "bind" runs the Option binding it stands
 	// for on a US layout (the default when empty), "type" sends it to the pane.
 	// Terminal.app and iTerm2 ship with Option composing, so opt+N reaches
 	// tuios only as the character. "type" is for a user who composes with
@@ -1561,13 +1561,14 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 
 // getDefaultWorkspaceKeybinds returns platform-specific workspace keybindings
 func getDefaultWorkspaceKeybinds() map[string][]string {
-	// On macOS, use opt+N (which expands to alt+N and unicode via normalization)
+	// On macOS, use opt+N, which the normalizer reads as alt+N. The character
+	// Option composes for it is read by the input path (see OptionGlyphKey).
 	// On Linux/other, use alt+N
 	var base map[string][]string
 
 	if isMacOS() {
 		// macOS users think in terms of Option key
-		// The KeyNormalizer will expand opt+1 → [opt+1, alt+1, ¡]
+		// The KeyNormalizer expands opt+1 to [opt+1, alt+1]
 		base = map[string][]string{
 			"switch_workspace_1": {"opt+1"},
 			"switch_workspace_2": {"opt+2"},
@@ -2374,6 +2375,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Keybindings.LeaderKey != "" {
 		s.LeaderKey = cfg.Keybindings.LeaderKey
 	}
+	s.KeyboardLayout = cfg.Keybindings.KeyboardLayout
+	s.OptionGlyphs = cfg.Keybindings.OptionGlyphs
 
 	// The motion level. A config that was not run through the load path (one
 	// built in code) can still carry the old boolean, so it is folded here as

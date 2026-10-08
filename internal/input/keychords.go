@@ -23,22 +23,21 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //   - Key.String() is the text the key produced when there is one, so a binding
 //     on "!" matches whether the terminal sent the character or the chord.
 //   - Key.Keystroke() is the chord spelling.
-//   - shiftedKey is the chord spelled with the character Shift gave, when the
-//     Kitty protocol reports it: on AZERTY Option+Shift+& is alt+1.
 //   - baseLayoutKey is the US key at the same position, for a key whose
 //     produced character no binding can be spelled in (see usesBaseLayout).
+//   - shiftedKey is the chord spelled with the character Shift gave, when the
+//     Kitty protocol reports it: on AZERTY Option+Shift+& is alt+1.
 //
 // After those come the keys that only match under an assumption about the
 // keyboard, which the registry keeps in tiers of their own, so that a binding
 // written for the key itself always wins:
 //
 //   - The US-layout tier (config.USLayoutKey): the US spellings of a shifted
-//     digit, and the chord a macOS Option character with the Alt bit stands
-//     for. Asked only when the event does not contradict a US layout.
+//     digit. Asked only when the event does not contradict a US layout.
 //   - The Option-glyph tier (config.OptionGlyphKey): the chord a macOS Option
-//     character with no Alt modifier stands for. The registry leaves it empty
-//     when keybindings.option_glyphs is "type", and the character is then
-//     text that goes to the pane (issue #566).
+//     character stands for (see composedChords). The registry leaves it empty
+//     when keybindings.option_glyphs is "type" or keyboard_layout is "other",
+//     and the character is then text that goes to the pane (issue #566).
 //
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.
@@ -54,11 +53,15 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 	if stroke := msg.Keystroke(); stroke != key {
 		keys = append(keys, stroke)
 	}
-	if shifted, ok := shiftedKey(msg); ok && !slices.Contains(keys, shifted) {
-		keys = append(keys, shifted)
-	}
+	// The base-layout key comes before the shifted one. For a non-Latin key
+	// it names the chord pressed, and Bubble Tea fills the shifted key from
+	// the base key when the report leaves it empty, so Option, Shift and 8
+	// composing ° would otherwise read as alt+8.
 	if pos, ok := baseLayoutKey(orig); ok && !slices.Contains(keys, pos) {
 		keys = append(keys, pos)
+	}
+	if shifted, ok := shiftedKey(msg); ok && !slices.Contains(keys, shifted) {
+		keys = append(keys, shifted)
 	}
 	plain := len(keys)
 
@@ -68,26 +71,52 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 			keys = append(keys, config.USLayoutKey(k))
 		}
 	}
-	if chord, ok := macOptionChord(msg); ok && chord != key {
-		tier := config.OptionGlyphKey
-		if mods&tea.ModAlt != 0 {
-			tier = config.USLayoutKey
+	for _, chord := range composedChords(msg, base) {
+		if chord != key {
+			keys = append(keys, config.OptionGlyphKey(chord))
 		}
-		// Four of the Option+letter chords (e, i, n, u) compose the same
-		// character shifted as unshifted, because unshifted they are dead keys
-		// whose accent only lands once a second key ends the composition. When
-		// the terminal reports the Shift bit the two are still tellable apart,
-		// and the shifted reading is the more specific one: alt+shift+n walks
-		// sessions while alt+n walks windows.
-		if mods&tea.ModShift != 0 {
-			if shifted := strings.Replace(chord, "alt+", "alt+shift+", 1); shifted != chord &&
-				!strings.Contains(chord, "shift+") {
-				keys = append(keys, tier(shifted))
-			}
-		}
-		keys = append(keys, tier(chord))
 	}
 	return keys
+}
+
+// composedChords returns the alt+ chords a character macOS composed for an
+// Option chord stands for, most specific first, or nil when msg is not such a
+// character. base is the base-layout key the host sent with msg.
+//
+// With the Alt bit set (Ghostty and kitty under the Kitty protocol), a base
+// key names the key that was pressed, so the chord is that key. Without one,
+// the US table is the only guide. With no Alt bit, a base key means the key
+// was typed without Option: AZERTY ç is the 9 key, not Option and c.
+func composedChords(msg tea.KeyPressMsg, base rune) []string {
+	chord, ok := macOptionChord(msg)
+	if !ok {
+		return nil
+	}
+	mods := msg.Mod &^ lockMods
+	if base != 0 {
+		if mods&tea.ModAlt == 0 {
+			return nil
+		}
+		return []string{tea.Key{Code: base, Mod: mods}.Keystroke()}
+	}
+	// Four of the Option+letter chords (e, i, n, u) compose the same
+	// character shifted as unshifted, because unshifted they are dead keys
+	// whose accent only lands once a second key ends the composition. When
+	// the terminal reports the Shift bit the two are still tellable apart,
+	// and the shifted reading is the more specific one: alt+shift+n walks
+	// sessions while alt+n walks windows.
+	if mods&tea.ModShift != 0 && !strings.Contains(chord, "shift+") {
+		return []string{strings.Replace(chord, "alt+", "alt+shift+", 1), chord}
+	}
+	return []string{chord}
+}
+
+// optionGlyphsApply reports whether the config lets a composed Option
+// character stand for its chord: keyboard_layout is not "other" (the chords
+// come from the US table) and option_glyphs is not "type". The registry
+// applies the same rule when it fills the Option-glyph tier.
+func optionGlyphsApply(layout, glyphs string) bool {
+	return layout != config.KeyboardLayoutOther && glyphs != config.OptionGlyphsType
 }
 
 // shiftedKey spells msg with the character Shift gave in place of the key and
