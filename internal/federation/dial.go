@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,15 +116,55 @@ func SSHArgs(h Host, remoteCmd string) []string {
 const sharingPersist = "10m"
 
 // sharingOptions are the options that make ssh share the connection at
-// h.ControlPath, or none when the host has no path.
+// h.ControlPath. A host with no path rides a master the person opened, when
+// there is one (see reuseOptions).
 func sharingOptions(h Host) []string {
 	if h.ControlPath == "" {
-		return nil
+		return reuseOptions()
 	}
 	return []string{
 		"-o", "ControlMaster=auto",
 		"-o", "ControlPath=" + h.ControlPath,
 		"-o", "ControlPersist=" + sharingPersist,
+	}
+}
+
+// SharedMasterDir is where a client that can ask the person for a secret
+// keeps the ssh master connections it opened: tuios-gpui opens the first
+// connection to a machine itself, with its passphrase, password or second
+// factor prompts in its own window, as a master socket in this folder. The
+// daemon's links never prompt (BatchMode), so this is how a machine that
+// needs a password or a code is reached at all, and no secret is stored.
+//
+// It is $XDG_RUNTIME_DIR/tuios/cm, beside the daemon's socket, or "" with no
+// runtime directory. Each master is named by ssh's %C, a hash of the local
+// host, the remote host, the port and the user, so the client and the daemon
+// name the same socket for the same destination without agreeing on more.
+func SharedMasterDir() string {
+	rt := os.Getenv("XDG_RUNTIME_DIR")
+	if rt == "" {
+		return ""
+	}
+	return filepath.Join(rt, "tuios", "cm")
+}
+
+// reuseOptions make ssh use a live master in SharedMasterDir and otherwise
+// connect as it always did: ControlMaster=no never opens a master and never
+// fails for want of one. The folder must exist and be the user's alone, as
+// the client makes it. A folder others can write could hold a socket that
+// is not the person's connection, so it is not used.
+func reuseOptions() []string {
+	dir := SharedMasterDir()
+	if dir == "" {
+		return nil
+	}
+	fi, err := os.Stat(dir)
+	if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o077 != 0 {
+		return nil
+	}
+	return []string{
+		"-o", "ControlMaster=no",
+		"-o", "ControlPath=" + filepath.Join(dir, "%C"),
 	}
 }
 
