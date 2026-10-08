@@ -122,7 +122,10 @@ type Event struct {
 	// Launcher is set on "launcher" events, the answer to a launcher
 	// command: every program the launcher offers. See launcher.go.
 	Launcher []LauncherEntry `json:"launcher,omitempty"`
-	Req      int64           `json:"req,omitempty"`
+	// Layouts is set on "layouts" events, the answer to a layouts command:
+	// the saved layout templates. See layouts.go.
+	Layouts []SavedLayout `json:"layouts,omitempty"`
+	Req     int64         `json:"req,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -649,6 +652,11 @@ func (m *model) handle(c Command) tea.Cmd {
 		sendOptions(m.out, c.Req)
 	case "launcher":
 		return m.askLauncher()
+	case "layouts":
+		sendLayouts(m.out, c.Req)
+	case "layout-save", "layout-load", "layout-delete":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
+		m.answer(res, m.layoutTemplate(c.Cmd, c.Name))
 	case "launch":
 		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Path}
 		cmd, err := m.launch(c.Path, c.Type)
