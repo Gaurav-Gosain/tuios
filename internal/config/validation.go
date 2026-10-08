@@ -90,7 +90,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 
 	warnEnum(result, "keybindings", "keyboard_layout", cfg.Keybindings.KeyboardLayout, KeyboardLayouts, KeyboardLayoutUS)
-	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsType)
+	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsBind)
 
 	// Validate all sections
 	for _, section := range keySections(&cfg.Keybindings) {

@@ -16,12 +16,8 @@ import (
 // Those keep missing until the setting named here is turned on, so the user is
 // told about it the first time the subject comes up rather than left to find out
 // which of their bindings are quietly unreliable.
-//
-// typed is set when the character arrived with no Alt modifier and went to the
-// pane as text, which is what happens unless keybindings.option_glyphs is
-// "bind". The note then also says how to turn it off.
-func (m *OS) NoteComposedOptionChord(chord string, typed bool) {
-	m.noteOptionProblemTyped(chord, chord, typed)
+func (m *OS) NoteComposedOptionChord(chord string) {
+	m.noteOptionProblem(chord, chord)
 }
 
 // NoteRewrittenAltArrow reports the same thing for the other way a macOS
@@ -45,12 +41,6 @@ func (m *OS) NoteRewrittenAltArrow(got, arrow string) {
 // noteOptionProblem is the one advice, shown once per run. bound is the chord
 // to check is worth talking about; named is how the message spells it.
 func (m *OS) noteOptionProblem(bound, named string) {
-	m.noteOptionProblemTyped(bound, named, false)
-}
-
-// noteOptionProblemTyped is noteOptionProblem for a chord whose character was
-// typed into the pane.
-func (m *OS) noteOptionProblemTyped(bound, named string, typed bool) {
 	if m.optionAdviceShown {
 		return
 	}
@@ -81,9 +71,6 @@ func (m *OS) noteOptionProblemTyped(bound, named string, typed bool) {
 		host = config.HostUnknown
 	}
 	advice := config.MacOptionAdvice(host, chord)
-	if typed {
-		advice += ". " + config.OptionGlyphsAdvice
-	}
 	if host == config.HostGhostty {
 		advice += ". " + config.GhosttyAltArrowAdvice
 	}

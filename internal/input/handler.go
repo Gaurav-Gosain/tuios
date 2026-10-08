@@ -345,16 +345,15 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// A character macOS composed out of an Option chord is proof the Option
-	// key is not being sent as Alt. With no Alt bit at all the character is
-	// text and goes to the pane, unless keybindings.option_glyphs says to read
-	// it as the chord. The note is for a user who has not chosen: one who
-	// composes on purpose with one Option key (issue #566) sets the option and
-	// never sees it.
+	// A chord that only resolved because tuios recognised the character macOS
+	// composed out of it is proof the Option key is not being sent as Alt. A
+	// user who set keybindings.option_glyphs = "type" composes on purpose
+	// (issue #566): the character went to the pane, and there is nothing to say.
 	if chord, ok := macOptionChord(msg); ok && chord != msg.Keystroke() {
-		typed := msg.Mod&tea.ModAlt == 0
-		if !typed || o.UserConfig == nil || o.UserConfig.Keybindings.OptionGlyphs == "" {
-			o.NoteComposedOptionChord(chord, typed)
+		typed := msg.Mod&tea.ModAlt == 0 && o.UserConfig != nil &&
+			o.UserConfig.Keybindings.OptionGlyphs == config.OptionGlyphsType
+		if !typed {
+			o.NoteComposedOptionChord(chord)
 		}
 	}
 	// The other way a macOS terminal loses an Option chord, and the one that

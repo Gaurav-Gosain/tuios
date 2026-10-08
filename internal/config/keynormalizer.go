@@ -387,7 +387,7 @@ func USLayoutKey(key string) string { return usLayoutTier + key }
 
 // OptionGlyphKey is the registry key that matches chord when it arrives as the
 // character macOS composed for it, with no Alt modifier. The registry fills
-// that tier only when keybindings.option_glyphs is "bind".
+// that tier unless keybindings.option_glyphs is "type".
 func OptionGlyphKey(chord string) string { return optionGlyphTier + chord }
 
 // KeyFitsUSLayout reports whether a key event is consistent with a US layout,
@@ -431,11 +431,10 @@ var KeyboardLayouts = []string{KeyboardLayoutUS, KeyboardLayoutOther}
 
 // Option glyph values for keybindings.option_glyphs.
 const (
-	// OptionGlyphsType sends a character composed with Option to the pane. The
-	// default.
+	// OptionGlyphsType sends a character composed with Option to the pane.
 	OptionGlyphsType = "type"
 	// OptionGlyphsBind reads a character composed with Option as the Option
-	// binding it stands for on a US layout.
+	// binding it stands for on a US layout. The default.
 	OptionGlyphsBind = "bind"
 )
 
@@ -474,10 +473,9 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	result = append(result, letterShiftAliases(canonical, strings.ToLower(canonical))...)
 
 	// The character macOS composes for an Option chord is not a spelling of
-	// the binding. A terminal that composes sends it as text with no Alt
-	// modifier, and a user who composes on purpose (issue #566) types it. The
+	// the binding: a user who composes on purpose (issue #566) types it. The
 	// input path reads it through MacOSOptionChord instead, into the tiers
-	// USLayoutKey and OptionGlyphKey name.
+	// USLayoutKey and OptionGlyphKey name, which the config can turn off.
 	if kn.isMacOS {
 		// Option reaches a terminal as the Alt modifier whatever key it is
 		// held with, so the alt+ spelling is always one of the ways an opt+

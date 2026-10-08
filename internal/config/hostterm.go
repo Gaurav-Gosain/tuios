@@ -125,14 +125,6 @@ func MacOptionAdvice(host HostTerminal, chord string) string {
 	return advice
 }
 
-// OptionGlyphsAdvice is the extra step when a composed character went to the
-// pane as text. A user who composes with one Option key on purpose turns the
-// note off with it, and a user who wants the character read as the chord turns
-// that on.
-const OptionGlyphsAdvice = "tuios typed the character into the pane. " +
-	"To stop this note, set keybindings.option_glyphs to \"type\". " +
-	"To run the key, set it to \"bind\""
-
 // GhosttyAltArrowAdvice is the extra step Ghostty needs for the alt+arrow binds.
 // Ghostty ships keybinds that rewrite alt+left/alt+right into the readline word
 // motions ESC b and ESC f before any encoding happens, so those two chords never

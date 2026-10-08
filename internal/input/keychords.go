@@ -36,9 +36,9 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //     digit, and the chord a macOS Option character with the Alt bit stands
 //     for. Asked only when the event does not contradict a US layout.
 //   - The Option-glyph tier (config.OptionGlyphKey): the chord a macOS Option
-//     character with no Alt modifier stands for. The registry fills it only
-//     when keybindings.option_glyphs is "bind". Without that, the character is
-//     text and goes to the pane (issue #566).
+//     character with no Alt modifier stands for. The registry leaves it empty
+//     when keybindings.option_glyphs is "type", and the character is then
+//     text that goes to the pane (issue #566).
 //
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.
@@ -137,8 +137,8 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 // recognised here; anything carrying Ctrl or Super is not a chord macOS
 // composes for and is left alone. Recognising one is not running it:
 // bindingKeys asks for the chord only in the tiers that hold under an
-// assumption, and a bare character is text unless keybindings.option_glyphs
-// is "bind".
+// assumption, and a bare character is text when keybindings.option_glyphs
+// is "type".
 //
 // Darwin only. Every one of these glyphs is an ordinary typed character on some
 // other layout (£ is Shift+3 on a UK keyboard), so doing this anywhere else

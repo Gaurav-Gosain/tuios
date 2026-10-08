@@ -22,7 +22,7 @@ func TestBrowserClientGetsNoTerminalAdvice(t *testing.T) {
 	m := adviceModel()
 	m.BrowserClient = true
 	m.RemoteClient = true
-	m.NoteComposedOptionChord("alt+n", false)
+	m.NoteComposedOptionChord("alt+n")
 	if len(m.Notifications) != 0 {
 		t.Fatalf("a browser client was told to edit a terminal config file it has no way to reach: %q",
 			m.Notifications[0].Message)
@@ -42,7 +42,7 @@ func TestSSHClientGetsGenericAdvice(t *testing.T) {
 	m := adviceModel()
 	m.IsSSHMode = true
 	m.RemoteClient = true
-	m.NoteComposedOptionChord("alt+n", false)
+	m.NoteComposedOptionChord("alt+n")
 	if len(m.Notifications) != 1 {
 		t.Fatalf("an SSH client was told nothing about a chord that did not arrive")
 	}
@@ -93,7 +93,7 @@ func TestTheAdviceIsShownOnce(t *testing.T) {
 	m := adviceModel()
 	m.NoteRewrittenAltArrow("alt+b", "alt+left")
 	m.NoteRewrittenAltArrow("alt+f", "alt+right")
-	m.NoteComposedOptionChord("alt+n", false)
+	m.NoteComposedOptionChord("alt+n")
 
 	if len(m.Notifications) != 1 {
 		t.Errorf("the advice was shown %d times", len(m.Notifications))

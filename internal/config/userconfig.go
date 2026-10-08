@@ -783,10 +783,11 @@ type KeybindingsConfig struct {
 	// layout under the Kitty protocol is read from that report either way.
 	KeyboardLayout string `toml:"keyboard_layout,omitempty"`
 	// OptionGlyphs is what a character composed with macOS Option does when it
-	// arrives with no Alt modifier: "type" sends it to the pane (the default
-	// when empty), "bind" runs the Option binding it stands for on a US layout.
-	// Empty is "type" with a one-time hint when such a character would have
-	// matched a binding; either value written out turns the hint off.
+	// arrives with no Alt modifier: "bind" runs the Option binding it stands
+	// for on a US layout (the default when empty), "type" sends it to the pane.
+	// Terminal.app and iTerm2 ship with Option composing, so opt+N reaches
+	// tuios only as the character. "type" is for a user who composes with
+	// Option on purpose, such as the right Option key in WezTerm (issue #566).
 	OptionGlyphs     string              `toml:"option_glyphs,omitempty"`
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`

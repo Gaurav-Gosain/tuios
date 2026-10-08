@@ -1191,7 +1191,8 @@ move_and_follow_9 = ["opt+ç"]
 ```
 
 To type `[ ] { } |` with Option, set the right Option key to compose. See
-[One Option key for typing](#one-option-key-for-typing).
+[One Option key for typing](#one-option-key-for-typing). With
+`keyboard_layout = "other"`, tuios sends those characters to the pane.
 
 In window mode tuios tells the terminal to send every key as a code. tuios
 resets this when it stops. If tuios cannot stop correctly, the terminal can
@@ -1238,19 +1239,23 @@ To change the keys, set `terminal_scroll_up` and `terminal_scroll_down` in
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an
-Option chord usually arrives as a character rather than as Alt. A character
-that arrives with no Alt modifier is text. tuios sends it to the pane and does
-not run a binding. So when Option+8 types `•`, you get `•`, and not workspace 8.
+Option chord usually arrives as a character rather than as Alt. tuios reads
+the characters that a US layout composes back into the chord that types them.
+When Option+8 types `•`, tuios runs the `opt+8` binding and switches to
+workspace 8.
 
-To read these characters as the Option chord that types them on a US layout,
-set this:
+If you use Option to type characters such as `#`, `•` or `{`, set this. tuios
+then sends the character to the pane:
 
 ```toml
 [keybindings]
-option_glyphs = "bind"   # the default is "type"
+option_glyphs = "type"   # the default is "bind"
 ```
 
-Even with `bind`, two kinds of chord cannot be read:
+With `keyboard_layout = "other"`, tuios does not use the US characters, and
+the characters go to the pane.
+
+Two kinds of chord cannot be read:
 
 - **Dead keys.** Option+e, i, n, u and backtick emit nothing at all until a
   second key ends the composition. `alt+n` is bound to "next pane" in terminal
@@ -1286,8 +1291,7 @@ keybind = alt+right=unbind
 ```
 
 tuios says all of this on screen the first time it sees a chord that did not
-arrive as it was meant to. When the chord arrived as typed text, set
-`option_glyphs` to `"type"` or `"bind"` to stop this note.
+arrive as it was meant to.
 
 ### One Option key for typing
 
@@ -1301,9 +1305,15 @@ config.send_composed_key_when_right_alt_is_pressed = true
 ```
 
 In iTerm2, set Left Option key to "Esc+" and Right Option key to "Normal".
-The left Option key then runs tuios bindings. The right Option key types
-characters into the pane. To stop the note about composed characters, set
-`option_glyphs = "type"` under `[keybindings]`.
+Then set this, so that the right Option key types characters into the pane:
+
+```toml
+[keybindings]
+option_glyphs = "type"
+```
+
+The left Option key sends Alt and runs tuios bindings. The right Option key
+types characters into the pane.
 
 ### What works without changing anything
 

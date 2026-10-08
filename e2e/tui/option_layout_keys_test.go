@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,10 @@ const (
 	// right Option and 8 on a US layout sends the composed character as text,
 	// with no ESC and no modifier.
 	wezComposedBullet = "•"
+
+	// normalOptionPound is Terminal.app, or iTerm2 with Option on "Normal", as
+	// they ship: Option and 3 on a US layout sends the composed £ as text.
+	normalOptionPound = "£"
 
 	// escPlus8, escPlus3, escPlus1 and escPlusHash are the left Option key as
 	// Meta (WezTerm) or Esc+ (iTerm2): ESC, then the character the key types
@@ -101,8 +106,9 @@ func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws i
 
 // TestComposedOptionCharacterReachesThePane is issue #566. WezTerm composes with
 // the right Option key, so right Option and 8 sends "•" as text. tuios read
-// that character as opt+8 and switched to workspace 8. The character must
-// reach the shell. The left Option key sends ESC 8, and that must still switch.
+// that character as opt+8 and switched to workspace 8. With
+// keybindings.option_glyphs = "type" the character must reach the shell. The
+// left Option key sends ESC 8, and that must still switch.
 //
 // Negative control: in bindingKeys, ask for a bare character's chord as a
 // plain key instead of in the Option-glyph tier. The "•" then switches to
@@ -110,7 +116,7 @@ func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws i
 func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	base := t.TempDir()
 	const session = "e2e-opt-compose"
-	term := macSession(t, base, session, "")
+	term := macSession(t, base, session, "[keybindings]\noption_glyphs = \"type\"\n")
 	enterTerminalMode(t, term)
 
 	// The shell prints x2•y only if the "•" reached it between the two halves.
@@ -134,21 +140,38 @@ func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	waitWorkspace(t, base, session, 8)
 }
 
-// TestComposedOptionCharacterRunsTheBindingWhenAsked is the opt-in that keeps
-// the old reading: with keybindings.option_glyphs = "bind", the same "•" is
-// opt+8 and switches to workspace 8.
+// TestNormalOptionCharacterSwitchesWorkspaceByDefault is the shipped default.
+// Terminal.app and iTerm2 ship with Option on "Normal", so Option and 3 sends
+// the composed "£" and nothing else. With no config, that is opt+3 and
+// switches to workspace 3, as it did before #566. The character must not
+// reach the shell.
 //
-// Negative control: in expandInto, skip the OptionGlyphKey claim. The "•" is
+// Negative control: in expandInto, skip the OptionGlyphKey claim. The "£" is
 // then typed into the shell, and this fails at the workspace wait.
-func TestComposedOptionCharacterRunsTheBindingWhenAsked(t *testing.T) {
+func TestNormalOptionCharacterSwitchesWorkspaceByDefault(t *testing.T) {
 	base := t.TempDir()
-	const session = "e2e-opt-glyphs"
-	term := macSession(t, base, session, "[keybindings]\noption_glyphs = \"bind\"\n")
+	const session = "e2e-opt-normal"
+	term := macSession(t, base, session, "")
 	enterTerminalMode(t, term)
+	runInShell(t, term, "echo ready-$((2+3))", "ready-5", shellTimeout)
 
-	press(t, term, "Option and 8 (composed)", wezComposedBullet)
-	waitWorkspace(t, base, session, 8)
-	saveFrame(t, term, "option-composed-bullet-bound")
+	press(t, term, "Option and 3 (composed)", normalOptionPound)
+	waitWorkspace(t, base, session, 3)
+	saveFrame(t, term, "option-normal-pound-bound")
+
+	// Back on workspace 1 the shell's prompt line holds no "£". A "£" the
+	// shell got is echoed there, since the prompt waits for the rest of a line.
+	press(t, term, "Option and 1 (ESC 1)", escPlus1)
+	waitWorkspace(t, base, session, 1)
+	if err := term.WaitForText("ready-5", uiTimeout); err != nil {
+		t.Fatalf("workspace 1 is not drawn again: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the frame never settled: %v\n%s", err, term.Snapshot())
+	}
+	if text := term.Screen().Text(); strings.Contains(text, "£") {
+		t.Fatalf("the composed character was typed into the pane:\n%s", term.Snapshot())
+	}
 }
 
 // TestEscPlusOptionChordsOnAUSLayout is iTerm2 with Esc+ on a US layout. ESC 3

@@ -179,7 +179,7 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 			continue
 		}
 		claim(USLayoutKey(key))
-		if kb.OptionGlyphs == OptionGlyphsBind {
+		if kb.OptionGlyphs != OptionGlyphsType {
 			claim(OptionGlyphKey(key))
 		}
 	}
