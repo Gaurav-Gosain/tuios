@@ -69,8 +69,8 @@ func (e *Emulator) handleRequestMode(params ansi.Params, isAnsi bool) {
 //
 // The settings reported are the ones this emulator holds exactly: the margins,
 // the pen (SGR) and the cursor shape (DECSCUSR). Each value is written so that
-// sending it back recreates the state it was read from. DECSCA is refused,
-// because nothing here protects cells.
+// sending it back recreates the state it was read from. DECSCA is refused, as
+// libghostty refuses it, so a guest hears the same answer on either backend.
 func (e *Emulator) reportSetting(req string) {
 	r := e.scr.ScrollRegion()
 	var value string

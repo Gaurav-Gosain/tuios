@@ -29,4 +29,7 @@ type Cursor struct {
 	uv.Position
 
 	Hidden bool
+	// Protected says DECSCA protects what is printed next from a selective
+	// erase. DECSC saves it with the rest of the cursor.
+	Protected bool
 }

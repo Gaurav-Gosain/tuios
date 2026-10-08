@@ -73,8 +73,9 @@ func (e *Emulator) restoreCharsets() {
 // origin mode absolute, the keypad numeric, normal arrow keys, the scroll
 // region back to the full page, the left and right margins with it, G0 to G3
 // and GL and GR back to their defaults, SGR back to normal, and the saved
-// cursor to home. The modes DEC also lists but this emulator has no notion of,
-// KAM, DECNRCM, DECSCA, DECSASD, DECKPM, DECRLM and DECPCTERM, are left out:
+// cursor to home, and DECSCA protection off for what is printed next. The
+// modes DEC also lists but this emulator has no notion of, KAM, DECNRCM,
+// DECSASD, DECKPM, DECRLM and DECPCTERM, are left out:
 // a guest cannot set them (see handleMode), so there is nothing to clear.
 //
 // Two things it deliberately does not do, both of which programs depend on: it
@@ -113,6 +114,8 @@ func (e *Emulator) softReset() {
 	// printed afterwards belong to somebody's URL.
 	e.scr.cur.Pen = uv.Style{}
 	e.scr.cur.Link = uv.Link{}
+	// DEC lists DECSCA among what a soft reset turns off.
+	e.scr.cur.Protected = false
 
 	// The saved cursor goes back to the origin with a default pen, so a DECRC
 	// after a soft reset lands somewhere defined.

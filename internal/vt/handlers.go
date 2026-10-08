@@ -7,7 +7,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -658,97 +657,45 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		return true
 	})
 
-	eraseDisplay := func(params ansi.Params) bool {
-		// Erase in Display [ansi.ED]
-		n, _, _ := params.Param(0, 0)
-		width, height := e.Width(), e.Height()
-		x, y := e.scr.CursorPosition()
-		switch n {
-		case 0: // Erase screen below (from after cursor position)
-			rect1 := uv.Rect(x, y, width, 1)            // cursor to end of line
-			rect2 := uv.Rect(0, y+1, width, height-y-1) // next line onwards
-			e.scr.FillArea(e.scr.blankCell(), rect1)
-			e.scr.FillArea(e.scr.blankCell(), rect2)
-			// Don't clear images for ED 0: commonly used by apps
-			// But clear text sizing placements if clearing from top (ctrl+l pattern: CUP(1,1) + ED 0)
-			if x == 0 && y == 0 && e.cb.ScreenClear != nil {
-				e.cb.ScreenClear()
-			}
-		case 1: // Erase screen above (including cursor)
-			// The cursor's own row is erased only as far as the cursor, the
-			// way EL 1 does it. Clearing the whole row instead takes out text
-			// to the right of the cursor that the guest still expects to be
-			// there, which shows up as the top of a redrawn screen losing its
-			// last line.
-			if y > 0 {
-				e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, 0, width, y))
-			}
-			e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, y, min(x+1, width), 1))
-			// Don't clear images for ED 1: commonly used by apps
-		case 2: // erase screen (clear command)
-			e.scr.Clear()
-			e.KittyState().ClearPlacements()
-			// Drop on-screen semantic markers so stale prompt/command markers
-			// don't cause output extraction to read overwritten cells.
-			if e.semanticMarkers != nil {
-				e.semanticMarkers.RemoveOnScreen(e.ScrollbackLen())
-			}
-			if e.cb.ScreenClear != nil {
-				e.cb.ScreenClear()
-			}
-		case 3: // Erase Saved Lines, the scrollback only
-			// The visible screen is deliberately untouched. xterm, tmux, kitty
-			// and ghostty all read CSI 3 J as dropping the saved lines and
-			// nothing else, and the two are separate requests: `clear` sends
-			// ED 2 and ED 3 together, so clearing the screen here looks right
-			// under `clear` and destroys the screen for anything that sends
-			// ED 3 on its own to drop history.
-			//
-			// The markers come right without help. Clearing the ring fires the
-			// trim callback, which shifts every marker down by the lines that
-			// went and drops the ones that fell off the front, leaving the
-			// on-screen ones where the screen still has them.
-			e.scr.ClearScrollback()
-		default:
-			return false
+	// eraseDisplay is ED, or with selective set DECSED, which erases only
+	// the cells DECSCA has not protected. ED itself erases protected cells
+	// too: DEC protection guards a cell against the selective forms only.
+	eraseDisplay := func(selective bool) func(ansi.Params) bool {
+		fill := e.eraseFill(selective)
+		return func(params ansi.Params) bool {
+			return e.eraseDisplay(params, selective, fill)
 		}
-		return true
 	}
-	e.RegisterCsiHandler('J', eraseDisplay)
+	e.RegisterCsiHandler('J', eraseDisplay(false))
 	// Selective Erase in Display [ansi.DECSED], "CSI ? Ps J". It erases only
-	// the cells DECSCA has not protected. Nothing here implements DECSCA, so
-	// no cell is ever protected and DECSED is ED, which is what xterm and
-	// ghostty do on a screen with nothing protected. Leaving it unregistered
-	// made it erase nothing, the one answer that is wrong for every program
-	// that sends it.
-	e.RegisterCsiHandler(ansi.Command('?', 0, 'J'), eraseDisplay)
+	// the cells DECSCA has not protected, so on a screen with nothing
+	// protected it is ED, which is what xterm and ghostty do too.
+	e.RegisterCsiHandler(ansi.Command('?', 0, 'J'), eraseDisplay(true))
 
-	eraseLine := func(params ansi.Params) bool {
-		// Erase in Line [ansi.EL]
+	eraseLine := func(selective bool) func(ansi.Params) bool {
+		fill := e.eraseFill(selective)
+		return func(params ansi.Params) bool {
+			return e.eraseLine(params, selective, fill)
+		}
+	}
+	e.RegisterCsiHandler('K', eraseLine(false))
+	// Selective Erase in Line [ansi.DECSEL], "CSI ? Ps K": EL that leaves
+	// protected cells alone, for the reason given at DECSED above.
+	e.RegisterCsiHandler(ansi.Command('?', 0, 'K'), eraseLine(true))
+
+	// Select Character Protection Attribute [ansi.DECSCA], "CSI Ps " q".
+	// 1 protects what the guest prints next from DECSED and DECSEL; 0 and 2
+	// stop protecting. Any other value is ignored, as ghostty does.
+	e.RegisterCsiHandler(ansi.Command(0, '"', 'q'), func(params ansi.Params) bool {
 		n, _, _ := params.Param(0, 0)
-		// NOTE: Erase Line (EL) erases all character attributes but not cell
-		// bg color.
-		x, y := e.scr.CursorPosition()
-		w := e.scr.Width()
-
 		switch n {
-		case 0: // Erase from cursor to end of line
-			e.eraseCharacter(w - x)
-		case 1: // Erase from start of line to cursor
-			rect := uv.Rect(0, y, x+1, 1)
-			e.scr.FillArea(e.scr.blankCell(), rect)
-		case 2: // Erase entire line
-			rect := uv.Rect(0, y, w, 1)
-			e.scr.FillArea(e.scr.blankCell(), rect)
-		default:
-			return false
+		case 1:
+			e.scr.cur.Protected = true
+		case 0, 2:
+			e.scr.cur.Protected = false
 		}
 		return true
-	}
-	e.RegisterCsiHandler('K', eraseLine)
-	// Selective Erase in Line [ansi.DECSEL], "CSI ? Ps K". With no cell ever
-	// protected it is EL, for the reason given at DECSED above.
-	e.RegisterCsiHandler(ansi.Command('?', 0, 'K'), eraseLine)
+	})
 
 	e.RegisterCsiHandler('L', func(params ansi.Params) bool {
 		// Insert Line [ansi.IL]

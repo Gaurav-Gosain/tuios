@@ -171,6 +171,10 @@ func (s *Screen) shrinkRows(height int) {
 		if s.buf.tail != nil {
 			s.buf.tail = s.buf.tail[:y]
 		}
+		if s.buf.prot != nil {
+			s.buf.prot[y] = nil
+			s.buf.prot = s.buf.prot[:y]
+		}
 	}
 	if excess <= 0 {
 		return
@@ -425,6 +429,8 @@ func (s *Screen) insertCellAt(x, y, n int) {
 		putBlank(line, i, blank)
 	}
 	repairWide(line)
+	s.buf.shiftProtected(y, x+n, x, right-x-n)
+	s.buf.clearProtected(y, x, x+n)
 }
 
 // DeleteCell deletes n cells at the cursor position moving cells to the left.
@@ -449,6 +455,8 @@ func (s *Screen) DeleteCell(n int) {
 		putBlank(line, i, blank)
 	}
 	repairWide(line)
+	s.buf.shiftProtected(y, x, x+n, right-x-n)
+	s.buf.clearProtected(y, right-n, right)
 	// The text that wrapped has been pulled off the row's end. ghostty
 	// clears the row's wrap flag on DCH as well.
 	s.buf.setSoftWrapped(y, false)

@@ -393,6 +393,7 @@ func (e *Emulator) extendOpenGrapheme() {
 		rewriteKittyPlaceholder(&cell, left, e.kittyImageIDTranslator, &e.kittyPlaceholderMemo, e.openGrapheme.x, e.openGrapheme.y)
 	}
 	e.scr.SetCell(e.openGrapheme.x, e.openGrapheme.y, &cell)
+	e.markPrinted(e.openGrapheme.x, e.openGrapheme.y, width)
 	e.openGrapheme.baseASCII = 0
 	e.openGrapheme.base = cluster
 	// The marks are part of the character now, so a repeat has to carry them.
@@ -509,7 +510,13 @@ func (e *Emulator) attachZeroWidth(content string) printOutcome {
 		changed = true
 	}
 	if changed {
+		// The mark joins a character already printed, which keeps the
+		// protection it was printed with.
+		was := e.scr.buf.Protected(tx, y)
 		e.scr.SetCell(tx, y, &cell)
+		if was {
+			e.scr.buf.setProtected(tx, y, max(cell.Width, 1), true)
+		}
 	}
 	return printConsumed
 }
@@ -584,12 +591,17 @@ func (e *Emulator) printASCIIRun(run []byte) {
 			e.scr.buf.raiseExt(y, x+n)
 			e.scr.buf.dropTail(y)
 			e.scr.wideCol = false
+			// And so is its protection, which SetCell would have cleared.
+			if e.scr.buf.prot != nil {
+				e.scr.buf.clearProtected(y, x, x+n)
+			}
 		} else {
 			for k := range n {
 				cell.Content = asciiStr[run[k]]
 				e.scr.SetCell(x+k, y, &cell)
 			}
 		}
+		e.markPrinted(x, y, n)
 
 		// The bookkeeping handleGraphemeWithin does for the last character
 		// of the run; every earlier character's is overwritten by the next.
@@ -789,6 +801,7 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 	e.lastCellX, e.lastCellY = x, y
 	e.lastCellLeft, e.lastCellRight = left, right
 	e.scr.SetCell(x, y, &cell)
+	e.markPrinted(x, y, cell.Width)
 
 	// Pending wrap: the cursor stays on the character just drawn and the wrap
 	// happens only when the next one arrives, so that a line ending exactly at

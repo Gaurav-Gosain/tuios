@@ -840,44 +840,33 @@ func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
 //
 // The pure emulator used to leave DECSED and DECSEL unhandled, so CSI ? 2 J
 // cleared the screen on the library backend and did nothing on the pure one.
-// It now erases as ED and EL do, which agrees with the library wherever no
-// cell is protected, and the first two cases hold the backends together
-// there.
-//
-// DECSCA is still unimplemented on the pure emulator, so a selective erase
-// clears cells a guest marked protected. The library keeps them, as xterm
-// does, and the library is the right one. The third case pins that
-// divergence on a protected cell.
+// Then it erased as ED and EL do, which agreed with the library wherever no
+// cell was protected, but DECSCA was unimplemented, so a selective erase
+// cleared cells a guest marked protected. It implements DECSCA now, and the
+// backends agree on protected cells too.
 func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
-	agree := []struct {
+	cases := []struct {
 		name, in string
 		at       int
+		want     string
 	}{
-		{"DECSED erases on both when nothing is protected", "ABCD\x1b[H\x1b[?2J", 0},
-		{"DECSEL erases on both when nothing is protected", "abcdef\x1b[H\x1b[?0K", 0},
+		{"DECSED erases on both when nothing is protected", "ABCD\x1b[H\x1b[?2J", 0, " "},
+		{"DECSEL erases on both when nothing is protected", "abcdef\x1b[H\x1b[?0K", 0, " "},
 		// Column 2 holds an unprotected character, which both must clear.
-		{"DECSED clears an unprotected cell next to protected ones", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 2},
+		{"DECSED clears an unprotected cell next to protected ones", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 2, " "},
+		// Column 0 holds a character written under DECSCA 1.
+		{"DECSED keeps a protected cell on both", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 0, "A"},
+		{"DECSEL keeps a protected cell on both", "ab\x1b[1\"qC\x1b[0\"q\x1b[H\x1b[?2K", 2, "C"},
+		{"ED erases a protected cell on both", "\x1b[1\"qAB\x1b[0\"q\x1b[H\x1b[2J", 0, " "},
 	}
-	for _, tc := range agree {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := probeBoth(t, tc.in, tc.at, 0)
-			if p.pureCell != " " || p.ghCell != " " {
-				t.Errorf("%q: cell (%d,0) pure=%q ghostty=%q, want both erased", tc.in, tc.at, p.pureCell, p.ghCell)
+			if p.pureCell != tc.want || p.ghCell != tc.want {
+				t.Errorf("%q: cell (%d,0) pure=%q ghostty=%q, want both %q", tc.in, tc.at, p.pureCell, p.ghCell, tc.want)
 			}
 		})
 	}
-
-	t.Run("DECSCA does not protect on the pure emulator", func(t *testing.T) {
-		// Column 0 holds a character written under DECSCA 1.
-		p := probeBoth(t, "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 0, 0)
-		if p.pureCell != " " {
-			t.Fatalf("the pure emulator now keeps a protected cell (%q); DECSCA works, "+
-				"so TestConform_SelectiveErase needs updating and so does this entry", p.pureCell)
-		}
-		if p.ghCell != "A" {
-			t.Errorf("ghostty no longer keeps the protected cell (cell %q); update this entry", p.ghCell)
-		}
-	})
 }
 
 // TestGhosttyDivergence_BackgroundColourErase pins which operations carry the
