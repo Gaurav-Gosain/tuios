@@ -492,10 +492,7 @@ func TestPasteKeepsItsPlaceWhenRetried(t *testing.T) {
 	const pane = "11111111-2222-3333-4444-555555555555"
 	paste := bytes.Repeat([]byte("p"), 200<<10)
 
-	type input struct {
-		n    int
-		ping bool
-	}
+	type input struct{ n int }
 	got := make(chan input, 16)
 	go func() {
 		refusedOnce := false
