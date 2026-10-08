@@ -297,9 +297,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	}
 
 	scratchPanes := map[string]scratchPane{}
+	views := map[string][2]string{}
 	for _, w := range kept {
 		if w.Scratch {
 			scratchPanes[w.ID] = scratchPane{name: w.ScratchName, workspace: w.Workspace}
+		}
+		if w.Kind != "" || w.URI != "" {
+			views[w.ID] = [2]string{w.Kind, w.URI}
 		}
 	}
 
@@ -317,6 +321,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// only the marks canonical state already has, and a new session has none.
 	if len(scratchPanes) > 0 {
 		sess.markRestoredScratch(scratchPanes)
+	}
+	// A window a renderer draws natively comes back as that kind of window,
+	// for the same reason.
+	if len(views) > 0 {
+		sess.markRestoredViews(views)
 	}
 
 	// The worktree record goes back on for the same reason: it is

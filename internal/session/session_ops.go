@@ -812,6 +812,21 @@ func (s *Session) markRestoredScratch(panes map[string]scratchPane) {
 	})
 }
 
+// markRestoredViews puts back the kind and uri of restored windows a renderer
+// draws natively. They are daemon-owned like the scratch mark, so UpdateState
+// keeps only what canonical state already has, and a new session has none.
+func (s *Session) markRestoredViews(views map[string][2]string) {
+	_ = s.mutateState(func(state *SessionState) error {
+		for i := range state.Windows {
+			w := &state.Windows[i]
+			if v, ok := views[w.ID]; ok {
+				w.Kind, w.URI = v[0], v[1]
+			}
+		}
+		return nil
+	})
+}
+
 // SetDaemonWindowMinimized sets the minimized flag on the window matching target.
 func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error {
 	return s.mutateState(func(state *SessionState) error {
