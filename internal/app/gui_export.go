@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
 // What the GUI bridge (internal/guibridge) reads off the model for a native
@@ -127,4 +128,19 @@ func (m *OS) ScrollStrip() (viewport, width int, panes []StripPane, ok bool) {
 		return panes[i].Y < panes[j].Y
 	})
 	return sl.ViewportX, sl.TotalStripWidth(viewW), panes, true
+}
+
+// BridgeLauncherEntries are the programs the launcher offers, in the order
+// it lists them with nothing typed: launch history first.
+func (m *OS) BridgeLauncherEntries() []applist.Entry {
+	items := make([]LauncherItem, 0)
+	for _, e := range m.knownPathApps() {
+		items = append(items, LauncherItem{Entry: e})
+	}
+	items = orderByHistory(items, m.launchHistory)
+	out := make([]applist.Entry, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Entry)
+	}
+	return out
 }

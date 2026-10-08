@@ -119,7 +119,10 @@ type Event struct {
 	// every option with the value the config file gives it. Req is the
 	// command's req.
 	Options *OptionList `json:"options,omitempty"`
-	Req     int64       `json:"req,omitempty"`
+	// Launcher is set on "launcher" events, the answer to a launcher
+	// command: every program the launcher offers. See launcher.go.
+	Launcher []LauncherEntry `json:"launcher,omitempty"`
+	Req      int64           `json:"req,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -309,6 +312,10 @@ type Command struct {
 	Value string `json:"value,omitempty"`
 	// group: On puts the pane ID in the group, off takes it out.
 	On bool `json:"on,omitempty"`
+	// launch: Path names the program, and Type types its command line at
+	// a new pane's prompt instead of running it.
+	Path string `json:"path,omitempty"`
+	Type bool   `json:"type,omitempty"`
 }
 
 // Run attaches and serves the renderer until its input closes or the session
@@ -474,6 +481,8 @@ type model struct {
 	// built from. See palette.go.
 	paletteSent string
 	paletteKey  string
+	// launcherWanted is set while a launcher command waits for its scan.
+	launcherWanted bool
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -545,6 +554,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.os = o
 		}
 		cmd = c
+		if m.launcherWanted && isPathApps(msg) {
+			m.sendLauncher()
+		}
 	}
 	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
 		m.sendKeybinds()
@@ -630,6 +642,13 @@ func (m *model) handle(c Command) tea.Cmd {
 		m.answer(res, writeOption(c.Key, c.Value))
 	case "options":
 		sendOptions(m.out, c.Req)
+	case "launcher":
+		return m.askLauncher()
+	case "launch":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Path}
+		cmd, err := m.launch(c.Path, c.Type)
+		m.answer(res, err)
+		return cmd
 	case "group":
 		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.ID}
 		m.answer(res, m.os.SetMultifocus(c.ID, c.On))
