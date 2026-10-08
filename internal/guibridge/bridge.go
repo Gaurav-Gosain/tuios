@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -81,8 +82,22 @@ type Options struct {
 	Version string
 	// Theme overrides the theme the user's config names. Empty keeps it.
 	Theme string
-	In    io.Reader
-	Out   io.Writer
+	// SessionID attaches the session with this id when the daemon holds it,
+	// before Session is looked at. With neither, the bridge attaches the
+	// session last active. Session ids survive a rename and a restore.
+	SessionID string
+	// Host attaches a session on that host's daemon, through this machine's
+	// daemon and its link. Empty is this machine.
+	Host string
+	// Resume is the stream position the renderer's emulator holds for each
+	// pane, from an earlier bridge. A pane listed here is caught up from that
+	// position instead of being sent a snapshot. See resume.go.
+	Resume map[string]int64
+	// ResumePID is the daemon the positions in Resume came from. A daemon
+	// with another pid has new streams, and Resume is not used.
+	ResumePID int
+	In        io.Reader
+	Out       io.Writer
 }
 
 // Event is the JSON the bridge sends.
@@ -126,6 +141,18 @@ type Event struct {
 	// the saved layout templates. See layouts.go.
 	Layouts []SavedLayout `json:"layouts,omitempty"`
 	Req     int64         `json:"req,omitempty"`
+	// Attached is set on the "attached" event: which session, on which
+	// daemon. See resume.go.
+	Attached *Attached `json:"attached,omitempty"`
+	// PTY, Seq and Kept are set on "seq" events, sent before a pane's
+	// snapshot, or in its place when the renderer keeps its emulator. See
+	// resume.go.
+	PTY  string `json:"pty,omitempty"`
+	Seq  int64  `json:"seq,omitempty"`
+	Kept bool   `json:"kept,omitempty"`
+	// Hosts is set on "hosts" events: every machine in the [hosts] table,
+	// with its link, its round trip and its sessions. See hosts.go.
+	Hosts *Hosts `json:"hosts,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -328,6 +355,9 @@ type Command struct {
 	// a new pane's prompt instead of running it.
 	Path string `json:"path,omitempty"`
 	Type bool   `json:"type,omitempty"`
+	// switch-session: Resume is the stream position of each pane the
+	// renderer kept from the last time it showed the session. See resume.go.
+	Resume map[string]int64 `json:"resume,omitempty"`
 }
 
 // Run attaches and serves the renderer until its input closes or the session
@@ -351,22 +381,34 @@ func Run(opts Options) error {
 	// The size is the renderer's window, not this process's terminal, which
 	// it has none of.
 	client.Served = true
-	if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, app.ClientCapabilitiesOf(caps)); err != nil {
-		return fmt.Errorf("failed to connect to daemon: %w", err)
+	// The renderer runs where the person is, so its agent socket is theirs.
+	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
+	if opts.Host == "" {
+		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, app.ClientCapabilitiesOf(caps)); err != nil {
+			return fmt.Errorf("failed to connect to daemon: %w", err)
+		}
+	} else if _, err := client.ConnectThroughHost(opts.Host, opts.Version, opts.Cols, opts.Rows, app.ClientCapabilitiesOf(caps)); err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", opts.Host, err)
 	}
-	name := opts.Session
-	if name == "" {
-		if names := client.AvailableSessionNames(); len(names) > 0 {
-			name = names[0]
-		} else {
-			name = "gui"
+	cached := client.CachedSessions()
+	if opts.SessionID != "" {
+		// The handshake's listing can come after this point; ask.
+		if listed := listSessions(opts.Version, opts.Host); len(listed) > 0 {
+			cached = listed
 		}
 	}
+	name := pickSession(cached, opts.SessionID, opts.Session)
 	state, err := client.AttachSession(name, true, opts.Cols, opts.Rows)
 	if err != nil {
 		_ = client.Close()
 		return fmt.Errorf("failed to attach to session %q: %w", name, err)
 	}
+	if name == "" && state != nil {
+		name = state.Name
+	}
+	// From the listing made before the attach, which clears the restored
+	// mark.
+	info := attachedInfo(cached, name, opts.Host)
 	client.StartReadLoop()
 
 	osModel := newModel(app.OSOptions{
@@ -378,12 +420,17 @@ func Run(opts Options) error {
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     name,
+		AttachedHost:    opts.Host,
 	})
-	osModel.SetStreamTap(&tap{out: out})
+	streams := &tap{out: out}
+	if len(opts.Resume) > 0 && (opts.Host != "" || opts.ResumePID == info.DaemonPID) {
+		streams.resume = opts.Resume
+	}
+	osModel.SetStreamTap(streams)
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
 
-	m := &model{os: osModel, out: out, version: opts.Version, nonce: client.HumanNonce}
+	m := &model{os: osModel, out: out, version: opts.Version, nonce: client.HumanNonce, host: opts.Host, tap: streams}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -400,7 +447,10 @@ func Run(opts Options) error {
 	if opts.Theme != "" {
 		_ = theme.Initialize(opts.Theme)
 	}
-	out.JSON(Event{Type: "attached", Message: name})
+	if info.SessionID == "" {
+		info.SessionID = m.sessionID(name)
+	}
+	out.JSON(Event{Type: "attached", Message: name, Attached: &info})
 	th := CurrentTheme()
 	out.JSON(Event{Type: "theme", Theme: &th})
 	m.sendKeybinds()
@@ -408,6 +458,7 @@ func Run(opts Options) error {
 	stopFleet := make(chan struct{})
 	defer close(stopFleet)
 	go watchFleet(stopFleet, out, opts.Version)
+	go watchHosts(stopFleet, out, opts.Version)
 
 	go func() {
 		err := readCommands(opts.In, client, program)
@@ -495,6 +546,10 @@ type model struct {
 	paletteKey  string
 	// launcherWanted is set while a launcher command waits for its scan.
 	launcherWanted bool
+	// host is the machine the session is on, empty for this one, and tap
+	// the stream tap, which a switch-session hands its resume positions.
+	host string
+	tap  *tap
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -816,10 +871,19 @@ func setInsets(v []int, cellW, cellH int) bool {
 	return true
 }
 
-// tap forwards the panes' streams to the renderer, in order.
-type tap struct{ out *frameWriter }
+// tap forwards the panes' streams to the renderer, in order. resume and
+// from are the positions the renderer's kept emulators hold; see resume.go.
+type tap struct {
+	out    *frameWriter
+	mu     sync.Mutex
+	resume map[string]int64
+	from   map[string]int64
+}
 
 func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
+	if t.keep(ptyID, state) {
+		return
+	}
 	var cols, rows int
 	var vt []byte
 	if state != nil {

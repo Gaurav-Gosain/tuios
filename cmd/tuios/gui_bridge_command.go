@@ -13,6 +13,7 @@ import (
 // internal/guibridge on stdin and stdout. It is not for running by hand.
 func newGUIBridgeCommand() *cobra.Command {
 	var opts guibridge.Options
+	var resume string
 	cmd := &cobra.Command{
 		Use:    "gui-bridge",
 		Short:  "Serve a session to a native renderer over stdin and stdout",
@@ -25,6 +26,13 @@ func newGUIBridgeCommand() *cobra.Command {
 			os.Stdout = os.Stderr
 			if err := ensureDaemon(); err != nil {
 				return err
+			}
+			if resume != "" {
+				r, err := guibridge.ParseResume(resume)
+				if err != nil {
+					return err
+				}
+				opts.Resume = r
 			}
 			opts.Version = version
 			opts.In = os.Stdin
@@ -40,5 +48,9 @@ func newGUIBridgeCommand() *cobra.Command {
 	f.IntVar(&opts.CellHeight, "cell-height", 18, "Cell height in pixels")
 	f.IntSliceVar(&opts.Insets, "insets", nil, "Room around each pane's text in pixels: top,left,right,bottom")
 	f.StringVar(&opts.Theme, "theme", "", "Theme to use instead of the one the config names")
+	f.StringVar(&opts.SessionID, "session-id", "", "Session to attach by id, before --session; with neither, the session last active")
+	f.StringVar(&opts.Host, "host", "", "Attach a session on this host from the [hosts] table, through this machine's daemon")
+	f.StringVar(&resume, "resume", "", "Stream position the renderer holds per pane: pty=seq,pty=seq")
+	f.IntVar(&opts.ResumePID, "resume-pid", 0, "The daemon pid the --resume positions came from")
 	return cmd
 }
