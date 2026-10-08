@@ -362,7 +362,27 @@ func diffReplaySplit(s vtgen.Script, seed uint64) (found divergence) {
 // filter goes too.
 func diffFilter(s vtgen.Script) vtgen.Script {
 	out := make(vtgen.Script, 0, len(s))
+	cols, rows := diffFuzzCols, diffFuzzRows
+	protected := false
 	for _, seq := range s {
+		// A cell DECSCA 1 protected keeps its protection through a reflow
+		// on the library and loses it on the pure emulator, so a later
+		// selective erase differs. Pinned by TestGhosttyDivergence_ProtectionLost.
+		// Only a resize that can reflow is dropped: one that changes the
+		// width, or one that adds rows, which pulls history back. RIS ends it,
+		// because it clears every cell.
+		if p, r := strings.LastIndex(seq.Bytes, "\x1b[1\"q"), strings.LastIndex(seq.Bytes, "\x1bc"); p > r {
+			protected = true
+		} else if r >= 0 {
+			protected = false
+		}
+		if seq.Kind == "resize" {
+			reflows := seq.Cols != cols || seq.Rows > rows
+			if protected && reflows {
+				continue
+			}
+			cols, rows = seq.Cols, seq.Rows
+		}
 		// SGR 21 is double underline to ghostty and nothing to the pure
 		// emulator. Pinned by TestGhosttyKnownDivergences/sgr21-double-underline.
 		if seq.Kind == "sgr" && sgrHasParam(seq.Bytes, "21") {
@@ -382,7 +402,9 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 			continue
 		}
 		// The library ignores DECSTR, and the pure emulator runs it. Pinned by
-		// TestGhosttyDivergence_DECSTRIgnored.
+		// TestGhosttyDivergence_DECSTRIgnored, and for DECSCA, which a soft
+		// reset stops on the pure emulator only, by
+		// TestGhosttyDivergence_ProtectionLost.
 		if seq.Bytes == "\x1b[!p" {
 			continue
 		}
@@ -905,6 +927,39 @@ func TestGhosttyDivergence_ProtectionLost(t *testing.T) {
 			t.Errorf("ghostty stops protecting after DECSTR (cell %q); update this entry", p.ghCell)
 		}
 	})
+}
+
+// TestDiffFilterDropsOnlyAReflowAfterProtection holds the filter to the one
+// divergence it is for. A script that protects a cell, reflows and erases
+// selectively diverges as it is, and agrees once filtered. Without the
+// protection, or with a resize that cannot reflow, or after a reset, the
+// filter keeps the resize.
+func TestDiffFilterDropsOnlyAReflowAfterProtection(t *testing.T) {
+	long := strings.Repeat("x", 35)
+	protect := vtgen.Seq{Kind: "erase", Bytes: "\x1b[1\"qP\x1b[0\"q" + long, Desc: "DECSCA character protection 1"}
+	plain := vtgen.Seq{Kind: "text", Bytes: "P" + long, Desc: "text"}
+	narrow := vtgen.Seq{Kind: "resize", Cols: 30, Rows: diffFuzzRows, Desc: "resize to 30"}
+	shorter := vtgen.Seq{Kind: "resize", Cols: diffFuzzCols, Rows: diffFuzzRows - 2, Desc: "resize shorter"}
+	reset := vtgen.Seq{Kind: "erase", Bytes: "\x1bc", Desc: "RIS full reset"}
+	erase := vtgen.Seq{Kind: "erase", Bytes: "\x1b[H\x1b[?2J", Desc: "DECSED"}
+
+	script := vtgen.Script{protect, narrow, erase}
+	if !diffReplay(script).found() {
+		t.Fatal("protect, reflow and erase do not diverge, so the filter has nothing to drop; it goes")
+	}
+	if d := diffReplay(diffFilter(script)); d.found() {
+		t.Errorf("the filtered script still diverges: %v", d)
+	}
+
+	keeps := func(name string, s vtgen.Script) {
+		t.Helper()
+		if got := diffFilter(s); len(got) != len(s) {
+			t.Errorf("%s: the filter dropped %d steps it is not for", name, len(s)-len(got))
+		}
+	}
+	keeps("no protection", vtgen.Script{plain, narrow, erase})
+	keeps("a resize that cannot reflow", vtgen.Script{protect, shorter, erase})
+	keeps("a reset before the resize", vtgen.Script{protect, reset, narrow, erase})
 }
 
 // TestGhosttyDivergence_BackgroundColourErase pins which operations carry the
