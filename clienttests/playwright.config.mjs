@@ -81,6 +81,10 @@ const appearance = isolatedTree('TUIOS_CT_APPEARANCE_HOME');
 // a default is showing that the file never reached it. They are also all
 // readable off the terminal buffer: a box-drawing glyph, a row position, a pane
 // of text down one side, a clock.
+//
+// notify = true is the one exception. It is the default value, written out.
+// A browser cannot send desktop notifications, so a value the user wrote earns
+// a notice, and the default must not.
 export const SEEDED_CONFIG = `[appearance]
 border_style = "double"
 dockbar_position = "bottom"
@@ -98,6 +102,9 @@ open_default_window = true
 
 [keybindings]
 leader_key = "ctrl+a"
+
+[notifications.agent]
+notify = true
 `;
 
 mkdirSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
@@ -142,8 +149,14 @@ const chromium = {
 // Never reuse a server. The key bar is built in Go and handed to the page in
 // the HTML, so a server left over from an earlier build serves the old bar
 // while the source on disk says otherwise, and nothing reports it.
+//
+// TUIOS_WEB_BIN names a tuios-web built beforehand, which CI uses to compile
+// once instead of once per server. Whoever sets it owns rebuilding it.
+const WEB_BIN = process.env.TUIOS_WEB_BIN;
 const server = (port, url, env) => ({
-  command: `go run ./cmd/tuios-web --host 127.0.0.1 --port ${port}`,
+  command: WEB_BIN
+    ? `"${WEB_BIN}" --host 127.0.0.1 --port ${port}`
+    : `go run ./cmd/tuios-web --host 127.0.0.1 --port ${port}`,
   cwd: '..',
   url,
   env,

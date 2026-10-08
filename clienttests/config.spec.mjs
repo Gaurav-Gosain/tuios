@@ -12,6 +12,7 @@
 // software rasterization and the chrome is text either way.
 
 import { test, expect } from '@playwright/test';
+import { APPEARANCE_BASE_URL } from './playwright.config.mjs';
 
 /** The visible terminal, line by line. */
 const screen = (page) => page.evaluate(() => {
@@ -20,13 +21,13 @@ const screen = (page) => page.evaluate(() => {
   return Array.from({ length: t.rows }, (_, i) => b.getLine(b.viewportY + i)?.translateToString(true) ?? '');
 });
 
-async function boot(page) {
+async function boot(page, url = '/') {
   await page.addInitScript(() => {
     localStorage.setItem('sip-web-settings', JSON.stringify({
       transport: 'websocket', fontSize: 14, copyOnSelect: false, cursorBlink: false, renderer: 'canvas',
     }));
   });
-  await page.goto('/');
+  await page.goto(url);
   await page.waitForFunction(() => window.sipTerm?.connected, null, { timeout: 40_000 });
   // The seeded config opens a window at startup, so waiting for a border is
   // waiting for the first real frame rather than for a fixed number of seconds.
@@ -71,8 +72,50 @@ test.describe('the config file reaches a browser session', () => {
   });
 
   test('appearance: show_clock puts a clock on screen', async ({ page }) => {
-    const s = await boot(page);
-    expect(s.join('\n')).toMatch(/\d{2}:\d{2}:\d{2}/);
+    await boot(page);
+    // The clock sits in the dock's right block, and a dock message takes that
+    // block over while it shows. A session opens with a few of them, so the
+    // clock can be hidden for several seconds after the first frame. Wait for
+    // the messages to clear rather than reading the first frame.
+    await expect
+      .poll(async () => (await screen(page)).join('\n'), { timeout: 15_000 })
+      .toMatch(/\d{2}:\d{2}:\d{2}/);
+  });
+
+  // The two halves of one claim: a value the user wrote that the browser
+  // cannot carry out earns a notice, and a default earns nothing. notify
+  // defaults to true and a browser cannot send desktop notifications, so tuios
+  // used to log the default as a config problem on every browser attach.
+  //
+  // The seeded file sets notify = true. The appearance server's file has no
+  // [notifications] table, so there notify is the default. Both run at this
+  // project's viewport, so the visit does not resize the other session.
+  //
+  // Read from the log viewer, where both kinds of line go. The dock shows only
+  // its newest message, so whether a startup message is on screen depends on
+  // what else happened at startup.
+  const openLog = async (page, leader) => {
+    await page.locator('.xterm-screen').click();
+    await page.keyboard.press(leader);
+    await page.keyboard.press('Shift+D');
+    await page.keyboard.press('l');
+    await expect
+      .poll(async () => (await screen(page)).join('\n'), { timeout: 15_000 })
+      .toContain('copy errors');
+    return (await screen(page)).join('\n');
+  };
+
+  test('notifications: a setting the browser cannot carry out is a notice, not a config problem', async ({ page }) => {
+    await boot(page);
+    const log = await openLog(page, 'Control+a');
+    expect(log).toContain('[INFO] Config: [notifications.agent] notify');
+    expect(log).not.toContain('[WARN] Config: [notifications.agent]');
+  });
+
+  test('notifications: a default is not a config problem and earns no notice', async ({ page }) => {
+    await boot(page, APPEARANCE_BASE_URL);
+    const log = await openLog(page, 'Control+b');
+    expect(log, 'a default config was reported').not.toContain('[notifications.agent]');
   });
 
   test('appearance: window_title_format formats the pane title', async ({ page }) => {

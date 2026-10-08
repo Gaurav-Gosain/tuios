@@ -49,6 +49,14 @@ const wire = (page) => page.evaluate(() => window.__sentInput.map((b) =>
 
 const clearWire = (page) => page.evaluate(() => { window.__sentInput.length = 0; });
 
+/**
+ * The keys sent since the last clear, as one string, without the replies the
+ * terminal sends on its own. tuios asks for the keyboard protocol flags when
+ * the size changes, and xterm.js answers with CSI ? flags u on the same wire.
+ * That answer is not a key anyone pressed.
+ */
+const keysSent = async (page) => (await wire(page)).join('').replace(/\\x1b\[\?\d+u/g, '');
+
 /** The visible terminal, line by line. */
 const screen = (page) => page.evaluate(() => {
   const t = window.sipTerm.term;
@@ -110,14 +118,43 @@ const onSplash = async (page) =>
   (await screen(page)).some((l) => l.includes('Terminal UI Operating System'));
 
 /**
- * Whether the drawn pane is floating, read off its own title bar: only a
- * floating pane carries the maximize button, and a tiled one has nothing to
- * maximize into. Asked of the pane rather than of the dock's mode letter,
- * because the pane is what the gestures below are aimed at.
+ * Whether the one drawn pane is floating, read off where its frame sits. A
+ * tiled pane fills the area from the left edge of the screen to the right
+ * edge. A floating pane is inset from both. Asked of the pane rather than of
+ * a title-bar glyph or the dock's mode letter: the window controls change
+ * with the config, and the pane is what the gestures below are aimed at.
  */
 async function paneIsFloating(page) {
   const frame = await paneFrame(page);
-  return frame !== null && frame.top > 0 && (await screen(page))[frame.top].includes('□');
+  if (frame === null || frame.top <= 0) return false;
+  const cols = await page.evaluate(() => window.sipTerm.term.cols);
+  return frame.left > 0 && frame.right < cols - 1;
+}
+
+/**
+ * Toggle the layout between tiled and floating. Sent from the keyboard,
+ * because the bar's tile button sits behind a pan on a phone. The tiling
+ * toggle is leader Space. Leader t opens the window menu.
+ */
+async function toggleTiling(page) {
+  await page.keyboard.press('Control+b');
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(1500);
+}
+
+/**
+ * Two taps on the same cell, close together. click_to_type ships as double,
+ * so one tap on a pane focuses it and the second tap enters terminal mode.
+ *
+ * Sent as raw touch events, which xterm's own gesture recognizer turns into
+ * taps. Input.synthesizeTapGesture puts about two seconds between two taps,
+ * even with tapCount 2, and tuios counts a second click only within 300 ms.
+ */
+async function doubleTap(page, cdp, x, y) {
+  for (let i = 0; i < 2; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
 }
 
 /**
@@ -140,7 +177,7 @@ async function resetToOneFloatingPane(page, cdp) {
   await clear();
   await press(page, cdp, 'new', 2500);
   if (!(await paneIsFloating(page))) {
-    await press(page, cdp, 'tile');
+    await toggleTiling(page);
     await clear();
     await press(page, cdp, 'new', 2500);
   }
@@ -161,7 +198,9 @@ const paneFrame = (page) => page.evaluate(() => {
   const top = lines.findIndex((l) => /[╭┌╔┏]/.test(l));
   if (top === -1) return null;
   const bottom = lines.findLastIndex((l) => /[╰└╚┗]/.test(l));
-  return { top, bottom, left: lines[top].search(/[╭┌╔┏]/) };
+  const left = lines[top].search(/[╭┌╔┏]/);
+  const right = left + lines[top].slice(left).search(/[╮┐╗┓]/);
+  return { top, bottom, left, right: right < left ? -1 : right };
 });
 
 test.describe('the touch key bar', () => {
@@ -201,7 +240,7 @@ test.describe('the touch key bar', () => {
     await page.waitForTimeout(1500);
 
     // Ctrl+B is 0x02, and the window key is c. One tap, both bytes.
-    expect((await wire(page)).join('')).toBe('\\x02c');
+    expect(await keysSent(page)).toBe('\\x02c');
     expect((await screen(page)).join('\n'), 'a new window left the screen unchanged').not.toBe(before);
   });
 
@@ -213,7 +252,7 @@ test.describe('the touch key bar', () => {
     const { x, y } = await buttonCentre(page, 'esc');
     await tap(cdp, x, y);
     await page.waitForTimeout(400);
-    expect((await wire(page)).join('')).toBe('\\x1b');
+    expect(await keysSent(page)).toBe('\\x1b');
   });
 
   test('survives the software keyboard taking the bottom of the screen', async ({ page }) => {
@@ -244,7 +283,7 @@ test.describe('the touch key bar', () => {
     const { x, y } = await buttonCentre(page, 'zoom');
     await tap(cdp, x, y);
     await page.waitForTimeout(600);
-    expect((await wire(page)).join('')).toBe('\\x02z');
+    expect(await keysSent(page)).toBe('\\x02z');
   });
 });
 
@@ -316,10 +355,10 @@ test.describe('a finger on tuios itself', () => {
 
     const g = await geom(page);
     const inside = cell(g, frame.left + 4, frame.top + 6);
-    await tap(cdp, inside.x, inside.y);
+    await doubleTap(page, cdp, inside.x, inside.y);
     await page.waitForTimeout(900);
 
-    // Click-to-type: the tap hands the keyboard to the pane, so what the
+    // Click-to-type: the double tap hands the keyboard to the pane, so what the
     // software keyboard sends next is the pane's, not a window-management key.
     // "m" would minimize the pane if the tap had not landed. The marker is
     // short because a floating pane on this viewport is 24 columns and the
@@ -345,7 +384,7 @@ test.describe('a finger on tuios itself', () => {
 
     // Into the pane first, so the press happens in the mode a user is in while
     // they are typing, which is where it used to reach nothing.
-    await tap(cdp, inside.x, inside.y);
+    await doubleTap(page, cdp, inside.x, inside.y);
     await page.waitForTimeout(900);
 
     await tap(cdp, inside.x, inside.y, 900);
@@ -447,9 +486,8 @@ test.describe('a finger on tuios itself', () => {
     await press(page, cdp, 'new', 2500);
     await press(page, cdp, 'new', 2500);
     if (!tiled(await corners())) {
-      await page.keyboard.press('Control+b');
-      await page.keyboard.press('t');
-      await page.waitForTimeout(2500);
+      await toggleTiling(page);
+      await page.waitForTimeout(1000);
     }
 
     const before = await corners();
