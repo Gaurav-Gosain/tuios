@@ -158,6 +158,7 @@ tuios/
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── tmuxcompat/         # The opt-in tmux shim (tuios tmux-shim) and its pane holder; see docs/TMUX_SHIM.md
 │   ├── shimlink/           # The tmux and herdr links that run tuios as another program
+│   ├── stopevent/          # The Windows event tuios kill-server sets to stop a daemon
 │   ├── scrollback/         # OSC 133 scrollback browser
 │   ├── overlay/            # Panel and dialog primitives for chrome
 │   ├── sessiontree/        # Sidebar session tree model

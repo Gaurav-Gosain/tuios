@@ -1118,10 +1118,7 @@ func runKillDaemon() error {
 			pid = session.GetDaemonPID()
 		}
 		if pid > 0 {
-			if err := killDaemonProcess(pid); err != nil {
-				return err
-			}
-			return awaitDaemonShutdown(pid, diag.SocketPath)
+			return stopDaemon(pid, diag.SocketPath)
 		}
 		return &diagnosticError{
 			What:  "The TUIOS daemon is running but its process id could not be determined.",
@@ -1180,12 +1177,12 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 		What: fmt.Sprintf("The TUIOS daemon (PID %d) was asked to stop but had not finished after %s.",
 			pid, killServerTimeout),
 		Cause: "the daemon is wedged, or a session is taking an unusually long time to write its saved state.",
-		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with 'kill -9 %d' and remove %s. Force killing loses any session state that was not yet written.",
-			pid, socketPath),
+		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with '%s' and remove %s. Force killing loses any session state that was not yet written.",
+			forceKillCommand(pid), socketPath),
 		Err: err,
 	}
 }
 
-// killDaemonProcess is defined in platform-specific files:
+// stopDaemon and forceKillCommand are defined in platform-specific files:
 // - session_commands_unix.go for Unix/Linux/macOS
 // - session_commands_windows.go for Windows
