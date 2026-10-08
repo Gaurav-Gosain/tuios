@@ -51,8 +51,9 @@ type HostCapabilities struct {
 	// wrong here costs nothing.
 	KittyPlaceholders bool
 	SixelGraphics     bool
-	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, so no
-	// later answer from the terminal changes it.
+	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, or by a
+	// host that stores images in its cells, so no later answer from the
+	// terminal changes it.
 	SixelPinned bool
 	// DA1Late says the startup probe asked for DA1 and gave up before the
 	// answer came. A slow terminal, a console on a loaded machine say,
@@ -377,6 +378,9 @@ func probeTerminal(caps *HostCapabilities) {
 	parseHostFont(caps, response)
 	parseHostPalette(caps, response)
 	caps.KittyPlaceholders = caps.KittyGraphics && hostDrawsPlaceholders(response)
+	// A host that stores images in its cells cannot have them moved or
+	// cleared; see cell_bound_images.go.
+	dropCellBoundGraphics(caps, response)
 }
 
 // writePaletteQuery appends the colour questions to the probe batch: the

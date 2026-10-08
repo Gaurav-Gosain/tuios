@@ -3,6 +3,9 @@
 // background, one whose palette is not the xterm default, and one that
 // switches between light and dark while tuios runs.
 //
+// With -xtversion it also answers XTVERSION (CSI > q) with the name given,
+// so a test can play a terminal that names itself, such as xterm.js.
+//
 // It has two modes.
 //
 // hostterm run [flags] -- argv... runs argv in a PTY of its own and sits
@@ -85,7 +88,12 @@ type host struct {
 	mute bool
 	// programStatus answers the OSC 7501 query.
 	programStatus bool
-	log           io.Writer
+	// xtversion, when set, is the name and version XTVERSION is answered
+	// with. tuitest's emulator does not answer XTVERSION, and an answer typed
+	// by a test arrives after the DA1 that ends tuios's probe, so a test that
+	// needs the host to name itself puts the answer here.
+	xtversion string
+	log       io.Writer
 }
 
 func (h *host) now() scheme {
@@ -122,6 +130,7 @@ func run(args []string) int {
 	logPath := fs.String("log", "", "append every answered question here")
 	mute := fs.Bool("mute", false, "swallow every colour question and answer none, as mosh does")
 	programStatus := fs.Bool("program-status", false, "answer the OSC 7501 query, as a terminal that supports the protocol does")
+	xtversion := fs.String("xtversion", "", "answer XTVERSION (CSI > q) with this name and version, as in \"xterm.js(6.1.0)\"")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -131,7 +140,7 @@ func run(args []string) int {
 		return 2
 	}
 
-	h := &host{ansi: map[int]string{}, mute: *mute, programStatus: *programStatus}
+	h := &host{ansi: map[int]string{}, mute: *mute, programStatus: *programStatus, xtversion: *xtversion}
 	h.schemes = append(h.schemes, scheme{fg: *fg, bg: *bg, light: isLight(*bg)})
 	fgs, bgs := strings.Split(*altFg, ","), strings.Split(*altBg, ",")
 	if len(fgs) != len(bgs) {
@@ -399,6 +408,10 @@ func (f *filter) oscQuery(body string) bool {
 // whether the sequence was consumed.
 func (f *filter) csi(params string, final byte) bool {
 	switch {
+	case (params == ">" || params == ">0") && final == 'q' && f.h.xtversion != "":
+		f.h.note("answer xtversion %s", f.h.xtversion)
+		f.answer("\x1bP>|" + f.h.xtversion + "\x1b\\")
+		return true
 	case params == "?996" && final == 'n':
 		if f.h.mute {
 			f.h.note("unanswered 996")

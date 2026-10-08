@@ -3280,3 +3280,22 @@ Two things are not caught:
   Wine refuses to replace a running program, so the rename-aside path may not
   run there. The test runs on real Windows in the `go test (windows)` job,
   which is the proof of that path.
+## An xterm.js host gets images as glyphs (issue 567)
+
+`TestCellBoundImageHostGetsGlyphs` runs tuios under `testdata/hostterm` with
+`-xtversion`, so the host names itself the way Netcatty's xterm.js does.
+tuitest's emulator answers the kitty query OK and lists sixel in DA1, so the
+host claims both protocols. A pane draws a kitty picture, scrolls, and draws a
+sixel picture. The xterm.js host must be sent no kitty graphics and no sixel,
+and must show the sixel picture as glyphs on every one of its cells. The
+positive half names the host kitty with the same probe and must get kitty
+graphics and no glyphs, so a probe that never reads XTVERSION cannot pass.
+
+The test runs in the standalone TUI and against a daemon.
+
+Each control below was run on 2026-10-08 on branch `fix/kitty-image-ghosting`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The probe does not drop graphics for xterm.js | `probeTerminal`: the `dropCellBoundGraphics(caps, response)` line cut | `TestCellBoundImageHostGetsGlyphs/xtermjs-standalone` and `/xtermjs-daemon` (kitty and sixel sent, 0 of 80 cells painted) | **caught** |
+| Sixel is not pinned off | `dropCellBoundGraphics`: `caps.SixelPinned = true` cut | none | **not caught**: tuitest's emulator answers DA1 inside the probe, so no late DA1 reply reaches `handleSixelProbe` |

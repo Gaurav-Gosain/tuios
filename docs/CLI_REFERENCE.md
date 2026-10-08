@@ -4900,6 +4900,11 @@ cells are sized from it. The SSH server reads the same variable.
 `1` or `0` overrides what tuios detected about the host terminal's kitty
 graphics, kitty Unicode placeholders, kitty animation and sixel support.
 
+tuios turns kitty graphics and sixel off on a terminal built on xterm.js, such
+as VS Code or Netcatty. That terminal cannot clear an image, so tuios draws
+images as block glyphs. Set `TUIOS_KITTY_GRAPHICS=1` or
+`TUIOS_SIXEL_GRAPHICS=1` to turn a protocol on again.
+
 ### `$SHELL`
 
 TUIOS uses your default shell from this variable. If not set, it attempts to detect the appropriate shell for your platform.

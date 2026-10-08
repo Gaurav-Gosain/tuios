@@ -814,6 +814,13 @@ and over the next pane, with nothing to take it back.
   the guess.
 - `tuios-web` draws with xterm.js and its image addon, which does both sixel and
   kitty graphics.
+- A local terminal whose XTVERSION answer names xterm.js (VS Code, Netcatty,
+  Tabby, Hyper) gets neither sixel nor kitty graphics, whatever it answers to
+  the graphics queries. Its image addon writes every image into the cells
+  under it. Text does not erase it there, a second placement with the same ids
+  adds a second picture, and a delete leaves a grey placeholder, so tuios could
+  not move or clear a pane's picture (issue 567). The picture is drawn as
+  block glyphs instead (`internal/app/cell_bound_images.go`).
 - `TUIOS_SIXEL_GRAPHICS=1` or `0` overrides all of these.
 
 A pane is told it can draw sixel (DA1 attribute 4, and an answer to
