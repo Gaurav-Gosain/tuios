@@ -51,6 +51,9 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	}
 	// Runs on the Bubble Tea goroutine, so applying it to this session's
 	// settings is single-threaded and reaches nobody else's session.
+	if m.ReloadFilter != nil {
+		cfg = m.ReloadFilter(cfg)
+	}
 	themeBefore := theme.CurrentThemeID()
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
 	// ApplyAppearanceConfig switches the theme package, which recolours the
