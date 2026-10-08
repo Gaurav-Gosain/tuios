@@ -102,6 +102,8 @@ func StateFingerprint(s *SessionState) uint64 {
 		flag(w.IsFloating)
 		str(w.Stack)
 		num(w.StackIndex)
+		str(w.Kind)
+		str(w.URI)
 		flag(w.Zoomed)
 		num(w.PreZoomX)
 		num(w.PreZoomY)

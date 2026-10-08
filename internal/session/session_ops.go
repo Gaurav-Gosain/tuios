@@ -260,6 +260,20 @@ type NewWindowOptions struct {
 	// default of [agents.permissions]. It is in force before the process
 	// starts, and it is saved with the window. See pane_grants.go.
 	Grants *Grants
+	// Kind and URI make a window a renderer draws natively. See
+	// WindowState.Kind. With no Command, its program is the placeholder.
+	Kind string
+	URI  string
+}
+
+// WindowKinds are the kinds a window can be. Empty is "terminal".
+var WindowKinds = []string{"terminal", "view", "web", "app"}
+
+// PlaceholderCommand is the program of a window a renderer draws natively:
+// it prints one line that says what the window shows, for a terminal
+// client, and then waits without echoing what is typed.
+func PlaceholderCommand(kind, uri string) []string {
+	return []string{"/bin/sh", "-c", `stty -echo 2>/dev/null; printf '\033[2m%s pane\033[0m  %s\n' "$1" "$2"; exec sleep 2147483647`, "tuios-" + kind, kind, uri}
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -268,6 +282,12 @@ type NewWindowOptions struct {
 // window created on the current workspace and moved is visible on the wrong
 // workspace for as long as the two calls take, which an attached client renders.
 func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID string)) (WindowState, error) {
+	if opts.Kind == "terminal" {
+		opts.Kind = ""
+	}
+	if opts.Kind != "" && len(opts.Command) == 0 {
+		opts.Command = PlaceholderCommand(opts.Kind, opts.URI)
+	}
 	// A scratch pane is an ordinary tiled window on its group's workspace, not
 	// a popup. See scratch_workspace.go. While a client too old for that is
 	// attached it is a popup on the current workspace, as that client
@@ -457,6 +477,8 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			PopupHeight: opts.PopupHeight,
 			Scratch:     scratch,
 			ScratchName: scratchName,
+			Kind:        opts.Kind,
+			URI:         opts.URI,
 		}
 		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {

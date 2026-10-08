@@ -252,6 +252,14 @@ type WindowState struct {
 	// every older client and state reads as.
 	Stack      string `json:"stack,omitempty"`
 	StackIndex int    `json:"stack_index,omitempty"`
+	// Kind says what draws the window: "terminal" (empty), or for a window
+	// a renderer draws natively, "view", "web" or "app" (plan 5.1). URI names
+	// what such a window shows, such as tuios://review/<pane> or a page. Both
+	// are set when the window is made and are the daemon's, like Scratch: a
+	// push can neither set nor clear them. Such a window still has a PTY, and
+	// its program prints a one-line placeholder for a terminal client.
+	Kind string `json:"kind,omitempty"`
+	URI  string `json:"uri,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory
@@ -1948,6 +1956,13 @@ func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onE
 // shows above the banner.
 func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, workspace int, onExit func(ptyID string)) (*PTY, error) {
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history}, onExit: onExit, grants: grants, workspace: workspace})
+}
+
+// restorePlaceholderPTY starts the placeholder of a window a renderer draws
+// natively (WindowState.Kind), for a restore: the window comes back as what
+// it was, not as a shell.
+func (s *Session) restorePlaceholderPTY(windowID string, width, height int, cwd, kind, uri string, workspace int, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, command: PlaceholderCommand(kind, uri), onExit: onExit, workspace: workspace})
 }
 
 // ptySpawn is what createPTY starts a pane with, beside its size.

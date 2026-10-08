@@ -1336,6 +1336,7 @@ as typed. End the text with a newline to run it as a command.`,
 	var newWindowGrants []string
 	var newWindowJSON bool
 	var newWindowPrintID bool
+	var newWindowKind, newWindowURI string
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
@@ -1365,7 +1366,11 @@ lists, scripts and restores like any other.
 
 --grants says what the window's process may do through tuios: read, write,
 fan, respond, admin, or none. Without it the window holds the default of
-[agents.permissions]. See 'tuios pane-grants'.`,
+[agents.permissions]. See 'tuios pane-grants'.
+
+--kind makes a window that a native renderer (tuios-gpui) draws itself: view,
+web or app, with --uri naming what it shows. A terminal client shows such a
+window as one line with its uri.`,
 		Example: `  # Open an unnamed window
   tuios new-window
 
@@ -1398,7 +1403,7 @@ fan, respond, admin, or none. Without it the window holds the default of
 				command = args[1:]
 			}
 			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowJSON, newWindowPrintID)
+				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowKind, newWindowURI, newWindowJSON, newWindowPrintID)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1409,6 +1414,8 @@ fan, respond, admin, or none. Without it the window holds the default of
 	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, respond, admin, or none (default: [agents.permissions])")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	newWindowCmd.Flags().BoolVar(&newWindowPrintID, "print-id", false, "Print only the new window's full id, for id=$(...)")
+	newWindowCmd.Flags().StringVar(&newWindowKind, "kind", "", "What draws the window: terminal, or view, web or app for a native renderer (default: terminal)")
+	newWindowCmd.Flags().StringVar(&newWindowURI, "uri", "", "What a view, web or app window shows, such as tuios://review/<pane>")
 	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)

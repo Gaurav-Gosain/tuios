@@ -179,3 +179,11 @@ func sendOptions(out *frameWriter, req int64) {
 		out.JSON(Event{Type: "options", Options: ev, Req: req})
 	}()
 }
+
+// windowKind is a window's kind as the state names it: empty is a terminal.
+func windowKind(k string) string {
+	if k == "" {
+		return "terminal"
+	}
+	return k
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -265,9 +266,18 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// exit already. A detached session keeps it until something closes
 		// it, which is right for a shell and wrong for tuios xpanes -ss.
 		CloseOnExit bool `json:"close_on_exit"`
+		// Kind and URI make a window a renderer draws natively.
+		Kind string `json:"kind"`
+		URI  string `json:"uri"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Kind != "" && !slices.Contains(WindowKinds, p.Kind) {
+		return nil, invalidParam("kind", "kind is terminal, view, web or app")
+	}
+	if p.Kind != "" && p.Kind != "terminal" && p.URI == "" {
+		return nil, invalidParam("uri", "a "+p.Kind+" window needs uri, what it shows")
 	}
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
@@ -326,6 +336,8 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Name:      p.Name,
 		Host:      p.Host,
 		Grants:    grants,
+		Kind:      p.Kind,
+		URI:       p.URI,
 	}, onExit)
 	if errors.Is(err, ErrScratchExists) {
 		return nil, invalidParam("scratch", err.Error())

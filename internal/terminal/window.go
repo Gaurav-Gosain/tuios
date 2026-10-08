@@ -323,6 +323,11 @@ type Window struct {
 	// title row. See app/stack.go.
 	Stack      string
 	StackIndex int
+	// Kind and URI say what draws the pane and what it shows: empty for a
+	// terminal, or "view", "web" or "app" for a pane a native renderer draws
+	// itself. The daemon sets them. See session.WindowState.Kind.
+	Kind string
+	URI  string
 	// ScratchName keys a scratch pane: "scratch" (or empty, from before
 	// names) for the built-in one, the entry's name for a command entry.
 	ScratchName string

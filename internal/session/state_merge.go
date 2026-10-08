@@ -240,6 +240,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The field is daemon-owned like every other one in this block, and it was
 	// added without being put here.
 	hosts := make(map[string]string, len(canonical.Windows))
+	// What draws a window and what it shows are set when it is made and only
+	// the daemon sets them, so canonical wins the way the host does.
+	type viewMark struct{ kind, uri string }
+	views := make(map[string]viewMark)
 	// The turn count is daemon-owned and only ever goes up. A client echoes the
 	// value it was last sent, which can be behind, and an older client sends
 	// none, so canonical wins whenever it is ahead.
@@ -271,6 +275,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.Scratch {
 			scratches[w.ID] = scratchMark{w.ScratchName, w.Workspace}
+		}
+		if w.Kind != "" || w.URI != "" {
+			views[w.ID] = viewMark{w.Kind, w.URI}
 		}
 		workspaces[w.ID] = w.Workspace
 		if w.Host != "" {
@@ -323,6 +330,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if c := completions[w.ID]; c > w.CompletionSeq {
 			w.CompletionSeq = c
 		}
+		v := views[w.ID]
+		w.Kind, w.URI = v.kind, v.uri
 		// Only the daemon marks the scratch popup, so a push can neither set
 		// the mark on another pane nor clear it.
 		p, ok := popups[w.ID]

@@ -234,7 +234,7 @@ func sendKeysSummary(sentTo, windowID, window string, keys int) string {
 // window execs as its process instead of a shell. A non-empty host puts the
 // window's process on another machine; the window is still this session's.
 // Non-empty grants are what the window's process may do through tuios.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, jsonOutput, printID bool) error {
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, kind, uri string, jsonOutput, printID bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -256,6 +256,12 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	}
 	if len(grants) > 0 {
 		params["grants"] = grants
+	}
+	if kind != "" {
+		params["kind"] = kind
+	}
+	if uri != "" {
+		params["uri"] = uri
 	}
 	raw, err := client.Call("new-window", params)
 	if err != nil {
