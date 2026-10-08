@@ -179,7 +179,7 @@ func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verb
 	rows := make([]TransferRow, 0, len(local))
 	for _, path := range local {
 		dst := strings.TrimSuffix(dir, "/") + "/" + filepath.Base(path)
-		j := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both")
+		j := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both", true)
 		remote = append(remote, dst)
 		rows = append(rows, j.row())
 	}

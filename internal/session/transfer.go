@@ -87,7 +87,10 @@ type transferJob struct {
 	src, dst Endpoint
 	move     bool
 	conflict string
-	created  time.Time
+	// private keeps every file it writes owner only, as a drop folder's are,
+	// instead of taking the original's permission bits.
+	private bool
+	created time.Time
 
 	done atomic.Int64
 
@@ -142,13 +145,14 @@ func newTransferID() string {
 }
 
 // start makes a job and runs it in the background.
-func (m *transferManager) start(src, dst Endpoint, move bool, conflict string) *transferJob {
+func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool) *transferJob {
 	j := &transferJob{
 		id:       newTransferID(),
 		src:      src,
 		dst:      dst,
 		move:     move,
 		conflict: conflict,
+		private:  private,
 		created:  time.Now(),
 		state:    transferQueued,
 		finished: map[string]bool{},
@@ -389,12 +393,15 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 		}
 	}
 
+	if j.private {
+		info.perm = 0
+	}
 	if !info.isDir {
 		j.set(func(j *transferJob) {
 			j.size, j.files, j.isDir = info.size, 1, false
 			j.current = filepath.Base(j.src.Path)
 		})
-		got, err := m.copyFile(ctx, j, src, dst, j.src.Path, dstPath, info.size, 0, j.conflict)
+		got, err := m.copyFile(ctx, j, src, dst, j.src.Path, dstPath, info.size, 0, j.conflict, info.perm)
 		if err != nil {
 			return classify(err)
 		}
@@ -439,7 +446,11 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 			continue
 		}
 		j.set(func(j *transferJob) { j.current = e.Rel })
-		if _, err := m.copyFile(ctx, j, src, dst, joinRemote(j.src.Path, e.Rel), joinRemote(dstPath, e.Rel), e.Size, base, "replace"); err != nil {
+		perm := e.Perm
+		if j.private {
+			perm = 0
+		}
+		if _, err := m.copyFile(ctx, j, src, dst, joinRemote(j.src.Path, e.Rel), joinRemote(dstPath, e.Rel), e.Size, base, "replace", perm); err != nil {
 			return classify(err)
 		}
 		base += e.Size
@@ -466,7 +477,7 @@ func joinRemote(dir, rel string) string {
 // copyFile copies one file through its part, resuming a part that is there,
 // and returns where the file ended up. base is what the job had done before
 // this file, for the progress.
-func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, from, to string, size, base int64, conflict string) (string, error) {
+func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, from, to string, size, base int64, conflict string, perm uint32) (string, error) {
 	// The source's hash runs beside the copy: on another machine it is a
 	// read of the file there, which costs this link nothing.
 	type hashed struct {
@@ -553,7 +564,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	if h.err != nil {
 		return "", h.err
 	}
-	got, err := dst.commit(ctx, to, h.sum, conflict)
+	got, err := dst.commit(ctx, to, h.sum, conflict, perm)
 	if err != nil {
 		return "", err
 	}
@@ -722,6 +733,7 @@ type statResult struct {
 	exists bool
 	isDir  bool
 	size   int64
+	perm   uint32
 }
 
 func (e fileEnd) local() bool { return e.host == "" }
@@ -739,7 +751,7 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 		if err != nil {
 			return statResult{}, err
 		}
-		return statResult{exists: true, isDir: fi.IsDir(), size: fi.Size()}, nil
+		return statResult{exists: true, isDir: fi.IsDir(), size: fi.Size(), perm: uint32(fi.Mode().Perm())}, nil
 	}
 	var r struct {
 		Exists bool     `json:"exists"`
@@ -749,7 +761,7 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 	if err := e.call(ctx, "file-stat", map[string]any{"path": path}, &r); err != nil {
 		return statResult{}, err
 	}
-	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size}, nil
+	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm}, nil
 }
 
 func (e fileEnd) partSize(ctx context.Context, path string) (int64, error) {
@@ -899,9 +911,9 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 	return c, finish, nil
 }
 
-func (e fileEnd) commit(ctx context.Context, path, sum, conflict string) (string, error) {
+func (e fileEnd) commit(ctx context.Context, path, sum, conflict string, perm uint32) (string, error) {
 	if e.local() {
-		final, _, verr := commitPart(path, sum, conflict)
+		final, _, verr := commitPart(path, sum, conflict, perm)
 		if verr != nil {
 			return "", &VerbCallError{Code: verr.Code, Message: verr.Message}
 		}
@@ -910,7 +922,11 @@ func (e fileEnd) commit(ctx context.Context, path, sum, conflict string) (string
 	var r struct {
 		Path string `json:"path"`
 	}
-	err := e.callTimeout(ctx, "file-commit", map[string]any{"path": path, "sha256": sum, "conflict": conflict}, &r, transferHashTimeout)
+	params := map[string]any{"path": path, "sha256": sum, "conflict": conflict}
+	if perm != 0 {
+		params["perm"] = perm
+	}
+	err := e.callTimeout(ctx, "file-commit", params, &r, transferHashTimeout)
 	return r.Path, err
 }
 
@@ -1165,7 +1181,7 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 			})
 		}
 	}
-	j := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict)
+	j := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false)
 	return j.row(), nil
 }
 

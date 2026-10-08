@@ -84,8 +84,10 @@ type FileInfo struct {
 	Size     int64  `json:"size"`
 	// MTime is the modification time in Unix milliseconds.
 	MTime int64 `json:"mtime"`
-	// Mode is the permission string ls prints: drwxr-xr-x.
+	// Mode is the permission string ls prints: drwxr-xr-x. Perm is the
+	// permission bits as a number, for a copy to keep.
 	Mode   string `json:"mode"`
+	Perm   uint32 `json:"perm"`
 	Hidden bool   `json:"hidden,omitempty"`
 }
 
@@ -112,6 +114,7 @@ func describe(path string, fi fs.FileInfo) FileInfo {
 		Size:   fi.Size(),
 		MTime:  fi.ModTime().UnixMilli(),
 		Mode:   fi.Mode().String(),
+		Perm:   uint32(fi.Mode().Perm()),
 		Hidden: strings.HasPrefix(fi.Name(), "."),
 	}
 	if out.Kind == "symlink" {
@@ -626,8 +629,10 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 
 // commitPart checks a finished part against the sender's hash and renames it
 // into place. conflict says what to do when path exists: replace it, keep both
-// (the new file gets " 2", " 3" ... before its extension), or fail.
-func commitPart(path, want, conflict string) (string, string, *verbError) {
+// (the new file gets " 2", " 3" ... before its extension), or fail. perm, when
+// not zero, is the original's permission bits: the part is owner only while
+// it is written, and the finished file gets the original's.
+func commitPart(path, want, conflict string, perm uint32) (string, string, *verbError) {
 	part := partPath(path)
 	got, _, err := hashRange(part, 0, -1)
 	if err != nil {
@@ -646,6 +651,9 @@ func commitPart(path, want, conflict string) (string, string, *verbError) {
 		default:
 			return "", got, newVerbError(ErrVerbFileExists, echoName(path)+" already exists")
 		}
+	}
+	if perm != 0 {
+		_ = os.Chmod(part, os.FileMode(perm&0o777))
 	}
 	if err := os.Rename(part, final); err != nil {
 		return "", got, fileError("finish", final, err)
@@ -680,6 +688,7 @@ func (d *Daemon) verbFileCommit(_ *connState, params json.RawMessage) (any, *ver
 		Path     string `json:"path"`
 		SHA256   string `json:"sha256"`
 		Conflict string `json:"conflict"`
+		Perm     uint32 `json:"perm"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -693,7 +702,7 @@ func (d *Daemon) verbFileCommit(_ *connState, params json.RawMessage) (any, *ver
 	default:
 		return nil, invalidParam("conflict", "conflict is replace, keep-both or fail", "replace", "keep-both", "fail")
 	}
-	final, sum, verr := commitPart(path, p.SHA256, p.Conflict)
+	final, sum, verr := commitPart(path, p.SHA256, p.Conflict, p.Perm)
 	if verr != nil {
 		return nil, verr
 	}
@@ -727,6 +736,7 @@ type WalkEntry struct {
 	Rel  string `json:"rel"`
 	Size int64  `json:"size"`
 	Dir  bool   `json:"dir,omitempty"`
+	Perm uint32 `json:"perm,omitempty"`
 }
 
 // walkTree lists every file and folder under root, folders first in each
@@ -753,7 +763,7 @@ func walkTree(root string) ([]WalkEntry, int64, error) {
 			if err != nil {
 				return err
 			}
-			out = append(out, WalkEntry{Rel: rel, Size: fi.Size()})
+			out = append(out, WalkEntry{Rel: rel, Size: fi.Size(), Perm: uint32(fi.Mode().Perm())})
 			total += fi.Size()
 		}
 		return nil
@@ -790,7 +800,7 @@ func fileVerbs() map[string]verbEntry {
 	pathParam := func(what string) verbParam {
 		return verbParam{Name: "path", Type: "string", Required: true, Description: what + " An absolute path, or one that starts with ~."}
 	}
-	infoReturn := verbParam{Name: "info", Type: "object", Description: "name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), hidden."}
+	infoReturn := verbParam{Name: "info", Type: "object", Description: "name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), perm (the permission bits as a number), hidden."}
 	return map[string]verbEntry{
 		"file-stat": {
 			description: "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
@@ -923,6 +933,7 @@ func fileVerbs() map[string]verbEntry {
 				pathParam("The file the copy is for."),
 				{Name: "sha256", Type: "string", Description: "The sender's hash, hex. Omit to skip the check."},
 				{Name: "conflict", Type: "string", Description: "When the path exists: replace it, keep both (the copy gets a number), or fail.", Accepted: []string{"replace", "keep-both", "fail"}, Default: "fail"},
+				{Name: "perm", Type: "int", Description: "The original's permission bits, which the finished file gets. Omit to keep it owner only."},
 			},
 			returns: []verbParam{
 				{Name: "path", Type: "string", Description: "Where the file is now."},
