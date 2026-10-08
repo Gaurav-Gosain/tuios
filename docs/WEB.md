@@ -58,6 +58,15 @@ tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-pass
   no password, so tuios-web refuses it and the browser falls back to
   WebSocket.
 
+## Window size limit
+
+A browser window can be 1200 columns wide and 500 rows high at most. Each cell
+costs tuios-web memory, so the limit keeps one browser from using gigabytes.
+
+- tuios-web ignores a resize past the limit. The session keeps the size it had.
+- A browser that connects with a larger window gets no session. Make the font
+  larger or the window smaller, then connect again.
+
 ## Open the Inbox from a notification
 
 A push notification from the `[notify]` table links to the Inbox item when

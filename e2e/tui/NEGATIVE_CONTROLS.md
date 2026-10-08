@@ -3057,3 +3057,28 @@ name the key, its file and the default key the action uses.
 The key presses alone cannot catch the first control. A dropped `opt+1` falls
 back to the default `alt+1`, which is the same key on Linux. The doctor and the
 log viewer are what tell the two builds apart.
+
+## The saver's frame rate, and the tuios-web window limit
+
+`TestScreensaverPaintsAtSixtyAtMost` reads the saver's frame rate off the
+screen as the time an effect hides a marker. middleout counts frames (99), and
+tuffbaby paces its clip by the clock. The max_fps 30 case is the positive half:
+it fails if max_fps never reaches the saver.
+
+`TestWebIgnoresAWindowPastTheLimit` sends tuios-web a resize to 300x60, then
+one to 1500x900. The first must reach the pane, which is the positive half. The
+second must leave the pane at the size it had and keep the memory where it was.
+
+Each control below was run on 2026-10-08 at a load average near 30.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The saver ticks at NormalFPS again | main at `1db4d240` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 240 hides the screen for 0.48 s, want at least 1.2 s) | **caught** |
+| The clock disagrees with the tick | `screensaverBuild`: `NewVirtualClock(s.NormalFPS)` in place of `screensaverRate(s)` | `TestScreensaverPaintsAtSixtyAtMost` (tuffbaby at max_fps 240 keeps the marker hidden for more than 18 s, against 9.32 s with the fix) | **caught** |
+| max_fps never reaches the saver | `screensaverRate` always returns `screensaverFPS` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 30 hides the screen for 1.62 s, want at least 2.6 s) | **caught** |
+| No window limit | `cmd/tuios-web/main.go`: the `MaxWindowDims` line cut (main at `1db4d240`) | `TestWebIgnoresAWindowPastTheLimit` (tuios-web grows from 45 MB to 857 MB, and the shell stops answering within 10 s) | **caught** |
+
+With the fix, tuios-web held 55 MB before the oversized resize and 59 MB after
+it. The unit test `TestSaverClockRunsAtTheRateThePaintingDoes` in
+`internal/app` holds the clock to the tick at 10, 30, 60, 120 and 240 fps, and
+fails on the second control too.

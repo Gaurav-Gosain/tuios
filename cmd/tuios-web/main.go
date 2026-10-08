@@ -353,6 +353,7 @@ func runWebServer() error {
 	sipConfig.TLSCert = tlsCert
 	sipConfig.TLSKey = tlsKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
+	sipConfig.MaxWindowDims = sip.WindowSize{Width: webMaxCols, Height: webMaxRows}
 	access.apply(&sipConfig)
 
 	// How the page looks. Read after the config file and the flags have both
@@ -623,15 +624,27 @@ func checkTransportSecurity(w io.Writer) error {
 	return fmt.Errorf("refusing to serve %s in clear text: pass --auto-tls, or --cert and --key, or --insecure to accept it", webHost)
 }
 
+// webMaxCols and webMaxRows are the largest window a browser may ask for.
+//
+// Each cell costs tuios-web about 1.3 KB: one session resized to 2000x1000
+// took the process from 41 MB to 2.6 GB. sip's own limit is 4096x4096, which
+// is about 22 GB for one resize message. sip ignores a later resize past these
+// limits and keeps the session. It refuses a first resize past them, so they
+// sit well above any real window: a 5120 pixel wide screen at a 5 pixel cell
+// is 1024 columns.
+const (
+	webMaxCols = 1200
+	webMaxRows = 500
+)
+
 // createTUIOSHandler creates a TUIOS instance for each web session.
 //
-// Graphics: starting with sip v0.1.12, the bundled xterm.js loads
-// @xterm/addon-image 0.10.0-beta.196 with kittySupport and sixelSupport
-// enabled (from xtermjs/xterm.js#5619). We force-enable the kitty/sixel
-// passthroughs and route their output through the sip session's PTY slave
-// so APC sequences emitted by child processes (chafa -f kitty, kitten
-// icat, etc.) flow through the same pipe as bubbletea's text output and
-// get rendered by the browser's image addon.
+// Graphics: sip's page runs webterm, which draws kitty graphics in its own
+// overlay and sixel through @xterm/addon-image (sip's static/terminal.js asks
+// for both with graphics: { kitty, sixel }). The kitty and sixel passthroughs
+// are forced on here, and their output goes through the sip session's PTY
+// slave, so APC sequences from child processes (chafa -f kitty, kitten icat
+// and the rest) flow through the same pipe as bubbletea's text output.
 func createTUIOSHandler(sess sip.Session) *app.OS {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
@@ -690,9 +703,9 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 // went. The session switcher reaches the others from inside tuios.
 func pickWebSession([]string) string { return "web" }
 
-// webHostCaps is the browser terminal one connection draws to. sip's bundled
-// xterm.js loads the image addon with kitty and sixel support, so both
-// protocols render. KittyAnimation stays false because the browser overlay has
+// webHostCaps is the browser terminal one connection draws to. sip's page
+// draws kitty graphics in webterm's overlay and sixel through the xterm.js
+// image addon, so both protocols render. KittyAnimation stays false because the browser overlay has
 // no a=f frame-edit path, and KittyFileTransfer stays false because the browser
 // cannot read server-local paths. The palette is the one the browser draws
 // with; see browserPalette.
