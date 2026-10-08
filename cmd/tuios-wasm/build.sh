@@ -43,6 +43,11 @@ if [ -z "$sip" ] || [ ! -f "$sip/static/webterm.js" ]; then
 	exit 1
 fi
 cp "$sip/static/webterm.js" "$sip/static/webterm.css" "$sip/static/xterm.css" "$out/"
+# A newer sip ships the vtgl renderer as its own file, and the page loads it
+# only for ?renderer=vtgl. sip v0.8.5 and older carry vtgl inside webterm.js.
+if [ -f "$sip/static/webterm-vtgl.js" ]; then
+	cp "$sip/static/webterm-vtgl.js" "$out/"
+fi
 
 if command -v pyftsubset >/dev/null 2>&1; then
 	subset="pyftsubset"

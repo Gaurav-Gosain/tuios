@@ -1,7 +1,8 @@
 // A headless Chromium smoke test of the browser build. It serves a build.sh
 // output directory, loads the demo page, opens a window, runs a command in
 // the fake shell, checks the events that came back, and checks that q does
-// not quit.
+// not quit. Then it loads the page with ?renderer=vtgl and checks that vtgl
+// draws it.
 //
 // Usage: node cmd/tuios-wasm/smoke.mjs <dir> [screenshot.png]
 //
@@ -75,6 +76,17 @@ try {
   if (state.totalWindows !== 1 || state.mode !== 'window') fail('unexpected state ' + JSON.stringify(state));
   const actions = await page.evaluate(() => Object.keys(window.tuios.actions()).length);
   if (actions < 50) fail('tuios.actions() has only ' + actions + ' actions');
+
+  // ?renderer=vtgl must reach vtgl. A newer sip ships it as webterm-vtgl.js,
+  // which the page has to load itself, and without it webterm falls back to
+  // WebGL without an error.
+  const vtglPage = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  vtglPage.on('pageerror', (err) => logs.push('vtgl pageerror: ' + err.message));
+  await vtglPage.goto(`http://127.0.0.1:${port}/?renderer=vtgl`);
+  await vtglPage.waitForFunction(() => window.tuiosTimings && window.tuiosTimings.firstFrame, null, { timeout: 60000 });
+  const vtglRenderer = await vtglPage.evaluate(() => window.webterm.renderer);
+  if (vtglRenderer !== 'vtgl') fail('?renderer=vtgl drew with ' + vtglRenderer);
+  await vtglPage.close();
 
   if (shot) await page.screenshot({ path: shot });
   if (logs.length) fail('page errors:\n' + logs.join('\n'));

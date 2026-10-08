@@ -144,7 +144,23 @@ async function loadWasm(importObject) {
   return WebAssembly.instantiateStreaming(res, importObject);
 }
 
+// The vtgl renderer is a separate file, webterm-vtgl.js, that only
+// ?renderer=vtgl needs. It is about 900 KB, so the page loads it only then.
+// Without it, webterm falls back to WebGL. A build from an older sip has no
+// such file and has vtgl inside webterm.js, which needs no provider.
+function loadVtgl() {
+  return new Promise((resolve) => {
+    const el = document.createElement('script');
+    el.src = 'webterm-vtgl.js';
+    el.onload = () => resolve(window.WebTermVtgl ? window.WebTermVtgl.vtgl() : undefined);
+    el.onerror = () => resolve(undefined);
+    document.head.appendChild(el);
+  });
+}
+
 (async function main() {
+  const renderer = new URLSearchParams(location.search).get('renderer') || 'webgl';
+  const vtgl = renderer === 'vtgl' ? await loadVtgl() : undefined;
   const term = new WebTerm.WebTerm({
     fontFamily: 'JetBrainsMono Nerd Font Mono',
     fontSize: 14,
@@ -153,7 +169,7 @@ async function loadWasm(importObject) {
       { source: "url(fonts/JetBrainsMonoNerdFontMono-Regular.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Regular.ttf) format('truetype')", weight: '400', style: 'normal' },
       { source: "url(fonts/JetBrainsMonoNerdFontMono-Bold.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Bold.ttf) format('truetype')", weight: '700', style: 'normal' },
     ],
-    renderer: { prefer: new URLSearchParams(location.search).get('renderer') || 'webgl' },
+    renderer: { prefer: renderer, vtgl },
     theme: { background: '#11111b' },
     mouse: { suppressContextMenu: true },
     keyboard: { onKeyEvent: (e) => !isReloadKey(e) },
