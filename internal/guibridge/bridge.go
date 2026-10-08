@@ -774,6 +774,9 @@ func (m *model) handle(c Command) tea.Cmd {
 			m.os.NoteInboxReplied(id)
 		}
 		go runVerb(m.out, m.version, nonce, c)
+	case "probe-host":
+		// The renderer typed into a pane on the host: probe it now.
+		pokeHost(c.Name)
 	case "quit":
 		return tea.Quit
 	}

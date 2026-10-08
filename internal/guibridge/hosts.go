@@ -84,6 +84,9 @@ type prober struct {
 	host    string
 	version string
 	stop    chan struct{}
+	// poke sends the next probe now: the renderer typed into a pane on the
+	// host and wants to know at once whether the link still answers.
+	poke chan struct{}
 
 	mu       sync.Mutex
 	rtt      float64
@@ -134,19 +137,29 @@ func (p *prober) run() {
 			}
 			continue
 		}
-		if p.rtt == 0 {
-			p.rtt = took
-		} else {
-			p.rtt += (took - p.rtt) / 8
-		}
-		if p.slow {
-			p.slow = p.rtt > slowLeave
-		} else {
-			p.slow = p.rtt > slowEnter
+		// A probe that waited out a stall measured the stall, not the
+		// link: it is not a sample, and the next probe goes out at once for
+		// a fresh one.
+		stalled := time.Duration(took*float64(time.Millisecond)) >= stallAfter
+		if !stalled {
+			if p.rtt == 0 {
+				p.rtt = took
+			} else {
+				p.rtt += (took - p.rtt) / 8
+			}
+			if p.slow {
+				p.slow = p.rtt > slowLeave
+			} else {
+				p.slow = p.rtt > slowEnter
+			}
 		}
 		p.sessions = hostSessions(raw)
 		p.mu.Unlock()
-		if !p.wait(probePeriod) {
+		next := probePeriod
+		if stalled {
+			next = 0
+		}
+		if !p.wait(next) {
 			return
 		}
 	}
@@ -156,8 +169,23 @@ func (p *prober) wait(d time.Duration) bool {
 	select {
 	case <-p.stop:
 		return false
+	case <-p.poke:
+		return true
 	case <-time.After(d):
 		return true
+	}
+}
+
+// probers are the running probers by host, for pokeHost.
+var probers sync.Map
+
+// pokeHost sends the host's next probe now, if one is not out already.
+func pokeHost(host string) {
+	if v, ok := probers.Load(host); ok {
+		select {
+		case v.(*prober).poke <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -214,10 +242,11 @@ func linkHealth(status string) string {
 
 // watchHosts keeps the renderer's machines current until stop closes.
 func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
-	probers := map[string]*prober{}
+	running := map[string]*prober{}
 	defer func() {
-		for _, p := range probers {
+		for name, p := range running {
 			close(p.stop)
+			probers.Delete(name)
 		}
 	}()
 	var c *session.VerbClient
@@ -251,25 +280,28 @@ func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
 			r := &ev.Hosts[i]
 			if r.Status != "up" {
 				r.Health = linkHealth(r.Status)
-				if p := probers[r.Name]; p != nil {
+				if p := running[r.Name]; p != nil {
 					close(p.stop)
-					delete(probers, r.Name)
+					delete(running, r.Name)
+					probers.Delete(r.Name)
 				}
 				continue
 			}
 			seen[r.Name] = true
-			p := probers[r.Name]
+			p := running[r.Name]
 			if p == nil {
-				p = &prober{host: r.Name, version: version, stop: make(chan struct{})}
-				probers[r.Name] = p
+				p = &prober{host: r.Name, version: version, stop: make(chan struct{}), poke: make(chan struct{}, 1)}
+				running[r.Name] = p
+				probers.Store(r.Name, p)
 				go p.run()
 			}
 			p.row(r, now)
 		}
-		for name, p := range probers {
+		for name, p := range running {
 			if !seen[name] {
 				close(p.stop)
-				delete(probers, name)
+				delete(running, name)
+				probers.Delete(name)
 			}
 		}
 		if b, err := json.Marshal(Event{Type: "hosts", Hosts: &ev}); err == nil && !bytes.Equal(b, last) {
@@ -279,7 +311,7 @@ func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
 		// A stalled host is checked four times a second, so the row comes
 		// back as soon as its probe does.
 		wait := hostsPeriod
-		for _, p := range probers {
+		for _, p := range running {
 			p.mu.Lock()
 			if !p.out.IsZero() {
 				wait = 250 * time.Millisecond

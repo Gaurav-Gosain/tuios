@@ -396,3 +396,114 @@ func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
 		t.Fatalf("ASSERTION: after a config reload the pane is not over the whole grid:\nbefore %s\nafter  %s", before, after)
 	}
 }
+
+// farProxy finds the far side of the link to the remote machine at
+// remoteBase: the stdio-proxy whose runtime folder is that machine's.
+func farProxy(t *testing.T, remoteBase string) int {
+	t.Helper()
+	want := "XDG_RUNTIME_DIR=" + xdgDir(remoteBase, "XDG_RUNTIME_DIR")
+	entries, _ := os.ReadDir("/proc")
+	for _, e := range entries {
+		pid := 0
+		if _, err := fmt.Sscan(e.Name(), &pid); err != nil {
+			continue
+		}
+		cmd, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
+		if !bytes.Contains(cmd, []byte("stdio-proxy")) {
+			continue
+		}
+		env, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
+		for _, kv := range bytes.Split(env, []byte{0}) {
+			if string(kv) == want {
+				return pid
+			}
+		}
+	}
+	t.Fatalf("no stdio-proxy runs for the far machine")
+	return 0
+}
+
+// A link that stops answering: a probe asked for after typing shows it as
+// stalled within seconds, and the moment the far side answers again the
+// row is good, with a round trip that does not count the stall.
+func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh}
+	if out, err := tuiosCLI(t, remote, "start-server"); err != nil {
+		t.Fatalf("start the far daemon: %v\n%s", err, out)
+	}
+	killDaemon(t, base)
+	if out, err := tuiosCLIEnv(t, base, env, "start-server"); err != nil {
+		t.Fatalf("start-server: %v\n%s", err, out)
+	}
+	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes up")
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "here"}, env: env, cols: 100, rows: 30, keepDaemon: true, name: "stall"})
+	type row struct {
+		Health      string `json:"health"`
+		RTTMs       int    `json:"rtt_ms"`
+		SilentSince int64  `json:"silent_since"`
+	}
+	build := func() (row, bool) {
+		ev := eventsOf[struct {
+			Hosts []struct {
+				Name string `json:"name"`
+				row
+			} `json:"hosts"`
+		}](b, "hosts", "hosts")
+		if len(ev) == 0 {
+			return row{}, false
+		}
+		for _, h := range ev[len(ev)-1].Hosts {
+			if h.Name == "build" {
+				return h.row, true
+			}
+		}
+		return row{}, false
+	}
+	waitRow := func(ok func(row) bool, d time.Duration, what string) row {
+		deadline := time.Now().Add(d)
+		for {
+			r, seen := build()
+			if seen && ok(r) {
+				return r
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: %s within %v; last row %+v", what, d, r)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	waitRow(func(r row) bool { return r.Health == "good" && r.RTTMs > 0 }, 30*time.Second, "build good with a round trip")
+	// Right after a probe: the next one is about 5 s away.
+	time.Sleep(500 * time.Millisecond)
+
+	pid := farProxy(t, remote)
+	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+		t.Fatalf("stop the far proxy: %v", err)
+	}
+	resumed := false
+	defer func() {
+		if !resumed {
+			_ = syscall.Kill(pid, syscall.SIGCONT)
+		}
+	}()
+	stopped := time.Now()
+	b.send(map[string]any{"cmd": "probe-host", "name": "build"})
+	r := waitRow(func(r row) bool { return r.Health == "stalled" }, 7500*time.Millisecond, "build stalled after a probe asked for at the stop")
+	t.Logf("stalled after %v, silent since %d", time.Since(stopped).Round(100*time.Millisecond), r.SilentSince)
+	if r.SilentSince == 0 {
+		t.Fatalf("ASSERTION: a stalled row carries no silent_since")
+	}
+
+	_ = syscall.Kill(pid, syscall.SIGCONT)
+	resumed = true
+	back := time.Now()
+	r = waitRow(func(r row) bool { return r.Health == "good" }, 2*time.Second, "build good again within 2 s of the far side answering")
+	t.Logf("good again after %v, round trip %d ms", time.Since(back).Round(10*time.Millisecond), r.RTTMs)
+	if r.RTTMs >= 1000 {
+		t.Fatalf("ASSERTION: the round trip counts the stall: %d ms", r.RTTMs)
+	}
+}

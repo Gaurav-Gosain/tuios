@@ -3282,7 +3282,7 @@ Each control below was run on 2026-10-08 on branch
 
 ## The GUI bridge, wave 4: reopen, kept emulators and machines
 
-`e2e/tui/gui_bridge_wave4_test.go` has five tests:
+`e2e/tui/gui_bridge_wave4_test.go` has six tests:
 
 - `TestGUIBridgeAttachesByIDThenLastUsed` makes `alpha` and then `zeta`. A
   bridge with no session named must attach `zeta`, the newer one, while
@@ -3304,6 +3304,11 @@ Each control below was run on 2026-10-08 on branch
   round trip over 0 and its session `far`. A bridge with `--host build
   --session far` must attach `far` on `build`, echo through the far shell,
   and leave this machine's daemon without `far`.
+- `TestGUIBridgeHostStallAndRecovery` stops the far machine's stdio-proxy
+  with SIGSTOP right after a probe and asks for a probe (`probe-host`), as
+  the renderer does after a key. The `hosts` event must say `stalled`, with
+  `silent_since`, within 7.5 s. After SIGCONT it must say `good` within 2 s,
+  with a round trip under 1000 ms.
 - `TestGUIBridgeKeepsItsChromeAcrossAReload` writes a config file that puts
   the dock at the top while a bridge shows one pane. After the reload the
   pane must still start at row 0 and fill all 30 rows.
@@ -3321,6 +3326,8 @@ is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
 | No round trip is measured | `watchHosts`: the prober not started | `TestGUIBridgeOnAHostAndItsLink` (`rtt_ms` 0, no sessions) | **caught** |
 | `--host` attaches this machine | `Run`: always `ConnectWithCapabilities` | `TestGUIBridgeOnAHostAndItsLink` | **caught** |
 | The session id is ignored | `pickSession`: the id loop cut | `TestGUIBridgeAttachesByIDThenLastUsed` (attached `alpha`, want `omega`), `TestGUIBridgeKilledLeavesTheSession` (attached `other`, want `crash`) | **caught** |
+| A probe is not sent when the renderer asks | `handle`: `probe-host` does nothing | `TestGUIBridgeHostStallAndRecovery` (still good 7.5 s after the far proxy stopped) | **caught** |
+| A stalled probe counts in the round trip | `prober.run`: every probe is a sample | `TestGUIBridgeHostStallAndRecovery` (slow, 659 ms, 2 s after the far proxy answered again) | **caught** |
 | The reloaded config is put in force as the file says | `newModel`: `ReloadFilter` not set | `TestGUIBridgeKeepsItsChromeAcrossAReload` (the pane at row 2, 28 rows high, after the file put the dock at the top) | **caught** |
 
 All 37 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
