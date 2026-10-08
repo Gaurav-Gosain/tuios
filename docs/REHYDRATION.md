@@ -14,7 +14,9 @@ records where the implementations differ.
 daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
-modifyOtherKeys level, the alternate-screen flag and up to 1000 scrollback rows.
+modifyOtherKeys level, the alternate-screen flag, the cells DECSCA protected,
+the cursor DECSC saved on each screen, the character REP repeats and up to 1000
+scrollback rows.
 `ApplyTerminalState` reads it back, and
 `OS.restoreTerminalContent` (`internal/app/session.go`) is the window around
 that. It is a snapshot of *now*: applying it is idempotent and carries no
@@ -60,10 +62,12 @@ For every route, once the route has completed and the pane is quiet:
 4. **Modes.** Alternate-screen flag, DEC modes, the kitty keyboard stack and the
    modifyOtherKeys level match.
 5. **No duplication.** Content the pane produced once appears once.
-6. **What paints the next byte.** The pen, the scroll region and the character
-   set selection match. None of these can be read back off the cells, and each
-   decides how output that has not arrived yet is painted, where it lands and
-   which glyphs it draws.
+6. **What paints the next byte.** The pen with its hyperlink and its DECSCA
+   protection, the scroll region, the character set selection, the cells
+   DECSCA protected, the cursor DECSC saved and the character REP repeats
+   match. None of these can be read back off the cells, and each decides how
+   output that has not arrived yet is painted, where it lands, which glyphs it
+   draws and what a selective erase keeps.
 7. **The screen underneath.** While the alternate screen is active, the normal
    screen matches too. It is what quitting the guest's program puts back on
    display.
@@ -116,6 +120,14 @@ into a fixed RGB passed all 32 cases while repainting the user's screen. This
 test feeds a guest's output to one emulator, takes it through the wire into a
 second, and compares the two emulators to each other, with no wire in the middle
 of the comparison.
+
+`TestWireCarriesTheCursorState` (`internal/session/cursor_state_wire_test.go`)
+is the wire test for the state no cell shows. A restore of that state looks
+right until the guest sends the sequence that reads it, so each case restores
+a snapshot, feeds both emulators that sequence (REP, DECRC, a selective erase,
+leaving the alternate screen), and compares them after it. It runs on both
+wire forms, and `TestGhosttyWireCarriesTheCursorState` runs it across the two
+backends in each direction.
 
 `e2e/tui/session_switch_fidelity_test.go` is the third rung: a real client in a
 real terminal, switched away and back, read for what it actually painted.
@@ -277,6 +289,55 @@ Two things had to be true for that rule to hold, and neither was:
   out. The libghostty backend takes no sequence that sets the flag, so its
   restore prints the last cell again. A snapshot from an older daemon has no
   flag, which reads as no wrap pending.
+- **The pen's hyperlink is restored on the libghostty backend.** The pen
+  carried its OSC 8 link on the wire already, but the libghostty backend did
+  not read it when it took a snapshot and did not write it when it restored
+  one. Text the guest printed after a reattach inside an open link was not a
+  link. The library exposes the pen's link only through a formatter that
+  emits it after a cell, so the backend reads it from one, and its restore
+  sends the OSC 8 after the pen.
+- **DECSCA protection is carried.** A guest that sends DECSCA 1 protects
+  what it prints next from a selective erase (DECSED, DECSEL), and a plain
+  erase still clears it. `PenProtected` is the pen's protection and
+  `Protected` the protected cells, as runs of row, column and length;
+  `MainProtected` is the screen under an active alternate one. The pure
+  emulator did not implement DECSCA at all, so a selective erase cleared
+  cells the guest protected, and a pure client restored from a libghostty
+  daemon lost every protected cell to the next DECSED. It now keeps the
+  protection beside the cells (`grid.prot`), and moves it with them through
+  scrolls, line and character inserts and deletes. A reflow drops it. The
+  libghostty backend reads it off the library's cells, and its restore sends
+  DECSCA around the cells that have it. Protection is replaced whole on every
+  route, so a snapshot from an older daemon, which sends none, leaves no cell
+  protected.
+- **The character REP repeats is carried.** `CSI b` repeats the last
+  character the guest printed, as it sent it, before a character set maps
+  it. A client restored without it printed nothing for the next REP, or the
+  wrong character. `LastPrintedKnown` tells an empty one from an older daemon
+  that says nothing, and against an older daemon a surviving emulator keeps
+  its own. The library keeps the character where no query reaches it, so the
+  libghostty backend reads it off the stream as the bytes go past, and its
+  restore sets it the only way the library takes it: it prints the character
+  in a blank cell and erases the cell again. A pending wrap prints the cell
+  under the cursor last, so when that cell holds the character the reprint
+  sets it instead, through the character set when the set maps it. A
+  combining mark or a joiner joins the character before it and is not
+  recorded, on either backend.
+- **The cursor DECSC saved is carried, on each screen.** It is the position,
+  the pen, the pending wrap, origin mode, DECSCA and the character set
+  selection, which DECRC, SCORC and 1048 put back. `SavedCursor` is the
+  active screen's. `MainSavedCursor` is the main screen's while the
+  alternate one is active: entering the alternate screen with 1049 saved the
+  shell's cursor there, and leaving puts it back. Without it a pane with vim
+  open across a reattach put the shell's cursor at the top left when vim
+  quit. The pure emulator did not restore the cursor when 1049 was reset,
+  unlike xterm and libghostty, which also left the alternate screen's
+  character sets in force after it; it restores it now. The library keeps
+  the saved cursor where no query reaches it, so the libghostty backend
+  records the cursor at each save as the stream goes past, and its restore
+  puts the live cursor into the saved state and saves it, before 1049 for
+  the main screen. A peer from before these fields sends neither, and the
+  client keeps the saved cursor it has.
 - **The scroll region is carried, and only when a guest set one.** A region that
   is simply the whole screen says nothing, and sending it pinned a pane that had
   been resized since to whatever size the daemon was when the snapshot was taken.
@@ -475,9 +536,9 @@ scrollback. See [SESSIONS.md](SESSIONS.md#limits).
 
 ## What the wire still does not carry
 
-Known and deliberate, so the next person does not have to rediscover them: the
-saved cursor (DECSC), tab stops, the window title, the guest's OSC 4/10/11/12
-colour overrides, the pending-wrap latch, and the ANSI (non-DEC) modes, which
+Known and deliberate, so the next person does not have to rediscover them: tab
+stops, the window title, the guest's OSC 4/10/11/12 colour overrides, and the
+ANSI (non-DEC) modes, which
 `GetModes` drops because they share an int keyspace with the DEC modes. Insert
 mode (IRM) and reverse video (DECSCNM) are in that last group and are not
 implemented by the emulator at all, so nothing is lost by not carrying them.
@@ -493,9 +554,20 @@ arrives two rows taller than the grid. Those two rows were dropped silently, and
 the resize that grows the grid back is silent too, because the announced size was
 seeded from the daemon and so nothing tells the guest to redraw. An editor came
 back without its last line or its status line and stayed that way. It is grown
-and never shrunk: how much room a pane has is the client's layout to decide and
-it resizes the emulator on the next pass regardless, so growing is transient
+to fit: how much room a pane has is the client's layout to decide and it
+resizes the emulator on the next pass regardless, so growing is transient
 where dropping content is permanent.
+
+A client wider than the snapshot is brought down to the snapshot's width. The
+snapshot's rows, and the stream that resumes on top of it, were laid out at
+that width until the stream says otherwise, so the client has to wrap where
+the daemon wraps. Left wider, a wrap pending at the snapshot's last column was
+not at the client's margin: the pure client kept it pending one column short
+of its edge, the libghostty client's reprint moved the cursor one column
+right, and the next character and every line that reached the edge after it
+landed somewhere the daemon did not put it. A client taller than the snapshot
+is left taller, because extra rows below the snapshot change nowhere a line
+wraps. `TestWireNarrowsAWiderClient` holds this on both backends.
 
 A pane can be resized while it is hidden, by another client or by the daemon.
 `Window.Resize` measures against what this client last announced, so it cannot

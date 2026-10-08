@@ -3188,3 +3188,40 @@ Each control below was run on 2026-10-08 on branch `chore/sip-0.8.5`.
 | --- | --- | --- | --- |
 | tuios-web does not hand the names to sip | `webAccess.apply`: the `cfg.AllowedHosts = a.allowHosts` line cut | `TestWebAllowHostLetsAProxyNameIn` (Host `term.example` gets 403, want 101), and the unit test `TestAllowHostAddsAName` | **caught** |
 | The Host check is off | `webAccess.apply`: `"*"` added to `cfg.AllowedHosts` | `TestWebAllowHostLetsAProxyNameIn` (Host `evil.example` gets 101, want 403) | **caught** |
+
+## State a reattach has to carry that no cell shows
+
+`TestWireCarriesTheCursorState` and `TestWireNarrowsAWiderClient` in
+`internal/session` restore a snapshot, feed both emulators the sequence that
+reads the state, and compare them. The ghostty build runs the same cases pure to
+ghostty, ghostty to pure and ghostty to ghostty
+(`TestGhosttyWireCarriesTheCursorState`, `TestGhosttyWireNarrowsAWiderClient`).
+Each case runs in both wire forms, so one case is two subtests. These are unit
+tests, kept because they hold the wire. On 2026-10-08 each control cut one call
+site and ran the tests on both builds. Every control failed where shown, and the
+same tests passed on the branch.
+
+On `main` at `797ea69e`, with only the tests added, 32 of 56 pure cases fail,
+and so do all 8 wider-client cases. On the ghostty build 28, 52 and 44 of 56
+fail pure to ghostty, ghostty to pure and ghostty to ghostty.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| The OSC 8 the ghostty restore writes for the pen's link | 12 subtests: the three `open-link` cases into a ghostty client |
+| `penExtrasLocked` in the ghostty `CursorPen` | 16 subtests: the `open-link` cases from a ghostty daemon, and into one where the client's pen is read |
+| `RestoreProtectedCells` for the active screen in `ApplyTerminalState` | 12 pure, 48 ghostty: the six cases a selective erase reads on the active screen. `protected-cells-ed-erases`, the positive half, passes |
+| `RestoreProtectedCells` for the main screen | 2 pure, 8 ghostty: `protected-under-alt` |
+| `RestoreCursorProtected` | 2 pure, 8 ghostty: `protected-pen` |
+| The ghostty painter's protection (`appendStyledLineProt` given none) | 28 subtests: seven `protected-*` cases into a ghostty client |
+| The ghostty shadow grid's `setProtected` from the library's cells | 28 subtests: seven `protected-*` cases from a ghostty daemon |
+| `RestoreLastPrinted` | 14 pure: every `rep-*` case but the one after a reset. 40 ghostty, where a ghostty client still gets the character the restore painted last |
+| The ghostty restore's print and erase of REP's character | 8 subtests: `rep-line-drawing` and `rep-not-last-on-screen` into a ghostty client |
+| The ghostty reprint of a pending wrap through the character set | 4 subtests: `rep-line-drawing-under-pending-wrap` into a ghostty client |
+| The ghostty scanner's record of an ASCII character | 18 subtests: the `rep-*` cases from a ghostty daemon |
+| `RestoreSavedCursor` for the active screen | 20 pure, 72 ghostty: every `saved-*` case |
+| `RestoreSavedCursor` for the main screen | 2 pure, 8 ghostty: `saved-under-alt` |
+| The ghostty restore's saved cursor on the active screen | 32 subtests: eight `saved-*` cases into a ghostty client |
+| The ghostty restore's main saved cursor before 1049 | 4 subtests: `saved-under-alt` into a ghostty client |
+| The DECSC hook in the ghostty scanner | 28 subtests: seven `saved-*` cases from a ghostty daemon |
+| The pure emulator's cursor restore when 1049 is reset | 2 pure, 4 ghostty: `saved-under-alt` into a pure client |
+| The narrowing resize in `ApplyTerminalState` | 8 pure, 32 ghostty: every wider-client case |
