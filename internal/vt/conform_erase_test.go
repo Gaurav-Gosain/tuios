@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestConform_ScreenAlignmentPattern(t *testing.T) {
@@ -171,6 +172,40 @@ func TestConform_SelectiveErase(t *testing.T) {
 			name: "protection scrolls with its row",
 			in:   "x\r\n\x1b[1\"qP\x1b[0\"q\x1b[S\x1b[1;1H\x1b[?2J",
 			want: "P",
+		}, {
+			// The protection moves with its row, and a row that moves in
+			// keeps none of what was there before. Each case below fails when
+			// the protection stays where the row was.
+			name: "protection moves down with an inserted line",
+			in:   "ab\r\n\x1b[1\"qP\x1b[0\"q\x1b[1;1H\x1b[L\x1b[?2J",
+			want: "\n\nP",
+		}, {
+			name: "protection moves up with a deleted line",
+			in:   "ab\r\n\x1b[1\"qP\x1b[0\"q\x1b[1;1H\x1b[M\x1b[?2J",
+			want: "P",
+		}, {
+			name: "protection moves down with a reverse index in a region",
+			in:   "\x1b[2;4r\x1b[2;1H\x1b[1\"qP\x1b[0\"q\x1b[2;1H\x1bM\x1b[?2J",
+			want: "\n\nP",
+		}, {
+			name: "protection moves down with an inserted line inside side margins",
+			in:   "\x1b[?69h\x1b[2;5sab\x1b[1\"qC\x1b[0\"qd\x1b[1;2H\x1b[L\x1b[?69l\x1b[?2J",
+			want: "\n  C",
+		}, {
+			name: "protection moves up with a deleted line inside side margins",
+			in:   "a\r\nab\x1b[1\"qC\x1b[0\"qd\x1b[?69h\x1b[2;5s\x1b[1;2H\x1b[M\x1b[?69l\x1b[?2J",
+			want: "  C",
+		}, {
+			// An erased cell is not protected any more. The background a
+			// selective erase paints shows it: a cell still protected keeps
+			// the default one.
+			name:  "an erase in line unprotects the cells it erases",
+			in:    "\x1b[1\"qA\x1b[0\"q\x1b[1;1H\x1b[K\x1b[41m\x1b[?J",
+			cells: []cellWant{{x: 0, y: 0, bg: ansi.Red}},
+		}, {
+			name:  "a line scrolled in at the bottom is not protected",
+			in:    "\x1b[1\"qP\x1b[0\"q\x1b[S\x1b[41m\x1b[1;1H\x1b[?J",
+			cells: []cellWant{{x: 0, y: 3, bg: ansi.Red}},
 		}, {
 			// These two cases used to want "ABC" and an unhandled sequence:
 			// the selective erase erased nothing.

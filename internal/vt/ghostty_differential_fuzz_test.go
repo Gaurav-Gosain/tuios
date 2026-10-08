@@ -869,6 +869,44 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 	}
 }
 
+// TestGhosttyDivergence_ProtectionLost pins the two places the pure emulator
+// lets DECSCA protection go where the library keeps it.
+//
+// A reflow drops it: the pure emulator lays the main screen out again on a
+// change of width and builds new rows, which carry no protection. The library
+// keeps the protected bit in each cell through its own reflow. A guest that
+// protects cells and is then resized loses them to its next selective erase
+// on the pure backend.
+//
+// A soft reset stops it on the pure emulator, as DEC lists for DECSTR. The
+// library does not implement DECSTR (TestGhosttyDivergence_DECSTRIgnored),
+// so the pen keeps protecting there.
+func TestGhosttyDivergence_ProtectionLost(t *testing.T) {
+	t.Run("a reflow drops the protection on the pure emulator", func(t *testing.T) {
+		p := newDiffPair(t, 40, 12)
+		// A row longer than the new width, so the narrowing reflows it.
+		p.write(t, []byte("\x1b[1\"qP\x1b[0\"q"+strings.Repeat("x", 35)))
+		p.pure.Resize(30, 12)
+		p.gh.Resize(30, 12)
+		p.write(t, []byte("\x1b[?2J"))
+		if got := p.pure.CellAt(0, 0).Content; got != "" && got != " " {
+			t.Fatalf("the pure emulator keeps protection through a reflow (cell %q); this entry goes", got)
+		}
+		if got := p.gh.CellAt(0, 0).Content; got != "P" {
+			t.Errorf("ghostty no longer keeps protection through a reflow (cell %q); update this entry", got)
+		}
+	})
+	t.Run("a soft reset stops protecting on the pure emulator", func(t *testing.T) {
+		p := probeBoth(t, "\x1b[1\"q\x1b[!pA\x1b[1;1H\x1b[?2K", 0, 0)
+		if p.pureCell != " " {
+			t.Fatalf("the pure emulator protects after DECSTR (cell %q); this entry goes", p.pureCell)
+		}
+		if p.ghCell != "A" {
+			t.Errorf("ghostty stops protecting after DECSTR (cell %q); update this entry", p.ghCell)
+		}
+	})
+}
+
 // TestGhosttyDivergence_BackgroundColourErase pins which operations carry the
 // current background into the cells they blank.
 //
