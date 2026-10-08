@@ -240,7 +240,7 @@ const errTooManyConnections = "The tuios daemon has too many connections. Close 
 
 // ErrTooManyConnections is the error a client gets when the daemon refused
 // its connection over the cap.
-var ErrTooManyConnections = errors.New(errTooManyConnections)
+var ErrTooManyConnections = errors.New("the tuios daemon has too many connections")
 
 // admitConnection counts a connection just accepted on a socket whose count
 // is open and whose cap is limit, or refuses it when the socket already has

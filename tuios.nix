@@ -33,5 +33,5 @@ pkgs.buildGoModule rec {
   ];
 
   # This has to be updated each time dependencies are updated.
-  vendorHash = "sha256-mESjrddAANoY8wE7QNnzTLaxE6ESe5UoVfwsRU10hzM=";
+  vendorHash = "sha256-pijZ0s/WOEFGAL0XgUrb7B/EmmFZKXiu3ktGV95/RFQ=";
 }
