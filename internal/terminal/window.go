@@ -317,6 +317,12 @@ type Window struct {
 	// group's own workspace. It is the session's, like IsPopup. See
 	// session.WindowState.Scratch.
 	IsScratch bool
+	// Stack names the stack the pane is in, empty when it is in none, and
+	// StackIndex is its place in that stack. The stack's members share one
+	// tile: the one that is not minimized has it, and every other shows as a
+	// title row. See app/stack.go.
+	Stack      string
+	StackIndex int
 	// ScratchName keys a scratch pane: "scratch" (or empty, from before
 	// names) for the built-in one, the entry's name for a command entry.
 	ScratchName string

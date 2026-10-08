@@ -946,6 +946,20 @@ func (t *BSPTree) SwapWindows(windowID1, windowID2 int) {
 	t.WindowToNode[windowID2] = node1
 }
 
+// ReplaceWindow puts the window newID in the leaf of oldID, which leaves the
+// tree. The shape and every ratio stay. It reports whether oldID had a leaf
+// and newID had none.
+func (t *BSPTree) ReplaceWindow(oldID, newID int) bool {
+	node := t.WindowToNode[oldID]
+	if node == nil || t.WindowToNode[newID] != nil {
+		return false
+	}
+	node.WindowID = newID
+	delete(t.WindowToNode, oldID)
+	t.WindowToNode[newID] = node
+	return true
+}
+
 // EqualizeRatios sets all split ratios to 0.5
 func (t *BSPTree) EqualizeRatios() {
 	equalizeRatiosRecursive(t.Root)

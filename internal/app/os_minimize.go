@@ -78,6 +78,9 @@ func (m *OS) RestoreWindow(i int) {
 	}
 	if i >= 0 && i < len(m.Windows) && m.Windows[i].Minimized {
 		window := m.Windows[i]
+		// A title row of a stack that is restored from the dock leaves the
+		// stack and gets a tile of its own. See stack.go.
+		m.leaveStack(window)
 
 		// In tiling mode, skip animation and let TileAllWindows() handle positioning
 		// This prevents incorrect tiling calculations when restoring multiple windows

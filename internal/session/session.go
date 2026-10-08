@@ -245,6 +245,13 @@ type WindowState struct {
 	// of type scratch. A session has at most one scratch pane per name. It is
 	// the daemon's, like Scratch.
 	ScratchName string `json:"scratch_name,omitempty"`
+	// Stack and StackIndex put the window in a stack: panes that share one
+	// tile of the split tree, one open and the others as title rows. Every
+	// client lays the stack out from them, as from IsFloating, so a client
+	// pushes them. The zero values are a window in no stack, which is what
+	// every older client and state reads as.
+	Stack      string `json:"stack,omitempty"`
+	StackIndex int    `json:"stack_index,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory

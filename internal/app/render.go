@@ -321,6 +321,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	if frame := m.renderScratchFrame(); frame != nil {
 		layers = append(layers, frame)
 	}
+	layers = append(layers, m.renderStackRows()...)
 
 	// Add the shared-border dividers when the panes have given up their own borders
 	if m.panesBorderless() {

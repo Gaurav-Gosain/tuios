@@ -1012,6 +1012,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 			// place, discarded that whole layout and rebuilt a default one.
 			if owner := m.WorkspaceTrees[deletedWorkspace]; owner != nil && windowIntID > 0 {
 				owner.RemoveWindow(windowIntID)
+				// A stack that lost its open pane opens its next member,
+				// which the retile below gives a tile.
+				m.openOrphanStacks()
 				m.LogInfo("BSP: Removed window from the workspace %d tree, which now has %d windows",
 					deletedWorkspace, owner.WindowCount())
 				if owner.IsEmpty() {
