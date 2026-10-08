@@ -346,8 +346,9 @@ func TestSessionPoolRebuildsOnADepthChange(t *testing.T) {
 	withTheme(t, "nord")
 	m, _ := sessionColorOS(t, 120, 40)
 
+	prev := overlay.CurrentDepth()
+	t.Cleanup(func() { overlay.SetDepth(prev) })
 	overlay.SetDepth(overlay.DepthTrueColor)
-	defer overlay.SetDepth(overlay.Depth256)
 	wide := m.sessionPool()
 
 	overlay.SetDepth(overlay.Depth256)
