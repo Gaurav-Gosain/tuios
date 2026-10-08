@@ -1151,10 +1151,10 @@ func ptyWeights() []int {
 //	  go test -count=1 -run TestFuzzPTY -timeout 4h ./...
 //
 // TUIOS_FUZZ_FIRST moves the starting seed, which is what makes a wide campaign
-// survivable. tuitest panics on a scroll region wider than the screen (see the
-// third footgun in harness_test.go) and a panic in its pump goroutine takes the
-// test binary down with every finding it had not yet printed. Batches of ten
-// cost one batch when that happens instead of the whole run:
+// survivable. A panic in tuitest's emulator takes the test binary down with
+// every finding it had not yet printed (see the third footgun in
+// harness_test.go). Batches of ten cost one batch when that happens instead of
+// the whole run:
 //
 //	for f in 0 10 20 30; do
 //	  TUIOS_E2E=1 TUIOS_FUZZ_FIRST=$f TUIOS_FUZZ_SEEDS=10 \

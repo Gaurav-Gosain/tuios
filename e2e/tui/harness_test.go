@@ -51,7 +51,7 @@
 // starts the child with setsid and tears down the whole process group, so the
 // daemon and its panes are reaped even when a test fails.
 //
-// # Two harness footguns this file works around
+// # Harness footguns this file works around
 //
 //  1. WaitStable can report stability against a pre-action frame: called right
 //     after sending input, its quiet window can elapse before tuios has reacted.
@@ -63,26 +63,25 @@
 //     keys. enterTerminalMode handles both. An *attached* client is the other way
 //     round and boots into terminal mode; windowManagementMode is the fix.
 //
-//  3. tuitest's own emulator panics on a scroll region wider than the screen,
-//     which takes the whole test binary with it. Three lines reproduce it:
+//  3. An emulator panic in tuitest takes the whole test binary with it. A
+//     panic in its pump goroutine cannot be recovered by the test, so every
+//     result not yet printed is lost and t.Cleanup never runs. It killed an
+//     850 second fuzz campaign and every finding in it.
+//
+//     The panic that did it is fixed. tuitest used to panic on a scroll region
+//     past the bottom of the screen after a shrink, which a client is entitled
+//     to emit when a frame lands after the PTY shrank. These three lines
+//     reproduced it, and they pass against the tuitest this module pins
+//     (re-run on 2026-10-08):
 //
 //     term := tuitest.StartT(t, []string{"/bin/sh"}, tuitest.WithSize(80, 24))
 //     term.Resize(80, 10)
 //     term.SendKeys(`printf '\033[1;24r\033[3S'`, tuitest.Enter)
 //
-//     internal/vt/screen.go setVerticalMargins stores DECSTBM's bottom margin
-//     without clamping it to the buffer, and ultraviolet's DeleteLineArea limits
-//     the delete count against the region but then indexes b.Lines[src] without
-//     limiting it against the buffer, so the next scroll up runs off the end.
-//     A real terminal clamps DECSTBM to the screen.
-//
-//     This is not exotic. A client renders a frame for the size it last knew
-//     about, the PTY shrinks, and the frame lands afterwards; tuios is entitled
-//     to emit that and every real terminal tolerates it. It killed an 850 second
-//     fuzz campaign and took every finding in it, because a panic in the pump
-//     goroutine cannot be recovered by the test. Until tuitest clamps, a long
-//     campaign has to be run in seed batches so one crash costs one batch: see
-//     TUIOS_FUZZ_FIRST on TestFuzzPTY.
+//     tuitest still has no recover around its emulator, so the next emulator
+//     bug would do the same. Until it has one, a long campaign runs in seed
+//     batches so one crash costs one batch: see TUIOS_FUZZ_FIRST on
+//     TestFuzzPTY.
 package tuie2e
 
 import (

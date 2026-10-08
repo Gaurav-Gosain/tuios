@@ -230,9 +230,10 @@ var GuestPrograms = []GuestProgram{
 		Name:  "wlterm",
 		Comms: []string{"wlterm"},
 		Keys: map[string]string{
-			"ctrl+b": "prefix",
+			"ctrl+\\": "tapped twice, quits wlterm",
+			"ctrl+b":  "prefix, in wlterm -multi only",
 		},
-		Note: "Another ctrl+b prefix, and a compositor in a pane also wants key releases.",
+		Note: "The default single-app mode has no prefix and sends every key to the app. A compositor in a pane also wants key releases.",
 	},
 	{
 		Name:  "vim / neovim",
