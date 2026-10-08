@@ -184,7 +184,7 @@ export default defineConfig({
       // The config tests need columns: the rail and the dock both collapse on a
       // phone, and a collapsed thing cannot be told apart from a missing one.
       name: 'desktop',
-      testMatch: /config\.spec\.mjs/,
+      testMatch: /(config|keyboard)\.spec\.mjs/,
       use: {
         baseURL: CONFIG_BASE_URL,
         hasTouch: false,
