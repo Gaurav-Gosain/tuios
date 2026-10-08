@@ -164,10 +164,10 @@ function loadVtgl() {
   const term = new WebTerm.WebTerm({
     fontFamily: 'JetBrainsMono Nerd Font Mono',
     fontSize: 14,
-    // build.sh writes woff2 when it has fonttools, and the TTF otherwise.
+    // build.sh copies the WOFF2 files from sip.
     fonts: [
-      { source: "url(fonts/JetBrainsMonoNerdFontMono-Regular.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Regular.ttf) format('truetype')", weight: '400', style: 'normal' },
-      { source: "url(fonts/JetBrainsMonoNerdFontMono-Bold.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Bold.ttf) format('truetype')", weight: '700', style: 'normal' },
+      { source: "url(fonts/JetBrainsMonoNerdFontMono-Regular.woff2) format('woff2')", weight: '400', style: 'normal' },
+      { source: "url(fonts/JetBrainsMonoNerdFontMono-Bold.woff2) format('woff2')", weight: '700', style: 'normal' },
     ],
     renderer: { prefer: renderer, vtgl },
     theme: { background: '#11111b' },

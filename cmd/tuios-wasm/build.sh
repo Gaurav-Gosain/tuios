@@ -7,10 +7,8 @@
 #   --raw   keep the uncompressed tuios.wasm as well (it is over Cloudflare's
 #           25 MiB per-file limit, so the site never ships it)
 #
-# Needs go, gzip and brotli. The fonts are sip's WOFF2 files. A sip from
-# before it shipped WOFF2 has only TTFs: build.sh then converts them with
-# fonttools' pyftsubset when it, or uvx to fetch it, is on PATH, and copies
-# the TTFs otherwise. That fallback goes once go.mod pins a WOFF2 sip.
+# Needs go, gzip and brotli. The fonts are sip's WOFF2 files. The build fails
+# if sip does not ship them.
 set -e
 raw=0
 if [ "$1" = "--raw" ]; then
@@ -50,30 +48,13 @@ if [ -f "$sip/static/webterm-vtgl.js" ]; then
 	cp "$sip/static/webterm-vtgl.js" "$out/"
 fi
 
-subset=""
-if [ ! -f "$sip/static/fonts/JetBrainsMonoNerdFontMono-Regular.woff2" ]; then
-	if command -v pyftsubset >/dev/null 2>&1; then
-		subset="pyftsubset"
-	elif command -v uvx >/dev/null 2>&1; then
-		subset="uvx --from fonttools --with brotli pyftsubset"
-	fi
-fi
 for face in Regular Bold; do
 	woff2="$sip/static/fonts/JetBrainsMonoNerdFontMono-$face.woff2"
-	src="$sip/static/fonts/JetBrainsMonoNerdFontMono-$face.ttf"
-	if [ -f "$woff2" ]; then
-		# sip converts its TTFs losslessly and ships only the WOFF2.
-		cp "$woff2" "$out/fonts/"
-	elif [ -n "$subset" ]; then
-		# Every glyph and feature is kept: tuios draws nerd font icons in the
-		# dock and the launcher. woff2 alone takes the file from 2.4 MB to
-		# under 1 MB.
-		$subset "$src" --unicodes='*' --glyphs='*' --layout-features='*' \
-			--flavor=woff2 --output-file="$out/fonts/JetBrainsMonoNerdFontMono-$face.woff2" 2>/dev/null
-	else
-		echo "build.sh: no pyftsubset or uvx, copying the TTF" >&2
-		cp "$src" "$out/fonts/"
+	if [ ! -f "$woff2" ]; then
+		echo "build.sh: sip has no $woff2. Pin sip v0.9.0 or newer." >&2
+		exit 1
 	fi
+	cp "$woff2" "$out/fonts/"
 done
 
 if [ -d "$here/web" ]; then
