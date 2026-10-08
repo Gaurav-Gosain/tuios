@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sync/atomic"
@@ -637,7 +638,14 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		}
 		if pty := session.GetPTY(ptyID); pty != nil {
 			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
-			_, _ = pty.Write(data)
+			if len(data) > largeFrame {
+				if _, err := pty.writeLargeInput(data); errors.Is(err, errPaneInputBusy) {
+					_ = d.replyError(cs, msg, ErrCodeBusy, "refused: "+err.Error()+". Try again.")
+					return nil
+				}
+			} else {
+				_, _ = pty.Write(data)
+			}
 			// A key from a client ends the pane's done and error OSC 7501
 			// records: the person has come back to it.
 			pty.noteProgramStatusInput(data)

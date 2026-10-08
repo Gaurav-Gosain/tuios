@@ -186,11 +186,15 @@ type ClientLeftMsg struct {
 	ClientCount int
 }
 
+// PasteRefusedMsg says the daemon refused a paste and the client gave up on
+// it. See session/paste_retry.go.
+type PasteRefusedMsg struct{}
+
 // ClientEvent represents a multi-client notification delivered to the Bubble Tea
 // event loop so the work happens on the program goroutine instead of the daemon
 // read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined", "left", "resize", "refresh", "agent-mail", "agent-mail-load", or "hosts-changed"
+	Type        string // "joined", "left", "resize", "refresh", "agent-mail", "agent-mail-load", "hosts-changed" or "paste-refused"
 	ClientID    string
 	ClientCount int
 	Width       int    // "joined" and "resize"
@@ -488,6 +492,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return AgentMailLoadMsg{}
 	case "hosts-changed":
 		return HostsChangedMsg{}
+	case "paste-refused":
+		return PasteRefusedMsg{}
 	case "agent-mail-mark":
 		// The payload carries the thread to mark in ReadIDs[0]; see
 		// jumpToNotifTarget.
@@ -1534,6 +1540,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// which is the half a push cannot say.
 		m.ApplyNewWindowOnHost(msg)
 		return m, nil
+
+	case PasteRefusedMsg:
+		m.ShowNotification(session.PasteRefusedMessage, "error", m.Settings.NotificationDuration)
+		return m, ListenForClientEvents(m.ClientEventChan)
 
 	case HostsChangedMsg:
 		// The daemon's host table changed under this client. The poll is armed

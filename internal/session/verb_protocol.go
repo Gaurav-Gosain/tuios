@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"os"
 	"slices"
 	"time"
@@ -2158,32 +2159,34 @@ func init() {
 // it. A JSON verb-protocol client's first byte is '{' or leading whitespace; a
 // binary client's is the high byte of a big-endian length prefix (0x00/0x01 for
 // any sub-16MB frame), so the two never collide. It returns true when the
-// connection should be handled as JSON. On any read error it returns false and
-// lets the (short) binary path observe the same error and clean up.
-func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) bool {
+// connection should be handled as JSON. When nothing arrives within
+// firstByteDeadline it returns errFirstByteTimeout, and the caller closes the
+// connection. On any other read error it returns false and lets the (short)
+// binary path observe the same error and clean up.
+func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) (bool, error) {
 	select {
 	case <-d.ctx.Done():
-		return false
+		return false, nil
 	case <-cs.done:
-		return false
+		return false, nil
 	default:
 	}
-	// No deadline on the wait for the first byte. It used to poll every
-	// 100 ms to see the daemon stop, which cost each connection that had not
-	// spoken yet ten wakeups a second. Shutdown and drop close the
-	// connection, which ends the wait as well.
-	_ = cs.conn.SetReadDeadline(time.Time{})
+	// One deadline for the first byte, with no poll: shutdown and drop close
+	// the connection, which ends the wait. Every client speaks first, so a
+	// connection that stays silent this long is closed and gives its slot
+	// back. See frame_budget.go.
+	_ = cs.conn.SetReadDeadline(time.Now().Add(firstByteDeadline))
 	peeked, err := br.Peek(1)
+	_ = cs.conn.SetReadDeadline(time.Time{})
 	if err != nil {
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return false, errFirstByteTimeout
+		}
 		// EOF or hard error: not JSON; the binary loop will re-observe it.
-		return false
+		return false, nil
 	}
-	switch peeked[0] {
-	case '{', ' ', '\t', '\n', '\r':
-		return true
-	default:
-		return false
-	}
+	return isJSONStart(peeked[0]), nil
 }
 
 // handleJSONConnection runs the read/dispatch/respond loop for a JSON client. It

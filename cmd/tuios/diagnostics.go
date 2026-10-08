@@ -255,6 +255,15 @@ func explainDialError(err error) error {
 		return mismatch
 	}
 
+	if errors.Is(err, session.ErrTooManyConnections) {
+		return &diagnosticError{
+			What:  "The tuios daemon has too many connections.",
+			Cause: "other clients, commands or linked machines hold all of its connections.",
+			Fix:   "close some clients or commands, then run this command again.",
+			Err:   err,
+		}
+	}
+
 	d := session.DiagnoseDaemon()
 	if !d.Running() {
 		// The daemon disappeared between the check and the dial, which is

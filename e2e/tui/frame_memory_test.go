@@ -63,7 +63,9 @@ func readReply(conn net.Conn) (byte, []byte, error) {
 // 16 MiB input frame, send 15 MiB of it and stall, and holds the daemon's
 // resident memory to well under what they announced. Then it checks that a
 // hello over its short limit is refused with the stream in step, that the
-// daemon refuses connections past its cap, and that it still serves after.
+// link sockets have connection slots of their own, that the daemon refuses
+// connections past the main socket's cap and tuios ls says why, and that it
+// still serves after.
 //
 // NEGATIVE CONTROL: on a build before frame_budget.go, the daemon allocates
 // each announced body whole and the stalled frames take about 520 MB.
@@ -161,37 +163,27 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	}
 	fmt.Fprintf(&report, "a 1 MiB hello: refused, and the next frame answered\n")
 
-	// Connections past the cap are closed at once.
+	// The link sockets have slots of their own. Filling them leaves the
+	// person's socket free.
+	linkConns, linkRefused := dialAndCountRefused(t, sock+".link", 300)
+	defer closeAll(linkConns)
+	fmt.Fprintf(&report, "300 idle link connections: %d refused\n", linkRefused)
+	if linkRefused < 300-256 {
+		t.Errorf("the daemon refused %d of 300 link connections, want at least %d", linkRefused, 300-256)
+	}
+	if out, err := tuiosCLI(t, base, "ls"); err != nil || !strings.Contains(out, "frames") {
+		t.Errorf("with the link sockets full, tuios ls failed: %v: %s", err, out)
+	}
+	closeAll(linkConns)
+
+	// Connections past the main socket's cap are told why and closed.
 	capStart := time.Now()
 	const many = 1100
-	var open []net.Conn
-	defer func() {
-		for _, c := range open {
-			_ = c.Close()
-		}
-	}()
-	for range many {
-		c, err := net.Dial("unix", sock)
-		if err != nil {
-			t.Fatalf("dial connection %d: %v", len(open)+1, err)
-		}
-		open = append(open, c)
-	}
-	var closedN atomic.Int64
-	var reads sync.WaitGroup
-	for _, c := range open {
-		reads.Go(func() {
-			_ = c.SetReadDeadline(time.Now().Add(time.Second))
-			if _, err := c.Read(make([]byte, 1)); errors.Is(err, io.EOF) {
-				closedN.Add(1)
-			}
-		})
-	}
-	reads.Wait()
-	closed := int(closedN.Load())
-	fmt.Fprintf(&report, "%d idle connections: %d closed by the daemon, rss %d MB, in %v\n", many, closed, daemonRSS(t, base)>>10, time.Since(capStart).Round(time.Millisecond))
-	if closed < many-1024 {
-		t.Errorf("the daemon closed %d of %d connections, want at least %d", closed, many, many-1024)
+	open, refused := dialAndCountRefused(t, sock, many)
+	defer closeAll(open)
+	fmt.Fprintf(&report, "%d idle connections: %d refused, rss %d MB, in %v\n", many, refused, daemonRSS(t, base)>>10, time.Since(capStart).Round(time.Millisecond))
+	if refused < many-1024 {
+		t.Errorf("the daemon refused %d of %d connections, want at least %d", refused, many, many-1024)
 	}
 	// The log is written behind the connections' own lines, so it is waited
 	// for.
@@ -201,14 +193,15 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 		logged = strings.Contains(string(log), "connections, which is the maximum")
 	}
 	if !logged {
-		raw, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log"))
-		_ = os.WriteFile(filepath.Join(artifactDir(t), "daemon.log"), raw, 0o644)
 		t.Errorf("the daemon log says nothing of the refused connections\n%s", daemonLogTail(base, 20))
 	}
-	for _, c := range open {
-		_ = c.Close()
+	// A command run now is told why it cannot connect.
+	out, err := tuiosCLI(t, base, "ls")
+	fmt.Fprintf(&report, "tuios ls with the socket full: %v: %s\n", err, strings.TrimSpace(out))
+	if !strings.Contains(out, "too many connections") {
+		t.Errorf("with the socket full, tuios ls says %q, want it to name too many connections", out)
 	}
-	open = nil
+	closeAll(open)
 
 	lsStart := time.Now()
 	deadline := time.Now().Add(10 * time.Second)
@@ -223,4 +216,40 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	fmt.Fprintf(&report, "after: tuios ls answers in %v\n", time.Since(lsStart).Round(time.Millisecond))
+}
+
+// dialAndCountRefused opens n connections to sock and counts the ones the
+// daemon refused: a refused connection is told why or closed within a few
+// seconds, and an admitted one hears nothing.
+func dialAndCountRefused(t *testing.T, sock string, n int) ([]net.Conn, int) {
+	t.Helper()
+	var conns []net.Conn
+	for range n {
+		c, err := net.Dial("unix", sock)
+		if err != nil {
+			closeAll(conns)
+			t.Fatalf("dial connection %d to %s: %v", len(conns)+1, sock, err)
+		}
+		conns = append(conns, c)
+	}
+	var refused atomic.Int64
+	var reads sync.WaitGroup
+	for _, c := range conns {
+		reads.Go(func() {
+			_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+			_, err := c.Read(make([]byte, 1))
+			var ne net.Error
+			if !errors.As(err, &ne) || !ne.Timeout() {
+				refused.Add(1)
+			}
+		})
+	}
+	reads.Wait()
+	return conns, int(refused.Load())
+}
+
+func closeAll(conns []net.Conn) {
+	for _, c := range conns {
+		_ = c.Close()
+	}
 }

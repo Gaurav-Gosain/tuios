@@ -72,6 +72,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a hosts change")
 		}
 	})
+	// A paste the daemon refused twice, or one too large to send. The person
+	// is told, so a paste never vanishes. See session/paste_retry.go.
+	client.OnPasteRefused(func(string) {
+		if m.QueueClientEvent(ClientEvent{Type: "paste-refused"}) {
+			clientLog("ClientEventChan full, displaced an event for a refused paste")
+		}
+	})
 	// A folder the daemon watches for the files section changed. See
 	// sidebar_files_watch.go.
 	client.OnDirChanged(m.fileWatch.remoteDirChanged)
@@ -118,6 +125,7 @@ func (m *OS) UnwireDaemonClient(client *session.TUIClient) {
 	client.OnClientJoined(nil)
 	client.OnAgentMail(nil)
 	client.OnDirChanged(nil)
+	client.OnPasteRefused(nil)
 	client.OnClientLeft(nil)
 	client.OnSessionResize(nil)
 	client.OnSessionEnded(nil)

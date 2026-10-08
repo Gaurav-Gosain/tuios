@@ -248,6 +248,9 @@ func (c *Client) sendHello() error {
 	if resp.Type == MsgError {
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
+		if errPayload.Code == ErrCodeBusy {
+			return ErrTooManyConnections
+		}
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {

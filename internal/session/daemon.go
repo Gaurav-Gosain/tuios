@@ -67,11 +67,16 @@ type Daemon struct {
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
 
-	// readBudget is the memory large frames may hold across the daemon, and
-	// openConns the connections served now. See frame_budget.go.
+	// The read budgets large frames are charged to, and the connections
+	// served now on the main socket and the link sockets. See
+	// frame_budget.go.
 	readBudgetOnce sync.Once
-	readBudgetCh   memBudget
+	personBudget   *memBudget
+	peerBudget     *memBudget
 	openConns      atomic.Int64
+	openLinkConns  atomic.Int64
+	// refusalsTold counts the refused connections being told why now.
+	refusalsTold atomic.Int64
 	// connRefusals counts the connections refused over maxConnections since
 	// the last log line about them, and connRefusedLog is when that line was
 	// written, in unix nanoseconds.
@@ -1593,7 +1598,7 @@ func (d *Daemon) acceptLoop() {
 				continue
 			}
 		}
-		if !d.admitConnection(conn) {
+		if !d.admitConnection(conn, &d.openConns, maxConnections) {
 			continue
 		}
 		go func() {
@@ -1624,44 +1629,15 @@ func (d *Daemon) acceptLinkOn(l net.Listener, human bool) {
 				continue
 			}
 		}
-		if !d.admitConnection(conn) {
+		if !d.admitConnection(conn, &d.openLinkConns, maxLinkConnections) {
 			continue
 		}
 		go func() {
-			defer d.openConns.Add(-1)
+			defer d.openLinkConns.Add(-1)
 			d.handleConnectionOn(conn, true, human)
 		}()
 	}
 }
-
-// admitConnection counts a connection just accepted, or closes it when the
-// daemon already serves maxConnections. A caller that admits one subtracts it
-// from openConns when the connection ends. A refusal is logged at most once
-// in connRefusedLogEvery, with the count since the last line, so a flood of
-// connections does not also flood the log.
-func (d *Daemon) admitConnection(conn net.Conn) bool {
-	if d.openConns.Add(1) <= maxConnections {
-		return true
-	}
-	d.openConns.Add(-1)
-	_ = conn.Close()
-	n := d.connRefusals.Add(1)
-	now := time.Now().UnixNano()
-	last := d.connRefusedLog.Load()
-	if now-last >= int64(connRefusedLogEvery) && d.connRefusedLog.CompareAndSwap(last, now) {
-		d.connRefusals.Add(-n)
-		if n == 1 {
-			log.Printf("Refused a new connection. The daemon already serves %d connections, which is the maximum.", maxConnections)
-		} else {
-			log.Printf("Refused %d new connections. The daemon already serves %d connections, which is the maximum.", n, maxConnections)
-		}
-	}
-	return false
-}
-
-// connRefusedLogEvery is the least time between two log lines about refused
-// connections.
-const connRefusedLogEvery = 10 * time.Second
 
 // LinkSocketPath is the socket the local proxy dials for a connection that
 // arrived over a hub's link, beside the daemon's own socket. The daemon marks
@@ -1882,8 +1858,13 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 // serves it until it ends. The link-peer handshake calls it again after its
 // reply, so a connection that named its peer is served from scratch.
 func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
-	conn, clientID := cs.conn, cs.clientID
-	if d.detectJSONClient(cs, br) {
+	clientID := cs.clientID
+	isJSON, err := d.detectJSONClient(cs, br)
+	if errors.Is(err, errFirstByteTimeout) {
+		LogBasic("Client %s sent nothing for %v and was closed", clientID, firstByteDeadline)
+		return
+	}
+	if isJSON {
 		d.handleJSONConnection(cs, br)
 		return
 	}
@@ -1897,20 +1878,16 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 		default:
 		}
 
-		// No deadline between frames: the wait costs nothing until a frame
-		// arrives or the connection is closed, and both drop and shutdown
-		// close it. The body has frameBodyDeadline to arrive, so a sender
-		// that stalls in a frame cannot hold its memory. A large body is
-		// charged to the read budget until it has been handled. See
-		// frame_budget.go.
-		msg, held, err := readMessageBufferedLimit(conn, br, 0, frameBodyDeadline, daemonFrameLimit, d.readBudget())
+		// See frame_budget.go: the frame's type is checked and its memory
+		// charged before its body is read.
+		msg, release, err := d.readClientFrame(cs, br)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
-			// A frame over its type's limit was skipped unread, so the stream
-			// is still in step: tell the sender and go on serving it. See
-			// wire_bounds.go.
+			// A refused frame was skipped unread, so the stream is still in
+			// step: tell the sender and go on serving it. See wire_bounds.go
+			// and frame_budget.go.
 			if tooLarge, ok := errors.AsType[*FrameTooLargeError](err); ok {
 				LogError("Refused a message from %s: %v", clientID, err)
 				_ = d.replyError(cs, &Message{ReqID: tooLarge.ReqID}, ErrCodeInvalidMessage, "refused: "+err.Error())
@@ -1918,7 +1895,15 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 			}
 			if busy, ok := errors.AsType[*FrameBusyError](err); ok {
 				LogError("Refused a message from %s: %v", clientID, err)
-				_ = d.replyError(cs, &Message{ReqID: busy.ReqID}, ErrCodeInternal, "refused: "+err.Error())
+				_ = d.replyError(cs, &Message{ReqID: busy.ReqID}, ErrCodeBusy, "refused: "+err.Error()+". Try again.")
+				continue
+			}
+			if forbidden, ok := errors.AsType[*FrameForbiddenError](err); ok {
+				text := forbidden.Err.Message
+				if forbidden.Err.Hint != nil {
+					text += " " + forbidden.Err.Hint.Detail
+				}
+				_ = d.replyError(cs, &Message{ReqID: forbidden.ReqID}, ErrCodeForbidden, text)
 				continue
 			}
 			var netErr net.Error
@@ -1932,28 +1917,21 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 			return
 		}
 
-		d.serveMessage(cs, msg, held)
+		d.serveMessage(cs, msg, release)
 	}
 }
 
-// serveMessage checks one binary message against the connection's link
-// policy and grants and handles it, then gives back the read budget its frame
-// held.
-func (d *Daemon) serveMessage(cs *connState, msg *Message, held int) {
-	defer d.readBudget().release(held)
-	// A binary message on a link connection is held to the peer's policy
-	// like a verb is. See link_policy.go.
-	if verr := d.checkLinkMessage(cs, msg.Type); verr != nil {
-		_ = d.replyError(cs, msg, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
-		return
+// serveMessage handles one binary message whose frame readClientFrame has
+// checked, and gives back the read budget the frame holds. An input is given
+// back before it is handled: its write blocks while the pane does not read,
+// and the budget must not wait with it. See frame_budget.go.
+func (d *Daemon) serveMessage(cs *connState, msg *Message, release func()) {
+	if msg.Type == MsgInput {
+		release()
+	} else {
+		defer release()
 	}
 	markLinkServed(cs)
-	// A pane that does not hold admin may not use the client protocol.
-	// See pane_grants.go.
-	if verr := d.checkGrantMessage(cs, msg.Type); verr != nil {
-		_ = d.replyError(cs, msg, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
-		return
-	}
 	if err := d.handleMessage(cs, msg); err != nil {
 		LogError("Error handling message from %s: %v", cs.clientID, err)
 		_ = d.replyError(cs, msg, ErrCodeInternal, err.Error())

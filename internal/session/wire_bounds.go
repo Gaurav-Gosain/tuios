@@ -178,23 +178,6 @@ func (e *FrameTooLargeError) Error() string {
 		MessageTypeName(e.Type), e.Size, e.Limit)
 }
 
-// FrameBusyError is a frame the daemon had no memory for: other large frames
-// held the read budget (see frame_budget.go) for longer than it waits. The
-// reader has skipped its body, so the stream is still in step, and the sender
-// may send it again.
-type FrameBusyError struct {
-	Type MessageType
-	Size uint32
-	// ReqID is the request id the frame carried, so the refusal can be sent
-	// as the answer to it. Zero for an untagged frame.
-	ReqID uint64
-}
-
-func (e *FrameBusyError) Error() string {
-	return fmt.Sprintf("%s message of %d bytes was not read because the daemon is busy with other large messages",
-		MessageTypeName(e.Type), e.Size)
-}
-
 // errLayoutTooDeep, errLayoutTooLarge and errResultTooDeep refuse what no
 // real session or command produces.
 var (

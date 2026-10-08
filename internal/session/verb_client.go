@@ -52,6 +52,12 @@ type VerbCallError struct {
 // a caller that tests it through an interface rather than this type.
 func (e *VerbCallError) ErrorCode() string { return e.Code }
 
+// Is matches ErrTooManyConnections for the refusal of a daemon whose
+// socket is full.
+func (e *VerbCallError) Is(target error) bool {
+	return target == ErrTooManyConnections && e.Code == ErrVerbTooManyConnections
+}
+
 func (e *VerbCallError) Error() string {
 	if e.Code == "" {
 		return e.Message

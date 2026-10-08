@@ -238,6 +238,12 @@ type TUIClient struct {
 	// hostsChangedHandler takes the daemon's MsgHostsChanged push. See
 	// OnHostsChanged.
 	hostsChangedHandler HostsChangedHandler
+	// pasteRefusedHandler takes a paste the daemon refused. See
+	// paste_retry.go. pastes holds the large inputs sent and not answered,
+	// by request id, under pastesMu.
+	pasteRefusedHandler PasteRefusedHandler
+	pastes              map[uint64]*pasteRecord
+	pastesMu            sync.Mutex
 	sessionEndedOnce    sync.Once // gates the single session-ended notification
 	// pendingEnded holds a session-ended notice that arrived before a handler
 	// was registered: the read loop starts before the app wires itself, and
@@ -399,6 +405,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		// and its message already names the fix.
 		var errPayload ErrorPayload
 		_ = resp.ParsePayload(&errPayload)
+		if errPayload.Code == ErrCodeBusy {
+			return ErrTooManyConnections
+		}
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
@@ -1138,11 +1147,22 @@ func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, me
 	return c.send(msg)
 }
 
-// WritePTY sends input to a PTY.
+// WritePTY sends input to a PTY. Input larger than one frame is not sent and
+// is reported to OnPasteRefused. A large input to a daemon that tags replies
+// is sent again once if the daemon is busy; see paste_retry.go.
 func (c *TUIClient) WritePTY(ptyID string, data []byte) error {
+	if len(data) > maxPasteBytes {
+		c.pasteRefused(ptyID)
+		return ErrPasteTooLarge
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// The daemon charges a frame whose payload, the pane id and the data,
+	// is over largeFrame, so that is the input it can refuse as busy.
+	if 36+len(data) > largeFrame && c.requestIDs.Load() {
+		return c.writeLargeInput(ptyID, data, false)
+	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	return WritePTYInput(c.conn, ptyID, data)
 }
@@ -2323,6 +2343,9 @@ func (c *TUIClient) routeReply(msg *Message) replyRoute {
 	var p *pendingReply
 	if msg.ReqID != 0 {
 		p = c.pendingByID[msg.ReqID]
+		if p == nil && c.takePasteReply(msg) {
+			return replyDelivered
+		}
 		if p == nil {
 			debugLog("[CLIENT] dropped %s answering request %d, which nothing waits for", MessageTypeName(msg.Type), msg.ReqID)
 			return replyStale
