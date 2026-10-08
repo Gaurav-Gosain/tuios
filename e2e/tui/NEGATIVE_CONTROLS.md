@@ -3318,7 +3318,8 @@ reached through an ssh stand-in that records every argv it runs. With a
 folder `$XDG_RUNTIME_DIR/tuios/cm` of mode 0700, the link's ssh and the ssh
 of `tuios hosts test` must carry `ControlMaster=no` and
 `ControlPath=<folder>/%C`, and the link must still come up. With no folder,
-and with a folder of mode 0777, neither ssh may name the folder.
+with a folder of mode 0777, and with an ssh config that gives the host a
+`ControlPath` of its own, neither ssh may name the folder.
 
 Each control below was run on 2026-10-08 on branch
 `feat/link-shares-gui-ssh-master`. The log is
@@ -3329,3 +3330,4 @@ Each control below was run on 2026-10-08 on branch
 | A host with no path gets no sharing options | `sharingOptions`: `return reuseOptions()` replaced by `return nil` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (the link's ssh names no master) | **caught** |
 | A folder others can write is trusted | `reuseOptions`: the mode check cut | `TestLinkRidesTheSharedSSHMaster/a_master_folder_others_can_write` (the link's ssh names the folder) | **caught** |
 | The link may open a master of its own | `reuseOptions`: `ControlMaster=auto` in place of `no` | `TestLinkRidesTheSharedSSHMaster/a_master_folder_of_the_user's_own` (`ControlMaster=no` missing) | **caught** |
+| The person's own ControlPath is overridden | `reuseOptions`: the `configSharesConnections` check cut (run later on 2026-10-08, log `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-master.txt`) | `TestLinkRidesTheSharedSSHMaster/the_user's_ssh_config_shares_connections_itself` (the link's ssh names the folder) | **caught** |

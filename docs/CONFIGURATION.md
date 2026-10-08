@@ -1559,7 +1559,8 @@ open it, each link runs ssh with `-o ControlMaster=no` and
 `-o ControlPath=$XDG_RUNTIME_DIR/tuios/cm/%C`. The link then uses the master
 when one is open for that machine, and connects as usual when none is. A
 machine that needs a password or a second factor then works for as long as
-the master is open. No secret is stored.
+the master is open. No secret is stored. A host that your `~/.ssh/config`
+gives a `ControlPath` keeps it, so the link uses the master you open there.
 
 `tailscale_login` is the origin of a Headscale server that sends the Tailscale
 SSH check for this host, for example `"https://headscale.example"`. tuios

@@ -120,7 +120,7 @@ const sharingPersist = "10m"
 // there is one (see reuseOptions).
 func sharingOptions(h Host) []string {
 	if h.ControlPath == "" {
-		return reuseOptions()
+		return reuseOptions(h)
 	}
 	return []string{
 		"-o", "ControlMaster=auto",
@@ -153,7 +153,11 @@ func SharedMasterDir() string {
 // fails for want of one. The folder must exist and be the user's alone, as
 // the client makes it. A folder others can write could hold a socket that
 // is not the person's connection, so it is not used.
-func reuseOptions() []string {
+//
+// A host the person's own ssh config already shares (a ControlPath for it)
+// keeps that: options on the command line win over the config, so these
+// would take the link off the master the person opens in a terminal.
+func reuseOptions(h Host) []string {
 	dir := SharedMasterDir()
 	if dir == "" {
 		return nil
@@ -162,10 +166,33 @@ func reuseOptions() []string {
 	if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o077 != 0 {
 		return nil
 	}
+	if configSharesConnections(h) {
+		return nil
+	}
 	return []string{
 		"-o", "ControlMaster=no",
 		"-o", "ControlPath=" + filepath.Join(dir, "%C"),
 	}
+}
+
+// configSharesConnections says whether the person's ssh config gives h a
+// ControlPath. ssh -G prints the options ssh would use and reaches no
+// network. An ssh that cannot answer counts as no.
+func configSharesConnections(h Host) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	args := append([]string{"-G"}, h.SSHOptions...)
+	args = append(args, "--", h.Addr)
+	out, err := exec.CommandContext(ctx, SSHBinary(), args...).Output()
+	if err != nil {
+		return false
+	}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "controlpath "); ok && v != "none" {
+			return true
+		}
+	}
+	return false
 }
 
 // StopSharingArgs is the ssh argv, without the program name, that stops the
