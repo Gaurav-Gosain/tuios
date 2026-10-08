@@ -221,6 +221,10 @@ type OS struct {
 	LastCPUUpdate  time.Time       // Last time CPU was updated
 	RAMUsage       float64         // Cached RAM usage percentage
 	LastRAMUpdate  time.Time       // Last time RAM was updated
+	cpuLast        cpuTicks        // previous CPU reading, the baseline for the next sample
+	cpuHasLast     bool            // cpuLast holds a reading
+	cpuUnavailable bool            // the last CPU reading failed; the meter shows n/a
+	ramUnavailable bool            // the last RAM reading failed; the meter shows n/a
 	AutoTiling     bool            // Automatic tiling mode enabled
 	MasterRatio    float64         // Master window width ratio for tiling (0.1-0.9)
 	// TouchClient marks a session whose pointer is a finger. It is per session

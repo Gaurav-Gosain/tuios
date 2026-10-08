@@ -139,7 +139,7 @@ tuios --standalone
 - `--confirm-quit`: Always show the quit confirmation dialog
 - `--hide-clock`: Hide the clock overlay (deprecated, the clock is hidden by default)
 - `--show-clock`: Show the clock overlay
-- `--show-cpu`: Show a CPU graph in the dock
+- `--show-cpu`: Show a CPU graph in the dock. It works on Linux, macOS, Windows, FreeBSD and OpenBSD. On another platform it shows `CPU: n/a`.
 - `--show-ram`: Show RAM usage in the dock
 - `--no-animations`: Disable UI animations for instant transitions (`appearance.motion = none` for this run)
 - `--shared-borders`: Share borders between adjacent tiled windows

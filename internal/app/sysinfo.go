@@ -1,21 +1,23 @@
 package app
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // GetCPUGraph returns a formatted string with CPU usage graph and percentage.
+// It returns "CPU: n/a" when the last reading failed, which is always the case
+// on a platform with no CPU reader, so an unmeasured machine never reads as an
+// idle one.
 func (m *OS) GetCPUGraph() string {
+	if m.cpuUnavailable {
+		return "CPU: n/a"
+	}
+
 	// Get current usage
 	current := 0.0
 	if len(m.CPUHistory) > 0 {
@@ -84,6 +86,9 @@ func (m *OS) GetCPUGraph() string {
 // GetRAMUsage returns RAM usage as a formatted string.
 // Cached to avoid expensive gopsutil calls on every render.
 func (m *OS) GetRAMUsage() string {
+	if m.ramUnavailable {
+		return "RAM: n/a"
+	}
 	return fmt.Sprintf("RAM:%5.1f%%", m.RAMUsage)
 }
 
@@ -97,6 +102,7 @@ func (m *OS) UpdateRAMUsage() {
 
 	m.LastRAMUpdate = now
 	v, err := mem.VirtualMemory()
+	m.ramUnavailable = err != nil
 	if err != nil {
 		m.RAMUsage = 0
 		return
@@ -113,7 +119,19 @@ func (m *OS) UpdateCPUHistory() {
 	}
 
 	m.LastCPUUpdate = now
-	usage := getCPUUsageSimple()
+	ticks, ok := readCPUTicks()
+	m.cpuUnavailable = !ok
+	if !ok {
+		m.cpuHasLast = false
+		return
+	}
+	if !m.cpuHasLast {
+		// The first reading is only a baseline: a percentage needs two.
+		m.cpuLast, m.cpuHasLast = ticks, true
+		return
+	}
+	usage := cpuBusyPercent(m.cpuLast, ticks)
+	m.cpuLast = ticks
 
 	// Keep last 10 samples for a compact graph
 	if len(m.CPUHistory) >= 10 {
@@ -122,125 +140,27 @@ func (m *OS) UpdateCPUHistory() {
 	m.CPUHistory = append(m.CPUHistory, usage)
 }
 
-// CPUStats holds CPU usage statistics.
-type CPUStats struct {
-	user    uint64
-	nice    uint64
-	system  uint64
-	idle    uint64
-	iowait  uint64
-	irq     uint64
-	softirq uint64
-	steal   uint64
+// cpuTicks is one reading of the machine-wide cumulative CPU time counters, in
+// whatever unit the platform counts. Only the difference between two readings
+// means anything. Each platform's readCPUTicks (sysinfo_<goos>.go) fills it; a
+// platform without one reports false and the dock shows "CPU: n/a".
+type cpuTicks struct {
+	idle  uint64 // time all CPUs spent idle
+	total uint64 // time all CPUs spent in any state, idle included
 }
 
-var lastCPUStats *CPUStats
-
-// getCPUUsageSimple retrieves current CPU usage as a percentage.
-// This is a platform-specific implementation.
-func getCPUUsageSimple() float64 {
-	switch runtime.GOOS {
-	case "linux":
-		return getCPUUsageLinux()
-	case "darwin":
-		return getCPUUsageDarwin()
-	default:
-		return 0.0
-	}
-}
-
-// getCPUUsageLinux retrieves CPU usage on Linux systems.
-func getCPUUsageLinux() float64 {
-	stats := getCPUStats()
-	if stats == nil {
+// cpuBusyPercent is the share of the time between two readings that the CPUs
+// spent busy, from 0 to 100. A counter that went backwards (a wrap, or a
+// reading from a different processor group on Windows) yields 0 rather than
+// a wild figure.
+func cpuBusyPercent(prev, cur cpuTicks) float64 {
+	if cur.total <= prev.total || cur.idle < prev.idle {
 		return 0
 	}
-
-	if lastCPUStats == nil {
-		lastCPUStats = stats
+	total := cur.total - prev.total
+	idle := cur.idle - prev.idle
+	if idle >= total {
 		return 0
 	}
-
-	// Calculate deltas
-	totalDelta := float64((stats.user + stats.nice + stats.system + stats.idle + stats.iowait +
-		stats.irq + stats.softirq + stats.steal) -
-		(lastCPUStats.user + lastCPUStats.nice + lastCPUStats.system + lastCPUStats.idle +
-			lastCPUStats.iowait + lastCPUStats.irq + lastCPUStats.softirq + lastCPUStats.steal))
-
-	idleDelta := float64(stats.idle - lastCPUStats.idle)
-
-	if totalDelta == 0 {
-		return 0
-	}
-
-	usage := 100.0 * (1.0 - idleDelta/totalDelta)
-	lastCPUStats = stats
-
-	if usage < 0 {
-		return 0
-	}
-	if usage > 100 {
-		return 100
-	}
-
-	return usage
-}
-
-// getCPUUsageDarwin retrieves CPU usage on macOS systems using gopsutil.
-//
-// It uses a zero interval so the call never sleeps: gopsutil retains the CPU
-// times from the previous call and returns the usage over the elapsed window
-// (here ~500ms, one CPUUpdateInterval). A blocking cpu.Percent(100ms, ...) here
-// would stall the single Bubble Tea goroutine 100ms out of every 500ms whenever
-// ShowCPU is enabled. The first call has no baseline and returns 0, mirroring
-// the Linux delta path.
-func getCPUUsageDarwin() float64 {
-	percentages, err := cpu.Percent(0, false)
-	if err != nil || len(percentages) == 0 {
-		return 0
-	}
-	return percentages[0]
-}
-
-// getCPUStats reads CPU statistics from /proc/stat (Linux only).
-func getCPUStats() *CPUStats {
-	file, err := os.Open("/proc/stat")
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = file.Close() }()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "cpu ") {
-			fields := strings.Fields(line)
-			if len(fields) < 5 {
-				return nil
-			}
-
-			stats := &CPUStats{}
-			stats.user, _ = strconv.ParseUint(fields[1], 10, 64)
-			stats.nice, _ = strconv.ParseUint(fields[2], 10, 64)
-			stats.system, _ = strconv.ParseUint(fields[3], 10, 64)
-			stats.idle, _ = strconv.ParseUint(fields[4], 10, 64)
-
-			if len(fields) > 5 {
-				stats.iowait, _ = strconv.ParseUint(fields[5], 10, 64)
-			}
-			if len(fields) > 6 {
-				stats.irq, _ = strconv.ParseUint(fields[6], 10, 64)
-			}
-			if len(fields) > 7 {
-				stats.softirq, _ = strconv.ParseUint(fields[7], 10, 64)
-			}
-			if len(fields) > 8 {
-				stats.steal, _ = strconv.ParseUint(fields[8], 10, 64)
-			}
-
-			return stats
-		}
-	}
-
-	return nil
+	return 100 * float64(total-idle) / float64(total)
 }
