@@ -3339,7 +3339,7 @@ is `~/.cache/agent-tmp/proof/v2/wave4/e2e/negative-controls-bridge.txt`.
 All 40 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch.
 
-## The GUI bridge keeps the renderer's focus, and names a host that needs a sign-in
+## The GUI bridge keeps the renderer's focus and its keys, and names a host that needs a sign-in
 
 `TestGUIBridgeKeepsTheRenderersFocus` makes three panes, focuses the first
 through the bridge, kills the bridge and attaches a new one by session id.
@@ -3347,6 +3347,9 @@ The new bridge must attach with the focus on the first pane.
 `TestGUIBridgeHostThatNeedsASignIn` gives the daemon one host whose ssh
 stand-in fails with ssh's own words. "Permission denied (publickey)" must be
 `signin` in the hosts event, and "Connection refused" must stay `down`.
+`TestGUIBridgeTypesAfterTheLinkComesBack` attaches a bridge on `build`, kills
+the far stdio-proxy so the link drops and comes back, and types until a key
+reaches the far shell. One must within 40 s.
 
 Each control below was run on 2026-10-08 on branch `exp/gpui-bridge`. The log
 is `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-bridge.txt`.
@@ -3355,3 +3358,4 @@ is `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-bridge.txt`.
 | --- | --- | --- | --- |
 | The focus stays in the bridge's model | `focus` command: the `SyncStateToDaemon` call cut | `TestGUIBridgeKeepsTheRenderersFocus` (the new bridge attached on another pane) | **caught** |
 | ssh's words are not read | `linkHealth`: the `needsSignIn` branch turned off | `TestGUIBridgeHostThatNeedsASignIn/permission_denied` (`down`, want `signin`) | **caught** |
+| Input goes to the first daemon client | `model.Update`: the store of the client in force cut | `TestGUIBridgeTypesAfterTheLinkComesBack` (no key reached the far shell for 40 s) | **caught** |

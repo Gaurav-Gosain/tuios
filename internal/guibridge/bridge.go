@@ -41,6 +41,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -434,7 +435,12 @@ func Run(opts Options) error {
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
 
-	m := &model{os: osModel, out: out, version: opts.Version, nonce: client.HumanNonce, host: opts.Host, tap: streams}
+	// The model swaps its daemon client when it dials a dropped host link
+	// again. Input, the person nonce and the detach must use the one in
+	// force, or keys go to a closed connection after the link comes back.
+	cur := &atomic.Pointer[session.TUIClient]{}
+	cur.Store(client)
+	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, host: opts.Host, tap: streams, client: cur}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -465,14 +471,14 @@ func Run(opts Options) error {
 	go watchHosts(stopFleet, out, opts.Version)
 
 	go func() {
-		err := readCommands(opts.In, client, program)
+		err := readCommands(opts.In, cur, program)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Printf("gui-bridge: renderer input: %v", err)
 		}
 		// The renderer is gone. Leave the session as a detach does, so the
 		// daemon counts this client out at once and the session size follows
 		// the clients that are still there.
-		if err := client.Detach(); err != nil {
+		if err := cur.Load().Detach(); err != nil {
 			log.Printf("gui-bridge: detach: %v", err)
 		}
 		program.Quit()
@@ -484,7 +490,7 @@ func Run(opts Options) error {
 		out.JSON(Event{Type: "detached", Detached: d})
 	}
 	osModel.Cleanup()
-	_ = client.Close()
+	_ = cur.Load().Close()
 	return err
 }
 
@@ -574,6 +580,9 @@ type model struct {
 	// the stream tap, which a switch-session hands its resume positions.
 	host string
 	tap  *tap
+	// client is the daemon client in force, which readCommands writes
+	// input to. See Run.
+	client *atomic.Pointer[session.TUIClient]
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -648,6 +657,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.launcherWanted && isPathApps(msg) {
 			m.sendLauncher()
 		}
+	}
+	if c := m.os.DaemonClient; c != nil && m.client != nil && c != m.client.Load() {
+		m.client.Store(c)
 	}
 	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
 		m.sendKeybinds()
@@ -955,7 +967,7 @@ func appendID(b []byte, id string) []byte {
 
 // readCommands reads renderer frames until EOF. Input goes straight to the
 // daemon; everything else runs on the Update loop.
-func readCommands(r io.Reader, client *session.TUIClient, p *tea.Program) error {
+func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea.Program) error {
 	br := bufio.NewReaderSize(r, 64<<10)
 	var hdr [5]byte
 	for {
@@ -983,7 +995,7 @@ func readCommands(r io.Reader, client *session.TUIClient, p *tea.Program) error 
 				continue
 			}
 			id := string(body[1 : 1+int(body[0])])
-			if err := client.WritePTY(id, body[1+int(body[0]):]); err != nil {
+			if err := client.Load().WritePTY(id, body[1+int(body[0]):]); err != nil {
 				log.Printf("gui-bridge: input to %s: %v", id, err)
 			}
 		}
