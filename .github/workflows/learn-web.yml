@@ -53,6 +53,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y brotli
+          # fonttools converts the TTFs of a sip that ships no WOFF2. Drop
+          # these two lines when go.mod pins a sip with static/fonts/*.woff2.
           pipx install fonttools
           pipx inject fonttools brotli
 
