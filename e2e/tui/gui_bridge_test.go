@@ -46,21 +46,46 @@ type wireState struct {
 	ClientSize  wireSize             `json:"client_size"`
 	Viewport    *struct{ X, Y int }  `json:"viewport"`
 	AgentSeen   bool                 `json:"agent_seen"`
+	// Wave 3b (gui_bridge_wave3b_test.go).
+	Multifocus []string `json:"multifocus"`
+	PiP        *struct {
+		Window string `json:"window"`
+		Corner string `json:"corner"`
+	} `json:"pip"`
+	ScratchBox  *wireRect `json:"scratch_box"`
+	ScratchOver int       `json:"scratch_over"`
+	Strip       *struct {
+		Viewport int `json:"viewport"`
+		Width    int `json:"width"`
+		Panes    []struct {
+			ID string `json:"id"`
+			X  int    `json:"x"`
+			Y  int    `json:"y"`
+			W  int    `json:"w"`
+			H  int    `json:"h"`
+		} `json:"panes"`
+	} `json:"strip"`
 }
 
 type wireWindow struct {
-	ID        string `json:"id"`
-	PTY       string `json:"pty"`
-	Kind      string `json:"kind"`
-	Workspace int    `json:"workspace"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	W         int    `json:"w"`
-	H         int    `json:"h"`
-	Floating  bool   `json:"floating"`
-	Popup     bool   `json:"popup"`
-	Repo      string `json:"repo"`
-	Branch    string `json:"branch"`
+	ID         string `json:"id"`
+	PTY        string `json:"pty"`
+	Kind       string `json:"kind"`
+	Workspace  int    `json:"workspace"`
+	X          int    `json:"x"`
+	Y          int    `json:"y"`
+	W          int    `json:"w"`
+	H          int    `json:"h"`
+	Floating   bool   `json:"floating"`
+	Popup      bool   `json:"popup"`
+	Repo       string `json:"repo"`
+	Branch     string `json:"branch"`
+	Title      string `json:"title"`
+	Minimized  bool   `json:"minimized"`
+	Scratch    bool   `json:"scratch"`
+	Stack      string `json:"stack"`
+	StackIndex int    `json:"stack_index"`
+	URI        string `json:"uri"`
 }
 
 type wireSize struct {
@@ -155,6 +180,9 @@ type guiBridge struct {
 	// events holds every event of another type, in the order it came, for
 	// the Inbox tests (gui_bridge_inbox_test.go).
 	events []json.RawMessage
+	// snaps counts the SNAP frames of each PTY, for an in-place session
+	// switch, which sends a snapshot of every pane of the new session.
+	snaps  map[string]int
 	closed bool
 	req    int64
 	// log is every command sent and every result, kept as the test's
@@ -258,6 +286,16 @@ func (b *guiBridge) read(r io.Reader) {
 		body := make([]byte, n-1)
 		if _, err := io.ReadFull(br, body); err != nil {
 			break
+		}
+		if hdr[4] == 3 && len(body) > 0 && len(body) >= 1+int(body[0]) {
+			b.mu.Lock()
+			if b.snaps == nil {
+				b.snaps = map[string]int{}
+			}
+			b.snaps[string(body[1:1+int(body[0])])]++
+			b.cond.Broadcast()
+			b.mu.Unlock()
+			continue
 		}
 		if hdr[4] != 1 {
 			continue
