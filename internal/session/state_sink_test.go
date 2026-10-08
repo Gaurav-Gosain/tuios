@@ -31,10 +31,10 @@ func TestLateSnapshotIsDropped(t *testing.T) {
 	sess := newTestSession(t)
 	pushes := recordStateSink(sess)
 
-	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 7})
-	sess.publishState(&SessionState{Version: 5, CurrentWorkspace: 5}) // overtaken
-	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 9}) // already seen
-	sess.publishState(&SessionState{Version: 8, CurrentWorkspace: 8})
+	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 7, changeSeq: 7})
+	sess.publishState(&SessionState{Version: 5, CurrentWorkspace: 5, changeSeq: 5}) // overtaken
+	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 9, changeSeq: 7}) // already seen
+	sess.publishState(&SessionState{Version: 8, CurrentWorkspace: 8, changeSeq: 8})
 
 	got := pushes()
 	if len(got) != 2 {

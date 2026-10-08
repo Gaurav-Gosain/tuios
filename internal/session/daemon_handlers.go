@@ -934,7 +934,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// is this client's own, and it is what the panes' emulators answer OSC 11
 	// and OSC 10 with. See report_colors.go.
 	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
-	accepted, behind := session.updateStateFrom(&state, d.mayActAsHuman(cs))
+	accepted, behind, pushSeq := session.updateStateFrom(&state, d.mayActAsHuman(cs))
 	session.applyReportColors(reportBg, reportFg, reportPal)
 
 	// The merged state is a full copy of the session's, retitled from every
@@ -958,7 +958,8 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// answered the same way. The op's own broadcast reached this client before
 	// the push landed, so the client dropped it as older than the push, and
 	// nothing else would ever tell it about that tree.
-	if !accepted || behind {
+	reconciled := !accepted || behind
+	if reconciled {
 		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
 			State:       mergedState(),
 			TriggerType: "reconcile",
@@ -982,12 +983,19 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	//
 	// The reconcile reply above is deliberately outside this: it goes to the
 	// sender, whose state is by definition not the merged one.
+	//
+	// The forward is ordered with every other state delivery, under the
+	// session's pushMu. See Session.forwardPush.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if clientCount > 1 {
-		fp := StateFingerprint(mergedState())
-		if session.NoteBroadcastFingerprint(fp) {
-			d.broadcastStateSync(cs.sessionID, mergedState(), "update", cs.clientID)
+		snap := mergedState()
+		if hook := statePushSnapshotTaken.Load(); hook != nil {
+			(*hook)()
 		}
+		fp := StateFingerprint(snap)
+		session.forwardPush(snap, pushSeq, fp, reconciled, func(state *SessionState) {
+			d.broadcastStateSync(cs.sessionID, state, "update", cs.clientID)
+		})
 	}
 
 	return nil

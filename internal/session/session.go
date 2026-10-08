@@ -589,6 +589,11 @@ type SessionState struct {
 	// numbered below one it has already applied. Zero is a daemon that does
 	// not number them. Wire only, like PushSeen.
 	SnapshotSeq uint64 `json:"-"`
+	// changeSeq is the session's change count when this copy was taken. See
+	// Session.changeSeq. It is unexported, so it never goes on the wire or to
+	// disk: it orders the copies the daemon sends, and only the daemon reads
+	// it.
+	changeSeq uint64
 	// Options is a daemon-owned key/value store for session options set through
 	// the JSON verb protocol (set-option / get-option). It is additive: older
 	// clients and older on-disk state simply omit it. Keys are advisory names;
@@ -1199,17 +1204,24 @@ type Session struct {
 	stateSink   func(*SessionState)
 	stateSinkMu sync.RWMutex
 
-	// pushMu serializes state-sink deliveries and pushedVersion records the
-	// highest version already delivered. Snapshots are taken under stateMu but
-	// delivered without it, so two concurrent mutations can reach the sink in
-	// either order; this drops the loser rather than letting a client see the
-	// daemon go backwards.
-	pushMu        sync.Mutex
-	pushedVersion int
+	// changeSeq counts every change to the state, guarded by stateMu. It is
+	// bumped by noteStateChangeLocked, so a client push counts as well as a
+	// daemon-side mutation. Version cannot order the copies sent to clients:
+	// a client push keeps it the same, so two different states share it.
+	changeSeq uint64
+
+	// pushMu serializes the state deliveries to clients, and deliveredSeq
+	// records the changeSeq of the newest state delivered. Snapshots are taken
+	// under stateMu but delivered without it, so two changes can reach the
+	// clients in either order. pushMu drops the older one rather than let a
+	// client see the daemon go backwards. Every delivery goes through it: the
+	// state sink, a client push forwarded to its peers, and the attach repair.
+	pushMu       sync.Mutex
+	deliveredSeq uint64
 
 	// broadcastFP is the fingerprint of the state last forwarded to this
 	// session's peers on a client sync, and broadcastFPSet says whether there
-	// is one. See NoteBroadcastFingerprint.
+	// is one. See forwardPush.
 	broadcastFP    uint64
 	broadcastFPSet bool
 
@@ -1725,10 +1737,10 @@ func (s *Session) publishState(snap *SessionState) {
 
 	s.pushMu.Lock()
 	defer s.pushMu.Unlock()
-	if snap.Version <= s.pushedVersion {
+	if snap.changeSeq <= s.deliveredSeq {
 		return
 	}
-	s.pushedVersion = snap.Version
+	s.deliveredSeq = snap.changeSeq
 	// A daemon-side push reaches the clients by a different road than a client
 	// sync does, so what the peers hold afterwards is not what the sync
 	// suppressor last recorded. Forget the record rather than try to keep it in
@@ -1751,10 +1763,14 @@ func (s *Session) publishState(snap *SessionState) {
 //
 // The snapshot is taken outside pushMu, because fillLiveFacts takes the pane
 // locks and publishState never holds pushMu across those. Under pushMu it is
-// checked against what was delivered. Older than that, it is taken again.
-// Newer, it is a mutation whose own publish has not run yet, so it goes to
-// every client through the sink and the late publish is dropped as stale. The
-// same, it goes to send alone.
+// checked against what was delivered, by change count. Older than that, it is
+// taken again. Newer, it is a change whose own delivery has not run yet, so it
+// goes to every client through the sink and the late delivery is dropped as
+// stale. The same, it goes to send alone.
+//
+// The check used to compare Version. A client push keeps Version the same, so
+// a peer's push forwarded between the snapshot and the check passed as the
+// same state, and the older snapshot followed it to the client.
 func (s *Session) resendState(send func(*SessionState)) {
 	s.stateSinkMu.RLock()
 	fn := s.stateSink
@@ -1765,12 +1781,12 @@ func (s *Session) resendState(send func(*SessionState)) {
 			(*hook)()
 		}
 		s.pushMu.Lock()
-		if snap.Version < s.pushedVersion {
+		if snap.changeSeq < s.deliveredSeq {
 			s.pushMu.Unlock()
 			continue
 		}
-		if snap.Version > s.pushedVersion && fn != nil {
-			s.pushedVersion = snap.Version
+		if snap.changeSeq > s.deliveredSeq && fn != nil {
+			s.deliveredSeq = snap.changeSeq
 			s.forgetBroadcastFingerprint()
 			fn(snap)
 		} else {
@@ -1786,23 +1802,59 @@ func (s *Session) resendState(send func(*SessionState)) {
 // to land a mutation in that window on purpose.
 var stateResendSnapshotTaken atomic.Pointer[func()]
 
-// NoteBroadcastFingerprint records fp as the state about to be forwarded to
-// this session's peers, and reports whether that forward is worth making.
+// forwardPush hands the state after a client push to the session's other
+// clients, in the same order as publishState and resendState deliver. snap is
+// the merged state, taken after the push, and pushSeq is the change count the
+// push itself made. fp is snap's fingerprint. toPeers sends to every client
+// but the one that pushed. senderHolds says that client was already sent snap
+// (the reconcile reply).
 //
-// It answers false only when fp is exactly what was forwarded last time, which
-// means every peer already holds this state and the message would tell them
-// nothing. See the call site in handleUpdateState for why a suppressed sync
-// costs a peer nothing.
-func (s *Session) NoteBroadcastFingerprint(fp uint64) bool {
+// The forward used to run outside pushMu with no check. Two clients pushing
+// at once could forward in the opposite order to the one their pushes landed
+// in, and a peer adopted the older state last. A push forwarded inside an
+// attach repair let the repair's older snapshot follow it, because a push
+// keeps Version the same and the repair compared Version.
+//
+// Under pushMu, a snapshot no newer than what was delivered is dropped: every
+// client already holds a state at least as new. A snapshot newer than the
+// push carries a later change whose own delivery has not run yet. It goes to
+// every client through the sink, the client that pushed included, unless that
+// client already holds it, and the late delivery is dropped as stale.
+// Otherwise it goes to the peers, unless fp says they already hold it.
+func (s *Session) forwardPush(snap *SessionState, pushSeq, fp uint64, senderHolds bool, toPeers func(*SessionState)) {
+	if snap == nil {
+		return
+	}
+	s.stateSinkMu.RLock()
+	fn := s.stateSink
+	s.stateSinkMu.RUnlock()
+
 	s.pushMu.Lock()
 	defer s.pushMu.Unlock()
+	if snap.changeSeq <= s.deliveredSeq {
+		return
+	}
+	s.deliveredSeq = snap.changeSeq
+	if snap.changeSeq > pushSeq && !senderHolds && fn != nil {
+		s.forgetBroadcastFingerprint()
+		fn(snap)
+		return
+	}
+	// A merge that landed on the state already forwarded is not sent again.
+	// See the call site in handleUpdateState for why a suppressed sync costs
+	// a peer nothing.
 	if s.broadcastFPSet && s.broadcastFP == fp {
-		return false
+		return
 	}
 	s.broadcastFP = fp
 	s.broadcastFPSet = true
-	return true
+	toPeers(snap)
 }
+
+// statePushSnapshotTaken runs in handleUpdateState between the merged
+// snapshot and its forward to the peers. It is unset outside tests, which
+// use it to land another change in that window on purpose.
+var statePushSnapshotTaken atomic.Pointer[func()]
 
 // forgetBroadcastFingerprint drops the record, so the next client sync is
 // forwarded whatever it says. pushMu must already be held: publishState holds
@@ -2555,6 +2607,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	// Taken under the state lock, so a copy with a higher number shows the
 	// state at least as late as one with a lower number.
 	stateCopy.SnapshotSeq = s.snapSeq.Add(1)
+	stateCopy.changeSeq = s.changeSeq
 	// WorkspaceTrees, WindowToBSPID, PaneGeometry and ScrollStrip are left
 	// aliased on purpose: the daemon only ever replaces those whole, never
 	// writes into what they point at, so a snapshot that shares them is reading
@@ -2762,7 +2815,7 @@ func (s *Session) ForgetPush(origin string) {
 // finished turn seen: a client running inside a pane is an agent looking, and
 // finished_unread is about whether the person has. See human_origin.go.
 func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
-	accepted, _ := s.updateStateFrom(state, seen)
+	accepted, _, _ := s.updateStateFrom(state, seen)
 	return accepted
 }
 
@@ -2770,8 +2823,9 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 // built before a tree op another client sent. Such a push is accepted, because
 // it cannot undo a tree op (see missedMutationLocked). But the client that
 // sent it has not seen that tree, and a client is never sent its own push
-// back, so the caller answers it with the session's state.
-func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, behind bool) {
+// back, so the caller answers it with the session's state. seq is the change
+// count the push made (see Session.changeSeq).
+func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, behind bool, seq uint64) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -2844,7 +2898,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	s.TouchActive()
 	s.noteStateChangeLocked()
 	s.emitLifecycleLocked(before)
-	return accepted, behind
+	return accepted, behind, s.changeSeq
 }
 
 // pushOwnsFocusLocked reports whether a stale push from origin, built at base,
