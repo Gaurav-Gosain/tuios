@@ -23,15 +23,19 @@ import (
 // this one: options added to the CLI's ssh and not the daemon's link (the
 // link's argv has no ControlPath), a ControlMaster=auto that opens a master
 // in the daemon (the argv says auto), or a folder others can write that is
-// trusted (the third case's argv has a ControlPath).
+// trusted (the third case's argv has a ControlPath), or a ControlPath of the
+// person's own ssh config that the link no longer uses (the fourth case's
+// argv names the folder).
 
 // writeArgvSSH is writeFakeSSHTo that first appends its argv, one line per
-// run, to log.
-func writeArgvSSH(t *testing.T, dir, remoteBase, log string) string {
+// run, to log. Asked for its options (-G), it prints config: the lines a
+// person's ~/.ssh/config would give, such as a ControlPath of their own.
+func writeArgvSSH(t *testing.T, dir, remoteBase, log, config string) string {
 	t.Helper()
 	inner := writeFakeSSHTo(t, dir, remoteBase)
 	path := filepath.Join(dir, "fake-ssh-argv")
-	body := "#!/bin/sh\nprintf '%s\\n' \"$*\" >>'" + log + "'\nexec '" + inner + "' \"$@\"\n"
+	body := "#!/bin/sh\nif [ \"$1\" = -G ]; then printf '%s\\n' 'controlmaster false' " + config + "; exit 0; fi\n" +
+		"printf '%s\\n' \"$*\" >>'" + log + "'\nexec '" + inner + "' \"$@\"\n"
 	if err := os.WriteFile(path, []byte(body), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}
@@ -63,17 +67,20 @@ func TestLinkRidesTheSharedSSHMaster(t *testing.T) {
 		// mode is the master folder's mode, 0 for no folder.
 		mode  os.FileMode
 		rides bool
+		// config is what ssh -G adds, as quoted shell words.
+		config string
 	}{
-		{"a master folder of the user's own", 0o700, true},
-		{"no master folder", 0, false},
-		{"a master folder others can write", 0o777, false},
+		{"a master folder of the user's own", 0o700, true, ""},
+		{"no master folder", 0, false, ""},
+		{"a master folder others can write", 0o777, false, ""},
+		{"the user's ssh config shares connections itself", 0o700, false, "'controlpath /home/someone/.ssh/cm-%C'"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			base := t.TempDir()
 			remote := remoteMachine(t)
 			log := filepath.Join(base, "ssh-argv.log")
-			ssh := writeArgvSSH(t, base, remote, log)
+			ssh := writeArgvSSH(t, base, remote, log, c.config)
 			writeOneHostConfig(t, base, tuiosBin)
 			env := []string{"TUIOS_SSH=" + ssh}
 			cm := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "cm")
