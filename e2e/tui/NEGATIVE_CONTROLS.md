@@ -3102,3 +3102,18 @@ A probe on the same build showed the bug for every kind of file: a new
 config.d file, an edit to a config.d file, an included file and config.toml,
 with and without a daemon. In each case the border took the new theme's colour
 and the pane kept its old palette.
+
+## A default config in a browser session (clienttests)
+
+The two tests are in `clienttests/config.spec.mjs`. They read the log viewer
+of a browser session. The first one attaches to a server whose file sets
+`notify = true`. The log must hold an INFO notice for it and no WARN line.
+That is the positive half. The second one attaches to a server whose file has
+no `[notifications]` table. Its log must hold no `[notifications.agent]` line.
+
+The controls were run on 2026-10-08.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The browser check reads the resolved default | `browserAlertNotices`: the `alerts.Notify != nil` gate cut | the default test (the log holds the notify line). The positive half still passes. | **caught** |
+| The whole fix removed | tuios-web built from main at `2fcc83a4` | both tests (the line is a WARN config problem, and the default config logs it) | **caught** |
