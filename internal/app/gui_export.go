@@ -91,6 +91,15 @@ func (m *OS) PiPWindow() (id, corner string) {
 	return m.pip.windowID, corner
 }
 
+// ScratchOver is the workspace a scratch group is shown over, while one is
+// on screen, else 0.
+func (m *OS) ScratchOver() int {
+	if !m.InScratchView() {
+		return 0
+	}
+	return m.dockWorkspace()
+}
+
 // StripPane is one pane of the scrolling strip, in strip cells: X counts from
 // the strip's left end, not from the screen.
 type StripPane struct {
