@@ -918,6 +918,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	if c, ok := m.handleHostColorMsg(msg); ok {
 		return m, c
 	}
+	// The host's XTVERSION answer, after the startup probe. See
+	// cell_bound_images.go.
+	if m.handleHostVersion(msg) {
+		return m, nil
+	}
 	// An SSH client's DA1 answer. See sixel_probe.go.
 	if m.handleSixelProbe(msg) {
 		return m, nil

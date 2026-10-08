@@ -55,6 +55,12 @@ type HostCapabilities struct {
 	// host that stores images in its cells, so no later answer from the
 	// terminal changes it.
 	SixelPinned bool
+	// KittyPinned says KittyGraphics was set by TUIOS_KITTY_GRAPHICS, so a
+	// late answer from the terminal does not change it.
+	KittyPinned bool
+	// CellBoundImages says the host stores images in its cells, and its
+	// graphics are off for that reason. See cell_bound_images.go.
+	CellBoundImages bool
 	// DA1Late says the startup probe asked for DA1 and gave up before the
 	// answer came. A slow terminal, a console on a loaded machine say,
 	// still answers, and the program's input reader then gets the reply;
@@ -380,7 +386,7 @@ func probeTerminal(caps *HostCapabilities) {
 	caps.KittyPlaceholders = caps.KittyGraphics && hostDrawsPlaceholders(response)
 	// A host that stores images in its cells cannot have them moved or
 	// cleared; see cell_bound_images.go.
-	dropCellBoundGraphics(caps, response)
+	dropCellBoundGraphics(caps, response, os.Getenv)
 }
 
 // writePaletteQuery appends the colour questions to the probe batch: the
@@ -733,8 +739,10 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	switch os.Getenv("TUIOS_KITTY_GRAPHICS") {
 	case "1":
 		caps.KittyGraphics = true
+		caps.KittyPinned = true
 	case "0":
 		caps.KittyGraphics = false
+		caps.KittyPinned = true
 	}
 
 	switch os.Getenv("TUIOS_KITTY_PLACEHOLDERS") {

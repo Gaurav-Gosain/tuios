@@ -3291,11 +3291,23 @@ and must show the sixel picture as glyphs on every one of its cells. The
 positive half names the host kitty with the same probe and must get kitty
 graphics and no glyphs, so a probe that never reads XTVERSION cannot pass.
 
-The test runs in the standalone TUI and against a daemon.
+The test runs in the standalone TUI and against a daemon. Two more cases play a
+slow terminal: hostterm answers DA1 itself, 500 ms after the question, which is
+after the startup probe gives up. In `xtermjs-late-da1` only DA1 is late. In
+`xtermjs-late-both` and `xtermjs-late-both-daemon` XTVERSION is late too, so
+only the program's input reader sees it.
 
 Each control below was run on 2026-10-08 on branch `fix/kitty-image-ghosting`.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The probe does not drop graphics for xterm.js | `probeTerminal`: the `dropCellBoundGraphics(caps, response)` line cut | `TestCellBoundImageHostGetsGlyphs/xtermjs-standalone` and `/xtermjs-daemon` (kitty and sixel sent, 0 of 80 cells painted) | **caught** |
-| Sixel is not pinned off | `dropCellBoundGraphics`: `caps.SixelPinned = true` cut | none | **not caught**: tuitest's emulator answers DA1 inside the probe, so no late DA1 reply reaches `handleSixelProbe` |
+| Sixel is not pinned off | `dropCellBoundGraphics`: `caps.SixelPinned = true` cut | `TestCellBoundImageHostGetsGlyphs/xtermjs-late-da1` (the late DA1 turned sixel on: sixel sent, 0 of 80 cells painted) | **caught** |
+| A late XTVERSION answer is not read | `OS.Update`: the `handleHostVersion(msg)` call cut | `TestCellBoundImageHostGetsGlyphs/xtermjs-late-both` and `/xtermjs-late-both-daemon` (kitty and sixel sent) | **caught** |
+| The first fix only, before the late answer was handled | binary built from `cb0a899b` | `xtermjs-late-both` and `xtermjs-late-both-daemon` fail, `xtermjs-late-da1` passes | **caught** |
+
+The SSH server path, where `sixelProbe` now asks XTVERSION as well as DA1, has
+no e2e harness here. It was checked by hand: xterm.js 6.1 with its image addon,
+in headless Chromium, connected to `tuios ssh` through a real `ssh`. Before the
+change, `chafa` drew a sixel picture that stayed on screen after `clear`. After
+it, the picture was block glyphs and `clear` removed it.

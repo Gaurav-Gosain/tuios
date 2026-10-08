@@ -25,12 +25,14 @@ import (
 // its images were drawn as glyphs. The probe records that it gave up
 // (HostCapabilities.DA1Late), and the first reply after that is taken here.
 
-// sixelProbe asks an SSH client's terminal for its device attributes.
+// sixelProbe asks an SSH client's terminal who it is and for its device
+// attributes. XTVERSION goes first, so a terminal that stores images in its
+// cells is known before its DA1 could turn sixel on (handleHostVersion).
 func (m *OS) sixelProbe() tea.Cmd {
 	if m.Client != ClientSSH || m.SixelPassthrough == nil || m.hostCaps().SixelPinned {
 		return nil
 	}
-	return tea.Raw(ansi.RequestPrimaryDeviceAttributes)
+	return tea.Raw(xtversionQuery + ansi.RequestPrimaryDeviceAttributes)
 }
 
 // handleSixelProbe takes the DA1 reply. It reports whether msg was one.

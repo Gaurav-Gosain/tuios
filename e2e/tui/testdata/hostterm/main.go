@@ -4,7 +4,9 @@
 // switches between light and dark while tuios runs.
 //
 // With -xtversion it also answers XTVERSION (CSI > q) with the name given,
-// so a test can play a terminal that names itself, such as xterm.js.
+// so a test can play a terminal that names itself, such as xterm.js. With -da1
+// it answers DA1 itself. -xtversion-delay and -da1-delay hold those answers
+// back, to play a terminal that answers after tuios's startup probe gives up.
 //
 // It has two modes.
 //
@@ -93,7 +95,12 @@ type host struct {
 	// by a test arrives after the DA1 that ends tuios's probe, so a test that
 	// needs the host to name itself puts the answer here.
 	xtversion string
-	log       io.Writer
+	// da1, when set, is the DA1 answer, given here so tuitest's own cannot
+	// race it. The delays hold an answer back, for a terminal that answers
+	// after tuios's startup probe has given up.
+	da1                      string
+	xtversionDelay, da1Delay time.Duration
+	log                      io.Writer
 }
 
 func (h *host) now() scheme {
@@ -131,6 +138,9 @@ func run(args []string) int {
 	mute := fs.Bool("mute", false, "swallow every colour question and answer none, as mosh does")
 	programStatus := fs.Bool("program-status", false, "answer the OSC 7501 query, as a terminal that supports the protocol does")
 	xtversion := fs.String("xtversion", "", "answer XTVERSION (CSI > q) with this name and version, as in \"xterm.js(6.1.0)\"")
+	xtversionDelay := fs.Duration("xtversion-delay", 0, "wait this long before the XTVERSION answer")
+	da1 := fs.String("da1", "", "answer DA1 (CSI c) with these attributes, as in \"?62;4;9;22c\"")
+	da1Delay := fs.Duration("da1-delay", 0, "wait this long before the DA1 answer")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -140,7 +150,11 @@ func run(args []string) int {
 		return 2
 	}
 
-	h := &host{ansi: map[int]string{}, mute: *mute, programStatus: *programStatus, xtversion: *xtversion}
+	h := &host{
+		ansi: map[int]string{}, mute: *mute, programStatus: *programStatus,
+		xtversion: *xtversion, xtversionDelay: *xtversionDelay,
+		da1: *da1, da1Delay: *da1Delay,
+	}
 	h.schemes = append(h.schemes, scheme{fg: *fg, bg: *bg, light: isLight(*bg)})
 	fgs, bgs := strings.Split(*altFg, ","), strings.Split(*altBg, ",")
 	if len(fgs) != len(bgs) {
@@ -208,7 +222,26 @@ func run(args []string) int {
 
 	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
 
-	f := &filter{h: h, answer: func(b string) { _, _ = ptmx.Write([]byte(b)) }}
+	// Held-back answers go out in the order they were asked for, each after
+	// its own delay, the way a slow terminal answers.
+	type late struct {
+		at   time.Time
+		text string
+	}
+	lateQ := make(chan late, 16)
+	go func() {
+		for a := range lateQ {
+			time.Sleep(time.Until(a.at))
+			_, _ = ptmx.Write([]byte(a.text))
+		}
+	}()
+	f := &filter{h: h, answer: func(b string) { _, _ = ptmx.Write([]byte(b)) }, answerAfter: func(d time.Duration, b string) {
+		if d <= 0 {
+			_, _ = ptmx.Write([]byte(b))
+			return
+		}
+		lateQ <- late{time.Now().Add(d), b}
+	}}
 	buf := make([]byte, 64*1024)
 	for {
 		n, err := ptmx.Read(buf)
@@ -253,9 +286,10 @@ func isLight(hex string) bool {
 // filter passes the program's output through, taking out the questions it
 // answers. A sequence split across two reads is held until it is whole.
 type filter struct {
-	h      *host
-	answer func(string)
-	held   []byte
+	h           *host
+	answer      func(string)
+	answerAfter func(time.Duration, string)
+	held        []byte
 }
 
 // maxHeld bounds how much of an unfinished sequence is held back. A colour
@@ -409,8 +443,12 @@ func (f *filter) oscQuery(body string) bool {
 func (f *filter) csi(params string, final byte) bool {
 	switch {
 	case (params == ">" || params == ">0") && final == 'q' && f.h.xtversion != "":
-		f.h.note("answer xtversion %s", f.h.xtversion)
-		f.answer("\x1bP>|" + f.h.xtversion + "\x1b\\")
+		f.h.note("answer xtversion %s after %s", f.h.xtversion, f.h.xtversionDelay)
+		f.answerAfter(f.h.xtversionDelay, "\x1bP>|"+f.h.xtversion+"\x1b\\")
+		return true
+	case (params == "" || params == "0") && final == 'c' && f.h.da1 != "":
+		f.h.note("answer da1 %s after %s", f.h.da1, f.h.da1Delay)
+		f.answerAfter(f.h.da1Delay, "\x1b["+f.h.da1)
 		return true
 	case params == "?996" && final == 'n':
 		if f.h.mute {

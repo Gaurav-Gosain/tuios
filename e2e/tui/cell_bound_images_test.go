@@ -34,8 +34,10 @@ import (
 //   - The host could be sent nothing because the picture never reached tuios.
 //     The xterm.js host must show the sixel picture as glyphs, and the pane
 //     must be told sixel, so a tool that asks gets a picture.
-//   - A later DA1 answer could turn sixel back on. The pane is asked for DA1
-//     after the probe and the picture is drawn after that.
+//   - A DA1 answer that misses the probe could turn sixel back on, and an
+//     XTVERSION answer that misses it could go unread. hostterm answers DA1
+//     itself, after the probe has given up, with and without XTVERSION
+//     held back too.
 
 // xtermJSVersion is what Netcatty's xterm.js answers to XTVERSION.
 const xtermJSVersion = "xterm.js(6.1.0-beta.292)"
@@ -61,14 +63,26 @@ func cellBoundPNG(t *testing.T) string {
 
 func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 	hostterm := buildHostTerm(t)
+	// lateDA1 plays xterm.js answering DA1 after the startup probe gave up,
+	// with the attributes it lists: sixel among them.
+	lateDA1 := []string{"-da1", "?62;4;9;22c", "-da1-delay", "500ms"}
 	for _, tc := range []struct {
 		name    string
 		version string
 		daemon  bool
+		// host is more hostterm flags.
+		host []string
 	}{
-		{"xtermjs-standalone", xtermJSVersion, false},
-		{"xtermjs-daemon", xtermJSVersion, true},
-		{"kitty-standalone", kittyVersion, false},
+		{"xtermjs-standalone", xtermJSVersion, false, nil},
+		{"xtermjs-daemon", xtermJSVersion, true, nil},
+		// XTVERSION reaches the probe and DA1 does not. The late DA1 must
+		// not turn sixel back on.
+		{"xtermjs-late-da1", xtermJSVersion, false, lateDA1},
+		// Both answers miss the probe. The late XTVERSION, read by the
+		// program, must turn off what the probe's kitty answer turned on.
+		{"xtermjs-late-both", xtermJSVersion, false, append([]string{"-xtversion-delay", "500ms"}, lateDA1...)},
+		{"xtermjs-late-both-daemon", xtermJSVersion, true, append([]string{"-xtversion-delay", "500ms"}, lateDA1...)},
+		{"kitty-standalone", kittyVersion, false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xtermJS := tc.version == xtermJSVersion
@@ -81,7 +95,7 @@ func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 				out:           host,
 				daemonDefault: tc.daemon,
 				env:           []string{"TUIOS_CELL_SIZE=10x20"},
-				wrap:          []string{hostterm, "run", "-xtversion", tc.version, "--"},
+				wrap:          append(append([]string{hostterm, "run", "-xtversion", tc.version}, tc.host...), "--"),
 			})
 			if tc.daemon {
 				t.Cleanup(func() { killDaemon(t, base) })
