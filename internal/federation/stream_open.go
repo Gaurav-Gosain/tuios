@@ -25,6 +25,11 @@ type StreamOpen struct {
 	// claim any name, which is why only a pinned name is a boundary. Empty
 	// from a hub that predates it.
 	From string `json:"from,omitempty"`
+	// Bulk marks a stream that carries file bytes: it writes small frames,
+	// waits behind every other stream for the pipe, and keeps to a window the
+	// reader grants in credit frames. Only a hub that speaks credit frames
+	// sets it. See bulk.go.
+	Bulk bool `json:"bulk,omitempty"`
 }
 
 // maxStreamOpenPayload bounds what the accepting side decodes. The frame cap
