@@ -548,3 +548,86 @@ func TestGUIBridgeSnapshotCarriesTheRenderersHistory(t *testing.T) {
 		b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
 	}
 }
+
+// The focus the renderer sets is the session's focus, as a terminal client's
+// is. The daemon keeps it, so a bridge that dies and comes back, and a push
+// from the daemon after a burst of output, keep the pane the person chose.
+// Before the fix the bridge changed only its own model: a new bridge
+// attached on the pane the daemon last heard of, and in the app the focus
+// jumped to the first pane when a long `seq` ended.
+func TestGUIBridgeKeepsTheRenderersFocus(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "focus", 100, 30)
+	for range 3 {
+		b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
+	}
+	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 3 }, "three panes")
+	first := st.Windows[0].ID
+	if st.Focused == first {
+		t.Fatalf("the newest pane should have the focus at the start, not the first")
+	}
+	b.send(map[string]any{"cmd": "focus", "window": first})
+	b.waitState(func(s *wireState) bool { return s.Focused == first }, "the focus on the first pane")
+	_, info := attachedOf(b)
+	if err := syscall.Kill(b.pid, syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the bridge: %v", err)
+	}
+	b.waitFor(func() bool { return b.closed }, uiTimeout, "the killed bridge's output to close")
+
+	b = startBridgeWith(t, base, bridgeOpts{args: []string{"--session-id", info.SessionID}, cols: 100, rows: 30, keepDaemon: true, name: "again"})
+	got := b.waitState(func(s *wireState) bool { return len(s.Windows) == 3 }, "the three panes again")
+	if got.Focused != first {
+		t.Fatalf("ASSERTION: the new bridge attached with the focus on %s, want %s, the pane the renderer focused", got.Focused, first)
+	}
+}
+
+// A host whose link cannot sign in without a person (a key with a
+// passphrase once the person's ssh master is gone, a password, a second
+// factor) is "signin" in the hosts event, so the renderer offers to sign in
+// again. A host that does not answer at all stays "down".
+func TestGUIBridgeHostThatNeedsASignIn(t *testing.T) {
+	cases := []struct {
+		name, stderr, want string
+	}{
+		{"permission denied", "someone@buildbox: Permission denied (publickey).", "signin"},
+		{"no answer", "ssh: connect to host buildbox port 22: Connection refused", "down"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			base := t.TempDir()
+			ssh := filepath.Join(base, "fake-ssh-refuses")
+			body := "#!/bin/sh\nprintf '%s\\n' '" + c.stderr + "' >&2\nexit 255\n"
+			if err := os.WriteFile(ssh, []byte(body), 0o700); err != nil {
+				t.Fatalf("write the ssh stand-in: %v", err)
+			}
+			writeOneHostConfig(t, base, tuiosBin)
+			env := []string{"TUIOS_SSH=" + ssh}
+			killDaemon(t, base)
+			if out, err := tuiosCLIEnv(t, base, env, "start-server"); err != nil {
+				t.Fatalf("start-server: %v\n%s", err, out)
+			}
+			b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "here"}, env: env, cols: 100, rows: 30, keepDaemon: true, name: "here"})
+			health := func() string {
+				ev := eventsOf[wireHosts](b, "hosts", "hosts")
+				if len(ev) == 0 {
+					return ""
+				}
+				for _, h := range ev[len(ev)-1].Hosts {
+					if h.Name == "build" && h.Status != "connecting" && h.Status != "reconnecting" && h.Status != "" {
+						return h.Health
+					}
+				}
+				return ""
+			}
+			deadline := time.Now().Add(30 * time.Second)
+			got := health()
+			for got == "" && time.Now().Before(deadline) {
+				time.Sleep(200 * time.Millisecond)
+				got = health()
+			}
+			if got != c.want {
+				t.Fatalf("ASSERTION: a link whose ssh says %q is %q in the hosts event, want %q", c.stderr, got, c.want)
+			}
+		})
+	}
+}

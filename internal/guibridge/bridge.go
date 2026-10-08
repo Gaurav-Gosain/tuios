@@ -691,7 +691,13 @@ func (m *model) handle(c Command) tea.Cmd {
 		}
 		return cmd
 	case "focus":
-		_ = m.os.FocusPane(c.Window)
+		// The daemon keeps the session's focus. A terminal client tells it
+		// after every key and click. Without this, the next push from the
+		// daemon (a reattach, or a resync after a burst of output) hands the
+		// old focus back and the renderer's focus jumps to another pane.
+		if m.os.FocusPane(c.Window) == nil {
+			m.os.SyncStateToDaemon()
+		}
 	case "workspace":
 		_ = m.os.SwitchWorkspace(c.N)
 	case "tape":
