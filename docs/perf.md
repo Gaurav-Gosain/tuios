@@ -2889,3 +2889,33 @@ for that compose.
 Every frame and every edit reaches the host on both sides.
 `TestKittyStreamCostsLittle` asserts the CPU and the edit latency under
 `TUIOS_E2E_PERF`.
+
+## 2026-10 saving the cursor on the libghostty backend
+
+A reattach now carries the cursor DECSC saved. libghostty keeps it where no
+query reaches, so the backend records the cursor at every save (DECSC, SCOSC,
+1048, 1049) as the stream goes past: it hands the library the bytes before the
+save and reads the cursor, the pen and origin mode. apt saves and restores the
+cursor around its status line on every line it prints, so it pays this once a
+line. `BenchmarkBackendApt` is that stream: a scroll region above the last row,
+2000 lines, each followed by a save, a status line redraw and a restore, at
+120x40.
+
+### Numbers
+
+`go test -tags ghostty ./internal/vt/ -bench 'BackendApt$' -benchtime 3s
+-count 2`, run twice, GOMAXPROCS=4, nice 19 on cores 0-7 of a machine in use:
+
+| Build | ms per 2000 lines |
+|---|---|
+| main | 2.7 to 3.2 |
+| recording the saved cursor, the screen read from the library | 5.3 to 6.9 |
+| recording the saved cursor, the screen read from the cache | 4.3 to 4.9 |
+
+The library read was three `Mode` cgo calls per save and per restore, to ask
+which screen was active. The scanner already flips `cachedAltScreen` at the
+switch, mid-write, so `liveScreenLocked` reads that instead. What is left is
+the flush before the save and the cursor reads, about 0.8 µs a save.
+`BenchmarkBackendScroll`, which saves nothing, measured 44 to 64 ms on main
+and 47 to 50 ms here in the same runs, which is within the noise of this
+machine.

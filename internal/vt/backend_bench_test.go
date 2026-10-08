@@ -116,3 +116,23 @@ func BenchmarkBackendTUI(b *testing.B) {
 	data := synthTUI(120, 40, 3000)
 	benchBackendStream(b, 120, 40, data, 0)
 }
+
+// synthApt is apt's progress output: a scroll region that stops above the
+// last row, and on every line a save of the cursor, a redraw of the status
+// line under the region, and a restore. A backend that pays for each save
+// and restore pays it once a line.
+func synthApt(rows, lines int) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\x1b[1;%dr", rows-1)
+	for i := range lines {
+		fmt.Fprintf(&b, "Get:%d http://deb.example.org/debian stable/main amd64 pkg%d 1.%d [%d kB]\r\n", i, i, i%40, 10+i%900)
+		fmt.Fprintf(&b, "\x1b7\x1b[%d;1H\x1b[0;30;42mProgress: [%3d%%]\x1b[49m\x1b[39m [%s]\x1b[K\x1b8",
+			rows, i*100/lines, strings.Repeat("#", i*40/lines)+strings.Repeat(".", 40-i*40/lines))
+	}
+	return []byte(b.String())
+}
+
+func BenchmarkBackendApt(b *testing.B) {
+	data := synthApt(40, 2000)
+	benchBackendStream(b, 120, 40, data, 0)
+}

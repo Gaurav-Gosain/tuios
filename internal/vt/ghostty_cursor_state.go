@@ -20,9 +20,12 @@ import (
 // takes it, by sending what a guest would send.
 
 // liveScreenLocked is the screen the library is drawing to right now, 0 for
-// the main one and 1 for the alternate.
+// the main one and 1 for the alternate. It reads the cache rather than the
+// library: the scanner flips the cache at the switch, mid-write, and asking
+// the library cost three cgo calls on every save and restore of the cursor,
+// which a program redrawing a status line does once a line.
 func (t *GhosttyTerminal) liveScreenLocked() int {
-	if t.activeAltLiveLocked() {
+	if t.cachedAltScreen.Load() {
 		return 1
 	}
 	return 0
