@@ -124,10 +124,10 @@ func (s *ghosttyScanner) notePrint(b byte) {
 		if s.u8n == s.u8want {
 			r, size := utf8.DecodeRune(s.u8[:s.u8n])
 			s.u8n = 0
-			if r != utf8.RuneError || size > 1 {
-				if !joinsPrevious(r) {
-					s.lastPrint = r
-				}
+			// A C1 control sent as UTF-8 (U+0080 to U+009F) is a control,
+			// not a character REP can repeat.
+			if (r != utf8.RuneError || size > 1) && (r < 0x80 || r > 0x9f) && !joinsPrevious(r) {
+				s.lastPrint = r
 			}
 		}
 	default:
