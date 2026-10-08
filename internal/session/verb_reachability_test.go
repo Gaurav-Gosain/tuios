@@ -152,6 +152,22 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"send-agent-message#3": {errCode: ErrVerbInvalidParams, why: "message 12 does not exist here"},
 	"stash-put#0":          {errCode: ErrVerbInvalidParams, why: "/tmp/flame.png does not exist here"},
 	"stash-get#0":          {errCode: ErrVerbInvalidParams, why: "the example path is a placeholder, not a file this session stashed"},
+	// The file verbs name files and transfers the example invents. They are
+	// proved against two real daemons in e2e/tui/file_transfer_test.go.
+	"file-list#0":        {errCode: ErrVerbNoFile, why: "~/src does not exist here"},
+	"file-read#0":        {errCode: ErrVerbNoFile, why: "~/notes.md does not exist here"},
+	"file-rename#0":      {errCode: ErrVerbNoFile, why: "~/a.txt does not exist here"},
+	"file-hash#0":        {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
+	"file-walk#0":        {errCode: ErrVerbNoFile, why: "~/photos does not exist here"},
+	"file-preview#0":     {errCode: ErrVerbNoFile, why: "~/Pictures/cat.jpg does not exist here"},
+	"file-commit#0":      {errCode: ErrVerbNoFile, why: "no copy to ~/big.iso is in flight here"},
+	"open-file-stream#0": {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
+	"open-file-stream#1": {errCode: ErrVerbInvalidParams, why: "no part of a copy to ~/big.iso is here to go on from"},
+	"drop-files#0":       {errCode: ErrVerbNoFile, why: "~/Desktop/screenshot.png does not exist here"},
+	"transfer-start#0":   {errCode: ErrVerbUnknownHost, why: "the fixture daemon has no hosts"},
+	"transfer-cancel#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
+	"transfer-pause#0":   {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
+	"transfer-resume#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
 	// A blocked agent's pane, named by an id the example invents. The pair is
 	// proved against a real pane running a fake agent in verb_respond_test.go.
 	"peek-prompt#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
