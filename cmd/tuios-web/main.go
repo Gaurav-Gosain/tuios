@@ -631,7 +631,9 @@ func checkTransportSecurity(w io.Writer) error {
 // is about 22 GB for one resize message. sip ignores a later resize past these
 // limits and keeps the session. It refuses a first resize past them, so they
 // sit well above any real window: a 5120 pixel wide screen at a 5 pixel cell
-// is 1024 columns.
+// is 1024 columns. The limit bounds one window and not the process: a session
+// at exactly 1200x500 still took tuios-web from 41 MB to about 510 MB, and sip
+// has no cap on the number of sessions yet.
 const (
 	webMaxCols = 1200
 	webMaxRows = 500
@@ -705,10 +707,10 @@ func pickWebSession([]string) string { return "web" }
 
 // webHostCaps is the browser terminal one connection draws to. sip's page
 // draws kitty graphics in webterm's overlay and sixel through the xterm.js
-// image addon, so both protocols render. KittyAnimation stays false because the browser overlay has
-// no a=f frame-edit path, and KittyFileTransfer stays false because the browser
-// cannot read server-local paths. The palette is the one the browser draws
-// with; see browserPalette.
+// image addon, so both protocols render. KittyAnimation stays false because
+// the browser overlay has no a=f frame-edit path, and KittyFileTransfer stays
+// false because the browser cannot read server-local paths. The palette is the
+// one the browser draws with; see browserPalette.
 func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 	caps := &app.HostCapabilities{
 		KittyGraphics: true,

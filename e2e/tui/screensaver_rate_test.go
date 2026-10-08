@@ -60,8 +60,11 @@ func saverOpening(t *testing.T, effect string, maxFPS int, limit time.Duration) 
 //   - The same effect at max_fps = 30 must take at least 2.6 s (3.3 s at thirty
 //     frames a second). This is the positive half: it fails if max_fps never
 //     reaches the saver, which would let the first case pass for no reason.
-//   - tuffbaby paces its clip by the clock. It must finish within 18 s at
-//     max_fps = 240, which fails when the tick and the clock disagree.
+//   - tuffbaby paces its clip by the clock. At max_fps = 240 it must finish
+//     within 1.8 times its time at max_fps = 60, which fails when the tick and
+//     the clock disagree. The bound is a ratio to a run on the same machine,
+//     so a busy machine slows both runs and does not fail the test. At 60 the
+//     cap changes nothing, so that run is the same with or without the fix.
 //
 // Measured on 2026-10-08 at 100x30 and a load average near 30. middleout at
 // 240: 0.47 s on main and 1.63 s with the cap. tuffbaby at 240: 9.60 s with the
@@ -81,7 +84,10 @@ func TestScreensaverPaintsAtSixtyAtMost(t *testing.T) {
 		}
 	})
 	t.Run("clock paced effect at max_fps 240", func(t *testing.T) {
-		d := saverOpening(t, "tuffbaby", 240, 18*time.Second)
-		t.Logf("tuffbaby at max_fps 240 hid the screen for %.2f s", d.Seconds())
+		at60 := saverOpening(t, "tuffbaby", 60, 60*time.Second)
+		limit := at60 * 18 / 10
+		d := saverOpening(t, "tuffbaby", 240, limit)
+		t.Logf("tuffbaby hid the screen for %.2f s at max_fps 60 and %.2f s at max_fps 240 (limit %.2f s)",
+			at60.Seconds(), d.Seconds(), limit.Seconds())
 	})
 }

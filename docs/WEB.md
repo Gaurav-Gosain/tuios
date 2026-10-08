@@ -61,7 +61,8 @@ tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-pass
 ## Window size limit
 
 A browser window can be 1200 columns wide and 500 rows high at most. Each cell
-costs tuios-web memory, so the limit keeps one browser from using gigabytes.
+costs tuios-web memory. A window at the limit costs about half a gigabyte.
+Several windows at the limit can still use gigabytes together.
 
 - tuios-web ignores a resize past the limit. The session keeps the size it had.
 - A browser that connects with a larger window gets no session. Make the font

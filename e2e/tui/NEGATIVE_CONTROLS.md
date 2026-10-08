@@ -3062,8 +3062,9 @@ log viewer are what tell the two builds apart.
 
 `TestScreensaverPaintsAtSixtyAtMost` reads the saver's frame rate off the
 screen as the time an effect hides a marker. middleout counts frames (99), and
-tuffbaby paces its clip by the clock. The max_fps 30 case is the positive half:
-it fails if max_fps never reaches the saver.
+tuffbaby paces its clip by the clock, and its bound at max_fps 240 is 1.8 times
+its own time at max_fps 60 on the same machine. The max_fps 30 case is the
+positive half: it fails if max_fps never reaches the saver.
 
 `TestWebIgnoresAWindowPastTheLimit` sends tuios-web a resize to 300x60, then
 one to 1500x900. The first must reach the pane, which is the positive half. The
@@ -3074,7 +3075,7 @@ Each control below was run on 2026-10-08 at a load average near 30.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The saver ticks at NormalFPS again | main at `1db4d240` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 240 hides the screen for 0.48 s, want at least 1.2 s) | **caught** |
-| The clock disagrees with the tick | `screensaverBuild`: `NewVirtualClock(s.NormalFPS)` in place of `screensaverRate(s)` | `TestScreensaverPaintsAtSixtyAtMost` (tuffbaby at max_fps 240 keeps the marker hidden for more than 18 s, against 9.32 s with the fix) | **caught** |
+| The clock disagrees with the tick | `screensaverBuild`: `NewVirtualClock(s.NormalFPS)` in place of `screensaverRate(s)` | `TestScreensaverPaintsAtSixtyAtMost` (tuffbaby at max_fps 240 keeps the marker hidden for more than 16.81 s, which is 1.8 times its 9.34 s at max_fps 60. With the fix: 9.52 s at 60 and 10.08 s at 240. Rerun at a load average near 5) | **caught** |
 | max_fps never reaches the saver | `screensaverRate` always returns `screensaverFPS` | `TestScreensaverPaintsAtSixtyAtMost` (middleout at max_fps 30 hides the screen for 1.62 s, want at least 2.6 s) | **caught** |
 | No window limit | `cmd/tuios-web/main.go`: the `MaxWindowDims` line cut (main at `1db4d240`) | `TestWebIgnoresAWindowPastTheLimit` (tuios-web grows from 45 MB to 857 MB, and the shell stops answering within 10 s) | **caught** |
 
