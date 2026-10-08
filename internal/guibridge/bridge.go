@@ -112,6 +112,14 @@ type Event struct {
 	Attention *Attention `json:"attention,omitempty"`
 	Notify    *Notify    `json:"notify,omitempty"`
 	Detached  *Detached  `json:"detached,omitempty"`
+	// Palette is set on "palette" events: tuios's command palette rows, sent
+	// after "keybinds" and again when they change. See palette.go.
+	Palette []PaletteRow `json:"palette,omitempty"`
+	// Options is set on "options" events, the answer to an options command:
+	// every option with the value the config file gives it. Req is the
+	// command's req.
+	Options *OptionList `json:"options,omitempty"`
+	Req     int64       `json:"req,omitempty"`
 }
 
 // Result answers one action or layout command.
@@ -162,6 +170,42 @@ type State struct {
 	// AgentSeen is set once an agent has been seen in the session. Until
 	// then the renderer shows no agent chrome.
 	AgentSeen bool `json:"agent_seen"`
+	// Multifocus lists the panes that take typing together (the group),
+	// and Broadcast says typing goes to all of them now. Omitted when no
+	// pane is in the group.
+	Multifocus []string `json:"multifocus,omitempty"`
+	// PiP is the pane pinned as this client's picture in picture.
+	PiP *PiP `json:"pip,omitempty"`
+	// ScratchBox is the box the scratch panes show in, frame included, while
+	// a scratch group is on screen.
+	ScratchBox *Rect `json:"scratch_box,omitempty"`
+	// Strip is the scrolling layout's strip, while layout is "scrolling".
+	Strip *Strip `json:"strip,omitempty"`
+}
+
+// PiP is the pinned pane and the corner it goes in: bottom-right,
+// bottom-left, top-right or top-left.
+type PiP struct {
+	Window string `json:"window"`
+	Corner string `json:"corner"`
+}
+
+// Strip is the scrolling layout of the workspace on screen as it settles.
+// Positions are strip cells: a pane's X counts from the strip's left end.
+// The screen shows the strip from Viewport on.
+type Strip struct {
+	Viewport int         `json:"viewport"`
+	Width    int         `json:"width"`
+	Panes    []StripPane `json:"panes"`
+}
+
+// StripPane is one pane's place on the strip.
+type StripPane struct {
+	ID string `json:"id"`
+	X  int    `json:"x"`
+	Y  int    `json:"y"`
+	W  int    `json:"w"`
+	H  int    `json:"h"`
 }
 
 // Size is a size in cells.
@@ -254,6 +298,17 @@ type Command struct {
 	// "verb_result" event with the same req. See verb.go.
 	Verb   string         `json:"verb,omitempty"`
 	Params map[string]any `json:"params,omitempty"`
+	// switch-session: Create makes the session when it is missing, and
+	// Restore restores it from its saved state first.
+	Create  bool `json:"create,omitempty"`
+	Restore bool `json:"restore,omitempty"`
+	// theme: Persist writes the theme to the user's config file.
+	Persist bool `json:"persist,omitempty"`
+	// option: Key is an option path from list-options, Value its new value.
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
+	// group: On puts the pane ID in the group, off takes it out.
+	On bool `json:"on,omitempty"`
 }
 
 // Run attaches and serves the renderer until its input closes or the session
@@ -415,6 +470,10 @@ type model struct {
 	attentionGen  uint64
 	attentionLive bool
 	notified      map[string]bool
+	// paletteSent is the palette as last sent, and paletteKey what it was
+	// built from. See palette.go.
+	paletteSent string
+	paletteKey  string
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -423,6 +482,7 @@ func (m *model) sendKeybinds() {
 		m.keysFrom = r.GetConfig()
 	}
 	m.out.JSON(Event{Type: "keybinds", Keybinds: exportKeybinds(m.os)})
+	m.paletteKey = ""
 }
 
 // gitEntry is a cached reading of a folder's checkout.
@@ -489,6 +549,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
 		m.sendKeybinds()
 	}
+	if key := fmt.Sprint(m.keysFrom != nil, m.os.AgentsSeen(), len(m.os.MultifocusSet) > 0, m.keysFrom); key != m.paletteKey {
+		m.paletteKey = key
+		m.sendPalette()
+	}
 	m.export()
 	m.exportAttention()
 	m.exportNotify()
@@ -539,12 +603,36 @@ func (m *model) handle(c Command) tea.Cmd {
 		}
 	case "theme":
 		// The theme is this client's own setting, as in the terminal
-		// client. Nothing is written to the config file.
-		if err := theme.Initialize(c.Theme); err != nil {
+		// client. With persist it is also written to the config file, as the
+		// terminal client's theme picker writes it.
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Theme}
+		err := theme.Initialize(c.Theme)
+		if err != nil {
 			log.Printf("gui-bridge: theme %q: %v", c.Theme, err)
+		} else if c.Persist {
+			err = writeOption("appearance.theme", c.Theme)
 		}
 		th := CurrentTheme()
 		m.out.JSON(Event{Type: "theme", Theme: &th})
+		if c.Req != 0 {
+			m.answer(res, err)
+		}
+	case "switch-session":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
+		m.answer(res, m.switchSession(c))
+	case "palette":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
+		cmd, err := m.runPalette(c.Name)
+		m.answer(res, err)
+		return cmd
+	case "option":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Key}
+		m.answer(res, writeOption(c.Key, c.Value))
+	case "options":
+		sendOptions(m.out, c.Req)
+	case "group":
+		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.ID}
+		m.answer(res, m.os.SetMultifocus(c.ID, c.On))
 	case "action":
 		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Name}
 		var cmd tea.Cmd
@@ -612,6 +700,23 @@ func (m *model) export() {
 	}
 	if view.Cropped {
 		st.Viewport = &Point{X: view.OffsetX, Y: view.OffsetY}
+	}
+	if ids := o.MultifocusIDs(); len(ids) > 0 {
+		st.Multifocus = ids
+	}
+	if id, corner := o.PiPWindow(); id != "" {
+		st.PiP = &PiP{Window: id, Corner: corner}
+	}
+	if box, ok := o.ScratchBox(); ok {
+		r := rectOf(box)
+		st.ScratchBox = &r
+	}
+	if vp, width, panes, ok := o.ScrollStrip(); ok {
+		strip := &Strip{Viewport: vp, Width: width, Panes: make([]StripPane, 0, len(panes))}
+		for _, p := range panes {
+			strip.Panes = append(strip.Panes, StripPane{ID: p.ID, X: p.X, Y: p.Y, W: p.W, H: p.H})
+		}
+		st.Strip = strip
 	}
 	occupied := map[int]bool{}
 	if f := o.GetFocusedWindow(); f != nil {
