@@ -314,3 +314,17 @@ func TestGhosttyWireCarriesTheCursorState(t *testing.T) {
 	t.Run("ghostty-to-pure", func(t *testing.T) { runSeamCases(t, cursorStateCases, ghostty, pure) })
 	t.Run("ghostty-to-ghostty", func(t *testing.T) { runSeamCases(t, cursorStateCases, ghostty, ghostty) })
 }
+
+// TestGhosttyWireNarrowsAWiderClient runs the wider-client cases across
+// backends. On the library a pending wrap the restore armed away from the
+// client's margin was no wrap at all: the reprint moved the cursor one column
+// right.
+func TestGhosttyWireNarrowsAWiderClient(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	widePure := func() vt.Terminal { return vt.NewEmulator(fidelityCols+10, fidelityRows) }
+	wideGhostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols+10, fidelityRows) }
+	t.Run("pure-to-ghostty", func(t *testing.T) { runSeamCases(t, widerClientCases, pure, wideGhostty) })
+	t.Run("ghostty-to-pure", func(t *testing.T) { runSeamCases(t, widerClientCases, ghostty, widePure) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runSeamCases(t, widerClientCases, ghostty, wideGhostty) })
+}

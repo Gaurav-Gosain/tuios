@@ -71,6 +71,24 @@ func TestWireCarriesTheCursorState(t *testing.T) {
 	runSeamCases(t, cursorStateCases, newPure, newPure)
 }
 
+// Gap 5: a client wider than the snapshot. ApplyTerminalState grew a client
+// that was too small and left one that was too big, so the snapshot's last
+// column was not the client's: a wrap pending there went one column right on
+// the client and to the next row on the daemon, and so did every line that
+// reached the edge after it.
+var widerClientCases = []seamCase{
+	{"pending", "$ " + strings.Repeat("x", fidelityCols-3) + "Z", "NEXT\r\n"},
+	{"pending-wide", strings.Repeat("x", fidelityCols-2) + "日", "NEXT"},
+	{"line-reaches-the-edge", "$ ", strings.Repeat("y", fidelityCols+5) + "\r\n"},
+	{"scrolls", strings.Repeat("line\r\n", fidelityRows), strings.Repeat("z", fidelityCols) + "!"},
+}
+
+func TestWireNarrowsAWiderClient(t *testing.T) {
+	newDaemon := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	newClient := func() vt.Terminal { return vt.NewEmulator(fidelityCols+10, fidelityRows) }
+	runSeamCases(t, widerClientCases, newDaemon, newClient)
+}
+
 // TestCursorStateFieldsAreOptionalOnTheWire: a peer from before these fields
 // decodes a snapshot that has them, and a snapshot from such a peer decodes
 // here with none of them. Applied to an emulator that survived, it leaves the
