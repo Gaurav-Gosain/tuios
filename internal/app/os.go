@@ -410,7 +410,12 @@ type OS struct {
 	// SessionCloseWorkspace turns the dialog into close_workspace's: it asks
 	// about the panes of this workspace, not the session. 0 is the session.
 	SessionCloseWorkspace int
-	SessionCloseSelected  int
+	// SessionCloseWindow turns the dialog into a one-pane confirmation. It is
+	// how a tuios://window/<id>/close link closes: the pane a program in
+	// another pane named gets named back to the person holding the mouse
+	// before anything dies. -1 is no pane.
+	SessionCloseWindow   int
+	SessionCloseSelected int
 	// Pending resize tracking for debouncing PTY resize during mouse drag
 	PendingResizes map[string][2]int // windowID -> [width, height] of pending PTY resize
 	// pendingCopy is text a settled multi-click selection will put on the

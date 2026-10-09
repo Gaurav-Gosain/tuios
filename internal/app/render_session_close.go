@@ -24,7 +24,9 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, sessionCloseRowCount-1)
 
 	toll := m.SessionTollFor(m.SessionCloseTarget)
-	if m.SessionCloseWorkspace != 0 {
+	if m.SessionCloseWindow >= 0 {
+		toll = m.windowToll(m.SessionCloseWindow)
+	} else if m.SessionCloseWorkspace != 0 {
 		toll = m.workspaceToll(m.SessionCloseWorkspace)
 	}
 	// The toll is warn-coloured only when an agent is in it. Colouring it always

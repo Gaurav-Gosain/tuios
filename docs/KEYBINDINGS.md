@@ -364,6 +364,12 @@ pointer does not move. `appearance.link_click` sets which click opens a
 link. See [CONFIGURATION.md](CONFIGURATION.md#opening-links) for the
 settings, the opener and a table of terminals.
 
+A pane can address another pane with a `tuios://window/<id>` link, where
+`<id>` is the pane's short id from the sidebar or `list-windows`. A plain
+`Ctrl+click` there jumps to that pane, and a
+`tuios://window/<id>/close` link asks first: the confirmation names the
+pane and only a second click closes it.
+
 ## Moving a pane with the mouse
 
 Drag a tiled pane by its title bar, or `Ctrl+click` anywhere in it and drag. In BSP tiling, dropping it on the middle of another pane swaps the two, and dropping it near an edge of another pane splits that pane and puts the dragged pane in the half toward that edge. While the button is down, the place the pane will land is highlighted. See [LAYOUT_MODES.md](LAYOUT_MODES.md#moving-a-pane-with-the-mouse).

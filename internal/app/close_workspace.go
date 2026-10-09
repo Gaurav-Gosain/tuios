@@ -52,6 +52,9 @@ func (m *OS) workspaceLabel(ws int) string {
 // sessionCloseTitle and sessionCloseLabel are the dialog's frame title and its
 // destructive row, for the session or for a workspace.
 func (m *OS) sessionCloseTitle() string {
+	if m.SessionCloseWindow >= 0 {
+		return "close pane"
+	}
 	if m.SessionCloseWorkspace != 0 {
 		return "close workspace"
 	}
@@ -59,6 +62,9 @@ func (m *OS) sessionCloseTitle() string {
 }
 
 func (m *OS) sessionCloseLabel() string {
+	if m.SessionCloseWindow >= 0 {
+		return "Close pane"
+	}
 	if m.SessionCloseWorkspace != 0 {
 		return "Close workspace"
 	}

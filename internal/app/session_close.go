@@ -127,6 +127,9 @@ func countOf(n int, noun string) string {
 // because the question is being asked of a person: a session renamed to
 // "Payments API" is not recognisable by the name it is addressed by.
 func (m *OS) sessionCloseQuestion() string {
+	if win := m.SessionCloseWindow; win >= 0 {
+		return "Close " + m.windowCloseLabel(win) + "?"
+	}
 	if ws := m.SessionCloseWorkspace; ws != 0 {
 		return "Close every pane on " + m.workspaceLabel(ws) + "?"
 	}
@@ -135,6 +138,33 @@ func (m *OS) sessionCloseQuestion() string {
 		return "Close this session?"
 	}
 	return "Close " + printableTitle(m.sessionTitle(name)) + "?"
+}
+
+// windowToll counts the one pane a link-close link named. The dialog's toll
+// line is what makes reading it worth the pause, and for a single pane that
+// is the agent state: a pane whose agent is mid-task is the case the
+// confirmation exists to catch.
+func (m *OS) windowToll(i int) sessionToll {
+	var t sessionToll
+	if i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
+		return t
+	}
+	t.Panes = 1
+	t.count(m.Windows[i].AgentState)
+	return t
+}
+
+// windowCloseLabel names the pane at i the way the dialog's question shows
+// it: its title where it has one, its id where it does not.
+func (m *OS) windowCloseLabel(i int) string {
+	if i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
+		return "that pane"
+	}
+	w := m.Windows[i]
+	if name := printableTitle(w.Title()); name != "" {
+		return "pane '" + name + "'"
+	}
+	return "pane " + shortID(w.ID)
 }
 
 // sessionCloseTarget is the session the open dialog is about, resolved: the one
@@ -149,6 +179,16 @@ func (m *OS) sessionCloseTarget() string {
 // OpenSessionClose raises the close confirmation for the attached session.
 func (m *OS) OpenSessionClose() { m.OpenSessionCloseFor("") }
 
+// OpenSessionCloseForWindow raises the confirmation for the one pane at i.
+// It is the path a tuios://window/<id>/close link takes: a program in any
+// pane can print such a link, its visible text names whatever it likes, and
+// the answer has to name the pane back before the click does anything.
+func (m *OS) OpenSessionCloseForWindow(i int) {
+	m.SessionCloseWindow = i
+	m.SessionCloseSelected = SessionCloseRowCancel
+	m.ShowSessionClose = true
+}
+
 // OpenSessionCloseFor raises it for any session, named by identity. One dialog
 // answers for all of them: it is the only place that counts what a close would
 // take down, and a second one built for other sessions would be the same
@@ -161,6 +201,7 @@ func (m *OS) OpenSessionCloseFor(sessionID string) {
 	if sessionID == m.sidebarCurrentSessionID() {
 		sessionID = ""
 	}
+	m.SessionCloseWindow = -1
 	m.SessionCloseTarget = sessionID
 	m.SessionCloseSelected = SessionCloseRowCancel
 	m.ShowSessionClose = true
@@ -171,6 +212,7 @@ func (m *OS) CloseSessionClose() {
 	m.ShowSessionClose = false
 	m.SessionCloseTarget = ""
 	m.SessionCloseWorkspace = 0
+	m.SessionCloseWindow = -1
 	m.SessionCloseSelected = SessionCloseRowCancel
 }
 
@@ -194,8 +236,13 @@ func (m *OS) SessionCloseMove(delta int) {
 func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 	target := m.SessionCloseTarget
 	ws := m.SessionCloseWorkspace
+	win := m.SessionCloseWindow
 	m.CloseSessionClose()
 	if idx != SessionCloseRowClose {
+		return nil
+	}
+	if win >= 0 {
+		m.CloseWindowByHand(win)
 		return nil
 	}
 	if ws != 0 {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The routing these tests pin is the one thing in the link feature that is a
@@ -118,5 +119,122 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 	}
 	if len(m.Notifications) == 0 {
 		t.Error("a refused scheme said nothing about what it did instead")
+	}
+}
+
+// TestTuiosWindowLinksParse checks the shapes the tuios:// scheme answers:
+// a window id focuses it, a /close suffix closes it, and anything else is
+// not an address tuios acts on.
+//
+// Negative control: with the host check dropped from parseTuiosLink, the
+// tuios://session/... case comes back ok and this fails.
+func TestTuiosWindowLinksParse(t *testing.T) {
+	good := []struct {
+		url     string
+		id      string
+		closing bool
+	}{
+		{"tuios://window/4262c319", "4262c319", false},
+		{"tuios://window/4262c319/close", "4262c319", true},
+		{"tuios://window/a878cd43-0b70-4c1e-bd43-7b78de51cc43", "a878cd43-0b70-4c1e-bd43-7b78de51cc43", false},
+	}
+	for _, c := range good {
+		got, ok := parseTuiosLink(c.url)
+		if !ok || got.id != c.id || got.close != c.closing {
+			t.Errorf("%q parsed as %+v, ok=%v; want id %q close=%v", c.url, got, ok, c.id, c.closing)
+		}
+	}
+
+	bad := []string{
+		"tuios://window/",
+		"tuios://window",
+		"tuios://window//close",
+		"tuios://session/4262c319",
+		"tuios://pane/4262c319",
+		"https://window/4262c319",
+		// Below the 8-character short id: a prefix that short names a window
+		// one time in many, and the program printing the link chose it, not
+		// the person clicking.
+		"tuios://window/4262c31",
+		"tuios://window/4262c31/close",
+		"tuios://window/a/close",
+	}
+	for _, u := range bad {
+		if got, ok := parseTuiosLink(u); ok {
+			t.Errorf("%q parsed as %+v; want refusal", u, got)
+		}
+	}
+}
+
+// TestTuiosWindowLinkResolution checks that a window id resolves to exactly
+// one window, by full uuid or unique prefix of at least the short form, and
+// that a prefix two windows share names nothing.
+func TestTuiosWindowLinkResolution(t *testing.T) {
+	m := &OS{Settings: config.Global}
+	m.Windows = []*terminal.Window{
+		{ID: "a878cd43-0b70-4c1e-bd43-7b78de51cc43"},
+		{ID: "a878cd44-1111-2222-3333-444455556666"},
+		{ID: "ffffffff-0000-0000-0000-000000000001"},
+	}
+
+	if i, ok := m.resolveWindowByIDPrefix("a878cd43-0b70-4c1e-bd43-7b78de51cc43"); !ok || i != 0 {
+		t.Errorf("full uuid resolved to %d, %v; want 0, true", i, ok)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("4262c319"); ok {
+		t.Errorf("unknown prefix resolved to %d; want no window", i)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("a878cd4"); ok {
+		t.Errorf("ambiguous prefix resolved to %d; want no window", i)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("ffff"); !ok || i != 2 {
+		t.Errorf("unique prefix resolved to %d, %v; want 2, true", i, ok)
+	}
+}
+
+// TestTuiosWindowCloseConfirms checks that the close half of the scheme
+// raises the confirmation naming the pane, and that the pane dies only when
+// the dialog's destructive row runs.
+func TestTuiosWindowCloseConfirms(t *testing.T) {
+	m := &OS{Settings: config.Global}
+	w := &terminal.Window{ID: "a878cd43-0b70-4c1e-bd43-7b78de51cc43"}
+	w.SetTitle("build watcher")
+	m.Windows = []*terminal.Window{w}
+
+	m.OpenLink("tuios://window/a878cd43/close")
+	if !m.ShowSessionClose || m.SessionCloseWindow != 0 {
+		t.Fatalf("a close link skipped the confirmation: shown=%v window=%d", m.ShowSessionClose, m.SessionCloseWindow)
+	}
+	if q := m.sessionCloseQuestion(); q != "Close pane 'build watcher'?" {
+		t.Errorf("confirmation question was %q", q)
+	}
+	if len(m.Windows) != 1 {
+		t.Fatal("the pane died before the dialog was answered")
+	}
+
+	m.SessionCloseActivate(SessionCloseRowCancel)
+	if len(m.Windows) != 1 {
+		t.Fatal("cancel closed the pane")
+	}
+
+	m.OpenLink("tuios://window/a878cd43/close")
+	m.SessionCloseActivate(SessionCloseRowClose)
+	if len(m.Windows) != 0 {
+		t.Error("confirming the dialog left the pane alive")
+	}
+}
+
+// TestLinkLabelHintForTuios checks the hint says what the click does to a
+// tuios link, not "open": nothing opens, and the close half confirms.
+func TestLinkLabelHintForTuios(t *testing.T) {
+	s := config.Global
+	s.LinkClick = config.LinkClickCtrl
+	if got := linkLabelHintFor("tuios://window/a878cd43-0b70-4c1e-bd43-7b78de51cc43", &s); got != "ctrl+click jumps to that window" {
+		t.Errorf("focus hint was %q", got)
+	}
+	if got := linkLabelHintFor("tuios://window/a878cd43-0b70-4c1e-bd43-7b78de51cc43/close", &s); got != "ctrl+click asks to close that window" {
+		t.Errorf("close hint was %q", got)
+	}
+	if got := linkLabelHintFor("https://example.com", &s); got != "ctrl+click to open" {
+		t.Errorf("plain-URL hint was %q", got)
 	}
 }

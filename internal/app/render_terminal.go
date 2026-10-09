@@ -744,12 +744,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 			// The link this cell belongs to, carried to the outer terminal as
 			// OSC 8. A marked link wins over a detected one. The test in front
-			// is three length checks, which is what a cell outside any link
+			// is three field reads, which is what a cell outside any link
 			// pays; a change flushes the run and writes the sequence between
 			// runs, never inside one.
-			if openLink.URL != "" || bareRow != nil || (cell != nil && cell.Link.URL != "") {
+			if openLink.URL != "" || bareRow != nil || (cell != nil && cell.Link.URL != "" && frameLink(cell.Link.URL)) {
 				var cellLink uv.Link
-				if cell != nil {
+				if cell != nil && cell.Link.URL != "" && frameLink(cell.Link.URL) {
 					cellLink = cell.Link
 				}
 				if cellLink.URL == "" && bareRow != nil {

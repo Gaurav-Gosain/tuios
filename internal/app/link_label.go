@@ -45,6 +45,26 @@ func linkLabelHint(s *config.Settings) string {
 	return "ctrl+click to open"
 }
 
+// linkLabelHintFor names what the click does to the address. A tuios window
+// link is an order to this client, not a document, so "open" would describe
+// nothing: the hint says where the click lands instead. The close half
+// confirms before it acts, and the hint says that too, so the label under
+// the pointer and the dialog that follows tell the same story.
+func linkLabelHintFor(rawURL string, s *config.Settings) string {
+	if target, ok := parseTuiosLink(rawURL); ok {
+		verb := "jumps to that window"
+		if target.close {
+			verb = "asks to close that window"
+		}
+		if hint := linkLabelHint(s); hint != "" {
+			gesture := strings.TrimSuffix(hint, " to open")
+			return gesture + " " + verb
+		}
+		return ""
+	}
+	return linkLabelHint(s)
+}
+
 // linkLabelMax bounds the address. A URL can be thousands of characters and the
 // label is one row on a screen that is not; the end is trimmed rather than the
 // middle, so the scheme and the host, which are what tell a user whether they
@@ -64,7 +84,7 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 
 	body := overlay.Truncate(sanitizeLinkText(linkDisplayAddress(link.URL)), linkLabelMax)
 	text := body
-	if hint := linkLabelHint(&m.Settings); hint != "" {
+	if hint := linkLabelHintFor(link.URL, &m.Settings); hint != "" {
 		text += "  " + hint
 	}
 	label := tooltipLabel(text, max(renderW-2, 1), pal)
