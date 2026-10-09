@@ -3547,3 +3547,20 @@ test, and the test passed on the branch build. The artifact is
 | The branch before the change (no `before`, no `older`) | **caught**: "one read of everything: want 80 entries and no older", `older` missing |
 | The filter that keeps only the entries before the cursor, cut from `back` | **caught**: "the pages joined" with entries twice |
 | The record at a cursor inside a record left out of `back`'s window (`stop = next` cut) | **caught**: "page 10 is empty" |
+
+### Diff colours for the phone
+
+`TestPersonSeesDiffColours` reads edits of a Go file, a Python file and a
+text file. It checks the `spans` and `words` of each diff line, in UTF-16
+offsets, with a line that holds an emoji. Then it reads twelve Writes of a
+300-line Go file and checks that only the newest has spans. On 2026-10-09
+each build below ran the test, and the test passed on the branch build three
+runs in a row. The artifact is `transcript-colours.txt` under
+`TUIOS_E2E_FRAMES`.
+
+| Control | Result |
+| --- | --- |
+| The branch before the change (no `spans`, no `words`) | **caught**: "the Go context line: want func as kd and greet as nf, got []" |
+| Byte offsets sent in place of UTF-16 offsets (`utf16Index.at` returns its input) | **caught**: "a bad span {S:23 E:27 K:nx}" past the end of the emoji line |
+| The pairing of removed and added lines cut from `styleHunk` | **caught**: "the changed words: want name at [20,24) and fullName at [20,28), got [] and []" |
+| The budget check cut from `reader.style` | **caught**: "the colour budget: Write 0 (newest false) has plain false and 2700 spans" |

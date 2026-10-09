@@ -144,6 +144,13 @@ type Diff struct {
 	// Truncated says lines past DiffLinesMax were left out. Added and
 	// Removed still count every line.
 	Truncated bool `json:"truncated,omitzero"`
+
+	// Plain says the reply reached its budget for colours before this
+	// diff, so its lines have words but no spans.
+	Plain bool `json:"plain,omitzero"`
+
+	// styled says style has added the spans and words.
+	styled bool
 }
 
 // Hunk is one run of changed lines with their context.
@@ -153,10 +160,14 @@ type Hunk struct {
 	Lines    []DiffLine `json:"lines"`
 }
 
-// DiffLine is one line of a hunk. Op is " ", "+" or "-".
+// DiffLine is one line of a hunk. Op is " ", "+" or "-". Spans colour its
+// code and Words mark the part of a changed line that changed, both in
+// UTF-16 code units of Text (style.go).
 type DiffLine struct {
-	Op   string `json:"op"`
-	Text string `json:"text"`
+	Op    string  `json:"op"`
+	Text  string  `json:"text"`
+	Spans []Span  `json:"spans,omitempty"`
+	Words []Range `json:"words,omitempty"`
 }
 
 // Todo is one item of a todo list.
@@ -259,6 +270,9 @@ type reader struct {
 	opts    Options
 	bufs    [][]byte
 	skipped int
+	// lexed counts the bytes of code the lexer read for this call, against
+	// spanBudget.
+	lexed int
 }
 
 func (r *reader) zero() {
@@ -349,7 +363,7 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 			keep := len(entries) - min(len(entries), r.opts.Limit)
 			total := 0
 			for i := len(entries) - 1; i >= keep; i-- {
-				n := entrySize(&entries[i])
+				n := r.entrySize(&entries[i])
 				if total+n > r.opts.MaxBytes-pageOverhead {
 					keep = i + 1
 					break
@@ -357,7 +371,7 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 				total += n
 			}
 			page := Page{
-				Entries: entries[keep:],
+				Entries: r.styled(entries[keep:]),
 				Skipped: r.skipped,
 			}
 			if atEnd {
@@ -409,9 +423,20 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 	entries = entries[skip:]
 	next := cursorPos{off: at.off + int64(end)}
 
+	// A call takes its result's diff when both land on the page, so a call
+	// is counted with the result's diff as well as its own.
+	results := map[string]*Diff{}
+	for i := range entries {
+		if e := &entries[i]; e.Kind == KindToolResult && e.ToolID != "" && e.Diff != nil {
+			results[e.ToolID] = e.Diff
+		}
+	}
 	total := 0
 	for i, e := range entries {
-		n := entrySize(&entries[i])
+		n := r.entrySize(&entries[i])
+		if d := results[e.ToolID]; d != nil && e.Kind != KindToolResult && e.Diff != nil {
+			n += r.diffSize(d)
+		}
 		if i > 0 && (i >= r.opts.Limit || total+n > r.opts.MaxBytes-pageOverhead) {
 			// The page ends before this entry, which the next one starts at.
 			next = cursorPos{off: e.line, sub: e.sub}
@@ -422,7 +447,7 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 		total += n
 	}
 	page := Page{
-		Entries: foldResults(entries),
+		Entries: r.styled(foldResults(entries)),
 		Cursor:  makeCursor(id, next),
 		More:    more,
 		Skipped: r.skipped,
@@ -491,13 +516,34 @@ func (r *reader) decode(lines []byte, base int64) []Entry {
 	return out
 }
 
-// entrySize is an entry's size as JSON.
-func entrySize(e *Entry) int {
+// entrySize is an entry's size as JSON, with the colours of its diff, which
+// it adds first so the size counts them.
+func (r *reader) entrySize(e *Entry) int {
+	r.style(e.Diff)
 	b, err := json.Marshal(e)
 	if err != nil {
 		return 0
 	}
 	return len(b) + 1
+}
+
+// diffSize is a diff's size as JSON, with its colours.
+func (r *reader) diffSize(d *Diff) int {
+	r.style(d)
+	b, err := json.Marshal(d)
+	if err != nil {
+		return 0
+	}
+	return len(b)
+}
+
+// styled adds the colours to every diff on a page. A call that took its
+// result's diff in foldResults has a copy that may not have them yet.
+func (r *reader) styled(entries []Entry) []Entry {
+	for i := range entries {
+		r.style(entries[i].Diff)
+	}
+	return entries
 }
 
 // foldResults gives each tool call the status of its result on the page, or
@@ -523,6 +569,11 @@ func foldResults(entries []Entry) []Entry {
 		res := entries[j]
 		e.Status = res.Status
 		if e.Diff != nil && res.Diff != nil {
+			if res.Diff.File == e.Diff.File {
+				// One diff for both, so its colours are worked out once.
+				e.Diff = res.Diff
+				continue
+			}
 			file := e.Diff.File
 			d := *res.Diff
 			d.File = file

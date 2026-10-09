@@ -55,7 +55,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "reset", Type: "bool", Description: "True when after was not a cursor into the file as it is now. The entries are then the newest limit, and the client starts its list again."},
 				{Name: "more", Type: "bool", Description: "True when a read after a cursor stopped before the end. Read again with the new cursor."},
 				{Name: "older", Type: "string", Description: "Send it as before to read the entries before this page. Empty when the page starts at the first entry."},
-				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. An entry with an id the client holds replaces it."},
+				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. Each diff line carries spans (syntax tokens with chroma CSS classes) and words (the changed part), in UTF-16 offsets. An entry with an id the client holds replaces it."},
 				{Name: "untrusted", Type: "bool", Description: "Always true: the text is the agent's."},
 			},
 			examples: []string{

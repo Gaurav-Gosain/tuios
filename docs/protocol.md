@@ -5220,7 +5220,10 @@ Response:
   "entries": [
     {"id": "0-0", "at": 1791531791506, "role": "user", "kind": "text", "text": "Add retry to the client"},
     {"id": "1g-0", "at": 1791531793120, "role": "assistant", "kind": "tool_call", "tool": "Edit", "target": "api/client.go", "status": "ok", "tool_id": "toolu_01",
-     "diff": {"file": "api/client.go", "added": 1, "removed": 1, "hunks": [{"old_start": 12, "new_start": 12, "lines": [{"op": " ", "text": "func get() {"}, {"op": "-", "text": "\treturn do()"}, {"op": "+", "text": "\treturn retry(do)"}]}]}},
+     "diff": {"file": "api/client.go", "added": 1, "removed": 1, "hunks": [{"old_start": 12, "new_start": 12, "lines": [
+       {"op": " ", "text": "func get() {", "spans": [{"s": 0, "e": 4, "k": "kd"}, {"s": 5, "e": 8, "k": "nf"}, {"s": 8, "e": 10, "k": "p"}, {"s": 11, "e": 12, "k": "p"}]},
+       {"op": "-", "text": "\treturn do()", "spans": [{"s": 1, "e": 7, "k": "k"}, {"s": 8, "e": 10, "k": "nf"}, {"s": 10, "e": 12, "k": "p"}], "words": [{"s": 8, "e": 11}]},
+       {"op": "+", "text": "\treturn retry(do)", "spans": [{"s": 1, "e": 7, "k": "k"}, {"s": 8, "e": 13, "k": "nf"}, {"s": 13, "e": 14, "k": "p"}, {"s": 14, "e": 16, "k": "nx"}, {"s": 16, "e": 17, "k": "p"}], "words": [{"s": 8, "e": 16}]}]}]}},
     {"id": "2c-0", "at": 1791531793300, "role": "tool", "kind": "tool_result", "status": "ok", "tool_id": "toolu_01", "text": "The file api/client.go has been updated."},
     {"id": "3a-0", "at": 1791531794000, "role": "assistant", "kind": "todos", "tool": "TodoWrite", "status": "running", "tool_id": "toolu_02",
      "todos": [{"text": "Add retry", "status": "completed"}, {"text": "Run the tests", "status": "in_progress"}]}]}}
@@ -5254,9 +5257,42 @@ Each entry has:
 | `target` | One line that says what the call acts on: the command, the file path, the URL or the pattern. |
 | `status` | `ok`, `error` or `running`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. |
 | `tool_id` | Joins a call to its result. When a result arrives in a later reply, update the call with that `tool_id` from it. |
-| `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`) and `text`. A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
+| `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated`, `plain` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`), `text`, `spans` and `words`. See [Diff colours](#diff-colours). A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
 | `plan` | For `ExitPlanMode`: the plan, as markdown. |
 | `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
+
+#### Diff colours
+
+Each diff line can carry the colours to draw it with. The daemon works them
+out with the same rules as the review view in tuios.
+
+- `spans`: the syntax tokens of the line, as `{"s": start, "e": end, "k":
+  class}`. `k` is the short CSS class name that chroma gives the token type,
+  for example `k` (keyword), `kd`, `kt`, `s`, `s2`, `c`, `c1`, `nf`, `nc`,
+  `m`, `mi`, `o`, `p`, `nb` and `bp`. Plain text and white space have no span.
+  The daemon picks the language by the file name in `file`. A file with no
+  extension and a `#!` first line is read by that line. A file of an unknown
+  type has no spans.
+- `words`: the part of a changed line that changed, as `{"s": start, "e":
+  end}`. Only `+` and `-` lines have it. A run of removed lines and the run
+  of added lines after it are paired in order: the first removed line with
+  the first added line, and so on. A line with no partner, and a line that
+  changed too much for a mark to help, has no `words`.
+- Offsets count UTF-16 code units of `text`, the unit of a Kotlin or Java
+  string index. A range starts at `s` and stops before `e`.
+- The lines of one side of a hunk are read as one text: the context and
+  removed lines, then the context and added lines. A context line takes its
+  spans from the second read. So a comment or a string that runs over lines
+  has its colour on every line.
+- `plain`: `true` when the reply reached its limit for colours before this
+  diff. The lines then have `words` and no `spans`. Read a smaller page, with
+  a lower `limit`, to get the spans.
+
+The colours have a limit because the lexers are slow, about 0.5 MB a second.
+For one reply, the daemon lexes at most 16 KiB of code, or one hunk when the
+first hunk is larger. On a 400-line diff that is about 50 ms. The newest
+diffs of a read without `after` get their colours first. A line longer than
+2000 characters has no spans.
 
 A subagent's own records (`isSidechain`) and the records that Claude Code
 marks as meta are left out. The `Task` call that started the subagent stays.

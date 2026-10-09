@@ -324,3 +324,227 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	}
 	r.art.add("result", fmt.Sprintf("%d pages, %d entries, in order", len(pages), len(gotIDs)))
 }
+
+// atEditRecord is a record with one tool call of tool with input.
+func atToolRecord(uuid, id, tool string, input map[string]any) string {
+	b, _ := json.Marshal(map[string]any{
+		"type": "assistant", "uuid": uuid, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
+		"message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "tool_use", "id": id, "name": tool, "input": input},
+		}},
+	})
+	return string(b)
+}
+
+// atStyledLine is a diff line with its colours, as the phone reads it.
+type atStyledLine struct {
+	Op    string `json:"op"`
+	Text  string `json:"text"`
+	Spans []struct {
+		S int    `json:"s"`
+		E int    `json:"e"`
+		K string `json:"k"`
+	} `json:"spans"`
+	Words []struct {
+		S int `json:"s"`
+		E int `json:"e"`
+	} `json:"words"`
+}
+
+// atStyledLines returns the diff lines of the call with tool id id.
+func atStyledLines(t *testing.T, res map[string]any, id string) []atStyledLine {
+	t.Helper()
+	var entries []struct {
+		ToolID string `json:"tool_id"`
+		Kind   string `json:"kind"`
+		Diff   *struct {
+			Hunks []struct {
+				Lines []atStyledLine `json:"lines"`
+			} `json:"hunks"`
+		} `json:"diff"`
+	}
+	b, _ := json.Marshal(res["entries"])
+	if err := json.Unmarshal(b, &entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.ToolID == id && e.Kind == "tool_call" && e.Diff != nil {
+			var out []atStyledLine
+			for _, h := range e.Diff.Hunks {
+				out = append(out, h.Lines...)
+			}
+			return out
+		}
+	}
+	t.Fatalf("no diff for %s", id)
+	return nil
+}
+
+// utf16Len is the length of s in UTF-16 code units, as Kotlin counts it.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		if r >= 0x10000 {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+// atSpanOf returns the class of the span [s, e) of line, or "".
+func (l atStyledLine) spanOf(s, e int) string {
+	for _, sp := range l.Spans {
+		if sp.S == s && sp.E == e {
+			return sp.K
+		}
+	}
+	return ""
+}
+
+// TestPersonSeesDiffColours reads edits of a Go file, a Python file and a
+// text file, and checks the colours the phone draws them with: syntax spans
+// by chroma's class names, picked by file name as the desktop review picks
+// them, changed words on a removed line and the added line that replaced it,
+// and every offset in UTF-16 code units.
+//
+// The artifact is transcript-colours.txt under artifactDir.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
+//   - with byte offsets sent in place of UTF-16 ones, the test fails at "a
+//     bad span" for the Go line with the emoji.
+//   - with the pairing of removed and added lines cut, the test fails at "the
+//     changed words".
+//   - with the budget check cut from style, the test fails at "the colour
+//     budget".
+func TestPersonSeesDiffColours(t *testing.T) {
+	r := newATRig(t, "transcript-colours.txt", 1)
+	win := r.wins[0]
+	path := filepath.Join(r.base, "projects", "demo", "colours.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	goOld := "func greet(name string) string {\n\ts := \"héllo 😀 \" + name\n\treturn s\n}\n"
+	goNew := "func greet(name string) string {\n\ts := \"héllo 😀 \" + fullName\n\treturn s\n}\n"
+	lines := []string{
+		atToolRecord("e1", "toolu_go", "Edit", map[string]any{"file_path": "/work/demo/greet.go", "old_string": goOld, "new_string": goNew}),
+		atToolRecord("e2", "toolu_py", "Write", map[string]any{"file_path": "/work/demo/tool.py", "content": "def main():\n    # say it\n    print('hi', 42)\n"}),
+		atToolRecord("e3", "toolu_txt", "Edit", map[string]any{"file_path": "/work/demo/notes.txt", "old_string": "the quick brown fox\n", "new_string": "the quick red fox\n"}),
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.join(win, path, "colours")
+	res := r.read(win, nil)
+
+	// Every line: spans and words in order, inside the line, in UTF-16.
+	for _, id := range []string{"toolu_go", "toolu_py", "toolu_txt"} {
+		for _, l := range atStyledLines(t, res, id) {
+			n, last := utf16Len(l.Text), 0
+			for _, sp := range l.Spans {
+				if sp.S < last || sp.E <= sp.S || sp.E > n || sp.K == "" || sp.K == "w" {
+					t.Fatalf("%s: a bad span %+v in %q", id, sp, l.Text)
+				}
+				last = sp.E
+			}
+			for _, w := range l.Words {
+				if w.E <= w.S || w.E > n {
+					t.Fatalf("%s: a bad word range %+v in %q", id, w, l.Text)
+				}
+			}
+			if l.Op == " " && len(l.Words) > 0 {
+				t.Fatalf("%s: a context line has changed words: %+v", id, l)
+			}
+		}
+	}
+
+	// Go, by the .go name.
+	goLines := atStyledLines(t, res, "toolu_go")
+	var del, add, ctx atStyledLine
+	for _, l := range goLines {
+		switch {
+		case l.Op == "-":
+			del = l
+		case l.Op == "+":
+			add = l
+		case strings.HasPrefix(l.Text, "func"):
+			ctx = l
+		}
+	}
+	if ctx.spanOf(0, 4) != "kd" || ctx.spanOf(5, 10) != "nf" {
+		t.Fatalf("the Go context line: want func as kd and greet as nf, got %+v", ctx.Spans)
+	}
+	// `\ts := "héllo 😀 " + ...`: the string starts at 6 and is 11 UTF-16
+	// units long. In bytes it would end at 21.
+	if k := del.spanOf(6, 17); k != "s" {
+		t.Fatalf("the string's span: want [6,17) as s, got %+v in %q", del.Spans, del.Text)
+	}
+	if len(del.Words) != 1 || del.Words[0].S != 20 || del.Words[0].E != 24 ||
+		len(add.Words) != 1 || add.Words[0].S != 20 || add.Words[0].E != 28 {
+		t.Fatalf("the changed words: want name at [20,24) and fullName at [20,28), got %+v and %+v", del.Words, add.Words)
+	}
+
+	// Python, by the .py name. A new file is all added, with no words.
+	py := atStyledLines(t, res, "toolu_py")
+	if len(py) != 3 || py[0].spanOf(0, 3) != "k" || py[0].spanOf(4, 8) != "nf" || py[1].spanOf(4, 12) != "c1" || py[2].spanOf(4, 9) != "nb" || py[2].spanOf(10, 14) != "s1" || py[2].spanOf(16, 18) != "mi" {
+		t.Fatalf("the Python spans: %+v", py)
+	}
+	for _, l := range py {
+		if len(l.Words) > 0 {
+			t.Fatalf("a Write of a new file has changed words: %+v", l)
+		}
+	}
+
+	// The colour budget: of twelve Writes of a 300-line Go file, the newest
+	// gets spans and the older ones say plain and carry none.
+	var big strings.Builder
+	for i := range 300 {
+		fmt.Fprintf(&big, "\tv%d := compute(%d, \"x\") // step\n", i, i)
+	}
+	var writes []string
+	for i := range 12 {
+		writes = append(writes, atToolRecord(fmt.Sprintf("w%d", i), fmt.Sprintf("toolu_w%02d", i), "Write", map[string]any{"file_path": fmt.Sprintf("/work/demo/gen%d.go", i), "content": big.String()}))
+	}
+	appendLines(t, path, writes...)
+	bres := r.read(win, map[string]any{"limit": 12})
+	var diffs []struct {
+		ToolID string `json:"tool_id"`
+		Diff   struct {
+			Plain bool `json:"plain"`
+			Hunks []struct {
+				Lines []atStyledLine `json:"lines"`
+			} `json:"hunks"`
+		} `json:"diff"`
+	}
+	b, _ := json.Marshal(bres["entries"])
+	if err := json.Unmarshal(b, &diffs); err != nil {
+		t.Fatal(err)
+	}
+	if len(diffs) != 12 {
+		t.Fatalf("want the twelve Writes, got %d entries", len(diffs))
+	}
+	for i, d := range diffs {
+		spans := 0
+		for _, h := range d.Diff.Hunks {
+			for _, l := range h.Lines {
+				spans += len(l.Spans)
+			}
+		}
+		newest := i == len(diffs)-1
+		if newest && (d.Diff.Plain || spans == 0) || !newest && (!d.Diff.Plain || spans != 0) {
+			t.Fatalf("the colour budget: Write %d (newest %v) has plain %v and %d spans", i, newest, d.Diff.Plain, spans)
+		}
+	}
+	r.art.add("reply size", fmt.Sprintf("%d bytes of entries for twelve 300-line Writes", len(b)))
+
+	// A text file has no lexer, so no spans, and still has its words.
+	txt := atStyledLines(t, res, "toolu_txt")
+	if len(txt) != 2 || len(txt[0].Spans)+len(txt[1].Spans) != 0 ||
+		len(txt[0].Words) != 1 || txt[0].Words[0] != (struct {
+		S int `json:"s"`
+		E int `json:"e"`
+	}{10, 15}) || len(txt[1].Words) != 1 || txt[1].Words[0].S != 10 || txt[1].Words[0].E != 13 {
+		t.Fatalf("the text file: want no spans and brown and red marked, got %+v", txt)
+	}
+}
