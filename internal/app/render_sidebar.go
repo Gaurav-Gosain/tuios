@@ -742,8 +742,14 @@ func sidebarHeaderRightRoom(cw, labelW int) int {
 // Passing nil settings keeps the old blank gap, which is what the callers that
 // put their own controls in that gap still want.
 func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
+	headings := s.GetRailHeaderCase() == config.RailHeaderUppercase
+	labelStyle := sidebarStyle(nil, pal.FgMute)
+	if headings {
+		labelStyle = sidebarStyle(nil, pal.FgDim).Bold(true)
+		label = strings.ToUpper(label)
+	}
 	row := sidebarStyle(nil, nil).Render(" ") +
-		sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(label, max(cw-2, 1)))
+		labelStyle.Render(overlay.Truncate(label, max(cw-2, 1)))
 	lw := lipgloss.Width(row)
 	rw := lipgloss.Width(right)
 	if rw > 0 {
@@ -753,7 +759,7 @@ func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *
 		}
 	}
 	if rw == 0 {
-		if s != nil {
+		if headings {
 			if run := cw - lw - 1; run > 1 {
 				row += sidebarStyle(nil, nil).Render(" ") +
 					sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), run-1))
@@ -765,7 +771,7 @@ func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *
 	// sidebarHeaderGap of them. A rule needs a blank on each side of it, so it
 	// draws only when there are three or more.
 	gap := cw - lw - rw - 1
-	if s != nil && gap > sidebarHeaderGap {
+	if headings && gap > sidebarHeaderGap {
 		row += sidebarStyle(nil, nil).Render(" ") +
 			sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), gap-2)) +
 			sidebarStyle(nil, nil).Render(" ")

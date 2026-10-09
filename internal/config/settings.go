@@ -195,6 +195,11 @@ type Settings struct {
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick string
+	// RailHeaderCase is how the rail's section headers read: "lowercase"
+	// keeps the quiet furniture look they have always had, "uppercase" draws
+	// the heading treatment (bold, secondary ink, the rule glyph and the
+	// uppercase label). Set via appearance.sidebar.header_case.
+	RailHeaderCase string
 	// SidebarEditor is the terminal editor command; empty uses the environment.
 	SidebarEditor string
 
