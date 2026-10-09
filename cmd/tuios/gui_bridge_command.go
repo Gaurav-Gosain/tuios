@@ -24,6 +24,12 @@ func newGUIBridgeCommand() *cobra.Command {
 			// note that the daemon is starting, goes to stderr instead.
 			proto := os.Stdout
 			os.Stdout = os.Stderr
+			// The renderer starts this process with a fixed command line,
+			// so a profile of it is asked for in the environment.
+			if pprofAddr == "" {
+				pprofAddr = os.Getenv("TUIOS_GUI_BRIDGE_PPROF")
+			}
+			startPprofServer()
 			if err := ensureDaemon(); err != nil {
 				return err
 			}
