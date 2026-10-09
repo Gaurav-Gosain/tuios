@@ -61,7 +61,7 @@ var (
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventClientSessionChanged, EventGap, EventAttention,
 		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
-		EventAgentActivity,
+		EventAgentActivity, EventTranscript,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames
@@ -96,6 +96,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbPromptChanged, "respond pressed nothing: the pane is not on needs_input, no rule reads its prompt now, the prompt is not the one prompt_id names, or another client already answered it. Read it again with peek-prompt."},
 	{ErrVerbNotResumable, "resume-agent found no conversation it can resume in the pane: none was recorded by a hook, the harness has no resume command, the recorded id is not one plain shell token, or the pane runs on another machine. Nothing was typed."},
 	{ErrVerbConfirmRequired, "A write addressed by selector, or a ship-push or ship-pr, was not sent, because it carried no confirm token or the token names something other than what would be sent now. Nothing was sent. The hint lists the panes the selector matches, or what the push would send, and carries the token in confirm: check the list, then call again with that token."},
+	{ErrVerbNoTranscript, "agent-transcript found no transcript for the pane: it is not joined to one, or the file is gone. Nothing was read."},
+	{ErrVerbUnsupportedHarness, "agent-transcript cannot read the transcript of the pane's harness. Read the pane with capture-pane or stream-pane."},
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
 	{ErrVerbNoShellIntegration, "The pane's shell has not sent the OSC 133 marks that say where a command starts and ends, so the daemon cannot run a command in it and report its exit code, or say what the last command printed. Nothing was typed. Enable the shell's prompt integration, or use send-text and wait-for window-output."},
 	{ErrVerbNotAtPrompt, "run typed nothing because the pane's shell is not at its prompt: a command is running in it. The message names the command. Wait for it with wait-for command-finished, or run in another pane."},

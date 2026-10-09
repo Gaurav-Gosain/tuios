@@ -58,6 +58,9 @@ type transcriptJoin struct {
 	// gone is an agent that is not coming back, and the claim is given up rather
 	// than left pinning the pane.
 	missing int
+	// announced is the offset the last transcript event was raised at, so
+	// a read that found nothing new raises none.
+	announced int64
 }
 
 // transcriptMissingLimit is how many consecutive gone-file reads end a join. It
@@ -220,6 +223,10 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 	j.missing = 0
 	harnessID := j.harness
 	s.transcripts.mu.Unlock()
+	// The file grew: a reader of the conversation (agent-transcript) can
+	// read again. Raised for bookkeeping appends too, since only the
+	// reader can tell what they hold.
+	s.noteTranscriptGrowth(windowID, j)
 	if !fresh {
 		// An append that only wrote bookkeeping. A real event with no answer in
 		// it, so the pane keeps believing what it already believed.

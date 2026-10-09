@@ -60,6 +60,7 @@ var agentOnlyVerbs = []string{
 	// Agent state, as a pane reports it and as a reader reads it.
 	"set-agent-state", "set-agent-session", "set-agent-meta",
 	"get-agent-state", "report-agent-activity", "agent-activity",
+	"agent-transcript",
 	// Mail.
 	"send-agent-message", "release-agent-message", "read-agent-messages",
 	// The Inbox, attention and approvals.
@@ -123,7 +124,7 @@ func (d *Daemon) agentsOffRefusal(verb string, params json.RawMessage) *verbErro
 // isAgentEvent reports whether a session event is about an agent.
 func isAgentEvent(eventType string) bool {
 	switch eventType {
-	case EventAgentState, EventAgentMessage, EventAgentActivity:
+	case EventAgentState, EventAgentMessage, EventAgentActivity, EventTranscript:
 		return true
 	}
 	return false

@@ -79,7 +79,12 @@ const (
 	// reported them. It is chatty, so it reaches only a subscriber that names
 	// it in types. See agent_activity.go.
 	EventAgentActivity = "agent-activity"
-	EventSubscribed    = "subscribed" // subscribe ack result type
+	// EventTranscript says the transcript a pane is joined to grew, so a
+	// reader of agent-transcript can read again. Cursor is the cursor a read
+	// to the end returns now. It carries nothing of the file, and it reaches
+	// only a subscriber that names it in types. See verb_agent_transcript.go.
+	EventTranscript = "transcript"
+	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -167,6 +172,8 @@ type streamEvent struct {
 	CommandSeq uint64 `json:"command_seq,omitempty"`
 	// Entry is an agent-activity event's entry of the pane's activity ring.
 	Entry *AgentActivityEntry `json:"entry,omitempty"`
+	// Cursor is a transcript event's agent-transcript cursor.
+	Cursor string `json:"cursor,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -195,6 +202,8 @@ type SessionEvent struct {
 	ExitCode   *int
 	DurationMS int64
 	CommandSeq uint64
+	// Cursor is a transcript event's cursor. See streamEvent.
+	Cursor string
 
 	// The fields below carry everything the hook dispatcher needs, so it can
 	// build a hook's environment from the event alone. That is not a
@@ -313,7 +322,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventAgentActivity: true}
+var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -364,6 +373,9 @@ type eventHub struct {
 	evictedSeq      uint64
 	lastOutputSeq   uint64
 	lastActivitySeq uint64
+	// lastTranscriptSeq is the same for transcript events, which a reader
+	// replaces with one agent-transcript call from its cursor.
+	lastTranscriptSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -462,7 +474,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 	case from.afterSeq < h.evictedSeq:
 		out = append(out, gap(GapEvicted))
 	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq,
-		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq:
+		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq,
+		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -479,7 +492,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 // agent and lifecycle events a reconnecting subscriber actually needs out of a
 // bounded ring within seconds. Agent-activity events are counted the same way:
 // one fires on every tool call of every agent, and a subscriber that missed
-// some reads the pane's ring with agent-activity instead.
+// some reads the pane's ring with agent-activity instead. Transcript events
+// are counted too: a reader that missed some reads from its cursor.
 func (h *eventHub) retain(ev streamEvent) {
 	switch ev.Type {
 	case EventOutput:
@@ -487,6 +501,9 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventAgentActivity:
 		h.lastActivitySeq = ev.Seq
+		return
+	case EventTranscript:
+		h.lastTranscriptSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {

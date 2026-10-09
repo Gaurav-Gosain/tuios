@@ -79,11 +79,13 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"dismiss-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may dismiss, and none is"},
 	// The same holds for answering an approval. The allowed path is proved in
 	// approvals_test.go.
-	"reply-approval#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
-	"run-command#0":    {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
-	"set-layout#0":     {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
-	"set-layout#1":     {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
-	"split-window#0":   {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
+	"reply-approval#0":   {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
+	"agent-transcript#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
+	"agent-transcript#1": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
+	"run-command#0":      {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
+	"set-layout#0":       {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
+	"set-layout#1":       {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
+	"split-window#0":     {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.

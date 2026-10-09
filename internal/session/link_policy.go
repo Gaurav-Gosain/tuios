@@ -183,8 +183,11 @@ var verbCapabilities = map[string][]string{
 	// ask-human's own handler refuses every link caller as well.
 	"ask-human": {config.LinkAllowWrite},
 
-	"respond":               {config.LinkAllowRespond},
-	"reply-approval":        {config.LinkAllowRespond},
+	"respond":        {config.LinkAllowRespond},
+	"reply-approval": {config.LinkAllowRespond},
+	// The conversation holds the prompts, file contents and command output.
+	// Reading it is as much the person's act as answering for them.
+	"agent-transcript":      {config.LinkAllowRespond},
 	"dismiss-attention":     {config.LinkAllowRespond},
 	"release-agent-message": {config.LinkAllowRespond},
 	"answer-ask":            {config.LinkAllowRespond},

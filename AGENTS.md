@@ -135,6 +135,7 @@ tuios/
 │   │   ├── screen.go       # Screen buffer management
 │   │   └── scrollback.go   # History ring (10,000 lines unless configured)
 │   ├── session/            # The daemon: sessions, PTYs (session.go), wire protocol, JSON verbs
+│   ├── transcriptview/     # Decodes an agent's transcript into a conversation, for agent-transcript only
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
 │   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
 │   ├── gitstate/           # Branch and upstream drift for the sidebar

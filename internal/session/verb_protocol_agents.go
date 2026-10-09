@@ -36,6 +36,32 @@ var (
 func agentWorkVerbs() map[string]verbEntry {
 	humanNonce := verbParam{Name: "human_nonce", Type: "string", Description: "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."}
 	return map[string]verbEntry{
+		// verb_agent_transcript.go
+		"agent-transcript": {
+			description: "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Only the person can read it, with a live human_nonce, as reply-approval checks it. Claude Code transcripts only. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Required: true, Description: "The pane: a window id or name."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of a client attached now, or of attach-presence on this connection. Without a live one the call is refused with not_human."},
+				{Name: "after", Type: "string", Description: "The cursor of an earlier reply. The reply then holds the entries after it. Omit it to read the newest limit entries."},
+				{Name: "limit", Type: "int", Description: "The most entries to return, 1 to 1000.", Default: "200"},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The pane's session."},
+				{Name: "window", Type: "string", Description: "The pane's window id."},
+				{Name: "harness", Type: "string", Description: "The harness whose transcript was read."},
+				{Name: "cursor", Type: "string", Description: "Send it as after to read what comes next. It is opaque."},
+				{Name: "reset", Type: "bool", Description: "True when after was not a cursor into the file as it is now. The entries are then the newest limit, and the client starts its list again."},
+				{Name: "more", Type: "bool", Description: "True when a read after a cursor stopped before the end. Read again with the new cursor."},
+				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. An entry with an id the client holds replaces it."},
+				{Name: "untrusted", Type: "bool", Description: "Always true: the text is the agent's."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"agent-transcript","params":{"session":"work","window":"api","human_nonce":"<from attach-presence>"}}`,
+				`{"id":2,"verb":"agent-transcript","params":{"session":"work","window":"api","human_nonce":"<from attach-presence>","after":"<the cursor of the last reply>"}}`,
+			},
+			handler: (*Daemon).verbAgentTranscript,
+		},
 		// verb_review.go
 		"review-diff": {
 			description: "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",

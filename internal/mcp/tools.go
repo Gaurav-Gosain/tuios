@@ -375,7 +375,7 @@ var EventTypes = []string{
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
-	"agent-activity",
+	"agent-activity", "transcript",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

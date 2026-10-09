@@ -28,8 +28,9 @@
 //     panic traceback prints argument words, and a slice header passed by value
 //     would put a pointer to that page in the trace.
 //
-// The only thing that leaves this package is a [Turn], which is one of three
-// constants.
+// The only things that leave this package are a [Turn], which is one of three
+// constants, and the offset a read stopped at, which says how far the file
+// grew.
 package transcript
 
 import (
@@ -155,6 +156,15 @@ func NewReader(path string) *Reader { return &Reader{path: path} }
 
 // Path returns the file this reader tails.
 func (r *Reader) Path() string { return r.path }
+
+// Offset returns where the last read stopped: the end of the last complete
+// record it consumed. It says how far the file has grown and nothing about
+// what is in it.
+func (r *Reader) Offset() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.off
+}
 
 // Skipped returns how many lines have failed to parse over this reader's life.
 func (r *Reader) Skipped() int {

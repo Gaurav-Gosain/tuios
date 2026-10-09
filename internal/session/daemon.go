@@ -1081,6 +1081,14 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				}
 			}
 		}
+		// A transcript growing is news for the subscribers who read the
+		// conversation, and for nothing else here.
+		if ev.Type == EventTranscript {
+			if !d.agentsOff.Load() {
+				d.events.publish(streamEvent{Type: EventTranscript, Session: name, Window: ev.Window, Cursor: ev.Cursor})
+			}
+			return
+		}
 		// A pane seen, or a new kind or message on a pane whose state did not
 		// change, is news for the Inbox only: it is not a stream event and
 		// raises no hook.

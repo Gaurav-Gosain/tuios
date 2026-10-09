@@ -119,6 +119,12 @@ const (
 	// panes than the selector matches now. The hint lists the set and carries
 	// its token. See selector.go.
 	ErrVerbConfirmRequired = "confirm_required"
+	// ErrVerbNoTranscript reports an agent-transcript call for a pane that is
+	// not joined to a transcript, or whose transcript is gone.
+	ErrVerbNoTranscript = "no_transcript"
+	// ErrVerbUnsupportedHarness reports an agent-transcript call for a pane
+	// whose harness keeps no transcript this daemon can read.
+	ErrVerbUnsupportedHarness = "unsupported_harness"
 
 	// ErrVerbProtocolMismatch reports that the caller's protocol version is
 	// outside the range this daemon accepts. It is only ever produced by the

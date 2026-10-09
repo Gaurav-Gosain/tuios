@@ -1462,10 +1462,12 @@ catalog.
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
-| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `mark-attention`, `respond` and `reply-approval` raise it. |
+| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `mark-attention`, `respond`, `reply-approval` and `agent-transcript` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `confirm_required` | A write by `select`, or a `ship-push` or `ship-pr`, sent nothing: it carried no `confirm` token, or a token for something other than what would be sent now. The hint lists the panes, or what the push would send, in `available`, and carries the token in `confirm`. |
+| `no_transcript` | `agent-transcript` found no transcript for the pane: it is not joined to one, or the file is gone. Nothing was read. |
+| `unsupported_harness` | `agent-transcript` cannot read the transcript of the pane's harness. Today it reads Claude Code transcripts only. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
@@ -5172,6 +5174,109 @@ resume; read the ring instead.
 
 `tuios agent-log` is this verb on the command line.
 
+### agent-transcript
+
+Read the conversation of the agent in a pane, as data. A client uses it to
+show the conversation in its own view, for example a phone app: prompts,
+answers, thinking, tool calls, diffs of edits, plans and todo lists.
+
+The daemon reads the transcript file that the pane is joined to. The pane is
+joined when the agent's hooks report `transcript_path`, or when the daemon
+finds the one file that belongs to the pane. The path stays in the daemon.
+The caller names a window, never a file. Today the daemon reads Claude Code
+transcripts only.
+
+Params:
+
+- `session` (optional).
+- `window` (required): the window id or name of the pane.
+- `human_nonce` (required): the nonce of a client attached now, or of
+  [attach-presence](#attach-presence) on this connection.
+- `after` (optional): the `cursor` of an earlier reply.
+- `limit` (optional int): the most entries to return, 1 to 1000. The default
+  is 200.
+
+Without `after`, the reply holds the newest `limit` entries. With `after`, it
+holds the entries after that cursor, oldest first.
+
+Request:
+
+```json
+{"id": 1, "verb": "agent-transcript", "params": {"session": "work", "window": "api", "human_nonce": "294e0a278581acd0f07ff40561c52bf7"}}
+```
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "agent_transcript", "session": "work", "window": "3f2a9c1e", "harness": "claude-code",
+  "cursor": "t1.5b0c9e2a41d7f003.2kq9", "reset": false, "more": false, "untrusted": true,
+  "entries": [
+    {"id": "0-0", "at": 1791531791506, "role": "user", "kind": "text", "text": "Add retry to the client"},
+    {"id": "1g-0", "at": 1791531793120, "role": "assistant", "kind": "tool_call", "tool": "Edit", "target": "api/client.go", "status": "ok", "tool_id": "toolu_01",
+     "diff": {"file": "api/client.go", "added": 1, "removed": 1, "hunks": [{"old_start": 12, "new_start": 12, "lines": [{"op": " ", "text": "func get() {"}, {"op": "-", "text": "\treturn do()"}, {"op": "+", "text": "\treturn retry(do)"}]}]}},
+    {"id": "2c-0", "at": 1791531793300, "role": "tool", "kind": "tool_result", "status": "ok", "tool_id": "toolu_01", "text": "The file api/client.go has been updated."},
+    {"id": "3a-0", "at": 1791531794000, "role": "assistant", "kind": "todos", "tool": "TodoWrite", "status": "running", "tool_id": "toolu_02",
+     "todos": [{"text": "Add retry", "status": "completed"}, {"text": "Run the tests", "status": "in_progress"}]}]}}
+```
+
+The reply:
+
+- `cursor`: send it as `after` to read what comes next. It is opaque.
+- `reset`: `true` when `after` is not a cursor into the file as it is now, for
+  example when the agent started a new file at the same path. The entries are
+  then the newest `limit`, and the client starts its list again.
+- `more`: `true` when a read after a cursor stopped before the end of the
+  file, at `limit` entries or at the size bound. Read again with the new
+  cursor.
+
+Each entry has:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | A stable id. A read of the same record gives the same id. An entry with an id that the client holds replaces it. |
+| `at` | When the agent wrote the record, unix milliseconds. |
+| `role` | `user`, `assistant` or `tool`. |
+| `kind` | `text`, `thinking`, `tool_call`, `tool_result`, `plan` or `todos`. |
+| `text` | The text. For a `tool_result`, the first 20 lines. |
+| `truncated` | `true` when `text` or `plan` was cut, or a tool result had more lines. |
+| `tool` | The tool name of a call: `Bash`, `Edit`, `TodoWrite`. |
+| `target` | One line that says what the call acts on: the command, the file path, the URL or the pattern. |
+| `status` | `ok`, `error` or `running`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. |
+| `tool_id` | Joins a call to its result. When a result arrives in a later reply, update the call with that `tool_id` from it. |
+| `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`) and `text`. A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
+| `plan` | For `ExitPlanMode`: the plan, as markdown. |
+| `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
+
+A subagent's own records (`isSidechain`) and the records that Claude Code
+marks as meta are left out. The `Task` call that started the subagent stays.
+
+Bounds: `text` and `plan` are cut to 8 KiB, a diff to 400 lines and each diff
+line to 1 KiB, a target to 512 bytes, and a todo list to 100 items. The
+entries of one reply are at most 2 MiB as JSON. A read without `after` looks
+at most 32 MiB back from the end of the file.
+
+Every string is the agent's or its tools'. The daemon removes control
+characters other than newline and tab, removes bidirectional controls, and
+masks likely secrets as it does for the Inbox. The reply is marked
+`untrusted`.
+
+Who may read it: only the person. The call needs a `human_nonce` that
+verifies by the rules of [reply-approval](#reply-approval), so a process
+inside a pane and a link stream that the hub did not vouch for get
+`not_human`. A restricted connection is refused with `forbidden`. Over a link
+it needs `respond`, because the conversation holds the prompts, file contents
+and command output.
+
+The [`transcript` event](#event-stream) says when to read again. Subscribe
+with `types` that name `transcript`, and call `agent-transcript` with your
+cursor when an event has a different one.
+
+Errors: `invalid_params` when `window` is missing or `limit` is out of range.
+`not_human` without a live nonce. `no_transcript` when the pane is not joined
+to a transcript or the file is gone. `unsupported_harness` when the pane's
+harness keeps no transcript that the daemon reads. `window_not_found` and
+`session_not_found` as for every verb.
+
 ### Agent review, triage and queue verbs
 
 Every one of these verbs is built: `agent-activity` (see
@@ -5308,6 +5413,7 @@ Event types:
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 | `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
+| `transcript` | The transcript that a pane is joined to grew. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
 
 ### What fires when
 
@@ -5400,8 +5506,8 @@ A second `subscribe` on the same connection is rejected with `invalid_request`.
 
 The daemon keeps the last 4096 events in a replay ring, apart from `output`
 events, which fire on every PTY read and would push everything else out within
-seconds, and `agent-activity` events, which fire on every tool call of every
-agent. A subscriber that kept the `seq` of the last event it read, and the
+seconds, and `agent-activity` and `transcript` events, which fire on every
+tool call of every agent. A subscriber that kept the `seq` of the last event it read, and the
 `boot_id` that came with it, can reconnect and pass both:
 
 ```json

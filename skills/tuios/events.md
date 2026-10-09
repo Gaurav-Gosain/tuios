@@ -58,6 +58,9 @@ them is refused. `agent-activity` (one entry of
 a pane's activity ring, as `entry`: a prompt, a tool call, its result or a
 finished turn) is opt-in: it arrives only when `--types` names it, and a
 resumed stream does not replay it, so read `tuios agent-log` after a gap.
+`transcript` (a pane's joined transcript grew, with the `cursor` of
+`agent-transcript`) is opt-in in the same way. It is for a client that shows
+the conversation to the person.
 
 Every type, and what it reports:
 
@@ -72,6 +75,7 @@ Every type, and what it reports:
 | `session-created`, `session-closed` | A session is made or ends |
 | `client-session-changed` | A client enters or leaves a session |
 | `agent-state`, `agent-message`, `agent-activity` | An agent changes state, gets mail, or logs activity |
+| `transcript` | The transcript a pane is joined to grows |
 | `attention` | The Inbox changes |
 | `notification`, `bell` | A pane sends a notification or a bell |
 | `prompt`, `command-started`, `command-finished` | Shell integration marks in a pane |

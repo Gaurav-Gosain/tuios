@@ -13,7 +13,8 @@ Over the socket every failure carries a stable code in the error envelope:
 `needs_client`, `option_not_found`, `command_failed`, `timeout`, `not_ready`,
 `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard`, `forbidden`, `not_human`, `prompt_changed`, `not_resumable`,
-`no_shell_integration`, `not_at_prompt`, `confirm_required`,
+`no_shell_integration`, `not_at_prompt`, `confirm_required`, `no_transcript`,
+`unsupported_harness`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
@@ -57,6 +58,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `not_resumable` | The pane has no conversation `resume-agent` can bring back. Nothing was typed. |
 | `no_shell_integration`, `not_at_prompt` | From `run`: the shell sends no OSC 133 marks, or is busy. Nothing was typed. Use `send-text` and a marker, or `wait-for command-finished`. |
 | `confirm_required` | A write by selector, or a `ship-push` or `ship-pr`. The hint lists the panes, or what would be sent, and a token. Check them, then call again with the token. |
+| `no_transcript`, `unsupported_harness` | From `agent-transcript`: the pane is not joined to a transcript, or its harness keeps none this daemon reads. Read the pane with `capture-pane`. |
 | `protocol_mismatch` | The caller's protocol version is outside what this daemon accepts. Use a matching tuios. |
 | `unknown_host` | No host by that name. Names are matched exactly and never guessed. |
 | `host_unreachable` | The host is not answering: its link is down or does not answer. Nothing was queued except mail. `tuios hosts` says why. |
