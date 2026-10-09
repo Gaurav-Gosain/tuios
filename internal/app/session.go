@@ -1444,6 +1444,10 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 		m.PTYDataChan,
 		m.Settings.ScrollbackLines,
 	)
+	if m.streamTap != nil {
+		// The tap's renderer keeps the history; nothing reads this copy.
+		window.DiscardScrollback()
+	}
 	adoptWindowHost(window, ws.Host)
 	m.takeDaemonCwd(window, ws)
 	window.HostLink = ws.HostLink

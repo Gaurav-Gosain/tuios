@@ -590,6 +590,14 @@ func (e *Emulator) PushScrollbackLine(line uv.Line) {
 	e.scrs[0].Scrollback().PushLine(line)
 }
 
+// DiscardScrollback makes the main screen drop the lines that scroll off its
+// top instead of keeping them. See Scrollback.Discard.
+func (e *Emulator) DiscardScrollback() {
+	if sb := e.scrs[0].Scrollback(); sb != nil {
+		sb.Discard()
+	}
+}
+
 // ClearScrollback clears the scrollback buffer of the main screen.
 func (e *Emulator) ClearScrollback() {
 	e.scrs[0].ClearScrollback()

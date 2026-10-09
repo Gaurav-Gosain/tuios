@@ -197,3 +197,15 @@ func (w *Window) EnableCallbacks() {
 func (w *Window) DisableCallbacks() {
 	w.suppressCallbacks.Store(true)
 }
+
+// DiscardScrollback makes the pane's emulator drop the lines that scroll off
+// its screen instead of keeping them, for a client whose history lives
+// elsewhere (tuios gui-bridge: its renderer keeps each pane's history). The
+// libghostty backend keeps its history; only the pure Go emulator offers this.
+func (w *Window) DiscardScrollback() {
+	w.LockIO()
+	defer w.UnlockIO()
+	if d, ok := w.Terminal.(interface{ DiscardScrollback() }); ok {
+		d.DiscardScrollback()
+	}
+}

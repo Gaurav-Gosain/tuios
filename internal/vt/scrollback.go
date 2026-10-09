@@ -61,6 +61,8 @@ type Scrollback struct {
 	// of calling onTrim, for a reflow that reports them itself.
 	holdTrims bool
 	heldTrims int
+	// discard drops every line pushed, before it is encoded. See Discard.
+	discard bool
 
 	// Intern table for colour values of a type the packer does not know. It
 	// is capped at internCap entries; past the cap a colour is reduced to RGB
@@ -232,9 +234,29 @@ func (sb *Scrollback) PushBlankLine(width int) {
 	sb.push(nil, width)
 }
 
+// Discard empties the ring and makes it drop every line pushed from now on,
+// before the line is encoded. It is for an emulator whose history nobody
+// reads: tuios gui-bridge runs one per pane only to follow titles, folders
+// and modes, and its renderer keeps the history. Encoding each line that
+// scrolled off was about a third of that process's work under a flood.
+func (sb *Scrollback) Discard() {
+	sb.Clear()
+	sb.discard = true
+}
+
 // push stores cells, the non-blank prefix of a line of the given width, as
 // the newest line.
 func (sb *Scrollback) push(cells uv.Line, width int) {
+	if sb.discard {
+		// A ring that holds nothing drops each line as it lands, and says
+		// so, so the semantic marks move as they would for a full ring.
+		if sb.holdTrims {
+			sb.heldTrims++
+		} else if sb.onTrim != nil {
+			sb.onTrim(1)
+		}
+		return
+	}
 	// Once the ring's storage has reached its capacity, every line lands in
 	// a slot in place: the oldest when the ring is full, or one a reflow
 	// gave back with truncate.
