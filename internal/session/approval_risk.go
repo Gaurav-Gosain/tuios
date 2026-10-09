@@ -82,8 +82,9 @@ func (a *attentionStore) riskOfCall(tool, target, line, root string) []risk.Hit 
 // riskOfLine matches the rules against the line a pane reported for its
 // approval. A plan's line is its title, which is not a command.
 //
-// The hooks clip that line to integration.MaxMessage, so a risky part past
-// the cut is not there to match. A clipped line is marked cut short on top of
+// The hooks clip that line to integration.MaxMessage and redact what looks
+// like a secret to "***", so a risky part past the cut or behind the stars is
+// not there to match. Such a line is marked cut short on top of
 // whatever the rules found, which holds the allow to two presses and keeps a
 // pane with the respond grant from allowing it: fail closed.
 func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
@@ -92,10 +93,14 @@ func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
 		return nil
 	}
 	tool, text := risk.ParseSummary(line)
-	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home})
-	// A line cut to length, or a dialog that shows only part of the call
-	// (harness.PartialSuffix), may hide what a rule would match.
-	if integration.Clipped(line) || strings.HasSuffix(line, harness.PartialSuffix) {
+	// Shown: the line is not the call. A path in it may stop at the clip or
+	// at a redacted run, and the rules must not read that stop as where the
+	// path ends: a worktree path longer than the line read as outside it.
+	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home, Shown: true})
+	// A line cut to length, a run redacted from it, or a dialog that shows
+	// only part of the call (harness.PartialSuffix) may hide what a rule
+	// would match.
+	if integration.Clipped(line) || strings.Contains(line, risk.ShownRedacted) || strings.HasSuffix(line, harness.PartialSuffix) {
 		hits = append(hits, risk.CutShortHit)
 	}
 	return hits

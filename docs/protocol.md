@@ -4463,8 +4463,11 @@ matches. They run on a held call's `tool` and `target` when the hook names
 them, else on its `summary`, and on the line of every `approval` item nobody
 holds (tuios's own hooks report `approve <Tool>: <what>`, which is read as that
 tool and argument; any other line is read as a command). The names of the rules
-that matched are the item's `risk`. That line is clipped, so a clipped one also
-carries `cut short` in `risk`, which is acknowledged like a rule. A daemon that
+that matched are the item's `risk`. That line is clipped and redacted, so a line
+that does not show the whole call also carries `cut short` in `risk`, which is
+acknowledged like a rule. A path in such a line is read only up to the cut or
+the `***`, and `outside the worktree` names it only when that part already
+leaves the worktree. A daemon that
 read no config file uses the shipped rules.
 
 - `reply-approval` with `once` or `always` on an item with `risk` must carry

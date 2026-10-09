@@ -3382,3 +3382,26 @@ list it reads: it guards the explicit resets that now carry the load.
 | --- | --- | --- |
 | `\033[?2031l` in `ResetSequence` | both subtests | **caught**: "tuios left DEC mode 2031 at h" |
 | The OSC 22 reset in `ResetSequence` | none | **not caught**: no run moves the mouse, so tuios never sets a pointer shape |
+
+## A worktree path the Inbox line cuts short
+
+`TestRiskInWorktree` and `TestRiskInWorktreeRedacted` report a Claude Code
+`Edit` of `demo/greet.py` inside a worktree that `worktree new` made under
+`XDG_DATA_HOME`. One pane is the worktree session's own pane. The other is a
+pane of another session that starts in the worktree. The Inbox line is clipped
+to 100 characters, and in the second test a part of the path is also redacted
+to `***`. The outside-the-worktree rule read what the line showed as the whole
+path, and marked the call. The fix reads a path in the line only up to the cut
+or the stars. Run on 2026-10-09.
+
+The positive half: in the same daemon, an `Edit` of `/etc/hosts` is marked
+`outside the worktree`. An `Edit` of a long path under `/etc` is marked
+`outside the worktree` and `cut short`. Each test also checks that the line is
+cut inside the worktree's path, so the case is not vacuous.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| None: `main` at `937cc693` | both | **caught**: both panes are marked `outside the worktree` |
+| `Shown: true` in `riskOfLine` | both | **caught**: the same failure |
+| The `shownOutside` call in `outside` (always false) | `TestRiskInWorktree` | **caught**: the long `/etc` path is not marked `outside the worktree` |
+| The `***` arm of the cut short mark in `riskOfLine` | `TestRiskInWorktree` | **caught**: `/etc/***.conf` is not marked `cut short` |

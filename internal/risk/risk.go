@@ -35,7 +35,20 @@ type Call struct {
 	Root string
 	// Home is the home directory a leading ~ stands for.
 	Home string
+	// Shown says Text is the one-line summary a pane reported for the call,
+	// not the call itself. That line is clipped and ends in "..." when it is
+	// too long, and a key-like run in it is replaced with "***", so a path
+	// rule reads a path in it only up to the first of them (see outside).
+	Shown bool
 }
+
+// Marks a shown line carries where it does not show the call.
+const (
+	// ShownClip ends a line that was clipped to length.
+	ShownClip = "..."
+	// ShownRedacted stands in a line for a run that looked like a secret.
+	ShownRedacted = "***"
+)
 
 // Hit is one rule a call matched.
 type Hit struct {
@@ -223,15 +236,65 @@ func outside(path string, call Call) bool {
 	case !strings.HasPrefix(path, "/"):
 		return false
 	}
+	root := filepath.Clean(call.Root)
+	if call.Shown {
+		if shown, cut := shownPart(path); cut {
+			return shownOutside(shown, root)
+		}
+	}
 	path = filepath.Clean(path)
 	if slices.Contains(harmlessDevices, path) || strings.HasPrefix(path, "/dev/fd/") {
 		return false
 	}
-	root := filepath.Clean(call.Root)
 	if path == root {
 		return false
 	}
 	return !strings.HasPrefix(path, root+string(filepath.Separator)) && root != "/"
+}
+
+// shownPart is the part of a path from a shown line that the line shows as
+// it is: up to the first "***", or up to the "..." a clip ends it with. cut
+// reports whether the line hides the rest. A word before the end of the line
+// that ends in "..." is read as cut too; that only ever reads less into it.
+func shownPart(path string) (shown string, cut bool) {
+	if i := strings.Index(path, ShownRedacted); i >= 0 {
+		return path[:i], true
+	}
+	if s, ok := strings.CutSuffix(path, ShownClip); ok {
+		return s, true
+	}
+	return path, false
+}
+
+// shownOutside reports whether a path the line shows only the start of is
+// outside root whatever the hidden rest is. The line was cut, so the call is
+// marked cut short anyway; this rule only marks what the line itself shows
+// leaving the worktree.
+//
+// The start is read as finished directories and an unfinished last name.
+// The path is outside for sure only when the finished directories are
+// neither root, a directory under it, nor a directory above it on the way
+// to it, or when they are above it and the unfinished name cannot become the
+// next name on the way. An unfinished name that may still become ".." can
+// climb anywhere, so it is never outside for sure.
+func shownOutside(shown, root string) bool {
+	if !strings.HasPrefix(shown, "/") || root == "/" {
+		return false
+	}
+	i := strings.LastIndex(shown, "/")
+	dir, name := filepath.Clean(shown[:i+1]), shown[i+1:]
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	sep := string(filepath.Separator)
+	switch {
+	case dir == root || strings.HasPrefix(dir, root+sep):
+		return false
+	case dir == "/" || strings.HasPrefix(root, dir+sep):
+		next, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(root, dir), sep), sep)
+		return !strings.HasPrefix(next, name)
+	}
+	return true
 }
 
 // harmlessDevices are paths a command writes to without changing anything.

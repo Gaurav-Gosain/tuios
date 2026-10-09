@@ -22,13 +22,14 @@ const (
 	RuleInfrastructure  = "infrastructure"
 	RuleOutsideWorktree = "outside the worktree"
 	// RuleCutShort is not a rule of its own: the daemon marks an approval
-	// with it when the only line it has for the call was cut short, so the
-	// rules could not read the rest. See CutShortHit.
+	// with it when the only line it has for the call does not show all of
+	// it (clipped, redacted, or only part of a dialog), so the rules could
+	// not read the rest. See CutShortHit.
 	RuleCutShort = "cut short"
 )
 
 // CutShortHit is the mark for a call whose line was cut short.
-var CutShortHit = Hit{Rule: RuleCutShort, Why: "the line was too long to read whole, so a risky part may be hidden"}
+var CutShortHit = Hit{Rule: RuleCutShort, Why: "the line does not show the whole call, so a risky part may be hidden"}
 
 // Why is what a shipped rule, or the cut short mark, guards against.
 func Why(name string) (string, bool) {

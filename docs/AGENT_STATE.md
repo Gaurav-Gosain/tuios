@@ -2836,11 +2836,14 @@ The rules are read from the file and again when it changes, and cannot be set
 with `set-option`, so a pane cannot switch them off through tuios. An approval
 nobody holds is matched on its line: tuios's own hooks report
 `approve <Tool>: <what>`, read as that tool and argument; any other line is
-read as a command. That line is clipped to 100 characters, so a risky part
-past the cut is not there to match. A clipped line is therefore marked
+read as a command. That line is clipped to 100 characters, and a part that
+looks like a key is replaced with `***`. So a risky part past the cut or
+behind the stars is not there to match. Such a line is therefore marked
 `cut short` besides whatever the rules found: the allow takes the second
-press, and a pane with the `respond` grant cannot give it. A held call is
-matched on the whole command the hook sends, not on the line.
+press, and a pane with the `respond` grant cannot give it. A path in the line
+is read only up to the cut or the stars. `outside the worktree` marks it only
+when that part already leaves the worktree. A held call is matched on the
+whole command the hook sends, not on the line.
 
 The rules are a speed bump, not a sandbox. A command written to hide what it
 does (a variable holding `rm`, an alias, a script file) passes them. The
