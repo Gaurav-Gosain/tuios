@@ -2,6 +2,8 @@ module github.com/Gaurav-Gosain/tuios/e2e/tui
 
 go 1.26.6
 
+toolchain go1.26.9
+
 require github.com/Gaurav-Gosain/tuitest v0.1.0
 
 require (
@@ -12,7 +14,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )
 
 require (
@@ -33,8 +35,8 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )
 
 replace github.com/Gaurav-Gosain/tuios => ../..
