@@ -135,7 +135,8 @@ type dockEngine struct {
 	// focused pane and the section's size, read fresh by the model for each
 	// run and handed over here, under mu, because runs start on engine
 	// goroutines that may not touch the model.
-	rail railContext
+	rail          railContext
+	secondaryRail railContext
 
 	// wakes counts scheduler firings and pushed lines. The idle guard reads it;
 	// nothing else should.
@@ -234,6 +235,15 @@ func (e *dockEngine) SetRailContext(ctx railContext) {
 	}
 	e.mu.Lock()
 	e.rail = ctx
+	e.mu.Unlock()
+}
+
+func (e *dockEngine) SetSecondaryRailContext(ctx railContext) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	e.secondaryRail = ctx
 	e.mu.Unlock()
 }
 
@@ -652,8 +662,11 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 		return
 	}
 	var rail railContext
-	if c.Name == railCustomComponent {
+	if c.Name == railCustomComponent || c.Name == railSecondaryComponent {
 		rail = e.rail
+		if c.Name == railSecondaryComponent {
+			rail = e.secondaryRail
+		}
 		if rail.Width <= 0 {
 			// The rail is folded or hidden and draws no rows. A command run
 			// here is told a width of zero, and a script that wraps to the
@@ -675,7 +688,7 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	// #nosec G204 - the command is the user's own config, run as the user, on
 	// the same footing as [hooks]. There is no new trust boundary here.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	if c.Name == railCustomComponent {
+	if c.Name == railCustomComponent || c.Name == railSecondaryComponent {
 		cmd.Env = e.railCommandEnv(rail)
 	} else {
 		cmd.Env = e.commandEnv(c.Name)

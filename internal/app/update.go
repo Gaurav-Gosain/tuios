@@ -845,6 +845,16 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pane's directory is what both are about, and every handler that can move
 	// it is covered by one comparison here rather than by a hook in each.
 	gitSync := m.GitSyncCmd()
+	// The opposite edge may be the only rail that names files or git. Its
+	// presentation state is scoped to that edge; the directory and repository
+	// readings themselves are shared because both follow the same pane.
+	var secondFiles, secondGit tea.Cmd
+	if m.secondarySidebarWidth() > 0 {
+		m.withSecondaryRail(func() bool {
+			secondFiles, secondGit = m.FilesSyncCmd(), m.GitSyncCmd()
+			return true
+		})
+	}
 	// A live meter toggle changes which dock components need to poll.
 	dockSync := m.DockMetersSyncCmd()
 	// The rail's custom section on the same beat: the focused pane and the
@@ -866,10 +876,10 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// the settings page opening and a pane starting an agent are both things
 	// any handler can do. See settings_agents.go.
 	agents := m.agentsSyncCmd()
-	if sync == nil && replan == nil && gitSync == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
+	if sync == nil && replan == nil && gitSync == nil && secondFiles == nil && secondGit == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync, dockSync, railSync, loading, motion, agents)
+	return model, tea.Batch(cmd, sync, replan, gitSync, secondFiles, secondGit, dockSync, railSync, loading, motion, agents)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.

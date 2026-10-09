@@ -58,7 +58,7 @@ type GitStateMsg struct {
 // Asked once per message from Update, so it answers on the cheapest facts
 // first.
 func (m *OS) gitSectionEnabled() bool {
-	if !m.Settings.SidebarEnabled {
+	if !m.Settings.SidebarEnabled && !m.sidebarDrawing {
 		return false
 	}
 	if !sidebarLayoutHas(sidebarSectionGit, &m.Settings) {

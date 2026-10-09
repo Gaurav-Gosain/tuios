@@ -206,7 +206,11 @@ func (m *OS) sidebarSignature() uint64 {
 	mixU(m.filesView.Gen)
 	// The custom section: its rows change when its command's output does,
 	// which is the generation, and the section scrolls like the others.
-	mixU(m.railCustom.gen)
+	if m.sidebarDrawing {
+		mixU(m.railCustomSecond.gen)
+	} else {
+		mixU(m.railCustom.gen)
+	}
 	mixI(m.SidebarScrollC)
 
 	// The agents section's two controls decide which rows it holds and in what
@@ -228,7 +232,7 @@ func (m *OS) sidebarSignature() uint64 {
 
 	// Rail keyboard focus: the accent edge and the cursor-row highlight both
 	// depend on it, so a focus change or a cursor move must rebuild.
-	mixB(m.SidebarFocused)
+	mixB(m.sidebarRailFocused())
 	mixI(m.SidebarCursor)
 
 	// The switch numbers are drawn state, on while show_numbers is set.

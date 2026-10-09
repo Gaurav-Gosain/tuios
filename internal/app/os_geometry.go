@@ -351,6 +351,9 @@ func (m *OS) GetRenderWidth() int {
 // to nothing. If the floor would be violated it steps down to a narrower variant
 // first, then hides.
 func (m *OS) GetSidebarWidth() int {
+	if m.sidebarDrawing {
+		return m.sidebarDrawingWidth
+	}
 	return m.sidebarWidthFor(m.sidebarPreferredWidth())
 }
 
@@ -391,7 +394,39 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 	if !m.Settings.SidebarEnabled || m.Settings.SidebarPosition == "hidden" {
 		return 0
 	}
-	rw := m.GetRenderWidth()
+	return sidebarResponsiveWidth(prefer, m.GetRenderWidth())
+}
+
+// secondarySidebarWidth gives the newly configured edge only columns left
+// after the original rail and the pane floor. Without an explicit enabled
+// override, a second rail cannot appear merely because a table was written.
+func (m *OS) secondarySidebarWidth() int {
+	if m.UserConfig == nil {
+		return 0
+	}
+	var cfg *config.SidebarEdgeConfig
+	if m.legacySidebarEdge() == sidebarRight {
+		cfg = m.UserConfig.Appearance.Sidebar.Left
+	} else {
+		cfg = m.UserConfig.Appearance.Sidebar.Right
+	}
+	if cfg == nil || cfg.Enabled == nil || !*cfg.Enabled {
+		return 0
+	}
+	width := cfg.Width
+	if width <= 0 {
+		width = config.SidebarDefaultWidth
+	}
+	if m.secondaryWidthPref > 0 {
+		width = m.secondaryWidthPref
+	}
+	if m.secondaryCollapsed {
+		width = config.SidebarGlyphWidth
+	}
+	return sidebarResponsiveWidth(width, m.GetRenderWidth()-m.sidebarWidthFor(m.sidebarPreferredWidth()))
+}
+
+func sidebarResponsiveWidth(prefer, rw int) int {
 	if rw <= 0 {
 		return 0
 	}
@@ -433,12 +468,18 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 // any client and leaves no blank band on another client's screen.
 func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	var r session.LayoutReserve
+	secondary := m.secondarySidebarWidth()
+	if m.legacySidebarEdge() == sidebarLeft {
+		r.Right = secondary
+	} else {
+		r.Left = secondary
+	}
 	if !m.SidebarRevealedForFocus {
 		switch m.Settings.SidebarPosition {
 		case "left":
-			r.Left = m.GetSidebarWidth()
+			r.Left = m.sidebarWidthFor(m.sidebarPreferredWidth())
 		case "right":
-			r.Right = m.GetSidebarWidth()
+			r.Right = m.sidebarWidthFor(m.sidebarPreferredWidth())
 		}
 	}
 	switch m.Settings.DockbarPosition {

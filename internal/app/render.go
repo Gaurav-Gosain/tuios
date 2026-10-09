@@ -341,6 +341,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if sidebarLayer := m.renderSidebar(); sidebarLayer != nil {
 			layers = append(layers, sidebarLayer)
 		}
+		if sidebarLayer := m.renderSecondarySidebar(); sidebarLayer != nil {
+			layers = append(layers, sidebarLayer)
+		}
 		// The picture-in-picture view, above the tiles and below every popup
 		// and panel by its z. See pip.go.
 		if pipLayer := m.renderPiP(); pipLayer != nil {
@@ -827,7 +830,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// it reserves any columns a lone window no longer fills the screen, so fall
 	// back to the compositor (which draws the sidebar and clips the pane to the
 	// content region). Cheapest correct v1; can be optimised later.
-	if m.GetSidebarWidth() > 0 {
+	if m.GetSidebarWidth() > 0 || m.secondarySidebarWidth() > 0 {
 		return nil, false
 	}
 	if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
