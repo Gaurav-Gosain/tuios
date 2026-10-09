@@ -35,3 +35,37 @@ What an agent must know:
 
 For a message of your own on the person's phone, the person can add a hook
 on `after-agent-state` (`tuios --skill recipes`).
+
+## Web Push to a phone
+
+A phone can also get Inbox items by Web Push, with no provider in
+`[notify]`. The phone registers its push subscription with `register-push`,
+and the daemon sends an encrypted push for each item of a kind the phone
+asked for. The phone needs no connection to tuios.
+
+```sh
+tuios notify push ls
+tuios notify push register --device pixel --subscription pixel.json
+tuios notify push rm pixel
+```
+
+What an agent must know:
+
+- Only the person registers, lists or removes a phone. These commands and
+  the verbs fail from a pane with `not_human`. Do not try to work around it.
+- A presence made for one session can not do it, because a phone gets the
+  Inbox of every session. The nonce must come from an attach or from a
+  presence with no session.
+- `register` reads the subscription from a file, or from stdin with `-`.
+  It holds secrets, so never put them on a command line.
+- Each registration opens an Inbox item named `phone NAME`. Over a link, a
+  registration can not replace a phone of the same name.
+- `enabled = false` in `[notify]` stops new pushes. A phone still gets the
+  close of an item, so it can remove a notification.
+- An item from another machine is not pushed. That machine pushes to its
+  own phones.
+- When the push service says a phone is gone, the daemon removes it and
+  opens the Inbox item `phone NAME` to say so.
+
+The payload and the encryption are in `docs/protocol.md`, under
+`register-push`.

@@ -1253,7 +1253,7 @@ allow_insecure = false
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `subject` | `https://tuios.dev/push/<machine>` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. |
+| `subject` | `https://tuios.dev/push` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. The push service reads it, so the default names no machine. |
 | `allow_insecure` | `false` | Lets tuios send to a push service on a loopback or private address, by `https` or `http`, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
 
 When `allow_insecure` is `false`, tuios does not send to a loopback or
@@ -1266,11 +1266,20 @@ and sends it to the phone's push service. When the item closes, tuios sends a
 close, so the phone can remove the notification. A phone gets `approval`,
 `plan`, `ask` and `question` unless it asked for other kinds. The triggers,
 `quiet_active_seconds` and `cooldown_seconds` are for the other providers.
-`enabled = false` stops the pushes. `max_per_hour` applies to each phone.
+`enabled = false` stops the pushes of new items. A phone still gets the close
+of an item, so it can remove a notification. `max_per_hour` applies to each
+phone. An item from another machine is not pushed. That machine pushes to its
+own phones.
 
-A push lives 120 seconds on the push service. tuios tries a failed push again
-after 1, 4 and 15 seconds. When the push service says that the phone is gone
-(404 or 410), tuios removes the phone. The phones and the VAPID key are in
+A push of `approval`, `plan`, `ask` or `question` lives one hour on the push
+service. Other pushes live 120 seconds. tuios tries a failed push again after
+1, 4 and 15 seconds. When the push service says that the phone is gone (404
+or 410), tuios removes the phone and shows an Inbox item about it.
+
+Each registration shows an Inbox item named `phone NAME`. It says who
+registered the phone. Another machine can register a phone over a link with
+`respond`, but it can not replace a registered phone. Check the item. Remove
+a phone you do not know with `tuios notify push rm NAME`. The phones and the VAPID key are in
 the state directory, in `push/`, with mode 600.
 
 Run `tuios notify push ls` to see the phones and the VAPID public key. Run

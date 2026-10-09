@@ -4399,7 +4399,7 @@ Register, list and remove the phones that get Inbox items by Web Push. See
 
 **Usage:**
 ```bash
-tuios notify push register --device NAME --endpoint URL --p256dh KEY --auth SECRET [--kind KIND]... [--json]
+tuios notify push register --device NAME --subscription FILE [--kind KIND]... [--json]
 tuios notify push ls [--json]
 tuios notify push rm NAME [--json]
 ```
@@ -4408,11 +4408,20 @@ Each command holds a presence on its own connection to the daemon, and sends
 the nonce of that presence. Run them in a terminal outside tuios. From a pane
 the daemon refuses them.
 
-`register` takes the values of the phone's push subscription. `--p256dh` is
-the phone's P-256 public key and `--auth` its 16-byte secret, both base64url.
+`register` reads the phone's push subscription from `FILE`, or from stdin
+when `FILE` is `-`. The subscription holds secrets, so the command line never
+takes them: other processes can read it. The file is JSON, in the shape that
+`PushSubscription.toJSON()` gives:
+
+```json
+{"endpoint": "https://push.example.net/s/abc", "keys": {"p256dh": "BKZ91bcH...", "auth": "GT7vKYlZ..."}}
+```
+
+`register` also reads `endpoint`, `p256dh` and `auth` at the top level.
 Give `--kind` once for each Inbox kind to push. Without it the phone gets
 `approval`, `plan`, `ask` and `question`. A second `register` with the same
-`--device` replaces the phone.
+`--device` replaces the phone. The Inbox shows an item for each
+registration.
 
 `ls` shows each phone with the origin of its push service and its kinds,
 and the daemon's VAPID public key. A phone app needs the key before it

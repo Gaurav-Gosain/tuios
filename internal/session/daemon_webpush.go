@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,20 @@ const pushDeviceQueue = 64
 // well inside the TTL, since a push the phone gets later than that is stale.
 var pushRetryDelays = []time.Duration{time.Second, 4 * time.Second, 15 * time.Second}
 
+// pushTTLWaiting is the TTL of the open and the close of an item that waits
+// for the person: approval, plan, ask and question. Such an item stays
+// answerable while it is open, which is often longer than the hook's hold (at
+// most 300 seconds), because the prompt stays on the pane, and an ask lives
+// until it is answered. A phone in Doze can get even a high-urgency push some
+// minutes late, so 120 seconds lost real prompts. A stale open does not
+// outlive its item: the close goes under the same Topic with the same TTL,
+// and a push service replaces the open it still holds with the close.
+const pushTTLWaiting = 3600
+
+// pushTTLOther is the TTL of every other push: an item that does not wait
+// for an answer is news only for a short time.
+const pushTTLOther = pushnotify.PushTTL
+
 // pushDevice is one registered phone, as it is kept on disk.
 type pushDevice struct {
 	Device string   `json:"device"`
@@ -79,6 +94,8 @@ type pushPayload struct {
 	RequestID string   `json:"request_id,omitempty"`
 	Options   []string `json:"options,omitempty"`
 	Machine   string   `json:"machine"`
+	// Truncated is true when a text field was cut to fit MaxPayload.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Payload types.
@@ -92,6 +109,7 @@ type pushJob struct {
 	payload []byte
 	urgency string
 	topic   string
+	ttl     int
 	itemID  string
 	typ     string
 }
@@ -239,8 +257,9 @@ func (w *webPusher) publicKey() (string, error) {
 	return k.PublicKey(), nil
 }
 
-// register adds or replaces a phone.
-func (w *webPusher) register(d pushDevice) (replaced bool, err error) {
+// register adds a phone, or replaces the one of the same name when
+// mayReplace. Without it, a phone of that name is errPushExists.
+func (w *webPusher) register(d pushDevice, mayReplace bool) (replaced bool, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.loadLocked()
@@ -248,6 +267,9 @@ func (w *webPusher) register(d pushDevice) (replaced bool, err error) {
 		return false, err
 	}
 	_, replaced = w.devices[d.Device]
+	if replaced && !mayReplace {
+		return false, errPushExists
+	}
 	if !replaced && len(w.devices) >= pushMaxDevices {
 		return false, errPushFull
 	}
@@ -341,16 +363,19 @@ func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 		// A close needs only what names the item.
 		p = pushPayload{V: 1, Type: typ, ID: it.ID, Kind: it.Kind, Session: it.Session, Window: it.Window, Host: it.Host, Machine: machine}
 	}
-	data, ok := fitPayload(p)
-	if !ok {
-		log.Printf("[NOTIFY] item %s: the push payload does not fit %d bytes", it.ID, pushnotify.MaxPayload)
-		return
+	data, cut := fitPayload(p)
+	if cut {
+		log.Printf("[NOTIFY] item %s: the push payload was cut to fit %d bytes", it.ID, pushnotify.MaxPayload)
 	}
 	urgency := pushnotify.UrgencyNormal
-	if typ == pushOpen && slices.Contains(pushDefaultKinds, it.Kind) {
-		urgency = pushnotify.UrgencyHigh
+	ttl := pushTTLOther
+	if slices.Contains(pushDefaultKinds, it.Kind) {
+		ttl = pushTTLWaiting
+		if typ == pushOpen {
+			urgency = pushnotify.UrgencyHigh
+		}
 	}
-	job := pushJob{payload: data, urgency: urgency, topic: pushnotify.Topic(machine + "\x00" + it.ID), itemID: it.ID, typ: typ}
+	job := pushJob{payload: data, urgency: urgency, topic: pushnotify.Topic(machine + "\x00" + it.ID), ttl: ttl, itemID: it.ID, typ: typ}
 	cfg := w.n.cfg.Load()
 	now := time.Now()
 	for name, dev := range w.devices {
@@ -377,27 +402,44 @@ func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 	}
 }
 
-// fitPayload marshals p within MaxPayload, cutting the summary, then the
-// options and the risk, if it has to.
+// fitPayload marshals p within MaxPayload and reports whether it had to cut
+// it. It never drops the push: it cuts the summary first, then the risk,
+// then halves every text field until the payload fits. It does not cut the
+// options or the request id, which an answer must give back as they are. They
+// are short (an ask takes at most 9 options of 60 bytes), and so are the id,
+// the kind and the type, so the payload always fits. A payload is
+// marshalled with no HTML escaping: a phone reads JSON, not HTML, and the
+// escapes made "<" six bytes.
 func fitPayload(p pushPayload) ([]byte, bool) {
-	for range 4 {
-		data, err := json.Marshal(p)
-		if err != nil {
-			return nil, false
+	marshal := func(p pushPayload) []byte {
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(p); err != nil {
+			return nil
 		}
-		if len(data) <= pushnotify.MaxPayload {
+		return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+	}
+	data := marshal(p)
+	if len(data) <= pushnotify.MaxPayload {
+		return data, false
+	}
+	p.Truncated = true
+	if len(p.Summary) > 64 {
+		p.Summary = clipUTF8(p.Summary, 64)
+		if data = marshal(p); len(data) <= pushnotify.MaxPayload {
 			return data, true
 		}
-		switch {
-		case len(p.Summary) > 64:
-			p.Summary = clipUTF8(p.Summary, 64)
-		case len(p.Options) > 0:
-			p.Options = nil
-		default:
-			p.Risk = nil
+	}
+	p.Risk = nil
+	for limit := 512; ; limit /= 2 {
+		if data = marshal(p); len(data) <= pushnotify.MaxPayload || limit == 0 {
+			return data, true
+		}
+		for _, f := range []*string{&p.Summary, &p.Name, &p.Session, &p.Window, &p.Host, &p.Harness, &p.Machine} {
+			*f = clipUTF8(*f, limit)
 		}
 	}
-	return nil, false
 }
 
 // clipUTF8 cuts s to at most n bytes on a rune boundary.
@@ -474,9 +516,9 @@ func (w *webPusher) deliver(device string, j pushJob) {
 		if cfg == nil {
 			cfg = &config.NotifyConfig{}
 		}
-		subject := cfg.WebPushSubject(w.n.d.manager.HostName())
+		subject := cfg.WebPushSubject()
 		err := w.n.client.Load().SendWebPush(w.ctx, key, pushnotify.Push{
-			Sub: sub, Payload: j.payload, Urgency: j.urgency, Topic: j.topic, Subject: subject,
+			Sub: sub, Payload: j.payload, Urgency: j.urgency, Topic: j.topic, Subject: subject, TTL: j.ttl,
 		}, cfg.WebPushInsecure())
 		host := hostOfEndpoint(sub.Endpoint)
 		if err == nil {
@@ -489,6 +531,7 @@ func (w *webPusher) deliver(device string, j pushJob) {
 			if _, rerr := w.remove(device); rerr != nil {
 				log.Printf("[NOTIFY] cannot save the registered phones: %v", rerr)
 			}
+			w.n.d.attention.notePhone(device, "The push service ("+host+") no longer knows this phone, so tuios removed it. Register the phone again to get pushes.")
 			return
 		}
 		var retry *pushnotify.RetryableError

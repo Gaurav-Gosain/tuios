@@ -187,7 +187,8 @@ presence made for one session acts only in that session. See
 [register-push, list-push and remove-push](#register-push) keep the person's
 phones. When an Inbox item of a kind a phone asked for opens or closes, the
 daemon sends an encrypted push to the phone's push service. The verbs take
-the person's `human_nonce`, and over a link the `respond` capability.
+the person's `human_nonce`, from an attach or a presence with no session, and
+over a link the `respond` capability. Each registration opens an Inbox item.
 
 **A pane's OSC 7501 reports are part of its state.** A program in a pane can
 report what it does with the Program Status Protocol (see
@@ -597,7 +598,8 @@ entry closes that.
 daemon's `humanNonceFor` (`internal/session/human_sender.go`). The verbs are
 `respond`, `reply-approval`, `answer-ask`, `dismiss-attention`,
 `mark-attention`, `send-agent-message` from `human`, `release-agent-message`,
-`queue-prompt`, `cancel-queued`, `review-note` and `paste-image`.
+`queue-prompt`, `cancel-queued`, `review-note`, `paste-image`,
+`register-push`, `list-push` and `remove-push`.
 
 - A session is a boundary. A presence made with
   [attach-presence](#attach-presence) and `{"session": X}` proves the person
@@ -610,7 +612,9 @@ daemon's `humanNonceFor` (`internal/session/human_sender.go`). The verbs are
   the Inbox of one client answers for every session. `send-agent-message` and
   `paste-image` also need the attach to be to the session of the act.
 - An act that is in no single session, such as an Inbox item of another
-  machine, takes the nonce of an attach or of a presence with no session.
+  machine, takes the nonce of an attach or of a presence with no session. A
+  phone for Web Push gets the Inbox of every session, so `register-push`,
+  `list-push` and `remove-push` are such acts.
 - The sender rules apply to both kinds: the caller is outside every pane,
   comes over the same kind of connection, and is the process that holds the
   nonce when the kernel gives the process ids.
@@ -2860,11 +2864,13 @@ Params:
   (65 bytes, first byte `0x04`), base64url. Padding is optional.
 - `auth` (required): the phone's authentication secret, 16 bytes, base64url.
 - `device` (required): a name for the phone, 1 to 64 bytes of printable
-  text. A second call with the same name replaces the phone.
+  text. A second call with the same name replaces the phone. Over a link,
+  a call with the name of a registered phone fails with `forbidden`.
 - `kinds` (optional): the Inbox kinds to push. The default is `approval`,
   `plan`, `ask` and `question`.
-- `human_nonce` (required): the nonce of an attach or of
-  [attach-presence](#attach-presence), from the same process.
+- `human_nonce` (required): the nonce of an attach, or of an
+  [attach-presence](#attach-presence) made with no session, from the same
+  process.
 
 Request:
 
@@ -2888,11 +2894,21 @@ the state directory, at `push/vapid.pem`, with mode 600. The phones are in
 Who may call it:
 
 - Only the person. A missing nonce, a nonce that does not verify, and any
-  call from a process inside a pane fail with `not_human`. The nonce is
-  checked as `reply-approval` checks it.
+  call from a process inside a pane fail with `not_human`.
+- A phone gets the Inbox of every session, so it is an act in no one
+  session (see [Nonce scope](#nonce-scope)). A presence made for one
+  session covers only that session. With such a nonce, `register-push`,
+  `list-push` and `remove-push` fail with `not_human`, and the message says
+  the nonce is for another session.
 - Over a link, the link needs the `respond` capability. Without it the call
-  fails with `forbidden`.
+  fails with `forbidden`. A link can not replace a registered phone.
 - A restricted connection cannot call it.
+
+Each registration opens an Inbox item of kind `errored`, with no session,
+named `phone NAME`. Its summary says who registered the phone (this machine,
+or the link from a named machine) and whether it replaced a phone of that
+name. A `remove-push` over a link opens the same item. A `remove-push` on
+this machine closes it.
 
 At most 16 phones. A bad endpoint or key fails with `invalid_params`.
 
@@ -2904,14 +2920,21 @@ Each push is one HTTP `POST` to `endpoint` with these headers:
 | --- | --- |
 | `Content-Encoding` | `aes128gcm` |
 | `Content-Type` | `application/octet-stream` |
-| `TTL` | `120` |
+| `TTL` | `3600` for the open and the close of `approval`, `plan`, `ask` and `question`, else `120` |
 | `Urgency` | `high` for an open of `approval`, `plan`, `ask` or `question`, else `normal` |
 | `Topic` | 32 base64url characters, the same for the open and the close of one item. A push service that holds an open replaces it with the close. |
 | `Authorization` | `vapid t=JWT, k=VAPID_PUBLIC_KEY` |
 
 The JWT is ES256, with the claims `aud` (the endpoint's origin), `exp` (12
 hours from the send) and `sub` (`[notify.webpush] subject`, by default
-`https://tuios.dev/push/<machine>`).
+`https://tuios.dev/push`). The push service reads the JWT, so the default
+`sub` names no machine.
+
+The TTL of an item that waits for the person is one hour. The item stays
+answerable while it is open, often after the hook's hold ends, and a phone
+that sleeps can get a push some minutes late. A stale open does not outlive
+its item: the close has the same `Topic` and the same TTL, and a push
+service that still holds the open replaces it with the close.
 
 The body is encrypted for the phone by RFC 8291, as one record of the
 `aes128gcm` content coding (RFC 8188). The body is:
@@ -2933,14 +2956,16 @@ P-256 point. The phone keeps `ua_private` (its private key), `ua_public` (the
 6. `NONCE = HMAC(PRK, "Content-Encoding: nonce" || 0x00 || 0x01)`, first 12 bytes.
 7. Decrypt `ciphertext` with AES-128-GCM, key `CEK`, nonce `NONCE`, no
    associated data. The 16-byte tag is at the end.
-8. Remove the last byte, `0x02`, which marks the last record. tuios adds no
-   padding. A phone that also accepts padding removes zero bytes before it.
+8. Remove the zero bytes at the end, then the `0x02` before them, which
+   marks the last record. tuios pads the JSON with zero bytes up to 256,
+   512, 1024, 2048 or 3072 bytes, the smallest that holds it, so the length
+   of a push tells little about its text.
 
 Steps 2 and 3 are HKDF (RFC 5869) with `auth_secret` as the salt. Steps 4 to
 6 are HKDF with `salt` as the salt. The ntfy UnifiedPush distributor gives
 the body to the app base64-encoded.
 
-The plain text is JSON, at most 3 KiB:
+The plain text is JSON, at most 3 KiB, with no HTML escapes:
 
 ```json
 {"v":1,"type":"open","id":"1","kind":"approval","session":"demo","window":"f9ab67c1-6226-4335-8c7e-ea784574a3ef","harness":"claude-code","name":"Terminal f9ab67c1","summary":"approve Bash: npm test","request_id":"69a569a6ab65115e","options":["once","deny"],"machine":"studio"}
@@ -2958,8 +2983,12 @@ The plain text is JSON, at most 3 KiB:
 | `risk` | The risk rules the call matched, as the Inbox item has them. |
 | `request_id`, `options` | A held prompt's request and its answers, for `reply-approval`. |
 | `machine` | The name of the machine that sent the push. |
+| `truncated` | `true` when text was cut to fit 3 KiB. |
 
-An empty field is left out. A `close` carries only `v`, `type`, `id`, `kind`,
+An empty field is left out. A payload that does not fit 3 KiB is cut, not
+dropped: first the `summary`, then the `risk`, then each text field. The
+`id`, `request_id` and `options` are never cut, because an answer gives them
+back. A `close` carries only `v`, `type`, `id`, `kind`,
 `session`, `window`, `host` and `machine`.
 
 The daemon sends an `open` when an item opens. It sends the `open` again,
@@ -2970,9 +2999,12 @@ answer it at the desk. A phone that does not know the `id` ignores the close.
 
 Delivery never blocks the daemon. Each phone has its own queue. A push that
 gets no answer, `429` or a `5xx` is tried again after 1, 4 and 15 seconds.
-When the push service answers `404` or `410`, the daemon removes the phone.
-`[notify] enabled = false` stops the opens, and `max_per_hour` limits the
-opens to each phone.
+When the push service answers `404` or `410`, the daemon removes the phone,
+logs it, and opens the Inbox item `phone NAME` to say so.
+`[notify] enabled = false` stops the opens. A close still goes, so a phone
+can remove what it shows. `max_per_hour` limits the opens to each phone. An
+item from another machine is not pushed: that machine pushes to its own
+phones.
 
 Link capability: `respond`.
 

@@ -65,8 +65,8 @@ type NotifyConfig struct {
 // WebPushConfig is [notify.webpush].
 type WebPushConfig struct {
 	// Subject is the VAPID subject a push service may use to contact the
-	// sender: an https URL or a mailto: address. Default: an https URL that
-	// names tuios and this machine (WebPushSubject).
+	// sender: an https URL or a mailto: address. Default:
+	// DefaultWebPushSubject, which names no machine.
 	Subject string `toml:"subject,omitempty"`
 	// AllowInsecure lets the daemon send to a push service on a loopback or
 	// private address, by https or by http (an IP literal or localhost),
@@ -75,26 +75,20 @@ type WebPushConfig struct {
 	AllowInsecure bool `toml:"allow_insecure,omitempty"`
 }
 
-// WebPushSubject is the VAPID subject in force: Subject when set, else an
-// https URL with the machine name in it. It never carries an address.
-func (n *NotifyConfig) WebPushSubject(machine string) string {
+// DefaultWebPushSubject is the VAPID subject when [notify.webpush] subject
+// is not set. It is the same on every machine. The JWT goes to the push
+// service in clear, and a host name in it would tell the push service which
+// machine sends. The VAPID public key already tells it which install sends,
+// so a per-install subject would add nothing.
+const DefaultWebPushSubject = "https://tuios.dev/push"
+
+// WebPushSubject is the VAPID subject in force: Subject when it is valid,
+// else DefaultWebPushSubject.
+func (n *NotifyConfig) WebPushSubject() string {
 	if n.WebPush != nil && ValidWebPushSubject(strings.TrimSpace(n.WebPush.Subject)) {
 		return strings.TrimSpace(n.WebPush.Subject)
 	}
-	label := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r - 'A' + 'a'
-		}
-		return '-'
-	}, machine)
-	label = strings.Trim(label, "-")
-	if label == "" {
-		label = "machine"
-	}
-	return "https://tuios.dev/push/" + label
+	return DefaultWebPushSubject
 }
 
 // WebPushInsecure reports whether [notify.webpush] allow_insecure is set.

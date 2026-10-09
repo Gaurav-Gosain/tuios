@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -27,18 +29,31 @@ cannot.`,
 	var jsonOutput bool
 	var nonce string
 	var r struct {
-		endpoint, p256dh, auth, device string
-		kinds                          []string
+		subscription, device string
+		kinds                []string
 	}
 	register := &cobra.Command{
 		Use:   "register",
 		Short: "Register a phone's push subscription",
-		Example: `  # A phone whose push service is at push.example.net
-  tuios notify push register --device pixel --endpoint https://push.example.net/s/abc \
-    --p256dh BNc... --auth tBH...`,
+		Long: `Register a phone's push subscription.
+
+The subscription holds secrets: the endpoint, the p256dh key and the auth
+secret. Anyone who has them can send to the phone. So the command reads them
+from a file or from stdin, never from the command line, where other programs
+can see them. Give the JSON a browser gives for PushSubscription.toJSON(), or
+an object with endpoint, p256dh and auth.`,
+		Example: `  # Read the subscription from a file
+  tuios notify push register --device pixel --subscription pixel.json
+
+  # Read it from stdin
+  tuios notify push register --device pixel --subscription - < pixel.json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			params := map[string]any{"endpoint": r.endpoint, "p256dh": r.p256dh, "auth": r.auth, "device": r.device}
+			sub, err := readPushSubscription(cmd.InOrStdin(), r.subscription)
+			if err != nil {
+				return reportVerbError(err, jsonOutput)
+			}
+			params := map[string]any{"endpoint": sub.Endpoint, "p256dh": sub.P256dh, "auth": sub.Auth, "device": r.device}
 			if len(r.kinds) > 0 {
 				params["kinds"] = r.kinds
 			}
@@ -47,11 +62,11 @@ cannot.`,
 			})
 		},
 	}
-	register.Flags().StringVar(&r.endpoint, "endpoint", "", "The push service's address for the phone")
-	register.Flags().StringVar(&r.p256dh, "p256dh", "", "The phone's P-256 public key, base64url")
-	register.Flags().StringVar(&r.auth, "auth", "", "The phone's 16-byte authentication secret, base64url")
+	register.Flags().StringVar(&r.subscription, "subscription", "", "The file that holds the phone's subscription as JSON, or - for stdin")
 	register.Flags().StringVar(&r.device, "device", "", "A name for the phone")
 	register.Flags().StringSliceVar(&r.kinds, "kind", nil, "An Inbox kind to push. Repeatable (default: approval, plan, ask, question)")
+	_ = register.MarkFlagRequired("subscription")
+	_ = register.MarkFlagRequired("device")
 	ls := &cobra.Command{
 		Use:   "ls",
 		Short: "List the registered phones and the VAPID public key",
@@ -138,4 +153,55 @@ func joinAny(v any) string {
 		parts = append(parts, fmt.Sprint(x))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// pushSubscriptionMax bounds the subscription file. An endpoint is at most
+// 2048 bytes, and the keys are short.
+const pushSubscriptionMax = 16 << 10
+
+// pushSubscription is the subscription register reads.
+type pushSubscription struct {
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
+	Keys     struct {
+		P256dh string `json:"p256dh"`
+		Auth   string `json:"auth"`
+	} `json:"keys"`
+}
+
+// readPushSubscription reads a subscription from path, or from stdin when
+// path is "-". It takes the shape of PushSubscription.toJSON(), with the keys
+// under "keys", and the flat shape of register-push.
+func readPushSubscription(stdin io.Reader, path string) (pushSubscription, error) {
+	var src io.Reader = stdin
+	if path != "-" {
+		f, err := os.Open(path)
+		if err != nil {
+			return pushSubscription{}, fmt.Errorf("cannot read the subscription: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		src = f
+	}
+	data, err := io.ReadAll(io.LimitReader(src, pushSubscriptionMax+1))
+	if err != nil {
+		return pushSubscription{}, fmt.Errorf("cannot read the subscription: %w", err)
+	}
+	if len(data) > pushSubscriptionMax {
+		return pushSubscription{}, errors.New("the subscription is longer than 16 KiB")
+	}
+	var sub pushSubscription
+	if err := json.Unmarshal(data, &sub); err != nil {
+		return pushSubscription{}, fmt.Errorf("the subscription is not JSON: %w", err)
+	}
+	if sub.P256dh == "" {
+		sub.P256dh = sub.Keys.P256dh
+	}
+	if sub.Auth == "" {
+		sub.Auth = sub.Keys.Auth
+	}
+	if sub.Endpoint == "" || sub.P256dh == "" || sub.Auth == "" {
+		return pushSubscription{}, errors.New("the subscription needs endpoint, p256dh and auth (or keys.p256dh and keys.auth)")
+	}
+	return sub, nil
 }

@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -44,6 +45,14 @@ import (
 // that answers 503 once gets the push on the retry, and a phone that asked for
 // another kind gets nothing.
 //
+// And the review fixes: a presence made for one session can not register,
+// list or remove a phone. Each registration, a replace, a removal over a link
+// and a 410 open an Inbox item. A link can not replace a phone. The CLI reads
+// the subscription from stdin and takes none of it on the command line. The
+// VAPID sub names no machine. Every body is padded to a bucket. An approval's
+// open and close live 3600 seconds. An ask's nine options of "<" keep their
+// place in the payload.
+//
 // The artifact is webpush-transcript.json in TUIOS_E2E_FRAMES: every request
 // the stub received, decrypted.
 //
@@ -55,6 +64,16 @@ import (
 //     without respond registers.
 //   - the ErrGone arm cut from webPusher.deliver: the 410 phone stays.
 //   - the retry cut (no RetryableError check): the 503 phone never gets it.
+//   - the humanNonceFor check cut from requirePushPerson: a presence for one
+//     session registers.
+//   - the hostname put back in the default subject: the JWT sub names it.
+//   - each notePhone call cut: its Inbox item never says so.
+//   - register always may replace: the link replaces pixel.
+//   - the old --endpoint, --p256dh and --auth flags put back: the command
+//     line takes them.
+//   - PaddedSize returns n: the body is not a bucket.
+//   - pushTTLWaiting 120: the approval's TTL is 120.
+//   - the old fitPayload: the ask's push has no options.
 
 // stubPush is the push service: it records each request and answers with the
 // status its path asks for.
@@ -287,6 +306,9 @@ func waitPush(t *testing.T, s *stubPush, k phoneKeys, path string, pred func(map
 			if len(plain) > 3<<10 {
 				t.Fatalf("the payload is %d bytes, over 3 KiB", len(plain))
 			}
+			if padded := len(r.Body) - 86 - 17; !pushPadBuckets[padded] {
+				t.Fatalf("ASSERTION: the push to %s pads a %d-byte payload to %d bytes, not to a bucket", path, len(plain), padded)
+			}
 			if pred(r.Payload) {
 				return r
 			}
@@ -295,6 +317,67 @@ func waitPush(t *testing.T, s *stubPush, k phoneKeys, path string, pred func(map
 	}
 	t.Fatalf("no push to %s matched; got %d requests", path, len(s.requests(path)))
 	return stubReq{}
+}
+
+// subJSON is a subscription as PushSubscription.toJSON() gives it, the
+// shape tuios notify push register reads from a file or stdin.
+func (k phoneKeys) subJSON(endpoint string) string {
+	data, _ := json.Marshal(map[string]any{
+		"endpoint": endpoint,
+		"keys":     map[string]string{"p256dh": k.p256dh(), "auth": k.authB64()},
+	})
+	return string(data)
+}
+
+// tuiosCLIStdin is tuiosCLI with stdin.
+func tuiosCLIStdin(t *testing.T, base, stdin string, args ...string) (string, error) {
+	t.Helper()
+	pinPreV080Looks(t, base)
+	cmd := exec.Command(tuiosBin, args...)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Stdin = strings.NewReader(stdin)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// pushPadBuckets are the sizes the daemon pads a payload up to. A body is
+// 86 bytes of header, then the padded payload, the delimiter and the 16-byte
+// tag.
+var pushPadBuckets = map[int]bool{256: true, 512: true, 1024: true, 2048: true, 3072: true}
+
+// phoneItem is the Inbox item about the phone device, or nil.
+func phoneItem(t *testing.T, ctl *linkStream, device string) map[string]any {
+	t.Helper()
+	items, verr := ctl.call(t, "list-attention", nil)
+	if verr != nil {
+		t.Fatalf("list-attention: %v", verr)
+	}
+	list, _ := items["items"].([]any)
+	for _, it := range list {
+		m, _ := it.(map[string]any)
+		if m["name"] == "phone "+device && m["session"] == "" {
+			return m
+		}
+	}
+	return nil
+}
+
+// waitPhoneItem waits for the Inbox item about device to say want.
+func waitPhoneItem(t *testing.T, ctl *linkStream, device, want string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	var it map[string]any
+	for time.Now().Before(deadline) {
+		if it = phoneItem(t, ctl, device); it != nil && strings.Contains(fmt.Sprint(it["summary"]), want) {
+			return it
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("ASSERTION: no Inbox item about phone %s says %q; last: %v", device, want, it)
+	return nil
 }
 
 func TestWebPushToAPhone(t *testing.T) {
@@ -372,8 +455,8 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatalf("list-windows: %v", verr)
 	}
 	w0 := wins["windows"].([]any)[0].(map[string]any)["window_id"].(string)
-	line := fmt.Sprintf("%s notify push register --device pane --endpoint %s --p256dh %s --auth %s --human-nonce %s; echo PANE_EXIT=$?\n",
-		tuiosBin, stub.url("/s/pane"), phone.p256dh(), phone.authB64(), nonce)
+	line := fmt.Sprintf("printf '%%s' '%s' | %s notify push register --device pane --subscription - --human-nonce %s; echo PANE_EXIT=$?\n",
+		phone.subJSON(stub.url("/s/pane")), tuiosBin, nonce)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", streamSession, "-w", w0, line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
@@ -387,9 +470,43 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatalf("ASSERTION: register-push from a pane was not refused:\n%s", paneOut)
 	}
 	// The positive half: the same command outside every pane, with a
-	// presence of its own, is taken.
-	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "desk", "--endpoint", stub.url("/s/desk"), "--p256dh", phone.p256dh(), "--auth", phone.authB64(), "--kind", "finished"); err != nil || !strings.Contains(out, "Registered desk") {
-		t.Fatalf("notify push register outside a pane: %v\n%s", err, out)
+	// presence of its own, is taken. It reads the subscription's secrets
+	// from stdin. The command line, which every process can read, takes
+	// none of them.
+	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "desk", "--p256dh", phone.p256dh(), "--auth", phone.authB64(), "--endpoint", stub.url("/s/desk")); err == nil || !strings.Contains(out, "unknown flag") {
+		t.Fatalf("ASSERTION: notify push register took the subscription's secrets on the command line: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLIStdin(t, base, phone.subJSON(stub.url("/s/desk")), "notify", "push", "register", "--device", "desk", "--subscription", "-", "--kind", "finished"); err != nil || !strings.Contains(out, "Registered desk") {
+		t.Fatalf("ASSERTION: notify push register with the subscription on stdin: %v\n%s", err, out)
+	}
+	waitPhoneItem(t, ctl, "desk", "by this machine")
+	// The person registers desk again on this machine: the item says so.
+	if out, err := tuiosCLIStdin(t, base, phone.subJSON(stub.url("/s/desk")), "notify", "push", "register", "--device", "desk", "--subscription", "-", "--kind", "finished"); err != nil || !strings.Contains(out, "Registered desk") {
+		t.Fatalf("notify push register desk again: %v\n%s", err, out)
+	}
+	waitPhoneItem(t, ctl, "desk", "in place of the phone of that name")
+
+	// A presence made for one session covers only that session. A phone
+	// gets the Inbox of every session, so such a presence can not register,
+	// list or remove one.
+	scoped := link.open(t, true)
+	spres, verr := scoped.call(t, "attach-presence", map[string]any{"session": streamSession})
+	if verr != nil {
+		t.Fatalf("attach-presence for one session: %v", verr)
+	}
+	snonce := spres["human_nonce"].(string)
+	for _, c := range []struct {
+		verb   string
+		params map[string]any
+	}{
+		{"register-push", map[string]any{"endpoint": stub.url("/s/scoped"), "p256dh": phone.p256dh(), "auth": phone.authB64(), "device": "scoped"}},
+		{"list-push", map[string]any{}},
+		{"remove-push", map[string]any{"device": "desk"}},
+	} {
+		c.params["human_nonce"] = snonce
+		if _, verr := scoped.call(t, c.verb, c.params); verr == nil || verr.Code != "not_human" || !strings.Contains(verr.Message, "another session") {
+			t.Fatalf("ASSERTION: %s with a presence made for one session: want not_human for another session, got %v", c.verb, verr)
+		}
 	}
 
 	// --- Register the phone, a gone one, a flaky one and one for another kind.
@@ -401,6 +518,13 @@ func TestWebPushToAPhone(t *testing.T) {
 	machine, _ := res["machine"].(string)
 	if fmt.Sprint(res["kinds"]) != "[approval plan ask question]" || vapidKey == "" {
 		t.Fatalf("register-push reply: %v", res)
+	}
+	// The person sees every phone a link registers, in the Inbox.
+	waitPhoneItem(t, ctl, "pixel", "by the link from phone")
+	// A link may not put its own phone in place of the person's.
+	other := newPhoneKeys(t)
+	if _, verr := reg("pixel", "/s/swapped", other, nil, nonce); verr == nil || verr.Code != "forbidden" {
+		t.Fatalf("ASSERTION: register-push over a link in place of a registered phone: want forbidden, got %v", verr)
 	}
 	gone, flaky, hop := newPhoneKeys(t), newPhoneKeys(t), newPhoneKeys(t)
 	// The endpoint an Android emulator's UnifiedPush distributor gives, with
@@ -456,7 +580,7 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Errorf("payload has no options: %v", p)
 	}
 	h := open.Headers
-	if h["Content-Encoding"] != "aes128gcm" || h["Ttl"] != "120" || h["Urgency"] != "high" || len(h["Topic"]) != 32 || h["Content-Type"] != "application/octet-stream" {
+	if h["Content-Encoding"] != "aes128gcm" || h["Ttl"] != "3600" || h["Urgency"] != "high" || len(h["Topic"]) != 32 || h["Content-Type"] != "application/octet-stream" {
 		t.Errorf("push headers %v", h)
 	}
 	claims := checkVAPID(t, h["Authorization"], vapidKey)
@@ -467,8 +591,9 @@ func TestWebPushToAPhone(t *testing.T) {
 	if left := time.Until(time.Unix(int64(exp), 0)); left <= 0 || left > 24*time.Hour {
 		t.Errorf("JWT exp is %v from now, want within 24 h", left)
 	}
-	if sub, _ := claims["sub"].(string); !strings.HasPrefix(sub, "https://") || strings.Contains(sub, "@") {
-		t.Errorf("JWT sub %q, want an https URL with no address", sub)
+	// The JWT goes to the push service in clear: it names no machine.
+	if sub, _ := claims["sub"].(string); sub != "https://tuios.dev/push" || (machine != "" && strings.Contains(strings.ToLower(sub), strings.ToLower(machine))) {
+		t.Errorf("ASSERTION: JWT sub %q, want https://tuios.dev/push, with no machine name (%s) in it", sub, machine)
 	}
 
 	// The flaky service got it on the retry. The gone one lost its phone.
@@ -529,6 +654,8 @@ func TestWebPushToAPhone(t *testing.T) {
 	if strings.Contains(fmt.Sprint(listed["devices"]), "device:old") || len(stub.requests("/s/gone")) == 0 {
 		t.Fatalf("ASSERTION: the phone whose service answered 410 is still listed: %v", listed)
 	}
+	// The removal is not silent: the Inbox says the phone is gone.
+	waitPhoneItem(t, ctl, "old", "no longer knows this phone")
 	if s := fmt.Sprint(listed["devices"]); strings.Contains(s, "/s/") || !strings.Contains(s, "device:pixel") {
 		t.Errorf("list-push shows %s, want pixel with only the service origin", s)
 	}
@@ -543,11 +670,37 @@ func TestWebPushToAPhone(t *testing.T) {
 		return p["type"] == "close" && p["id"] == open.Payload["id"]
 	})
 	transcript = append(transcript, closed)
+	if closed.Headers["Ttl"] != "3600" {
+		t.Errorf("ASSERTION: the close of an approval has TTL %q, want 3600 like its open", closed.Headers["Ttl"])
+	}
 	if closed.Headers["Topic"] != h["Topic"] {
 		t.Errorf("the close's topic %q differs from the open's %q", closed.Headers["Topic"], h["Topic"])
 	}
 	if len(stub.requests("/s/desk")) != 0 {
 		t.Errorf("the phone registered for finished got an approval push")
+	}
+
+	// --- A payload past 3 KiB is cut, not dropped, and the answers stay.
+	// Nine options of 60 "<" were 3 KiB of JSON escapes, and the push went
+	// with no options, so the phone could not answer.
+	asker := newPhoneKeys(t)
+	if _, verr := reg("asker", "/s/asker", asker, []string{"ask"}, nonce); verr != nil {
+		t.Fatalf("register asker: %v", verr)
+	}
+	var opts []string
+	askArgs := []string{"-s", streamSession, "--timeout", "60000", strings.Repeat("<", 150)}
+	for i := range 9 {
+		o := strings.Repeat("<", 59) + fmt.Sprint(i+1)
+		opts = append(opts, o)
+		askArgs = append(askArgs, "-o", o)
+	}
+	_ = startAskHuman(t, base, askArgs...)
+	asked := waitPush(t, stub, asker, "/s/asker", func(p map[string]any) bool { return p["type"] == "open" && p["kind"] == "ask" })
+	if got := fmt.Sprint(asked.Payload["options"]); got != fmt.Sprint(opts) {
+		t.Fatalf("ASSERTION: the ask's push lost its options: got %s", got)
+	}
+	if asked.Payload["request_id"] == nil || asked.Payload["request_id"] == "" {
+		t.Fatalf("the ask's push has no request id: %v", asked.Payload)
 	}
 
 	// --- remove-push.
@@ -560,6 +713,8 @@ func TestWebPushToAPhone(t *testing.T) {
 	if _, verr := ctl.call(t, "remove-push", map[string]any{"device": "pixel", "human_nonce": nonce}); verr == nil || verr.Code != "invalid_params" {
 		t.Fatalf("remove-push of a removed phone: want invalid_params, got %v", verr)
 	}
+	// A link that removes the person's phone is seen too.
+	waitPhoneItem(t, ctl, "pixel", "Removed from Web Push by the link from phone")
 	for i := range transcript {
 		if transcript[i].Payload == nil {
 			if plain, err := phone.decrypt(transcript[i].Body); err == nil {
@@ -736,7 +891,11 @@ func TestWebPushKeepsACorruptPhonesFile(t *testing.T) {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
 	phone := newPhoneKeys(t)
-	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "tablet", "--endpoint", "https://push.example.net/s/new", "--p256dh", phone.p256dh(), "--auth", phone.authB64()); err != nil || !strings.Contains(out, "Registered tablet") {
+	subFile := filepath.Join(t.TempDir(), "tablet.json")
+	if err := os.WriteFile(subFile, []byte(phone.subJSON("https://push.example.net/s/new")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "tablet", "--subscription", subFile); err != nil || !strings.Contains(out, "Registered tablet") {
 		t.Fatalf("notify push register: %v\n%s", err, out)
 	}
 	kept, err := os.ReadFile(filepath.Join(pushDir, "subscriptions.json.bad"))

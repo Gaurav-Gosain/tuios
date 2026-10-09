@@ -68,6 +68,23 @@ const MaxPayload = 3 << 10
 // recordSize is the rs the header names. One record holds the whole payload.
 const recordSize = 4096
 
+// padBuckets are the sizes a payload is padded up to before it is encrypted
+// (RFC 8188, section 2: zero octets after the delimiter), so the length the
+// push service sees says only which bucket the payload fell in. The last is
+// MaxPayload, which every payload fits.
+var padBuckets = []int{256, 512, 1024, 2048, MaxPayload}
+
+// PaddedSize is the size a payload of n bytes is padded to: the smallest
+// bucket that holds it, or n when n is over MaxPayload.
+func PaddedSize(n int) int {
+	for _, b := range padBuckets {
+		if n <= b {
+			return b
+		}
+	}
+	return n
+}
+
 // DecodeKey decodes a base64url value, with or without padding.
 func DecodeKey(s string) ([]byte, error) {
 	s = strings.TrimRight(strings.TrimSpace(s), "=")
@@ -217,7 +234,8 @@ func newPushHTTPClient() *http.Client {
 }
 
 // Encrypt encrypts plaintext for a subscription per RFC 8291, as one
-// aes128gcm record (RFC 8188). The result is the request body:
+// aes128gcm record (RFC 8188), padded with zero octets after the delimiter
+// up to PaddedSize. The result is the request body:
 //
 //	salt (16) | rs (4, big endian) | idlen (1) = 65 | keyid = as_public (65) | ciphertext
 //
@@ -229,7 +247,9 @@ func newPushHTTPClient() *http.Client {
 //	PRK         = HMAC(salt, IKM)
 //	CEK         = HMAC(PRK, "Content-Encoding: aes128gcm" 0x00 0x01)[0:16]
 //	NONCE       = HMAC(PRK, "Content-Encoding: nonce" 0x00 0x01)[0:12]
-//	ciphertext  = AES-128-GCM(CEK, NONCE, plaintext 0x02)
+//	ciphertext  = AES-128-GCM(CEK, NONCE, plaintext 0x02 0x00*)
+//
+// A receiver strips the zero octets at the end of the record, then the 0x02.
 func Encrypt(uaPublic *ecdh.PublicKey, authSecret, plaintext []byte) ([]byte, error) {
 	asPrivate, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {
@@ -239,12 +259,15 @@ func Encrypt(uaPublic *ecdh.PublicKey, authSecret, plaintext []byte) ([]byte, er
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
-	return encrypt(asPrivate, uaPublic, authSecret, salt, plaintext)
+	return encrypt(asPrivate, uaPublic, authSecret, salt, plaintext, PaddedSize(len(plaintext)))
 }
 
-// encrypt is Encrypt with the sender's key and the salt given.
-func encrypt(asPrivate *ecdh.PrivateKey, uaPublic *ecdh.PublicKey, authSecret, salt, plaintext []byte) ([]byte, error) {
-	if len(plaintext)+1+16 > recordSize {
+// encrypt is Encrypt with the sender's key and the salt given, padding the
+// plaintext to padTo bytes (no padding when padTo is not more than its
+// length).
+func encrypt(asPrivate *ecdh.PrivateKey, uaPublic *ecdh.PublicKey, authSecret, salt, plaintext []byte, padTo int) ([]byte, error) {
+	padTo = max(padTo, len(plaintext))
+	if padTo+1+16 > recordSize {
 		return nil, errors.New("the payload does not fit one record")
 	}
 	ecdhSecret, err := asPrivate.ECDH(uaPublic)
@@ -285,7 +308,9 @@ func encrypt(asPrivate *ecdh.PrivateKey, uaPublic *ecdh.PublicKey, authSecret, s
 	_ = binary.Write(&out, binary.BigEndian, uint32(recordSize))
 	out.WriteByte(byte(len(asPublic)))
 	out.Write(asPublic)
-	record := append(append([]byte{}, plaintext...), 0x02)
+	record := make([]byte, padTo+1)
+	copy(record, plaintext)
+	record[len(plaintext)] = 0x02
 	out.Write(gcm.Seal(nil, nonce, record, nil))
 	return out.Bytes(), nil
 }
@@ -407,8 +432,8 @@ const (
 	UrgencyNormal = "normal"
 )
 
-// PushTTL is the TTL header: a push service drops a message it could not
-// deliver in this many seconds. An Inbox item older than that is stale news.
+// PushTTL is the TTL header a Push with no TTL of its own carries: a push
+// service drops a message it could not deliver in this many seconds.
 const PushTTL = 120
 
 // Push is one Web Push request.
@@ -420,6 +445,8 @@ type Push struct {
 	// service still holds: base64url, at most 32 characters.
 	Topic   string
 	Subject string
+	// TTL is the TTL header in seconds. Zero means PushTTL.
+	TTL int
 }
 
 // ErrGone is a push service's answer that the subscription no longer exists
@@ -464,7 +491,11 @@ func (c *Client) SendWebPush(ctx context.Context, key *VAPIDKey, p Push, allowIn
 	req.Header.Set("User-Agent", "tuios-notify")
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Content-Encoding", "aes128gcm")
-	req.Header.Set("TTL", strconv.Itoa(PushTTL))
+	ttl := p.TTL
+	if ttl <= 0 {
+		ttl = PushTTL
+	}
+	req.Header.Set("TTL", strconv.Itoa(ttl))
 	urgency := p.Urgency
 	if urgency == "" {
 		urgency = UrgencyNormal

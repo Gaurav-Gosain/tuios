@@ -3650,3 +3650,47 @@ the daemon on an unreadable `subscriptions.json` and registers a phone.
 | The push client's `CheckRedirect` set to nil, so it follows | `TestWebPushToAPhone` | **caught**: "the push followed the redirect: /s/landed got 2 requests" |
 | `CheckRedirect` refuses with an error, which retries | `TestWebPushToAPhone` | **caught**: "the push the redirect refused was tried again" |
 | The rename cut from `webPusher.loadLocked` | `TestWebPushKeepsACorruptPhonesFile` | **caught**: "the unreadable phones file was not kept aside" |
+
+### Review: nonce scope, Inbox items, secrets, padding, TTL
+
+The second review of the branch asked for these fixes. Each control below
+puts one fix back and runs `TestWebPushToAPhone`. Run on 2026-10-09, on the
+branch rebased onto stream-pane at 26a474cc.
+
+- A phone gets the Inbox of every session, so `register-push`, `list-push`
+  and `remove-push` are an act in no one session. A presence made for one
+  session can not do them.
+- The VAPID `sub` is `https://tuios.dev/push` on every machine. The push
+  service reads the JWT, and the old default named the machine.
+- Each registration opens the Inbox item `phone NAME`, and says when it
+  replaced a phone of that name. A link can not replace a phone. A removal
+  over a link and a 404 or 410 from the push service open the item too.
+- `tuios notify push register` reads the subscription from a file or stdin.
+  The command line takes none of its secrets.
+- Each payload is padded to 256, 512, 1024, 2048 or 3072 bytes.
+- The open and the close of `approval`, `plan`, `ask` and `question` have a
+  TTL of 3600 seconds.
+- A payload past 3 KiB is cut, not dropped, and its options stay. The JSON
+  has no HTML escapes.
+
+The positive halves are in the same test: the unscoped presence registers,
+lists and removes; the CLI registers from stdin; the person replaces `desk`
+on this machine; every other push arrives and decrypts.
+
+| Control: what was put back | Result |
+| --- | --- |
+| The `humanNonceFor` check cut from `requirePushPerson` | **caught**: "register-push with a presence made for one session: want not_human for another session, got <nil>" |
+| The default subject with the host name after it | **caught**: "JWT sub "https://tuios.dev/push/HOST", want https://tuios.dev/push, with no machine name (HOST) in it" |
+| The `notePhone` call cut from `verbRegisterPush` | **caught**: "no Inbox item about phone desk says "by this machine"" |
+| `phoneRegisteredNote` never says replaced | **caught**: "no Inbox item about phone desk says "in place of the phone of that name"" |
+| `register` always may replace, also over a link | **caught**: "register-push over a link in place of a registered phone: want forbidden, got <nil>" |
+| The `notePhone` call cut from the `ErrGone` arm | **caught**: "no Inbox item about phone old says "no longer knows this phone"" |
+| The `notePhone` call cut from a remove over a link | **caught**: "no Inbox item about phone pixel says "Removed from Web Push by the link from phone"" |
+| The `--endpoint`, `--p256dh` and `--auth` flags put back | **caught**: "notify push register took the subscription's secrets on the command line" |
+| `PaddedSize` returns the length unpadded | **caught**: "the push to /s/pixel pads a 221-byte payload to 221 bytes, not to a bucket" |
+| `pushTTLWaiting` set back to 120 | **caught**: the open's headers show `Ttl:120`, and "the close of an approval has TTL "120", want 3600 like its open" |
+| The old `fitPayload`: `json.Marshal` with HTML escapes, and options dropped to fit | **caught**: "the ask's push lost its options: got <nil>" |
+
+The RFC 8291 Appendix A example is a wire compatibility test in
+`internal/pushnotify` (`TestEncryptRFC8291AppendixA`). With the delimiter
+`0x02` changed to `0x01` it fails.
