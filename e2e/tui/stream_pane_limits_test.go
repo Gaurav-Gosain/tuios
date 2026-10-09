@@ -221,9 +221,13 @@ func TestStreamPaneClientFrameMemory(t *testing.T) {
 		t.Fatalf("stream-pane: %v", verr)
 	}
 	s.nextOf(t, 'S', uiTimeout)
-	text := "echo " + strings.Repeat("x", 64<<10-len("echo ")-len(" LIMIT-OK\r")) + " LIMIT-OK\r"
-	s.send(t, 'I', []byte(text))
-	spWait(t, ctl, w1, "LIMIT-OK")
+	// A program reads the frame in raw mode and counts it. A shell line
+	// would not do: a shell without line editing (dash on Linux CI) reads
+	// in canonical mode, where the terminal keeps only 4095 bytes of a line.
+	spType(t, ctl, w1, "stty raw -echo; head -c 65536 | wc -c | sed 's/^ */LIMIT-/'; stty sane\n")
+	time.Sleep(500 * time.Millisecond)
+	s.send(t, 'I', []byte(strings.Repeat("x", 64<<10)))
+	spWait(t, ctl, w1, "LIMIT-65536")
 	s.close()
 }
 
