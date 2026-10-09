@@ -344,16 +344,20 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	} else if !extend {
 		t.modifyOtherKeys.Store(0)
 	}
-	if len(r.kittyKbdStack) > 0 {
-		t.kittyKbd.Reset()
-		t.kittyKbd.SelectScreen(altActive)
-		t.kittyKbd.SetStack(r.kittyKbdStack)
-	} else if !extend {
-		t.kittyKbd.Reset()
-		t.kittyKbd.SelectScreen(altActive)
-	}
-	if len(r.kittyKbdMainStack) > 0 {
-		t.kittyKbd.SetMainStack(r.kittyKbdMainStack)
+	// A ConPTY pane never offered the protocol, so a saved stack describes a
+	// negotiation that could not have happened; leave the (empty) state alone.
+	if !t.kkpUnavailable {
+		if len(r.kittyKbdStack) > 0 {
+			t.kittyKbd.Reset()
+			t.kittyKbd.SelectScreen(altActive)
+			t.kittyKbd.SetStack(r.kittyKbdStack)
+		} else if !extend {
+			t.kittyKbd.Reset()
+			t.kittyKbd.SelectScreen(altActive)
+		}
+		if len(r.kittyKbdMainStack) > 0 {
+			t.kittyKbd.SetMainStack(r.kittyKbdMainStack)
+		}
 	}
 
 	t.term.VTWrite(seq.Bytes())

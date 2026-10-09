@@ -117,6 +117,12 @@ type Emulator struct {
 	syncOpens atomic.Uint64
 	// Thread-safe cached kitty keyboard flags (updated on push/pop/set/reset)
 	cachedKittyFlags atomic.Int32
+	// Set for panes whose PTY is a Windows ConPTY: conhost drops input CSIs it
+	// does not recognise (before conhost 1.22) and never answers kitty keyboard
+	// queries, so the pane must not offer the protocol at all — per spec a
+	// silent CSI ? u means "not supported" and the guest falls back on its own.
+	// See DisableKittyKeyboardProtocol.
+	kkpUnavailable bool
 
 	// The last cluster written, and the columns it took, for REP. A rune is
 	// not enough: a double-width character and a base carrying combining marks

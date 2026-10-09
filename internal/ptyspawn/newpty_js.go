@@ -19,3 +19,7 @@ func hostPty(_, _ int) (xpty.Pty, error) {
 // configureCommand is a no-op: the guest is not a process, so there is no
 // session or controlling terminal to set up.
 func configureCommand(_ *exec.Cmd) {}
+
+// HostIsConPTY mirrors newpty_native.go: the browser build spawns no local
+// panes, so none of them can sit on a ConPTY.
+func HostIsConPTY() bool { return false }

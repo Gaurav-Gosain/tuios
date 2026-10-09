@@ -172,18 +172,27 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		}
 		t.cursorStyle, t.cursorSteady = CursorStyle(style), !blink
 	case final == 'u' && prefix == '>':
+		if t.kkpUnavailable {
+			break // ConPTY pane: the protocol was never offered
+		}
 		flags := 0
 		if v, ok := csiFirstParam(params); ok {
 			flags = v
 		}
 		t.kittyKbd.Push(flags)
 	case final == 'u' && prefix == '<':
+		if t.kkpUnavailable {
+			break // ConPTY pane: the protocol was never offered
+		}
 		n := 1
 		if v, ok := csiFirstParam(params); ok && v > 0 {
 			n = v
 		}
 		t.kittyKbd.Pop(n)
 	case final == 'u' && prefix == '=':
+		if t.kkpUnavailable {
+			break // ConPTY pane: the protocol was never offered
+		}
 		flags, mode := csiTwoParams(params, 0, 1)
 		t.kittyKbd.Set(flags, mode)
 	case (final == 'm' || final == 'n') && prefix == '>' && inter == 0:
