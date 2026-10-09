@@ -60,18 +60,28 @@ func wait(done <-chan struct{}, ev windows.Handle, stop chan<- struct{}) {
 	}
 }
 
-// Request sets the stop event of the daemon on socketPath. An error means
-// no daemon waits on it: the daemon is from a tuios older than the event,
-// or it is gone.
+// Request sets the stop event of the daemon on socketPath. It looks in this
+// Windows session first, then in session 0, where a daemon started over
+// OpenSSH runs. ErrNotWaiting means neither has the event: the daemon is
+// from a tuios older than the event, or it runs in another session that
+// this one cannot see. Any other error is a daemon that has the event and
+// could not be told.
 func Request(socketPath string) error {
-	p, err := windows.UTF16PtrFromString(Name(socketPath))
-	if err != nil {
+	for _, name := range []string{Name(socketPath), GlobalName(socketPath)} {
+		p, err := windows.UTF16PtrFromString(name)
+		if err != nil {
+			return err
+		}
+		ev, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, p)
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		err = windows.SetEvent(ev)
+		_ = windows.CloseHandle(ev)
 		return err
 	}
-	ev, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, p)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = windows.CloseHandle(ev) }()
-	return windows.SetEvent(ev)
+	return ErrNotWaiting
 }

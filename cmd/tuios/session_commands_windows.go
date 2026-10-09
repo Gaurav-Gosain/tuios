@@ -29,14 +29,24 @@ func forceKillCommand(pid int) string { return fmt.Sprintf("taskkill /F /PID %d"
 // it sets the daemon's stop event and waits, as kill-server does on Unix,
 // for the daemon to save its sessions and remove its socket.
 //
-// A daemon from a tuios older than the event does not wait on it. That one
-// is terminated, as kill-server always did on Windows, and its sockets and
-// pid file are removed here, since it cannot remove them itself. Without
-// that, kill-server waited for a socket that never went away.
+// When no daemon waits on the event, the daemon is from a tuios older than
+// the event, or it runs in a Windows session this one cannot see. That
+// daemon is terminated, as kill-server always did on Windows, and its
+// sockets and pid file are removed here, since it cannot remove them itself.
+// Without that, kill-server waited for a socket that never went away.
 func stopDaemon(pid int, socketPath string) error {
-	if err := stopevent.Request(socketPath); err == nil {
+	err := stopevent.Request(socketPath)
+	if err == nil {
 		fmt.Printf("Asked the daemon (PID %d) to stop\n", pid)
 		return awaitDaemonShutdown(pid, socketPath)
+	}
+	if !errors.Is(err, stopevent.ErrNotWaiting) {
+		return &diagnosticError{
+			What:  fmt.Sprintf("Could not ask the TUIOS daemon (PID %d) to stop: %v.", pid, err),
+			Cause: "the daemon runs as another user, or Windows refused access to its stop event.",
+			Fix:   fmt.Sprintf("stop it with '%s'. This loses any session state that was not yet written.", forceKillCommand(pid)),
+			Err:   err,
+		}
 	}
 	if err := terminateDaemon(pid); err != nil {
 		return err
@@ -46,7 +56,7 @@ func stopDaemon(pid int, socketPath string) error {
 			fmt.Fprintf(os.Stderr, "Warning: could not remove %s: %v\n", f, err)
 		}
 	}
-	fmt.Printf("TUIOS daemon (PID %d) stopped. This daemon is from an older tuios, so it was terminated and could not save its sessions.\n", pid)
+	fmt.Printf("TUIOS daemon (PID %d) stopped. It did not answer the stop request, so tuios terminated it. Sessions that were not saved are lost.\n", pid)
 	return nil
 }
 

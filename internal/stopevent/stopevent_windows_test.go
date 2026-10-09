@@ -3,6 +3,7 @@
 package stopevent
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,14 +17,15 @@ import (
 //   - the socket path in another case names another event;
 //   - a set event left from the last daemon stops the next one at once;
 //   - a request with no daemon waiting reports success, so kill-server
-//     waits for a socket that never goes away.
+//     waits for a socket that never goes away, or reports an error other
+//     than ErrNotWaiting, so kill-server cannot tell it from a failure.
 
 func TestRequestReachesTheDaemon(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "tuios.sock")
 	other := filepath.Join(t.TempDir(), "tuios.sock")
 
-	if err := Request(sock); err == nil {
-		t.Fatal("a stop request succeeded with no daemon waiting")
+	if err := Request(sock); !errors.Is(err, ErrNotWaiting) {
+		t.Fatalf("a stop request with no daemon waiting returned %v, want ErrNotWaiting", err)
 	}
 
 	done := make(chan struct{})
@@ -33,8 +35,8 @@ func TestRequestReachesTheDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Request(other); err == nil {
-		t.Fatal("a stop request for another socket succeeded")
+	if err := Request(other); !errors.Is(err, ErrNotWaiting) {
+		t.Fatalf("a stop request for another socket returned %v, want ErrNotWaiting", err)
 	}
 	select {
 	case <-stop:
