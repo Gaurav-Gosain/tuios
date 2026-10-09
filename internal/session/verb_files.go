@@ -1,0 +1,1041 @@
+package session
+
+import (
+	"bufio"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+	"unicode"
+	"unicode/utf8"
+)
+
+// The file verbs: what an explorer needs from the machine the files are on.
+//
+// read-dir is the rail's listing and stays as it is: names and a folder flag,
+// for a section a few cells wide. The explorer needs what a file manager
+// shows, so these verbs are a family of their own, each named file-*, and each
+// acts on this machine only. A client reaches another machine's files by
+// running the same verbs there, through open-host-connection, so the far
+// machine's link policy decides what the hub may do (link_policy.go): reading
+// a listing is list, and reading or changing a file's bytes is write.
+//
+// open-file-stream moves bytes. After its reply the connection carries raw
+// file bytes, in one direction, with the count given up front, so neither end
+// needs framing of its own. A write lands in a part file beside the
+// destination, owner only; file-commit checks the part's hash and renames it
+// into place. That is the stage, hash and rename every transfer goes through,
+// and a part left behind by a dropped link is where the next try resumes.
+
+// Error codes of the file verbs.
+const (
+	// ErrVerbNoFile is a path that does not exist.
+	ErrVerbNoFile = "no_file"
+	// ErrVerbFileExists is a destination that exists, for a call that was
+	// told not to replace it.
+	ErrVerbFileExists = "file_exists"
+	// ErrVerbNoPermission is a path this machine's user may not read or
+	// change.
+	ErrVerbNoPermission = "no_permission"
+	// ErrVerbHashMismatch is a part file whose bytes are not the bytes the
+	// sender hashed. The part is removed and the copy starts again.
+	ErrVerbHashMismatch = "hash_mismatch"
+	// ErrVerbCrossDevice is a rename between two file systems, which only a
+	// copy can do.
+	ErrVerbCrossDevice = "cross_device"
+	// ErrVerbDiskFull is a write the disk had no room for.
+	ErrVerbDiskFull = "disk_full"
+)
+
+// partSuffix names the file a copy writes into before it is checked.
+const partSuffix = ".tuios-part"
+
+// fileListMax bounds one page of a listing, and fileScanMax how many names a
+// listing reads from one directory before it says the folder is too large to
+// sort.
+const (
+	fileListDefault = 500
+	fileListMax     = 5000
+	fileScanMax     = 50000
+)
+
+// fileReadMax bounds one file-read, which carries the bytes base64 in a line.
+const fileReadMax = 4 << 20
+
+// FileInfo is one file as the file verbs describe it.
+type FileInfo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	// Kind is file, dir, symlink or other. A link's target kind is in
+	// LinkKind, so a link to a folder can be opened as one.
+	Kind     string `json:"kind"`
+	LinkKind string `json:"link_kind,omitempty"`
+	Link     string `json:"link,omitempty"`
+	Size     int64  `json:"size"`
+	// MTime is the modification time in Unix milliseconds.
+	MTime int64 `json:"mtime"`
+	// Mode is the permission string ls prints: drwxr-xr-x. Perm is the
+	// permission bits as a number, for a copy to keep.
+	Mode   string `json:"mode"`
+	Perm   uint32 `json:"perm"`
+	Hidden bool   `json:"hidden,omitempty"`
+}
+
+func kindOf(m fs.FileMode) string {
+	switch {
+	case m.IsDir():
+		return "dir"
+	case m&fs.ModeSymlink != 0:
+		return "symlink"
+	case m.IsRegular():
+		return "file"
+	default:
+		return "other"
+	}
+}
+
+// describe fills a FileInfo from an lstat, following a link one step for its
+// target's kind.
+func describe(path string, fi fs.FileInfo) FileInfo {
+	out := FileInfo{
+		Name:   fi.Name(),
+		Path:   path,
+		Kind:   kindOf(fi.Mode()),
+		Size:   fi.Size(),
+		MTime:  fi.ModTime().UnixMilli(),
+		Mode:   fi.Mode().String(),
+		Perm:   uint32(fi.Mode().Perm()),
+		Hidden: strings.HasPrefix(fi.Name(), "."),
+	}
+	if out.Kind == "symlink" {
+		if target, err := os.Readlink(path); err == nil {
+			out.Link = target
+		}
+		if ti, err := os.Stat(path); err == nil {
+			out.LinkKind = kindOf(ti.Mode())
+			if ti.Mode().IsRegular() {
+				out.Size = ti.Size()
+			}
+		}
+	}
+	return out
+}
+
+// expandPath turns ~ and an empty path into this machine's home, and makes the
+// path absolute and clean. Every file verb takes paths through it, so "~/src"
+// means the same folder whichever machine is asked.
+func expandPath(p string) (string, *verbError) {
+	if p == "" || p == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", newVerbError(ErrVerbInternal, "this machine has no home folder")
+		}
+		return home, nil
+	}
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", newVerbError(ErrVerbInternal, "this machine has no home folder")
+		}
+		p = filepath.Join(home, p[2:])
+	}
+	if strings.ContainsRune(p, 0) {
+		return "", invalidParam("path", "a path cannot hold a NUL byte")
+	}
+	if !filepath.IsAbs(p) {
+		return "", invalidParam("path", "give an absolute path, or one that starts with ~: "+echoName(p))
+	}
+	return filepath.Clean(p), nil
+}
+
+// errNotRegular is a path that is a pipe, a device or a socket where a file's
+// bytes were asked for.
+var errNotRegular = errors.New("not a regular file")
+
+// openRegular opens a file to read its bytes, and refuses anything that is
+// not a regular file. The open does not wait: opening a named pipe for
+// reading blocks until something writes to it, and a device such as
+// /dev/zero never ends, so either would hold the verb, and a hash of it a
+// CPU, for as long as the daemon runs.
+func openRegular(path string) (*os.File, fs.FileInfo, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		_ = f.Close()
+		if fi.IsDir() {
+			return nil, fi, &fs.PathError{Op: "read", Path: path, Err: syscall.EISDIR}
+		}
+		return nil, fi, &fs.PathError{Op: "read", Path: path, Err: errNotRegular}
+	}
+	return f, fi, nil
+}
+
+// fileError turns a file system error into the verb error a person can act on.
+func fileError(what, path string, err error) *verbError {
+	switch {
+	case errors.Is(err, errNotRegular):
+		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is not a regular file, so tuios does not read or write it")
+	case errors.Is(err, syscall.EISDIR):
+		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is a folder")
+	case errors.Is(err, fs.ErrNotExist):
+		return newVerbError(ErrVerbNoFile, what+": "+echoName(path)+" does not exist")
+	case errors.Is(err, fs.ErrPermission):
+		return newVerbError(ErrVerbNoPermission, what+": no permission for "+echoName(path))
+	case errors.Is(err, fs.ErrExist):
+		return newVerbError(ErrVerbFileExists, what+": "+echoName(path)+" already exists")
+	case errors.Is(err, syscall.EXDEV):
+		return newVerbError(ErrVerbCrossDevice, what+": "+echoName(path)+" is on another disk")
+	case errors.Is(err, syscall.ENOSPC):
+		return newVerbError(ErrVerbDiskFull, what+": the disk is full")
+	default:
+		return newVerbError(ErrVerbInternal, what+": "+err.Error())
+	}
+}
+
+// openPart opens the part file of a copy to write it, owner only. It never
+// follows a link: in a folder that others can write to, a link put where the
+// part goes would turn the copy into a write to the link's target. A part
+// that is not a regular file is refused for the same reason.
+func openPart(part string) (*os.File, error) {
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|oNoFollow|syscall.O_NONBLOCK, 0o600)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
+		}
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
+	}
+	return f, nil
+}
+
+// partPath is the part file a copy to dst writes into: hidden, beside it.
+func partPath(dst string) string {
+	return filepath.Join(filepath.Dir(dst), "."+filepath.Base(dst)+partSuffix)
+}
+
+// verbFileStat describes one path.
+func (d *Daemon) verbFileStat(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path string `json:"path"`
+		Part bool   `json:"part"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	target := path
+	if p.Part {
+		target = partPath(path)
+	}
+	fi, err := os.Lstat(target)
+	if err != nil {
+		if p.Part && errors.Is(err, fs.ErrNotExist) {
+			return map[string]any{"path": path, "exists": false, "size": 0}, nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			return map[string]any{"path": path, "exists": false}, nil
+		}
+		return nil, fileError("stat", path, err)
+	}
+	info := describe(target, fi)
+	return map[string]any{"path": path, "exists": true, "info": info, "size": info.Size}, nil
+}
+
+// verbFileList lists a folder a page at a time: folders first, then names in
+// natural order, with the details a file manager shows.
+func (d *Daemon) verbFileList(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Dir    string `json:"dir"`
+		Offset int    `json:"offset"`
+		Limit  int    `json:"limit"`
+		Hidden *bool  `json:"hidden"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	dir, verr := expandPath(p.Dir)
+	if verr != nil {
+		return nil, verr
+	}
+	limit := p.Limit
+	if limit <= 0 {
+		limit = fileListDefault
+	}
+	limit = min(limit, fileListMax)
+	showHidden := p.Hidden == nil || *p.Hidden
+
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, fileError("list", dir, err)
+	}
+	defer func() { _ = f.Close() }()
+	names, err := f.Readdirnames(fileScanMax + 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, fileError("list", dir, err)
+	}
+	capped := len(names) > fileScanMax
+	if capped {
+		names = names[:fileScanMax]
+	}
+	entries := make([]FileInfo, 0, len(names))
+	for _, name := range names {
+		if !showHidden && strings.HasPrefix(name, ".") {
+			continue
+		}
+		// A part file is a copy in flight, not a file of the folder's own.
+		if strings.HasPrefix(name, ".") && strings.HasSuffix(name, partSuffix) {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		fi, err := os.Lstat(full)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, describe(full, fi))
+	}
+	// Names in one folder are unique, so the sort need not be stable, and an
+	// unstable one is several times faster on a large folder.
+	slices.SortFunc(entries, func(a, b FileInfo) int {
+		da, db := a.isDirLike(), b.isDirLike()
+		switch {
+		case da != db && da:
+			return -1
+		case da != db:
+			return 1
+		case a.Name == b.Name:
+			return 0
+		case naturalLess(a.Name, b.Name):
+			return -1
+		}
+		return 1
+	})
+	total := len(entries)
+	start := min(max(p.Offset, 0), total)
+	end := min(start+limit, total)
+	out := map[string]any{
+		"dir":     dir,
+		"entries": entries[start:end],
+		"total":   total,
+		"capped":  capped,
+	}
+	if parent := filepath.Dir(dir); parent != dir {
+		out["parent"] = parent
+	}
+	if end < total {
+		out["next"] = end
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		out["home"] = home
+	}
+	return out, nil
+}
+
+func (f FileInfo) isDirLike() bool {
+	return f.Kind == "dir" || (f.Kind == "symlink" && f.LinkKind == "dir")
+}
+
+// naturalLess orders names as a person reads them: case is ignored, and a run
+// of digits compares as a number, so "file2" comes before "file10". It reads
+// the names in place: a listing sorts tens of thousands of them, and a copy of
+// each name as runes per comparison was most of a large folder's listing time.
+func naturalLess(a, b string) bool {
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		ca, wa := utf8.DecodeRuneInString(a[i:])
+		cb, wb := utf8.DecodeRuneInString(b[j:])
+		if unicode.IsDigit(ca) && unicode.IsDigit(cb) {
+			si := i
+			for i < len(a) {
+				r, w := utf8.DecodeRuneInString(a[i:])
+				if !unicode.IsDigit(r) {
+					break
+				}
+				i += w
+			}
+			sj := j
+			for j < len(b) {
+				r, w := utf8.DecodeRuneInString(b[j:])
+				if !unicode.IsDigit(r) {
+					break
+				}
+				j += w
+			}
+			na := strings.TrimLeft(a[si:i], "0")
+			nb := strings.TrimLeft(b[sj:j], "0")
+			if len(na) != len(nb) {
+				return len(na) < len(nb)
+			}
+			if na != nb {
+				return na < nb
+			}
+			continue
+		}
+		la, lb := unicode.ToLower(ca), unicode.ToLower(cb)
+		if la != lb {
+			return la < lb
+		}
+		i += wa
+		j += wb
+	}
+	ra, rb := utf8.RuneCountInString(a[i:]), utf8.RuneCountInString(b[j:])
+	if ra != rb {
+		return ra < rb
+	}
+	return a < b
+}
+
+// verbFileRead returns a range of a file's bytes.
+func (d *Daemon) verbFileRead(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path   string `json:"path"`
+		Offset int64  `json:"offset"`
+		Length int64  `json:"length"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	length := p.Length
+	if length <= 0 || length > fileReadMax {
+		length = fileReadMax
+	}
+	f, fi, err := openRegular(path)
+	if errors.Is(err, syscall.EISDIR) {
+		return nil, invalidParam("path", echoName(path)+" is a folder: list it with file-list")
+	}
+	if err != nil {
+		return nil, fileError("read", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, length)
+	n, err := f.ReadAt(buf, max(p.Offset, 0))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, fileError("read", path, err)
+	}
+	return map[string]any{
+		"path":    path,
+		"offset":  p.Offset,
+		"size":    fi.Size(),
+		"eof":     p.Offset+int64(n) >= fi.Size(),
+		"content": base64.StdEncoding.EncodeToString(buf[:n]),
+	}, nil
+}
+
+// verbFileMkdir makes a folder and its parents.
+func (d *Daemon) verbFileMkdir(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path string `json:"path"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return nil, fileError("make the folder", path, err)
+	}
+	return map[string]any{"path": path}, nil
+}
+
+// verbFileRename moves a path on this machine. It never replaces a file that
+// is there unless told to.
+func (d *Daemon) verbFileRename(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		From    string `json:"from"`
+		To      string `json:"to"`
+		Replace bool   `json:"replace"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	from, verr := expandPath(p.From)
+	if verr != nil {
+		return nil, verr
+	}
+	to, verr := expandPath(p.To)
+	if verr != nil {
+		return nil, verr
+	}
+	if from == to {
+		return map[string]any{"from": from, "to": to}, nil
+	}
+	if strings.HasPrefix(to+string(filepath.Separator), from+string(filepath.Separator)) {
+		return nil, invalidParam("to", "a folder cannot move into itself")
+	}
+	if !p.Replace {
+		if _, err := os.Lstat(to); err == nil {
+			return nil, newVerbError(ErrVerbFileExists, "move: "+echoName(to)+" already exists")
+		}
+	}
+	if err := os.Rename(from, to); err != nil {
+		return nil, fileError("move", from, err)
+	}
+	return map[string]any{"from": from, "to": to}, nil
+}
+
+// verbFileRemove deletes a path. A folder with files in it needs recursive.
+func (d *Daemon) verbFileRemove(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path      string `json:"path"`
+		Recursive bool   `json:"recursive"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	if home, err := os.UserHomeDir(); err == nil && (path == home || path == "/") {
+		return nil, invalidParam("path", "tuios does not remove "+echoName(path))
+	}
+	var err error
+	if p.Recursive {
+		err = os.RemoveAll(path)
+	} else {
+		err = os.Remove(path)
+	}
+	if err != nil {
+		return nil, fileError("remove", path, err)
+	}
+	return map[string]any{"path": path}, nil
+}
+
+// hashRange is the sha256 of length bytes of the file at offset, or of
+// everything from offset when length is negative. It stops when ctx ends: a
+// hash of a large file runs for minutes, and a copy that was cancelled or
+// lost its link must not leave one reading the disk.
+func hashRange(ctx context.Context, path string, offset, length int64) (string, int64, error) {
+	f, _, err := openRegular(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return "", 0, err
+	}
+	h := sha256.New()
+	var r io.Reader = ctxReader{ctx: ctx, r: f}
+	if length >= 0 {
+		r = io.LimitReader(r, length)
+	}
+	n, err := io.CopyBuffer(h, r, make([]byte, 1<<20))
+	if err != nil {
+		return "", n, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, nil
+}
+
+// ctxReader is a reader that stops when its context ends.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
+// verbFileHash hashes a file, or a range of it, or of the part a copy to it
+// is writing.
+func (d *Daemon) verbFileHash(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path   string `json:"path"`
+		Offset int64  `json:"offset"`
+		Length *int64 `json:"length"`
+		Part   bool   `json:"part"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	target := path
+	if p.Part {
+		target = partPath(path)
+	}
+	length := int64(-1)
+	if p.Length != nil {
+		length = *p.Length
+	}
+	sum, n, err := hashRange(d.ctx, target, max(p.Offset, 0), length)
+	if err != nil {
+		return nil, fileError("hash", target, err)
+	}
+	return map[string]any{"path": path, "sha256": sum, "bytes": n}, nil
+}
+
+// verbOpenFileStream turns the connection into a byte stream of one file.
+//
+// mode read: the reply says the size, then the connection carries the bytes
+// from offset to that size and closes. mode write: the part file is cut to
+// offset (which must not be past the part's end), the reply says where it
+// starts, then the connection carries length bytes into it. When they are all
+// written and synced the daemon writes one JSON line with the part's size and
+// closes. Either side ending early leaves the part as it is, which is what a
+// resume starts from.
+func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path   string `json:"path"`
+		Mode   string `json:"mode"`
+		Offset int64  `json:"offset"`
+		Length int64  `json:"length"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	if p.Offset < 0 || p.Length < 0 {
+		return nil, invalidParam("offset", "offset and length cannot be negative")
+	}
+	switch p.Mode {
+	case "read", "":
+		f, fi, err := openRegular(path)
+		if err != nil {
+			return nil, fileError("read", path, err)
+		}
+		size := fi.Size()
+		if p.Offset > size {
+			_ = f.Close()
+			return nil, invalidParam("offset", "offset is past the end of the file")
+		}
+		if _, err := f.Seek(p.Offset, io.SeekStart); err != nil {
+			_ = f.Close()
+			return nil, fileError("read", path, err)
+		}
+		cs.takeover = func(_ *bufio.Reader) {
+			defer func() { _ = f.Close() }()
+			_ = cs.conn.SetWriteDeadline(time.Time{})
+			_, _ = io.CopyBuffer(cs.conn, io.LimitReader(f, size-p.Offset), make([]byte, 256<<10))
+			_ = cs.conn.Close()
+		}
+		return map[string]any{"path": path, "mode": "read", "size": size, "offset": p.Offset, "mtime": fi.ModTime().UnixMilli()}, nil
+	case "write":
+		dir := filepath.Dir(path)
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			if err == nil {
+				err = fs.ErrNotExist
+			}
+			return nil, fileError("write", dir, err)
+		}
+		part := partPath(path)
+		f, err := openPart(part)
+		if err != nil {
+			return nil, fileError("write", part, err)
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, fileError("write", part, err)
+		}
+		if p.Offset > fi.Size() {
+			_ = f.Close()
+			return nil, invalidParam("offset", "offset "+strconv.FormatInt(p.Offset, 10)+" is past the part's "+strconv.FormatInt(fi.Size(), 10)+" bytes")
+		}
+		if err := f.Truncate(p.Offset); err != nil {
+			_ = f.Close()
+			return nil, fileError("write", part, err)
+		}
+		if _, err := f.Seek(p.Offset, io.SeekStart); err != nil {
+			_ = f.Close()
+			return nil, fileError("write", part, err)
+		}
+		cs.takeover = func(br *bufio.Reader) {
+			defer func() { _ = f.Close() }()
+			_ = cs.conn.SetReadDeadline(time.Time{})
+			n, cerr := io.CopyBuffer(f, io.LimitReader(br, p.Length), make([]byte, 256<<10))
+			syncErr := f.Sync()
+			reply := map[string]any{"part_size": p.Offset + n, "written": n}
+			switch {
+			case cerr != nil:
+				reply["error"] = fileError("write", path, cerr).Message
+			case syncErr != nil:
+				reply["error"] = fileError("write", path, syncErr).Message
+			case n < p.Length:
+				reply["error"] = "the sender stopped after " + strconv.FormatInt(n, 10) + " of " + strconv.FormatInt(p.Length, 10) + " bytes"
+			}
+			line, _ := json.Marshal(reply)
+			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_, _ = cs.conn.Write(append(line, '\n'))
+			_ = cs.conn.Close()
+		}
+		return map[string]any{"path": path, "mode": "write", "part_size": fi.Size(), "offset": p.Offset}, nil
+	default:
+		return nil, invalidParam("mode", "mode is read or write", "read", "write")
+	}
+}
+
+// commitPart checks a finished part against the sender's hash and renames it
+// into place. conflict says what to do when path exists: replace it, keep both
+// (the new file gets " 2", " 3" ... before its extension), or fail. perm, when
+// not zero, is the original's permission bits: the part is owner only while
+// it is written, and the finished file gets the original's.
+func commitPart(ctx context.Context, path, want, conflict string, perm uint32) (string, string, *verbError) {
+	part := partPath(path)
+	// The part is checked and moved by its name, so it must still be the
+	// regular file the copy wrote, not a link put there since.
+	if fi, err := os.Lstat(part); err != nil {
+		return "", "", fileError("check", part, err)
+	} else if !fi.Mode().IsRegular() {
+		return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
+	}
+	got, _, err := hashRange(ctx, part, 0, -1)
+	if err != nil {
+		return "", "", fileError("check", part, err)
+	}
+	if want != "" && !strings.EqualFold(got, want) {
+		_ = os.Remove(part)
+		return "", got, newVerbError(ErrVerbHashMismatch, "the copy of "+echoName(filepath.Base(path))+" does not match the original, so it was removed")
+	}
+	final := path
+	if _, err := os.Lstat(path); err == nil {
+		switch conflict {
+		case "replace":
+		case "keep-both":
+			final = freeName(path)
+		default:
+			return "", got, newVerbError(ErrVerbFileExists, echoName(path)+" already exists")
+		}
+	}
+	if perm != 0 {
+		_ = os.Chmod(part, os.FileMode(perm&0o777))
+	}
+	if err := os.Rename(part, final); err != nil {
+		return "", got, fileError("finish", final, err)
+	}
+	if dir, err := os.Open(filepath.Dir(final)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+	return final, got, nil
+}
+
+// freeName is path with " 2", " 3" ... before its extension, the first that is
+// free.
+func freeName(path string) string {
+	dir, base := filepath.Split(path)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	if ext == base {
+		stem, ext = base, ""
+	}
+	for i := 2; ; i++ {
+		cand := filepath.Join(dir, fmt.Sprintf("%s %d%s", stem, i, ext))
+		if _, err := os.Lstat(cand); errors.Is(err, fs.ErrNotExist) {
+			return cand
+		}
+	}
+}
+
+// verbFileCommit finishes a copy written with open-file-stream.
+func (d *Daemon) verbFileCommit(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path     string `json:"path"`
+		SHA256   string `json:"sha256"`
+		Conflict string `json:"conflict"`
+		Perm     uint32 `json:"perm"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	switch p.Conflict {
+	case "", "fail", "replace", "keep-both":
+	default:
+		return nil, invalidParam("conflict", "conflict is replace, keep-both or fail", "replace", "keep-both", "fail")
+	}
+	final, sum, verr := commitPart(d.ctx, path, p.SHA256, p.Conflict, p.Perm)
+	if verr != nil {
+		return nil, verr
+	}
+	return map[string]any{"path": final, "sha256": sum}, nil
+}
+
+// verbFileAbort removes the part a copy left, for a copy that was cancelled.
+func (d *Daemon) verbFileAbort(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path string `json:"path"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	err := os.Remove(partPath(path))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, fileError("remove the part of", path, err)
+	}
+	return map[string]any{"path": path}, nil
+}
+
+// fileWalkMax bounds the files one folder copy carries.
+const fileWalkMax = 20000
+
+// WalkEntry is one file of a folder being copied, relative to the folder.
+type WalkEntry struct {
+	Rel  string `json:"rel"`
+	Size int64  `json:"size"`
+	Dir  bool   `json:"dir,omitempty"`
+	Perm uint32 `json:"perm,omitempty"`
+}
+
+// walkTree lists every file and folder under root, folders first in each
+// folder, so a copy can make them in order. Links are not followed.
+func walkTree(root string) ([]WalkEntry, int64, error) {
+	var out []WalkEntry
+	var total int64
+	err := filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == root {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		if len(out) >= fileWalkMax {
+			return errWalkTooLarge
+		}
+		switch {
+		case de.IsDir():
+			out = append(out, WalkEntry{Rel: rel, Dir: true})
+		case de.Type().IsRegular():
+			fi, err := de.Info()
+			if err != nil {
+				return err
+			}
+			out = append(out, WalkEntry{Rel: rel, Size: fi.Size(), Perm: uint32(fi.Mode().Perm())})
+			total += fi.Size()
+		}
+		return nil
+	})
+	return out, total, err
+}
+
+var errWalkTooLarge = errors.New("the folder holds more than " + strconv.Itoa(fileWalkMax) + " files")
+
+// verbFileWalk lists every file under a folder, for a folder copy.
+func (d *Daemon) verbFileWalk(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Path string `json:"path"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	path, verr := expandPath(p.Path)
+	if verr != nil {
+		return nil, verr
+	}
+	entries, total, err := walkTree(path)
+	if errors.Is(err, errWalkTooLarge) {
+		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error())
+	}
+	if err != nil {
+		return nil, fileError("list", path, err)
+	}
+	return map[string]any{"path": path, "entries": entries, "bytes": total}, nil
+}
+
+// fileVerbs is the file verb family.
+func fileVerbs() map[string]verbEntry {
+	pathParam := func(what string) verbParam {
+		return verbParam{Name: "path", Type: "string", Required: true, Description: what + " An absolute path, or one that starts with ~."}
+	}
+	infoReturn := verbParam{Name: "info", Type: "object", Description: "name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), perm (the permission bits as a number), hidden."}
+	return map[string]verbEntry{
+		"file-stat": {
+			description: "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
+			params: []verbParam{
+				pathParam("The path."),
+				{Name: "part", Type: "bool", Description: "Describe the part file of a copy to this path instead."},
+			},
+			returns: []verbParam{
+				{Name: "path", Type: "string", Description: "The path, made absolute."},
+				{Name: "exists", Type: "bool", Description: "False when nothing is there."},
+				{Name: "size", Type: "int", Description: "The size in bytes. 0 for a part that is not there."},
+				infoReturn,
+			},
+			examples: []string{`{"id":1,"verb":"file-stat","params":{"path":"~/notes.md"}}`},
+			handler:  (*Daemon).verbFileStat,
+		},
+		"file-list": {
+			description: "List a folder on this machine a page at a time, folders first, then names in natural order (file2 before file10), with size, time and mode.",
+			params: []verbParam{
+				{Name: "dir", Type: "string", Description: "The folder. Omit for the home folder."},
+				{Name: "offset", Type: "int", Description: "The first entry of the page.", Default: "0"},
+				{Name: "limit", Type: "int", Description: "Entries in the page, at most 5000.", Default: "500"},
+				{Name: "hidden", Type: "bool", Description: "Include names that start with a dot.", Default: "true"},
+			},
+			returns: []verbParam{
+				{Name: "dir", Type: "string", Description: "The folder, made absolute."},
+				{Name: "entries", Type: "[]object", Description: "One info object per entry, as file-stat's info."},
+				{Name: "total", Type: "int", Description: "Entries in the folder."},
+				{Name: "next", Type: "int", Description: "The offset of the next page. Absent on the last page."},
+				{Name: "parent", Type: "string", Description: "The folder above. Absent at the root."},
+				{Name: "home", Type: "string", Description: "This machine's home folder."},
+				{Name: "capped", Type: "bool", Description: "The folder holds more than 50000 names, and only those were read."},
+			},
+			examples: []string{`{"id":1,"verb":"file-list","params":{"dir":"~/src","limit":200}}`},
+			handler:  (*Daemon).verbFileList,
+		},
+		"file-read": {
+			description: "Read up to 4 MiB of a file on this machine, base64.",
+			params: []verbParam{
+				pathParam("The file."),
+				{Name: "offset", Type: "int", Description: "Where to start.", Default: "0"},
+				{Name: "length", Type: "int", Description: "How many bytes, at most 4 MiB.", Default: "4194304"},
+			},
+			returns: []verbParam{
+				{Name: "content", Type: "string", Description: "The bytes, base64."},
+				{Name: "size", Type: "int", Description: "The file's size."},
+				{Name: "eof", Type: "bool", Description: "The read reached the end of the file."},
+			},
+			examples: []string{`{"id":1,"verb":"file-read","params":{"path":"~/notes.md","length":65536}}`},
+			handler:  (*Daemon).verbFileRead,
+		},
+		"file-mkdir": {
+			description: "Make a folder on this machine, with its parents.",
+			params:      []verbParam{pathParam("The folder.")},
+			returns:     []verbParam{{Name: "path", Type: "string", Description: "The folder, made absolute."}},
+			examples:    []string{`{"id":1,"verb":"file-mkdir","params":{"path":"~/new"}}`},
+			handler:     (*Daemon).verbFileMkdir,
+		},
+		"file-rename": {
+			description: "Move or rename a path on this machine. It does not replace a path that is there unless replace is set. A move to another disk answers cross_device: copy it with transfer-start and move set.",
+			params: []verbParam{
+				{Name: "from", Type: "string", Required: true, Description: "The path to move."},
+				{Name: "to", Type: "string", Required: true, Description: "The new path."},
+				{Name: "replace", Type: "bool", Description: "Replace what is at to."},
+			},
+			returns: []verbParam{
+				{Name: "from", Type: "string", Description: "The old path."},
+				{Name: "to", Type: "string", Description: "The new path."},
+			},
+			examples: []string{`{"id":1,"verb":"file-rename","params":{"from":"~/a.txt","to":"~/b.txt"}}`},
+			handler:  (*Daemon).verbFileRename,
+		},
+		"file-remove": {
+			description: "Delete a path on this machine. A folder that holds files needs recursive. The home folder and / are refused.",
+			params: []verbParam{
+				pathParam("The path."),
+				{Name: "recursive", Type: "bool", Description: "Delete a folder and all it holds."},
+			},
+			returns:  []verbParam{{Name: "path", Type: "string", Description: "The path deleted."}},
+			examples: []string{`{"id":1,"verb":"file-remove","params":{"path":"~/old","recursive":true}}`},
+			handler:  (*Daemon).verbFileRemove,
+		},
+		"file-hash": {
+			description: "The sha256 of a file on this machine, of a range of it, or of the part a copy to it is writing.",
+			params: []verbParam{
+				pathParam("The file."),
+				{Name: "offset", Type: "int", Description: "Where the range starts.", Default: "0"},
+				{Name: "length", Type: "int", Description: "How many bytes. Omit for the rest of the file."},
+				{Name: "part", Type: "bool", Description: "Hash the part file of a copy to this path."},
+			},
+			returns: []verbParam{
+				{Name: "sha256", Type: "string", Description: "The hash, hex."},
+				{Name: "bytes", Type: "int", Description: "How many bytes were hashed."},
+			},
+			examples: []string{`{"id":1,"verb":"file-hash","params":{"path":"~/big.iso"}}`},
+			handler:  (*Daemon).verbFileHash,
+		},
+		"file-walk": {
+			description: "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries. Links are not followed.",
+			params:      []verbParam{pathParam("The folder.")},
+			returns: []verbParam{
+				{Name: "entries", Type: "[]object", Description: "rel (the path under the folder), size, dir. A folder comes before what it holds."},
+				{Name: "bytes", Type: "int", Description: "The bytes of every file together."},
+			},
+			examples: []string{`{"id":1,"verb":"file-walk","params":{"path":"~/photos"}}`},
+			handler:  (*Daemon).verbFileWalk,
+		},
+		"open-file-stream": {
+			description: "Turn this connection into the bytes of one file. mode read: after the reply the connection carries the file from offset to size, then closes. mode write: the part file beside path is cut to offset, then the connection takes length bytes into it, answers one line {part_size, written, error} and closes. file-commit puts the part in place.",
+			params: []verbParam{
+				pathParam("The file to read, or the file a write is for."),
+				{Name: "mode", Type: "string", Description: "read or write.", Accepted: []string{"read", "write"}, Default: "read"},
+				{Name: "offset", Type: "int", Description: "Where the bytes start. A write's offset cannot be past the part's end.", Default: "0"},
+				{Name: "length", Type: "int", Description: "write only: how many bytes the caller sends."},
+			},
+			returns: []verbParam{
+				{Name: "size", Type: "int", Description: "read: the file's size. The connection carries size minus offset bytes."},
+				{Name: "mtime", Type: "int", Description: "read: the file's modification time, Unix ms."},
+				{Name: "part_size", Type: "int", Description: "write: the part's size before it was cut to offset."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"open-file-stream","params":{"path":"~/big.iso","mode":"read","offset":0}}`,
+				`{"id":1,"verb":"open-file-stream","params":{"path":"~/big.iso","mode":"write","offset":1048576,"length":2097152}}`,
+			},
+			handler: (*Daemon).verbOpenFileStream,
+		},
+		"file-commit": {
+			description: "Finish a copy written with open-file-stream: check the part's sha256 against the sender's, then rename it into place. A part that does not match is removed.",
+			params: []verbParam{
+				pathParam("The file the copy is for."),
+				{Name: "sha256", Type: "string", Description: "The sender's hash, hex. Omit to skip the check."},
+				{Name: "conflict", Type: "string", Description: "When the path exists: replace it, keep both (the copy gets a number), or fail.", Accepted: []string{"replace", "keep-both", "fail"}, Default: "fail"},
+				{Name: "perm", Type: "int", Description: "The original's permission bits, which the finished file gets. Omit to keep it owner only."},
+			},
+			returns: []verbParam{
+				{Name: "path", Type: "string", Description: "Where the file is now."},
+				{Name: "sha256", Type: "string", Description: "The part's hash."},
+			},
+			examples: []string{`{"id":1,"verb":"file-commit","params":{"path":"~/big.iso","sha256":"9f86d0...","conflict":"keep-both"}}`},
+			handler:  (*Daemon).verbFileCommit,
+		},
+		"file-abort": {
+			description: "Remove the part a copy to a path left on this machine.",
+			params:      []verbParam{pathParam("The file the copy was for.")},
+			returns:     []verbParam{{Name: "path", Type: "string", Description: "The path."}},
+			examples:    []string{`{"id":1,"verb":"file-abort","params":{"path":"~/big.iso"}}`},
+			handler:     (*Daemon).verbFileAbort,
+		},
+	}
+}

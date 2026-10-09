@@ -294,6 +294,10 @@ type Window struct {
 	AgentMsg   string `json:"agent_message,omitempty"`
 	AgentKind  string `json:"agent_kind,omitempty"`
 	Cwd        string `json:"cwd,omitempty"`
+	// Host is the machine the pane's program runs on, for a pane this
+	// session holds for another machine. Empty for this session's own
+	// machine (wave 5: the explorer and a drop follow it).
+	Host string `json:"host,omitempty"`
 	// Foreground is what the pane runs, empty at a shell prompt.
 	Foreground string `json:"foreground,omitempty"`
 	// Harness is the agent harness that reported the state (claude, codex).
@@ -344,6 +348,9 @@ type Command struct {
 	// "verb_result" event with the same req. See verb.go.
 	Verb   string         `json:"verb,omitempty"`
 	Params map[string]any `json:"params,omitempty"`
+	// Host runs the verb on that machine's daemon, through this machine's
+	// daemon and its link, as `tuios --host` does. Empty is this machine.
+	Host string `json:"host,omitempty"`
 	// switch-session: Create makes the session when it is missing, and
 	// Restore restores it from its saved state first.
 	Create  bool `json:"create,omitempty"`
@@ -878,7 +885,7 @@ func (m *model) export() {
 			Workspace: w.Workspace, X: w.X, Y: w.Y, W: w.Width, H: w.Height, Z: w.Z,
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
-			Cwd: cwd, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, AgentAt: w.AgentStateAt / int64(time.Millisecond),
+			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, AgentAt: w.AgentStateAt / int64(time.Millisecond),
 			Repo: repo, Branch: branch,
 		})
 	}

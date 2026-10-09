@@ -3362,3 +3362,110 @@ is `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-bridge.txt`.
 
 All 43 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch (`~/.cache/agent-tmp/proof/v2/wave4/review/bridge-suite.txt`).
+## Files, transfers, drops and previews across a link
+
+The tests are in `file_transfer_test.go`. Each runs a second daemon as
+build, reached only over the hub daemon's link through the ssh stand-in. The
+two tests about speed put this test binary in the link as a throttle: the far
+side's output passes at a fixed rate through a buffer as deep as ssh's
+channel window.
+
+- `TestATransferFromAHostResumesAfterTheLinkDrops` copies 96 MiB from build
+  over 24 MB/s, cuts the link a third of the way in, and changes a byte of
+  the part file while the link is down. The copy must wait, go on from the
+  part (resumed_from past half the bytes at the cut), catch the changed byte
+  with the whole-file check, copy again, and put the original in place with
+  its permission bits.
+- `TestATransferLeavesTypingOnItsMachineFast` times small verb round trips on
+  build while a copy fills an 8 MB/s link with 2 MiB of buffer. The p90 must
+  stay under 150 ms. The positive half is the copy itself: it must be running
+  at the link's rate while the round trips are timed.
+- `TestDropFilesOnAPaneOnAHost` drops two files on build. They must arrive in
+  a new folder under build's runtime folder, the folder owner only and the
+  files 0600.
+- `TestFilesAndPreviewsOnAHost` lists a folder on build (folders first, then
+  natural order, with kinds, sizes and modes) and previews a 3000 px PNG at
+  1200 px and a table as text.
+- `TestFileBytesKeepToTheLinkPolicy` gives the hub only `list` on build. A
+  listing goes through (the positive half), a read of a file's bytes is
+  forbidden, and a copy fails with forbidden instead of waiting.
+
+The controls were run on 2026-10-08 on branch `feat/file-transfer`, each on a
+binary built with the one line changed and the rest as merged.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A resume trusts no part | `copyFile`: the tail comparison's `if berr == nil && a == b` made false | `TestATransferFromAHostResumesAfterTheLinkDrops` (resumed_from 0 with 34 MB copied at the cut) | **caught** |
+| No whole-file check | `commitPart`: the sha256 comparison made false | `TestATransferFromAHostResumesAfterTheLinkDrops` (the file in place has another sha256) | **caught** |
+| No scheduler | `dialHostFiles`: `StreamOpen{Bulk: bulk}` made `Bulk: false`, so file bytes ride ordinary 1 MiB frames in the same lane as everything else | `TestATransferLeavesTypingOnItsMachineFast` (p90 275 ms, against 30 ms with it) | **caught** |
+| A drop stays on this machine | `verbDropFiles`: the this-machine answer taken for every host | `TestDropFilesOnAPaneOnAHost` (the paths are this machine's, no transfers) | **caught** |
+| A preview is not scaled | `previewImage`: `fit(img, maxPx)` cut | `TestFilesAndPreviewsOnAHost` (3000 x 2000, want 1200 x 800) | **caught** |
+| Plain name order | `verbFileList`: `naturalLess` replaced by `<` | `TestFilesAndPreviewsOnAHost` (file10 before file2) | **caught** |
+| Reading bytes needs only list | `verbCapabilities`: `file-read` moved to `list` | `TestFileBytesKeepToTheLinkPolicy` (the read went through) | **caught** |
+
+The federation package keeps two unit tests for the same work, as a perf
+budget and a wire compatibility check: `TestABulkCopyLeavesTypingFast` (an
+echo during a copy over a slow pipe stays under 150 ms; with the window cut it
+waited 519 ms, **caught**) and `TestABulkStreamToAnOlderPeerWritesWithoutAWindow`
+(a peer that never answers with a credit gets no credit frame and no wait).
+
+## The bridge runs a verb on a host (wave 5)
+
+`TestGUIBridgeVerbOnAHost` (`gui_bridge_files_test.go`) lists a folder
+through the bridge with `host` build and checks the answer came from build's
+daemon by its home folder, since both daemons share one disk. The positive
+half lists the same folder with no host and gets this machine's home. It
+then copies a file from build with a transfer, waits for a window that says
+`host` build, and refuses `respond` with a host.
+
+The controls were run on 2026-10-08 on the bridge branch.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The bridge ignores host | `runVerb`: the `verbDialHost` branch made false | `TestGUIBridgeVerbOnAHost` (the listing's home is this machine's) | **caught** |
+| The nonce goes to the host | `runVerb`: the person-verb refusal made false | `TestGUIBridgeVerbOnAHost` (build answered forbidden, not this machine's refusal) | **caught** |
+| No host on a window | the state export: `Host: w.Host` cut | `TestGUIBridgeVerbOnAHost` (no window says build) | **caught** |
+
+## The review of files, transfers and drops (wave 5)
+
+The tests are in `file_review_test.go`. The ones that need a far machine
+that lies put a fake daemon on build's socket, reached through the real ssh
+stand-in, stdio-proxy and mux.
+
+- `TestAFolderFromAHostCannotLandOutsideItsDestination`: build's file-walk
+  names `../../escaped.txt`. Nothing may land outside the destination, and
+  the copy must fail with the reason.
+- `TestFileVerbsOnAPipeADeviceAndAHugePicture`: file-preview, file-read,
+  file-hash and open-file-stream on a named pipe and on /dev/zero answer in
+  5 s, and four previews of a 400 KB PNG of 10000 x 10000 pixels keep the
+  daemon under 512 MB. The positive half previews an ordinary picture.
+- `TestATransferStoppedWhileQueuedStaysStopped`: a copy cancelled and a
+  copy paused while they wait for a running slot stay so when the slots
+  free. The positive half resumes the paused one to done and verified.
+- `TestACopyDoesNotWriteThroughALinkAtItsPart`: a link at the part file,
+  here and on build, is not written through.
+- `TestADropNamesEachFileSafely`: two dropped files of one name get two
+  paths, and no path holds a control character or a backslash.
+- `TestACancelledCopyStopsReadingItsSource`: after a copy of a 16 GiB
+  sparse file is cancelled, the daemon reads under 64 MB in 2 s.
+- `TestAFolderMoveRemovesOnlyWhatItCopied`: a move leaves the link it did
+  not copy.
+
+The controls were run on 2026-10-09 on branch `gpui-bridge-wave5`. "Before"
+is the branch as it was before the review (d32f832a); each test also passes
+on the branch with its fix.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Names from a walk are trusted | before (no `safeRel` check) | `TestAFolderFromAHostCannotLandOutsideItsDestination` (escaped.txt and escaped-too.txt written outside, copy done) | **caught** |
+| Pipes and devices are opened | before (`os.Open`, no regular-file check) | `TestFileVerbsOnAPipeADeviceAndAHugePicture` (five verbs never answered) | **caught** |
+| No decode cap | before (only the side cap) | `TestFileVerbsOnAPipeADeviceAndAHugePicture` (daemon peak 3572 MB, against 43 MB) | **caught** |
+| A queued copy ignores its stop | before (no state check after the slot) | `TestATransferStoppedWhileQueuedStaysStopped` (both ended done, both files arrived) | **caught** |
+| The part follows links | before (no `O_NOFOLLOW`) | `TestACopyDoesNotWriteThroughALinkAtItsPart` (the target holds the copy, the link put in place, here and on build) | **caught** |
+| Drop names as given | before (`filepath.Base`) | `TestADropNamesEachFileSafely` (two notes.txt wrote one part and failed the check) | **caught** |
+| A backslash stays in a drop name | `dropName`: `r == '\\'` cut | `TestADropNamesEachFileSafely` (the path holds `y\'; touch pwned; echo '.txt`) | **caught** |
+| The hash ignores the copy's context | before (`hashRange` with no context) | `TestACancelledCopyStopsReadingItsSource` (828 MB read in the 2 s after the cancel, against 0) | **caught** |
+| A move removes the whole folder | before (`RemoveAll`) | `TestAFolderMoveRemovesOnlyWhatItCopied` (the link is gone) | **caught** |
+
+The wave 5 tests in `file_transfer_test.go` and `gui_bridge_files_test.go`
+pass on the branch with every fix.

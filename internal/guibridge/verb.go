@@ -63,6 +63,16 @@ var verbDial = func(version string) (verbCaller, error) {
 	return session.DialVerbClientAs(version)
 }
 
+// verbDialHost opens a verb connection to a host's daemon through this
+// machine's daemon. Tests replace it.
+var verbDialHost = func(host, version string) (verbCaller, error) {
+	c, _, err := session.DialVerbClientThroughHost(host, version)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // verbCaller is the part of session.VerbClient the proxy uses.
 type verbCaller interface {
 	CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error)
@@ -101,12 +111,27 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 		res.Code, res.Error = "unsupported", fmt.Sprintf("%s streams its answer; the bridge proxies only verbs with one reply", c.Verb)
 		return
 	}
+	host := c.Host
+	if host == "local" {
+		host = ""
+	}
+	if host != "" && personVerbs[c.Verb] {
+		// The nonce is this machine's daemon's word about this client. It
+		// means nothing to another machine's daemon, and must not reach it.
+		res.Code, res.Error = "not_human", c.Verb+" answers for the person on this machine only; attach the session on "+host+" to answer there"
+		return
+	}
 	params, err := verbParams(c.Verb, c.Params, nonce)
 	if err != nil {
 		res.Code, res.Error = "not_human", err.Error()
 		return
 	}
-	client, err := verbDial(version)
+	var client verbCaller
+	if host != "" {
+		client, err = verbDialHost(host, version)
+	} else {
+		client, err = verbDial(version)
+	}
 	if err != nil {
 		res.Error = err.Error()
 		return

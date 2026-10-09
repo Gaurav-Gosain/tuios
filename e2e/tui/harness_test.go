@@ -148,6 +148,7 @@ var tuiosBin string
 // where /tmp is a tmpfs each leaked one is memory that never comes back.
 func TestMain(m *testing.M) {
 	runRelayClientIfAsked()
+	runThrottleIfAsked()
 	os.Exit(runE2E(m))
 }
 
