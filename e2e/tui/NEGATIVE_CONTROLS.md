@@ -3424,3 +3424,25 @@ in a word before the last one. Run on 2026-10-09.
 | `Clipped: false` in `riskOfLine` | `TestRiskLineClipOnlyAtEnd` | **caught**: `clip-path`, cut inside the root, is marked `outside the worktree` |
 | `Clipped: false` in `riskOfLine` | `TestRiskInWorktree` | **caught**: both panes mark the `Edit` inside the worktree `outside the worktree` |
 | The `***` arm of `shownPart` | `TestRiskLineClipOnlyAtEnd` | **caught**: `mask-in` is marked `outside the worktree` |
+## stream-pane, attach-presence and the size lease
+
+`TestPhoneStreamsAPaneAndAnswersTheInbox` runs the real `tuios stdio-proxy
+--as phone` and plays the phone on its stdin and stdout. On 2026-10-09 each
+control below cut one line of wiring, built a binary, and ran the test
+against it. Each control failed where shown, and the test passed on the
+branch build. The transcript the test writes is
+`stream-pane-transcript.txt` under `TUIOS_E2E_FRAMES`.
+
+The positive halves: a made-up nonce gets `not_human` before the presence
+nonce answers, `attach-presence` on a stream the hub did not vouch for gets
+`forbidden` before a vouched stream gets a nonce, and the nonce of a closed
+presence gets `not_human` before a new presence answers the same hold.
+
+| Control: what was cut | Result |
+| --- | --- |
+| The presence clause in `matchHumanNonceClient` (`match := same && attach`) | **caught**: "the presence nonce did not answer the held approval", `not_human` |
+| The `leasedSizeLocked` call in `PTY.Resize` | **caught**: "a resize under the lease changed the leased pane" |
+| The lease release in `paneStream.close` | **caught**: "the pane did not go back to the size asked for" |
+| The `decModes` call in `snapshotVT` | **caught**: "the snapshot did not set DEC mode 1" (and 2004, 1000, 1006, 66) |
+| The alternate screen block in `snapshotVT` | **caught**: "the snapshot of a pane on the alternate screen: alt false" |
+| The gap rebuild in `paneStream.stream` (the `recoverGap` call) | **caught**: the stream goes silent after the phone falls behind, "read a pane frame: stream read timed out" |
