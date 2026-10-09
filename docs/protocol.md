@@ -2654,6 +2654,11 @@ directions. A frame is one type byte, a 4-byte payload length (big-endian),
 and the payload. All numbers are big-endian. The connection does not take
 JSON again.
 
+Skip a frame type that you do not know. Read its length, then read and drop
+that many bytes. The daemon can add a frame type in a later release, and a
+client that stops on an unknown type breaks then. The daemon sends a new frame
+type only when the client can ignore it safely.
+
 Frames from the daemon:
 
 | Type | Payload | Meaning |
