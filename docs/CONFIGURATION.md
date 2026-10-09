@@ -1498,7 +1498,7 @@ allow = ["list", "mail"]
 
 | Capability | What it lets the other machine do here |
 | --- | --- |
-| `list` | Read: sessions, windows, captures, screenshots, agent state, the Inbox, prompts, waits and the event stream. |
+| `list` | Read: sessions, windows, captures, screenshots, agent state, the Inbox, prompts, waits and the event stream. It also gives a live stream of the bytes of any pane (`stream-pane`). |
 | `mail` | Send and read agent mail, and use the stash. |
 | `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
 | `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |

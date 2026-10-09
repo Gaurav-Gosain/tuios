@@ -189,8 +189,8 @@ holds that position.
 
 `snapshotVT` reproduces invariants 1 to 4 and 7 on any xterm-compatible
 emulator. Of invariant 6 it carries the pen, the scroll region's top and
-bottom and the character sets, and not the protected cells, the saved cursor
-or the character REP repeats.
+bottom and the character sets, and not the protected cells, the saved cursor,
+insert mode (IRM), newline mode (LNM) or the character REP repeats.
 
 ## Why the snapshot and the stream cannot both be applied
 

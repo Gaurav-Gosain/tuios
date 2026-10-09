@@ -179,8 +179,9 @@ additions serve a native phone app on `ssh host tuios stdio-proxy`:
   layout sees the difference. The pane goes back when the lease ends.
 
 `respond`, `reply-approval`, `answer-ask`, `dismiss-attention` and every other
-verb that takes `human_nonce` now also accept the nonce of a presence. The
-rules for the nonce do not change.
+verb that takes `human_nonce` now also accept the nonce of a presence. A
+presence made for one session acts only in that session. See
+[Nonce scope](#nonce-scope).
 
 **A pane's OSC 7501 reports are part of its state.** A program in a pane can
 report what it does with the Program Status Protocol (see
@@ -584,6 +585,29 @@ exactly like the person's reply from the mail overlay. Now:
 
 The nonce alone is not an identity, since an agent can attach too. The next
 entry closes that.
+
+<a id="nonce-scope"></a>
+**Nonce scope.** Every verb that takes `human_nonce` applies one rule, in the
+daemon's `humanNonceFor` (`internal/session/human_sender.go`). The verbs are
+`respond`, `reply-approval`, `answer-ask`, `dismiss-attention`,
+`mark-attention`, `send-agent-message` from `human`, `release-agent-message`,
+`queue-prompt`, `cancel-queued`, `review-note` and `paste-image`.
+
+- A session is a boundary. A presence made with
+  [attach-presence](#attach-presence) and `{"session": X}` proves the person
+  only for an act in session X. Anywhere else the verb fails with
+  `not_human`, and nothing is done.
+- A presence made with no session proves the person for every act that its
+  connection can reach. A connection that calls `restrict-connection` loses
+  its presence.
+- The nonce of an attach proves the person for an act in any session, because
+  the Inbox of one client answers for every session. `send-agent-message` and
+  `paste-image` also need the attach to be to the session of the act.
+- An act that is in no single session, such as an Inbox item of another
+  machine, takes the nonce of an attach or of a presence with no session.
+- The sender rules apply to both kinds: the caller is outside every pane,
+  comes over the same kind of connection, and is the process that holds the
+  nonce when the kernel gives the process ids.
 
 **A process inside a pane cannot act as the person.** The daemon reads the
 pid of every caller from its socket (`SO_PEERCRED` on Linux, `LOCAL_PEERPID`
@@ -2659,6 +2683,13 @@ that many bytes. The daemon can add a frame type in a later release, and a
 client that stops on an unknown type breaks then. The daemon sends a new frame
 type only when the client can ignore it safely.
 
+The daemon charges each snapshot to its memory budget for client reads, until
+the `S` frame is sent. The charge is 160 bytes for each cell of the screen and
+of 500 rows of history, and at most the whole budget. When the budget has no
+room for 2 seconds, `stream-pane` fails with `busy`. When the stream needs a
+new snapshot and the budget has no room, the stream ends with an `X` frame
+that starts with `busy:`. Connect again with `from_seq`.
+
 Frames from the daemon:
 
 | Type | Payload | Meaning |
@@ -2666,7 +2697,7 @@ Frames from the daemon:
 | `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
-| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame. The codes are the verb error codes. The stream continues. |
+| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
 | `X` (0x58) | UTF-8 text | The stream ended, for example `exited 0` when the pane closed, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
@@ -2686,7 +2717,8 @@ set the scroll region, the character sets, the pen, the kitty keyboard flags,
 modifyOtherKeys, and the DEC modes that change the input a client must send:
 application cursor keys, the keypad mode, bracketed paste, focus reports,
 mouse tracking and its encodings, and alternate scroll. They do not set left
-and right margins, origin mode, the saved cursor or protected cells.
+and right margins, origin mode, insert mode (IRM), newline mode (LNM), the
+saved cursor or protected cells.
 
 The daemon takes the snapshot from its own emulator under the lock that reads
 the emulator's position. So the snapshot shows exactly the stream up to its
@@ -2706,6 +2738,11 @@ An `I` frame passes the checks that `send-text` passes: the link policy needs
 frame passes the checks that `resize` passes. A refused frame gets an `E`
 frame, and the stream continues. A frame from the client larger than 64 KiB
 ends the stream. Send a longer paste as more than one `I` frame.
+
+The daemon writes `I` frames into the pane in order, on its own goroutine. A
+pane that does not read its input does not delay `L` frames. At most 4 `I`
+frames wait for the pane. The next `I` frame gets an `E` frame with code
+`busy`, and the daemon does not type it.
 
 The daemon checks the caller again each second, as it checks a new
 `stream-pane`. When a pane loses its read grant, or the link policy no longer
@@ -2736,6 +2773,20 @@ dimension.
 Leases resize a pane at most once every 100 ms. A lease that comes sooner
 applies when the 100 ms end, and the pane takes the newest lease.
 
+A lease lasts 30 seconds. To keep it, send the same `L` frame again every 10
+seconds. When the client sends no `L` frame for 30 seconds, the daemon
+releases the lease within one more second. It then sends an `E` frame with
+code `lease_expired`, and the pane goes back to the size that the clients
+asked for. A new `L` frame sets the lease again.
+
+The renewal bounds a lease that a lost client holds. A phone that drops off
+the network sends nothing, and ssh and TCP can keep its connection open for
+hours. A ping from the daemon does not find that sooner: its write goes into
+the buffers of the proxy, ssh and TCP, and does not fail until they are full.
+The stream itself ends when the connection closes, or when a write to the
+client blocks for 10 seconds. Until then, the stream holds only its place in
+the pane output. It never holds back the pane.
+
 ### attach-presence
 
 Give this connection the person's `human_nonce` without an attach. A phone
@@ -2757,8 +2808,10 @@ Response:
 ```
 
 `respond`, `reply-approval`, `answer-ask`, `dismiss-attention` and every other
-verb that takes `human_nonce` accept this nonce. The rules are the same as for
-the nonce of an attach:
+verb that takes `human_nonce` accept this nonce. A presence made with
+`session` acts only in that session, and a presence made with no session acts
+in every session. See [Nonce scope](#nonce-scope). The other rules are the
+same as for the nonce of an attach:
 
 - The caller must be outside every pane of this daemon. Over a link, the
   stream must come on the link-human socket, so the hub must open it with
@@ -2773,7 +2826,8 @@ The presence is not an attach. It does not change the session size, it does
 not count as a client that shows or focuses a pane, and it gets no
 broadcasts. So `request-approval` holds a prompt for the Inbox and does not
 answer `viewed`. The connection continues to take verbs. The presence ends
-when the connection closes. A second call replaces the nonce.
+when the connection closes, or when the connection calls
+`restrict-connection`. A second call replaces the nonce.
 
 Link capability: `list`. The verbs that use the nonce need their own
 capability, for example `respond` for `reply-approval`.

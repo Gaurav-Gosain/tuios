@@ -297,6 +297,7 @@ Print one with `tuios --skill <topic>`:
 | `ship` | Commit, merge, push and open a pull request for a worktree, and the Inbox question a push asks |
 | `hosts` | Other machines: hosts, remote sessions, hosted panes, agents and worktrees there |
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
+| `stream` | `stream-pane` and `attach-presence`: a pane as bytes for a client that is not tuios, the size lease, the person's presence and its session scope |
 | `clients` | `list-clients`: which client shows which session, `switch-session`, `detach-client`, and the `client-session-changed` event |
 | `mcp` | tuios as an MCP server: setup, tools, scope |
 | `tmux` | The tmux shim for tools that only drive tmux |
