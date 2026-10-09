@@ -3492,3 +3492,29 @@ The positive halves: the scoped presence still acts in its own session, a
 presence with no session answers the approval in the other session, a client
 that renews its lease every 10 seconds keeps it past 30 seconds, input past
 the queue gets `E busy`, and the budget frees once the first stream ends.
+## agent-transcript and the transcript event
+
+`TestPersonReadsAgentTranscript` joins a pane to a Claude Code transcript
+fixture with the real `agent-hook claude-code` SessionStart, and reads it
+through the real `tuios stdio-proxy --as phone` with a presence nonce. On
+2026-10-09 each control below cut one line, built a binary, and ran the
+test against it. Each control failed where shown, and the test passed on
+the branch build. The artifact is `agent-transcript.txt` under
+`TUIOS_E2E_FRAMES`.
+
+The positive halves: before the read that works, a read without a nonce, a
+made-up nonce, and the person's nonce on a stream the hub did not vouch for
+get `not_human`. A link whose host lacks `respond` gets `forbidden`. A
+process in the pane gets `forbidden` for its own presence and `not_human`
+for a live local presence nonce.
+
+| Control: what was cut | Result |
+| --- | --- |
+| The `humanNonceClient` check in `verbAgentTranscript` | **caught**: "a read without a nonce: want not_human, got <nil>" |
+| `respond` for `agent-transcript` in `verbCapabilities` (made `list`) | **caught**: "a link without respond: want forbidden naming respond, got <nil>" |
+| The `noteTranscriptGrowth` call in `readAgentTranscript` | **caught**: "no transcript event: stream read timed out" |
+| `foldResults` in `forward` | **caught**: "the appended call: want the text and a running Bash call" |
+| The file id comparison in `parseCursor` | **caught**: "a made-up cursor: want reset with the newest entries" |
+| The first record in `fileID` | **caught**: "a replaced file: want reset with its two entries", got `AFTER-REPLACE` alone with reset false |
+| The secret mask in `transcriptText` | **caught**: the Bash call's target carries `sk-live-e2e-SECRET` |
+| `ansi.Strip` in `transcriptText` | **caught**: the Bash result and the last answer carry `[31m` and `[2J` |
