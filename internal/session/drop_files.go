@@ -190,11 +190,14 @@ func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verb
 
 // dropName is the name a dropped file gets in its drop folder. The client
 // types the path into a shell, so a control character in it, which can act
-// as a key there, becomes "_". Two files of one name in one drop get " 2",
-// " 3" ..., so each path the answer gives is the file that lands there.
+// as a key there, becomes "_", and so does a backslash: fish reads \' inside
+// single quotes as a quote, which ends the quoting a POSIX quote gives, and
+// the rest of the name would run as a command. Two files of one name in one
+// drop get " 2", " 3" ..., so each path the answer gives is the file that
+// lands there.
 func dropName(base string, used map[string]bool) string {
 	name := strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == '\\' {
 			return '_'
 		}
 		return r
