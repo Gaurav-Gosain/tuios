@@ -191,7 +191,7 @@ func openRegular(path string) (*os.File, fs.FileInfo, error) {
 func fileError(what, path string, err error) *verbError {
 	switch {
 	case errors.Is(err, errNotRegular):
-		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is not a file. It is a pipe, a device or a socket")
+		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is not a regular file, so tuios does not read or write it")
 	case errors.Is(err, syscall.EISDIR):
 		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is a folder")
 	case errors.Is(err, fs.ErrNotExist):
@@ -207,6 +207,30 @@ func fileError(what, path string, err error) *verbError {
 	default:
 		return newVerbError(ErrVerbInternal, what+": "+err.Error())
 	}
+}
+
+// openPart opens the part file of a copy to write it, owner only. It never
+// follows a link: in a folder that others can write to, a link put where the
+// part goes would turn the copy into a write to the link's target. A part
+// that is not a regular file is refused for the same reason.
+func openPart(part string) (*os.File, error) {
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|oNoFollow|syscall.O_NONBLOCK, 0o600)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
+		}
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
+	}
+	return f, nil
 }
 
 // partPath is the part file a copy to dst writes into: hidden, beside it.
@@ -601,7 +625,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			return nil, fileError("write", dir, err)
 		}
 		part := partPath(path)
-		f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := openPart(part)
 		if err != nil {
 			return nil, fileError("write", part, err)
 		}
@@ -654,6 +678,13 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 // it is written, and the finished file gets the original's.
 func commitPart(path, want, conflict string, perm uint32) (string, string, *verbError) {
 	part := partPath(path)
+	// The part is checked and moved by its name, so it must still be the
+	// regular file the copy wrote, not a link put there since.
+	if fi, err := os.Lstat(part); err != nil {
+		return "", "", fileError("check", part, err)
+	} else if !fi.Mode().IsRegular() {
+		return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
+	}
 	got, _, err := hashRange(part, 0, -1)
 	if err != nil {
 		return "", "", fileError("check", part, err)

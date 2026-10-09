@@ -875,7 +875,7 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 			}
 			return nil, nil, err
 		}
-		f, err := os.OpenFile(partPath(path), os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := openPart(partPath(path))
 		if err != nil {
 			return nil, nil, err
 		}
