@@ -3370,3 +3370,15 @@ asserts that tuios sent `CSI ? 1049 l`.
 | The fix: `\033c` put back at the front of `ResetSequence` | `standalone-quit`, `daemon-detach` | **caught**: the same failures |
 | `tape play`'s own copy of the reset | none | **not caught**: no test leaves `tape play` |
 | `forceExit`, the reset after a wedged quit | none | **not caught**: no test wedges the client |
+
+`TestExitTurnsOffWhatItTurnedOn` sets a bar cursor in a pane, quits from
+terminal mode and from window management mode, and reads the last value of
+each DEC private mode, the cursor style, the kitty keyboard flags,
+modifyOtherKeys and the pointer shape in the host stream. Without RIS, each of
+these needs its own reset. It passes on `main` too, because RIS is not in the
+list it reads: it guards the explicit resets that now carry the load.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| `\033[?2031l` in `ResetSequence` | both subtests | **caught**: "tuios left DEC mode 2031 at h" |
+| The OSC 22 reset in `ResetSequence` | none | **not caught**: no run moves the mouse, so tuios never sets a pointer shape |
