@@ -3731,15 +3731,17 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 // Write sends input to the PTY.
 //
 // Input of more than largeFrame bytes, such as a paste, takes the pane's one
-// slot for a large write. A second large write waits for the slot up to
-// paneWriteWait, so large writes into a pane that reads go in one after
-// another. It is refused with errPaneInputBusy when the wait runs out, or at
-// once when the write holding the slot has already waited longer than that:
-// the pane is not reading. A pane whose program does not read its input
-// blocks the write, and the write holds the input's memory while it waits,
-// so one waiting write per pane bounds that memory to the largest input, 16
-// MiB, for each pane, plus the writes waiting for the slot, each for at most
-// paneWriteWait. Every path that types into a pane comes through here:
+// slot for a large write. A second large write waits for the slot, so large
+// writes into a pane that reads go in one after another, however many queue.
+// It is refused with errPaneInputBusy once the write holding the slot has
+// held it longer than paneWriteWait: the pane is not reading. The clock is
+// the holder's, not the waiter's, so a write queued behind several others
+// into a pane that reads slowly is not taken for one into a pane that does
+// not read. A pane whose program does not read its input blocks the write,
+// and the write holds the input's memory while it waits, so one waiting
+// write per pane bounds that memory to the largest input, 16 MiB, for each
+// pane, plus the writes waiting for the slot, each until the pane has not
+// read for paneWriteWait. Every path that types into a pane comes through here:
 // client input, send-text, paste-buffer, send-keys, submit-prompt and
 // respond. Only a caller that may already write to the pane can make it hold
 // that memory. See frame_budget.go.
@@ -3757,8 +3759,9 @@ func (p *PTY) Write(data []byte) (int, error) {
 	return p.pty.Write(data)
 }
 
-// paneWriteWait is how long a large write waits for the pane's large write
-// slot. A variable so a test can shorten it.
+// paneWriteWait is how long the write holding a pane's large write slot may
+// hold it before the next large write is refused. A variable so a test can
+// shorten it.
 var paneWriteWait = 5 * time.Second
 
 // largeSlotCh is the pane's slot for a large write.
@@ -3768,24 +3771,52 @@ func (p *PTY) largeSlotCh() chan struct{} {
 }
 
 // takeLargeSlot takes the pane's large write slot, waiting as Write says.
+//
+// The wait runs out paneWriteWait after the current holder took the slot,
+// and starts over each time the slot passes to another write. Timing the
+// wait from the waiter's own start instead refused the sixth of six queued
+// 1 MiB writes into cat on a slow machine (go test -race on a CI runner):
+// the five ahead of it took longer than paneWriteWait in total, while each
+// one went in well within it.
 func (p *PTY) takeLargeSlot() error {
 	slot := p.largeSlotCh()
-	select {
-	case slot <- struct{}{}:
-	default:
-		if since := p.largeSince.Load(); since != 0 && time.Since(time.Unix(0, since)) > paneWriteWait {
-			return errPaneInputBusy
+	var timer *time.Timer
+	defer func() {
+		if timer != nil {
+			timer.Stop()
 		}
-		timer := time.NewTimer(paneWriteWait)
-		defer timer.Stop()
+	}()
+	for {
 		select {
 		case slot <- struct{}{}:
-		case <-timer.C:
+			p.largeSince.Store(time.Now().UnixNano())
+			return nil
+		default:
+		}
+		// 0 means the holder is between taking the slot and recording when,
+		// or is giving it back: either way it has only just held it.
+		since := time.Now()
+		if ns := p.largeSince.Load(); ns != 0 {
+			since = time.Unix(0, ns)
+		}
+		wait := time.Until(since.Add(paneWriteWait))
+		if wait <= 0 {
 			return errPaneInputBusy
 		}
+		if timer == nil {
+			timer = time.NewTimer(wait)
+		} else {
+			timer.Reset(wait)
+		}
+		select {
+		case slot <- struct{}{}:
+			p.largeSince.Store(time.Now().UnixNano())
+			return nil
+		case <-timer.C:
+			// Look again: the slot may have passed to another write, whose
+			// own paneWriteWait starts now.
+		}
 	}
-	p.largeSince.Store(time.Now().UnixNano())
-	return nil
 }
 
 // giveLargeSlot gives the slot back.

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -590,6 +591,90 @@ func TestLargeWritesIntoAReadingPaneQueue(t *testing.T) {
 	for e := range errs {
 		t.Errorf("a 1 MiB send-text into cat failed: %s", e)
 	}
+}
+
+// slowPane is a paneIO whose program reads each write after read, or never
+// when read is 0. Inside a synctest bubble the time is fake.
+type slowPane struct {
+	read   time.Duration
+	closed chan struct{}
+}
+
+func (s *slowPane) Write(b []byte) (int, error) {
+	if s.read == 0 {
+		<-s.closed
+		return 0, io.ErrClosedPipe
+	}
+	time.Sleep(s.read)
+	return len(b), nil
+}
+func (s *slowPane) Read([]byte) (int, error) { <-s.closed; return 0, io.EOF }
+func (s *slowPane) Close() error             { close(s.closed); return nil }
+func (s *slowPane) Resize(int, int) error    { return nil }
+
+// TestLargeWriteWaitIsTimedFromTheHolder is the deterministic form of
+// TestLargeWritesIntoAReadingPaneQueue, which failed under go test -race on
+// a CI runner. The ways the slot could go wrong:
+//
+//  1. A write queued behind several others into a pane that reads is refused,
+//     because the wait is timed from when it arrived: the writes ahead of it
+//     take longer than paneWriteWait in total, though each goes in well
+//     within it. This is the bug.
+//  2. A write into a pane that does not read waits for ever, so blocked
+//     writes hold memory without bound.
+//  3. A write that arrives after the holder has waited past paneWriteWait
+//     waits again instead of being refused at once.
+func TestLargeWriteWaitIsTimedFromTheHolder(t *testing.T) {
+	old := paneWriteWait
+	paneWriteWait = time.Second
+	defer func() { paneWriteWait = old }()
+	data := make([]byte, largeFrame+1)
+
+	t.Run("a pane that reads takes every queued write", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			// Each write goes in after 600ms, under paneWriteWait. The last
+			// of four waits 1.8s in all, over it.
+			p := &PTY{pty: &slowPane{read: 600 * time.Millisecond, closed: make(chan struct{})}}
+			defer func() { _ = p.pty.Close() }()
+			errs := make(chan error, 4)
+			for range 4 {
+				go func() { _, err := p.Write(data); errs <- err }()
+			}
+			for i := range 4 {
+				if err := <-errs; err != nil {
+					t.Errorf("write %d of 4 into a pane that reads: %v", i+1, err)
+				}
+			}
+		})
+	})
+
+	t.Run("a pane that does not read refuses the next write", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			p := &PTY{pty: &slowPane{closed: make(chan struct{})}}
+			go func() { _, _ = p.Write(data) }()
+			synctest.Wait()
+			if !p.largeWriteWaiting() {
+				t.Fatal("the first write does not hold the slot")
+			}
+
+			start := time.Now()
+			if _, err := p.Write(data); !errors.Is(err, errPaneInputBusy) {
+				t.Fatalf("second write = %v, want %v", err, errPaneInputBusy)
+			}
+			if waited := time.Since(start); waited != paneWriteWait {
+				t.Errorf("second write waited %v, want %v", waited, paneWriteWait)
+			}
+
+			start = time.Now()
+			if _, err := p.Write(data); !errors.Is(err, errPaneInputBusy) {
+				t.Fatalf("third write = %v, want %v", err, errPaneInputBusy)
+			}
+			if waited := time.Since(start); waited != 0 {
+				t.Errorf("third write waited %v, want a refusal at once", waited)
+			}
+			_ = p.pty.Close()
+		})
+	})
 }
 
 // TestPasteHoldIsASafetyNet has a stand-in daemon that never answers the
