@@ -580,7 +580,7 @@ type model struct {
 	// paletteSent is the palette as last sent, and paletteKey what it was
 	// built from. See palette.go.
 	paletteSent string
-	paletteKey  string
+	paletteKey  paletteInputs
 	// launcherWanted is set while a launcher command waits for its scan.
 	launcherWanted bool
 	// host is the machine the session is on, empty for this one, and tap
@@ -598,7 +598,18 @@ func (m *model) sendKeybinds() {
 		m.keysFrom = r.GetConfig()
 	}
 	m.out.JSON(Event{Type: "keybinds", Keybinds: exportKeybinds(m.os)})
-	m.paletteKey = ""
+	m.paletteKey = paletteInputs{}
+}
+
+// paletteInputs is what the palette rows are built from. The config counts by
+// identity: a reload replaces it, and sendKeybinds follows the same pointer.
+// It was a fmt.Sprint of these with the config printed field by field, on
+// every message: over half of this process's work while a pane redrew at
+// 60 Hz.
+type paletteInputs struct {
+	keys          *config.UserConfig
+	agents, group bool
+	set           bool
 }
 
 // gitEntry is a cached reading of a folder's checkout.
@@ -671,7 +682,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
 		m.sendKeybinds()
 	}
-	if key := fmt.Sprint(m.keysFrom != nil, m.os.AgentsSeen(), len(m.os.MultifocusSet) > 0, m.keysFrom); key != m.paletteKey {
+	if key := (paletteInputs{m.keysFrom, m.os.AgentsSeen(), len(m.os.MultifocusSet) > 0, true}); key != m.paletteKey {
 		m.paletteKey = key
 		m.sendPalette()
 	}
@@ -951,10 +962,10 @@ func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
 }
 
 func (t *tap) Output(ptyID string, data []byte) {
-	b := make([]byte, 0, 1+len(ptyID)+len(data))
-	b = appendID(b, ptyID)
-	b = append(b, data...)
-	t.out.Frame(KindOutput, b)
+	// data is queued as it is, not copied: the daemon client hands each
+	// callback a payload of its own and never writes to it again, and the
+	// pane's emulator only reads it. See Window.WriteOutputAsync.
+	t.out.frameWith(KindOutput, appendID(make([]byte, 0, 1+len(ptyID)), ptyID), data)
 }
 
 func (t *tap) Resized(ptyID string, width, height int) {
@@ -1010,7 +1021,9 @@ func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea
 }
 
 // frameWriter serializes frames onto the renderer's pipe from any goroutine.
-// Frames queue in memory, so a tap callback never blocks on the pipe.
+// Frames queue in memory, so a tap callback never blocks on the pipe. A frame
+// may take two queue entries, its head and its body; both go in under one
+// hold of the lock, so frames never interleave.
 type frameWriter struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -1031,9 +1044,26 @@ func (f *frameWriter) Frame(kind byte, payload []byte) {
 	binary.BigEndian.PutUint32(b, uint32(1+len(payload)))
 	b[4] = kind
 	b = append(b, payload...)
+	f.push(b, nil)
+}
+
+// frameWith queues a frame whose payload is head then body. body is written
+// from where it is, so the caller must not change it afterwards.
+func (f *frameWriter) frameWith(kind byte, head, body []byte) {
+	b := make([]byte, 5, 5+len(head))
+	binary.BigEndian.PutUint32(b, uint32(1+len(head)+len(body)))
+	b[4] = kind
+	b = append(b, head...)
+	f.push(b, body)
+}
+
+func (f *frameWriter) push(a, b []byte) {
 	f.mu.Lock()
 	if !f.closed {
-		f.queue = append(f.queue, b)
+		f.queue = append(f.queue, a)
+		if len(b) > 0 {
+			f.queue = append(f.queue, b)
+		}
 		f.cond.Signal()
 	}
 	f.mu.Unlock()
