@@ -479,11 +479,59 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	}
 	j.done.Store(total)
 	if j.move {
-		if err := src.remove(ctx, j.src.Path, true); err != nil {
+		left, err := removeMoved(ctx, src, j.src.Path, entries)
+		if err != nil {
 			return classify(err)
+		}
+		if left {
+			j.set(func(j *transferJob) {
+				j.errText = "The copy is done. Some items in " + j.src.String() + " were not copied, such as links, pipes or new files, so they stay there."
+			})
 		}
 	}
 	return nil
+}
+
+// removeMoved removes from a moved folder what the copy carried: each file it
+// copied, then each folder that is empty after that, deepest first. A move
+// must not remove what it did not copy: a link, a pipe, or a file made in the
+// folder while the copy ran stays, and so does the folder that holds it. It
+// reports whether anything stayed.
+func removeMoved(ctx context.Context, src fileEnd, root string, entries []WalkEntry) (bool, error) {
+	gone := func(err error) bool {
+		if errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+		var ve *VerbCallError
+		return errors.As(err, &ve) && ve.Code == ErrVerbNoFile
+	}
+	for _, e := range entries {
+		if e.Dir {
+			continue
+		}
+		if err := src.remove(ctx, joinRemote(root, e.Rel), false); err != nil && !gone(err) {
+			return false, err
+		}
+	}
+	left := false
+	for i := len(entries) - 1; i >= 0; i-- {
+		if !entries[i].Dir {
+			continue
+		}
+		if err := src.remove(ctx, joinRemote(root, entries[i].Rel), false); err != nil && !gone(err) {
+			if ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			left = true
+		}
+	}
+	if err := src.remove(ctx, root, false); err != nil && !gone(err) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		left = true
+	}
+	return left, nil
 }
 
 // safeRel reports whether rel names a path inside a folder: relative, slash
