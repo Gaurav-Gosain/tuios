@@ -3249,3 +3249,34 @@ against the code it covers with that code cut, on 2026-10-08.
 `TestGhosttyDivergence_ProtectionLost` pins two places the backends still
 differ: a reflow drops protection on the pure emulator, and DECSTR stops it
 there. Each case fails when the backends start to agree.
+
+## herdr plugins on Windows (#579)
+
+These are unit and platform-boundary tests in `internal/shimlink`,
+`internal/herdrplugin` and `internal/stopevent`. No machine here runs Windows,
+and Wine has no AF_UNIX, so no end-to-end test reaches this code. On
+2026-10-09 each control below cut one piece of wiring, built the Windows test
+binary, and ran the named test under Wine 10. The sweep control ran on Linux.
+Every control failed where shown, and the same tests passed on the branch
+build.
+
+| Control: what was cut | Test | Where it failed |
+| --- | --- | --- |
+| The `withExtension` call in `ResolveProgram` | `TestResolveProgramOnThisPlatform` | `bin/herdr-nvim`, `./bin/herdr-nvim` and the absolute path all `plugin_command_not_found` |
+| The job assignment in `track` (`if useJobs`) | `TestStopPluginKillsWhatTheCommandStarted` | the child of a running command still runs after `StopAll` |
+| The job assignment in `track` (`if useJobs`) | `TestPluginProcessesEndWithTheDaemon` | the plugin's child still runs after the host is terminated |
+| The `ntResumeProcess` call in `track` | `TestStartWithoutAJob` | the command never runs: no pid written in 20 s |
+| The `setLimits(g.job, 0)` call in `release` | `TestAFinishedCommandLeavesItsProgramRunning` | the program a finished command opened is killed |
+| The `Alive` check in `sweep` | `TestInstallFileSweepsLeftovers` | the running process's `.new-78` file is removed |
+| The `ERROR_FILE_NOT_FOUND` case in `stopevent.Request` | `TestRequestReachesTheDaemon` | a request with no daemon returns "File not found", not `ErrNotWaiting` |
+
+Two things are not caught:
+
+- Cutting the `group.release()` call in the runner leaves every test green.
+  The job then stays open with its kill-on-close limit, so a program a
+  finished command opened ends with the daemon, and the handle leaks. No test
+  ends the daemon after a command finishes.
+- `TestInstallReplacesARunningLink` passes under Wine, but nothing shows that
+  Wine refuses to replace a running program, so the rename-aside path may not
+  run there. The test runs on real Windows in the `go test (windows)` job,
+  which is the proof of that path.
