@@ -824,7 +824,7 @@ func (e fileEnd) hash(ctx context.Context, path string, part bool, off, length i
 
 func (e fileEnd) openRead(ctx context.Context, path string, off int64) (io.ReadCloser, error) {
 	if e.local() {
-		f, err := os.Open(path)
+		f, _, err := openRegular(path)
 		if err != nil {
 			return nil, err
 		}
