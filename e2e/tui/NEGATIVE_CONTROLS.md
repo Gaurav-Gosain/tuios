@@ -3470,3 +3470,25 @@ its session is killed. `TestStreamPaneLeaseOnTheDesktop` saves the frames
 `stream-lease-held` and `stream-lease-released` under `TUIOS_E2E_FRAMES`: an
 attached client draws the leased pane at 30 by 6 in its full rectangle, and at
 58 by 36 again once the lease ends.
+
+## stream-pane review fixes
+
+`e2e/tui/stream_pane_review_test.go` holds the fixes from the review of the
+stream-pane pull request. On 2026-10-09 each control below cut one line of a
+fix, built a binary, and ran the test against it. Each control failed where
+shown, and each test passed on the fixed build. The tests write
+`presence-nonce-scope.txt`, `stream-lease-expiry.txt`,
+`stream-lease-behind-input.txt` and `stream-snapshot-charge.txt` under
+`TUIOS_E2E_FRAMES`.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| The `covers` check in `humanNonceFor` (`if !ok \|\| !h.covers(sessionID)` to `if !ok`) | `TestPresenceNonceScope` | **caught**: "a presence for session phone answered in session other: reply-approval ... applied:true" |
+| The `expireLease` call in `paneStream.stream` | `TestStreamPaneLeaseExpires` | **caught**: "the lease of a silent client did not end within 40s" (fixed build: `lease_expired` after 30s) |
+| `queueInput` writing to the pane on the goroutine that reads the client | `TestStreamPaneLeaseBehindBlockedInput` | **caught**: "a lease frame behind input the pane does not read was not applied within 5s" |
+| The read budget charge in `snapshotSubscribe` (charge 0) | `TestStreamPaneSnapshotCharged` | **caught**: "a second snapshot was taken while the first held the budget" (fixed build: `busy`) |
+
+The positive halves: the scoped presence still acts in its own session, a
+presence with no session answers the approval in the other session, a client
+that renews its lease every 10 seconds keeps it past 30 seconds, input past
+the queue gets `E busy`, and the budget frees once the first stream ends.
