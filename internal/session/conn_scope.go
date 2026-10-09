@@ -272,6 +272,9 @@ var verbScopes = map[string]scopeKind{
 	"verify-fan":     scopeLaunch,
 	"keep-fan":       scopeDeny,
 	"mark-attention": scopeDeny,
+	// review-stage writes the index of a pane's worktree. It is the person's
+	// tool, so a restricted caller has no use for it.
+	"review-stage": scopeDeny,
 
 	// From the checkpoint work (verb_checkpoint.go). Listing and reading a
 	// pane's checkpoints are reads of its session. A restore writes the

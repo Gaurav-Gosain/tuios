@@ -18,6 +18,10 @@ import "slices"
 var (
 	// reviewNoteActions are what review-note does.
 	reviewNoteActions = []string{"add", "edit", "remove", "list", "clear"}
+	// reviewIndexModes are the index diffs review-diff reads.
+	reviewIndexModes = []string{"unstaged", "staged"}
+	// reviewStageActions are what review-stage does.
+	reviewStageActions = []string{"stage", "unstage", "undo"}
 	// reviewNoteSides are the sides of a diff a note can sit on.
 	reviewNoteSides = []string{"new", "old"}
 	// markAttentionActions are what mark-attention does to an item.
@@ -47,14 +51,16 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "uncommitted", Type: "bool", Description: "Only what is not committed yet, against HEAD.", Default: "false"},
 				{Name: "paths", Type: "[]string", Description: "Only these paths, relative to the repository root. Omit for every changed file."},
 				{Name: "context", Type: "int", Description: "Lines of context around each change, 0 to 20.", Default: "3"},
+				{Name: "index", Type: "string", Description: "Read the worktree's index instead of the base. unstaged is the index against the working files, untracked files included. staged is HEAD against the index. Omit for the diff against the base. Not with base, against or uncommitted.", Accepted: reviewIndexModes},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The session of the pane reviewed."},
 				{Name: "window", Type: "string", Description: "The pane reviewed, by id: the one its notes are kept for."},
 				{Name: "repo_root", Type: "string", Description: "The repository's main checkout."},
 				{Name: "worktree", Type: "string", Description: "The worktree the diff was read from, symbolic links resolved."},
-				{Name: "base", Type: "string", Description: "The base as named (the ref given, the worktree's base, the upstream branch, or HEAD), empty with against."},
-				{Name: "base_sha", Type: "string", Description: "The commit the diff runs from: the merge base of HEAD and the base, or HEAD for uncommitted changes only."},
+				{Name: "base", Type: "string", Description: "The base as named (the ref given, the worktree's base, the upstream branch, or HEAD), empty with against. With index unstaged it is index, with index staged it is HEAD."},
+				{Name: "base_sha", Type: "string", Description: "The commit the diff runs from: the merge base of HEAD and the base, or HEAD for uncommitted changes only. With index it is a tree: the index, or HEAD's tree."},
+				{Name: "index", Type: "string", Description: "The index mode read, unstaged or staged. Absent without index."},
 				{Name: "uncommitted", Type: "bool", Description: "The diff shows only what is not committed: asked for, or no base was found."},
 				{Name: "tree_sha", Type: "string", Description: "The tree the working state was written to, for a later diff of the same state."},
 				{Name: "against", Type: "string", Description: "The sibling session, when one was given."},
@@ -68,8 +74,38 @@ func agentWorkVerbs() map[string]verbEntry {
 			examples: []string{
 				`{"id":1,"verb":"review-diff","params":{"session":"api-fan-retry-2"}}`,
 				`{"id":1,"verb":"review-diff","params":{"session":"work","window":"build","uncommitted":true}}`,
+				`{"id":1,"verb":"review-diff","params":{"session":"work","window":"build","index":"unstaged"}}`,
 			},
 			handler: (*Daemon).verbReviewDiff,
+		},
+		// verb_review_stage.go
+		"review-stage": {
+			description: "Stage or unstage a change in the worktree of a pane. Name a whole file, one hunk, or some lines of a hunk. Only the index changes. The working files do not change. Every result carries an undo object. Send it back with action undo to undo the call. The undo result carries its own undo object, which redoes the call.",
+			params: []verbParam{
+				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: reviewStageActions},
+				sessionParam,
+				windowParam,
+				{Name: "path", Type: "string", Description: "The file, relative to the repository root. Needed to stage and unstage."},
+				{Name: "hunk", Type: "string", Description: "The hunk header, exactly as review-diff returned it. Stage reads it from index unstaged, unstage from index staged. Omit for the whole file."},
+				{Name: "lines", Type: "[]int", Description: "Indices into the lines of the hunk. Only added and removed lines count. Context lines are ignored. Omit for the whole hunk."},
+				{Name: "context", Type: "int", Description: "The context of the diff the hunk came from, 0 to 20. It must match that diff.", Default: "3"},
+				{Name: "undo", Type: "object", Description: "For action undo: the undo object of the result to undo, with entries and after."},
+				humanNonce,
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The session of the pane."},
+				{Name: "window", Type: "string", Description: "The pane, by id."},
+				{Name: "worktree", Type: "string", Description: "The worktree whose index changed."},
+				{Name: "path", Type: "string", Description: "The file named."},
+				{Name: "action", Type: "string", Description: "The action done: stage, unstage or undo."},
+				{Name: "undo", Type: "object", Description: "entries: the index entries of the paths touched before the call, each path with mode and sha, or absent. after: the same paths after the call. Send it with action undo to undo the call."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"review-stage","params":{"action":"stage","session":"work","window":"build","path":"api/retry.go","hunk":"@@ -40,7 +40,9 @@ func Do(ctx context.Context","lines":[3,4]}}`,
+				`{"id":1,"verb":"review-stage","params":{"action":"unstage","session":"work","window":"build","path":"api/retry.go"}}`,
+				`{"id":1,"verb":"review-stage","params":{"action":"undo","session":"work","window":"build","undo":{"entries":[{"path":"api/retry.go","mode":"100644","sha":"<sha>"}],"after":[{"path":"api/retry.go","mode":"100644","sha":"<sha>"}]}}}`,
+			},
+			handler: (*Daemon).verbReviewStage,
 		},
 		"review-note": {
 			description: "Keep the review notes on a pane's changes: add one on a line or a hunk, edit, remove, list or clear them. Notes are held by the daemon per worktree, so every client and the CLI see the same ones, and follow their line as the diff moves. A note is the person's only with a live human_nonce, and a pane without admin adds or edits notes only on panes it could type into.",

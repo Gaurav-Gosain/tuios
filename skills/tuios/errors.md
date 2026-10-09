@@ -16,7 +16,8 @@ Over the socket every failure carries a stable code in the error envelope:
 `no_shell_integration`, `not_at_prompt`, `confirm_required`,
 `protocol_mismatch`, `unknown_host`, `host_unreachable`, `host_refused`,
 `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
-`repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
+`repo_not_found`, `not_repo`, `no_notes`, `hunk_changed`, `index_changed`,
+`whole_file_only`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
 `internal`. `internal` is a failure inside the daemon
@@ -45,6 +46,9 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `agents_disabled` | The person turned the agent features off with `[agents] enabled = false`, and the verb is one of them. Nothing was done. Do not retry. Tell the person. |
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
 | `no_notes` | From `send-review`: no unsent notes. Add one with `tuios review note`, or name sent ones with `--id` to send them again. |
+| `hunk_changed` | From `review-stage`: the file or the hunk is not in the diff now. Nothing was changed. Read the diff again with `review-diff` and the same `index` and `context`. |
+| `index_changed` | From `review-stage` undo: the index changed after the call. Nothing was changed. Read the diff again. |
+| `whole_file_only` | From `review-stage`: a rename, a binary file or a very large file is staged only whole. Nothing was changed. Leave `hunk` and `lines` out. |
 | `no_checkpoint` | From `checkpoint-diff` and `restore-checkpoint`: the pane has no checkpoint by that number. The hint lists the ones it has. Nothing was changed. |
 | `nothing_to_commit` | From `ship-commit`: the work tree has no change. From `ship-push` and `ship-pr`: the branch has no commit. Nothing was changed. |
 | `merge_conflict` | From `ship-merge`: the merge conflicted and was undone. The hint lists the files. Rebase the branch in the worktree, resolve them there, and merge again. |

@@ -3469,3 +3469,17 @@ on the branch with its fix.
 
 The wave 5 tests in `file_transfer_test.go` and `gui_bridge_files_test.go`
 pass on the branch with every fix.
+
+## Staging by hunk and by line (review-stage)
+
+`review_stage_test.go` has one test, `TestReviewStageByHunkAndLine`. It runs
+review-diff with `index` and review-stage through a real gui-bridge against a
+real daemon, on a scratch repository. On 2026-10-09 each control below was
+built into a binary and the test was run against it. Each control failed
+where shown. The same test passed on the branch build.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| `SelectionPatch` keeps every unselected added line (the patch builder) | after staging the line `new b`, `git diff --cached` also holds `+new a` |
+| `reviewStageChange` ignores `lines` and takes the whole hunk (the call site) | after staging the line `new b`, `git diff --cached` also holds `+new a` |
+| `reviewStageUndo` skips the check that the index still holds `after` | the undo after `git add` answers ok instead of `index_changed` |

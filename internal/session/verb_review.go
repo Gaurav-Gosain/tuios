@@ -181,6 +181,7 @@ type reviewParams struct {
 	Uncommitted bool     `json:"uncommitted"`
 	Paths       []string `json:"paths"`
 	Context     *int     `json:"context"`
+	Index       string   `json:"index"`
 }
 
 // verbReviewDiff answers review-diff.
@@ -212,6 +213,12 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	if p.Against != "" && (p.Base != "" || p.Uncommitted) {
 		return nil, invalidParam("against", "against compares two attempts with each other, so it takes no base and no uncommitted")
 	}
+	if p.Index != "" && !slices.Contains(reviewIndexModes, p.Index) {
+		return nil, invalidParam("index", "index is unstaged or staged, or empty for the diff against the base", reviewIndexModes...)
+	}
+	if p.Index != "" && (p.Base != "" || p.Against != "" || p.Uncommitted) {
+		return nil, invalidParam("index", "index reads the worktree's own index, so it takes no base, against or uncommitted")
+	}
 	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
@@ -221,7 +228,14 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	defer cancel()
 	opt := review.Options{Dir: repo.root, Paths: p.Paths, Context: lines}
 	againstName := ""
-	if p.Against != "" {
+	if p.Index != "" {
+		iopt, err := review.IndexOptions(ctx, repo.root, p.Index)
+		if err != nil {
+			return nil, reviewGitFailed(err)
+		}
+		iopt.Paths, iopt.Context = p.Paths, lines
+		opt = iopt
+	} else if p.Against != "" {
 		sib, verr := d.reviewSibling(cs, sess, repo, p.Against)
 		if verr != nil {
 			return nil, verr
@@ -246,7 +260,9 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		return nil, reviewGitFailed(err)
 	}
 
-	if againstName == "" {
+	// The notes sit on the diff against the base. An index diff is a part of
+	// it, so it neither moves them nor names their base.
+	if againstName == "" && p.Index == "" {
 		d.reanchorReviewNotes(ctx, repo, target.ID, diff, p.Paths)
 		d.reviewNotes.setBase(repo.root, target.ID, diff.Base)
 	}
@@ -266,6 +282,9 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		"truncated":   diff.Truncated,
 		"notes":       notes,
 		"untrusted":   true,
+	}
+	if p.Index != "" {
+		out["index"] = p.Index
 	}
 	if againstName != "" {
 		out["against"] = againstName

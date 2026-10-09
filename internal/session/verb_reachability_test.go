@@ -218,6 +218,12 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// agent. The review verbs are proved in verb_review_test.go.
 	"review-diff#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-2 does not exist here"},
 	"send-review#0": {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
+	// The fixture's repository has no api/retry.go, and the undo example's
+	// sha is a placeholder. review-stage is proved in
+	// e2e/tui/review_stage_test.go.
+	"review-stage#0": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
+	"review-stage#1": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
+	"review-stage#2": {errCode: ErrVerbInvalidParams, why: "the example's sha is a placeholder"},
 	// No agent finished a turn in the fixture, so no pane has a checkpoint.
 	// The checkpoints are proved in e2e/tui/checkpoint_test.go.
 	"checkpoint-diff#0":    {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 2"},
