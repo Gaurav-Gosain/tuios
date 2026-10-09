@@ -435,3 +435,70 @@ func TestATransferStoppedWhileQueuedStaysStopped(t *testing.T) {
 		t.Errorf("ASSERTION: the paused copy, resumed, ended %s (verified %v): %s", r.State, r.Verified, r.Error)
 	}
 }
+
+// TestACopyDoesNotWriteThroughALinkAtItsPart puts a link where a copy's
+// part file goes, pointing at a file that must not change, on this machine
+// and on build. The copy must refuse to write through either link, and the
+// file the links point at must keep its bytes.
+func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+
+	src := filepath.Join(base, "report.txt")
+	if err := os.WriteFile(src, []byte("the copy's bytes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	farSrc := filepath.Join(remote, "far-report.txt")
+	if err := os.WriteFile(farSrc, []byte("the copy's bytes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		precious string
+		src, dst map[string]any
+		part     string
+	}{
+		{
+			name:     "here",
+			precious: filepath.Join(base, "precious.txt"),
+			src:      map[string]any{"host": "build", "path": farSrc},
+			dst:      map[string]any{"path": filepath.Join(base, "shared", "report.txt")},
+			part:     filepath.Join(base, "shared", ".report.txt.tuios-part"),
+		},
+		{
+			name:     "on build",
+			precious: filepath.Join(remote, "precious.txt"),
+			src:      map[string]any{"path": src},
+			dst:      map[string]any{"host": "build", "path": filepath.Join(remote, "shared", "report.txt")},
+			part:     filepath.Join(remote, "shared", ".report.txt.tuios-part"),
+		},
+	}
+	c := dialVerbs(t, base)
+	for _, tc := range cases {
+		if err := os.WriteFile(tc.precious, []byte("keep me\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(tc.part), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(tc.precious, tc.part); err != nil {
+			t.Fatal(err)
+		}
+		var row transferRow
+		c.must("transfer-start", map[string]any{"src": tc.src, "dst": tc.dst}, &row)
+		row = waitTransferEnd(t, base, row.ID, 30*time.Second)
+		got, _ := os.ReadFile(tc.precious)
+		fi, _ := os.Lstat(tc.dst["path"].(string))
+		t.Logf("%s: the copy ended %s (%s); precious holds %q", tc.name, row.State, row.Error, got)
+		if string(got) != "keep me\n" {
+			t.Errorf("ASSERTION: %s, the copy wrote through the link at its part: the file it points at holds %q", tc.name, got)
+		}
+		if fi != nil && fi.Mode()&os.ModeSymlink != 0 {
+			t.Errorf("ASSERTION: %s, the copy put the link in place of the file", tc.name)
+		}
+		if row.State != "failed" {
+			t.Errorf("ASSERTION: %s, the copy ended %s, want failed with a reason", tc.name, row.State)
+		}
+	}
+}
