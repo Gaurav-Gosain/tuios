@@ -133,6 +133,9 @@ func ellipsize(s string, w int) string {
 }
 
 func cmdColors(t *TTY, _ []string) int {
+	cols, _ := t.Size()
+	// Each of the 16 swatches is four cells, eight to a row when they fit.
+	perRow := max(min(8, cols/4), 1)
 	for row := range 2 {
 		for c := range 8 {
 			bg := 40 + c
@@ -140,10 +143,18 @@ func cmdColors(t *TTY, _ []string) int {
 				bg = 100 + c
 			}
 			t.Printf("\x1b[%d;97m %2d ", bg, c+8*row)
+			if (c+1)%perRow == 0 && c < 7 {
+				t.Print(reset + "\r\n")
+			}
 		}
 		t.Print(reset + "\r\n")
 	}
+	// The cube strip is 36 swatches of two cells, as many to a row as fit.
+	perRow = max(cols/2, 1)
 	for i := range 36 {
+		if i > 0 && i%perRow == 0 {
+			t.Print(reset + "\r\n")
+		}
 		t.Printf("\x1b[48;5;%dm  ", 16+i*6)
 	}
 	t.Print(reset + "\r\n")
@@ -236,7 +247,13 @@ func cmdTop(t *TTY, _ []string) int {
 		}
 		b.WriteString("\x1b[J")
 		fmt.Fprintf(&b, "\x1b[%d;1H%s q to quit %s", rows, "\x1b[7m", reset)
-		return b.String()
+		// A line wider than the screen wraps and pushes every row below it
+		// down, so cut each one to the width.
+		frame := strings.Split(b.String(), "\r\n")
+		for i, l := range frame {
+			frame[i] = fit(l, cols)
+		}
+		return strings.Join(frame, "\r\n")
 	}, 500*time.Millisecond, false)
 }
 
@@ -315,7 +332,8 @@ var fortunes = []string{
 }
 
 func cmdFortune(t *TTY, _ []string) int {
-	t.Print(fortunes[rand.IntN(len(fortunes))] + "\r\n")
+	cols, _ := t.Size()
+	printLines(t, wrapWords(fortunes[rand.IntN(len(fortunes))], cols))
 	return 0
 }
 
@@ -324,10 +342,28 @@ func cmdCowsay(t *TTY, args []string) int {
 	if text == "" {
 		text = "moo. try cowsay hello"
 	}
-	n := utf8.RuneCountInString(text)
-	t.Print(" " + strings.Repeat("_", n+2) + "\r\n")
-	t.Print("< " + text + " >\r\n")
-	t.Print(" " + strings.Repeat("-", n+2) + "\r\n")
+	// Like cowsay, wrap the text at 40 columns, or narrower when the pane
+	// is: the bubble adds four cells.
+	cols, _ := t.Size()
+	lines := wrapWords(text, min(40, max(cols-4, 1)))
+	n := 0
+	for _, l := range lines {
+		n = max(n, utf8.RuneCountInString(l))
+	}
+	t.Print(fit(" "+strings.Repeat("_", n+2), cols) + "\r\n")
+	for i, l := range lines {
+		left, right := "|", "|"
+		switch {
+		case len(lines) == 1:
+			left, right = "<", ">"
+		case i == 0:
+			left, right = "/", "\\"
+		case i == len(lines)-1:
+			left, right = "\\", "/"
+		}
+		t.Print(fit(left+" "+l+strings.Repeat(" ", n-utf8.RuneCountInString(l))+" "+right, cols) + "\r\n")
+	}
+	t.Print(fit(" "+strings.Repeat("-", n+2), cols) + "\r\n")
 	for _, l := range []string{
 		`        \   ^__^`,
 		`         \  (oo)\_______`,
@@ -335,7 +371,7 @@ func cmdCowsay(t *TTY, args []string) int {
 		`                ||----w |`,
 		`                ||     ||`,
 	} {
-		t.Print(l + "\r\n")
+		t.Print(fit(l, cols) + "\r\n")
 	}
 	return 0
 }

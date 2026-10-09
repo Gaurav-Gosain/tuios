@@ -522,7 +522,9 @@ func (s *shell) complete() {
 		s.insert(add...)
 		return
 	}
-	s.t.Print("\r\n" + strings.Join(matches, "  ") + "\r\n")
+	cols, _ := s.t.Size()
+	s.t.Print("\r\n")
+	printLines(s.t, columns(matches, cols))
 	s.redraw()
 }
 
@@ -688,8 +690,9 @@ func (s *shell) ls(args []string, long bool) int {
 		}
 		parts = append(parts, name)
 	}
-	if !long && len(parts) > 0 {
-		s.t.Print(strings.Join(parts, "  ") + "\r\n")
+	if !long {
+		cols, _ := s.t.Size()
+		printLines(s.t, columns(parts, cols))
 	}
 	return 0
 }
@@ -751,9 +754,11 @@ func splitArgs(line string) []string {
 
 func cmdHelp(t *TTY) int {
 	t.Print(bold + "Things to try" + reset + "\r\n")
-	for _, s := range summaries {
-		t.Printf("  %s%-26s%s %s\r\n", green, s[0], reset, s[1])
+	cols, _ := t.Size()
+	printLines(t, table(summaries, 2, green, cols))
+	t.Print("\r\n")
+	for _, l := range wrapWords("tuios keys: Ctrl+B then ? shows every keybinding.", cols) {
+		t.Print(dim + l + reset + "\r\n")
 	}
-	t.Print("\r\n" + dim + "tuios keys: Ctrl+B then ? shows every keybinding." + reset + "\r\n")
 	return 0
 }

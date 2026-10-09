@@ -14,14 +14,32 @@ func cmdTuios(s *shell, args []string, _ string) int {
 	sub := argOr(args, 1, "")
 	switch sub {
 	case "", "help", "--help", "-h":
-		t.Print("You are already in tuios. Press " + bold + "Ctrl+B" + reset + " then " + bold + "?" + reset + " to see every key.\r\n\r\n")
+		cols, _ := t.Size()
+		intro := strings.Fields("You are already in tuios. Press " + bold + "Ctrl+B" + reset + " then " + bold + "?" + reset + " to see every key.")
+		printLines(t, wrapTokens(intro, cols))
+		t.Print("\r\n")
 		t.Print("In this shell:\r\n")
-		t.Print("  " + green + "tuios tape play demo.tape" + reset + "  watch tuios drive itself\r\n")
-		t.Print("  " + green + "tuios tape list" + reset + "            the tapes here\r\n")
-		t.Print("  " + green + "tuios version" + reset + "\r\n")
-		t.Print("\r\n" + dim + "These show what they print on a real machine:" + reset + "\r\n")
-		t.Print("  " + green + "tuios ls" + reset + ", " + green + "tuios fan" + reset + ", " + green + "tuios worktree" + reset + ", " +
-			green + "tuios list-agents" + reset + ", " + green + "tuios list-verbs" + reset + ", " + green + "tuios list-hooks" + reset + "\r\n")
+		printLines(t, table([][2]string{
+			{"tuios tape play demo.tape", "watch tuios drive itself"},
+			{"tuios tape list", "the tapes here"},
+			{"tuios version", ""},
+		}, 2, green, cols))
+		t.Print("\r\n")
+		for _, l := range wrapWords("These show what they print on a real machine:", cols) {
+			t.Print(dim + l + reset + "\r\n")
+		}
+		real := []string{"tuios ls", "tuios fan", "tuios worktree", "tuios list-agents", "tuios list-verbs", "tuios list-hooks"}
+		var tokens []string
+		for i, name := range real {
+			tok := green + name + reset
+			if i < len(real)-1 {
+				tok += ","
+			}
+			tokens = append(tokens, tok)
+		}
+		for _, l := range wrapTokens(tokens, cols-2) {
+			t.Print("  " + l + "\r\n")
+		}
 		return 0
 	case "version", "--version", "-v":
 		t.Print("tuios (browser demo, the real thing compiled to WebAssembly)\r\n")
