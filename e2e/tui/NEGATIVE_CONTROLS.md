@@ -3353,3 +3353,20 @@ Each control below was run on 2026-10-08 on branch
 | The parent folder is not checked | `reuseOptions`: the `privateDir(filepath.Dir(dir))` check cut | `TestReuseNeedsPrivateFolders` (a group-writable parent is used) | **caught** |
 | A folder of another user is trusted | `privateDir`: the uid comparison cut | `TestPrivateDirRefusesAFolderOfAnotherUser` (`/proc/1/fd` counts as the user's own) | **caught** |
 | ssh's stale socket line is reported | `cmdTransport.Diagnostic`: `withoutStaleMasterLines` cut | `TestDiagnosticDropsTheStaleMasterLine` (the `Control socket connect(...)` line is kept) | **caught** |
+## The screen and scrollback from before tuios (discussion #588)
+
+`TestExitKeepsTheHostScreen` starts tuios from a shell that has printed 60
+lines, leaves it, and reads the host screen and the raw host stream. The exit
+reset began with RIS (`ESC c`). RIS cleared the screen that leaving the
+alternate screen had put back, and kitty and ghostty also drop the scrollback
+on it. The fix replaces RIS with DECSTR, the soft reset. Run on 2026-10-09.
+
+The positive half: each run waits until tuios has covered the 60 lines, and
+asserts that tuios sent `CSI ? 1049 l`.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| None: `main` at `8d3e07b9` | `standalone-quit`, `daemon-detach` | **caught**: the lines are gone, one RIS in each stream |
+| The fix: `\033c` put back at the front of `ResetSequence` | `standalone-quit`, `daemon-detach` | **caught**: the same failures |
+| `tape play`'s own copy of the reset | none | **not caught**: no test leaves `tape play` |
+| `forceExit`, the reset after a wedged quit | none | **not caught**: no test wedges the client |

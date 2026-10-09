@@ -177,9 +177,7 @@ func runLocal() error {
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		finalOS.DumpTickStats()
 		finalOS.Cleanup()
-		// The OSC 7501 records this client left on the terminal. The reset
-		// below removes them too; a terminal that keeps them past a reset
-		// is cleared all the same.
+		// The OSC 7501 records this client left on the terminal.
 		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
 	}
 

@@ -157,11 +157,18 @@ func captureTerminalState() (restore func()) {
 //
 // The daemon client's detach sync and Close are skipped: both can block on the
 // same wedge, and the session itself lives on in the daemon.
+// forcedExitPrefix undoes what Bubble Tea's exit would have: the kitty
+// keyboard flags, modifyOtherKeys and the alternate screen.
+const forcedExitPrefix = "\x1b[=0;1u\x1b[>4m\x1b[?1049l"
+
 func forceExit(restoreTerminal func(), code int) {
 	restoreTerminal()
 	wrote := make(chan struct{})
 	go func() {
-		_, _ = os.Stdout.WriteString("\x18" + terminal.ResetSequence)
+		// Bubble Tea's own exit never ran, so this also leaves the alternate
+		// screen and turns off the keyboard modes it set. ResetSequence no
+		// longer carries RIS, which used to do both by clearing everything.
+		_, _ = os.Stdout.WriteString("\x18" + forcedExitPrefix + terminal.ResetSequence)
 		close(wrote)
 	}()
 	select {

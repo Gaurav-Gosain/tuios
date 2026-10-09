@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -93,17 +94,7 @@ func runTapeInteractive(tapeFile string) error {
 		_, _ = os.Stdout.WriteString(finalOS.HostProgramStatusClear())
 	}
 
-	fmt.Print("\033c")
-	fmt.Print("\033[?1000l")
-	fmt.Print("\033[?1002l")
-	fmt.Print("\033[?1003l")
-	fmt.Print("\033[?1004l")
-	fmt.Print("\033[?1006l")
-	fmt.Print("\033[?25h")
-	fmt.Print("\033[?47l")
-	fmt.Print("\033[0m")
-	fmt.Print("\r\n")
-	_ = os.Stdout.Sync()
+	terminal.ResetTerminal()
 	finish()
 
 	if err != nil {
