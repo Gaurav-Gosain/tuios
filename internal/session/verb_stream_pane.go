@@ -82,7 +82,21 @@ const (
 	maxPaneOutputFrame = 256 << 10
 	// maxLeaseDim bounds a lease, which is a terminal size.
 	maxLeaseDim = 4096
+	// paneInputQueue is how many I frames wait for the pane to read the one
+	// before them. A frame that finds the queue full is refused as busy.
+	paneInputQueue = 4
+	// snapCellBytes is what one cell of a snapshot costs the daemon at most:
+	// its CellState in the TerminalState and its share of the VT bytes. A
+	// snapshot is charged this for every cell it may hold before it is taken.
+	snapCellBytes = 160
 )
+
+// paneLeaseTTL is how long a lease lasts without an L frame that renews it.
+// A phone that drops off the network sends nothing, and its connection can
+// stay open for as long as ssh and TCP take to notice, which is hours by
+// default. The lease ends after paneLeaseTTL instead, and the pane goes back
+// to the size its clients asked for. A variable so a test can shorten it.
+var paneLeaseTTL = 30 * time.Second
 
 // errPaneStreamGone ends a stream whose connection failed.
 var errPaneStreamGone = errors.New("pane stream connection gone")
@@ -106,7 +120,23 @@ type paneStream struct {
 	leaseMu sync.Mutex
 	leased  bool
 	closed  bool
+	// leaseAt is when the client last set or renewed its lease, in unix
+	// nanoseconds. Guarded by leaseMu.
+	leaseAt int64
 	done    sync.Once
+	// admitMu serializes the access checks of the stream's two goroutines.
+	// A check stores the caller's pane authority on the connection
+	// (cs.paneView) and recheckTyping reads it back, so a check on the other
+	// goroutine in between would hand an input frame the authority another
+	// verb computed.
+	admitMu sync.Mutex
+	// inputQ holds I frames for the goroutine that writes them to the pane,
+	// so a pane that does not read its input never holds up an L frame.
+	// quit closes when the stream ends.
+	inputQ chan []byte
+	quit   chan struct{}
+	// snapRelease gives back the read budget the snapshot in snap holds.
+	snapRelease func()
 }
 
 // verbStreamPane answers stream-pane and hands the connection to the stream.
@@ -145,7 +175,8 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		return nil, mapResolveErr(err, sess)
 	}
 	win := state.Windows[idx]
-	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID}
+	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
+		inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -230,10 +261,21 @@ func (ps *paneStream) setSub(sub *ptySubscriber) {
 // taken again. A pane that floods that hard for every try is subscribed from
 // the ring's start, and the bytes in between are the one hole the stream
 // allows.
+//
+// The snapshot is charged to the connection's read budget (frame_budget.go)
+// before it is taken, and holds the charge until writeSnap sent it. A
+// snapshot of a wide pane with its history is megabytes, and a peer that
+// opened streams in a loop held that much for each without the charge.
 func (ps *paneStream) snapshotSubscribe() *verbError {
+	w, h := ps.pty.Size()
+	release, ok := ps.d.readBudgetFor(ps.cs).acquire(int64(paneStreamScrollback+h)*int64(w)*snapCellBytes, readBudgetWait)
+	if !ok {
+		return newVerbError(ErrVerbBusy, "the daemon has no memory free for a snapshot of the pane now. Nothing was sent. Try again in a few seconds")
+	}
 	for attempt := 0; ; attempt++ {
 		st := ps.pty.GetTerminalState(paneStreamScrollback, 0)
 		if st == nil {
+			release()
 			return newVerbError(ErrVerbInternal, "the pane has no terminal to stream")
 		}
 		sub, ok := ps.pty.subscribeAt(ps.subID, st.Seq, true)
@@ -243,12 +285,13 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 		}
 		if ok && sub != nil {
 			ps.setSub(sub)
-			ps.snap = st
+			ps.snap, ps.snapRelease = st, release
 			ps.pos = st.Seq
 			ps.cols, ps.rows = st.Width, st.Height
 			return nil
 		}
 		if ps.pty.ctx.Err() != nil {
+			release()
 			return newVerbError(ErrVerbUnknownPane, "the pane closed")
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -267,6 +310,8 @@ func (ps *paneStream) close() {
 		}
 		ps.leased, ps.closed = false, true
 		ps.leaseMu.Unlock()
+		close(ps.quit)
+		ps.dropSnap()
 		LogBasic("Client %s stopped streaming pane %s", ps.cs.clientID, shortWindowID(ps.window))
 	})
 }
@@ -274,6 +319,7 @@ func (ps *paneStream) close() {
 // run serves the stream until the client or the pane goes.
 func (ps *paneStream) run(br *bufio.Reader) {
 	defer ps.close()
+	go ps.writeInput()
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -376,6 +422,8 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 				}
 				return &paneExit{reason: "refused: " + verr.Message}
 			}
+			// A lease the client stopped renewing ends. See paneLeaseTTL.
+			ps.expireLease()
 			// A pane whose program exited stays open until a client closes
 			// its window. With nothing more coming from it, the stream ends.
 			if ps.pty.IsExited() && len(ps.sub.ch) == 0 {
@@ -426,6 +474,8 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 // recheck runs the checks stream-pane passed at the start again, against
 // the caller's grants and link policy as they are now.
 func (ps *paneStream) recheck() *verbError {
+	ps.admitMu.Lock()
+	defer ps.admitMu.Unlock()
 	params, _ := json.Marshal(map[string]string{"session": ps.sess.Name(), "window": ps.window})
 	_, _, verr := ps.d.admitVerb(ps.cs, "stream-pane", params)
 	return verr
@@ -441,6 +491,9 @@ func (ps *paneStream) recoverGap() error {
 		return nil
 	}
 	if verr := ps.snapshotSubscribe(); verr != nil {
+		if verr.Code == ErrVerbBusy {
+			return &paneExit{reason: "busy: " + verr.Message}
+		}
 		return ps.exitReason()
 	}
 	return ps.writeSnap()
@@ -449,7 +502,7 @@ func (ps *paneStream) recoverGap() error {
 // writeSnap sends the snapshot the stream holds, and forgets it.
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
-	ps.snap = nil
+	defer ps.dropSnap()
 	body := snapshotVT(st)
 	payload := make([]byte, 12, 12+len(body))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(st.Seq))
@@ -457,6 +510,16 @@ func (ps *paneStream) writeSnap() error {
 	binary.BigEndian.PutUint16(payload[10:12], uint16(st.Height))
 	payload = append(payload, body...)
 	return ps.writeFrame(paneFrameSnap, payload)
+}
+
+// dropSnap forgets the snapshot the stream holds and gives back its charge.
+// The stream goroutine calls it, and close, which runs after it.
+func (ps *paneStream) dropSnap() {
+	ps.snap = nil
+	if ps.snapRelease != nil {
+		ps.snapRelease()
+		ps.snapRelease = nil
+	}
 }
 
 // writeResize sends the stream's current size at its current position.
@@ -530,7 +593,7 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 		}
 		switch head[0] {
 		case paneFrameInput:
-			if verr := ps.input(payload); verr != nil {
+			if verr := ps.queueInput(payload); verr != nil {
 				ps.writeError(verr)
 			}
 		case paneFrameLease:
@@ -543,23 +606,51 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 	}
 }
 
-// input types bytes into the pane, after every check send-text passes.
-func (ps *paneStream) input(data []byte) *verbError {
+// queueInput checks an I frame as send-text is checked, and queues it for
+// writeInput. A frame that finds paneInputQueue frames already waiting is
+// refused as busy: the pane is not reading its input.
+func (ps *paneStream) queueInput(data []byte) *verbError {
 	if len(data) == 0 {
 		return nil
 	}
+	if verr := ps.admitInput(); verr != nil {
+		return verr
+	}
+	select {
+	case ps.inputQ <- data:
+		return nil
+	default:
+		return newVerbError(ErrVerbBusy, fmt.Sprintf("the pane has not read the last %d input frames. This frame was not typed. Send it again when the pane reads its input", paneInputQueue))
+	}
+}
+
+// admitInput runs every check send-text passes.
+func (ps *paneStream) admitInput() *verbError {
+	ps.admitMu.Lock()
+	defer ps.admitMu.Unlock()
 	params, _ := json.Marshal(map[string]string{"session": ps.sess.Name(), "window": ps.window})
 	if _, _, verr := ps.d.admitVerb(ps.cs, "send-text", params); verr != nil {
 		return verr
 	}
-	if verr := ps.d.recheckTyping(ps.cs, "send-text", ps.sess, ps.window); verr != nil {
-		return verr
+	return ps.d.recheckTyping(ps.cs, "send-text", ps.sess, ps.window)
+}
+
+// writeInput types the queued I frames into the pane, one after another,
+// until the stream ends. A write into a pane that does not read blocks here,
+// and holds one frame, while the client's lease frames go on.
+func (ps *paneStream) writeInput() {
+	for {
+		select {
+		case <-ps.quit:
+			return
+		case data := <-ps.inputQ:
+			if _, err := ps.pty.Write(data); err != nil {
+				ps.writeError(ptyWriteError(err))
+				continue
+			}
+			ps.cs.lastInput.Store(time.Now().UnixNano())
+		}
 	}
-	if _, err := ps.pty.Write(data); err != nil {
-		return ptyWriteError(err)
-	}
-	ps.cs.lastInput.Store(time.Now().UnixNano())
-	return nil
 }
 
 // lease reads an 'L' frame and sets or releases the stream's lease.
@@ -586,6 +677,8 @@ func (ps *paneStream) lease(payload []byte) *verbError {
 // admitLease runs the checks a resize of the pane passes: a lease changes
 // the pane's size for every client, so it needs what resize needs.
 func (ps *paneStream) admitLease(cols, rows int) *verbError {
+	ps.admitMu.Lock()
+	defer ps.admitMu.Unlock()
 	params, _ := json.Marshal(map[string]any{"session": ps.sess.Name(), "window": ps.window, "width": cols, "height": rows})
 	_, _, verr := ps.d.admitVerb(ps.cs, "resize", params)
 	return verr
@@ -599,8 +692,31 @@ func (ps *paneStream) setLease(cols, rows int) error {
 		return nil
 	}
 	ps.leased = cols > 0
+	ps.leaseAt = time.Now().UnixNano()
 	return ps.pty.SetLease(ps.subID, cols, rows)
 }
+
+// expireLease releases the lease when the client has not renewed it for
+// paneLeaseTTL, and tells the client with an E frame of code
+// lease_expired. An L frame sets the lease again.
+func (ps *paneStream) expireLease() {
+	ps.leaseMu.Lock()
+	if !ps.leased || ps.closed || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
+		ps.leaseMu.Unlock()
+		return
+	}
+	ps.leased = false
+	err := ps.pty.SetLease(ps.subID, 0, 0)
+	ps.leaseMu.Unlock()
+	if err != nil {
+		LogBasic("Pane %s: an expired lease could not resize the pane: %v", shortWindowID(ps.window), err)
+	}
+	LogBasic("Client %s let its lease on pane %s expire", ps.cs.clientID, shortWindowID(ps.window))
+	ps.writeError(newVerbError(errLeaseExpired, fmt.Sprintf("the lease was not renewed for %s and was released. Send an L frame to hold the pane again", paneLeaseTTL)))
+}
+
+// errLeaseExpired is the E frame code of a lease the client did not renew.
+const errLeaseExpired = "lease_expired"
 
 // subscribeAt subscribes clientID from exactly fromSeq. It subscribes
 // nothing and reports false when the ring no longer holds the bytes from

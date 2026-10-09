@@ -31,8 +31,9 @@ import (
 //     mode, bracketed paste, focus reports, every mouse tracking mode and its
 //     encodings, and alternate scroll.
 //
-// What it does not: left and right margins, origin mode, the cursor DECSC
-// saved, protected cells and the character REP repeats. They decide how
+// What it does not: left and right margins, origin mode, insert mode (IRM),
+// newline mode (LNM), the cursor DECSC saved, protected cells and the
+// character REP repeats. They decide how
 // later output is painted, and a phone that misses them paints a rare
 // sequence differently until the next snapshot; the input it sends is the
 // same.
