@@ -502,6 +502,21 @@ var SidebarFolderClicks = []string{
 	SidebarFolderClickNavigate, SidebarFolderClickCd, SidebarFolderClickBoth,
 }
 
+// Rail header cases. See AppearanceConfig.RailHeaderCase.
+//
+// The rail's section headers are furniture: they frame their section without
+// competing with the rows under it, so "lowercase" keeps the muted unbolded
+// label the rail has always drawn. "uppercase" promotes them to headings in
+// their own right: the label goes uppercase and bold in the secondary ink and
+// the rule glyph runs out of it to the rail's edge.
+const (
+	RailHeaderLowercase = "lowercase"
+	RailHeaderUppercase = "uppercase"
+)
+
+// RailHeaderCases lists the valid values for appearance.sidebar.header_case.
+var RailHeaderCases = []string{RailHeaderLowercase, RailHeaderUppercase}
+
 // Where a delete from the files section sends the file.
 //
 // Trash is the default. The rail is an incidental place for a keystroke to land
