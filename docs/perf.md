@@ -2160,10 +2160,10 @@ request and push to main. It builds tuios the way the release does
 darwin/arm64 with the Go version go.mod names, prints the size, and fails when
 a binary is over its budget.
 
-| target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.6) | budget |
+| target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 33,431,714 | 33,500,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 31,467,538 | 31,540,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 33,501,346 | 34,000,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 31,536,466 | 32,000,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2471,6 +2471,15 @@ paste. It links golang.org/x/sync/semaphore, which was already in the module
 graph. On Go 1.26.6 the build measured 33,431,714 and 31,467,538 bytes, 45,056
 and 51,296 over origin/main at d2f6277b. darwin/arm64 was 7,538 bytes over the
 old budget.
+
+The budgets went to 34,000,000 (linux/amd64) and 32,000,000 (darwin/arm64)
+when main moved to the go1.26.9 toolchain and newer golang.org/x modules. On
+origin/main at 370097e6 the build measured 33,493,154 and 31,536,434 bytes,
+6,846 and 3,566 bytes under the old budgets. The glyph fallback for hosts that
+store images in their cells (#583, issue 567) added 8,192 and 32 bytes: the
+xterm.js check in the startup probe and the handler for a late XTVERSION
+answer. That put linux/amd64 1,346 bytes over. Both budgets now have about
+500 KB of room, and both stay under the 35 MB ceiling.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
