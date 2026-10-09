@@ -420,6 +420,12 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	}
 	files := 0
 	for _, e := range entries {
+		// The names come from the machine the folder is on, which may not
+		// be this one. A name that climbs out of the folder, or starts at
+		// the root, would let that machine choose where its bytes land.
+		if !safeRel(e.Rel) {
+			return permanent(ErrVerbInvalidParams, j.src.String()+" names a file outside the folder: "+echoName(e.Rel)+". Nothing outside the folder was written.")
+		}
 		if !e.Dir {
 			files++
 		}
@@ -466,6 +472,20 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 		}
 	}
 	return nil
+}
+
+// safeRel reports whether rel names a path inside a folder: relative, slash
+// separated, and with no empty, "." or ".." part and no NUL.
+func safeRel(rel string) bool {
+	if rel == "" || strings.HasPrefix(rel, "/") || strings.ContainsRune(rel, 0) {
+		return false
+	}
+	for part := range strings.SplitSeq(rel, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // joinRemote joins a path under a folder on any machine. Paths on every
