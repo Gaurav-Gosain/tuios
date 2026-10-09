@@ -12,12 +12,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // The file verbs: what an explorer needs from the machine the files are on.
@@ -321,12 +322,21 @@ func (d *Daemon) verbFileList(_ *connState, params json.RawMessage) (any, *verbE
 		}
 		entries = append(entries, describe(full, fi))
 	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		di, dj := entries[i].isDirLike(), entries[j].isDirLike()
-		if di != dj {
-			return di
+	// Names in one folder are unique, so the sort need not be stable, and an
+	// unstable one is several times faster on a large folder.
+	slices.SortFunc(entries, func(a, b FileInfo) int {
+		da, db := a.isDirLike(), b.isDirLike()
+		switch {
+		case da != db && da:
+			return -1
+		case da != db:
+			return 1
+		case a.Name == b.Name:
+			return 0
+		case naturalLess(a.Name, b.Name):
+			return -1
 		}
-		return naturalLess(entries[i].Name, entries[j].Name)
+		return 1
 	})
 	total := len(entries)
 	start := min(max(p.Offset, 0), total)
@@ -354,23 +364,33 @@ func (f FileInfo) isDirLike() bool {
 }
 
 // naturalLess orders names as a person reads them: case is ignored, and a run
-// of digits compares as a number, so "file2" comes before "file10".
+// of digits compares as a number, so "file2" comes before "file10". It reads
+// the names in place: a listing sorts tens of thousands of them, and a copy of
+// each name as runes per comparison was most of a large folder's listing time.
 func naturalLess(a, b string) bool {
-	ar, br := []rune(a), []rune(b)
 	i, j := 0, 0
-	for i < len(ar) && j < len(br) {
-		ca, cb := ar[i], br[j]
+	for i < len(a) && j < len(b) {
+		ca, wa := utf8.DecodeRuneInString(a[i:])
+		cb, wb := utf8.DecodeRuneInString(b[j:])
 		if unicode.IsDigit(ca) && unicode.IsDigit(cb) {
 			si := i
-			for i < len(ar) && unicode.IsDigit(ar[i]) {
-				i++
+			for i < len(a) {
+				r, w := utf8.DecodeRuneInString(a[i:])
+				if !unicode.IsDigit(r) {
+					break
+				}
+				i += w
 			}
 			sj := j
-			for j < len(br) && unicode.IsDigit(br[j]) {
-				j++
+			for j < len(b) {
+				r, w := utf8.DecodeRuneInString(b[j:])
+				if !unicode.IsDigit(r) {
+					break
+				}
+				j += w
 			}
-			na := strings.TrimLeft(string(ar[si:i]), "0")
-			nb := strings.TrimLeft(string(br[sj:j]), "0")
+			na := strings.TrimLeft(a[si:i], "0")
+			nb := strings.TrimLeft(b[sj:j], "0")
 			if len(na) != len(nb) {
 				return len(na) < len(nb)
 			}
@@ -383,11 +403,12 @@ func naturalLess(a, b string) bool {
 		if la != lb {
 			return la < lb
 		}
-		i++
-		j++
+		i += wa
+		j += wb
 	}
-	if len(ar)-i != len(br)-j {
-		return len(ar)-i < len(br)-j
+	ra, rb := utf8.RuneCountInString(a[i:]), utf8.RuneCountInString(b[j:])
+	if ra != rb {
+		return ra < rb
 	}
 	return a < b
 }
