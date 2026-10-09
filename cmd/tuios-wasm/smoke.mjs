@@ -2,7 +2,8 @@
 // output directory, loads the demo page, opens a window, runs a command in
 // the fake shell, checks the events that came back, and checks that q does
 // not quit. Then it loads the page with ?renderer=vtgl and checks that vtgl
-// draws it.
+// draws it. For both renderers it checks that the bottom row is on screen
+// when the host centres the grid, as tuios.dev/learn does.
 //
 // Usage: node cmd/tuios-wasm/smoke.mjs <dir> [screenshot.png]
 //
@@ -25,9 +26,43 @@ const server = spawn(process.execPath, [path.join(here, 'serve.mjs'), dir, Strin
 await new Promise((resolve) => server.stdout.once('data', resolve));
 
 const fail = (msg) => { throw new Error(msg); };
+
+// tuios.dev/learn centres the grid in its host (app/learn/learn.css in
+// tuios-docs), and this page does not. A renderer whose screen element is not
+// the size of the grid it draws is placed by the wrong box there: vtgl drew
+// the grid about 200 px low and the dock fell off the stage. So the page is
+// loaded with that rule added, and the grid it draws has to fit in the host.
+const learnLayout = '#terminal { display: flex !important; flex-direction: column; justify-content: safe center; }'
+  + ' #terminal > .xterm { flex: none; }';
+
+const checkBottomRow = async (page, renderer) => {
+  await page.addStyleTag({ content: learnLayout });
+  // Two frames, so layout has run with the rule in place.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const box = await page.evaluate(() => {
+    const rect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; };
+    const host = document.getElementById('terminal');
+    const screen = host.querySelector('.xterm-screen');
+    // The grid is the largest canvas in the screen element: the WebGL
+    // renderer adds a small one for its link layer. The DOM renderer, the
+    // fallback without WebGL, draws into the screen element itself.
+    const canvases = [...screen.querySelectorAll('canvas')];
+    const grid = canvases.reduce((a, b) => (b.clientHeight > a.clientHeight ? b : a), screen);
+    return { host: rect(host), grid: rect(grid), rows: window.webterm.rows };
+  });
+  // Half a pixel for sub-pixel layout.
+  if (box.grid.top < box.host.top - 0.5 || box.grid.bottom > box.host.bottom + 0.5) {
+    fail(`${renderer}: the grid spans ${box.grid.top}..${box.grid.bottom} px, outside the host ${box.host.top}..${box.host.bottom} px, so row ${box.rows} is off screen`);
+  }
+};
+
 let browser;
 try {
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
+  browser = await chromium.launch({
+    executablePath: process.env.CHROMIUM || undefined,
+    // tuios plays sounds. A test run has no business making any.
+    args: ['--mute-audio'],
+  });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   const logs = [];
   page.on('pageerror', (err) => logs.push('pageerror: ' + err.message));
@@ -76,6 +111,7 @@ try {
   if (state.totalWindows !== 1 || state.mode !== 'window') fail('unexpected state ' + JSON.stringify(state));
   const actions = await page.evaluate(() => Object.keys(window.tuios.actions()).length);
   if (actions < 50) fail('tuios.actions() has only ' + actions + ' actions');
+  await checkBottomRow(page, 'webgl');
 
   // ?renderer=vtgl must reach vtgl. A newer sip ships it as webterm-vtgl.js,
   // which the page has to load itself, and without it webterm falls back to
@@ -86,6 +122,7 @@ try {
   await vtglPage.waitForFunction(() => window.tuiosTimings && window.tuiosTimings.firstFrame, null, { timeout: 60000 });
   const vtglRenderer = await vtglPage.evaluate(() => window.webterm.renderer);
   if (vtglRenderer !== 'vtgl') fail('?renderer=vtgl drew with ' + vtglRenderer);
+  await checkBottomRow(vtglPage, 'vtgl');
   await vtglPage.close();
 
   if (shot) await page.screenshot({ path: shot });
