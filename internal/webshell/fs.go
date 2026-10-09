@@ -127,7 +127,7 @@ Sleep 700ms
 ToggleZoom
 Sleep 400ms
 TerminalMode
-Type "neofetch"
+Type "fastfetch"
 Enter
 Sleep 1800ms
 WindowManagementMode
@@ -182,7 +182,7 @@ Sleep 700ms
 NewWindow
 Sleep 600ms
 TerminalMode
-Type "neofetch"
+Type "fastfetch"
 Enter
 Sleep 300ms
 `,

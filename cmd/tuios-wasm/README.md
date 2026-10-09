@@ -183,5 +183,5 @@ lesson:
   all follow it. Its screen also matches the claude-code harness rules.
 - `tuios tape play demo.tape` plays a tape that opens two windows and runs
   commands in them. `tuios tape list` lists the tapes.
-- `top`, `rain`, `neofetch`, `tree`, `fortune`, `cowsay` and `colors` are
-  there for fun. The launcher (Alt+Space) lists the full-screen ones.
+- `top`, `rain`, `fastfetch`, `tree`, `fortune`, `cowsay` and `colors` are
+  there for fun. `neofetch` is another name for `fastfetch`. The launcher (Alt+Space) lists the full-screen ones.
