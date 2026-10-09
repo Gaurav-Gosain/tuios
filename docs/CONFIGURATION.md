@@ -1254,7 +1254,12 @@ allow_insecure = false
 | Key | Default | What it does |
 | --- | --- | --- |
 | `subject` | `https://tuios.dev/push/<machine>` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. |
-| `allow_insecure` | `false` | Lets `register-push` take an `http` endpoint on a loopback or private IP address, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
+| `allow_insecure` | `false` | Lets tuios send to a push service on a loopback or private address, by `https` or `http`, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
+
+When `allow_insecure` is `false`, tuios does not send to a loopback or
+private address. This applies also to a host name that resolves to one. tuios
+never sends to a link-local, multicast or unspecified address. A push does not
+follow a redirect.
 
 When an item opens, tuios encrypts it for each phone that asked for its kind
 and sends it to the phone's push service. When the item closes, tuios sends a

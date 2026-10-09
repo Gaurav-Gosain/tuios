@@ -68,8 +68,9 @@ type WebPushConfig struct {
 	// sender: an https URL or a mailto: address. Default: an https URL that
 	// names tuios and this machine (WebPushSubject).
 	Subject string `toml:"subject,omitempty"`
-	// AllowInsecure lets register-push take an http endpoint on a loopback
-	// or private IP address, for a push service on your own network.
+	// AllowInsecure lets the daemon send to a push service on a loopback or
+	// private address, by https or by http (an IP literal or localhost),
+	// for a push service on your own network.
 	// Default: false.
 	AllowInsecure bool `toml:"allow_insecure,omitempty"`
 }

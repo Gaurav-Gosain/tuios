@@ -22,9 +22,11 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -93,6 +95,13 @@ func ParseSubscriptionKeys(p256dh, auth string) (*ecdh.PublicKey, []byte, error)
 // CheckEndpoint checks a push endpoint: an https address, or an http one
 // when allowInsecure and its host is a loopback or private IP address (or
 // localhost). It returns the endpoint's origin, the VAPID audience.
+//
+// The endpoint comes from whoever called register-push, which can be a
+// linked machine, so it may not aim the daemon at this machine or its
+// network. A loopback or private address, as an IP literal or localhost, is
+// taken only when allowInsecure. A link-local, multicast or unspecified one
+// never is. A name is checked when the daemon connects (dialGuard), since
+// what it resolves to can change after this check.
 func CheckEndpoint(raw string, allowInsecure bool) (string, error) {
 	if len(raw) > 2048 {
 		return "", errors.New("endpoint is longer than 2048 bytes")
@@ -103,6 +112,9 @@ func CheckEndpoint(raw string, allowInsecure bool) (string, error) {
 	}
 	switch u.Scheme {
 	case "https":
+		if !hostAllowed(u.Hostname(), allowInsecure) {
+			return "", errLocalEndpoint
+		}
 	case "http":
 		if !allowInsecure {
 			return "", errors.New("endpoint is http. Use https, or set [notify.webpush] allow_insecure = true for a push service on a loopback or private address")
@@ -116,6 +128,9 @@ func CheckEndpoint(raw string, allowInsecure bool) (string, error) {
 	return u.Scheme + "://" + u.Host, nil
 }
 
+// errLocalEndpoint refuses an endpoint on this machine or its network.
+var errLocalEndpoint = errors.New("endpoint is on a loopback, private or link-local address. Set [notify.webpush] allow_insecure = true for a push service on your own network")
+
 // localHost reports whether host is localhost or a loopback or private IP
 // address. A name other than localhost is not resolved: what it resolves to
 // can change after the check.
@@ -123,8 +138,82 @@ func localHost(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
-	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	ip = ip.WithZone("").Unmap()
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
+// hostAllowed reports whether an endpoint's host may be used: a name other
+// than localhost always (the dial checks it), and localhost or an IP literal
+// by addrAllowed.
+func hostAllowed(host string, allowLocal bool) bool {
+	if strings.EqualFold(host, "localhost") {
+		return allowLocal
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return true
+	}
+	return addrAllowed(ip, allowLocal)
+}
+
+// addrAllowed reports whether the daemon may connect to ip for a push: never
+// to a link-local (the cloud metadata service is one), multicast or
+// unspecified address, and to a loopback or private one only when
+// allowLocal.
+func addrAllowed(ip netip.Addr, allowLocal bool) bool {
+	ip = ip.WithZone("").Unmap()
+	switch {
+	case !ip.IsValid(), ip.IsUnspecified(), ip.IsLinkLocalUnicast(), ip.IsLinkLocalMulticast(),
+		ip.IsInterfaceLocalMulticast(), ip.IsMulticast():
+		return false
+	case ip.IsLoopback(), ip.IsPrivate():
+		return allowLocal
+	}
+	return true
+}
+
+// dialPolicy is what the push client's dialer checks, carried in the
+// request's context.
+type dialPolicy struct{ allowLocal bool }
+
+type dialPolicyKey struct{}
+
+// newPushHTTPClient is the client Web Push sends with. It follows no
+// redirect: a push service answers a push with 201, and a redirect would send
+// the VAPID token again to an address the endpoint did not name. Its dialer
+// refuses an address addrAllowed refuses, after the name is resolved, so a
+// name that resolves to this machine, or changes to, gets nothing.
+func newPushHTTPClient() *http.Client {
+	base := &net.Dialer{Timeout: SendTimeout, KeepAlive: 30 * time.Second}
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				pol, ok := ctx.Value(dialPolicyKey{}).(dialPolicy)
+				if !ok {
+					return base.DialContext(ctx, network, addr)
+				}
+				d := *base
+				d.Control = func(_, address string, _ syscall.RawConn) error {
+					ap, err := netip.ParseAddrPort(address)
+					if err != nil || !addrAllowed(ap.Addr(), pol.allowLocal) {
+						return errLocalEndpoint
+					}
+					return nil
+				}
+				return d.DialContext(ctx, network, addr)
+			},
+			// A connection made under one allow_insecure is not reused
+			// under another.
+			DisableKeepAlives:   true,
+			TLSHandshakeTimeout: SendTimeout,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 }
 
 // Encrypt encrypts plaintext for a subscription per RFC 8291, as one
@@ -385,8 +474,17 @@ func (c *Client) SendWebPush(ctx context.Context, key *VAPIDKey, p Push, allowIn
 		req.Header.Set("Topic", p.Topic)
 	}
 	req.Header.Set("Authorization", "vapid t="+jwt+", k="+key.PublicKey())
-	resp, err := c.http.Do(req)
+	// Through a proxy, the proxy resolves the name and the dial reaches the
+	// proxy, which the person configured. Without one, the dial checks the
+	// address the name resolved to.
+	if proxy, perr := http.ProxyFromEnvironment(req); perr == nil && proxy == nil {
+		req = req.WithContext(context.WithValue(ctx, dialPolicyKey{}, dialPolicy{allowLocal: allowInsecure}))
+	}
+	resp, err := c.push.Do(req)
 	if err != nil {
+		if errors.Is(err, errLocalEndpoint) {
+			return errLocalEndpoint
+		}
 		return &RetryableError{Err: describeTransport(ctx, err)}
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -402,6 +500,8 @@ func (c *Client) SendWebPush(ctx context.Context, key *VAPIDKey, p Push, allowIn
 			after = time.Duration(s) * time.Second
 		}
 		return &RetryableError{Err: describeStatus(code), After: after}
+	case code >= 300 && code < 400:
+		return errors.New("the push service answered with a redirect, and a push follows none. Register the phone again")
 	default:
 		return fmt.Errorf("the push service answered %s", statusText(code))
 	}

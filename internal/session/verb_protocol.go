@@ -1302,7 +1302,7 @@ func init() {
 		"register-push": {
 			description: "Register a phone's Web Push subscription, so the phone gets Inbox items while it sleeps. When an item of a kind the phone asked for opens, the daemon posts a payload encrypted for the phone (RFC 8291, aes128gcm) to its push service, signed with the daemon's VAPID key (RFC 8292), and posts a close when the item closes. The same device name replaces the phone it names. Only the person: a live human_nonce, as reply-approval takes it, and over a link the respond capability. At most 16 phones.",
 			params: []verbParam{
-				{Name: "endpoint", Type: "string", Required: true, Description: "The push service's address for the phone. https, or http on a loopback or private IP address when [notify.webpush] allow_insecure is true."},
+				{Name: "endpoint", Type: "string", Required: true, Description: "The push service's address for the phone. https, or http on a loopback or private IP address when [notify.webpush] allow_insecure is true. A loopback or private address needs allow_insecure also with https, and the daemon checks the address a name resolves to when it connects."},
 				{Name: "p256dh", Type: "string", Required: true, Description: "The phone's public key: the uncompressed P-256 point (65 bytes), base64url."},
 				{Name: "auth", Type: "string", Required: true, Description: "The phone's authentication secret: 16 bytes, base64url."},
 				{Name: "device", Type: "string", Required: true, Description: "A name for the phone, 1 to 64 bytes. remove-push takes it."},

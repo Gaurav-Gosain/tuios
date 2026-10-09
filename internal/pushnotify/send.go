@@ -91,6 +91,9 @@ func hostOf(raw string) string {
 // Client is how every provider sends.
 type Client struct {
 	http *http.Client
+	// push sends Web Push: it follows no redirect, and its dialer checks
+	// the address it connects to (webpush.go).
+	push *http.Client
 }
 
 // errRedirectHTTP and errRedirectLimit are what CheckRedirect gives, so post
@@ -126,7 +129,7 @@ func NewClient(allowHTTP bool) *Client {
 			}
 			return nil
 		},
-	}}
+	}, push: newPushHTTPClient()}
 }
 
 // post sends one request and turns any failure into an error that says what

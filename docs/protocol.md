@@ -2851,7 +2851,11 @@ Params:
 - `endpoint` (required): the push service's address for the phone. It must
   be `https`. It can be `http` only when its host is `localhost` or a
   loopback or private IP address, and `[notify.webpush] allow_insecure` is
-  `true`.
+  `true`. A loopback or private host, given as `localhost` or an IP address,
+  needs `allow_insecure` also with `https`. A link-local, multicast or
+  unspecified IP address is refused. The daemon checks a host name when it
+  connects: it does not connect to an address that the endpoint could not
+  name. A push does not follow a redirect.
 - `p256dh` (required): the phone's public key, the uncompressed P-256 point
   (65 bytes, first byte `0x04`), base64url. Padding is optional.
 - `auth` (required): the phone's authentication secret, 16 bytes, base64url.

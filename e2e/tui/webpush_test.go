@@ -95,6 +95,9 @@ func startStubPush(t *testing.T) *stubPush {
 		switch r.URL.Path {
 		case "/s/gone":
 			status = http.StatusGone
+		case "/s/redirect":
+			status = http.StatusTemporaryRedirect
+			w.Header().Set("Location", "/s/landed")
 		case "/s/flaky":
 			s.flaky++
 			if s.flaky == 1 {
@@ -302,6 +305,7 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n\n" +
+		"[notify]\nallow_http_redirects = true\n\n" +
 		"[notify.webpush]\nallow_insecure = true\n\n" +
 		"[hosts.phone]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\"]\n\n" +
 		"[hosts.viewer]\nallow = [\"list\"]\n"
@@ -398,11 +402,17 @@ func TestWebPushToAPhone(t *testing.T) {
 	if fmt.Sprint(res["kinds"]) != "[approval plan ask question]" || vapidKey == "" {
 		t.Fatalf("register-push reply: %v", res)
 	}
-	gone, flaky := newPhoneKeys(t), newPhoneKeys(t)
+	gone, flaky, hop := newPhoneKeys(t), newPhoneKeys(t), newPhoneKeys(t)
+	// The endpoint an Android emulator's UnifiedPush distributor gives, with
+	// adb reverse taking its loopback to a push service on this machine.
+	android := newPhoneKeys(t)
+	if _, verr := reg("android", "/upAbC123xyz?up=1", android, nil, nonce); verr != nil {
+		t.Fatalf("ASSERTION: register-push of a loopback UnifiedPush endpoint with allow_insecure: %v", verr)
+	}
 	for _, r := range []struct {
 		device, path string
 		k            phoneKeys
-	}{{"old", "/s/gone", gone}, {"flaky", "/s/flaky", flaky}} {
+	}{{"old", "/s/gone", gone}, {"flaky", "/s/flaky", flaky}, {"hop", "/s/redirect", hop}} {
 		if _, verr := reg(r.device, r.path, r.k, nil, nonce); verr != nil {
 			t.Fatalf("register %s: %v", r.device, verr)
 		}
@@ -479,6 +489,31 @@ func TestWebPushToAPhone(t *testing.T) {
 		want, _ := json.Marshal(first)
 		return string(again) == string(want)
 	})
+	waitPush(t, stub, android, "/upAbC123xyz", func(p map[string]any) bool { return p["type"] == "open" })
+
+	// A push service that redirects is not followed, even with
+	// allow_http_redirects for the other providers, and not tried again.
+	deadline = time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) && len(stub.requests("/s/redirect")) == 0 {
+		time.Sleep(50 * time.Millisecond)
+	}
+	time.Sleep(6 * time.Second) // past the first two retry waits
+	if n := len(stub.requests("/s/landed")); n != 0 {
+		t.Fatalf("ASSERTION: the push followed the redirect: /s/landed got %d requests", n)
+	}
+	// A retry sends the same payload again. Each push here is a new one.
+	seenPlain := map[string]bool{}
+	for _, r := range stub.requests("/s/redirect") {
+		plain, err := hop.decrypt(r.Body)
+		if err != nil {
+			t.Fatalf("decrypt the push to /s/redirect: %v", err)
+		}
+		if seenPlain[string(plain)] {
+			t.Fatalf("ASSERTION: the push the redirect refused was tried again: %s", plain)
+		}
+		seenPlain[string(plain)] = true
+	}
+
 	deadline = time.Now().Add(15 * time.Second)
 	var listed map[string]any
 	for time.Now().Before(deadline) {
@@ -532,4 +567,150 @@ func TestWebPushToAPhone(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestWebPushRefusesLocalAddresses: without allow_insecure, register-push
+// may not aim the daemon at this machine or its network. The caller can be a
+// linked machine, so this is the line between a phone and a port scan of
+// this machine's loopback.
+//
+// An https endpoint on a loopback or link-local IP literal, or on localhost,
+// is refused when it is registered. A name the check cannot see through,
+// tuios-test.localhost (RFC 6761: it resolves to loopback), is taken, and
+// the daemon then refuses to connect to the address it resolved to: the
+// listener on that port is never dialed, and list-push says why.
+//
+// The positive half is TestWebPushToAPhone: with allow_insecure, the same
+// loopback stub gets every push.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
+//   - the hostAllowed check cut from CheckEndpoint's https arm: the loopback
+//     literal registers.
+//   - the Control hook cut from the push client's dialer: the listener is
+//     dialed.
+func TestWebPushRefusesLocalAddresses(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n\n" +
+		"[hosts.phone]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new", streamSession, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+
+	// A listener that counts who connects, and hangs up.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	var dialedMu sync.Mutex
+	dialed := 0
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			dialedMu.Lock()
+			dialed++
+			dialedMu.Unlock()
+			_ = c.Close()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	ctl := startPhoneLink(t, base).open(t, true)
+	pres, verr := ctl.call(t, "attach-presence", nil)
+	if verr != nil {
+		t.Fatalf("attach-presence: %v", verr)
+	}
+	nonce := pres["human_nonce"].(string)
+	phone := newPhoneKeys(t)
+	reg := func(device, endpoint string) *spVerbErr {
+		_, verr := ctl.call(t, "register-push", map[string]any{
+			"endpoint": endpoint, "p256dh": phone.p256dh(), "auth": phone.authB64(),
+			"device": device, "human_nonce": nonce,
+		})
+		return verr
+	}
+	for _, ep := range []string{
+		fmt.Sprintf("https://127.0.0.1:%d/s/x", port),
+		fmt.Sprintf("https://[::1]:%d/s/x", port),
+		fmt.Sprintf("https://localhost:%d/s/x", port),
+		"https://169.254.169.254/latest/meta-data",
+		"https://0.0.0.0/s/x",
+	} {
+		if verr := reg("local", ep); verr == nil || verr.Code != "invalid_params" {
+			t.Fatalf("ASSERTION: register-push to %s without allow_insecure: want invalid_params, got %v", ep, verr)
+		}
+	}
+
+	if verr := reg("byname", fmt.Sprintf("https://tuios-test.localhost:%d/s/x", port)); verr != nil {
+		t.Fatalf("register-push to a name: %v", verr)
+	}
+	wins, verr := ctl.call(t, "list-windows", map[string]any{"session": streamSession})
+	if verr != nil {
+		t.Fatalf("list-windows: %v", verr)
+	}
+	w0 := wins["windows"].([]any)[0].(map[string]any)["window_id"].(string)
+	hook := startApprovalHook(t, base, w0)
+
+	lastError := ""
+	deadline := time.Now().Add(40 * time.Second)
+	for time.Now().Before(deadline) {
+		dialedMu.Lock()
+		n := dialed
+		dialedMu.Unlock()
+		if n > 0 {
+			break
+		}
+		listed, verr := ctl.call(t, "list-push", map[string]any{"human_nonce": nonce})
+		if verr != nil {
+			t.Fatalf("list-push: %v", verr)
+		}
+		if devs, _ := listed["devices"].([]any); len(devs) == 1 {
+			lastError, _ = devs[0].(map[string]any)["last_error"].(string)
+			if lastError != "" {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	dialedMu.Lock()
+	n := dialed
+	dialedMu.Unlock()
+	if n != 0 {
+		t.Fatalf("ASSERTION: the daemon connected %d times to a loopback address it reached by name", n)
+	}
+	if !strings.Contains(lastError, "loopback") {
+		t.Fatalf("ASSERTION: list-push last_error %q, want the refusal of a loopback address", lastError)
+	}
+
+	// Let the hook go.
+	deadline = time.Now().Add(uiTimeout)
+	answered := false
+	for !answered && time.Now().Before(deadline) {
+		items, verr := ctl.call(t, "list-attention", nil)
+		if verr != nil {
+			t.Fatalf("list-attention: %v", verr)
+		}
+		list, _ := items["items"].([]any)
+		for _, it := range list {
+			if id, _ := it.(map[string]any)["request_id"].(string); id != "" {
+				if _, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "deny", "human_nonce": nonce}); verr != nil {
+					t.Fatalf("reply-approval: %v", verr)
+				}
+				answered = true
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	hook.wait(t)
 }
