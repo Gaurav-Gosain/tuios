@@ -4465,9 +4465,12 @@ holds (tuios's own hooks report `approve <Tool>: <what>`, which is read as that
 tool and argument; any other line is read as a command). The names of the rules
 that matched are the item's `risk`. That line is clipped and redacted, so a line
 that does not show the whole call also carries `cut short` in `risk`, which is
-acknowledged like a rule. A path in such a line is read only up to the cut or
-the `***`, and `outside the worktree` names it only when that part already
-leaves the worktree. A daemon that
+acknowledged like a rule. A path in such a line is read only up to the `***`,
+or, for the last word of a clipped line, up to the `...` the clip adds. A
+`...` at any other place is part of the path. `outside the worktree` names a
+cut path only when the part the line shows already leaves the worktree. A
+Codex `apply_patch` line always carries `cut short`, because every patch
+starts with `*** Begin Patch`. A daemon that
 read no config file uses the shipped rules.
 
 - `reply-approval` with `once` or `always` on an item with `risk` must carry

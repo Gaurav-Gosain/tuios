@@ -93,14 +93,17 @@ func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
 		return nil
 	}
 	tool, text := risk.ParseSummary(line)
-	// Shown: the line is not the call. A path in it may stop at the clip or
-	// at a redacted run, and the rules must not read that stop as where the
-	// path ends: a worktree path longer than the line read as outside it.
-	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home, Shown: true})
+	// Shown: the line is not the call. A path in it may stop at a redacted
+	// run, or, in its last word, at the clip, and the rules must not read
+	// that stop as where the path ends: a worktree path longer than the line
+	// read as outside it. A "..." the line did not get from a clip is part
+	// of the path, so Clipped is set only for a line Clip cut.
+	clipped := integration.Clipped(line)
+	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home, Shown: true, Clipped: clipped})
 	// A line cut to length, a run redacted from it, or a dialog that shows
 	// only part of the call (harness.PartialSuffix) may hide what a rule
 	// would match.
-	if integration.Clipped(line) || strings.Contains(line, risk.ShownRedacted) || strings.HasSuffix(line, harness.PartialSuffix) {
+	if clipped || strings.Contains(line, risk.ShownRedacted) || strings.HasSuffix(line, harness.PartialSuffix) {
 		hits = append(hits, risk.CutShortHit)
 	}
 	return hits

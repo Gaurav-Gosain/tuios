@@ -2841,9 +2841,16 @@ looks like a key is replaced with `***`. So a risky part past the cut or
 behind the stars is not there to match. Such a line is therefore marked
 `cut short` besides whatever the rules found: the allow takes the second
 press, and a pane with the `respond` grant cannot give it. A path in the line
-is read only up to the cut or the stars. `outside the worktree` marks it only
-when that part already leaves the worktree. A held call is matched on the
-whole command the hook sends, not on the line.
+is read only up to the stars. The `...` at the end of a clipped line is the
+cut, and the last path in that line is read only up to it. A `...` at any
+other place is part of the path. `outside the worktree` marks a path that the
+line does not show whole only when the part it shows already leaves the
+worktree. A held call is matched on the whole command the hook sends, not on
+the line.
+
+A Codex `apply_patch` line is always marked `cut short`. Its line shows the
+patch, and every patch starts with `*** Begin Patch`. tuios cannot tell these
+stars from a redacted part.
 
 The rules are a speed bump, not a sandbox. A command written to hide what it
 does (a variable holding `rm`, an alias, a script file) passes them. The

@@ -3405,3 +3405,22 @@ cut inside the worktree's path, so the case is not vacuous.
 | `Shown: true` in `riskOfLine` | both | **caught**: the same failure |
 | The `shownOutside` call in `outside` (always false) | `TestRiskInWorktree` | **caught**: the long `/etc` path is not marked `outside the worktree` |
 | The `***` arm of the cut short mark in `riskOfLine` | `TestRiskInWorktree` | **caught**: `/etc/***.conf` is not marked `cut short` |
+
+## A "..." that is not a clip mark
+
+`TestRiskLineClipOnlyAtEnd` reports approval lines with `set-agent-state` from
+a pane whose root is a linked worktree at a short path. The first fix cut a
+path at any `...`. So `approve Write: <root cut 2 short>...` on a line that was
+not clipped read as a path on the way into the worktree, and was not marked.
+That failed open. The fix cuts a path at `...` only in the last word of a line
+that `integration.Clipped` says was clipped. A `***` cuts a path in any word.
+The test also covers a `...` in the middle of a clipped line, a clipped line
+whose last word is not a path, a clipped line cut inside the root, and `***`
+in a word before the last one. Run on 2026-10-09.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| None: the first fix at `64c6df2d` | `TestRiskLineClipOnlyAtEnd` | **caught**: `lit-write`, `lit-mid` and `lit-mid-clip` are not marked `outside the worktree` |
+| `Clipped: false` in `riskOfLine` | `TestRiskLineClipOnlyAtEnd` | **caught**: `clip-path`, cut inside the root, is marked `outside the worktree` |
+| `Clipped: false` in `riskOfLine` | `TestRiskInWorktree` | **caught**: both panes mark the `Edit` inside the worktree `outside the worktree` |
+| The `***` arm of `shownPart` | `TestRiskLineClipOnlyAtEnd` | **caught**: `mask-in` is marked `outside the worktree` |

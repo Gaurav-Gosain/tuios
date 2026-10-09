@@ -235,3 +235,91 @@ func saveRiskItems(t *testing.T, base, name string) {
 		t.Logf("could not save the items: %v", err)
 	}
 }
+
+// TestRiskLineClipOnlyAtEnd reports approval lines from a pane whose root is
+// a plain directory, and checks how the outside-the-worktree rule reads a
+// path in each. A "..." is a clip only at the end of a line Clip cut. A
+// "..." anywhere else is part of the path, and a path read short there can
+// pass for one on the way to the root: /x/pr... read as /x/pr, which may
+// still become /x/proj. That failed open. A "***" stands for a redacted run
+// in any word.
+func TestRiskLineClipOnlyAtEnd(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	// The root is a linked worktree, so that the pane's root is known from
+	// its first state, and at a short path, so that a line can hold it whole
+	// and still be clipped after it: t.TempDir() is long.
+	repo := testutil.GitRepo(t)
+	dir, err := os.MkdirTemp("", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	root := filepath.Join(dir, "worktree")
+	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "edges", root)
+	// near is a path beside root that starts the way root's last name
+	// does: written out, it is outside, and cut where it is, it could still
+	// be the way into root.
+	near := root[:len(root)-2]
+	// clip makes a line as Clip cuts one: 97 runes, then "...".
+	clip := func(head string) string {
+		if len(head) > 97 {
+			t.Fatalf("precondition: %q is too long to clip at its end", head)
+		}
+		return head + strings.Repeat("x", 97-len(head)) + "..."
+	}
+	// clipIn makes a clipped line whose last word is root cut 2 runes short.
+	clipIn := func() string {
+		tail := " && rm " + near + "..."
+		pad := 100 - len("approve Bash: echo ") - len(tail)
+		if pad < 1 {
+			t.Fatalf("precondition: root %s is too long for a clipped line", root)
+		}
+		return "approve Bash: echo " + strings.Repeat("y", pad) + tail
+	}
+	cases := []struct {
+		session, line   string
+		outside, cutOff bool
+	}{
+		// The review case: a literal "..." at the end of a line that was
+		// not clipped.
+		{"lit-write", "approve Write: " + near + "...", true, false},
+		{"lit-mid", "approve Bash: rm " + near + "... && echo done", true, false},
+		// A clipped line: the "..." in the middle is still literal.
+		{"lit-mid-clip", clip("approve Bash: rm " + near + "... && echo "), true, true},
+		// A clipped line whose last word is not a path.
+		{"clip-word", clip("approve Bash: rm " + root + "/notes.txt && echo "), false, true},
+		// A clipped line whose last word is the path, cut inside root.
+		{"clip-path", clipIn(), false, true},
+		// "***" in a word before the last one.
+		{"mask-in", "approve Bash: rm " + near + "*** " + root + "/notes.txt", false, true},
+		{"mask-out", "approve Bash: rm /etc/x*** " + root + "/notes.txt", true, true},
+		{"plain-out", "approve Bash: rm /etc/hosts.bak", true, false},
+	}
+	for _, c := range cases {
+		if out, err := tuiosCLIIn(t, base, root, "new", c.session, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", c.session, err, out)
+		}
+		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", c.session, "needs_input",
+			"--kind", "approval", "--harness", "claude-code", "-m", c.line); err != nil {
+			t.Fatalf("set-agent-state %s: %v\n%s", c.session, err, out)
+		}
+	}
+	for _, c := range cases {
+		it := waitRiskItem(t, base, c.session)
+		t.Logf("%s: %q risk %v", c.session, it.Summary, it.Risk)
+		if it.Summary != c.line {
+			t.Fatalf("precondition: %s reported %q, want %q", c.session, it.Summary, c.line)
+		}
+		if got := slices.Contains(it.Risk, "outside the worktree"); got != c.outside {
+			t.Errorf("ASSERTION: %s outside the worktree = %v, want %v (root %s)", c.session, got, c.outside, root)
+		}
+		if got := slices.Contains(it.Risk, "cut short"); got != c.cutOff {
+			t.Errorf("%s cut short = %v, want %v", c.session, got, c.cutOff)
+		}
+	}
+	saveRiskItems(t, base, "risk-line-clip-items.json")
+}

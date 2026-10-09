@@ -36,10 +36,15 @@ type Call struct {
 	// Home is the home directory a leading ~ stands for.
 	Home string
 	// Shown says Text is the one-line summary a pane reported for the call,
-	// not the call itself. That line is clipped and ends in "..." when it is
-	// too long, and a key-like run in it is replaced with "***", so a path
-	// rule reads a path in it only up to the first of them (see outside).
+	// not the call itself. A key-like run in that line is replaced with
+	// "***", so a path rule reads a path in it only up to the stars (see
+	// outside).
 	Shown bool
+	// Clipped says the line was clipped to length, so Text ends in the "..."
+	// the clip added. A path rule reads the last word of Text only up to that
+	// "...". A "..." anywhere else, or on a line that was not clipped, is
+	// part of what the call names, and is read as written.
+	Clipped bool
 }
 
 // Marks a shown line carries where it does not show the call.
@@ -49,6 +54,25 @@ const (
 	// ShownRedacted stands in a line for a run that looked like a secret.
 	ShownRedacted = "***"
 )
+
+// clipMark stands in Text for the "..." a clip ended it with, while the path
+// rules read it, so that the cut is known by where it is and a "..." written
+// in the call is not read as one. U+FFFF is a noncharacter: no reported line
+// carries it, and a Text that does is not marked (see markClip).
+const clipMark = "\uffff"
+
+// markClip replaces the "..." a clipped text ends with by clipMark. ok is
+// false when text does not end in "..." or already holds clipMark.
+func markClip(text string) (marked string, ok bool) {
+	if strings.Contains(text, clipMark) {
+		return text, false
+	}
+	s, ok := strings.CutSuffix(strings.TrimRight(text, " \t"), ShownClip)
+	if !ok {
+		return text, false
+	}
+	return s + clipMark, true
+}
 
 // Hit is one rule a call matched.
 type Hit struct {
@@ -148,9 +172,21 @@ func Match(rules []Rule, call Call) []Hit {
 	if isShell(call.Tool) {
 		cmds = parseCommands(text, 0)
 	}
+	// The path and command rules read a clipped text with its clip marked,
+	// so that only the word the clip cut is read as cut. The patterns read
+	// the text as the line shows it.
+	in := input{text: text, cmds: cmds, pathText: text, pathCmds: cmds}
+	if call.Clipped {
+		if marked, ok := markClip(text); ok {
+			in.pathText = marked
+			if isShell(call.Tool) {
+				in.pathCmds = parseCommands(marked, 0)
+			}
+		}
+	}
 	var hits []Hit
 	for _, r := range rules {
-		if !r.appliesTo(call.Tool) || !r.matches(call, text, cmds) {
+		if !r.appliesTo(call.Tool) || !r.matches(call, in) {
 			continue
 		}
 		if !slices.ContainsFunc(hits, func(h Hit) bool { return h.Rule == r.Name }) {
@@ -172,27 +208,38 @@ func Names(hits []Hit) []string {
 	return out
 }
 
+// input is a call's text as each kind of rule reads it.
+type input struct {
+	// text and cmds are what the patterns read.
+	text string
+	cmds []command
+	// pathText and pathCmds are what the path and command rules read: the
+	// same, with a clip marked (see markClip).
+	pathText string
+	pathCmds []command
+}
+
 // matches runs one rule on a call.
-func (r Rule) matches(call Call, text string, cmds []command) bool {
+func (r Rule) matches(call Call, in input) bool {
 	switch {
 	case r.pattern != nil:
-		if len(cmds) == 0 {
-			return r.pattern.MatchString(text)
+		if len(in.cmds) == 0 {
+			return r.pattern.MatchString(in.text)
 		}
-		for _, c := range cmds {
+		for _, c := range in.cmds {
 			if r.pattern.MatchString(c.raw) {
 				return true
 			}
 		}
 		return false
 	case r.command != nil && isShell(call.Tool):
-		for _, c := range cmds {
+		for _, c := range in.pathCmds {
 			if r.command(c, call) {
 				return true
 			}
 		}
 	case r.path != nil && isFile(call.Tool):
-		return r.path(strings.TrimSpace(text), call)
+		return r.path(strings.TrimSpace(in.pathText), call)
 	}
 	return false
 }
@@ -237,10 +284,8 @@ func outside(path string, call Call) bool {
 		return false
 	}
 	root := filepath.Clean(call.Root)
-	if call.Shown {
-		if shown, cut := shownPart(path); cut {
-			return shownOutside(shown, root)
-		}
+	if shown, cut := shownPart(path, call); cut {
+		return shownOutside(shown, root)
 	}
 	path = filepath.Clean(path)
 	if slices.Contains(harmlessDevices, path) || strings.HasPrefix(path, "/dev/fd/") {
@@ -253,15 +298,17 @@ func outside(path string, call Call) bool {
 }
 
 // shownPart is the part of a path from a shown line that the line shows as
-// it is: up to the first "***", or up to the "..." a clip ends it with. cut
-// reports whether the line hides the rest. A word before the end of the line
-// that ends in "..." is read as cut too; that only ever reads less into it.
-func shownPart(path string) (shown string, cut bool) {
-	if i := strings.Index(path, ShownRedacted); i >= 0 {
-		return path[:i], true
+// it is: up to the first "***", or up to the clip (clipMark, which only the
+// last word of a clipped line carries). cut reports whether the line hides
+// the rest. A "..." written in the path is not a clip and is read as it is.
+func shownPart(path string, call Call) (shown string, cut bool) {
+	if call.Shown {
+		if i := strings.Index(path, ShownRedacted); i >= 0 {
+			return path[:i], true
+		}
 	}
-	if s, ok := strings.CutSuffix(path, ShownClip); ok {
-		return s, true
+	if i := strings.Index(path, clipMark); i >= 0 {
+		return path[:i], true
 	}
 	return path, false
 }
