@@ -407,7 +407,14 @@ type phoneLink struct {
 // base, the command a phone runs over ssh.
 func startPhoneLink(t *testing.T, base string) *phoneLink {
 	t.Helper()
-	cmd := exec.Command(tuiosBin, "stdio-proxy", "--as", "phone")
+	return startLinkAs(t, base, "phone")
+}
+
+// startLinkAs is startPhoneLink for the peer name as, which picks the
+// [hosts.NAME] policy the daemon holds the link to.
+func startLinkAs(t *testing.T, base, as string) *phoneLink {
+	t.Helper()
+	cmd := exec.Command(tuiosBin, "stdio-proxy", "--as", as)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {

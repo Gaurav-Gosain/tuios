@@ -3446,3 +3446,27 @@ presence gets `not_human` before a new presence answers the same hold.
 | The `decModes` call in `snapshotVT` | **caught**: "the snapshot did not set DEC mode 1" (and 2004, 1000, 1006, 66) |
 | The alternate screen block in `snapshotVT` | **caught**: "the snapshot of a pane on the alternate screen: alt false" |
 | The gap rebuild in `paneStream.stream` (the `recoverGap` call) | **caught**: the stream goes silent after the phone falls behind, "read a pane frame: stream read timed out" |
+
+## stream-pane limits
+
+`e2e/tui/stream_pane_limits_test.go` holds stream-pane to the limits around
+its happy path. On 2026-10-09 each control below put back one line of the
+review fixes, built a binary, and ran the test against it. Each control
+failed where shown, and each test passed on the fixed build. The branch
+before the fixes failed the same three tests the same way.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| `maxPaneInputFrame = 1 << 20` | `TestStreamPaneClientFrameMemory` | **caught**: "the daemon grew by 96 MiB for 96 streams" (fixed build: +0 MiB) |
+| `PTY.SetLease` resizing on every call, with no `leaseInterval` | `TestStreamPaneLeaseChurn` | **caught**: "301 lease frames resized the pane 301 times in 1.73s" (fixed build: 2 times) |
+| The `recheck` call in `paneStream.stream` left out | `TestStreamPaneFromAPane` | **caught**: "the stream outlived the read grant" |
+
+`TestStreamPaneHeldToTheLinkPolicy` and `TestStreamPaneEndsWithItsWindow`
+passed on the branch before the fixes. They hold behaviour the review
+checked and found correct: input and lease frames from a peer without
+`write` get `forbidden`, a presence nonce does not answer from a stream the
+hub did not vouch for, and a stream ends with `X` when its window closes or
+its session is killed. `TestStreamPaneLeaseOnTheDesktop` saves the frames
+`stream-lease-held` and `stream-lease-released` under `TUIOS_E2E_FRAMES`: an
+attached client draws the leased pane at 30 by 6 in its full rectangle, and at
+58 by 36 again once the lease ends.
