@@ -1,6 +1,9 @@
 package app
 
-import "github.com/Gaurav-Gosain/tuios/internal/terminal"
+import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+)
 
 // The pointer's side of the link feature: what it is on, and what changes when
 // that moves.
@@ -9,8 +12,11 @@ import "github.com/Gaurav-Gosain/tuios/internal/terminal"
 // path already keeps: a pane in terminal mode whose guest asked for mouse
 // reporting owns the mouse, and tuios does not draw on top of a program that is
 // tracking the cursor itself. Underlining a link a click would forward to vim
-// anyway would be a promise tuios does not keep, so the highlight is suppressed
-// under exactly the condition the click is forwarded under, and nowhere else.
+// anyway would be a promise tuios does not keep, so the default hover policy
+// suppresses the highlight under exactly the condition the click is forwarded
+// under, and nowhere else. link_hover = "always" hands the call to the user:
+// a pane whose links are meant for the modifier click wants the highlight even
+// while the guest tracks the mouse.
 
 // LinkHoverActive reports whether the pointer is on a link. The motion filter
 // reads it so one event still arrives after the pointer leaves, which is what
@@ -56,7 +62,7 @@ func (m *OS) PointerOverLink(x, y int) bool {
 		return false
 	}
 	window := m.Windows[idx]
-	if m.guestOwnsPointer(window) {
+	if m.hoverSuppressedByGuest(window) {
 		return false
 	}
 	termX, termY, inContent := window.ScreenToTerminal(x, y)
@@ -121,7 +127,7 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 		return m.clearLinkHover()
 	}
 	window := m.Windows[idx]
-	if m.guestOwnsPointer(window) {
+	if m.hoverSuppressedByGuest(window) {
 		return m.clearLinkHover()
 	}
 
@@ -163,6 +169,14 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 		return PaneLink{}, false
 	}
 	return resolvePaneLink(window, termX, termY, &m.Settings)
+}
+
+// hoverSuppressedByGuest applies the hover policy to a pane whose guest might
+// own the pointer. link_hover = "always" never suppresses; the default "safe"
+// keeps the underline off wherever the click would be forwarded, the same
+// three-part test the click handler applies.
+func (m *OS) hoverSuppressedByGuest(window *terminal.Window) bool {
+	return m.Settings.LinkHover != config.LinkHoverAlways && m.guestOwnsPointer(window)
 }
 
 // guestOwnsPointer reports whether the program in this pane is tracking the

@@ -157,6 +157,16 @@ var optionSpecs = []Option{
 		Accepted:    LinkClickModes, Default: LinkClickBoth,
 	},
 	{
+		Path: "appearance.link_hover", Type: OptionString, Section: "appearance",
+		Description: "The hover highlight: safe skips a pane whose guest tracks the mouse, always draws it everywhere",
+		Accepted:    LinkHoverModes, Default: LinkHoverSafe,
+	},
+	{
+		Path: "appearance.link_label", Type: OptionBool, Section: "appearance",
+		Description: "Pop up a label naming the address of the link under the pointer",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.link_opener", Type: OptionString, Section: "appearance",
 		Description: "The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener.",
 		Default:     "",

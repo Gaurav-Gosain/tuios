@@ -293,6 +293,8 @@ type AppearanceConfig struct {
 	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
 	LinkClick                string                  `toml:"link_click"`                   // The click that opens a link: both, ctrl, shift, off (default: both)
+	LinkHover                string                  `toml:"link_hover"`                   // The hover highlight: safe (skips a pane whose guest tracks the mouse) or always (default: safe)
+	LinkLabel                bool                    `toml:"link_label"`                   // Pop up a label naming the address of the link under the pointer (default: true)
 	LinkOpener               string                  `toml:"link_opener"`                  // Command that opens a web link; empty uses $BROWSER, then the system opener
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
@@ -553,6 +555,23 @@ const (
 
 // LinkClickModes lists the valid values for appearance.link_click.
 var LinkClickModes = []string{LinkClickBoth, LinkClickCtrl, LinkClickShift, LinkClickOff}
+
+// Link hover policies. See AppearanceConfig.LinkHover.
+//
+// A pane whose program tracks the mouse owns plain clicks over its content, so
+// the default keeps the hover underline off there: an underline a plain click
+// would not honour is a promise tuios does not keep. "always" draws the hover
+// anyway, for a setup where the guest tracks the mouse and the links are meant
+// for the modifier click.
+const (
+	// LinkHoverSafe keeps the hover off where the guest owns the pointer.
+	LinkHoverSafe = "safe"
+	// LinkHoverAlways draws the hover wherever the pointer finds a link.
+	LinkHoverAlways = "always"
+)
+
+// LinkHoverModes lists the valid values for appearance.link_hover.
+var LinkHoverModes = []string{LinkHoverSafe, LinkHoverAlways}
 
 // Window control styles. See AppearanceConfig.WindowButtonStyle.
 const (
@@ -869,6 +888,8 @@ func DefaultConfig() *UserConfig {
 			ZenMode:                  ZenModeDisabled,
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,
+			LinkHover:                LinkHoverSafe,
+			LinkLabel:                true,
 			HideWindowButtons:        false,
 			WindowButtonStyle:        WindowButtonStyleDots,
 			WindowButtonPosition:     WindowButtonPositionLeft,
@@ -1958,6 +1979,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.LinkClick == "" {
 		cfg.Appearance.LinkClick = defaultCfg.Appearance.LinkClick
 	}
+	if cfg.Appearance.LinkHover == "" {
+		cfg.Appearance.LinkHover = defaultCfg.Appearance.LinkHover
+	}
 
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
@@ -2109,6 +2133,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.LinkClick = cfg.Appearance.LinkClick
 	} else if cfg.Appearance.LinkClick != "" {
 		s.LinkClick = LinkClickBoth
+	}
+	if slices.Contains(LinkHoverModes, cfg.Appearance.LinkHover) {
+		s.LinkHover = cfg.Appearance.LinkHover
+	} else if cfg.Appearance.LinkHover != "" {
+		s.LinkHover = LinkHoverSafe
 	}
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
 

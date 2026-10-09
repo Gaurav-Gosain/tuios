@@ -113,6 +113,14 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 	if !m.LinkHoverAt(sx, sy) {
 		t.Error("window management mode handed the pointer to the guest")
 	}
+
+	// link_hover = "always" hands the call to the user: the same setup that
+	// just suppressed the highlight now keeps it, tracking guest and all.
+	m.Mode = TerminalMode
+	m.Settings.LinkHover = config.LinkHoverAlways
+	if !m.LinkHoverAt(sx, sy) {
+		t.Error("link_hover = always still suppressed the hover over a tracking guest")
+	}
 }
 
 // TestUnfocusedPaneLeavesTheFastPathToUnderline pins the one line in
