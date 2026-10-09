@@ -219,7 +219,7 @@ func (m *OS) filesSectionEnabled() bool {
 	// from Update, so it is on the idle path of every client; SidebarEnabled is
 	// false for most of them and answering there costs a load and a branch,
 	// where filesOn takes the layout mutex.
-	if !m.Settings.SidebarEnabled || !m.filesOn() {
+	if (!m.Settings.SidebarEnabled && !m.sidebarDrawing) || !m.filesOn() {
 		return false
 	}
 	w := m.GetSidebarWidth()

@@ -14,6 +14,7 @@ func (m *OS) MarkAllDirty() {
 	}
 	m.cachedViewContent = "" // Invalidate view cache
 	m.sidebarCache.invalidate()
+	m.secondarySidebarCache.invalidate()
 	m.pip.dirty = true
 }
 

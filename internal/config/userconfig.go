@@ -757,6 +757,11 @@ type SidebarConfig struct {
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
 	Custom SidebarCustomConfig `toml:"custom"`
+	// Left and Right independently configure rails on the two screen edges.
+	// When absent, the existing rail still lives at Position with its existing
+	// settings. A new edge must be explicitly enabled; see sidebar_edges.go.
+	Left  *SidebarEdgeConfig `toml:"left,omitempty"`
+	Right *SidebarEdgeConfig `toml:"right,omitempty"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -2126,6 +2131,27 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// the toggles are pointer bools so turning one off in the settings page
 	// survives a reload just as turning it on does.
 	sb := cfg.Appearance.Sidebar
+	// The legacy rail keeps its runtime settings and controls. An explicit
+	// table for that same edge overrides only fields it names; the opposite
+	// edge has its own model and must not overwrite the legacy rail here.
+	var primary *SidebarEdgeConfig
+	switch sb.Position {
+	case "left":
+		primary = sb.Left
+	case "right", "":
+		primary = sb.Right
+	}
+	if primary != nil {
+		if primary.Enabled != nil {
+			sb.Enabled = primary.Enabled
+		}
+		if primary.Width > 0 {
+			sb.Width = primary.Width
+		}
+		if primary.Sections != "" {
+			sb.Sections = primary.Sections
+		}
+	}
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}

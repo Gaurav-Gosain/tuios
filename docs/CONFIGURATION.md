@@ -986,6 +986,45 @@ the command fails, and `tuios list-dock-components` says which and why.
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## Two sidebar edges
+
+The existing `[appearance.sidebar]` settings still configure the original rail.
+A table for its current edge overrides only the fields it names; the opposite
+edge stays hidden unless explicitly enabled. Each edge can have its own width,
+section order and custom command:
+
+```toml
+[appearance.sidebar]
+position = "right"
+sections = "sessions,terminals,custom"
+
+[appearance.sidebar.custom]
+command = "right-summary"
+
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions,files,custom"
+
+[appearance.sidebar.left.custom]
+command = "left-summary"
+```
+
+`[appearance.sidebar.right]` has the same `enabled`, `width`, `sections` and
+`custom` keys. On the original edge, omitted keys retain the legacy settings;
+on the other edge, an omitted `sections` uses the default section order.
+Writing an edge table without `enabled = true` does not enable that edge.
+Both rails can show the same built-in sections: they use the same sessions,
+focused pane's directory listing and repository reading, but have independent
+section scrolling, keyboard focus and pointer hit areas. A custom command on
+each edge runs independently: `rail/custom` belongs to the original rail and
+`rail/secondary/custom` to the other. These edge tables are file-only, not
+`set-option` targets, because custom commands execute outside panes.
+
+On narrow screens, the optional edge contracts before the original rail; both
+may hide to leave room for the panes. Resizing either rail by dragging its
+inner border changes only that edge for this client.
+
 ## The rail's custom section
 
 The rail has one section whose rows are the output of a command you write.

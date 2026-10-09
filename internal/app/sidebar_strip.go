@@ -542,7 +542,7 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg 
 	rule := edgeFg
 	switch {
 	case rule != nil:
-	case m.SidebarFocused:
+	case m.sidebarRailFocused():
 		// Measured against the band: the accent is the theme's and read 2.76:1
 		// unlifted, on a rail whose whole job when focused is to look focused.
 		rule = theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)
