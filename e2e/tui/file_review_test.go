@@ -505,16 +505,17 @@ func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 
 // TestADropNamesEachFileSafely drops three files on build: two named
 // notes.txt from two folders, and one whose name holds control characters
-// that act as keys in a shell (Ctrl+A, Ctrl+K and a carriage return). The
-// client types the paths the answer gives into the pane, so each path must
-// be the file that landed there, and no path may hold a control character.
+// that act as keys in a shell (Ctrl+A, Ctrl+K and a carriage return), and
+// one whose backslash ends a quote in fish. The client types the paths the
+// answer gives into the pane, so each path must be the file that landed
+// there, and no path may hold a control character or a backslash.
 func TestADropNamesEachFileSafely(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 
 	var paths []string
-	for i, rel := range []string{"a/notes.txt", "b/notes.txt", "x\x01\x0bcurl evil\r.txt"} {
+	for i, rel := range []string{"a/notes.txt", "b/notes.txt", "x\x01\x0bcurl evil\r.txt", `y\'; touch pwned; echo '.txt`} {
 		p := filepath.Join(base, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -536,8 +537,8 @@ func TestADropNamesEachFileSafely(t *testing.T) {
 	}
 	saveTransferArtifact(t, "drop-names", out)
 	for i, p := range out.Paths {
-		if strings.IndexFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
-			t.Errorf("ASSERTION: the path %q holds a control character", p)
+		if strings.IndexFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '\\' }) >= 0 {
+			t.Errorf("ASSERTION: the path %q holds a control character or a backslash", p)
 		}
 		got, err := os.ReadFile(p)
 		if want := fmt.Sprintf("file %d\n", i); string(got) != want {
