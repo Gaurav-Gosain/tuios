@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,13 +178,41 @@ func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verb
 	}
 	remote := make([]string, 0, len(local))
 	rows := make([]TransferRow, 0, len(local))
+	used := map[string]bool{}
 	for _, path := range local {
-		dst := strings.TrimSuffix(dir, "/") + "/" + filepath.Base(path)
+		dst := strings.TrimSuffix(dir, "/") + "/" + dropName(filepath.Base(path), used)
 		j := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both", true)
 		remote = append(remote, dst)
 		rows = append(rows, j.row())
 	}
 	return map[string]any{"paths": remote, "dir": dir, "transfers": rows}, nil
+}
+
+// dropName is the name a dropped file gets in its drop folder. The client
+// types the path into a shell, so a control character in it, which can act
+// as a key there, becomes "_". Two files of one name in one drop get " 2",
+// " 3" ..., so each path the answer gives is the file that lands there.
+func dropName(base string, used map[string]bool) string {
+	name := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return '_'
+		}
+		return r
+	}, base)
+	if name == "" || name == "." || name == ".." || name == "/" {
+		name = "dropped"
+	}
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	if stem == "" {
+		stem, ext = name, ""
+	}
+	cand := name
+	for i := 2; used[cand]; i++ {
+		cand = stem + " " + strconv.Itoa(i) + ext
+	}
+	used[cand] = true
+	return cand
 }
 
 func dropVerbs() map[string]verbEntry {
