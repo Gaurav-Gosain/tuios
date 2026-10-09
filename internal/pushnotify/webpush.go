@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/netip"
@@ -392,38 +391,6 @@ func (k *VAPIDKey) Token(audience, subject string, now time.Time) (string, error
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
 	return signing + "." + enc.EncodeToString(sig), nil
-}
-
-// VerifyToken checks a VAPID JWT against the public key, for tests and for a
-// push service written in Go. It returns the claims.
-func VerifyToken(token, publicKey string) (map[string]any, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("not a JWT")
-	}
-	pub, err := DecodeKey(publicKey)
-	if err != nil || len(pub) != p256PointLen {
-		return nil, errors.New("bad public key")
-	}
-	x, y := new(big.Int).SetBytes(pub[1:33]), new(big.Int).SetBytes(pub[33:])
-	key := &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}
-	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || len(sig) != 64 {
-		return nil, errors.New("bad signature encoding")
-	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if !ecdsa.Verify(key, digest[:], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:])) {
-		return nil, errors.New("the signature does not verify")
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-	var claims map[string]any
-	if err := json.Unmarshal(raw, &claims); err != nil {
-		return nil, err
-	}
-	return claims, nil
 }
 
 // Urgency values for the Urgency header (RFC 8030).

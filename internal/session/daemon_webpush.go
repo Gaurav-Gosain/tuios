@@ -163,7 +163,7 @@ func writePrivate(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	_ = os.Chmod(filepath.Dir(path), 0o700)
+	_ = os.Chmod(filepath.Dir(path), 0o700) //nolint:gosec // a directory needs x, and 0700 opens it to its owner only
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err

@@ -174,7 +174,7 @@ type pushSubscription struct {
 // path is "-". It takes the shape of PushSubscription.toJSON(), with the keys
 // under "keys", and the flat shape of register-push.
 func readPushSubscription(stdin io.Reader, path string) (pushSubscription, error) {
-	var src io.Reader = stdin
+	src := stdin
 	if path != "-" {
 		f, err := os.Open(path)
 		if err != nil {
