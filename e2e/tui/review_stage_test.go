@@ -255,3 +255,84 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 	}
 	workBytes()
 }
+
+// TestReviewDiffHighlight asks review-diff for highlight, as tuios-gpui does,
+// on a Go file whose function was renamed. The renamed line carries a
+// keyword span on func, on both sides, and the changed part of the pair is
+// the name alone. The result names the classes in order.
+//
+// The result is in the bridge's log in the artifact directory.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the reviewHighlight call cut
+// from the review-diff handler, no line carries hl.
+func TestReviewDiffHighlight(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	src := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(src, []byte("package a\n\n// Old is old.\nfunc Old() int {\n\treturn 1\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "a.go")
+	testutil.Git(t, repo, "commit", "-q", "-m", "a")
+	if err := os.WriteFile(src, []byte("package a\n\n// Old is old.\nfunc NewName() int {\n\treturn 1\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLIIn(t, base, repo, "new", "hl", "--detach"); err != nil {
+		t.Fatalf("new session in the repository: %v: %s", err, out)
+	}
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "hl"}, cols: 120, rows: 40, keepDaemon: true, name: "hl"})
+
+	res := b.verb("review-diff", map[string]any{"session": "hl", "index": "unstaged", "highlight": true})
+	if !res.OK {
+		t.Fatalf("review-diff highlight: %s %s", res.Code, res.Error)
+	}
+	var d struct {
+		Classes []string `json:"classes"`
+		Files   []struct {
+			Path  string `json:"path"`
+			Hunks []struct {
+				Lines []struct {
+					Op      string   `json:"op"`
+					Text    string   `json:"text"`
+					HL      [][3]int `json:"hl"`
+					Changed []int    `json:"changed"`
+				} `json:"lines"`
+			} `json:"hunks"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(res.Result, &d); err != nil {
+		t.Fatal(err)
+	}
+	keyword := slices.Index(d.Classes, "keyword")
+	if len(d.Classes) == 0 || d.Classes[0] != "plain" || keyword < 0 || slices.Index(d.Classes, "comment") < 0 {
+		t.Fatalf("classes = %v, want plain first, keyword and comment", d.Classes)
+	}
+	if len(d.Files) != 1 || len(d.Files[0].Hunks) != 1 {
+		t.Fatalf("files = %s", res.Result)
+	}
+	want := map[string][]int{"delete": {5, 8}, "add": {5, 12}}
+	seen := map[string]bool{}
+	comment := false
+	for _, l := range d.Files[0].Hunks[0].Lines {
+		if l.Text == "// Old is old." {
+			comment = len(l.HL) == 1 && l.HL[0] == [3]int{0, 14, slices.Index(d.Classes, "comment")}
+		}
+		if !strings.HasPrefix(l.Text, "func ") {
+			continue
+		}
+		if !slices.Contains(l.HL, [3]int{0, 4, keyword}) {
+			t.Errorf("%s line %q has hl %v, want a keyword span on func", l.Op, l.Text, l.HL)
+		}
+		if !slices.Equal(l.Changed, want[l.Op]) {
+			t.Errorf("%s line %q has changed %v, want %v", l.Op, l.Text, l.Changed, want[l.Op])
+		}
+		seen[l.Op] = true
+	}
+	if !seen["delete"] || !seen["add"] {
+		t.Fatalf("the hunk has no removed and added func line: %s", res.Result)
+	}
+	if !comment {
+		t.Errorf("the comment line has no comment span: %s", res.Result)
+	}
+}

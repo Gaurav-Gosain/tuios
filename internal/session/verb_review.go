@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -182,6 +183,7 @@ type reviewParams struct {
 	Paths       []string `json:"paths"`
 	Context     *int     `json:"context"`
 	Index       string   `json:"index"`
+	Highlight   bool     `json:"highlight"`
 }
 
 // verbReviewDiff answers review-diff.
@@ -266,6 +268,9 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		d.reanchorReviewNotes(ctx, repo, target.ID, diff, p.Paths)
 		d.reviewNotes.setBase(repo.root, target.ID, diff.Base)
 	}
+	if p.Highlight {
+		reviewHighlight(diff.Files)
+	}
 	notes, _ := d.reviewNotes.list(repo.root, target.ID)
 	out := map[string]any{
 		"type":        "review_diff",
@@ -285,6 +290,9 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if p.Index != "" {
 		out["index"] = p.Index
+	}
+	if p.Highlight {
+		out["classes"] = diffview.ClassNames
 	}
 	if againstName != "" {
 		out["against"] = againstName

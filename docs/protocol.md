@@ -3126,6 +3126,15 @@ tree, and the result has `index`. It takes no `base`, `against` or
 hunk's `header` and its `lines` are the same as `review-stage` reads them for
 the same `index` and `context`.
 
+`highlight` (default false) adds two fields to each line. `hl` is the
+syntax colour: `[start, end, class]` runs in bytes of `text`, where `class`
+is a number. The result's `classes` names the numbers in order (`plain`,
+`keyword`, `type`, ...). `changed` is the `[start, end]` bytes of a removed
+or added line that changed against the line it pairs with. Each field is
+absent when it is empty. The old side and the new side of a hunk are each
+coloured as one text. A truncated file, a binary file and a very large text
+are not coloured.
+
 A pane without `admin` reads its own session and fan group, and the session
 `against` names must be in its reach too. Over a link it needs `write`, since
 it returns file contents.

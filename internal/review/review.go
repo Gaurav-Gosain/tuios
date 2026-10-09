@@ -67,6 +67,14 @@ type Line struct {
 	// NoNewline marks the last line of a side that has no newline at its
 	// end ("\ No newline at end of file").
 	NoNewline bool `json:"no_newline,omitempty"`
+	// HL is the line's syntax colour, filled in only when review-diff is
+	// asked to highlight: [start, end, class] runs in bytes of Text, class
+	// a diffview.Class. Absent for a plain line.
+	HL [][3]int `json:"hl,omitempty"`
+	// Changed is the part of a removed or added line that changed against
+	// the line it pairs with, [start, end] in bytes of Text, filled in like
+	// HL. Absent when there is no such part.
+	Changed []int `json:"changed,omitempty"`
 	// raw is the line's text as git printed it, a carriage return kept,
 	// which a patch built from the line has to carry to apply.
 	raw string

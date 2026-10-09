@@ -3483,3 +3483,11 @@ where shown. The same test passed on the branch build.
 | `SelectionPatch` keeps every unselected added line (the patch builder) | after staging the line `new b`, `git diff --cached` also holds `+new a` |
 | `reviewStageChange` ignores `lines` and takes the whole hunk (the call site) | after staging the line `new b`, `git diff --cached` also holds `+new a` |
 | `reviewStageUndo` skips the check that the index still holds `after` | the undo after `git add` answers ok instead of `index_changed` |
+
+`TestReviewDiffHighlight` in the same file checks review-diff's `highlight`.
+On 2026-10-09 its control was built into a binary and the test was run
+against it. It failed where shown, and passed on the branch build.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| The `reviewHighlight` call in the review-diff handler | both `func` lines have no `hl` keyword span and no `changed` range |
