@@ -668,7 +668,7 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	if p.ID == 0 {
 		return nil, invalidParam("id", "id is required: the message_id of the held message")
 	}
-	if !d.verifyAnyHumanNonce(p.HumanNonce, cs) {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "release-agent-message is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Mail from another machine is held so the person decides whether an agent sees it. Only a client attached right now can pass it on, with the nonce its attach reply carried.",
@@ -677,6 +677,9 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+	if _, ok := d.humanNonceFor(p.HumanNonce, sess.ID, cs); !ok {
+		return nil, nonceScopeError("release-agent-message")
 	}
 	held, ok := d.agents.takeHeld(sess.Name(), p.ID)
 	if !ok {

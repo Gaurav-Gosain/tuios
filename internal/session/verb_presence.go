@@ -17,7 +17,10 @@ import "encoding/json"
 // only on the link-human socket), only over the same kind of connection, and,
 // where the kernel names pids, only from the process that holds it. It is
 // never attached, so nothing that measures, focuses or speaks to a session's
-// clients counts it, and it ends when its connection closes.
+// clients counts it, and it ends when its connection closes or restricts
+// itself. Which sessions it acts in is the nonce scope (human_sender.go): a
+// presence made for a session acts only there, and one made with none acts
+// in every session.
 
 // verbAttachPresence registers a screenless presence on this connection.
 func (d *Daemon) verbAttachPresence(cs *connState, params json.RawMessage) (any, *verbError) {

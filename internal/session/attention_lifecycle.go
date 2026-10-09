@@ -13,7 +13,7 @@ import (
 // Every one of them is the person's act on the list the person reads, so
 // mark-attention takes the proof dismiss-attention and reply-approval take: a
 // live nonce from an attached client, over the kind of connection it was
-// issued on, and not from inside a pane (verifyAnyHumanNonce). It is scopeDeny
+// issued on, and not from inside a pane (humanNonceFor). It is scopeDeny
 // for a restricted connection and for a pane without admin, and a link needs
 // respond. An agent therefore cannot snooze, un-read or restore the Inbox.
 //
@@ -569,7 +569,7 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 	if p.ID == "" && (p.Window == "" || (p.Kind == "" && p.Action != "unread")) {
 		return nil, invalidParam("id", "name the item with id, or with session, window and kind")
 	}
-	if !d.verifyAnyHumanNonce(p.HumanNonce, cs) {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "mark-attention is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Only a client attached right now can snooze, wake, mark unread or restore an Inbox item, by passing the nonce its attach reply carried. An agent cannot change what the person reads.",
@@ -597,6 +597,13 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 			return nil, mapResolveErr(err, sess)
 		}
 		p.Session, p.Window = sess.Name(), sess.GetState().Windows[idx].ID
+	}
+	target := d.sessionIDOf(p.Session)
+	if p.ID != "" {
+		target = d.attentionItemSession(p.ID)
+	}
+	if _, ok := d.humanNonceFor(p.HumanNonce, target, cs); !ok {
+		return nil, nonceScopeError("mark-attention")
 	}
 	a := d.attention
 	a.mu.Lock()
@@ -760,6 +767,16 @@ func (d *Daemon) attentionItemAnywhere(id string) (AttentionItem, bool) {
 		}
 	}
 	return AttentionItem{}, false
+}
+
+// attentionItemSession is the ID of the session an item is in, for
+// humanNonceFor: "" for an item of another machine, or one not found.
+func (d *Daemon) attentionItemSession(id string) string {
+	it, ok := d.attentionItemAnywhere(id)
+	if !ok || it.Host != "" {
+		return ""
+	}
+	return d.sessionIDOf(it.Session)
 }
 
 // snoozedCount is how many items are asleep, for tests and diagnostics.

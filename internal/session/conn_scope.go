@@ -338,6 +338,11 @@ func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (
 		}
 	}
 	cs.scope.Store(next)
+	// A restricted connection is automation, never the person, so a
+	// presence it held ends here (human_sender.go, "Nonce scope").
+	cs.mu.Lock()
+	cs.presenceNonce, cs.presenceSession = "", ""
+	cs.mu.Unlock()
 	LogBasic("Client %s restricted: scope=%s read_only=%v pane=%q via=%q", cs.clientID, scopeName(next), next.readOnly, shortWindowID(next.window), next.via)
 
 	res := map[string]any{

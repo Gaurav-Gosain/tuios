@@ -154,11 +154,14 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 	if p.ID == "" {
 		return nil, invalidParam("id", "id is required: pass the id list-attention printed")
 	}
-	if !d.verifyAnyHumanNonce(p.HumanNonce, cs) {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "dismiss-attention is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Only a client attached right now can clear the Inbox, by passing the nonce its attach reply carried. An agent that wants the person to stop waiting on it should change its own state, or reply to the mail.",
 		})
+	}
+	if _, ok := d.humanNonceFor(p.HumanNonce, d.attentionItemSession(p.ID), cs); !ok {
+		return nil, nonceScopeError("dismiss-attention")
 	}
 	it, ok := d.attention.dismiss(p.ID)
 	if !ok {

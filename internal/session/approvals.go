@@ -719,8 +719,7 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		}
 		return nil, invalidParam("decision", msg, approvalReplies...)
 	}
-	by, ok := d.humanNonceClient(p.HumanNonce, cs)
-	if !ok {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "reply-approval is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer an approval, by passing the nonce its attach reply carried. An agent never can.",
@@ -745,6 +744,11 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 			return nil, noHoldError("no approval is held for window " + echoName(p.Window))
 		}
 		requestID = id
+	}
+	holdSession, _ := d.attention.holdSession(requestID)
+	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(holdSession), cs)
+	if !ok {
+		return nil, nonceScopeError("reply-approval")
 	}
 	message := attentionText(p.Message, approvalMaxMessage)
 	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary, p.RiskAck, p.PlanSHA)
@@ -820,11 +824,24 @@ func noHoldError(msg string) *verbError {
 	})
 }
 
-// humanNonceClient is verifyAnyHumanNonce that also names the client whose
-// attach the nonce came from, for the record of who answered.
-func (d *Daemon) humanNonceClient(nonce string, sender *connState) (string, bool) {
-	id, ok := d.matchHumanNonceClient(nonce, "", sender)
-	return id, ok
+// holdSession is the session a running hold is in, by name.
+func (a *attentionStore) holdSession(requestID string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if h, ok := a.holds[requestID]; ok {
+		return h.session, true
+	}
+	return "", false
+}
+
+// nonceScopeError refuses a nonce that is live but does not cover the
+// session the act lands in (humanNonceFor).
+func nonceScopeError(verb string) *verbError {
+	return hintedVerbError(ErrVerbNotHuman, verb+" is refused: the human_nonce is for another session", &VerbHint{
+		Param:  "human_nonce",
+		Verb:   "attach-presence",
+		Detail: "Nothing was done. A presence made for one session acts only in that session. To act in every session, call attach-presence with no session.",
+	})
 }
 
 // paneInFrontOfPerson reports whether a client the person holds is attached

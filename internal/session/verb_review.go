@@ -40,7 +40,7 @@ import (
 //     types (queueOriginRefusal), and refuses a pane on needs_input then.
 //   - Who wrote a note, and who sent a message, is the daemon's reading of the
 //     connection (reviewAuthor), never a parameter: human only with a live
-//     human_nonce (verifyAnyHumanNonce, which refuses any process in a pane).
+//     human_nonce (humanNonceFor, which refuses any process in a pane).
 //   - A note is typed into its pane when it is sent, whoever sends it, so a
 //     pane without admin may add or edit a note only on a pane it could type
 //     into itself (reviewNoteTargetRefusal, the typingRefusal rule). When the
@@ -417,8 +417,8 @@ type reviewAuthor struct {
 	pane string
 }
 
-func (d *Daemon) reviewAuthorOf(cs *connState, nonce, verb string) (reviewAuthor, *verbError) {
-	human := nonce != "" && d.verifyAnyHumanNonce(nonce, cs)
+func (d *Daemon) reviewAuthorOf(cs *connState, nonce, sessionID, verb string) (reviewAuthor, *verbError) {
+	_, human := d.humanNonceFor(nonce, sessionID, cs)
 	if nonce != "" && !human {
 		return reviewAuthor{}, hintedVerbError(ErrVerbNotHuman, "human_nonce does not belong to a client attached right now", &VerbHint{
 			Param:  "human_nonce",
@@ -499,11 +499,16 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	if (p.Action == "edit" || p.Action == "remove") && p.ID == "" {
 		return nil, invalidParam("id", "id is required: the note to "+p.Action+" (see review-note list)")
 	}
-	author, verr := d.reviewAuthorOf(cs, p.HumanNonce, "review-note")
+	if p.HumanNonce != "" && !d.humanNonceHeld(p.HumanNonce, cs) {
+		if _, verr := d.reviewAuthorOf(cs, p.HumanNonce, "", "review-note"); verr != nil {
+			return nil, verr
+		}
+	}
+	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
 	if verr != nil {
 		return nil, verr
 	}
-	sess, target, repo, verr := d.reviewTarget(p.Session, p.Window)
+	author, verr := d.reviewAuthorOf(cs, p.HumanNonce, sess.ID, "review-note")
 	if verr != nil {
 		return nil, verr
 	}

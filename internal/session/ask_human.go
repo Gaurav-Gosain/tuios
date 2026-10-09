@@ -209,6 +209,16 @@ func (a *attentionStore) askPane(requestID string) (string, bool) {
 	return "", false
 }
 
+// askSession is the session of an open question, by name.
+func (a *attentionStore) askSession(requestID string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if h, ok := a.asks[requestID]; ok {
+		return h.session, true
+	}
+	return "", false
+}
+
 // joinAsk is a caller coming back for a question: it waits on it when it is
 // still open, or gets how it ended.
 func (a *attentionStore) joinAsk(requestID string) (*askHold, askOutcome, bool, error) {
@@ -486,12 +496,16 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	if p.Answer == "" {
 		return nil, invalidParam("answer", "answer is required: one of the question's options")
 	}
-	by, ok := d.humanNonceClient(p.HumanNonce, cs)
-	if !ok {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "answer-ask is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer a question, by passing the nonce its attach reply carried. An agent never can.",
 		})
+	}
+	askSession, _ := d.attention.askSession(p.RequestID)
+	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(askSession), cs)
+	if !ok {
+		return nil, nonceScopeError("answer-ask")
 	}
 	out, hold, applied, mail, err := d.attention.answerAsk(p.RequestID, p.Answer, by, p.Question)
 	switch {

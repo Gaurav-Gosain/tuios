@@ -56,52 +56,103 @@ func newHumanNonce() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// verifyHumanNonce reports whether nonce belongs to a client attached to the
-// session sessionID right now, over a connection of the same kind as the
-// sender's: a nonce issued to an attach on the link socket verifies only a
-// send on the link socket, and a local one only a local send.
+// Nonce scope: the one rule for every verb that takes human_nonce.
 //
-// Two more conditions come from human_origin.go. The sender itself must be
-// allowed to act as the person, so a nonce that leaked into a pane is no use
-// there. And where the kernel gave both pids, the sender must be the process
-// that attached: the tuios client sends its reply on a fresh connection, but
-// from the same process that holds the attach, so a nonce copied to another
-// process does not verify. A nil sender is the daemon itself.
+// A session is a boundary. A presence made with a session (attach-presence
+// with {"session": X}) proves the person for acts in session X only. A
+// presence made with no session proves the person for every act its
+// connection could already reach, which for an unrestricted connection is
+// every session; a connection that restricts itself loses its presence
+// (verbRestrictConnection). An attach nonce keeps its own rule: it proves
+// the person for an act in any session, because the Inbox of one attached
+// client answers for every session, and send-agent-message and paste-image
+// also need the attach to be to the session they act in.
+//
+// A verb names the session its act lands in by ID. An act that lands in no
+// one session (a host's item, or an item the verb cannot place) names "",
+// and only an attach nonce or a presence with no session proves the person
+// for it.
+
+// humanNonceFor is the check every verb that takes human_nonce runs once it
+// knows the session the act lands in: sessionID is that session's ID, "" for
+// an act in no one session. It returns the id of the client that holds the
+// nonce, for answered_by, and whether the nonce proves the person for this
+// act from sender. See "Nonce scope" above, and docs/protocol.md, "Nonce
+// scope".
+func (d *Daemon) humanNonceFor(nonce, sessionID string, sender *connState) (string, bool) {
+	h, ok := d.humanNonceHolder(nonce, "", sender)
+	if !ok || !h.covers(sessionID) {
+		return "", false
+	}
+	return h.clientID, true
+}
+
+// humanNonceHeld reports whether nonce belongs to a live attach or presence
+// that sender may use, before the verb knows the session its act lands in.
+// It lets a verb refuse a caller with no proof at all before it looks
+// anything up. It is never the whole check: the verb calls humanNonceFor
+// once it knows the session.
+func (d *Daemon) humanNonceHeld(nonce string, sender *connState) bool {
+	_, ok := d.humanNonceHolder(nonce, "", sender)
+	return ok
+}
+
+// verifyHumanNonce is humanNonceFor for a verb that also needs an attach
+// nonce to come from an attach to sessionID itself: a reply in a session's
+// mail (send-agent-message) and paste-image. sessionID "" proves nothing.
 func (d *Daemon) verifyHumanNonce(nonce, sessionID string, sender *connState) bool {
 	if sessionID == "" {
 		return false
 	}
-	return d.matchHumanNonce(nonce, sessionID, sender)
+	h, ok := d.humanNonceHolder(nonce, sessionID, sender)
+	return ok && h.covers(sessionID)
 }
 
-// verifyAnyHumanNonce is verifyHumanNonce for a call that spans sessions, such
-// as dismiss-attention: the attach the nonce came from may be to any session,
-// and every other condition holds as it does for a reply.
-func (d *Daemon) verifyAnyHumanNonce(nonce string, sender *connState) bool {
-	return d.matchHumanNonce(nonce, "", sender)
+// sessionIDOf is the ID of the session named name, "" when there is none.
+// A verb whose record names its session by name uses it for humanNonceFor.
+func (d *Daemon) sessionIDOf(name string) string {
+	if name == "" {
+		return ""
+	}
+	if s, _ := d.manager.ResolveSession(name); s != nil {
+		return s.ID
+	}
+	return ""
 }
 
-// matchHumanNonce is the check behind both: sessionID empty matches an attach
-// to any session.
-func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) bool {
-	_, ok := d.matchHumanNonceClient(nonce, sessionID, sender)
-	return ok
+// humanHolder is the attach or presence a nonce belongs to.
+type humanHolder struct {
+	clientID string
+	// presence marks a nonce from attach-presence, and presenceSession the
+	// session ID it was made for, "" for every session.
+	presence        bool
+	presenceSession string
 }
 
-// matchHumanNonceClient is matchHumanNonce that also returns the id of the
-// attached client the nonce belongs to. A presence from attach-presence
-// (verb_presence.go) counts as an attached client here, so for every verb
-// that takes human_nonce, and nowhere else: it does not size, focus or view.
-func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connState) (string, bool) {
+// covers reports whether the holder proves the person for an act in session
+// sessionID ("" for an act in no one session).
+func (h humanHolder) covers(sessionID string) bool {
+	if !h.presence || h.presenceSession == "" {
+		return true
+	}
+	return sessionID != "" && sessionID == h.presenceSession
+}
+
+// humanNonceHolder finds the attach or presence nonce belongs to, under the
+// sender rules: the sender may act as the person, comes over the same kind
+// of connection, and, where the kernel gave both pids, is the process that
+// holds it. A nil sender is the daemon itself. attachSession, when set,
+// also needs an attach nonce to come from an attach to that session.
+func (d *Daemon) humanNonceHolder(nonce, attachSession string, sender *connState) (humanHolder, bool) {
 	if nonce == "" {
-		return "", false
+		return humanHolder{}, false
 	}
 	viaLink, linkHuman, pid := false, false, 0
 	if sender != nil {
 		viaLink, linkHuman, pid = sender.viaLink, sender.linkHuman, sender.peerPID
 	}
 	if !d.mayActAsHuman(sender) {
-		return "", false
+		return humanHolder{}, false
 	}
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -109,18 +160,17 @@ func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connStat
 		cs.mu.Lock()
 		same := cs.viaLink == viaLink && cs.linkHuman == linkHuman &&
 			(pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid)
-		attach := cs.attached && cs.isTUIClient && (sessionID == "" || cs.sessionID == sessionID) &&
+		attach := cs.attached && cs.isTUIClient && (attachSession == "" || cs.sessionID == attachSession) &&
 			cs.humanNonce != "" && subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
-		// A presence from attach-presence is held to the same rules as an
-		// attach. One for every session matches a call about any session.
+		// A presence from attach-presence is held to the same sender rules
+		// as an attach. Which sessions it covers is humanHolder.covers.
 		presence := cs.presenceNonce != "" &&
-			(sessionID == "" || cs.presenceSession == "" || cs.presenceSession == sessionID) &&
 			subtle.ConstantTimeCompare([]byte(cs.presenceNonce), []byte(nonce)) == 1
-		match := same && (attach || presence)
+		h := humanHolder{clientID: cs.clientID, presence: presence && !attach, presenceSession: cs.presenceSession}
 		cs.mu.Unlock()
-		if match {
-			return cs.clientID, true
+		if same && (attach || presence) {
+			return h, true
 		}
 	}
-	return "", false
+	return humanHolder{}, false
 }

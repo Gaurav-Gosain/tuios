@@ -379,8 +379,8 @@ func peekResult(sess *Session, look promptLook, now time.Time) map[string]any {
 // mayRespond reports whether the caller may answer a prompt as the person:
 // a verified attach nonce, or the respond_from_shell grant for a caller the
 // kernel names outside every pane.
-func (d *Daemon) mayRespond(cs *connState, nonce string) bool {
-	if d.verifyAnyHumanNonce(nonce, cs) {
+func (d *Daemon) mayRespond(cs *connState, nonce, sessionID string) bool {
+	if _, ok := d.humanNonceFor(nonce, sessionID, cs); ok {
 		return true
 	}
 	return d.respondFromShell && cs != nil && cs.peerPID > 0 && d.mayActAsHuman(cs)
@@ -429,7 +429,7 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	// A pane the person gave the respond grant may answer for them in the
 	// sessions it may write to. See pane_grants.go.
 	byPane := ""
-	if !d.mayRespond(cs, p.HumanNonce) {
+	if !d.mayRespond(cs, p.HumanNonce, sess.ID) {
 		if !d.paneMayRespond(cs, sess.Name()) {
 			return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
 				Param:  "human_nonce",

@@ -19,7 +19,7 @@ import (
 // and list-queued needs list.
 //
 // Who queued an entry is decided here, once, from the connection, never from
-// a parameter: human only with a live human_nonce (verifyAnyHumanNonce, which
+// a parameter: human only with a live human_nonce (humanNonceFor, which
 // also refuses any process inside a pane), link:HOST for a call over a link,
 // the pane's window id for a process in a pane, and shell for anything else.
 // A call a pane on another machine forwards through its report channel
@@ -137,7 +137,7 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 		return nil, verr
 	}
 	e := &queueEntry{text: text}
-	human := nonce != "" && d.verifyAnyHumanNonce(nonce, cs)
+	_, human := d.humanNonceFor(nonce, sess.ID, cs)
 	if nonce != "" && !human {
 		return nil, hintedVerbError(ErrVerbNotHuman, "human_nonce does not belong to a client attached right now", &VerbHint{
 			Param:  "human_nonce",
@@ -286,13 +286,18 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	if p.ID != "" && p.All {
 		return nil, invalidParam("all", "pass id or all, not both")
 	}
-	human := p.HumanNonce != "" && d.verifyAnyHumanNonce(p.HumanNonce, cs)
-	if p.HumanNonce != "" && !human {
+	if p.HumanNonce != "" && !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, newVerbError(ErrVerbNotHuman, "human_nonce does not belong to a client attached right now. Nothing was dropped")
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+	human := false
+	if p.HumanNonce != "" {
+		if _, human = d.humanNonceFor(p.HumanNonce, sess.ID, cs); !human {
+			return nil, nonceScopeError("cancel-queued")
+		}
 	}
 	state := sess.GetState()
 
