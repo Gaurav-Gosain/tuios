@@ -608,3 +608,46 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 		t.Fatalf("ASSERTION: the daemon read %d MB of the source in the 2 s after the copy was cancelled", read>>20)
 	}
 }
+
+// TestAFolderMoveRemovesOnlyWhatItCopied moves a folder that holds two
+// files and a link to build. A copy carries files and folders, not links,
+// so the move must remove the two files it copied and leave the link, and
+// the folder that holds it, where they were.
+func TestAFolderMoveRemovesOnlyWhatItCopied(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+
+	src := filepath.Join(base, "project")
+	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(src, "a.txt"), []byte("a\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("b\n"), 0o644)
+	if err := os.Symlink("/etc/hostname", filepath.Join(src, "link")); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(remote, "project")
+	var row transferRow
+	dialVerbs(t, base).must("transfer-start", map[string]any{
+		"src":  map[string]any{"path": src},
+		"dst":  map[string]any{"host": "build", "path": dst},
+		"move": true,
+	}, &row)
+	row = waitTransferEnd(t, base, row.ID, 30*time.Second)
+	if row.State != "done" {
+		t.Fatalf("ASSERTION: the move ended %s: %s", row.State, row.Error)
+	}
+	for _, rel := range []string{"a.txt", "sub/b.txt"} {
+		if _, err := os.Stat(filepath.Join(dst, rel)); err != nil {
+			t.Errorf("ASSERTION: %s did not reach build: %v", rel, err)
+		}
+		if _, err := os.Lstat(filepath.Join(src, rel)); err == nil {
+			t.Errorf("ASSERTION: the move left %s, which it copied", rel)
+		}
+	}
+	if target, err := os.Readlink(filepath.Join(src, "link")); err != nil || target != "/etc/hostname" {
+		t.Errorf("ASSERTION: the move removed a link it did not copy: %v", err)
+	}
+	saveTransferArtifact(t, "move-keeps-uncopied", row)
+}
