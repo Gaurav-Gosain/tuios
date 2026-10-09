@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -536,8 +537,10 @@ func (d *Daemon) verbFileRemove(_ *connState, params json.RawMessage) (any, *ver
 }
 
 // hashRange is the sha256 of length bytes of the file at offset, or of
-// everything from offset when length is negative.
-func hashRange(path string, offset, length int64) (string, int64, error) {
+// everything from offset when length is negative. It stops when ctx ends: a
+// hash of a large file runs for minutes, and a copy that was cancelled or
+// lost its link must not leave one reading the disk.
+func hashRange(ctx context.Context, path string, offset, length int64) (string, int64, error) {
 	f, _, err := openRegular(path)
 	if err != nil {
 		return "", 0, err
@@ -547,15 +550,28 @@ func hashRange(path string, offset, length int64) (string, int64, error) {
 		return "", 0, err
 	}
 	h := sha256.New()
-	var r io.Reader = f
+	var r io.Reader = ctxReader{ctx: ctx, r: f}
 	if length >= 0 {
-		r = io.LimitReader(f, length)
+		r = io.LimitReader(r, length)
 	}
 	n, err := io.CopyBuffer(h, r, make([]byte, 1<<20))
 	if err != nil {
 		return "", n, err
 	}
 	return hex.EncodeToString(h.Sum(nil)), n, nil
+}
+
+// ctxReader is a reader that stops when its context ends.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
 }
 
 // verbFileHash hashes a file, or a range of it, or of the part a copy to it
@@ -582,7 +598,7 @@ func (d *Daemon) verbFileHash(_ *connState, params json.RawMessage) (any, *verbE
 	if p.Length != nil {
 		length = *p.Length
 	}
-	sum, n, err := hashRange(target, max(p.Offset, 0), length)
+	sum, n, err := hashRange(d.ctx, target, max(p.Offset, 0), length)
 	if err != nil {
 		return nil, fileError("hash", target, err)
 	}
@@ -697,7 +713,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 // (the new file gets " 2", " 3" ... before its extension), or fail. perm, when
 // not zero, is the original's permission bits: the part is owner only while
 // it is written, and the finished file gets the original's.
-func commitPart(path, want, conflict string, perm uint32) (string, string, *verbError) {
+func commitPart(ctx context.Context, path, want, conflict string, perm uint32) (string, string, *verbError) {
 	part := partPath(path)
 	// The part is checked and moved by its name, so it must still be the
 	// regular file the copy wrote, not a link put there since.
@@ -706,7 +722,7 @@ func commitPart(path, want, conflict string, perm uint32) (string, string, *verb
 	} else if !fi.Mode().IsRegular() {
 		return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
 	}
-	got, _, err := hashRange(part, 0, -1)
+	got, _, err := hashRange(ctx, part, 0, -1)
 	if err != nil {
 		return "", "", fileError("check", part, err)
 	}
@@ -774,7 +790,7 @@ func (d *Daemon) verbFileCommit(_ *connState, params json.RawMessage) (any, *ver
 	default:
 		return nil, invalidParam("conflict", "conflict is replace, keep-both or fail", "replace", "keep-both", "fail")
 	}
-	final, sum, verr := commitPart(path, p.SHA256, p.Conflict, p.Perm)
+	final, sum, verr := commitPart(d.ctx, path, p.SHA256, p.Conflict, p.Perm)
 	if verr != nil {
 		return nil, verr
 	}

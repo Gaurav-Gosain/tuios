@@ -820,7 +820,7 @@ func (e fileEnd) hash(ctx context.Context, path string, part bool, off, length i
 		if part {
 			target = partPath(path)
 		}
-		sum, _, err := hashRange(target, off, length)
+		sum, _, err := hashRange(ctx, target, off, length)
 		return sum, err
 	}
 	params := map[string]any{"path": path, "offset": off, "part": part}
@@ -945,7 +945,7 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 
 func (e fileEnd) commit(ctx context.Context, path, sum, conflict string, perm uint32) (string, error) {
 	if e.local() {
-		final, _, verr := commitPart(path, sum, conflict, perm)
+		final, _, verr := commitPart(ctx, path, sum, conflict, perm)
 		if verr != nil {
 			return "", &VerbCallError{Code: verr.Code, Message: verr.Message}
 		}
