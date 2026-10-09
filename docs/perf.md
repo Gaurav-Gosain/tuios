@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 33,501,346 | 34,000,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 31,536,466 | 32,000,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 34,046,114 | 34,600,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 32,043,810 | 32,600,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2480,6 +2480,15 @@ store images in their cells (#583, issue 567) added 8,192 and 32 bytes: the
 xterm.js check in the startup probe and the handler for a late XTVERSION
 answer. That put linux/amd64 1,346 bytes over. Both budgets now have about
 500 KB of room, and both stay under the 35 MB ceiling.
+
+The budgets went to 34,600,000 (linux/amd64) and 32,600,000 (darwin/arm64)
+for the phone apps. stream-pane, attach-presence and the size lease (#602),
+agent-transcript (#603) and Web Push with RFC 8291 encryption (#608) landed
+first, and `tuios pair` (#607) adds the QR encoder (rsc.io/qr) and the
+pairing listener. With #607 the build measured 34,046,114 and 32,043,810
+bytes, 46,114 and 43,810 over the old budgets. Both budgets again have about
+550 KB of room, and linux/amd64 is now within 400 KB of the 35 MB ceiling, so
+the next feature that needs room should look for bytes to cut first.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
