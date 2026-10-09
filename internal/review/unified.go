@@ -65,8 +65,8 @@ func (u *unifiedReader) cutRest(i int) {
 // line takes one line of the diff, and reports whether reading stops.
 func (u *unifiedReader) line(raw string) bool {
 	u.total += len(raw)
-	text := strings.TrimSuffix(raw, "\n")
-	text = strings.TrimSuffix(text, "\r")
+	full := strings.TrimSuffix(raw, "\n")
+	text := strings.TrimSuffix(full, "\r")
 
 	if !u.inHunk && strings.HasPrefix(text, "diff --git ") {
 		u.idx++
@@ -141,6 +141,9 @@ func (u *unifiedReader) line(raw string) bool {
 		}
 	}
 	ln := Line{Op: op, Text: body}
+	if full != "" {
+		ln.raw = full[1:]
+	}
 	switch op {
 	case OpDelete:
 		ln.Old = u.oldLine

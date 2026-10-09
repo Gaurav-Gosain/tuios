@@ -28,7 +28,7 @@ func ParseRawNumstat(out string) ([]File, error) {
 				return nil, fmt.Errorf("unexpected raw diff line %q", tok)
 			}
 			letter := fields[4][:1]
-			f := File{}
+			f := File{oldMode: strings.TrimPrefix(fields[0], ":"), newMode: fields[1]}
 			switch letter {
 			case "R", "C":
 				if i+2 >= len(tokens) {

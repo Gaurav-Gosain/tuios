@@ -225,6 +225,8 @@ var verbCapabilities = map[string][]string{
 	"review-diff":    {config.LinkAllowWrite},
 	"review-note":    {config.LinkAllowWrite},
 	"send-review":    {config.LinkAllowWrite},
+	// review-stage writes the index, as a commit does.
+	"review-stage":   {config.LinkAllowWrite},
 	"queue-prompt":   {config.LinkAllowWrite},
 	"cancel-queued":  {config.LinkAllowWrite},
 	"keep-fan":       {config.LinkAllowWrite},

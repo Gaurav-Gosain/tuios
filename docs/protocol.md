@@ -1439,6 +1439,9 @@ catalog.
 | `repo_not_found` | No checkout on this machine has the origin `repo_url` names, and `clone` was not passed. Pass `clone`, a `repos_root`, or `repo` with the directory. |
 | `not_repo` | No git repository is under the pane or session named, so there is nothing to review. Nothing was read. |
 | `no_notes` | `send-review` found no unsent review notes for the pane. Nothing was typed. |
+| `hunk_changed` | `review-stage` did not find the file or the hunk in the diff now. Nothing was changed. Read the diff again with the same `index` and `context`. |
+| `index_changed` | `review-stage` did not undo the call: the index changed after it. Nothing was changed. |
+| `whole_file_only` | `review-stage` stages a rename, a binary file or a file past the diff caps only whole. Nothing was changed. Leave `hunk` and `lines` out. |
 | `no_checkpoint` | The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the numbers it has. |
 | `nothing_to_commit` | `ship-commit` found no change in the work tree. `ship-push` and `ship-pr` raise it for a branch with no commit. Nothing was changed. |
 | `merge_conflict` | `ship-merge` stopped on conflicts and undid the merge. The main checkout is as it was. The hint lists the files in `available`. |
@@ -3078,7 +3081,7 @@ base, else the merge base with the upstream, else `HEAD`), `against` (another
 session of the same fan: the two attempts diffed with each other; not with
 `base` or `uncommitted`), `uncommitted` (only what is not committed, against
 `HEAD`), `paths` (at most 256, relative, each taken literally), `context` (0
-to 20, default 3). A `base` that does not resolve, or reads as an option, is
+to 20, default 3), `index` (`unstaged` or `staged`; see below). A `base` that does not resolve, or reads as an option, is
 `invalid_params`, and so is an `against` that is not another attempt of the
 fan. A named or recorded base is taken through its merge base with `HEAD`.
 
@@ -3114,9 +3117,73 @@ Every call finds the pane's notes again in the diff it read and returns them
 as `notes`, as `review-note` lists them. The answer is marked `untrusted`: the
 text is the repository's.
 
+`index` reads the worktree's own index instead of a base. `unstaged` is the
+index (written with `git write-tree`) against the working files, untracked
+files included as `U`. `staged` is `HEAD` (the empty tree before the first
+commit) against the index. `base` is then `index` or `HEAD`, `base_sha` is a
+tree, and the result has `index`. It takes no `base`, `against` or
+`uncommitted`. The notes are returned, and are not moved by an index diff. A
+hunk's `header` and its `lines` are the same as `review-stage` reads them for
+the same `index` and `context`.
+
+`highlight` (default false) adds two fields to each line. `hl` is the
+syntax colour: `[start, end, class]` runs in bytes of `text`, where `class`
+is a number. The result's `classes` names the numbers in order (`plain`,
+`keyword`, `type`, ...). `changed` is the `[start, end]` bytes of a removed
+or added line that changed against the line it pairs with. Each field is
+absent when it is empty. The old side and the new side of a hunk are each
+coloured as one text. A truncated file, a binary file and a very large text
+are not coloured.
+
 A pane without `admin` reads its own session and fan group, and the session
 `against` names must be in its reach too. Over a link it needs `write`, since
 it returns file contents.
+
+### review-stage
+
+Stage or unstage a change in the worktree under a pane. Only the index
+changes. The working files do not change. One call runs at a time in a
+worktree.
+
+Params: `session`, `window` (as for `review-diff`), `action` (`stage`,
+`unstage` or `undo`), `path` (relative to the repository root), `hunk` (a
+header exactly as `review-diff` returned it; omit for the whole file),
+`lines` (indices into that hunk's `lines`; only added and removed lines
+count; omit for the whole hunk), `context` (the context of that diff, default
+3), `undo` (for `undo`), `human_nonce`.
+
+- `stage` reads the `unstaged` diff of `path` again. A whole file is
+  `git add -A`, which also stages a deletion or an untracked file. A hunk or
+  lines become a patch applied with `git apply --cached`: an unselected
+  added line is left out, and an unselected removed line stays.
+- `unstage` reads the `staged` diff. A whole file is `git reset`, or a
+  removal from the index before the first commit. A hunk or lines are the
+  reverse: an unselected added line stays, and an unselected removed line is
+  left out.
+- A rename and its old path are staged together, and only whole, as is a
+  binary file (`whole_file_only`). A hunk no longer in the diff is
+  `hunk_changed`.
+- Every result has `undo`: `entries`, the index entries of the paths touched
+  before the call (`{path, mode, sha}`, or `{path, absent: true}`), and
+  `after`, the same paths after it.
+- `undo` takes that object. It is `index_changed` unless the index still
+  holds `after`. Then it writes `entries` back with `git update-index`, and
+  answers with `undo` swapped, so sending that back redoes the call.
+
+```json
+{"verb": "review-stage", "params": {"action": "stage", "session": "work",
+ "path": "list.txt", "hunk": "@@ -8,5 +8,7 @@ seven", "lines": [4]}}
+```
+
+```json
+{"result": {"type": "review_stage", "session": "work", "window": "ee773ef6-...",
+ "worktree": "/src/repo", "path": "list.txt", "action": "stage",
+ "undo": {"entries": [{"path": "list.txt", "mode": "100644", "sha": "e68fa666..."}],
+          "after": [{"path": "list.txt", "mode": "100644", "sha": "e5dcefbe..."}]}}}
+```
+
+It is the person's tool: refused on a restricted connection, `admin` for a
+pane, `write` over a link. A `human_nonce` that is given must be live.
 
 ### review-note
 
@@ -4772,7 +4839,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
-| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway) |
@@ -4947,6 +5014,7 @@ them:
 | --- | --- | --- | --- | --- |
 | `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
 | `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | `write` | a note is the person's only with a live `human_nonce` |
+| `review-stage` | Stage or unstage a file, a hunk or lines of a pane's worktree, and undo it; only the index changes | refused | `write` | no; a `human_nonce` that is given must be live |
 | `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
 | `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
 | `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
