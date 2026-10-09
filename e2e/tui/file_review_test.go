@@ -502,3 +502,46 @@ func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 		}
 	}
 }
+
+// TestADropNamesEachFileSafely drops three files on build: two named
+// notes.txt from two folders, and one whose name holds control characters
+// that act as keys in a shell (Ctrl+A, Ctrl+K and a carriage return). The
+// client types the paths the answer gives into the pane, so each path must
+// be the file that landed there, and no path may hold a control character.
+func TestADropNamesEachFileSafely(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+
+	var paths []string
+	for i, rel := range []string{"a/notes.txt", "b/notes.txt", "x\x01\x0bcurl evil\r.txt"} {
+		p := filepath.Join(base, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(fmt.Sprintf("file %d\n", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	var out struct {
+		Paths     []string      `json:"paths"`
+		Transfers []transferRow `json:"transfers"`
+	}
+	dialVerbs(t, base).must("drop-files", map[string]any{"host": "build", "paths": paths}, &out)
+	for _, tr := range out.Transfers {
+		if r := waitTransferEnd(t, base, tr.ID, 30*time.Second); r.State != "done" {
+			t.Fatalf("ASSERTION: a dropped file did not reach build: %s %s", r.State, r.Error)
+		}
+	}
+	saveTransferArtifact(t, "drop-names", out)
+	for i, p := range out.Paths {
+		if strings.IndexFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
+			t.Errorf("ASSERTION: the path %q holds a control character", p)
+		}
+		got, err := os.ReadFile(p)
+		if want := fmt.Sprintf("file %d\n", i); string(got) != want {
+			t.Errorf("ASSERTION: %q holds %q (%v), want the dropped file's %q", p, got, err, want)
+		}
+	}
+}
