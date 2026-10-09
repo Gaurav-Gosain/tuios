@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image"
+	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -46,7 +47,15 @@ const (
 	previewPDFBytesMax = 8 << 20
 	previewSVGMax      = 4 << 20
 	previewToolTimeout = 20 * time.Second
+	// previewDecodeMax bounds the memory one decoded image may take. A
+	// small file can hold a huge picture: a 400 KB PNG of 10000 x 10000
+	// pixels decodes to 400 MB, and the scale to more.
+	previewDecodeMax = 256 << 20
 )
+
+// previewDecodeSlot lets one image decode at a time, so previews asked for
+// together cannot add their pictures up in the daemon's memory.
+var previewDecodeSlot = make(chan struct{}, 1)
 
 var (
 	previewImageExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true}
@@ -88,19 +97,26 @@ func (d *Daemon) verbFilePreview(_ *connState, params json.RawMessage) (any, *ve
 		out["kind"] = "dir"
 		return out, nil
 	}
+	if !fi.Mode().IsRegular() {
+		// A named pipe would hold the preview until something wrote to it,
+		// and a device has no end. Neither is opened.
+		out["kind"] = "binary"
+		out["note"] = "This is a pipe, a device or a socket. It has no preview."
+		return out, nil
+	}
 	ext := strings.ToLower(filepath.Ext(path))
 	ctx, cancel := context.WithTimeout(d.ctx, previewToolTimeout)
 	defer cancel()
 
 	switch {
 	case previewImageExt[ext]:
-		if err := previewImage(path, fi.Size(), maxPx, out); err != nil {
+		if err := previewImage(ctx, path, fi.Size(), maxPx, out); err != nil {
 			describeBinary(path, out, err.Error())
 		}
 		return out, nil
 	case ext == ".svg":
 		if fi.Size() <= previewSVGMax {
-			if b, err := os.ReadFile(path); err == nil {
+			if b, err := readRegular(path, previewSVGMax); err == nil {
 				out["kind"] = "svg"
 				out["text"] = string(b)
 				return out, nil
@@ -122,12 +138,48 @@ func (d *Daemon) verbFilePreview(_ *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
+// readRegular reads a regular file of at most limit bytes.
+func readRegular(path string, limit int64) ([]byte, error) {
+	f, _, err := openRegular(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > limit {
+		return nil, errors.New("the file grew past the limit")
+	}
+	return b, nil
+}
+
+// decodedBytesPerPixel is what one pixel of a decoded image takes in memory,
+// at the most, for the color model the image's header names.
+func decodedBytesPerPixel(m color.Model) int64 {
+	switch m {
+	case color.RGBA64Model, color.NRGBA64Model:
+		return 8
+	case color.GrayModel, color.AlphaModel:
+		return 1
+	case color.Gray16Model, color.Alpha16Model:
+		return 2
+	case color.YCbCrModel, color.NYCbCrAModel:
+		return 4
+	}
+	if _, ok := m.(color.Palette); ok {
+		return 1
+	}
+	return 4
+}
+
 // previewImage decodes an image and sends it at most maxPx on its long side.
-func previewImage(path string, size int64, maxPx int, out map[string]any) error {
+func previewImage(ctx context.Context, path string, size int64, maxPx int, out map[string]any) error {
 	if size > previewImageMax {
 		return errors.New("The image is too large to show.")
 	}
-	f, err := os.Open(path)
+	f, _, err := openRegular(path)
 	if err != nil {
 		return err
 	}
@@ -136,8 +188,15 @@ func previewImage(path string, size int64, maxPx int, out map[string]any) error 
 	if err != nil {
 		return errors.New("The image could not be read.")
 	}
-	if cfg.Width > previewImageDimMax || cfg.Height > previewImageDimMax {
+	if cfg.Width > previewImageDimMax || cfg.Height > previewImageDimMax ||
+		int64(cfg.Width)*int64(cfg.Height)*decodedBytesPerPixel(cfg.ColorModel) > previewDecodeMax {
 		return errors.New("The image is too large to show.")
+	}
+	select {
+	case previewDecodeSlot <- struct{}{}:
+		defer func() { <-previewDecodeSlot }()
+	case <-ctx.Done():
+		return errors.New("The preview took too long. Try again.")
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return err
@@ -227,7 +286,7 @@ func previewPDF(ctx context.Context, path string, size int64, maxPx, page int, o
 		}
 	}
 	if size <= previewPDFBytesMax {
-		if b, err := os.ReadFile(path); err == nil {
+		if b, err := readRegular(path, previewPDFBytesMax); err == nil {
 			out["pdf"] = base64.StdEncoding.EncodeToString(b)
 			return
 		}
@@ -309,7 +368,7 @@ func videoDuration(ctx context.Context, path string) int64 {
 // previewText sends the start of a file that reads as text. It reports false
 // for a file that does not.
 func previewText(path string, size int64, out map[string]any) bool {
-	f, err := os.Open(path)
+	f, _, err := openRegular(path)
 	if err != nil {
 		return false
 	}
@@ -339,7 +398,7 @@ func previewText(path string, size int64, out map[string]any) bool {
 // describeBinary is the preview of a file that has none: its type and size.
 func describeBinary(path string, out map[string]any, note string) {
 	out["kind"] = "binary"
-	if f, err := os.Open(path); err == nil {
+	if f, _, err := openRegular(path); err == nil {
 		head := make([]byte, 512)
 		n, _ := f.Read(head)
 		_ = f.Close()
