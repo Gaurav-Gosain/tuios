@@ -77,11 +77,8 @@ type Runner struct {
 	inFlight int
 	perPlug  map[string]int
 	procs    map[string]map[*exec.Cmd]*procGroup
-	// lingering are the groups of finished commands that left a process
-	// running. Only Windows keeps one: see procGroup.release.
-	lingering map[string][]*procGroup
-	stopped   bool
-	wg        sync.WaitGroup
+	stopped  bool
+	wg       sync.WaitGroup
 	// OnPID, when set, is told each process the runner starts and ends, so
 	// the daemon can tell a plugin's process from a person's.
 	OnPID func(pid int, running bool)
@@ -89,7 +86,7 @@ type Runner struct {
 
 // NewRunner returns an empty runner.
 func NewRunner() *Runner {
-	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}, lingering: map[string][]*procGroup{}}
+	return &Runner{perPlug: map[string]int{}, procs: map[string]map[*exec.Cmd]*procGroup{}}
 }
 
 // ResolveProgram finds a command's program as herdr does: a relative path
@@ -177,7 +174,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		cancel()
 		return refuse("plugin_command_failed", terr.Error())
 	}
-	r.pruneLocked(j.Plugin.PluginID)
 	r.inFlight++
 	r.perPlug[j.Plugin.PluginID]++
 	if r.procs[j.Plugin.PluginID] == nil {
@@ -218,9 +214,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		r.inFlight--
 		r.perPlug[j.Plugin.PluginID]--
 		delete(r.procs[j.Plugin.PluginID], cmd)
-		if !group.release() {
-			r.lingering[j.Plugin.PluginID] = append(r.lingering[j.Plugin.PluginID], group)
-		}
+		group.release()
 		for i := range r.logs {
 			if r.logs[i].LogID != e.LogID {
 				continue
@@ -281,32 +275,10 @@ func (r *Runner) StopPlugin(pluginID string) {
 	for _, g := range r.procs[pluginID] {
 		groups = append(groups, g)
 	}
-	lingering := r.lingering[pluginID]
-	delete(r.lingering, pluginID)
 	r.mu.Unlock()
 	for _, g := range groups {
 		g.kill()
 	}
-	for _, g := range lingering {
-		g.kill()
-		g.drop()
-	}
-}
-
-// pruneLocked lets go of the lingering groups of a plugin whose processes
-// have since ended.
-func (r *Runner) pruneLocked(pluginID string) {
-	keep := r.lingering[pluginID][:0]
-	for _, g := range r.lingering[pluginID] {
-		if !g.release() {
-			keep = append(keep, g)
-		}
-	}
-	if len(keep) == 0 {
-		delete(r.lingering, pluginID)
-		return
-	}
-	r.lingering[pluginID] = keep
 }
 
 // StopAll kills every plugin process, refuses new ones, and waits up to
@@ -317,11 +289,6 @@ func (r *Runner) StopAll(wait time.Duration) {
 	var ids []string
 	for id := range r.procs {
 		ids = append(ids, id)
-	}
-	for id := range r.lingering {
-		if _, ok := r.procs[id]; !ok {
-			ids = append(ids, id)
-		}
 	}
 	r.mu.Unlock()
 	for _, id := range ids {

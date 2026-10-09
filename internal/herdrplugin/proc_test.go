@@ -1,3 +1,5 @@
+//go:build unix || windows
+
 package herdrplugin
 
 import (
@@ -9,58 +11,17 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // The ways stopping a plugin can fail, which these tests hold it to:
 //
 //   - StopPlugin kills the command and not the process it started, so a
 //     plugin's helper outlives it (Windows has no process group);
-//   - a process a finished command left behind is never reached again;
+//   - a program a finished command opened for the person, such as an editor
+//     or a browser, is killed when the plugin stops or the daemon ends;
 //   - the daemon ends without running StopAll, as kill-server's
-//     TerminateProcess makes it, and every plugin process outlives it.
-//
-// The helper modes run this test binary as the plugin's processes.
-
-const helperEnv = "TUIOS_HERDRPLUGIN_HELPER"
-
-func TestMain(m *testing.M) {
-	switch os.Getenv(helperEnv) {
-	case "":
-		os.Exit(testutil.RunIsolated(m))
-	case "parent", "parent-exits":
-		// Start a child that sleeps, write its pid, then sleep or exit.
-		child := exec.Command(os.Args[0])
-		child.Env = append(os.Environ(), helperEnv+"=child")
-		if err := child.Start(); err != nil {
-			os.Exit(3)
-		}
-		_ = os.WriteFile(os.Getenv("TUIOS_HERDRPLUGIN_PIDFILE"), []byte(strconv.Itoa(child.Process.Pid)), 0o600)
-		if os.Getenv(helperEnv) == "parent-exits" {
-			os.Exit(0)
-		}
-		time.Sleep(time.Minute)
-		os.Exit(0)
-	case "child":
-		time.Sleep(time.Minute)
-		os.Exit(0)
-	case "host":
-		// A daemon: a runner with one plugin command, which never stops it.
-		r := NewRunner()
-		self, _ := os.Executable()
-		_, perr := r.Start(Job{
-			Plugin:  &Plugin{PluginID: "test.host", PluginRoot: filepath.Dir(self)},
-			Command: []string{self},
-			Env:     []string{helperEnv + "=parent", "TUIOS_HERDRPLUGIN_PIDFILE=" + os.Getenv("TUIOS_HERDRPLUGIN_PIDFILE")},
-		})
-		if perr != nil {
-			os.Exit(4)
-		}
-		time.Sleep(time.Minute)
-		os.Exit(0)
-	}
-}
+//     TerminateProcess makes it, and a running command outlives it;
+//   - without a job, the command never starts, or StopPlugin misses it.
 
 func readPid(t *testing.T, path string) int {
 	t.Helper()
@@ -117,15 +78,13 @@ func TestStopPluginKillsWhatTheCommandStarted(t *testing.T) {
 	waitGone(t, child, "the child of a running command")
 }
 
-func TestStopPluginKillsWhatAFinishedCommandLeft(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("on Unix a finished command's group is not kept: its id may name another group")
-	}
+func TestAFinishedCommandLeavesItsProgramRunning(t *testing.T) {
 	if testing.Short() {
 		t.Skip("spawns processes")
 	}
 	r := NewRunner()
 	child := startHelper(t, r, "parent-exits")
+	defer killPid(child)
 	// The command itself has exited once its log entry is finished.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -138,11 +97,12 @@ func TestStopPluginKillsWhatAFinishedCommandLeft(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !alive(child) {
-		t.Fatal("setup: the child died with its parent")
-	}
 	r.StopPlugin("test.plugin")
-	waitGone(t, child, "the child a finished command left")
+	r.StopAll(time.Second)
+	time.Sleep(500 * time.Millisecond)
+	if !alive(child) {
+		t.Fatal("a program the finished command opened was killed")
+	}
 }
 
 func TestPluginProcessesEndWithTheDaemon(t *testing.T) {

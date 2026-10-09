@@ -28,9 +28,6 @@ func (g *procGroup) kill() {
 	}
 }
 
-// release reports that nothing is kept once the command is reaped: after
-// Wait the group id may name another group, so it is not killed later.
-func (g *procGroup) release() bool { return true }
-
-// drop does nothing: nothing is kept. See release.
-func (g *procGroup) drop() {}
+// release does nothing. After Wait the group id may name another group, so
+// the runner does not kill it later, and what the command left runs on.
+func (g *procGroup) release() {}

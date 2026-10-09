@@ -19,6 +19,4 @@ func (g *procGroup) kill() {
 	}
 }
 
-func (g *procGroup) release() bool { return true }
-
-func (g *procGroup) drop() {}
+func (g *procGroup) release() {}
