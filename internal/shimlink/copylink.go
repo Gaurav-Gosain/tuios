@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,8 @@ type FS interface {
 	Remove(name string) error
 	Glob(pattern string) ([]string, error)
 	Open(name string) (io.ReadCloser, error)
+	// Alive reports whether a process with this id runs.
+	Alive(pid int) bool
 }
 
 // OSFS is FS on the real filesystem.
@@ -58,6 +61,7 @@ func (OSFS) Rename(oldname, newname string) error    { return os.Rename(oldname,
 func (OSFS) Remove(name string) error                { return os.Remove(name) }
 func (OSFS) Glob(pattern string) ([]string, error)   { return filepath.Glob(pattern) }
 func (OSFS) Open(name string) (io.ReadCloser, error) { return os.Open(name) } //nolint:gosec // the tuios binary and its link
+func (OSFS) Alive(pid int) bool                      { return processAlive(pid) }
 
 func (OSFS) Copy(src, dst string) (err error) {
 	in, err := os.Open(src) //nolint:gosec // the running tuios binary
@@ -216,7 +220,9 @@ func sameBytes(fsys FS, a, b string) bool {
 
 // sweep removes the files an earlier InstallFile left beside link: a file
 // moved aside while it ran, or a half-made one from a process that died.
-// One that is still running stays until a later start.
+// A file moved aside that still runs cannot be removed, and stays until a
+// later start. A half-made file whose process still runs is that process's
+// work in progress, and is left alone.
 func sweep(fsys FS, link string) {
 	for _, suffix := range []string{".old-", ".new-"} {
 		names, err := fsys.Glob(globEscape(link) + suffix + "*")
@@ -224,6 +230,12 @@ func sweep(fsys FS, link string) {
 			continue
 		}
 		for _, n := range names {
+			if suffix == ".new-" {
+				pid, err := strconv.Atoi(n[len(link)+len(suffix):])
+				if err == nil && pid > 0 && fsys.Alive(pid) {
+					continue
+				}
+			}
 			_ = fsys.Remove(n)
 		}
 	}
