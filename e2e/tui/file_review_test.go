@@ -545,3 +545,66 @@ func TestADropNamesEachFileSafely(t *testing.T) {
 		}
 	}
 }
+
+// daemonReadBytes is how many bytes the daemon of base has read, from /proc.
+func daemonReadBytes(t *testing.T, base string) int64 {
+	t.Helper()
+	var hello struct {
+		PID int `json:"pid"`
+	}
+	dialVerbs(t, base).must("hello", nil, &hello)
+	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(hello.PID), "io"))
+	if err != nil {
+		t.Skipf("no /proc io here: %v", err)
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if rest, ok := strings.CutPrefix(line, "rchar:"); ok {
+			n, _ := strconv.ParseInt(strings.TrimSpace(rest), 10, 64)
+			return n
+		}
+	}
+	t.Fatalf("no rchar in the daemon's io")
+	return 0
+}
+
+// TestACancelledCopyStopsReadingItsSource starts a copy of a 16 GiB file
+// (sparse, so it costs no disk) to build over a slow link, and cancels it
+// after a second. The copy hashes its source beside the bytes it sends. Once
+// the copy is cancelled the daemon must stop reading the file, where it went
+// on hashing all 16 GiB.
+func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 1<<20, 256<<10))
+
+	src := filepath.Join(base, "sparse.img")
+	f, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(16 << 30); err != nil {
+		t.Skipf("no sparse files here: %v", err)
+	}
+	_ = f.Close()
+
+	c := dialVerbs(t, base)
+	var row transferRow
+	c.must("transfer-start", map[string]any{
+		"src": map[string]any{"path": src},
+		"dst": map[string]any{"host": "build", "path": filepath.Join(remote, "sparse.img")},
+	}, &row)
+	time.Sleep(time.Second)
+	c.must("transfer-cancel", map[string]any{"id": row.ID}, nil)
+	if r := waitTransferEnd(t, base, row.ID, 20*time.Second); r.State != "cancelled" {
+		t.Fatalf("the copy did not cancel: %+v", r)
+	}
+	time.Sleep(500 * time.Millisecond)
+	before := daemonReadBytes(t, base)
+	time.Sleep(2 * time.Second)
+	read := daemonReadBytes(t, base) - before
+	saveTransferArtifact(t, "cancel-stops-hash", map[string]any{"read_after_cancel": read})
+	t.Logf("the daemon read %d MB in the 2 s after the cancel", read>>20)
+	if read > 64<<20 {
+		t.Fatalf("ASSERTION: the daemon read %d MB of the source in the 2 s after the copy was cancelled", read>>20)
+	}
+}
