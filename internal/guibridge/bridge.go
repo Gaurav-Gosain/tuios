@@ -997,10 +997,10 @@ func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
 }
 
 func (t *tap) Output(ptyID string, data []byte) {
-	b := make([]byte, 0, 1+len(ptyID)+len(data))
-	b = appendID(b, ptyID)
-	b = append(b, data...)
-	t.out.Frame(KindOutput, b)
+	// data is queued as it is, not copied: the daemon client hands each
+	// callback a payload of its own and never writes to it again, and the
+	// pane's emulator only reads it. See Window.WriteOutputAsync.
+	t.out.frameWith(KindOutput, appendID(make([]byte, 0, 1+len(ptyID)), ptyID), data)
 }
 
 func (t *tap) Resized(ptyID string, width, height int) {
@@ -1131,13 +1131,29 @@ func (f *frameWriter) Frame(kind byte, payload []byte) {
 	f.push(paneKind(kind), b)
 }
 
-func (f *frameWriter) push(pane bool, b []byte) {
+// frameWith queues a frame whose payload is head then body, as two queue
+// entries put in under one hold of the lock, so frames never interleave.
+// body is written from where it is, so the caller must not change it
+// afterwards.
+func (f *frameWriter) frameWith(kind byte, head, body []byte) {
+	b := make([]byte, 5, 5+len(head))
+	binary.BigEndian.PutUint32(b, uint32(1+len(head)+len(body)))
+	b[4] = kind
+	b = append(b, head...)
+	f.push(paneKind(kind), b, body)
+}
+
+func (f *frameWriter) push(pane bool, parts ...[]byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.closed || f.failed || (pane && f.stale) {
 		return
 	}
-	if pane && f.queued+len(b) > f.max {
+	n := 0
+	for _, b := range parts {
+		n += len(b)
+	}
+	if pane && f.queued+n > f.max {
 		// The renderer is not keeping up. What it has not read of the
 		// panes is dropped; the resync replaces it.
 		kept := f.queue[:0]
@@ -1154,8 +1170,12 @@ func (f *frameWriter) push(pane bool, b []byte) {
 		log.Printf("gui-bridge: the renderer fell %d bytes behind; dropping pane output until a resync", f.max)
 		return
 	}
-	f.queue = append(f.queue, queuedFrame{b: b, pane: pane})
-	f.queued += len(b)
+	for _, b := range parts {
+		if len(b) > 0 {
+			f.queue = append(f.queue, queuedFrame{b: b, pane: pane})
+		}
+	}
+	f.queued += n
 	f.cond.Signal()
 }
 
