@@ -1,5 +1,11 @@
 package session
 
+import "time"
+
+// leaseInterval is the least time between two resizes leases make on one
+// pane.
+const leaseInterval = 100 * time.Millisecond
+
 // A per-pane size lease.
 //
 // A session has one size, and under window_size = smallest a phone that
@@ -19,6 +25,14 @@ package session
 // A lease never makes a pane larger than the clients asked for. Each
 // dimension is the smaller of the two, so a lease larger than the pane is a
 // no-op, and a pane with two leases takes the smallest of each dimension.
+//
+// A lease resizes the pane at most once every leaseInterval. A lease frame
+// costs the client nine bytes and no reply, and every resize it makes signals
+// the program in the pane, logs a line, records a resize mark that only the
+// pane's output ages out, and is broadcast to every client drawing the pane.
+// A client that sent them in a loop resized a desktop pane hundreds of times
+// a second. Leases that come faster are recorded at once and applied together
+// when the interval ends, so the pane always ends at the newest of them.
 
 // paneLease is one holder's leased size.
 type paneLease struct {
@@ -41,8 +55,9 @@ func (p *PTY) leasedSizeLocked(width, height int) (int, int) {
 }
 
 // SetLease holds the pane at most at width by height for holder, or with a
-// zero size releases holder's lease. The pane is resized at once to what the
-// leases now allow, or back to the size its clients last asked for.
+// zero size releases holder's lease. The pane is resized to what the leases
+// now allow, or back to the size its clients last asked for: at once, or
+// when leaseInterval has passed since the last resize a lease made.
 func (p *PTY) SetLease(holder string, width, height int) error {
 	p.streamMu.Lock()
 	defer p.streamMu.Unlock()
@@ -57,6 +72,32 @@ func (p *PTY) SetLease(holder string, width, height int) error {
 		}
 		p.leases[holder] = paneLease{width: width, height: height}
 	}
+	if wait := leaseInterval - time.Since(p.leaseAt); wait > 0 {
+		if p.leaseTimer == nil {
+			p.leaseTimer = time.AfterFunc(wait, p.applyLeases)
+		}
+		return nil
+	}
+	return p.applyLeasesLocked()
+}
+
+// applyLeases is the resize SetLease put off.
+func (p *PTY) applyLeases() {
+	p.streamMu.Lock()
+	defer p.streamMu.Unlock()
+	p.leaseTimer = nil
+	if p.ctx.Err() != nil {
+		return
+	}
+	if err := p.applyLeasesLocked(); err != nil {
+		LogBasic("PTY %s: a lease could not resize the pane: %v", shortID(p.ID), err)
+	}
+}
+
+// applyLeasesLocked resizes the pane to the size its clients asked for,
+// clamped to the leases held now. streamMu is held.
+func (p *PTY) applyLeasesLocked() error {
+	p.leaseAt = time.Now()
 	askedW, askedH := p.askedW, p.askedH
 	if askedW <= 0 || askedH <= 0 {
 		// No client has asked for a size since the pane was made, so the

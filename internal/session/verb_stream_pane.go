@@ -30,12 +30,13 @@ import (
 //	'R' resize:   u64 seq, u16 cols, u16 rows: the pane changed size at seq.
 //	'E' error:    JSON {"code","message"}: an input or lease frame was refused.
 //	    The stream goes on.
-//	'X' exit:     UTF-8 reason. The pane is gone and the daemon closes the
-//	    connection.
+//	'X' exit:     UTF-8 reason. The pane is gone, or the caller may no
+//	    longer read it, and the daemon closes the connection.
 //
 // From the client:
 //
-//	'I' input:  bytes for the pane, as typed. Checked as send-text is.
+//	'I' input:  bytes for the pane, as typed, at most maxPaneInputFrame.
+//	    Checked as send-text is.
 //	'L' lease:  u16 cols, u16 rows, or 0,0 to release (pane_lease.go).
 //
 // The stream position is the pane's outputSeq: every byte it ever wrote,
@@ -70,8 +71,13 @@ const (
 	paneFrameHeader = 5
 	// maxPaneInputFrame bounds what one client frame may announce. A client
 	// that sends more is refused and the stream ends, since the bytes after
-	// the frame cannot be found again.
-	maxPaneInputFrame = 1 << 20
+	// the frame cannot be found again. It is largeFrame, the size up to which
+	// a frame is not charged to the read budget (frame_budget.go), because
+	// the frame is read here, outside that budget, and its buffer is made
+	// before its bytes arrive. At 1 MiB, a pane with the read grant could
+	// open streams that each announced a megabyte and never finished it, and
+	// hold a gigabyte of the daemon's memory.
+	maxPaneInputFrame = largeFrame
 	// maxPaneOutputFrame bounds one output frame's payload.
 	maxPaneOutputFrame = 256 << 10
 	// maxLeaseDim bounds a lease, which is a terminal size.
@@ -361,6 +367,15 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 		case <-ps.d.ctx.Done():
 			return &paneExit{reason: "the daemon stopped"}
 		case <-tick.C:
+			// The caller was let in when the stream opened. A pane whose
+			// read grant is taken away, or a link whose policy no longer
+			// allows list, is held to that from here on: its stream ends.
+			if verr := ps.recheck(); verr != nil {
+				if err := flush(); err != nil {
+					return err
+				}
+				return &paneExit{reason: "refused: " + verr.Message}
+			}
 			// A pane whose program exited stays open until a client closes
 			// its window. With nothing more coming from it, the stream ends.
 			if ps.pty.IsExited() && len(ps.sub.ch) == 0 {
@@ -406,6 +421,14 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 			}
 		}
 	}
+}
+
+// recheck runs the checks stream-pane passed at the start again, against
+// the caller's grants and link policy as they are now.
+func (ps *paneStream) recheck() *verbError {
+	params, _ := json.Marshal(map[string]string{"session": ps.sess.Name(), "window": ps.window})
+	_, _, verr := ps.d.admitVerb(ps.cs, "stream-pane", params)
+	return verr
 }
 
 // recoverGap rebuilds a stream that fell out of its queue: from the ring when
@@ -497,7 +520,7 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 		}
 		n := binary.BigEndian.Uint32(head[1:5])
 		if n > maxPaneInputFrame {
-			ps.writeError(newVerbError(ErrVerbInvalidRequest, fmt.Sprintf("a frame of %d bytes is larger than the limit of %d; the stream ends", n, maxPaneInputFrame)))
+			ps.writeError(newVerbError(ErrVerbInvalidRequest, fmt.Sprintf("a frame of %d bytes is larger than the limit of %d bytes. The stream ends. Send a longer paste as more than one I frame", n, maxPaneInputFrame)))
 			_ = ps.cs.conn.Close()
 			return
 		}

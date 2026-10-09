@@ -90,7 +90,8 @@ func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) boo
 
 // matchHumanNonceClient is matchHumanNonce that also returns the id of the
 // attached client the nonce belongs to. A presence from attach-presence
-// (verb_presence.go) counts as an attached client here and nowhere else.
+// (verb_presence.go) counts as an attached client here, so for every verb
+// that takes human_nonce, and nowhere else: it does not size, focus or view.
 func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connState) (string, bool) {
 	if nonce == "" {
 		return "", false

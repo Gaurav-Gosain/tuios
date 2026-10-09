@@ -2662,7 +2662,7 @@ Frames from the daemon:
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
 | `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame. The codes are the verb error codes. The stream continues. |
-| `X` (0x58) | UTF-8 text | The pane closed, for example `exited 0`. The daemon then closes the connection. |
+| `X` (0x58) | UTF-8 text | The stream ended, for example `exited 0` when the pane closed, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
 
@@ -2699,8 +2699,12 @@ was behind.
 An `I` frame passes the checks that `send-text` passes: the link policy needs
 `write`, the pane grants of the caller, and a restricted connection. An `L`
 frame passes the checks that `resize` passes. A refused frame gets an `E`
-frame, and the stream continues. A frame from the client larger than 1 MiB
-ends the stream.
+frame, and the stream continues. A frame from the client larger than 64 KiB
+ends the stream. Send a longer paste as more than one `I` frame.
+
+The daemon checks the caller again each second, as it checks a new
+`stream-pane`. When a pane loses its read grant, or the link policy no longer
+allows `list`, the stream ends with an `X` frame.
 
 Link capability: `list` for the verb. `write` for `I` and `L` frames.
 
@@ -2723,6 +2727,9 @@ attached tuios client shows the smaller pane in the same rectangle.
 
 When two streams hold a lease on one pane, the smaller lease applies in each
 dimension.
+
+Leases resize a pane at most once every 100 ms. A lease that comes sooner
+applies when the 100 ms end, and the pane takes the newest lease.
 
 ### attach-presence
 

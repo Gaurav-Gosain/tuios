@@ -897,6 +897,11 @@ type PTY struct {
 	// guarded by streamMu. See pane_lease.go.
 	askedW, askedH int
 	leases         map[string]paneLease
+	// leaseAt is when a lease last resized the pane, and leaseTimer the
+	// resize put off until leaseInterval has passed since. Both guarded by
+	// streamMu.
+	leaseAt    time.Time
+	leaseTimer *time.Timer
 	// spawnW and spawnH are the size the pane was made at, which is the
 	// size of the stream before its first resize mark. Set once.
 	spawnW, spawnH int
