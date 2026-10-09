@@ -47,10 +47,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: golang/govulncheck-action@v1
+      - uses: actions/checkout@v7
+
+      # The go.mod toolchain line sets the stdlib that govulncheck scans. The
+      # govulncheck action ignores go-version-file and installs "stable".
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          go-package: ./...
+          cache: false
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   cross-vet:
     name: go vet (${{ matrix.goos }})
