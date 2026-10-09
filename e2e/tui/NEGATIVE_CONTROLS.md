@@ -3510,7 +3510,7 @@ for a live local presence nonce.
 
 | Control: what was cut | Result |
 | --- | --- |
-| The `humanNonceClient` check in `verbAgentTranscript` | **caught**: "a read without a nonce: want not_human, got <nil>" |
+| The `humanNonceHeld` and `humanNonceFor` checks in `verbAgentTranscript` (rerun 2026-10-09 after the rebase onto nonce scope; with only `humanNonceHeld` cut, `humanNonceFor` still refuses, so it is not caught) | **caught**: "a read without a nonce: want not_human, got <nil>" |
 | `respond` for `agent-transcript` in `verbCapabilities` (made `list`) | **caught**: "a link without respond: want forbidden naming respond, got <nil>" |
 | The `noteTranscriptGrowth` call in `readAgentTranscript` | **caught**: "no transcript event: stream read timed out" |
 | `foldResults` in `forward` | **caught**: "the appended call: want the text and a running Bash call" |
@@ -3564,3 +3564,36 @@ runs in a row. The artifact is `transcript-colours.txt` under
 | Byte offsets sent in place of UTF-16 offsets (`utf16Index.at` returns its input) | **caught**: "a bad span {S:23 E:27 K:nx}" past the end of the emoji line |
 | The pairing of removed and added lines cut from `styleHunk` | **caught**: "the changed words: want name at [20,24) and fullName at [20,28), got [] and []" |
 | The budget check cut from `reader.style` | **caught**: "the colour budget: Write 0 (newest false) has plain false and 2700 spans" |
+
+### agent-transcript review fixes
+
+`agent_transcript_review_test.go` holds the review fixes of draft PR #603. On
+2026-10-09 each control below cut one line, built a binary, and ran the named
+test against it. Each control failed where shown. The same tests passed on
+the branch build three runs in a row. The artifacts are under
+`TUIOS_E2E_FRAMES`, one file for each test.
+
+The positive halves: a presence for the pane's own session and a presence
+with no session read the pane. The same local connection reads before it
+restricts itself. A limit of 1 reads. A pane names its own transcript and is
+joined. The newest edit of a page is matched. The `.env` keys, the `BEGIN`
+and `END` lines and an ordinary Python edit stay in the reply.
+
+| Control: what was cut | Test | Result |
+| --- | --- | --- |
+| The `humanNonceFor` check in `verbAgentTranscript` | `TestTranscriptNonceScope` | **caught**: "a presence for session other read session convo" |
+| `agent-transcript` made `scopeOpen` in `verbScopes` | `TestTranscriptNonceScope` | **caught**: "a restricted connection: want forbidden, got not_human" |
+| The limit check made `*p.Limit < 0` | `TestTranscriptNonceScope` | **caught**: "limit 0: want invalid_params, got <nil>" |
+| The `transcriptPathAllowed` call in `joinReportedTranscript` | `TestTranscriptPathRules` | **caught**: "a path outside the projects folder: want transcript_refused" |
+| The own-pane check in `joinReportedTranscript` | `TestTranscriptPathRules` | **caught**: "pane A named a transcript for pane B: want transcript_refused" |
+| `transcript.OpenRegular` replaced by `os.Open` in `transcriptview.Read` | `TestTranscriptPathRules` | **caught**: the read after the FIFO swap: "stream read timed out" |
+| `Unwatch` clears every callback of the path again (`clear(fns)`) | `TestTranscriptSharedFileWatch` | **caught**: "no transcript event: stream read timed out" |
+| Every entry finished in `decode`, oldest first | `TestTranscriptDiffBudget` | **caught**: "limit 1: the newest edit: want it matched", got `whole_replace` true |
+| The cells not taken from the budget in `lineDiff` | `TestTranscriptDiffBudget` | **caught**: "limit 2: the older edit: want a whole replace", got whole false |
+| The `CleanLines` call in `addHunk` | `TestTranscriptMasksMultiLineSecrets` | **caught**: "a diff carries a secret ENVMARKER" |
+| The `maskSecretLines` call in `transcriptText` | `TestTranscriptMasksMultiLineSecrets` | **caught**: "the Bash result carries a secret PEMBODYMARKER" |
+
+Not caught here: the bound on memory for one call. `decode` keeps about
+twice `limit` entries, and their text is cut before `Clean`, but no test
+measures the daemon's memory. The diff controls above show that an entry the
+page does not carry is not finished.

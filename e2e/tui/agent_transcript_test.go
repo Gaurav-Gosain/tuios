@@ -35,8 +35,9 @@ import (
 // reply, the events, and what the pane printed.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
-//   - with the nonce check in verbAgentTranscript cut, the read without a
-//     nonce is served and the test fails at "a read without a nonce".
+//   - with both nonce checks in verbAgentTranscript cut (humanNonceHeld and
+//     humanNonceFor), the read without a nonce is served and the test fails
+//     at "a read without a nonce".
 //   - with agent-transcript mapped to list instead of respond in
 //     verbCapabilities, the test fails at "a link without respond".
 //   - with the noteTranscriptGrowth call cut from readAgentTranscript, the
@@ -81,7 +82,7 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the fixture: %v", err)
 	}
-	path := filepath.Join(base, "projects", "demo", "7c1d2e3f.jsonl")
+	path := filepath.Join(atProjects(base), "demo", "7c1d2e3f.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}

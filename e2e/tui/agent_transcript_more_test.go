@@ -138,7 +138,7 @@ func atEventPast(t *testing.T, sub *linkStream, art *atArtifact, window string, 
 func TestTranscriptWatchOutlivesItsDirectory(t *testing.T) {
 	r := newATRig(t, "transcript-watch.txt", 2)
 	winA, winB := r.wins[0], r.wins[1]
-	dir := filepath.Join(r.base, "projects", "demo")
+	dir := filepath.Join(atProjects(r.base), "demo")
 	pathA := filepath.Join(dir, "aaaa.jsonl")
 	pathB := filepath.Join(dir, "bbbb.jsonl")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -226,7 +226,7 @@ func atCallRecord(i int) string {
 func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	r := newATRig(t, "transcript-pages.txt", 1)
 	win := r.wins[0]
-	path := filepath.Join(r.base, "projects", "demo", "pages.jsonl")
+	path := filepath.Join(atProjects(r.base), "demo", "pages.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func (l atStyledLine) spanOf(s, e int) string {
 func TestPersonSeesDiffColours(t *testing.T) {
 	r := newATRig(t, "transcript-colours.txt", 1)
 	win := r.wins[0]
-	path := filepath.Join(r.base, "projects", "demo", "colours.jsonl")
+	path := filepath.Join(atProjects(r.base), "demo", "colours.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
