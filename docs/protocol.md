@@ -183,6 +183,12 @@ verb that takes `human_nonce` now also accept the nonce of a presence. A
 presence made for one session acts only in that session. See
 [Nonce scope](#nonce-scope).
 
+**A phone can get the Inbox by Web Push.** The new verbs
+[register-push, list-push and remove-push](#register-push) keep the person's
+phones. When an Inbox item of a kind a phone asked for opens or closes, the
+daemon sends an encrypted push to the phone's push service. The verbs take
+the person's `human_nonce`, and over a link the `respond` capability.
+
 **A pane's OSC 7501 reports are part of its state.** A program in a pane can
 report what it does with the Program Status Protocol (see
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md)). What changes for a caller:
@@ -2834,6 +2840,170 @@ when the connection closes, or when the connection calls
 Link capability: `list`. The verbs that use the nonce need their own
 capability, for example `respond` for `reply-approval`.
 
+### register-push
+
+Register a phone's Web Push subscription. From then on, the daemon pushes
+Inbox items to the phone. The phone needs no connection to tuios. Its push
+service, or its UnifiedPush distributor, wakes it.
+
+Params:
+
+- `endpoint` (required): the push service's address for the phone. It must
+  be `https`. It can be `http` only when its host is `localhost` or a
+  loopback or private IP address, and `[notify.webpush] allow_insecure` is
+  `true`.
+- `p256dh` (required): the phone's public key, the uncompressed P-256 point
+  (65 bytes, first byte `0x04`), base64url. Padding is optional.
+- `auth` (required): the phone's authentication secret, 16 bytes, base64url.
+- `device` (required): a name for the phone, 1 to 64 bytes of printable
+  text. A second call with the same name replaces the phone.
+- `kinds` (optional): the Inbox kinds to push. The default is `approval`,
+  `plan`, `ask` and `question`.
+- `human_nonce` (required): the nonce of an attach or of
+  [attach-presence](#attach-presence), from the same process.
+
+Request:
+
+```json
+{"id": 1, "verb": "register-push", "params": {"endpoint": "https://push.example.net/s/abc", "p256dh": "BKZ91bcH6n7KanE3PpyzUohdcLmK8Nze7jWdSbKRc9I4ZnFUdH6u_p5rNRnpzq_6CCKbzDwOprt1CjQPXjNbY04", "auth": "GT7vKYlZkqz3Qw7cTswShg", "device": "pixel", "human_nonce": "294e0a278581acd0f07ff40561c52bf7"}}
+```
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "push_registered", "device": "pixel", "kinds": ["approval", "plan", "ask", "question"], "replaced": false, "vapid_public_key": "BCM4cML1lw6X1BHn3-nOS6-QtjYUql5FDx-etpdO8RHCTTipUMWpGY46YBB4bLwbc31yGx_O9LQVABj-B0Dqvp0", "machine": "studio"}}
+```
+
+`vapid_public_key` is the daemon's VAPID public key (RFC 8292), the
+uncompressed P-256 point, base64url. A phone that subscribes through a push
+service that takes an application server key gives it this key. Get it first
+with [list-push](#list-push). The daemon makes the key once and keeps it in
+the state directory, at `push/vapid.pem`, with mode 600. The phones are in
+`push/subscriptions.json`, with mode 600.
+
+Who may call it:
+
+- Only the person. A missing nonce, a nonce that does not verify, and any
+  call from a process inside a pane fail with `not_human`. The nonce is
+  checked as `reply-approval` checks it.
+- Over a link, the link needs the `respond` capability. Without it the call
+  fails with `forbidden`.
+- A restricted connection cannot call it.
+
+At most 16 phones. A bad endpoint or key fails with `invalid_params`.
+
+#### What the phone gets
+
+Each push is one HTTP `POST` to `endpoint` with these headers:
+
+| Header | Value |
+| --- | --- |
+| `Content-Encoding` | `aes128gcm` |
+| `Content-Type` | `application/octet-stream` |
+| `TTL` | `120` |
+| `Urgency` | `high` for an open of `approval`, `plan`, `ask` or `question`, else `normal` |
+| `Topic` | 32 base64url characters, the same for the open and the close of one item. A push service that holds an open replaces it with the close. |
+| `Authorization` | `vapid t=JWT, k=VAPID_PUBLIC_KEY` |
+
+The JWT is ES256, with the claims `aud` (the endpoint's origin), `exp` (12
+hours from the send) and `sub` (`[notify.webpush] subject`, by default
+`https://tuios.dev/push/<machine>`).
+
+The body is encrypted for the phone by RFC 8291, as one record of the
+`aes128gcm` content coding (RFC 8188). The body is:
+
+```
+salt (16 bytes) | rs (4 bytes, big endian, 4096) | idlen (1 byte, 65) | keyid (65 bytes) | ciphertext
+```
+
+`keyid` is the sender's one-time public key, `as_public`, an uncompressed
+P-256 point. The phone keeps `ua_private` (its private key), `ua_public` (the
+`p256dh` it registered) and `auth_secret`. To decrypt, with HMAC-SHA-256 as
+`HMAC(key, data)`:
+
+1. `ecdh_secret = ECDH(ua_private, as_public)`, the 32-byte x coordinate.
+2. `PRK_key = HMAC(auth_secret, ecdh_secret)`.
+3. `IKM = HMAC(PRK_key, "WebPush: info" || 0x00 || ua_public || as_public || 0x01)`.
+4. `PRK = HMAC(salt, IKM)`.
+5. `CEK = HMAC(PRK, "Content-Encoding: aes128gcm" || 0x00 || 0x01)`, first 16 bytes.
+6. `NONCE = HMAC(PRK, "Content-Encoding: nonce" || 0x00 || 0x01)`, first 12 bytes.
+7. Decrypt `ciphertext` with AES-128-GCM, key `CEK`, nonce `NONCE`, no
+   associated data. The 16-byte tag is at the end.
+8. Remove the last byte, `0x02`, which marks the last record. tuios adds no
+   padding. A phone that also accepts padding removes zero bytes before it.
+
+Steps 2 and 3 are HKDF (RFC 5869) with `auth_secret` as the salt. Steps 4 to
+6 are HKDF with `salt` as the salt. The ntfy UnifiedPush distributor gives
+the body to the app base64-encoded.
+
+The plain text is JSON, at most 3 KiB:
+
+```json
+{"v":1,"type":"open","id":"1","kind":"approval","session":"demo","window":"f9ab67c1-6226-4335-8c7e-ea784574a3ef","harness":"claude-code","name":"Terminal f9ab67c1","summary":"approve Bash: npm test","request_id":"69a569a6ab65115e","options":["once","deny"],"machine":"studio"}
+```
+
+| Field | What it is |
+| --- | --- |
+| `v` | `1`. A change that breaks a reader gets a new number. |
+| `type` | `open` or `close`. |
+| `id` | The Inbox item's id. A `close` has the id of its `open`. |
+| `kind` | The Inbox kind. |
+| `session`, `window` | The pane the item is about. |
+| `host` | The linked machine the item is on, empty for this one. |
+| `harness`, `name`, `summary` | What the Inbox row shows. |
+| `risk` | The risk rules the call matched, as the Inbox item has them. |
+| `request_id`, `options` | A held prompt's request and its answers, for `reply-approval`. |
+| `machine` | The name of the machine that sent the push. |
+
+An empty field is left out. A `close` carries only `v`, `type`, `id`, `kind`,
+`session`, `window`, `host` and `machine`.
+
+The daemon sends an `open` when an item opens. It sends the `open` again,
+with the same `id`, when the item gets a held prompt, or loses one: then
+`request_id`, `options` or `risk` change. A phone replaces the notification
+with the same `id`. It sends a `close` when the item closes, also when you
+answer it at the desk. A phone that does not know the `id` ignores the close.
+
+Delivery never blocks the daemon. Each phone has its own queue. A push that
+gets no answer, `429` or a `5xx` is tried again after 1, 4 and 15 seconds.
+When the push service answers `404` or `410`, the daemon removes the phone.
+`[notify] enabled = false` stops the opens, and `max_per_hour` limits the
+opens to each phone.
+
+Link capability: `respond`.
+
+### list-push
+
+List the phones that [register-push](#register-push) registered, and the
+daemon's VAPID public key. Params: `human_nonce` (required). The rules are
+those of `register-push`.
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "push_devices", "devices": [{"device": "pixel", "kinds": ["approval", "plan", "ask", "question"], "service": "https://push.example.net", "created": 1791543122, "last_ok": 1791543130}], "vapid_public_key": "BCM4cML1lw6X1BHn3-nOS6-QtjYUql5FDx-etpdO8RHCTTipUMWpGY46YBB4bLwbc31yGx_O9LQVABj-B0Dqvp0", "machine": "studio"}}
+```
+
+`service` is the endpoint's origin only. The full endpoint lets anyone send
+to the phone, so no verb shows it. `last_error` says why the last push
+failed.
+
+Link capability: `respond`.
+
+### remove-push
+
+Remove a phone. Params: `device` (required), `human_nonce` (required). The
+rules are those of `register-push`. A name that is not registered fails with
+`invalid_params`, and the hint lists the names.
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "push_removed", "device": "pixel", "removed": true}}
+```
+
+Link capability: `respond`.
+
 ### capture-pane
 
 Capture a pane's content, rendered from the daemon side terminal emulator.
@@ -5017,7 +5187,7 @@ the one before. The configuration is in
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,

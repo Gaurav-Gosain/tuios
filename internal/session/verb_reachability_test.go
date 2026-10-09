@@ -83,10 +83,15 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"agent-transcript#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
 	"agent-transcript#1": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
 	"agent-transcript#2": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
-	"run-command#0":      {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
-	"set-layout#0":       {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
-	"set-layout#1":       {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
-	"split-window#0":     {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
+	// The phones for Web Push are the person's, and the example's nonce is a
+	// placeholder. e2e/tui/webpush_test.go registers one with a real nonce.
+	"register-push#0": {errCode: ErrVerbNotHuman, why: "only the person may register a phone, with a live nonce"},
+	"list-push#0":     {errCode: ErrVerbNotHuman, why: "only the person may list the phones, with a live nonce"},
+	"remove-push#0":   {errCode: ErrVerbNotHuman, why: "only the person may remove a phone, with a live nonce"},
+	"run-command#0":   {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
+	"set-layout#0":    {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
+	"set-layout#1":    {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
+	"split-window#0":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.

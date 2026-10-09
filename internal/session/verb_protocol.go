@@ -1299,6 +1299,52 @@ func init() {
 			examples: []string{`{"id":1,"verb":"attach-presence"}`},
 			handler:  (*Daemon).verbAttachPresence,
 		},
+		"register-push": {
+			description: "Register a phone's Web Push subscription, so the phone gets Inbox items while it sleeps. When an item of a kind the phone asked for opens, the daemon posts a payload encrypted for the phone (RFC 8291, aes128gcm) to its push service, signed with the daemon's VAPID key (RFC 8292), and posts a close when the item closes. The same device name replaces the phone it names. Only the person: a live human_nonce, as reply-approval takes it, and over a link the respond capability. At most 16 phones.",
+			params: []verbParam{
+				{Name: "endpoint", Type: "string", Required: true, Description: "The push service's address for the phone. https, or http on a loopback or private IP address when [notify.webpush] allow_insecure is true."},
+				{Name: "p256dh", Type: "string", Required: true, Description: "The phone's public key: the uncompressed P-256 point (65 bytes), base64url."},
+				{Name: "auth", Type: "string", Required: true, Description: "The phone's authentication secret: 16 bytes, base64url."},
+				{Name: "device", Type: "string", Required: true, Description: "A name for the phone, 1 to 64 bytes. remove-push takes it."},
+				{Name: "kinds", Type: "string[]", Description: "The Inbox kinds to push. Default: approval, plan, ask and question."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of an attach or of attach-presence, from the same process."},
+			},
+			returns: []verbParam{
+				{Name: "device", Type: "string", Description: "The phone's name."},
+				{Name: "kinds", Type: "string[]", Description: "The kinds it gets."},
+				{Name: "replaced", Type: "bool", Description: "True when a phone of that name was registered before."},
+				{Name: "vapid_public_key", Type: "string", Description: "The daemon's VAPID public key, the uncompressed point, base64url: the applicationServerKey to subscribe with."},
+				{Name: "machine", Type: "string", Description: "This machine's name, as the payload carries it."},
+			},
+			examples: []string{`{"id":1,"verb":"register-push","params":{"endpoint":"https://push.example.net/s/abc","p256dh":"BNc...","auth":"tBH...","device":"pixel","human_nonce":"<from attach-presence>"}}`},
+			handler:  (*Daemon).verbRegisterPush,
+		},
+		"list-push": {
+			description: "List the phones registered with register-push, and the daemon's VAPID public key. A phone's endpoint is shown only as its origin. Only the person, by the rules of register-push.",
+			params: []verbParam{
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of an attach or of attach-presence, from the same process."},
+			},
+			returns: []verbParam{
+				{Name: "devices", Type: "object[]", Description: "Each phone: device, kinds, service (the endpoint's origin), created, and last_ok or last_error when a push was tried."},
+				{Name: "vapid_public_key", Type: "string", Description: "The daemon's VAPID public key, base64url. A phone needs it before it subscribes."},
+				{Name: "machine", Type: "string", Description: "This machine's name."},
+			},
+			examples: []string{`{"id":1,"verb":"list-push","params":{"human_nonce":"<from attach-presence>"}}`},
+			handler:  (*Daemon).verbListPush,
+		},
+		"remove-push": {
+			description: "Remove a phone registered with register-push. Only the person, by the rules of register-push.",
+			params: []verbParam{
+				{Name: "device", Type: "string", Required: true, Description: "The phone's name."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of an attach or of attach-presence, from the same process."},
+			},
+			returns: []verbParam{
+				{Name: "device", Type: "string", Description: "The phone removed."},
+				{Name: "removed", Type: "bool", Description: "Always true. An unknown name is refused with invalid_params."},
+			},
+			examples: []string{`{"id":1,"verb":"remove-push","params":{"device":"pixel","human_nonce":"<from attach-presence>"}}`},
+			handler:  (*Daemon).verbRemovePush,
+		},
 		"capture-pane": {
 			description: "Capture a pane's content.",
 			params: []verbParam{

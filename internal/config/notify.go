@@ -55,6 +55,66 @@ type NotifyConfig struct {
 	Ntfy     *NtfyConfig     `toml:"ntfy,omitempty"`
 	Pushover *PushoverConfig `toml:"pushover,omitempty"`
 	Webhook  *WebhookConfig  `toml:"webhook,omitempty"`
+
+	// WebPush sets how the daemon sends to the phones registered with
+	// register-push. The phones themselves are not in config.toml: only the
+	// person registers one.
+	WebPush *WebPushConfig `toml:"webpush,omitempty"`
+}
+
+// WebPushConfig is [notify.webpush].
+type WebPushConfig struct {
+	// Subject is the VAPID subject a push service may use to contact the
+	// sender: an https URL or a mailto: address. Default: an https URL that
+	// names tuios and this machine (WebPushSubject).
+	Subject string `toml:"subject,omitempty"`
+	// AllowInsecure lets register-push take an http endpoint on a loopback
+	// or private IP address, for a push service on your own network.
+	// Default: false.
+	AllowInsecure bool `toml:"allow_insecure,omitempty"`
+}
+
+// WebPushSubject is the VAPID subject in force: Subject when set, else an
+// https URL with the machine name in it. It never carries an address.
+func (n *NotifyConfig) WebPushSubject(machine string) string {
+	if n.WebPush != nil && ValidWebPushSubject(strings.TrimSpace(n.WebPush.Subject)) {
+		return strings.TrimSpace(n.WebPush.Subject)
+	}
+	label := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r - 'A' + 'a'
+		}
+		return '-'
+	}, machine)
+	label = strings.Trim(label, "-")
+	if label == "" {
+		label = "machine"
+	}
+	return "https://tuios.dev/push/" + label
+}
+
+// WebPushInsecure reports whether [notify.webpush] allow_insecure is set.
+func (n *NotifyConfig) WebPushInsecure() bool {
+	return n.WebPush != nil && n.WebPush.AllowInsecure
+}
+
+// ValidWebPushSubject reports whether s is a subject RFC 8292 takes: an https
+// URL with a host, or a mailto: URI.
+func ValidWebPushSubject(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return u.Host != ""
+	case "mailto":
+		return u.Opaque != ""
+	}
+	return false
 }
 
 // NotifyTriggers is the [notify.triggers] table. A kind that waits on the
@@ -251,6 +311,10 @@ func (n *NotifyConfig) Destinations() []string {
 	if n.WebURL != "" {
 		out = append(out, "web\x00"+n.WebURL)
 	}
+	// Plain http lets the Inbox's text go to a push service in clear.
+	if n.WebPushInsecure() {
+		out = append(out, "webpush\x00insecure")
+	}
 	return out
 }
 
@@ -386,5 +450,10 @@ func validateNotify(cfg *UserConfig, result *ValidationResult) {
 			warn("webhook.url", why)
 		}
 		sources("webhook.token", p.Token, p.TokenEnv, p.TokenFile)
+	}
+	if p := n.WebPush; p != nil {
+		if sub := strings.TrimSpace(p.Subject); sub != "" && !ValidWebPushSubject(sub) {
+			warn("webpush.subject", "subject must be an https URL or a mailto: URI. The default https URL is sent")
+		}
 	}
 }

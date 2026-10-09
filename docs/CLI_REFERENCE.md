@@ -21,6 +21,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
   - [tuios notify test](#tuios-notify-test)
+  - [tuios notify push](#tuios-notify-push)
   - [tuios status](#tuios-status)
   - [tuios update](#tuios-update)
   - [tuios layout](#tuios-layout)
@@ -4388,6 +4389,45 @@ webhook (hooks.example.com): failed. The server answered 401 Unauthorized. Check
 
 **Flags:**
 - `--json`: Output a list with `provider`, `host`, `ok` and `error` for each provider
+
+---
+
+### `tuios notify push`
+
+Register, list and remove the phones that get Inbox items by Web Push. See
+[CONFIGURATION.md](CONFIGURATION.md#web-push-to-a-phone).
+
+**Usage:**
+```bash
+tuios notify push register --device NAME --endpoint URL --p256dh KEY --auth SECRET [--kind KIND]... [--json]
+tuios notify push ls [--json]
+tuios notify push rm NAME [--json]
+```
+
+Each command holds a presence on its own connection to the daemon, and sends
+the nonce of that presence. Run them in a terminal outside tuios. From a pane
+the daemon refuses them.
+
+`register` takes the values of the phone's push subscription. `--p256dh` is
+the phone's P-256 public key and `--auth` its 16-byte secret, both base64url.
+Give `--kind` once for each Inbox kind to push. Without it the phone gets
+`approval`, `plan`, `ask` and `question`. A second `register` with the same
+`--device` replaces the phone.
+
+`ls` shows each phone with the origin of its push service and its kinds,
+and the daemon's VAPID public key. A phone app needs the key before it
+subscribes.
+
+**Output:**
+```
+$ tuios notify push ls
+pixel: https://push.example.net, approval, plan, ask, question
+VAPID public key: BCM4cML1lw6X1BHn3-nOS6-QtjYUql5FDx-etpdO8RHCTTipUMWpGY46YBB4bLwbc31yGx_O9LQVABj-B0Dqvp0
+```
+
+**Flags:**
+- `--json`: Output the daemon's reply as JSON
+- `--human-nonce`: Use this nonce instead of a presence of the command's own
 
 ---
 

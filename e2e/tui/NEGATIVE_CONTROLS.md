@@ -3597,3 +3597,25 @@ Not caught here: the bound on memory for one call. `decode` keeps about
 twice `limit` entries, and their text is cut before `Clean`, but no test
 measures the daemon's memory. The diff controls above show that an entry the
 page does not carry is not finished.
+## Web Push to a phone
+
+`TestWebPushToAPhone` runs a real daemon, a stub push service on loopback and
+the phone link. The test is the phone. It registers with `register-push` and
+the nonce of `attach-presence`. The real Claude Code hook holds an approval.
+The test decrypts the push with its own RFC 8291 code, and checks the
+payload, the headers and the VAPID JWT. Then it answers the approval and
+decrypts the close. Run on 2026-10-09.
+
+The positive halves: the same `register-push` with the person's nonce, over
+the phone link, is taken. `tuios notify push register` outside every pane is
+taken. A phone whose service answers 201 stays registered. The 503 phone gets
+its push on the retry.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| The `n.web.note` call in `pushNotifier.note` | **caught**: no push to `/s/pixel` |
+| The `requirePushPerson` call in `verbRegisterPush` | **caught**: a call with no nonce registers |
+| `register-push` needs `list` instead of `respond` in the link policy | **caught**: the link without `respond` registers |
+| The `ErrGone` arm in `webPusher.deliver` | **caught**: the phone whose service answered 410 is still listed |
+| The retry in `webPusher.deliver` | **caught**: the payload the 503 refused never arrives |
+| The pane check in `matchHumanNonceClient` | **not run**: it is the check `reply-approval` uses, and `TestAPaneCannotAnswerAsThePerson` and the stream-pane test cover it |

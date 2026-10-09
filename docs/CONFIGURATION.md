@@ -1232,8 +1232,44 @@ Inbox to another address. Like `[hosts]`, `[notify]` is not in
 `list-options`, and `tuios set-config` cannot change it.
 
 Run `tuios notify test` to send a test notification through each provider.
+It does not send to the phones of `[notify.webpush]`.
 It says the result for each provider. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-notify-test).
+
+### Web Push to a phone
+
+A phone can get Inbox items by Web Push. The phone does not keep a
+connection to tuios. Its push service, or its UnifiedPush distributor such as
+the ntfy app, wakes it. The phone app registers with the `register-push`
+verb, or you register it with `tuios notify push register`. Only you can
+register a phone. A program in a pane cannot. See
+[protocol.md](protocol.md#register-push).
+
+```toml
+[notify.webpush]
+subject = "https://example.com/tuios-contact"   # optional
+allow_insecure = false
+```
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `subject` | `https://tuios.dev/push/<machine>` | The VAPID subject: a URL that a push service can use to contact you. It must be an `https` URL or a `mailto:` URI. |
+| `allow_insecure` | `false` | Lets `register-push` take an `http` endpoint on a loopback or private IP address, for a push service on your own network. A change to `true` waits for `tuios config apply`. |
+
+When an item opens, tuios encrypts it for each phone that asked for its kind
+and sends it to the phone's push service. When the item closes, tuios sends a
+close, so the phone can remove the notification. A phone gets `approval`,
+`plan`, `ask` and `question` unless it asked for other kinds. The triggers,
+`quiet_active_seconds` and `cooldown_seconds` are for the other providers.
+`enabled = false` stops the pushes. `max_per_hour` applies to each phone.
+
+A push lives 120 seconds on the push service. tuios tries a failed push again
+after 1, 4 and 15 seconds. When the push service says that the phone is gone
+(404 or 410), tuios removes the phone. The phones and the VAPID key are in
+the state directory, in `push/`, with mode 600.
+
+Run `tuios notify push ls` to see the phones and the VAPID public key. Run
+`tuios notify push rm NAME` to remove a phone.
 
 ## Harnesses that report to herdr
 

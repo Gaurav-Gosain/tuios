@@ -191,6 +191,11 @@ var verbCapabilities = map[string][]string{
 	"dismiss-attention":     {config.LinkAllowRespond},
 	"release-agent-message": {config.LinkAllowRespond},
 	"answer-ask":            {config.LinkAllowRespond},
+	// A phone registered for Web Push gets what waits for the person, so
+	// the push verbs need what answering it needs.
+	"register-push": {config.LinkAllowRespond},
+	"list-push":     {config.LinkAllowRespond},
+	"remove-push":   {config.LinkAllowRespond},
 
 	"open-host-connection": {capRelay},
 	// Another machine has no reason to make this one's links dial.

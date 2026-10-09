@@ -70,6 +70,8 @@ type pushNotifier struct {
 	wg     sync.WaitGroup
 	client atomic.Pointer[pushnotify.Client]
 	now    func() time.Time
+	// web sends to the phones registered with register-push.
+	web *webPusher
 }
 
 func newPushNotifier(d *Daemon, cfg config.NotifyConfig) *pushNotifier {
@@ -82,6 +84,7 @@ func newPushNotifier(d *Daemon, cfg config.NotifyConfig) *pushNotifier {
 		done:  make(chan struct{}),
 		now:   time.Now,
 	}
+	n.web = newWebPusher(n)
 	n.set(cfg)
 	return n
 }
@@ -160,6 +163,7 @@ func (n *pushNotifier) stop() {
 	}
 	n.mu.Unlock()
 	n.wg.Wait()
+	n.web.stop()
 }
 
 // follow reads the attention events.
@@ -183,6 +187,7 @@ func (n *pushNotifier) note(action string, it AttentionItem) {
 		// Another machine's item. That machine sends its own.
 		return
 	}
+	n.web.note(action, it)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if action == AttentionClosed {
