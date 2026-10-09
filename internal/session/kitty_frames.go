@@ -713,6 +713,7 @@ func (p *PTY) enqueue(clientID string, sub *ptySubscriber, c ptyChunk, end int64
 	// Counted before the send, so the stream goroutine can never take more
 	// than was counted.
 	sub.queued.Add(n)
+	c.end = end
 	select {
 	case sub.ch <- c:
 		// Only an item that was queued counts as reached: a client dropped

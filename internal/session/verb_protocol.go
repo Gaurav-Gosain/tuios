@@ -1254,6 +1254,45 @@ func init() {
 			},
 			handler: (*Daemon).verbRun,
 		},
+		"stream-pane": {
+			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame; the stream goes on), X exit (the reason; the connection then closes). From the client: I input (bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release). The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "window", Type: "string", Required: true, Description: "The pane to stream: a window id or name."},
+				{Name: "from_seq", Type: "int", Description: "The seq the client reached on an earlier stream of this pane. With boot_id, the stream resumes there when the daemon still holds the bytes after it."},
+				{Name: "boot_id", Type: "string", Description: "The boot_id of the stream from_seq came from. A different one means the daemon restarted, and the stream starts with a snapshot."},
+				{Name: "lease_cols", Type: "int", Description: "Hold the pane at most this many columns wide while the stream is open. Needs lease_rows. It needs what resize needs."},
+				{Name: "lease_rows", Type: "int", Description: "Hold the pane at most this many rows high while the stream is open. Needs lease_cols."},
+			},
+			returns: []verbParam{
+				{Name: "mode", Type: "string", Description: "resume: the first frames are output from from_seq. snapshot: the first frame is S.", Accepted: []string{"resume", "snapshot"}},
+				{Name: "seq", Type: "int", Description: "The stream position the first frame starts at."},
+				{Name: "cols", Type: "int", Description: "The pane's width at seq."},
+				{Name: "rows", Type: "int", Description: "The pane's height at seq."},
+				{Name: "boot_id", Type: "string", Description: "This daemon start. Send it back with from_seq to resume."},
+				{Name: "session", Type: "string", Description: "The pane's session."},
+				{Name: "window", Type: "string", Description: "The pane's window id."},
+				{Name: "title", Type: "string", Description: "The pane's title."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"stream-pane","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"stream-pane","params":{"session":"work","window":"build","from_seq":48211,"boot_id":"<from the last reply>","lease_cols":45,"lease_rows":20}}`,
+			},
+			handler: (*Daemon).verbStreamPane,
+		},
+		"attach-presence": {
+			description: "Hold the person's nonce on this connection without a screen. The reply carries human_nonce, which respond, reply-approval, answer-ask and dismiss-attention take as the person's, by the same rules as an attach nonce: only from outside every pane, over a link only on a stream the hub vouched for, and only from the process that holds it. The presence does not attach: it does not change the session size, focus or view a pane, or receive broadcasts. The connection serves other verbs as before, and the presence ends when it closes.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Description: "The session the nonce is for. Omit for every session."},
+			},
+			returns: []verbParam{
+				{Name: "human_nonce", Type: "string", Description: "The nonce. Send it from this process, as human_nonce."},
+				{Name: "client_id", Type: "string", Description: "This connection's client id, which answered_by reports."},
+				{Name: "session", Type: "string", Description: "The session, when one was named."},
+			},
+			examples: []string{`{"id":1,"verb":"attach-presence"}`},
+			handler:  (*Daemon).verbAttachPresence,
+		},
 		"capture-pane": {
 			description: "Capture a pane's content.",
 			params: []verbParam{

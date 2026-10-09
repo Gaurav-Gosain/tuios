@@ -892,6 +892,15 @@ type PTY struct {
 	// streamMu, which readOutput also holds to close.
 	vtClosed bool
 
+	// askedW and askedH are the size the session's clients last asked this
+	// pane to be, and leases the size leases held on it, by holder. Both are
+	// guarded by streamMu. See pane_lease.go.
+	askedW, askedH int
+	leases         map[string]paneLease
+	// spawnW and spawnH are the size the pane was made at, which is the
+	// size of the stream before its first resize mark. Set once.
+	spawnW, spawnH int
+
 	// winsizeMu serializes writes of the real PTY's window size, and guards
 	// the cell size in pixels they are computed from. Resize takes it under
 	// streamMu; UpdatePixelDimensions takes it alone. It is held across the
@@ -2113,6 +2122,8 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		terminal:     terminal,
 		width:        width,
 		height:       height,
+		spawnW:       width,
+		spawnH:       height,
 		outputBuffer: make([]byte, 64*1024), // 64KB ring buffer
 		subscribers:  make(map[string]*ptySubscriber),
 		paceWake:     make(chan struct{}, 1),
@@ -3424,6 +3435,10 @@ type ptySubscriber struct {
 	// stream used to be a silent hole the client painted the rest of the
 	// stream on top of, until the next workspace switch replaced the screen.
 	gapped atomic.Bool
+	// missed says the catch-up could not start where the subscriber asked,
+	// because the ring had already rolled past that position. Set once, by
+	// subscribeLocked.
+	missed bool
 
 	// framesWaiting counts the frames on ch that the stream goroutine has not
 	// taken. skipped counts the frames dropped for newer ones. See
@@ -3461,6 +3476,11 @@ type ptyChunk struct {
 	// frame is one whole kitty graphics frame instead of data. See
 	// kitty_frames.go.
 	frame *queuedFrame
+	// end is the stream position just after the chunk's last byte, set on
+	// output and frames, zero on a resize. A stream-pane subscriber reads it
+	// to number what it sends (verb_stream_pane.go); the attach stream does
+	// not need it.
+	end int64
 }
 
 // size is how many bytes the chunk holds.
@@ -3591,6 +3611,7 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	endSeq := bufStart + int64(ringEnd)
 	start := 0
 	rolled := fromSeq > 0 && fromSeq < bufStart
+	sub.missed = fromSeq < bufStart
 	if fromSeq > bufStart {
 		start = min(int(fromSeq-bufStart), ringEnd)
 	}
@@ -3657,7 +3678,7 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 			seg = append(seg, prefix...)
 			prefix = nil
 			seg = append(seg, p.outputBuffer[segStart:end]...)
-			send(ptyChunk{data: seg})
+			send(ptyChunk{data: seg, end: bufStart + int64(end)})
 			segStart = end
 		}
 		for _, m := range p.resizeMarks {
@@ -3919,6 +3940,18 @@ func (p *PTY) Resize(width, height int) error {
 	// no client was drawing.
 	p.streamMu.Lock()
 	defer p.streamMu.Unlock()
+	// The size the clients ask for is kept apart from the size the pane
+	// takes, because a lease (pane_lease.go) can hold the pane smaller, and
+	// the pane goes back to the size asked for when the lease ends.
+	if width > 0 && height > 0 {
+		p.askedW, p.askedH = width, height
+	}
+	width, height = p.leasedSizeLocked(width, height)
+	return p.resizeStreamLocked(width, height)
+}
+
+// resizeStreamLocked is Resize with streamMu held and the lease applied.
+func (p *PTY) resizeStreamLocked(width, height int) error {
 	p.terminalMu.Lock()
 	unchanged := width > 0 && height > 0 && p.width == width && p.height == height
 	oldW, oldH := p.width, p.height

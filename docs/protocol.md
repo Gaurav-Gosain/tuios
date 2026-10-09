@@ -166,6 +166,22 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A client that is not tuios can stream a pane and answer the Inbox.** Three
+additions serve a native phone app on `ssh host tuios stdio-proxy`:
+
+- The new verb [stream-pane](#stream-pane) streams one pane as bytes, with a
+  sequence number on every frame, so a client resumes after a dropped network
+  instead of taking a new screen.
+- The new verb [attach-presence](#attach-presence) gives a connection the
+  person's `human_nonce` without an attach.
+- A pane can now be smaller than its clients asked for, while a stream holds a
+  size lease on it. A client that compares the pane's size with its own
+  layout sees the difference. The pane goes back when the lease ends.
+
+`respond`, `reply-approval`, `answer-ask`, `dismiss-attention` and every other
+verb that takes `human_nonce` now also accept the nonce of a presence. The
+rules for the nonce do not change.
+
 **A pane's OSC 7501 reports are part of its state.** A program in a pane can
 report what it does with the Program Status Protocol (see
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md)). What changes for a caller:
@@ -2596,6 +2612,159 @@ finishes, or at once if it already has.
 `run` grants nothing that `send-text` and `capture-pane` do not: a caller that
 can type into a pane and read it back can already do all of it. What it adds is
 the refusal to type into a running program.
+
+### stream-pane
+
+Stream one pane as bytes. A client that is not tuios uses it to show a pane in
+its own terminal emulator, such as a phone app.
+
+Params:
+
+- `session` (optional).
+- `window` (required): the window id or name of the pane.
+- `from_seq` (optional int): the `seq` that the client got to on an earlier
+  stream of this pane.
+- `boot_id` (optional): the `boot_id` of the stream that `from_seq` came from.
+- `lease_cols`, `lease_rows` (optional ints): hold a size lease from the
+  start. See [The size lease](#the-size-lease).
+
+Request:
+
+```json
+{"id": 1, "verb": "stream-pane", "params": {"session": "work", "window": "3f2a9c1e", "from_seq": 48211, "boot_id": "9f2c41d07a3e8b65"}}
+```
+
+Response, one line:
+
+```json
+{"id": 1, "result": {"type": "pane_stream", "mode": "resume", "seq": 48211, "cols": 80, "rows": 24, "boot_id": "9f2c41d07a3e8b65", "session": "work", "window": "3f2a9c1e-...", "title": "zsh"}}
+```
+
+- `mode` is `resume` or `snapshot`. It is `resume` only when `boot_id` is this
+  daemon's and the daemon still holds the output after `from_seq`. Then the
+  first frames are output from `from_seq`. Otherwise it is `snapshot`, and
+  the first frame is `S`.
+- `seq` is the stream position where the first frame starts.
+- `cols` and `rows` are the size of the pane at `seq`. In `resume` mode,
+  resize your emulator to them when they are different.
+- `window` is the window id.
+
+After the response line, the connection carries binary frames in both
+directions. A frame is one type byte, a 4-byte payload length (big-endian),
+and the payload. All numbers are big-endian. The connection does not take
+JSON again.
+
+Frames from the daemon:
+
+| Type | Payload | Meaning |
+| --- | --- | --- |
+| `S` (0x53) | u64 seq, u16 cols, u16 rows, bytes | A snapshot. Reset the emulator to cols by rows and write the bytes into it. |
+| `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
+| `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
+| `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame. The codes are the verb error codes. The stream continues. |
+| `X` (0x58) | UTF-8 text | The pane closed, for example `exited 0`. The daemon then closes the connection. |
+
+Frames from the client:
+
+| Type | Payload | Meaning |
+| --- | --- | --- |
+| `I` (0x49) | bytes | Input for the pane, as typed. The client encodes the keys. |
+| `L` (0x4C) | u16 cols, u16 rows | Hold a size lease. `0 0` releases it. |
+
+The snapshot bytes paint the pane on a fresh xterm-compatible emulator: up to
+500 rows of history above the screen, every cell with its colours and
+attributes, soft wraps, and the cursor with its position, shape and
+visibility. A palette colour stays a palette index, and a truecolour stays a
+truecolour. When a program uses the alternate screen, the bytes paint the
+shell's screen first and then switch to the alternate screen. The bytes also
+set the scroll region, the character sets, the pen, the kitty keyboard flags,
+modifyOtherKeys, and the DEC modes that change the input a client must send:
+application cursor keys, the keypad mode, bracketed paste, focus reports,
+mouse tracking and its encodings, and alternate scroll. They do not set left
+and right margins, origin mode, the saved cursor or protected cells.
+
+The daemon takes the snapshot from its own emulator under the lock that reads
+the emulator's position. So the snapshot shows exactly the stream up to its
+`seq`, and the output frames continue from that `seq`.
+
+Every `O` frame starts where the one before it ended. A client keeps the last
+`seq` it wrote into its emulator and sends it as `from_seq` when it connects
+again. The daemon keeps the last 64 KiB of each pane's output. When the client
+is too slow and the daemon cannot keep its output, the daemon continues from
+those 64 KiB, or sends a new `S` frame when they do not reach back far enough.
+The `seq` also moves past some bytes that the daemon does not send: a kitty
+graphics frame that a newer frame of the same image replaced while the client
+was behind.
+
+An `I` frame passes the checks that `send-text` passes: the link policy needs
+`write`, the pane grants of the caller, and a restricted connection. An `L`
+frame passes the checks that `resize` passes. A refused frame gets an `E`
+frame, and the stream continues. A frame from the client larger than 1 MiB
+ends the stream.
+
+Link capability: `list` for the verb. `write` for `I` and `L` frames.
+
+Errors: `invalid_params` when `window` is missing or a lease size is not
+between 1 and 4096. `window_not_found` and `session_not_found` as for every
+verb.
+
+#### The size lease
+
+The stream does not change the size of the pane or of the session. The client
+shows the pane at the size that the pane has.
+
+A lease holds one pane at a size, while the stream is open. Each dimension is
+the smaller of the lease and the size that the session's clients ask for. So
+a lease never makes a pane larger. While the lease is held, a resize from any
+client is limited to the lease. When the stream releases the lease with
+`L 0 0`, or the connection closes, the pane goes back to the size that the
+clients asked for last. Other panes and the session size do not change. An
+attached tuios client shows the smaller pane in the same rectangle.
+
+When two streams hold a lease on one pane, the smaller lease applies in each
+dimension.
+
+### attach-presence
+
+Give this connection the person's `human_nonce` without an attach. A phone
+that only answers the Inbox uses it.
+
+Params: `session` (optional). Without `session`, the nonce is for all
+sessions.
+
+Request:
+
+```json
+{"id": 1, "verb": "attach-presence"}
+```
+
+Response:
+
+```json
+{"id": 1, "result": {"type": "presence", "human_nonce": "294e0a278581acd0f07ff40561c52bf7", "client_id": "client-1791531791506586672"}}
+```
+
+`respond`, `reply-approval`, `answer-ask`, `dismiss-attention` and every other
+verb that takes `human_nonce` accept this nonce. The rules are the same as for
+the nonce of an attach:
+
+- The caller must be outside every pane of this daemon. Over a link, the
+  stream must come on the link-human socket, so the hub must open it with
+  `{"human":true}`. Otherwise the call fails with `forbidden`.
+- A verb that uses the nonce must come over the same kind of connection: a
+  local socket, a plain link or a link-human stream.
+- When the kernel gives the process ids, the verb must come from the same
+  process. All streams of one `tuios stdio-proxy` come from the same process,
+  so a phone can send the nonce on any stream of that link.
+
+The presence is not an attach. It does not change the session size, it does
+not count as a client that shows or focuses a pane, and it gets no
+broadcasts. So `request-approval` holds a prompt for the Inbox and does not
+answer `viewed`. The connection continues to take verbs. The presence ends
+when the connection closes. A second call replaces the nonce.
+
+Link capability: `list`. The verbs that use the nonce need their own
+capability, for example `respond` for `reply-approval`.
 
 ### capture-pane
 

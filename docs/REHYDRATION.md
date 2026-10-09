@@ -173,6 +173,25 @@ the snapshot and then the stream to the same emulator**, and the stream they
 applied was history the snapshot had already accounted for. The routes differed
 only in how much history got painted twice.
 
+### stream-pane: a client that is not tuios
+
+`stream-pane` (`internal/session/verb_stream_pane.go`, docs/protocol.md) is an
+eighth route, for a client that cannot read a `TerminalState`. It keeps the
+same pairing on the daemon side. The snapshot is `GetTerminalState`, turned
+into bytes by `snapshotVT`, and its `Seq` is the position the subscription
+starts at. A subscription that cannot start exactly there, because the ring
+rolled past it, is dropped and the snapshot is taken again
+(`PTY.subscribeAt`). Every output frame carries the position after its last
+byte, and the stream skips bytes it already sent, so a catch-up that overlaps
+the snapshot paints nothing twice. A client that reconnects with the position
+it reached resumes from the ring, without a snapshot, when the ring still
+holds that position.
+
+`snapshotVT` reproduces invariants 1 to 4 and 7 on any xterm-compatible
+emulator. Of invariant 6 it carries the pen, the scroll region's top and
+bottom and the character sets, and not the protected cells, the saved cursor
+or the character REP repeats.
+
 ## Why the snapshot and the stream cannot both be applied
 
 The snapshot is the daemon emulator's state after consuming bytes `0..S`. The

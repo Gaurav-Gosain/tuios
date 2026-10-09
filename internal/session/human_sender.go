@@ -89,7 +89,8 @@ func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) boo
 }
 
 // matchHumanNonceClient is matchHumanNonce that also returns the id of the
-// attached client the nonce belongs to.
+// attached client the nonce belongs to. A presence from attach-presence
+// (verb_presence.go) counts as an attached client here and nowhere else.
 func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connState) (string, bool) {
 	if nonce == "" {
 		return "", false
@@ -105,10 +106,16 @@ func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connStat
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.attached && cs.isTUIClient && (sessionID == "" || cs.sessionID == sessionID) &&
-			cs.viaLink == viaLink && cs.linkHuman == linkHuman && cs.humanNonce != "" &&
-			(pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid) &&
-			subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
+		same := cs.viaLink == viaLink && cs.linkHuman == linkHuman &&
+			(pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid)
+		attach := cs.attached && cs.isTUIClient && (sessionID == "" || cs.sessionID == sessionID) &&
+			cs.humanNonce != "" && subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
+		// A presence from attach-presence is held to the same rules as an
+		// attach. One for every session matches a call about any session.
+		presence := cs.presenceNonce != "" &&
+			(sessionID == "" || cs.presenceSession == "" || cs.presenceSession == sessionID) &&
+			subtle.ConstantTimeCompare([]byte(cs.presenceNonce), []byte(nonce)) == 1
+		match := same && (attach || presence)
 		cs.mu.Unlock()
 		if match {
 			return cs.clientID, true

@@ -86,6 +86,12 @@ var verbCapabilities = map[string][]string{
 	"get-window":           {config.LinkAllowList},
 	"list-workspaces":      {config.LinkAllowList},
 	"capture-pane":         {config.LinkAllowList},
+	// stream-pane reads a pane. Its input and lease frames are checked
+	// as send-text and resize, frame by frame, so they need write.
+	"stream-pane": {config.LinkAllowList},
+	// attach-presence only names the person on this connection. What it
+	// lets the connection answer is checked by those verbs (respond).
+	"attach-presence":      {config.LinkAllowList},
 	"list-buffers":         {config.LinkAllowList},
 	"show-buffer":          {config.LinkAllowList},
 	"screenshot":           {config.LinkAllowList},

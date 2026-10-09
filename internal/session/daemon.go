@@ -643,6 +643,15 @@ type connState struct {
 	// stored as verified_human; see verifyHumanNonce. Guarded by mu.
 	humanNonce string
 
+	// presenceNonce is the secret attach-presence handed this connection,
+	// "" when it has not called it, and presenceSession the session it is
+	// for, by ID, "" for every session. A presence counts as the person for
+	// the nonce checks only: it is not attached, so it does not size a
+	// session, focus or view a pane, or receive broadcasts. It ends with the
+	// connection. Both guarded by mu. See verb_presence.go.
+	presenceNonce   string
+	presenceSession string
+
 	// hostFocus is what this client last said about its host terminal's
 	// focus: focusUnknown until it says anything. Guarded by mu. See
 	// client_focus.go.
