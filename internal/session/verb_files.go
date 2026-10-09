@@ -158,9 +158,42 @@ func expandPath(p string) (string, *verbError) {
 	return filepath.Clean(p), nil
 }
 
+// errNotRegular is a path that is a pipe, a device or a socket where a file's
+// bytes were asked for.
+var errNotRegular = errors.New("not a regular file")
+
+// openRegular opens a file to read its bytes, and refuses anything that is
+// not a regular file. The open does not wait: opening a named pipe for
+// reading blocks until something writes to it, and a device such as
+// /dev/zero never ends, so either would hold the verb, and a hash of it a
+// CPU, for as long as the daemon runs.
+func openRegular(path string) (*os.File, fs.FileInfo, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		_ = f.Close()
+		if fi.IsDir() {
+			return nil, fi, &fs.PathError{Op: "read", Path: path, Err: syscall.EISDIR}
+		}
+		return nil, fi, &fs.PathError{Op: "read", Path: path, Err: errNotRegular}
+	}
+	return f, fi, nil
+}
+
 // fileError turns a file system error into the verb error a person can act on.
 func fileError(what, path string, err error) *verbError {
 	switch {
+	case errors.Is(err, errNotRegular):
+		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is not a file. It is a pipe, a device or a socket")
+	case errors.Is(err, syscall.EISDIR):
+		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is a folder")
 	case errors.Is(err, fs.ErrNotExist):
 		return newVerbError(ErrVerbNoFile, what+": "+echoName(path)+" does not exist")
 	case errors.Is(err, fs.ErrPermission):
@@ -353,18 +386,14 @@ func (d *Daemon) verbFileRead(_ *connState, params json.RawMessage) (any, *verbE
 	if length <= 0 || length > fileReadMax {
 		length = fileReadMax
 	}
-	f, err := os.Open(path)
+	f, fi, err := openRegular(path)
+	if errors.Is(err, syscall.EISDIR) {
+		return nil, invalidParam("path", echoName(path)+" is a folder: list it with file-list")
+	}
 	if err != nil {
 		return nil, fileError("read", path, err)
 	}
 	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, fileError("read", path, err)
-	}
-	if fi.IsDir() {
-		return nil, invalidParam("path", echoName(path)+" is a folder: list it with file-list")
-	}
 	buf := make([]byte, length)
 	n, err := f.ReadAt(buf, max(p.Offset, 0))
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -464,7 +493,7 @@ func (d *Daemon) verbFileRemove(_ *connState, params json.RawMessage) (any, *ver
 // hashRange is the sha256 of length bytes of the file at offset, or of
 // everything from offset when length is negative.
 func hashRange(path string, offset, length int64) (string, int64, error) {
-	f, err := os.Open(path)
+	f, _, err := openRegular(path)
 	if err != nil {
 		return "", 0, err
 	}
@@ -543,18 +572,9 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 	switch p.Mode {
 	case "read", "":
-		f, err := os.Open(path)
+		f, fi, err := openRegular(path)
 		if err != nil {
 			return nil, fileError("read", path, err)
-		}
-		fi, err := f.Stat()
-		if err != nil {
-			_ = f.Close()
-			return nil, fileError("read", path, err)
-		}
-		if !fi.Mode().IsRegular() {
-			_ = f.Close()
-			return nil, invalidParam("path", echoName(path)+" is not a file")
 		}
 		size := fi.Size()
 		if p.Offset > size {
