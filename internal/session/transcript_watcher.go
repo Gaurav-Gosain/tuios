@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -23,6 +24,19 @@ import (
 // It also survives the file being replaced. A harness that rotates its session
 // file writes a new inode at a path a file watch would no longer be following;
 // the directory watch reports it either way.
+//
+// # When the directory goes away
+//
+// The kernel drops a directory's watch when the directory is deleted or moved,
+// but the refcount here still counts the joins in it. Without more, a
+// directory made again at the same path is never watched again: the next join
+// there is not the first, so it adds nothing, and the joins already there wait
+// for events that never come. So a directory the kernel dropped is marked
+// lost, and its parent is watched until the directory comes back. The parent's
+// Create event re-adds the directory and wakes every join in it, because their
+// files may have been written before the watch was back. A join in a lost
+// directory re-adds it too. The parent watch exists only while a directory is
+// lost, and it is event-driven like the rest, with no timer.
 //
 // # What it costs when nothing is happening
 //
@@ -51,7 +65,13 @@ type TranscriptWatcher struct {
 	// slice because two windows may be joined to the same file, which happens
 	// when a session is attached from two panes.
 	onChange map[string][]func()
-	closed   bool
+	// lost holds the watched directories whose watch the kernel dropped
+	// because the directory was deleted or moved.
+	lost map[string]bool
+	// parents refcounts the parent directories watched for a lost directory
+	// to come back.
+	parents map[string]int
+	closed  bool
 }
 
 // NewTranscriptWatcher starts a watcher, or reports why it could not.
@@ -68,6 +88,8 @@ func NewTranscriptWatcher() (*TranscriptWatcher, error) {
 		w:        w,
 		dirs:     make(map[string]int),
 		onChange: make(map[string][]func()),
+		lost:     make(map[string]bool),
+		parents:  make(map[string]int),
 	}
 	go tw.run()
 	return tw, nil
@@ -86,9 +108,16 @@ func (t *TranscriptWatcher) Watch(path string, onChange func()) error {
 		return errNoTranscriptWatcher
 	}
 	first := t.dirs[dir] == 0
+	lost := t.lost[dir]
 	t.mu.Unlock()
 
-	if first {
+	if lost {
+		// The directory was deleted and made again while joins still
+		// counted it. Watch it again before counting this join in it.
+		if err := t.rearm(dir); err != nil {
+			return err
+		}
+	} else if first {
 		// Added outside the lock: fsnotify's Add touches the kernel, and holding
 		// the lock across it would block every other join behind one syscall.
 		if err := t.w.Add(dir); err != nil {
@@ -120,14 +149,101 @@ func (t *TranscriptWatcher) Unwatch(path string) {
 	delete(t.onChange, path)
 	t.dirs[dir]--
 	last := t.dirs[dir] <= 0
+	var dropParent string
 	if last {
 		delete(t.dirs, dir)
+		if t.lost[dir] {
+			delete(t.lost, dir)
+			dropParent = t.releaseParentLocked(filepath.Dir(dir))
+		}
 	}
 	closed := t.closed
 	t.mu.Unlock()
 	if last && !closed {
 		_ = t.w.Remove(dir)
+		if dropParent != "" {
+			_ = t.w.Remove(dropParent)
+		}
 	}
+}
+
+// markLost records that the kernel dropped the watch on dir, and watches its
+// parent so the directory coming back is seen.
+func (t *TranscriptWatcher) markLost(dir string) {
+	parent := filepath.Dir(dir)
+	t.mu.Lock()
+	if t.closed || t.dirs[dir] == 0 || t.lost[dir] {
+		t.mu.Unlock()
+		return
+	}
+	t.lost[dir] = true
+	t.parents[parent]++
+	addParent := t.parents[parent] == 1 && t.dirs[parent] == 0
+	t.mu.Unlock()
+	// A moved directory may still be watched at its new place. That watch
+	// reports names this watcher does not know, so it is removed.
+	_ = t.w.Remove(dir)
+	if addParent {
+		// When the parent cannot be watched either, the directory stays
+		// lost until a new join in it watches it again.
+		_ = t.w.Add(parent)
+	}
+	// The directory may be back already, before the parent was watched.
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		t.comeBack(dir)
+	}
+}
+
+// comeBack watches a lost directory again and wakes every join in it.
+func (t *TranscriptWatcher) comeBack(dir string) {
+	if t.rearm(dir) != nil {
+		return
+	}
+	t.mu.Lock()
+	var cbs []func()
+	for path, fns := range t.onChange {
+		if filepath.Dir(path) == dir {
+			cbs = append(cbs, fns...)
+		}
+	}
+	t.mu.Unlock()
+	for _, cb := range cbs {
+		cb()
+	}
+}
+
+// rearm adds the watch on a lost directory again and stops watching its
+// parent for it. It returns the error of the add, and nil for a directory
+// that is not lost.
+func (t *TranscriptWatcher) rearm(dir string) error {
+	if err := t.w.Add(dir); err != nil {
+		return err
+	}
+	t.mu.Lock()
+	var dropParent string
+	if t.lost[dir] {
+		delete(t.lost, dir)
+		dropParent = t.releaseParentLocked(filepath.Dir(dir))
+	}
+	t.mu.Unlock()
+	if dropParent != "" {
+		_ = t.w.Remove(dropParent)
+	}
+	return nil
+}
+
+// releaseParentLocked drops one count on a parent watch and returns the
+// parent when its watch is to be removed. Called with the mutex held.
+func (t *TranscriptWatcher) releaseParentLocked(parent string) string {
+	t.parents[parent]--
+	if t.parents[parent] > 0 {
+		return ""
+	}
+	delete(t.parents, parent)
+	if t.dirs[parent] > 0 {
+		return ""
+	}
+	return parent
 }
 
 // Close stops the watcher.
@@ -143,6 +259,8 @@ func (t *TranscriptWatcher) Close() error {
 	t.closed = true
 	t.onChange = nil
 	t.dirs = nil
+	t.lost = nil
+	t.parents = nil
 	t.mu.Unlock()
 	return t.w.Close()
 }
@@ -163,7 +281,20 @@ func (t *TranscriptWatcher) run() {
 			}
 			t.mu.Lock()
 			cbs := append([]func(){}, t.onChange[ev.Name]...)
+			watched := t.dirs[ev.Name] > 0
+			lost := t.lost[ev.Name]
 			t.mu.Unlock()
+			switch {
+			case watched && !lost && ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
+				// The watched directory itself went away.
+				t.markLost(ev.Name)
+			case lost && ev.Op&(fsnotify.Create|fsnotify.Rename) != 0:
+				// A parent reports the lost directory made again, or moved
+				// back.
+				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
+					t.comeBack(ev.Name)
+				}
+			}
 			for _, cb := range cbs {
 				cb()
 			}

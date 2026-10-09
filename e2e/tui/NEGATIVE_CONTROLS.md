@@ -3518,3 +3518,17 @@ for a live local presence nonce.
 | The first record in `fileID` | **caught**: "a replaced file: want reset with its two entries", got `AFTER-REPLACE` alone with reset false |
 | The secret mask in `transcriptText` | **caught**: the Bash call's target carries `sk-live-e2e-SECRET` |
 | `ansi.Strip` in `transcriptText` | **caught**: the Bash result and the last answer carry `[31m` and `[2J` |
+
+### A transcript directory deleted and made again
+
+`TestTranscriptWatchOutlivesItsDirectory` joins two panes to transcripts in
+one directory, deletes the directory, and makes it again. It then checks
+that a new join in the directory and the old join both get `transcript`
+events. On 2026-10-09 each build below ran the test. The test passed on the
+fixed build three runs in a row. The artifact is `transcript-watch.txt` under
+`TUIOS_E2E_FRAMES`.
+
+| Control | Result |
+| --- | --- |
+| The watcher before the fix (`transcript_watcher.go` from `fb5d07fd`) | **caught**: "no transcript event: stream read timed out" for the new join |
+| The `markLost` call cut from `TranscriptWatcher.run` | **caught**: "no transcript event: stream read timed out" for the new join |

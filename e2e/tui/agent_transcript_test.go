@@ -589,6 +589,8 @@ func (c *verbConn) close() { _ = c.conn.Close() }
 type atArtifact struct {
 	t *testing.T
 	b strings.Builder
+	// name is the artifact's file name, agent-transcript.txt when empty.
+	name string
 }
 
 func (a *atArtifact) add(title, body string) {
@@ -614,7 +616,11 @@ func (a *atArtifact) call(verb string, params, res map[string]any, verr *spVerbE
 }
 
 func (a *atArtifact) save() {
-	path := filepath.Join(artifactDir(a.t), "agent-transcript.txt")
+	name := a.name
+	if name == "" {
+		name = "agent-transcript.txt"
+	}
+	path := filepath.Join(artifactDir(a.t), name)
 	if err := os.WriteFile(path, []byte(a.b.String()), 0o644); err != nil {
 		a.t.Errorf("save the artifact: %v", err)
 		return
