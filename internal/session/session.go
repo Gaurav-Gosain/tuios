@@ -1199,6 +1199,13 @@ type Session struct {
 	// than a field of state because the saver goroutine reads it and holds no
 	// lock of this session.
 	stateDirty atomic.Bool
+	// enforceOpDispatch enforces that session-owned fields are mutated only
+	// through operations dispatched by the operation dispatcher, guarding
+	// against direct mutations from client state sync pushes. Guarded by stateMu.
+	enforceOpDispatch bool
+	// dispatcher routes operations that mutate session-owned fields through
+	// the session's mutateState pipeline.
+	dispatcher *OperationDispatcher
 	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
 	// by stateWakeMu, which is never held with another lock taken after it.
 	stateWake   chan struct{}
@@ -1485,6 +1492,9 @@ type SessionConfig struct {
 	// so a client's ids for it stay valid. Empty, or an id already in use,
 	// mints a new one.
 	restoreID string
+	// EnforceOperationDispatch guards session-owned fields against direct mutation
+	// from client state pushes and requires operation dispatch.
+	EnforceOperationDispatch bool
 }
 
 // SetStartDir sets the directory new local windows start in when nothing
@@ -1654,6 +1664,10 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		Created:    now,
 		lastActive: now,
 		config:     cfg,
+		dispatcher: NewOperationDispatcher(),
+	}
+	if cfg != nil && cfg.EnforceOperationDispatch {
+		session.enforceOpDispatch = true
 	}
 
 	session.setName(name)
@@ -2912,6 +2926,11 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
+		if s.enforceOpDispatch {
+			if guardSessionOwnedFields(state, prev) {
+				accepted = false
+			}
+		}
 		// While a client too old for scratch workspaces is attached, a push
 		// cannot put the focus on one: that client would draw it nowhere.
 		if s.scratchWSOff {
@@ -3003,6 +3022,45 @@ func (s *Session) mutateState(fn func(state *SessionState) error) error {
 	// Deliberately outside the state lock: the sink writes to client sockets.
 	s.publishState(snap)
 	return nil
+}
+
+// Dispatcher returns the session's operation dispatcher.
+func (s *Session) Dispatcher() *OperationDispatcher {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.dispatcher == nil {
+		s.dispatcher = NewOperationDispatcher()
+	}
+	return s.dispatcher
+}
+
+// DispatchOp routes an operation through the session's operation dispatcher under mutateState.
+func (s *Session) DispatchOp(op SessionOp) error {
+	return s.Dispatcher().Dispatch(s, op)
+}
+
+// SetEnforceOperationDispatch enables or disables guarding session-owned fields
+// against direct mutations from client state sync pushes.
+func (s *Session) SetEnforceOperationDispatch(enforce bool) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.enforceOpDispatch = enforce
+}
+
+// EnforceOperationDispatch reports whether operation dispatch enforcement is active.
+func (s *Session) EnforceOperationDispatch() bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.enforceOpDispatch
+}
+
+// SetLayoutTreeOp applies a layout tree operation through the operation dispatcher.
+func (s *Session) SetLayoutTreeOp(ws int, tree *SerializedBSPTree, leaves map[int]string) error {
+	return s.DispatchOp(&LayoutTreeOp{
+		Workspace: ws,
+		Tree:      tree,
+		Leaves:    leaves,
+	})
 }
 
 // mutateStateLocked is mutateState's critical section. It returns the snapshot
