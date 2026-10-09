@@ -378,3 +378,60 @@ func TestFileVerbsOnAPipeADeviceAndAHugePicture(t *testing.T) {
 		t.Errorf("ASSERTION: an ordinary picture no longer previews: %+v", pic)
 	}
 }
+
+// TestATransferStoppedWhileQueuedStaysStopped fills the three running slots
+// with copies over a slow link, then cancels a fourth copy and pauses a
+// fifth while they wait for a slot. When the slots free, neither may run:
+// the cancelled one stays cancelled and the paused one paused, and neither
+// file arrives.
+func TestATransferStoppedWhileQueuedStaysStopped(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 1<<20, 256<<10))
+
+	c := dialVerbs(t, base)
+	start := func(name string, size int) transferRow {
+		src := filepath.Join(remote, name)
+		randomFile(t, src, size)
+		var row transferRow
+		c.must("transfer-start", map[string]any{
+			"src": map[string]any{"host": "build", "path": src},
+			"dst": map[string]any{"path": filepath.Join(base, name)},
+		}, &row)
+		return row
+	}
+	var running []transferRow
+	for i := range 3 {
+		running = append(running, start(fmt.Sprintf("busy%d.bin", i), 16<<20))
+	}
+	cancelled := start("cancelled.bin", 64<<10)
+	paused := start("paused.bin", 64<<10)
+	if r := transferNow(t, base, cancelled.ID); r.State != "queued" {
+		t.Fatalf("the fourth copy is %s, want queued behind three", r.State)
+	}
+	c.must("transfer-cancel", map[string]any{"id": cancelled.ID}, nil)
+	c.must("transfer-pause", map[string]any{"id": paused.ID}, nil)
+	for _, r := range running {
+		c.must("transfer-cancel", map[string]any{"id": r.ID}, nil)
+	}
+	time.Sleep(4 * time.Second)
+
+	rc, rp := transferNow(t, base, cancelled.ID), transferNow(t, base, paused.ID)
+	saveTransferArtifact(t, "stopped-while-queued", map[string]any{"cancelled": rc, "paused": rp})
+	if rc.State != "cancelled" {
+		t.Errorf("ASSERTION: the copy cancelled while queued is %s", rc.State)
+	}
+	if rp.State != "paused" {
+		t.Errorf("ASSERTION: the copy paused while queued is %s", rp.State)
+	}
+	for _, name := range []string{"cancelled.bin", "paused.bin"} {
+		if _, err := os.Stat(filepath.Join(base, name)); err == nil {
+			t.Errorf("ASSERTION: %s arrived although its copy was stopped while queued", name)
+		}
+	}
+	// The positive half: the paused copy goes on when it is resumed.
+	c.must("transfer-resume", map[string]any{"id": paused.ID}, nil)
+	if r := waitTransferEnd(t, base, paused.ID, 30*time.Second); r.State != "done" || !r.Verified {
+		t.Errorf("ASSERTION: the paused copy, resumed, ended %s (verified %v): %s", r.State, r.Verified, r.Error)
+	}
+}

@@ -227,7 +227,14 @@ func (m *transferManager) run(j *transferJob) {
 			return
 		}
 		actx, cancel := context.WithCancel(ctx)
+		// A job paused or cancelled while it waited for its slot was told so
+		// with no attempt to stop. It must not start one now.
+		held := false
 		j.set(func(j *transferJob) {
+			if j.state == transferPaused || j.state == transferCancelled {
+				held = true
+				return
+			}
 			j.cancel = cancel
 			if j.started.IsZero() {
 				j.started = time.Now()
@@ -237,6 +244,11 @@ func (m *transferManager) run(j *transferJob) {
 			}
 			j.errText, j.errCode = "", ""
 		})
+		if held {
+			cancel()
+			<-m.running
+			continue
+		}
 		err := m.attempt(actx, j)
 		cancel()
 		<-m.running
