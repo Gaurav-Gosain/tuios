@@ -3880,3 +3880,47 @@ The controls were run on 2026-10-08 on the bridge branch.
 | The bridge ignores host | `runVerb`: the `verbDialHost` branch made false | `TestGUIBridgeVerbOnAHost` (the listing's home is this machine's) | **caught** |
 | The nonce goes to the host | `runVerb`: the person-verb refusal made false | `TestGUIBridgeVerbOnAHost` (build answered forbidden, not this machine's refusal) | **caught** |
 | No host on a window | the state export: `Host: w.Host` cut | `TestGUIBridgeVerbOnAHost` (no window says build) | **caught** |
+
+## The review of files, transfers and drops (wave 5)
+
+The tests are in `file_review_test.go`. The ones that need a far machine
+that lies put a fake daemon on build's socket, reached through the real ssh
+stand-in, stdio-proxy and mux.
+
+- `TestAFolderFromAHostCannotLandOutsideItsDestination`: build's file-walk
+  names `../../escaped.txt`. Nothing may land outside the destination, and
+  the copy must fail with the reason.
+- `TestFileVerbsOnAPipeADeviceAndAHugePicture`: file-preview, file-read,
+  file-hash and open-file-stream on a named pipe and on /dev/zero answer in
+  5 s, and four previews of a 400 KB PNG of 10000 x 10000 pixels keep the
+  daemon under 512 MB. The positive half previews an ordinary picture.
+- `TestATransferStoppedWhileQueuedStaysStopped`: a copy cancelled and a
+  copy paused while they wait for a running slot stay so when the slots
+  free. The positive half resumes the paused one to done and verified.
+- `TestACopyDoesNotWriteThroughALinkAtItsPart`: a link at the part file,
+  here and on build, is not written through.
+- `TestADropNamesEachFileSafely`: two dropped files of one name get two
+  paths, and no path holds a control character or a backslash.
+- `TestACancelledCopyStopsReadingItsSource`: after a copy of a 16 GiB
+  sparse file is cancelled, the daemon reads under 64 MB in 2 s.
+- `TestAFolderMoveRemovesOnlyWhatItCopied`: a move leaves the link it did
+  not copy.
+
+The controls were run on 2026-10-09 on branch `gpui-bridge-wave5`. "Before"
+is the branch as it was before the review (d32f832a); each test also passes
+on the branch with its fix.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Names from a walk are trusted | before (no `safeRel` check) | `TestAFolderFromAHostCannotLandOutsideItsDestination` (escaped.txt and escaped-too.txt written outside, copy done) | **caught** |
+| Pipes and devices are opened | before (`os.Open`, no regular-file check) | `TestFileVerbsOnAPipeADeviceAndAHugePicture` (five verbs never answered) | **caught** |
+| No decode cap | before (only the side cap) | `TestFileVerbsOnAPipeADeviceAndAHugePicture` (daemon peak 3572 MB, against 43 MB) | **caught** |
+| A queued copy ignores its stop | before (no state check after the slot) | `TestATransferStoppedWhileQueuedStaysStopped` (both ended done, both files arrived) | **caught** |
+| The part follows links | before (no `O_NOFOLLOW`) | `TestACopyDoesNotWriteThroughALinkAtItsPart` (the target holds the copy, the link put in place, here and on build) | **caught** |
+| Drop names as given | before (`filepath.Base`) | `TestADropNamesEachFileSafely` (two notes.txt wrote one part and failed the check) | **caught** |
+| A backslash stays in a drop name | `dropName`: `r == '\\'` cut | `TestADropNamesEachFileSafely` (the path holds `y\'; touch pwned; echo '.txt`) | **caught** |
+| The hash ignores the copy's context | before (`hashRange` with no context) | `TestACancelledCopyStopsReadingItsSource` (828 MB read in the 2 s after the cancel, against 0) | **caught** |
+| A move removes the whole folder | before (`RemoveAll`) | `TestAFolderMoveRemovesOnlyWhatItCopied` (the link is gone) | **caught** |
+
+The wave 5 tests in `file_transfer_test.go` and `gui_bridge_files_test.go`
+pass on the branch with every fix.
