@@ -1,6 +1,6 @@
 ---
 name: tuios
-description: "Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, turn checkpoints, shipping a worktree, the Inbox and approvals, push notifications, mail, other machines, clients, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, agent features off, errors and recipes."
+description: "Drive tuios from inside one of its panes. Find out where you are running, read and write other panes, run work and wait on it instead of polling, report your own state so the person sees it, and talk to the other agents and the person safely. `tuios --skill <topic>` prints the rest: fleets of agents, turn checkpoints, shipping a worktree, the Inbox and approvals, push notifications, pairing a phone, mail, other machines, clients, events, MCP, the tmux shim, herdr's command line, pane grants, configuration, agent features off, errors and recipes."
 ---
 
 # Driving tuios from a pane
@@ -303,6 +303,7 @@ Print one with `tuios --skill <topic>`:
 | `tmux` | The tmux shim for tools that only drive tmux |
 | `herdr` | herdr's command line and socket, for tools built for herdr |
 | `notify` | Push notifications from the Inbox to the person's phone, and `notify test` |
+| `pair` | `tuios pair`: what it changes, what the person must check, and why an agent does not run it |
 | `agents-off` | What works and what fails with `agents_disabled` when the person turns agent features off |
 | `grants` | Pane grants: what a pane may do, and giving a helper less |
 | `config` | Options, appearance, themes, glyphs, the dock, hooks and keybindings |

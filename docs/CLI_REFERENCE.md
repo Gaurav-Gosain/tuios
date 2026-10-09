@@ -3429,6 +3429,7 @@ An enabled plugin runs with your rights. See
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
 | `tuios hosts signin [name]` | Open the Tailscale sign-in page of each host that waits for one, or of the named host. With no desktop, it prints the address. `--print`, `--json`. See [Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode) |
 | `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--start` starts each daemon that does not run, after the install. `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
+| `tuios pair` | Show a QR code that adds this machine to a phone. The phone sends its key, and you accept it. The key can only open a tuios link, with the policy of a new `[hosts.DEVICE]` table. See [below](#tuios-pair) |
 | `tuios stdio-proxy [--as NAME]` | Hidden. What the other machine's daemon runs over ssh for a link. `--as` pins the name this machine's link policy is resolved for, whatever the other machine calls itself: put it in a forced command in `authorized_keys` (`command="tuios stdio-proxy --as laptop",restrict ...`) to make the policy a boundary. See [What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here) |
 
 A call over a link that the far machine's policy does not allow fails with
@@ -3460,6 +3461,192 @@ there.
 | `tuios tape show <name>` | Display the contents of a tape file |
 | `tuios tape delete <name>` | Delete a tape recording |
 | `tuios tape dir` | Show the tape recordings directory path |
+
+### `tuios pair`
+
+Show a QR code that adds this machine to a phone. You do not copy a key by hand.
+
+```
+tuios pair [--name DEVICE] [--machine NAME] [--allow list,mail,open,write,respond] [--timeout 5m]
+           [--listen HOST:PORT] [--listen-all] [--accept-local] [--authorized-keys PATH]
+           [--advertise-ssh HOST:PORT,...] [--advertise-pair HOST:PORT,...]
+           [--ssh-port 22] [--host-key PATH] [--command PATH] [--yes] [--json]
+```
+
+1. Run `tuios pair` on the machine.
+2. Scan the code with the tuios app on the phone.
+3. Compare the check code and the key fingerprint on the screen with the ones
+   on the phone.
+4. Type `y` to accept the key.
+
+The question shows the device name, the check code, the key, the address the
+request came from and the allow list:
+
+```
+A device asks to pair.
+  Name:  phone
+  Check: 482916
+  Key:   ECDSA SHA256:...
+  From:  192.168.1.23:51734
+  Allow: list, mail
+Compare the check code and the key with the phone. Add this key? [y/N]
+```
+
+tuios then changes two files, in this order:
+
+1. It adds a new `[hosts.DEVICE]` table to `config.toml`, with `allow` set to
+   `--allow`. Without `--allow`, the list is `list` and `mail`. tuios reads
+   the file back. When the table is not there as the policy of the device,
+   tuios stops and does not add the key.
+2. It adds one line to `~/.ssh/authorized_keys`:
+
+```
+command="/usr/bin/tuios stdio-proxy --as phone",restrict ecdsa-sha2-nistp256 AAAA... tuios-pair:phone
+```
+
+The key can only run `tuios stdio-proxy --as phone`. `restrict` stops port
+forwards, agent forwards and a terminal. The `[hosts.phone]` table sets what
+the phone may do here. See
+[What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here).
+
+tuios refuses a device name that is in use here. Case does not matter. A name
+is in use when:
+
+- `config.toml` has a `[hosts]` table of that name.
+- A forced command in the authorized keys file opens links under that name
+  (`stdio-proxy --as NAME`).
+- It is the name of this machine.
+
+| Flag | What it does |
+|------|--------------|
+| `--name DEVICE` | The device name. It replaces the name the phone sends. Use letters, digits, dot, dash and underscore |
+| `--machine NAME` | The machine name in the code. The phone shows it. The default is the host name, up to the first dot |
+| `--allow LIST` | The `allow` list of the new `[hosts.DEVICE]` table. The default is `list,mail` |
+| `--timeout D` | The time the code works. The default is 5 minutes. The maximum is 1 hour |
+| `--listen HOST:PORT` | Listen on this address. Port 0 picks a free port. Without it, tuios listens on each address in the code |
+| `--listen-all` | Let the listener use every interface, as `0.0.0.0` or `[::]` do, or a public address. tuios prints a warning for every interface |
+| `--accept-local` | Accept a request from this machine. Use it for a phone in an emulator, or for a machine that runs tailscaled in userspace mode, which sends each tailnet connection from `127.0.0.1` |
+| `--authorized-keys PATH` | The file for the key. The default is `~/.ssh/authorized_keys`. tuios makes the file (0600) and its folder (0700) when they do not exist |
+| `--advertise-ssh LIST` | The ssh addresses in the code. They replace the addresses tuios finds |
+| `--advertise-pair LIST` | The pairing addresses in the code. They replace the addresses tuios finds |
+| `--ssh-port N` | The ssh port for the addresses tuios finds. The default is 22 |
+| `--host-key PATH` | The ssh host public key in the code. The default is the first of `/etc/ssh/ssh_host_ed25519_key.pub`, `ssh_host_ecdsa_key.pub` and `ssh_host_rsa_key.pub` |
+| `--command PATH` | The tuios path in the forced command. See below for the default |
+| `--yes` | Accept the key without a question. Use it for tests only |
+| `--json` | Print the link as the first JSON line and the result as the last |
+
+The forced command uses the `tuios` on `PATH`, as `PATH` names it, when that
+file is this tuios. For example, it uses `~/.nix-profile/bin/tuios` or
+`/opt/homebrew/bin/tuios`, not the file in `/nix/store` or in the Homebrew
+`Cellar`. An upgrade replaces that file, and a forced command with its path
+stops working. When `tuios` on `PATH` is another binary, or is not there,
+tuios uses its own path and prints a warning. Give `--command` to set a path
+that stays the same after an upgrade.
+
+tuios finds the addresses itself, in this order:
+
+1. The MagicDNS name of this machine, when `tailscale status --json` answers.
+2. Up to three LAN IPv4 addresses. tuios leaves out the interfaces of
+   containers, VMs and VPNs.
+
+`s` holds these addresses with the ssh port. `p` holds the addresses that
+the listener uses, in the same order. The listener does not use a public
+address without `--listen-all`, so `p` can be shorter than `s`. An address in
+`p` and the address at the same place in `s` do not always name the same
+interface. The phone tries the addresses of each list in order.
+
+tuios refuses the authorized keys file before it shows the code when sshd
+would not use keys from it. sshd checks the file, its folder and each folder
+above it up to the home folder. tuios refuses one that anyone can write to or
+that another user owns. It prints a warning for one that the group can write
+to. Debian's sshd accepts a group that holds only you. Other builds of sshd
+refuse it.
+
+The code stops when one phone pairs, when the time runs out, or after three
+wrong requests. A wrong request is a pairing request with a `mac` that does
+not match. A request that is not a pairing request gets an error and does not
+count. A key that is in the file already is refused. The key must be ECDSA
+P-256, Ed25519, or RSA with 3072 bits or more.
+
+A request with a good `mac` from this machine, or from a machine in the
+`[hosts]` table, stops the pairing. A program on such a machine can read the
+code from the screen or from a pane, and that program is not the phone.
+tuios knows these addresses:
+
+- This machine: each address of its interfaces, loopback included.
+  `--accept-local` lets them through.
+- A machine in `[hosts]`: the IP in its `addr`, the addresses that the host
+  name in `addr` resolves to, and the tailnet IP of the tailnet machine of
+  that name. tuios does not ask ssh, so an alias in `~/.ssh/config` with no
+  DNS name is not found. `--accept-local` does not change this.
+
+#### The pairing protocol
+
+The QR code holds this link:
+
+```
+tuios://pair?v=1&m=MACHINE&u=USER&s=HOST:PORT,...&p=HOST:PORT,...&fp=SHA256:...&t=TOKEN
+```
+
+| Field | Value |
+|-------|-------|
+| `v` | `1` |
+| `m` | The machine name |
+| `u` | The ssh user |
+| `s` | The ssh addresses: the tailnet name first, then the LAN addresses |
+| `p` | The pairing addresses: the tailnet name first, then the LAN addresses the listener uses |
+| `fp` | The SHA256 fingerprint of the ssh host key, as `ssh-keygen -lf` prints it |
+| `t` | 16 random bytes in base64url without padding. It works one time |
+
+The phone sends `POST /v1/pair` to an address in `p`, with a `Content-Length`
+and a JSON body of at most 8 KiB:
+
+```json
+{"device": "phone", "key": "ecdsa-sha2-nistp256 AAAA...", "mac": "..."}
+```
+
+`mac` is base64url, without padding, of HMAC-SHA256. The HMAC key is the 16
+bytes that `t` decodes to. The message is these three lines, joined with
+`\n`, with no newline at the end:
+
+```
+tuios-pair-v1
+phone
+ecdsa-sha2-nistp256 AAAA...
+```
+
+##### The check code
+
+Both screens show a check code of six digits. The phone computes it before it
+sends the request, and shows it while the person answers the question here.
+
+1. Compute HMAC-SHA256 with the 16 bytes of `t` as the key. The message is
+   `tuios-pair-v1-check`, a `\n`, and the `key` field of the request, byte
+   for byte.
+2. Read the first 4 bytes of the result as a big-endian unsigned 32-bit
+   integer.
+3. Take that number modulo 1000000.
+4. Write it as 6 decimal digits, with leading zeros.
+
+A person who scanned the code and sent their own key gets another check code
+than the phone shows.
+
+##### The reply
+
+The reply to a good request:
+
+```json
+{"ok": true, "device": "phone", "user": "gaurav", "command": "/usr/bin/tuios stdio-proxy --as phone",
+ "host_key": "ssh-ed25519 AAAA...", "mac": "...", "check": "482916"}
+```
+
+The reply `mac` is made the same way over `tuios-pair-v1-ok`, the device
+name and `host_key`. The phone checks this `mac` and checks that the
+fingerprint of `host_key` is `fp`. Then it keeps `host_key` as the host key
+for the addresses in `s`. `check` is the check code of the request. The phone
+compares it with the code it computed. A refused request gets
+`{"ok": false, "error": "..."}` and an HTTP status of 400, 403, 404, 405,
+409, 410, 411, 413, 429 or 500.
 
 ### `tuios hosts test`
 

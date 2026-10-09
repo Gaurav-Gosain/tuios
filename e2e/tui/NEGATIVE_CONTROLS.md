@@ -3694,3 +3694,85 @@ on this machine; every other push arrives and decrypts.
 The RFC 8291 Appendix A example is a wire compatibility test in
 `internal/pushnotify` (`TestEncryptRFC8291AppendixA`). With the delimiter
 `0x02` changed to `0x01` it fails.
+## tuios pair
+
+`e2e/tui/pair_test.go` acts as the phone against a real `tuios pair`. It
+reads the link, makes the MAC, posts the key and checks the reply.
+`TestPairedKeyOpensOnlyTheLink` then logs in with the installed key through a
+scratch sshd (its own host key, port and authorized keys file, run as the
+user) and links a second daemon through it. `TestPairQRCodeHoldsTheLink`
+decodes the drawn code with `zbarimg`.
+
+Each control below was run on 2026-10-09 on branch `feat/pair`. The logs are
+in `~/.cache/agent-tmp/pair/neg/`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The MAC check | `TestPairRefusesWrongRequests/wrong_mac`, `/swapped_key` (status 200, the key is written) | **caught** |
+| `command="..."` in the installed line | `TestPairAddsAPhoneKey` (the line), `TestPairedKeyOpensOnlyTheLink` (ssh runs `echo NOT-FORCED`, and typing goes through) | **caught** |
+| `restrict` in the installed line | `TestPairedKeyOpensOnlyTheLink` (`ssh -R` keeps running) | **caught** |
+| `--as DEVICE` in the forced command | `TestPairedKeyOpensOnlyTheLink` (send-text goes through: the hub's own name gets the default policy) | **caught** |
+| The token is spent on success | `TestPairAddsAPhoneKey` (the code pairs a second key) | **caught** |
+| The timeout | `TestPairCodeExpires` (tuios pair does not end) | **caught** |
+| The 8 KiB body cap | `TestPairRefusesWrongRequests/oversize_body` (status 200) | **caught** |
+| The key type check | `TestPairAddsAPhoneKey` (an RSA 2048 key is written) | **caught** |
+| The device name check | `TestPairAddsAPhoneKey` (`../evil` is written) | **caught** |
+| The duplicate key check | `TestPairLeavesWhatIsThereAlone` (status 200, the file changes) | **caught** |
+| The case-blind `[hosts]` table check | `TestPairLeavesWhatIsThereAlone` (`[hosts.phone]` is added beside `[hosts.Phone]`) | **caught** |
+| The limit of wrong requests | `TestPairStopsAfterTooManyWrongRequests` (a good request after three wrong ones pairs) | **caught** |
+| The limit set to 4 in place of 3 | `TestPairStopsAfterTooManyWrongRequests` (the same) | **caught** |
+| The reply MAC over `tuios-pair-v1-ok` | `TestPairAddsAPhoneKey` (the reply MAC does not match) | **caught** |
+| The QR code holds the printed link | `TestPairQRCodeHoldsTheLink/colour`, `/plain` (the link plus `x`) | **caught** |
+| The `--listen-all` check | `TestPairListensOnlyWhereTheCodeSays` (`0.0.0.0:0`, `[::]:0` and `:0` run) | **caught** |
+| The `--listen-all` warning | `TestPairListensOnlyWhereTheCodeSays` (no warning) | **caught** |
+| The default binds each found address | `TestPairListensOnlyWhereTheCodeSays` (bound to `0.0.0.0` gives a listener on `[::]`) | **caught** |
+| The question before the key is added | `TestPairAsksBeforeItAddsTheKey/n` (the key is written after `n`), `/y` (no question) | **caught** |
+| The constant-time compare (`hmac.Equal`) | none | **not caught**: an end-to-end test cannot measure the timing |
+
+### tuios pair: security review fixes
+
+Each control below was run on 2026-10-09 on branch `feat/pair`. Each one
+builds `cmd/tuios` with one fix taken out and runs the test that covers it.
+The build from `bd0316ed`, before the fixes, fails the same tests. The logs
+are in `~/.cache/agent-tmp/pair-review/neg/`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The write deadline for the reply in `serveConn` | `TestPairReplyReachesAPhoneAfterASlowAnswer` (a `y` after 13 seconds: the phone gets EOF, and the key is written) | **caught** |
+| The stop check before the key write, and the stop case in `confirm` | `TestPairStopDuringTheQuestionWritesNothing` (a `y` after Ctrl+C writes the key and the phone gets ok, while tuios says pairing is stopped) | **caught** |
+| The check of the bound address in `openPairListeners` | `TestPairListensOnlyWhereTheCodeSays` (`--listen 0:0` runs on `[::]` without `--listen-all`) | **caught** |
+| Skipping a connection closed before its first byte | `TestPairIgnoresConnectionsClosedUnused` (the fourth connection is refused: three unused ones stopped the pairing) | **caught** |
+| `checkAuthorizedKeysModes` | `TestPairRefusesAKeysFileAnyoneCanWrite` (a file and a folder with mode 0666 and 0777 get a code; a 0660 file gives no warning) | **caught** |
+| The one-line check of the key field | `TestPairAddsAPhoneKey` (`"not a key\n"+KEY` gets 200 and is written) | **caught** |
+
+`TestPairIgnoresConnectionsClosedUnused` waits 400 ms between connections.
+With 100 ms, the build before the fix passed: a wrong request holds the
+listener for its 200 ms pause, so some connections got 429 and were not
+counted.
+
+### tuios pair: second review
+
+Each control below was run on 2026-10-09 on branch `feat/pair`. Each one
+builds `cmd/tuios` with one fix taken out and runs the tests named. The logs
+are in `~/.cache/agent-tmp/pair-r2/neg/`. The build from `874cf2d2`, before
+these fixes, fails every test named here. Part of that is the
+`--accept-local` flag, which the test helpers pass and that build does not
+have.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The stop when the `[hosts.DEVICE]` write fails | `TestPairWritesThePolicyBeforeTheKey` (config.toml is read-only: the key is written, the phone gets 200) | **caught** |
+| The default `allow` of `list, mail` without `--allow` | `TestPairAsksBeforeItAddsTheKey/n`, `/y` (no allow list in the question, no `[hosts.pixel-9]` table) | **caught** |
+| `pairNameInUse`, at the request and for `--name` | `TestPairRefusesANameInUse`, `TestPairLeavesWhatIsThereAlone` (the name of `[hosts.Phone]` gets 500 and stops the pairing, not 409) | **caught** |
+| The names that pinned keys in authorized_keys use | `TestPairRefusesANameInUse` (`tablet` pairs beside a key pinned as `Tablet`, and `--name TABLET` shows a code) | **caught** |
+| The allow list in the question | `TestPairAsksBeforeItAddsTheKey/n`, `/y` | **caught** |
+| The refusal of this machine's addresses | `TestPairRefusesRequestsFromThisMachine/loopback`, `/own_lan_address` (200, the key is written) | **caught** |
+| The refusal of the addresses of `[hosts]` | `TestPairRefusesRequestsFromThisMachine/host_in_config` (200 with `--accept-local`, the key is written) | **caught** |
+| `check` in the reply | `TestPairAddsAPhoneKey` (the reply check code is empty) | **caught** |
+| The check code in the question | `TestPairAsksBeforeItAddsTheKey/n`, `/y` | **caught** |
+| The `tuios` on PATH in the forced command | `TestPairForcedCommandUsesTheTuiosOnPath/link_on_path` (the command names the file the link points to) | **caught** |
+| The public address check before the bind | `TestPairListensOnlyWhereTheCodeSays` (`--listen 8.8.8.8:0` fails at the bind, with no word of `--listen-all`) | **caught** |
+| Counting only pairing requests with a wrong MAC | `TestPairCountsOnlyPairingRequests` (three requests that are not pairing requests stop the listener) | **caught** |
+| The folders above the authorized keys folder, up to the home folder | `TestPairChecksTheHomeFolder/anyone`, `/group` (a home with mode 0777 gets a code, 0770 gives no warning) | **caught** |
+| The public address check for addresses tuios finds | none | **not caught**: the test machine has no public address to find |
+| The DNS and tailnet lookups of `[hosts]` addresses | none | **not caught**: the tests give an IP in `addr`. A name needs a resolver or a tailnet the test controls |

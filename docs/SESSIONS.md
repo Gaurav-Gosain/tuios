@@ -25,6 +25,7 @@ what does and does not come back after each kind of interruption.
 - [Global Sessions](#global-sessions)
 - [Keeping Hosts on One Version](#keeping-hosts-on-one-version)
 - [Starting the Daemon on a Host](#starting-the-daemon-on-a-host)
+- [Adding a Phone](#adding-a-phone)
 - [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
 - [Limitations](#limitations)
@@ -852,6 +853,41 @@ tuios hosts sync build --start    # install tuios on build if needed, then start
 
 `hosts test --start` does not install tuios. On a host with no tuios, use
 `hosts sync --start`. See [`tuios hosts test`](CLI_REFERENCE.md#tuios-hosts-test).
+
+## Adding a Phone
+
+A phone connects to this machine over ssh and runs
+`tuios stdio-proxy --as NAME`. To give the phone its key with no copy and
+paste, use `tuios pair`:
+
+```sh
+tuios pair --name phone
+```
+
+1. Scan the QR code with the tuios app on the phone.
+2. Compare the check code and the key fingerprint on the screen with the ones
+   on the phone.
+3. Type `y` to accept the key.
+
+The phone must reach this machine, for example on the same Wi-Fi network or
+on your tailnet. The code works one time, for 5 minutes. Anyone who sees the
+code can try to pair until the phone does. Do not show the code on a shared
+screen.
+
+The key can only open a tuios link under the name `phone`. tuios writes a new
+`[hosts.phone]` table first, and then adds the key. The table sets what the
+phone may do. By default it allows `list` and `mail`:
+
+- `list` lets the phone read: listings, pane captures, screenshots, agent
+  state, the Inbox and the event stream.
+- `mail` lets the phone send and read agent mail.
+
+The phone cannot start programs, type into panes or answer prompts. To allow
+more, give `--allow`, for example `--allow list,mail,open,write`. See
+[`tuios pair`](CLI_REFERENCE.md#tuios-pair) for each flag and the protocol.
+
+To remove the phone, delete the line that ends in `tuios-pair:phone` from
+`~/.ssh/authorized_keys`, and the `[hosts.phone]` table from `config.toml`.
 
 ## Machines on a Tailnet
 

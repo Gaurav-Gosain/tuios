@@ -436,3 +436,52 @@ func trimTrailingBlank(lines []string) []string {
 	}
 	return lines
 }
+
+// ErrHostTableExists is what AddLinkPolicyInFile returns when the config has a
+// [hosts.NAME] table already. The caller leaves it alone and tells the person.
+var ErrHostTableExists = errors.New("the config has this host table already")
+
+// AddLinkPolicyInFile writes a new [hosts.NAME] table that holds only allow:
+// what the machine of that name may do here when it links in. It never edits
+// a table that is there: it returns ErrHostTableExists, matched without
+// regard to case as the link policy matches names. tuios pair uses it for a
+// device it has just let in.
+func AddLinkPolicyInFile(path, name string, allow []string) (WriteNote, error) {
+	if err := federation.ValidHostName(name); err != nil {
+		return WriteNote{}, err
+	}
+	existing, err := HostsInFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return WriteNote{}, err
+	}
+	for key := range existing {
+		if strings.EqualFold(key, name) {
+			return WriteNote{}, ErrHostTableExists
+		}
+	}
+	target, note, err := writeTargetFor(path, []string{"hosts", name})
+	if err != nil {
+		return note, err
+	}
+	data, err := readConfigForEdit(target)
+	if err != nil {
+		return note, err
+	}
+	lines := splitLines(string(data))
+	if _, _, found := findTableBlock(lines, []string{"hosts", name}); found {
+		return note, ErrHostTableExists
+	}
+	var b strings.Builder
+	b.WriteString("[hosts." + tomlKey(name) + "]\n")
+	parts := make([]string, 0, len(allow))
+	for _, c := range allow {
+		parts = append(parts, tomlString(c))
+	}
+	b.WriteString("allow = [" + strings.Join(parts, ", ") + "]\n")
+	out := trimTrailingBlank(lines)
+	if len(out) > 0 {
+		out = append(out, "")
+	}
+	out = append(out, splitLines(b.String())...)
+	return note, writeConfigBytes([]byte(joinLines(out)), target)
+}

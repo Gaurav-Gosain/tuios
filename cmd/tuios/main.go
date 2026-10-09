@@ -2986,7 +2986,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand(), newXpanesCommand(), newCloseWorkspaceCommand(), newCloseWindowCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newAgentStatusLineCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
-	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand())
+	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand(), newPairCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 	rootCmd.AddCommand(newPluginsCommand())
 
