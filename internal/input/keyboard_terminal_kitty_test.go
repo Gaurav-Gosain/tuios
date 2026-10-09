@@ -1,6 +1,7 @@
 package input
 
 import (
+	"runtime"
 	"os/exec"
 	"testing"
 
@@ -90,19 +91,59 @@ func TestForwardKittyKeyboardPane(t *testing.T) {
 		{"bare escape", tea.KeyPressMsg{Code: tea.KeyEscape}, "\x1b[27u", "\x1b"},
 	}
 
+	// On Windows every pane PTY is a ConPTY, and ConPTY silently drops
+	// CSI-u sequences written to its input handle, so EncodeKeyCSIu keeps
+	// every key on its legacy encoding there (see kitty_keyboard.go).
+	wantKitty := func(tt struct {
+		name   string
+		msg    tea.KeyPressMsg
+		kitty  string
+		legacy string
+	}) string {
+		if runtime.GOOS == "windows" {
+			return tt.legacy
+		}
+		return tt.kitty
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := forwardNative(t, pushAll, tt.msg); got != tt.kitty {
-				t.Errorf("native kitty pane: got %q, want %q", got, tt.kitty)
+			if got := forwardNative(t, pushAll, tt.msg); got != wantKitty(tt) {
+				t.Errorf("native kitty pane: got %q, want %q", got, wantKitty(tt))
 			}
-			if got := forwardDaemon(t, pushAll, tt.msg); got != tt.kitty {
-				t.Errorf("daemon kitty pane: got %q, want %q", got, tt.kitty)
+			if got := forwardDaemon(t, pushAll, tt.msg); got != wantKitty(tt) {
+				t.Errorf("daemon kitty pane: got %q, want %q", got, wantKitty(tt))
 			}
 			if got := forwardNative(t, "", tt.msg); got != tt.legacy {
 				t.Errorf("native legacy pane: got %q, want %q", got, tt.legacy)
 			}
 			if got := forwardDaemon(t, "", tt.msg); got != tt.legacy {
 				t.Errorf("daemon legacy pane: got %q, want %q", got, tt.legacy)
+			}
+		})
+	}
+}
+
+// TestForwardKittyFlags7 pins the bytes for the flag set pi pushes (CSI >7u:
+// disambiguate + event types + alternate keys, no report-all-keys). Under
+// these flags Enter and Backspace keep their legacy encoding.
+func TestForwardKittyFlags7(t *testing.T) {
+	const push7 = "\x1b[>7u"
+	tests := []struct {
+		name string
+		msg  tea.KeyPressMsg
+		want string
+	}{
+		{"enter", tea.KeyPressMsg{Code: tea.KeyEnter}, "\r"},
+		{"backspace", tea.KeyPressMsg{Code: tea.KeyBackspace}, "\x7f"},
+		{"letter", tea.KeyPressMsg{Code: 'a', Text: "a"}, "a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := forwardNative(t, push7, tt.msg); got != tt.want {
+				t.Errorf("native flags7 %s: got %q, want %q", tt.name, got, tt.want)
+			}
+			if got := forwardDaemon(t, push7, tt.msg); got != tt.want {
+				t.Errorf("daemon flags7 %s: got %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}

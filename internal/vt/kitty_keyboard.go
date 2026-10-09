@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"runtime"
 	"fmt"
 	"io"
 	"slices"
@@ -193,6 +194,19 @@ func (e *Emulator) updateKittyKeyboardCache() {
 // EncodeKeyCSIu encodes a key event in the CSI u format used by the kitty keyboard protocol.
 // Returns the encoded sequence, or empty string if the key should use legacy encoding.
 func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
+
+	// Windows ConPTY silently drops CSI-u sequences written to its input
+	// handle, so a kitty-encoded Enter or Backspace never reaches the guest.
+	// Legacy control bytes survive ConPTY and guests fall back to them
+	// cleanly, so on Windows every key keeps its legacy encoding.
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+
+	// Windows ConPTY silently drops CSI-u sequences written to its input
+	// handle, so a kitty-encoded Enter or Backspace never reaches the guest.
+	// Legacy control bytes survive ConPTY and guests fall back to them
+	// cleanly, so on Windows every key keeps its legacy encoding.
 	// Only encode if at least disambiguate or report-all-keys flag is set
 	if flags&(ansi.KittyDisambiguateEscapeCodes|ansi.KittyReportAllKeysAsEscapeCodes) == 0 {
 		return ""
