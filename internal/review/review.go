@@ -67,6 +67,9 @@ type Line struct {
 	// NoNewline marks the last line of a side that has no newline at its
 	// end ("\ No newline at end of file").
 	NoNewline bool `json:"no_newline,omitempty"`
+	// raw is the line's text as git printed it, a carriage return kept,
+	// which a patch built from the line has to carry to apply.
+	raw string
 }
 
 // Hunk is one hunk of a file's diff.
@@ -93,6 +96,10 @@ type File struct {
 	// hunks are left out.
 	Truncated bool   `json:"truncated,omitempty"`
 	Hunks     []Hunk `json:"hunks"`
+	// oldMode and newMode are the file's modes on each side, as git's raw
+	// listing gives them ("000000" for none). A patch that creates the file
+	// in the index needs its mode.
+	oldMode, newMode string
 }
 
 // Totals sum a diff.

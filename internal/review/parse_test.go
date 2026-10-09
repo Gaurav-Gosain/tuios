@@ -26,13 +26,13 @@ func TestParseRawNumstat(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []File{
-		{Path: "api/retry.go", Status: "M", Added: 80, Removed: 12},
-		{Path: "docs/new.md", Status: "A", Added: 9},
-		{Path: "new/name.go", OldPath: "old/name.go", Status: "R", Added: 2, Removed: 1},
-		{Path: "gone.txt", Status: "D", Removed: 3},
-		{Path: "logo.png", Status: "M", Binary: true},
-		{Path: "run.sh", Status: "M"},
-		{Path: "copy.go", Status: "A", Added: 4},
+		{Path: "api/retry.go", Status: "M", Added: 80, Removed: 12, oldMode: "100644", newMode: "100644"},
+		{Path: "docs/new.md", Status: "A", Added: 9, oldMode: "000000", newMode: "100644"},
+		{Path: "new/name.go", OldPath: "old/name.go", Status: "R", Added: 2, Removed: 1, oldMode: "100644", newMode: "100644"},
+		{Path: "gone.txt", Status: "D", Removed: 3, oldMode: "100644", newMode: "000000"},
+		{Path: "logo.png", Status: "M", Binary: true, oldMode: "100644", newMode: "100644"},
+		{Path: "run.sh", Status: "M", oldMode: "100644", newMode: "100755"},
+		{Path: "copy.go", Status: "A", Added: 4, oldMode: "100644", newMode: "100644"},
 	}
 	if len(files) != len(want) {
 		t.Fatalf("got %d files, want %d: %+v", len(files), len(want), files)
@@ -112,11 +112,13 @@ func TestReadUnified(t *testing.T) {
 		t.Errorf("hunk = %+v", h)
 	}
 	want := []Line{
-		{Op: OpContext, Old: 1, New: 1, Text: "one"},
+		// raw keeps the carriage return, which a patch built from the
+		// line must carry to apply.
+		{Op: OpContext, Old: 1, New: 1, Text: "one", raw: "one\r"},
 		{Op: OpContext, Old: 2, New: 2, Text: ""},
-		{Op: OpDelete, Old: 3, Text: "two", NoNewline: true},
-		{Op: OpAdd, New: 3, Text: "two!"},
-		{Op: OpAdd, New: 4, Text: "three", NoNewline: true},
+		{Op: OpDelete, Old: 3, Text: "two", NoNewline: true, raw: "two"},
+		{Op: OpAdd, New: 3, Text: "two!", raw: "two!\r"},
+		{Op: OpAdd, New: 4, Text: "three", NoNewline: true, raw: "three"},
 	}
 	if fmt.Sprintf("%+v", h.Lines) != fmt.Sprintf("%+v", want) {
 		t.Errorf("lines =\n%+v\nwant\n%+v", h.Lines, want)
