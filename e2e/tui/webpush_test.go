@@ -714,3 +714,37 @@ func TestWebPushRefusesLocalAddresses(t *testing.T) {
 	}
 	hook.wait(t)
 }
+
+// TestWebPushKeepsACorruptPhonesFile: a phones file the daemon cannot read is
+// moved aside, not written over. Before, the next register-push saved only
+// the new phone over it, and every phone in it was lost with no word.
+//
+// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md): the rename cut from
+// webPusher.loadLocked: the old file is gone and no .bad file is left.
+func TestWebPushKeepsACorruptPhonesFile(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	pushDir := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", "push")
+	if err := os.MkdirAll(pushDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := []byte(`[{"device":"pixel","endpoint":"https://push.example.net/s/abc"` + "\n")
+	if err := os.WriteFile(filepath.Join(pushDir, "subscriptions.json"), corrupt, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new", streamSession, "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	phone := newPhoneKeys(t)
+	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "tablet", "--endpoint", "https://push.example.net/s/new", "--p256dh", phone.p256dh(), "--auth", phone.authB64()); err != nil || !strings.Contains(out, "Registered tablet") {
+		t.Fatalf("notify push register: %v\n%s", err, out)
+	}
+	kept, err := os.ReadFile(filepath.Join(pushDir, "subscriptions.json.bad"))
+	if err != nil || string(kept) != string(corrupt) {
+		t.Fatalf("ASSERTION: the unreadable phones file was not kept aside: %v %q", err, kept)
+	}
+	now, err := os.ReadFile(filepath.Join(pushDir, "subscriptions.json"))
+	if err != nil || !strings.Contains(string(now), `"tablet"`) {
+		t.Fatalf("the new phones file: %v %s", err, now)
+	}
+}

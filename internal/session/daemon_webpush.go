@@ -166,7 +166,14 @@ func (w *webPusher) loadLocked() {
 	}
 	var list []*pushDevice
 	if err := json.Unmarshal(data, &list); err != nil {
-		log.Printf("[NOTIFY] cannot read the registered phones: %v", err)
+		// The next register would write over it with only the new phone.
+		// Keep it beside, so the phones in it can be got back by hand.
+		bad := pushDevicesPath() + ".bad"
+		if rerr := os.Rename(pushDevicesPath(), bad); rerr != nil {
+			log.Printf("[NOTIFY] cannot read the registered phones (%v), and cannot move the file aside: %v", err, rerr)
+			return
+		}
+		log.Printf("[NOTIFY] cannot read the registered phones: %v. The file is now %s. Register the phones again", err, bad)
 		return
 	}
 	for _, d := range list {

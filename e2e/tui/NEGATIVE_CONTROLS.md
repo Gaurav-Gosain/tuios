@@ -3619,3 +3619,34 @@ its push on the retry.
 | The `ErrGone` arm in `webPusher.deliver` | **caught**: the phone whose service answered 410 is still listed |
 | The retry in `webPusher.deliver` | **caught**: the payload the 503 refused never arrives |
 | The pane check in `matchHumanNonceClient` | **not run**: it is the check `reply-approval` uses, and `TestAPaneCannotAnswerAsThePerson` and the stream-pane test cover it |
+
+### Review: local addresses, redirects, a corrupt phones file
+
+The security review of the branch found that `register-push` took an `https`
+endpoint on any address. A linked machine with `respond` could aim the daemon
+at this machine's loopback or network, and `list-push` told it what answered.
+A push also followed a redirect on the same host, and tried a refused
+redirect again. A phones file the daemon could not read was written over by
+the next register. Run on 2026-10-09. The branch before the fixes fails all
+three cases below.
+
+`TestWebPushRefusesLocalAddresses` runs with no `allow_insecure`. It refuses
+`https` to `127.0.0.1`, `[::1]`, `localhost`, `169.254.169.254` and
+`0.0.0.0`. It registers `tuios-test.localhost`, a name that resolves to
+loopback, and checks that the daemon never connects to the listener on that
+port. The positive half is `TestWebPushToAPhone`: with `allow_insecure`, the
+loopback stub gets every push, also at `http://127.0.0.1:<port>/up...?up=1`,
+the endpoint shape an Android emulator gives through `adb reverse`.
+
+`TestWebPushToAPhone` also registers a phone whose service answers 307, with
+`notify.allow_http_redirects = true`. The redirect target must get nothing,
+and no payload may arrive twice. `TestWebPushKeepsACorruptPhonesFile` starts
+the daemon on an unreadable `subscriptions.json` and registers a phone.
+
+| Control: what was put back | Test | Result |
+| --- | --- | --- |
+| The `hostAllowed` check cut from the `https` arm of `CheckEndpoint` | `TestWebPushRefusesLocalAddresses` | **caught**: "register-push to https://127.0.0.1:38833/s/x without allow_insecure: want invalid_params, got <nil>" |
+| The dialer's `Control` hook never set | `TestWebPushRefusesLocalAddresses` | **caught**: "the daemon connected 1 times to a loopback address it reached by name" |
+| The push client's `CheckRedirect` set to nil, so it follows | `TestWebPushToAPhone` | **caught**: "the push followed the redirect: /s/landed got 2 requests" |
+| `CheckRedirect` refuses with an error, which retries | `TestWebPushToAPhone` | **caught**: "the push the redirect refused was tried again" |
+| The rename cut from `webPusher.loadLocked` | `TestWebPushKeepsACorruptPhonesFile` | **caught**: "the unreadable phones file was not kept aside" |
