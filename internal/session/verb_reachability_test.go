@@ -82,6 +82,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"reply-approval#0":   {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
 	"agent-transcript#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
 	"agent-transcript#1": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
+	"agent-transcript#2": {errCode: ErrVerbNotHuman, why: "only a client attached right now may read a transcript, and none is"},
 	"run-command#0":      {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
 	"set-layout#0":       {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"set-layout#1":       {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},

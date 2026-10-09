@@ -44,6 +44,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "window", Type: "string", Required: true, Description: "The pane: a window id or name."},
 				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of a client attached now, or of attach-presence on this connection. Without a live one the call is refused with not_human."},
 				{Name: "after", Type: "string", Description: "The cursor of an earlier reply. The reply then holds the entries after it. Omit it to read the newest limit entries."},
+				{Name: "before", Type: "string", Description: "The older cursor of an earlier reply. The reply then holds the newest limit entries before it. Do not give it with after."},
 				{Name: "limit", Type: "int", Description: "The most entries to return, 1 to 1000.", Default: "200"},
 			},
 			returns: []verbParam{
@@ -53,12 +54,14 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "cursor", Type: "string", Description: "Send it as after to read what comes next. It is opaque."},
 				{Name: "reset", Type: "bool", Description: "True when after was not a cursor into the file as it is now. The entries are then the newest limit, and the client starts its list again."},
 				{Name: "more", Type: "bool", Description: "True when a read after a cursor stopped before the end. Read again with the new cursor."},
+				{Name: "older", Type: "string", Description: "Send it as before to read the entries before this page. Empty when the page starts at the first entry."},
 				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. An entry with an id the client holds replaces it."},
 				{Name: "untrusted", Type: "bool", Description: "Always true: the text is the agent's."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"agent-transcript","params":{"session":"work","window":"api","human_nonce":"<from attach-presence>"}}`,
 				`{"id":2,"verb":"agent-transcript","params":{"session":"work","window":"api","human_nonce":"<from attach-presence>","after":"<the cursor of the last reply>"}}`,
+				`{"id":3,"verb":"agent-transcript","params":{"session":"work","window":"api","human_nonce":"<from attach-presence>","before":"<the older cursor of the first reply>"}}`,
 			},
 			handler: (*Daemon).verbAgentTranscript,
 		},

@@ -36,6 +36,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		Window     string `json:"window"`
 		HumanNonce string `json:"human_nonce"`
 		After      string `json:"after"`
+		Before     string `json:"before"`
 		Limit      int    `json:"limit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -43,6 +44,9 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	}
 	if p.Window == "" {
 		return nil, invalidParam("window", "window is required")
+	}
+	if p.After != "" && p.Before != "" {
+		return nil, invalidParam("before", "give after or before, not both")
 	}
 	if p.Limit < 0 || p.Limit > transcriptview.MaxLimit {
 		return nil, invalidParam("limit", "limit must be between 1 and "+strconv.Itoa(transcriptview.MaxLimit))
@@ -80,9 +84,10 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		return nil, unsupportedHarnessError(harnessID)
 	}
 	page, err := transcriptview.Read(path, transcriptview.Options{
-		After: p.After,
-		Limit: p.Limit,
-		Clean: transcriptText,
+		After:  p.After,
+		Before: p.Before,
+		Limit:  p.Limit,
+		Clean:  transcriptText,
 	})
 	if err != nil {
 		if errors.Is(err, transcriptview.ErrNoFile) {
@@ -104,6 +109,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		"cursor":    page.Cursor,
 		"reset":     page.Reset,
 		"more":      page.More,
+		"older":     page.Older,
 		"entries":   entries,
 		"untrusted": true,
 	}

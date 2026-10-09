@@ -127,6 +127,14 @@ type Entry struct {
 	sub  int
 }
 
+// pos is the place of an entry, as a cursor names it.
+func (e *Entry) pos() cursorPos { return cursorPos{off: e.line, sub: e.sub} }
+
+// before reports whether the entry comes before position at.
+func (e *Entry) before(at cursorPos) bool {
+	return e.line < at.off || e.line == at.off && e.sub < at.sub
+}
+
 // Diff is the change an edit made to one file.
 type Diff struct {
 	File    string `json:"file"`
@@ -162,6 +170,10 @@ type Options struct {
 	// After is the cursor of an earlier page. Empty reads the newest Limit
 	// entries.
 	After string
+	// Before is a cursor, and the page is the newest Limit entries before
+	// it. Older of an earlier page is one. After and Before are not given
+	// together.
+	Before string
 	// Limit is the most entries to return, DefaultLimit when 0.
 	Limit int
 	// MaxBytes bounds the page's entries as JSON, DefaultMaxBytes when 0.
@@ -182,6 +194,9 @@ type Page struct {
 	Reset bool
 	// More says the read after a cursor stopped before the end of the file.
 	More bool
+	// Older is the cursor to read the page before this one with Before. It
+	// is empty when the page starts at the first entry of the file.
+	Older string
 	// Skipped counts lines that did not decode.
 	Skipped int
 }
@@ -221,6 +236,14 @@ func Read(path string, opts Options) (Page, error) {
 	if opts.After != "" {
 		if at, ok := parseCursor(opts.After, id); ok && at.off <= size && r.atBoundary(at.off) {
 			return r.forward(at, id)
+		}
+		page, err := r.newest(id)
+		page.Reset = true
+		return page, err
+	}
+	if opts.Before != "" {
+		if at, ok := parseCursor(opts.Before, id); ok && at.off <= size && r.atBoundary(at.off) {
+			return r.back(at, id, false)
 		}
 		page, err := r.newest(id)
 		page.Reset = true
@@ -267,13 +290,33 @@ func (r *reader) atBoundary(off int64) bool {
 	return b[0] == '\n'
 }
 
-// newest reads the newest Limit entries, from a window at the end of the file
-// that grows until it holds them or reaches scanMax.
+// newest reads the newest Limit entries.
 func (r *reader) newest(id string) (Page, error) {
+	return r.back(cursorPos{off: r.size}, id, true)
+}
+
+// back reads the newest Limit entries before position to, from a window that
+// ends there and grows back until it holds them or reaches scanMax. The
+// window is all one call reads, so a page far back in a large file costs
+// what a page at its end costs. When atEnd, to is the end of the file, which
+// may end inside a record that is not finished, and the page's cursor is
+// the end of the last whole record. Otherwise to is a cursor, and the
+// page's cursor is to itself.
+func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
+	stop := to.off
+	if to.sub > 0 {
+		// The record at to gave some of its entries to a newer page, and the
+		// ones before them belong to this one.
+		if next := r.skipLongLine(to.off); next > 0 {
+			stop = next
+		} else {
+			to.sub = 0
+		}
+	}
 	window := int64(scanFirst)
 	for {
-		start := max(r.size-window, 0)
-		buf, err := r.readAt(start, r.size)
+		start := max(stop-window, 0)
+		buf, err := r.readAt(start, stop)
 		if err != nil {
 			return Page{}, err
 		}
@@ -285,6 +328,7 @@ func (r *reader) newest(id string) (Page, error) {
 			i := bytes.IndexByte(lines, '\n')
 			if i < 0 {
 				lines = nil
+				base = start + int64(end)
 			} else {
 				lines = lines[i+1:]
 				base += int64(i + 1)
@@ -292,28 +336,49 @@ func (r *reader) newest(id string) (Page, error) {
 		}
 		r.skipped = 0
 		entries := r.decode(lines, base)
+		if !atEnd {
+			n := len(entries)
+			for n > 0 && !entries[n-1].before(to) {
+				n--
+			}
+			entries = entries[:n]
+		}
 		if len(entries) >= r.opts.Limit || start == 0 || window >= scanMax {
 			entries = foldResults(entries)
 			// Keep the newest whole entries that fit both bounds.
 			keep := len(entries) - min(len(entries), r.opts.Limit)
 			total := 0
 			for i := len(entries) - 1; i >= keep; i-- {
-				n := entrySize(entries[i])
+				n := entrySize(&entries[i])
 				if total+n > r.opts.MaxBytes-pageOverhead {
 					keep = i + 1
 					break
 				}
 				total += n
 			}
-			return Page{
+			page := Page{
 				Entries: entries[keep:],
-				Cursor:  makeCursor(id, cursorPos{off: start + int64(end)}),
 				Skipped: r.skipped,
-			}, nil
+			}
+			if atEnd {
+				page.Cursor = makeCursor(id, cursorPos{off: start + int64(end)})
+			} else {
+				page.Cursor = makeCursor(id, to)
+			}
+			switch {
+			case keep < len(entries):
+				if base > 0 || keep > 0 {
+					page.Older = makeCursor(id, entries[keep].pos())
+				}
+			case base > 0:
+				// The window held no entry. The next page starts where it did.
+				page.Older = makeCursor(id, cursorPos{off: base})
+			}
+			return page, nil
 		}
 		// Not enough yet: drop this window's buffer and read a larger one.
 		clear(buf)
-		window *= 4
+		window = min(window*4, scanMax)
 	}
 }
 
@@ -346,7 +411,7 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 
 	total := 0
 	for i, e := range entries {
-		n := entrySize(e)
+		n := entrySize(&entries[i])
 		if i > 0 && (i >= r.opts.Limit || total+n > r.opts.MaxBytes-pageOverhead) {
 			// The page ends before this entry, which the next one starts at.
 			next = cursorPos{off: e.line, sub: e.sub}
@@ -356,12 +421,22 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 		}
 		total += n
 	}
-	return Page{
+	page := Page{
 		Entries: foldResults(entries),
 		Cursor:  makeCursor(id, next),
 		More:    more,
 		Skipped: r.skipped,
-	}, nil
+	}
+	// The page starts at its first entry, or at the cursor when it has none.
+	// A read from the start of the file has nothing before it.
+	if at.off > 0 || at.sub > 0 {
+		first := at
+		if len(page.Entries) > 0 {
+			first = page.Entries[0].pos()
+		}
+		page.Older = makeCursor(id, first)
+	}
+	return page, nil
 }
 
 // skipLongLine finds the end of a record that starts before from and runs
@@ -417,7 +492,7 @@ func (r *reader) decode(lines []byte, base int64) []Entry {
 }
 
 // entrySize is an entry's size as JSON.
-func entrySize(e Entry) int {
+func entrySize(e *Entry) int {
 	b, err := json.Marshal(e)
 	if err != nil {
 		return 0

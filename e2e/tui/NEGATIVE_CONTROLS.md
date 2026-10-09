@@ -3532,3 +3532,18 @@ fixed build three runs in a row. The artifact is `transcript-watch.txt` under
 | --- | --- |
 | The watcher before the fix (`transcript_watcher.go` from `fb5d07fd`) | **caught**: "no transcript event: stream read timed out" for the new join |
 | The `markLost` call cut from `TranscriptWatcher.run` | **caught**: "no transcript event: stream read timed out" for the new join |
+
+### Paging back through a transcript with before
+
+`TestPersonPagesBackThroughATranscript` reads a transcript of 80 entries from
+its newest page back to its first with `before`, 7 entries a page. Each
+record gives two entries, so pages end inside records. The pages joined
+must equal one read of everything. On 2026-10-09 each build below ran the
+test, and the test passed on the branch build. The artifact is
+`transcript-pages.txt` under `TUIOS_E2E_FRAMES`.
+
+| Control | Result |
+| --- | --- |
+| The branch before the change (no `before`, no `older`) | **caught**: "one read of everything: want 80 entries and no older", `older` missing |
+| The filter that keeps only the entries before the cursor, cut from `back` | **caught**: "the pages joined" with entries twice |
+| The record at a cursor inside a record left out of `back`'s window (`stop = next` cut) | **caught**: "page 10 is empty" |

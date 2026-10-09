@@ -5193,11 +5193,18 @@ Params:
 - `human_nonce` (required): the nonce of a client attached now, or of
   [attach-presence](#attach-presence) on this connection.
 - `after` (optional): the `cursor` of an earlier reply.
+- `before` (optional): the `older` cursor of an earlier reply. Do not give
+  `after` and `before` together.
 - `limit` (optional int): the most entries to return, 1 to 1000. The default
   is 200.
 
-Without `after`, the reply holds the newest `limit` entries. With `after`, it
-holds the entries after that cursor, oldest first.
+Without `after` and `before`, the reply holds the newest `limit` entries.
+With `after`, it holds the entries after that cursor. With `before`, it holds
+the newest `limit` entries before that cursor. The entries are always oldest
+first.
+
+To show the history, read without a cursor first. Then send the reply's
+`older` as `before` to get the page before it. Repeat until `older` is empty.
 
 Request:
 
@@ -5209,7 +5216,7 @@ Response:
 
 ```json
 {"id": 1, "result": {"type": "agent_transcript", "session": "work", "window": "3f2a9c1e", "harness": "claude-code",
-  "cursor": "t1.5b0c9e2a41d7f003.2kq9", "reset": false, "more": false, "untrusted": true,
+  "cursor": "t1.5b0c9e2a41d7f003.2kq9", "older": "t1.5b0c9e2a41d7f003.0", "reset": false, "more": false, "untrusted": true,
   "entries": [
     {"id": "0-0", "at": 1791531791506, "role": "user", "kind": "text", "text": "Add retry to the client"},
     {"id": "1g-0", "at": 1791531793120, "role": "assistant", "kind": "tool_call", "tool": "Edit", "target": "api/client.go", "status": "ok", "tool_id": "toolu_01",
@@ -5222,9 +5229,13 @@ Response:
 The reply:
 
 - `cursor`: send it as `after` to read what comes next. It is opaque.
-- `reset`: `true` when `after` is not a cursor into the file as it is now, for
-  example when the agent started a new file at the same path. The entries are
-  then the newest `limit`, and the client starts its list again.
+- `older`: send it as `before` to read the entries before this page. It is
+  opaque. It is empty when the page starts at the first entry of the file.
+  After a read with `after`, `older` can name a place with no entry before
+  it. A read with that `before` then returns no entries and an empty `older`.
+- `reset`: `true` when `after` or `before` is not a cursor into the file as it
+  is now, for example when the agent started a new file at the same path. The
+  entries are then the newest `limit`, and the client starts its list again.
 - `more`: `true` when a read after a cursor stopped before the end of the
   file, at `limit` entries or at the size bound. Read again with the new
   cursor.
@@ -5253,7 +5264,11 @@ marks as meta are left out. The `Task` call that started the subagent stays.
 Bounds: `text` and `plan` are cut to 8 KiB, a diff to 400 lines and each diff
 line to 1 KiB, a target to 512 bytes, and a todo list to 100 items. The
 entries of one reply are at most 2 MiB as JSON. A read without `after` looks
-at most 32 MiB back from the end of the file.
+at most 32 MiB back from the end of the file, or from the `before` cursor.
+When that part of the file holds fewer than `limit` entries, the reply holds
+what it found, and `older` goes on from there. A read with `before` reads only
+the part of the file before the cursor that the page needs, so a page far
+back costs the same as the newest page.
 
 Every string is the agent's or its tools'. The daemon removes control
 characters other than newline and tab, removes bidirectional controls, and
@@ -5271,7 +5286,8 @@ The [`transcript` event](#event-stream) says when to read again. Subscribe
 with `types` that name `transcript`, and call `agent-transcript` with your
 cursor when an event has a different one.
 
-Errors: `invalid_params` when `window` is missing or `limit` is out of range.
+Errors: `invalid_params` when `window` is missing, `limit` is out of range,
+or `after` and `before` are both given.
 `not_human` without a live nonce. `no_transcript` when the pane is not joined
 to a transcript or the file is gone. `unsupported_harness` when the pane's
 harness keeps no transcript that the daemon reads. `window_not_found` and
