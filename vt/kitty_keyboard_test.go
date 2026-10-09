@@ -342,3 +342,53 @@ func TestKittyTextUnderDisambiguate(t *testing.T) {
 		})
 	}
 }
+
+// TestConPTYPaneIgnoresKittyKeyboard pins the behaviour of a pane whose PTY
+// is a Windows ConPTY: the emulator never offers the kitty keyboard protocol,
+// so pushes, pops and sets leave the flags at 0 and a CSI ? u query goes
+// unanswered — per spec, silence means "not supported" and the guest falls
+// back to legacy keys on its own. conhost drops input CSIs it does not
+// recognise (before conhost 1.22), so any CSI u bytes a guest sent anyway
+// would never reach it.
+func TestConPTYPaneIgnoresKittyKeyboard(t *testing.T) {
+	e := NewEmulator(80, 24)
+	defer e.Close()
+	e.DisableKittyKeyboardProtocol()
+
+	_, _ = e.Write([]byte("\x1b[>1u\x1b[=7;1u\x1b[<1u"))
+	if got := e.KittyKeyboardFlags(); got != 0 {
+		t.Errorf("flags = %d, want 0 after push/set/pop on a ConPTY pane", got)
+	}
+
+	responseChan := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 256)
+		n, err := e.Read(buf)
+		if err != nil && err != io.EOF {
+			responseChan <- "read error: " + err.Error()
+			return
+		}
+		responseChan <- string(buf[:n])
+	}()
+	_, _ = e.Write([]byte("\x1b[?u"))
+
+	select {
+	case response := <-responseChan:
+		t.Errorf("a ConPTY pane answered the query with %q, want silence", response)
+	case <-time.After(500 * time.Millisecond):
+		// Silence is the expected outcome: no reply means "not supported".
+	}
+}
+
+// TestConPTYPaneRestoreKeepsStackEmpty pins that a saved kitty stack is not
+// restored onto a ConPTY pane: the guest could never have negotiated it.
+func TestConPTYPaneRestoreKeepsStackEmpty(t *testing.T) {
+	e := NewEmulator(80, 24)
+	defer e.Close()
+	e.DisableKittyKeyboardProtocol()
+
+	e.RestoreKittyKeyboardState([]int{1, 7})
+	if got := e.KittyKeyboardFlags(); got != 0 {
+		t.Errorf("flags = %d, want 0 after restoring a stack onto a ConPTY pane", got)
+	}
+}
