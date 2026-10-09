@@ -65,6 +65,13 @@ const (
 	NumClasses
 )
 
+// ClassNames names each Class, in the order of their numbers, for a client
+// that is sent the numbers.
+var ClassNames = [NumClasses]string{
+	"plain", "keyword", "type", "func", "builtin", "string", "number",
+	"comment", "operator", "punct", "preproc", "tag", "attr", "heading", "meta",
+}
+
 // Span is a run of one class in a line, in bytes of the line's text.
 type Span struct {
 	Start, End int
