@@ -212,16 +212,14 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 		if strings.TrimSpace(b.Text) == "" {
 			return Entry{}, false
 		}
-		text, cutText := r.clean(b.Text, TextMax)
-		return Entry{Role: role, Kind: KindText, Text: text, Truncated: cutText}, true
+		return Entry{Role: role, Kind: KindText, raw: rawText(b.Text)}, true
 	case "image":
 		return Entry{Role: role, Kind: KindText, Text: "[image]"}, true
 	case "thinking":
 		if strings.TrimSpace(b.Thinking) == "" {
 			return Entry{}, false
 		}
-		text, cutText := r.clean(b.Thinking, TextMax)
-		return Entry{Role: RoleAssistant, Kind: KindThinking, Text: text, Truncated: cutText}, true
+		return Entry{Role: RoleAssistant, Kind: KindThinking, raw: rawText(b.Thinking)}, true
 	case "tool_use":
 		return r.toolCall(b), true
 	case "tool_result":
@@ -230,52 +228,58 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 	return Entry{}, false
 }
 
-// toolResult is a result: its status and the head of its text.
+// rawText is the raw of a text entry, cut to rawTextMax.
+func rawText(s string) *rawEntry {
+	text, cut := cutString(s, rawTextMax)
+	return &rawEntry{text: text, textCut: cut}
+}
+
+// toolResult is a result: its status and the head of its text. The head is
+// taken before Clean, so only the lines the page can show are cleaned, and a
+// secret that starts in them is masked to their end.
 func (r *reader) toolResult(rec *ccRecord, b *ccBlock) Entry {
 	e := Entry{Role: RoleTool, Kind: KindToolResult, ToolID: b.ToolUseID, Status: StatusOK}
 	if b.IsError {
 		e.Status = StatusError
 	}
-	text := string(b.Content)
-	if r.opts.Clean != nil {
-		text = r.opts.Clean(text)
-	}
-	text, cutLines := headLines(text, ResultLines)
-	text, cutBytes := cut(text, TextMax)
-	e.Text, e.Truncated = text, cutLines || cutBytes
+	text, cutLines := headLines(string(b.Content), ResultLines)
+	text, cutBytes := cutString(text, rawTextMax)
+	e.raw = &rawEntry{text: text, textCut: cutLines || cutBytes}
 	if p := rec.ToolUseResult.StructuredPatch; len(p) > 0 {
-		e.Diff = r.patchDiff(rec.ToolUseResult.FilePath, p)
+		e.raw.diff = &diffSrc{file: rec.ToolUseResult.FilePath, patch: p}
 	}
 	return e
 }
 
-// toolCall is a tool call, a plan or a todo list.
+// toolCall is a tool call, a plan or a todo list, as decoded. finish cleans
+// it and works out its diff.
 func (r *reader) toolCall(b *ccBlock) Entry {
 	in := toolInput(b.Input)
-	tool, _ := r.clean(oneLine(b.Name), toolMax)
-	e := Entry{Role: RoleAssistant, Kind: KindToolCall, Tool: tool, ToolID: b.ID}
-	e.Target, _ = r.clean(oneLine(target(b.Name, in)), targetMax)
+	raw := &rawEntry{}
+	raw.tool, _ = cutString(oneLine(b.Name), 4*toolMax)
+	raw.target, _ = cutString(oneLine(target(b.Name, in)), 4*targetMax)
+	e := Entry{Role: RoleAssistant, Kind: KindToolCall, ToolID: b.ID, raw: raw}
 	switch b.Name {
 	case "TodoWrite":
 		e.Kind = KindTodos
 		for _, t := range in.Todos[:min(len(in.Todos), todosMax)] {
-			text, _ := r.clean(oneLine(t.Content), targetMax)
-			status, _ := r.clean(oneLine(t.Status), toolMax)
-			e.Todos = append(e.Todos, Todo{Text: text, Status: status})
+			text, _ := cutString(oneLine(t.Content), 4*targetMax)
+			status, _ := cutString(oneLine(t.Status), 4*toolMax)
+			raw.todos = append(raw.todos, Todo{Text: text, Status: status})
 		}
 	case "ExitPlanMode":
 		e.Kind = KindPlan
-		e.Plan, e.Truncated = r.clean(in.Plan, TextMax)
+		raw.plan, raw.textCut = cutString(in.Plan, rawTextMax)
 	case "Edit":
-		e.Diff = r.editDiff(in.FilePath, [][2]string{{in.OldString, in.NewString}})
+		raw.diff = &diffSrc{file: in.FilePath, pairs: [][2]string{{in.OldString, in.NewString}}}
 	case "MultiEdit":
 		pairs := make([][2]string, 0, len(in.Edits))
 		for _, ed := range in.Edits {
 			pairs = append(pairs, [2]string{ed.OldString, ed.NewString})
 		}
-		e.Diff = r.editDiff(in.FilePath, pairs)
+		raw.diff = &diffSrc{file: in.FilePath, pairs: pairs}
 	case "Write":
-		e.Diff = r.editDiff(in.FilePath, [][2]string{{"", in.Content}})
+		raw.diff = &diffSrc{file: in.FilePath, pairs: [][2]string{{"", in.Content}}}
 	}
 	return e
 }
@@ -315,16 +319,12 @@ func (r *reader) editDiff(file string, pairs [][2]string) *Diff {
 	d := &Diff{File: name}
 	shown := 0
 	for _, p := range pairs {
-		ops := lineDiff(splitLines(p[0]), splitLines(p[1]))
-		for _, h := range hunks(ops, 3) {
-			for _, l := range h.Lines {
-				switch l.Op {
-				case "+":
-					d.Added++
-				case "-":
-					d.Removed++
-				}
-			}
+		res := lineDiff(splitLines(p[0]), splitLines(p[1]), &r.lcsLeft)
+		d.Added += res.added
+		d.Removed += res.removed
+		d.WholeReplace = d.WholeReplace || res.whole
+		d.Truncated = d.Truncated || res.cut
+		for _, h := range hunks(res.ops, 3, res.skip) {
 			shown = r.addHunk(d, h, shown)
 		}
 	}
@@ -375,6 +375,19 @@ func (r *reader) addHunk(d *Diff, h Hunk, shown int) int {
 	for i := range h.Lines {
 		h.Lines[i].Text, _ = r.clean(h.Lines[i].Text, diffLineMax)
 	}
+	if r.opts.CleanLines != nil && len(h.Lines) > 0 {
+		// A key or an .env block spans lines, so it is masked over the
+		// hunk's lines together, in the order the hunk shows them.
+		texts := make([]string, len(h.Lines))
+		for i := range h.Lines {
+			texts[i] = h.Lines[i].Text
+		}
+		if r.opts.CleanLines(texts) {
+			for i := range h.Lines {
+				h.Lines[i].Text = texts[i]
+			}
+		}
+	}
 	d.Hunks = append(d.Hunks, h)
 	return shown + len(h.Lines)
 }
@@ -392,10 +405,26 @@ type diffOp struct {
 	line string
 }
 
-// lineDiff is the edit script from a to b by longest common subsequence. Two
-// texts too large to compare in bounded time are all removed and all added,
-// which is still a correct diff.
-func lineDiff(a, b []string) []diffOp {
+// lineDiffResult is an edit script and what it counts.
+type lineDiffResult struct {
+	ops            []diffOp
+	added, removed int
+	// whole says the changed lines were not matched: they are all removed
+	// and then all added.
+	whole bool
+	// cut says some changed lines of a whole replace were left out of ops.
+	cut bool
+	// skip is how many equal lines at the start were left out of ops, so
+	// the line numbers of the hunks start after them.
+	skip int
+}
+
+// lineDiff is the edit script from a to b by longest common subsequence.
+// budget is what is left of the call's LCSCellsPerCall, and the table's
+// cells are taken from it. When the table would not fit, the changed lines
+// are all removed and all added, which is still a correct diff, and at most
+// DiffLinesMax/2 of each side are kept, since no more could be shown.
+func lineDiff(a, b []string, budget *int) lineDiffResult {
 	pre := 0
 	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
 		pre++
@@ -404,39 +433,89 @@ func lineDiff(a, b []string) []diffOp {
 	for suf < len(a)-pre && suf < len(b)-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
 		suf++
 	}
-	ops := make([]diffOp, 0, len(a)+len(b))
-	for _, l := range a[:pre] {
-		ops = append(ops, diffOp{' ', l})
-	}
 	ma, mb := a[pre:len(a)-suf], b[pre:len(b)-suf]
-	if len(ma)*len(mb) > maxLineDiffOps {
-		for _, l := range ma {
-			ops = append(ops, diffOp{'-', l})
-		}
-		for _, l := range mb {
-			ops = append(ops, diffOp{'+', l})
-		}
-	} else {
-		ops = append(ops, lcsOps(ma, mb)...)
-	}
-	for _, l := range a[len(a)-suf:] {
+	res := lineDiffResult{added: len(mb), removed: len(ma), skip: max(0, pre-3)}
+	// Context beyond what a hunk shows is never read, so it is not kept.
+	ctxA := a[max(0, pre-3):pre]
+	ctxB := a[len(a)-suf : len(a)-suf+min(suf, 3)]
+	ops := make([]diffOp, 0, len(ctxA)+len(ctxB)+min(len(ma)+len(mb), DiffLinesMax+2))
+	for _, l := range ctxA {
 		ops = append(ops, diffOp{' ', l})
+	}
+	cells := (len(ma) + 1) * (len(mb) + 1)
+	switch {
+	case len(ma) == 0 || len(mb) == 0:
+		// Only added or only removed: the script needs no table.
+		ops = appendSide(ops, '-', ma, DiffLinesMax, &res.cut)
+		ops = appendSide(ops, '+', mb, DiffLinesMax, &res.cut)
+	case cells > *budget:
+		res.whole = true
+		ops = appendSide(ops, '-', ma, DiffLinesMax/2, &res.cut)
+		ops = appendSide(ops, '+', mb, DiffLinesMax/2, &res.cut)
+	default:
+		*budget -= cells
+		lcs := lcsOps(ma, mb)
+		res.added, res.removed = 0, 0
+		for _, o := range lcs {
+			switch o.op {
+			case '+':
+				res.added++
+			case '-':
+				res.removed++
+			}
+		}
+		ops = append(ops, lcs...)
+	}
+	for _, l := range ctxB {
+		ops = append(ops, diffOp{' ', l})
+	}
+	res.ops = ops
+	return res
+}
+
+// appendSide appends up to keep lines of one side, setting cut when it
+// leaves some out.
+func appendSide(ops []diffOp, op byte, lines []string, keep int, cut *bool) []diffOp {
+	if len(lines) > keep {
+		lines = lines[:keep]
+		*cut = true
+	}
+	for _, l := range lines {
+		ops = append(ops, diffOp{op, l})
 	}
 	return ops
 }
 
+// lcsOps is the edit script of a and b by longest common subsequence. The
+// lines are numbered first, equal lines the same number, so the table
+// compares integers, not strings. The table is one block of uint16: the
+// caller keeps it within LCSCellsPerCall cells, so the shorter side, which
+// bounds every value in it, has fewer than 2048 lines.
 func lcsOps(a, b []string) []diffOp {
-	n, m := len(a), len(b)
-	table := make([][]int32, n+1)
-	for i := range table {
-		table[i] = make([]int32, m+1)
+	ids := make(map[string]int32, len(a)+len(b))
+	number := func(lines []string) []int32 {
+		out := make([]int32, len(lines))
+		for i, l := range lines {
+			id, ok := ids[l]
+			if !ok {
+				id = int32(len(ids))
+				ids[l] = id
+			}
+			out[i] = id
+		}
+		return out
 	}
+	ha, hb := number(a), number(b)
+	n, m := len(a), len(b)
+	w := m + 1
+	table := make([]uint16, (n+1)*w)
+	at := func(i, j int) uint16 { return table[i*w+j] }
 	for i := n - 1; i >= 0; i-- {
 		for j := m - 1; j >= 0; j-- {
-			if a[i] == b[j] {
-				table[i][j] = table[i+1][j+1] + 1
+			if ha[i] == hb[j] {
+				table[i*w+j] = at(i+1, j+1) + 1
 			} else {
-				table[i][j] = max(table[i+1][j], table[i][j+1])
+				table[i*w+j] = max(at(i+1, j), at(i, j+1))
 			}
 		}
 	}
@@ -444,11 +523,11 @@ func lcsOps(a, b []string) []diffOp {
 	i, j := 0, 0
 	for i < n && j < m {
 		switch {
-		case a[i] == b[j]:
+		case ha[i] == hb[j]:
 			ops = append(ops, diffOp{' ', a[i]})
 			i++
 			j++
-		case table[i+1][j] >= table[i][j+1]:
+		case at(i+1, j) >= at(i, j+1):
 			ops = append(ops, diffOp{'-', a[i]})
 			i++
 		default:
@@ -465,8 +544,9 @@ func lcsOps(a, b []string) []diffOp {
 	return ops
 }
 
-// hunks groups an edit script into hunks with ctx lines of context.
-func hunks(ops []diffOp, ctx int) []Hunk {
+// hunks groups an edit script into hunks with ctx lines of context. skip is
+// how many equal lines came before the script's first.
+func hunks(ops []diffOp, ctx, skip int) []Hunk {
 	var out []Hunk
 	for start := 0; start < len(ops); {
 		first := start
@@ -488,7 +568,7 @@ func hunks(ops []diffOp, ctx int) []Hunk {
 		}
 		lo := max(first-ctx, start)
 		hi := min(last+ctx+1, len(ops))
-		oldLine, newLine := 1, 1
+		oldLine, newLine := 1+skip, 1+skip
 		for _, o := range ops[:lo] {
 			if o.op != '+' {
 				oldLine++

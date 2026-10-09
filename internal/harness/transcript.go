@@ -123,6 +123,37 @@ func (t Transcript) ExpandDir(cwd string) string {
 	return filepath.Clean(out)
 }
 
+// Root is the folder every transcript of the harness is under, whatever the
+// pane's working directory: Dir up to the last whole path element before the
+// first placeholder other than {home}, with {home} resolved. For Claude Code
+// it is ~/.claude/projects. It is "" when Dir has no such folder or the home
+// is unknown, and then no path a hook reports can be accepted.
+func (t Transcript) Root() string {
+	if !t.Enabled() {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	dir := strings.ReplaceAll(t.Dir, "{home}", home)
+	if i := strings.IndexByte(dir, '{'); i >= 0 {
+		dir = dir[:i]
+		j := strings.LastIndexAny(dir, `/\`)
+		if j < 0 {
+			return ""
+		}
+		dir = dir[:j+1]
+	}
+	dir = filepath.Clean(dir)
+	if !filepath.IsAbs(dir) || dir == filepath.Dir(dir) {
+		// Relative, or the root of the file system: no folder to hold a
+		// path to.
+		return ""
+	}
+	return dir
+}
+
 // DashPath is the {cwd:dashes} mangling.
 func DashPath(cwd string) string { return strings.ReplaceAll(cwd, "/", "-") }
 

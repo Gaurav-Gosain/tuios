@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -19,7 +20,8 @@ import (
 // of every command it ran. Until this verb the daemon read only a turn state
 // out of it. This verb reads the content, so it is held to the strictest rule
 // the daemon has: only the person may call it. That is the reply-approval
-// check, a live human_nonce that verifies for this caller, so a process in a
+// check, a live human_nonce that verifies for this caller and covers the
+// session of the pane (humanNonceFor, "Nonce scope"), so a process in a
 // pane and a link stream the hub did not vouch for get not_human. A
 // restricted connection is automation and is refused outright (conn_scope.go),
 // and a link needs respond (link_policy.go), the capability that answers for
@@ -37,7 +39,7 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		HumanNonce string `json:"human_nonce"`
 		After      string `json:"after"`
 		Before     string `json:"before"`
-		Limit      int    `json:"limit"`
+		Limit      *int   `json:"limit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -48,10 +50,16 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	if p.After != "" && p.Before != "" {
 		return nil, invalidParam("before", "give after or before, not both")
 	}
-	if p.Limit < 0 || p.Limit > transcriptview.MaxLimit {
-		return nil, invalidParam("limit", "limit must be between 1 and "+strconv.Itoa(transcriptview.MaxLimit))
+	limit := 0
+	if p.Limit != nil {
+		// An omitted limit is the default. A limit given must be one: 0 is
+		// not a page size, so it is refused rather than read as the default.
+		if *p.Limit < 1 || *p.Limit > transcriptview.MaxLimit {
+			return nil, invalidParam("limit", "limit must be between 1 and "+strconv.Itoa(transcriptview.MaxLimit))
+		}
+		limit = *p.Limit
 	}
-	if _, ok := d.humanNonceClient(p.HumanNonce, cs); !ok {
+	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "agent-transcript is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Nothing was read. Only a client attached now, or a connection that holds a presence, can read a transcript, by passing its nonce. An agent never can.",
@@ -60,6 +68,11 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+	// Nonce scope (human_sender.go): a presence made for one session reads
+	// only that session's transcripts.
+	if _, ok := d.humanNonceFor(p.HumanNonce, sess.ID, cs); !ok {
+		return nil, nonceScopeError("agent-transcript")
 	}
 	st := sess.GetState()
 	idx, err := findWindowStateIndex(st.Windows, p.Window)
@@ -84,14 +97,18 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		return nil, unsupportedHarnessError(harnessID)
 	}
 	page, err := transcriptview.Read(path, transcriptview.Options{
-		After:  p.After,
-		Before: p.Before,
-		Limit:  p.Limit,
-		Clean:  transcriptText,
+		After:      p.After,
+		Before:     p.Before,
+		Limit:      limit,
+		Clean:      transcriptText,
+		CleanLines: maskSecretLines,
 	})
 	if err != nil {
 		if errors.Is(err, transcriptview.ErrNoFile) {
 			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is gone")
+		}
+		if errors.Is(err, transcript.ErrNotRegular) {
+			return nil, newVerbError(ErrVerbNoTranscript, "the transcript of window "+echoName(p.Window)+" is not a regular file, so it was not read")
 		}
 		// The error would name the file, which is the person's project and
 		// session, so it is not passed on.
@@ -184,7 +201,113 @@ func transcriptText(s string) string {
 	if attentionMaySecret(s) {
 		s = attentionSecret().ReplaceAllString(s, "${1}[redacted]")
 	}
+	if strings.IndexByte(s, '\n') >= 0 {
+		lines := strings.Split(s, "\n")
+		if maskSecretLines(lines) {
+			s = strings.Join(lines, "\n")
+		}
+	}
 	return s
+}
+
+// maskSecretLines masks the secrets that span lines, in place, and reports
+// whether it masked any. attentionSecret sees one line at a time, so it
+// misses these:
+//
+//   - A PEM private key: every line from its BEGIN line to its END line, or to
+//     the last line when the END is not there, becomes [redacted]. The BEGIN
+//     and END lines stay, so the person sees that a key was there.
+//   - The body of a key whose BEGIN line is not in view, as in a diff hunk in
+//     the middle of a key: a run of two or more lines of base64 alone, each
+//     of 40 characters or more.
+//   - An .env style block: a run of two or more KEY=VALUE lines with an upper
+//     case key and no space before the "=". The value of each becomes
+//     [redacted] and the key stays.
+//
+// A diff's lines are masked in the order the hunk shows them, so a key that
+// is removed and added again is masked on both sides.
+func maskSecretLines(lines []string) bool {
+	masked := false
+	inKey := false
+	for i, l := range lines {
+		switch {
+		case !inKey && strings.Contains(l, "-----BEGIN") && strings.Contains(l, "PRIVATE KEY"):
+			inKey = true
+		case inKey && strings.Contains(l, "-----END"):
+			inKey = false
+		case inKey:
+			if l != secretMask {
+				lines[i] = secretMask
+				masked = true
+			}
+		}
+	}
+	masked = maskRuns(lines, isBase64Line, func(string) string { return secretMask }) || masked
+	masked = maskRuns(lines, isEnvLine, func(l string) string {
+		eq := strings.IndexByte(l, '=')
+		return l[:eq+1] + secretMask
+	}) || masked
+	return masked
+}
+
+// secretMask is what a masked secret reads as.
+const secretMask = "[redacted]"
+
+// maskRuns replaces each line of every run of two or more lines that match,
+// and reports whether it replaced any.
+func maskRuns(lines []string, match func(string) bool, mask func(string) string) bool {
+	masked := false
+	for i := 0; i < len(lines); {
+		j := i
+		for j < len(lines) && match(lines[j]) {
+			j++
+		}
+		if j-i >= 2 {
+			for k := i; k < j; k++ {
+				lines[k] = mask(lines[k])
+			}
+			masked = true
+		}
+		i = max(j, i+1)
+	}
+	return masked
+}
+
+// isBase64Line reports a line of 40 or more base64 characters and nothing
+// else, the body of a PEM block.
+func isBase64Line(l string) bool {
+	l = strings.TrimSpace(l)
+	if len(l) < 40 {
+		return false
+	}
+	for i := 0; i < len(l); i++ {
+		c := l[i]
+		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '+' || c == '/' || c == '=') {
+			return false
+		}
+	}
+	return true
+}
+
+// isEnvLine reports a KEY=VALUE line as an .env file writes it: an optional
+// export, an upper case key, "=" with no space before it, and a value.
+func isEnvLine(l string) bool {
+	l = strings.TrimSpace(l)
+	l = strings.TrimPrefix(l, "export ")
+	eq := strings.IndexByte(l, '=')
+	if eq < 1 || eq == len(l)-1 {
+		return false
+	}
+	if l[eq+1:] == secretMask {
+		return true
+	}
+	for i := 0; i < eq; i++ {
+		c := l[i]
+		if !(c >= 'A' && c <= 'Z' || c == '_' || i > 0 && c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // isBidiControl reports the embedding, override and isolate controls.

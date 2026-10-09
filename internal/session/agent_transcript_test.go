@@ -56,7 +56,7 @@ type fakeWatch struct {
 
 func newFakeWatch() *fakeWatch { return &fakeWatch{cbs: map[string]func(){}} }
 
-func (f *fakeWatch) Watch(path string, onChange func()) error {
+func (f *fakeWatch) Watch(path, _ string, onChange func()) error {
 	if f.fail {
 		return errNoTranscriptWatcher
 	}
@@ -66,7 +66,7 @@ func (f *fakeWatch) Watch(path string, onChange func()) error {
 	return nil
 }
 
-func (f *fakeWatch) Unwatch(path string) {
+func (f *fakeWatch) Unwatch(path, _ string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.cbs, path)

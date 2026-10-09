@@ -35,6 +35,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
 // Bounds on what one page carries.
@@ -70,9 +72,17 @@ const (
 	scanFirst = 1 << 20
 	// lineMax bounds one record. A longer line is skipped.
 	lineMax = 16 << 20
-	// maxLineDiffOps bounds the longest common subsequence table of one edit.
-	// Two texts larger than that are shown as all removed and all added.
-	maxLineDiffOps = 1 << 22
+	// LCSCellsPerCall bounds the longest common subsequence work of one call:
+	// the cells of every table the call's diffs fill, together. A cell is a
+	// uint16, so the largest table is 8 MiB, and it is freed when its diff
+	// is done. A diff whose table would pass what is left is shown as one
+	// replace of the changed lines, all removed and then all added, and says
+	// so with WholeReplace. The page's newest diffs are worked out first
+	// (oldest first for an after read), so they are the ones matched.
+	LCSCellsPerCall = 1 << 22
+	// rawTextMax bounds the text of one entry as decoded, before Clean. It
+	// is more than TextMax because Clean removes escapes and so shortens.
+	rawTextMax = 4 * TextMax
 	// headMax is how many bytes of the first record go into the file's
 	// identity.
 	headMax = 256
@@ -125,6 +135,35 @@ type Entry struct {
 	// never sent.
 	line int64
 	sub  int
+
+	// raw is what the record said, before Clean and before any diff is
+	// worked out. finish turns it into the fields above, only for an entry
+	// that a page is about to carry.
+	raw *rawEntry
+}
+
+// rawEntry is an entry as decoded. Its strings are cut to a bound but not
+// cleaned.
+type rawEntry struct {
+	text    string
+	textCut bool
+	tool    string
+	target  string
+	plan    string
+	todos   []Todo
+	diff    *diffSrc
+}
+
+// diffSrc is what a diff is worked out from: an edit's old and new texts, or
+// a result's structuredPatch. built holds the diff once it is.
+type diffSrc struct {
+	file  string
+	pairs [][2]string
+	patch []ccPatch
+	// shared is the result's source, for a call that takes the diff of a
+	// result about another file name. The call shows it under its own name.
+	shared *diffSrc
+	built  *Diff
 }
 
 // pos is the place of an entry, as a cursor names it.
@@ -148,6 +187,12 @@ type Diff struct {
 	// Plain says the reply reached its budget for colours before this
 	// diff, so its lines have words but no spans.
 	Plain bool `json:"plain,omitzero"`
+
+	// WholeReplace says the lines were not matched: the call reached
+	// LCSCellsPerCall, so each hunk shows every old line removed and then
+	// every new line added. Added and Removed then count the changed lines
+	// of each side.
+	WholeReplace bool `json:"whole_replace,omitzero"`
 
 	// styled says style has added the spans and words.
 	styled bool
@@ -193,6 +238,9 @@ type Options struct {
 	// leaves this package, before it is cut to its bound. Nil leaves strings
 	// as they are, which only a test should do.
 	Clean func(string) string
+	// CleanLines masks, in place, what spans lines of a diff hunk once
+	// Clean has run on each line, such as a private key. Nil does nothing.
+	CleanLines func([]string) bool
 }
 
 // Page is one read.
@@ -224,7 +272,7 @@ func Read(path string, opts Options) (Page, error) {
 	if opts.MaxBytes <= 0 {
 		opts.MaxBytes = DefaultMaxBytes
 	}
-	f, err := os.Open(path) //nolint:gosec // the path is the daemon's join, never the caller's
+	f, err := transcript.OpenRegular(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Page{}, ErrNoFile
@@ -241,7 +289,7 @@ func Read(path string, opts Options) (Page, error) {
 	if err != nil {
 		return Page{}, err
 	}
-	r := &reader{f: f, size: size, opts: opts}
+	r := &reader{f: f, size: size, opts: opts, lcsLeft: LCSCellsPerCall}
 	defer r.zero()
 
 	if opts.After != "" {
@@ -273,6 +321,8 @@ type reader struct {
 	// lexed counts the bytes of code the lexer read for this call, against
 	// spanBudget.
 	lexed int
+	// lcsLeft is what is left of LCSCellsPerCall.
+	lcsLeft int
 }
 
 func (r *reader) zero() {
@@ -349,18 +399,18 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 			}
 		}
 		r.skipped = 0
-		entries := r.decode(lines, base)
+		var before *cursorPos
 		if !atEnd {
-			n := len(entries)
-			for n > 0 && !entries[n-1].before(to) {
-				n--
-			}
-			entries = entries[:n]
+			before = &to
 		}
+		entries := r.decode(lines, base, decodeBounds{before: before, keepLast: r.opts.Limit + 1})
 		if len(entries) >= r.opts.Limit || start == 0 || window >= scanMax {
-			entries = foldResults(entries)
-			// Keep the newest whole entries that fit both bounds.
+			// Only the newest Limit can be on the page. Their calls fold in
+			// their results, and then each is finished, newest first, until
+			// the page is full. An entry the page does not carry is never
+			// cleaned and its diff never worked out.
 			keep := len(entries) - min(len(entries), r.opts.Limit)
+			foldResults(entries[keep:])
 			total := 0
 			for i := len(entries) - 1; i >= keep; i-- {
 				n := r.entrySize(&entries[i])
@@ -371,7 +421,7 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 				total += n
 			}
 			page := Page{
-				Entries: r.styled(entries[keep:]),
+				Entries: entries[keep:],
 				Skipped: r.skipped,
 			}
 			if atEnd {
@@ -414,40 +464,35 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 		}
 	}
 	more := to < r.size
-	entries := r.decode(buf[:end], at.off)
-	// Drop what the last page already returned of the first record.
-	skip := 0
-	for skip < len(entries) && entries[skip].line == at.off && entries[skip].sub < at.sub {
-		skip++
-	}
-	entries = entries[skip:]
+	// Decoding stops once it has one entry past the page, which is where
+	// the next page starts.
+	entries := r.decode(buf[:end], at.off, decodeBounds{from: &at, maxCount: r.opts.Limit + 1})
 	next := cursorPos{off: at.off + int64(end)}
-
-	// A call takes its result's diff when both land on the page, so a call
-	// is counted with the result's diff as well as its own.
-	results := map[string]*Diff{}
-	for i := range entries {
-		if e := &entries[i]; e.Kind == KindToolResult && e.ToolID != "" && e.Diff != nil {
-			results[e.ToolID] = e.Diff
-		}
+	if len(entries) > r.opts.Limit {
+		e := entries[r.opts.Limit]
+		next = cursorPos{off: e.line, sub: e.sub}
+		entries = entries[:r.opts.Limit]
+		more = true
 	}
+	// The calls fold in their results among the first Limit, and each entry
+	// is finished in order until the page is full.
+	foldResults(entries)
 	total := 0
-	for i, e := range entries {
+	for i := range entries {
 		n := r.entrySize(&entries[i])
-		if d := results[e.ToolID]; d != nil && e.Kind != KindToolResult && e.Diff != nil {
-			n += r.diffSize(d)
-		}
-		if i > 0 && (i >= r.opts.Limit || total+n > r.opts.MaxBytes-pageOverhead) {
+		if i > 0 && total+n > r.opts.MaxBytes-pageOverhead {
 			// The page ends before this entry, which the next one starts at.
+			e := entries[i]
 			next = cursorPos{off: e.line, sub: e.sub}
 			entries = entries[:i]
 			more = true
+			unfoldPast(entries)
 			break
 		}
 		total += n
 	}
 	page := Page{
-		Entries: r.styled(foldResults(entries)),
+		Entries: entries,
 		Cursor:  makeCursor(id, next),
 		More:    more,
 		Skipped: r.skipped,
@@ -483,8 +528,25 @@ func (r *reader) skipLongLine(from int64) int64 {
 	return 0
 }
 
-// decode turns complete lines starting at file offset base into entries.
-func (r *reader) decode(lines []byte, base int64) []Entry {
+// decodeBounds limits what decode keeps, so one call holds no more entries
+// than its page can use.
+type decodeBounds struct {
+	// from drops the entries before it: those a page after a cursor has
+	// already returned.
+	from *cursorPos
+	// before drops the entries at it and after it.
+	before *cursorPos
+	// keepLast, when set, keeps only about the newest keepLast entries: the
+	// older ones are dropped whenever twice that many are held.
+	keepLast int
+	// maxCount, when set, stops decoding at the first record that brings
+	// the entries to it.
+	maxCount int
+}
+
+// decode turns complete lines starting at file offset base into entries, as
+// far as b allows.
+func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 	var out []Entry
 	off := base
 	for len(lines) > 0 {
@@ -510,16 +572,30 @@ func (r *reader) decode(lines []byte, base int64) []Entry {
 		}
 		for i, e := range r.recordEntries(&rec, start) {
 			e.line, e.sub = start, i
+			if b.from != nil && e.before(*b.from) {
+				continue
+			}
+			if b.before != nil && !e.before(*b.before) {
+				continue
+			}
 			out = append(out, e)
+		}
+		if b.keepLast > 0 && len(out) >= 2*b.keepLast {
+			n := copy(out, out[len(out)-b.keepLast:])
+			clear(out[n:])
+			out = out[:n]
+		}
+		if b.maxCount > 0 && len(out) >= b.maxCount {
+			break
 		}
 	}
 	return out
 }
 
-// entrySize is an entry's size as JSON, with the colours of its diff, which
-// it adds first so the size counts them.
+// entrySize finishes an entry and returns its size as JSON, with the
+// colours of its diff.
 func (r *reader) entrySize(e *Entry) int {
-	r.style(e.Diff)
+	r.finish(e)
 	b, err := json.Marshal(e)
 	if err != nil {
 		return 0
@@ -527,29 +603,75 @@ func (r *reader) entrySize(e *Entry) int {
 	return len(b) + 1
 }
 
-// diffSize is a diff's size as JSON, with its colours.
-func (r *reader) diffSize(d *Diff) int {
-	r.style(d)
-	b, err := json.Marshal(d)
-	if err != nil {
-		return 0
+// finish cleans an entry's strings and works out its diff, once. It runs
+// only for an entry a page is about to carry.
+func (r *reader) finish(e *Entry) {
+	raw := e.raw
+	if raw == nil {
+		return
 	}
-	return len(b)
+	e.raw = nil
+	switch e.Kind {
+	case KindText, KindThinking:
+		var cut bool
+		e.Text, cut = r.clean(raw.text, TextMax)
+		e.Truncated = raw.textCut || cut
+	case KindToolResult:
+		text := raw.text
+		if r.opts.Clean != nil {
+			text = r.opts.Clean(text)
+		}
+		var cut bool
+		e.Text, cut = cutString(text, TextMax)
+		e.Truncated = raw.textCut || cut
+	case KindPlan:
+		var cut bool
+		e.Plan, cut = r.clean(raw.plan, TextMax)
+		e.Truncated = raw.textCut || cut
+	}
+	if raw.tool != "" {
+		e.Tool, _ = r.clean(raw.tool, toolMax)
+	}
+	if raw.target != "" {
+		e.Target, _ = r.clean(raw.target, targetMax)
+	}
+	for _, t := range raw.todos {
+		text, _ := r.clean(t.Text, targetMax)
+		status, _ := r.clean(t.Status, toolMax)
+		e.Todos = append(e.Todos, Todo{Text: text, Status: status})
+	}
+	if raw.diff != nil {
+		e.Diff = r.buildDiff(raw.diff)
+	}
 }
 
-// styled adds the colours to every diff on a page. A call that took its
-// result's diff in foldResults has a copy that may not have them yet.
-func (r *reader) styled(entries []Entry) []Entry {
-	for i := range entries {
-		r.style(entries[i].Diff)
+// buildDiff works out the diff of src once, with its colours, and returns
+// it.
+func (r *reader) buildDiff(src *diffSrc) *Diff {
+	if src.built != nil {
+		return src.built
 	}
-	return entries
+	var d *Diff
+	switch {
+	case src.shared != nil:
+		cp := *r.buildDiff(src.shared)
+		cp.File, _ = r.clean(oneLine(src.file), targetMax)
+		d = &cp
+	case src.patch != nil:
+		d = r.patchDiff(src.file, src.patch)
+	default:
+		d = r.editDiff(src.file, src.pairs)
+	}
+	r.style(d)
+	src.built = d
+	return d
 }
 
 // foldResults gives each tool call the status of its result on the page, or
 // running when the page has none. A result's file diff, which carries the
-// file's real line numbers, replaces the hunks worked out from the call.
-func foldResults(entries []Entry) []Entry {
+// file's real line numbers, replaces the hunks worked out from the call. It
+// works on the entries as decoded, before finish.
+func foldResults(entries []Entry) {
 	results := map[string]int{}
 	for i, e := range entries {
 		if e.Kind == KindToolResult && e.ToolID != "" {
@@ -566,21 +688,35 @@ func foldResults(entries []Entry) []Entry {
 			e.Status = StatusRunning
 			continue
 		}
-		res := entries[j]
+		res := &entries[j]
 		e.Status = res.Status
-		if e.Diff != nil && res.Diff != nil {
-			if res.Diff.File == e.Diff.File {
-				// One diff for both, so its colours are worked out once.
-				e.Diff = res.Diff
-				continue
-			}
-			file := e.Diff.File
-			d := *res.Diff
-			d.File = file
-			e.Diff = &d
+		if e.raw == nil || res.raw == nil || e.raw.diff == nil || res.raw.diff == nil {
+			continue
+		}
+		if res.raw.diff.file == e.raw.diff.file {
+			// One diff for both, so it is worked out once.
+			e.raw.diff = res.raw.diff
+			continue
+		}
+		e.raw.diff = &diffSrc{file: e.raw.diff.file, shared: res.raw.diff}
+	}
+}
+
+// unfoldPast marks running each call on a page whose result was folded in
+// but did not fit on it. The call keeps the result's diff.
+func unfoldPast(entries []Entry) {
+	on := map[string]bool{}
+	for _, e := range entries {
+		if e.Kind == KindToolResult && e.ToolID != "" {
+			on[e.ToolID] = true
 		}
 	}
-	return entries
+	for i := range entries {
+		e := &entries[i]
+		if e.Kind != KindToolResult && e.ToolID != "" && e.Role == RoleAssistant && !on[e.ToolID] {
+			e.Status = StatusRunning
+		}
+	}
 }
 
 // --- Cursors.
@@ -618,7 +754,7 @@ func fileID(f *os.File, path string, size int64) (string, error) {
 // reads the start of the first record to name the file, and returns nothing
 // of it.
 func CursorAt(path string, off int64) (string, error) {
-	f, err := os.Open(path) //nolint:gosec // the path is the daemon's join, never the caller's
+	f, err := transcript.OpenRegular(path)
 	if err != nil {
 		return "", err
 	}
@@ -679,11 +815,11 @@ func (r *reader) clean(s string, limit int) (string, bool) {
 	if r.opts.Clean != nil {
 		s = r.opts.Clean(s)
 	}
-	return cut(s, limit)
+	return cutString(s, limit)
 }
 
-// cut cuts s to limit bytes on a rune boundary.
-func cut(s string, limit int) (string, bool) {
+// cutString cuts s to limit bytes on a rune boundary.
+func cutString(s string, limit int) (string, bool) {
 	if len(s) <= limit {
 		return s, false
 	}

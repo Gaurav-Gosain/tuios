@@ -5186,6 +5186,18 @@ finds the one file that belongs to the pane. The path stays in the daemon.
 The caller names a window, never a file. Today the daemon reads Claude Code
 transcripts only.
 
+The daemon accepts a reported `transcript_path` only when all of these are
+true. Otherwise it does not join the pane, and the `set-agent-state` reply
+says why in `transcript_refused`:
+
+- A process in a pane names a file only for its own pane.
+- The file is under the harness's transcript folder. For Claude Code that is
+  `~/.claude/projects`. A symbolic link that leads out of the folder does
+  not count.
+- The file name matches the harness's pattern (`*.jsonl`).
+- The file is a regular file. The daemon opens it without waiting and checks
+  it again on each read, so a FIFO or a link put in its place is not read.
+
 Params:
 
 - `session` (optional).
@@ -5196,7 +5208,7 @@ Params:
 - `before` (optional): the `older` cursor of an earlier reply. Do not give
   `after` and `before` together.
 - `limit` (optional int): the most entries to return, 1 to 1000. The default
-  is 200.
+  is 200. Leave it out for the default. A `limit` of 0 is `invalid_params`.
 
 Without `after` and `before`, the reply holds the newest `limit` entries.
 With `after`, it holds the entries after that cursor. With `before`, it holds
@@ -5257,7 +5269,7 @@ Each entry has:
 | `target` | One line that says what the call acts on: the command, the file path, the URL or the pattern. |
 | `status` | `ok`, `error` or `running`. A call gets the status of its result when the result is in the same reply, and `running` when it is not. |
 | `tool_id` | Joins a call to its result. When a result arrives in a later reply, update the call with that `tool_id` from it. |
-| `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated`, `plain` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`), `text`, `spans` and `words`. See [Diff colours](#diff-colours). A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
+| `diff` | For `Edit`, `MultiEdit` and `Write`: `file`, `added`, `removed`, `truncated`, `plain`, `whole_replace` and `hunks`. Each hunk has `old_start`, `new_start` and `lines`, and each line has `op` (`" "`, `"+"` or `"-"`), `text`, `spans` and `words`. See [Diff colours](#diff-colours). A `Write` of a new file is all `+`. When the result carries the file's own line numbers (Claude Code's `structuredPatch`), the result has the diff too, and a call in the same reply takes those hunks. Without them, the line numbers count from the start of the edited text. |
 | `plan` | For `ExitPlanMode`: the plan, as markdown. |
 | `todos` | For `TodoWrite`: the list, each item with `text` and `status`. |
 
@@ -5288,6 +5300,29 @@ out with the same rules as the review view in tuios.
   diff. The lines then have `words` and no `spans`. Read a smaller page, with
   a lower `limit`, to get the spans.
 
+#### Whole replace
+
+The daemon matches the old and new lines of an edit to find what changed.
+The work for this has a limit: 4,194,304 table cells for one reply, all diffs
+together. An edit of n changed old lines and m changed new lines uses
+(n+1)×(m+1) cells. The newest diffs of a read without `after` are matched
+first. A diff that does not fit in what is left is not matched:
+
+- `whole_replace` is `true`.
+- Each hunk shows the changed old lines as `-`, then the changed new lines
+  as `+`. Equal lines at the start and the end are context as usual.
+- `added` and `removed` count the changed lines of each side.
+- At most 200 lines of each side are shown, and `truncated` is `true` when
+  some are left out.
+
+Show such a diff as one block replaced by another. Read a smaller page to
+get it matched.
+
+The daemon builds the diff, its colours and its clean text only for the
+entries in the reply.
+
+#### Diff colour limits
+
 The colours have a limit because the lexers are slow, about 0.5 MB a second.
 For one reply, the daemon lexes at most 16 KiB of code, or one hunk when the
 first hunk is larger. On a 400-line diff that is about 50 ms. The newest
@@ -5311,10 +5346,23 @@ characters other than newline and tab, removes bidirectional controls, and
 masks likely secrets as it does for the Inbox. The reply is marked
 `untrusted`.
 
+The daemon also masks secrets that span lines, in text, tool results and
+the lines of each diff hunk:
+
+- A PEM private key: the lines from its `BEGIN` line to its `END` line
+  become `[redacted]`. The `BEGIN` and `END` lines stay.
+- Two or more lines in a row of base64 alone, 40 characters or more each,
+  become `[redacted]`. This is the body of a key with its `BEGIN` line out of
+  view.
+- Two or more `KEY=VALUE` lines in a row, with an upper case key, as in an
+  `.env` file: each value becomes `[redacted]`. The key stays.
+
 Who may read it: only the person. The call needs a `human_nonce` that
 verifies by the rules of [reply-approval](#reply-approval), so a process
 inside a pane and a link stream that the hub did not vouch for get
-`not_human`. A restricted connection is refused with `forbidden`. Over a link
+`not_human`. [Nonce scope](#nonce-scope) applies: a presence made with a session
+reads only the panes of that session, and gets `not_human` for a pane of
+another session. A restricted connection is refused with `forbidden`. Over a link
 it needs `respond`, because the conversation holds the prompts, file contents
 and command output.
 

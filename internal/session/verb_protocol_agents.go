@@ -42,10 +42,10 @@ func agentWorkVerbs() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Required: true, Description: "The pane: a window id or name."},
-				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of a client attached now, or of attach-presence on this connection. Without a live one the call is refused with not_human."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce of a client attached now, or of attach-presence on this connection. Without a live one the call is refused with not_human. A presence made for one session reads only that session's panes."},
 				{Name: "after", Type: "string", Description: "The cursor of an earlier reply. The reply then holds the entries after it. Omit it to read the newest limit entries."},
 				{Name: "before", Type: "string", Description: "The older cursor of an earlier reply. The reply then holds the newest limit entries before it. Do not give it with after."},
-				{Name: "limit", Type: "int", Description: "The most entries to return, 1 to 1000.", Default: "200"},
+				{Name: "limit", Type: "int", Description: "The most entries to return, 1 to 1000. Leave it out for the default. 0 is refused.", Default: "200"},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The pane's session."},
@@ -55,7 +55,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "reset", Type: "bool", Description: "True when after was not a cursor into the file as it is now. The entries are then the newest limit, and the client starts its list again."},
 				{Name: "more", Type: "bool", Description: "True when a read after a cursor stopped before the end. Read again with the new cursor."},
 				{Name: "older", Type: "string", Description: "Send it as before to read the entries before this page. Empty when the page starts at the first entry."},
-				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. Each diff line carries spans (syntax tokens with chroma CSS classes) and words (the changed part), in UTF-16 offsets. An entry with an id the client holds replaces it."},
+				{Name: "entries", Type: "[]object", Description: "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan and todos. Each diff line carries spans (syntax tokens with chroma CSS classes) and words (the changed part), in UTF-16 offsets. A diff with whole_replace true was not matched line by line: each hunk shows the changed old lines removed, then the changed new lines added. An entry with an id the client holds replaces it."},
 				{Name: "untrusted", Type: "bool", Description: "Always true: the text is the agent's."},
 			},
 			examples: []string{

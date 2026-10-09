@@ -193,7 +193,7 @@ func (r *Reader) Read() (Observation, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	f, err := os.Open(r.path) //nolint:gosec // the path came from the agent's own hook or from the manifest's directory
+	f, err := OpenRegular(r.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Observation{}, false, ErrNoFile

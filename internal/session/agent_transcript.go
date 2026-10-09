@@ -30,8 +30,8 @@ const transcriptJoinRetry = 10 * time.Second
 // the pane's own output, which is the same trigger the screen tier uses and
 // costs exactly nothing on a silent pane.
 type transcriptWatch interface {
-	Watch(path string, onChange func()) error
-	Unwatch(path string)
+	Watch(path, key string, onChange func()) error
+	Unwatch(path, key string)
 }
 
 // transcriptJoin binds one window to one transcript file.
@@ -128,7 +128,7 @@ func (s *Session) JoinAgentTranscript(windowID, harnessID, path string, exact bo
 	s.transcripts.mu.Unlock()
 
 	if watcher != nil {
-		if err := watcher.Watch(abs, func() { s.onTranscriptChanged(windowID) }); err == nil {
+		if err := watcher.Watch(abs, s.transcriptWatchKey(windowID), func() { s.onTranscriptChanged(windowID) }); err == nil {
 			s.transcripts.mu.Lock()
 			j.watched = true
 			s.transcripts.mu.Unlock()
@@ -162,8 +162,14 @@ func (s *Session) releaseJoinLocked(j *transcriptJoin) {
 		j.debounce = nil
 	}
 	if j.watched && s.transcripts.watcher != nil {
-		s.transcripts.watcher.Unwatch(j.reader.Path())
+		s.transcripts.watcher.Unwatch(j.reader.Path(), s.transcriptWatchKey(j.windowID))
 	}
+}
+
+// transcriptWatchKey names one join to the watcher: the session and the
+// window, since windows of two sessions may share one file.
+func (s *Session) transcriptWatchKey(windowID string) string {
+	return s.ID + "/" + windowID
 }
 
 // onTranscriptChanged is what the watcher calls. It arms the debounce rather
@@ -202,7 +208,9 @@ func (s *Session) readAgentTranscript(windowID string) bool {
 
 	obs, fresh, err := j.reader.Read()
 	if err != nil {
-		if errors.Is(err, transcript.ErrNoFile) {
+		// A path that is not a regular file now (a FIFO put in its place)
+		// is as good as gone: it is not read, and the join ends.
+		if errors.Is(err, transcript.ErrNoFile) || errors.Is(err, transcript.ErrNotRegular) {
 			s.transcripts.mu.Lock()
 			j.missing++
 			gone := j.missing >= transcriptMissingLimit

@@ -192,6 +192,9 @@ type agentHookOutcome struct {
 	// ActivityRecorded says whether the daemon kept the event's activity,
 	// nil when none was sent.
 	ActivityRecorded *bool `json:"activity_recorded,omitempty"`
+	// TranscriptRefused is why the daemon did not join the pane to the
+	// transcript the hook named.
+	TranscriptRefused string `json:"transcript_refused,omitempty"`
 	// Subagents is how many subagents the pane holds after a
 	// report-agent-activity call, nil when none was made.
 	Subagents *int `json:"subagents,omitempty"`
@@ -456,6 +459,7 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 		}
 		out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
 		out.ActivityRecorded = res.ActivityRecorded
+		out.TranscriptRefused = res.TranscriptRefused
 		out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
 	}
 	if alone == nil {
@@ -576,6 +580,9 @@ type hookReportResult struct {
 	State            string `json:"state"`
 	Reason           string `json:"reason"`
 	ActivityRecorded *bool  `json:"activity_recorded"`
+	// TranscriptRefused is why the daemon did not join the pane to the
+	// transcript_path the report named, "" when it did or none was named.
+	TranscriptRefused string `json:"transcript_refused"`
 }
 
 // hookFields are the set-agent-state params a hook report may carry beyond

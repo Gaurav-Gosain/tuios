@@ -122,7 +122,7 @@ func TestWatcherReportsAWriteToAFileInAWatchedDirectory(t *testing.T) {
 	}
 
 	var fired atomic.Int64
-	if err := w.Watch(path, func() { fired.Add(1) }); err != nil {
+	if err := w.Watch(path, "k", func() { fired.Add(1) }); err != nil {
 		t.Fatalf("watch: %v", err)
 	}
 	appendLine(t, path, "{}\n")
@@ -137,23 +137,23 @@ func TestWatchAfterCloseIsRefusedRatherThanPanicking(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Watch(filepath.Join(t.TempDir(), "a.jsonl"), func() {}); err == nil {
+	if err := w.Watch(filepath.Join(t.TempDir(), "a.jsonl"), "k", func() {}); err == nil {
 		t.Fatal("a closed watcher accepted a watch")
 	}
 	// Idempotent, because the daemon's shutdown path may run twice.
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	w.Unwatch("anything")
+	w.Unwatch("anything", "k")
 }
 
 // A daemon that could not get a watcher is a working daemon.
 func TestANilWatcherDegradesRatherThanCrashing(t *testing.T) {
 	var w *TranscriptWatcher
-	if err := w.Watch("/x", func() {}); err == nil {
+	if err := w.Watch("/x", "k", func() {}); err == nil {
 		t.Fatal("a nil watcher accepted a watch")
 	}
-	w.Unwatch("/x")
+	w.Unwatch("/x", "k")
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}

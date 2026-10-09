@@ -61,10 +61,11 @@ type TranscriptWatcher struct {
 	// dirs refcounts the directories being watched, so the last file in a
 	// project takes its watch with it and no earlier one does.
 	dirs map[string]int
-	// onChange maps an absolute file path to the joins waiting on it. It is a
-	// slice because two windows may be joined to the same file, which happens
-	// when a session is attached from two panes.
-	onChange map[string][]func()
+	// onChange maps an absolute file path to the joins waiting on it, by the
+	// key each join watched with. Two windows may be joined to the same file,
+	// which happens when a session is attached from two panes, and each one
+	// counts once in dirs and is taken out alone by Unwatch.
+	onChange map[string]map[string]func()
 	// lost holds the watched directories whose watch the kernel dropped
 	// because the directory was deleted or moved.
 	lost map[string]bool
@@ -87,7 +88,7 @@ func NewTranscriptWatcher() (*TranscriptWatcher, error) {
 	tw := &TranscriptWatcher{
 		w:        w,
 		dirs:     make(map[string]int),
-		onChange: make(map[string][]func()),
+		onChange: make(map[string]map[string]func()),
 		lost:     make(map[string]bool),
 		parents:  make(map[string]int),
 	}
@@ -95,9 +96,10 @@ func NewTranscriptWatcher() (*TranscriptWatcher, error) {
 	return tw, nil
 }
 
-// Watch registers a callback for a file, adding a watch on its directory if this
-// is the first file there.
-func (t *TranscriptWatcher) Watch(path string, onChange func()) error {
+// Watch registers a callback for a file under key, adding a watch on its
+// directory if this is the first file there. A second Watch with the same path
+// and key replaces the callback and counts nothing more.
+func (t *TranscriptWatcher) Watch(path, key string, onChange func()) error {
 	if t == nil {
 		return errNoTranscriptWatcher
 	}
@@ -129,24 +131,36 @@ func (t *TranscriptWatcher) Watch(path string, onChange func()) error {
 	if t.closed {
 		return errNoTranscriptWatcher
 	}
-	t.dirs[dir]++
-	t.onChange[path] = append(t.onChange[path], onChange)
+	fns := t.onChange[path]
+	if fns == nil {
+		fns = make(map[string]func())
+		t.onChange[path] = fns
+	}
+	if _, again := fns[key]; !again {
+		t.dirs[dir]++
+	}
+	fns[key] = onChange
 	return nil
 }
 
-// Unwatch removes every callback for a file and drops the directory watch when
-// it was the last file there.
-func (t *TranscriptWatcher) Unwatch(path string) {
+// Unwatch removes the callback a join registered under key, and drops the
+// directory watch when it was the last one there. Another join on the same
+// file keeps its callback.
+func (t *TranscriptWatcher) Unwatch(path, key string) {
 	if t == nil {
 		return
 	}
 	dir := filepath.Dir(path)
 	t.mu.Lock()
-	if _, ok := t.onChange[path]; !ok {
+	fns, ok := t.onChange[path]
+	if _, has := fns[key]; !ok || !has {
 		t.mu.Unlock()
 		return
 	}
-	delete(t.onChange, path)
+	delete(fns, key)
+	if len(fns) == 0 {
+		delete(t.onChange, path)
+	}
 	t.dirs[dir]--
 	last := t.dirs[dir] <= 0
 	var dropParent string
@@ -203,7 +217,9 @@ func (t *TranscriptWatcher) comeBack(dir string) {
 	var cbs []func()
 	for path, fns := range t.onChange {
 		if filepath.Dir(path) == dir {
-			cbs = append(cbs, fns...)
+			for _, fn := range fns {
+				cbs = append(cbs, fn)
+			}
 		}
 	}
 	t.mu.Unlock()
@@ -280,7 +296,10 @@ func (t *TranscriptWatcher) run() {
 				continue
 			}
 			t.mu.Lock()
-			cbs := append([]func(){}, t.onChange[ev.Name]...)
+			var cbs []func()
+			for _, fn := range t.onChange[ev.Name] {
+				cbs = append(cbs, fn)
+			}
 			watched := t.dirs[ev.Name] > 0
 			lost := t.lost[ev.Name]
 			t.mu.Unlock()

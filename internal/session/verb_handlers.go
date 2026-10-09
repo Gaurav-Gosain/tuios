@@ -1349,8 +1349,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		// pane's agent.
 		d.activity.forgetIfEmpty(sess.ID, windowID)
 	}
+	transcriptRefused := ""
 	if applied && p.TranscriptPath != "" {
-		d.joinReportedTranscript(sess, target, p.Harness, p.TranscriptPath)
+		transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, p.TranscriptPath)
 	}
 	// state is the effective state, so a report a higher-ranked source outranked
 	// reports what the pane actually shows rather than what was asked for.
@@ -1367,6 +1368,9 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 	}
 	if p.Activity != nil {
 		out["activity_recorded"] = recorded
+	}
+	if transcriptRefused != "" {
+		out["transcript_refused"] = transcriptRefused
 	}
 	return out, nil
 }
@@ -1549,11 +1553,17 @@ var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQues
 // harness naming its own file settles that. Only a harness whose manifest has
 // a transcript reader is joined, since nothing else could read the file, and
 // a failure leaves the pane on whatever join it had.
-func (d *Daemon) joinReportedTranscript(sess *Session, target, harnessID, path string) {
+//
+// The path is what agent-transcript later reads for the person, so it is held
+// to two rules (transcriptPathRefusal): a process in a pane names a file only
+// for its own pane, and the file must be a regular file under the harness's
+// transcript folder. A refusal is returned for the reply, so the hook's
+// --explain shows it, and logged without the path, which is the person's.
+func (d *Daemon) joinReportedTranscript(cs *connState, sess *Session, target, harnessID, path string) string {
 	state := sess.GetState()
 	idx, err := findWindowStateIndex(state.Windows, target)
 	if err != nil {
-		return
+		return ""
 	}
 	w := state.Windows[idx]
 	if harnessID == "" {
@@ -1561,9 +1571,82 @@ func (d *Daemon) joinReportedTranscript(sess *Session, target, harnessID, path s
 	}
 	reg := d.agentMatcher.registry
 	if harnessID == "" || reg == nil || reg.TranscriptFor(harnessID) == nil {
-		return
+		return ""
 	}
-	_ = sess.JoinAgentTranscript(w.ID, harnessID, path, true)
+	if pa := d.paneAuthority(cs); pa != nil && (pa.hosted || pa.window != w.ID || !paneInSession(pa, sess)) {
+		why := "a pane may name a transcript only for its own pane"
+		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
+		return why
+	}
+	if cs != nil && (cs.viaLink || cs.paneOnly) {
+		why := "a transcript is named only from this machine"
+		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
+		return why
+	}
+	resolved, why := transcriptPathAllowed(reg.TranscriptFor(harnessID), path)
+	if why != "" {
+		LogBasic("transcript_path refused for window %s: %s", shortWindowID(w.ID), why)
+		return why
+	}
+	_ = sess.JoinAgentTranscript(w.ID, harnessID, resolved, true)
+	return ""
+}
+
+// paneInSession reports whether the pane pa is in sess, by ID when pa has
+// one and by name when it was found only through the grant table.
+func paneInSession(pa *paneAuth, sess *Session) bool {
+	if pa.sessionID != "" {
+		return pa.sessionID == sess.ID
+	}
+	return pa.session == sess.Name()
+}
+
+// transcriptPathAllowed checks a reported transcript path against the
+// harness's transcript folder (harness.Transcript.Root). It returns the path
+// with every symbolic link resolved, or why it is refused. The file need not
+// exist yet: a harness reports its path at the start of a session, before it
+// writes the first record. What exists of the path is resolved, so a link
+// cannot lead out of the folder, and a file that exists must be a regular
+// file. Each later open refuses a link or anything but a regular file again
+// (transcript.OpenRegular), so a file swapped after this check is not read.
+func transcriptPathAllowed(tr *harness.Transcript, path string) (string, string) {
+	root := tr.Root()
+	if root == "" {
+		return "", "the harness has no transcript folder"
+	}
+	if !filepath.IsAbs(path) {
+		return "", "the transcript path is not absolute"
+	}
+	realRoot := resolveExisting(root)
+	resolved := resolveExisting(filepath.Clean(path))
+	rel, err := filepath.Rel(realRoot, resolved)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "the transcript is not in the harness's transcript folder"
+	}
+	if ok, _ := filepath.Match(tr.Glob, filepath.Base(resolved)); !ok {
+		return "", "the transcript file name does not match the harness's pattern"
+	}
+	if info, err := os.Lstat(resolved); err == nil && !info.Mode().IsRegular() {
+		return "", "the transcript is not a regular file"
+	}
+	return resolved, ""
+}
+
+// resolveExisting resolves the symbolic links of the longest part of path
+// that exists, and keeps the rest as it is.
+func resolveExisting(path string) string {
+	rest := ""
+	for p := path; ; {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return filepath.Join(r, rest)
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return path
+		}
+		rest = filepath.Join(filepath.Base(p), rest)
+		p = parent
+	}
 }
 
 func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
