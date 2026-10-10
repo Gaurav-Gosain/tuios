@@ -276,6 +276,9 @@ func (m *OS) takePaneOutput(now time.Time) (open, changed bool, due tea.Cmd) {
 
 // anyPaneOutput reports whether a pane has output no frame has drawn yet.
 func (m *OS) anyPaneOutput() bool {
+	if m.sidebarSessionOutputPending() {
+		return true
+	}
 	for _, w := range m.Windows {
 		if w != nil && (w.HasNewOutput.Load() || w.HasGraphicsOutput.Load()) {
 			return true

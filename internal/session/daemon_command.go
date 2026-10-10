@@ -34,6 +34,12 @@ var daemonOwnedCommands = map[string]bool{
 	// because it has no viewport. It says so with WindowState.Unplaced instead of
 	// guessing, and the client that receives the push places it.
 	"NewWindow": true,
+	// Focus is also daemon-owned session state. A session may be shown by a
+	// rail-only client with no full OS command executor; asking that client to
+	// handle navigation silently leaves the focused pane unchanged.
+	"NextWindow":  true,
+	"PrevWindow":  true,
+	"FocusWindow": true,
 }
 
 // tapeResultTTL is how long the daemon keeps a tape exec's request open for
@@ -366,7 +372,8 @@ func (d *Daemon) findTargetSession(sessionName string) *Session {
 // that ran it reached one pane.
 //
 // A view-only client, such as a read-only web viewer, is not the person: it
-// is picked only when no other client shows the session.
+// is picked only when no other client shows the session. A passive rail viewer
+// cannot execute renderer commands at all, so it is never a routing target.
 func (d *Daemon) findTUIClient(sessionID string) *connState {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -379,7 +386,7 @@ func (d *Daemon) findTUIClient(sessionID string) *connState {
 	var person, viewer pick
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
+		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached && !cs.passive
 		input, seq, viewOnly := cs.lastActivity, cs.attachSeq, cs.viewOnly
 		cs.mu.Unlock()
 		if !match {
