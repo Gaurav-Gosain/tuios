@@ -12,6 +12,7 @@ This document provides a comprehensive overview of TUIOS's internal architecture
 - [Rendering Pipeline](#rendering-pipeline)
 - [SSH Server Architecture](#ssh-server-architecture)
 - [Core Components](#core-components)
+- [File transfers between machines](#file-transfers-between-machines)
 
 ## Overview
 
@@ -931,6 +932,30 @@ replays what tuios wrote to a stand-in sixel terminal and checks that the
 picture lands in the right cells, clipped, and is gone when cleared. An SSH
 client and a browser use the same code with a different writer; neither has an
 end-to-end test.
+
+## File transfers between machines
+
+A copy between machines is a job in the daemon of the machine where it was
+started (`internal/session/transfer.go`). That daemon reads and writes its own
+disk directly and reaches another machine's disk through that machine's
+daemon, with the file verbs (`verb_files.go`), over the link. So every
+direction, this machine to a host, a host to this machine and one host to
+another, is one code path with a different end.
+
+The bytes ride bulk streams (`internal/federation/bulk.go`). A link's mux has
+two write lanes: every ordinary frame goes first, and a bulk frame (64 KiB at
+most) waits for the ordinary lane to be empty. A bulk stream also keeps to a
+credit window, sized at twice the bytes of the shortest round trip seen, from
+256 KiB to 16 MiB, so a copy never fills the ssh channel's buffer ahead of a
+keystroke. A peer that sends no credit frames gets no window, so an older peer
+still works.
+
+Each file goes through a part file named by its job, a sha256 of the original
+and of the part, and a rename into place. A job that has not ended is in a
+journal under the state folder, so a daemon restart goes on with it from its
+parts. Writes that arrive over a link go through an `os.Root` at the home
+folder and are refused in a deny list (`verb_files_confine.go`). The contract
+is in [protocol.md](protocol.md#files-and-transfers).
 
 ## Performance Characteristics
 

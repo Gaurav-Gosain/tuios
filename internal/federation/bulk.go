@@ -122,12 +122,11 @@ type window struct {
 	// gives one round trip and one delivery rate.
 	marks []mark
 
-	minRTT   time.Duration
-	minAt    time.Time
-	maxRate  float64
-	rateAt   time.Time
-	samples  int
-	lastSize uint64
+	minRTT  time.Duration
+	minAt   time.Time
+	maxRate float64
+	rateAt  time.Time
+	samples int
 }
 
 type mark struct {

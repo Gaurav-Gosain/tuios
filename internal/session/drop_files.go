@@ -42,7 +42,7 @@ func (d *Daemon) dropRoot() (string, error) {
 	}
 	// MkdirAll keeps the mode of a folder that was there. A drop folder that
 	// others can read is not one to write into.
-	if err := os.Chmod(root, 0o700); err != nil {
+	if err := os.Chmod(root, 0o700); err != nil { //nolint:gosec // a directory needs x, and 0700 opens it to its owner only
 		return "", err
 	}
 	return root, nil

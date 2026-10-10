@@ -296,6 +296,7 @@ Print one with `tuios --skill <topic>`:
 | `checkpoints` | The checkpoint of each finished turn: list, diff, restore and undo the restore |
 | `ship` | Commit, merge, push and open a pull request for a worktree, and the Inbox question a push asks |
 | `hosts` | Other machines: hosts, remote sessions, hosted panes, agents and worktrees there |
+| `files` | Files and copies between machines: the file verbs, `transfer-start`, following a copy on the event stream, what a host lets you write |
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
 | `stream` | `stream-pane` and `attach-presence`: a pane as bytes for a client that is not tuios, the size lease, the person's presence and its session scope |
 | `clients` | `list-clients`: which client shows which session, `switch-session`, `detach-client`, and the `client-session-changed` event |

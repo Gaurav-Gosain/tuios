@@ -1,7 +1,6 @@
 package session
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -303,9 +302,6 @@ func linkDenied(p, home string) bool {
 	return false
 }
 
-// errLinkWrite is a write over a link that the rules above refuse.
-var errLinkWrite = errors.New("refused for a link")
-
 // linkWriteFS is where a file verb on cs may write the given paths. For a
 // call that did not come over a link it is the plain file system. For a link
 // it is an os.Root at the folder that holds every path, and a path outside
@@ -368,6 +364,20 @@ func (f fileFS) confine(p string) string {
 	if foldPaths && pathUnder(real, f.dir) && !strings.HasPrefix(real, f.dir) {
 		// The same folder written with other case: the root needs its own
 		// spelling for the part above the path.
+		real = f.dir + real[len(f.dir):]
+	}
+	return real
+}
+
+// confineDir is confine for a folder that the operation goes into rather
+// than acts on, so a link at its last name is followed too: an os.Root
+// refuses a link that names an absolute path, even one inside the root.
+func (f fileFS) confineDir(p string) string {
+	if f.root == nil {
+		return p
+	}
+	real := realPath(p)
+	if foldPaths && pathUnder(real, f.dir) && !strings.HasPrefix(real, f.dir) {
 		real = f.dir + real[len(f.dir):]
 	}
 	return real
