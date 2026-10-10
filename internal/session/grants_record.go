@@ -276,14 +276,20 @@ func describeConfigChanges(before, after configSnapshot) []string {
 			peer = ""
 		}
 		was, now := config.LinkPolicyFor(before.links, peer), config.LinkPolicyFor(after.links, peer)
-		if slices.Equal(was.Allow, now.Allow) && was.HoldMail == now.HoldMail && was.HostedGrace == now.HostedGrace {
+		sameRoots := slices.Equal(linkRootPaths(was), linkRootPaths(now))
+		if slices.Equal(was.Allow, now.Allow) && was.HoldMail == now.HoldMail && was.HostedGrace == now.HostedGrace && sameRoots {
 			continue
 		}
 		who := "Machine " + k
 		if peer == "" {
 			who = "A machine with no table of its own"
 		}
-		out = append(out, fmt.Sprintf("%s may now do %s here. Before: %s.", who, grantWords(now.Allow), grantWords(was.Allow)))
+		if !slices.Equal(was.Allow, now.Allow) || was.HoldMail != now.HoldMail || was.HostedGrace != now.HostedGrace {
+			out = append(out, fmt.Sprintf("%s may now do %s here. Before: %s.", who, grantWords(now.Allow), grantWords(was.Allow)))
+		}
+		if !sameRoots {
+			out = append(out, fmt.Sprintf("%s may now write files in %s here. Before: %s.", who, grantWords(linkRootPaths(now)), grantWords(linkRootPaths(was))))
+		}
 	}
 	return out
 }

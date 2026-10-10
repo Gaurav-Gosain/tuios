@@ -150,6 +150,9 @@ type transferManager struct {
 	jobs    map[string]*transferJob
 	order   []string
 	running chan struct{}
+	// journalMu serialises writes to the journal folder, so two jobs saving
+	// at once do not race on a shared temp file.
+	journalMu sync.Mutex
 }
 
 func newTransferManager(d *Daemon) *transferManager {
@@ -164,6 +167,17 @@ func newTransferID() string {
 
 // errTransferBusy is a copy to a path another copy is writing.
 var errTransferBusy = errors.New("busy")
+
+// busyKey is the destination path as the busy check compares it. A local
+// path is resolved through its real parent, so ~/x and /home/u/x are one
+// path. A remote path is left as given: canonicalising it needs a round trip,
+// and the part id keeps two copies from corrupting each other anyway.
+func busyKey(dst Endpoint) string {
+	if dst.Host == "" {
+		return realParent(filepath.Clean(dst.Path))
+	}
+	return dst.Path
+}
 
 // start makes a job and runs it in the background. A copy to the same place
 // as a copy that has not ended is refused: one of the two would replace the
@@ -181,10 +195,11 @@ func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, p
 		finished: map[string]bool{},
 		wake:     make(chan struct{}, 1),
 	}
+	key := busyKey(dst)
 	m.mu.Lock()
 	for _, id := range m.order {
 		o := m.jobs[id]
-		if o.dst.Host == dst.Host && o.dst.Path == dst.Path && !transferEnded(o.getState()) {
+		if o.dst.Host == dst.Host && busyKey(o.dst) == key && !transferEnded(o.getState()) {
 			m.mu.Unlock()
 			return nil, fmt.Errorf("%w: copy %s writes %s", errTransferBusy, o.id, dst)
 		}
@@ -606,7 +621,7 @@ func removeMoved(ctx context.Context, src fileEnd, root string, entries []WalkEn
 // safeRel reports whether rel names a path inside a folder: relative, slash
 // separated, and with no empty, "." or ".." part and no NUL.
 func safeRel(rel string) bool {
-	if rel == "" || strings.HasPrefix(rel, "/") || strings.ContainsRune(rel, 0) {
+	if rel == "" || strings.HasPrefix(rel, "/") || strings.ContainsAny(rel, "\x00\\:") {
 		return false
 	}
 	for part := range strings.SplitSeq(rel, "/") {
@@ -614,7 +629,11 @@ func safeRel(rel string) bool {
 			return false
 		}
 	}
-	return true
+	// On the destination machine a rel is joined with filepath.FromSlash, so
+	// a Windows daemon must read it as a local path with no drive, no volume
+	// and no escape. A backslash and a colon are refused above, which leaves
+	// filepath.IsLocal to catch a reserved name such as CON or NUL.
+	return filepath.IsLocal(filepath.FromSlash(rel))
 }
 
 // joinRemote joins a path under a folder on any machine. Paths on every
@@ -1067,22 +1086,36 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 		if r.err != nil {
 			return r.err
 		}
-		var out struct {
-			PartSize int64  `json:"part_size"`
-			Error    string `json:"error"`
-		}
-		if err := json.Unmarshal(r.line, &out); err != nil {
-			return err
-		}
-		if out.Error != "" {
-			return errors.New(out.Error)
-		}
-		if out.PartSize != off+length {
-			return fmt.Errorf("the part on %s holds %d bytes, want %d", e.host, out.PartSize, off+length)
-		}
-		return nil
+		return writeReplyError(r.line, e.host, off+length)
 	}
 	return c, finish, nil
+}
+
+// writeReplyError reads the line the far side writes after the bytes of an
+// open-file-stream write, and returns nil when the part holds want bytes. A
+// code the far side gives, such as disk_full or no_permission, is its word
+// about its own disk: it comes back as a VerbCallError, which classify ends
+// the job on, not as a plain error, which classify would retry for ever as an
+// unreachable host.
+func writeReplyError(line []byte, host string, want int64) error {
+	var out struct {
+		PartSize int64  `json:"part_size"`
+		Error    string `json:"error"`
+		Code     string `json:"code"`
+	}
+	if err := json.Unmarshal(line, &out); err != nil {
+		return err
+	}
+	if out.Error != "" {
+		if out.Code != "" {
+			return &VerbCallError{Code: out.Code, Message: out.Error}
+		}
+		return errors.New(out.Error)
+	}
+	if out.PartSize != want {
+		return fmt.Errorf("the part on %s holds %d bytes, want %d", host, out.PartSize, want)
+	}
+	return nil
 }
 
 func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, perm uint32, mtime int64) (string, error) {

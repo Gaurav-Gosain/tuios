@@ -53,7 +53,10 @@ const (
 	bulkWindowMax = 16 << 20
 
 	// bulkBufferFrames is a bulk stream's receive buffer in frames. A peer
-	// that keeps to the window never fills it.
+	// that keeps to the window never fills it: the buffer holds the whole
+	// window in frames, so a reader that falls behind costs its own stream
+	// and never the link's shared read loop. The assertion below keeps the
+	// two in step if either constant changes.
 	bulkBufferFrames = bulkWindowMax / bulkFramePayload
 
 	// bulkCreditEvery is how many bytes a reader takes before it says so.
@@ -64,6 +67,10 @@ const (
 	// within this span.
 	bulkFilterSpan = 10 * time.Second
 )
+
+// The receive buffer must hold at least the whole window, or a writer that
+// keeps to the window could still block the shared read loop.
+const _ = uint(bulkBufferFrames*bulkFramePayload - bulkWindowMax)
 
 // prioLock is the mux's write lock with two lanes. An urgent writer goes ahead
 // of every bulk writer that is waiting; bulk writers queue behind any urgent

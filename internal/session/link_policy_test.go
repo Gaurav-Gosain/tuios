@@ -393,10 +393,10 @@ func TestTheIntegratedVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	if verr := d.checkLinkPolicy(cs, linkCapSpawn, "fan"); verr != nil {
 		t.Errorf("a clone from a machine that may open was refused: %v", verr.Message)
 	}
-	if verr := d.checkLinkPolicy(cs, linkCapFiles, "bundle-worktree"); verr == nil || verr.Code != ErrVerbForbidden {
+	if verr := d.checkLinkPolicy(cs, linkCapReadOut, "bundle-worktree"); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("reading files out from a machine that may not write was allowed")
 	}
-	if verr := d.checkLinkPolicy(&connState{}, linkCapFiles, "bundle-worktree"); verr != nil {
+	if verr := d.checkLinkPolicy(&connState{}, linkCapReadOut, "bundle-worktree"); verr != nil {
 		t.Errorf("a caller on this machine was held to a link policy: %v", verr.Message)
 	}
 }

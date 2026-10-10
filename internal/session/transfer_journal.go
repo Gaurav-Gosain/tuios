@@ -112,7 +112,10 @@ func (m *transferManager) save(j *transferJob) {
 	if err != nil {
 		return
 	}
-	if err := writeFileAtomic(path, data); err != nil {
+	m.journalMu.Lock()
+	err = writeFileAtomic(path, data)
+	m.journalMu.Unlock()
+	if err != nil {
 		LogError("Transfer %s: the journal entry could not be saved, so a restart loses this copy: %v", rec.ID, err)
 	}
 }
@@ -136,19 +139,46 @@ func (m *transferManager) saveFinished(j *transferJob) {
 	}
 }
 
-// writeFileAtomic writes data to path through a temporary file and a rename,
-// owner only, so a crash leaves the old file or the new one.
+// writeFileAtomic writes data to path through a unique temporary file in the
+// same folder, fsynced, then renamed, owner only, so a crash leaves the old
+// file or the new one whole and never a half-written one. The folder is
+// fsynced too, so the rename survives a crash right after it.
 func writeFileAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return err
+	}
+	if df, err := os.Open(dir); err == nil {
+		_ = df.Sync()
+		_ = df.Close()
 	}
 	return nil
 }
@@ -219,7 +249,7 @@ func (m *transferManager) load() {
 	var resumed []*transferJob
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasSuffix(name, ".json.tmp") {
+		if strings.HasSuffix(name, ".tmp") {
 			_ = os.Remove(filepath.Join(dir, name))
 			continue
 		}

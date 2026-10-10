@@ -107,8 +107,11 @@ func (d *Daemon) verbFileDropDir(_ *connState, params json.RawMessage) (any, *ve
 	if err != nil {
 		return nil, fileError("make the drop folder", root, err)
 	}
-	// Room for this drop comes out of what the older drops may keep.
-	pruneDrops(root, max(dropKeepBytes-p.Bytes, 0), time.Now())
+	// Room for this drop comes out of what the older drops may keep. A caller
+	// that names more bytes than the folder ever holds would otherwise prune
+	// every older drop, so the claim is clamped.
+	want := min(max(p.Bytes, 0), dropKeepBytes)
+	pruneDrops(root, dropKeepBytes-want, time.Now())
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	dir := filepath.Join(root, time.Now().Format("20060102-150405")+"-"+hex.EncodeToString(b[:]))

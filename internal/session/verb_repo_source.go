@@ -38,7 +38,10 @@ const ErrVerbRepoNotFound = "repo_not_found"
 // of them already, and list, which only reads screens, must not.
 const (
 	linkCapSpawn = config.LinkAllowOpen
-	linkCapFiles = config.LinkAllowWrite
+	// linkCapReadOut is write, not files: bundle-worktree reads a whole
+	// worktree out, which a machine that may type into a shell here can do
+	// already. files is the file verbs' own capability.
+	linkCapReadOut = config.LinkAllowWrite
 )
 
 // checkLinkPolicy holds a call from another machine to that machine's link

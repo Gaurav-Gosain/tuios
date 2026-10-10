@@ -462,7 +462,7 @@ func naturalLess(a, b string) bool {
 }
 
 // verbFileRead returns a range of a file's bytes.
-func (d *Daemon) verbFileRead(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
 		Offset int64  `json:"offset"`
@@ -473,6 +473,9 @@ func (d *Daemon) verbFileRead(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
+		return nil, verr
+	}
+	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
 	length := p.Length
@@ -643,7 +646,7 @@ func (c ctxReader) Read(p []byte) (int, error) {
 
 // verbFileHash hashes a file, or a range of it, or of the part a copy to it
 // is writing.
-func (d *Daemon) verbFileHash(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
 		Offset int64  `json:"offset"`
@@ -659,6 +662,9 @@ func (d *Daemon) verbFileHash(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
+		return nil, verr
+	}
+	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
 	target := path
@@ -708,6 +714,9 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 	switch p.Mode {
 	case "read", "":
+		if verr := d.checkLinkRead(cs, path); verr != nil {
+			return nil, verr
+		}
 		f, fi, err := openRegular(path)
 		if err != nil {
 			return nil, fileError("read", path, err)
@@ -774,9 +783,11 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			reply := map[string]any{"part_size": p.Offset + n, "written": n}
 			switch {
 			case cerr != nil:
-				reply["error"] = fileError("write", path, cerr).Message
+				ve := fileError("write", path, cerr)
+				reply["error"], reply["code"] = ve.Message, ve.Code
 			case syncErr != nil:
-				reply["error"] = fileError("write", path, syncErr).Message
+				ve := fileError("write", path, syncErr)
+				reply["error"], reply["code"] = ve.Message, ve.Code
 			case n < p.Length:
 				reply["error"] = "the sender stopped after " + strconv.FormatInt(n, 10) + " of " + strconv.FormatInt(p.Length, 10) + " bytes"
 			}
@@ -1026,7 +1037,7 @@ func walkTree(root string) (walkResult, error) {
 var errWalkTooLarge = errors.New("the folder holds more than " + strconv.Itoa(fileWalkMax) + " files")
 
 // verbFileWalk lists every file under a folder, for a folder copy.
-func (d *Daemon) verbFileWalk(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path string `json:"path"`
 	}
@@ -1035,6 +1046,9 @@ func (d *Daemon) verbFileWalk(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
+		return nil, verr
+	}
+	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
 	w, err := walkTree(path)

@@ -169,7 +169,7 @@ func (d *Daemon) verbBundleWorktree(cs *connState, params json.RawMessage) (any,
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if verr := d.checkLinkPolicy(cs, linkCapFiles, "bundle-worktree"); verr != nil {
+	if verr := d.checkLinkPolicy(cs, linkCapReadOut, "bundle-worktree"); verr != nil {
 		return nil, verr
 	}
 	if p.Token != "" {
