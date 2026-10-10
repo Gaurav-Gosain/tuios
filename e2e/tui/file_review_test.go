@@ -340,12 +340,16 @@ func TestATransferStoppedWhileQueuedStaysStopped(t *testing.T) {
 
 // TestACopyDoesNotWriteThroughALinkAtItsPart puts a link where a copy's
 // part file goes, pointing at a file that must not change, on this machine
-// and on build. The copy must refuse to write through either link, and the
-// file the links point at must keep its bytes.
+// and on build. A part is named by its copy's id, so the link goes in while
+// the copy waits for a running slot behind three slow copies, once its id is
+// known. On build one link is relative, which the os.Root that confines a
+// link's writes would follow. The copy must refuse to write through either link, and the file the
+// links point at must keep its bytes.
 func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
-	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 1<<20, 256<<10))
+	farHome := xdgDir(remote, "HOME")
 
 	src := filepath.Join(base, "report.txt")
 	if err := os.WriteFile(src, []byte("the copy's bytes\n"), 0o644); err != nil {
@@ -355,41 +359,76 @@ func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 	if err := os.WriteFile(farSrc, []byte("the copy's bytes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	c := dialFileVerbs(t, base)
+	var busy []transferRow
+	for i := range 3 {
+		name := fmt.Sprintf("busy%d.bin", i)
+		randomFile(t, filepath.Join(remote, name), 16<<20)
+		var row transferRow
+		c.must("transfer-start", map[string]any{
+			"src": map[string]any{"host": "build", "path": filepath.Join(remote, name)},
+			"dst": map[string]any{"path": filepath.Join(base, name)},
+		}, &row)
+		busy = append(busy, row)
+	}
 	cases := []struct {
 		name     string
 		precious string
 		src, dst map[string]any
-		part     string
+		dir      string
+		relative bool
+		row      transferRow
 	}{
 		{
 			name:     "here",
 			precious: filepath.Join(base, "precious.txt"),
 			src:      map[string]any{"host": "build", "path": farSrc},
 			dst:      map[string]any{"path": filepath.Join(base, "shared", "report.txt")},
-			part:     filepath.Join(base, "shared", ".report.txt.tuios-part"),
+			dir:      filepath.Join(base, "shared"),
 		},
 		{
 			name:     "on build",
-			precious: filepath.Join(remote, "precious.txt"),
+			precious: filepath.Join(farHome, "precious.txt"),
 			src:      map[string]any{"path": src},
-			dst:      map[string]any{"host": "build", "path": filepath.Join(remote, "shared", "report.txt")},
-			part:     filepath.Join(remote, "shared", ".report.txt.tuios-part"),
+			dst:      map[string]any{"host": "build", "path": filepath.Join(farHome, "shared", "report.txt")},
+			dir:      filepath.Join(farHome, "shared"),
+		},
+		{
+			// A relative link stays inside build's home, where the os.Root a
+			// link's writes go through follows it.
+			name:     "on build, relative",
+			precious: filepath.Join(farHome, "precious2.txt"),
+			src:      map[string]any{"path": src},
+			dst:      map[string]any{"host": "build", "path": filepath.Join(farHome, "shared2", "report.txt")},
+			dir:      filepath.Join(farHome, "shared2"),
+			relative: true,
 		},
 	}
-	c := dialFileVerbs(t, base)
-	for _, tc := range cases {
+	for i := range cases {
+		tc := &cases[i]
 		if err := os.WriteFile(tc.precious, []byte("keep me\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(filepath.Dir(tc.part), 0o777); err != nil {
+		if err := os.MkdirAll(tc.dir, 0o777); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Symlink(tc.precious, tc.part); err != nil {
+		c.must("transfer-start", map[string]any{"src": tc.src, "dst": tc.dst}, &tc.row)
+		if r := transferNow(t, base, tc.row.ID); r.State != "queued" {
+			t.Fatalf("%s: the copy is %s, want queued behind three", tc.name, r.State)
+		}
+		target := tc.precious
+		if tc.relative {
+			target = filepath.Join("..", filepath.Base(tc.precious))
+		}
+		if err := os.Symlink(target, filepath.Join(tc.dir, ".report.txt.tuios-part-"+tc.row.ID)); err != nil {
 			t.Fatal(err)
 		}
-		var row transferRow
-		c.must("transfer-start", map[string]any{"src": tc.src, "dst": tc.dst}, &row)
-		row = waitTransferEnd(t, base, row.ID, 30*time.Second)
+	}
+	for _, r := range busy {
+		c.must("transfer-cancel", map[string]any{"id": r.ID}, nil)
+	}
+	for _, tc := range cases {
+		row := waitTransferEnd(t, base, tc.row.ID, 30*time.Second)
 		got, _ := os.ReadFile(tc.precious)
 		fi, _ := os.Lstat(tc.dst["path"].(string))
 		t.Logf("%s: the copy ended %s (%s); precious holds %q", tc.name, row.State, row.Error, got)
@@ -494,7 +533,7 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 	var row transferRow
 	c.must("transfer-start", map[string]any{
 		"src": map[string]any{"path": src},
-		"dst": map[string]any{"host": "build", "path": filepath.Join(remote, "sparse.img")},
+		"dst": map[string]any{"host": "build", "path": filepath.Join(xdgDir(remote, "HOME"), "sparse.img")},
 	}, &row)
 	time.Sleep(time.Second)
 	c.must("transfer-cancel", map[string]any{"id": row.ID}, nil)
@@ -515,7 +554,8 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 // TestAFolderMoveRemovesOnlyWhatItCopied moves a folder that holds two
 // files and a link to build. A copy carries files and folders, not links,
 // so the move must remove the two files it copied and leave the link, and
-// the folder that holds it, where they were.
+// the folder that holds it, where they were. The copy must also say it did
+// not carry the link.
 func TestAFolderMoveRemovesOnlyWhatItCopied(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -530,7 +570,7 @@ func TestAFolderMoveRemovesOnlyWhatItCopied(t *testing.T) {
 	if err := os.Symlink("/etc/hostname", filepath.Join(src, "link")); err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(remote, "project")
+	dst := filepath.Join(xdgDir(remote, "HOME"), "project")
 	var row transferRow
 	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src":  map[string]any{"path": src},
@@ -552,5 +592,25 @@ func TestAFolderMoveRemovesOnlyWhatItCopied(t *testing.T) {
 	if target, err := os.Readlink(filepath.Join(src, "link")); err != nil || target != "/etc/hostname" {
 		t.Errorf("ASSERTION: the move removed a link it did not copy: %v", err)
 	}
-	saveTransferArtifact(t, "move-keeps-uncopied", row)
+	var skipped struct {
+		Skipped      int `json:"skipped"`
+		SkippedItems []struct {
+			Rel  string `json:"rel"`
+			Kind string `json:"kind"`
+		} `json:"skipped_items"`
+		Error string `json:"error"`
+	}
+	raw, _ := json.Marshal(row)
+	var out struct {
+		Transfers []json.RawMessage `json:"transfers"`
+	}
+	_ = json.Unmarshal(dialFileVerbs(t, base).mustRaw("transfer-list", map[string]any{"id": row.ID}), &out)
+	if len(out.Transfers) == 1 {
+		raw = out.Transfers[0]
+	}
+	_ = json.Unmarshal(raw, &skipped)
+	if skipped.Skipped != 1 || len(skipped.SkippedItems) != 1 || skipped.SkippedItems[0].Rel != "link" || skipped.SkippedItems[0].Kind != "symlink" {
+		t.Errorf("ASSERTION: the copy does not say it left the link: %s", raw)
+	}
+	saveTransferArtifact(t, "move-keeps-uncopied", json.RawMessage(raw))
 }

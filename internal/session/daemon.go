@@ -1344,6 +1344,9 @@ func (d *Daemon) Start() error {
 	if d.federation != nil {
 		d.federation.Start(d.ctx)
 	}
+	// The copies the previous daemon did not finish go on from their parts,
+	// once the links are on their way up. See transfer_journal.go.
+	d.transfers.load()
 	// Each linked host's agents are followed from here on. See host_fleet.go.
 	d.fleet.start(d.ctx)
 	// The config file is followed from here on, so a host added while the daemon
