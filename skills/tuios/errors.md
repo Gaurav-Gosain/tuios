@@ -20,7 +20,8 @@ Over the socket every failure carries a stable code in the error envelope:
 `repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
-`internal`. `internal` is a failure inside the daemon
+`no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `cross_device`,
+`disk_full`, `no_transfer`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
 
@@ -41,7 +42,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
 | `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
 | `no_buffer` | From the paste buffer verbs: no buffer has that name, or there are no buffers. Nothing was read, pasted or deleted. `tuios list-buffers` shows the names. |
-| `busy` | The daemon had no room for the request now: other large requests held its memory, or the pane has not read the last large input. Nothing was done. Try again after a short wait. |
+| `busy` | The daemon had no room for the request now: other large requests held its memory, or the pane has not read the last large input. From `transfer-start`: another copy writes that path now. Nothing was done. Try again after a short wait, or when that copy ends. |
 | `too_many_connections` | The daemon already serves as many connections as it takes, and closed yours. Nothing was done. Close some clients or commands, then try again. |
 | `agents_disabled` | The person turned the agent features off with `[agents] enabled = false`, and the verb is one of them. Nothing was done. Do not retry. Tell the person. |
 | `not_repo` | From `review-diff` and `review-note`: no git repository is under the pane, or its process runs on another machine. Nothing was read. |
@@ -65,6 +66,11 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `host_refused` | The link is up and cannot take another connection. Close one. |
 | `unknown_pane` | A pane id on the far machine is gone. Drop it. |
 | `not_worktree`, `worktree_dirty`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |
+| `no_file`, `file_exists`, `no_permission` | From the file verbs and `transfer-start`: the path is not there, the destination is there and the call did not say what to do with it, or the user the daemon runs as may not touch it. Nothing was changed. For `file_exists`, ask the person, then pass `conflict`. |
+| `hash_mismatch` | A copy's bytes did not match the original's sha256. The copy was removed, and the transfer copies that file once more by itself. A second mismatch fails the transfer: the disk or the file may be changing. |
+| `cross_device` | `file-rename` cannot move a path to another disk. Copy it with `transfer-start` and `move`. |
+| `disk_full` | The disk had no room. What was written stays in the part, and `transfer-resume` goes on from it once there is space. |
+| `no_transfer` | No transfer has that id. A finished transfer leaves the list 30 minutes after it ends. |
 
 ## When the daemon is not running
 

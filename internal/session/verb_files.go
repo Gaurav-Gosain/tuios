@@ -199,7 +199,7 @@ func openRegular(path string) (*os.File, fs.FileInfo, error) {
 
 // openRegularIn is openRegular through fsys.
 func openRegularIn(fsys fileFS, path string) (*os.File, fs.FileInfo, error) {
-	f, err := fsys.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := fsys.OpenFile(path, os.O_RDONLY|oNonBlock, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -250,7 +250,7 @@ func fileError(what, path string, err error) *verbError {
 // also be the file that is at the part's name now, and a regular one.
 func openPart(fsys fileFS, part string) (*os.File, error) {
 	notRegular := &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
-	f, err := fsys.OpenFile(part, os.O_CREATE|os.O_WRONLY|oNoFollow|syscall.O_NONBLOCK, 0o600)
+	f, err := fsys.OpenFile(part, os.O_CREATE|os.O_WRONLY|oNoFollow|oNonBlock, 0o600)
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, notRegular
@@ -518,7 +518,7 @@ func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 	defer fsys.Close()
-	if err := fsys.MkdirAll(fsys.confine(path), 0o755); err != nil {
+	if err := fsys.MkdirAll(fsys.confineDir(path), 0o755); err != nil {
 		return nil, fileError("make the folder", path, err)
 	}
 	return map[string]any{"path": path}, nil
@@ -737,7 +737,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		}
 		defer fsys.Close()
 		dir := filepath.Dir(path)
-		if fi, err := fsys.Stat(fsys.confine(dir)); err != nil || !fi.IsDir() {
+		if fi, err := fsys.Stat(fsys.confineDir(dir)); err != nil || !fi.IsDir() {
 			if err == nil {
 				err = fs.ErrNotExist
 			}

@@ -540,7 +540,8 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 }
 
 // eventInScope reports whether an event may be written to cs. Gap markers
-// always may. Under scope own an event reaches the stream only when its
+// always may, and transfer events reach only a caller that may list the
+// transfers. Under scope own an event reaches the stream only when its
 // session is one the connection reaches; an event with no session, such as
 // host-changed, does not.
 //
@@ -550,6 +551,16 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if ev.Type == EventGap {
 		return true
+	}
+	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
+	// events reach no restricted connection and no pane without admin.
+	if ev.Transfer != nil {
+		if cs.scope.Load() != nil {
+			return false
+		}
+		if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
+			return false
+		}
 	}
 	var owners []string
 	if sc := cs.scope.Load(); sc != nil && sc.own {

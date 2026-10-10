@@ -172,7 +172,7 @@ code and the fingerprint on the phone with the ones here before you accept.`,
 	f.StringVar(&o.machine, "machine", "", "Name of this machine in the code, which the phone shows (default the host name)")
 	f.StringVar(&o.listen, "listen", "", "Address for the pairing listener, as HOST:PORT. Port 0 picks a free port")
 	f.StringVar(&o.authorizedKeys, "authorized-keys", "", "File to add the key to (default ~/.ssh/authorized_keys)")
-	f.StringSliceVar(&o.allow, "allow", nil, "Capabilities for the new [hosts.DEVICE] table: list, mail, open, write, respond (default list,mail)")
+	f.StringSliceVar(&o.allow, "allow", nil, "Capabilities for the new [hosts.DEVICE] table: list, mail, open, write, respond, files (default list,mail)")
 	f.BoolVar(&o.yes, "yes", false, "Accept the key without a question. Use it for tests only")
 	f.BoolVar(&o.listenAll, "listen-all", false, "Let the listener use every interface (0.0.0.0 or [::]) or a public address")
 	f.BoolVar(&o.acceptLocal, "accept-local", false, "Accept a request from this machine, for an emulator or a userspace tailscaled. Programs here that can read the code can then pair")
