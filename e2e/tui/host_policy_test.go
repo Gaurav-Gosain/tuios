@@ -255,7 +255,7 @@ func TestAMachineHoldsALinkToItsPolicy(t *testing.T) {
 	}
 	// The CLI wraps its message to the terminal, so words are compared, not
 	// lines.
-	if flat := strings.Join(strings.Fields(out), " "); !contains(flat, "may not write on") {
+	if flat := strings.Join(strings.Fields(out), " "); !contains(flat, "(write) on") {
 		t.Errorf("the refusal does not name what is missing:\n%s", out)
 	}
 
