@@ -2115,6 +2115,17 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	} else {
 		terminal = vt.NewWithScrollback(width, height, s.scrollbackLines())
 	}
+	// A locally spawned pane on Windows runs on a ConPTY (xpty.NewPty returns
+	// one), and conhost drops input CSIs it does not recognise, so the pane's
+	// emulator must not offer the kitty keyboard protocol: an unanswered
+	// CSI ? u tells the guest to fall back to legacy keys by itself. Remote
+	// panes run on a real PTY at the far end and keep the protocol. The type
+	// assertion keeps the vt.Terminal interface free of ConPTY concerns.
+	if sp.host == "" && ptyspawn.HostIsConPTY() {
+		if e, ok := terminal.(interface{ DisableKittyKeyboardProtocol() }); ok {
+			e.DisableKittyKeyboardProtocol()
+		}
+	}
 
 	pty := &PTY{
 		ID:           id,
