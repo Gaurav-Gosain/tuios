@@ -52,10 +52,23 @@ func runThrottleIfAsked() {
 	if spec == "" {
 		return
 	}
-	var rate, depth int
-	if _, err := fmt.Sscanf(spec, "%d:%d", &rate, &depth); err != nil || rate <= 0 || depth <= 0 {
+	// rate:depth, or rate:depth:delay with a delay in ms that every byte
+	// from the far side waits before it is passed on: a link with that round
+	// trip.
+	var rate, depth, delayMs int
+	parts := strings.Split(spec, ":")
+	if len(parts) < 2 || len(parts) > 3 {
 		os.Exit(2)
 	}
+	rate, _ = strconv.Atoi(parts[0])
+	depth, _ = strconv.Atoi(parts[1])
+	if len(parts) == 3 {
+		delayMs, _ = strconv.Atoi(parts[2])
+	}
+	if rate <= 0 || depth <= 0 || delayMs < 0 {
+		os.Exit(2)
+	}
+	delay := time.Duration(delayMs) * time.Millisecond
 	cmdline := ""
 	for i, a := range os.Args {
 		if a == "--" && i+1 < len(os.Args) {
@@ -75,10 +88,31 @@ func runThrottleIfAsked() {
 	cond := sync.NewCond(&mu)
 	var buf []byte
 	eof := false
+	type timed struct {
+		at   time.Time
+		data []byte
+		err  error
+	}
+	// The delay line holds what the link carries in one delay, and no more,
+	// so the far side still waits on the buffer behind it.
+	line := make(chan timed, int(int64(rate)*int64(delay)/int64(time.Second)/(64<<10))+1)
 	go func() {
-		chunk := make([]byte, 64<<10)
 		for {
+			chunk := make([]byte, 64<<10)
 			n, err := far.Read(chunk)
+			line <- timed{time.Now(), chunk[:n], err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	go func() {
+		for c := range line {
+			if d := time.Until(c.at.Add(delay)); d > 0 {
+				time.Sleep(d)
+			}
+			n, err := len(c.data), c.err
+			chunk := c.data
 			mu.Lock()
 			for len(buf) >= depth {
 				cond.Wait()
@@ -140,6 +174,13 @@ func slicesWithout(env []string, key string) []string {
 // line names base, so a test can cut this link and no other.
 func writeSlowFakeSSH(t *testing.T, dir, remoteBase string, rate, depth int) string {
 	t.Helper()
+	return writeDelayedFakeSSH(t, dir, remoteBase, rate, depth, 0)
+}
+
+// writeDelayedFakeSSH is writeSlowFakeSSH with every byte from the far side
+// held delayMs first, which gives the link that round trip.
+func writeDelayedFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, delayMs int) string {
+	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatalf("find this test binary: %v", err)
@@ -152,7 +193,7 @@ func writeSlowFakeSSH(t *testing.T, dir, remoteBase string, rate, depth int) str
 	for _, key := range xdgKeys {
 		b.WriteString("export " + key + "=" + xdgDir(remoteBase, key) + "\n")
 	}
-	fmt.Fprintf(&b, "%s=%d:%d exec %s %s %s -- \"$*\"\n", throttleEnv, rate, depth, self, throttleMarker, dir)
+	fmt.Fprintf(&b, "%s=%d:%d:%d exec %s %s %s -- \"$*\"\n", throttleEnv, rate, depth, delayMs, self, throttleMarker, dir)
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
 		t.Fatalf("write the slow ssh stand-in: %v", err)
 	}
