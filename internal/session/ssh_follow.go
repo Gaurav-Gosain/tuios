@@ -101,10 +101,14 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 
 // ownedSocket reports whether path is an absolute path to a Unix socket, not
 // a link, owned by the user the daemon runs as, where no other user can put a
-// socket of their own in its place. Every folder from the socket's up to the
-// root is checked, as OpenSSH's safe_path does: each must be owned by this
-// user or by root, and no other user may write to it, unless it is sticky
-// (/tmp), where nobody can remove or rename what another user made.
+// socket of their own in its place. The socket's folder is resolved once with
+// filepath.EvalSymlinks: macOS's /var, a symlink to /private/var, sits in
+// every standard temp path there, and without resolving it first the walk
+// below would reject every socket under it, not just a suspicious one. Every
+// folder from there up to the root is then checked, as OpenSSH's safe_path
+// does: each must be owned by this user or by root, and no other user may
+// write to it, unless it is sticky (/tmp), where nobody can remove or rename
+// what another user made.
 func ownedSocket(path string) bool {
 	if !filepath.IsAbs(path) || hasControl(path) {
 		return false
@@ -117,7 +121,11 @@ func ownedSocket(path string) bool {
 	if uid, ok := fileOwner(fi); !ok || uid != me {
 		return false
 	}
-	for dir := filepath.Dir(filepath.Clean(path)); ; dir = filepath.Dir(dir) {
+	folder, err := filepath.EvalSymlinks(filepath.Dir(filepath.Clean(path)))
+	if err != nil {
+		return false
+	}
+	for dir := folder; ; dir = filepath.Dir(dir) {
 		if !safeFolder(dir, me) {
 			return false
 		}
@@ -128,7 +136,9 @@ func ownedSocket(path string) bool {
 }
 
 // safeFolder reports whether dir is a real folder, owned by me or by root,
-// that no other user can write to unless it is sticky.
+// that no other user can write to unless it is sticky. Every symlink in dir
+// is already resolved by the time this is called, so Lstat here still
+// rejects anything that is not a plain directory.
 func safeFolder(dir string, me int) bool {
 	fi, err := os.Lstat(dir)
 	if err != nil || !fi.IsDir() {
