@@ -7,8 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// TestSidebarSessionFrameAlignsWithCenter keeps each session name visible
-// without reserving a row above its framed terminal. A center pane can be
+// TestSidebarSessionFrameAlignsWithCenter keeps ordinary pane borders
+// at the top of each rail without reserving a session-label row. A center pane can be
 // floating, but both rails start at the viewport's first usable row.
 func TestSidebarSessionFrameAlignsWithCenter(t *testing.T) {
 	const cfg = `[appearance.sidebar]
@@ -43,21 +43,21 @@ session = "side-right"
 	}
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "side-left") && strings.Contains(s.Text(), "side-right") && strings.Contains(s.Text(), "SAVED-LINE")
+		return strings.Contains(s.Text(), "SAVED-LINE") && strings.Count(s.Line(0), "╭") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("rails did not attach: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		row := s.Line(0)
+		row := []rune(s.Line(0))
 		if len(row) < 120 {
 			return false
 		}
-		// Both rail frames start on the first row, with their session
-		// identities inside the title bars, not on a row above them.
-		return strings.HasPrefix(row, "╭") && strings.Contains(row[:36], "side-left") &&
-			strings.Contains(row[84:], "side-right")
+		// Both normal rail frames start on the first row, not below an
+		// extra session-label row.
+		return row[0] == '╭' && row[84] == '╭' &&
+			!strings.Contains(string(row), "side-left") && !strings.Contains(string(row), "side-right")
 	}, uiTimeout); err != nil {
 		t.Fatalf("rail frames sit below the center frame: %v\n%s", err, term.Snapshot())
 	}
-	t.Logf("aligned frame and session labels:\n%s", term.Snapshot())
+	t.Logf("aligned ordinary rail frames:\n%s", term.Snapshot())
 }

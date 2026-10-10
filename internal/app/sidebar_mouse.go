@@ -348,9 +348,6 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 			m.OpenSettingsAt("Sidebar")
 		} else {
 			m.FocusSidebarSession(edge)
-			if m.sidebarSessions[edge-1].paneCount > 1 {
-				m.SidebarSessionIntent("NextWindow")
-			}
 		}
 		return true
 	}

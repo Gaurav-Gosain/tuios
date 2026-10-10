@@ -104,21 +104,28 @@ session = "side-left"
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "NEXT-ACTIVE-PANE") && strings.Contains(s.Text(), "LEFT-SESSION-VIEW") &&
-			strings.Contains(s.Line(0), "side-left  3/3")
+			!strings.Contains(s.Line(0), "side-left")
 	}, uiTimeout); err != nil {
 		t.Fatalf("left rail did not stack the additional pane: %v\n%s", err, term.Snapshot())
+	}
+	next, err := daemonWindows(base, "side-left")
+	if err != nil || next.Total != 3 || next.FocusedWindowID == "" {
+		t.Fatalf("third stacked pane: %+v %v", next, err)
 	}
 	if err := term.SendKeys(tuitest.Ctrl('b'), "p"); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "side-left  2/3") && strings.Contains(s.Text(), "NEXT-ACTIVE-PANE")
-	}, uiTimeout); err != nil {
-		t.Fatalf("previous-pane shortcut did not focus a stacked pane: %v\n%s", err, term.Snapshot())
-	}
-	previous, err := daemonWindows(base, "side-left")
-	if err != nil || previous.FocusedWindowID == "" {
-		t.Fatalf("read previous rail pane: %+v %v", previous, err)
+	deadline = time.Now().Add(uiTimeout)
+	var previous daemonWindowList
+	for {
+		previous, err = daemonWindows(base, "side-left")
+		if err == nil && previous.FocusedWindowID != "" && previous.FocusedWindowID != next.FocusedWindowID {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("previous-pane shortcut did not focus a stacked pane: %+v %v\n%s", previous, err, term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	if err := term.SendKeys("printf '%s\\n' PREVFOCUS", tuitest.Enter); err != nil {
 		t.Fatal(err)
@@ -137,13 +144,20 @@ session = "side-left"
 	if out, err := tuiosCLI(t, base, "capture-pane", "-s", "center"); err != nil || strings.Contains(out, "PREVFOCUS") {
 		t.Fatalf("rail pane shortcut changed center session: %v\n%s", err, out)
 	}
-	// The rail header is a pane selector, not an ordinary session-list row.
+	// Clicking the ordinary title bar focuses that exact pane, not the next
+	// pane or an ordinary session-list row.
 	mousePress(t, term, 15, 0, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 15, 0, tuitest.MouseLeft, 0)
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "side-left  3/3") && strings.Contains(s.Text(), "NEXT-ACTIVE-PANE")
-	}, uiTimeout); err != nil {
-		t.Fatalf("rail header did not focus the next stacked pane: %v\n%s", err, term.Snapshot())
+	deadline = time.Now().Add(uiTimeout)
+	for {
+		focused, focusErr := daemonWindows(base, "side-left")
+		if focusErr == nil && focused.FocusedWindowID == previous.Windows[0].ID {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rail title did not focus its pane: %+v %v\n%s", focused, focusErr, term.Snapshot())
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// The session assignments belong to distinct left/right Settings rows; a

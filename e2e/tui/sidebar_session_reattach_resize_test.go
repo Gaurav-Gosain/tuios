@@ -34,7 +34,7 @@ session = "side"
 	id := list.Windows[0].ID
 	first := startIn(t, base, startOpts{cols: 100, rows: 35, args: []string{"attach", "center"}})
 	if err := first.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "side") && strings.Contains(s.Text(), "sh-3.2$")
+		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "sh-3.2$") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("first attach: %v\n%s", err, first.Snapshot())
 	}
@@ -60,7 +60,7 @@ session = "side"
 	}
 	second := startIn(t, base, startOpts{cols: 100, rows: 35, args: []string{"attach", "center"}})
 	if err := second.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "side") && strings.Contains(s.Text(), "sh-3.2$")
+		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "sh-3.2$") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("second attach: %v\n%s", err, second.Snapshot())
 	}

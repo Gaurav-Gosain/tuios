@@ -105,7 +105,7 @@ command = %q
 	}
 	term := startIn(t, base, startOpts{cols: 110, rows: 40, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "side-right") && strings.Contains(s.Line(0), "side-left")
+		return strings.Count(s.Line(0), "╭") >= 2 && !strings.Contains(s.Line(0), "side-left") && !strings.Contains(s.Line(0), "side-right")
 	}, uiTimeout); err != nil {
 		t.Fatalf("assigned rail session did not appear: %v\n%s", err, term.Snapshot())
 	}

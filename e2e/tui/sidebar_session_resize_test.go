@@ -32,7 +32,7 @@ session = "side"
 	}
 	term := startIn(t, base, startOpts{cols: 100, rows: 35, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "side") && strings.Contains(s.Text(), "sh-3.2$")
+		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "sh-3.2$") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("side rail did not attach: %v\n%s", err, term.Snapshot())
 	}
