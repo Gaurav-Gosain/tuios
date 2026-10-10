@@ -53,6 +53,24 @@ border still at its original column while `FilterMouseMotion` had no
 logs a real-client screen snapshot as its repeatable artifact. Run them with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestDualRail' .`
 
+For the review's hidden-edge case, `TestDualRailHiddenLegacyExplicitLeft`
+failed on the original foundation binary: no sidebar appeared. After resolving
+the effective edge, `TestDualRailHiddenDoesNotInheritLegacyFields` failed
+against the intermediate build because a hidden legacy section order and width
+leaked onto that edge; both pass on the final build. The negative logs are
+`/tmp/tuios-pr600-hidden-negative.log` and
+`/tmp/tuios-pr600-hidden-fields-negative.log`.
+
+On 2026-10-10, `TestDualRailClickSwitchesSession` was tightened to check
+which edge actually gets keyboard focus after a blank left-rail click, rather
+than only checking a session switch that either rail could perform. With the
+secondary branch removed from `OS.SidebarClick`, the rebuilt real client failed
+at `blank left-rail click did not give left edge keyboard focus`; after restoring
+the branch it passed. The run is recorded in
+`/tmp/tuios-pr600-click-negative.log`; the passing test saves a styled and
+plain settled screen in `$TUIOS_E2E_FRAMES/TestDualRailClickSwitchesSession/`
+(or the default system-temp artifacts directory).
+
 ## Paste buffers (#514)
 
 `paste_buffers_test.go`, `paste_buffers_scope_test.go`,
