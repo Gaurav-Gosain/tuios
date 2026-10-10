@@ -22,10 +22,15 @@ every pane holds it; under `strict` a call fails with `forbidden`. That is the
 person's decision. Tell them, do not look for another way.
 
 On another machine, the file verbs need `files` in that machine's `allow` for
-this one. Its writes land only in its home folder, never in `~/.ssh`,
-`~/.gnupg`, credentials, shell start files, login items or tuios's own
-config. A refusal is `forbidden` and names the path. Do not try another path
-to the same file.
+this one. A write that arrives over the link lands only under that machine's
+`files_roots` (one receive folder, `~/Downloads/tuios`, unless the person
+added more), plus the drop folder. It never reaches `~/.ssh`, `~/.gnupg`,
+credentials, shell start files, login items or tuios's own config, whatever
+`files_roots` says, and a read never returns keys or credentials. A refusal is
+`forbidden`: the write refusal names where writes may land and which setting to
+change, and the read refusal names the path. Do not try another path to the
+same file. To copy into a folder the far machine does not yet allow, tell the
+person to add it to `files_roots` for this machine in the config there.
 
 ## Copy a file or a folder
 

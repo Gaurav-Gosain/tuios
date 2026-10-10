@@ -3522,7 +3522,7 @@ is in use when:
 |------|--------------|
 | `--name DEVICE` | The device name. It replaces the name the phone sends. Use letters, digits, dot, dash and underscore |
 | `--machine NAME` | The machine name in the code. The phone shows it. The default is the host name, up to the first dot |
-| `--allow LIST` | The `allow` list of the new `[hosts.DEVICE]` table. The default is `list,mail` |
+| `--allow LIST` | The `allow` list of the new `[hosts.DEVICE]` table. The default is `list,mail`. `files` lets the device read and write files here; a write from it lands only under the device's `files_roots` (the receive folder `~/Downloads/tuios` unless you add more in `config.toml`) and never in keys, credentials or shell start files |
 | `--timeout D` | The time the code works. The default is 5 minutes. The maximum is 1 hour |
 | `--listen HOST:PORT` | Listen on this address. Port 0 picks a free port. Without it, tuios listens on each address in the code |
 | `--listen-all` | Let the listener use every interface, as `0.0.0.0` or `[::]` do, or a public address. tuios prints a warning for every interface |
