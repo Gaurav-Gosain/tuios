@@ -122,6 +122,10 @@ type CommandPaletteItem struct {
 	// AgentSeen is the unread bit behind a done AgentState: true once the
 	// person has looked at the pane, which draws idle's mark (agentMark).
 	AgentSeen bool
+	// AgentSubagents is how many subagents the pane's agent is running, or
+	// for a session the pane its state was rolled up from, which draws a
+	// pane at rest as waiting.
+	AgentSubagents int
 	// Keybind marks a row that names one action to rebind. Those rows are
 	// reached only behind the "#" token and are hidden from every other query,
 	// which is what keeps a few hundred of them out of a list of twenty

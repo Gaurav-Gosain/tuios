@@ -3815,3 +3815,35 @@ wiring cut and runs `TestSubagentListFromHooks` against it. The logs are in
 The "tools" step is there for the flush control. Without it, the `Stop` after
 the four calls changes descriptions, which pushes the whole list, held calls
 included, and the build without the flush passed.
+
+## Subagent rows
+
+`e2e/tui/subagent_rows_test.go` runs the stand-in `claude` of "Subagent
+list" under a real client with the rail at 24 columns, beside a second agent
+pane at rest that sorts after the lead. `TestSubagentRowsOnTheRail` checks
+the waiting mark on the lead's rail row and title bar, a tall row per
+subagent, and each collapse step as the terminal shrinks from 50 rows to 12.
+It runs in the shipped layout and in a layout with the agents section alone.
+At every height it checks that no subagent row shows while an agent row is
+hidden. Then it checks the fade, ASCII at 16 colours, and
+`subagent_rows = "count"`.
+
+Each control below was run on 2026-10-10 on branch `feat/subagent-rows`.
+Each one builds `cmd/tuios` with one piece of wiring cut and runs
+`TestSubagentRowsOnTheRail` against it. The logs are in
+`~/.cache/agent-tmp/subagents/neg/` (`pr2-*.log`).
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `displayState` in `windowMarkState` (the title bar reads `sidebarGlyphState`) | "the lead's title bar does not wear the waiting mark" | **caught** |
+| `displayState` in `sidebarGlyph` | "the lead's rail row does not wear the waiting mark" | **caught** |
+| Step 1 of `sidebarAgentChildren` counts the subagents and not the agent rows (`all <= room`) | "at 24 rows a subagent row shows while an agent row is hidden" | **caught** |
+| The `!childCut` guard on the tall test | "at 24 rows a subagent row shows while an agent row is hidden": the collapsed rows went tall and pushed the second agent off | **caught** |
+| The list copy in the sync path (`w.AgentSubagentList = subagentsFromWire(...)` in `internal/app/session.go`) | "the rail never drew a tall row per subagent" | **caught** |
+| The child entries put into the section (`agents, childCut = plan.rows, plan.cut`) | "the rail never drew a tall row per subagent" | **caught** |
+| The `subagent_rows = "count"` check in `sidebarAgentChildren` | "subagent_rows = count still draws rows" | **caught** |
+
+The design named `◐` for the waiting mark. The frames drawn by
+`internal/shot`, with the Go Mono it embeds, showed it as a missing glyph.
+The mark is `◊`, which Go Mono and Menlo both have. Kiro and Qwen Code also
+put `◐` in their window titles as a spinner.

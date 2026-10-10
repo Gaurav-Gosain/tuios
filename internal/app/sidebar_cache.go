@@ -409,6 +409,27 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentSubagents > 0 {
 			mixI(w.AgentSubagents)
 		}
+		// The subagents' rows: each one's name, state, tool and end, and the
+		// minute a running one's age reads as. A pane with none folds
+		// nothing.
+		if n := len(w.AgentSubagentList); n > 0 {
+			mixI(n)
+			for _, sa := range w.AgentSubagentList {
+				mixS(sa.ID)
+				mixS(sa.State)
+				mixS(sa.Description)
+				mixS(sa.Type)
+				mixS(sa.Now)
+				mixS(sa.Last)
+				mixI(sa.Tools)
+				mixS(sa.Result)
+				if sa.EndedAt == 0 {
+					mixI(int(agentElapsedBucket(sa.StartedAt)))
+				} else {
+					mixI(int((sa.EndedAt - sa.StartedAt) / int64(time.Minute)))
+				}
+			}
+		}
 		// The OSC 7501 records draw the app and the progress on the row.
 		if n := len(w.ProgramStatus); n > 0 {
 			mixI(n)

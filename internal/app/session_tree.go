@@ -73,22 +73,23 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
 		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
 		windows = append(windows, sessiontree.WindowInput{
-			ID:         w.ID,
-			Title:      m.railTitleShown(w),
-			AgentState: state,
-			DoneSeen:   seen,
-			StateAt:    w.AgentStateAt,
-			Harness:    w.AgentHarness,
-			Message:    message,
-			AgentKind:  kind,
-			Meta:       w.AgentMeta,
-			Queued:     w.AgentQueued,
-			Subagents:  w.AgentSubagents,
-			Program:    w.ProgramStatus,
-			Focused:    i == m.FocusedWindow,
-			Workspace:  w.Workspace,
-			Host:       w.Host,
-			HostLink:   w.HostLink,
+			ID:           w.ID,
+			Title:        m.railTitleShown(w),
+			AgentState:   state,
+			DoneSeen:     seen,
+			StateAt:      w.AgentStateAt,
+			Harness:      w.AgentHarness,
+			Message:      message,
+			AgentKind:    kind,
+			Meta:         w.AgentMeta,
+			Queued:       w.AgentQueued,
+			Subagents:    w.AgentSubagents,
+			SubagentList: w.AgentSubagentList,
+			Program:      w.ProgramStatus,
+			Focused:      i == m.FocusedWindow,
+			Workspace:    w.Workspace,
+			Host:         w.Host,
+			HostLink:     w.HostLink,
 		})
 	}
 	name := m.SessionName
@@ -131,18 +132,19 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			ID: w.ID,
 			// The daemon folds a custom name into Title and withholds a command
 			// for a named pane, so passing no name here still lets one win.
-			Title:      railWindowLabel("", w.ForegroundCmd, w.Title),
-			AgentState: state,
-			DoneSeen:   seen,
-			StateAt:    w.AgentStateAt,
-			Harness:    w.AgentHarness,
-			Message:    message,
-			AgentKind:  kind,
-			Meta:       agentMetaFromWire(nil, w.AgentMeta),
-			Queued:     w.AgentQueued,
-			Subagents:  w.Subagents,
-			Program:    programStatusFromWire(nil, w.ProgramStatus),
-			Workspace:  w.Workspace,
+			Title:        railWindowLabel("", w.ForegroundCmd, w.Title),
+			AgentState:   state,
+			DoneSeen:     seen,
+			StateAt:      w.AgentStateAt,
+			Harness:      w.AgentHarness,
+			Message:      message,
+			AgentKind:    kind,
+			Meta:         agentMetaFromWire(nil, w.AgentMeta),
+			Queued:       w.AgentQueued,
+			Subagents:    w.Subagents,
+			SubagentList: subagentsFromWire(nil, w.SubagentList),
+			Program:      programStatusFromWire(nil, w.ProgramStatus),
+			Workspace:    w.Workspace,
 		})
 	}
 	display, _ := client.SessionLabel(name)
@@ -284,8 +286,8 @@ func (m *OS) SwitchToSessionByIndex(n int) {
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
 // in the agent-state glyph the same way the window title bar does, so the
 // palette and the title bar never disagree about what a glyph means.
-func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool) string {
-	if glyph := agentStateIndicator(sidebarGlyphState(agentState, doneSeen)); glyph != "" {
+func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool, running int) string {
+	if glyph := agentStateIndicator(displayState(agentState, doneSeen, running)); glyph != "" {
 		return prefix + glyph + " " + name
 	}
 	return prefix + name
@@ -343,11 +345,12 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		if isRemoteNode(s) {
 			host, name := s.Host, remoteSessionName(s)
 			items = append(items, CommandPaletteItem{
-				Name:       sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState, s.DoneSeen),
-				Shortcut:   "another machine",
-				Category:   "Sessions",
-				AgentState: s.AgentState,
-				AgentSeen:  s.DoneSeen,
+				Name:           sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState, s.DoneSeen, s.Subagents),
+				Shortcut:       "another machine",
+				Category:       "Sessions",
+				AgentState:     s.AgentState,
+				AgentSeen:      s.DoneSeen,
+				AgentSubagents: s.Subagents,
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					m.openRemoteSession(host, name)
@@ -362,10 +365,11 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		items = append(items, CommandPaletteItem{
 			// The rail's title for the session, so a session reads by one name
 			// here and there; the action still switches by its identity.
-			Name:       sessionPaletteLabel("Session: ", s.Title, s.AgentState, s.DoneSeen),
-			Category:   "Sessions",
-			AgentState: s.AgentState,
-			AgentSeen:  s.DoneSeen,
+			Name:           sessionPaletteLabel("Session: ", s.Title, s.AgentState, s.DoneSeen, s.Subagents),
+			Category:       "Sessions",
+			AgentState:     s.AgentState,
+			AgentSeen:      s.DoneSeen,
+			AgentSubagents: s.Subagents,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if isCurrent {
 					m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
@@ -385,11 +389,12 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 				label, warn = s.Title+"/"+w.Title, "switches session"
 			}
 			items = append(items, CommandPaletteItem{
-				Name:       sessionPaletteLabel("Window: ", label, w.AgentState, w.DoneSeen),
-				Shortcut:   warn,
-				Category:   "Sessions",
-				AgentState: w.AgentState,
-				AgentSeen:  w.DoneSeen,
+				Name:           sessionPaletteLabel("Window: ", label, w.AgentState, w.DoneSeen, w.Subagents),
+				Shortcut:       warn,
+				Category:       "Sessions",
+				AgentState:     w.AgentState,
+				AgentSeen:      w.DoneSeen,
+				AgentSubagents: w.Subagents,
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					if !isCurrent {

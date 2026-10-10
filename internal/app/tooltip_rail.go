@@ -225,6 +225,8 @@ func sidebarStateWords(state string) string {
 		return "done"
 	case "unknown":
 		return "unknown"
+	case string(agentStateWaiting):
+		return "waiting"
 	default:
 		return "idle"
 	}

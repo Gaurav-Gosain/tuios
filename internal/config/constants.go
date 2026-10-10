@@ -532,6 +532,18 @@ const (
 // SidebarFileDeletes lists the valid values for appearance.sidebar.file_delete.
 var SidebarFileDeletes = []string{SidebarFileDeleteTrash, SidebarFileDeletePermanent}
 
+// How the rail shows the subagents of an agent row. Rows draws one row per
+// subagent under its pane's row, as space allows; count draws only the count on
+// the pane's row, as the rail did before it knew more than the count.
+const (
+	SidebarSubagentRowsRows  = "rows"
+	SidebarSubagentRowsCount = "count"
+)
+
+// SidebarSubagentRowsValues lists the valid values for
+// appearance.sidebar.subagent_rows.
+var SidebarSubagentRowsValues = []string{SidebarSubagentRowsRows, SidebarSubagentRowsCount}
+
 // FormatWindowTitle expands WindowTitleFormat for one window. The placeholders
 // are {title} (the custom or terminal-reported title), {index} (the window's
 // 1-based position in its workspace, the same number the leader-digit shortcuts

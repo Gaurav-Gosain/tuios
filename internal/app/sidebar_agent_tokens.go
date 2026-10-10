@@ -67,7 +67,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "name":
 		tk.Text = sidebarAgentName(e)
 	case "state":
-		tk.Text = sidebarStateWords(e.State)
+		tk.Text = sidebarStateWords(displayState(e.State, e.DoneSeen, e.Subagents))
 	case "progress":
 		// "40%": the progress of the pane's OSC 7501 summary record, while
 		// it works or waits. Its number is the percent, for gt and lt.
@@ -107,7 +107,14 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "subagents":
 		// "2 subagents" on any row, since a pane at rest with subagents at
 		// work is the case it is for. Its number is the count, for gt and lt.
-		if tk.Text = session.SubagentsText(e.Subagents); tk.Text != "" {
+		// With rows of their own under this one, "3 of 4 run" says how
+		// many of them still work.
+		if e.ChildRows > 0 {
+			tk.Text = subagentsRunText(runningSubagents(e.Children), len(e.Children))
+		} else {
+			tk.Text = session.SubagentsText(e.Subagents)
+		}
+		if tk.Text != "" {
 			tk.Number, tk.HasNumber = float64(e.Subagents), true
 		}
 	case "pr":
@@ -381,7 +388,9 @@ func sidebarAgentMetaValue(meta []sessiontree.MetaToken, key string) string {
 func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) bool {
 	now := time.Now()
 	for _, e := range agents {
-		if len(m.sidebarAgentTokensFor(e, variant, true, now).Note) > 0 {
+		// A subagent's row always has a second line: its tool, or how it
+		// ended.
+		if e.sidebarSubRow() || len(m.sidebarAgentTokensFor(e, variant, true, now).Note) > 0 {
 			return true
 		}
 	}

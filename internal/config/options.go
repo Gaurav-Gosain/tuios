@@ -845,6 +845,11 @@ var optionSpecs = []Option{
 		Default:     "1h",
 	},
 	{
+		Path: "appearance.sidebar.subagent_rows", Type: OptionString, Section: "sidebar",
+		Description: "How an agent row shows its subagents: a row for each under it, or the count alone",
+		Accepted:    SidebarSubagentRowsValues, Default: SidebarSubagentRowsRows,
+	},
+	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
 		Description: "Workspace chip band the rail used to draw",
 		Default:     "",

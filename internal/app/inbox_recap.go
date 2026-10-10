@@ -210,6 +210,11 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 	if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
 		add(facts)
 	}
+	if it.Host == "" {
+		for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
+			add(l)
+		}
+	}
 	return lines
 }
 

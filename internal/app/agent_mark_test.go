@@ -84,8 +84,8 @@ func TestAgentMarksAreOneCharacterPerMeaning(t *testing.T) {
 // palette, the session switcher and the aggregate view.
 func TestReadFinishedPaneLooksTheSameEverywhere(t *testing.T) {
 	pal := theme.UI()
-	unread, _ := agentMark("done", false, pal)
-	read, readInk := agentMark("done", true, pal)
+	unread, _ := agentMark("done", false, 0, pal)
+	read, readInk := agentMark("done", true, 0, pal)
 	if unread != agentStateIndicator("done") {
 		t.Errorf("an unread finished pane draws %q, want done's %q", unread, agentStateIndicator("done"))
 	}
@@ -96,7 +96,7 @@ func TestReadFinishedPaneLooksTheSameEverywhere(t *testing.T) {
 		t.Errorf("a read finished pane is inked %v, want the muted ink", readInk)
 	}
 
-	if got := sessionPaletteLabel("Window: ", "api", "done", true); !strings.Contains(got, read) || strings.Contains(got, unread) {
+	if got := sessionPaletteLabel("Window: ", "api", "done", true, 0); !strings.Contains(got, read) || strings.Contains(got, unread) {
 		t.Errorf("palette row for a read finished pane = %q, want the %q mark", got, read)
 	}
 

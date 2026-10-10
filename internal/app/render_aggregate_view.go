@@ -111,7 +111,7 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 	// used to wear jammed against its name, which read as part of the name.
 	mark, markW := pad+pad, 2
 	state, seen := m.railAgentState(item.Window.ID, item.Window.AgentState, item.Window.AgentCompletionSeq)
-	if glyph, glyphColor := agentMark(state, seen, pal); glyph != "" {
+	if glyph, glyphColor := agentMark(state, seen, item.Window.AgentSubagents, pal); glyph != "" {
 		mark = overlay.Style(rowBg).Foreground(glyphColor).
 			Bold(sidebarAttention(state)).Render(glyph) + pad
 	} else if item.IsFocused {

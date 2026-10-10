@@ -615,7 +615,7 @@ func navSSHTarget(cmdline string) string {
 // navPaneLabel's.
 func (m *OS) navPaneName(s *navSession, p *navPane, selected bool, k navInks) (string, bool) {
 	mark := k.ink(k.fg).Render("  ")
-	if glyph, c := agentMark(p.AgentState, p.DoneSeen, theme.UI()); glyph != "" {
+	if glyph, c := agentMark(p.AgentState, p.DoneSeen, p.Subagents, theme.UI()); glyph != "" {
 		mark = k.ink(theme.Readable(c, k.ground)).Bold(sidebarAttention(p.AgentState)).Render(glyph) + k.ink(k.fg).Render(" ")
 	}
 	label, byFolder, quiet := navPaneLabel(p)

@@ -86,7 +86,9 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	log := &stateLog{name: "subagents-resting-row"}
 	defer log.save(t)
 	base := t.TempDir()
-	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nagent_rest_fold = \"1s\"\n")
+	// The count alone on the row, which is what this test holds; the rows
+	// under it are TestSubagentRowsOnTheRail's.
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nagent_rest_fold = \"1s\"\nsubagent_rows = \"count\"\n")
 	killDaemon(t, base)
 	for _, name := range []string{"e2e-home", "e2e-lead", "e2e-ra", "e2e-rb", "e2e-rc"} {
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {

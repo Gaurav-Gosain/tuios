@@ -379,6 +379,13 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if summary == "" {
 		summary = inboxKindWords(it)
 	}
+	// A finished turn whose subagents still run says so first: the turn is
+	// over and the work is not.
+	if it.Kind == session.AttentionFinished && it.Host == "" {
+		if wait := subagentsWaitText(m.paneSubagentCount(it.Session, it.Window)); wait != "" {
+			summary = wait + sidebarAgentSep() + summary
+		}
+	}
 	if extra := m.inboxRowExtras(it); extra != "" {
 		// "risky: ", said in front of the line and after the keys.
 		summary = extra + summary
@@ -463,6 +470,9 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 			add(pal.FgDim, facts)
 		}
 		for _, l := range programStatusLines(m.paneProgramStatus(it.Session, it.Window)) {
+			add(pal.FgDim, l)
+		}
+		for _, l := range subagentDetailLines(m.paneSubagentList(it.Session, it.Window)) {
 			add(pal.FgDim, l)
 		}
 	}

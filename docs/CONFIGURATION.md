@@ -1461,11 +1461,25 @@ takes two rows or more, and never a row that needs you, a finished turn not
 yet seen, a working agent, the pane you are in, one with messages queued, or
 one whose agent has subagents at work.
 
+A second rail option goes with it: `appearance.sidebar.subagent_rows`, how an
+agent row shows its subagents. `rows` (the default) draws a row for each
+subagent under its agent's row, with its mark (`●` running, `■` done, `×`
+failed, `○` stopped), what it was asked to do, and on a tall section the tool
+it runs or how it ended, while the agent's own row says `3 of 4 run`. When the
+section has too little room it leaves the finished ones out first, then
+shows the newest few and `+2 more`, then none; it never hides an agent row to
+show a subagent row. `count` draws the count alone, as the rail did before.
+An agent at rest with subagents at work wears `◊` (`%` in ASCII) in the
+working ink, on the rail, its title bar and the switcher. The settings page
+shows the option on its Sidebar tab once an agent has been seen. See
+[Subagents on the rail](AGENT_STATE.md#subagents-on-the-rail).
+
 The agent row in `[appearance.sidebar.agent_row]` has five tokens for what
 tuios feeds itself: `now` (what a working agent is doing, drawn only while it
 works), `context` (`ctx 84%` in the warning ink, drawn only at 80% or more),
 `subagents` (`2 subagents`, how many subagents the agent has at work, drawn
-on any row while any run, from Claude Code's hooks), `pr` (`PR #12 open
+on any row while any run, from Claude Code's hooks, and `3 of 4 run` when
+the subagents have rows of their own), `pr` (`PR #12 open
 pass`, the pull request of the session's worktree branch and its checks, in
 the error ink for failing checks, the warning ink for pending ones and the
 success ink for passing ones and a merge, see

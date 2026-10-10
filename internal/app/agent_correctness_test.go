@@ -14,7 +14,7 @@ import (
 // "Window:  lint" with no mark.
 func TestEveryStateMarkSurvivesTheTitleSanitiser(t *testing.T) {
 	for _, state := range agentMarkStates {
-		label := sessionPaletteLabel("Window: ", "lint", state, false)
+		label := sessionPaletteLabel("Window: ", "lint", state, false, 0)
 		if got := printableTitle(label); got != label {
 			t.Errorf("%s: the palette row %q is drawn as %q", state, label, got)
 		}

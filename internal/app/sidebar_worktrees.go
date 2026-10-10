@@ -154,7 +154,7 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	}
 	glyph := sidebarQuietDot(rowBg, pal, &m.Settings)
 	if agentStateIndicator(state) != "" {
-		glyph = sidebarGlyph(state, node.DoneSeen, rowBg, pal, &m.Settings)
+		glyph = sidebarGlyph(state, node.DoneSeen, node.Subagents, rowBg, pal, &m.Settings)
 	}
 
 	fg := pal.FgDim

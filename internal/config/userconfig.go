@@ -774,6 +774,9 @@ type SidebarConfig struct {
 	// AgentRestFold is how long an agent row rests before the rail folds it
 	// into one line: a duration, or off (default: 1h).
 	AgentRestFold string `toml:"agent_rest_fold"`
+	// SubagentRows is how an agent row shows its subagents: rows, one row
+	// each under it, or count, the count alone (default: rows).
+	SubagentRows string `toml:"subagent_rows"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
@@ -938,6 +941,7 @@ func DefaultConfig() *UserConfig {
 				HeaderCase:    RailHeaderLowercase,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
+				SubagentRows:  SidebarSubagentRowsRows,
 			},
 		},
 		Daemon: DaemonConfig{
@@ -2220,6 +2224,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// Assigned whatever the file says, so a value removed from it goes back
 	// to the default. A bad value reads as the default and validation says so.
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
+	// Anything but count draws rows, the default; validation names a typo.
+	s.SidebarSubagentRows = sb.SubagentRows != SidebarSubagentRowsCount
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}

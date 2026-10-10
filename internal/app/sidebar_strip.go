@@ -612,7 +612,7 @@ func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw in
 		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, pal, bg, lit, &m.Settings), cw, bg)
+		stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, bg, lit, &m.Settings), cw, bg)
 }
 
 // sidebarStripAgentCell is one pane of the last group in two cells: the gutter
@@ -629,16 +629,16 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, pal, bg, lit, &m.Settings), cw, bg)
+		stripStateMark(e.State, e.DoneSeen, e.Subagents, pal, bg, lit, &m.Settings), cw, bg)
 }
 
 // stripStateMark is a pane's one cell on the spine: the quiet dot every list on
 // this rail rests at, or the pane's state glyph in its own colour when it has
 // something to say. One vocabulary across the lists is what lets the stack be
 // read as one object at two cells wide.
-func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool, s *config.Settings) string {
+func stripStateMark(state string, doneSeen bool, running int, pal overlay.Palette, bg color.Color, lit bool, s *config.Settings) string {
 	mark, markFg := s.GetRailBullet(), stripRestingInk(lit, pal)
-	if g, fg := agentMark(state, doneSeen, pal); g != "" && s.SidebarShowGlyphs {
+	if g, fg := agentMark(state, doneSeen, running, pal); g != "" && s.SidebarShowGlyphs {
 		mark, markFg = g, fg
 	}
 	return sidebarStyle(bg, markFg).Render(mark)

@@ -439,9 +439,9 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 	pal := theme.UI()
 	state, seen := m.railAgentState(src.ID, src.AgentState, src.AgentCompletionSeq)
 	name := pipPaneName(src)
-	key := fmt.Sprintf("%d:%d:%s:%s:%t:%t", box.Dx(), box.Dy(), name, state, seen, overlay.UseASCII())
+	key := fmt.Sprintf("%d:%d:%s:%s:%t:%d:%t", box.Dx(), box.Dy(), name, state, seen, src.AgentSubagents, overlay.UseASCII())
 	if m.pip.box == "" || m.pip.boxKey != key {
-		m.pip.box = pipFrame(m.pip.body, cols, rows, name, state, seen, pal)
+		m.pip.box = pipFrame(m.pip.body, cols, rows, name, state, seen, src.AgentSubagents, pal)
 		m.pip.boxKey = key
 	}
 	m.pip.rect = box
@@ -565,7 +565,7 @@ func pipRowHasText(scr pipScreen, y, w int) bool {
 
 // pipFrame draws the box: a border in the accent, the source's agent mark and
 // name on the top edge, and the body inside.
-func pipFrame(body string, cols, rows int, name, state string, seen bool, pal overlay.Palette) string {
+func pipFrame(body string, cols, rows int, name, state string, seen bool, running int, pal overlay.Palette) string {
 	tl, tr, bl, br, hz, vl := "╭", "╮", "╰", "╯", "─", "│"
 	if overlay.UseASCII() {
 		tl, tr, bl, br, hz, vl = "+", "+", "+", "+", "-", "|"
@@ -574,7 +574,7 @@ func pipFrame(body string, cols, rows int, name, state string, seen bool, pal ov
 
 	// The title: the state's mark in its own colour, then the name, cut to
 	// fit between the corner and a cell of rule on the right.
-	glyph, glyphColor := agentMark(state, seen, pal)
+	glyph, glyphColor := agentMark(state, seen, running, pal)
 	mark := ""
 	if glyph != "" {
 		mark = lipgloss.NewStyle().Foreground(glyphColor).Bold(sidebarAttention(state)).Render(" " + glyph)

@@ -12,6 +12,26 @@ package sessiontree
 
 import "strconv"
 
+// Subagent is one subagent of a pane's agent, as the daemon reported it:
+// what it was asked to do, the tool it runs, and once it ended, how.
+type Subagent struct {
+	ID          string
+	Type        string
+	Description string
+	// State is running, done, failed or stopped.
+	State string
+	// StartedAt and EndedAt are Unix nanoseconds. EndedAt is 0 while it runs.
+	StartedAt, EndedAt int64
+	// Now is the tool it runs, Last the tool it ran last.
+	Now, Last string
+	Tools     int
+	// Result is the first line it ended with, or the error.
+	Result string
+}
+
+// Running reports whether the subagent has not ended.
+func (s Subagent) Running() bool { return s.State == "running" }
+
 // NodeKind distinguishes a session row from a window row in the tree.
 type NodeKind int
 
@@ -68,9 +88,14 @@ type Node struct {
 	// Queued is how many messages wait in the pane's delivery queue to be
 	// typed when its agent comes to rest. Never rolled up.
 	Queued int
-	// Subagents is how many subagents the pane's agent is running. Never
-	// rolled up.
+	// Subagents is how many subagents the pane's agent is running. On a
+	// session node it belongs to the window that won the roll-up, like
+	// DoneSeen, so the session's mark says "waiting" when that pane is at
+	// rest with work going on.
 	Subagents int
+	// SubagentList is the pane's subagents themselves, in start order. Never
+	// rolled up.
+	SubagentList []Subagent
 	// Program is the pane's OSC 7501 records, the root first. Nil for none.
 	// Never rolled up.
 	Program []ProgramRecord
@@ -186,6 +211,9 @@ type WindowInput struct {
 	Queued int
 	// Subagents is how many subagents the pane's agent is running.
 	Subagents int
+	// SubagentList is the pane's subagents themselves, in start order. Nil
+	// from a daemon that sends only the count.
+	SubagentList []Subagent
 	// Program is the pane's OSC 7501 records, the root first. Nil for none.
 	Program []ProgramRecord
 	// Focused marks the currently focused window in its session.
@@ -328,26 +356,27 @@ func BuildSession(s SessionInput) Node {
 	bestRank := 0
 	for _, w := range s.Windows {
 		children = append(children, Node{
-			Kind:       KindWindow,
-			ID:         w.ID,
-			Title:      w.Title,
-			AgentState: w.AgentState,
-			DoneSeen:   w.DoneSeen,
-			StateAt:    w.StateAt,
-			Harness:    w.Harness,
-			Message:    w.Message,
-			AgentKind:  w.AgentKind,
-			Meta:       w.Meta,
-			Queued:     w.Queued,
-			Subagents:  w.Subagents,
-			Program:    w.Program,
-			IsCurrent:  w.Focused,
-			Workspace:  w.Workspace,
-			Host:       w.Host,
-			HostLink:   w.HostLink,
+			Kind:         KindWindow,
+			ID:           w.ID,
+			Title:        w.Title,
+			AgentState:   w.AgentState,
+			DoneSeen:     w.DoneSeen,
+			StateAt:      w.StateAt,
+			Harness:      w.Harness,
+			Message:      w.Message,
+			AgentKind:    w.AgentKind,
+			Meta:         w.Meta,
+			Queued:       w.Queued,
+			Subagents:    w.Subagents,
+			SubagentList: w.SubagentList,
+			Program:      w.Program,
+			IsCurrent:    w.Focused,
+			Workspace:    w.Workspace,
+			Host:         w.Host,
+			HostLink:     w.HostLink,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
-			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r
+			node.AgentState, node.DoneSeen, node.Subagents, bestRank = w.AgentState, w.DoneSeen, w.Subagents, r
 		}
 	}
 	node.Children = disambiguate(children)

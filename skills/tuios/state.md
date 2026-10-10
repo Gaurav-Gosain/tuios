@@ -33,6 +33,8 @@ list for a minute (five when `failed`).
 
 A pane whose main agent ended its turn reports `done` while its subagents
 work: `state` never says they run, and `wait-for agent-state` matches at once.
+The person sees it as waiting: the rail draws such a pane with `◊` and a row
+per subagent under it.
 To wait for the work itself, poll until `subagents` is 0, and read
 `subagent_list` for how each ended:
 

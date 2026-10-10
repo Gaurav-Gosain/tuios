@@ -1123,7 +1123,7 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	// sessions you can reach.
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(m.Settings.GetRailBullet())
 	if m.hostIsUp(node.Host) && agentStateIndicator(node.AgentState) != "" {
-		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal, &m.Settings)
+		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, node.Subagents, rowBg, pal, &m.Settings)
 	}
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }

@@ -227,5 +227,5 @@ func launcherDetail(e applist.Entry) string {
 // accent. It is the palette's own name renderer with no agent-state glyph to
 // splice in, kept shared so the two lists highlight a match identically.
 func launcherRowName(name string, match []int, bg, nameColor color.Color, selected bool, pal overlay.Palette) string {
-	return paletteRowName(name, "", false, match, bg, nameColor, selected, pal)
+	return paletteRowName(name, "", false, 0, match, bg, nameColor, selected, pal)
 }

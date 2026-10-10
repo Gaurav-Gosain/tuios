@@ -494,7 +494,10 @@ func (m *OS) settingsCategories() []settingsCategory {
 	// How long an agent row rests before it folds means nothing until an
 	// agent has run, so the row waits for one like the other agent rows.
 	if m.agentsSeen() {
-		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{opt("appearance.sidebar.agent_rest_fold")})...)
+		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{
+			opt("appearance.sidebar.agent_rest_fold"),
+			opt("appearance.sidebar.subagent_rows"),
+		})...)
 	}
 
 	// The marks a pane paints over its own output, in the order a person meets

@@ -73,6 +73,9 @@ type navPane struct {
 	// DoneSeen says a finished agent's pane has been looked at since, so
 	// its mark is the resting one. Known for the panes this client draws.
 	DoneSeen bool
+	// Subagents is how many subagents the pane's agent is running, which
+	// draws a pane at rest as waiting. Known for the panes this client draws.
+	Subagents int
 	// Text is the last lines of the pane's screen, oldest first. For a pane
 	// this client draws, the preview reads the live screen instead.
 	Text []string
@@ -377,6 +380,7 @@ func (m *OS) navigatorCurrentSession() navSession {
 			Focused:    i == m.FocusedWindow,
 			AgentState: state,
 			DoneSeen:   seen,
+			Subagents:  w.AgentSubagents,
 		})
 		s.Panes[len(s.Panes)-1].setText(navScreenText(w, navTextLines))
 	}

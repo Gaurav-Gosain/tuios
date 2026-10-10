@@ -1880,7 +1880,7 @@ answered.
 │    ctx 84% · Bash: go…
 │ ● web
 │    Edit: src/app.tsx
-│ ○ lead
+│ ◊ lead
 │    claude · 3 subagents
 ```
 
@@ -2046,6 +2046,53 @@ finished its turn stays `done` while its subagents work.
 them, and its `--clear` leaves them. Writing a key the value it already holds changes
 nothing and sends nothing to attached clients, and a TTL is renewed only once
 less than half of it is left, so a status line may write on every tick.
+
+#### Subagents on the rail
+
+A pane whose agent is at rest (`idle` or `done`) while subagents it started
+still run wears `◊` in the working ink (`%` with ASCII), and its state reads
+`waiting`. It is a display state, not an agent state: the daemon keeps the
+pane `done`, so `wait-for`, the done alert, the Inbox's finished item and the
+delivery queue work as before. The rail, the title bar, the strip, the
+switcher, the palette and the navigator draw it from one function, so they
+cannot disagree. A pane that is `working`, `needs_input`, `errored` or
+`unknown` draws its own state: the main agent says more than "at rest".
+
+Under the pane's row each subagent gets a row of its own, in start order,
+when the list is there (a daemon that sends only the count gets the count):
+
+```
+ agents
+ ◊ lead
+    claude · 3 of 4 run
+    ● Research tmux
+      Bash: go test ./…
+    ● Audit the rail
+      Read: internal/a…
+    ■ Write the docs
+      done · 14 tools
+    ● Check CI
+      Bash: gh run list
+```
+
+- The mark: `●` running, `■` done, `×` failed, `○` stopped (`*`, `#`, `x`,
+  `o` with ASCII). A finished row is muted, its mark too unless it failed,
+  until the daemon removes it a minute after it ended (five for a failed
+  one).
+- The second line, on a tall section, is the tool it runs, the tool it ran
+  last between calls, or how it ended. The age at the right edge shows after
+  five minutes, frozen at its length once it ended.
+- A click on a subagent's row goes to its pane. The keyboard steps over it.
+- When the section has too little room, it leaves the finished subagents
+  out first; then it gives each pane with subagents at work at least one
+  row, the focused pane and then the one that started a subagent last first,
+  ending in `+2 more`; then it draws none. It never hides an agent row to
+  show a subagent row. A section that left any out keeps its rows short.
+- `appearance.sidebar.subagent_rows = "count"` draws the count alone.
+
+The Inbox's finished item says `waits for 3 subagents` while any run, and its
+detail, like the peek of a prompt, has a line per subagent with the same text
+as its row.
 
 #### What feeds it
 

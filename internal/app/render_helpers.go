@@ -57,6 +57,12 @@ var agentStateMarks = map[session.AgentState]struct{ glyph, ascii string }{
 	// anything is there. It reads as the same family as idle's hollow circle,
 	// which is the nearest thing to what it means.
 	session.AgentStateUnknown: {"□", "?"},
+	// Display only, never a pane's state: the agent is at rest and
+	// subagents it started still run (see displayState). A lozenge in the
+	// working ink: a shape none of the states uses, and one Go Mono, which
+	// tuios shot draws with when no font is given, has. The half-filled
+	// circle the design named draws as a missing glyph there.
+	agentStateWaiting: {"◊", "%"},
 }
 
 // agentMark is the mark and the colour one pane's agent state wears, and every
@@ -70,15 +76,21 @@ var agentStateMarks = map[session.AgentState]struct{ glyph, ascii string }{
 // sense that matters; an unread one keeps the filled square in the success
 // colour. The two used to differ only in colour on some surfaces and in shape
 // on others.
-func agentMark(state string, doneSeen bool, pal overlay.Palette) (string, color.Color) {
-	return agentStateIndicator(sidebarGlyphState(state, doneSeen)), sidebarStateColor(state, doneSeen, pal)
+//
+// running is how many subagents the pane's agent is running: a pane at rest
+// with some draws waiting (see displayState). A surface that does not know
+// passes 0 and draws the state as it is.
+func agentMark(state string, doneSeen bool, running int, pal overlay.Palette) (string, color.Color) {
+	shown := displayState(state, doneSeen, running)
+	return agentStateIndicator(shown), agentGlyphColor(shown, pal)
 }
 
 // windowMarkState is the state whose mark a pane's title bar draws: the rail's
-// reading of the pane, with the unread bit folded in, so a title bar and the
-// rail row beside it never disagree.
+// reading of the pane, with the unread bit and the subagents folded in, so a
+// title bar and the rail row beside it never disagree.
 func (m *OS) windowMarkState(w *terminal.Window) string {
-	return sidebarGlyphState(m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq))
+	state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
+	return displayState(state, seen, w.AgentSubagents)
 }
 
 // badgeStyle is the ink a window's title badge is written in. The colour is

@@ -444,6 +444,10 @@ type Window struct {
 	// AgentSubagents is how many subagents the pane's agent is running, as the
 	// daemon synced it. Zero for none, and from a daemon that counts none.
 	AgentSubagents int
+	// AgentSubagentList is the subagents themselves, as the daemon synced
+	// them, in start order. Nil from a daemon that sends only the count.
+	// Replaced whole on every sync and never edited in place.
+	AgentSubagentList []sessiontree.Subagent
 	// ProgramStatus is the pane's OSC 7501 records, as the daemon synced them,
 	// the root first. Replaced whole on every sync and never edited in place.
 	ProgramStatus []sessiontree.ProgramRecord
