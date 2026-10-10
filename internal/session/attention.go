@@ -214,6 +214,10 @@ type AttentionItem struct {
 	// Count is how many unread messages a mail item stands for, or how many
 	// turns a finished item stands for.
 	Count int `json:"count,omitempty"`
+	// Seen is how many of a mail item's unread messages the recipient looked
+	// at with a peek and did not read. It is part of Count, never added to it,
+	// and absent while none is seen.
+	Seen int `json:"seen,omitempty"`
 	// CompletionSeq is the pane's completion_seq when a finished item last
 	// changed. Focusing the pane at that count or later closes it.
 	CompletionSeq uint64 `json:"completion_seq,omitempty"`
@@ -504,7 +508,7 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 // so a repeated report publishes nothing.
 func attentionSame(a, b AttentionItem) bool {
 	return a.Kind == b.Kind && a.Workspace == b.Workspace && a.Harness == b.Harness &&
-		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count &&
+		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count && a.Seen == b.Seen &&
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
 		a.RequestID == b.RequestID && a.Expires == b.Expires && a.Stale == b.Stale &&
 		a.HeldID == b.HeldID && a.HeldFor == b.HeldFor && a.ForHost == b.ForHost &&
@@ -853,6 +857,7 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 	if id, ok := a.byKey[attentionKey(AttentionMail, msg.Session, "", msg.ThreadID)]; ok {
 		cur := a.items[id]
 		it.Count = cur.Count + 1
+		it.Seen = cur.Seen
 		// The newest message names the thread's latest word, but the row is
 		// still the thread the person has not read.
 		if it.Window == "" {
@@ -864,6 +869,23 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 			it.HeldID, it.HeldFor = cur.HeldID, cur.HeldFor
 		}
 	}
+	a.upsertLocked(it)
+}
+
+// noteMailSeen records how many of a thread's messages for the person have
+// been seen and not read, so the Inbox row and list-attention can say so.
+func (a *attentionStore) noteMailSeen(sessionName string, thread uint64, seen int) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, ok := a.byKey[attentionKey(AttentionMail, sessionName, "", thread)]
+	if !ok {
+		return
+	}
+	it := *a.items[id]
+	it.Seen = min(seen, it.Count)
 	a.upsertLocked(it)
 }
 

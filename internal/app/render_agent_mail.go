@@ -251,6 +251,8 @@ func (m *OS) agentMailWindowName(windowID string) string {
 func (m *OS) agentMailThreadRow(th agentMailThread, selected bool, rowBg color.Color, pal overlay.Palette, width int, now time.Time) string {
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(strconv.Itoa(th.Count) + " · " + agentMailAge(th.LastAt, now))
 	switch {
+	case th.Unread && !th.Untouched:
+		right = overlay.Style(rowBg).Foreground(pal.AccentBright).Bold(true).Render("seen  ") + right
 	case th.Unread:
 		right = overlay.Style(rowBg).Foreground(pal.AccentBright).Bold(true).Render("unread  ") + right
 	case th.New:
@@ -362,7 +364,11 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		}
 		age := agentMailAge(mm.SentAt, now)
 		if mm.Kind == "message" && mm.To == session.AgentInboxHuman && mm.ReadAt == 0 {
-			age = "unread · " + age
+			if mm.SeenAt != 0 {
+				age = "seen · " + age
+			} else {
+				age = "unread · " + age
+			}
 		}
 		gap := max(width-lipgloss.Width(who)-lipgloss.Width(age)-1, 1)
 		lines = append(lines, strong.Render(overlay.Truncate(who, max(width-lipgloss.Width(age)-2, 1)))+

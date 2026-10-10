@@ -95,6 +95,7 @@ type agentRow struct {
 	Workspace  int    `json:"workspace"`
 	Focused    bool   `json:"focused"`
 	Unread     int    `json:"unread"`
+	Seen       int    `json:"seen"`
 	Ready      bool   `json:"ready"`
 	BlockedBy  string `json:"blocked_by"`
 }
@@ -168,6 +169,9 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		unread := ""
 		if a.Unread > 0 {
 			unread = fmt.Sprintf("%d", a.Unread)
+			if a.Seen > 0 {
+				unread += fmt.Sprintf(" (%d seen)", a.Seen)
+			}
 		}
 		state := a.State
 		if a.BlockedBy != "" {
@@ -383,8 +387,10 @@ type agentMessageRow struct {
 	Attachments    []attachmentRow `json:"attachments"`
 	SentAt         int64           `json:"sent_at"`
 	ReadAt         int64           `json:"read_at"`
+	SeenAt         int64           `json:"seen_at"`
 	Undeliverable  bool            `json:"undeliverable"`
 	WasUnread      bool            `json:"was_unread"`
+	WasSeen        bool            `json:"was_seen"`
 	Origin         string          `json:"origin"`
 	OriginHost     string          `json:"origin_host"`
 	VerifiedHuman  bool            `json:"verified_human"`
@@ -440,7 +446,6 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	var res struct {
 		Messages []agentMessageRow `json:"messages"`
-		Unread   int               `json:"unread"`
 		Total    int               `json:"total"`
 		Evicted  uint64            `json:"evicted"`
 		Thread   uint64            `json:"thread"`
@@ -471,7 +476,10 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		if m.ThreadID != 0 && m.ThreadID != m.ID {
 			head += fmt.Sprintf("  thread #%d", m.ThreadID)
 		}
-		if m.WasUnread {
+		switch {
+		case m.WasUnread && m.WasSeen && m.ReadAt == 0:
+			head += "  seen"
+		case m.WasUnread:
 			head += "  new"
 		}
 		if m.Undeliverable {
@@ -499,14 +507,64 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		where = " on " + on
 	}
 	if res.Thread != 0 {
-		fmt.Fprintf(w, "\n%s in thread %d%s, %d unread.\n", plural.Count(res.Total, "message"), res.Thread, where, res.Unread)
+		fmt.Fprintf(w, "\n%s in thread %d%s, %s.\n", plural.Count(res.Total, "message"), res.Thread, where, mailStateSummary(res.Messages))
 	} else {
-		fmt.Fprintf(w, "\n%s%s, %d unread.\n", plural.Count(res.Total, "message"), where, res.Unread)
+		fmt.Fprintf(w, "\n%s%s, %s.\n", plural.Count(res.Total, "message"), where, mailStateSummary(res.Messages))
 	}
 	if res.Evicted > 0 {
 		fmt.Fprintf(w, "%s %s dropped: the ring was full, and %s never read.\n", plural.Count(res.Evicted, "older message"), plural.Word(res.Evicted, "was", "were"), plural.Word(res.Evicted, "it was", "they were"))
 	}
 	return nil
+}
+
+// mailStateSummary says what state the returned messages are in after the
+// call: what the call itself just marked, then what was already seen, then
+// what is still unread. It counts directed messages only, because notices and
+// ask records are never unread. A call that marked nothing and found nothing
+// unread says "all read".
+func mailStateSummary(msgs []agentMessageRow) string {
+	var markedRead, markedSeen, seen, unread int
+	for _, m := range msgs {
+		if m.Kind != "message" {
+			continue
+		}
+		switch {
+		case m.ReadAt != 0 && m.WasUnread:
+			markedRead++
+		case m.ReadAt != 0:
+		case m.SeenAt != 0 && m.WasSeen:
+			seen++
+		case m.SeenAt != 0:
+			markedSeen++
+		default:
+			unread++
+		}
+	}
+	// When the call marked every message it returned and nothing else, the
+	// count is already in front of the line.
+	if len(msgs) == markedRead && markedRead > 0 {
+		return "marked read"
+	}
+	if len(msgs) == markedSeen && markedSeen > 0 {
+		return "marked seen"
+	}
+	var parts []string
+	if markedRead > 0 {
+		parts = append(parts, fmt.Sprintf("%d marked read", markedRead))
+	}
+	if markedSeen > 0 {
+		parts = append(parts, fmt.Sprintf("%d marked seen", markedSeen))
+	}
+	if seen > 0 {
+		parts = append(parts, fmt.Sprintf("%d seen", seen))
+	}
+	if unread > 0 {
+		parts = append(parts, fmt.Sprintf("%d unread", unread))
+	}
+	if len(parts) == 0 {
+		return "all read"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // agoOf renders a unix-nano timestamp as a rough age, which is what a reader

@@ -172,6 +172,13 @@ type AgentMessage struct {
 	// consumes: a consumed message leaves nothing behind for a human to look at
 	// afterwards, and the cap already bounds the ring.
 	ReadAt int64 `json:"read_at,omitempty"`
+	// SeenAt is zero until the recipient looked at the message without
+	// reading it: a peek that names the recipient's inbox stamps it. Seen sits
+	// between unread and read, so the sender and the person can tell a message
+	// was looked at. ReadAt stays zero while a message is only seen, so a peer
+	// that does not know this field counts the message as unread, which is
+	// still true. A marking read sets ReadAt and leaves SeenAt alone.
+	SeenAt int64 `json:"seen_at,omitempty"`
 	// SettledBy is set on an ask record only: which signal ended the wait, as
 	// ask-agent reported it ("agent-state", "idle", "timeout", ...).
 	SettledBy string `json:"settled_by,omitempty"`
@@ -206,6 +213,10 @@ type AgentMessage struct {
 	// back looks read, and a reader could not tell the one that just arrived
 	// from the twenty it had already seen.
 	WasUnread bool `json:"was_unread,omitempty"`
+	// WasSeen means the message was already seen, and not read, before this
+	// read. SeenAt cannot say it on the call that sets it, for the same
+	// reason WasUnread exists.
+	WasSeen bool `json:"was_seen,omitempty"`
 
 	// Held is set on mail from another machine that this machine's link
 	// policy (hold_mail) put in the person's inbox instead of the recipient's.
@@ -365,6 +376,10 @@ type readQuery struct {
 	notices bool
 	// peek reads without marking anything read.
 	peek bool
+	// markSeen makes a peek of one inbox mark the unread messages it returns
+	// seen. It needs peek and an inbox, and is off when the daemon forced the
+	// peek because the caller may not act as the reader.
+	markSeen bool
 	// thread restricts the answer to one thread, by its id. Zero means every
 	// thread. A thread the ring no longer holds anything from matches nothing,
 	// which is the same answer an empty inbox gives: the ring forgets, so an
@@ -380,8 +395,13 @@ type readQuery struct {
 type readResult struct {
 	Messages []AgentMessage
 	Unread   int
-	Total    int
-	Evicted  uint64
+	// Seen is how many of the Unread were already seen. MarkedRead and
+	// MarkedSeen are what this read changed.
+	Seen       int
+	MarkedRead int
+	MarkedSeen int
+	Total      int
+	Evicted    uint64
 }
 
 // read answers a query against a session's ring, marking the returned directed
@@ -454,9 +474,21 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 		if out.Kind == agentMsgDirect && out.ReadAt == 0 {
 			res.Unread++
 			out.WasUnread = true
-			if !q.peek && q.inbox != "" && m.To == q.inbox {
-				m.ReadAt = now
-				out.ReadAt = now
+			out.WasSeen = out.SeenAt != 0
+			if out.WasSeen {
+				res.Seen++
+			}
+			if q.inbox != "" && m.To == q.inbox {
+				switch {
+				case !q.peek:
+					m.ReadAt = now
+					out.ReadAt = now
+					res.MarkedRead++
+				case q.markSeen && m.SeenAt == 0:
+					m.SeenAt = now
+					out.SeenAt = now
+					res.MarkedSeen++
+				}
 			}
 		}
 		res.Messages = append(res.Messages, out)
@@ -519,6 +551,38 @@ func (b *agentBus) unreadCounts(session string) map[string]int {
 		}
 	}
 	return counts
+}
+
+// seenCounts returns, for every inbox in a session, how many of its unread
+// messages have been seen. A seen message is still unread, so this is a part
+// of unreadCounts and never an addition to it.
+func (b *agentBus) seenCounts(session string) map[string]int {
+	counts := map[string]int{}
+	if b == nil {
+		return counts
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, m := range b.box(session).msgs {
+		if m.Kind == agentMsgDirect && m.ReadAt == 0 && m.SeenAt != 0 && m.To != "" {
+			counts[m.To]++
+		}
+	}
+	return counts
+}
+
+// threadSeen counts the messages in one thread that sit in an inbox seen and
+// not read.
+func (b *agentBus) threadSeen(session, inbox string, thread uint64) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n := 0
+	for _, m := range b.box(session).msgs {
+		if m.ThreadID == thread && m.Kind == agentMsgDirect && m.To == inbox && m.ReadAt == 0 && m.SeenAt != 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // highestID is the id of the newest message the bus has recorded. A wait that
