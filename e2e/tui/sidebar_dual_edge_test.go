@@ -10,6 +10,125 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
+// TestDualRailHiddenLegacyExplicitLeft proves an explicitly enabled left edge
+// works even if the legacy rail is hidden. It must draw the left edge's own
+// section, not silently choose the right table or reveal the legacy rail.
+func TestDualRailHiddenLegacyExplicitLeft(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "hidden"
+enabled = true
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions,custom"
+[appearance.sidebar.left.custom]
+command = "printf 'LEFT-ONLY-HIDDEN\\n'"
+`
+	term, _ := railClient(t, "hidden-left", cfg, startOpts{cols: 120, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, rows := s.Size()
+		for y := 0; y < rows; y++ {
+			line := []rune(s.Line(y))
+			if strings.Contains(string(line[:min(28, len(line))]), "LEFT-ONLY-HIDDEN") {
+				return len(line) <= cols-28 || !strings.Contains(string(line[cols-28:]), "LEFT-ONLY-HIDDEN")
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("explicit left edge absent with hidden legacy rail: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hidden-left")
+}
+
+// TestDualRailHiddenDoesNotInheritLegacyFields checks that an explicit edge
+// under a hidden legacy rail uses the resolver's defaults, not hidden legacy
+// section order, width or command from [appearance.sidebar].
+func TestDualRailHiddenDoesNotInheritLegacyFields(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "hidden"
+width = 46
+sections = "custom"
+[appearance.sidebar.custom]
+command = "printf 'LEGACY-MUST-NOT-DRAW\\n'"
+[appearance.sidebar.left]
+enabled = true
+`
+	term, _ := railClient(t, "hidden-defaults", cfg, startOpts{cols: 120, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Line(0)[:min(24, len(s.Line(0)))], "sessions") &&
+			s.Cell(23, 12).Rune == '│' &&
+			!strings.Contains(s.Text(), "LEGACY-MUST-NOT-DRAW")
+	}, uiTimeout); err != nil {
+		t.Fatalf("hidden legacy fields leaked into explicit left edge: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hidden-edge-defaults")
+}
+
+// TestDualRailHiddenLegacyExplicitRight covers the mirror of the left case:
+// a hidden legacy rail must not suppress an explicitly enabled right edge.
+func TestDualRailHiddenLegacyExplicitRight(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "hidden"
+[appearance.sidebar.right]
+enabled = true
+width = 28
+sections = "sessions,custom"
+[appearance.sidebar.right.custom]
+command = "printf 'RIGHT-ONLY-HIDDEN\\n'"
+`
+	term, _ := railClient(t, "hidden-right", cfg, startOpts{cols: 120, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, rows := s.Size()
+		for y := 0; y < rows; y++ {
+			line := []rune(s.Line(y))
+			if len(line) > cols-28 && strings.Contains(string(line[cols-28:]), "RIGHT-ONLY-HIDDEN") {
+				return !strings.Contains(string(line[:min(28, len(line))]), "RIGHT-ONLY-HIDDEN")
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		t.Fatalf("explicit right edge absent with hidden legacy rail: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hidden-right")
+}
+
+// TestDualRailHiddenExplicitBoth checks the resolver's two enabled edges
+// against the actual draw: hiding the legacy rail cannot discard either
+// explicitly enabled per-edge rail.
+func TestDualRailHiddenExplicitBoth(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "hidden"
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "custom"
+[appearance.sidebar.left.custom]
+command = "printf 'EXPLICIT-LEFT\\n'"
+[appearance.sidebar.right]
+enabled = true
+width = 28
+sections = "sessions,custom"
+[appearance.sidebar.right.custom]
+command = "printf 'EXPLICIT-RIGHT\\n'"
+`
+	term, _ := railClient(t, "hidden-both", cfg, startOpts{cols: 120, rows: 40})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, rows := s.Size()
+		left, right := false, false
+		for y := 0; y < rows; y++ {
+			line := []rune(s.Line(y))
+			left = left || strings.Contains(string(line[:min(28, len(line))]), "EXPLICIT-LEFT")
+			if len(line) > cols-28 {
+				right = right || strings.Contains(string(line[cols-28:]), "EXPLICIT-RIGHT")
+			}
+		}
+		return left && right
+	}, uiTimeout); err != nil {
+		t.Fatalf("both explicitly enabled edges did not draw: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "hidden-both")
+}
+
 // TestDualRailResizeEdges proves resizing the optional rail does not change
 // the width of the legacy rail and the original edge remains resizable too.
 func TestDualRailResizeEdges(t *testing.T) {
@@ -193,6 +312,145 @@ command = "i=1; while [ $i -le 70 ]; do printf 'LEFT-%02d\\n' \"$i\"; i=$((i+1))
 	t.Logf("independent rail scroll screen:\n%s", term.Snapshot())
 }
 
+// TestDualRailFooterAndTooltip checks the left edge's own inward-facing
+// controls and the hover label's position, not just the right edge's config.
+func TestDualRailFooterAndTooltip(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "right"
+enabled = true
+width = 28
+sections = "sessions"
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions"
+`
+	term, _ := railClient(t, "dual-tooltip", cfg, startOpts{cols: 120, rows: 40})
+	screen := term.Screen()
+	cols, rows := screen.Size()
+	arrowsFaceInward := false
+	for y := 0; y < rows; y++ {
+		line := []rune(screen.Line(y))
+		if len(line) > cols-28 && strings.Contains(string(line[:28]), "«") && strings.Contains(string(line[cols-28:]), "»") {
+			arrowsFaceInward = true
+			break
+		}
+	}
+	if !arrowsFaceInward {
+		t.Fatalf("footer arrows do not face inward from their own edges:\n%s", term.Snapshot())
+	}
+	plus := strings.IndexRune(string([]rune(screen.Line(0))[:28]), '+')
+	if plus < 0 {
+		t.Fatalf("no left-edge add control to hover:\n%s", term.Snapshot())
+	}
+	sendMouse(t, term, "hover left add", tuitest.MouseEvent{
+		Col: plus, Row: 0, Button: tuitest.MouseNone, Action: tuitest.MouseMove,
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		line := []rune(s.Line(0))
+		return len(line) > 28 && strings.Contains(string(line[28:min(92, len(line))]), "new session")
+	}, uiTimeout); err != nil {
+		t.Fatalf("left add tooltip did not open beside the left rail: %v\n%s", err, term.Snapshot())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "dual-rail-left-tooltip")
+	savePNG(t, term.Screen(), hostPalette(t, ""), dir, "dual-rail-left-tooltip")
+}
+
+// TestDualRailToggleOtherEdge gives the opt-in edge its own keyboard toggle.
+// Hiding it must not also hide the original right rail; toggling again restores
+// the left rail with its own session rows.
+func TestDualRailToggleOtherEdge(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "right"
+enabled = true
+width = 28
+sections = "sessions"
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions"
+`
+	term, _ := railClient(t, "dual-toggle", cfg, startOpts{cols: 120, rows: 40})
+	prefix(t, term, "H")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, _ := s.Size()
+		return !strings.Contains(s.Line(0)[:min(28, len(s.Line(0)))], "sessions") &&
+			strings.Contains(s.Line(0)[cols-28:], "sessions") && countWindows(s) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("opposite edge did not hide independently: %v\n%s", err, term.Snapshot())
+	}
+	prefix(t, term, "H")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, _ := s.Size()
+		return strings.Contains(s.Line(0)[:min(28, len(s.Line(0)))], "sessions") &&
+			strings.Contains(s.Line(0)[cols-28:], "sessions")
+	}, uiTimeout); err != nil {
+		t.Fatalf("opposite edge did not reopen: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "opposite-edge-toggle")
+}
+
+// TestDualRailKeyboardSwitchEdge checks the focused row on each actual edge.
+// Merely attaching via j/Enter cannot prove keyboard ownership: either rail
+// lists the same sessions, so the opposite rail must gain the focus styling.
+func TestDualRailKeyboardSwitchEdge(t *testing.T) {
+	cfg := `[appearance.sidebar]
+position = "right"
+enabled = true
+width = 28
+sections = "sessions"
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions"
+`
+	term, _ := railClient(t, "dual-key-edge", cfg, startOpts{cols: 120, rows: 40})
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatal(err)
+	}
+	var leftX, rightX int
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		cols, rows := s.Size()
+		leftX, rightX = -1, -1
+		for y := 0; y < rows; y++ {
+			line := []rune(s.Line(y))
+			if leftX < 0 {
+				if i := strings.Index(string(line[:min(28, len(line))]), "dual-key-edge"); i >= 0 {
+					leftX = i
+				}
+			}
+			if rightX < 0 && len(line) > cols-28 {
+				if i := strings.Index(string(line[cols-28:]), "dual-key-edge"); i >= 0 {
+					rightX = cols - 28 + i
+				}
+			}
+		}
+		return leftX >= 0 && rightX >= 0 && s.Cell(27, 12).Fg != s.Cell(92, 12).Fg
+	}, uiTimeout); err != nil {
+		t.Fatalf("session rows or initial right-rail focus absent: %v\n%s", err, term.Snapshot())
+	}
+	before := term.Screen()
+	leftBefore, rightBefore := before.Cell(27, 12).Fg, before.Cell(92, 12).Fg
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return s.Cell(27, 12).Fg != leftBefore && s.Cell(92, 12).Fg != rightBefore
+	}, uiTimeout); err != nil {
+		t.Fatalf("keyboard did not transfer focus from right to left: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "dual-rail-keyboard-focus")
+	if err := term.SendKeys("e"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return s.Cell(27, 12).Fg == leftBefore && s.Cell(92, 12).Fg == rightBefore
+	}, uiTimeout); err != nil {
+		t.Fatalf("keyboard did not return focus to right rail: %v\n%s", err, term.Snapshot())
+	}
+}
+
 // TestDualRailClickSwitchesSession exercises the actual pointer path on both
 // edges: a row on the left must not be mistaken for a pane click or a hit on
 // the legacy right rail. Switching back through the right proves both remain
@@ -255,14 +513,24 @@ sections = "sessions"
 	}
 	// Empty space belongs to the left rail too: click there to move keyboard
 	// focus into its own nav list, then choose the next session with j/Enter.
+	// Assert keyboard ownership changed on the actual left rail, not merely
+	// that a session row shared with the right rail can be activated there.
+	leftBefore, rightBefore := term.Screen().Cell(27, 12).Fg, term.Screen().Cell(92, 12).Fg
 	mouseClick(t, term, 4, 12, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return s.Cell(27, 12).Fg != leftBefore && s.Cell(92, 12).Fg == rightBefore
+	}, uiTimeout); err != nil {
+		t.Fatalf("blank left-rail click did not give left edge keyboard focus: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys("j", tuitest.Enter); err != nil {
 		t.Fatalf("navigate the left rail by keyboard: %v", err)
 	}
 	if err := term.WaitForText("Session: other-edge", uiTimeout); err != nil {
 		t.Fatalf("left rail did not own keyboard focus: %v\n%s", err, term.Snapshot())
 	}
-	t.Logf("session switched by left click, right click, and left keyboard focus:\n%s", term.Snapshot())
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "dual-rail-click-keyboard-focus")
+	savePNG(t, term.Screen(), hostPalette(t, ""), dir, "dual-rail-click-keyboard-focus")
 }
 
 // TestDualRailCustomSections keeps the original right-hand rail and its

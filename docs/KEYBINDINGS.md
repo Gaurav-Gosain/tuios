@@ -53,6 +53,11 @@ on a terminal too.
 ## Editing sidebar files
 
 Focus the sidebar with `s` in window mode or `Ctrl+B e`, then select a file.
+With both sidebar edges visible, `e` while the sidebar has keyboard focus
+switches focus to the other edge; press it again to return. `Ctrl+B H` toggles
+the independently configured opposite rail without changing the original
+rail (`Ctrl+B b` still toggles that original rail).
+
 `Enter` opens a folder or copies the path of a file. `Shift+Enter` opens a text
 file in a new pane. The pane runs the editor set under Settings, Sidebar, File
 editor. A folder keeps its navigation action. tuios does not edit a file that is
