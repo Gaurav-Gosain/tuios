@@ -9,6 +9,7 @@ package session
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -331,4 +332,87 @@ func TestGhosttyWireNarrowsAWiderClient(t *testing.T) {
 			t.Run("ghostty-to-ghostty", func(t *testing.T) { runSeamCases(t, widerClientCases, ghostty, bigGhostty) })
 		})
 	}
+}
+
+// TestGhosttyWireCarriesTheSnapshotState runs the snapshot state cases across
+// backends: the tab stops, the titles, the guest's colours and the ANSI modes
+// are kept apart from the library on the libghostty side, and its restore
+// puts them back by sending what a guest would send.
+func TestGhosttyWireCarriesTheSnapshotState(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	// A palette slot past the sixteen paints an SGR 38;5 on the library and
+	// not on the pure emulator, snapshot or none, so that case runs on one
+	// backend at a time.
+	cross := withoutSeamCases(snapshotStateCases, "palette-slot-256")
+	t.Run("pure-to-ghostty", func(t *testing.T) { runSnapshotStateCases(t, cross, pure, ghostty) })
+	t.Run("ghostty-to-pure", func(t *testing.T) { runSnapshotStateCases(t, cross, ghostty, pure) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runSnapshotStateCases(t, snapshotStateCases, ghostty, ghostty) })
+}
+
+// withoutSeamCases is cases without the ones named.
+func withoutSeamCases(cases []seamCase, names ...string) []seamCase {
+	var out []seamCase
+	for _, c := range cases {
+		if !slices.Contains(names, c.name) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// TestGhosttyWireCarriesACutSequence cuts the streams at every byte across
+// backends. The libghostty side reads its unfinished input from the library
+// and from the scanner in front of it, which holds the strings tuios handles
+// itself.
+func TestGhosttyWireCarriesACutSequence(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	t.Run("pure-to-ghostty", func(t *testing.T) { runCutStreams(t, pure, ghostty) })
+	t.Run("ghostty-to-pure", func(t *testing.T) { runCutStreams(t, ghostty, pure) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runCutStreams(t, ghostty, ghostty) })
+}
+
+// TestGhosttyWireDropsTheClientsOwnCut is TestWireDropsTheClientsOwnCut with
+// a libghostty client, whose library and scanner both have to let go of the
+// sequence the stream left them in.
+func TestGhosttyWireDropsTheClientsOwnCut(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	t.Run("pure-to-ghostty", func(t *testing.T) { runClientsOwnCut(t, pure, ghostty) })
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runClientsOwnCut(t, ghostty, ghostty) })
+}
+
+// TestGhosttyWireCarriesACutSequenceTheScannerFollows cuts the streams the
+// two backends read differently, between two libghostty emulators. The
+// scanner in front of the library has to be in the state the library is in,
+// or the tab stops and the titles it keeps for the library drift.
+func TestGhosttyWireCarriesACutSequenceTheScannerFollows(t *testing.T) {
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	runCutStreamList(t, sameBackendCutStreams, ghostty, ghostty)
+}
+
+// TestGhosttyWireDropsTheClientsCutAtAPendingWrap is
+// TestWireDropsTheClientsCutAtAPendingWrap with a libghostty client, which
+// can let go of a UTF-8 character only by printing U+FFFD for it.
+func TestGhosttyWireDropsTheClientsCutAtAPendingWrap(t *testing.T) {
+	pure := func() vt.Terminal { return vt.NewEmulator(10, 3) }
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(10, 3) }
+	t.Run("ghostty-to-ghostty", func(t *testing.T) { runClientsCutAtAPendingWrap(t, ghostty, ghostty) })
+	t.Run("pure-to-ghostty", func(t *testing.T) { runClientsCutAtAPendingWrap(t, pure, ghostty) })
+}
+
+// TestGhosttyWireRestoresUnderTheClientsInsertMode is
+// TestWireRestoresUnderTheClientsInsertMode with a libghostty client, whose
+// restore prints the cells through the library.
+func TestGhosttyWireRestoresUnderTheClientsInsertMode(t *testing.T) {
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	runClientsOwnInsertMode(t, ghostty, ghostty)
+}
+
+// TestGhosttyWireCutsAnOversizedSequence runs on the library alone: the two
+// backends already disagree about an OSC past the limit, cut or not.
+func TestGhosttyWireCutsAnOversizedSequence(t *testing.T) {
+	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
+	runOversizedCut(t, ghostty, ghostty)
 }

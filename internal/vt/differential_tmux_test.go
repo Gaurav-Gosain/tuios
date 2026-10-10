@@ -198,6 +198,17 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"the alignment pattern clears the margins", 8, 4, "\x1b[2;3r\x1b#8\x1b[9;1HX"},
 		{"restore a pending wrap", 10, 4, "abcdefghij\x1b7\x1b[1;1H\x1b8g"},
 		{"restore origin mode with the cursor", 10, 6, "\x1b[2;5r\x1b[?6h\x1b7\x1b[?6l\x1b8\x1b[1;1HX"},
+
+		// A C0 control inside a sequence is carried out where it is, and the
+		// sequence goes on: the DEC parser that VT500 terminals, xterm,
+		// ghostty and tmux follow executes it without leaving the state it
+		// is in. The control is VT, which moves down a line as LF does. An LF
+		// would not test this: the pane's pseudo-terminal turns it into CR
+		// LF on the way to tmux, and the CR makes tmux look as if it ended
+		// the sequence.
+		{"a vertical tab inside a charset designation", 10, 4, "ab\x1b(\v0X"},
+		{"a vertical tab inside a cursor style", 10, 4, "ab\x1b[1 \vqX"},
+		{"a vertical tab after a private marker", 10, 4, "ab\x1b[?\v1;2HX"},
 	}
 
 	sock := "tuios-diff-" + t.Name()

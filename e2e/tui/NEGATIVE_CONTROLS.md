@@ -4280,3 +4280,68 @@ when the short path is the same file. The macOS controls:
 | A link reads a file with two names | `checkOpenedForLink`: the `fileLinks` check made false | `TestALinkCannotReadAFileWithTwoNames` (read, hash, stream and copy) | **caught** |
 | No data volume trim | `realPath`: the `trimDataVolume` call cut | `TestADarwinLinkCannotReadThroughTheDataVolume` (`file-stat`, `file-list` and `read-dir` showed the dummy key; the read stayed refused by the check after the open) | **caught** |
 | No check after the open, before the trim | `checkOpenedForLink`: the `fdPath` check made false, on e5a21555 | `TestADarwinLinkCannotReadThroughTheDataVolume` (the dummy key was read through the data volume) | **caught** |
+## Snapshot state
+
+`reattach_snapshot_state_test.go` has one test, `TestReattachCarriesSnapshotState`,
+and the snapshot fields it covers have wire and conformance tests in
+`internal/session/snapshot_complete_wire_test.go`, `ghostty_wire_test.go` and
+`internal/vt/conform_snapshot_state_test.go`. On 2026-10-10 each control below
+cut one line, built a binary or ran the named package, and the same tests
+passed on the branch build. The end-to-end test passed five runs in a row on
+the branch build.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| `t.RestorePendingInput(pending)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the client reattached at the first stop shows `STOP1 mple.test/LINKTEXT`; the one at the second shows `STOP2  END8`) | **caught** |
+| `t.RestoreTabStops(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the tabs land 8 and 8 columns apart, not 9 and 9) | **caught** |
+| `t.RestoreGuestColors(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (REDTEXT is palette colour 1, not the guest's red) | **caught** |
+| `t.RestoreANSIModes(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the row reads `INSrow`, not `INSxyzrow`) | **caught** |
+| `t.RestoreTitles(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` | **not caught**: the title a client draws follows the daemon's own title for the pane, and the daemon's emulator is never restored on a reattach. The client's stack matters to a daemon that takes over a pane, the live upgrade. `TestWireCarriesTheSnapshotState/*/title-stack-*` cover the wire |
+| `state.PendingInput = t.PendingInput()` in `beginTerminalState` | `TestWireCarriesACutSequence` | **caught** |
+| `t.RestorePendingInput(pending)` in `ApplyTerminalState` | `TestWireCarriesACutSequence`, `TestWireDropsTheClientsOwnCut` | **caught** |
+| `b.Write(st.PendingInput)` in `snapshotVT` | `TestSnapshotVTCarriesTheTabsModesAndACut` | **caught** |
+| The HTS of each stop in `snapshotVT` | `TestSnapshotVTCarriesTheTabsModesAndACut/tabs-*` | **caught** |
+| The ground state check around `p.cmd = int(b)` in `seqParser.performAction` | `TestConform_CSIParameters` (the control inside a CSI erases the screen) | **caught** |
+| `e.notePending(...)` in `Emulator.Write` | `TestSnapshotState_PendingInput` | **caught** |
+| The OSC 2 a pop sends the library (`afterCSI`), `-tags ghostty` | `TestSnapshotState_Titles` | **caught** |
+| `setTabStopLocked` on HTS in `observeESC`, `-tags ghostty` | `TestSnapshotState_TabStops` | **caught** |
+| The library continuation in `GhosttyTerminal.PendingInput`, `-tags ghostty` | `TestGhosttyWireCarriesACutSequence` | **caught** |
+| The scanner's held bytes in `GhosttyTerminal.PendingInput`, `-tags ghostty` | `TestGhosttyWireCarriesACutSequence` | **caught** |
+| The HTS of each stop in the libghostty restore, `-tags ghostty` | `TestGhosttyWireCarriesTheSnapshotState` | **caught** |
+| The insert and newline mode in the libghostty restore, `-tags ghostty` | `TestGhosttyWireCarriesTheSnapshotState` | **caught** |
+| The `holdsC1Introducer` check in `notePending` (2026-10-11) | `TestSnapshotState_PendingInputC1` (five cases keep the bytes from the last ESC, such as `"ab\x9b1;3"`) | **caught** |
+| The open rune's byte count passed to `sequenceStart` (2026-10-11) | `TestSnapshotState_PendingInputC1/a_C1_CSI_after_a_rune_cut_across_writes` (`"\x9b\x9b4"`, want `"\x9b4"`) | **caught** |
+
+### Snapshot state: review fixes
+
+On 2026-10-11 each control below cut one fix, ran the named test, and put
+the fix back. `-tags ghostty` runs the libghostty ones. The same tests passed
+on the branch build. `ghostty cut` is
+`TestGhosttyWireCarriesACutSequenceTheScannerFollows`, which cuts each stream
+in `sameBackendCutStreams` at every byte between two libghostty emulators.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| The `state == parser.DcsStringState` check in `notePending` (an ESC right after a DCS introducer is payload) | `TestWireCarriesACutSequence/*/dcs-passthrough-*`, `c1-dcs-passthrough` (29 cases; the client's copy differs in 3 places) | **caught** |
+| `isC1Introducer(b)` as a sequence start in `sequenceStart` | `TestSnapshotState_PendingInputC1/a_C1_CSI_right_after_an_ESC` (`"\x1b\x9b("`, want `"\x9b("`) | **caught** |
+| A C0 control inside an escape sequence leaves the scanner's `gsEsc` | ghostty cut `esc-bs-csi` (tab stops: client [], daemon [0 8 16 24 32]) | **caught** |
+| An ESC after an intermediate leaves the scanner's `gsEscInter` at ground | ghostty cut `esc-sp-then-*`, `esc-paren-then-tab-clear` (25 cases) | **caught** |
+| A C0 control after an intermediate leaves `gsEscInter` | ghostty cut `esc-intermediate-lf-charset` | **caught** |
+| The ESC handed over early when it ends a cut UTF-8 character | ghostty cut `hts-after-a-cut-character` (cursor: client (5,0), daemon (6,0)) | **caught** |
+| Autowrap off around the CAN in `dropCutLocked` | `TestGhosttyWireDropsTheClientsCutAtAPendingWrap` (history: client 4 lines, daemon 3) | **caught** |
+| The shadow tab stops reset on DECCOLM in `observeDecMode` | ghostty cut `deccolm-with-mode-40` | **caught** |
+| Mode 40 in `ghosttyModeNumbers` | ghostty cut `deccolm-with-mode-40` (11 cases) | **caught** |
+| `\x1b[4l\x1b[20l` in the extending restore prefix | `TestGhosttyWireRestoresUnderTheClientsInsertMode` (4 cells differ) | **caught** |
+| `highInSequence` (a byte with the top bit set inside a sequence) | ghostty cut `utf8-inside-a-csi` (cursor: client (39,0), daemon (5,0)) | **caught** |
+| The `csiIgnore` check before the CSI hook | ghostty cut `csi-prefix-after-a-parameter` | **caught** |
+| CAN and SUB ending a CSI in the scanner | ghostty cut `csi-cancelled` (tab stops: client [0 8 16 24 32], daemon []) | **caught** |
+| SOS and PM withheld from the library | ghostty cut `sos-holding-0x88` | **caught** |
+| A non-kitty APC withheld from the library | ghostty cut `apc-holding-0x88` | **caught** |
+| The charset filter in `observeESC` (the library ignores a set it does not have) | ghostty cut `unknown-charset` (charsets: client "BBBB", daemon "]BBB") | **caught** |
+| U+FFFD as REP's character after a cut character | ghostty cut `rep-after-a-cut-character` | **caught** |
+| U+FFFD as REP's character after a stray continuation byte | ghostty cut `rep-after-a-stray-byte` | **caught** |
+| DEL as REP's character | ghostty cut `rep-after-del` | **caught** |
+| The ESC that ends a CSI handed over at once | ghostty cut `csi-ended-by-a-kept-osc` (cursor shape: client steady false, daemon steady true) | **caught** |
+
+`TestWireCarriesAnOpenCluster` records a known gap: it fails when the
+snapshot starts to carry an open character cluster.

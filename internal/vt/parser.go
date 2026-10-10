@@ -1,7 +1,7 @@
 package vt
 
 // The sequence parser. This is charmbracelet/x/ansi's Parser (v0.11.8, MIT,
-// Copyright (c) 2023 Charmbracelet, Inc.) with three changes:
+// Copyright (c) 2023 Charmbracelet, Inc.) with four changes:
 //
 //   - the string data buffer starts small and grows on demand up to its cap,
 //     instead of being allocated at the cap up front;
@@ -9,7 +9,9 @@ package vt
 //     8-bit C1 control (see advance);
 //   - a parameter byte inside a CSI takes a direct path in advance that makes
 //     the same change to the params as the transition table and performAction
-//     would, without the table lookup and the action switch.
+//     would, without the table lookup and the action switch;
+//   - a control carried out inside a sequence leaves the sequence's command
+//     bits alone (see performAction).
 //
 // Upstream allocates the whole buffer in SetDataSize, and the emulator needs
 // a 4 MiB cap so a sixel image or a large OSC 52 write is not cut short. That
@@ -23,7 +25,7 @@ package vt
 // as it was before.
 //
 // Apart from those, the state machine, the parameter handling and the
-// dispatch are verbatim upstream, so every sequence parses as it did.
+// dispatch are verbatim upstream, so every other sequence parses as it did.
 
 import (
 	"unicode/utf8"
@@ -218,7 +220,19 @@ func (p *seqParser) abortRune() {
 // inStringState reports whether the parser is collecting the payload of a
 // string sequence: OSC, DCS, SOS, PM or APC.
 func (p *seqParser) inStringState() bool {
-	switch p.state {
+	return isStringState(p.state)
+}
+
+// runeNeed is how many more bytes the rune the parser is collecting needs.
+// It is meaningful in the UTF-8 state only.
+func (p *seqParser) runeNeed() int {
+	return utf8ByteLen(byte(p.cmd&0xff)) - p.paramsLen
+}
+
+// isStringState reports whether st collects the payload of a string
+// sequence: OSC, DCS, SOS, PM or APC.
+func isStringState(st parser.State) bool {
+	switch st {
 	case parser.OscStringState, parser.DcsStringState,
 		parser.SosStringState, parser.PmStringState, parser.ApcStringState:
 		return true
@@ -376,7 +390,15 @@ func (p *seqParser) performAction(action parser.Action, state parser.State, b by
 		}
 
 	case parser.ExecuteAction:
-		p.cmd = int(b)
+		// A control inside a CSI or an escape sequence is carried out where
+		// it is, and the sequence goes on, as in xterm and libghostty. cmd
+		// holds that sequence's prefix and intermediate by then, so it is
+		// left alone: upstream wrote the control into it, and the final byte
+		// was then added to the control's bits, which made a CSI 2 ; 3 H with
+		// a line feed inside it an erase of the whole screen.
+		if p.state == parser.GroundState {
+			p.cmd = int(b)
+		}
 		if p.handler.Execute != nil {
 			p.handler.Execute(b)
 		}

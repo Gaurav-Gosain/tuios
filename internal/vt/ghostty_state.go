@@ -51,6 +51,9 @@ var ghosttyModeNumbers = []struct {
 	{2027, gh.ModeGraphemeCluster},
 	{2031, gh.ModeColorSchemeReport},
 	{2048, gh.ModeInBandResize},
+	// Last, so the restore turns it on after it has set 3: with 40 on,
+	// setting 3 is DECCOLM, which clears the screen and the tab stops.
+	{40, gh.ModeEnableMode3},
 }
 
 // GetModes serializes DEC mode state for a wire snapshot. Synchronized
@@ -326,7 +329,7 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 			_, _ = t.pipe.Write([]byte("\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + oscReplyEnd(t.scanner.oscBEL)))
 			return
 		}
-		if c := ansi.XParseColor(arg); c != nil {
+		if c := parseGuestColor(arg); c != nil {
 			t.colors[idx] = c
 			t.refreshPaletteClaimsLocked()
 			t.styleCache = make(map[uint16]uv.Style)
@@ -369,7 +372,7 @@ func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 	}
 	dynamicColorItems(number, parts, func(number int, arg string) {
 		if arg != "?" {
-			if c := ansi.XParseColor(arg); c != nil {
+			if c := parseGuestColor(arg); c != nil {
 				set(number, c)
 			}
 			return

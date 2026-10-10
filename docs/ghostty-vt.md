@@ -111,7 +111,11 @@ top of the library:
   (answered Go-side so the library cannot answer queries a second time),
   OSC 66 text sizing, OSC 133 semantic markers, and the CSI/ESC
   dispatches whose state the library keeps but does not expose (DECSTBM
-  values, charset designations, the kitty keyboard stack).
+  values, charset designations, the kitty keyboard stack). SOS, PM and
+  any other APC are withheld too: the library does nothing with them. The
+  scanner follows the library's parser state by state, 8-bit controls
+  inside a sequence included, so what it observes is what the library
+  carried out (see REHYDRATION.md).
 - **Shadow grid**: a uv-typed copy of the viewport, refreshed from the
   render state's dirty rows on the first read after a write. Each cell
   costs one Go memory read: the packed cell layout is decoded using the

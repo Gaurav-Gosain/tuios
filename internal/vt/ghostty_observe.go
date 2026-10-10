@@ -50,6 +50,14 @@ func (t *GhosttyTerminal) observeCtrl(b byte) {
 
 func (t *GhosttyTerminal) observeESC(inter, final byte) {
 	switch inter {
+	case '(', ')', '*', '+':
+		// The library has US ASCII, the UK set and DEC special graphics,
+		// and leaves the set as it was for a name it does not know.
+		if final != 'B' && final != 'A' && final != '0' {
+			return
+		}
+	}
+	switch inter {
 	case '(':
 		t.charsetIDs[0] = final
 	case ')':
@@ -75,6 +83,8 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 					cb.ProgramStatus(progstatus.Event{Reset: true})
 				}
 			})
+		case 'H': // HTS
+			t.setTabStopLocked()
 		case '7': // DECSC
 			t.saveCursorShadowLocked()
 		case '8': // DECRC
@@ -111,6 +121,11 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.kittyKbd.Reset()
 	t.modifyOtherKeys.Store(0)
 	t.semanticMarkers.Clear()
+	// The library puts the default tab stops back and clears the title.
+	// The title stack and the icon name are kept here, so they go too.
+	t.tabstops = uv.DefaultTabStops(t.width)
+	t.iconName = ""
+	t.titleStack = nil
 }
 
 func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
@@ -216,6 +231,10 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		// Pinned by TestGhosttyDivergence_DECSTRIgnored.
 	case final == 'J' && prefix == 0 && inter == 0:
 		t.observeEraseDisplay(params)
+	case (final == 'g' || final == 'W') && inter == 0:
+		t.observeTabControl(prefix, final, params)
+	case final == 't' && prefix == 0 && inter == 0:
+		t.observeTitleStack(params)
 	case final == 'h' && prefix == '?', final == 'l' && prefix == '?':
 		t.observeDecMode(params, final == 'h')
 	case final == 'S' && prefix == '?' && inter == 0:
@@ -290,6 +309,7 @@ func (t *GhosttyTerminal) answerDecStatusReport(params []byte) {
 // of the left and right margins follows 69, and the synchronized-output cache
 // follows 2026.
 func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
+	mode40 := 0 // 1 set, -1 reset, earlier in this sequence
 	for _, part := range bytes.Split(params, []byte{';'}) {
 		n, ok := atoiBytes(part)
 		if !ok {
@@ -344,6 +364,28 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 					cb.AltScreen(set)
 				}
 			})
+		case 3:
+			// DECCOLM, which the library carries out only while mode 40
+			// allows it, puts the default tab stops back there, among
+			// other things. The hook runs before the library reads the
+			// sequence, so its mode 40 is the one that decides, unless
+			// this sequence set it before the 3.
+			allowed := mode40 > 0
+			if mode40 == 0 {
+				t.scanner.flushOut()
+				on, err := t.term.Mode(gh.ModeEnableMode3)
+				allowed = err == nil && on
+			}
+			if allowed {
+				t.tabstops = uv.DefaultTabStops(t.width)
+			}
+		case 40:
+			// Set in the same sequence as a DECCOLM after it, it decides
+			// that one.
+			mode40 = -1
+			if set {
+				mode40 = 1
+			}
 		case 1048:
 			if set {
 				t.saveCursorShadowLocked()
@@ -479,6 +521,13 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 			})
 		}
 		return false
+	case 0, 1:
+		// The icon name, which the library does not keep. OSC 0 sets the
+		// title as well, and the library takes that part.
+		if _, name, ok := bytes.Cut(payload, []byte{';'}); ok {
+			t.iconName = sanitiseTitle(name)
+		}
+		return true
 	case 4, 104, 10, 11, 12, 110, 111, 112:
 		// Color set/query is owned here so the library does not answer
 		// queries a second time.

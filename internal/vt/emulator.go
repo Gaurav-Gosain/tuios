@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"encoding/binary"
 	"image/color"
 	"io"
 	"strings"
@@ -227,6 +228,14 @@ type Emulator struct {
 
 	// onReflow is called after a reflow with where rows went.
 	onReflow func(remap func(absLine int) int)
+
+	// pending is the input since the parser last left its ground state,
+	// which a snapshot carries. See PendingInput.
+	pending []byte
+
+	// guestCur records that the guest set the cursor colour with OSC 12,
+	// for GuestColors.
+	guestCur bool
 }
 
 // maxSequenceData is the most bytes of one OSC, DCS or APC payload the
@@ -1368,6 +1377,10 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 	if e.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
+	from, need := e.parser.State(), 0
+	if from == parser.Utf8State {
+		need = e.parser.runeNeed()
+	}
 
 	for i := 0; i < len(p); i++ {
 		if b := p[i]; b >= ansi.SP && b < ansi.DEL && e.parser.State() == parser.GroundState && len(e.grapheme) == 0 {
@@ -1393,10 +1406,7 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 			// nothing to decide. Every such byte is a PutAction with no state
 			// change, so the run is handed over whole; the terminator (ESC,
 			// BEL, CAN, SUB) goes through the parser as before.
-			j := i + 1
-			for j < len(p) && isStringPayload(p[j]) {
-				j++
-			}
+			j := i + 1 + stringPayloadRun(p[i+1:])
 			e.parser.putRun(p[i:j])
 			e.lastState = st
 			i = j - 1
@@ -1429,15 +1439,48 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		}
 		e.lastState = state
 	}
+	e.notePending(p, from, need)
 	return len(p), nil
 }
 
-// isStringPayload reports whether b is plain payload inside an APC or DCS
-// string: printable ASCII, or a byte with the top bit set, which advance()
-// also treats as payload in a string state. Controls and DEL are left to the
-// parser.
+// isStringPayload reports whether b is plain payload inside a string
+// sequence: anything but a C0 control. Every such byte is payload in each
+// string state the parser has (DEL included, and a byte with the top bit
+// set, which advance() treats as payload in a string state). The controls
+// are left to the parser, since some of them end the string.
 func isStringPayload(b byte) bool {
-	return (b >= 0x20 && b < 0x7f) || b >= 0x80
+	return b >= 0x20
+}
+
+// stringPayloadRun returns how many bytes at the start of p are string
+// payload (see isStringPayload). It tests eight bytes at a time and finishes
+// one byte at a time from the first word that holds a byte that is not. One
+// byte at a time, the loop ran at the speed of the instruction fetch, and how
+// that went depended on where the linker put the loop: an unrelated change
+// to Write made BenchmarkWriteBareAPC a quarter slower at the same
+// instruction count.
+func stringPayloadRun(p []byte) int {
+	const (
+		ones  = 0x0101010101010101
+		highs = 0x8080808080808080
+	)
+	n := 0
+	for len(p)-n >= 8 {
+		x := binary.LittleEndian.Uint64(p[n:])
+		// A byte below 0x20, a C0 control, sets the top bit of its lane.
+		// A byte with the top bit set is payload, and &^x masks its lane
+		// out. A lane borrows from the next only when it is below 0x20
+		// itself, so the test is exact for "any byte in the word", which
+		// is all the loop asks.
+		if (x-0x20*ones)&^x&highs != 0 {
+			break
+		}
+		n += 8
+	}
+	for n < len(p) && isStringPayload(p[n]) {
+		n++
+	}
+	return n
 }
 
 // WriteString writes a string to the terminal output buffer.

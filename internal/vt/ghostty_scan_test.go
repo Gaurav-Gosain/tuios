@@ -73,9 +73,11 @@ func TestGhosttyScan(t *testing.T) {
 		},
 		{
 			// Kitty APC and sixel are gone; the non-kitty APC survives.
+			// Any other APC is withheld too: the library does nothing with
+			// one, and would read an 8-bit control inside it.
 			name:   "kitty and sixel are withheld",
 			in:     "a\x1b_Gf=100,a=T;QUJD\x1b\\b\x1bP0;1;0q#0;2;0;0;0-\x1b\\c\x1b_other\x1b\\d",
-			fwd:    "abc\x1b_other\x1b\\d",
+			fwd:    "abcd",
 			events: []string{`kitty:"Gf=100,a=T;QUJD"`, `sixel:"0;1;0":"#0;2;0;0;0-"`},
 		},
 		{

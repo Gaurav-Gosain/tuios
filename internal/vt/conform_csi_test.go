@@ -83,6 +83,28 @@ func TestConform_CSIParameters(t *testing.T) {
 			unhandled: true,
 		},
 		{
+			// A C0 control inside a CSI is carried out where it is, and the
+			// CSI goes on to its final byte, as in xterm. The parser used to
+			// fold the control into the command, so this CUP with a line
+			// feed inside it came out as ED 2 and erased the x.
+			name:   "a control inside a CSI is carried out and the CSI goes on",
+			in:     "x\x1b[2\n;3Hy",
+			cursor: "3,1",
+			want:   "x\n  y",
+		},
+		{
+			name:   "a backspace inside a CSI is carried out and the CSI goes on",
+			in:     "ab\x1b[\x08CZ",
+			cursor: "3,0",
+			want:   "abZ",
+		},
+		{
+			name:   "a control inside an escape sequence leaves its intermediate",
+			in:     "\x1b(\n0q",
+			cursor: "1,1",
+			want:   "\n─",
+		},
+		{
 			name:   "an ESC inside a sequence starts a new one",
 			in:     "\x1b[1;\x1b[3;3HX",
 			cursor: "3,2",

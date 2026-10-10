@@ -76,6 +76,45 @@ type Terminal interface {
 	LastPrinted() string
 	RestoreLastPrinted(cluster string)
 
+	// Tab stops. TabStops lists the columns that hold a stop, in order.
+	// RestoreTabStops replaces the table with the columns given, after any
+	// resize, since a resize to a new width resets the table. A column off
+	// the screen is dropped.
+	TabStops() []int
+	RestoreTabStops(cols []int)
+
+	// Titles is the window title, the icon name and what XTWINOPS 22 saved.
+	// RestoreTitles puts all three back, keeping the newest entries of a
+	// stack longer than XTWINOPS keeps. It does not tell the host through
+	// the Title callback, except on the libghostty backend, whose library
+	// takes a title only as OSC 2 and reports each one it takes.
+	Titles() Titles
+	RestoreTitles(t Titles)
+
+	// GuestColors is what the guest set with OSC 4, 10, 11 and 12 and has
+	// not reset. RestoreGuestColors replaces all of it.
+	GuestColors() GuestColors
+	RestoreGuestColors(c GuestColors)
+
+	// ANSIModes reports the ANSI (not DEC private) modes the emulator
+	// implements, by number: insert mode (4) and newline mode (20) on both
+	// backends. GetModes cannot carry them, because the two kinds share a
+	// number space there. RestoreANSIModes sets them without side effects
+	// and ignores a mode the emulator does not implement.
+	ANSIModes() map[int]bool
+	RestoreANSIModes(modes map[int]bool)
+
+	// PendingInput is the input since the parser last left its ground
+	// state: the start of an escape sequence or of a UTF-8 character that
+	// has not ended yet, without a control the parser has already carried
+	// out inside it. It is empty at ground and at most MaxPendingInput
+	// bytes. A snapshot carries it, because the rest of the sequence
+	// arrives after the snapshot and an emulator at ground prints it as
+	// text. RestorePendingInput drops whatever unfinished input the
+	// emulator holds and then reads p, so the next byte continues p.
+	PendingInput() []byte
+	RestorePendingInput(p []byte)
+
 	// Protected cells. ProtectedCells lists the cells DECSCA protected on
 	// the active screen, or with main set on the main screen under an active
 	// alternate one, as runs along a row. RestoreProtectedCells replaces the
@@ -265,3 +304,31 @@ type SavedCursor struct {
 type CellRun struct {
 	X, Y, N int
 }
+
+// Titles is the window title, the icon name and the title stack XTWINOPS 22
+// and 23 push to and pop from, oldest entry first.
+type Titles struct {
+	Title, Icon string
+	Stack       []TitleEntry
+}
+
+// TitleEntry is one entry of the title stack. A push can save the title, the
+// icon name or both, and a pop puts back only what the entry holds.
+type TitleEntry struct {
+	Title, Icon       string
+	HasTitle, HasIcon bool
+}
+
+// GuestColors is what a guest set with OSC 4 (Palette, by slot) and with OSC
+// 10, 11 and 12 (the default foreground, background and cursor colours). A
+// nil entry is one the guest has not set, or has reset.
+type GuestColors struct {
+	Palette        [256]color.Color
+	Fg, Bg, Cursor color.Color
+}
+
+// MaxPendingInput bounds PendingInput: the longest payload the emulator keeps
+// of one sequence, and room for its introducer and parameters. The parser
+// cuts a longer payload at the same length, so input cut there replays to the
+// same state.
+const MaxPendingInput = maxSequenceData + 4096

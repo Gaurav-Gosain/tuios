@@ -116,6 +116,13 @@ type GhosttyTerminal struct {
 	// restore and cannot ask it for the result.
 	savedLRMM bool
 	kittyKbd  *kittyKeyboardState
+	// tabstops follows the library's tab stops, which it keeps where no
+	// query reaches (observeTabControl).
+	tabstops *uv.TabStops
+	// iconName and titleStack are what OSC 1 and XTWINOPS 22 set. The
+	// library keeps neither (observeTitleStack).
+	iconName   string
+	titleStack []savedTitle
 	// modifyOtherKeys mirrors the XTMODKEYS level the guest set, for the
 	// input path. libghostty keeps its own copy for its key encoder, which
 	// tuios does not use.
@@ -216,6 +223,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 	t.bufs[0] = newGrid(w, h)
 	// bufs[1] is made by bufAt on the first switch to the alternate screen.
 	t.scrollRegion = uv.Rect(0, 0, w, h)
+	t.tabstops = uv.DefaultTabStops(w)
 	t.dec = newGhosttyCellDecoder()
 
 	term, err := gh.NewTerminal(
@@ -231,6 +239,10 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		// always clusters, and so does Ghostty itself by default. An app
 		// may still reset 2027 for itself.
 		gh.WithModeDefault(gh.ModeGraphemeCluster, true),
+		// The library keeps the start of a sequence or a character that
+		// has not ended, for PendingInput. The scanner withholds the long
+		// strings, so what the library keeps here is short.
+		gh.WithContinuationMaxBytes(uint(MaxPendingInput)),
 		gh.WithWritePty(func(_ *gh.Terminal, data []byte) {
 			// Query responses; the pipe write never blocks.
 			_, _ = t.pipe.Write(data)
@@ -507,6 +519,11 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 		return
 	}
 	t.flushRestoreLocked()
+	if width != t.width {
+		// The library puts the default tab stops back when the width
+		// changes, and only then.
+		t.tabstops = uv.DefaultTabStops(width)
+	}
 	t.width, t.height = width, height
 	_ = t.term.Resize(clampU16(width), clampU16(height), uint32(t.cellW), uint32(t.cellH))
 	t.bufs[0].Resize(width, height)
