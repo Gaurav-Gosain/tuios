@@ -162,11 +162,6 @@ var optionSpecs = []Option{
 		Accepted:    LinkHoverModes, Default: LinkHoverSafe,
 	},
 	{
-		Path: "appearance.link_label", Type: OptionBool, Section: "appearance",
-		Description: "Pop up a label naming the address of the link under the pointer",
-		Default:     "true",
-	},
-	{
 		Path: "appearance.link_opener", Type: OptionString, Section: "appearance",
 		Description: "The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener.",
 		Default:     "",

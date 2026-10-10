@@ -207,6 +207,7 @@ starts with `http://`, `https://`, `ftp://`, `ftps://`, `file://`, `ssh://` or
 [appearance]
 links = "all"          # off, marked (OSC 8 only), all
 link_click = "both"    # both, ctrl, shift, off
+link_hover = "safe"    # safe, always
 link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
 ```
 
@@ -214,6 +215,7 @@ link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
 |---|---|---|
 | `links` | `all` | The links that tuios finds. `marked` finds only OSC 8 links. |
 | `link_click` | `both` | The click that opens a link. `both` is `Ctrl+click` and `Shift+click`. `Ctrl+click` also works on macOS, in Ghostty, kitty, WezTerm and Terminal.app. `Cmd+click` does not open a link there. |
+| `link_hover` | `safe` | The hover underline and label. `safe` skips a pane whose program tracks the mouse. `always` draws them in every pane. |
 | `link_opener` | empty | The command that opens a web link. tuios puts the URL where `%s` is, or at the end. If this is empty, tuios uses `$BROWSER`, then the system opener. |
 
 The system opener is `open` on macOS, `rundll32` on Windows, `wslview` under

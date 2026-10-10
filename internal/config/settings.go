@@ -148,11 +148,6 @@ type Settings struct {
 	// constants. Set via appearance.link_hover.
 	LinkHover string
 
-	// LinkLabel pops up a label naming the address of the link under the
-	// pointer. Turn it off to keep the hover to the underline, the pointer and
-	// the click. Set via appearance.link_label.
-	LinkLabel bool
-
 	// LinkOpener is the command that opens a web link. Empty uses $BROWSER,
 	// then the system opener. Set via appearance.link_opener.
 	LinkOpener string
@@ -772,7 +767,6 @@ func DefaultSettings() Settings {
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
 		LinkClick:                   LinkClickBoth,
-		LinkLabel:                   true,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,

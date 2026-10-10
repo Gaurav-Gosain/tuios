@@ -294,7 +294,6 @@ type AppearanceConfig struct {
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
 	LinkClick                string                  `toml:"link_click"`                   // The click that opens a link: both, ctrl, shift, off (default: both)
 	LinkHover                string                  `toml:"link_hover"`                   // The hover highlight: safe (skips a pane whose guest tracks the mouse) or always (default: safe)
-	LinkLabel                bool                    `toml:"link_label"`                   // Pop up a label naming the address of the link under the pointer (default: true)
 	LinkOpener               string                  `toml:"link_opener"`                  // Command that opens a web link; empty uses $BROWSER, then the system opener
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
@@ -889,7 +888,6 @@ func DefaultConfig() *UserConfig {
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,
 			LinkHover:                LinkHoverSafe,
-			LinkLabel:                true,
 			HideWindowButtons:        false,
 			WindowButtonStyle:        WindowButtonStyleDots,
 			WindowButtonPosition:     WindowButtonPositionLeft,
