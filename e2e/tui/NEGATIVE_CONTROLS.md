@@ -3850,13 +3850,14 @@ stand-in, stdio-proxy and mux.
   copy paused while they wait for a running slot stay so when the slots
   free. The positive half resumes the paused one to done and verified.
 - `TestACopyDoesNotWriteThroughALinkAtItsPart`: a link at the part file,
-  here and on build, is not written through.
+  here and on build, is not written through. A part is named by its copy's
+  id, so the links go in while the copies wait behind three slow ones.
 - `TestADropNamesEachFileSafely`: two dropped files of one name get two
   paths, and no path holds a control character or a backslash.
 - `TestACancelledCopyStopsReadingItsSource`: after a copy of a 16 GiB
   sparse file is cancelled, the daemon reads under 64 MB in 2 s.
 - `TestAFolderMoveRemovesOnlyWhatItCopied`: a move leaves the link it did
-  not copy.
+  not copy, and the row names it in `skipped_items`.
 
 The controls were run on 2026-10-09 on branch `gpui-bridge-wave5`. "Before"
 is the branch as it was before the review (d32f832a); each test also passes
@@ -3865,7 +3866,7 @@ on the branch with its fix.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | Names from a walk are trusted | before (no `safeRel` check) | `TestAFolderFromAHostCannotLandOutsideItsDestination` (escaped.txt and escaped-too.txt written outside, copy done) | **caught** |
-| Pipes and devices are opened | before (`os.Open`, no regular-file check) | `TestFileVerbsOnAPipeAndADevice` (five verbs never answered) | **caught** |
+| Pipes and devices are opened | before (`os.Open`, no regular-file check) | `TestFileVerbsOnAPipeAndADevice` (the verbs never answered) | **caught** |
 | A queued copy ignores its stop | before (no state check after the slot) | `TestATransferStoppedWhileQueuedStaysStopped` (both ended done, both files arrived) | **caught** |
 | The part follows links | before (no `O_NOFOLLOW`) | `TestACopyDoesNotWriteThroughALinkAtItsPart` (the target holds the copy, the link put in place, here and on build) | **caught** |
 | Drop names as given | before (`filepath.Base`) | `TestADropNamesEachFileSafely` (two notes.txt wrote one part and failed the check) | **caught** |
@@ -3875,3 +3876,67 @@ on the branch with its fix.
 
 The wave 5 tests in `file_transfer_test.go` pass on the branch with every
 fix.
+
+## Transfers on main: the journal, parts per copy, link writes, events
+
+The tests are in `file_transfer_journal_test.go`, with the far daemon of
+`host_attach_test.go` as build. Each saves its record as JSON under
+`TUIOS_E2E_FRAMES` (the rows or events in order and the sha256 of each file
+that matters).
+
+- `TestACopySurvivesADaemonRestart` copies 96 MiB from build at 24 MB/s and
+  kills the hub daemon with SIGKILL a third of the way in. The next daemon
+  must hold the copy, go on from the part (`resumed_from` past half the bytes
+  at the kill), and end done with the original's sha256. In the same folder a
+  part eight days old with no copy must be gone and a new one must stay.
+- `TestTwoCopiesToOnePathKeepTheirParts` copies two 32 MiB files from build
+  to one file at once, named through a folder and a link to it. Both must
+  write parts of their own, both must end checked, and the file in place
+  must be one of the two. The positive half of the busy rule: a third copy
+  to the first path answers `busy`.
+- `TestALinkCannotWriteKeysOrLeaveTheHome` sends a file to build's
+  `authorized_keys` (by `~`, by full path, through a link in build's home
+  that points at `~/.ssh`, and as `~/.SSH`), to `.bashrc`, and outside
+  build's home, and calls `file-mkdir`, `file-remove`, `file-rename` and
+  `open-file-stream` on those places over the link. Every one must be
+  `forbidden`, the files must keep their bytes, and no part may be left. The
+  positive half: a copy into `~/inbox` arrives with its time kept, a copy
+  through a link inside the home to `~/inbox` arrives, and a rename and a
+  remove there work.
+- `TestFileWritesNeedTheFilesCapability`: with `allow = ["list", "write"]`
+  on build, a listing works, each file verb but the listing is refused on
+  its own, and a copy to build fails as `forbidden`, naming `files`.
+- `TestACopySaysWhatItDoesOnTheEventStream`: a subscriber that names
+  `transfer` and `transfer-progress` sees the copy created, its progress at
+  most four times a second and never going back, and its end, done and
+  checked. A subscriber that names no types sees the start and the end and
+  no progress.
+
+`TestATransferFromAHostResumesAfterTheLinkDrops` also checks that the copy
+keeps the original's modification time, and `TestAFolderMoveRemovesOnlyWhatItCopied`
+that it names what it did not copy.
+
+The controls were run on 2026-10-10 on branch `feat/transfer-engine`, each
+on a binary built with the one change and the rest as committed.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No journal | `Start`: `d.transfers.load()` cut | `TestACopySurvivesADaemonRestart` (`no_transfer` after the restart) | **caught** |
+| No stale part sweep | `load`: `m.parts.sweep(...)` cut | `TestACopySurvivesADaemonRestart` (the eight day old part is still there) | **caught** |
+| One part name per path | `partPath`: the id not added to the name | `TestTwoCopiesToOnePathKeepTheirParts` (one copy failed its check, the other found no part, no file in place) | **caught** |
+| No busy rule | `start`: the check of the other jobs made `false` | `TestTwoCopiesToOnePathKeepTheirParts` (the third copy started) | **caught** |
+| No deny list | `linkDenied` returns false | `TestALinkCannotWriteKeysOrLeaveTheHome` (copies to `authorized_keys` and `.bashrc` done, `file-mkdir ~/.ssh/more` and `file-remove ~/.ssh/authorized_keys` went through) | **caught** |
+| The deny list read by name | `linkWriteFS`: only `linkDenied(p, $HOME)`, no real path | `TestALinkCannotWriteKeysOrLeaveTheHome` (`~/innocent/authorized_keys` was written through the link, `authorized_keys` emptied) | **caught** |
+| No home root | `linkWriteRoots`: `/` added to the roots | `TestALinkCannotWriteKeysOrLeaveTheHome` (outside.txt arrived, `file-mkdir` outside the home went through) | **caught** |
+| A folder link inside the home is not followed | `verbOpenFileStream` and `verbFileMkdir`: `confineDir` replaced by `confine` | `TestALinkCannotWriteKeysOrLeaveTheHome` (the copy through `~/projects`, a link to `~/inbox`, failed: the `os.Root` refuses the link it would stat) | **caught** |
+| The part opened is not checked against its name | `openPart`: the `os.SameFile` and `Lstat` check cut | `TestACopyDoesNotWriteThroughALinkAtItsPart` ("on build, relative": the target holds the copy, since an `os.Root` follows a relative link whatever `O_NOFOLLOW` says) | **caught** |
+| files is write | every `config.LinkAllowFiles` in `verbCapabilities` made `config.LinkAllowWrite` | `TestFileWritesNeedTheFilesCapability` (the copy ended done) | **caught** |
+| files on one verb only | `file-commit` alone made `write`; then `open-file-stream` alone | `TestFileWritesNeedTheFilesCapability` (that verb answered past the policy: `no_file` from `file-commit`, a stream from `open-file-stream`) | **caught** |
+| mtime not kept | `commitPart`: the `Chtimes` made unreachable | `TestATransferFromAHostResumesAfterTheLinkDrops`, `TestALinkCannotWriteKeysOrLeaveTheHome` (the time of the copy, not the original's) | **caught** |
+| Skipped items not said | `walkTree`: the default case returns without counting | `TestAFolderMoveRemovesOnlyWhatItCopied` (no `skipped`) | **caught** |
+| No state events | `note`: the `publish` cut | `TestACopySaysWhatItDoesOnTheEventStream` (the stream starts with progress, never says created or ended) | **caught** |
+| No progress limit | `transferProgressEvery` = 0 | `TestACopySaysWhatItDoesOnTheEventStream` (2048 progress events in 2 s) | **caught** |
+| Progress not opt-in | `optInEventTypes`: `transfer-progress` cut | `TestACopySaysWhatItDoesOnTheEventStream` (a subscriber that named no types got progress) | **caught** |
+
+`TestACancelledCopyStopsReadingItsSource` reads `/proc` and skips on macOS,
+where these controls ran; it runs on Linux CI.

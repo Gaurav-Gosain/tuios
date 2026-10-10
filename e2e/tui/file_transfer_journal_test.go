@@ -407,8 +407,9 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 }
 
 // TestFileWritesNeedTheFilesCapability gives the hub list and write on build,
-// but not files. A listing goes through, and a copy to build fails as
-// forbidden and names the capability that is missing.
+// but not files. A listing goes through, every file verb but the listing is
+// refused on its own, and a copy to build fails as forbidden and names the
+// capability that is missing.
 func TestFileWritesNeedTheFilesCapability(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -418,7 +419,30 @@ func TestFileWritesNeedTheFilesCapability(t *testing.T) {
 	if err := os.WriteFile(src, []byte("note\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	dialHostVerbs(t, base).must("file-list", map[string]any{"dir": "~"}, nil)
+	far := dialHostVerbs(t, base)
+	far.must("file-list", map[string]any{"dir": "~"}, nil)
+	// Each verb on its own, so one that needs only write is seen.
+	for _, v := range []struct {
+		verb   string
+		params map[string]any
+	}{
+		{"file-read", map[string]any{"path": "~/x"}},
+		{"file-hash", map[string]any{"path": "~/x"}},
+		{"file-walk", map[string]any{"path": "~"}},
+		{"open-file-stream", map[string]any{"path": "~/x", "mode": "write", "length": 1}},
+		{"file-mkdir", map[string]any{"path": "~/new"}},
+		{"file-rename", map[string]any{"from": "~/a", "to": "~/b"}},
+		{"file-remove", map[string]any{"path": "~/a"}},
+		{"file-commit", map[string]any{"path": "~/x"}},
+		{"file-abort", map[string]any{"path": "~/x"}},
+		{"file-drop-dir", map[string]any{}},
+	} {
+		_, err := far.call(v.verb, v.params)
+		var vf *verbFailure
+		if !errors.As(err, &vf) || vf.Code != "forbidden" || !strings.Contains(vf.Message+errString(err), "files") {
+			t.Errorf("ASSERTION: %s on a host that does not allow files answered %v, want forbidden naming files", v.verb, err)
+		}
+	}
 	var row transferRow
 	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": "~/note.txt"},
