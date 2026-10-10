@@ -1697,7 +1697,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				recordToken(span, "")
 			}
 		}
-		lines = append(lines, compose(sidebarHeaderRow(label, add, cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRowRuled(label, add, cw, pal, &m.Settings)))
 		// lazygit's excludeBlankColumns, on the rail's right spine. A one-window
 		// session is the common case, so a column that prints "1" against every
 		// row is a column of identical digits carrying nothing. It is dropped
@@ -1782,7 +1782,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		if hasTermAdd {
 			recordToken(termSpan, shown)
 		}
-		lines = append(lines, compose(sidebarHeaderRow("terminals", right, cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRowRuled("terminals", right, cw, pal, &m.Settings)))
 		if emptyPeek {
 			hint := "no terminals"
 			lines = append(lines, compose(sidebarFit(
@@ -1832,7 +1832,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	drawGit := func() {
-		lines = append(lines, compose(sidebarHeaderRow("git", "", cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRowRuled("git", "", cw, pal, &m.Settings)))
 		for i := range count[sidebarSectionGit] {
 			idx := start[sidebarSectionGit] + i
 			if idx >= len(gitRows) {
@@ -1844,7 +1844,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	drawCustom := func() {
-		lines = append(lines, compose(sidebarHeaderRow(m.railCustomTitle(), "", cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRowRuled(m.railCustomTitle(), "", cw, pal, &m.Settings)))
 		if len(customRows) == 0 {
 			// The title over an empty section: the one notional row draws
 			// as a blank line, so the heading is not the last thing on the
@@ -1880,7 +1880,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for _, tk := range tokens {
 			recordToken(tk, "")
 		}
-		lines = append(lines, compose(sidebarHeaderRow("agents", controls, cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRowRuled("agents", controls, cw, pal, &m.Settings)))
 		if emptyFilter {
 			// The hint is about the attached session ("here"), so it carries that
 			// identity: it is a second filter control, and without something to tell

@@ -208,7 +208,7 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 		}
 		right += cdTok
 	}
-	return sidebarHeaderRow(sidebarFilesLabel, right, cw, pal)
+	return sidebarHeaderRowRuled(sidebarFilesLabel, right, cw, pal, &m.Settings)
 }
 
 // sidebarFilesEmptyRow says why the section is listing nothing.
