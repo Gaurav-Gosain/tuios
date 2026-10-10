@@ -73,6 +73,15 @@ plain settled screen in `$TUIOS_E2E_FRAMES/TestDualRailClickSwitchesSession/`
 
 ## Session-backed sidebar rails
 
+`TestSidebarSessionUsesPaneTitles` failed against PR #626's prior binary
+(`/tmp/tuios-rail-title-negative.log`): the first pane on each rail displayed
+`side-left` or `side-right` instead of its own renamed title. With ordinary
+pane chrome restored and `WindowState.CustomName` hydrated, the test confirms
+both rails and a second stacked pane show their own titles, live renames
+update, a title click focuses that exact pane, and close/minimize/zoom dots
+act only on its rail (`/tmp/tuios-session-title-buttons.log`). The PNG artifact
+records four ordinary pane titles, including two stacked left panes.
+
 `TestSidebarSessionDoesNotRunHiddenCustomCommand` fails on the combined
 foundation/session build before suppressing ordinary custom components behind
 an assigned daemon pane: the legacy-edge command created its marker despite

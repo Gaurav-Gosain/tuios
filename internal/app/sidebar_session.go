@@ -2,17 +2,14 @@ package app
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // A rail session is a second *client* of the daemon, not a shell owned by the
@@ -29,9 +26,9 @@ type sidebarSessionView struct {
 	windows    map[string]*terminal.Window
 	pending    map[string]bool
 	focusPTY   string
+	zoomPTY    string // client-local expansion of a rail pane, not the daemon layout
 	workspace  int
 	paneIndex  int
-	paneCount  int
 	width      int
 	height     int
 	problem    string
@@ -144,10 +141,11 @@ func (m *OS) closeSidebarSession(edge sidebarEdge) {
 		v.client = nil
 	}
 	for _, w := range v.windows {
+		m.recordWindowButtons(w.ID, nil)
 		w.Close()
 	}
 	v.window, v.windows, v.pending, v.panes = nil, nil, nil, nil
-	v.name, v.ptyID, v.focusPTY, v.problem = "", "", "", ""
+	v.name, v.ptyID, v.focusPTY, v.zoomPTY, v.problem = "", "", "", "", ""
 	if m.sidebarSessionFocus == int(edge)+1 {
 		m.sidebarSessionFocus = 0
 	}
@@ -228,6 +226,15 @@ func (m *OS) layoutSidebarSessionPanes(edge sidebarEdge) {
 		return
 	}
 	body := max(1, v.height)
+	if w := v.windows[v.zoomPTY]; v.zoomPTY != "" && w != nil {
+		w.X, w.Y = sidebarEdgeX(edge, v.width, m.GetRenderWidth()), m.viewReserve().Top
+		if m.viewportResizing {
+			w.ResizeVisual(v.width, body)
+		} else {
+			w.Resize(v.width, body)
+		}
+		return
+	}
 	y := m.viewReserve().Top
 	for i, pane := range v.panes {
 		h := body / count
@@ -254,7 +261,7 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 	}
 	active := sidebarActivePane(state)
 	var eligible []session.WindowState
-	v.paneIndex, v.paneCount = 0, 0
+	v.paneIndex = 0
 	if state != nil {
 		v.workspace = state.CurrentWorkspace
 		for _, pane := range state.Windows {
@@ -266,7 +273,15 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 			}
 		}
 	}
-	v.paneCount = len(eligible)
+	if v.zoomPTY != "" {
+		zoomVisible := false
+		for _, pane := range eligible {
+			zoomVisible = zoomVisible || pane.PTYID == v.zoomPTY
+		}
+		if !zoomVisible {
+			v.zoomPTY = ""
+		}
+	}
 	capacity := max(1, v.height/6)
 	if len(eligible) > capacity {
 		start := max(0, v.paneIndex-capacity)
@@ -280,6 +295,7 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 	for id, w := range v.windows {
 		if !visible[id] {
 			v.client.UnsubscribePTY(id)
+			m.recordWindowButtons(w.ID, nil)
 			w.Close()
 			delete(v.windows, id)
 		}
@@ -288,6 +304,9 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 		if !visible[id] {
 			delete(v.pending, id)
 		}
+	}
+	if v.zoomPTY != "" && !visible[v.zoomPTY] {
+		v.zoomPTY = ""
 	}
 	v.panes = eligible
 	v.ptyID, v.window = "", nil
@@ -307,6 +326,7 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 			if w.Title() != pane.Title {
 				w.SetTitle(pane.Title)
 			}
+			w.CustomName = pane.CustomName
 			w.ForegroundCmd = pane.ForegroundCmd
 			continue
 		}
@@ -378,6 +398,7 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 		w := terminal.NewDaemonWindow(event.pane.ID, event.pane.Title,
 			sidebarEdgeX(event.edge, v.width, m.GetRenderWidth()), m.viewReserve().Top,
 			v.width, v.height, 0, ptyID, m.PTYDataChan, m.Settings.ScrollbackLines)
+		w.CustomName = event.pane.CustomName
 		w.ForegroundCmd = event.pane.ForegroundCmd
 		w.DaemonWriteFunc = func(data []byte) error { return client.WritePTY(ptyID, data) }
 		w.DaemonResizeFunc = func(width, height int) error { return client.ResizePTY(ptyID, width, height) }
@@ -425,18 +446,14 @@ func (m *OS) sidebarSessionPanel(edge sidebarEdge, width int) (string, bool) {
 	}
 	v := &m.sidebarSessions[edge]
 	lines := make([]string, m.ViewUsableHeight())
-	label := " " + v.name
-	if v.paneCount > 1 {
-		label += fmt.Sprintf("  %d/%d", v.paneIndex, v.paneCount)
+	// The rail has no extra header: its panes use the same title bars as
+	// ordinary windows. Only an empty rail needs a loading placeholder.
+	if len(v.panes) == 0 {
+		lines[0] = sidebarFit(" Connecting to session…", width, m.railGround())
 	}
-	if cfg := m.sidebarSessionConfig(edge); cfg != nil && cfg.SessionWorkspace > 0 {
-		label += fmt.Sprintf("  [%d]", cfg.SessionWorkspace)
-	}
-	// Keep the selector visible while a pane snapshot is still loading.
-	lines[0] = sidebarFit(label, width, m.railGround())
-	for i, pane := range v.panes {
+	for _, pane := range v.panes {
 		w := v.windows[pane.PTYID]
-		if w == nil {
+		if w == nil || (v.zoomPTY != "" && v.zoomPTY != pane.PTYID) {
 			continue
 		}
 		focused := m.sidebarSessionFocus == int(edge)+1 && m.SidebarSessionWindow() == w
@@ -445,13 +462,6 @@ func (m *OS) sidebarSessionPanel(edge sidebarEdge, width int) (string, bool) {
 			border = theme.BorderFocusedTerminalOn(m.host.bg)
 		}
 		body := strings.Split(m.renderWindowBox(w, 0, focused, border), "\n")
-		if i == 0 && len(body) > 0 {
-			// The selector replaces this pane's title bar, rather than
-			// taking a full row above its frame. There are no window
-			// buttons in this bar: the entire label is the pane selector.
-			body[0] = m.sidebarSessionTitleBar(label, width, border)
-			m.recordWindowButtons(w.ID, nil)
-		}
 		start := w.Y - m.viewReserve().Top
 		for y := 0; y < w.Height && y < len(body) && start+y < len(lines); y++ {
 			lines[start+y] = sidebarFit(body[y], width, m.railGround())
@@ -466,16 +476,6 @@ func (m *OS) sidebarSessionPanel(edge sidebarEdge, width int) (string, bool) {
 		}
 	}
 	return strings.Join(lines, "\n"), true
-}
-
-// sidebarSessionTitleBar puts the rail's daemon session identity in the first
-// pane's border. This keeps its guest grid, border and cursor on the same
-// geometry as an ordinary pane, with no extra header row above the frame.
-func (m *OS) sidebarSessionTitleBar(label string, width int, borderColor color.Color) string {
-	left, right, horizontal := m.Settings.GetWindowBorderTopLeft(), m.Settings.GetWindowBorderTopRight(), m.Settings.GetWindowBorderTop()
-	inner := max(0, width-lipgloss.Width(left)-lipgloss.Width(right))
-	name := ansi.Truncate(" "+printableTitle(label), inner, "")
-	return lipgloss.NewStyle().Foreground(borderColor).Render(left + name + strings.Repeat(horizontal, max(0, inner-lipgloss.Width(name))) + right)
 }
 
 func (m *OS) sidebarSessionOutputPending() bool {
@@ -510,9 +510,8 @@ func (m *OS) SidebarSessionAt(x, y int) (edge int, ok bool) {
 	return 0, false
 }
 
-// SidebarSessionHeaderAt identifies the selector in the first pane's top
-// border. Clicking it cycles the daemon's active pane without moving the
-// center attachment or borrowing the ordinary rail's session-list hits.
+// SidebarSessionHeaderAt claims the first rail row while its pane is loading.
+// Once loaded, SidebarSessionTitlePaneAt resolves the ordinary title bar.
 func (m *OS) SidebarSessionHeaderAt(x, y int) (edge int, ok bool) {
 	x, y = m.ScreenPoint(x, y)
 	if y != m.viewReserve().Top {
@@ -539,14 +538,76 @@ func (m *OS) SidebarSessionHeaderAt(x, y int) (edge int, ok bool) {
 func (m *OS) SidebarSessionPaneAt(x, y int) *terminal.Window {
 	if edge, ok := m.SidebarSessionAt(x, y); ok {
 		_, row := m.ScreenPoint(x, y)
-		for _, pane := range m.sidebarSessions[edge-1].panes {
-			w := m.sidebarSessions[edge-1].windows[pane.PTYID]
-			if w != nil && row >= w.Y && row < w.Y+w.Height {
+		v := &m.sidebarSessions[edge-1]
+		for _, pane := range v.panes {
+			w := v.windows[pane.PTYID]
+			if w != nil && (v.zoomPTY == "" || v.zoomPTY == pane.PTYID) && row >= w.Y && row < w.Y+w.Height {
 				return w
 			}
 		}
 	}
 	return nil
+}
+
+// SidebarSessionTitlePaneAt finds the ordinary title bar of a rail pane.
+// Its first row is intentionally outside SidebarSessionAt's body hit.
+func (m *OS) SidebarSessionTitlePaneAt(x, y int) (int, *terminal.Window) {
+	x, y = m.ScreenPoint(x, y)
+	for _, side := range []sidebarEdge{sidebarLeft, sidebarRight} {
+		if !m.sidebarSessionVisible(side) {
+			continue
+		}
+		v := &m.sidebarSessions[side]
+		border := sidebarEdgeX(side, v.width, m.GetRenderWidth())
+		if side == sidebarLeft {
+			border += v.width - 1
+		}
+		for _, pane := range v.panes {
+			w := v.windows[pane.PTYID]
+			if w != nil && (v.zoomPTY == "" || v.zoomPTY == pane.PTYID) && y == w.Y && x >= w.X && x < w.X+w.Width && x != border {
+				return int(side) + 1, w
+			}
+		}
+	}
+	return 0, nil
+}
+
+// sidebarSessionWindowByID finds a currently drawn rail pane for title-bar
+// button hit testing. A zoomed rail does not expose the hidden panes' buttons.
+func (m *OS) sidebarSessionWindowByID(id string) *terminal.Window {
+	for _, side := range []sidebarEdge{sidebarLeft, sidebarRight} {
+		if !m.sidebarSessionVisible(side) {
+			continue
+		}
+		v := &m.sidebarSessions[side]
+		for _, pane := range v.panes {
+			if pane.ID == id && (v.zoomPTY == "" || v.zoomPTY == pane.PTYID) {
+				return v.windows[pane.PTYID]
+			}
+		}
+	}
+	return nil
+}
+
+// ToggleSidebarSessionZoom expands this pane within its own rail, leaving
+// the daemon session's ordinary pane set and the center session unchanged.
+func (m *OS) ToggleSidebarSessionZoom(edge int, w *terminal.Window) {
+	if edge < 1 || edge > len(m.sidebarSessions) || w == nil {
+		return
+	}
+	v := &m.sidebarSessions[edge-1]
+	if v.zoomPTY == w.PTYID {
+		v.zoomPTY = ""
+	} else {
+		v.zoomPTY = w.PTYID
+	}
+	for _, pane := range v.panes {
+		if v.zoomPTY != "" && pane.PTYID != v.zoomPTY {
+			m.recordWindowButtons(pane.ID, nil)
+		}
+	}
+	m.layoutSidebarSessionPanes(sidebarEdge(edge - 1))
+	m.MarkAllDirty()
 }
 
 // FocusSidebarSession gives keyboard input to the selected daemon pane. The

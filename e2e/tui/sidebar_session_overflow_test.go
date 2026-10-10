@@ -50,7 +50,7 @@ session = "side"
 	}
 	term := startIn(t, base, startOpts{cols: 100, rows: 18, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "6/6") && strings.Contains(s.Text(), "LASTPANE") && !strings.Contains(s.Text(), "FIRSTPANE")
+		return strings.Contains(s.Text(), "LASTPANE") && !strings.Contains(s.Text(), "FIRSTPANE")
 	}, bootTimeout); err != nil {
 		t.Fatalf("active pane did not remain visible in a short rail: %v\n%s", err, term.Snapshot())
 	}
@@ -58,7 +58,7 @@ session = "side"
 		t.Fatalf("focus earlier pane: %v\n%s", err, out)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "1/6") && strings.Contains(s.Text(), "FIRSTPANE") && !strings.Contains(s.Text(), "LASTPANE")
+		return strings.Contains(s.Text(), "FIRSTPANE") && !strings.Contains(s.Text(), "LASTPANE")
 	}, uiTimeout); err != nil {
 		t.Fatalf("offscreen pane did not come into view: %v\n%s", err, term.Snapshot())
 	}

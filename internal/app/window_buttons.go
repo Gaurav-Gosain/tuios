@@ -90,7 +90,7 @@ func (m *OS) pruneWindowButtonRects() {
 		return
 	}
 	for id := range m.windowButtonRects {
-		if m.windowByID(id) == nil {
+		if m.windowByID(id) == nil && m.sidebarSessionWindowByID(id) == nil {
 			delete(m.windowButtonRects, id)
 		}
 	}
@@ -114,6 +114,19 @@ func (m *OS) WindowButtonIn(windowID string, x, y int) (WindowButtonAction, bool
 // which window owns it. Windows are walked in their own order rather than the
 // map's, so an overlap resolves the same way twice running.
 func (m *OS) WindowButtonAt(x, y int) (windowID string, action WindowButtonAction, ok bool) {
+	for _, side := range []sidebarEdge{sidebarLeft, sidebarRight} {
+		if !m.sidebarSessionVisible(side) {
+			continue
+		}
+		v := &m.sidebarSessions[side]
+		for _, pane := range v.panes {
+			if w := m.sidebarSessionWindowByID(pane.ID); w != nil {
+				if action, ok := m.WindowButtonIn(w.ID, x, y); ok {
+					return w.ID, action, true
+				}
+			}
+		}
+	}
 	for _, w := range m.Windows {
 		if action, ok := m.WindowButtonIn(w.ID, x, y); ok {
 			return w.ID, action, true
@@ -139,6 +152,9 @@ func (m *OS) WindowButtonHoverAt(x, y int) bool {
 	for _, wid := range []string{prev, id} {
 		if w := m.windowByID(wid); w != nil {
 			w.Dirty = true
+		} else if w := m.sidebarSessionWindowByID(wid); w != nil {
+			w.Dirty = true
+			m.MarkAllDirty()
 		}
 	}
 	return true

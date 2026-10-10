@@ -1122,10 +1122,12 @@ Click a pane to type in it. With the rail focused, `Ctrl+B` then `-` splits
 **downwards**: it creates a normal pane in the assigned daemon session and
 stacks it below the others. `Ctrl+B` then `c` also creates a pane there;
 `Ctrl+B` then `|` stacks it vertically rather than subdividing a narrow rail
-sideways. `Ctrl+B` then `n` or `p`, or a click on the first pane's
-session-labelled title bar, changes the active pane. The title bar occupies
-the pane's normal border row: no extra row separates a rail pane from the top
-of the viewport. To align idle shells, the client can hide up to two *empty*
+sideways. `Ctrl+B` then `n` or `p` changes the active pane; clicking any
+pane's title bar focuses that pane. Each pane uses its normal title and title
+position, not the assigned session ID. Its close and minimize buttons target
+that daemon pane; zoom temporarily expands the pane within the rail. The
+session assignment remains in Settings. There is no extra row above the rail
+pane's normal border. To align idle shells, the client can hide up to two *empty*
 leading guest rows in its view, translating cursor and mouse coordinates with
 them. It does not clear the daemon's screen or history; full-screen programs
 and copy mode use the original grid. All visible panes remain on screen. If

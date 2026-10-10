@@ -63,6 +63,35 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// Rail panes keep their ordinary title bars. A title click focuses that
+	// exact pane; its controls must never fall through to the center session.
+	if edge, w := o.SidebarSessionTitlePaneAt(X, Y); w != nil {
+		if msg.Button == tea.MouseRight {
+			o.OpenSettingsAt("Sidebar")
+			return o, nil
+		}
+		if msg.Button == tea.MouseLeft {
+			if action, ok := o.WindowButtonIn(w.ID, X, Y); ok {
+				switch action {
+				case app.WindowButtonClose:
+					o.FocusSidebarSession(edge)
+					o.SidebarSessionIntent("CloseWindow", w.ID)
+				case app.WindowButtonMinimize:
+					o.FocusSidebarSession(edge)
+					o.SidebarSessionIntent("MinimizeWindow", w.ID)
+				case app.WindowButtonZoom:
+					o.FocusSidebarSession(edge)
+					o.FocusSidebarSessionPane(w)
+					o.ToggleSidebarSessionZoom(edge, w)
+				}
+				return o, nil
+			}
+			o.FocusSidebarSession(edge)
+			o.FocusSidebarSessionPane(w)
+			return o, nil
+		}
+	}
+
 	// The pane displayed in a rail gets normal terminal mouse input when its
 	// guest asked for tracking. A click also gives it keyboard focus without
 	// switching the center client's daemon session.

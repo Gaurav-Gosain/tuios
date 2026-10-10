@@ -33,9 +33,13 @@ subscribes to each visible PTY, restores its snapshot, and announces each
 pane's actual content dimensions. Each pane has its own framed border,
 terminal input, cursor, mouse coordinates, and paste destination. With a rail
 pane focused, the normal pane-create and split chords create panes in that
-rail's daemon session; next/previous and close likewise target it. The first
-pane's title bar names the session and can select its active pane. A narrow
-rail stacks even a sideways split vertically rather than squeezing panes next
+rail's daemon session; next/previous and close likewise target it. Every
+pane keeps its normal title bar (including its configured title position),
+showing its own pane name rather than the assigned session's ID. Clicking a
+title focuses that pane. Its close and minimize buttons act on that daemon
+pane, and zoom temporarily expands it within the rail; the assigned session
+name remains in Settings. A narrow rail stacks even a sideways split
+vertically rather than squeezing panes next
 to each other. If the rail cannot give all panes at least six rows, it shows a
 contiguous group containing the active pane; selecting another pane brings it
 into view.
