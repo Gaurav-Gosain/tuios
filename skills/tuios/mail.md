@@ -72,7 +72,9 @@ The last line says what state the messages are in after the call. It reads
 `seen` and `unread` ones, or says `all read`.
 
 Naming an inbox marks what it returns as read. `--peek` does not mark them
-read, but it marks the unread ones seen. A message goes from unread to seen to
+read. When a pane peeks its own inbox (`-w "$TUIOS_PANE_ID"`), it marks the
+unread ones seen. A peek of another pane's inbox, for example to check on a
+message you sent, marks nothing. A message goes from unread to seen to
 read, and the sender sees which with `read-agent-messages` on the session (the
 header says `seen`; `--json` has `seen_at` and `read_at`). Seen means the
 recipient looked at the message, not that it acted on it. A seen message still

@@ -377,8 +377,8 @@ type readQuery struct {
 	// peek reads without marking anything read.
 	peek bool
 	// markSeen makes a peek of one inbox mark the unread messages it returns
-	// seen. It needs peek and an inbox, and is off when the daemon forced the
-	// peek because the caller may not act as the reader.
+	// seen. The verb sets it only for a peek whose caller is the inbox's
+	// reader (callerReadsInbox).
 	markSeen bool
 	// thread restricts the answer to one thread, by its id. Zero means every
 	// thread. A thread the ring no longer holds anything from matches nothing,
