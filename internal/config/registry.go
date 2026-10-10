@@ -598,6 +598,8 @@ var ActionDescriptions = map[string]string{
 	"close_workspace":          "Close every pane on the current workspace, after a confirmation",
 
 	// Workspaces
+	"next_workspace":    "Next workspace",
+	"prev_workspace":    "Previous workspace",
 	"switch_workspace_1": "Switch to workspace 1",
 	"switch_workspace_2": "Switch to workspace 2",
 	"switch_workspace_3": "Switch to workspace 3",

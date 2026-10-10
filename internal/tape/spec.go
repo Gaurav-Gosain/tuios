@@ -148,7 +148,7 @@ func IsActionName(name string) bool {
 }
 
 // registeredActions are the action names the key handling dispatches. Some
-// have no description (the scrolling layout's scroll_*, next_workspace, the
+// have no description (the scrolling layout's scroll_*, the
 // prefix copies of window actions), and a key bound to one in config.toml
 // runs it, so a tape may too.
 var registeredActions sync.Map

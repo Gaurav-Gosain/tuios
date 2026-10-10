@@ -110,9 +110,9 @@ func (d *ActionDispatcher) registerHandlers() {
 	for i := 1; i <= 9; i++ {
 		d.Register("switch_workspace_"+string(rune('0'+i)), makeSwitchWorkspaceHandler(i))
 		d.Register("move_and_follow_"+string(rune('0'+i)), makeMoveAndFollowHandler(i))
-		d.Register("next_workspace", handleNextWorkspace)
-		d.Register("prev_workspace", handlePrevWorkspace)
 	}
+	d.Register("next_workspace", handleNextWorkspace)
+	d.Register("prev_workspace", handlePrevWorkspace)
 
 	// Layout actions
 	d.Register("snap_left", handleSnapLeft)
@@ -510,35 +510,16 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 	}
 }
 
-// next/prev workspace cycle only through workspaces that hold at least one
-// window, wrapping at the ends. With no other populated workspace they do
-// nothing, so a stray chord cannot land the person on an empty grid.
+// next_workspace and prev_workspace cycle sequentially through workspaces
+// with wrap-around support.
 
 func handleNextWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	for i := 1; i <= o.NumWorkspaces; i++ {
-		next := o.CurrentWorkspace + i
-		if next > o.NumWorkspaces {
-			next -= o.NumWorkspaces
-		}
-		if o.GetWorkspaceWindowCount(next) > 0 {
-			o.SwitchToWorkspace(next)
-			break
-		}
-	}
+	o.NextWorkspace()
 	return o, nil
 }
 
 func handlePrevWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	for i := 1; i <= o.NumWorkspaces; i++ {
-		prev := o.CurrentWorkspace - i
-		if prev < 1 {
-			prev += o.NumWorkspaces
-		}
-		if o.GetWorkspaceWindowCount(prev) > 0 {
-			o.SwitchToWorkspace(prev)
-			break
-		}
-	}
+	o.PrevWorkspace()
 	return o, nil
 }
 

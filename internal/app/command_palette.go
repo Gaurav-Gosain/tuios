@@ -668,6 +668,22 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
+		{
+			Name:     "Next workspace",
+			Category: "Navigation",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.NextWorkspace()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Previous workspace",
+			Category: "Navigation",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.PrevWorkspace()
+				return m, nil
+			},
+		},
 
 		// Layout
 		{
