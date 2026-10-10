@@ -1109,7 +1109,7 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	tr.add("send-text -s studio:far: %v\n%s", err, out)
 	if err == nil {
 		t.Errorf("ASSERTION: typing went through, so the policy of phone did not apply:\n%s", out)
-	} else if flat := strings.Join(strings.Fields(out), " "); !contains(flat, "may not write on") {
+	} else if flat := strings.Join(strings.Fields(out), " "); !contains(flat, "(write) on") {
 		t.Errorf("the refusal does not name what is missing:\n%s", out)
 	}
 	data, _ := os.ReadFile(ak)

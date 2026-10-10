@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -189,7 +190,14 @@ func cutSlowLink(t *testing.T, dir string) int {
 func hubWithFileHost(t *testing.T, base, remote, ssh string) []string {
 	t.Helper()
 	// The far daemon runs, as on a machine where someone uses tuios. The
-	// proxy never starts one.
+	// proxy never starts one. Unless the test already wrote a policy, build
+	// lets a linked machine write anywhere in its home folder, which is what
+	// these tests about other properties assume; the roots themselves are
+	// tested on their own.
+	cfg := filepath.Join(xdgDir(remote, "XDG_CONFIG_HOME"), "tuios", "config.toml")
+	if _, err := os.Stat(cfg); errors.Is(err, os.ErrNotExist) {
+		writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\"]\n")
+	}
 	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start build's daemon: %v\n%s", err, out)
 	}

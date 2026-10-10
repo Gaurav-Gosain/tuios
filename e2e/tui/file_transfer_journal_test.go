@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -294,6 +295,9 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	if err := os.Symlink(filepath.Join(farHome, ".ssh"), filepath.Join(farHome, "innocent")); err != nil {
 		t.Fatal(err)
 	}
+	// build lets a machine write anywhere in its home folder (hubWithFileHost
+	// writes that), so this test is
+	// about the deny list that holds inside every root, not about the roots.
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 
 	evil := filepath.Join(base, "evil.pub")
@@ -308,14 +312,20 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	}
 	var copies []outcome
 	c := dialFileVerbs(t, base)
-	for _, dst := range []string{
+	dsts := []string{
 		"~/.ssh/authorized_keys",
 		keys,
 		filepath.Join(farHome, "innocent", "authorized_keys"),
-		filepath.Join(farHome, ".SSH", "authorized_keys"),
 		rc,
 		filepath.Join(remote, "outside.txt"),
-	} {
+	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		// A disk that folds case opens .ssh under another spelling; on a
+		// case-sensitive disk .SSH is a different folder that does not exist,
+		// so the copy fails as no_file, not forbidden.
+		dsts = append(dsts, filepath.Join(farHome, ".SSH", "authorized_keys"))
+	}
+	for _, dst := range dsts {
 		var row transferRow
 		c.must("transfer-start", map[string]any{
 			"src": map[string]any{"path": evil}, "dst": map[string]any{"host": "build", "path": dst}, "conflict": "replace",
