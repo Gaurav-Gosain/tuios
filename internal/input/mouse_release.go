@@ -56,6 +56,19 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Reset pointer shape on release
 	o.ResetPointerShape()
 
+	// A rail session's tracked mouse click needs its matching release. The
+	// center pane must not receive a release for a press it never saw.
+	if mouse := msg.Mouse(); mouse.Button != tea.MouseRight {
+		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
+			if w.Terminal != nil && w.Terminal.HasMouseMode() {
+				if tx, ty, inside := w.ScreenToTerminal(mouse.X, mouse.Y); inside {
+					sendMouseToWindow(o, w, uv.MouseReleaseEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
+				}
+			}
+			return o, nil
+		}
+	}
+
 	// A sidebar session gesture resolves on release: commit a reorder drag, or
 	// deliver the plain click (switch / toggle) the press deferred.
 	if o.SidebarDragActive() {

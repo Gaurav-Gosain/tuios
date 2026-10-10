@@ -55,6 +55,24 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The pane displayed in a rail gets normal terminal mouse input when its
+	// guest asked for tracking. A click also gives it keyboard focus without
+	// switching the center client's daemon session.
+	if msg.Button != tea.MouseRight {
+		if edge, ok := o.SidebarSessionAt(X, Y); ok {
+			o.FocusSidebarSession(edge)
+			if w := o.SidebarSessionPaneAt(X, Y); w != nil {
+				o.FocusSidebarSessionPane(w)
+				if w.Terminal != nil && w.Terminal.HasMouseMode() {
+					if tx, ty, inside := w.ScreenToTerminal(X, Y); inside {
+						sendMouseToWindow(o, w, uv.MouseClickEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
+					}
+				}
+			}
+			return o, nil
+		}
+	}
+
 	// The sidebar is a reserved-region panel like the dock: a click anywhere in
 	// its band is the sidebar's (focus a window, switch or expand a session, or,
 	// on right-click, open the context menu), never the pane it sits in front of.

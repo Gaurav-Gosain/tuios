@@ -358,6 +358,10 @@ func GetDispatcher() *ActionDispatcher {
 // ============================================================================
 
 func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.NewSidebarSessionWindow()
+		return o, nil
+	}
 	if o.FollowSSHOnNewWindow() {
 		o.NewWindowSSH()
 		return o, nil
@@ -369,6 +373,10 @@ func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleNewWindowSSH opens a window that runs the focused pane's ssh, or an
 // ordinary one when that pane runs none.
 func handleNewWindowSSH(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.NewSidebarSessionWindow()
+		return o, nil
+	}
 	o.NewWindowSSH()
 	return o, nil
 }
@@ -776,6 +784,10 @@ func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.NewSidebarSessionWindow() // rail panes always stack top to bottom
+		return o, nil
+	}
 	if o.FollowSSHOnNewWindow() {
 		return handleSplitSSHHorizontal(tea.KeyPressMsg{}, o)
 	}
@@ -787,6 +799,10 @@ func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.NewSidebarSessionWindow() // no horizontal subdivision of a narrow rail
+		return o, nil
+	}
 	if o.FollowSSHOnNewWindow() {
 		return handleSplitSSHVertical(tea.KeyPressMsg{}, o)
 	}

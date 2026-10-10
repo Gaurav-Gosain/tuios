@@ -524,6 +524,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		content = fitToContentBox(content, window.ContentWidth(), window.ContentHeight())
 	}
 	if rendersBorderless(window) {
+		window.DisplayRowOffset = 0
 		// No border means no title bar and so no controls. Recorded as an empty
 		// set rather than left alone, because the set outlives a frame: a pane
 		// that had a bar before shared borders were turned on would otherwise
@@ -531,6 +532,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 		m.recordWindowButtons(window.ID, nil)
 		return content
 	}
+	content = m.normalizeShellContent(window, content)
 	// Zen mode: the frame melts away but the cells stay reserved. A window that
 	// owns its border draws its content at Width-2 by Height-2 placed at the
 	// window origin, so returning the bare content would jump the text one cell

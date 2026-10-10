@@ -139,7 +139,7 @@ func (m *OS) railCustomRunnable() bool {
 // flag first, because it is asked once per message and most clients set no
 // command, so they never take the layout's mutex here.
 func (m *OS) railCustomWanted() bool {
-	return m.railCustom.runnable && m.railCustomEnabled()
+	return m.railCustom.runnable && m.railCustomEnabled() && !m.sidebarSessionVisible(m.legacySidebarEdge())
 }
 
 // railCustomComponent is the engine component for the section, or nil when
@@ -149,6 +149,13 @@ func (m *OS) secondaryRailCustomComponent() *dockComponent {
 	custom := m.secondaryRailCustomConfig()
 	if !custom.HasCommand() || m.secondarySidebarWidth() == 0 || m.UserConfig == nil {
 		return nil
+	}
+	other := sidebarLeft
+	if m.legacySidebarEdge() == sidebarLeft {
+		other = sidebarRight
+	}
+	if m.sidebarSessionVisible(other) {
+		return nil // the assigned daemon pane replaces this edge's sections
 	}
 	cfg := m.UserConfig.Appearance.Sidebar.Left
 	if m.legacySidebarEdge() == sidebarLeft {

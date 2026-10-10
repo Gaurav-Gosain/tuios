@@ -53,6 +53,9 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
+	// Passive shows a daemon pane but cannot execute full renderer commands.
+	// It still accepts input and participates in the session's size negotiation.
+	Passive bool
 	// DetachOthers is sent with the next AttachSession, as tuios attach -d
 	// asks: the other clients of the session are detached. AttachSession
 	// clears it, so a later attach on this client (a session switch, a host
@@ -510,6 +513,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		AllowNested:  c.AllowNested,
 		NestProbe:    probe,
 		ViewOnly:     c.viewOnly(),
+		Passive:      c.Passive,
 		Cwd:          c.StartDir,
 		DetachOthers: c.DetachOthers,
 		Reconnect:    c.Reconnect,
@@ -746,6 +750,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		AllowNested: c.AllowNested,
 		NestProbe:   probe,
 		ViewOnly:    c.viewOnly(),
+		Passive:     c.Passive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)

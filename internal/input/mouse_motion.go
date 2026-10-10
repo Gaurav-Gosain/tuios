@@ -97,6 +97,16 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
 			return o, nil
 		}
+		// A docked session is a real pane, not a list of sidebar rows. Send
+		// tracking motion to its guest before the rail hover path consumes it.
+		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
+			if w.Terminal != nil && guestWantsMotion(w.Terminal, mouse.Button) {
+				if tx, ty, inside := w.ScreenToTerminal(mouse.X, mouse.Y); inside {
+					sendMouseToWindow(o, w, uv.MouseMotionEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
+				}
+			}
+			return o, nil
+		}
 		// The sidebar band tracks hover the same way the overlays do, and
 		// consumes motion over it so the pane it sits in front of never sees it.
 		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {

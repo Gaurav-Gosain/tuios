@@ -9,10 +9,12 @@ import "fmt"
 // its own enabled field is set. Commands are not settable options: a pane must
 // not be able to replace a command that runs in the client outside the pane.
 type SidebarEdgeConfig struct {
-	Enabled  *bool                `toml:"enabled,omitempty"`
-	Width    int                  `toml:"width,omitempty"`
-	Sections string               `toml:"sections,omitempty"`
-	Custom   *SidebarCustomConfig `toml:"custom,omitempty"`
+	Enabled          *bool                `toml:"enabled,omitempty"`
+	Width            int                  `toml:"width,omitempty"`
+	Sections         string               `toml:"sections,omitempty"`
+	Session          string               `toml:"session,omitempty"`           // Existing local daemon session to show in this rail.
+	SessionWorkspace int                  `toml:"session_workspace,omitempty"` // 0 follows every workspace; 1-9 pins visibility.
+	Custom           *SidebarCustomConfig `toml:"custom,omitempty"`
 }
 
 // SidebarEdgeResolved is the effective rail settings on one side of the
@@ -101,6 +103,12 @@ func validateSidebarEdges(sidebar SidebarConfig, result *ValidationResult) {
 		}
 		if edge.cfg.Width < 0 {
 			warn("width", "a negative width is not usable; the default width is used")
+		}
+		if edge.cfg.SessionWorkspace < 0 || edge.cfg.SessionWorkspace > 9 {
+			warn("session_workspace", "must be 0 (all workspaces) or 1-9")
+		}
+		if edge.cfg.Session != "" && !edge.resolved.Enabled {
+			warn("session", "the assigned session is not shown while this edge is disabled")
 		}
 		for _, problem := range SidebarSectionProblems(edge.cfg.Sections) {
 			warn("sections", problem)

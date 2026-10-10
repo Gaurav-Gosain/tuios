@@ -328,7 +328,11 @@ type Window struct {
 	// Vim-style copy mode
 	CopyMode *CopyMode // Copy mode state (nil when not active)
 	// Daemon session support
-	PTYID             string                   // ID of daemon-managed PTY (empty for local PTYs)
+	PTYID string // ID of daemon-managed PTY (empty for local PTYs)
+	// DisplayRowOffset is the count of empty guest rows hidden at the top of
+	// this client view. It never changes the PTY or emulator; input and cursor
+	// coordinates must use the same offset as the rendered content.
+	DisplayRowOffset  int
 	DaemonMode        bool                     // True when PTY is managed by daemon
 	DaemonWriteFunc   func([]byte) error       // Callback for sending input to daemon PTY
 	DaemonResizeFunc  func(w, h int) error     // Callback for resizing daemon PTY

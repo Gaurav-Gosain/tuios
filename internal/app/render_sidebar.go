@@ -1146,6 +1146,10 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 // hit geometry of every row into m.SidebarHits for the mouse handlers.
 func (m *OS) renderSidebar() *lipgloss.Layer {
 	panel, w := m.sidebarPanel()
+	if docked, ok := m.sidebarSessionPanel(m.legacySidebarEdge(), w); ok {
+		panel = docked
+		m.SidebarHits = m.SidebarHits[:0]
+	}
 	if panel == "" {
 		return nil
 	}
@@ -1182,6 +1186,10 @@ func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
 	m.sidebarDrawingEdge = edge
 	m.sidebarDrawingWidth = w
 	panel, _ := m.sidebarPanel()
+	if docked, ok := m.sidebarSessionPanel(edge, w); ok {
+		panel = docked
+		m.SidebarHits = m.SidebarHits[:0]
+	}
 	m.secondarySidebarCache = m.sidebarCache
 	m.sidebarCache = primaryCache
 	m.Settings.SidebarSections = primarySections

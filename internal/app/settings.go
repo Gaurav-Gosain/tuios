@@ -494,6 +494,18 @@ func (m *OS) settingsCategories() []settingsCategory {
 	if m.agentsSeen() {
 		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{opt("appearance.sidebar.agent_rest_fold")})...)
 	}
+	// When both edges display sessions, the old rail's sections, file and
+	// agent options do nothing. Keep them accessible only when a rail can
+	// actually use ordinary sections, instead of showing irrelevant controls.
+	left, right := m.sidebarSessionConfig(sidebarLeft), m.sidebarSessionConfig(sidebarRight)
+	if left != nil && right != nil && left.Session != "" && right.Session != "" {
+		sidebar.Items = nil
+	} else if cfg := m.sidebarSessionConfig(m.legacySidebarEdge()); cfg != nil && cfg.Session != "" {
+		sidebar.Items = slices.DeleteFunc(sidebar.Items, func(item settingItem) bool {
+			return item.Path == "appearance.sidebar.sections"
+		})
+	}
+	sidebar.Items = slices.Insert(sidebar.Items, 0, m.sidebarSessionSettingItems()...)
 
 	// The marks a pane paints over its own output, in the order a person meets
 	// them: the selection first, then the search, then the copy mode cursor.

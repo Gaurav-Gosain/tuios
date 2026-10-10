@@ -192,6 +192,12 @@ func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		if w := o.SidebarSessionWindow(); w != nil {
+			o.SidebarSessionIntent("CloseWindow", w.ID)
+		}
+		return o, nil
+	}
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return o, nil
 	}
@@ -272,6 +278,10 @@ func handlePrefixKeybinds(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.SidebarSessionIntent("NextWindow")
+		return o, nil
+	}
 	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToNextVisibleWindow()
@@ -281,6 +291,10 @@ func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.SidebarSessionIntent("PrevWindow")
+		return o, nil
+	}
 	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToPreviousVisibleWindow()
