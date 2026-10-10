@@ -375,6 +375,12 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if it.Count > 1 {
 		who += " (" + strconv.Itoa(it.Count) + ")"
 	}
+	if it.Kind == session.AttentionMail && it.Seen > 0 {
+		who += " seen"
+		if it.Seen < it.Count {
+			who += " " + strconv.Itoa(it.Seen)
+		}
+	}
 	summary := printableTitle(it.Summary)
 	if summary == "" {
 		summary = inboxKindWords(it)
