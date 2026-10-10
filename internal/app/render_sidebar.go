@@ -705,7 +705,20 @@ func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
 	return lipgloss.NewStyle().Foreground(rule).Render(s.GetWindowBorderLeft())
 }
 
-// sidebarHeaderRow renders a quiet section header: the label, lowercase and
+// sidebarHeaderGap is the fewest blank cells between a header's label and the
+// element on its right. One cell read as a word break at best: with the peeked
+// session's name it was lost entirely, and "terminals" and "session-1" printed
+// as "terminalssession-1". Two cells keep the label a label.
+const sidebarHeaderGap = 2
+
+// sidebarHeaderRightRoom is how many cells a header's right element may take
+// beside the label of width labelW (sidebarHeaderLabelW): the rail's content
+// width less the label, the gap after it and the inset cell before the edge.
+func sidebarHeaderRightRoom(cw, labelW int) int {
+	return max(cw-labelW-sidebarHeaderGap-1, 0)
+}
+
+// sidebarHeaderRowRuled renders a quiet section header: the label, lowercase and
 // muted, so it frames its section without competing with it. Lowercase and
 // unbolded because a header is furniture: the rail spends its one bold voice on
 // a row that wants a human, and spending it here would rank a label above them.
@@ -721,26 +734,10 @@ func sidebarEdgeRule(s *config.Settings, rule color.Color) string {
 // last cells: those are where the controls sit, at columns the caller has
 // already recorded as click targets. A caller sizes right with
 // sidebarHeaderRightRoom so this cut is only a backstop.
-func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
-	return sidebarHeaderRowRuled(label, right, cw, pal, nil)
-}
-
-// sidebarHeaderGap is the fewest blank cells between a header's label and the
-// element on its right. One cell read as a word break at best: with the peeked
-// session's name it was lost entirely, and "terminals" and "session-1" printed
-// as "terminalssession-1". Two cells keep the label a label.
-const sidebarHeaderGap = 2
-
-// sidebarHeaderRightRoom is how many cells a header's right element may take
-// beside the label of width labelW (sidebarHeaderLabelW): the rail's content
-// width less the label, the gap after it and the inset cell before the edge.
-func sidebarHeaderRightRoom(cw, labelW int) int {
-	return max(cw-labelW-sidebarHeaderGap-1, 0)
-}
-
-// sidebarHeaderRowRuled is sidebarHeaderRow with the rule that marks a heading.
-// Passing nil settings keeps the old blank gap, which is what the callers that
-// put their own controls in that gap still want.
+//
+// s carries appearance.sidebar.header_case: with headings on, the label is bold
+// and uppercase and a rule runs to right. Passing nil settings keeps the blank
+// gap, which is what the callers that put their own controls in that gap want.
 func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
 	headings := s.GetRailHeaderCase() == config.RailHeaderUppercase
 	labelStyle := sidebarStyle(nil, pal.FgMute)
