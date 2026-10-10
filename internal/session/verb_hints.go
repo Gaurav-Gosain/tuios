@@ -122,7 +122,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbQueueFull, "The pane's delivery queue holds as many messages as [agents.queue] max allows. Nothing was queued. Wait for the agent to take one, or drop one with cancel-queued."},
 	{ErrVerbRiskUnacknowledged, "An allow for an approval that matches a risk rule was refused because risk_ack did not name exactly the rules it matched. Nothing was answered. Read the rules with get-approval, or answer in the pane."},
 	{ErrVerbAgentsDisabled, "The verb is an agent feature, and the agent features are off: [agents] enabled = false. Nothing was done. Set agents.enabled = true in the config to use it."},
-	{ErrVerbBusy, "The daemon had no room for the request now: other large requests held its memory, or the pane has not read the last large input. Nothing was done. Try again."},
+	{ErrVerbBusy, "The daemon had no room for the request now: other large requests held its memory, the pane has not read the last large input, or another copy writes the path a transfer-start names. Nothing was done. Try again when the other work ends."},
 	{ErrVerbTooManyConnections, "The daemon already serves as many connections as it takes, and closed this one. Nothing was done. Close some clients or commands, then try again."},
 	{ErrVerbNoFile, "A file verb was given a path that does not exist on that machine. Nothing was read or changed. file-list shows what is there."},
 	{ErrVerbFileExists, "The destination exists, and the call was not told to replace it. Nothing was changed. Say what to do with conflict or replace."},

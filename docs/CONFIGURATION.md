@@ -1555,11 +1555,15 @@ allow = ["list", "mail"]
 | `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
 | `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |
 | `respond` | Answer for the person: prompts, held approvals, `ask-human` questions, dismissing Inbox items, and passing on held mail. Also type into a pane that waits on a prompt, from a pane on the other machine. The person on the other machine, outside every pane, needs only `write` for that. |
+| `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. Its writes land only in the home folder (and the drop folder for dropped files), never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` says. See [protocol.md](protocol.md#files-and-transfers). |
 
-With no table, a machine may `list`, `mail`, `open` and `write`, which is what
-every link could do before the policy existed. `respond` is opt-in. Relaying on
-to this machine's own hosts needs all five, because the next machine sees the
-relay as coming from this one. An `allow` that is set replaces the inherited
+With no table, a machine may `list`, `mail`, `open`, `write` and `files`,
+which is what every link could do before the policy existed. `respond` is
+opt-in. Relaying on to this machine's own hosts needs all six, because the next
+machine sees the relay as coming from this one, and so does a copy this machine
+runs for the other one. A table that sets `allow` without `files` keeps that
+machine from the file verbs; tables written before `files` existed need it
+added. An `allow` that is set replaces the inherited
 list; `allow = []` allows nothing but `hello`.
 
 `hold_mail` holds mail from that machine to any agent here in your Inbox,

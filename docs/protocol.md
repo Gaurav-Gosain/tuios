@@ -1526,6 +1526,14 @@ catalog.
 | `no_buffer` | No paste buffer has the name given, or there are no buffers when none was named. Nothing was read, pasted or deleted. |
 | `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 | `agents_disabled` | The verb is an agent feature, and `[agents] enabled = false` turned the agent features off. Nothing was done. |
+| `no_file` | A file verb was given a path that does not exist on that machine. Nothing was read or changed. |
+| `file_exists` | The destination exists, and the call was not told what to do with it (`conflict`, or `replace` for `file-rename`). Nothing was changed. |
+| `no_permission` | The user the daemon runs as may not read or change that path. Nothing was changed. |
+| `hash_mismatch` | A part's bytes did not match the sender's sha256, so the part was removed and nothing was put in place. A transfer copies that file once more by itself. |
+| `cross_device` | `file-rename` cannot move a path to another disk. Nothing was moved. |
+| `disk_full` | The disk had no room for the write. What was written stays in the part. |
+| `no_transfer` | No transfer has that id. A finished one leaves the list 30 minutes after it ends. |
+| `busy` | The daemon had no room for the request now, or (`transfer-start`) another copy writes that destination now. Nothing was done. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -5266,6 +5274,112 @@ sends this call only for a `paste-image` of the person. A wrong or missing
 token is `forbidden`. An unknown pane is `unknown_pane`. Over a link it needs
 `open`.
 
+### Files and transfers
+
+The file verbs act on the files of the machine whose daemon answers them. A
+client reaches another machine's files by sending the same verbs there, on a
+connection from `open-host-connection`, so that machine's link policy decides
+what may be done (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
+Every path is absolute or starts with `~`, which means the home folder of the
+machine that answers. `list-verbs` carries every parameter and return field;
+this section is the contract around them.
+
+| Verb | What it does |
+| --- | --- |
+| `file-stat` | Describes one path: `exists`, `size`, and `info` (name, path, kind `file`, `dir`, `symlink` or `other`, `link_kind` and `link` for a link, size, `mtime` in Unix ms, `mode` as `ls` prints it, `perm` as a number, `hidden`). With `part`, it describes the part file of a copy to the path instead. |
+| `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). Part files are not listed. |
+| `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
+| `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
+| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. |
+| `file-mkdir` | Makes a folder and its parents. |
+| `file-rename` | Moves a path on one disk. It does not replace what is at `to` unless `replace` is set. Another disk answers `cross_device`. |
+| `file-remove` | Deletes a path. A folder that holds files needs `recursive`. The home folder and `/` are refused. |
+| `open-file-stream` | Turns the connection into the bytes of one file; see below. |
+| `file-commit` | Checks a written part against the sender's `sha256` and renames it into place, with `conflict` (`replace`, `keep-both`, `fail`), `perm` and `mtime`. A part that does not match is removed (`hash_mismatch`). |
+| `file-abort` | Removes the part a copy left. |
+| `file-drop-dir` | Makes a private folder (0700) for files dropped on a pane, under the daemon's runtime folder. Drops are kept 24 hours and 256 MiB together. |
+| `drop-files` | Gives a pane on a machine the paths of files on this one: this machine's paths as they are, or, for a host, the paths in a new drop folder there and the transfers that copy them. |
+
+Only regular files are read: a named pipe or a device answers at once with
+`invalid_params` instead of holding the call.
+
+**Byte streams.** `open-file-stream` with `mode` `read` answers `size`,
+`offset` and `mtime`, then the connection carries the file's bytes from
+`offset` to `size` and closes. With `mode` `write` it cuts the part file to
+`offset` (which may not be past the part's end), answers `part_size`, then
+takes `length` bytes into the part. When they are written and synced it
+writes one line, `{"part_size":N,"written":N}` or with `error`, and closes.
+Either side ending early leaves the part as it is, which is where the next
+attempt resumes. Over a link these streams ride bulk lanes that wait behind
+every pane and keep to a credit window (see
+[ARCHITECTURE.md](ARCHITECTURE.md)).
+
+**Part files.** A write lands in a hidden part file beside the destination,
+owner only: `.NAME.tuios-part-ID`, where `ID` is the `part_id` the caller
+gives (up to 32 hex digits). A caller with no `part_id` writes
+`.NAME.tuios-part`. A part is opened without following a link, and the file
+opened must be the regular file at the part's name, so a link put there turns
+the copy into a failure, not a write to the link's target. `file-commit` sets
+the original's permission bits and modification time on the part, renames it
+into place, and syncs the folder.
+
+**Transfers.** `transfer-start` makes a job in the daemon that answers it, so
+the client may quit. `src` and `dst` are `{host, path}`, with `host` empty for
+this machine, so one call copies this machine to a host, a host to this
+machine, or one host to another (through this machine). A folder copies its
+whole tree; a folder into a folder that is there needs `conflict` `merge`, and
+inside it every file is replaced. Each file goes through its part, a sha256 of
+the original and of the part, and the rename, and keeps the original's
+permission bits and modification time, never its owner. A link that drops
+leaves the part: the job waits (`waiting`, with `retry_in_ms`), and when the
+machine is back it compares the last MiB of the part with the original and
+goes on from the part's end when they match. A file whose check fails is
+copied once more; a second failure fails the job. At most three jobs move
+bytes at once; the rest are `queued`.
+
+`transfer-list`, `transfer-pause`, `transfer-resume` and `transfer-cancel` take
+an `id`. A row has `id`, `name`, `src`, `dst`, `final`, `kind`, `move`,
+`state` (`queued`, `running`, `verifying`, `waiting`, `paused`, `done`,
+`failed`, `cancelled`), `size`, `done`, `rate`, `eta_ms`, `files`,
+`files_done`, `current`, `error`, `code`, `resumed_from`, `resumes`, `sha256`,
+`verified`, `created`, `started`, `ended`, `retry_in_ms`, `skipped` and
+`skipped_items`. `transfer-resume` goes on with a paused job, tries a waiting
+one now, or tries a failed one again from its parts. `transfer-cancel` removes
+the part of the file in flight. A finished job stays listed for 30 minutes; a
+failed one takes its parts with it when it leaves the list.
+
+A `transfer-start` to the destination of a job that has not ended answers
+`busy`. Two jobs that reach one file by two paths write two parts, and the
+one that commits last is the file in place.
+
+**The journal.** Every job that has not ended is a file in
+`$XDG_STATE_HOME/tuios/sessions/transfers/`, written on each change of state.
+A daemon that starts after a crash, `tuios kill-server` or `tuios update`
+takes back the jobs of its own socket: a paused job stays paused, a failed
+one is listed as failed, and every other goes on from its parts. At start the
+daemon also removes, in each folder it wrote a part in, the parts older than
+seven days that no job of its own holds.
+
+**Writes over a link.** A file write that arrives over a link
+(`open-file-stream` write, `file-commit`, `file-mkdir`, `file-rename`,
+`file-remove`, `file-abort`) lands only in the home folder or the drop
+folder. The check is on the real path, with links resolved, and the write
+itself goes through an `os.Root` at that folder, so a link cannot carry it
+out. A write into these places is refused whatever the link policy says,
+with case ignored: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`,
+`~/.netrc`, `~/.git-credentials`, `~/.config/git/credentials`, the shell
+start files (`.profile`, `.bashrc`, `.bash_profile`, `.bash_login`,
+`.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`, `.zlogout`,
+`.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `~/.config/fish`), the login items
+(`~/.config/systemd`, `~/.config/autostart`, `~/.config/environment.d`,
+`~/Library/LaunchAgents`, `.pam_environment`, `.xprofile`, `.xsession`,
+`.xinitrc`), the crontab spools, and tuios's own config, state and data
+folders. The refusal is `forbidden`. Reads are not confined: a machine that
+may use `files` may read what the user may read.
+
+A job is logged in the daemon log when it starts and ends, with both ends
+and the byte count.
+
 ### What a linked machine may do here
 
 A connection that arrives over a link is accepted on a link socket
@@ -5280,13 +5394,14 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
-| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway) |
+| `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`. Writes are also held to the home folder and the deny list in [Files and transfers](#files-and-transfers). |
+| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `drop-files` (they make this daemon use its own links) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and
@@ -5295,7 +5410,7 @@ Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgCreatePTY` and `MsgResurrect` need `open`; `MsgNew` needs `open`, `list`
 and `write`. A refused message is answered with `MsgError` code 10.
 
-The default grants `list`, `mail`, `open` and `write`.
+The default grants `list`, `mail`, `open`, `write` and `files`. A `[hosts]` table written before `files` existed that sets `allow` does not have it: add `"files"` to let that machine use the file verbs.
 
 A verb or message with no entry in the table is refused over a link. A test
 holds the table to the verb registry, so a new verb cannot ship without one.
@@ -5782,6 +5897,8 @@ Event types:
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 | `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
 | `transcript` | The transcript that a pane is joined to grew. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
+| `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state` or `ended`, and `transfer` is its row as `transfer-list` returns it. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
+| `transfer-progress` | A copy's row while its bytes move, at most four a second per copy. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action` (`progress`), `transfer` |
 
 ### What fires when
 

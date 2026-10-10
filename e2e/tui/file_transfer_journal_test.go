@@ -230,7 +230,10 @@ func TestTwoCopiesToOnePathKeepTheirParts(t *testing.T) {
 	}
 	endA := waitTransferEnd(t, base, ra.ID, 90*time.Second)
 	endB := waitTransferEnd(t, base, rb.ID, 90*time.Second)
-	got := fileSHA(t, filepath.Join(real, "same.bin"))
+	got := ""
+	if _, err := os.Stat(filepath.Join(real, "same.bin")); err == nil {
+		got = fileSHA(t, filepath.Join(real, "same.bin"))
+	}
 	left := partsIn(t, real)
 	saveTransferArtifact(t, "two-copies-one-path", map[string]any{
 		"a": endA, "b": endB, "parts_in_flight": both, "parts_after": left,
@@ -241,7 +244,7 @@ func TestTwoCopiesToOnePathKeepTheirParts(t *testing.T) {
 		t.Errorf("ASSERTION: a third copy to the path the first writes was not refused as busy: %v", busyErr)
 	}
 	if len(both) != 2 {
-		t.Errorf("ASSERTION: the two copies did not write two parts: %v", both)
+		t.Errorf("ASSERTION: the two copies did not write two parts at once: %v", both)
 	}
 	for _, e := range []transferRow{endA, endB} {
 		if e.State != "done" || !e.Verified {
@@ -381,6 +384,19 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	}
 	if !fi.ModTime().Equal(mtime) {
 		t.Errorf("ASSERTION: the copy on build does not keep the original's time: %v, want %v", fi.ModTime().UTC(), mtime)
+	}
+	// A link inside the home folder to another folder there is a fine
+	// place to write: the write lands where the link points.
+	if err := os.Symlink(filepath.Join(farHome, "inbox"), filepath.Join(farHome, "projects")); err != nil {
+		t.Fatal(err)
+	}
+	var via transferRow
+	c.must("transfer-start", map[string]any{
+		"src": map[string]any{"path": evil}, "dst": map[string]any{"host": "build", "path": "~/projects/via-link.pub"},
+	}, &via)
+	via = waitTransferEnd(t, base, via.ID, 30*time.Second)
+	if _, err := os.Stat(filepath.Join(farHome, "inbox", "via-link.pub")); via.State != "done" || err != nil {
+		t.Errorf("ASSERTION: the copy through a link inside build's home ended %s (%s): %v", via.State, via.Error, err)
 	}
 	far.must("file-rename", map[string]any{"from": "~/inbox/key.pub", "to": "~/inbox/renamed.pub"}, nil)
 	far.must("file-remove", map[string]any{"path": "~/inbox/renamed.pub"}, nil)

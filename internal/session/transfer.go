@@ -129,12 +129,11 @@ type transferJob struct {
 	emitted      string
 	lastProgress time.Time
 	// saved is when the journal last took the list of finished files.
-	saved      time.Time
-	cancel     context.CancelFunc
-	stop       string // "pause" or "cancel" while an attempt is being stopped
-	wake       chan struct{}
-	retryAt    time.Time
-	lastWindow uint64
+	saved   time.Time
+	cancel  context.CancelFunc
+	stop    string // "pause" or "cancel" while an attempt is being stopped
+	wake    chan struct{}
+	retryAt time.Time
 }
 
 type rateSample struct {
@@ -1121,7 +1120,7 @@ func (e fileEnd) abort(ctx context.Context, path, id string) error {
 
 func (e fileEnd) mkdir(ctx context.Context, path string) error {
 	if e.local() {
-		return os.MkdirAll(path, 0o755)
+		return os.MkdirAll(path, 0o755) //nolint:gosec // a folder of a copy the person asked for, with the mode mkdir gives
 	}
 	return e.call(ctx, "file-mkdir", map[string]any{"path": path}, nil)
 }
