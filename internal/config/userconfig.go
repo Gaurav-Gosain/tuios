@@ -733,6 +733,9 @@ type SidebarConfig struct {
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
+	// HeaderCase is how the rail's section headers read: lowercase or uppercase
+	// (default: lowercase). See RailHeaderCases.
+	HeaderCase string `toml:"header_case"`
 	// Editor is the terminal editor command for files (default: $EDITOR,
 	// $VISUAL or vi).
 	Editor string `toml:"editor"`
@@ -913,6 +916,7 @@ func DefaultConfig() *UserConfig {
 				Width:         SidebarDefaultWidth,
 				Sections:      SidebarDefaultSections,
 				FolderClick:   SidebarFolderClickNavigate,
+				HeaderCase:    RailHeaderLowercase,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 			},
@@ -2170,6 +2174,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if sb.FolderClick != "" {
 		s.SidebarFolderClick = sb.FolderClick
+	}
+	// A typo reads as the default, the same contract the other enum options
+	// keep.
+	if slices.Contains(RailHeaderCases, sb.HeaderCase) {
+		s.RailHeaderCase = sb.HeaderCase
+	} else if sb.HeaderCase != "" {
+		s.RailHeaderCase = RailHeaderLowercase
 	}
 	s.SidebarEditor = sb.Editor
 	if sb.FileActions != nil {

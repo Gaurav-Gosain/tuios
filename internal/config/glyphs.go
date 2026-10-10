@@ -130,6 +130,16 @@ func (s *Settings) GetRailFoldShutGlyph() string {
 // restyles one has said what it wants the other to be.
 func (s *Settings) GetRailRuleGlyph() string { return s.GetWindowSeparatorChar() }
 
+// GetRailHeaderCase is how the rail's section headers read. A nil settings
+// keeps the quiet lowercase look, the same contract sidebarHeaderRow keeps for
+// its callers outside the rail.
+func (s *Settings) GetRailHeaderCase() string {
+	if s == nil {
+		return RailHeaderLowercase
+	}
+	return s.RailHeaderCase
+}
+
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
 //
 // Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the

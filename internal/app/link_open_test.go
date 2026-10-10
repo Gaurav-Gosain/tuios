@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The routing these tests pin is the one thing in the link feature that is a
@@ -118,5 +119,68 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 	}
 	if len(m.Notifications) == 0 {
 		t.Error("a refused scheme said nothing about what it did instead")
+	}
+}
+
+// TestTuiosWindowLinksParse checks the shapes the tuios:// scheme answers:
+// a window id focuses it, a /close suffix closes it, and anything else is
+// not an address tuios acts on.
+//
+// Negative control: with the host check dropped from parseTuiosLink, the
+// tuios://session/... case comes back ok and this fails.
+func TestTuiosWindowLinksParse(t *testing.T) {
+	good := []struct {
+		url     string
+		id      string
+		closing bool
+	}{
+		{"tuios://window/4262c319", "4262c319", false},
+		{"tuios://window/4262c319/close", "4262c319", true},
+		{"tuios://window/a878cd43-0b70-4c1e-bd43-7b78de51cc43", "a878cd43-0b70-4c1e-bd43-7b78de51cc43", false},
+	}
+	for _, c := range good {
+		got, ok := parseTuiosLink(c.url)
+		if !ok || got.id != c.id || got.close != c.closing {
+			t.Errorf("%q parsed as %+v, ok=%v; want id %q close=%v", c.url, got, ok, c.id, c.closing)
+		}
+	}
+
+	bad := []string{
+		"tuios://window/",
+		"tuios://window",
+		"tuios://window//close",
+		"tuios://session/4262c319",
+		"tuios://pane/4262c319",
+		"https://window/4262c319",
+	}
+	for _, u := range bad {
+		if got, ok := parseTuiosLink(u); ok {
+			t.Errorf("%q parsed as %+v; want refusal", u, got)
+		}
+	}
+}
+
+// TestTuiosWindowLinkResolution checks that a window id resolves to exactly
+// one window, by full uuid or unique prefix, and that a prefix two windows
+// share names nothing.
+func TestTuiosWindowLinkResolution(t *testing.T) {
+	m := &OS{Settings: config.Global}
+	m.Windows = []*terminal.Window{
+		{ID: "a878cd43-0b70-4c1e-bd43-7b78de51cc43"},
+		{ID: "a878cd44-1111-2222-3333-444455556666"},
+		{ID: "ffffffff-0000-0000-0000-000000000001"},
+	}
+
+	if i, ok := m.resolveWindowByIDPrefix("a878cd43-0b70-4c1e-bd43-7b78de51cc43"); !ok || i != 0 {
+		t.Errorf("full uuid resolved to %d, %v; want 0, true", i, ok)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("4262c319"); ok {
+		t.Errorf("unknown prefix resolved to %d; want no window", i)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("a878cd4"); ok {
+		t.Errorf("ambiguous prefix resolved to %d; want no window", i)
+	}
+	if i, ok := m.resolveWindowByIDPrefix("ffff"); !ok || i != 2 {
+		t.Errorf("unique prefix resolved to %d, %v; want 2, true", i, ok)
 	}
 }

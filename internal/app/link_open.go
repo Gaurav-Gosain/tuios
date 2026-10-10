@@ -71,6 +71,19 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 		return m.openLocalPath(path, rawURL)
 	}
 
+	// A tuios:// address is an order to tuios itself, not a document for
+	// the desktop. It is handled before the scheme list, which exists to
+	// decide what may leave for the viewer's machine, and nothing about a
+	// window of this session belongs there.
+	if target, ok := parseTuiosLink(rawURL); ok {
+		return m.openWindowLink(target, rawURL)
+	}
+	if strings.HasPrefix(strings.ToLower(rawURL), "tuios:") {
+		m.ShowNotification("tuios did not understand the link. A window link is tuios://window/<id>, or tuios://window/<id>/close.",
+			"warning", m.Settings.NotificationDuration)
+		return nil
+	}
+
 	// A file:// link that linkFilePath turned down names a file on another
 	// machine (file://otherhost/path). That file is not here to open, and
 	// handing the address to the desktop would open whatever this machine
@@ -116,6 +129,86 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	}
 	m.ShowNotification("Opening "+linkHostLabel(rawURL)+".", "success", m.Settings.NotificationDuration)
 	return watch
+}
+
+// frameLink reports whether a link belongs in the frame tuios emits to the
+// outer terminal. A tuios:// address is an order to tuios itself, never a
+// document for the desktop, and the outer terminal has no handler for the
+// scheme: its cmd+click would open a dialog. The inner emulator still carries
+// the link, so tuios's own clicks answer it.
+func frameLink(u string) bool {
+	return !strings.HasPrefix(strings.ToLower(u), "tuios:")
+}
+
+// tuiosLink is the parse of a tuios://window address.
+type tuiosLink struct {
+	id    string
+	close bool
+}
+
+// parseTuiosLink reads the window addresses the scheme carries:
+// tuios://window/<id> focuses the window and tuios://window/<id>/close closes
+// it. The id is the window's uuid or a prefix of it, the short form
+// list-windows prints. Any other tuios:// shape is not an address tuios
+// answers, and the caller says so.
+func parseTuiosLink(rawURL string) (tuiosLink, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "tuios" || u.Host != "window" {
+		return tuiosLink{}, false
+	}
+	rest := strings.TrimPrefix(u.Path, "/")
+	if rest == "" {
+		return tuiosLink{}, false
+	}
+	if id, found := strings.CutSuffix(rest, "/close"); found {
+		if id == "" {
+			return tuiosLink{}, false
+		}
+		return tuiosLink{id: id, close: true}, true
+	}
+	return tuiosLink{id: rest}, true
+}
+
+// openWindowLink acts on a tuios://window link. The window set is the
+// client's own in every deployment, so the id resolves here: a full uuid or
+// a prefix that names exactly one window. A prefix two windows share names
+// nothing, because focusing or closing the wrong pane one time in many is
+// worse than saying the address was ambiguous.
+func (m *OS) openWindowLink(target tuiosLink, rawURL string) tea.Cmd {
+	i, found := m.resolveWindowByIDPrefix(target.id)
+	if !found {
+		m.ShowNotification("The window link names no window on this machine, or names more than one. The address is on your clipboard.",
+			"warning", m.Settings.NotificationDuration)
+		return tea.SetClipboard(rawURL)
+	}
+	if target.close {
+		m.CloseWindowByHand(i)
+		return nil
+	}
+	m.FocusWindow(i)
+	m.RevealFocusedColumn()
+	return nil
+}
+
+// resolveWindowByIDPrefix finds the window an id or id prefix names.
+func (m *OS) resolveWindowByIDPrefix(id string) (int, bool) {
+	for i, w := range m.Windows {
+		if strings.EqualFold(w.ID, id) {
+			return i, true
+		}
+	}
+	matches := 0
+	index := 0
+	for i, w := range m.Windows {
+		if strings.HasPrefix(strings.ToLower(w.ID), strings.ToLower(id)) {
+			matches++
+			index = i
+		}
+	}
+	if matches == 1 {
+		return index, true
+	}
+	return 0, false
 }
 
 // linkTextClean reports whether an address holds no control byte and no
