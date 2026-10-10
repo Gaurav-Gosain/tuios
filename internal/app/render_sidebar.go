@@ -2339,7 +2339,7 @@ type sidebarFooterZone struct {
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	left, right := m.Settings.GetRailCollapseGlyph(), m.Settings.GetRailExpandGlyph()
 	collapse, expand := left, right
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		collapse, expand = right, left
 	}
 	if variant == sidebarVariantGlyph {
@@ -2385,7 +2385,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// The toggle is always the thing nearest the panes, where the pointer
 	// arrives from, so its corner swaps with the rail's side.
 	facing := max(cw-1-stepW, 1)
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		facing = 1
 	}
 	line := 0
@@ -2398,7 +2398,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// pointer cannot separate from its neighbour is worse than one that is not
 	// there, and the file view is also reachable by clicking a folder link.
 	filesX := 1
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		filesX = max(cw-1-sidebarFilesLabelW, 1)
 	}
 	filesEnd := filesX + sidebarFilesLabelW

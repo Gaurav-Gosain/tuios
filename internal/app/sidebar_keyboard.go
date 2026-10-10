@@ -69,6 +69,18 @@ func (m *OS) EnterSidebarFocus() {
 	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
 }
 
+// FocusOtherSidebar moves keyboard ownership between visible rails without
+// changing either rail's saved cursor or leaking a key to the pane underneath.
+func (m *OS) FocusOtherSidebar() {
+	if !m.SidebarFocused || m.sidebarWidthFor(m.sidebarPreferredWidth()) == 0 || m.secondarySidebarWidth() == 0 {
+		return
+	}
+	// HandleSidebarKey scopes the secondary rail around dispatch. The view
+	// fields will be restored when it returns; the focus owner is not swapped.
+	m.sidebarClearPeek()
+	m.sidebarFocusSecondary = !m.sidebarFocusSecondary
+}
+
 // sidebarSetCursor moves the keyboard cursor and re-derives the preview from
 // where it landed, so a browse down the sessions section previews row by row
 // exactly as hovering it does.
@@ -455,7 +467,7 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 		}
 	}
 	x := 0
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		x = m.GetRenderWidth() - m.GetSidebarWidth()
 	}
 	return x, m.viewReserve().Top

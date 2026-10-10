@@ -142,6 +142,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(-1)
 	case sidebarActSection:
 		o.SidebarCycleSection()
+	case sidebarActSwitchEdge:
+		o.FocusOtherSidebar()
 	case sidebarActPalette:
 		// The rail lists what exists; the palette finds it by name across every
 		// session and filters it by who needs a human. Rail focus is kept, so

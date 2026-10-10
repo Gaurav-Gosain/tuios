@@ -74,6 +74,36 @@ func (m *OS) ToggleSidebar() {
 	}
 }
 
+// ToggleOtherSidebar independently shows or hides the explicitly configured
+// opposite edge. Unlike the legacy rail this is client-local: the opposite
+// edge's opt-in belongs to this client's config, not to daemon session state.
+func (m *OS) ToggleOtherSidebar() bool {
+	if m.UserConfig == nil {
+		return false
+	}
+	cfg := m.UserConfig.Appearance.Sidebar.Left
+	if m.legacySidebarEdge() == sidebarLeft {
+		cfg = m.UserConfig.Appearance.Sidebar.Right
+	}
+	if cfg == nil || cfg.Enabled == nil {
+		return false // a table alone must never opt a rail in
+	}
+	on := !*cfg.Enabled
+	if !on && m.SidebarFocusOnSecondary() {
+		m.WithSecondarySidebar(func() { m.ExitSidebarFocus() })
+	}
+	cfg.Enabled = &on
+	m.secondarySidebarCache.invalidate()
+	m.secondarySidebarHits = m.secondarySidebarHits[:0]
+	m.tooltipClear()
+	if m.AutoTiling {
+		m.TileAllWindows()
+	} else {
+		m.ClampWindowsToView()
+	}
+	return on
+}
+
 // setSidebarShown shows or hides the rail on this client alone and lays the
 // panes out in the content region that leaves. It does not save the config
 // and does not tell the daemon.

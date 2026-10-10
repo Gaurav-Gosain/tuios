@@ -21,6 +21,15 @@ func (m *OS) legacySidebarEdge() sidebarEdge {
 	return sidebarLeft
 }
 
+// railEdge is the edge of the rail currently drawn or handled. The secondary
+// rail temporarily swaps its view state, but does not change the legacy config.
+func (m *OS) railEdge() sidebarEdge {
+	if m.sidebarDrawing {
+		return m.sidebarDrawingEdge
+	}
+	return m.legacySidebarEdge()
+}
+
 // sidebarEdgeX locates the first column of a rail of width w on an edge.
 // Both drawing and pointer geometry use it so they cannot disagree about
 // which side of the screen owns the reserved columns.
