@@ -343,6 +343,25 @@ func (m *OS) sidebarPeekAt(x, y int) {
 //   - Right press on any row: open the context menu (pane menu for a window or
 //     agent row, the session/desktop menu for a session row).
 func (m *OS) SidebarClick(x, y int, right bool) bool {
+	if edge, ok := m.SidebarSessionHeaderAt(x, y); ok {
+		if right {
+			m.OpenSettingsAt("Sidebar")
+		} else {
+			m.FocusSidebarSession(edge)
+			if m.sidebarSessions[edge-1].paneCount > 1 {
+				m.SidebarSessionIntent("NextWindow")
+			}
+		}
+		return true
+	}
+	if edge, ok := m.SidebarSessionAt(x, y); ok {
+		if right {
+			m.OpenSettingsAt("Sidebar")
+		} else {
+			m.FocusSidebarSession(edge)
+		}
+		return true
+	}
 	if m.secondarySidebarBandContains(x, y) {
 		return m.withSecondaryRail(func() bool { return m.sidebarClick(x, y, right) })
 	}

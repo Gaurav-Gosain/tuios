@@ -19,8 +19,10 @@ import (
 // remember to re-emit anything, and an unfocused pane cannot reach the host
 // cursor at all.
 func (m *OS) getRealCursor() *tea.Cursor {
-	// Only show real cursor in terminal mode with valid focused window
-	if m.Mode != TerminalMode || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+	// A docked session is a separate daemon pane; it can own the keyboard
+	// without changing the center session's mode or focused window.
+	sidebarWindow := m.SidebarSessionWindow()
+	if sidebarWindow == nil && (m.Mode != TerminalMode || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows)) {
 		return nil
 	}
 
@@ -46,7 +48,10 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
-	window := m.Windows[m.FocusedWindow]
+	window := sidebarWindow
+	if window == nil {
+		window = m.Windows[m.FocusedWindow]
+	}
 	if window == nil || window.Terminal == nil {
 		return nil
 	}
@@ -80,8 +85,11 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 
+	// A normalized shell view hides only empty leading guest rows. Keep the
+	// hardware cursor on the same displayed cell as the shell's text.
+	visualY := pos.Y - window.DisplayRowOffset
 	// Bounds check: the cursor must be within the visible content area.
-	if pos.X < 0 || pos.X >= contentWidth || pos.Y < 0 || pos.Y >= contentHeight {
+	if pos.X < 0 || pos.X >= contentWidth || visualY < 0 || visualY >= contentHeight {
 		return nil
 	}
 
@@ -91,10 +99,10 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		borderOffset = 0
 	}
 	screenX := window.X + borderOffset + pos.X
-	screenY := window.Y + borderOffset + pos.Y
+	screenY := window.Y + borderOffset + visualY
 	// In a view of a larger session the pane is drawn shifted, and a cursor
 	// the view does not show is not drawn. See pane_view.go.
-	if v := m.sessionView; v.on {
+	if v := m.sessionView; v.on && sidebarWindow == nil {
 		screenX, screenY = v.toScreen(screenX, screenY)
 		if !image.Pt(screenX, screenY).In(v.clip) {
 			return nil
