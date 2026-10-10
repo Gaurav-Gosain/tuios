@@ -209,11 +209,11 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		copyRow.desc = fmt.Sprintf("Multi copy (%d)/paste image/buffer", st.MultiCopy)
 		copyRow.parts[0].desc = fmt.Sprintf("Multi copy (%d)", st.MultiCopy)
 	}
-	sidebarRow := pair("Sidebar/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_spotlight", "Spotlight"))
+	sidebarRow := pair("Sidebar/other/spotlight", part("prefix_toggle_sidebar", "Sidebar"), part("prefix_toggle_other_rail", "Other rail"), part("prefix_toggle_spotlight", "Spotlight"))
 	if st.Spotlight {
 		// While the beam is on, its row says the key turns it off.
-		sidebarRow.desc = "Sidebar/spotlight off"
-		sidebarRow.parts[1].desc = "Spotlight off"
+		sidebarRow.desc = "Sidebar/other/spotlight off"
+		sidebarRow.parts[2].desc = "Spotlight off"
 	}
 	modes.rows = append(modes.rows,
 		// Copy mode and the two pastes share a line: the leader's menu

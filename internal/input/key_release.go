@@ -26,10 +26,15 @@ import (
 // that asked for every key, the only mode in which a modifier is a key at all.
 func forwardKeyReleaseToFocused(msg tea.KeyReleaseMsg, o *app.OS) bool {
 	pressedIn, pressed := o.TakePaneKeyDown(msg.Code)
-	if o.Mode != app.TerminalMode || !pressed {
+	if !pressed {
 		return false
 	}
 	window := o.GetFocusedWindow()
+	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() {
+		window = o.SidebarSessionWindow()
+	} else if o.Mode != app.TerminalMode {
+		return false
+	}
 	if window == nil || window.Terminal == nil || window.ID != pressedIn {
 		return false
 	}

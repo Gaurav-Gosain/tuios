@@ -14,6 +14,7 @@ func (m *OS) MarkAllDirty() {
 	}
 	m.cachedViewContent = "" // Invalidate view cache
 	m.sidebarCache.invalidate()
+	m.secondarySidebarCache.invalidate()
 	m.pip.dirty = true
 }
 
@@ -39,8 +40,9 @@ func (m *OS) markZenDirty() {
 
 // MarkTerminalsWithNewContent marks terminals that have new content as dirty.
 func (m *OS) MarkTerminalsWithNewContent() bool {
-	// Fast path: no windows
-	if len(m.Windows) == 0 {
+	// A docked session's pane is deliberately not in m.Windows, but its
+	// subscription uses the same output signal and frame budget.
+	if len(m.Windows) == 0 && !m.sidebarSessionOutputPending() {
 		return false
 	}
 
@@ -131,6 +133,17 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		}
 	}
 
+	for edge := range m.sidebarSessions {
+		for _, w := range m.sidebarSessions[edge].windows {
+			if w.HasNewOutput.Swap(false) {
+				w.MarkContentDirty()
+				hasChanges = true
+			}
+		}
+	}
+	if hasChanges {
+		m.cachedViewContent = ""
+	}
 	return hasChanges
 }
 

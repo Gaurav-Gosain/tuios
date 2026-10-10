@@ -160,7 +160,7 @@ func (st sidebarRowState) mark(pal overlay.Palette, row string) string {
 
 // railRowState reads the rail's focus once so a row site does not have to.
 func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
-	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.SidebarFocused}
+	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.sidebarRailFocused()}
 }
 
 // sidebarRowBg is the ground a row paints. Three steps, not one.
@@ -1178,14 +1178,61 @@ func sidebarNameAvailIn(cw, rightW, indent int) int {
 // hit geometry of every row into m.SidebarHits for the mouse handlers.
 func (m *OS) renderSidebar() *lipgloss.Layer {
 	panel, w := m.sidebarPanel()
+	if docked, ok := m.sidebarSessionPanel(m.legacySidebarEdge(), w); ok {
+		panel = docked
+		m.SidebarHits = m.SidebarHits[:0]
+	}
 	if panel == "" {
 		return nil
 	}
-	sidebarX := 0
-	if m.Settings.SidebarPosition == "right" {
-		sidebarX = m.GetRenderWidth() - w
-	}
+	sidebarX := sidebarEdgeX(m.legacySidebarEdge(), w, m.GetRenderWidth())
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.viewReserve().Top).Z(config.ZIndexDock).ID(sidebarLayerID)
+}
+
+// renderSecondarySidebar draws the opt-in opposite edge with its own layout
+// and render cache. The render pass is synchronous; restore the primary rail's
+// settings and hit geometry before another layer or input handler sees them.
+func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
+	w := m.secondarySidebarWidth()
+	if w == 0 || m.UserConfig == nil {
+		m.secondarySidebarHits = m.secondarySidebarHits[:0]
+		return nil
+	}
+	edge := sidebarLeft
+	cfg := m.UserConfig.Appearance.Sidebar.Left
+	if m.legacySidebarEdge() == sidebarLeft {
+		edge, cfg = sidebarRight, m.UserConfig.Appearance.Sidebar.Right
+	}
+	if cfg == nil {
+		return nil
+	}
+	sections := cfg.Sections
+	if sections == "" {
+		sections = config.SidebarDefaultSections
+	}
+	primarySections, primaryCache := m.Settings.SidebarSections, m.sidebarCache
+	m.swapSecondaryRail()
+	m.Settings.SidebarSections = sections
+	m.sidebarCache = m.secondarySidebarCache
+	m.sidebarDrawing = true
+	m.sidebarDrawingEdge = edge
+	m.sidebarDrawingWidth = w
+	panel, _ := m.sidebarPanel()
+	if docked, ok := m.sidebarSessionPanel(edge, w); ok {
+		panel = docked
+		m.SidebarHits = m.SidebarHits[:0]
+	}
+	m.secondarySidebarCache = m.sidebarCache
+	m.sidebarCache = primaryCache
+	m.Settings.SidebarSections = primarySections
+	m.sidebarDrawing = false
+	m.swapSecondaryRail()
+	m.secondarySidebarHits = append(m.secondarySidebarHits[:0], m.secondaryRailView.hits...)
+	m.SidebarHits = append(m.SidebarHits, m.secondarySidebarHits...)
+	if panel == "" {
+		return nil
+	}
+	return lipgloss.NewLayer(panel).X(sidebarEdgeX(edge, w, m.GetRenderWidth())).Y(m.viewReserve().Top).Z(config.ZIndexDock).ID("sidebar-secondary")
 }
 
 // sidebarWindowSection windows one section's rows onto the lines it was given,
@@ -1245,11 +1292,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	topMargin := m.viewReserve().Top
-	sidebarX := 0
-	edgeLeft := m.Settings.SidebarPosition != "right"
-	if !edgeLeft {
-		sidebarX = m.GetRenderWidth() - w
+	side := m.legacySidebarEdge()
+	if m.sidebarDrawing {
+		side = m.sidebarDrawingEdge
 	}
+	sidebarX := sidebarEdgeX(side, w, m.GetRenderWidth())
+	edgeLeft := side == sidebarLeft
 	// First content column: a right-hand rail spends its first band column on
 	// the edge rule, so the content starts one cell in.
 	contentX0 := sidebarX
@@ -1264,7 +1312,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// While the rail owns the keyboard its edge rule burns accent instead of the
 	// dock's muted hairline, so the focus is legible at the frame, not only on a
 	// single highlighted row.
-	if m.SidebarFocused {
+	if m.sidebarRailFocused() {
 		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(m.Settings.GetWindowBorderLeft())
 	}
 
@@ -1315,7 +1363,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		haveCursorTarget = true
 	}
 	isCursor := func(kind sidebarRowKind, sessionID, windowID string) bool {
-		return m.SidebarFocused && haveCursorTarget &&
+		return m.sidebarRailFocused() && haveCursorTarget &&
 			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
 	}
 
@@ -1623,7 +1671,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// mechanisms agree on what is on screen and the cursor keeps the last word.
 	// See sidebar_reveal.go.
 	m.sidebarRevealFocus(sessions, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
-	if m.SidebarFocused && haveCursorTarget {
+	if m.sidebarRailFocused() && haveCursorTarget {
 		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
 				if idx < *scroll[sec] {
@@ -2381,7 +2429,7 @@ type sidebarFooterZone struct {
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	left, right := m.Settings.GetRailCollapseGlyph(), m.Settings.GetRailExpandGlyph()
 	collapse, expand := left, right
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		collapse, expand = right, left
 	}
 	if variant == sidebarVariantGlyph {
@@ -2427,7 +2475,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// The toggle is always the thing nearest the panes, where the pointer
 	// arrives from, so its corner swaps with the rail's side.
 	facing := max(cw-1-stepW, 1)
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		facing = 1
 	}
 	line := 0
@@ -2440,7 +2488,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// pointer cannot separate from its neighbour is worse than one that is not
 	// there, and the file view is also reachable by clicking a folder link.
 	filesX := 1
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		filesX = max(cw-1-sidebarFilesLabelW, 1)
 	}
 	filesEnd := filesX + sidebarFilesLabelW

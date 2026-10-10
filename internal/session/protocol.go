@@ -345,6 +345,10 @@ type AttachPayload struct {
 	// window_size policies it does not count toward the session's size;
 	// under smallest it counts like any client. An older daemon ignores it.
 	ViewOnly bool `json:"view_only,omitzero"`
+	// Passive displays and accepts input for a pane but does not implement
+	// renderer commands (for example a session shown in a sidebar rail).
+	// Command routing must skip it; the daemon still counts its size.
+	Passive bool `json:"passive,omitempty"`
 	// Cwd is the start directory of a session this attach creates (CreateNew
 	// and no session by that name). See NewPayload.Cwd. An attach to a
 	// session that exists ignores it.

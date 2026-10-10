@@ -53,6 +53,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
+		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
+			o.BlurSidebarSession()
+		}
 		// A click ends hints mode. The labels name the screen as it was when
 		// they were drawn, and a click is about to change it.
 		o.CloseHints()
@@ -135,6 +138,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
 		if pasteTakenByOverlay(o, msg.Content) {
+			return o, nil
+		}
+		if o.SidebarSessionFocused() {
+			if msg.Content != "" {
+				o.PasteSidebarSession(msg.Content)
+			}
 			return o, nil
 		}
 		if o.Mode == app.TerminalMode {
@@ -481,6 +490,25 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// its keys must reach it.
 	// The message view and the log viewer are the last two: ctrl+b N opens the
 	// view over the rail, and its scroll and close keys must reach it.
+	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() {
+		if msg.String() == "alt+esc" {
+			o.BlurSidebarSession()
+			return o, nil
+		}
+		// Keep leader chords and workspace navigation in the window manager.
+		// Every other key belongs to the pane actually visible in the rail.
+		key := msg.String()
+		workspaceChord := strings.HasPrefix(key, "alt+") && len(key) == len("alt+1") && key[len(key)-1] >= '1' && key[len(key)-1] <= '9'
+		if !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !workspaceChord {
+			if w := o.SidebarSessionWindow(); w != nil {
+				raw, released := paneKeyBytes(paneMsg(msg, o), w, o, true)
+				if len(raw) > 0 && o.WriteSidebarSession(raw) && !released {
+					o.NotePaneKeyDown(msg.Code, w.ID)
+				}
+			}
+			return o, nil
+		}
+	}
 	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox &&
 		!o.MessageViewOpen() && !o.ShowLogs && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return HandleSidebarKey(msg, o)

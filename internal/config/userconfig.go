@@ -781,6 +781,11 @@ type SidebarConfig struct {
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
 	Custom SidebarCustomConfig `toml:"custom"`
+	// Left and Right independently configure rails on the two screen edges.
+	// When absent, the existing rail still lives at Position with its existing
+	// settings. A new edge must be explicitly enabled; see sidebar_edges.go.
+	Left  *SidebarEdgeConfig `toml:"left,omitempty"`
+	Right *SidebarEdgeConfig `toml:"right,omitempty"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -1138,10 +1143,11 @@ func DefaultConfig() *UserConfig {
 				// s is the scrollback browser, so the capture takes capital C,
 				// one shift away from the c that creates a window. Nothing here
 				// is destructive either way.
-				"prefix_screenshot":      {"C"},
-				"prefix_command_palette": {"P"},
-				"prefix_file_search":     {"f"},
-				"prefix_toggle_sidebar":  {"b"},
+				"prefix_screenshot":        {"C"},
+				"prefix_command_palette":   {"P"},
+				"prefix_file_search":       {"f"},
+				"prefix_toggle_sidebar":    {"b"},
+				"prefix_toggle_other_rail": {"H"},
 				// B turns the spotlight on and off from either mode. In
 				// terminal mode it is the way out of the beam, since esc
 				// belongs to the program in the pane there.
@@ -1330,6 +1336,7 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"reorder_down": {"J", "shift+down"},
 		"reorder_up":   {"K", "shift+up"},
 		"section":      {"tab", "shift+tab"},
+		"switch_edge":  {"e"}, // switch keyboard focus between two visible rails
 		// The agents section's own two controls, which is why they are single
 		// letters rather than a chord: they are the section's shape, and changing
 		// it is a browse, not a command.
@@ -2161,6 +2168,42 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// the toggles are pointer bools so turning one off in the settings page
 	// survives a reload just as turning it on does.
 	sb := cfg.Appearance.Sidebar
+	// The legacy rail keeps its runtime settings and controls. An explicit
+	// table for that same edge overrides only fields it names; the opposite
+	// edge has its own model and must not overwrite the legacy rail here.
+	// When the legacy rail is hidden, the resolver can still enable either
+	// explicit edge. Use the first enabled edge as the existing rail and the
+	// other as the opt-in rail, rather than letting a hidden "left" placeholder
+	// steal the right table. This is runtime presentation only: the file still
+	// says position = "hidden" and neither explicit override is rewritten.
+	var primary *SidebarEdgeConfig
+	if sb.Position == "hidden" {
+		left, right := ResolveSidebarEdges(sb)
+		switch {
+		case left.Enabled:
+			sb.Position, sb.Width, sb.Sections, primary = "left", left.Width, left.Sections, sb.Left
+		case right.Enabled:
+			sb.Position, sb.Width, sb.Sections, primary = "right", right.Width, right.Sections, sb.Right
+		}
+	} else {
+		switch sb.Position {
+		case "left":
+			primary = sb.Left
+		case "right", "":
+			primary = sb.Right
+		}
+	}
+	if primary != nil {
+		if primary.Enabled != nil {
+			sb.Enabled = primary.Enabled
+		}
+		if primary.Width > 0 {
+			sb.Width = primary.Width
+		}
+		if primary.Sections != "" {
+			sb.Sections = primary.Sections
+		}
+	}
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}

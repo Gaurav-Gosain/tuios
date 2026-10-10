@@ -343,8 +343,14 @@ func (m *OS) reportConfigWarnings() {
 // in the View() method as per bubbletea v2.0.0-beta.5 API changes.
 func (m *OS) Init() tea.Cmd {
 	m.reportConfigWarnings()
+	if m.sidebarSessionEvents == nil {
+		m.sidebarSessionEvents = make(chan sidebarSessionEvent, 64)
+		m.sidebarSessionDone = make(chan struct{})
+	}
 
 	cmds := []tea.Cmd{
+		m.listenSidebarSession(),
+		m.refreshSidebarSessions(),
 		TickCmd(&m.Settings),
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
@@ -788,6 +794,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	model, cmd := m.update(msg)
+	// Input may switch the center workspace, edit an edge's session assignment,
+	// or finish a rail resize. Reconcile after it has changed the model.
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseReleaseMsg, tea.WindowSizeMsg:
+		cmd = tea.Batch(cmd, m.refreshSidebarSessions())
+	}
 	// A pane state that changed is reported to the host terminal, batched.
 	// See host_program_status.go.
 	if hc := m.hostProgramStatusAfter(); hc != nil {
@@ -845,6 +857,16 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pane's directory is what both are about, and every handler that can move
 	// it is covered by one comparison here rather than by a hook in each.
 	gitSync := m.GitSyncCmd()
+	// The opposite edge may be the only rail that names files or git. Its
+	// presentation state is scoped to that edge; the directory and repository
+	// readings themselves are shared because both follow the same pane.
+	var secondFiles, secondGit tea.Cmd
+	if m.secondarySidebarWidth() > 0 {
+		m.withSecondaryRail(func() bool {
+			secondFiles, secondGit = m.FilesSyncCmd(), m.GitSyncCmd()
+			return true
+		})
+	}
 	// A live meter toggle changes which dock components need to poll.
 	dockSync := m.DockMetersSyncCmd()
 	// The rail's custom section on the same beat: the focused pane and the
@@ -866,10 +888,10 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// the settings page opening and a pane starting an agent are both things
 	// any handler can do. See settings_agents.go.
 	agents := m.agentsSyncCmd()
-	if sync == nil && replan == nil && gitSync == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
+	if sync == nil && replan == nil && gitSync == nil && secondFiles == nil && secondGit == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync, dockSync, railSync, loading, motion, agents)
+	return model, tea.Batch(cmd, sync, replan, gitSync, secondFiles, secondGit, dockSync, railSync, loading, motion, agents)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -934,6 +956,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case sidebarSessionNotice:
+		cmd := m.handleSidebarSessionEvent(msg.sidebarSessionEvent)
+		return m, tea.Batch(cmd, m.listenSidebarSession())
+	case sidebarSessionEvent:
+		return m, m.handleSidebarSessionEvent(msg)
 	case PTYDataMsg:
 		// PTY output arrived: mark dirty terminals and re-render immediately.
 		// This is the primary render trigger, replacing tick-driven rendering.
@@ -1907,6 +1934,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// for the newest resize, so whatever state the flag is in, the deferred
 		// work is due now. Draining an empty PendingResizes costs nothing.
 		m.endResizeDeferral()
+		m.settleSidebarSessionSizes()
 		// A taller terminal shows more launcher rows, and the new ones have had
 		// no icon asked for. The settle is the right moment for that rather than
 		// every delivered size.
@@ -2023,7 +2051,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 		// Continue listening for more state syncs
-		return m, ListenForStateSync(m.StateSyncChan)
+		return m, tea.Batch(ListenForStateSync(m.StateSyncChan), m.refreshSidebarSessions())
 
 	case ScratchOpenedMsg:
 		m.handleScratchOpened(msg)
@@ -2277,7 +2305,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// loop closes: this client's own reserve is a function of the render
 		// width alone, so the second round finds it unmoved and sends nothing.
 		// Continue listening for more client events
-		return m, ListenForClientEvents(m.ClientEventChan)
+		return m, tea.Batch(ListenForClientEvents(m.ClientEventChan), m.refreshSidebarSessions())
 
 	case ForceRefreshMsg:
 		// Force re-render
@@ -2367,7 +2395,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			m.ShowNotification(msg.Config.LoadWarnings[0], "warning", m.Settings.NotificationWarningDuration)
 		}
-		return m, cmd
+		return m, tea.Batch(cmd, m.refreshSidebarSessions())
 
 	case ConfigReloadFailedMsg:
 		// The file on disk cannot be used and the running config stands. The

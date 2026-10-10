@@ -41,9 +41,10 @@ func (m *OS) sidebarCursorRow() (sidebarNavRow, bool) {
 // the rail is not already showing. The cursor lands on the current session so
 // navigation starts where the eye is.
 func (m *OS) EnterSidebarFocus() {
-	if m.SidebarFocused {
+	if m.SidebarFocused && m.sidebarFocusSecondary == m.sidebarDrawing {
 		return
 	}
+	m.sidebarFocusSecondary = m.sidebarDrawing
 	// Shown on this client alone, over the panes: the scope is this
 	// person's keyboard, not a change to the session's rail, so it takes no
 	// columns from anybody's panes. See OwnLayoutReserve.
@@ -68,6 +69,18 @@ func (m *OS) EnterSidebarFocus() {
 	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
 }
 
+// FocusOtherSidebar moves keyboard ownership between visible rails without
+// changing either rail's saved cursor or leaking a key to the pane underneath.
+func (m *OS) FocusOtherSidebar() {
+	if !m.SidebarFocused || m.sidebarWidthFor(m.sidebarPreferredWidth()) == 0 || m.secondarySidebarWidth() == 0 {
+		return
+	}
+	// HandleSidebarKey scopes the secondary rail around dispatch. The view
+	// fields will be restored when it returns; the focus owner is not swapped.
+	m.sidebarClearPeek()
+	m.sidebarFocusSecondary = !m.sidebarFocusSecondary
+}
+
 // sidebarSetCursor moves the keyboard cursor and re-derives the preview from
 // where it landed, so a browse down the sessions section previews row by row
 // exactly as hovering it does.
@@ -88,6 +101,7 @@ func (m *OS) ExitSidebarFocus() {
 		return
 	}
 	m.SidebarFocused = false
+	m.sidebarFocusSecondary = false
 	// The rows at rest fold away again once the rail lets go of the keyboard.
 	m.sidebarAgentsUnfolded = false
 	m.recordSidebarRow()
@@ -453,7 +467,7 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 		}
 	}
 	x := 0
-	if m.Settings.SidebarPosition == "right" {
+	if m.railEdge() == sidebarRight {
 		x = m.GetRenderWidth() - m.GetSidebarWidth()
 	}
 	return x, m.viewReserve().Top
@@ -528,12 +542,32 @@ func (m *OS) SidebarCanCreateSession() bool {
 // three-stop ladder had a middle width no control named and no way back out of
 // except by stepping through it, and the responsive clamp already owns that
 // width on the screens where it belongs.
-func (m *OS) SidebarToggleCollapsed() { m.SidebarSetCollapsed(!m.SidebarCollapsed) }
+func (m *OS) SidebarToggleCollapsed() {
+	if m.sidebarDrawing {
+		m.SidebarSetCollapsed(!m.secondaryCollapsed)
+		return
+	}
+	m.SidebarSetCollapsed(!m.SidebarCollapsed)
+}
 
 // SidebarSetCollapsed is the directed half: the footer's arrow and the keys
 // point somewhere, so pressing the same one twice is a no-op rather than a
 // flicker.
 func (m *OS) SidebarSetCollapsed(collapsed bool) {
+	if m.sidebarDrawing {
+		if collapsed == m.secondaryCollapsed {
+			return
+		}
+		m.secondaryCollapsed = collapsed
+		m.sidebarClearPeek()
+		m.tooltipClear()
+		if m.AutoTiling {
+			m.TileAllWindows()
+		} else {
+			m.ClampWindowsToView()
+		}
+		return
+	}
 	if collapsed == m.SidebarCollapsed {
 		return
 	}

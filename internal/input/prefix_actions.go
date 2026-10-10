@@ -51,6 +51,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_command_palette", handleOpenCommandPalette)
 	d.Register("prefix_file_search", handleOpenFileSearch)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
+	d.Register("prefix_toggle_other_rail", handlePrefixToggleOtherSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("choose_tree", handleChooseTree)
@@ -191,6 +192,12 @@ func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		if w := o.SidebarSessionWindow(); w != nil {
+			o.SidebarSessionIntent("CloseWindow", w.ID)
+		}
+		return o, nil
+	}
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return o, nil
 	}
@@ -271,6 +278,10 @@ func handlePrefixKeybinds(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.SidebarSessionIntent("NextWindow")
+		return o, nil
+	}
 	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToNextVisibleWindow()
@@ -280,6 +291,10 @@ func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarSessionFocused() {
+		o.SidebarSessionIntent("PrevWindow")
+		return o, nil
+	}
 	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToPreviousVisibleWindow()
@@ -359,6 +374,15 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		state = "on"
 	}
 	o.ShowNotification("Sidebar "+state, "success", o.Settings.NotificationDuration)
+	return o, nil
+}
+
+func handlePrefixToggleOtherSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	state := "off"
+	if o.ToggleOtherSidebar() {
+		state = "on"
+	}
+	o.ShowNotification("Opposite sidebar "+state, "success", o.Settings.NotificationDuration)
 	return o, nil
 }
 

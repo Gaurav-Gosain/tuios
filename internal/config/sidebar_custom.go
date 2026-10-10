@@ -78,8 +78,25 @@ func SidebarCustomPlaced(sections string) bool {
 // draws nothing and says nothing about why is the failure mode the dock's
 // warnings exist to stop.
 func validateSidebarCustom(cfg *UserConfig, result *ValidationResult) {
-	custom := cfg.Appearance.Sidebar.Custom
-	placed := SidebarCustomPlaced(cfg.Appearance.Sidebar.Sections)
+	sidebar := cfg.Appearance.Sidebar
+	// An explicit command on the legacy edge replaces, rather than joins, the
+	// legacy command. The edge validator reports problems with that override;
+	// warning about the replaced command here would point at the wrong table.
+	var override *SidebarEdgeConfig
+	if sidebar.Position == "left" {
+		override = sidebar.Left
+	} else if sidebar.Position != "hidden" {
+		override = sidebar.Right
+	}
+	if override != nil && override.Custom != nil {
+		return
+	}
+	custom := sidebar.Custom
+	sections := sidebar.Sections
+	if override != nil && override.Sections != "" {
+		sections = override.Sections
+	}
+	placed := SidebarCustomPlaced(sections)
 	warn := func(key, message string) {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field: "appearance.sidebar.custom", Key: key, Message: message,

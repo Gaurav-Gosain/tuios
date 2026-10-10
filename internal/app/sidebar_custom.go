@@ -26,6 +26,7 @@ import (
 // under the dock's custom/ prefix, so it is never drawn as a bar cell, and
 // tuios refresh-dock rail/custom reaches it.
 const railCustomComponent = "rail/custom"
+const railSecondaryComponent = "rail/secondary/custom"
 
 // railCustomState is the model's side of the section.
 type railCustomState struct {
@@ -58,12 +59,41 @@ func (m *OS) railCustomConfig() config.SidebarCustomConfig {
 	if m.UserConfig == nil {
 		return config.SidebarCustomConfig{}
 	}
-	return m.UserConfig.Appearance.Sidebar.Custom
+	sb := m.UserConfig.Appearance.Sidebar
+	if m.Settings.SidebarPosition == "left" && sb.Left != nil && sb.Left.Custom != nil {
+		return *sb.Left.Custom
+	}
+	if m.Settings.SidebarPosition == "right" && sb.Right != nil && sb.Right.Custom != nil {
+		return *sb.Right.Custom
+	}
+	if sb.Position == "hidden" {
+		// An explicitly enabled edge under a hidden legacy rail starts from
+		// the resolver's empty custom section, not the hidden legacy command.
+		return config.SidebarCustomConfig{}
+	}
+	return sb.Custom
 }
 
 // railCustomTitle is the section's heading.
 func (m *OS) railCustomTitle() string {
+	if m.sidebarDrawing {
+		return m.secondaryRailCustomConfig().ResolvedTitle()
+	}
 	return m.railCustomConfig().ResolvedTitle()
+}
+
+func (m *OS) secondaryRailCustomConfig() config.SidebarCustomConfig {
+	if m.UserConfig == nil {
+		return config.SidebarCustomConfig{}
+	}
+	cfg := m.UserConfig.Appearance.Sidebar.Left
+	if m.legacySidebarEdge() == sidebarLeft {
+		cfg = m.UserConfig.Appearance.Sidebar.Right
+	}
+	if cfg != nil && cfg.Custom != nil {
+		return *cfg.Custom
+	}
+	return config.SidebarCustomConfig{}
 }
 
 // railCustomRows is what the section draws, one row per line the command
@@ -71,7 +101,11 @@ func (m *OS) railCustomTitle() string {
 // blanks a failed component's text, so the rows can never be an earlier
 // run's.
 func (m *OS) railCustomRows() []string {
-	text := m.dockEngine.Text(railCustomComponent)
+	component := railCustomComponent
+	if m.sidebarDrawing {
+		component = railSecondaryComponent
+	}
+	text := m.dockEngine.Text(component)
 	if text == "" {
 		return nil
 	}
@@ -105,12 +139,42 @@ func (m *OS) railCustomRunnable() bool {
 // flag first, because it is asked once per message and most clients set no
 // command, so they never take the layout's mutex here.
 func (m *OS) railCustomWanted() bool {
-	return m.railCustom.runnable && m.railCustomEnabled()
+	return m.railCustom.runnable && m.railCustomEnabled() && !m.sidebarSessionVisible(m.legacySidebarEdge())
 }
 
 // railCustomComponent is the engine component for the section, or nil when
 // the section runs nothing. Built beside the dock's components in
 // InitDockComponents, so a config reload rebuilds it with them.
+func (m *OS) secondaryRailCustomComponent() *dockComponent {
+	custom := m.secondaryRailCustomConfig()
+	if !custom.HasCommand() || m.secondarySidebarWidth() == 0 || m.UserConfig == nil {
+		return nil
+	}
+	other := sidebarLeft
+	if m.legacySidebarEdge() == sidebarLeft {
+		other = sidebarRight
+	}
+	if m.sidebarSessionVisible(other) {
+		return nil // the assigned daemon pane replaces this edge's sections
+	}
+	cfg := m.UserConfig.Appearance.Sidebar.Left
+	if m.legacySidebarEdge() == sidebarLeft {
+		cfg = m.UserConfig.Appearance.Sidebar.Right
+	}
+	sections := config.SidebarDefaultSections
+	if cfg != nil && cfg.Sections != "" {
+		sections = cfg.Sections
+	}
+	if !config.SidebarCustomPlaced(sections) {
+		return nil
+	}
+	refresh, err := config.ParseSidebarCustomRefresh(custom.Refresh)
+	if err != nil {
+		return nil
+	}
+	return &dockComponent{Name: railSecondaryComponent, Command: custom.Command, Refresh: refresh, MultiLine: true, Coalesce: true}
+}
+
 func (m *OS) railCustomComponent() *dockComponent {
 	if !m.railCustomWanted() {
 		return nil
@@ -194,6 +258,35 @@ func (ctx railContext) folder() string {
 // when an edit to the layout gains or loses the section; then the engine is
 // rebuilt, which is what a dock component gets on a config reload too. The
 // per-run context is the other, and syncRailContext hands it over.
+func (m *OS) secondaryRailContextNow() railContext {
+	ctx := m.railContextNow()
+	w := m.secondarySidebarWidth()
+	if w <= 0 || sidebarVariant(w) == sidebarVariantGlyph {
+		ctx.Width, ctx.Height = 0, 0
+		return ctx
+	}
+	ctx.Width = max(w-2, 0)
+	lines := max(m.ViewUsableHeight()-1, 0)
+	if m.UserConfig != nil {
+		cfg := m.UserConfig.Appearance.Sidebar.Left
+		if m.legacySidebarEdge() == sidebarLeft {
+			cfg = m.UserConfig.Appearance.Sidebar.Right
+		}
+		sections := config.SidebarDefaultSections
+		if cfg != nil && cfg.Sections != "" {
+			sections = cfg.Sections
+		}
+		plans, _ := sidebarLayoutFor(sections)
+		for _, p := range plans {
+			if !p.Spacer && p.Section == sidebarSectionCustom && p.Share > 0 {
+				lines = lines * p.Share / 100
+			}
+		}
+	}
+	ctx.Height = max(lines, 1)
+	return ctx
+}
+
 func (m *OS) RailCustomSyncCmd() tea.Cmd {
 	if m.dockEngine == nil {
 		// No engine means no dock either: the client is shutting down or was
@@ -201,7 +294,7 @@ func (m *OS) RailCustomSyncCmd() tea.Cmd {
 		return nil
 	}
 	var cmd tea.Cmd
-	if want := m.railCustomWanted(); want != m.railCustom.on {
+	if want := m.railCustomWanted(); want != m.railCustom.on || (m.secondaryRailCustomComponent() != nil) != m.railCustomSecond.on {
 		cmd = m.ReloadDockComponents(nil)
 	}
 	m.syncRailContext()
@@ -222,15 +315,24 @@ func (m *OS) RailCustomSyncCmd() tea.Cmd {
 // none when it was shut from the start, and a once or event section would
 // keep them until its next trigger.
 func (m *OS) syncRailContext() {
-	if !m.railCustom.on {
-		return
+	if m.railCustom.on {
+		if ctx := m.railContextNow(); ctx != m.railCustom.ctx {
+			opened := m.railCustom.ctx.Width <= 0 && ctx.Width > 0
+			m.railCustom.ctx = ctx
+			m.dockEngine.SetRailContext(ctx)
+			if opened {
+				m.dockEngine.Rerun(railCustomComponent)
+			}
+		}
 	}
-	if ctx := m.railContextNow(); ctx != m.railCustom.ctx {
-		opened := m.railCustom.ctx.Width <= 0 && ctx.Width > 0
-		m.railCustom.ctx = ctx
-		m.dockEngine.SetRailContext(ctx)
-		if opened {
-			m.dockEngine.Rerun(railCustomComponent)
+	if m.railCustomSecond.on {
+		if ctx := m.secondaryRailContextNow(); ctx != m.railCustomSecond.ctx {
+			opened := m.railCustomSecond.ctx.Width <= 0 && ctx.Width > 0
+			m.railCustomSecond.ctx = ctx
+			m.dockEngine.SetSecondaryRailContext(ctx)
+			if opened {
+				m.dockEngine.Rerun(railSecondaryComponent)
+			}
 		}
 	}
 }

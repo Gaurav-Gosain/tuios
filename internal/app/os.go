@@ -1330,13 +1330,19 @@ type OS struct {
 	// wheel scrolls the one under the pointer and no header can be scrolled
 	// away; sidebarSectionY is where each section was drawn, which is how a
 	// wheel event finds its section. Scrolls are clamped by the next render.
-	SidebarHits    []sidebarRowHit
-	SidebarScrollS int
-	SidebarScrollT int
-	SidebarScrollA int
-	SidebarScrollF int
-	SidebarScrollG int
-	SidebarScrollC int
+	SidebarHits []sidebarRowHit
+	// A docked session owns its own daemon connection and terminal snapshot;
+	// neither is part of the center session's window list or state sync.
+	sidebarSessions      [2]sidebarSessionView
+	sidebarSessionEvents chan sidebarSessionEvent
+	sidebarSessionDone   chan struct{}
+	sidebarSessionFocus  int // 0 none, 1 left, 2 right
+	SidebarScrollS       int
+	SidebarScrollT       int
+	SidebarScrollA       int
+	SidebarScrollF       int
+	SidebarScrollG       int
+	SidebarScrollC       int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
@@ -1603,6 +1609,19 @@ type OS struct {
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.
 	sidebarCache sidebarRenderCache
+	// The second edge keeps its render cache and recorded hits separate from
+	// the original rail. sidebarDrawing is set only during the synchronous
+	// render pass for that edge, never across an Update or background run.
+	secondarySidebarCache sidebarRenderCache
+	secondarySidebarHits  []sidebarRowHit
+	secondaryRailView     secondaryRailView
+	secondaryWidthPref    int
+	secondaryCollapsed    bool
+	sidebarFocusSecondary bool
+	sidebarDrawing        bool
+	sidebarDrawingWidth   int
+	sidebarDrawingEdge    sidebarEdge
+	railCustomSecond      railCustomState
 	// sidebarTitles debounces window titles for the rail so bursty title churn
 	// does not thrash the rows; sidebarTitlePending is set while an adopted title
 	// is still catching up, keeping the tick alive until it settles.
@@ -2000,6 +2019,7 @@ func (m *OS) Cleanup() {
 		m.FireDetached()
 	}
 
+	m.stopSidebarSessions()
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	m.endInboxWatch()

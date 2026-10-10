@@ -40,6 +40,38 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// A docked session is an ordinary pane: send a tracked wheel to its app,
+	// otherwise scroll its own history rather than the rail's old list model.
+	if wm := msg.Mouse(); !o.OverlayActive() {
+		if w := o.SidebarSessionPaneAt(wm.X, wm.Y); w != nil {
+			if !horizontal {
+				if w.Terminal != nil && w.Terminal.HasMouseMode() {
+					if tx, ty, inside := w.ScreenToTerminal(wm.X, wm.Y); inside {
+						event := uv.MouseWheelEvent{X: tx, Y: ty, Button: uv.MouseButton(wm.Button), Mod: uv.KeyMod(wm.Mod)}
+						for range max(o.Settings.ScrollLines, 1) {
+							sendMouseToWindow(o, w, event)
+						}
+						return o, nil
+					}
+				}
+				switch wm.Button {
+				case tea.MouseWheelUp:
+					if !w.InCopyMode() && w.Terminal != nil && !w.IsAltScreen() && w.ScrollbackLen() > 0 {
+						w.EnterCopyModeImplicit()
+					}
+					if w.InCopyMode() {
+						scrollCopyModeUp(w, &o.Settings)
+					}
+				case tea.MouseWheelDown:
+					if w.InCopyMode() {
+						scrollCopyModeDown(w, &o.Settings)
+					}
+				}
+			}
+			return o, nil
+		}
+	}
+
 	// Wheel over the sidebar band scrolls the sidebar list, never the pane the
 	// sidebar sits in front of.
 	if o.SidebarActive() {

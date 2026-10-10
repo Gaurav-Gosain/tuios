@@ -988,6 +988,115 @@ the command fails, and `tuios list-dock-components` says which and why.
 
 `examples/dock/README.md` is the full contract and five working recipes.
 
+## Two sidebar edges
+
+The existing `[appearance.sidebar]` settings still configure the original rail.
+A table for its current edge overrides only the fields it names; the opposite
+edge stays hidden unless explicitly enabled. Each edge can have its own width,
+section order and custom command:
+
+```toml
+[appearance.sidebar]
+position = "right"
+sections = "sessions,terminals,custom"
+
+[appearance.sidebar.custom]
+command = "right-summary"
+
+[appearance.sidebar.left]
+enabled = true
+width = 28
+sections = "sessions,files,custom"
+
+[appearance.sidebar.left.custom]
+command = "left-summary"
+```
+
+`[appearance.sidebar.right]` has the same `enabled`, `width`, `sections` and
+`custom` keys. On the original edge, omitted keys retain the legacy settings;
+on the other edge, an omitted `sections` uses the default section order.
+Writing an edge table without `enabled = true` does not enable that edge.
+With `position = "hidden"`, explicitly enabled edge tables still draw: if
+both edges are enabled, the left one supplies the primary rail settings and
+the right one supplies the opposite rail settings. Unset fields on those
+explicit edges use the edge defaults; they do not inherit a hidden legacy
+width, section order or custom command. The file's hidden legacy position is
+not rewritten.
+Both rails can show the same built-in sections: they use the same sessions,
+focused pane's directory listing and repository reading, but have independent
+section scrolling, keyboard focus and pointer hit areas. A custom command on
+each edge runs independently: `rail/custom` belongs to the original rail and
+`rail/secondary/custom` to the other. These edge tables are file-only, not
+`set-option` targets, because custom commands execute outside panes.
+
+On narrow screens, the optional edge contracts before the original rail; both
+may hide to leave room for the panes. Resizing either rail by dragging its
+inner border changes only that edge for this client. In sidebar keyboard focus,
+`e` moves focus to the other visible edge (and back); `Ctrl+B H` independently
+hides or shows the opposite edge, while `Ctrl+B b` keeps its existing legacy
+rail toggle. The opposite-edge toggle does not opt in an edge whose
+`enabled = true` was never configured.
+
+### Show a daemon session in each rail
+
+To use a rail as a terminal, assign a **local daemon session** to that edge.
+Its panes on the session's current workspace stack **top to bottom** in the
+rail, independent of the central session's layout and attachment.
+For example, create two sessions, then edit `config.toml`:
+
+```sh
+tuios new side-left --detach
+tuios new side-right --detach
+```
+
+```toml
+[appearance.sidebar]
+enabled = true
+position = "right"
+width = 36
+
+[appearance.sidebar.right]
+session = "side-right"
+
+[appearance.sidebar.left]
+enabled = true
+width = 36
+session = "side-left"
+```
+
+Settings → Sidebar exposes separate **Left session**, **Right session**,
+width and workspace controls. Entering a session name enables that edge.
+An empty session name restores that rail's ordinary sections (including
+`sections` and `custom`). While a daemon session occupies the rail, its
+ordinary custom-section command does not run. `session_workspace = 0` or an omitted value shows
+the rail on every central workspace; set `session_workspace = 2` on one
+edge to show it only on workspace 2 (or use `1`–`9`). This controls
+*visibility*, not the assigned session's own workspace. Each
+edge is independent, so one can follow while the other is pinned.
+
+Click a pane to type in it. With the rail focused, `Ctrl+B` then `-` splits
+**downwards**: it creates a normal pane in the assigned daemon session and
+stacks it below the others. `Ctrl+B` then `c` also creates a pane there;
+`Ctrl+B` then `|` stacks it vertically rather than subdividing a narrow rail
+sideways. `Ctrl+B` then `n` or `p`, or a click on the first pane's
+session-labelled title bar, changes the active pane. The title bar occupies
+the pane's normal border row: no extra row separates a rail pane from the top
+of the viewport. To align idle shells, the client can hide up to two *empty*
+leading guest rows in its view, translating cursor and mouse coordinates with
+them. It does not clear the daemon's screen or history; full-screen programs
+and copy mode use the original grid. All visible panes remain on screen. If
+the rail is too short to give every pane at least six rows, it shows a
+contiguous group containing
+the active pane; cycling focus brings the others into view.
+
+Switching central workspaces, hiding the rail or detaching this TUI client
+does not end the assigned daemon session or its processes. Reattaching
+restores the pane's output. A *daemon restart* is different: it ends running
+pane programs and restores saved layouts with new shells. Right-clicking the
+rail currently opens Sidebar Settings, not a pane picker. The assignment can
+be entered before its daemon session exists: the rail shows an attach error
+and retries when the session is created. Standalone mode cannot attach sessions.
+
 ## The rail's custom section
 
 The rail has one section whose rows are the output of a command you write.
