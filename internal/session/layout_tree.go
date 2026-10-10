@@ -84,23 +84,43 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 	if p == nil {
 		return false, nil
 	}
+	op := &LayoutTreeOp{
+		PushOrigin:  p.PushOrigin,
+		PushSeq:     p.PushSeq,
+		Workspace:   p.Workspace,
+		Tree:        p.Tree,
+		Leaves:      p.Leaves,
+		BaseVersion: p.BaseVersion,
+	}
+	return s.ApplyLayoutTreeOp(op)
+}
+
+// ApplyLayoutTreeOp applies a LayoutTreeOp to the session under mutateStateLocked.
+func (s *Session) ApplyLayoutTreeOp(op *LayoutTreeOp) (bool, error) {
+	if op == nil {
+		return false, nil
+	}
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
 		// Counted with the change it makes. See notePushLocked.
-		s.notePushLocked(p.PushOrigin, p.PushSeq)
-		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
-			return fmt.Errorf("workspace %d is out of range", p.Workspace)
+		s.notePushLocked(op.PushOrigin, op.PushSeq)
+		if op.Workspace < 0 || (op.Workspace > state.workspaceBound() && !IsScratchWorkspace(op.Workspace)) {
+			return fmt.Errorf("workspace %d is out of range", op.Workspace)
 		}
-		if p.BaseVersion != 0 && s.peerTreeChangedLocked(p.PushOrigin, p.Workspace, p.BaseVersion, state.Version) {
+		if op.BaseVersion != 0 && s.peerTreeChangedLocked(op.PushOrigin, op.Workspace, op.BaseVersion, state.Version) {
 			return errLayoutTreeStale
 		}
-		trees, ids, next, changed := placeTree(state, p.Workspace, p.Tree, p.Leaves)
-		if !changed {
-			return errLayoutTreeSame
+		var err error
+		if s.dispatcher != nil && s.dispatcher.HasHandler(op.OpKind()) {
+			err = s.dispatcher.Execute(state, op)
+		} else {
+			err = op.Apply(state)
 		}
-		state.WorkspaceTrees, state.WindowToBSPID, state.NextBSPWindowID = trees, ids, next
+		if err != nil {
+			return err
+		}
 		// mutateStateLocked advances Version by one once this returns, so the
 		// op's version is the next one.
-		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, p.Workspace)
+		s.noteTreeOpLocked(state.Version+1, op.PushOrigin, op.Workspace)
 		return nil
 	})
 	switch {
