@@ -108,6 +108,11 @@ type ghosttyScanner struct {
 	u8     [4]byte
 	u8n    int
 	u8want int
+
+	// afterCSI, when a CSI hook sets it, runs once the CSI's final byte has
+	// reached the sink, for a hook whose effect the sink has to see after
+	// the sequence rather than before it.
+	afterCSI func()
 }
 
 // notePrint records a ground-state byte of a UTF-8 character toward
@@ -283,6 +288,11 @@ func (s *ghosttyScanner) Scan(p []byte) {
 				s.emit(b)
 				s.resetSeq()
 				s.state = gsGround
+				if f := s.afterCSI; f != nil {
+					s.afterCSI = nil
+					s.flushOut()
+					f()
+				}
 			case b == 0x1b:
 				// Aborted CSI; both sides see the same malformed stream.
 				s.resetSeq()

@@ -15,8 +15,10 @@ daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
 modifyOtherKeys level, the alternate-screen flag, the cells DECSCA protected,
-the cursor DECSC saved on each screen, the character REP repeats and up to 1000
-scrollback rows.
+the cursor DECSC saved on each screen, the character REP repeats, the tab
+stops, the titles and the title stack, the colours the guest set with OSC 4,
+10, 11 and 12, insert mode and newline mode, the sequence the parser is part
+way through, and up to 1000 scrollback rows.
 `ApplyTerminalState` reads it back, and
 `OS.restoreTerminalContent` (`internal/app/session.go`) is the window around
 that. It is a snapshot of *now*: applying it is idempotent and carries no
@@ -64,10 +66,12 @@ For every route, once the route has completed and the pane is quiet:
 5. **No duplication.** Content the pane produced once appears once.
 6. **What paints the next byte.** The pen with its hyperlink and its DECSCA
    protection, the scroll region, the character set selection, the cells
-   DECSCA protected, the cursor DECSC saved and the character REP repeats
-   match. None of these can be read back off the cells, and each decides how
-   output that has not arrived yet is painted, where it lands, which glyphs it
-   draws and what a selective erase keeps.
+   DECSCA protected, the cursor DECSC saved, the character REP repeats, the
+   tab stops, the title stack, the guest's palette, insert mode, newline
+   mode and the sequence the parser is part way through match. None of
+   these can be read back off the cells, and each decides how output that
+   has not arrived yet is painted, where it lands, which glyphs it draws and
+   what a selective erase keeps.
 7. **The screen underneath.** While the alternate screen is active, the normal
    screen matches too. It is what quitting the guest's program puts back on
    display.
@@ -189,8 +193,11 @@ holds that position.
 
 `snapshotVT` reproduces invariants 1 to 4 and 7 on any xterm-compatible
 emulator. Of invariant 6 it carries the pen, the scroll region's top and
-bottom and the character sets, and not the protected cells, the saved cursor,
-insert mode (IRM), newline mode (LNM) or the character REP repeats.
+bottom, the character sets, the tab stops, insert mode (IRM) and newline mode
+(LNM), and not the protected cells, the saved cursor, the character REP
+repeats, the title stack or the guest's palette. It ends with the sequence the
+daemon's parser was part way through, so the stream after the snapshot
+finishes it on the client too.
 
 ## Why the snapshot and the stream cannot both be applied
 
@@ -413,6 +420,60 @@ Two things had to be true for that rule to hold, and neither was:
   (`GetTerminalStatePacked`), and `TestDirectPackMatchesPack` holds that to the
   same bytes as `GetTerminalState` followed by `Pack`.
   `TestWireCarriesTheWholeCell` runs every shape under both forms.
+- **The tab stops are carried.** A program that lines up columns sets its
+  stops once (HTS, TBC) and then sends tabs, so a client restored with the
+  default table put every column after a reattach eight cells apart.
+  `TabStops` is one bit per column and always has a byte, so a table with
+  every stop cleared still says so, and a snapshot from an older daemon, which
+  has none, leaves the client's own table alone. It is applied after the
+  resizes in `ApplyTerminalState`, because a resize to a new width resets the
+  table on both backends. The libghostty backend keeps its own copy of the
+  library's table, which it cannot read (`observeTabControl`), and follows the
+  library where it differs from xterm: CSI g with no parameter changes
+  nothing there.
+- **The titles and the title stack are carried.** A program saves the shell's
+  title with XTWINOPS 22 when it starts and puts it back with 23 when it
+  quits. Without the stack a pane reattached under the program kept the
+  program's title after it had gone. `Title`, `IconName` and `TitleStack`
+  travel with `TitlesKnown`, so an empty title is the guest's. The library
+  does nothing with 22 and 23 and keeps no icon name, so the libghostty
+  backend now keeps both and sends the library an OSC 2 when a pop puts a
+  title back, which is also a change to what that backend does with no
+  snapshot in sight.
+- **The guest's colours are carried.** A palette entry set with OSC 4 decides
+  how the guest's next SGR in that slot is painted, and OSC 10, 11 and 12
+  answer its queries. `GuestColors` lists only what the guest set and has not
+  reset, and is applied after the cells, which were resolved against the
+  palette they were painted with. Both backends now keep each colour as a
+  `color.RGBA`: `XParseColor` returns another type for `#rrggbb` than for
+  `rgb:`, a cell keeps the type it was painted with, and a colour that went
+  through the wire, which carries the value, came back as the other type.
+- **Insert mode and newline mode are carried.** `ANSIModes` holds them by
+  number, apart from `Modes`, whose numbers are the DEC ones. The pure
+  emulator restores them through `setMode`, which sets the flags the print
+  and line feed paths read. The libghostty restore sends them after
+  everything it prints, and its extending ground state now turns both off
+  before it prints the cells, which insert mode would push along the row.
+- **The sequence the daemon's parser is in the middle of is carried.** A
+  snapshot is taken at a stream position, and that position can be inside a
+  CSI, an OSC, a DCS, an APC, an ESC sequence or a UTF-8 character. The rest
+  of it arrives on the stream after `Seq`, and a client restored at the ground
+  state printed that rest as text: the second half of an OSC 8 link, or a
+  U+FFFD for the last byte of a character. `PendingInput` is the input since
+  the parser last left its ground state, with any control the parser already
+  carried out inside the sequence left out, so the client does not carry it
+  out a second time. `ApplyTerminalState` feeds it last, after it drops
+  whatever the client's own emulator was left in: an emulator that survived a
+  workspace switch can have been stopped in the middle of a sequence by the
+  stream it was on, and the snapshot has replaced that stream. The pure
+  emulator records the bytes as its parser reads them. The libghostty backend
+  asks the library for its continuation and adds what its scanner holds back
+  from it. Both stop at `vt.MaxPendingInput`, past which the parser drops a
+  payload anyway, so a cut there replays to the same state.
+  `TestWireCarriesACutSequence` cuts a set of streams at every byte, on both
+  backends and across them. It found a parser bug on the way: a control
+  inside a CSI was folded into the command, so CUP with a line feed inside it
+  ran as ED 2.
 - **The soft-wrap flags are carried.** `ScreenWraps` and `ScrollbackWraps` are
   one bit per row: the active screen's rows, and the history rows the snapshot
   sends, in order. A set bit says the emulator wrapped that row onto the next;
@@ -571,12 +632,18 @@ scrollback. See [SESSIONS.md](SESSIONS.md#limits).
 
 ## What the wire still does not carry
 
-Known and deliberate, so the next person does not have to rediscover them: tab
-stops, the window title, the guest's OSC 4/10/11/12 colour overrides, and the
-ANSI (non-DEC) modes, which
-`GetModes` drops because they share an int keyspace with the DEC modes. Insert
-mode (IRM) and reverse video (DECSCNM) are in that last group and are not
-implemented by the emulator at all, so nothing is lost by not carrying them.
+Known and deliberate, so the next person does not have to rediscover them:
+
+- The ANSI modes other than insert mode and newline mode. KAM (2) and SRM (12)
+  exist only on the libghostty backend, which tuios does not use them on.
+  Reverse video (DECSCNM) is not implemented by the pure emulator at all.
+- A character cluster left open across a write on the pure emulator. A
+  combining mark that arrives as the first byte after a snapshot does not join
+  the base character the snapshot restored; on libghostty it does, because the
+  library joins it to the cell before the cursor.
+- A libghostty client that a stream left part way through a UTF-8 character.
+  The library lets go of that character only by printing U+FFFD at the
+  cursor. The restore that follows paints the screen over it.
 
 ## Sizes
 

@@ -72,6 +72,9 @@ type Emulator struct {
 	// SetReportColors.
 	reportFg, reportBg color.Color
 	guestFg, guestBg   bool
+	// guestCur records that the guest set the cursor colour with OSC 12,
+	// for GuestColors.
+	guestCur bool
 	// reportPal answers an OSC 4 query for a slot nothing else has set. See
 	// SetReportPalette.
 	reportPal [16]color.Color
@@ -153,6 +156,9 @@ type Emulator struct {
 
 	// The ANSI parser to use.
 	parser *seqParser
+	// pending is the input since the parser last left its ground state,
+	// which a snapshot carries. See PendingInput.
+	pending []byte
 	// The last parser state.
 	lastState parser.State
 
@@ -1369,6 +1375,7 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
+	start := -1
 	for i := 0; i < len(p); i++ {
 		if b := p[i]; b >= ansi.SP && b < ansi.DEL && e.parser.State() == parser.GroundState && len(e.grapheme) == 0 {
 			// A run of printable ASCII in the ground state is what most of
@@ -1411,6 +1418,12 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		}
 		e.parser.Advance(p[i])
 		state := e.parser.State()
+		// Where the unfinished input starts, for PendingInput: the byte
+		// that took the parser out of the ground state, or an ESC, which
+		// starts a sequence over from any state.
+		if state != parser.GroundState && (e.lastState == parser.GroundState || p[i] == ansi.ESC) {
+			start = i
+		}
 		// flush grapheme if we transitioned to a non-utf8 state or we have
 		// written the whole byte slice.
 		if len(e.grapheme) > 0 {
@@ -1429,6 +1442,7 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 		}
 		e.lastState = state
 	}
+	e.notePending(p, start)
 	return len(p), nil
 }
 

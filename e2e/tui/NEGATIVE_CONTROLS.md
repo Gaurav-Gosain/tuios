@@ -3786,3 +3786,33 @@ cycle visits every workspace, built as `cmd/tuios` and run against
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The skip of workspaces with no panes in `cycleWorkspace` (the cycle visits every workspace) | `TestWorkspaceCycleSkipsEmptyWorkspaces` (alt+y from 1 shows 2, not 3), `TestWorkspaceCycleOpensNoPanes` (three presses leave 4 panes, not 1) | **caught** |
+
+## Snapshot state
+
+`reattach_snapshot_state_test.go` has one test, `TestReattachCarriesSnapshotState`,
+and the snapshot fields it covers have wire and conformance tests in
+`internal/session/snapshot_complete_wire_test.go`, `ghostty_wire_test.go` and
+`internal/vt/conform_snapshot_state_test.go`. On 2026-10-10 each control below
+cut one line, built a binary or ran the named package, and the same tests
+passed on the branch build. The end-to-end test passed five runs in a row on
+the branch build.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| `t.RestorePendingInput(pending)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the client reattached at the first stop shows `STOP1 mple.test/LINKTEXT`; the one at the second shows `STOP2  END8`) | **caught** |
+| `t.RestoreTabStops(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the tabs land 8 and 8 columns apart, not 9 and 9) | **caught** |
+| `t.RestoreGuestColors(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (REDTEXT is palette colour 1, not the guest's red) | **caught** |
+| `t.RestoreANSIModes(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` (the row reads `INSrow`, not `INSxyzrow`) | **caught** |
+| `t.RestoreTitles(...)` in `ApplyTerminalState` | `TestReattachCarriesSnapshotState` | **not caught**: the title a client draws follows the daemon's own title for the pane, and the daemon's emulator is never restored on a reattach. The client's stack matters to a daemon that takes over a pane, the live upgrade. `TestWireCarriesTheSnapshotState/*/title-stack-*` cover the wire |
+| `state.PendingInput = t.PendingInput()` in `beginTerminalState` | `TestWireCarriesACutSequence` | **caught** |
+| `t.RestorePendingInput(pending)` in `ApplyTerminalState` | `TestWireCarriesACutSequence`, `TestWireDropsTheClientsOwnCut` | **caught** |
+| `b.Write(st.PendingInput)` in `snapshotVT` | `TestSnapshotVTCarriesTheTabsModesAndACut` | **caught** |
+| The HTS of each stop in `snapshotVT` | `TestSnapshotVTCarriesTheTabsModesAndACut/tabs-*` | **caught** |
+| The ground state check around `p.cmd = int(b)` in `seqParser.performAction` | `TestConform_CSIParameters` (the control inside a CSI erases the screen) | **caught** |
+| `e.notePending(...)` in `Emulator.Write` | `TestSnapshotState_PendingInput` | **caught** |
+| The OSC 2 a pop sends the library (`afterCSI`), `-tags ghostty` | `TestSnapshotState_Titles` | **caught** |
+| `setTabStopLocked` on HTS in `observeESC`, `-tags ghostty` | `TestSnapshotState_TabStops` | **caught** |
+| The library continuation in `GhosttyTerminal.PendingInput`, `-tags ghostty` | `TestGhosttyWireCarriesACutSequence` | **caught** |
+| The scanner's held bytes in `GhosttyTerminal.PendingInput`, `-tags ghostty` | `TestGhosttyWireCarriesACutSequence` | **caught** |
+| The HTS of each stop in the libghostty restore, `-tags ghostty` | `TestGhosttyWireCarriesTheSnapshotState` | **caught** |
+| The insert and newline mode in the libghostty restore, `-tags ghostty` | `TestGhosttyWireCarriesTheSnapshotState` | **caught** |

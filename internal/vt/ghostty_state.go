@@ -326,7 +326,7 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 			_, _ = t.pipe.Write([]byte("\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + oscReplyEnd(t.scanner.oscBEL)))
 			return
 		}
-		if c := ansi.XParseColor(arg); c != nil {
+		if c := parseGuestColor(arg); c != nil {
 			t.colors[idx] = c
 			t.refreshPaletteClaimsLocked()
 			t.styleCache = make(map[uint16]uv.Style)
@@ -369,7 +369,7 @@ func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 	}
 	dynamicColorItems(number, parts, func(number int, arg string) {
 		if arg != "?" {
-			if c := ansi.XParseColor(arg); c != nil {
+			if c := parseGuestColor(arg); c != nil {
 				set(number, c)
 			}
 			return

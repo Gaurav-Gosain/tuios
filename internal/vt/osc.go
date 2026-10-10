@@ -121,6 +121,7 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 			e.guestBg = c != nil
 			e.SetBackgroundColor(c)
 		case 12, 112: // Cursor color
+			e.guestCur = c != nil
 			e.SetCursorColor(c)
 		}
 	}
@@ -134,7 +135,7 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 
 	dynamicColorItems(cmd, parts, func(cmd int, arg string) {
 		if arg != "?" {
-			if c := ansi.XParseColor(arg); c != nil {
+			if c := parseGuestColor(arg); c != nil {
 				set(cmd, c)
 			}
 			return
@@ -313,7 +314,7 @@ func (e *Emulator) handlePaletteColor(data []byte) {
 			response := "\x1b]4;" + string(parts[1]) + ";" + xrgb.String() + oscReplyEnd(e.parser.oscBEL)
 			_, _ = io.WriteString(e.pipe, response)
 		}
-	} else if c := ansi.XParseColor(arg); c != nil {
+	} else if c := parseGuestColor(arg); c != nil {
 		// Set: update the palette entry
 		e.SetIndexedColor(idx, c)
 	}

@@ -74,6 +74,17 @@ type ghosttyRestore struct {
 	// carried it. The library takes one only by saving the live cursor, so
 	// the synthesis puts the live cursor into that state and saves it.
 	saved [2]*SavedCursor
+	// tabStops is the tab stop table, when hasTabStops says the snapshot
+	// carried one. The synthesis clears the library's and sets each stop
+	// with HTS.
+	tabStops    []int
+	hasTabStops bool
+	// titles is the title, the icon name and the title stack, when the
+	// snapshot carried them. The library takes the title as OSC 2.
+	titles *Titles
+	// ansiModes is insert mode and newline mode, sent after everything the
+	// synthesis prints.
+	ansiModes map[int]bool
 }
 
 func (t *GhosttyTerminal) pendingRestore() *ghosttyRestore {
@@ -146,9 +157,27 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		if t.activeAltLiveLocked() {
 			seq.WriteString("\x1b[?1049l\x1b[?1047l")
 		}
-		seq.WriteString("\x1b[?69l\x1b[r\x1b[?6l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b[2J\x1b[H")
+		// Replace mode and line feed mode as well: the cells below are
+		// printed, and insert mode would push each one along the row.
+		seq.WriteString("\x1b[?69l\x1b[r\x1b[?6l\x1b[4l\x1b[20l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b[2J\x1b[H")
 	} else {
 		seq.WriteString("\x1bc")
+	}
+
+	// Tab stops, from the ground state above, so each HTS is addressed from
+	// the top left of the screen. The cursor goes home again after them,
+	// where the history below starts typing.
+	if r.hasTabStops {
+		seq.WriteString("\x1b[3g")
+		for _, x := range r.tabStops {
+			if x >= 0 && x < t.width {
+				fmt.Fprintf(&seq, "\x1b[1;%dH\x1bH", x+1)
+			}
+		}
+		seq.WriteString("\x1b[H")
+	}
+	if r.titles != nil {
+		seq.WriteString("\x1b]2;" + r.titles.Title + "\x1b\\")
 	}
 
 	// Scrollback replays as printed lines pushed off the top. A line that
@@ -369,6 +398,17 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		}
 	}
 
+	// Insert mode and newline mode, once nothing more is printed.
+	for _, m := range ghosttyANSIModes {
+		if v, ok := r.ansiModes[m.num]; ok {
+			ch := byte('l')
+			if v {
+				ch = 'h'
+			}
+			fmt.Fprintf(&seq, "\x1b[%d%c", m.num, ch)
+		}
+	}
+
 	// The pen, last, because everything above prints with a pen of its own:
 	// the rendition, the hyperlink and DECSCA.
 	if r.hasPen {
@@ -433,6 +473,22 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		if r.gr >= 0 && r.gr < 4 {
 			t.gr = r.gr
 		}
+	}
+	switch {
+	case r.hasTabStops:
+		t.tabstops = tabStopsAt(t.width, r.tabStops)
+	case !extend:
+		t.tabstops = uv.DefaultTabStops(t.width)
+	}
+	if r.titles != nil {
+		t.iconName = r.titles.Icon
+		t.titleStack = nil
+		for _, e := range r.titles.Stack {
+			t.titleStack = append(t.titleStack, savedTitle{title: e.Title, icon: e.Icon, hasTitle: e.HasTitle, hasIcon: e.HasIcon})
+		}
+	} else if !extend {
+		t.iconName = ""
+		t.titleStack = nil
 	}
 	t.scrollRegion = uv.Rect(0, 0, t.width, t.height)
 	if r.hasScrollRegion {

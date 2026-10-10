@@ -4138,6 +4138,20 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 	// as a block, because that is what a fresh emulator is.
 	state.CursorShape = decscusrParam(t.CursorStyle())
 
+	// Set once and read later, like the modes: the tab stops a program
+	// lines its columns up on, the title stack a program pops when it
+	// quits, the colours it set for its palette, and insert and newline
+	// mode.
+	state.TabStops = tabStopBits(t.TabStops(), t.Width())
+	titlesToWire(state, t.Titles())
+	state.GuestColors = guestColorsToWire(t.GuestColors())
+	state.ANSIModes = t.ANSIModes()
+
+	// The sequence the parser is in the middle of. Its end arrives after Seq
+	// on the stream, and a client that had not seen its start would print
+	// that end as text.
+	state.PendingInput = t.PendingInput()
+
 	// Colours are encoded through one cache for the whole snapshot: a
 	// truecolor cell's hex string was one allocation per cell, eleven
 	// thousand per screen, for what is usually a few dozen distinct colours.
@@ -4457,6 +4471,19 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if len(state.Modes) > 0 {
 		t.RestoreModes(state.Modes)
 	}
+	// Insert mode and newline mode, which Modes cannot carry. Absent from an
+	// older daemon, and this emulator keeps its own.
+	if state.ANSIModes != nil {
+		t.RestoreANSIModes(state.ANSIModes)
+	}
+	// After the resizes above, because a resize to a new width resets the
+	// table. Absent from an older daemon, and this emulator keeps its own.
+	if len(state.TabStops) > 0 {
+		t.RestoreTabStops(tabStopCols(state.TabStops))
+	}
+	if state.TitlesKnown {
+		t.RestoreTitles(titlesFromWire(state))
+	}
 
 	// Kitty keyboard flags travel outside the DEC mode map and are set once by
 	// the guest (CSI > u / CSI = u), so like the modes above they cannot be
@@ -4625,6 +4652,26 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 		wrapFlags(state.ScreenPads, state.Height),
 		wrapFlags(state.ScrollbackPads, packedRowCount(state.PackedScrollback)),
 	)
+
+	// The guest's colours after the cells, which were resolved against the
+	// palette the cells were painted with: a cell the guest painted in a
+	// slot before it set the slot keeps the slot, as it does on the daemon.
+	// Absent from an older daemon, and this emulator keeps its own.
+	if state.GuestColors != nil {
+		t.RestoreGuestColors(guestColorsFromWire(t, state.GuestColors))
+	}
+
+	// Last, the sequence the daemon's parser was in the middle of, so the
+	// stream that resumes at Seq finishes it. It goes in on every route:
+	// with nothing pending, it still drops a sequence this emulator was
+	// left in by a stream that stopped part way through one, which the
+	// snapshot has replaced.
+	pending := state.PendingInput
+	if len(pending) > maxPendingInput {
+		debugLog("[CLIENT] snapshot pending input of %d bytes dropped", len(pending))
+		pending = nil
+	}
+	t.RestorePendingInput(pending)
 }
 
 // wireStyle is one entry of a snapshot's style table, resolved for the
@@ -4942,6 +4989,137 @@ type TerminalState struct {
 	// fields sends neither, and the client keeps the saved cursor it has.
 	SavedCursor     *SavedCursorState `json:"saved_cursor,omitempty"`
 	MainSavedCursor *SavedCursorState `json:"main_saved_cursor,omitempty"`
+
+	// TabStops is the tab stop table, one bit per column in the layout of
+	// ScreenWraps. It is never empty from a daemon that reports it, even
+	// with every stop cleared, so a peer from before the field, which
+	// sends none, reads as saying nothing, and the client keeps its own.
+	TabStops []byte `json:"tab_stops,omitempty"`
+
+	// Title, IconName and TitleStack are the window title, the icon name
+	// and what XTWINOPS 22 saved, oldest first. A program saves the shell's
+	// title when it starts and puts it back when it quits, so a client
+	// restored without the stack keeps the program's title after it has
+	// gone. TitlesKnown says the daemon reported them, so an empty title is
+	// one the guest set and not an older daemon that says nothing.
+	Title       string            `json:"title,omitempty"`
+	IconName    string            `json:"icon_name,omitempty"`
+	TitleStack  []TitleEntryState `json:"title_stack,omitempty"`
+	TitlesKnown bool              `json:"titles_known,omitempty"`
+
+	// GuestColors is what the guest set with OSC 4, 10, 11 and 12. A palette
+	// entry decides how the guest's next SGR in that slot is painted, and
+	// the three defaults answer its queries. Nil from an older daemon, and
+	// the client keeps its own.
+	GuestColors *GuestColorState `json:"guest_colors,omitempty"`
+
+	// ANSIModes is insert mode (4) and newline mode (20), by number, which
+	// Modes cannot carry: the two kinds of mode share its numbers. Nil from
+	// an older daemon, and the client keeps its own.
+	ANSIModes map[int]bool `json:"ansi_modes,omitempty"`
+
+	// PendingInput is the input the daemon's parser is part way through
+	// when the snapshot is taken: the start of an escape sequence or of a
+	// UTF-8 character, at most vt.MaxPendingInput bytes. The rest of it
+	// arrives on the stream after Seq, and a client at the ground state
+	// would print that rest as text. See vt.Terminal.PendingInput.
+	PendingInput []byte `json:"pending_input,omitempty"`
+}
+
+// TitleEntryState is one entry of the title stack on the wire
+// (vt.TitleEntry).
+type TitleEntryState struct {
+	Title    string `json:"title,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	HasTitle bool   `json:"has_title,omitempty"`
+	HasIcon  bool   `json:"has_icon,omitempty"`
+}
+
+// GuestColorState is vt.GuestColors on the wire, each colour encoded by
+// colorToWire. Palette lists only the slots the guest set.
+type GuestColorState struct {
+	Palette []PaletteColorState `json:"palette,omitempty"`
+	Fg      string              `json:"fg,omitempty"`
+	Bg      string              `json:"bg,omitempty"`
+	Cursor  string              `json:"cursor,omitempty"`
+}
+
+// PaletteColorState is one palette slot the guest set.
+type PaletteColorState struct {
+	Index int    `json:"i"`
+	Color string `json:"c"`
+}
+
+// maxPendingInput bounds TerminalState.PendingInput. A snapshot over it is
+// not one this build's emulators produce, and its pending input is dropped.
+const maxPendingInput = vt.MaxPendingInput
+
+func titlesToWire(state *TerminalState, ti vt.Titles) {
+	state.Title, state.IconName, state.TitlesKnown = ti.Title, ti.Icon, true
+	for _, e := range ti.Stack {
+		state.TitleStack = append(state.TitleStack, TitleEntryState(e))
+	}
+}
+
+func titlesFromWire(state *TerminalState) vt.Titles {
+	ti := vt.Titles{Title: state.Title, Icon: state.IconName}
+	for _, e := range state.TitleStack {
+		ti.Stack = append(ti.Stack, vt.TitleEntry(e))
+	}
+	return ti
+}
+
+func guestColorsToWire(c vt.GuestColors) *GuestColorState {
+	out := &GuestColorState{
+		Fg:     colorToWire(c.Fg),
+		Bg:     colorToWire(c.Bg),
+		Cursor: colorToWire(c.Cursor),
+	}
+	for i, pc := range c.Palette {
+		if pc != nil {
+			out.Palette = append(out.Palette, PaletteColorState{Index: i, Color: colorToWire(pc)})
+		}
+	}
+	return out
+}
+
+func guestColorsFromWire(t vt.Terminal, s *GuestColorState) vt.GuestColors {
+	c := vt.GuestColors{
+		Fg:     colorFromWire(t, s.Fg),
+		Bg:     colorFromWire(t, s.Bg),
+		Cursor: colorFromWire(t, s.Cursor),
+	}
+	for _, p := range s.Palette {
+		if p.Index >= 0 && p.Index < len(c.Palette) {
+			c.Palette[p.Index] = colorFromWire(t, p.Color)
+		}
+	}
+	return c
+}
+
+// tabStopBits is the wire's bitset for a tab stop table width columns wide.
+// It always has a byte, so a table with no stop still says so.
+func tabStopBits(cols []int, width int) []byte {
+	out := make([]byte, max((width+7)/8, 1))
+	for _, x := range cols {
+		if x >= 0 && x/8 < len(out) {
+			out[x/8] |= 1 << (x % 8)
+		}
+	}
+	return out
+}
+
+// tabStopCols reads the bitset back into the columns that hold a stop.
+func tabStopCols(bits []byte) []int {
+	cols := []int{}
+	for i, b := range bits {
+		for k := range 8 {
+			if b&(1<<k) != 0 {
+				cols = append(cols, i*8+k)
+			}
+		}
+	}
+	return cols
 }
 
 // SavedCursorState is a saved cursor on the wire (vt.SavedCursor).

@@ -30,13 +30,16 @@ import (
 //     change what the client must send: application cursor keys, the keypad
 //     mode, bracketed paste, focus reports, every mouse tracking mode and its
 //     encodings, and alternate scroll.
+//   - The tab stops, the window title, insert mode (IRM) and newline mode
+//     (LNM).
+//   - The sequence the daemon's parser was in the middle of, last, so the
+//     stream that follows the snapshot finishes it.
 //
-// What it does not: left and right margins, origin mode, insert mode (IRM),
-// newline mode (LNM), the cursor DECSC saved, protected cells and the
-// character REP repeats. They decide how
-// later output is painted, and a phone that misses them paints a rare
-// sequence differently until the next snapshot; the input it sends is the
-// same.
+// What it does not: left and right margins, origin mode, the cursor DECSC
+// saved, protected cells, the character REP repeats, the title stack and the
+// colours the guest set with OSC 4, 10, 11 and 12. They decide how later
+// output is painted, and a phone that misses them paints a rare sequence
+// differently until the next snapshot; the input it sends is the same.
 func snapshotVT(st *TerminalState) []byte {
 	if st == nil {
 		return nil
@@ -72,6 +75,18 @@ func snapshotVT(st *TerminalState) []byte {
 		w.rows(st.Screen, wrapFlags(st.ScreenWraps, len(st.Screen)), true)
 	}
 
+	if len(st.TabStops) > 0 {
+		// HTS sets a stop at the cursor, so the table goes before the
+		// cursor is placed.
+		b.WriteString("\x1b[3g")
+		for _, x := range tabStopCols(st.TabStops) {
+			if x < st.Width {
+				w.cup(x, 0)
+				b.WriteString("\x1bH")
+			}
+		}
+	}
+
 	if m := st.Margins; len(m) == 4 && m[3] > 0 {
 		// DECSTBM homes the cursor, so it goes before the cursor is placed.
 		b.WriteString("\x1b[" + strconv.Itoa(m[1]+1) + ";" + strconv.Itoa(m[1]+m[3]) + "r")
@@ -101,6 +116,24 @@ func snapshotVT(st *TerminalState) []byte {
 	}
 	if st.Pen != nil {
 		w.pen(*st.Pen)
+	}
+	if st.TitlesKnown {
+		b.WriteString("\x1b]2;" + st.Title + "\x1b\\")
+	}
+	// After everything printed above, which insert mode would push along
+	// the row.
+	for _, m := range []int{4, 20} {
+		if on, ok := st.ANSIModes[m]; ok {
+			b.WriteString("\x1b[" + strconv.Itoa(m))
+			if on {
+				b.WriteByte('h')
+			} else {
+				b.WriteByte('l')
+			}
+		}
+	}
+	if len(st.PendingInput) <= maxPendingInput {
+		b.Write(st.PendingInput)
 	}
 	return b.Bytes()
 }

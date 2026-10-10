@@ -75,6 +75,8 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 					cb.ProgramStatus(progstatus.Event{Reset: true})
 				}
 			})
+		case 'H': // HTS
+			t.setTabStopLocked()
 		case '7': // DECSC
 			t.saveCursorShadowLocked()
 		case '8': // DECRC
@@ -111,6 +113,11 @@ func (t *GhosttyTerminal) resetShadowState() {
 	t.kittyKbd.Reset()
 	t.modifyOtherKeys.Store(0)
 	t.semanticMarkers.Clear()
+	// The library puts the default tab stops back and clears the title.
+	// The title stack and the icon name are kept here, so they go too.
+	t.tabstops = uv.DefaultTabStops(t.width)
+	t.iconName = ""
+	t.titleStack = nil
 }
 
 func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
@@ -216,6 +223,10 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		// Pinned by TestGhosttyDivergence_DECSTRIgnored.
 	case final == 'J' && prefix == 0 && inter == 0:
 		t.observeEraseDisplay(params)
+	case (final == 'g' || final == 'W') && inter == 0:
+		t.observeTabControl(prefix, final, params)
+	case final == 't' && prefix == 0 && inter == 0:
+		t.observeTitleStack(params)
 	case final == 'h' && prefix == '?', final == 'l' && prefix == '?':
 		t.observeDecMode(params, final == 'h')
 	case final == 'S' && prefix == '?' && inter == 0:
@@ -479,6 +490,13 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 			})
 		}
 		return false
+	case 0, 1:
+		// The icon name, which the library does not keep. OSC 0 sets the
+		// title as well, and the library takes that part.
+		if _, name, ok := bytes.Cut(payload, []byte{';'}); ok {
+			t.iconName = sanitiseTitle(name)
+		}
+		return true
 	case 4, 104, 10, 11, 12, 110, 111, 112:
 		// Color set/query is owned here so the library does not answer
 		// queries a second time.
