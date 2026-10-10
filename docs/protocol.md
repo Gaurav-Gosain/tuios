@@ -5362,20 +5362,39 @@ seven days that no job of its own holds.
 
 **Writes over a link.** A file write that arrives over a link
 (`open-file-stream` write, `file-commit`, `file-mkdir`, `file-rename`,
-`file-remove`, `file-abort`) lands only in the home folder or the drop
-folder. The check is on the real path, with links resolved, and the write
-itself goes through an `os.Root` at that folder, so a link cannot carry it
-out. A write into these places is refused whatever the link policy says,
-with case ignored: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`,
-`~/.netrc`, `~/.git-credentials`, `~/.config/git/credentials`, the shell
-start files (`.profile`, `.bashrc`, `.bash_profile`, `.bash_login`,
-`.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`, `.zlogout`,
-`.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `~/.config/fish`), the login items
-(`~/.config/systemd`, `~/.config/autostart`, `~/.config/environment.d`,
-`~/Library/LaunchAgents`, `.pam_environment`, `.xprofile`, `.xsession`,
-`.xinitrc`), the crontab spools, and tuios's own config, state and data
-folders. The refusal is `forbidden`. Reads are not confined: a machine that
-may use `files` may read what the user may read.
+`file-remove`, `file-abort`) lands only under the write roots: the folders
+`files_roots` names for that machine, or one receive folder
+(`~/Downloads/tuios`, or `$XDG_DOWNLOAD_DIR/tuios` on Linux) when it names
+none, plus the drop folder. The check is on the real path, with links
+resolved, and the write itself goes through an `os.Root` at the root, so a
+link inside it cannot carry the write out. A write outside the roots is
+`forbidden`, and the refusal says where writes may land and which setting to
+change.
+
+Inside every root, a write into these places is refused whatever
+`files_roots` says, with case and Unicode width folded the way the disk folds
+them, and a write to a folder that *holds* one of them (a rename of
+`~/.config`, say) is refused too, so a link cannot carry a denied folder out
+and back: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`,
+`~/.netrc`, `~/.git-credentials`, `~/.config/git`, `~/.config/gh`,
+`~/.config/gcloud`, `~/.password-store`, `~/.claude`, `~/.codex`, the shell
+start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
+`.bash_login`, `.bash_logout`, `.zshenv`, `.zprofile`, `.zshrc`, `.zlogin`,
+`.zlogout`, `.cshrc`, `.tcshrc`, `.kshrc`, `.mkshrc`, `.xprofile`, `.xsession`,
+`.xinitrc`, `~/.config/fish`, `~/.config/zsh`, `.gitconfig`, `.inputrc`), the
+login items (`~/.config/systemd`, `~/.config/autostart`,
+`~/.config/environment.d`, `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`,
+`.pam_environment`), the crontab spools, and tuios's own config, state and
+data folders.
+
+**Reads over a link.** A read (`file-read`, `file-hash`, `file-walk`,
+`open-file-stream` read) from one of these is `forbidden` too, so a linked
+machine cannot read keys or credentials out: `~/.ssh` (except a `*.pub` key),
+`~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`,
+`~/.docker/config.json`, `~/.netrc`, `~/.git-credentials`,
+`~/.config/gh/hosts.yml`, `~/.password-store`, `~/Library/Keychains`, the
+Claude and Codex credential files, and tuios's own config, state and data. A
+read elsewhere in the home folder is allowed, so a copy out works.
 
 A job is logged in the daemon log when it starts and ends, with both ends
 and the byte count.

@@ -1555,16 +1555,41 @@ allow = ["list", "mail"]
 | `open` | Start processes: sessions, windows, worktrees, fans, `start-agent`, clones of a repository by its URL, and panes this machine runs for it. |
 | `write` | Change what is here: type into panes, `run` a line at a prompt, close and move windows, set options, layouts and names, report agent state, and attach. Also read a worktree's work out with `bundle-worktree` (`tuios worktree pull`), since a machine that may type into a shell here can read those files already. |
 | `respond` | Answer for the person: prompts, held approvals, `ask-human` questions, dismissing Inbox items, and passing on held mail. Also type into a pane that waits on a prompt, from a pane on the other machine. The person on the other machine, outside every pane, needs only `write` for that. |
-| `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. Its writes land only in the home folder (and the drop folder for dropped files), never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` says. See [protocol.md](protocol.md#files-and-transfers). |
+| `files` | Read and write files here with the file verbs: a file's bytes, copies in and out (`transfer-start` on the other machine), new folders, moves and removes. It is apart from `write`, so you can stop one machine's copies and keep its typing. A write that arrives over the link lands only in the folders of `files_roots` (the receive folder unless you add more, see below), and the drop folder for dropped files, never in `~/.ssh`, `~/.gnupg`, credentials, shell start files, login items or tuios's own config, whatever `allow` and `files_roots` say. A read never returns keys or credentials. See [protocol.md](protocol.md#files-and-transfers). |
 
 With no table, a machine may `list`, `mail`, `open`, `write` and `files`,
 which is what every link could do before the policy existed. `respond` is
-opt-in. Relaying on to this machine's own hosts needs all six, because the next
-machine sees the relay as coming from this one, and so does a copy this machine
-runs for the other one. A table that sets `allow` without `files` keeps that
-machine from the file verbs; tables written before `files` existed need it
-added. An `allow` that is set replaces the inherited
+opt-in. Relaying on to this machine's own hosts needs the five capabilities a
+link had before `files` (`list`, `mail`, `open`, `write`, `respond`), because
+the next machine sees the relay as coming from this one; a table written for an
+older tuios that allows those five still relays. A copy this machine runs for
+another one also needs `files`. A table that sets `allow` without `files` keeps
+that machine from the file verbs. An `allow` that is set replaces the inherited
 list; `allow = []` allows nothing but `hello`.
+
+**Where a link may write: `files_roots`.** A machine with `files` writes only
+under the folders `files_roots` names, plus the drop folder. Unset, it is one
+receive folder: `~/Downloads/tuios` on macOS and Windows, and
+`$XDG_DOWNLOAD_DIR/tuios` (or `~/Downloads/tuios`) on other systems. tuios
+makes it on first use. Widen it on purpose, per machine:
+
+```toml
+[hosts.laptop]
+allow = ["list", "files"]
+files_roots = ["~/Downloads/tuios", "~/dev"]
+```
+
+A path is absolute or starts with `~`. `files_roots = ["~"]` lets the machine
+write anywhere in your home folder; the deny list below still holds inside
+every root, so even then it cannot touch `~/.ssh` or a shell start file. A
+write outside the roots is refused, and the refusal says where writes may land
+and which setting to change. A reload that widens `files_roots`, like one that
+widens `allow`, waits for `tuios config apply`.
+
+> **Trust.** A machine with `files` can write any file inside its roots and
+> read any file outside the deny list. A file copy is a way to run code: a
+> binary dropped on your `PATH`, a config a program reads. Give `files`, and a
+> wide `files_roots`, only to machines you trust as you trust your own.
 
 `hold_mail` holds mail from that machine to any agent here in your Inbox,
 marked `held for NAME`, until you pass it on with `p` there (or
