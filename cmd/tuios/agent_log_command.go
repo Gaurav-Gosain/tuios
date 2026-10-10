@@ -40,6 +40,10 @@ type agentLogEntry struct {
 	OK     *bool    `json:"ok"`
 	Exit   *int     `json:"exit"`
 	Text   string   `json:"text"`
+	// Outcome, DurationMS and Tools say how a stopped subagent ended.
+	Outcome    string `json:"outcome"`
+	DurationMS int64  `json:"duration_ms"`
+	Tools      int    `json:"tools"`
 }
 
 // agentLogRecap is the recap of the agent-activity result.
@@ -200,10 +204,12 @@ func agentLogLabel(e agentLogEntry) string {
 func agentLogDetail(e agentLogEntry) string {
 	switch e.Kind {
 	case session.ActivitySubagentStart, session.ActivitySubagentStop:
-		// "Explore started": the subagent's type, then what it did.
+		// "Research tmux (general-purpose) started": the subagent, then
+		// what it did. A stop says how it ended, "done after 3m, 14 tools",
+		// and from a daemon before outcomes just "stopped".
 		did := "started"
 		if e.Kind == session.ActivitySubagentStop {
-			did = "stopped"
+			did = subagentEnd(e)
 		}
 		if e.Text == "" {
 			return did
@@ -238,6 +244,44 @@ func agentLogDetail(e agentLogEntry) string {
 		fmt.Fprintf(&b, "  (wrote %s)", listFiles(e.Files, len(e.Files), 3))
 	}
 	return b.String()
+}
+
+// subagentEnd is how a subagent_stop entry says its subagent ended.
+func subagentEnd(e agentLogEntry) string {
+	did := "stopped"
+	switch e.Outcome {
+	case session.SubagentDone, session.SubagentFailed:
+		did = e.Outcome
+	}
+	var parts []string
+	if e.DurationMS > 0 {
+		parts = append(parts, "after "+shortSpan(time.Duration(e.DurationMS)*time.Millisecond))
+	}
+	switch {
+	case e.Tools == 1:
+		parts = append(parts, "1 tool")
+	case e.Tools > 1:
+		parts = append(parts, strconv.Itoa(e.Tools)+" tools")
+	}
+	if len(parts) == 0 {
+		return did
+	}
+	return did + " " + strings.Join(parts, ", ")
+}
+
+// shortSpan is a length of time in its largest unit: 4s, 3m, 2h10m.
+func shortSpan(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(max(int(d/time.Second), 1)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	}
+	h, m := int(d/time.Hour), int(d%time.Hour/time.Minute)
+	if m == 0 {
+		return strconv.Itoa(h) + "h"
+	}
+	return strconv.Itoa(h) + "h" + strconv.Itoa(m) + "m"
 }
 
 // listFiles names up to show of files, and how many more of total there are.

@@ -23,8 +23,26 @@ is wrong when you are not the focused pane.
 `needs_input` and `errored`), `blocked_by` (`approval`, `question` or `auth`,
 from `--kind`), `completion_seq` (turns the pane has finished), `finished_unread`
 (true while a pane rests after a turn nobody has looked at since), `queued`
-(messages waiting to be typed to the agent when it comes to rest) and
-`subagents` (subagents its agent started that have not stopped).
+(messages waiting to be typed to the agent when it comes to rest),
+`subagents` (subagents its agent started that have not stopped) and
+`subagent_list`, one entry per subagent: `id`, `type`, `description` (what it
+was asked to do), `state` (`running`, `done`, `failed`, `stopped`), `now`
+(the tool it runs), `last`, `tools`, `result` (the first line it ended with,
+or the error), `started_at` and `ended_at`. An ended subagent stays on the
+list for a minute (five when `failed`).
+
+A pane whose main agent ended its turn reports `done` while its subagents
+work: `state` never says they run, and `wait-for agent-state` matches at once.
+To wait for the work itself, poll until `subagents` is 0, and read
+`subagent_list` for how each ended:
+
+```sh
+tuios get-agent-state -s work -w build --json
+```
+
+Claude Code fills it from its hooks (`tuios integration install claude-code`).
+A subagent's description comes from the call that launched it; two of one
+type launched together can show each other's description for a while.
 
 Facts that are not a state (model, context use, a one-line summary) go in
 metadata. The rail draws it under your row. It is display only. `key=` removes a

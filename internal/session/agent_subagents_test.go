@@ -24,9 +24,9 @@ func subagentStart(id string) map[string]any {
 	return map[string]any{"event": "subagent_start", "agent_id": id, "agent_type": "Explore"}
 }
 
-// paneSubagents is what the session's one window says about its subagents:
+// paneSubagentCount is what the session's one window says about its subagents:
 // the count it carries and the subagents key of its metadata.
-func paneSubagents(sess *Session) (int, string) {
+func paneSubagentCount(sess *Session) (int, string) {
 	w := sess.GetState().Windows[0]
 	return w.AgentSubagents, agentMetaValue(w.AgentMeta, AgentMetaSubagents)
 }
@@ -40,12 +40,14 @@ func agentAtRest(t *testing.T, c *verbConn) {
 // TestMoveSubagents holds moveSubagentsLocked to what each change does: a
 // start is counted, a second start of the same id is not but renews it, a
 // stop for an id never started is nothing, the cap holds, a pane with no agent
-// state counts nothing, and a session start forgets them all.
+// state counts nothing, a stop keeps the subagent on the list as finished,
+// and a session start forgets them all.
 func TestMoveSubagents(t *testing.T) {
 	s := &Session{}
 	w := &WindowState{ID: "w", AgentState: AgentStateDone}
 	start := func(id string, now int64) (int, bool) {
-		return s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStart, id: id, agentType: "Explore"}, now)
+		got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStart, id: id, agentType: "Explore"}, now)
+		return s.agentSubagents["w"].running(), got.move == subagentListMove
 	}
 	if n, moved := start("a1", 100); n != 1 || !moved {
 		t.Fatalf("a start: %d %v, want 1 and moved", n, moved)
@@ -53,11 +55,11 @@ func TestMoveSubagents(t *testing.T) {
 	if n, moved := start("a1", 200); n != 1 || moved {
 		t.Fatalf("a second start of a1: %d %v, want 1 and not moved", n, moved)
 	}
-	if seen := s.agentSubagents["w"]["a1"].seen; seen != 200 {
+	if seen := s.agentSubagents["w"].byID["a1"].seen; seen != 200 {
 		t.Fatalf("a second start left a1 seen at %d, want it renewed to 200", seen)
 	}
-	if n, moved := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStop, id: "never"}, 300); n != 1 || moved {
-		t.Fatalf("a stop for an unknown id: %d %v, want 1 and not moved", n, moved)
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStop, id: "never"}, 300); got.move != subagentNoMove {
+		t.Fatalf("a stop for an unknown id moved %v", got.move)
 	}
 	for i := 2; i <= subagentsMax; i++ {
 		if n, moved := start("a"+strconv.Itoa(i), 400); n != i || !moved {
@@ -67,15 +69,16 @@ func TestMoveSubagents(t *testing.T) {
 	if n, moved := start("past-the-cap", 500); n != subagentsMax || moved {
 		t.Fatalf("a start past the cap: %d %v, want %d and not moved", n, moved, subagentsMax)
 	}
-	if n, moved := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStop, id: "a1"}, 600); n != subagentsMax-1 || !moved {
-		t.Fatalf("a stop: %d %v, want %d and moved", n, moved, subagentsMax-1)
+	got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySubagentStop, id: "a1", text: "Mapped the api."}, 600)
+	if n := s.agentSubagents["w"].running(); n != subagentsMax-1 || got.move != subagentListMove || !got.ended || got.sa.state != SubagentDone {
+		t.Fatalf("a stop: %d running, %+v, want %d and a1 done", n, got, subagentsMax-1)
 	}
-	if n, moved := s.moveSubagentsLocked(w, subagentChange{op: ActivitySessionStart}, 700); n != 0 || !moved || len(s.agentSubagents) != 0 {
-		t.Fatalf("a session start: %d %v with %d sets left, want 0, moved and none", n, moved, len(s.agentSubagents))
+	if got := s.moveSubagentsLocked(w, subagentChange{op: ActivitySessionStart}, 700); got.move != subagentListMove || len(s.agentSubagents) != 0 {
+		t.Fatalf("a session start: %+v with %d sets left, want moved and none", got, len(s.agentSubagents))
 	}
 	none := &WindowState{ID: "n"}
-	if n, moved := s.moveSubagentsLocked(none, subagentChange{op: ActivitySubagentStart, id: "a1"}, 800); n != 0 || moved {
-		t.Fatalf("a start on a pane with no state: %d %v, want 0 and not moved", n, moved)
+	if got := s.moveSubagentsLocked(none, subagentChange{op: ActivitySubagentStart, id: "a1"}, 800); got.move != subagentNoMove || s.agentSubagents["n"].running() != 0 {
+		t.Fatalf("a start on a pane with no state moved %v", got.move)
 	}
 }
 
@@ -92,13 +95,13 @@ func TestSubagentsClearWithTheAgent(t *testing.T) {
 	counted := func(step string) {
 		t.Helper()
 		res := result(t, reportActivity(t, c, "s1", subagentStart("a1")))
-		if n, key := paneSubagents(sess); res["recorded"] != true || n != 1 || key != "1 subagent" {
+		if n, key := paneSubagentCount(sess); res["recorded"] != true || n != 1 || key != "1 subagent" {
 			t.Fatalf("%s: the start answered %v and the pane says %d %q, want it counted", step, res, n, key)
 		}
 	}
 	cleared := func(step string) {
 		t.Helper()
-		if n, key := paneSubagents(sess); n != 0 || key != "" || sess.subagentCount(sess.GetState().Windows[0].ID) != 0 {
+		if n, key := paneSubagentCount(sess); n != 0 || key != "" || sess.subagentCount(sess.GetState().Windows[0].ID) != 0 {
 			t.Fatalf("%s: the pane still says %d %q", step, n, key)
 		}
 	}
@@ -142,7 +145,7 @@ func TestActivityReportGuard(t *testing.T) {
 	if res["reason"] != agentRefusedForeignHarness || res["recorded"] != false {
 		t.Fatalf("another harness's subagent: %v, want refused as foreign_harness", res)
 	}
-	if n, _ := paneSubagents(sess); n != 0 {
+	if n, _ := paneSubagentCount(sess); n != 0 {
 		t.Fatalf("a refused subagent was counted: %d", n)
 	}
 	res = result(t, reportActivity(t, c, "s1", subagentStart("own")))
@@ -167,7 +170,7 @@ func TestQuietSubagentsExpire(t *testing.T) {
 	result(t, reportActivity(t, c, "s1", subagentStart("a1")))
 	id := sess.GetState().Windows[0].ID
 	sess.stateMu.RLock()
-	seen := sess.agentSubagents[id]["a1"].seen
+	seen := sess.agentSubagents[id].byID["a1"].seen
 	sess.stateMu.RUnlock()
 	armed := sess.subagentPrune.due()
 	if want := seen + int64(subagentQuiet); armed != want {
@@ -177,13 +180,13 @@ func TestQuietSubagentsExpire(t *testing.T) {
 	if n := sess.expireSubagents(quiet.Add(-time.Minute)); n != 0 {
 		t.Fatalf("a minute early the prune dropped %d", n)
 	}
-	if n, _ := paneSubagents(sess); n != 1 {
+	if n, _ := paneSubagentCount(sess); n != 1 {
 		t.Fatalf("a minute early the pane says %d subagents, want 1", n)
 	}
 	if n := sess.expireSubagents(quiet); n != 1 {
 		t.Fatalf("at the hour the prune dropped %d, want 1", n)
 	}
-	if n, key := paneSubagents(sess); n != 0 || key != "" {
+	if n, key := paneSubagentCount(sess); n != 0 || key != "" {
 		t.Fatalf("after the prune the pane says %d %q", n, key)
 	}
 }

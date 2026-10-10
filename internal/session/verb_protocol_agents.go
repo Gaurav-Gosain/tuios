@@ -29,7 +29,7 @@ var (
 	// reportActivityEvents are the entries report-agent-activity takes: the
 	// same, and the events no state report carries, which set-agent-state
 	// predates.
-	reportActivityEvents = slices.Concat(activityEvents, []string{ActivitySubagentStart, ActivitySubagentStop, ActivitySessionStart})
+	reportActivityEvents = slices.Concat(activityEvents, []string{ActivitySubagentStart, ActivitySubagentStop, ActivitySessionStart, ActivitySubagentUpdate})
 )
 
 // agentWorkVerbs are the registry entries of the verbs above.

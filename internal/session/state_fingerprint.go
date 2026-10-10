@@ -122,6 +122,19 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 		num(w.AgentQueued)
 		num(w.AgentSubagents)
+		num(len(w.AgentSubagentList))
+		for _, sa := range w.AgentSubagentList {
+			str(sa.ID)
+			str(sa.Type)
+			str(sa.Description)
+			str(sa.State)
+			num(int(sa.StartedAt))
+			num(int(sa.EndedAt))
+			str(sa.Now)
+			str(sa.Last)
+			num(sa.Tools)
+			str(sa.Result)
+		}
 		num(len(w.ProgramStatus))
 		for _, r := range w.ProgramStatus {
 			str(r.ID)

@@ -73,11 +73,19 @@ const (
 	// ActivityState is the pane's agent state changing. Text is the new state.
 	ActivityState = "state"
 	// ActivitySubagentStart is a subagent the agent handed work to starting,
-	// or an agent-team teammate waking to work. Text is its type.
+	// or an agent-team teammate waking to work. Text names it: its
+	// description and type, "Research tmux (general-purpose)", or its type
+	// alone when no launch described it.
 	ActivitySubagentStart = "subagent_start"
 	// ActivitySubagentStop is a subagent that finished, failed or was stopped,
-	// or a teammate going idle. Text is its type.
+	// or a teammate going idle. Text names it as for a start, Outcome says how
+	// it ended, DurationMS how long it ran and Tools how many tool calls it
+	// made.
 	ActivitySubagentStop = "subagent_stop"
+	// ActivitySubagentUpdate is news about a subagent: the tool it runs, its
+	// description, how it is ending. report-agent-activity takes it and the
+	// ring keeps none, so a busy subagent does not flood its parent's ring.
+	ActivitySubagentUpdate = "subagent_update"
 	// ActivitySessionStart is the agent starting a conversation: a new one, a
 	// resumed one, or a fresh one after a clear. Text says which.
 	ActivitySessionStart = "session_start"
@@ -129,8 +137,16 @@ type AgentActivityEntry struct {
 	// Exit is a command's exit status, nil when the shell sent none.
 	Exit *int `json:"exit,omitempty"`
 	// Text is a prompt's first line, a failure, the first line a turn ended
-	// with, or a state entry's new state.
+	// with, a state entry's new state, or the subagent a subagent entry is
+	// about.
 	Text string `json:"text,omitempty"`
+	// Outcome is how a subagent_stop entry's subagent ended: done, failed
+	// or stopped. Empty from a daemon before it.
+	Outcome string `json:"outcome,omitempty"`
+	// DurationMS is how long that subagent ran, and Tools how many tool
+	// calls it made.
+	DurationMS int64 `json:"duration_ms,omitempty"`
+	Tools      int   `json:"tools,omitempty"`
 
 	// turns is how many turns the pane finished with a state entry: its
 	// completion_seq delta. The recap adds them up. Never on the wire.
@@ -358,7 +374,26 @@ type AgentActivityReport struct {
 	// harness's id for it, which pairs its start with its stop, and its type.
 	AgentID   string `json:"agent_id,omitempty"`
 	AgentType string `json:"agent_type,omitempty"`
+	// CallID is the harness's id for a tool call: on a spawn hint the call
+	// that launches a subagent, and on a subagent_update without agent_id
+	// the call whose subagent it is about.
+	CallID string `json:"call_id,omitempty"`
+	// Spawn marks a tool event, or a subagent_update, as the launch of a
+	// subagent: AgentType is the type asked for and Target the description,
+	// which the next subagent to start on the pane takes.
+	Spawn bool `json:"spawn,omitempty"`
+	// Outcome is how a subagent_update says its subagent is ending: stopping
+	// (the agent asked to stop it) or failed (Text is the error).
+	Outcome string `json:"outcome,omitempty"`
+	// Tools is how many tool calls the subagent made, when the harness said.
+	Tools int `json:"tools,omitempty"`
 }
+
+// subagentOutcomes are the outcomes a subagent_update takes.
+var subagentOutcomes = []string{subagentOutcomeStopping, subagentOutcomeFailed}
+
+// subagentToolsMax bounds a reported tool count.
+const subagentToolsMax = 1_000_000
 
 // checkActivityReport refuses an activity whose event is not one of events,
 // the verb's, and a subagent event without an id the daemon can keep. A
@@ -370,8 +405,26 @@ func checkActivityReport(a *AgentActivityReport, events []string) *verbError {
 	if !slices.Contains(events, a.Event) {
 		return invalidParam("activity", "activity.event is one of the activity events", events...)
 	}
+	idRule := "1 to " + strconv.Itoa(integration.SubagentIDMax) + " letters, digits, '_', '.', ':', '@' or '-'"
 	if subagentEvent(a.Event) && !integration.ValidSubagentID(a.AgentID) {
-		return invalidParam("activity", "a subagent event needs activity.agent_id: 1 to "+strconv.Itoa(integration.SubagentIDMax)+" letters, digits, '_', '.', ':', '@' or '-'")
+		return invalidParam("activity", "a subagent event needs activity.agent_id: "+idRule)
+	}
+	if a.Event == ActivitySubagentUpdate {
+		if a.AgentID == "" && a.CallID == "" {
+			return invalidParam("activity", "a subagent_update needs activity.agent_id, or activity.call_id for the call that launched the subagent")
+		}
+		if a.AgentID != "" && !integration.ValidSubagentID(a.AgentID) {
+			return invalidParam("activity", "activity.agent_id is "+idRule)
+		}
+	}
+	if a.CallID != "" && !integration.ValidSubagentID(a.CallID) {
+		return invalidParam("activity", "activity.call_id is "+idRule)
+	}
+	if a.Outcome != "" && (a.Event != ActivitySubagentUpdate || !slices.Contains(subagentOutcomes, a.Outcome)) {
+		return invalidParam("activity", "activity.outcome is for a subagent_update, one of the outcomes", subagentOutcomes...)
+	}
+	if a.Tools < 0 || a.Tools > subagentToolsMax {
+		return invalidParam("activity", "activity.tools is 0 to "+strconv.Itoa(subagentToolsMax))
 	}
 	return nil
 }
@@ -398,6 +451,7 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 	if subagentEvent(r.Event) {
 		// The entry says which kind of agent it was. Its id pairs a start
 		// with its stop in the daemon and says nothing to a reader.
+		// recordAgentActivity names it better once the daemon knows it.
 		e.Text = attentionText(firstLine(r.AgentType), activityToolMax)
 	}
 	if r.OK != nil {
@@ -430,10 +484,17 @@ func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentAct
 	e := activityEntryOf(r)
 	m := activityMetaFor(e, r.Model, state)
 	m.subagents = subagentChangeOf(r)
-	if subagentEvent(r.Event) {
-		if !sess.applyActivityMeta(windowID, m) {
+	if subagentEvent(r.Event) || r.Event == ActivitySubagentUpdate {
+		got := sess.applyActivityMeta(windowID, m)
+		if got.move == subagentNoMove && !got.ended {
 			return false
 		}
+		// The ring keeps a subagent's start and its end, named, and not its
+		// tool calls. An update that ended it, a failed call, is its end.
+		if r.Event == ActivitySubagentUpdate && !got.ended {
+			return true
+		}
+		e = subagentEntry(got)
 		d.activity.add(sess.ID, sess.Name(), windowID, e, true)
 		d.dropRingOfClosedWindow(sess, windowID)
 		return true
@@ -442,6 +503,20 @@ func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentAct
 	d.dropRingOfClosedWindow(sess, windowID)
 	sess.applyActivityMeta(windowID, m)
 	return true
+}
+
+// subagentEntry is the ring entry of a subagent's start, or of its end when
+// the change ended it.
+func subagentEntry(got subagentOutcome) AgentActivityEntry {
+	sa := got.sa
+	if !got.ended {
+		return AgentActivityEntry{Kind: ActivitySubagentStart, Text: subagentLabel(sa)}
+	}
+	e := AgentActivityEntry{Kind: ActivitySubagentStop, Text: subagentLabel(sa), Outcome: sa.state, Tools: sa.tools}
+	if sa.endedAt > sa.startedAt {
+		e.DurationMS = (sa.endedAt - sa.startedAt) / int64(time.Millisecond)
+	}
+	return e
 }
 
 // dropRingOfClosedWindow forgets the pane's ring when the window is gone. The
@@ -551,16 +626,18 @@ func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
 // from any source change nothing, so a hook firing on every tool call pushes
 // state only when what the rail draws moves.
 //
-// The pane's subagents move in the same mutation as the count the window
-// carries and the key that says it, under the state lock, so hooks for
-// subagents started together, which a harness runs at the same moment, cannot
-// leave a count the set no longer has. It reports whether they moved.
-func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
-	if len(m.keys) == 0 && m.model == "" && m.subagents.op == "" {
-		return false
+// The pane's subagents move in the same mutation as the count and the list
+// the window carries and the key that says the count, under the state lock,
+// so hooks for subagents started together, which a harness runs at the same
+// moment, cannot leave a count the set no longer has. A change to the tool a
+// subagent runs alone, within subagentPublishGap of the last subagent change
+// shown, is held for subagentFlush. It reports what the subagents did.
+func (s *Session) applyActivityMeta(windowID string, m activityMeta) subagentOutcome {
+	var got subagentOutcome
+	if len(m.keys) == 0 && m.model == "" && m.subagents.op == "" && !m.subagents.spawn {
+		return got
 	}
-	moved := false
-	var expiry int64
+	var expiry, flushAt int64
 	_ = s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, windowID)
 		if err != nil {
@@ -574,10 +651,18 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
 			u.Keys = append(u.Keys, key)
 			u.Values = append(u.Values, m.values[i])
 		}
-		var n int
-		n, moved = s.moveSubagentsLocked(w, m.subagents, now)
+		got = s.moveSubagentsLocked(w, m.subagents, now)
 		if m.subagents.op != "" {
 			expiry = s.subagentExpiryLocked()
+		}
+		show := got.move == subagentListMove
+		if got.move == subagentToolMove {
+			if gap := int64(subagentPublishGap); now-s.subagentShownAt < gap {
+				s.agentSubagents[w.ID].held = true
+				flushAt = s.subagentShownAt + gap
+			} else {
+				show = true
+			}
 		}
 		next, changed, err := applyAgentMeta(cur, u, now)
 		if err != nil {
@@ -592,10 +677,12 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
 			}
 			changed = true
 		}
-		if moved {
-			w.AgentSubagents = n
-			next = withSubagentsKey(next, n, now)
-			changed = true
+		if show {
+			var shown bool
+			if next, shown = s.showSubagentsLocked(w, next, now); shown {
+				s.subagentShownAt = now
+				changed = true
+			}
 		}
 		if !changed && len(cur) == len(w.AgentMeta) {
 			return errNoAgentMetaChange
@@ -604,7 +691,8 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) bool {
 		return nil
 	})
 	s.armSubagentPrune(expiry)
-	return moved
+	s.subagentFlush.arm(flushAt, s.flushHeldSubagents)
+	return got
 }
 
 // agentMetaValue is the value tokens hold for key, or "".

@@ -1957,10 +1957,66 @@ The Claude Code and Codex hooks feed these keys from what the agent does (see
   idle.
 
 `subagents` follows a set the daemon keeps per pane: each subagent's id and
-type, from its start until its stop, at most 64 of them (a start past that is
+type, from its start until its stop, at most 64 running (a start past that is
 not kept, so the count stays at 64 until one stops). The hook reports them
 with `report-agent-activity`, which never touches the pane's state (see
 [the protocol reference](protocol.md#report-agent-activity)).
+
+#### Each subagent
+
+The set holds more than the count. For each subagent the daemon keeps what it
+was asked to do, the tool it runs, how many tool calls it made, and once it
+stops, how it ended. `get-agent-state --json` and `list-agents --json` return
+them as `subagent_list`, in start order:
+
+```json
+"subagent_list": [
+  {"id": "ab34da07d2d63ee3c", "type": "general-purpose", "description": "Research tmux",
+   "state": "running", "started_at": 1791610152040873000, "now": "Bash: go test ./...", "tools": 3},
+  {"id": "aa84fb4f695c1ee02", "type": "general-purpose", "description": "Audit the rail",
+   "state": "done", "started_at": 1791610152338010000, "ended_at": 1791610156228274000,
+   "last": "Bash: go vet ./...", "tools": 2, "result": "The rail is fine."}
+]
+```
+
+- `state` is `running`, `done`, `failed` or `stopped`. `now` is the tool a
+  running subagent runs, `last` the tool it ran last, and `result` the first
+  line it ended with, or for a failed one the error.
+- The strings are the agent's, cut to one line with likely secrets masked:
+  80 bytes for `description`, `now`, `last` and `result`. The list holds at
+  most 16 subagents.
+- A finished subagent stays on the list for a minute (`done`, `stopped`) or
+  five minutes (`failed`) after it ends, then goes. The count says the
+  running ones only.
+
+Where it comes from, with the Claude Code integration (2.1.296, captured):
+
+| Hook | What it gives the subagent |
+| ---- | -------------------------- |
+| `PreToolUse` of the `Agent` tool (`Task` before) | its description and type, before it starts: the next `SubagentStart` takes them |
+| `SubagentStart` | its id and type |
+| `PostToolUse` of the `Agent` tool | its description again, by its id, for a background launch at once and for a foreground one when it completes, with its tool count |
+| `PreToolUse`, `PostToolUse`, `PostToolUseFailure` with its `agent_id` | the tool it runs, and when that call ends |
+| `Stop`, `SubagentStop` | `background_tasks`: the description of every subagent still running |
+| `PreToolUse` of `TaskStop` (`KillShell`, `KillBash`) | the main agent asked to stop it |
+| `PostToolUseFailure` of the `Agent` tool | it failed, with the error |
+| `SubagentStop` | it ended: `done` with what it said last, `stopped` when it said nothing or was asked to stop |
+
+Limits:
+
+- `SubagentStart` does not say which launch it belongs to. A start takes the
+  oldest launch of its type that has no subagent yet, else the oldest launch.
+  Two subagents of one type launched together can take each other's
+  description until a `PostToolUse` or a `Stop`'s `background_tasks` names
+  each by its id. A background launch is named again at once, a foreground
+  one when it completes, so two foreground subagents of one type launched in
+  one message can show each other's description while they run. The
+  agent-log line of a start keeps the description it was given then.
+- No hook says how a subagent ended. A stop with a final message reads as
+  `done`, one without as `stopped`, and a failed `Agent` call as `failed`.
+- A subagent's own subagents are kept beside it, not under it.
+- The tool calls of busy subagents reach attached clients at most four times
+  a second per session: one that comes sooner waits for the next.
 
 - A stop for a subagent the pane never saw start changes nothing.
 - A start from another conversation (a `claude -p` the agent left running,
@@ -1975,10 +2031,10 @@ with `report-agent-activity`, which never touches the pane's state (see
   and when the pane closes.
 - A subagent the pane hears nothing more of for an hour is dropped, so a stop
   that never came, after an interrupt, does not leave a count on the row while
-  the agent runs on. Claude Code reports a subagent only when it starts and
-  stops, so one that runs longer than an hour leaves the count early.
-- A pane may report a burst of 64 starts and stops, then 10 a second: each
-  one moves what every attached client draws.
+  the agent runs on. Each tool call it makes counts as hearing from it.
+- A pane may report a burst of 64 subagent events, then 10 a second: each
+  one may move what every attached client draws. A tool call refused for the
+  rate leaves the subagent's `now` behind until its next one.
 
 The set lives in daemon memory only, and a daemon restart, which ends every
 program in every pane, starts it empty. `get-agent-state` and `list-agents`
@@ -2023,8 +2079,10 @@ polls. The values stay display only.
 With the Claude Code or Codex integration installed, each prompt, tool call,
 tool result and finished turn is also kept in the pane's activity ring in the
 daemon: the newest 256 entries per pane, in memory only. With Claude Code the
-ring also keeps each conversation's start and each subagent's start and stop,
-the stop only for a subagent it saw start. Once a pane has a
+ring also keeps each conversation's start and each subagent's start and end,
+named by its description and type, the end only for a subagent it saw start,
+with how it ended, how long it ran and how many tool calls it made. A
+subagent's own tool calls are not kept there. Once a pane has a
 ring, the commands its shell finishes (OSC 133) and its state changes join
 it. A pane whose harness has no hooks, and a plain shell, has none and costs
 nothing.
@@ -2040,10 +2098,10 @@ tuios agent-log -w api --json                # the verb's answer, for a script
 14:02:15  tool      Bash: go test ./api/
 14:02:40  failed    Bash: go test ./api/  Exit code 1
 14:03:02  done      Edit: api/retry.go  (wrote api/retry.go)
-14:03:05  subagent  Explore started
+14:03:05  subagent  Map the retry callers (Explore) started
 14:05:30  said      Added retry with backoff and tests.
 14:05:30  state     done
-14:06:12  subagent  Explore stopped
+14:06:12  subagent  Map the retry callers (Explore) done after 3m, 14 tools
 ```
 
 The recap says how many turns finished, which files were written, how many
@@ -3265,10 +3323,14 @@ for the same reason.
 `tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
 arrives as the last argument) and sends one `set-agent-state`, or nothing. A
 report that ends a turn also sends, with `set-agent-meta`, what the pane's
-status line feed held back (see above). A subagent's start or stop sends
-`report-agent-activity` instead, which records the event and moves the pane's
-`subagents` count without touching its state, and a `SessionStart` sends one
-after its `set-agent-state`.
+status line feed held back (see above). A subagent's start, stop or tool
+call sends `report-agent-activity` instead, which records the event and moves
+the pane's `subagents` count and list without touching its state, and a
+`SessionStart` sends one after its `set-agent-state`. An event that names
+subagents beside its own report (a `Stop` with `background_tasks`, the
+`Agent` tool's result) sends one `report-agent-activity` per subagent after
+it. A daemon from before `subagent_update` refuses those, which changes
+nothing.
 
 | Claude Code event | Reports |
 | ----------------- | ------- |
@@ -3286,7 +3348,9 @@ after its `set-agent-state`.
 | `Stop` | `done`, with the first line of `last_assistant_message` as its message and as activity. A `Stop` without the field (older Claude Code) or with an empty one reports `done` with no message and a `turn_end` activity with no text |
 | `StopFailure` | `errored`, message `stopped on <error_type>` |
 | `SessionEnd` | `none` |
-| `SubagentStart`, `SubagentStop` with `agent_id` | no state: a `subagent_start` or `subagent_stop` activity with `agent_id` and `agent_type`, sent with `report-agent-activity`, which moves the pane's `subagents` count (see [Agent metadata](#agent-metadata)). An `agent_id` that is not 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-` reports nothing |
+| `SubagentStart`, `SubagentStop` with `agent_id` | no state: a `subagent_start` or `subagent_stop` activity with `agent_id` and `agent_type`, the stop with the first line of `last_assistant_message`, sent with `report-agent-activity`, which moves the pane's `subagents` count and list (see [Each subagent](#each-subagent)). An `agent_id` that is not 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-` reports nothing |
+| `PreToolUse`, `PostToolUse`, `PostToolUseFailure` with `agent_id` | no state: a `subagent_update` with the subagent's tool call, sent with `report-agent-activity` |
+| `PreToolUse` of `Agent`, `PostToolUse` and `PostToolUseFailure` of `Agent`, `PreToolUse` of `TaskStop`, `Stop`, `SubagentStop` | their report as in this table, then one `subagent_update` for each subagent the event names: the launch's description and type, the subagent's id and tool count, its failure, a stop asked for, or each entry of `background_tasks` |
 | any other event with `agent_id` | nothing |
 
 Codex maps the same events the same way, plus `Interrupt` to `idle`, with the
@@ -3426,10 +3490,11 @@ Hooks are configured per user, so they fire for every harness process, not only
 the one that owns the pane. These filters keep those events off the pane:
 
 - A subagent's own events (`agent_id` set, opencode child sessions) are
-  dropped by the reporter. Claude Code's `SubagentStart` and `SubagentStop`
-  are the exception: they go with `report-agent-activity`, which cannot move
-  the pane's state, and which the daemon refuses for a conversation other
-  than the pane's at rest as well as mid-turn.
+  dropped by the reporter. Claude Code's `SubagentStart`, `SubagentStop` and
+  a subagent's tool calls are the exception: they go with
+  `report-agent-activity`, which cannot move the pane's state, and which the
+  daemon refuses for a conversation other than the pane's at rest as well as
+  mid-turn.
 - An event from a harness other than the one `TUIOS_AGENT` names is dropped by
   the reporter. `TUIOS_AGENT` may name any harness tuios recognises, one with
   no integration included, so a Claude Code hook in a pane given to aider is

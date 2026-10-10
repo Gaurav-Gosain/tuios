@@ -204,6 +204,15 @@ type WindowState struct {
 	// AgentQueued and never set by a client. Additive: zero, which is what an
 	// older daemon sends, means none.
 	AgentSubagents int `json:"agent_subagents,omitzero"`
+	// AgentSubagentList is the subagents themselves, running and finished a
+	// moment ago, in start order: what each was asked to do, the tool it
+	// runs, and how it ended (see agent_subagents.go). At most
+	// subagentListMax, with bounded strings. Daemon-owned like
+	// AgentSubagents and never set by a client: a push's copy is replaced
+	// with the daemon's. Additive: an older peer drops it on decode, and an
+	// empty list beside a count, which is what an older daemon sends, means
+	// the daemon did not say, so a client draws the count alone.
+	AgentSubagentList []SubagentInfo `json:"agent_subagent_list,omitempty"`
 	// ProgramStatus is the pane's OSC 7501 records (the Program Status
 	// Protocol), the root first, with title and msg already made safe to
 	// draw. Daemon-owned like AgentMeta and never set by a client. Additive:
@@ -1297,12 +1306,16 @@ type Session struct {
 	agentHarnessPIDs map[string]int
 
 	// agentSubagents records, by window ID, the subagents the window's agent
-	// is running, as its hooks reported them: subagent id to its type and
-	// when it was last reported. The window's AgentSubagents and the reserved
-	// metadata key subagents count them, and all three move in one mutation.
-	// See agent_subagents.go. Daemon memory only, and read and written under
-	// stateMu.
-	agentSubagents map[string]map[string]subagent
+	// is running or ran a moment ago, and the launches whose subagent has not
+	// started, as its hooks reported them. The window's AgentSubagents and
+	// AgentSubagentList and the reserved metadata key subagents say them, and
+	// move in one mutation. See agent_subagents.go. Daemon memory only, and
+	// read and written under stateMu.
+	agentSubagents map[string]*paneSubagents
+	// subagentShownAt is when a subagent change was last put on a window,
+	// unix nanoseconds, under stateMu. A tool change within
+	// subagentPublishGap of it waits for subagentFlush.
+	subagentShownAt int64
 
 	// transcripts binds windows to the record files their harnesses write. It is
 	// held here rather than in SessionState because none of it is state: a
@@ -1340,6 +1353,9 @@ type Session struct {
 	// subagentPrune drops subagents gone quiet. Idle while no pane has
 	// subagents. See agent_subagents.go.
 	subagentPrune pruneTimer
+	// subagentFlush pushes the subagent tool changes held back. Idle while
+	// no subagent runs a tool.
+	subagentFlush pruneTimer
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -3075,6 +3091,7 @@ func (s *Session) Stop() {
 	s.idle.stop()
 	s.agentMetaPrune.stop()
 	s.subagentPrune.stop()
+	s.subagentFlush.stop()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -3253,6 +3270,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentMeta:     w.AgentMeta,
 			AgentQueued:   w.AgentQueued,
 			Subagents:     w.AgentSubagents,
+			SubagentList:  w.AgentSubagentList,
 			ProgramStatus: w.ProgramStatus,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,

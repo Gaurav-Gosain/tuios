@@ -187,7 +187,7 @@
   {
     "name": "SubagentStop",
     "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "SubagentStop", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore", "agent_transcript_path": "/t/agent-a3f09c2e71d4b5a68.jsonl", "stop_hook_active": false, "background_tasks": [{"agent_type": "Explore", "description": "map the api", "id": "a3f09c2e71d4b5a68", "status": "running", "type": "subagent"}]},
-    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_stop", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}}
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_stop", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}, "extra": [{"event": "subagent_update", "agent_id": "a3f09c2e71d4b5a68", "text": "map the api"}]}
   },
   {
     "name": "SubagentStop with no last message and no type",
@@ -206,7 +206,12 @@
   },
   {
     "name": "subagent PreToolUse",
-    "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "agent_id": "a1", "agent_type": "Explore", "tool_name": "Read"},
+    "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "agent_id": "a1", "agent_type": "Explore", "tool_name": "Read", "tool_input": {"file_path": "go.mod"}},
+    "want": {"agent_session_id": "sess-1", "activity": {"event": "subagent_update", "agent_id": "a1", "tool": "Read", "target": "go.mod"}}
+  },
+  {
+    "name": "subagent Notification",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "agent_id": "a1", "agent_type": "Explore", "notification_type": "permission_prompt", "message": "Claude needs your permission"},
     "skip": "subagent"
   },
   {

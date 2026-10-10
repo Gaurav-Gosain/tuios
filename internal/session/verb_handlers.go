@@ -1713,6 +1713,9 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// its hooks reported them; meta's subagents key says the same in
 		// words.
 		"subagents": w.AgentSubagents,
+		// subagent_list is the subagents themselves, in start order, the
+		// finished ones for a minute after they end.
+		"subagent_list": subagentListOut(w.AgentSubagentList),
 		// program_status is the pane's OSC 7501 records, the root first.
 		"program_status": programStatusList(w.ProgramStatus),
 	}, nil

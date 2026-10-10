@@ -488,6 +488,11 @@ type WindowSummary struct {
 	// watching another session can say so. Additive and omitted when zero,
 	// which is what an older peer sends.
 	Subagents int `json:"agent_subagents,omitzero"`
+	// SubagentList is the subagents themselves
+	// (WindowState.AgentSubagentList), so a rail watching another session
+	// can draw a row for each. Additive and omitted when empty, which is what
+	// an older peer sends.
+	SubagentList []SubagentInfo `json:"agent_subagent_list,omitempty"`
 	// ProgramStatus is the pane's OSC 7501 records (WindowState.ProgramStatus),
 	// so a rail watching another session can show them. Additive and omitted
 	// when empty, which is what an older peer sends.

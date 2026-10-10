@@ -207,6 +207,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// the subagent count, which only the pane's hooks move.
 	queued := make(map[string]int)
 	var subagents map[string]int // most sessions have none
+	var subagentLists map[string][]SubagentInfo
 	// The popup mark and the size the popup was asked for are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
 	// is always the truth and they are carried over by id the way Cwd is.
@@ -300,6 +301,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			}
 			subagents[w.ID] = w.AgentSubagents
 		}
+		if len(w.AgentSubagentList) != 0 {
+			if subagentLists == nil {
+				subagentLists = make(map[string][]SubagentInfo)
+			}
+			subagentLists[w.ID] = w.AgentSubagentList
+		}
 	}
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
@@ -363,6 +370,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentMeta = metas[w.ID]
 		w.AgentQueued = queued[w.ID]
 		w.AgentSubagents = subagents[w.ID]
+		w.AgentSubagentList = subagentLists[w.ID]
 		w.ProgramStatus = programStatus[w.ID]
 		w.Grants = paneGrants[w.ID]
 	}

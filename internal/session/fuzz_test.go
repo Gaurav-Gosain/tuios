@@ -17,6 +17,12 @@ var verbLineSeeds = []string{
 	`{"verb":"new-session","params":{"name":"work"}}`,
 	`{"id":"str-id","verb":"list-windows","params":{"session":"work"}}`,
 	`{"id":null,"verb":"kill-session","params":{"session":"gone"}}`,
+	// A subagent's news, by its id and by the call that launched it, with an
+	// outcome and a tool count the daemon bounds.
+	`{"id":1,"verb":"report-agent-activity","params":{"session":"work","window":"build","harness":"claude-code","agent_session_id":"5f1c","activity":{"event":"subagent_update","agent_id":"ab34da07d2d63ee3c","tool":"Bash","target":"go test ./...","ok":true,"tools":3}}}`,
+	`{"id":1,"verb":"report-agent-activity","params":{"session":"work","activity":{"event":"subagent_update","call_id":"toolu_018oJpQiuuCwCqSvc1N1wGYd","outcome":"failed","text":"boom"}}}`,
+	`{"id":1,"verb":"report-agent-activity","params":{"activity":{"event":"subagent_update","agent_id":"a1","spawn":true,"agent_type":"Explore","target":"map the api","call_id":"x","outcome":"nope","tools":-1}}}`,
+	`{"id":1,"verb":"set-agent-state","params":{"state":"working","activity":{"event":"tool","tool":"Agent","target":"Research tmux","spawn":true,"agent_type":"general-purpose","call_id":"toolu_01"}}}`,
 	// Missing and empty fields.
 	`{}`,
 	`{"verb":""}`,

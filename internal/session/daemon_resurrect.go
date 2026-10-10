@@ -29,6 +29,7 @@ func clearLiveAgent(w *WindowState) {
 	// below says ran in a process that is gone.
 	w.AgentQueued = 0
 	w.AgentSubagents = 0
+	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""
 	// OSC 7501 records live in the pane's emulator, which a restore does
 	// not bring back.

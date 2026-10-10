@@ -94,9 +94,9 @@ and leave the state to the pane's screen rules.
 The pane is found from --window, then TUIOS_PANE_ID, then the process's
 controlling terminal, then its parent processes, so a harness or sandbox
 that scrubs the environment is still reported for. A payload that does not
-parse, an event with no mapping, a subagent's own tool calls, and an event
-from a harness other than the one TUIOS_AGENT names are all reported as
-nothing, never as done.
+parse, an event with no mapping, and an event from a harness other than the
+one TUIOS_AGENT names are all reported as nothing, never as done. A
+subagent's own tool calls never move the pane's state.
 
 It asks the daemon which set-agent-state fields it supports and sends only
 those. A conditional report (if_state) is not sent to a daemon older than the
@@ -110,11 +110,14 @@ sent, with likely secrets masked. A Stop's done report says the first line of
 what the agent said last.
 
 Claude Code's SubagentStart and SubagentStop report no state. Each sends the
-subagent with report-agent-activity, and the daemon counts the subagents
-started and not yet stopped in the pane's subagents metadata, which the rail
-shows on a pane at rest. A SessionStart sends its idle report and then a
-session_start, which clears the count. A daemon without report-agent-activity
-gets neither.
+subagent with report-agent-activity, and the daemon keeps the pane's
+subagents: the count of those started and not yet stopped in the subagents
+metadata, and a list of each one's description, tool and end, which the rail
+shows on a pane at rest. A subagent's own tool calls, the Agent tool's launch
+and result, a TaskStop, and the background_tasks list of a Stop each send a
+subagent_update for it. A SessionStart sends its idle report and then a
+session_start, which clears them. A daemon without report-agent-activity
+gets none of these, and one before subagent_update gets no updates.
 
 A report that ends a turn (done or errored) also sends what the pane's status
 line feed (tuios agent-statusline) held back, with set-agent-meta for the same
@@ -201,7 +204,10 @@ type agentHookOutcome struct {
 	// ActivityError is why the report-agent-activity call that followed a
 	// state report failed. The state report stands.
 	ActivityError string `json:"activity_error,omitempty"`
-	Error         string `json:"error,omitempty"`
+	// Updates is how many of the report's subagent updates the daemon
+	// answered.
+	Updates int    `json:"updates,omitempty"`
+	Error   string `json:"error,omitempty"`
 	// Hold is what happened to a prompt the Inbox could answer, when the
 	// hook asked for one.
 	Hold *approvalTrace `json:"hold,omitempty"`
@@ -462,20 +468,33 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 		out.TranscriptRefused = res.TranscriptRefused
 		out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
 	}
-	if alone == nil {
-		return out
-	}
-	res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, *alone)
-	switch {
-	case err != nil && r.State == "":
-		out.Error = err.Error()
-	case err != nil:
-		out.ActivityError = err.Error()
-	default:
-		out.ActivityRecorded, out.Subagents = &res.Recorded, &res.Subagents
-		if r.State == "" {
-			out.State, out.Reason = res.State, res.Reason
+	if alone != nil {
+		res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, *alone)
+		switch {
+		case err != nil && r.State == "":
+			out.Error = err.Error()
+			return out
+		case err != nil:
+			out.ActivityError = err.Error()
+		default:
+			out.ActivityRecorded, out.Subagents = &res.Recorded, &res.Subagents
+			if r.State == "" {
+				out.State, out.Reason = res.State, res.Reason
+			}
 		}
+	}
+	// The subagent updates the same event carries, in order. A daemon from
+	// before subagent_update refuses each with invalid_params, which changes
+	// nothing; the first refusal ends the run, since the rest would be
+	// refused alike.
+	for _, a := range r.Extra {
+		res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, a)
+		if err != nil {
+			out.ActivityError = err.Error()
+			break
+		}
+		out.Updates++
+		out.Subagents = &res.Subagents
 	}
 	return out
 }

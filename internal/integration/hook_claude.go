@@ -1,6 +1,9 @@
 package integration
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // The Claude Code event map. Source: the hooks reference at
 // https://code.claude.com/docs/en/hooks, read for this change. It lists the
@@ -27,6 +30,8 @@ import "strings"
 //	SessionEnd            none
 //	SubagentStart         no state: a subagent started, see claudeSubagent
 //	SubagentStop          no state: a subagent stopped
+//	PreToolUse, PostToolUse, PostToolUseFailure with agent_id
+//	                      no state: a tool call inside a subagent
 //	any other event with agent_id: nothing
 //
 // Eight of them also carry activity for the pane's ring, read from the fields
@@ -41,19 +46,42 @@ import "strings"
 //	                      which is also the done report's message, or no
 //	                      text when the field is missing or empty
 //	SubagentStart         subagent_start: agent_id and agent_type
-//	SubagentStop          subagent_stop: agent_id and agent_type
+//	SubagentStop          subagent_stop: agent_id, agent_type and the first
+//	                      line of last_assistant_message
 //
-// The last three go with report-agent-activity rather than on a state report
-// (see StateActivity). The daemon counts the subagents started and not yet
-// stopped on the pane, and forgets them at a session_start, so the rail can
-// say work goes on in a pane whose main agent finished its turn. Claude Code 2.1.286, measured: a
+// The last two go with report-agent-activity rather than on a state report
+// (see StateActivity). The daemon keeps the subagents started on the pane,
+// and forgets them at a session_start, so the rail can say work goes on in a
+// pane whose main agent finished its turn. Claude Code 2.1.286, measured: a
 // subagent's start and stop carry the same agent_id and the main session's
 // session_id, and SubagentStop fires for a background subagent too, and for
 // one that errors or is stopped. An agent-team teammate fires both in its
 // lead's session, with its name as agent_type: a start each time it wakes to
-// work, a stop when it goes idle. SubagentStop also carries background_tasks,
-// a list of the session's running tasks that still names the subagent
-// stopping; it is not in the reference, so nothing here reads it.
+// work, a stop when it goes idle.
+//
+// What each subagent does is a subagent_update, also sent with
+// report-agent-activity, from these (Claude Code 2.1.296, captured):
+//
+//	PreToolUse of Agent   the tool activity carries spawn: the subagent_type
+//	(or Task)             and tool_use_id, with the description as its
+//	                      target. SubagentStart names neither, so the daemon
+//	                      gives them to the next subagent that starts.
+//	PostToolUse of Agent  tool_response.agentId with its description, which
+//	                      corrects that guess, and totalToolUseCount once a
+//	                      foreground subagent completed
+//	PostToolUseFailure    outcome failed with the error, by tool_use_id,
+//	of Agent              since the failure names no agent
+//	PreToolUse of TaskStop
+//	(KillShell, KillBash) outcome stopping for tool_input.task_id
+//	a tool event with     the subagent's tool and target, and on a Post event
+//	agent_id              how the call ended
+//	Stop, SubagentStop    one update per subagent in background_tasks, the
+//	                      running tasks, with its description
+//
+// A subagent's own tool calls name it by agent_id, which the reference says
+// to use, not agent_type, to tell a subagent's call from the main thread's.
+// Nothing reads the undocumented files Claude Code writes beside a subagent's
+// transcript.
 //
 // PermissionRequest is the approval signal. Notification's permission_prompt
 // also fires for one, but only after the user seems away, which is too late
@@ -81,8 +109,11 @@ func translateClaude(in Input, p fields) Decision {
 		return skip(ClaudeCode, event, "foreign harness: the event comes from Grok")
 	}
 	if p.str("agent_id") != "" {
-		if event == "SubagentStart" || event == "SubagentStop" {
+		switch event {
+		case "SubagentStart", "SubagentStop":
 			return claudeSubagent(event, p)
+		case "PreToolUse", "PostToolUse", "PostToolUseFailure":
+			return claudeSubagentTool(event, p)
 		}
 		return skip(ClaudeCode, event, "subagent event")
 	}
@@ -104,6 +135,16 @@ func translateClaude(in Input, p fields) Decision {
 	case "PreToolUse":
 		r := identity(Report{State: "working"}, p)
 		r.Activity = toolActivity(ActivityTool, p)
+		if r.Activity != nil && slices.Contains(claudeSpawnTools, r.Activity.Tool) {
+			claudeSpawnHint(r.Activity, p)
+		}
+		if slices.Contains(claudeStopTools, p.str("tool_name")) {
+			// The main agent stops a background task. The id may be a
+			// shell's, which the daemon does not know and so ignores.
+			if id := p.obj("tool_input").str("task_id"); ValidSubagentID(id) {
+				r.Extra = append(r.Extra, Activity{Event: ActivitySubagentUpdate, AgentID: id, Outcome: OutcomeStopping})
+			}
+		}
 		return send(ClaudeCode, event, r)
 	case "PermissionRequest":
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
@@ -130,11 +171,18 @@ func translateClaude(in Input, p fields) Decision {
 				r.Activity = a
 			}
 		}
+		if slices.Contains(claudeSpawnTools, p.str("tool_name")) {
+			if u, ok := claudeSpawnResult(event, p); ok {
+				r.Extra = append(r.Extra, u)
+			}
+		}
 		return send(ClaudeCode, event, r)
 	case "Notification":
 		return claudeNotification(event, p)
 	case "Stop":
-		return send(ClaudeCode, event, turnEnd(identity(Report{State: "done"}, p), p))
+		r := turnEnd(identity(Report{State: "done"}, p), p)
+		r.Extra = claudeBackgroundTasks(p)
+		return send(ClaudeCode, event, r)
 	case "StopFailure":
 		msg := "stopped on an error"
 		if t := p.str("error_type"); t != "" {
@@ -209,10 +257,128 @@ func claudeSubagent(event string, p fields) Decision {
 		return skip(ClaudeCode, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
 	}
 	a := &Activity{Event: ActivitySubagentStart, AgentID: id, AgentType: activityText(p.str("agent_type"))}
+	r := Report{SessionID: p.str("session_id"), Activity: a}
 	if event == "SubagentStop" {
 		a.Event = ActivitySubagentStop
+		// What the subagent said last. The daemon reads an empty one as a
+		// subagent that was stopped rather than one that finished.
+		a.Text = activityText(p.str("last_assistant_message"))
+		r.Extra = claudeBackgroundTasks(p)
+	}
+	return send(ClaudeCode, event, r)
+}
+
+// claudeSpawnTools are the names Claude Code gives the tool that launches a
+// subagent: Agent, and Task in builds before 2.1.
+var claudeSpawnTools = []string{"Agent", "Task"}
+
+// claudeStopTools are the names Claude Code gives the tool that stops a
+// background task: TaskStop, and the older KillShell and KillBash.
+var claudeStopTools = []string{"TaskStop", "KillShell", "KillBash"}
+
+// claudeBackgroundMax bounds the subagents one event's background_tasks
+// reports, each one a call to the daemon.
+const claudeBackgroundMax = 16
+
+// claudeSpawnHint marks a PreToolUse of the Agent tool as the launch of a
+// subagent: the type asked for, and the call's id. Its Target is already the
+// description (toolTargetKeys reads it). SubagentStart carries neither, so the
+// daemon gives them to the next subagent that starts.
+func claudeSpawnHint(a *Activity, p fields) {
+	a.Spawn = true
+	a.AgentType = activityText(p.obj("tool_input").str("subagent_type"))
+	if id := p.str("tool_use_id"); ValidSubagentID(id) {
+		a.CallID = id
+	}
+}
+
+// claudeSpawnResult is the subagent_update a PostToolUse or
+// PostToolUseFailure of the Agent tool makes. The PostToolUse names the
+// subagent it started in tool_response.agentId, with the description it was
+// given, which corrects the daemon's guess at the start. A finished
+// foreground subagent's response also counts its tool calls. A failure names
+// no subagent, so it goes by the call's id, with the error.
+func claudeSpawnResult(event string, p fields) (Activity, bool) {
+	callID := p.str("tool_use_id")
+	if !ValidSubagentID(callID) {
+		callID = ""
+	}
+	if event == "PostToolUseFailure" {
+		if callID == "" {
+			return Activity{}, false
+		}
+		return Activity{Event: ActivitySubagentUpdate, CallID: callID, Outcome: OutcomeFailed, Text: activityText(p.first("error", "message"))}, true
+	}
+	resp := p.obj("tool_response")
+	id := resp.str("agentId")
+	if !ValidSubagentID(id) {
+		return Activity{}, false
+	}
+	u := Activity{Event: ActivitySubagentUpdate, AgentID: id, CallID: callID}
+	u.Text = activityText(resp.first("description"))
+	if u.Text == "" {
+		u.Text = activityText(p.obj("tool_input").str("description"))
+	}
+	if n, ok := resp["totalToolUseCount"].(float64); ok && resp.str("status") == "completed" && n > 0 && n < 1e6 {
+		u.Tools = int(n)
+	}
+	return u, true
+}
+
+// claudeSubagentTool reports a tool call inside a subagent, which Claude Code
+// fires with the subagent's agent_id: a subagent_update with the tool and
+// what it acts on, and on a Post event how the call ended. A subagent that
+// launches one of its own sends the spawn hint on the same update, so the
+// nested subagent is named when it starts.
+func claudeSubagentTool(event string, p fields) Decision {
+	id := p.str("agent_id")
+	if !ValidSubagentID(id) {
+		return skip(ClaudeCode, event, "agent_id is not an id tuios keeps: 1 to 128 letters, digits, '_', '.', ':', '@' or '-'")
+	}
+	a := toolActivity(ActivityTool, p)
+	if a == nil {
+		return skip(ClaudeCode, event, "subagent tool event with no tool_name")
+	}
+	a.Event, a.AgentID = ActivitySubagentUpdate, id
+	switch event {
+	case "PreToolUse":
+		if slices.Contains(claudeSpawnTools, a.Tool) {
+			claudeSpawnHint(a, p)
+		}
+	case "PostToolUse":
+		a.OK = boolPtr(true)
+	case "PostToolUseFailure":
+		a.OK = boolPtr(false)
 	}
 	return send(ClaudeCode, event, Report{SessionID: p.str("session_id"), Activity: a})
+}
+
+// claudeBackgroundTasks reads the background_tasks list that Stop and
+// SubagentStop carry: one entry per task still running, with its id, which
+// for a subagent is its agent_id, its type and its description. Each
+// subagent's description is sent as a subagent_update, which corrects a
+// description the daemon guessed when two subagents of one type started
+// together.
+func claudeBackgroundTasks(p fields) []Activity {
+	list, _ := p["background_tasks"].([]any)
+	var out []Activity
+	for _, v := range list {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		t := fields(m)
+		id := t.str("id")
+		text := activityText(t.str("description"))
+		if t.str("type") != "subagent" || !ValidSubagentID(id) || text == "" {
+			continue
+		}
+		out = append(out, Activity{Event: ActivitySubagentUpdate, AgentID: id, Text: text})
+		if len(out) == claudeBackgroundMax {
+			break
+		}
+	}
+	return out
 }
 
 // turnEnd adds a Stop event's activity to its done report: the first line of

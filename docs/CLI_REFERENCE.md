@@ -2421,8 +2421,9 @@ With `--json`:
 
 Show what the agent in a pane has been doing, from the activity ring the daemon
 keeps from its hooks: the prompts it was given, its tool calls and how they
-ended, the turns it finished, the subagents it started and when they stopped
-(`subagent  Explore started`), each conversation's start, the commands its
+ended, the turns it finished, the subagents it started and how each ended
+(`subagent  Research tmux (general-purpose) started`, then `... done after 3m,
+14 tools`, `failed` or `stopped`), each conversation's start, the commands its
 shell ran and its state changes, oldest first. The daemon keeps the newest 256 per pane, in memory
 only. A pane fills only when its harness's hooks are installed
 (`tuios integration install claude-code` or `codex`).
@@ -3366,7 +3367,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 
 | Command | What it does |
 |---------|--------------|
-| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave. `--select` lists the panes a [selector](AGENT_STATE.md#selectors) matches, in every session, and prints the `--confirm` token for them. Each row carries `identity`, `confidence` and `evidence_age_ms` (see [AGENT_STATE.md](AGENT_STATE.md#confidence)), and `subagents`, how many subagents the pane's agent is running |
+| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave. `--select` lists the panes a [selector](AGENT_STATE.md#selectors) matches, in every session, and prints the `--confirm` token for them. Each row carries `identity`, `confidence` and `evidence_age_ms` (see [AGENT_STATE.md](AGENT_STATE.md#confidence)), `subagents`, how many subagents the pane's agent is running, and with `--json` `subagent_list`, each subagent with its description, state (`running`, `done`, `failed`, `stopped`), the tool it runs and how it ended (see [AGENT_STATE.md](AGENT_STATE.md#each-subagent)) |
 | `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine, `--select` to what a selector matches |
 | `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
 | `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell`, or from a pane the person gave the `respond` grant |

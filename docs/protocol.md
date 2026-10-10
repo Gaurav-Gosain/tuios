@@ -251,6 +251,31 @@ new error codes `nothing_to_commit`, `merge_conflict`, `checkout_dirty`,
 `no_remote` and `gh_unavailable` are in the catalog. See
 [ship-commit](#ship-commit).
 
+**A pane lists its subagents.** The daemon keeps each subagent a pane's
+agent runs, not only the count (see
+[Each subagent](AGENT_STATE.md#each-subagent)). What changes for a caller:
+
+- `get-agent-state` and every `list-agents` entry gain `subagent_list`: id,
+  type, description, state (`running`, `done`, `failed`, `stopped`),
+  started_at, ended_at, now, last, tools and result. `subagents` keeps its
+  meaning, the running ones. The synced window state and a session's window
+  summary gain `agent_subagent_list`, taken from the daemon's own state on
+  every client push and omitted when empty, which an older peer drops.
+- `report-agent-activity` takes the event `subagent_update`, and its
+  activity takes `call_id`, `spawn`, `outcome` and `tools`. A
+  `subagent_stop` no longer forgets the subagent at once: it stays on the
+  list as ended for a minute.
+- `set-agent-state`'s activity takes `spawn`, `agent_type` and `call_id` on a
+  `tool` event. An older daemon ignores them.
+- `agent-activity` entries of kind `subagent_start` and `subagent_stop` name
+  the subagent in `text` by its description and type, "Research tmux
+  (general-purpose)", or its type alone, and a `subagent_stop` carries
+  `outcome`, `duration_ms` and `tools`.
+- The Claude Code hook sends the subagents' own tool calls, which it dropped
+  before, as `subagent_update`, and reads `background_tasks` from `Stop` and
+  `SubagentStop`. The integration's version is unchanged: the events it
+  hooks are the same.
+
 **A pane counts the subagents its agent is running.** An agent that hands work
 to subagents and ends its turn reports `done` while they work, so the daemon
 keeps, per pane, the subagents its hooks reported starting and not yet
@@ -4240,18 +4265,43 @@ without it.
 
 Record one hook event of a pane's own agent without reporting a state. It is
 what `tuios agent-hook` sends for an event that says nothing about what the
-pane's agent is doing: Claude Code's `SubagentStart` and `SubagentStop`, and
-the `session_start` that follows a `SessionStart`'s state report. Params:
+pane's agent is doing: Claude Code's `SubagentStart` and `SubagentStop`, a
+subagent's tool calls and the other news of a subagent (`subagent_update`),
+and the `session_start` that follows a `SessionStart`'s state report. Params:
 `session`, `window`, `activity` (required), `harness`, `agent_session_id`,
 `harness_pid`. Without `window`, a caller in a pane reports about its own
 pane, as with `set-agent-state`.
 
-`activity` is `set-agent-state`'s activity with three more events, the list
+`activity` is `set-agent-state`'s activity with four more events, the list
 `list-verbs` gives as `accepted`: `subagent_start` and `subagent_stop`, with
 `agent_id` (required: 1 to 128 letters, digits, `_`, `.`, `:`, `@` or `-`,
-which pairs a start with its stop) and `agent_type`, and `session_start`, with
-how the conversation started as `text`. An unknown event, and a subagent event
+which pairs a start with its stop) and `agent_type`, a stop's `text` being
+what the subagent said last; `subagent_update`; and `session_start`, with how
+the conversation started as `text`. An unknown event, and a subagent event
 without a valid `agent_id`, is `invalid_params` and nothing is recorded.
+
+`subagent_update` is news about a subagent the pane holds. It names the
+subagent by `agent_id`, or without one by `call_id`, the tool call that
+launched it, and carries any of:
+
+| Field | Meaning |
+| ----- | ------- |
+| `text` | its description, which replaces the one it has; with `outcome` `failed`, the error |
+| `tool`, `target` | the tool call it runs; with `ok`, how that call ended |
+| `outcome` | `stopping` (the agent asked to stop it, so its stop reads as `stopped`) or `failed` (it ends now as `failed`) |
+| `tools` | how many tool calls it made |
+| `call_id` | the call that launched it, kept for a later update by `call_id` |
+
+An update for a subagent the pane does not hold changes nothing. A `call_id`
+that is not a valid id, an `outcome` other than those, or `tools` outside 0 to
+1000000 is `invalid_params`. The ring keeps no update, except one that ends
+the subagent, which it keeps as that subagent's `subagent_stop`.
+
+A launch: a `tool` event, `set-agent-state`'s or a `subagent_update`'s, with
+`spawn: true` names a subagent about to start, `agent_type` the type asked for,
+`target` its description and `call_id` the call. The next `subagent_start` on
+the pane takes the oldest launch of its type, else the oldest, within 30
+seconds. An older daemon ignores `spawn` and records the tool event as before.
 
 ```json
 {"verb": "report-agent-activity", "params": {"session": "work", "window": "build", "harness": "claude-code", "agent_session_id": "5f1c", "activity": {"event": "subagent_start", "agent_id": "a3f09c2e71d4b5a68", "agent_type": "Explore"}}}
@@ -4269,13 +4319,23 @@ subagents it holds after the call.
 
 The pane's subagents:
 
-- `subagent_start` adds one and `subagent_stop` removes it. The window
-  carries the count as `agent_subagents`, and the reserved metadata key
-  `subagents` says it in words. A pane holds at most 64.
+- `subagent_start` adds one and `subagent_stop` ends it: `done` with a
+  `text`, `stopped` without one or after `outcome: stopping`. The window
+  carries the running count as `agent_subagents`, and the reserved metadata
+  key `subagents` says it in words. A pane holds at most 64 running.
+- The window also carries the list, `agent_subagent_list`, which
+  `get-agent-state` and `list-agents` return as `subagent_list`: id, type,
+  description, state (`running`, `done`, `failed`, `stopped`), started_at,
+  ended_at, now, last, tools and result, at most 16 in start order. An ended
+  subagent stays a minute (five when `failed`), at most 8 of them per pane.
 - `recorded` is false, and the ring keeps nothing, for a stop of a subagent
-  the pane never saw start, a start past 64, a start on a pane whose state is
-  `none`, and a second start of one already running, which renews when the
-  pane last heard of it.
+  the pane does not hold or already ended, a start past 64, a start on a pane
+  whose state is `none`, and a second start of one already running, which
+  renews when the pane last heard of it. For a `subagent_update` it says
+  whether the update changed the subagent.
+- The tool calls of the subagents in one session are pushed to attached
+  clients at most once per 250 ms: one that comes sooner is pushed with the
+  next, by a timer armed only while such calls arrive.
 - They are forgotten on `session_start`, when the window's state goes to
   `none` (a `SessionEnd`, the agent leaving the pane, `set-agent-state none`)
   and when the window closes. One the pane hears nothing more of for an hour,
@@ -4299,7 +4359,9 @@ needs `write`, and a hosted pane's process sends it to its owner.
 
 Wire compatibility: a new verb. An older daemon answers `unknown_verb`, which
 changes nothing: `tuios agent-hook` then reports the `SessionStart`'s state
-alone, and nothing for a subagent.
+alone, and nothing for a subagent. A daemon from before `subagent_update`
+answers it with `invalid_params`, and the hook sends no more updates for that
+event.
 
 ### resume-agent
 
@@ -5317,8 +5379,8 @@ Each entry has `seq` (per pane, from 1), `at` (unix nanoseconds) and `kind`:
 | `tool_done` | a tool call that finished | `tool`, `target`, `files` it wrote, `ok` when the harness said |
 | `tool_failed` | a tool call that failed | `tool`, `target`, `ok` false, `text`: the error's first line |
 | `turn_end` | the agent finishing a turn | `text`: the first line of what it said last, absent when the harness sent none |
-| `subagent_start` | a subagent starting, or a teammate waking to work, reported with [report-agent-activity](#report-agent-activity); kept only when the pane did not have it running already | `text`: its type |
-| `subagent_stop` | a subagent stopping, or a teammate going idle; kept only for one the pane saw start | `text`: its type |
+| `subagent_start` | a subagent starting, or a teammate waking to work, reported with [report-agent-activity](#report-agent-activity); kept only when the pane did not have it running already | `text`: its description and type, "Research tmux (general-purpose)", or its type alone |
+| `subagent_stop` | a subagent ending, or a teammate going idle; kept only for one the pane saw start, once | `text` as for a start; `outcome`: done, failed or stopped; `duration_ms`; `tools` |
 | `session_start` | the agent starting a conversation | `text`: how, such as `startup`, `resume` or `clear` |
 | `command` | a command the pane's shell finished | `target`: the command line, `exit` when the shell sent one |
 | `state` | the pane's agent state changing | `text`: the new state |

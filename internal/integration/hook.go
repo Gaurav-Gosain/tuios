@@ -149,6 +149,11 @@ type Report struct {
 	// only to a daemon whose set-agent-state lists activity. Any other goes
 	// with report-agent-activity, after the state report when there is one.
 	Activity *Activity `json:"activity,omitempty"`
+	// Extra are more report-agent-activity calls the same hook event makes,
+	// sent in order after the report and its Activity: the subagent updates
+	// a Claude Code event carries beside the main agent's own report. A
+	// daemon that refuses one refuses only that one.
+	Extra []Activity `json:"extra,omitempty"`
 }
 
 // Activity is set-agent-state's activity parameter, in the verb's own field
@@ -169,7 +174,30 @@ type Activity struct {
 	// harness's id for it, which pairs its start with its stop, and its type.
 	AgentID   string `json:"agent_id,omitempty"`
 	AgentType string `json:"agent_type,omitempty"`
+	// CallID is the harness's id for the tool call: the call that launched a
+	// subagent on a spawn hint, and the call a subagent_update without an
+	// AgentID is about.
+	CallID string `json:"call_id,omitempty"`
+	// Spawn marks a tool call that launches a subagent (Claude Code's Agent
+	// tool). AgentType is then the type asked for and Target, as for any tool
+	// call, the description, which the daemon gives the next subagent that
+	// starts.
+	Spawn bool `json:"spawn,omitempty"`
+	// Outcome is how a subagent_update says the subagent is ending:
+	// OutcomeStopping or OutcomeFailed.
+	Outcome string `json:"outcome,omitempty"`
+	// Tools is how many tool calls a finished subagent made, when the harness
+	// said.
+	Tools int `json:"tools,omitempty"`
 }
+
+// Subagent outcomes, the values of Activity.Outcome.
+const (
+	// OutcomeStopping is the main agent asking to stop the subagent.
+	OutcomeStopping = "stopping"
+	// OutcomeFailed is the subagent's call failing. Text is then the error.
+	OutcomeFailed = "failed"
+)
 
 // Activity events, the values of Activity.Event.
 const (
@@ -178,11 +206,15 @@ const (
 	ActivityToolDone   = "tool_done"
 	ActivityToolFailed = "tool_failed"
 	ActivityTurnEnd    = "turn_end"
-	// The three below go with report-agent-activity, which set-agent-state
+	// The four below go with report-agent-activity, which set-agent-state
 	// predates: see StateActivity.
 	ActivitySubagentStart = "subagent_start"
 	ActivitySubagentStop  = "subagent_stop"
 	ActivitySessionStart  = "session_start"
+	// ActivitySubagentUpdate is news about a running subagent: the tool it
+	// runs, its description, or how it is ending. A daemon older than it
+	// refuses it, which costs nothing.
+	ActivitySubagentUpdate = "subagent_update"
 )
 
 // StateActivity reports whether set-agent-state takes event as the activity

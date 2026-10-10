@@ -3786,3 +3786,32 @@ cycle visits every workspace, built as `cmd/tuios` and run against
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The skip of workspaces with no panes in `cycleWorkspace` (the cycle visits every workspace) | `TestWorkspaceCycleSkipsEmptyWorkspaces` (alt+y from 1 shows 2, not 3), `TestWorkspaceCycleOpensNoPanes` (three presses leave 4 panes, not 1) | **caught** |
+
+## Subagent list
+
+`e2e/tui/agent_subagent_list_test.go` runs a stand-in `claude` in a pane. It
+replays hook payloads in the shape Claude Code 2.1.296 sent them (captured
+with a logging hook) through the real `tuios agent-hook claude-code`, against
+a real daemon with a real client attached. `TestSubagentListFromHooks` reads
+`get-agent-state --json` at each step: the descriptions, the tool each
+subagent runs, a client push, each way a subagent ends, the fade, and
+agent-log.
+
+Each control below was run on 2026-10-10 on branch
+`feat/subagent-rows-data`. Each one builds `cmd/tuios` with one piece of
+wiring cut and runs `TestSubagentListFromHooks` against it. The logs are in
+`~/.cache/agent-tmp/subagents/neg/` (`pr1-*.log`).
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| Whole feature: the base commit `71b6183d` | "tools": the list is empty, only the count moves | **caught** |
+| The `PreToolUse`, `PostToolUse`, `PostToolUseFailure` case for an event with `agent_id` in `translateClaude` | "tools": every `now` is empty | **caught** |
+| `r.Extra = claudeBackgroundTasks(p)` on `Stop` | "launched": the two subagents of one type keep each other's description | **caught** |
+| `w.AgentSubagentList = subagentLists[w.ID]` in `retainDaemonExclusive` | "a client push changed the list": the push after `new-window` empties it | **caught** |
+| The guard for `subagent_update`: `verbReportAgentActivity` records it whatever the reason | "launched": the first subagent's `now` is `Bash: FOREIGN-TOOL`, another conversation's call | **caught** |
+| The `subagentFlush.arm` call in `applyActivityMeta` | "tools": the four calls that came at once stay held | **caught** |
+| The fade (`subagentFade` set to 1000 hours) | "faded": the four finished subagents stay | **caught** |
+
+The "tools" step is there for the flush control. Without it, the `Stop` after
+the four calls changes descriptions, which pushes the whole list, held calls
+included, and the build without the flush passed.

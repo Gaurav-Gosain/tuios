@@ -67,7 +67,7 @@ func subagentCountOf(t *testing.T, base, session string) int {
 //   - a stop takes the count to "2 subagents";
 //   - a row at rest with a subagent at work is not folded into "+N at rest";
 //   - list-agents reports the figure, and agent-log the session start, the
-//     three starts and the one stop it knew;
+//     three starts and the one stop it knew, done since it said something;
 //   - a SessionStart (resume) forgets them: the metadata and the row lose the
 //     count, and a SessionEnd does the same for the other pane.
 //
@@ -222,7 +222,7 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 		t.Fatalf("list-agents subagents = %v, want lead 2, ra 1, rb 0\n%s", counts, raw)
 	}
 	out, err := tuiosCLI(t, base, "agent-log", "-s", "e2e-lead", "-w", "0")
-	if err != nil || !strings.Contains(out, "subagent  Explore started") || strings.Count(out, "subagent  Explore stopped") != 1 ||
+	if err != nil || !strings.Contains(out, "subagent  Explore started") || strings.Count(out, "subagent  Explore done") != 1 ||
 		!strings.Contains(out, "session   started (startup)") {
 		t.Fatalf("agent-log does not hold the session start, the subagents' starts and the one stop it knew: %v\n%s", err, out)
 	}
