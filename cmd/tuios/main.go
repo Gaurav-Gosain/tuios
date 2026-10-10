@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -82,6 +83,11 @@ func main() {
 		fang.WithVersion(versionReport()),
 		fang.WithErrorHandler(diagnosticErrorHandler),
 	); err != nil {
+		// A command may say what a wrong flag exits with (tuios cp exits 2).
+		var coded interface{ ExitStatus() int }
+		if errors.As(err, &coded) {
+			os.Exit(coded.ExitStatus())
+		}
 		os.Exit(1)
 	}
 	if code := exitStatus(cmdErr); code != 0 {
@@ -2989,6 +2995,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newAgentProtoCommand(), newAgentLogCommand(), newNotifyCommand(), newStatusCommand(), newPairCommand())
 	rootCmd.AddCommand(newHerdrGroupCommand("pane"), newHerdrGroupCommand("notification"))
 	rootCmd.AddCommand(newPluginsCommand())
+	rootCmd.AddCommand(newCpCommand(), newTransfersCommand())
 
 	addExplorers(rootCmd)
 	return rootCmd
