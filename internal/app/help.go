@@ -424,7 +424,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	}
 
 	bindings := generateCategoryBindings(registry, cat, []string{"focus_sidebar"})
-	for _, action := range []string{"prefix_explore", "prefix_toggle_sidebar"} {
+	for _, action := range []string{"prefix_explore", "prefix_toggle_sidebar", "prefix_toggle_other_rail"} {
 		for _, key := range registry.GetKeys(action) {
 			desc := config.ActionDescriptions[action]
 			if desc == "" {
@@ -460,6 +460,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("reorder_down"),
 		row("reorder_up"),
 		row("section"),
+		row("switch_edge"),
 		row("agents_filter"),
 		row("agents_sort"),
 		row("file_search"),

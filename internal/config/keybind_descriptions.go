@@ -28,6 +28,7 @@ var scopedDescriptions = map[string]map[string]string{
 		"reorder_down":  "Move the session or machine down the rail",
 		"reorder_up":    "Move the session or machine up the rail",
 		"section":       "Cycle the sessions, terminals and agents sections",
+		"switch_edge":   "Focus the other visible rail",
 		"agents_filter": "Agents: all sessions, or this one",
 		"agents_sort":   "Agents: needs you, priority, or recency",
 		"file_search":   "Files: search below the folder the sidebar shows",

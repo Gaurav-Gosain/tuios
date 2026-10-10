@@ -66,6 +66,11 @@ func (m *OS) railCustomConfig() config.SidebarCustomConfig {
 	if m.Settings.SidebarPosition == "right" && sb.Right != nil && sb.Right.Custom != nil {
 		return *sb.Right.Custom
 	}
+	if sb.Position == "hidden" {
+		// An explicitly enabled edge under a hidden legacy rail starts from
+		// the resolver's empty custom section, not the hidden legacy command.
+		return config.SidebarCustomConfig{}
+	}
 	return sb.Custom
 }
 

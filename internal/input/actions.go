@@ -30,6 +30,7 @@ const (
 	sidebarActReorderDown = "reorder_down"
 	sidebarActReorderUp   = "reorder_up"
 	sidebarActSection     = "section"
+	sidebarActSwitchEdge  = "switch_edge"
 	sidebarActAgentFilter = "agents_filter"
 	sidebarActAgentSort   = "agents_sort"
 	sidebarActMail        = "mail"
