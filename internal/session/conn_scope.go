@@ -189,10 +189,30 @@ var verbScopes = map[string]scopeKind{
 	"pane-calls":  scopeDeny,
 	// paste-image is the person's act and paste-pane-image the owning
 	// daemon's. Neither is for a restricted caller.
-	"paste-image":          scopeDeny,
-	"paste-pane-image":     scopeDeny,
-	"read-dir":             scopeDeny,
-	"wait-dir":             scopeDeny,
+	"paste-image":      scopeDeny,
+	"paste-pane-image": scopeDeny,
+	"read-dir":         scopeDeny,
+	"wait-dir":         scopeDeny,
+	// The file verbs, transfers and drops are the person's explorer, not a
+	// restricted caller's. A pane's own shell already reaches its files.
+	"file-stat":            scopeDeny,
+	"file-list":            scopeDeny,
+	"file-read":            scopeDeny,
+	"file-hash":            scopeDeny,
+	"file-walk":            scopeDeny,
+	"open-file-stream":     scopeDeny,
+	"file-mkdir":           scopeDeny,
+	"file-rename":          scopeDeny,
+	"file-remove":          scopeDeny,
+	"file-commit":          scopeDeny,
+	"file-abort":           scopeDeny,
+	"file-drop-dir":        scopeDeny,
+	"transfer-start":       scopeDeny,
+	"transfer-list":        scopeDeny,
+	"transfer-cancel":      scopeDeny,
+	"transfer-pause":       scopeDeny,
+	"transfer-resume":      scopeDeny,
+	"drop-files":           scopeDeny,
 	"new-window":           scopeDeny,
 	"popup":                scopeDeny,
 	"split-window":         scopeDeny,
@@ -520,7 +540,8 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 }
 
 // eventInScope reports whether an event may be written to cs. Gap markers
-// always may. Under scope own an event reaches the stream only when its
+// always may, and transfer events reach only a caller that may list the
+// transfers. Under scope own an event reaches the stream only when its
 // session is one the connection reaches; an event with no session, such as
 // host-changed, does not.
 //
@@ -530,6 +551,16 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if ev.Type == EventGap {
 		return true
+	}
+	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
+	// events reach no restricted connection and no pane without admin.
+	if ev.Transfer != nil {
+		if cs.scope.Load() != nil {
+			return false
+		}
+		if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
+			return false
+		}
 	}
 	var owners []string
 	if sc := cs.scope.Load(); sc != nil && sc.own {

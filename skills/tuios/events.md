@@ -36,6 +36,7 @@ tuios subscribe --types window-created,window-exit
 tuios subscribe --types agent-state,attention
 tuios subscribe --types client-session-changed
 tuios subscribe --hosts --types agent-state
+tuios subscribe --types transfer,transfer-progress
 ```
 
 ```
@@ -60,7 +61,8 @@ finished turn) is opt-in: it arrives only when `--types` names it, and a
 resumed stream does not replay it, so read `tuios agent-log` after a gap.
 `transcript` (a pane's joined transcript grew, with the `cursor` of
 `agent-transcript`) is opt-in in the same way. It is for a client that shows
-the conversation to the person.
+the conversation to the person. `transfer-progress` (a copy's row while its bytes
+move, at most four a second) is opt-in in the same way.
 
 Every type, and what it reports:
 
@@ -81,6 +83,7 @@ Every type, and what it reports:
 | `prompt`, `command-started`, `command-finished` | Shell integration marks in a pane |
 | `output` | A pane writes output. High volume |
 | `host-changed` | A host link connects or drops |
+| `transfer`, `transfer-progress` | A copy the daemon runs is created, changes state or ends; its progress, opt-in (`tuios --skill files`) |
 | `gap` | Events were lost. See below |
 
 The hook names (`after-new-window` and the rest) are not event types. The

@@ -84,7 +84,15 @@ const (
 	// to the end returns now. It carries nothing of the file, and it reaches
 	// only a subscriber that names it in types. See verb_agent_transcript.go.
 	EventTranscript = "transcript"
-	EventSubscribed = "subscribed" // subscribe ack result type
+	// EventTransfer is a change of a copy the daemon runs (transfer.go):
+	// Action is created, state or ended, and Transfer is the job's row as
+	// transfer-list gives it. A copy's state is said once per change.
+	EventTransfer = "transfer"
+	// EventTransferProgress is a copy's row while its bytes move, at most
+	// four times a second per copy. It reaches only a subscriber that names
+	// it in types, and it is not kept for replay: the next one replaces it.
+	EventTransferProgress = "transfer-progress"
+	EventSubscribed       = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -174,6 +182,8 @@ type streamEvent struct {
 	Entry *AgentActivityEntry `json:"entry,omitempty"`
 	// Cursor is a transcript event's agent-transcript cursor.
 	Cursor string `json:"cursor,omitempty"`
+	// Transfer is a transfer or transfer-progress event's copy.
+	Transfer *TransferRow `json:"transfer,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -322,7 +332,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true}
+var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -376,6 +386,9 @@ type eventHub struct {
 	// lastTranscriptSeq is the same for transcript events, which a reader
 	// replaces with one agent-transcript call from its cursor.
 	lastTranscriptSeq uint64
+	// lastProgressSeq is the same for transfer-progress events, which the
+	// next one replaces.
+	lastProgressSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -475,7 +488,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 		out = append(out, gap(GapEvicted))
 	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq,
 		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq,
-		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq:
+		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq,
+		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -504,6 +518,9 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventTranscript:
 		h.lastTranscriptSeq = ev.Seq
+		return
+	case EventTransferProgress:
+		h.lastProgressSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {

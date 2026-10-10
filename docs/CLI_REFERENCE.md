@@ -3467,7 +3467,7 @@ there.
 Show a QR code that adds this machine to a phone. You do not copy a key by hand.
 
 ```
-tuios pair [--name DEVICE] [--machine NAME] [--allow list,mail,open,write,respond] [--timeout 5m]
+tuios pair [--name DEVICE] [--machine NAME] [--allow list,mail,open,write,respond,files] [--timeout 5m]
            [--listen HOST:PORT] [--listen-all] [--accept-local] [--authorized-keys PATH]
            [--advertise-ssh HOST:PORT,...] [--advertise-pair HOST:PORT,...]
            [--ssh-port 22] [--host-key PATH] [--command PATH] [--yes] [--json]

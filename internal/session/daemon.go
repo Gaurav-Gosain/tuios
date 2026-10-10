@@ -240,6 +240,8 @@ type Daemon struct {
 	// which is why the daemon deletes them on session deletion, on shutdown, and
 	// again on the next start. See stash.go.
 	stash *stashStore
+	// transfers holds the copies this daemon runs. See transfer.go.
+	transfers *transferManager
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
@@ -856,6 +858,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
+	d.transfers = newTransferManager(d)
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
@@ -1341,6 +1344,9 @@ func (d *Daemon) Start() error {
 	if d.federation != nil {
 		d.federation.Start(d.ctx)
 	}
+	// The copies the previous daemon did not finish go on from their parts,
+	// once the links are on their way up. See transfer_journal.go.
+	d.transfers.load()
 	// Each linked host's agents are followed from here on. See host_fleet.go.
 	d.fleet.start(d.ctx)
 	// The config file is followed from here on, so a host added while the daemon

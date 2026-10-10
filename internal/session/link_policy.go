@@ -111,6 +111,31 @@ var verbCapabilities = map[string][]string{
 	"peek-prompt":          {config.LinkAllowList},
 	"read-dir":             {config.LinkAllowList},
 	"wait-dir":             {config.LinkAllowList},
+	// The file verbs. A listing is a listing. Reading a file's bytes out and
+	// changing a file are files, a capability apart from write, so a person
+	// can stop one machine's copies without stopping its typing. Every write
+	// that arrives over a link is also confined to the home folder and kept
+	// out of the deny list (verb_files_confine.go). See verb_files.go.
+	"file-stat":        {config.LinkAllowList},
+	"file-list":        {config.LinkAllowList},
+	"file-read":        {config.LinkAllowFiles},
+	"file-hash":        {config.LinkAllowFiles},
+	"file-walk":        {config.LinkAllowFiles},
+	"open-file-stream": {config.LinkAllowFiles},
+	"file-mkdir":       {config.LinkAllowFiles},
+	"file-rename":      {config.LinkAllowFiles},
+	"file-remove":      {config.LinkAllowFiles},
+	"file-commit":      {config.LinkAllowFiles},
+	"file-abort":       {config.LinkAllowFiles},
+	"file-drop-dir":    {config.LinkAllowFiles},
+	// A transfer and a drop make this daemon open connections on its own
+	// links, as open-host-connection does, so they need every capability.
+	"transfer-start":  {capRelay},
+	"transfer-list":   {capRelay},
+	"transfer-cancel": {capRelay},
+	"transfer-pause":  {capRelay},
+	"transfer-resume": {capRelay},
+	"drop-files":      {capRelay},
 
 	"send-agent-message":  {config.LinkAllowMail},
 	"read-agent-messages": {config.LinkAllowMail},
