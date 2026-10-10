@@ -2251,7 +2251,6 @@ func init() {
 	maps.Copy(verbRegistry, fileVerbs())
 	maps.Copy(verbRegistry, transferVerbs())
 	maps.Copy(verbRegistry, dropVerbs())
-	maps.Copy(verbRegistry, previewVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

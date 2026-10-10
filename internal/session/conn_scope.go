@@ -200,7 +200,6 @@ var verbScopes = map[string]scopeKind{
 	"file-read":            scopeDeny,
 	"file-hash":            scopeDeny,
 	"file-walk":            scopeDeny,
-	"file-preview":         scopeDeny,
 	"open-file-stream":     scopeDeny,
 	"file-mkdir":           scopeDeny,
 	"file-rename":          scopeDeny,
