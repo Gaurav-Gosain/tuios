@@ -2,17 +2,11 @@ package tuie2e
 
 import (
 	"bufio"
-	"bytes"
-	"compress/zlib"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/crc32"
-	"image"
-	"image/png"
 	"net"
 	"os"
 	"path/filepath"
@@ -192,7 +186,7 @@ func TestAFolderFromAHostCannotLandOutsideItsDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 	var row transferRow
-	dialVerbs(t, base).must("transfer-start", map[string]any{
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": "/far/folder"},
 		"dst": map[string]any{"path": dest},
 	}, &row)
@@ -217,7 +211,7 @@ func TestAFolderFromAHostCannotLandOutsideItsDestination(t *testing.T) {
 }
 
 // callWithin is one verb call that must answer within d.
-func (c *verbConn) callWithin(d time.Duration, verb string, params any) (json.RawMessage, error) {
+func (c *fileVerbConn) callWithin(d time.Duration, verb string, params any) (json.RawMessage, error) {
 	c.id++
 	line, _ := json.Marshal(map[string]any{"id": c.id, "verb": verb, "params": params})
 	_ = c.conn.SetDeadline(time.Now().Add(d))
@@ -241,65 +235,11 @@ func (c *verbConn) callWithin(d time.Duration, verb string, params any) (json.Ra
 	return resp.Result, nil
 }
 
-// daemonPeakKB is the most memory the daemon of base has held, from /proc.
-func daemonPeakKB(t *testing.T, base string) int64 {
-	t.Helper()
-	var hello struct {
-		PID int `json:"pid"`
-	}
-	dialVerbs(t, base).must("hello", nil, &hello)
-	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(hello.PID), "status"))
-	if err != nil {
-		t.Skipf("no /proc here: %v", err)
-	}
-	for line := range strings.SplitSeq(string(b), "\n") {
-		if rest, ok := strings.CutPrefix(line, "VmHWM:"); ok {
-			n, _ := strconv.ParseInt(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rest), "kB")), 10, 64)
-			return n
-		}
-	}
-	t.Fatalf("no VmHWM in the daemon's status")
-	return 0
-}
-
-// writePNGBomb writes a PNG of w x h transparent pixels. The rows are all
-// zero, so the file is small and the picture is not.
-func writePNGBomb(t *testing.T, path string, w, h int) {
-	t.Helper()
-	var idat bytes.Buffer
-	zw, _ := zlib.NewWriterLevel(&idat, zlib.BestCompression)
-	row := make([]byte, 1+w*4)
-	for range h {
-		_, _ = zw.Write(row)
-	}
-	_ = zw.Close()
-	chunk := func(out *bytes.Buffer, typ string, data []byte) {
-		_ = binary.Write(out, binary.BigEndian, uint32(len(data)))
-		out.WriteString(typ)
-		out.Write(data)
-		_ = binary.Write(out, binary.BigEndian, crc32.ChecksumIEEE(append([]byte(typ), data...)))
-	}
-	var out bytes.Buffer
-	out.WriteString("\x89PNG\r\n\x1a\n")
-	var hdr bytes.Buffer
-	_ = binary.Write(&hdr, binary.BigEndian, uint32(w))
-	_ = binary.Write(&hdr, binary.BigEndian, uint32(h))
-	hdr.Write([]byte{8, 6, 0, 0, 0})
-	chunk(&out, "IHDR", hdr.Bytes())
-	chunk(&out, "IDAT", idat.Bytes())
-	chunk(&out, "IEND", nil)
-	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestFileVerbsOnAPipeADeviceAndAHugePicture asks the file verbs about
-// three things a folder can hold that are not an ordinary file: a named
-// pipe, which blocks whoever opens it to read, /dev/zero, which never ends,
-// and a 400 KB PNG that decodes to 400 MB. Every verb must answer at once,
-// and four previews of the picture together must not take the daemon's
-// memory past 512 MB. An ordinary picture still previews.
-func TestFileVerbsOnAPipeADeviceAndAHugePicture(t *testing.T) {
+// TestFileVerbsOnAPipeAndADevice asks the file verbs about two things a
+// folder can hold that are not an ordinary file: a named pipe, which blocks
+// whoever opens it to read, and /dev/zero, which never ends. Every verb must
+// answer at once.
+func TestFileVerbsOnAPipeAndADevice(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
@@ -317,14 +257,13 @@ func TestFileVerbsOnAPipeADeviceAndAHugePicture(t *testing.T) {
 	}
 	var probes []probe
 	for _, p := range []probe{
-		{Verb: "file-preview", Params: map[string]any{"path": pipe}},
 		{Verb: "file-read", Params: map[string]any{"path": pipe}},
 		{Verb: "file-hash", Params: map[string]any{"path": pipe}},
 		{Verb: "open-file-stream", Params: map[string]any{"path": pipe}},
 		{Verb: "file-hash", Params: map[string]any{"path": "/dev/zero"}},
 		{Verb: "file-read", Params: map[string]any{"path": "/dev/zero"}},
 	} {
-		c := dialVerbs(t, base)
+		c := dialFileVerbs(t, base)
 		start := time.Now()
 		raw, err := c.callWithin(5*time.Second, p.Verb, p.Params)
 		p.Ms = time.Since(start).Milliseconds()
@@ -339,44 +278,7 @@ func TestFileVerbsOnAPipeADeviceAndAHugePicture(t *testing.T) {
 		}
 	}
 
-	bomb := filepath.Join(base, "huge.png")
-	writePNGBomb(t, bomb, 10000, 10000)
-	var wg sync.WaitGroup
-	answers := make([]string, 4)
-	for i := range answers {
-		wg.Go(func() {
-			c := dialVerbs(t, base)
-			raw, err := c.callWithin(60*time.Second, "file-preview", map[string]any{"path": bomb})
-			var out struct {
-				Kind string `json:"kind"`
-				Note string `json:"note"`
-			}
-			_ = json.Unmarshal(raw, &out)
-			answers[i] = fmt.Sprintf("%s %s %v", out.Kind, out.Note, err)
-		})
-	}
-	wg.Wait()
-	peak := daemonPeakKB(t, base)
-
-	small := filepath.Join(base, "small.png")
-	img := image.NewRGBA(image.Rect(0, 0, 2000, 1000))
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	_ = os.WriteFile(small, buf.Bytes(), 0o644)
-	var pic struct {
-		Kind       string `json:"kind"`
-		ImageWidth int    `json:"image_width"`
-	}
-	dialVerbs(t, base).must("file-preview", map[string]any{"path": small, "max_px": 500}, &pic)
-
-	saveTransferArtifact(t, "file-verbs-not-a-file", map[string]any{"probes": probes, "bomb_previews": answers, "daemon_peak_kb": peak, "small": pic})
-	t.Logf("daemon peak %d kB; bomb previews %q", peak, answers)
-	if peak > 512<<10 {
-		t.Errorf("ASSERTION: four previews of a 10000 x 10000 PNG took the daemon to %d MB", peak>>10)
-	}
-	if pic.Kind != "image" || pic.ImageWidth != 500 {
-		t.Errorf("ASSERTION: an ordinary picture no longer previews: %+v", pic)
-	}
+	saveTransferArtifact(t, "file-verbs-not-a-file", map[string]any{"probes": probes})
 }
 
 // TestATransferStoppedWhileQueuedStaysStopped fills the three running slots
@@ -389,7 +291,7 @@ func TestATransferStoppedWhileQueuedStaysStopped(t *testing.T) {
 	remote := remoteMachine(t)
 	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 1<<20, 256<<10))
 
-	c := dialVerbs(t, base)
+	c := dialFileVerbs(t, base)
 	start := func(name string, size int) transferRow {
 		src := filepath.Join(remote, name)
 		randomFile(t, src, size)
@@ -474,7 +376,7 @@ func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 			part:     filepath.Join(remote, "shared", ".report.txt.tuios-part"),
 		},
 	}
-	c := dialVerbs(t, base)
+	c := dialFileVerbs(t, base)
 	for _, tc := range cases {
 		if err := os.WriteFile(tc.precious, []byte("keep me\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -529,7 +431,7 @@ func TestADropNamesEachFileSafely(t *testing.T) {
 		Paths     []string      `json:"paths"`
 		Transfers []transferRow `json:"transfers"`
 	}
-	dialVerbs(t, base).must("drop-files", map[string]any{"host": "build", "paths": paths}, &out)
+	dialFileVerbs(t, base).must("drop-files", map[string]any{"host": "build", "paths": paths}, &out)
 	for _, tr := range out.Transfers {
 		if r := waitTransferEnd(t, base, tr.ID, 30*time.Second); r.State != "done" {
 			t.Fatalf("ASSERTION: a dropped file did not reach build: %s %s", r.State, r.Error)
@@ -553,7 +455,7 @@ func daemonReadBytes(t *testing.T, base string) int64 {
 	var hello struct {
 		PID int `json:"pid"`
 	}
-	dialVerbs(t, base).must("hello", nil, &hello)
+	dialFileVerbs(t, base).must("hello", nil, &hello)
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(hello.PID), "io"))
 	if err != nil {
 		t.Skipf("no /proc io here: %v", err)
@@ -588,7 +490,7 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 	}
 	_ = f.Close()
 
-	c := dialVerbs(t, base)
+	c := dialFileVerbs(t, base)
 	var row transferRow
 	c.must("transfer-start", map[string]any{
 		"src": map[string]any{"path": src},
@@ -630,7 +532,7 @@ func TestAFolderMoveRemovesOnlyWhatItCopied(t *testing.T) {
 	}
 	dst := filepath.Join(remote, "project")
 	var row transferRow
-	dialVerbs(t, base).must("transfer-start", map[string]any{
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src":  map[string]any{"path": src},
 		"dst":  map[string]any{"host": "build", "path": dst},
 		"move": true,

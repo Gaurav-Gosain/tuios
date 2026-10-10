@@ -119,7 +119,6 @@ var verbCapabilities = map[string][]string{
 	"file-read":        {config.LinkAllowWrite},
 	"file-hash":        {config.LinkAllowWrite},
 	"file-walk":        {config.LinkAllowWrite},
-	"file-preview":     {config.LinkAllowWrite},
 	"open-file-stream": {config.LinkAllowWrite},
 	"file-mkdir":       {config.LinkAllowWrite},
 	"file-rename":      {config.LinkAllowWrite},

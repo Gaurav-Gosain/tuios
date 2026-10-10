@@ -2,16 +2,11 @@ package tuie2e
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"io"
 	"net"
 	"os"
@@ -210,8 +205,8 @@ func hubWithFileHost(t *testing.T, base, remote, ssh string) []string {
 	return env
 }
 
-// verbConn is one JSON verb connection to a daemon.
-type verbConn struct {
+// fileVerbConn is one JSON verb connection to a daemon.
+type fileVerbConn struct {
 	t    *testing.T
 	conn net.Conn
 	br   *bufio.Reader
@@ -222,20 +217,20 @@ func hubSocket(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 }
 
-func dialVerbs(t *testing.T, base string) *verbConn {
+func dialFileVerbs(t *testing.T, base string) *fileVerbConn {
 	t.Helper()
 	conn, err := net.Dial("unix", hubSocket(base))
 	if err != nil {
 		t.Fatalf("dial the daemon: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return &verbConn{t: t, conn: conn, br: bufio.NewReaderSize(conn, 1<<20)}
+	return &fileVerbConn{t: t, conn: conn, br: bufio.NewReaderSize(conn, 1<<20)}
 }
 
 // dialHostVerbs is a verb connection to build's daemon, through the hub.
-func dialHostVerbs(t *testing.T, base string) *verbConn {
+func dialHostVerbs(t *testing.T, base string) *fileVerbConn {
 	t.Helper()
-	c := dialVerbs(t, base)
+	c := dialFileVerbs(t, base)
 	if _, err := c.call("open-host-connection", map[string]any{"host": "build"}); err != nil {
 		t.Fatalf("open a connection to build: %v", err)
 	}
@@ -246,7 +241,7 @@ type verbFailure struct{ Code, Message string }
 
 func (e *verbFailure) Error() string { return e.Code + ": " + e.Message }
 
-func (c *verbConn) call(verb string, params any) (json.RawMessage, error) {
+func (c *fileVerbConn) call(verb string, params any) (json.RawMessage, error) {
 	c.id++
 	line, _ := json.Marshal(map[string]any{"id": c.id, "verb": verb, "params": params})
 	_ = c.conn.SetDeadline(time.Now().Add(60 * time.Second))
@@ -270,7 +265,7 @@ func (c *verbConn) call(verb string, params any) (json.RawMessage, error) {
 	return resp.Result, nil
 }
 
-func (c *verbConn) must(verb string, params any, out any) {
+func (c *fileVerbConn) must(verb string, params any, out any) {
 	c.t.Helper()
 	raw, err := c.call(verb, params)
 	if err != nil {
@@ -303,7 +298,7 @@ func transferNow(t *testing.T, base, id string) transferRow {
 	var out struct {
 		Transfers []transferRow `json:"transfers"`
 	}
-	c := dialVerbs(t, base)
+	c := dialFileVerbs(t, base)
 	defer func() { _ = c.conn.Close() }()
 	c.must("transfer-list", map[string]any{"id": id}, &out)
 	if len(out.Transfers) != 1 {
@@ -373,7 +368,7 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 
 	dst := filepath.Join(base, "copy of big.bin")
 	var row transferRow
-	dialVerbs(t, base).must("transfer-start", map[string]any{
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": src},
 		"dst": map[string]any{"path": dst},
 	}, &row)
@@ -492,7 +487,7 @@ func TestATransferLeavesTypingOnItsMachineFast(t *testing.T) {
 	}
 
 	var row transferRow
-	dialVerbs(t, base).must("transfer-start", map[string]any{
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": src},
 		"dst": map[string]any{"path": filepath.Join(base, "big.bin")},
 	}, &row)
@@ -548,7 +543,7 @@ func TestDropFilesOnAPaneOnAHost(t *testing.T) {
 		Dir       string        `json:"dir"`
 		Transfers []transferRow `json:"transfers"`
 	}
-	dialVerbs(t, base).must("drop-files", map[string]any{"host": "build", "paths": []string{a, b}}, &out)
+	dialFileVerbs(t, base).must("drop-files", map[string]any{"host": "build", "paths": []string{a, b}}, &out)
 	if len(out.Paths) != 2 || len(out.Transfers) != 2 {
 		t.Fatalf("ASSERTION: the drop answered %+v", out)
 	}
@@ -581,9 +576,9 @@ func TestDropFilesOnAPaneOnAHost(t *testing.T) {
 	saveTransferArtifact(t, "drop-files", out)
 }
 
-// TestFilesAndPreviewsOnAHost lists a folder on build and previews an image
-// and a table there, through the hub, as the explorer does.
-func TestFilesAndPreviewsOnAHost(t *testing.T) {
+// TestFileListOnAHost lists a folder on build through the hub, as the
+// explorer does.
+func TestFileListOnAHost(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
@@ -599,17 +594,7 @@ func TestFilesAndPreviewsOnAHost(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	img := image.NewRGBA(image.Rect(0, 0, 3000, 2000))
-	for y := range 2000 {
-		for x := range 3000 {
-			img.Set(x, y, color.RGBA{uint8(x), uint8(y), 128, 255})
-		}
-	}
-	var pngBuf bytes.Buffer
-	if err := png.Encode(&pngBuf, img); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "wide.png"), pngBuf.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "wide.png"), []byte("not a picture"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -635,38 +620,6 @@ func TestFilesAndPreviewsOnAHost(t *testing.T) {
 	if list.Entries[0].Kind != "dir" || list.Entries[2].Size != 22 || !strings.HasPrefix(list.Entries[2].Mode, "-rw-") {
 		t.Fatalf("ASSERTION: the listing lacks kinds, sizes or modes: %+v", list.Entries)
 	}
-
-	var pic struct {
-		Kind        string `json:"kind"`
-		Width       int    `json:"width"`
-		ImageWidth  int    `json:"image_width"`
-		ImageHeight int    `json:"image_height"`
-		Image       string `json:"image"`
-	}
-	far.must("file-preview", map[string]any{"path": filepath.Join(dir, "wide.png"), "max_px": 1200}, &pic)
-	if pic.Kind != "image" || pic.Width != 3000 || pic.ImageWidth != 1200 || pic.ImageHeight != 800 {
-		t.Fatalf("ASSERTION: the image preview is %s %dpx scaled to %dx%d, want image 3000px scaled to 1200x800", pic.Kind, pic.Width, pic.ImageWidth, pic.ImageHeight)
-	}
-	raw, err := base64.StdEncoding.DecodeString(pic.Image)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := png.DecodeConfig(bytes.NewReader(raw))
-	if err != nil || cfg.Width != 1200 {
-		t.Fatalf("ASSERTION: the preview is not a 1200 px PNG: %+v %v", cfg, err)
-	}
-	if len(raw) >= pngBuf.Len() {
-		t.Fatalf("ASSERTION: the preview (%d bytes) is not smaller than the file (%d bytes)", len(raw), pngBuf.Len())
-	}
-
-	var text struct {
-		Kind string `json:"kind"`
-		Text string `json:"text"`
-	}
-	far.must("file-preview", map[string]any{"path": filepath.Join(dir, "data.csv")}, &text)
-	if text.Kind != "text" || !strings.Contains(text.Text, "2,linus") {
-		t.Fatalf("ASSERTION: the table preview is %+v", text)
-	}
 }
 
 // TestFileBytesKeepToTheLinkPolicy: a far machine that lets this one only
@@ -689,7 +642,7 @@ func TestFileBytesKeepToTheLinkPolicy(t *testing.T) {
 	}
 
 	var row transferRow
-	dialVerbs(t, base).must("transfer-start", map[string]any{
+	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": secret},
 		"dst": map[string]any{"path": filepath.Join(base, "secret.txt")},
 	}, &row)
