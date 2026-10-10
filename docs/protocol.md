@@ -1398,6 +1398,29 @@ an existing caller:
   now points at `tuios worktree pull` instead of a `HOST:SESSION` review:
   reviewing a session on a linked machine is not supported yet, and
   `tuios review` refuses a `HOST:` target before it dials.
+- A message has a state between unread and read: seen. `read-agent-messages`
+  with `to` set to a window and `peek: true` stamps `seen_at` (unix
+  nanoseconds) on the unread directed messages it returns, and leaves
+  `read_at` at zero, but only when the caller is that inbox's reader: the
+  caller runs in the pane `to` names. A peek of a pane's inbox from another
+  pane, from outside every pane, or over a link stamps nothing, because
+  nobody looked as the recipient. For `to: "human"` the reader is a caller
+  that may act as the person (the CLI outside every pane, an attached
+  client). A peek that gets `peek_forced`, and a read with no `to`, stamp
+  nothing. A marking read sets `read_at` and keeps `seen_at`. Messages
+  gain `seen_at` and `was_seen` (true when the message was seen, and not read,
+  before this call), each omitted when unset. The answer gains `seen` (how
+  many of the `unread` messages were already seen), `marked_read` and
+  `marked_seen` (how many messages this call changed). `unread` keeps its
+  meaning: the returned messages not read before this call, seen ones
+  included, and `unread: true` still returns the seen ones. `list-agents`
+  entries gain `seen`, the part of `unread` that was seen. Attention items of
+  kind `mail` gain `seen`, the part of `count` that was seen. The
+  `MsgAgentMail` push gains `seen_ids` and `seen_at`, a receipt for a peek.
+  Compatibility: a peer that does not know these fields sees a seen message
+  with `read_at` zero, so it counts it as unread, which it still is. A client
+  that gets a receipt with only `seen_ids` ignores it. Nothing is required of
+  an older peer.
 
 ### list-verbs
 
@@ -4511,6 +4534,7 @@ for this machine, the host's name for an item of a linked host), `session`,
 `since`
 (unix nanoseconds, when the item started waiting; an update keeps it), `seq`
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
+`seen` (mail: how many of `count` were seen with a peek and not read),
 `completion_seq` (finished), `snoozed_until` (a snoozed item listed with
 `include_snoozed`: when it opens again, in unix nanoseconds, or -1 for when
 its fact changes), `marked_unread` (a finished item the person reopened with

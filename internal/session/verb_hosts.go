@@ -148,6 +148,7 @@ type remoteAgentRow struct {
 	Message        string `json:"message,omitempty"`
 	HarnessID      string `json:"harness_id,omitempty"`
 	Unread         int    `json:"unread,omitempty"`
+	Seen           int    `json:"seen,omitempty"`
 	Ready          bool   `json:"ready,omitempty"`
 	Since          int64  `json:"agent_state_at,omitempty"`
 	Cwd            string `json:"cwd,omitempty"`

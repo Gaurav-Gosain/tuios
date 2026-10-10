@@ -210,6 +210,7 @@ func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 // agentRows is one session's rows of a list-agents answer. sel, when not nil,
 // keeps only the rows it matches.
 func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now int64, sel *Selector) []map[string]any {
+	seen := d.agents.seenCounts(sess.Name())
 	state := sess.GetState()
 	group := ""
 	if state.Worktree != nil {
@@ -247,6 +248,7 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			"workspace":      w.Workspace,
 			"focused":        w.ID == state.FocusedWindowID,
 			"unread":         unread[w.ID],
+			"seen":           seen[w.ID],
 			"ready":          d.agentReady(w, agentRestStates),
 			"blocked_by":     agentBlockedBy(w),
 			"needs_you":      w.AgentState.NeedsYou(),
@@ -773,6 +775,8 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	if q.inbox == AgentInboxHuman && !q.peek && !d.mayActAsHuman(cs) {
 		q.peek, peekForced = true, true
 	}
+	// A peek marks the inbox seen only when the caller is its reader.
+	q.markSeen = q.peek && !peekForced && d.callerReadsInbox(cs, q.inbox)
 	// The person's inbox is always live: it has no window to close.
 	live := map[string]bool{AgentInboxHuman: true}
 	for i := range state.Windows {
@@ -795,6 +799,26 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	}
 	if len(marked) > 0 {
 		d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: marked, ReadAt: readAt}, "")
+	}
+	// A peek that marked messages seen is news too: the sender reads seen_at,
+	// and the mailbox and the Inbox draw it.
+	var seenIDs []uint64
+	var seenAt int64
+	seenThreads := map[uint64]bool{}
+	for _, m := range res.Messages {
+		if q.markSeen && m.WasUnread && !m.WasSeen && m.SeenAt != 0 && m.ReadAt == 0 {
+			seenIDs = append(seenIDs, m.ID)
+			seenAt = m.SeenAt
+			seenThreads[m.ThreadID] = true
+		}
+	}
+	if len(seenIDs) > 0 {
+		d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{SeenIDs: seenIDs, SeenAt: seenAt}, "")
+		if q.inbox == AgentInboxHuman {
+			for thread := range seenThreads {
+				d.attention.noteMailSeen(sess.Name(), thread, d.agents.threadSeen(sess.Name(), AgentInboxHuman, thread))
+			}
+		}
 	}
 	// A thread of the person's mail with nothing left unread in it is no
 	// longer waiting in the Inbox.
@@ -826,13 +850,42 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		// skill trips over it in the shape of the answer.
 		"untrusted": true,
 		"messages":  res.Messages,
-		"unread":    res.Unread,
-		"total":     res.Total,
-		"evicted":   res.Evicted,
+		// unread is how many of the returned messages were not read before
+		// this call, seen ones included. seen is how many of those had been
+		// seen, and marked_read and marked_seen are what this call changed.
+		"unread":      res.Unread,
+		"seen":        res.Seen,
+		"marked_read": res.MarkedRead,
+		"marked_seen": res.MarkedSeen,
+		"total":       res.Total,
+		"evicted":     res.Evicted,
 		// True when the read asked to mark the person's mail read and was
 		// served as a peek instead, because the caller runs in a pane.
 		"peek_forced": peekForced,
 	}, nil
+}
+
+// callerReadsInbox reports whether the caller on cs is the reader of an inbox,
+// which is the only caller whose peek means the inbox's owner looked at its
+// mail. Another pane that peeks to check on a message has not looked as the
+// recipient, so it must not turn the message seen.
+//
+//   - A window inbox is read by the pane the caller runs in, placed the way
+//     the grants code places it. A caller in a different pane, in an unplaced
+//     pane, over a link, or in no pane at all is not that reader. A plain CLI
+//     in no pane is not an agent reading its own mail, so it marks nothing.
+//   - The person's inbox is read by the person: a caller that may act as the
+//     person (see mayActAsHuman), such as the CLI run outside every pane.
+//   - No inbox named means no reader.
+func (d *Daemon) callerReadsInbox(cs *connState, inbox string) bool {
+	switch inbox {
+	case "":
+		return false
+	case AgentInboxHuman:
+		return d.mayActAsHuman(cs)
+	}
+	pa := d.paneAuthority(cs)
+	return pa != nil && pa.window == inbox
 }
 
 // verbAskAgent is the composition that turns "type into a pane" into "ask

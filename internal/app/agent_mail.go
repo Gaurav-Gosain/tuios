@@ -147,6 +147,10 @@ type agentMailThread struct {
 	LastAt  int64
 	// Unread is true while a message to the person in this thread is unread.
 	Unread bool
+	// Untouched is true while an unread message to the person in this thread
+	// has not been seen either. Unread without Untouched is a thread whose
+	// unread mail was all seen with a peek.
+	Untouched bool
 	// New is true while the thread holds a message the person has not seen.
 	New bool
 	// Link is true when a message in this thread arrived from another
@@ -281,6 +285,19 @@ func (m *OS) AgentMailUnread() int { return m.agentMailUnreadFor(session.AgentIn
 // an inbox read marked. It runs in Update, on the message the read loop queued.
 func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	st := &m.AgentMail
+	if len(p.SeenIDs) > 0 {
+		seen := map[uint64]bool{}
+		for _, id := range p.SeenIDs {
+			seen[id] = true
+		}
+		for i := range st.Messages {
+			if seen[st.Messages[i].ID] && st.Messages[i].SeenAt == 0 {
+				st.Messages[i].SeenAt = p.SeenAt
+			}
+		}
+		m.agentMailChanged()
+		return
+	}
 	if len(p.ReadIDs) > 0 {
 		read := map[uint64]bool{}
 		for _, id := range p.ReadIDs {
@@ -626,6 +643,9 @@ func (m *OS) agentMailThreads() []agentMailThread {
 		th.LastAt = mm.SentAt
 		if mm.Kind == "message" && mm.To == session.AgentInboxHuman && mm.ReadAt == 0 {
 			th.Unread = true
+			if mm.SeenAt == 0 {
+				th.Untouched = true
+			}
 		}
 		if mm.ID > st.SeenID && !st.Seen[mm.ID] {
 			th.New = true

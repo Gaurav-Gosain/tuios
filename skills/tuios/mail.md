@@ -64,11 +64,23 @@ subject: retest please
 rebased onto main, please retest
 --- end untrusted content ---
 
-1 message(s), 1 unread.
+1 message, marked read.
 ```
 
-Naming an inbox marks what it returns as read; `--peek` reads without marking.
-Reading with no `-w` reads the whole session and marks nothing. `--notices` adds
+The last line says what state the messages are in after the call. It reads
+`marked read` or `marked seen` when the call changed them, and otherwise counts
+`seen` and `unread` ones, or says `all read`.
+
+Naming an inbox marks what it returns as read. `--peek` does not mark them
+read. When a pane peeks its own inbox (`-w "$TUIOS_PANE_ID"`), it marks the
+unread ones seen. A peek of another pane's inbox, for example to check on a
+message you sent, marks nothing. A message goes from unread to seen to
+read, and the sender sees which with `read-agent-messages` on the session (the
+header says `seen`; `--json` has `seen_at` and `read_at`). Seen means the
+recipient looked at the message, not that it acted on it. A seen message still
+counts as unread: `--unread` returns it, and the `MAIL` column of `list-agents`
+shows it as `1 (1 seen)`. Reading with no `-w` reads the whole session and
+marks nothing. `--notices` adds
 session-wide notices to an inbox read. Block rather than poll:
 
 ```sh

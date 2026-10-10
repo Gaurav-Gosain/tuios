@@ -3786,3 +3786,18 @@ cycle visits every workspace, built as `cmd/tuios` and run against
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The skip of workspaces with no panes in `cycleWorkspace` (the cycle visits every workspace) | `TestWorkspaceCycleSkipsEmptyWorkspaces` (alt+y from 1 shows 2, not 3), `TestWorkspaceCycleOpensNoPanes` (three presses leave 4 panes, not 1) | **caught** |
+
+### Mail seen state
+
+Run on 2026-10-10 on branch `feat/mail-seen`. Each control cuts one thing from
+the fixed build and runs `TestMailSeen*`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `q.markSeen = ... && d.callerReadsInbox(cs, q.inbox)` set to false in `verbReadAgentMessages` (a peek marks nothing seen) | `TestMailSeenStateBetweenUnreadAndRead` (the recipient's peek does not say `marked seen`, `seen_at` stays 0), `TestMailSeenInboxRow`, `TestMailSeenMailbox` | **caught** |
+| `callerReadsInbox` returning true for any caller (the sender's peek of the recipient's inbox marks it seen) | `TestMailSeenStateBetweenUnreadAndRead` (the peek from the sender's pane gets `marked seen`, and `seen_at` is set) | **caught** |
+| The "marked read" summary in `mailStateSummary` (the old count from before the read) | `TestMailSeenStateBetweenUnreadAndRead` (the marking read does not say `1 message, marked read.`) | **caught** |
+| `was_seen` in `collect` | `TestMailSeenStateBetweenUnreadAndRead` (the sender's view of a seen message has no `seen` word) | **caught** |
+| `noteMailSeen` for the person's thread | `TestMailSeenInboxRow` (`list-attention` has no `[1 seen]`, the row never says seen) | **caught** |
+| The `SeenIDs` branch of `noteAgentMail` (the receipt) | `TestMailSeenMailbox` (the open mailbox keeps saying unread) | **caught** |
+| The `seen` case of `agentMailThreadRow` | `TestMailSeenMailbox` (the list keeps saying unread) | **caught** |
