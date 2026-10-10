@@ -71,6 +71,70 @@ the branch it passed. The run is recorded in
 plain settled screen in `$TUIOS_E2E_FRAMES/TestDualRailClickSwitchesSession/`
 (or the default system-temp artifacts directory).
 
+## Session-backed sidebar rails
+
+`TestSidebarSessionDoesNotRunHiddenCustomCommand` fails on the combined
+foundation/session build before suppressing ordinary custom components behind
+an assigned daemon pane: the legacy-edge command created its marker despite
+its section being replaced (`/tmp/tuios-session-hidden-custom-negative.log`).
+After the fix, a separate marker on each edge stays absent while both session
+panes are visible (`/tmp/tuios-session-hidden-custom-two-edges.log`).
+
+On 2026-10-09 `TestSidebarSessionConnectsWhenCreatedLater` was run against
+`/tmp/tuios-session-stability`, built before the retry was added. The rail
+showed `attach failed` for an assigned session that did not yet exist. After
+creating the session and sending `LATE-SIDE-READY` to its pane, the test timed
+out without showing the marker: `/tmp/tuios-session-late-before.log`. The fix
+wires a two-second retry from the failed attach into session reconciliation;
+with it, the same test passed, then passed again after deleting and recreating
+the assigned session (`/tmp/tuios-session-recreate.log`). The successful
+connection, live pane output and renewed connection form the positive halves:
+this test cannot pass by merely hiding the attach error. The full selected
+`TestSidebar|TestDualRail|TestRail` real-client suite passed afterward
+(`/tmp/tuios-session-stability-broad.log`).
+
+On 2026-10-09 `TestSidebarSessionDownwardSplit` ran against the prior
+single-pane candidate (`/tmp/tuios-session-stability`): after focusing the
+left rail and pressing `Ctrl+B` then `-`, `side-left` still had one pane after
+10 seconds (`/tmp/tuios-session-split-negative.log`). With the split action
+routed to that daemon session and all visible pane streams stacked, the test
+passed: two different shell outputs remain on screen in top-to-bottom order,
+each clicked pane receives only its own input, and each guest gets half the
+rail's PTY height (`/tmp/tuios-stack-four.log`). A second control removed the
+focus update after daemon next/previous navigation: the header changed but
+keyboard input still went to the old pane
+(`/tmp/tuios-session-stack-focus-before.log`). The focused pane's captured
+command now passes in `TestSidebarSessionViewsAreIndependent`, alongside both
+pane outputs (`/tmp/tuios-session-stack-focus-after.log`).
+
+On 2026-10-09 `TestSidebarSessionFrameAlignsWithCenter` ran against
+`/tmp/tuios-session-aligned` with a separate one-row label above each rail
+pane. Both daemon sessions appeared, but their top borders began one row
+below the viewport's top row, so the test timed out
+(`/tmp/tuios-rail-frame-negative.log`). Moving each label into its first
+pane's title bar, without changing guest content, made the test pass and
+showed both framed rails beginning on the top row while preserving a
+pre-attach shell line (`/tmp/tuios-rail-frame-history.log`). The selected
+real-client sidebar/dual-rail/rail suite also passed
+(`/tmp/tuios-rail-frame-broad.log`). The earlier experimental automatic
+shell redraw was removed: it cleared shell content but did not address the
+extra rail header row shown in the user's screenshot.
+
+The remaining guest-content difference was tested separately on 2026-10-09.
+`TestSidebarSessionGuestTopAlignment` deliberately leaves two leading empty
+rows in the side daemon PTY and one in the center. Against the prior
+`/tmp/tuios-session-frame` build, the daemon captures remained correct but
+the visible text began on different pane-relative rows
+(`/tmp/tuios-guest-align-negative.log`). The display-only normalization
+passes the same test without changing the daemon capture, and additionally
+checks that the focused cursor follows the text, a tracked mouse click
+reaches the guest's original row, and an alternate-screen program is not
+shifted (`/tmp/tuios-display-cursor-mouse-alt.log`). The separate suspected
+redundant-resize control, `TestSidebarSessionReattachDoesNotResizeUnchangedPTY`,
+already passed on the old build (`/tmp/tuios-rail-reattach-negative.log`):
+reattach resize was not the cause, and no daemon PTY resize behavior was
+changed for this fix.
+
 ## Paste buffers (#514)
 
 `paste_buffers_test.go`, `paste_buffers_scope_test.go`,
