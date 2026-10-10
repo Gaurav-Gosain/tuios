@@ -756,7 +756,6 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	state := sess.GetState()
 
 	q := readQuery{unreadOnly: p.Unread, notices: p.Notices, peek: p.Peek, limit: p.Limit}
-	q.markSeen = p.Peek
 	// The filter takes any id in the thread, not only the root's, so a caller
 	// that read a reply can pass the id it has rather than tracing back to the
 	// first message.
@@ -775,8 +774,9 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	peekForced := false
 	if q.inbox == AgentInboxHuman && !q.peek && !d.mayActAsHuman(cs) {
 		q.peek, peekForced = true, true
-		q.markSeen = false
 	}
+	// A peek marks the inbox seen only when the caller is its reader.
+	q.markSeen = q.peek && !peekForced && d.callerReadsInbox(cs, q.inbox)
 	// The person's inbox is always live: it has no window to close.
 	live := map[string]bool{AgentInboxHuman: true}
 	for i := range state.Windows {
@@ -863,6 +863,29 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		// served as a peek instead, because the caller runs in a pane.
 		"peek_forced": peekForced,
 	}, nil
+}
+
+// callerReadsInbox reports whether the caller on cs is the reader of an inbox,
+// which is the only caller whose peek means the inbox's owner looked at its
+// mail. Another pane that peeks to check on a message has not looked as the
+// recipient, so it must not turn the message seen.
+//
+//   - A window inbox is read by the pane the caller runs in, placed the way
+//     the grants code places it. A caller in a different pane, in an unplaced
+//     pane, over a link, or in no pane at all is not that reader. A plain CLI
+//     in no pane is not an agent reading its own mail, so it marks nothing.
+//   - The person's inbox is read by the person: a caller that may act as the
+//     person (see mayActAsHuman), such as the CLI run outside every pane.
+//   - No inbox named means no reader.
+func (d *Daemon) callerReadsInbox(cs *connState, inbox string) bool {
+	switch inbox {
+	case "":
+		return false
+	case AgentInboxHuman:
+		return d.mayActAsHuman(cs)
+	}
+	pa := d.paneAuthority(cs)
+	return pa != nil && pa.window == inbox
 }
 
 // verbAskAgent is the composition that turns "type into a pane" into "ask

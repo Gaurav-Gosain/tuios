@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -71,6 +72,38 @@ func (l *mailSeenLog) save() {
 	}
 }
 
+// mailSeenInPane runs the tuios CLI inside a pane's shell, so the daemon
+// places the caller in that pane, and returns what it printed.
+func mailSeenInPane(t *testing.T, base string, log *mailSeenLog, window string, args ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	out, done := filepath.Join(dir, "out"), filepath.Join(dir, "done")
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+	}
+	cmd := fmt.Sprintf("%s %s > %s 2>&1; : > %s\n", tuiosBin, strings.Join(quoted, " "), out, done)
+	if o, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", "-w", window, cmd); err != nil {
+		t.Fatalf("send-text to %s failed: %v\n%s", window, err, o)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if _, err := os.Stat(done); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the command in pane %s never finished: %v", window, args)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read the output of the command in pane %s: %v", window, err)
+	}
+	fmt.Fprintf(&log.buf, "(in pane %s) $ tuios %s\n%s\n", window, strings.Join(args, " "), b)
+	return string(b)
+}
+
 func mailSeenWant(t *testing.T, out, want, when string) {
 	t.Helper()
 	if !strings.Contains(out, want) {
@@ -84,9 +117,14 @@ func mailSeenWant(t *testing.T, out, want, when string) {
 // seen, and a marking read ends with a summary that states the state after the
 // read ("marked read"), not the count from before it.
 //
-// Negative control: with markSeen left false in verbReadAgentMessages, the peek
-// stamps nothing and the first seen check fails; with the summary counting res.Unread
-// again, the marking read prints "1 unread".
+// Only the recipient's own peek counts. A peek of the recipient's inbox from the
+// sender's pane, or from outside every pane, leaves the message unseen.
+//
+// Negative control: with markSeen left false in verbReadAgentMessages, the
+// recipient's peek stamps nothing and the seen check fails; with callerReadsInbox
+// returning true for any caller, the sender's peek marks the message seen and the
+// check after it fails; with the summary counting res.Unread again, the marking
+// read prints "1 unread".
 func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 	_, base := attachClientBase(t)
 	log := &mailSeenLog{t: t, base: base, name: "mail-seen-states"}
@@ -107,14 +145,19 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 		t.Fatalf("a new message has seen_at or read_at set: %+v", rows)
 	}
 
-	// A peek with no inbox named marks nothing: nobody looked as the recipient.
+	// A peek that is not the recipient's marks nothing: one with no inbox
+	// named, one from outside every pane, and one from the sender's own pane,
+	// which is the sender checking on its message.
 	log.run("read-agent-messages", "-s", "e2e-ctrlp", "--peek")
+	log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
+	out = mailSeenInPane(t, base, log, "SENDER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
+	mailSeenWant(t, out, "1 message, 1 unread.", "the sender's peek of the recipient's inbox")
 	if rows := mailSeenRing(t, base); rows[0].SeenAt != 0 {
-		t.Fatalf("a peek of the whole session marked the message seen: %+v", rows)
+		t.Fatalf("a peek by someone who is not the recipient marked the message seen: %+v", rows)
 	}
 
-	// The recipient peeks: seen, not read.
-	out = log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
+	// The recipient peeks from its own pane: seen, not read.
+	out = mailSeenInPane(t, base, log, "WORKER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
 	mailSeenWant(t, out, "1 message, marked seen.", "the recipient's peek")
 	rows := mailSeenRing(t, base)
 	if rows[0].SeenAt == 0 || rows[0].ReadAt != 0 {
@@ -133,7 +176,7 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 	}
 
 	// A second peek keeps the first look.
-	log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
+	mailSeenInPane(t, base, log, "WORKER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
 	if rows := mailSeenRing(t, base); rows[0].SeenAt != firstSeen {
 		t.Errorf("a second peek moved seen_at from %d to %d", firstSeen, rows[0].SeenAt)
 	}

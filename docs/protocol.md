@@ -1401,8 +1401,13 @@ an existing caller:
 - A message has a state between unread and read: seen. `read-agent-messages`
   with `to` set to a window and `peek: true` stamps `seen_at` (unix
   nanoseconds) on the unread directed messages it returns, and leaves
-  `read_at` at zero. A peek that gets `peek_forced`, and a read with no `to`,
-  stamp nothing. A marking read sets `read_at` and keeps `seen_at`. Messages
+  `read_at` at zero, but only when the caller is that inbox's reader: the
+  caller runs in the pane `to` names. A peek of a pane's inbox from another
+  pane, from outside every pane, or over a link stamps nothing, because
+  nobody looked as the recipient. For `to: "human"` the reader is a caller
+  that may act as the person (the CLI outside every pane, an attached
+  client). A peek that gets `peek_forced`, and a read with no `to`, stamp
+  nothing. A marking read sets `read_at` and keeps `seen_at`. Messages
   gain `seen_at` and `was_seen` (true when the message was seen, and not read,
   before this call), each omitted when unset. The answer gains `seen` (how
   many of the `unread` messages were already seen), `marked_read` and

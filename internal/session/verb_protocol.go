@@ -2108,7 +2108,7 @@ func init() {
 				{Name: "to", Type: "string", Description: "Read this window's inbox, normally $TUIOS_PANE_ID. Omit to read everything in the session, which marks nothing read."},
 				{Name: "unread", Type: "bool", Description: "Return only directed messages nobody has read yet.", Default: "false"},
 				{Name: "notices", Type: "bool", Description: "Include session-wide notices in an inbox read. They are always included when no inbox is named.", Default: "false"},
-				{Name: "peek", Type: "bool", Description: "Read without marking anything read. A peek of one window's inbox marks its unread messages seen: seen_at is set and read_at stays zero. A read of the human inbox from a process inside a pane of this daemon is always a peek.", Default: "false"},
+				{Name: "peek", Type: "bool", Description: "Read without marking anything read. A peek by the window of its own inbox marks its unread messages seen: seen_at is set and read_at stays zero. A peek of another window's inbox marks nothing. A read of the human inbox from a process inside a pane of this daemon is always a peek.", Default: "false"},
 				{Name: "thread", Type: "int", Description: "Return only the messages in one thread. Pass any message id in the thread; the thread it belongs to is the one read. A thread the ring holds nothing from returns no messages rather than an error."},
 				{Name: "limit", Type: "int", Description: "Return at most this many, newest last.", Default: "20"},
 			},
