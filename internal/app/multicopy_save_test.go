@@ -105,7 +105,10 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 		t.Errorf("folder path: %q, want %q", got, want)
 	}
 
-	// The prompt shows the full path.
+	// The prompt shows the full path. The pane is made wide enough for it:
+	// the prompt truncates a path that does not fit, and the temp folder on
+	// macOS is long.
+	m.Windows[0].Width = len(home) + 80
 	m.MultiCopy.Save.Err = ""
 	m.MultiCopy.Save.Path = "~/rack/a.txt"
 	layer := m.multiCopySaveLayer()

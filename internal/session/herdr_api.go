@@ -1378,7 +1378,7 @@ func (d *Daemon) herdrWorktreeList(cs *connState, in *herdrIn) (*herdrResult, *h
 func herdrWorktreeOf(e worktree.Entry, open map[string]string) herdrWorktreeRecord {
 	r := herdrWorktreeRecord{
 		Path: e.Path, IsBare: e.Bare, IsDetached: e.Detached, IsPrunable: e.Prunable,
-		IsLinkedWorktree: e.Linked, OpenWorkspaceID: open[filepath.Clean(e.Path)], Label: filepath.Base(e.Path),
+		IsLinkedWorktree: e.Linked, OpenWorkspaceID: open[herdrRealPath(e.Path)], Label: filepath.Base(e.Path),
 	}
 	if e.Branch != "" {
 		r.Branch, r.Label = ptr(e.Branch), e.Branch
@@ -1395,7 +1395,7 @@ func (d *Daemon) herdrOpenCheckouts(cs *connState) map[string]string {
 		if w.Worktree == nil || w.Worktree.CheckoutPath == "" {
 			continue
 		}
-		if path := filepath.Clean(w.Worktree.CheckoutPath); open[path] == "" {
+		if path := herdrRealPath(w.Worktree.CheckoutPath); open[path] == "" {
 			open[path] = w.WorkspaceID
 		}
 	}
@@ -1424,6 +1424,16 @@ func (d *Daemon) herdrWorktreeCreate(cs *connState, in *herdrIn) (*herdrResult, 
 	return d.herdrLabelled(cs, herdrString(out, "session"), herdrString(out, "window_id"), in.label(), fail, &herdrResult{Type: "worktree_created", Worktree: wt})
 }
 
+// herdrRealPath is a path with its symlinks resolved, or the cleaned path when
+// it cannot be. git reports a checkout by its real path, and a caller may know
+// it by a symlinked one: on macOS /tmp and /var are links into /private.
+func herdrRealPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
 // herdrWorktreeOpen shows a checkout that exists: the session that already
 // shows it, or a new session in it.
 func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
@@ -1441,8 +1451,9 @@ func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *h
 		return nil, herdrErr("not_git_worktree", err.Error())
 	}
 	var entry *worktree.Entry
+	want := herdrRealPath(in.Path)
 	for i, e := range entries {
-		if (in.Path != "" && filepath.Clean(e.Path) == filepath.Clean(in.Path)) || (in.Path == "" && in.Branch != "" && e.Branch == in.Branch) {
+		if (in.Path != "" && herdrRealPath(e.Path) == want) || (in.Path == "" && in.Branch != "" && e.Branch == in.Branch) {
 			entry = &entries[i]
 		}
 	}
@@ -1452,7 +1463,7 @@ func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *h
 	open := d.herdrOpenCheckouts(cs)
 	rec := herdrWorktreeOf(*entry, open)
 	res := &herdrResult{Type: "worktree_opened", Worktree: &rec, AlreadyOpen: ptr(false)}
-	if id := open[filepath.Clean(entry.Path)]; id != "" {
+	if id := open[herdrRealPath(entry.Path)]; id != "" {
 		sess, ierr := d.herdrFindSession(id)
 		if ierr != nil {
 			return nil, ierr.herdr()

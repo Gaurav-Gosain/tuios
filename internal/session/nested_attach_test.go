@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -133,7 +134,13 @@ func TestTerminalWindowFromPaneIsAllowed(t *testing.T) {
 	sess, _, b := twoWindowSession(t, d, "window")
 	out := filepath.Join(t.TempDir(), "out")
 	helper := helperCommand(t, sp, out, "attach-probe", "window")
-	runInPane(t, d, sess, b, "script -qfec "+shellQuote(helper)+" /dev/null >/dev/null 2>&1")
+	// util-linux script takes the command after -c; the BSD script on macOS
+	// takes the file first and runs the command without a shell.
+	scriptCmd := "script -qfec " + shellQuote(helper) + " /dev/null"
+	if runtime.GOOS == "darwin" {
+		scriptCmd = "script -q /dev/null sh -c " + shellQuote(helper)
+	}
+	runInPane(t, d, sess, b, scriptCmd+" >/dev/null 2>&1")
 	if got := probeOutcome(t, out); got != "" {
 		t.Errorf("a client on its own terminal whose output does not reach the pane got %q, want it attached", got)
 	}
