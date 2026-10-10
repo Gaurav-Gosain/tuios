@@ -41,6 +41,12 @@ import (
 // The job waits for the machine, then compares the last MiB of the part with
 // the same range of the source and goes on from the part's end when they
 // match. A full hash at the end checks the whole result either way.
+//
+// Each job writes parts of its own, named by its id, so two jobs to one path
+// never write one part. The job is also kept in a journal on disk
+// (transfer_journal.go), so a daemon that restarts finds its jobs and goes on
+// with them from their parts, and every change of a job is an event on the
+// daemon's event stream.
 
 // transferMaxRunning bounds the jobs that move bytes at once. The rest wait
 // in order.
@@ -94,25 +100,36 @@ type transferJob struct {
 
 	done atomic.Int64
 
-	mu         sync.Mutex
-	state      string
-	size       int64
-	isDir      bool
-	files      int
-	filesDone  int
-	finished   map[string]bool
-	current    string
-	final      string
-	hash       string
-	verified   bool
-	errText    string
-	errCode    string
-	resumedAt  int64
-	resumes    int
-	restarts   int
-	started    time.Time
-	ended      time.Time
-	samples    []rateSample
+	mu        sync.Mutex
+	state     string
+	size      int64
+	isDir     bool
+	files     int
+	filesDone int
+	finished  map[string]bool
+	current   string
+	final     string
+	hash      string
+	verified  bool
+	errText   string
+	errCode   string
+	resumedAt int64
+	resumes   int
+	restarts  int
+	started   time.Time
+	ended     time.Time
+	samples   []rateSample
+	// skipped names what a folder copy did not carry (links, pipes, sockets,
+	// devices), and skippedCount counts all of it.
+	skipped      []SkippedItem
+	skippedCount int
+	// emitted is the state the last transfer event reported, and
+	// lastProgress when the last progress event went, so a copy says each
+	// state once and its progress at most four times a second.
+	emitted      string
+	lastProgress time.Time
+	// saved is when the journal last took the list of finished files.
+	saved      time.Time
 	cancel     context.CancelFunc
 	stop       string // "pause" or "cancel" while an attempt is being stopped
 	wake       chan struct{}
@@ -127,7 +144,9 @@ type rateSample struct {
 
 // transferManager holds the jobs.
 type transferManager struct {
-	d       *Daemon
+	d *Daemon
+	// parts is the folders this daemon wrote part files in.
+	parts   *partDirs
 	mu      sync.Mutex
 	jobs    map[string]*transferJob
 	order   []string
@@ -135,7 +154,7 @@ type transferManager struct {
 }
 
 func newTransferManager(d *Daemon) *transferManager {
-	return &transferManager{d: d, jobs: map[string]*transferJob{}, running: make(chan struct{}, transferMaxRunning)}
+	return &transferManager{d: d, parts: newPartDirs(), jobs: map[string]*transferJob{}, running: make(chan struct{}, transferMaxRunning)}
 }
 
 func newTransferID() string {
@@ -144,8 +163,13 @@ func newTransferID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// start makes a job and runs it in the background.
-func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool) *transferJob {
+// errTransferBusy is a copy to a path another copy is writing.
+var errTransferBusy = errors.New("busy")
+
+// start makes a job and runs it in the background. A copy to the same place
+// as a copy that has not ended is refused: one of the two would replace the
+// other's file.
+func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool) (*transferJob, error) {
 	j := &transferJob{
 		id:       newTransferID(),
 		src:      src,
@@ -159,12 +183,27 @@ func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, p
 		wake:     make(chan struct{}, 1),
 	}
 	m.mu.Lock()
+	for _, id := range m.order {
+		o := m.jobs[id]
+		if o.dst.Host == dst.Host && o.dst.Path == dst.Path && !transferEnded(o.getState()) {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("%w: copy %s writes %s", errTransferBusy, o.id, dst)
+		}
+	}
 	m.jobs[j.id] = j
 	m.order = append(m.order, j.id)
 	m.pruneLocked()
 	m.mu.Unlock()
+	LogBasic("Transfer %s starts: %s to %s (move %v, conflict %q)", j.id, src, dst, move, conflict)
+	m.note(j, true)
 	go m.run(j)
-	return j
+	return j, nil
+}
+
+// transferEnded reports whether a state is one a job does not leave by
+// itself.
+func transferEnded(state string) bool {
+	return state == transferDone || state == transferFailed || state == transferCancelled
 }
 
 func (m *transferManager) get(id string) *transferJob {
@@ -173,16 +212,23 @@ func (m *transferManager) get(id string) *transferJob {
 	return m.jobs[id]
 }
 
-// pruneLocked drops finished jobs older than transferKeepDone.
+// pruneLocked drops finished jobs older than transferKeepDone. A failed job
+// that leaves the list takes its parts and its journal entry with it: nothing
+// can resume it after that.
 func (m *transferManager) pruneLocked() {
 	keep := m.order[:0]
 	for _, id := range m.order {
 		j := m.jobs[id]
 		j.mu.Lock()
 		old := !j.ended.IsZero() && time.Since(j.ended) > transferKeepDone
+		failed := j.state == transferFailed
 		j.mu.Unlock()
 		if old {
 			delete(m.jobs, id)
+			m.forget(j)
+			if failed {
+				go m.abortParts(j)
+			}
 			continue
 		}
 		keep = append(keep, id)
@@ -249,6 +295,7 @@ func (m *transferManager) run(j *transferJob) {
 			<-m.running
 			continue
 		}
+		m.note(j, false)
 		err := m.attempt(actx, j)
 		cancel()
 		<-m.running
@@ -265,7 +312,8 @@ func (m *transferManager) run(j *transferJob) {
 				j.state = transferDone
 				j.ended = time.Now()
 			})
-			LogBasic("Transfer %s finished: %s to %s", j.id, j.src, j.dst)
+			LogBasic("Transfer %s finished: %s to %s, %d bytes", j.id, j.src, j.dst, j.done.Load())
+			m.note(j, false)
 			return
 		case stop == "cancel":
 			m.abortParts(j)
@@ -273,11 +321,18 @@ func (m *transferManager) run(j *transferJob) {
 				j.state = transferCancelled
 				j.ended = time.Now()
 			})
+			LogBasic("Transfer %s cancelled: %s to %s", j.id, j.src, j.dst)
+			m.note(j, false)
 			return
 		case stop == "pause":
 			j.set(func(j *transferJob) { j.state = transferPaused })
+			m.note(j, false)
 			tries = 0
 			continue
+		case ctx.Err() != nil:
+			// The daemon is stopping. The journal keeps the job, and the
+			// next start goes on with it.
+			return
 		}
 
 		var te *transferError
@@ -294,6 +349,7 @@ func (m *transferManager) run(j *transferJob) {
 				j.ended = time.Now()
 			})
 			LogBasic("Transfer %s failed: %s", j.id, te.msg)
+			m.note(j, false)
 			return
 		}
 		// Anything else is the way to a machine, which comes back.
@@ -313,6 +369,7 @@ func (m *transferManager) run(j *transferJob) {
 			j.retryAt = time.Now().Add(wait)
 		})
 		LogBasic("Transfer %s waits %v: %v", j.id, wait, err)
+		m.note(j, false)
 		select {
 		case <-time.After(wait):
 		case <-j.wake:
@@ -413,7 +470,7 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 			j.size, j.files, j.isDir = info.size, 1, false
 			j.current = filepath.Base(j.src.Path)
 		})
-		got, err := m.copyFile(ctx, j, src, dst, j.src.Path, dstPath, info.size, 0, j.conflict, info.perm)
+		got, err := m.copyFile(ctx, j, src, dst, j.src.Path, dstPath, info.size, 0, j.conflict, info.perm, info.mtime)
 		if err != nil {
 			return classify(err)
 		}
@@ -426,9 +483,15 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 		return nil
 	}
 
-	entries, total, err := src.walk(ctx, j.src.Path)
+	w, err := src.walk(ctx, j.src.Path)
 	if err != nil {
 		return classify(err)
+	}
+	entries, total := w.entries, w.total
+	for _, s := range w.skipped {
+		if !safeRel(s.Rel) {
+			return permanent(ErrVerbInvalidParams, j.src.String()+" names an item outside the folder: "+echoName(s.Rel)+". Nothing outside the folder was written.")
+		}
 	}
 	files := 0
 	for _, e := range entries {
@@ -442,7 +505,13 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 			files++
 		}
 	}
-	j.set(func(j *transferJob) { j.size, j.files, j.isDir = total, files, true })
+	j.set(func(j *transferJob) {
+		j.size, j.files, j.isDir = total, files, true
+		j.skipped, j.skippedCount = w.skipped, w.skippedCount
+	})
+	if w.skippedCount > 0 {
+		LogBasic("Transfer %s does not copy %d items of %s that are not files or folders, such as links", j.id, w.skippedCount, j.src)
+	}
 	if err := dst.mkdir(ctx, dstPath); err != nil {
 		return classify(err)
 	}
@@ -468,7 +537,7 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 		if j.private {
 			perm = 0
 		}
-		if _, err := m.copyFile(ctx, j, src, dst, joinRemote(j.src.Path, e.Rel), joinRemote(dstPath, e.Rel), e.Size, base, "replace", perm); err != nil {
+		if _, err := m.copyFile(ctx, j, src, dst, joinRemote(j.src.Path, e.Rel), joinRemote(dstPath, e.Rel), e.Size, base, "replace", perm, e.MTime); err != nil {
 			return classify(err)
 		}
 		base += e.Size
@@ -476,6 +545,7 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 			j.finished[e.Rel] = true
 			j.filesDone = len(j.finished)
 		})
+		m.saveFinished(j)
 	}
 	j.done.Store(total)
 	if j.move {
@@ -557,7 +627,7 @@ func joinRemote(dir, rel string) string {
 // copyFile copies one file through its part, resuming a part that is there,
 // and returns where the file ended up. base is what the job had done before
 // this file, for the progress.
-func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, from, to string, size, base int64, conflict string, perm uint32) (string, error) {
+func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, from, to string, size, base int64, conflict string, perm uint32, mtime int64) (string, error) {
 	// The source's hash runs beside the copy: on another machine it is a
 	// read of the file there, which costs this link nothing.
 	type hashed struct {
@@ -568,19 +638,19 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	go func() {
 		hctx, cancel := context.WithTimeout(ctx, transferHashTimeout)
 		defer cancel()
-		sum, err := src.hash(hctx, from, false, 0, -1)
+		sum, err := src.hash(hctx, from, 0, -1)
 		srcHash <- hashed{sum, err}
 	}()
 
-	part, err := dst.partSize(ctx, to)
+	part, err := dst.partSize(ctx, to, j.id)
 	if err != nil {
 		return "", err
 	}
 	offset := int64(0)
 	if part > 0 && part <= size {
 		n := min(part, int64(transferTailCheck))
-		a, aerr := src.hash(ctx, from, false, part-n, n)
-		b, berr := dst.hash(ctx, to, true, part-n, n)
+		a, aerr := src.hash(ctx, from, part-n, n)
+		b, berr := dst.partHash(ctx, to, j.id, part-n, n)
 		if aerr != nil {
 			return "", aerr
 		}
@@ -603,7 +673,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		if err != nil {
 			return "", err
 		}
-		w, finish, err := dst.openWrite(ctx, to, offset, size-offset)
+		w, finish, err := dst.openWrite(ctx, to, j.id, offset, size-offset)
 		if err != nil {
 			_ = r.Close()
 			return "", err
@@ -612,7 +682,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 			_ = r.Close()
 			_ = w.Close()
 		})
-		pw := &progressWriter{w: w, j: j}
+		pw := &progressWriter{w: w, j: j, m: m}
 		n, cerr := io.CopyBuffer(pw, io.LimitReader(r, size-offset), make([]byte, 256<<10))
 		stop()
 		_ = r.Close()
@@ -635,6 +705,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		j.state = transferVerifying
 		j.done.Store(base + size)
 	})
+	m.note(j, false)
 	var h hashed
 	select {
 	case h = <-srcHash:
@@ -644,7 +715,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	if h.err != nil {
 		return "", h.err
 	}
-	got, err := dst.commit(ctx, to, h.sum, conflict, perm)
+	got, err := dst.commit(ctx, to, j.id, h.sum, conflict, perm, mtime)
 	if err != nil {
 		return "", err
 	}
@@ -652,6 +723,7 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		j.hash, j.verified = h.sum, true
 		j.state = transferRunning
 	})
+	m.note(j, false)
 	return got, nil
 }
 
@@ -659,12 +731,14 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 type progressWriter struct {
 	w io.Writer
 	j *transferJob
+	m *transferManager
 }
 
 func (p *progressWriter) Write(b []byte) (int, error) {
 	n, err := p.w.Write(b)
 	p.j.done.Add(int64(n))
 	p.j.sample(false)
+	p.m.progress(p.j)
 	return n, err
 }
 
@@ -720,7 +794,7 @@ func (m *transferManager) abortParts(j *transferJob) {
 	if isDir && final != "" && current != "" {
 		target = joinRemote(final, current)
 	}
-	_ = dst.abort(ctx, target)
+	_ = dst.abort(ctx, target, j.id)
 }
 
 // TransferRow is one job in transfer-list.
@@ -750,6 +824,10 @@ type TransferRow struct {
 	Started     int64    `json:"started,omitempty"`
 	Ended       int64    `json:"ended,omitempty"`
 	RetryInMs   int64    `json:"retry_in_ms,omitempty"`
+	// Skipped counts what a folder copy did not carry: links, pipes,
+	// sockets and devices. SkippedItems names the first of them.
+	Skipped      int           `json:"skipped,omitempty"`
+	SkippedItems []SkippedItem `json:"skipped_items,omitempty"`
 }
 
 func (j *transferJob) row() TransferRow {
@@ -761,6 +839,7 @@ func (j *transferJob) row() TransferRow {
 		Files: j.files, FilesDone: j.filesDone, Current: j.current,
 		Error: j.errText, Code: j.errCode, ResumedFrom: j.resumedAt, Resumes: j.resumes,
 		SHA256: j.hash, Verified: j.verified, Created: j.created.UnixMilli(),
+		Skipped: j.skippedCount, SkippedItems: j.skipped,
 	}
 	if j.isDir {
 		r.Kind = "dir"
@@ -814,6 +893,8 @@ type statResult struct {
 	isDir  bool
 	size   int64
 	perm   uint32
+	// mtime is the modification time in Unix ms.
+	mtime int64
 }
 
 func (e fileEnd) local() bool { return e.host == "" }
@@ -831,7 +912,7 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 		if err != nil {
 			return statResult{}, err
 		}
-		return statResult{exists: true, isDir: fi.IsDir(), size: fi.Size(), perm: uint32(fi.Mode().Perm())}, nil
+		return statResult{exists: true, isDir: fi.IsDir(), size: fi.Size(), perm: uint32(fi.Mode().Perm()), mtime: fi.ModTime().UnixMilli()}, nil
 	}
 	var r struct {
 		Exists bool     `json:"exists"`
@@ -841,12 +922,12 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 	if err := e.call(ctx, "file-stat", map[string]any{"path": path}, &r); err != nil {
 		return statResult{}, err
 	}
-	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm}, nil
+	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm, mtime: r.Info.MTime}, nil
 }
 
-func (e fileEnd) partSize(ctx context.Context, path string) (int64, error) {
+func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 	if e.local() {
-		fi, err := os.Stat(partPath(path))
+		fi, err := os.Lstat(partPath(path, id))
 		if errors.Is(err, fs.ErrNotExist) {
 			return 0, nil
 		}
@@ -858,23 +939,36 @@ func (e fileEnd) partSize(ctx context.Context, path string) (int64, error) {
 	var r struct {
 		Size int64 `json:"size"`
 	}
-	err := e.call(ctx, "file-stat", map[string]any{"path": path, "part": true}, &r)
+	err := e.call(ctx, "file-stat", map[string]any{"path": path, "part": true, "part_id": id}, &r)
 	return r.Size, err
 }
 
-func (e fileEnd) hash(ctx context.Context, path string, part bool, off, length int64) (string, error) {
+// hash is the sha256 of a range of the file at path, to its end when length
+// is negative.
+func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
 	if e.local() {
-		target := path
-		if part {
-			target = partPath(path)
-		}
-		sum, _, err := hashRange(ctx, target, off, length)
+		sum, _, err := hashRange(ctx, path, off, length)
 		return sum, err
 	}
-	params := map[string]any{"path": path, "offset": off, "part": part}
+	params := map[string]any{"path": path, "offset": off}
 	if length >= 0 {
 		params["length"] = length
 	}
+	var r struct {
+		SHA256 string `json:"sha256"`
+	}
+	err := e.callTimeout(ctx, "file-hash", params, &r, transferHashTimeout)
+	return r.SHA256, err
+}
+
+// partHash is the sha256 of a range of the part a copy with part id id
+// writes for path.
+func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int64) (string, error) {
+	if e.local() {
+		sum, _, err := hashRange(ctx, partPath(path, id), off, length)
+		return sum, err
+	}
+	params := map[string]any{"path": path, "offset": off, "part": true, "part_id": id, "length": length}
 	var r struct {
 		SHA256 string `json:"sha256"`
 	}
@@ -914,7 +1008,7 @@ func (r *readCloser) Close() error { return r.c.Close() }
 
 // openWrite opens the part of a copy to path at off for length bytes. finish
 // ends the write and reports whether every byte landed.
-func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) (io.WriteCloser, func() error, error) {
+func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int64) (io.WriteCloser, func() error, error) {
 	if e.local() {
 		dir := filepath.Dir(path)
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
@@ -923,10 +1017,11 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 			}
 			return nil, nil, err
 		}
-		f, err := openPart(partPath(path))
+		f, err := openPart(fileFS{}, partPath(path, id))
 		if err != nil {
 			return nil, nil, err
 		}
+		e.d.transfers.parts.note(dir)
 		if err := f.Truncate(off); err != nil {
 			_ = f.Close()
 			return nil, nil, err
@@ -947,7 +1042,7 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := c.call(ctx, "open-file-stream", map[string]any{"path": path, "mode": "write", "offset": off, "length": length}, 30*time.Second); err != nil {
+	if _, err := c.call(ctx, "open-file-stream", map[string]any{"path": path, "mode": "write", "offset": off, "length": length, "part_id": id}, 30*time.Second); err != nil {
 		_ = c.Close()
 		return nil, nil, err
 	}
@@ -991,9 +1086,9 @@ func (e fileEnd) openWrite(ctx context.Context, path string, off, length int64) 
 	return c, finish, nil
 }
 
-func (e fileEnd) commit(ctx context.Context, path, sum, conflict string, perm uint32) (string, error) {
+func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, perm uint32, mtime int64) (string, error) {
 	if e.local() {
-		final, _, verr := commitPart(ctx, path, sum, conflict, perm)
+		final, _, verr := commitPart(ctx, fileFS{}, path, id, sum, conflict, perm, mtime)
 		if verr != nil {
 			return "", &VerbCallError{Code: verr.Code, Message: verr.Message}
 		}
@@ -1002,23 +1097,26 @@ func (e fileEnd) commit(ctx context.Context, path, sum, conflict string, perm ui
 	var r struct {
 		Path string `json:"path"`
 	}
-	params := map[string]any{"path": path, "sha256": sum, "conflict": conflict}
+	params := map[string]any{"path": path, "sha256": sum, "conflict": conflict, "part_id": id}
 	if perm != 0 {
 		params["perm"] = perm
+	}
+	if mtime > 0 {
+		params["mtime"] = mtime
 	}
 	err := e.callTimeout(ctx, "file-commit", params, &r, transferHashTimeout)
 	return r.Path, err
 }
 
-func (e fileEnd) abort(ctx context.Context, path string) error {
+func (e fileEnd) abort(ctx context.Context, path, id string) error {
 	if e.local() {
-		err := os.Remove(partPath(path))
+		err := os.Remove(partPath(path, id))
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err
 	}
-	return e.call(ctx, "file-abort", map[string]any{"path": path}, nil)
+	return e.call(ctx, "file-abort", map[string]any{"path": path, "part_id": id}, nil)
 }
 
 func (e fileEnd) mkdir(ctx context.Context, path string) error {
@@ -1038,20 +1136,25 @@ func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error 
 	return e.call(ctx, "file-remove", map[string]any{"path": path, "recursive": recursive}, nil)
 }
 
-func (e fileEnd) walk(ctx context.Context, path string) ([]WalkEntry, int64, error) {
+func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	if e.local() {
-		entries, total, err := walkTree(path)
+		w, err := walkTree(path)
 		if errors.Is(err, errWalkTooLarge) {
-			return nil, 0, permanent(ErrVerbInvalidParams, err.Error())
+			return walkResult{}, permanent(ErrVerbInvalidParams, err.Error())
 		}
-		return entries, total, err
+		return w, err
 	}
 	var r struct {
-		Entries []WalkEntry `json:"entries"`
-		Bytes   int64       `json:"bytes"`
+		Entries      []WalkEntry   `json:"entries"`
+		Bytes        int64         `json:"bytes"`
+		Skipped      []SkippedItem `json:"skipped"`
+		SkippedCount int           `json:"skipped_count"`
 	}
 	err := e.callTimeout(ctx, "file-walk", map[string]any{"path": path}, &r, 2*time.Minute)
-	return r.Entries, r.Bytes, err
+	if len(r.Skipped) > fileWalkSkippedMax {
+		r.Skipped = r.Skipped[:fileWalkSkippedMax]
+	}
+	return walkResult{entries: r.Entries, total: r.Bytes, skipped: r.Skipped, skippedCount: max(r.SkippedCount, len(r.Skipped))}, err
 }
 
 // freeName is the first free "name 2", "name 3" ... for a path on this end.
@@ -1261,7 +1364,10 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 			})
 		}
 	}
-	j := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false)
+	j, err := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false)
+	if err != nil {
+		return nil, busyTransferError(err)
+	}
 	return j.row(), nil
 }
 
@@ -1294,6 +1400,14 @@ func (d *Daemon) verbTransferList(_ *connState, params json.RawMessage) (any, *v
 
 // ErrVerbNoTransfer is a transfer id the daemon does not hold.
 const ErrVerbNoTransfer = "no_transfer"
+
+// busyTransferError is the answer to a copy that start refused.
+func busyTransferError(err error) *verbError {
+	return hintedVerbError(ErrVerbBusy, "another copy writes this path now: "+err.Error(), &VerbHint{
+		Verb:   "transfer-list",
+		Detail: "Nothing was started. Wait for that copy to end, or cancel it with transfer-cancel, then start this one again.",
+	})
+}
 
 func transferControl(op string) verbHandler {
 	return func(d *Daemon, _ *connState, params json.RawMessage) (any, *verbError) {
@@ -1328,6 +1442,7 @@ func transferControl(op string) verbHandler {
 				case j.wake <- struct{}{}:
 				default:
 				}
+				d.transfers.note(j, false)
 				return j.row(), nil
 			} else {
 				j.state = transferPaused
@@ -1352,6 +1467,7 @@ func transferControl(op string) verbHandler {
 			}
 		}
 		j.mu.Unlock()
+		d.transfers.note(j, false)
 		return j.row(), nil
 	}
 }
@@ -1375,7 +1491,7 @@ func transferVerbs() map[string]verbEntry {
 	idParam := verbParam{Name: "id", Type: "string", Required: true, Description: "The transfer's id."}
 	return map[string]verbEntry{
 		"transfer-start": {
-			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place. A destination that exists answers file_exists unless conflict says what to do.",
+			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
 			params: []verbParam{
 				endpoint("src", "What to copy"),
 				endpoint("dst", "Where it goes, the full path of the copy"),
@@ -1390,7 +1506,7 @@ func transferVerbs() map[string]verbEntry {
 			description: "List the transfers, newest first, with byte progress, rate and time left. Finished ones stay for 30 minutes.",
 			params:      []verbParam{{Name: "id", Type: "string", Description: "Only this transfer."}},
 			returns: []verbParam{
-				{Name: "transfers", Type: "[]object", Description: "One row per transfer: id, name, src, dst, kind, move, state, size, done, rate, eta_ms, files, files_done, current, error, code, resumed_from, resumes, sha256, verified, created, started, ended, retry_in_ms."},
+				{Name: "transfers", Type: "[]object", Description: "One row per transfer: id, name, src, dst, kind, move, state, size, done, rate, eta_ms, files, files_done, current, error, code, resumed_from, resumes, sha256, verified, created, started, ended, retry_in_ms, skipped, skipped_items."},
 				{Name: "active", Type: "int", Description: "Transfers that are not finished."},
 			},
 			examples: []string{`{"id":1,"verb":"transfer-list"}`},

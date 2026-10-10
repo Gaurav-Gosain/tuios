@@ -265,6 +265,16 @@ func (c *fileVerbConn) call(verb string, params any) (json.RawMessage, error) {
 	return resp.Result, nil
 }
 
+// mustRaw is must that returns the result as it came.
+func (c *fileVerbConn) mustRaw(verb string, params any) json.RawMessage {
+	c.t.Helper()
+	raw, err := c.call(verb, params)
+	if err != nil {
+		c.t.Fatalf("%s: %v", verb, err)
+	}
+	return raw
+}
+
 func (c *fileVerbConn) must(verb string, params any, out any) {
 	c.t.Helper()
 	raw, err := c.call(verb, params)
@@ -362,6 +372,12 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 	const size = 96 << 20
 	src := filepath.Join(remote, "big.bin")
 	want := randomFile(t, src, size)
+	// A time in the past, so a copy that does not keep it shows the time of
+	// the copy instead.
+	mtime := time.Date(2024, 3, 9, 12, 30, 0, 0, time.UTC)
+	if err := os.Chtimes(src, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
 
 	ssh := writeSlowFakeSSH(t, base, remote, 24<<20, 1<<20)
 	hubWithFileHost(t, base, remote, ssh)
@@ -405,7 +421,7 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 	// A byte of the part changes while the link is down, far from the end the
 	// resume compares. Only the whole-file check can catch it, and it must:
 	// the copy may not put that file in place.
-	part := filepath.Join(base, ".copy of big.bin.tuios-part")
+	part := filepath.Join(base, ".copy of big.bin.tuios-part-"+row.ID)
 	if f, err := os.OpenFile(part, os.O_WRONLY, 0); err != nil {
 		t.Fatalf("open the part: %v", err)
 	} else {
@@ -451,9 +467,11 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 	}
 	if fi, err := os.Stat(dst); err != nil || fi.Mode().Perm() != 0o644 {
 		t.Fatalf("ASSERTION: the copy does not keep the original's permissions (0644): %v %v", fi.Mode(), err)
+	} else if !fi.ModTime().Equal(mtime) {
+		t.Fatalf("ASSERTION: the copy does not keep the original's modification time: %v, want %v", fi.ModTime().UTC(), mtime)
 	}
-	if _, err := os.Stat(filepath.Join(base, ".copy of big.bin.tuios-part")); !os.IsNotExist(err) {
-		t.Fatalf("ASSERTION: the part file was left behind: %v", err)
+	if left, _ := filepath.Glob(filepath.Join(base, ".copy of big.bin.tuios-part*")); len(left) > 0 {
+		t.Fatalf("ASSERTION: the part file was left behind: %v", left)
 	}
 }
 

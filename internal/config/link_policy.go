@@ -15,7 +15,7 @@ import (
 //
 //	[hosts.laptop]
 //	addr = "laptop"                       # optional: without it nothing is dialled
-//	allow = ["list", "mail", "open", "write"]
+//	allow = ["list", "mail", "open", "write", "files"]
 //	hold_mail = true
 //	hosted_grace = "10m"
 //
@@ -45,15 +45,25 @@ const (
 	// LinkAllowRespond answers what waits for the person: prompts, held
 	// approvals, and dismissing Inbox items.
 	LinkAllowRespond = "respond"
+	// LinkAllowFiles reads and writes files here with the file verbs: a
+	// file's bytes, copies in and out, new folders, moves and removes. It is
+	// apart from write, so a person can stop file writes from a machine and
+	// still let it type into panes. A write that arrives over a link stays
+	// inside the home folder, and never reaches the folders that hold keys,
+	// shell start files and tuios's own config (verb_files_confine.go in
+	// internal/session).
+	LinkAllowFiles = "files"
 )
 
 // LinkCapabilities is every capability, in the order they are documented.
-var LinkCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond}
+var LinkCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond, LinkAllowFiles}
 
 // DefaultLinkAllow is what a machine may do here when nothing says otherwise.
 // It is what every link could do before the policy existed, less respond:
-// answering a prompt for the person is opt-in.
-var DefaultLinkAllow = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite}
+// answering a prompt for the person is opt-in. files is on: a machine that
+// may type into a shell here can already move files, and the file verbs keep
+// their writes to the home folder.
+var DefaultLinkAllow = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowFiles}
 
 // DefaultHostedGrace is how long a pane run here for another machine outlives
 // a dropped link when nothing says otherwise.
