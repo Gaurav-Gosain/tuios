@@ -53,37 +53,60 @@ func transferJournalDir() string {
 
 // transferRecord is one job in the journal.
 type transferRecord struct {
-	Version  int      `json:"version"`
-	ID       string   `json:"id"`
-	Socket   string   `json:"socket"`
-	Src      Endpoint `json:"src"`
-	Dst      Endpoint `json:"dst"`
-	Move     bool     `json:"move,omitempty"`
-	Conflict string   `json:"conflict,omitempty"`
-	Private  bool     `json:"private,omitempty"`
-	Created  int64    `json:"created"`
-	State    string   `json:"state"`
-	Final    string   `json:"final,omitempty"`
-	Finished []string `json:"finished,omitempty"`
-	Error    string   `json:"error,omitempty"`
-	Code     string   `json:"code,omitempty"`
-	Ended    int64    `json:"ended,omitempty"`
+	Version     int      `json:"version"`
+	ID          string   `json:"id"`
+	Socket      string   `json:"socket"`
+	Src         Endpoint `json:"src"`
+	Dst         Endpoint `json:"dst"`
+	Move        bool     `json:"move,omitempty"`
+	Conflict    string   `json:"conflict,omitempty"`
+	Each        string   `json:"each,omitempty"`
+	Place       string   `json:"place,omitempty"`
+	Label       string   `json:"label,omitempty"`
+	Private     bool     `json:"private,omitempty"`
+	NoPerms     bool     `json:"no_perms,omitempty"`
+	NoTimes     bool     `json:"no_times,omitempty"`
+	NoCompress  bool     `json:"no_compress,omitempty"`
+	RateLimit   int64    `json:"rate_limit,omitempty"`
+	Pane        string   `json:"pane,omitempty"`
+	PaneSession string   `json:"pane_session,omitempty"`
+	Created     int64    `json:"created"`
+	State       string   `json:"state"`
+	Target      string   `json:"target,omitempty"`
+	Final       string   `json:"final,omitempty"`
+	Finished    []string `json:"finished,omitempty"`
+	Same        int      `json:"same,omitempty"`
+	Skips       int      `json:"conflicts_skipped,omitempty"`
+	Error       string   `json:"error,omitempty"`
+	Code        string   `json:"code,omitempty"`
+	Ended       int64    `json:"ended,omitempty"`
 }
+
+// transferJournalFinishedMax bounds the finished files the journal names. A
+// folder copy of more goes on after a restart all the same: the check-ahead
+// finds the files that are there with the same bytes and leaves them out.
+const transferJournalFinishedMax = 50000
 
 // record is the job as the journal keeps it. The caller holds j.mu.
 func (j *transferJob) recordLocked(socket string) transferRecord {
+	o := j.opts
 	r := transferRecord{
-		Version: 1, ID: j.id, Socket: socket, Src: j.src, Dst: j.dst, Move: j.move,
-		Conflict: j.conflict, Private: j.private, Created: j.created.UnixMilli(),
-		State: j.state, Final: j.final, Error: j.errText, Code: j.errCode,
+		Version: 1, ID: j.id, Socket: socket, Src: j.src, Dst: j.dst, Move: o.Move,
+		Conflict: o.Conflict, Each: o.Each, Place: o.Place, Label: o.Label, Private: o.Private,
+		NoPerms: o.NoPerms, NoTimes: o.NoTimes, NoCompress: o.NoCompress, RateLimit: o.RateLimit,
+		Pane: o.Pane, PaneSession: o.PaneSession, Created: j.created.UnixMilli(),
+		State: j.state, Target: j.target, Final: j.final, Same: j.same, Skips: j.conflictsSkipped,
+		Error: j.errText, Code: j.errCode,
 	}
 	if !j.ended.IsZero() {
 		r.Ended = j.ended.UnixMilli()
 	}
-	for rel := range j.finished {
-		r.Finished = append(r.Finished, rel)
+	if len(j.finished) <= transferJournalFinishedMax {
+		for rel := range j.finished {
+			r.Finished = append(r.Finished, rel)
+		}
+		slices.Sort(r.Finished)
 	}
-	slices.Sort(r.Finished)
 	return r
 }
 
@@ -205,6 +228,34 @@ func (m *transferManager) publish(kind, action string, j *transferJob) {
 	m.d.events.publish(streamEvent{Type: kind, Action: action, Transfer: &row})
 }
 
+// TransferFile is one file of a copy as a transfer-file event says it.
+type TransferFile struct {
+	// ID is the copy's id, and Pane the pane that started it.
+	ID   string `json:"id"`
+	Pane string `json:"pane,omitempty"`
+	// Rel is the file under the folder, or the file's name for a copy of one
+	// file.
+	Rel string `json:"rel"`
+	// State is done (copied and checked), same (there already with the same
+	// bytes), skipped (there and different, left as it was), conflict (made
+	// there during the copy, left as it was) or failed.
+	State  string `json:"state"`
+	SHA256 string `json:"sha256,omitempty"`
+	Code   string `json:"code,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// fileEvent publishes what happened to one file of a copy. It reaches only a
+// subscriber that names transfer-file.
+func (m *transferManager) fileEvent(j *transferJob, rel, state, sum, code, msg string) {
+	if m.d == nil || m.d.events == nil {
+		return
+	}
+	m.d.events.publish(streamEvent{Type: EventTransferFile, Action: state, File: &TransferFile{
+		ID: j.id, Pane: j.opts.Pane, Rel: rel, State: state, SHA256: sum, Code: code, Error: msg,
+	}})
+}
+
 // load reads the journal and takes back this daemon's jobs: a paused job
 // stays paused, a failed one is listed as failed, and any other goes on from
 // its parts. Then it removes the stale parts. It runs once, at start, after
@@ -241,11 +292,17 @@ func (m *transferManager) load() {
 			// Another daemon's, one that runs on another socket.
 			continue
 		}
-		j := &transferJob{
-			id: rec.ID, src: rec.Src, dst: rec.Dst, move: rec.Move, conflict: rec.Conflict,
-			private: rec.Private, created: time.UnixMilli(rec.Created), final: rec.Final,
-			finished: map[string]bool{}, wake: make(chan struct{}, 1),
+		if rec.Label != "" && checkKeepLabel(rec.Label) != nil {
+			rec.Label = ""
 		}
+		j := newJob(rec.ID, rec.Src, rec.Dst, transferOptions{
+			Move: rec.Move, Conflict: rec.Conflict, Each: rec.Each, Place: rec.Place, Label: rec.Label,
+			Private: rec.Private, NoPerms: rec.NoPerms, NoTimes: rec.NoTimes, NoCompress: rec.NoCompress,
+			RateLimit: max(rec.RateLimit, 0), Pane: rec.Pane, PaneSession: rec.PaneSession,
+		})
+		j.created = time.UnixMilli(rec.Created)
+		j.target, j.final = rec.Target, rec.Final
+		j.same, j.conflictsSkipped = rec.Same, rec.Skips
 		for _, rel := range rec.Finished {
 			if safeRel(rel) {
 				j.finished[rel] = true

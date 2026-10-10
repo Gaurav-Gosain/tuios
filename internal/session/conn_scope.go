@@ -212,6 +212,12 @@ var verbScopes = map[string]scopeKind{
 	"transfer-cancel":      scopeDeny,
 	"transfer-pause":       scopeDeny,
 	"transfer-resume":      scopeDeny,
+	"transfer-answer":      scopeDeny,
+	"transfer-clear":       scopeDeny,
+	"file-check":           scopeDeny,
+	"open-tree-stream":     scopeDeny,
+	"speed-test":           scopeDeny,
+	"host-speed-test":      scopeDeny,
 	"drop-files":           scopeDeny,
 	"new-window":           scopeDeny,
 	"popup":                scopeDeny,
@@ -553,14 +559,22 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 		return true
 	}
 	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
-	// events reach no restricted connection and no pane without admin.
-	if ev.Transfer != nil {
+	// events reach no restricted connection, and a pane without admin sees
+	// only the copies it started, with the files grant.
+	if ev.Transfer != nil || ev.File != nil {
 		if cs.scope.Load() != nil {
 			return false
 		}
 		if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
-			return false
+			owner := ""
+			if ev.Transfer != nil {
+				owner = ev.Transfer.Pane
+			} else {
+				owner = ev.File.Pane
+			}
+			return pa.grants.Has(GrantFiles) && owner != "" && owner == pa.window
 		}
+		return true
 	}
 	var owners []string
 	if sc := cs.scope.Load(); sc != nil && sc.own {

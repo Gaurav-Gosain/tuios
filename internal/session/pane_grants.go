@@ -37,9 +37,12 @@ import (
 //   - respond: answer an on-screen prompt with respond, without the person's
 //     attach nonce, on a pane in its reach, and type into a pane waiting on a
 //     prompt. Nothing gives it by default, and admin does not imply it.
+//   - files: copy files with tuios cp. A copy's ends on this machine are in
+//     the pane's own folder, and its ends on a host are under that host's
+//     home. The pane sees and controls only the copies it started.
 //   - admin: everything else a pane could do before grants existed, which is
 //     every verb on every session, the listings across sessions, and the
-//     binary protocol (attach, input). It implies read, write and fan.
+//     binary protocol (attach, input). It implies read, write, fan and files.
 //
 // Every pane may also report its own state, meta and conversation id, ask
 // the person as itself, hold its own approval prompt, and call the verbs that
@@ -87,6 +90,10 @@ const (
 	GrantFan
 	GrantRespond
 	GrantAdmin
+	// GrantFiles copies files: transfer-start with both ends in the pane's
+	// own folder or a host's home, and the transfer verbs on the copies the
+	// pane started. See transferGrantCheck in transfer_grants.go.
+	GrantFiles
 )
 
 // grantNone is the name a caller uses for the empty set.
@@ -97,6 +104,7 @@ var grantByName = map[string]Grants{
 	config.PaneGrantWrite:   GrantWrite,
 	config.PaneGrantFan:     GrantFan,
 	config.PaneGrantRespond: GrantRespond,
+	config.PaneGrantFiles:   GrantFiles,
 	config.PaneGrantAdmin:   GrantAdmin,
 }
 
@@ -132,7 +140,7 @@ func parseGrantsParam(names []string) (Grants, *verbError) {
 // expand adds what admin implies.
 func (g Grants) expand() Grants {
 	if g&GrantAdmin != 0 {
-		g |= GrantRead | GrantWrite | GrantFan
+		g |= GrantRead | GrantWrite | GrantFan | GrantFiles
 	}
 	return g
 }
@@ -712,6 +720,14 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		}
 		return params, nil
 	case scopeDeny, scopeGlobal:
+		if transferGrantVerbs[verb] && pa.grants.Has(GrantFiles) {
+			// The handler holds the copy to the pane's folder and to the
+			// copies the pane started (transfer_grants.go).
+			return params, nil
+		}
+		if transferGrantVerbs[verb] {
+			return nil, deny(verb + " copies files, which needs the files grant")
+		}
 		return nil, deny(verb + " needs the admin grant")
 	case scopeSelf:
 		reach = func(target string) string {

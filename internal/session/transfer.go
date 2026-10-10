@@ -1,9 +1,9 @@
 package session
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -37,10 +38,19 @@ import (
 //
 // Every file goes through stage, hash, rename: the bytes land in a part file
 // beside the destination, the part's sha256 is checked against the source's,
-// and only then is it renamed into place. A link that drops leaves the part.
-// The job waits for the machine, then compares the last MiB of the part with
-// the same range of the source and goes on from the part's end when they
-// match. A full hash at the end checks the whole result either way.
+// and only then is it renamed into place. Both hashes are taken while the
+// bytes move: the machine that reads the file hashes what it reads, and the
+// machine that writes the part hashes what it writes, so a copy reads each
+// file once on each side. A link that drops leaves the part. The job waits
+// for the machine, then compares the last MiB of the part with the same range
+// of the source and goes on from the part's end when they match. A resumed
+// file is hashed whole at the end on both sides.
+//
+// A folder's small files go in one tree stream (transfer_tree.go) instead of
+// a few round trips each, and a file over treeSmallMax goes by itself, so it
+// can resume from the middle. Before a folder copy into a folder that is
+// there, a check-ahead pass asks the far side about every file in batches and
+// leaves out each one that is there already with the same sha256.
 //
 // Each job writes parts of its own, named by its id, so two jobs to one path
 // never write one part. The job is also kept in a journal on disk
@@ -60,6 +70,14 @@ const transferTailCheck = 1 << 20
 
 // transferHashTimeout bounds one hash of a whole file on another machine.
 const transferHashTimeout = 30 * time.Minute
+
+// transferConflictsShown bounds the conflicts a row lists at once. The next
+// ones show when these are answered.
+const transferConflictsShown = 200
+
+// ErrVerbSourceChanged is a file that changed on its machine while it was
+// copied: its size or modification time is not what the copy started from.
+const ErrVerbSourceChanged = "source_changed"
 
 // Endpoint is one end of a copy: a path on this machine (Host empty) or on a
 // configured host.
@@ -82,23 +100,54 @@ const (
 	transferVerifying = "verifying"
 	transferWaiting   = "waiting"
 	transferPaused    = "paused"
+	// transferConflict is a copy that waits for an answer to files that are
+	// there and differ (transfer-answer).
+	transferConflict  = "conflict"
 	transferDone      = "done"
 	transferFailed    = "failed"
 	transferCancelled = "cancelled"
 )
 
+// transferOptions is how a job copies, fixed when it starts.
+type transferOptions struct {
+	Move bool
+	// Conflict is what to do with a destination that is there: fail (or
+	// empty), replace, keep-both, merge (a folder into the folder there),
+	// skip, or ask.
+	Conflict string
+	// Each is what a folder copy does with each file that is there and
+	// differs: replace, keep-both, skip or ask. Empty follows Conflict.
+	Each string
+	// Place is how the destination is read: empty for the full path of the
+	// copy, auto for the cp rule (a folder that is there gets the copy
+	// inside it), into for a folder that must be there.
+	Place string
+	// Label names the copy keep-both makes: "name (LABEL).ext".
+	Label string
+	// Private keeps every file it writes owner only, as a drop folder's are,
+	// instead of taking the original's permission bits.
+	Private    bool
+	NoPerms    bool
+	NoTimes    bool
+	NoCompress bool
+	// RateLimit caps the bytes a second, 0 for none.
+	RateLimit int64
+	// Pane and PaneSession name the pane that started the copy, for a copy
+	// started from a pane.
+	Pane, PaneSession string
+}
+
 // transferJob is one copy.
 type transferJob struct {
 	id       string
 	src, dst Endpoint
-	move     bool
-	conflict string
-	// private keeps every file it writes owner only, as a drop folder's are,
-	// instead of taking the original's permission bits.
-	private bool
-	created time.Time
+	opts     transferOptions
+	created  time.Time
 
 	done atomic.Int64
+	// wire counts the bytes that crossed a link, which compression makes
+	// fewer than done.
+	wire atomic.Int64
 
 	mu        sync.Mutex
 	state     string
@@ -107,7 +156,12 @@ type transferJob struct {
 	files     int
 	filesDone int
 	finished  map[string]bool
+	// target is where the copy goes, as the first attempt read the
+	// destination: the file's path, or the folder's.
+	target    string
 	current   string
+	curBase   int64
+	curSize   int64
 	final     string
 	hash      string
 	verified  bool
@@ -123,6 +177,20 @@ type transferJob struct {
 	// devices), and skippedCount counts all of it.
 	skipped      []SkippedItem
 	skippedCount int
+	// same counts the files that were there already with the same bytes,
+	// conflictsSkipped the files a skip answer left out, conflictsLeft the
+	// files that appeared during the copy under a policy that asks, and
+	// failedFiles the files that did not copy.
+	same             int
+	conflictsSkipped int
+	conflictsLeft    int
+	failedFiles      int
+	// pending is the conflicts that wait for an answer, answers what the
+	// answers said by file, and answerAll the answer for every file.
+	pending   []ConflictItem
+	answers   map[string]string
+	answerAll string
+	answered  chan struct{}
 	// emitted is the state the last transfer event reported, and
 	// lastProgress when the last progress event went, so a copy says each
 	// state once and its progress at most four times a second.
@@ -134,6 +202,7 @@ type transferJob struct {
 	stop    string // "pause" or "cancel" while an attempt is being stopped
 	wake    chan struct{}
 	retryAt time.Time
+	limiter rateLimiter
 }
 
 type rateSample struct {
@@ -141,11 +210,23 @@ type rateSample struct {
 	done int64
 }
 
+// ConflictItem is a file a copy found at its destination with other bytes.
+type ConflictItem struct {
+	Rel      string `json:"rel"`
+	Path     string `json:"path"`
+	SrcSize  int64  `json:"src_size"`
+	SrcMTime int64  `json:"src_mtime,omitempty"`
+	DstSize  int64  `json:"dst_size"`
+	DstMTime int64  `json:"dst_mtime,omitempty"`
+}
+
 // transferManager holds the jobs.
 type transferManager struct {
 	d *Daemon
 	// parts is the folders this daemon wrote part files in.
-	parts   *partDirs
+	parts *partDirs
+	// sums is the hashes write streams took as their bytes landed.
+	sums    partSums
 	mu      sync.Mutex
 	jobs    map[string]*transferJob
 	order   []string
@@ -165,35 +246,43 @@ func newTransferID() string {
 // errTransferBusy is a copy to a path another copy is writing.
 var errTransferBusy = errors.New("busy")
 
-// start makes a job and runs it in the background. A copy to the same place
-// as a copy that has not ended is refused: one of the two would replace the
-// other's file.
-func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool) (*transferJob, error) {
-	j := &transferJob{
-		id:       newTransferID(),
+func newJob(id string, src, dst Endpoint, o transferOptions) *transferJob {
+	return &transferJob{
+		id:       id,
 		src:      src,
 		dst:      dst,
-		move:     move,
-		conflict: conflict,
-		private:  private,
+		opts:     o,
 		created:  time.Now(),
 		state:    transferQueued,
 		finished: map[string]bool{},
+		answers:  map[string]string{},
+		answered: make(chan struct{}, 1),
 		wake:     make(chan struct{}, 1),
 	}
+}
+
+// start makes a job and runs it in the background. A copy to the same place
+// as a copy that has not ended is refused: one of the two would replace the
+// other's file.
+func (m *transferManager) start(src, dst Endpoint, o transferOptions) (*transferJob, error) {
+	j := newJob(newTransferID(), src, dst, o)
 	m.mu.Lock()
 	for _, id := range m.order {
-		o := m.jobs[id]
-		if o.dst.Host == dst.Host && o.dst.Path == dst.Path && !transferEnded(o.getState()) {
+		other := m.jobs[id]
+		if other.dst.Host == dst.Host && (other.dst.Path == dst.Path || other.getTarget() == dst.Path) && !transferEnded(other.getState()) {
 			m.mu.Unlock()
-			return nil, fmt.Errorf("%w: copy %s writes %s", errTransferBusy, o.id, dst)
+			return nil, fmt.Errorf("%w: copy %s writes %s", errTransferBusy, other.id, dst)
 		}
 	}
 	m.jobs[j.id] = j
 	m.order = append(m.order, j.id)
 	m.pruneLocked()
 	m.mu.Unlock()
-	LogBasic("Transfer %s starts: %s to %s (move %v, conflict %q)", j.id, src, dst, move, conflict)
+	from := "the person"
+	if o.Pane != "" {
+		from = "pane " + shortWindowID(o.Pane)
+	}
+	LogBasic("Transfer %s starts for %s: %s to %s (move %v, conflict %q, each %q)", j.id, from, src, dst, o.Move, o.Conflict, o.Each)
 	m.note(j, true)
 	go m.run(j)
 	return j, nil
@@ -215,24 +304,35 @@ func (m *transferManager) get(id string) *transferJob {
 // that leaves the list takes its parts and its journal entry with it: nothing
 // can resume it after that.
 func (m *transferManager) pruneLocked() {
+	m.dropLocked(func(j *transferJob) bool {
+		return !j.ended.IsZero() && time.Since(j.ended) > transferKeepDone
+	})
+}
+
+// dropLocked removes the jobs gone says to, with their journal entries and
+// the parts of the failed ones. gone is called with j.mu held.
+func (m *transferManager) dropLocked(gone func(j *transferJob) bool) int {
 	keep := m.order[:0]
+	n := 0
 	for _, id := range m.order {
 		j := m.jobs[id]
 		j.mu.Lock()
-		old := !j.ended.IsZero() && time.Since(j.ended) > transferKeepDone
+		drop := gone(j)
 		failed := j.state == transferFailed
 		j.mu.Unlock()
-		if old {
+		if drop {
 			delete(m.jobs, id)
 			m.forget(j)
 			if failed {
 				go m.abortParts(j)
 			}
+			n++
 			continue
 		}
 		keep = append(keep, id)
 	}
 	m.order = keep
+	return n
 }
 
 func (j *transferJob) set(f func(j *transferJob)) {
@@ -245,6 +345,12 @@ func (j *transferJob) getState() string {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.state
+}
+
+func (j *transferJob) getTarget() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.target
 }
 
 // run drives one job to its end: it takes a running slot, makes attempts, and
@@ -288,6 +394,7 @@ func (m *transferManager) run(j *transferJob) {
 				j.state = transferRunning
 			}
 			j.errText, j.errCode = "", ""
+			j.limiter = rateLimiter{rate: j.opts.RateLimit}
 		})
 		if held {
 			cancel()
@@ -310,8 +417,9 @@ func (m *transferManager) run(j *transferJob) {
 			j.set(func(j *transferJob) {
 				j.state = transferDone
 				j.ended = time.Now()
+				j.current = ""
 			})
-			LogBasic("Transfer %s finished: %s to %s, %d bytes", j.id, j.src, j.dst, j.done.Load())
+			LogBasic("Transfer %s finished: %s to %s, %d bytes, %d over the links", j.id, j.src, j.dst, j.done.Load(), j.wire.Load())
 			m.note(j, false)
 			return
 		case stop == "cancel":
@@ -345,6 +453,9 @@ func (m *transferManager) run(j *transferJob) {
 			j.set(func(j *transferJob) {
 				j.state = transferFailed
 				j.errText, j.errCode = te.msg, te.code
+				if te.code == ErrVerbHashMismatch {
+					j.errText = "The copy did not match the original twice. The disk or the file may be changing. " + te.msg
+				}
 				j.ended = time.Now()
 			})
 			LogBasic("Transfer %s failed: %s", j.id, te.msg)
@@ -419,8 +530,8 @@ func classify(err error) error {
 
 // attempt runs the job once from where its parts are.
 func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
-	src := fileEnd{d: m.d, host: j.src.Host}
-	dst := fileEnd{d: m.d, host: j.dst.Host}
+	src := fileEnd{d: m.d, host: j.src.Host, wire: &j.wire}
+	dst := fileEnd{d: m.d, host: j.dst.Host, wire: &j.wire}
 
 	info, err := src.stat(ctx, j.src.Path)
 	if err != nil {
@@ -429,57 +540,252 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	if !info.exists {
 		return permanent(ErrVerbNoFile, j.src.String()+" does not exist")
 	}
+	target, err := m.resolveTarget(ctx, j, dst, info)
+	if err != nil {
+		return classify(err)
+	}
+	if j.opts.Private || j.opts.NoPerms {
+		info.perm = 0
+	}
+	if j.opts.NoTimes {
+		info.mtime = 0
+	}
+	if !info.isDir {
+		return m.attemptFile(ctx, j, src, dst, info, target)
+	}
+	return m.attemptDir(ctx, j, src, dst, info, target)
+}
 
-	dstPath := j.dst.Path
+// resolveTarget reads the destination once, on the first attempt: with place
+// auto a folder that is there gets the copy inside it, as cp does, and with
+// place into it must be a folder. Later attempts keep the answer, so a
+// folder the first attempt made does not move the copy into itself.
+func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst fileEnd, info statResult) (string, error) {
+	if t := j.getTarget(); t != "" {
+		return t, nil
+	}
+	target := j.dst.Path
+	place := j.opts.Place
+	if place == "contents" && !info.isDir {
+		place = "auto"
+	}
+	if place == "auto" || place == "into" {
+		st, err := dst.stat(ctx, target)
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case st.exists && st.isDir:
+			target = joinRemote(target, path.Base(filepath.ToSlash(j.src.Path)))
+		case place == "into" && !st.exists:
+			return "", permanent(ErrVerbNoFile, "the folder "+j.dst.String()+" does not exist")
+		case place == "into":
+			return "", permanent(ErrVerbInvalidParams, j.dst.String()+" is not a folder")
+		}
+	}
+	if j.src.Host == j.dst.Host {
+		s, t := filepath.Clean(j.src.Path), filepath.Clean(target)
+		if s == t {
+			return "", permanent(ErrVerbInvalidParams, "the copy would land on the file it copies: "+j.src.String())
+		}
+		if info.isDir && pathUnder(t, s) {
+			return "", permanent(ErrVerbInvalidParams, "a folder cannot be copied into itself: "+j.dst.String())
+		}
+	}
+	// Another copy that writes the same place would replace this one's
+	// files, or this one its.
+	m.mu.Lock()
+	for _, id := range m.order {
+		o := m.jobs[id]
+		if o != j && o.dst.Host == j.dst.Host && o.getTarget() == target && !transferEnded(o.getState()) {
+			m.mu.Unlock()
+			return "", permanent(ErrVerbBusy, "another copy writes "+target+" now: "+o.id)
+		}
+	}
+	m.mu.Unlock()
+	j.set(func(j *transferJob) { j.target = target })
+	return target, nil
+}
+
+// keepAction is what a file that is not there yet gets at its commit, should
+// one appear there during the copy: a file made meanwhile is not replaced
+// unless the policy says to.
+func keepAction(policy string) string {
+	switch policy {
+	case "replace", "keep-both", "skip":
+		return policy
+	case "ask":
+		return "skip"
+	}
+	return "fail"
+}
+
+// attemptFile copies one file.
+func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, dst fileEnd, info statResult, target string) error {
+	name := path.Base(filepath.ToSlash(j.src.Path))
+	j.set(func(j *transferJob) {
+		j.size, j.files, j.isDir = info.size, 1, false
+		j.current = name
+	})
+	existing, err := dst.stat(ctx, target)
+	if err != nil {
+		return classify(err)
+	}
+	policy := j.opts.Conflict
+	if policy == "merge" {
+		// A file has nothing to merge: each says what to do with it.
+		policy = j.opts.Each
+	}
+	action := keepAction(policy)
+	if existing.exists {
+		if existing.isDir {
+			return permanent(ErrVerbFileExists, j.dst.Host+":"+target+" is a folder, so the file cannot go there")
+		}
+		if existing.size == info.size {
+			same, sum, err := m.sameFile(ctx, src, dst, j.src.Path, target)
+			if err != nil {
+				return classify(err)
+			}
+			if same {
+				// A file that is there with the same bytes is the copy
+				// already. Nothing is written.
+				j.set(func(j *transferJob) {
+					j.same, j.filesDone, j.hash, j.verified, j.final = 1, 1, sum, true, target
+				})
+				j.done.Store(info.size)
+				m.fileEvent(j, name, "same", sum, "", "")
+				if j.opts.Move {
+					if err := src.remove(ctx, j.src.Path, false); err != nil {
+						return classify(err)
+					}
+				}
+				return nil
+			}
+		}
+		switch policy {
+		case "replace", "keep-both":
+			action = policy
+		case "skip":
+			j.set(func(j *transferJob) { j.conflictsSkipped = 1 })
+			m.fileEvent(j, name, "skipped", "", ErrVerbFileExists, "")
+			return nil
+		case "ask":
+			got, err := m.ask(ctx, j, []ConflictItem{{Rel: name, Path: target, SrcSize: info.size, SrcMTime: info.mtime, DstSize: existing.size, DstMTime: existing.mtime}})
+			if err != nil {
+				return err
+			}
+			action = got[name]
+			if action == "skip" {
+				j.set(func(j *transferJob) { j.conflictsSkipped = 1 })
+				m.fileEvent(j, name, "skipped", "", ErrVerbFileExists, "")
+				return nil
+			}
+		default:
+			return permanent(ErrVerbFileExists, j.dst.Host+":"+target+" already exists")
+		}
+	}
+	got, skipped, sum, err := m.copyFile(ctx, j, src, dst, fileCopy{
+		rel: name, from: j.src.Path, to: target, size: info.size, conflict: action,
+		perm: info.perm, mtime: info.mtime, srcMTime: info.mtime,
+	})
+	if err != nil {
+		return classify(err)
+	}
+	if skipped {
+		// A file appeared at the destination during the copy.
+		j.set(func(j *transferJob) {
+			if policy == "ask" {
+				j.conflictsLeft = 1
+			} else {
+				j.conflictsSkipped = 1
+			}
+		})
+		m.fileEvent(j, name, "conflict", "", ErrVerbFileExists, "")
+		return nil
+	}
+	j.set(func(j *transferJob) { j.final = got; j.filesDone = 1 })
+	m.fileEvent(j, name, "done", sum, "", "")
+	if j.opts.Move {
+		if err := src.remove(ctx, j.src.Path, false); err != nil {
+			return classify(err)
+		}
+	}
+	return nil
+}
+
+// sameFile reports whether two files hold the same bytes, by their sha256,
+// each taken on its own machine at once.
+func (m *transferManager) sameFile(ctx context.Context, src, dst fileEnd, a, b string) (bool, string, error) {
+	type res struct {
+		sum string
+		err error
+	}
+	theirs := make(chan res, 1)
+	go func() {
+		sum, err := dst.hash(ctx, b, 0, -1)
+		theirs <- res{sum, err}
+	}()
+	ours, err := src.hash(ctx, a, 0, -1)
+	t := <-theirs
+	if err != nil {
+		return false, "", err
+	}
+	if t.err != nil {
+		return false, "", t.err
+	}
+	return ours == t.sum, ours, nil
+}
+
+// fileTask is one file of a folder copy and what its commit does when a file
+// is there.
+type fileTask struct {
+	e      WalkEntry
+	action string
+}
+
+// attemptDir copies a folder.
+func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, dst fileEnd, info statResult, target string) error {
 	j.mu.Lock()
 	final := j.final
 	j.mu.Unlock()
-	if final != "" && info.isDir {
+	// merging is a copy into a folder that may hold files already, which
+	// asks the far side about them before it sends any.
+	merging := final != ""
+	dstPath := target
+	if final != "" {
 		// A folder copy keeps the folder it chose on its first attempt.
 		dstPath = final
-	} else if final == "" {
+	} else {
 		existing, err := dst.stat(ctx, dstPath)
 		if err != nil {
 			return classify(err)
 		}
-		if existing.exists && info.isDir {
-			switch j.conflict {
+		if existing.exists {
+			if !existing.isDir {
+				return permanent(ErrVerbFileExists, j.dst.Host+":"+dstPath+" is a file, so the folder cannot go there")
+			}
+			switch j.opts.Conflict {
 			case "keep-both":
 				dstPath, err = dst.freeName(ctx, dstPath)
 				if err != nil {
 					return classify(err)
 				}
-			case "replace", "merge":
+			case "replace", "merge", "skip", "ask":
+				merging = true
 			default:
 				return permanent(ErrVerbFileExists, j.dst.String()+" already exists")
 			}
-		} else if existing.exists && j.conflict != "replace" && j.conflict != "keep-both" {
-			return permanent(ErrVerbFileExists, j.dst.String()+" already exists")
 		}
-		if info.isDir {
-			j.set(func(j *transferJob) { j.final = dstPath })
-		}
+		j.set(func(j *transferJob) { j.final = dstPath })
 	}
-
-	if j.private {
-		info.perm = 0
-	}
-	if !info.isDir {
-		j.set(func(j *transferJob) {
-			j.size, j.files, j.isDir = info.size, 1, false
-			j.current = filepath.Base(j.src.Path)
-		})
-		got, err := m.copyFile(ctx, j, src, dst, j.src.Path, dstPath, info.size, 0, j.conflict, info.perm, info.mtime)
-		if err != nil {
-			return classify(err)
+	each := j.opts.Each
+	if each == "" {
+		switch j.opts.Conflict {
+		case "skip", "ask":
+			each = j.opts.Conflict
+		default:
+			each = "replace"
 		}
-		j.set(func(j *transferJob) { j.final = got; j.filesDone = 1 })
-		if j.move {
-			if err := src.remove(ctx, j.src.Path, false); err != nil {
-				return classify(err)
-			}
-		}
-		return nil
 	}
 
 	w, err := src.walk(ctx, j.src.Path)
@@ -514,51 +820,326 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	if err := dst.mkdir(ctx, dstPath); err != nil {
 		return classify(err)
 	}
+
 	// What the finished files hold counts as done from the start, so a resume
 	// shows the copy where it is and not from zero.
 	var base int64
+	var dirs []string
+	var todo []WalkEntry
+	j.mu.Lock()
 	for _, e := range entries {
-		if e.Dir {
-			if err := dst.mkdir(ctx, joinRemote(dstPath, e.Rel)); err != nil {
-				return classify(err)
-			}
-			continue
-		}
-		j.mu.Lock()
-		doneAlready := j.finished[e.Rel]
-		j.mu.Unlock()
-		if doneAlready {
+		switch {
+		case e.Dir:
+			dirs = append(dirs, e.Rel)
+		case j.finished[e.Rel]:
 			base += e.Size
-			continue
+		default:
+			todo = append(todo, e)
 		}
-		j.set(func(j *transferJob) { j.current = e.Rel })
-		perm := e.Perm
-		if j.private {
-			perm = 0
-		}
-		if _, err := m.copyFile(ctx, j, src, dst, joinRemote(j.src.Path, e.Rel), joinRemote(dstPath, e.Rel), e.Size, base, "replace", perm, e.MTime); err != nil {
-			return classify(err)
-		}
-		base += e.Size
-		j.set(func(j *transferJob) {
-			j.finished[e.Rel] = true
-			j.filesDone = len(j.finished)
-		})
-		m.saveFinished(j)
 	}
-	j.done.Store(total)
-	if j.move {
-		left, err := removeMoved(ctx, src, j.src.Path, entries)
+	j.mu.Unlock()
+	j.done.Store(base)
+
+	tasks, extra, err := m.checkAhead(ctx, j, src, dst, dstPath, todo, merging, each)
+	if err != nil {
+		return err
+	}
+	base += extra
+	j.done.Store(base)
+
+	var small, large []fileTask
+	for _, t := range tasks {
+		if t.e.Size <= treeSmallMax {
+			small = append(small, t)
+		} else {
+			large = append(large, t)
+		}
+	}
+	perm := func(e WalkEntry) uint32 {
+		if j.opts.Private || j.opts.NoPerms {
+			return 0
+		}
+		return e.Perm
+	}
+	mtime := func(e WalkEntry) int64 {
+		if j.opts.NoTimes {
+			return 0
+		}
+		return e.MTime
+	}
+
+	var failed []treeResult
+	if len(small) > 0 || len(dirs) > 0 {
+		res, err := m.treeCopy(ctx, j, src, dst, j.src.Path, dstPath, dirs, small, perm, mtime)
+		var ve *VerbCallError
+		if errors.As(err, &ve) && ve.Code == ErrVerbUnknownVerb {
+			// A daemon from before tree streams: each file by itself.
+			LogBasic("Transfer %s: a far daemon has no tree stream, so each file goes by itself", j.id)
+			for _, d := range dirs {
+				if err := dst.mkdir(ctx, joinRemote(dstPath, d)); err != nil {
+					return classify(err)
+				}
+			}
+			large = append(small, large...)
+			res, err = nil, nil
+		}
 		if err != nil {
 			return classify(err)
 		}
-		if left {
+		for _, r := range res {
+			if r.code == ErrVerbHashMismatch {
+				// Once more by itself, which reads it again on both sides.
+				for _, t := range small {
+					if t.e.Rel == r.rel {
+						large = append(large, t)
+						break
+					}
+				}
+				continue
+			}
+			failed = append(failed, r)
+		}
+	}
+	for _, t := range large {
+		e := t.e
+		fc := fileCopy{
+			rel: e.Rel, from: joinRemote(j.src.Path, e.Rel), to: joinRemote(dstPath, e.Rel),
+			size: e.Size, base: j.done.Load(), conflict: t.action, perm: perm(e), mtime: mtime(e), srcMTime: e.MTime,
+		}
+		_, skipped, sum, err := m.copyFile(ctx, j, src, dst, fc)
+		if err != nil {
+			c := classify(err)
+			var te *transferError
+			if errors.As(c, &te) && !te.retry && te.code != ErrVerbHashMismatch && ctx.Err() == nil {
+				// One file that cannot copy does not stop the others.
+				failed = append(failed, treeResult{rel: e.Rel, code: te.code, msg: te.msg})
+				m.fileEvent(j, e.Rel, "failed", "", te.code, te.msg)
+				continue
+			}
+			return c
+		}
+		j.done.Store(fc.base + e.Size)
+		m.noteFileResult(j, e.Rel, each, skipped, sum)
+	}
+	j.done.Store(total)
+	if len(failed) > 0 {
+		j.set(func(j *transferJob) { j.failedFiles = len(failed) })
+		first := failed[0]
+		msg := fmt.Sprintf("%d of %d files did not copy. The first: %s", len(failed), files, first.msg)
+		if len(failed) == 1 {
+			msg = first.msg
+		}
+		return permanent(first.code, msg)
+	}
+	if j.opts.Move {
+		j.mu.Lock()
+		var carried []WalkEntry
+		for _, e := range entries {
+			if e.Dir || j.finished[e.Rel] {
+				carried = append(carried, e)
+			}
+		}
+		j.mu.Unlock()
+		left, err := removeMoved(ctx, src, j.src.Path, carried)
+		if err != nil {
+			return classify(err)
+		}
+		if left || len(carried) < len(entries) {
 			j.set(func(j *transferJob) {
-				j.errText = "The copy is done. Some items in " + j.src.String() + " were not copied, such as links, pipes or new files, so they stay there."
+				j.errText = "The copy is done. Some items in " + j.src.String() + " were not copied, such as links, pipes, skipped files or new files, so they stay there."
 			})
 		}
 	}
 	return nil
+}
+
+// noteFileResult records a file a folder copy finished.
+func (m *transferManager) noteFileResult(j *transferJob, rel, each string, skipped bool, sum string) {
+	if skipped {
+		j.set(func(j *transferJob) {
+			if each == "ask" {
+				j.conflictsLeft++
+			} else {
+				j.conflictsSkipped++
+			}
+		})
+		m.fileEvent(j, rel, "conflict", "", ErrVerbFileExists, "")
+		return
+	}
+	j.set(func(j *transferJob) {
+		j.finished[rel] = true
+		j.filesDone = len(j.finished)
+	})
+	m.fileEvent(j, rel, "done", sum, "", "")
+	m.saveFinished(j)
+}
+
+// checkAhead decides each file of a folder copy before any byte moves. Into a
+// folder that holds nothing of the copy yet, every file goes. Into one that
+// may hold some, the far side is asked about all of them in batches: a file
+// there with the same size is hashed on both machines, and one with the same
+// sha256 is left out as the copy already. One that differs follows each, and
+// ask waits for the answers. It returns the files to send and the bytes of
+// those left out, for the progress.
+func (m *transferManager) checkAhead(ctx context.Context, j *transferJob, src, dst fileEnd, dstPath string, todo []WalkEntry, merging bool, each string) ([]fileTask, int64, error) {
+	tasks := make([]fileTask, 0, len(todo))
+	if !merging {
+		for _, e := range todo {
+			tasks = append(tasks, fileTask{e: e, action: keepAction(each)})
+		}
+		return tasks, 0, nil
+	}
+	rels := make([]string, len(todo))
+	for i, e := range todo {
+		rels[i] = e.Rel
+	}
+	there, err := dst.check(ctx, dstPath, rels, false)
+	if err != nil {
+		return nil, 0, classify(err)
+	}
+	var sameSize []string
+	for i, e := range todo {
+		if t := there[i]; t.Exists && t.Kind == "file" && t.Size == e.Size {
+			sameSize = append(sameSize, e.Rel)
+		}
+	}
+	srcSums, dstSums := map[string]string{}, map[string]string{}
+	if len(sameSize) > 0 {
+		type res struct {
+			out []FileCheck
+			err error
+		}
+		theirs := make(chan res, 1)
+		go func() {
+			out, err := dst.check(ctx, dstPath, sameSize, true)
+			theirs <- res{out, err}
+		}()
+		ours, err := src.check(ctx, j.src.Path, sameSize, true)
+		t := <-theirs
+		if err != nil {
+			return nil, 0, classify(err)
+		}
+		if t.err != nil {
+			return nil, 0, classify(t.err)
+		}
+		for i, rel := range sameSize {
+			if i < len(ours) {
+				srcSums[rel] = ours[i].SHA256
+			}
+			if i < len(t.out) {
+				dstSums[rel] = t.out[i].SHA256
+			}
+		}
+	}
+	var extra int64
+	var asks []ConflictItem
+	conflicted := map[string]WalkEntry{}
+	for i, e := range todo {
+		t := there[i]
+		switch {
+		case !t.Exists:
+			tasks = append(tasks, fileTask{e: e, action: keepAction(each)})
+			continue
+		case t.Kind != "file":
+			// A folder or a link where the file goes. It is not replaced.
+			extra += e.Size
+			j.set(func(j *transferJob) { j.conflictsLeft++ })
+			m.fileEvent(j, e.Rel, "conflict", "", ErrVerbFileExists, "a "+t.Kind+" is in the way")
+			continue
+		}
+		if sum := srcSums[e.Rel]; sum != "" && sum == dstSums[e.Rel] {
+			extra += e.Size
+			j.set(func(j *transferJob) {
+				j.same++
+				j.finished[e.Rel] = true
+				j.filesDone = len(j.finished)
+			})
+			m.fileEvent(j, e.Rel, "same", sum, "", "")
+			continue
+		}
+		switch each {
+		case "replace", "keep-both":
+			tasks = append(tasks, fileTask{e: e, action: each})
+		case "skip":
+			extra += e.Size
+			j.set(func(j *transferJob) { j.conflictsSkipped++ })
+			m.fileEvent(j, e.Rel, "skipped", "", ErrVerbFileExists, "")
+		default:
+			conflicted[e.Rel] = e
+			asks = append(asks, ConflictItem{Rel: e.Rel, Path: joinRemote(dstPath, e.Rel), SrcSize: e.Size, SrcMTime: e.MTime, DstSize: t.Size, DstMTime: t.MTime})
+		}
+	}
+	m.saveFinished(j)
+	if len(asks) > 0 {
+		got, err := m.ask(ctx, j, asks)
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, a := range asks {
+			e := conflicted[a.Rel]
+			switch choice := got[a.Rel]; choice {
+			case "replace", "keep-both":
+				tasks = append(tasks, fileTask{e: e, action: choice})
+			default:
+				extra += e.Size
+				j.set(func(j *transferJob) { j.conflictsSkipped++ })
+				m.fileEvent(j, e.Rel, "skipped", "", ErrVerbFileExists, "")
+			}
+		}
+	}
+	return tasks, extra, nil
+}
+
+// ask puts conflicts to whoever follows the copy and waits for an answer to
+// each: the job is in state conflict until then, and transfer-answer answers.
+// An answer given before, for a file or for all, stands. It returns the
+// answer per file.
+func (m *transferManager) ask(ctx context.Context, j *transferJob, items []ConflictItem) (map[string]string, error) {
+	out := make(map[string]string, len(items))
+	for {
+		j.mu.Lock()
+		var pending []ConflictItem
+		for _, it := range items {
+			switch {
+			case j.answers[it.Rel] != "":
+				out[it.Rel] = j.answers[it.Rel]
+			case j.answerAll != "":
+				out[it.Rel] = j.answerAll
+			default:
+				pending = append(pending, it)
+			}
+		}
+		if len(pending) == 0 {
+			wasConflict := j.state == transferConflict
+			j.pending = nil
+			if wasConflict {
+				j.state = transferRunning
+			}
+			j.mu.Unlock()
+			if wasConflict {
+				m.note(j, false)
+			}
+			return out, nil
+		}
+		j.pending = pending
+		was := j.state
+		j.state = transferConflict
+		j.mu.Unlock()
+		if was != transferConflict {
+			LogBasic("Transfer %s waits for an answer about %d files that are there and differ", j.id, len(pending))
+			m.note(j, false)
+		}
+		select {
+		case <-j.answered:
+		case <-ctx.Done():
+			j.set(func(j *transferJob) {
+				if j.state == transferConflict {
+					j.state = transferRunning
+				}
+			})
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // removeMoved removes from a moved folder what the copy carried: each file it
@@ -623,122 +1204,257 @@ func joinRemote(dir, rel string) string {
 	return strings.TrimSuffix(dir, "/") + "/" + filepath.ToSlash(rel)
 }
 
-// copyFile copies one file through its part, resuming a part that is there,
-// and returns where the file ended up. base is what the job had done before
-// this file, for the progress.
-func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, from, to string, size, base int64, conflict string, perm uint32, mtime int64) (string, error) {
-	// The source's hash runs beside the copy: on another machine it is a
-	// read of the file there, which costs this link nothing.
-	type hashed struct {
-		sum string
-		err error
-	}
-	srcHash := make(chan hashed, 1)
-	go func() {
-		hctx, cancel := context.WithTimeout(ctx, transferHashTimeout)
-		defer cancel()
-		sum, err := src.hash(hctx, from, 0, -1)
-		srcHash <- hashed{sum, err}
-	}()
+// fileCopy is one file a copy sends by itself.
+type fileCopy struct {
+	rel      string
+	from, to string
+	size     int64
+	// base is what the job had done before this file, for the progress.
+	base     int64
+	conflict string
+	label    string
+	perm     uint32
+	mtime    int64
+	// srcMTime is the source's modification time the copy started from, so
+	// a file that changes during the copy is found. 0 skips the check.
+	srcMTime int64
+}
 
-	part, err := dst.partSize(ctx, to, j.id)
+// emptySHA256 is the sha256 of no bytes.
+var emptySHA256 = func() string { s := sha256.Sum256(nil); return hex.EncodeToString(s[:]) }()
+
+// copyFile copies one file through its part, resuming a part that is there,
+// and returns where the file ended up, whether a skip conflict left it out,
+// and its sha256.
+//
+// From the start of a file, both hashes are taken on the way: the reading
+// side hashes what it reads (this daemon for its own disk, the far daemon in
+// the stream's trailer), and the writing side hashes what it writes. A resume
+// has bytes from an earlier attempt in its part, so it hashes the source
+// whole beside the copy, and the commit reads the part whole.
+func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, fc fileCopy) (string, bool, string, error) {
+	part, err := dst.partSize(ctx, fc.to, j.id)
 	if err != nil {
-		return "", err
+		return "", false, "", err
 	}
+	size := fc.size
 	offset := int64(0)
 	if part > 0 && part <= size {
 		n := min(part, int64(transferTailCheck))
-		a, aerr := src.hash(ctx, from, part-n, n)
-		b, berr := dst.partHash(ctx, to, j.id, part-n, n)
+		a, aerr := src.hash(ctx, fc.from, part-n, n)
+		b, berr := dst.partHash(ctx, fc.to, j.id, part-n, n)
 		if aerr != nil {
-			return "", aerr
+			return "", false, "", aerr
 		}
 		if berr == nil && a == b {
 			offset = part
 		}
 	}
+	type hashed struct {
+		sum string
+		err error
+	}
+	var srcHash chan hashed
 	if offset > 0 {
 		j.set(func(j *transferJob) {
-			j.resumedAt = base + offset
+			j.resumedAt = fc.base + offset
 			j.resumes++
 		})
-		LogBasic("Transfer %s resumes %s at byte %d of %d", j.id, from, offset, size)
+		LogBasic("Transfer %s resumes %s at byte %d of %d", j.id, fc.from, offset, size)
+		srcHash = make(chan hashed, 1)
+		go func() {
+			hctx, cancel := context.WithTimeout(ctx, transferHashTimeout)
+			defer cancel()
+			sum, err := src.hash(hctx, fc.from, 0, -1)
+			srcHash <- hashed{sum, err}
+		}()
 	}
-	j.done.Store(base + offset)
+	j.set(func(j *transferJob) {
+		j.current, j.curBase, j.curSize = fc.rel, fc.base, size
+	})
+	j.done.Store(fc.base + offset)
 	j.sample(true)
 
-	if offset < size {
-		r, err := src.openRead(ctx, from, offset)
+	sum := ""
+	known := ""
+	if offset < size || size == 0 {
+		in, err := src.openRead(ctx, fc.from, offset, !src.local() && j.compressionWanted() && compressibleName(fc.from))
 		if err != nil {
-			return "", err
+			return "", false, "", err
 		}
-		w, finish, err := dst.openWrite(ctx, to, j.id, offset, size-offset)
+		if fc.srcMTime > 0 && (in.size != size || in.mtime != fc.srcMTime) {
+			_ = in.Close()
+			return "", false, "", permanent(ErrVerbSourceChanged, echoName(fc.from)+" changed while it was copied. Copy it again when it is not being written.")
+		}
+		zOut := false
+		if !dst.local() && j.compressionWanted() {
+			if f, ok := in.r.(*os.File); ok {
+				zOut = compressibleFile(f, fc.from, size-offset, offset)
+			} else {
+				zOut = in.compressed
+			}
+		}
+		w, finish, err := dst.openWrite(ctx, fc.to, j.id, offset, size-offset, zOut)
 		if err != nil {
-			_ = r.Close()
-			return "", err
+			_ = in.Close()
+			return "", false, "", err
 		}
 		stop := context.AfterFunc(ctx, func() {
-			_ = r.Close()
+			_ = in.Close()
 			_ = w.Close()
 		})
-		pw := &progressWriter{w: w, j: j, m: m}
-		n, cerr := io.CopyBuffer(pw, io.LimitReader(r, size-offset), make([]byte, 256<<10))
-		stop()
-		_ = r.Close()
+		h := sha256.New()
+		var body io.Reader = io.LimitReader(in, size-offset)
+		if offset == 0 {
+			body = io.TeeReader(body, h)
+		}
+		var out io.Writer = w
+		var fw interface {
+			io.Writer
+			Close() error
+		}
+		if zOut {
+			f := getFlateWriter(w)
+			fw, out = f, f
+			defer putFlateWriter(f)
+		}
+		pw := &progressWriter{w: out, j: j, m: m, ctx: ctx}
+		n, cerr := io.CopyBuffer(pw, body, make([]byte, 256<<10))
+		if cerr == nil && fw != nil {
+			cerr = fw.Close()
+		}
 		if cerr == nil && n < size-offset {
 			cerr = io.ErrUnexpectedEOF
 		}
+		var theirs string
+		if cerr == nil && offset == 0 {
+			theirs, cerr = in.trailer()
+		}
+		stop()
+		_ = in.Close()
 		if cerr != nil {
 			_ = w.Close()
 			if ctx.Err() != nil {
-				return "", ctx.Err()
+				return "", false, "", ctx.Err()
 			}
-			return "", cerr
+			return "", false, "", cerr
 		}
 		if err := finish(); err != nil {
-			return "", err
+			return "", false, "", err
+		}
+		if offset == 0 {
+			sum = hex.EncodeToString(h.Sum(nil))
+			if theirs != "" && theirs != sum {
+				_ = dst.abort(ctx, fc.to, j.id)
+				return "", false, "", permanent(ErrVerbHashMismatch, "the bytes of "+echoName(fc.rel)+" that arrived are not the bytes "+src.name()+" read")
+			}
+			if dst.local() {
+				// This daemon wrote the part, so its hash is the one taken
+				// on the way.
+				known = sum
+			}
 		}
 	}
 
 	j.set(func(j *transferJob) {
 		j.state = transferVerifying
-		j.done.Store(base + size)
+		j.done.Store(fc.base + size)
 	})
 	m.note(j, false)
-	var h hashed
-	select {
-	case h = <-srcHash:
-	case <-ctx.Done():
-		return "", ctx.Err()
+	if srcHash != nil {
+		var h hashed
+		select {
+		case h = <-srcHash:
+		case <-ctx.Done():
+			return "", false, "", ctx.Err()
+		}
+		if h.err != nil {
+			return "", false, "", h.err
+		}
+		sum = h.sum
 	}
-	if h.err != nil {
-		return "", h.err
+	if sum == "" {
+		sum = emptySHA256
 	}
-	got, err := dst.commit(ctx, to, j.id, h.sum, conflict, perm, mtime)
+	if fc.srcMTime > 0 && size > treeSmallMax {
+		// A large file takes long enough to copy that its writer may have
+		// come back to it.
+		st, err := src.stat(ctx, fc.from)
+		if err != nil {
+			return "", false, "", err
+		}
+		if st.size != size || st.mtime != fc.srcMTime {
+			_ = dst.abort(ctx, fc.to, j.id)
+			return "", false, "", permanent(ErrVerbSourceChanged, echoName(fc.from)+" changed while it was copied. Copy it again when it is not being written.")
+		}
+	}
+	label := fc.label
+	if label == "" {
+		label = j.opts.Label
+	}
+	got, skipped, err := dst.commit(ctx, fc.to, j.id, sum, fc.conflict, fc.perm, fc.mtime, label, known)
 	if err != nil {
-		return "", err
+		return "", false, "", err
 	}
 	j.set(func(j *transferJob) {
-		j.hash, j.verified = h.sum, true
-		j.state = transferRunning
+		j.hash, j.verified = sum, true
+		if j.state == transferVerifying {
+			j.state = transferRunning
+		}
 	})
 	m.note(j, false)
-	return got, nil
+	return got, skipped, sum, nil
 }
 
-// progressWriter counts the bytes a copy has written.
+// progressWriter counts the bytes a copy has written, and holds them to the
+// copy's rate limit.
 type progressWriter struct {
-	w io.Writer
-	j *transferJob
-	m *transferManager
+	w   io.Writer
+	j   *transferJob
+	m   *transferManager
+	ctx context.Context
 }
 
 func (p *progressWriter) Write(b []byte) (int, error) {
 	n, err := p.w.Write(b)
-	p.j.done.Add(int64(n))
-	p.j.sample(false)
-	p.m.progress(p.j)
+	p.j.moved(p.ctx, p.m, n)
 	return n, err
+}
+
+// moved counts n bytes the copy moved: the progress, the rate, and the wait
+// a rate limit asks for.
+func (j *transferJob) moved(ctx context.Context, m *transferManager, n int) {
+	j.done.Add(int64(n))
+	j.sample(false)
+	m.progress(j)
+	j.limiter.wait(ctx, n)
+}
+
+// rateLimiter holds a copy to a rate: after each write it sleeps until the
+// bytes so far are no more than the rate allows since the first.
+type rateLimiter struct {
+	rate  int64
+	start time.Time
+	sent  int64
+}
+
+func (l *rateLimiter) wait(ctx context.Context, n int) {
+	if l.rate <= 0 {
+		return
+	}
+	if l.start.IsZero() {
+		l.start = time.Now()
+	}
+	l.sent += int64(n)
+	due := l.start.Add(time.Duration(float64(l.sent) / float64(l.rate) * float64(time.Second)))
+	if d := time.Until(due); d > 0 {
+		t := time.NewTimer(d)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+		}
+	}
 }
 
 // sample records the progress for the rate, at most every 200 ms.
@@ -754,13 +1470,13 @@ func (j *transferJob) sample(force bool) {
 	}
 	j.samples = append(j.samples, rateSample{at: now, done: j.done.Load()})
 	cut := 0
-	for cut < len(j.samples)-1 && now.Sub(j.samples[cut].at) > 3*time.Second {
+	for cut < len(j.samples)-1 && now.Sub(j.samples[cut].at) > 6*time.Second {
 		cut++
 	}
 	j.samples = j.samples[cut:]
 }
 
-// rate is the bytes per second over the last two seconds or so.
+// rateLocked is the bytes per second over the last five seconds or so.
 func (j *transferJob) rateLocked() float64 {
 	n := len(j.samples)
 	if n < 2 {
@@ -769,7 +1485,7 @@ func (j *transferJob) rateLocked() float64 {
 	last := j.samples[n-1]
 	first := j.samples[0]
 	for _, s := range j.samples {
-		if last.at.Sub(s.at) <= 2*time.Second {
+		if last.at.Sub(s.at) <= 5*time.Second {
 			first = s
 			break
 		}
@@ -787,9 +1503,11 @@ func (m *transferManager) abortParts(j *transferJob) {
 	defer cancel()
 	dst := fileEnd{d: m.d, host: j.dst.Host}
 	j.mu.Lock()
-	isDir, final, current := j.isDir, j.final, j.current
+	isDir, final, current, target := j.isDir, j.final, j.current, j.target
 	j.mu.Unlock()
-	target := j.dst.Path
+	if target == "" {
+		target = j.dst.Path
+	}
 	if isDir && final != "" && current != "" {
 		target = joinRemote(final, current)
 	}
@@ -798,55 +1516,94 @@ func (m *transferManager) abortParts(j *transferJob) {
 
 // TransferRow is one job in transfer-list.
 type TransferRow struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Src         Endpoint `json:"src"`
-	Dst         Endpoint `json:"dst"`
-	Final       string   `json:"final,omitempty"`
-	Kind        string   `json:"kind"`
-	Move        bool     `json:"move,omitempty"`
-	State       string   `json:"state"`
-	Size        int64    `json:"size"`
-	Done        int64    `json:"done"`
-	Rate        float64  `json:"rate"`
-	ETAms       int64    `json:"eta_ms,omitempty"`
-	Files       int      `json:"files"`
-	FilesDone   int      `json:"files_done"`
-	Current     string   `json:"current,omitempty"`
-	Error       string   `json:"error,omitempty"`
-	Code        string   `json:"code,omitempty"`
-	ResumedFrom int64    `json:"resumed_from,omitempty"`
-	Resumes     int      `json:"resumes,omitempty"`
-	SHA256      string   `json:"sha256,omitempty"`
-	Verified    bool     `json:"verified,omitempty"`
-	Created     int64    `json:"created"`
-	Started     int64    `json:"started,omitempty"`
-	Ended       int64    `json:"ended,omitempty"`
-	RetryInMs   int64    `json:"retry_in_ms,omitempty"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Src   Endpoint `json:"src"`
+	Dst   Endpoint `json:"dst"`
+	Final string   `json:"final,omitempty"`
+	// Target is where the copy goes, once the first attempt read the
+	// destination.
+	Target string `json:"target,omitempty"`
+	Kind   string `json:"kind"`
+	Move   bool   `json:"move,omitempty"`
+	State  string `json:"state"`
+	Size   int64  `json:"size"`
+	Done   int64  `json:"done"`
+	// Wire is the bytes that crossed a link, fewer than Done when they were
+	// compressed.
+	Wire      int64   `json:"wire,omitempty"`
+	Rate      float64 `json:"rate"`
+	ETAms     int64   `json:"eta_ms,omitempty"`
+	Files     int     `json:"files"`
+	FilesDone int     `json:"files_done"`
+	Current   string  `json:"current,omitempty"`
+	// CurrentDone and CurrentSize are the bytes of the file in flight.
+	CurrentDone int64  `json:"current_done,omitempty"`
+	CurrentSize int64  `json:"current_size,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Code        string `json:"code,omitempty"`
+	ResumedFrom int64  `json:"resumed_from,omitempty"`
+	Resumes     int    `json:"resumes,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
+	Verified    bool   `json:"verified,omitempty"`
+	Created     int64  `json:"created"`
+	Started     int64  `json:"started,omitempty"`
+	Ended       int64  `json:"ended,omitempty"`
+	RetryInMs   int64  `json:"retry_in_ms,omitempty"`
 	// Skipped counts what a folder copy did not carry: links, pipes,
 	// sockets and devices. SkippedItems names the first of them.
 	Skipped      int           `json:"skipped,omitempty"`
 	SkippedItems []SkippedItem `json:"skipped_items,omitempty"`
+	// Same counts the files that were there with the same bytes, which were
+	// not copied again.
+	Same int `json:"same,omitempty"`
+	// ConflictsSkipped counts the files that were there and differed, which
+	// skip left as they were. ConflictsLeft counts those that appeared
+	// during a copy that asks, which were left too.
+	ConflictsSkipped int `json:"conflicts_skipped,omitempty"`
+	ConflictsLeft    int `json:"conflicts_left,omitempty"`
+	// Conflicts is the files that wait for an answer in state conflict, the
+	// first of ConflictCount.
+	Conflicts     []ConflictItem `json:"conflicts,omitempty"`
+	ConflictCount int            `json:"conflict_count,omitempty"`
+	// FailedFiles counts the files of a folder copy that did not copy.
+	FailedFiles int `json:"failed_files,omitempty"`
+	// Pane names the pane that started the copy, and PaneSession its
+	// session.
+	Pane        string `json:"pane,omitempty"`
+	PaneSession string `json:"pane_session,omitempty"`
 }
 
 func (j *transferJob) row() TransferRow {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	r := TransferRow{
-		ID: j.id, Name: filepath.Base(j.src.Path), Src: j.src, Dst: j.dst, Final: j.final,
-		Kind: "file", Move: j.move, State: j.state, Size: j.size, Done: j.done.Load(),
+		ID: j.id, Name: path.Base(filepath.ToSlash(j.src.Path)), Src: j.src, Dst: j.dst, Final: j.final, Target: j.target,
+		Kind: "file", Move: j.opts.Move, State: j.state, Size: j.size, Done: j.done.Load(), Wire: j.wire.Load(),
 		Files: j.files, FilesDone: j.filesDone, Current: j.current,
 		Error: j.errText, Code: j.errCode, ResumedFrom: j.resumedAt, Resumes: j.resumes,
 		SHA256: j.hash, Verified: j.verified, Created: j.created.UnixMilli(),
 		Skipped: j.skippedCount, SkippedItems: j.skipped,
+		Same: j.same, ConflictsSkipped: j.conflictsSkipped, ConflictsLeft: j.conflictsLeft,
+		ConflictCount: len(j.pending), FailedFiles: j.failedFiles,
+		Pane: j.opts.Pane, PaneSession: j.opts.PaneSession,
 	}
 	if j.isDir {
 		r.Kind = "dir"
+		r.SHA256, r.Verified = "", j.state == transferDone && j.failedFiles == 0
 	}
-	if j.state == transferRunning {
+	if len(j.pending) > 0 {
+		r.Conflicts = j.pending[:min(len(j.pending), transferConflictsShown)]
+	}
+	if j.current != "" && j.curSize > 0 && !transferEnded(j.state) {
+		r.CurrentSize = j.curSize
+		r.CurrentDone = min(max(r.Done-j.curBase, 0), j.curSize)
+	}
+	if j.state == transferRunning || j.state == transferVerifying {
 		r.Rate = j.rateLocked()
-		// Time left after a second of data, as the plan's row asks.
-		if r.Rate > 0 && r.Size > r.Done && len(j.samples) > 0 && time.Since(j.samples[0].at) >= time.Second {
+		// Time left after two seconds of data, so the first guess is not a
+		// wild one.
+		if r.Rate > 0 && r.Size > r.Done && len(j.samples) > 0 && time.Since(j.samples[0].at) >= 2*time.Second {
 			r.ETAms = int64(float64(r.Size-r.Done) / r.Rate * 1000)
 		}
 	}
@@ -862,7 +1619,7 @@ func (j *transferJob) row() TransferRow {
 	return r
 }
 
-func (m *transferManager) rows() []TransferRow {
+func (m *transferManager) jobsNewestFirst() []*transferJob {
 	m.mu.Lock()
 	m.pruneLocked()
 	jobs := make([]*transferJob, 0, len(m.order))
@@ -870,429 +1627,17 @@ func (m *transferManager) rows() []TransferRow {
 		jobs = append(jobs, m.jobs[id])
 	}
 	m.mu.Unlock()
+	sort.SliceStable(jobs, func(a, b int) bool { return jobs[a].created.After(jobs[b].created) })
+	return jobs
+}
+
+func (m *transferManager) rows() []TransferRow {
+	jobs := m.jobsNewestFirst()
 	out := make([]TransferRow, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, j.row())
 	}
-	sort.SliceStable(out, func(a, b int) bool { return out[a].Created > out[b].Created })
 	return out
-}
-
-// ---- the two ends ---------------------------------------------------------
-
-// fileEnd is a machine's disk: this one's, read directly, or a host's, through
-// its daemon over the link.
-type fileEnd struct {
-	d    *Daemon
-	host string
-}
-
-type statResult struct {
-	exists bool
-	isDir  bool
-	size   int64
-	perm   uint32
-	// mtime is the modification time in Unix ms.
-	mtime int64
-}
-
-func (e fileEnd) local() bool { return e.host == "" }
-
-func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
-	if e.local() {
-		p, verr := expandPath(path)
-		if verr != nil {
-			return statResult{}, &VerbCallError{Code: verr.Code, Message: verr.Message}
-		}
-		fi, err := os.Stat(p)
-		if errors.Is(err, fs.ErrNotExist) {
-			return statResult{}, nil
-		}
-		if err != nil {
-			return statResult{}, err
-		}
-		return statResult{exists: true, isDir: fi.IsDir(), size: fi.Size(), perm: uint32(fi.Mode().Perm()), mtime: fi.ModTime().UnixMilli()}, nil
-	}
-	var r struct {
-		Exists bool     `json:"exists"`
-		Size   int64    `json:"size"`
-		Info   FileInfo `json:"info"`
-	}
-	if err := e.call(ctx, "file-stat", map[string]any{"path": path}, &r); err != nil {
-		return statResult{}, err
-	}
-	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm, mtime: r.Info.MTime}, nil
-}
-
-func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
-	if e.local() {
-		fi, err := os.Lstat(partPath(path, id))
-		if errors.Is(err, fs.ErrNotExist) {
-			return 0, nil
-		}
-		if err != nil {
-			return 0, err
-		}
-		return fi.Size(), nil
-	}
-	var r struct {
-		Size int64 `json:"size"`
-	}
-	err := e.call(ctx, "file-stat", map[string]any{"path": path, "part": true, "part_id": id}, &r)
-	return r.Size, err
-}
-
-// hash is the sha256 of a range of the file at path, to its end when length
-// is negative.
-func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
-	if e.local() {
-		sum, _, err := hashRange(ctx, path, off, length)
-		return sum, err
-	}
-	params := map[string]any{"path": path, "offset": off}
-	if length >= 0 {
-		params["length"] = length
-	}
-	var r struct {
-		SHA256 string `json:"sha256"`
-	}
-	err := e.callTimeout(ctx, "file-hash", params, &r, transferHashTimeout)
-	return r.SHA256, err
-}
-
-// partHash is the sha256 of a range of the part a copy with part id id
-// writes for path.
-func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int64) (string, error) {
-	if e.local() {
-		sum, _, err := hashRange(ctx, partPath(path, id), off, length)
-		return sum, err
-	}
-	params := map[string]any{"path": path, "offset": off, "part": true, "part_id": id, "length": length}
-	var r struct {
-		SHA256 string `json:"sha256"`
-	}
-	err := e.callTimeout(ctx, "file-hash", params, &r, transferHashTimeout)
-	return r.SHA256, err
-}
-
-func (e fileEnd) openRead(ctx context.Context, path string, off int64) (io.ReadCloser, error) {
-	if e.local() {
-		f, _, err := openRegular(path)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := f.Seek(off, io.SeekStart); err != nil {
-			_ = f.Close()
-			return nil, err
-		}
-		return f, nil
-	}
-	c, err := e.d.dialHostFiles(ctx, e.host, true)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := c.call(ctx, "open-file-stream", map[string]any{"path": path, "mode": "read", "offset": off}, 30*time.Second); err != nil {
-		_ = c.Close()
-		return nil, err
-	}
-	return &readCloser{Reader: c.br, c: c}, nil
-}
-
-type readCloser struct {
-	io.Reader
-	c io.Closer
-}
-
-func (r *readCloser) Close() error { return r.c.Close() }
-
-// openWrite opens the part of a copy to path at off for length bytes. finish
-// ends the write and reports whether every byte landed.
-func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int64) (io.WriteCloser, func() error, error) {
-	if e.local() {
-		dir := filepath.Dir(path)
-		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-			if err == nil {
-				err = &fs.PathError{Op: "write", Path: dir, Err: fs.ErrNotExist}
-			}
-			return nil, nil, err
-		}
-		f, err := openPart(fileFS{}, partPath(path, id))
-		if err != nil {
-			return nil, nil, err
-		}
-		e.d.transfers.parts.note(dir)
-		if err := f.Truncate(off); err != nil {
-			_ = f.Close()
-			return nil, nil, err
-		}
-		if _, err := f.Seek(off, io.SeekStart); err != nil {
-			_ = f.Close()
-			return nil, nil, err
-		}
-		return f, func() error {
-			if err := f.Sync(); err != nil {
-				_ = f.Close()
-				return err
-			}
-			return f.Close()
-		}, nil
-	}
-	c, err := e.d.dialHostFiles(ctx, e.host, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	if _, err := c.call(ctx, "open-file-stream", map[string]any{"path": path, "mode": "write", "offset": off, "length": length, "part_id": id}, 30*time.Second); err != nil {
-		_ = c.Close()
-		return nil, nil, err
-	}
-	finish := func() error {
-		defer func() { _ = c.Close() }()
-		type res struct {
-			line []byte
-			err  error
-		}
-		got := make(chan res, 1)
-		go func() {
-			line, err := readBoundedLine(c.br, 64<<10)
-			got <- res{line, err}
-		}()
-		var r res
-		select {
-		case r = <-got:
-		case <-time.After(2 * time.Minute):
-			return errors.New("the far side did not confirm the write")
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-		if r.err != nil {
-			return r.err
-		}
-		var out struct {
-			PartSize int64  `json:"part_size"`
-			Error    string `json:"error"`
-		}
-		if err := json.Unmarshal(r.line, &out); err != nil {
-			return err
-		}
-		if out.Error != "" {
-			return errors.New(out.Error)
-		}
-		if out.PartSize != off+length {
-			return fmt.Errorf("the part on %s holds %d bytes, want %d", e.host, out.PartSize, off+length)
-		}
-		return nil
-	}
-	return c, finish, nil
-}
-
-func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, perm uint32, mtime int64) (string, error) {
-	if e.local() {
-		final, _, verr := commitPart(ctx, fileFS{}, path, id, sum, conflict, perm, mtime)
-		if verr != nil {
-			return "", &VerbCallError{Code: verr.Code, Message: verr.Message}
-		}
-		return final, nil
-	}
-	var r struct {
-		Path string `json:"path"`
-	}
-	params := map[string]any{"path": path, "sha256": sum, "conflict": conflict, "part_id": id}
-	if perm != 0 {
-		params["perm"] = perm
-	}
-	if mtime > 0 {
-		params["mtime"] = mtime
-	}
-	err := e.callTimeout(ctx, "file-commit", params, &r, transferHashTimeout)
-	return r.Path, err
-}
-
-func (e fileEnd) abort(ctx context.Context, path, id string) error {
-	if e.local() {
-		err := os.Remove(partPath(path, id))
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	return e.call(ctx, "file-abort", map[string]any{"path": path, "part_id": id}, nil)
-}
-
-func (e fileEnd) mkdir(ctx context.Context, path string) error {
-	if e.local() {
-		return os.MkdirAll(path, 0o755) //nolint:gosec // a folder of a copy the person asked for, with the mode mkdir gives
-	}
-	return e.call(ctx, "file-mkdir", map[string]any{"path": path}, nil)
-}
-
-func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error {
-	if e.local() {
-		if recursive {
-			return os.RemoveAll(path)
-		}
-		return os.Remove(path)
-	}
-	return e.call(ctx, "file-remove", map[string]any{"path": path, "recursive": recursive}, nil)
-}
-
-func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
-	if e.local() {
-		w, err := walkTree(path)
-		if errors.Is(err, errWalkTooLarge) {
-			return walkResult{}, permanent(ErrVerbInvalidParams, err.Error())
-		}
-		return w, err
-	}
-	var r struct {
-		Entries      []WalkEntry   `json:"entries"`
-		Bytes        int64         `json:"bytes"`
-		Skipped      []SkippedItem `json:"skipped"`
-		SkippedCount int           `json:"skipped_count"`
-	}
-	err := e.callTimeout(ctx, "file-walk", map[string]any{"path": path}, &r, 2*time.Minute)
-	if len(r.Skipped) > fileWalkSkippedMax {
-		r.Skipped = r.Skipped[:fileWalkSkippedMax]
-	}
-	return walkResult{entries: r.Entries, total: r.Bytes, skipped: r.Skipped, skippedCount: max(r.SkippedCount, len(r.Skipped))}, err
-}
-
-// freeName is the first free "name 2", "name 3" ... for a path on this end.
-func (e fileEnd) freeName(ctx context.Context, path string) (string, error) {
-	if e.local() {
-		return freeName(path), nil
-	}
-	dir, base := filepath.Split(path)
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
-	for i := 2; i < 1000; i++ {
-		cand := dir + fmt.Sprintf("%s %d%s", stem, i, ext)
-		st, err := e.stat(ctx, cand)
-		if err != nil {
-			return "", err
-		}
-		if !st.exists {
-			return cand, nil
-		}
-	}
-	return "", permanent(ErrVerbFileExists, "no free name for "+path)
-}
-
-func (e fileEnd) call(ctx context.Context, verb string, params any, out any) error {
-	return e.callTimeout(ctx, verb, params, out, 30*time.Second)
-}
-
-func (e fileEnd) callTimeout(ctx context.Context, verb string, params any, out any, timeout time.Duration) error {
-	c, err := e.d.dialHostFiles(ctx, e.host, false)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = c.Close() }()
-	raw, err := c.call(ctx, verb, params, timeout)
-	if err != nil {
-		return err
-	}
-	if out != nil {
-		return json.Unmarshal(raw, out)
-	}
-	return nil
-}
-
-// hostFiles is one verb connection to a host's daemon over the link.
-type hostFiles struct {
-	rw io.ReadWriteCloser
-	br *bufio.Reader
-	id int
-}
-
-func (c *hostFiles) Write(p []byte) (int, error) { return c.rw.Write(p) }
-func (c *hostFiles) Close() error                { return c.rw.Close() }
-
-// dialHostFiles opens a connection to host's daemon for the file verbs. A bulk
-// connection carries file bytes after its first reply.
-func (d *Daemon) dialHostFiles(ctx context.Context, host string, bulk bool) (*hostFiles, error) {
-	if d.federation == nil {
-		return nil, &VerbCallError{Code: ErrVerbUnknownHost, Message: "no hosts are configured"}
-	}
-	octx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	rw, err := d.federation.OpenConnectionAs(octx, host, federation.StreamOpen{Bulk: bulk})
-	if err != nil {
-		msg, code := federationErrorText(err)
-		if code == ErrVerbUnknownHost {
-			return nil, &VerbCallError{Code: code, Message: msg}
-		}
-		return nil, &VerbCallError{Code: ErrVerbHostUnreachable, Message: msg}
-	}
-	return &hostFiles{rw: rw, br: bufio.NewReaderSize(rw, 256<<10)}, nil
-}
-
-// call sends one verb and reads its one reply line.
-func (c *hostFiles) call(ctx context.Context, verb string, params any, timeout time.Duration) (json.RawMessage, error) {
-	c.id++
-	req := map[string]any{"id": c.id, "verb": verb, "params": params}
-	line, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
-	}
-	type res struct {
-		line []byte
-		err  error
-	}
-	got := make(chan res, 1)
-	go func() {
-		if _, err := c.rw.Write(append(line, '\n')); err != nil {
-			got <- res{err: err}
-			return
-		}
-		l, err := readBoundedLine(c.br, 16<<20)
-		got <- res{l, err}
-	}()
-	var r res
-	select {
-	case r = <-got:
-	case <-time.After(timeout):
-		_ = c.rw.Close()
-		return nil, fmt.Errorf("%s did not answer in %v", verb, timeout)
-	case <-ctx.Done():
-		_ = c.rw.Close()
-		return nil, ctx.Err()
-	}
-	if r.err != nil {
-		return nil, r.err
-	}
-	var resp struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(r.line, &resp); err != nil {
-		return nil, fmt.Errorf("the answer to %s did not decode: %w", verb, err)
-	}
-	if resp.Error != nil {
-		return nil, &VerbCallError{Code: resp.Error.Code, Message: resp.Error.Message}
-	}
-	return resp.Result, nil
-}
-
-// readBoundedLine reads one line of at most limit bytes.
-func readBoundedLine(br *bufio.Reader, limit int) ([]byte, error) {
-	var buf []byte
-	for {
-		chunk, err := br.ReadSlice('\n')
-		buf = append(buf, chunk...)
-		if len(buf) > limit {
-			return nil, errors.New("the answer is larger than the limit")
-		}
-		if err == nil {
-			return buf, nil
-		}
-		if errors.Is(err, bufio.ErrBufferFull) {
-			continue
-		}
-		return nil, err
-	}
 }
 
 // ---- the verbs --------------------------------------------------------------
@@ -1315,18 +1660,47 @@ func (d *Daemon) checkEndpoint(name string, e *Endpoint) *verbError {
 	if !strings.HasPrefix(e.Path, "/") && !strings.HasPrefix(e.Path, "~") {
 		return invalidParam(name+".path", "give an absolute path, or one that starts with ~")
 	}
+	if strings.ContainsRune(e.Path, 0) {
+		return invalidParam(name+".path", "a path cannot hold a NUL byte")
+	}
 	return d.checkHostParam(e.Host)
 }
 
-func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *verbError) {
+// thisMachineLabel is the name a keep-both copy from this machine carries on
+// another: the host name up to its first dot.
+func thisMachineLabel() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "another machine"
+	}
+	h, _, _ = strings.Cut(h, ".")
+	if checkKeepLabel("from "+h) != nil {
+		return "another machine"
+	}
+	return h
+}
+
+func (d *Daemon) verbTransferStart(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Src      Endpoint `json:"src"`
-		Dst      Endpoint `json:"dst"`
-		Move     bool     `json:"move"`
-		Conflict string   `json:"conflict"`
+		Src        Endpoint `json:"src"`
+		Dst        Endpoint `json:"dst"`
+		Move       bool     `json:"move"`
+		Conflict   string   `json:"conflict"`
+		Each       string   `json:"each"`
+		Place      string   `json:"place"`
+		Perms      *bool    `json:"perms"`
+		Times      *bool    `json:"times"`
+		Compress   *bool    `json:"compress"`
+		RateLimit  int64    `json:"rate_limit"`
+		KeepSuffix *bool    `json:"keep_from"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Place == "auto" && strings.HasSuffix(p.Dst.Path, "/") {
+		// A destination written with a slash at its end is a folder, as cp
+		// reads it.
+		p.Place = "into"
 	}
 	if verr := d.checkEndpoint("src", &p.Src); verr != nil {
 		return nil, verr
@@ -1335,16 +1709,43 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 		return nil, verr
 	}
 	switch p.Conflict {
-	case "", "fail", "replace", "keep-both", "merge":
+	case "", "fail", "replace", "keep-both", "merge", "skip", "ask":
 	default:
-		return nil, invalidParam("conflict", "conflict is replace, keep-both, merge or fail", "replace", "keep-both", "merge", "fail")
+		return nil, invalidParam("conflict", "conflict is replace, keep-both, merge, skip, ask or fail", "replace", "keep-both", "merge", "skip", "ask", "fail")
+	}
+	switch p.Each {
+	case "", "replace", "keep-both", "skip", "ask":
+	default:
+		return nil, invalidParam("each", "each is replace, keep-both, skip or ask", "replace", "keep-both", "skip", "ask")
+	}
+	switch p.Place {
+	case "", "auto", "into", "contents":
+	default:
+		return nil, invalidParam("place", "place is auto, into or contents, or omit it for the full path of the copy", "auto", "into", "contents")
+	}
+	if p.RateLimit < 0 {
+		return nil, invalidParam("rate_limit", "rate_limit is bytes a second, 0 for none")
 	}
 	if p.Src == p.Dst {
 		return nil, invalidParam("dst", "the copy would land on the file it copies")
 	}
+	o := transferOptions{
+		Move: p.Move, Conflict: p.Conflict, Each: p.Each, Place: p.Place, RateLimit: p.RateLimit,
+		NoPerms: p.Perms != nil && !*p.Perms, NoTimes: p.Times != nil && !*p.Times, NoCompress: p.Compress != nil && !*p.Compress,
+	}
+	if p.Src.Host != p.Dst.Host && (p.KeepSuffix == nil || *p.KeepSuffix) {
+		from := p.Src.Host
+		if from == "" {
+			from = thisMachineLabel()
+		}
+		o.Label = "from " + from
+	}
+	if verr := d.transferGrantStart(cs, &p.Src, &p.Dst, &o); verr != nil {
+		return nil, verr
+	}
 	// A destination that is there is the caller's question to put to the
 	// person, so it is answered before a job exists.
-	if p.Conflict == "" || p.Conflict == "fail" {
+	if (p.Conflict == "" || p.Conflict == "fail") && p.Place == "" {
 		ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second)
 		st, err := fileEnd{d: d, host: p.Dst.Host}.stat(ctx, p.Dst.Path)
 		cancel()
@@ -1358,26 +1759,33 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 		if st.exists {
 			return nil, hintedVerbError(ErrVerbFileExists, p.Dst.String()+" already exists", &VerbHint{
 				Param:    "conflict",
-				Accepted: []string{"replace", "keep-both", "merge"},
-				Detail:   "Say what to do with the file that is there: replace it, keep both, or merge a folder into it.",
+				Accepted: []string{"replace", "keep-both", "merge", "skip", "ask"},
+				Detail:   "Say what to do with the file that is there: replace it, keep both, merge a folder into it, skip what differs, or ask.",
 			})
 		}
 	}
-	j, err := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false)
+	j, err := d.transfers.start(p.Src, p.Dst, o)
 	if err != nil {
 		return nil, busyTransferError(err)
 	}
 	return j.row(), nil
 }
 
-func (d *Daemon) verbTransferList(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbTransferList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		ID string `json:"id"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	rows := d.transfers.rows()
+	pane := d.transferGrantPane(cs)
+	all := d.transfers.rows()
+	rows := all[:0]
+	for _, r := range all {
+		if pane == "" || r.Pane == pane {
+			rows = append(rows, r)
+		}
+	}
 	if p.ID != "" {
 		for _, r := range rows {
 			if r.ID == p.ID {
@@ -1388,9 +1796,7 @@ func (d *Daemon) verbTransferList(_ *connState, params json.RawMessage) (any, *v
 	}
 	active := 0
 	for _, r := range rows {
-		switch r.State {
-		case transferDone, transferFailed, transferCancelled:
-		default:
+		if !transferEnded(r.State) {
 			active++
 		}
 	}
@@ -1408,17 +1814,31 @@ func busyTransferError(err error) *verbError {
 	})
 }
 
+// transferJobFor is the job id names, if the caller on cs may act on it: any
+// job for the person and a pane with admin, and only its own for a pane with
+// the files grant.
+func (d *Daemon) transferJobFor(cs *connState, id string) (*transferJob, *verbError) {
+	j := d.transfers.get(id)
+	if j == nil {
+		return nil, newVerbError(ErrVerbNoTransfer, "no transfer "+echoName(id))
+	}
+	if pane := d.transferGrantPane(cs); pane != "" && j.opts.Pane != pane {
+		return nil, newVerbError(ErrVerbNoTransfer, "no transfer "+echoName(id))
+	}
+	return j, nil
+}
+
 func transferControl(op string) verbHandler {
-	return func(d *Daemon, _ *connState, params json.RawMessage) (any, *verbError) {
+	return func(d *Daemon, cs *connState, params json.RawMessage) (any, *verbError) {
 		var p struct {
 			ID string `json:"id"`
 		}
 		if verr := decodeParams(params, &p); verr != nil {
 			return nil, verr
 		}
-		j := d.transfers.get(p.ID)
-		if j == nil {
-			return nil, newVerbError(ErrVerbNoTransfer, "no transfer "+echoName(p.ID))
+		j, verr := d.transferJobFor(cs, p.ID)
+		if verr != nil {
+			return nil, verr
 		}
 		j.mu.Lock()
 		state := j.state
@@ -1462,6 +1882,7 @@ func transferControl(op string) verbHandler {
 				j.ended = time.Time{}
 				j.errText, j.errCode = "", ""
 				j.restarts = 0
+				j.failedFiles = 0
 				go d.transfers.run(j)
 			}
 		}
@@ -1471,41 +1892,117 @@ func transferControl(op string) verbHandler {
 	}
 }
 
+// verbTransferAnswer answers the conflicts a copy in state conflict waits on.
+func (d *Daemon) verbTransferAnswer(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		ID     string   `json:"id"`
+		Rel    string   `json:"rel"`
+		Rels   []string `json:"rels"`
+		Choice string   `json:"choice"`
+		All    bool     `json:"all"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	switch p.Choice {
+	case "replace", "keep-both", "skip":
+	default:
+		return nil, invalidParam("choice", "choice is replace, keep-both or skip", "replace", "keep-both", "skip")
+	}
+	if p.Rel != "" {
+		p.Rels = append(p.Rels, p.Rel)
+	}
+	if len(p.Rels) == 0 && !p.All {
+		return nil, invalidParam("rel", "name the file with rel or rels, or answer every file with all")
+	}
+	j, verr := d.transferJobFor(cs, p.ID)
+	if verr != nil {
+		return nil, verr
+	}
+	j.mu.Lock()
+	if p.All {
+		j.answerAll = p.Choice
+	}
+	for _, rel := range p.Rels {
+		j.answers[rel] = p.Choice
+	}
+	j.mu.Unlock()
+	select {
+	case j.answered <- struct{}{}:
+	default:
+	}
+	LogBasic("Transfer %s: %s for %d files (all %v)", j.id, p.Choice, len(p.Rels), p.All)
+	return j.row(), nil
+}
+
+// verbTransferClear drops the copies that ended from the list.
+func (d *Daemon) verbTransferClear(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		IDs []string `json:"ids"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	pane := d.transferGrantPane(cs)
+	want := map[string]bool{}
+	for _, id := range p.IDs {
+		want[id] = true
+	}
+	m := d.transfers
+	m.mu.Lock()
+	n := m.dropLocked(func(j *transferJob) bool {
+		return transferEnded(j.state) && (pane == "" || j.opts.Pane == pane) && (len(want) == 0 || want[j.id])
+	})
+	m.mu.Unlock()
+	return map[string]any{"cleared": n}, nil
+}
+
 func transferVerbs() map[string]verbEntry {
 	endpoint := func(name, what string) verbParam {
 		return verbParam{Name: name, Type: "object", Required: true, Description: what + ": {host, path}. host is a name from [hosts], or empty for this machine. path is absolute or starts with ~."}
 	}
 	rowReturn := []verbParam{
 		{Name: "id", Type: "string", Description: "The transfer's id."},
-		{Name: "state", Type: "string", Description: "queued, running, verifying, waiting (for a machine that went away), paused, done, failed or cancelled.", Accepted: []string{transferQueued, transferRunning, transferVerifying, transferWaiting, transferPaused, transferDone, transferFailed, transferCancelled}},
+		{Name: "state", Type: "string", Description: "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled.", Accepted: []string{transferQueued, transferRunning, transferVerifying, transferWaiting, transferPaused, transferConflict, transferDone, transferFailed, transferCancelled}},
 		{Name: "size", Type: "int", Description: "Bytes to copy in all."},
-		{Name: "done", Type: "int", Description: "Bytes copied."},
-		{Name: "rate", Type: "float", Description: "Bytes per second over the last two seconds."},
-		{Name: "eta_ms", Type: "int", Description: "Time left, once a second of data came."},
+		{Name: "done", Type: "int", Description: "Bytes copied, or found to be there already."},
+		{Name: "wire", Type: "int", Description: "Bytes that crossed a link, fewer than done when they were compressed."},
+		{Name: "rate", Type: "float", Description: "Bytes per second over the last five seconds."},
+		{Name: "eta_ms", Type: "int", Description: "Time left, once two seconds of data came."},
 		{Name: "resumed_from", Type: "int", Description: "Where the copy went on from after a machine came back. Absent when it never had to."},
 		{Name: "verified", Type: "bool", Description: "The copy's sha256 matched the original's."},
 		{Name: "final", Type: "string", Description: "Where the file is now, which keep-both can change."},
+		{Name: "same", Type: "int", Description: "Files that were there with the same bytes, which were not copied again."},
+		{Name: "conflicts_skipped", Type: "int", Description: "Files that were there and differed, left as they were."},
+		{Name: "conflicts", Type: "[]object", Description: "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."},
 		{Name: "error", Type: "string", Description: "What happened and what to do, for failed and waiting."},
 	}
 	idParam := verbParam{Name: "id", Type: "string", Required: true, Description: "The transfer's id."}
 	return map[string]verbEntry{
 		"transfer-start": {
-			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
+			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A file that is there with the same sha256 is not copied again. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
 			params: []verbParam{
 				endpoint("src", "What to copy"),
-				endpoint("dst", "Where it goes, the full path of the copy"),
+				endpoint("dst", "Where it goes: the full path of the copy, or with place a folder"),
 				{Name: "move", Type: "bool", Description: "Remove the original once the copy is checked."},
-				{Name: "conflict", Type: "string", Description: "When dst exists: replace it, keep both (the copy gets a number), merge a folder into the folder there, or fail.", Accepted: []string{"replace", "keep-both", "merge", "fail"}, Default: "fail"},
+				{Name: "conflict", Type: "string", Description: "When dst exists: replace it, keep both (the copy gets a new name), merge a folder into the folder there, skip a file that differs, ask (the copy waits in state conflict for transfer-answer), or fail.", Accepted: []string{"replace", "keep-both", "merge", "skip", "ask", "fail"}, Default: "fail"},
+				{Name: "each", Type: "string", Description: "In a folder copy into a folder that is there: what to do with each file that is there and differs. Omit to follow conflict, which for merge and replace is replace.", Accepted: []string{"replace", "keep-both", "skip", "ask"}},
+				{Name: "place", Type: "string", Description: "auto reads dst as cp does: a folder that is there gets the copy inside it, and anything else is the new name. into needs dst to be a folder that is there. A dst that ends in / with auto is into. contents copies what a folder holds into dst, and a file as auto does.", Accepted: []string{"auto", "into", "contents"}},
+				{Name: "perms", Type: "bool", Description: "Give each file the original's permission bits.", Default: "true"},
+				{Name: "times", Type: "bool", Description: "Give each file the original's modification time.", Default: "true"},
+				{Name: "compress", Type: "bool", Description: "Compress the bytes on a link when they compress well.", Default: "true"},
+				{Name: "rate_limit", Type: "int", Description: "At most this many bytes a second. 0 for no limit.", Default: "0"},
+				{Name: "keep_from", Type: "bool", Description: "keep-both names a copy from another machine \"name (from HOST).ext\". false numbers it, \"name 2.ext\".", Default: "true"},
 			},
 			returns:  rowReturn,
 			examples: []string{`{"id":1,"verb":"transfer-start","params":{"src":{"host":"build","path":"~/out/image.iso"},"dst":{"path":"~/Downloads/image.iso"}}}`},
 			handler:  (*Daemon).verbTransferStart,
 		},
 		"transfer-list": {
-			description: "List the transfers, newest first, with byte progress, rate and time left. Finished ones stay for 30 minutes.",
+			description: "List the transfers, newest first, with byte progress, rate and time left. Finished ones stay for 30 minutes. A pane with the files grant sees only the copies it started.",
 			params:      []verbParam{{Name: "id", Type: "string", Description: "Only this transfer."}},
 			returns: []verbParam{
-				{Name: "transfers", Type: "[]object", Description: "One row per transfer: id, name, src, dst, kind, move, state, size, done, rate, eta_ms, files, files_done, current, error, code, resumed_from, resumes, sha256, verified, created, started, ended, retry_in_ms, skipped, skipped_items."},
+				{Name: "transfers", Type: "[]object", Description: "One row per transfer: id, name, src, dst, target, kind, move, state, size, done, wire, rate, eta_ms, files, files_done, current, current_done, current_size, error, code, resumed_from, resumes, sha256, verified, created, started, ended, retry_in_ms, skipped, skipped_items, same, conflicts_skipped, conflicts_left, conflicts, conflict_count, failed_files, pane, pane_session."},
 				{Name: "active", Type: "int", Description: "Transfers that are not finished."},
 			},
 			examples: []string{`{"id":1,"verb":"transfer-list"}`},
@@ -1531,6 +2028,26 @@ func transferVerbs() map[string]verbEntry {
 			returns:     rowReturn,
 			examples:    []string{`{"id":1,"verb":"transfer-resume","params":{"id":"3f9a1c2b7d00"}}`},
 			handler:     transferControl("resume"),
+		},
+		"transfer-answer": {
+			description: "Answer a copy in state conflict: what to do with files that are there and differ. Answer one file, several, or every file with all. The copy goes on when every file it waits on has an answer.",
+			params: []verbParam{
+				idParam,
+				{Name: "choice", Type: "string", Required: true, Description: "replace the file there, keep both (the copy gets a new name), or skip the file.", Accepted: []string{"replace", "keep-both", "skip"}},
+				{Name: "rel", Type: "string", Description: "The file, as the row's conflicts name it."},
+				{Name: "rels", Type: "[]string", Description: "Several files."},
+				{Name: "all", Type: "bool", Description: "This answer for every file of the copy, now and later."},
+			},
+			returns:  rowReturn,
+			examples: []string{`{"id":1,"verb":"transfer-answer","params":{"id":"3f9a1c2b7d00","choice":"keep-both","all":true}}`},
+			handler:  (*Daemon).verbTransferAnswer,
+		},
+		"transfer-clear": {
+			description: "Remove the transfers that ended (done, failed, cancelled) from the list. A failed one takes its parts with it.",
+			params:      []verbParam{{Name: "ids", Type: "[]string", Description: "Only these transfers. Omit for every one that ended."}},
+			returns:     []verbParam{{Name: "cleared", Type: "int", Description: "How many left the list."}},
+			examples:    []string{`{"id":1,"verb":"transfer-clear"}`},
+			handler:     (*Daemon).verbTransferClear,
 		},
 	}
 }
