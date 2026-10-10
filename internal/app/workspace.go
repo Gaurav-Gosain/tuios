@@ -34,28 +34,24 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	m.openPaneOnEmptyWorkspace(from, workspace, fromPane)
 }
 
-// NextWorkspace switches sequentially to the next workspace with wrap-around.
-func (m *OS) NextWorkspace() {
-	if m.NumWorkspaces <= 0 {
-		return
-	}
-	next := m.CurrentWorkspace + 1
-	if next > m.NumWorkspaces || next < 1 {
-		next = 1
-	}
-	m.SwitchToWorkspace(next)
-}
+// NextWorkspace switches to the next workspace that holds at least one
+// pane, wrapping at the end. With no other such workspace it does nothing, so
+// a run of presses cannot land on an empty workspace, and with
+// workspaces.new_window_when_empty on it cannot open a pane on each one.
+func (m *OS) NextWorkspace() { m.cycleWorkspace(1) }
 
-// PrevWorkspace switches sequentially to the previous workspace with wrap-around.
-func (m *OS) PrevWorkspace() {
-	if m.NumWorkspaces <= 0 {
-		return
+// PrevWorkspace is NextWorkspace in the other direction.
+func (m *OS) PrevWorkspace() { m.cycleWorkspace(-1) }
+
+func (m *OS) cycleWorkspace(step int) {
+	n := m.NumWorkspaces
+	for i := 1; i < n; i++ {
+		ws := ((m.CurrentWorkspace-1+step*i)%n+n)%n + 1
+		if m.GetWorkspaceWindowCount(ws) > 0 {
+			m.SwitchToWorkspace(ws)
+			return
+		}
 	}
-	prev := m.CurrentWorkspace - 1
-	if prev < 1 || prev > m.NumWorkspaces {
-		prev = m.NumWorkspaces
-	}
-	m.SwitchToWorkspace(prev)
 }
 
 // openPaneOnEmptyWorkspace opens a pane on workspace when the switch from

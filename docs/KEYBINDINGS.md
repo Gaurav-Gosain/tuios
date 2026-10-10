@@ -650,6 +650,21 @@ agents are in them. `Cancel` is the default row. Scratch panes stay open.
 `tuios close-workspace` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
 
+## Cycle through workspaces
+
+The `next_workspace` and `prev_workspace` actions go to the next or the
+previous workspace that has panes, and wrap at the end. They skip a workspace
+with no panes, so with `workspaces.new_window_when_empty` on they do not open
+a pane on each empty workspace. When no other workspace has panes, they do
+nothing. The actions have no default key. The command palette has the entries
+"Next workspace" and "Previous workspace". To bind them:
+
+```toml
+[keybindings.workspaces]
+next_workspace = ["alt+y"]
+prev_workspace = ["alt+u"]
+```
+
 ## Split into the same ssh
 
 These actions open a pane on the machine that the focused pane is connected to

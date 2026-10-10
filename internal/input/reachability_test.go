@@ -463,8 +463,8 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_move_right":  "user binding",
 	// Workspace cycling. The numbered keys and the switcher cover the default
 	// surface; a user who wants h/l cycle binds these.
-	"next_workspace": "user binding",
-	"prev_workspace": "user binding",
+	"next_workspace": "palette row, user binding",
+	"prev_workspace": "palette row, user binding",
 	// Session jumping ships unbound for the same reason; the switcher and the
 	// rail cover it by default, and opt+N is a user binding.
 	"switch_session_1":   "user binding",

@@ -3776,3 +3776,13 @@ have.
 | The folders above the authorized keys folder, up to the home folder | `TestPairChecksTheHomeFolder/anyone`, `/group` (a home with mode 0777 gets a code, 0770 gives no warning) | **caught** |
 | The public address check for addresses tuios finds | none | **not caught**: the test machine has no public address to find |
 | The DNS and tailnet lookups of `[hosts]` addresses | none | **not caught**: the tests give an IP in `addr`. A name needs a resolver or a tailnet the test controls |
+
+### Workspace cycling (#612)
+
+Run on 2026-10-10. The control is the head of PR 616 (`bfa8054f`), whose
+cycle visits every workspace, built as `cmd/tuios` and run against
+`TestWorkspaceCycleSkipsEmptyWorkspaces` and `TestWorkspaceCycleOpensNoPanes`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The skip of workspaces with no panes in `cycleWorkspace` (the cycle visits every workspace) | `TestWorkspaceCycleSkipsEmptyWorkspaces` (alt+y from 1 shows 2, not 3), `TestWorkspaceCycleOpensNoPanes` (three presses leave 4 panes, not 1) | **caught** |

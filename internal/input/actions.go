@@ -510,8 +510,8 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 	}
 }
 
-// next_workspace and prev_workspace cycle sequentially through workspaces
-// with wrap-around support.
+// next_workspace and prev_workspace cycle through the workspaces that hold
+// a pane. See OS.NextWorkspace.
 
 func handleNextWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.NextWorkspace()
