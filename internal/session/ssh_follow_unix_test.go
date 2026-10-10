@@ -60,6 +60,62 @@ func TestOwnedSocket(t *testing.T) {
 	}
 }
 
+// A symlink ancestor sits in every standard macOS temp path (/var, a symlink
+// to /private/var), so rejecting any path that passes through one would
+// refuse the socket in the common case, not just the suspicious one.
+// ownedSocket resolves the socket's folder once up front, so the walk itself
+// never sees the symlink — it checks whatever the symlink resolves to, the
+// same as a real directory at that position would be checked, and still
+// rejects a resolved target that is not actually safe.
+func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
+	listen := func(dir string) string {
+		path := filepath.Join(dir, "s")
+		l, err := net.Listen("unix", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = l.Close() })
+		return path
+	}
+	// A short-named root, not t.TempDir(): a Unix domain socket's sun_path is
+	// capped (104 bytes on macOS/BSD), and t.TempDir() embeds this test's own
+	// (long) function name in the directory it hands back.
+	root, err := os.MkdirTemp("", "owned-sock-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+
+	safeTarget := filepath.Join(root, "real")
+	if err := os.Mkdir(safeTarget, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	safeLink := filepath.Join(root, "link-to-real")
+	if err := os.Symlink(safeTarget, safeLink); err != nil {
+		t.Fatal(err)
+	}
+	if sock := listen(safeTarget); !ownedSocket(filepath.Join(safeLink, "s")) {
+		t.Fatalf("a socket reached through a symlink to a safe folder was refused: %s", sock)
+	}
+
+	unsafeTarget := filepath.Join(root, "unsafe")
+	if err := os.Mkdir(unsafeTarget, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Mkdir's mode is masked by umask; Chmod sets the exact bits, same as
+	// TestOwnedSocket's "open" case above does for the same reason.
+	if err := os.Chmod(unsafeTarget, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	unsafeLink := filepath.Join(root, "link-to-unsafe")
+	if err := os.Symlink(unsafeTarget, unsafeLink); err != nil {
+		t.Fatal(err)
+	}
+	if sock := listen(unsafeTarget); ownedSocket(filepath.Join(unsafeLink, "s")) {
+		t.Fatalf("a socket reached through a symlink to a world-writable folder was passed: %s", sock)
+	}
+}
+
 // ssh -G reads ~/.ssh/config, where a Match exec can start a child that keeps
 // ssh's output open. The lookup must still return at its timeout.
 func TestResolveSSHHostNameIsBounded(t *testing.T) {
