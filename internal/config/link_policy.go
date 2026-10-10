@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +21,7 @@ import (
 //	allow = ["list", "mail", "open", "write", "files"]
 //	hold_mail = true
 //	hosted_grace = "10m"
+//	files_roots = ["~/Downloads/tuios", "~/dev"]
 //
 //	[hosts."*"]                           # every machine with no table of its own
 //	allow = ["list", "mail"]
@@ -48,21 +52,48 @@ const (
 	// LinkAllowFiles reads and writes files here with the file verbs: a
 	// file's bytes, copies in and out, new folders, moves and removes. It is
 	// apart from write, so a person can stop file writes from a machine and
-	// still let it type into panes. A write that arrives over a link stays
-	// inside the home folder, and never reaches the folders that hold keys,
-	// shell start files and tuios's own config (verb_files_confine.go in
-	// internal/session).
+	// still let it type into panes. A write that arrives over a link lands
+	// only in the folders of files_roots (the receive folder unless the
+	// person adds more), and never in the folders that hold keys, shell
+	// start files and tuios's own config. A read never returns keys or
+	// credentials. See verb_files_confine.go in internal/session.
 	LinkAllowFiles = "files"
 )
 
 // LinkCapabilities is every capability, in the order they are documented.
 var LinkCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond, LinkAllowFiles}
 
+// LinkRelayCapabilities is what a machine needs to relay through this one to
+// its hosts: every capability there was before files. A table written for
+// v0.9 that allows all five keeps relaying. The transfer verbs, which relay
+// file bytes, need files as well.
+var LinkRelayCapabilities = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowRespond}
+
+// LinkCapabilityWords says what a capability lets a machine do, for a
+// refusal a person reads.
+func LinkCapabilityWords(c string) string {
+	switch c {
+	case LinkAllowList:
+		return "read listings and screens"
+	case LinkAllowMail:
+		return "send and read agent mail"
+	case LinkAllowOpen:
+		return "start programs"
+	case LinkAllowWrite:
+		return "type into panes and change windows"
+	case LinkAllowRespond:
+		return "answer for the person"
+	case LinkAllowFiles:
+		return "read and write files"
+	}
+	return c
+}
+
 // DefaultLinkAllow is what a machine may do here when nothing says otherwise.
 // It is what every link could do before the policy existed, less respond:
 // answering a prompt for the person is opt-in. files is on: a machine that
 // may type into a shell here can already move files, and the file verbs keep
-// their writes to the home folder.
+// its writes to the receive folder unless files_roots says more.
 var DefaultLinkAllow = []string{LinkAllowList, LinkAllowMail, LinkAllowOpen, LinkAllowWrite, LinkAllowFiles}
 
 // DefaultHostedGrace is how long a pane run here for another machine outlives
@@ -87,6 +118,10 @@ type LinkPolicy struct {
 	HoldMail bool
 	// HostedGrace is how long a pane run for it outlives a dropped link.
 	HostedGrace time.Duration
+	// FilesRoots are the folders files_roots names, as written: absolute or
+	// starting with ~. Nil is the receive folder, DefaultFilesRoot. Empty is
+	// no folder at all.
+	FilesRoots []string
 	// Source names the table the policy came from, for an error that tells
 	// the caller which key to change: hosts.laptop, hosts."*", or empty for
 	// the built-in default.
@@ -130,6 +165,9 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 				p.HostedGrace = d
 			}
 		}
+		if h.FilesRoots != nil {
+			p.FilesRoots = cleanFilesRoots(h.FilesRoots)
+		}
 		p.Source = "hosts." + key
 	}
 	if h, ok := hosts[LinkPolicyDefaultName]; ok {
@@ -163,6 +201,80 @@ func cleanLinkAllow(in []string) []string {
 	return out
 }
 
+// cleanFilesRoots keeps the roots that are absolute or start with ~, once
+// each, cleaned. ValidateConfig reports the others.
+func cleanFilesRoots(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, r := range in {
+		r = strings.TrimSpace(r)
+		if !validFilesRoot(r) {
+			continue
+		}
+		if r != "~" && !strings.HasPrefix(r, "~/") {
+			r = filepath.Clean(r)
+		}
+		if !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func validFilesRoot(r string) bool {
+	return r == "~" || strings.HasPrefix(r, "~/") || filepath.IsAbs(r)
+}
+
+// DefaultFilesRoot is the receive folder: where another machine may write
+// files here when files_roots says nothing. It is a tuios folder in the
+// downloads folder: ~/Downloads/tuios on macOS and Windows, and on other
+// systems the XDG download folder ($XDG_DOWNLOAD_DIR, or the one
+// user-dirs.dirs names) or ~/Downloads. It is empty when there is no home
+// folder.
+func DefaultFilesRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	dl := filepath.Join(home, "Downloads")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		if d := xdgDownloadDir(home); d != "" {
+			dl = d
+		}
+	}
+	return filepath.Join(dl, "tuios")
+}
+
+// xdgDownloadDir is the XDG download folder, or empty when none is set.
+func xdgDownloadDir(home string) string {
+	expand := func(v string) string {
+		v = strings.Trim(strings.TrimSpace(v), `"`)
+		if strings.HasPrefix(v, "$HOME") {
+			v = home + v[len("$HOME"):]
+		}
+		if !filepath.IsAbs(v) {
+			return ""
+		}
+		return filepath.Clean(v)
+	}
+	if v := os.Getenv("XDG_DOWNLOAD_DIR"); v != "" {
+		return expand(v)
+	}
+	cfg := os.Getenv("XDG_CONFIG_HOME")
+	if cfg == "" {
+		cfg = filepath.Join(home, ".config")
+	}
+	data, err := os.ReadFile(filepath.Join(cfg, "user-dirs.dirs"))
+	if err != nil {
+		return ""
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "XDG_DOWNLOAD_DIR="); ok {
+			return expand(v)
+		}
+	}
+	return ""
+}
+
 // ParseHostedGrace reads hosted_grace: a Go duration, or "0" for none. A
 // negative value is an error and a value past MaxHostedGrace is cut to it.
 func ParseHostedGrace(s string) (time.Duration, error) {
@@ -191,6 +303,15 @@ func validateLinkPolicies(cfg *UserConfig, result *ValidationResult) {
 					Field:   "hosts." + name,
 					Key:     "allow",
 					Message: fmt.Sprintf("'%s' is not a capability (allowed: %s); it is ignored", c, strings.Join(LinkCapabilities, ", ")),
+				})
+			}
+		}
+		for _, r := range h.FilesRoots {
+			if !validFilesRoot(strings.TrimSpace(r)) {
+				result.Warnings = append(result.Warnings, ValidationError{
+					Field:   "hosts." + name,
+					Key:     "files_roots",
+					Message: fmt.Sprintf("'%s' is not an absolute path or a path that starts with ~; it is ignored", r),
 				})
 			}
 		}
