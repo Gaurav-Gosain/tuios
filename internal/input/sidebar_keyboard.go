@@ -33,6 +33,16 @@ func handleToggleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // Keys with no rail binding are swallowed, not passed to the pane underneath:
 // the whole point of the scope is that pane bindings do not fire here.
 func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if o.SidebarFocusOnSecondary() {
+		var result *app.OS
+		var cmd tea.Cmd
+		o.WithSecondarySidebar(func() { result, cmd = handleSidebarKey(msg, o) })
+		return result, cmd
+	}
+	return handleSidebarKey(msg, o)
+}
+
+func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.KeybindRegistry == nil {
 		o.ExitSidebarFocus()
@@ -132,6 +142,8 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(-1)
 	case sidebarActSection:
 		o.SidebarCycleSection()
+	case sidebarActSwitchEdge:
+		o.FocusOtherSidebar()
 	case sidebarActPalette:
 		// The rail lists what exists; the palette finds it by name across every
 		// session and filters it by who needs a human. Rail focus is kept, so

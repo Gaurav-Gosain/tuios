@@ -51,6 +51,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_command_palette", handleOpenCommandPalette)
 	d.Register("prefix_file_search", handleOpenFileSearch)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
+	d.Register("prefix_toggle_other_rail", handlePrefixToggleOtherSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("choose_tree", handleChooseTree)
@@ -359,6 +360,15 @@ func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		state = "on"
 	}
 	o.ShowNotification("Sidebar "+state, "success", o.Settings.NotificationDuration)
+	return o, nil
+}
+
+func handlePrefixToggleOtherSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	state := "off"
+	if o.ToggleOtherSidebar() {
+		state = "on"
+	}
+	o.ShowNotification("Opposite sidebar "+state, "success", o.Settings.NotificationDuration)
 	return o, nil
 }
 

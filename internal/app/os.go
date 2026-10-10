@@ -1603,6 +1603,19 @@ type OS struct {
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.
 	sidebarCache sidebarRenderCache
+	// The second edge keeps its render cache and recorded hits separate from
+	// the original rail. sidebarDrawing is set only during the synchronous
+	// render pass for that edge, never across an Update or background run.
+	secondarySidebarCache sidebarRenderCache
+	secondarySidebarHits  []sidebarRowHit
+	secondaryRailView     secondaryRailView
+	secondaryWidthPref    int
+	secondaryCollapsed    bool
+	sidebarFocusSecondary bool
+	sidebarDrawing        bool
+	sidebarDrawingWidth   int
+	sidebarDrawingEdge    sidebarEdge
+	railCustomSecond      railCustomState
 	// sidebarTitles debounces window titles for the rail so bursty title churn
 	// does not thrash the rows; sidebarTitlePending is set while an adopted title
 	// is still catching up, keeping the tick alive until it settles.

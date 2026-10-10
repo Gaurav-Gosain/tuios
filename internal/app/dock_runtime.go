@@ -37,12 +37,19 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	if rail != nil {
 		comps = append(comps, rail)
 	}
+	secondary := m.secondaryRailCustomComponent()
+	m.railCustomSecond.on = secondary != nil
+	if secondary != nil {
+		comps = append(comps, secondary)
+	}
 	m.dockEngine = newDockEngine(comps)
 	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
 	// Before Start, so the first run is told the focus and the size rather
 	// than running with none.
 	m.railCustom.ctx = m.railContextNow()
 	m.dockEngine.SetRailContext(m.railCustom.ctx)
+	m.railCustomSecond.ctx = m.secondaryRailContextNow()
+	m.dockEngine.SetSecondaryRailContext(m.railCustomSecond.ctx)
 	// The built-ins are filled here rather than by the engine, because their
 	// values come from model state this goroutine owns.
 	for _, c := range comps {
@@ -153,6 +160,18 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 		return m.refreshBuiltinDockComponent(msg.Name)
 	}
 	changed, newFailure := m.dockEngine.applyUpdate(dockComponentUpdate(msg))
+	if msg.Name == railSecondaryComponent {
+		if changed {
+			m.railCustomSecond.gen++
+		}
+		if newFailure {
+			title := m.secondaryRailCustomConfig().ResolvedTitle()
+			m.LogWarn("Rail section %s failed: %s", title, msg.Err)
+			m.ShowNotification("Rail section "+title+": "+dockFailureDetail(msg), "warning", m.Settings.NotificationDuration)
+			return true
+		}
+		return changed
+	}
 	if msg.Name == railCustomComponent {
 		if changed {
 			// The render cache keys on this, so new rows redraw the rail and
