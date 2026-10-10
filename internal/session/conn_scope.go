@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // Restricted connections: the minimal form of scoped callers.
@@ -553,12 +555,17 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 		return true
 	}
 	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
-	// events reach no restricted connection and no pane without admin.
+	// events reach no restricted connection and no pane without admin. A link
+	// hears them only when it may list the transfers, which needs the files
+	// capability and relay, not list alone.
 	if ev.Transfer != nil {
 		if cs.scope.Load() != nil {
 			return false
 		}
 		if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
+			return false
+		}
+		if cs.viaLink && d.checkLinkCaps(cs, "transfer", []string{capRelay, config.LinkAllowFiles}) != nil {
 			return false
 		}
 	}

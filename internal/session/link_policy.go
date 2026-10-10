@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -51,7 +52,8 @@ import (
 // only names the peer, and only on a link connection that has not named one.
 const linkPolicyVerb = "link-peer"
 
-// capRelay marks open-host-connection, which needs every capability.
+// capRelay marks open-host-connection and the other verbs that act on this
+// machine's own links: they need config.LinkRelayCapabilities.
 const capRelay = "*"
 
 // verbCapabilities is what each verb needs on a link connection. An empty list
@@ -129,13 +131,14 @@ var verbCapabilities = map[string][]string{
 	"file-abort":       {config.LinkAllowFiles},
 	"file-drop-dir":    {config.LinkAllowFiles},
 	// A transfer and a drop make this daemon open connections on its own
-	// links, as open-host-connection does, so they need every capability.
-	"transfer-start":  {capRelay},
-	"transfer-list":   {capRelay},
-	"transfer-cancel": {capRelay},
-	"transfer-pause":  {capRelay},
-	"transfer-resume": {capRelay},
-	"drop-files":      {capRelay},
+	// links, as open-host-connection does, so they need what a relay needs,
+	// and files, because they move file bytes.
+	"transfer-start":  {capRelay, config.LinkAllowFiles},
+	"transfer-list":   {capRelay, config.LinkAllowFiles},
+	"transfer-cancel": {capRelay, config.LinkAllowFiles},
+	"transfer-pause":  {capRelay, config.LinkAllowFiles},
+	"transfer-resume": {capRelay, config.LinkAllowFiles},
+	"drop-files":      {capRelay, config.LinkAllowFiles},
 
 	"send-agent-message":  {config.LinkAllowMail},
 	"read-agent-messages": {config.LinkAllowMail},
@@ -381,10 +384,7 @@ func (d *Daemon) checkLinkCaps(cs *connState, what string, caps []string) *verbE
 		return nil
 	}
 	policy := d.linkPolicy(cs)
-	need := caps
-	if len(caps) == 1 && caps[0] == capRelay {
-		need = config.LinkCapabilities
-	}
+	need := expandRelay(caps)
 	var missing []string
 	for _, c := range need {
 		if !policy.Allows(c) {
@@ -395,6 +395,27 @@ func (d *Daemon) checkLinkCaps(cs *connState, what string, caps []string) *verbE
 		return nil
 	}
 	return linkForbidden(d, cs, what, missing, "")
+}
+
+// expandRelay is caps with capRelay replaced by the capabilities a relay
+// needs, config.LinkRelayCapabilities.
+func expandRelay(caps []string) []string {
+	if !slices.Contains(caps, capRelay) {
+		return caps
+	}
+	out := make([]string, 0, len(caps)+len(config.LinkRelayCapabilities))
+	for _, c := range caps {
+		if c == capRelay {
+			for _, r := range config.LinkRelayCapabilities {
+				if !slices.Contains(out, r) {
+					out = append(out, r)
+				}
+			}
+		} else if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // linkForbidden is the refusal a link caller reads. It names the capability
@@ -414,7 +435,11 @@ func linkForbidden(d *Daemon, cs *connState, what string, missing []string, reas
 		from = peer
 	}
 	if reason == "" {
-		reason = "the link from " + from + " may not " + strings.Join(missing, " or ") + " on " + here
+		words := make([]string, 0, len(missing))
+		for _, m := range missing {
+			words = append(words, config.LinkCapabilityWords(m)+" ("+m+")")
+		}
+		reason = from + " may not " + strings.Join(words, " or ") + " on " + here
 	}
 	LogBasic("Link %s (peer %q) refused %s: missing %s", cs.clientID, peer, what, strings.Join(missing, ","))
 	detail := "Nothing was done."

@@ -238,8 +238,12 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		if now.HostedGrace > was.HostedGrace {
 			widened = true
 		}
+		roots, rootsWiden := narrowFilesRoots(was, now)
+		if rootsWiden {
+			widened = true
+		}
 		h := next[key]
-		h.Allow, h.HoldMail, h.HostedGrace = allow, &hold, grace.String()
+		h.Allow, h.HoldMail, h.HostedGrace, h.FilesRoots = allow, &hold, grace.String(), roots
 		merged[key] = h
 	}
 	d.SetLinkPolicies(merged)
@@ -247,6 +251,32 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		log.Printf("[FEDERATION] A link policy in config.toml gives another machine more than before. That part applies after tuios config apply from outside tuios, or a daemon restart.")
 	}
 	return widened
+}
+
+// narrowFilesRoots is the write roots both policies allow: each root of one
+// that lies inside a root of the other. widens reports whether now names a
+// folder that was not allowed before, which waits for tuios config apply.
+func narrowFilesRoots(was, now config.LinkPolicy) (roots []string, widens bool) {
+	a, b := linkRootPaths(was), linkRootPaths(now)
+	roots = []string{}
+	add := func(r string) {
+		if !slices.Contains(roots, r) {
+			roots = append(roots, r)
+		}
+	}
+	for _, r := range b {
+		if slices.ContainsFunc(a, func(w string) bool { return pathUnder(r, w) }) {
+			add(r)
+		} else {
+			widens = true
+		}
+	}
+	for _, r := range a {
+		if slices.ContainsFunc(b, func(n string) bool { return pathUnder(r, n) }) {
+			add(r)
+		}
+	}
+	return roots, widens
 }
 
 // ApplyHosts swaps the daemon's host table for a new one and reconciles the
