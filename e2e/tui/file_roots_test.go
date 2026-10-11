@@ -216,6 +216,18 @@ func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(farHome, ".ssh", "authorized_keys")); string(got) != keep {
 		t.Errorf("ASSERTION: build's authorized_keys changed through a case-folded name: %q", got)
 	}
+	// APFS folds the long s, so a stat of ~/.ſsh finds ~/.ssh. The names in
+	// the folder show whether a second folder was made.
+	entries, err := os.ReadDir(farHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != ".ssh" && strings.EqualFold(strings.ReplaceAll(e.Name(), "\u017f", "s"), ".ssh") {
+			t.Errorf("ASSERTION: a folder %q was made beside .ssh", e.Name())
+		}
+	}
+	saveTransferArtifact(t, "darwin-case-fold", map[string]any{"row": row})
 }
 
 // TestALinkCannotReadProcOrTheDaemonFolder is the second review's finding: a
