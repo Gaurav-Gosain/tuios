@@ -598,3 +598,59 @@ func TestALinkCannotReadAFileWithTwoNames(t *testing.T) {
 	}
 	saveTransferArtifact(t, "link-two-names", record)
 }
+
+// TestADarwinLinkCannotReadThroughTheDataVolume: on macOS the folders of the
+// data volume, /Users and /private among them, are also under
+// /System/Volumes/Data. EvalSymlinks does not follow a firmlink, so a path
+// there missed the deny list: a link read the dummy key and listed ~/.ssh
+// through it. F_GETPATH names an open file by its short path, and realPath
+// now does too, so both checks see ~/.ssh.
+func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("/System/Volumes/Data is a macOS folder")
+	}
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	farHome := xdgDir(remote, "HOME")
+	writeRemoteConfig(t, remote, listFilesPolicy)
+	key := dummyKey(t, farHome)
+	notes := filepath.Join(farHome, "notes.txt")
+	writeFarFile(t, notes, "ordinary\n", 0o644)
+	realKey, err := filepath.EvalSymlinks(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	realNotes, err := filepath.EvalSymlinks(notes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const data = "/System/Volumes/Data"
+	if _, err := os.Stat(data + realKey); err != nil {
+		t.Skipf("the home folder is not under %s: %v", data, err)
+	}
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	far := dialHostVerbs(t, base)
+
+	got, err := readContent(far, data+realKey)
+	if !forbidden(err) || strings.Contains(got, "DUMMY-KEY-MARKER") {
+		t.Errorf("ASSERTION: a link read the dummy key through %s: %q %v", data, got, err)
+	}
+	record := map[string]any{"file-read": errString(err)}
+	sshDir := data + filepath.Dir(realKey)
+	for verb, params := range map[string]map[string]any{
+		"file-stat": {"path": data + realKey},
+		"file-list": {"dir": sshDir},
+		"read-dir":  {"dir": sshDir},
+	} {
+		raw, err := far.call(verb, params)
+		record[verb] = errString(err)
+		if !forbidden(err) || strings.Contains(string(raw), "id_ed25519") {
+			t.Errorf("ASSERTION: %s through %s over the link was not refused: %s %v", verb, data, raw, err)
+		}
+	}
+	// The positive half: an ordinary file reads through the same folder.
+	if got, err := readContent(far, data+realNotes); err != nil || got != "ordinary\n" {
+		t.Errorf("ASSERTION: a read of an ordinary file through %s failed: %q %v", data, got, err)
+	}
+	saveTransferArtifact(t, "darwin-data-volume", record)
+}
