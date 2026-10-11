@@ -164,6 +164,11 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 	run := func(name, args string) int {
 		t.Helper()
 		out := filepath.Join(codes, name)
+		// A run of the same name before left its files; a stale code would
+		// end the wait before this run, and the next one truncate its
+		// stderr.
+		_ = os.Remove(out)
+		_ = os.Remove(out + ".err")
 		typeInPane(t, base, "work", pane, tuiosBin+" cp --conflict replace "+args+" 2>"+out+".err; echo $? >"+out)
 		return waitExitFile(t, out, 60*time.Second)
 	}
@@ -278,7 +283,7 @@ func TestCopyOnATerminalAsksAndKeepsRunning(t *testing.T) {
 	}
 	codeFile := filepath.Join(base, "ask.code")
 	typeInPane(t, base, "work", pane, "clear; "+tuiosBin+" cp ./docs build:; echo $? >"+codeFile)
-	screens["ask"] = waitPaneScreen(t, base, "work", pane, 30*time.Second, "is there on build", "Replace it, keep both, or skip?")
+	screens["ask"] = waitPaneScreen(t, base, "work", pane, 30*time.Second, "a.txt", "Replace it, keep both, or skip?")
 	pressInPane(t, base, "work", pane, "K")
 	if c := waitPaneExit(t, base, "work", pane, codeFile, 30*time.Second); c != 0 {
 		t.Fatalf("ASSERTION: cp after keep both for all exited %d\n%s", c, paneScreen(t, base, "work", pane))
