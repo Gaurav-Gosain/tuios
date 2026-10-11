@@ -777,6 +777,19 @@ type SidebarConfig struct {
 	// SubagentRows is how an agent row shows its subagents: rows, one row
 	// each under it, or count, the count alone (default: rows).
 	SubagentRows string `toml:"subagent_rows"`
+	// SubagentCollapse is whether a heading line over an agent's subagents
+	// folds them: off, expanded or collapsed (default: off). See
+	// sidebar_subagents.go for these and the three keys after it.
+	SubagentCollapse string `toml:"subagent_collapse"`
+	// SubagentFields is the fields each subagent row draws, a comma list of
+	// mark, name, type, time and note (default: mark,name,time,note).
+	SubagentFields string `toml:"subagent_fields"`
+	// SubagentMaxRows is the most lines one agent's subagents take, the
+	// "+N more" line included. Zero is no limit (default: 0).
+	SubagentMaxRows int `toml:"subagent_max_rows"`
+	// SubagentHideFinished hides a finished subagent's row this long after it
+	// ended: a duration, or off (default: off).
+	SubagentHideFinished string `toml:"subagent_hide_finished"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
@@ -947,6 +960,11 @@ func DefaultConfig() *UserConfig {
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
+				// The other subagent keys as they ship: no heading line, the
+				// row's four fields, no cap and no early hide.
+				SubagentCollapse:     SidebarSubagentCollapseOff,
+				SubagentFields:       DefaultSubagentFields,
+				SubagentHideFinished: SubagentHideOff,
 			},
 		},
 		Daemon: DaemonConfig{
@@ -1403,6 +1421,9 @@ const (
 	ActionAgentReply        = "agent_reply"
 	ActionAgentReview       = "agent_review"
 	ActionAgentCancelQueued = "agent_cancel_queued"
+	// ActionAgentSubagents opens or shuts the subagent rows under the agent
+	// row, when appearance.sidebar.subagent_collapse draws their heading.
+	ActionAgentSubagents = "agent_subagents"
 
 	// The prefix keys of the review and triage work (ctrl+b v, ctrl+b O).
 	ActionPrefixReview       = "prefix_review"
@@ -1474,6 +1495,7 @@ func getDefaultSidebarAgentsKeybinds() map[string][]string {
 		ActionAgentReply:        {"r"},
 		ActionAgentReview:       {"v"},
 		ActionAgentCancelQueued: {"x"},
+		ActionAgentSubagents:    {"space"},
 	}
 }
 
@@ -2268,7 +2290,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// to the default. A bad value reads as the default and validation says so.
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	// Anything but count draws rows, the default; validation names a typo.
-	s.SidebarSubagentRows = sb.SubagentRows != SidebarSubagentRowsCount
+	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}

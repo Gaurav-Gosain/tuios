@@ -1076,10 +1076,13 @@ The Inbox's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
 `[keybindings.prefix_mode]`.
 The agent rows' keys are a section of their own,
 `[keybindings.sidebar_agents]` (`agent_unread`, `agent_snooze`,
-`agent_reply`, `agent_review`, `agent_cancel_queued`). It is consulted before
+`agent_reply`, `agent_review`, `agent_cancel_queued`, `agent_subagents`). It is consulted before
 the rail's own keys and only while the cursor is on an agent row, the way
 `[keybindings.sidebar_files]` is on a file row, so `r` and `x` mean the agent
 on an agent row and keep renaming and opening the menu on every other row.
+`agent_subagents` (`space`) opens or closes the subagent rows under the agent
+row. It works on the agent row and on the subagent heading, and only when
+`appearance.sidebar.subagent_collapse` is `expanded` or `collapsed`.
 
 In the reply line every printable key is typed, and a paste is typed as one
 line; `enter` queues it, `backspace` deletes, `esc` closes it and sends

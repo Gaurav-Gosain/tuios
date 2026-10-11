@@ -229,6 +229,25 @@ func (m *OS) sidebarSignature() uint64 {
 	if m.Settings.SidebarAgentRestFold > 0 && m.SidebarAgentsSeen {
 		mixI(int(sidebarFoldClock().Unix() / 60))
 	}
+	// The subagent options of the rail being drawn, which differ per edge,
+	// and the open or shut headings, which a toggle on either rail moves.
+	sv := m.Settings.SidebarSubagents
+	mixB(sv.Rows)
+	mixB(sv.Tree)
+	mixS(sv.Collapse)
+	mixB(sv.Fields.Mark)
+	mixB(sv.Fields.Name)
+	mixB(sv.Fields.Type)
+	mixB(sv.Fields.Time)
+	mixB(sv.Fields.Note)
+	mixI(sv.MaxRows)
+	mixB(sv.Hide)
+	mixI(int(sv.HideAfter / time.Millisecond))
+	mixI(m.sidebarSubagentFoldGen)
+	var hideNow time.Time
+	if sv.Hide {
+		hideNow = time.Now()
+	}
 
 	// Rail keyboard focus: the accent edge and the cursor-row highlight both
 	// depend on it, so a focus change or a cursor move must rebuild.
@@ -427,6 +446,11 @@ func (m *OS) sidebarSignature() uint64 {
 				mixS(sa.Last)
 				mixI(sa.Tools)
 				mixS(sa.Result)
+				// Whether subagent_hide_finished hides it by now, so the
+				// row goes on the frame the hide is due.
+				if sv.Hide {
+					mixB(sidebarSubagentHidden(sv, sa, hideNow))
+				}
 				if sa.EndedAt == 0 {
 					mixI(int(agentElapsedBucket(sa.StartedAt)))
 				} else {

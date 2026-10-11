@@ -272,3 +272,12 @@ func ParseAgentRestFold(v string) (d time.Duration, ok bool) {
 	}
 	return d, true
 }
+
+// checkAgentRestFold is the error for an agent_rest_fold value that is
+// neither a duration nor off.
+func checkAgentRestFold(v string) error {
+	if _, ok := ParseAgentRestFold(v); !ok {
+		return fmt.Errorf("%q is not a duration such as 1h, or off", v)
+	}
+	return nil
+}

@@ -1013,7 +1013,7 @@ command = "left-summary"
 ```
 
 `[appearance.sidebar.right]` has the same `enabled`, `width`, `sections` and
-`custom` keys. On the original edge, omitted keys retain the legacy settings;
+`custom` keys. Both edge tables also take the five `subagent_*` keys. On the original edge, omitted keys retain the legacy settings;
 on the other edge, an omitted `sections` uses the default section order.
 Writing an edge table without `enabled = true` does not enable that edge.
 With `position = "hidden"`, explicitly enabled edge tables still draw: if
@@ -1517,11 +1517,46 @@ failed, `○` stopped), what it was asked to do, and on a tall section the tool
 it runs or how it ended, while the agent's own row says `3 of 4 run`. When the
 section has too little room it leaves the finished ones out first, then
 shows the newest few and `+2 more`, then none; it never hides an agent row to
-show a subagent row. `count` draws the count alone, as the rail did before.
+show a subagent row. `tree` draws the same rows on tree lines (`├─` and
+`└─`, `|-` and `` `- `` in ASCII). `count` draws the count alone, as the rail
+did before.
 An agent at rest with subagents at work wears `◊` (`%` in ASCII) in the
 working ink, on the rail, its title bar and the switcher. The settings page
 shows the option on its Sidebar tab once an agent has been seen. See
 [Subagents on the rail](AGENT_STATE.md#subagents-on-the-rail).
+
+Four more rail options change how the subagent rows look. Each default draws
+the rows as described above.
+
+| Option | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `subagent_collapse` | `off`, `expanded`, `collapsed` | `off` | `expanded` and `collapsed` draw a heading line, `▾ 4 subagents`, over each agent's subagent rows. The value is the state at the start. |
+| `subagent_fields` | a comma list of `mark`, `name`, `type`, `time`, `note` | `mark,name,time,note` | The parts each subagent row shows. `type` is the agent type, such as `Explore`. `note` is the second line. |
+| `subagent_max_rows` | `0` to `16` | `0` | The most lines one agent's subagents use, the `+N more` line included. `0` means no limit. |
+| `subagent_hide_finished` | a duration such as `30s`, or `off` | `off` | Removes the row of a finished subagent this long after it ends. |
+
+A click on the heading, or `enter` on it, opens or closes the rows. `space`
+does the same with the rail cursor on the agent row or on its heading. The
+rail keeps the state of each pane until the client stops. A closed heading
+shows `▸`, and on a tall section its second line names the subagents.
+
+The daemon keeps a finished subagent for 60 seconds (a failed one for 5
+minutes). `subagent_hide_finished` can make a row go earlier, but it cannot
+keep a row longer than the daemon keeps it.
+
+```toml
+[appearance.sidebar]
+subagent_rows = "tree"
+subagent_collapse = "expanded"
+subagent_fields = "mark,name,time"
+subagent_max_rows = 4
+subagent_hide_finished = "20s"
+```
+
+Each of the five subagent options can be set again in
+`[appearance.sidebar.left]` or `[appearance.sidebar.right]`, for the rail on
+that edge. An option that the edge table does not set uses the value from
+`[appearance.sidebar]`.
 
 The agent row in `[appearance.sidebar.agent_row]` has five tokens for what
 tuios feeds itself: `now` (what a working agent is doing, drawn only while it

@@ -85,6 +85,10 @@ type Option struct {
 	// Auto marks an int option that also takes the word "auto". Its config
 	// field is a string type, such as FPSLimit, that can hold either.
 	Auto bool `json:"auto,omitempty"`
+	// Check rejects a value of an open string option that does not parse,
+	// such as a duration or a field list, at set time rather than as a
+	// warning on the next load. Nil checks nothing beyond the rest.
+	Check func(string) error `json:"-"`
 }
 
 // UnsetText is how a reader is told an option is unset and what it follows,
@@ -842,12 +846,32 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar.agent_rest_fold", Type: OptionString, Section: "sidebar",
 		Description: "How long an agent row rests (idle, unknown, or done and seen) before the rail folds it into one line: a duration such as 1h, or off",
-		Default:     "1h",
+		Default:     "1h", Check: checkAgentRestFold,
 	},
 	{
 		Path: "appearance.sidebar.subagent_rows", Type: OptionString, Section: "sidebar",
-		Description: "How an agent row shows its subagents: a row for each under it, or the count alone",
+		Description: "How an agent row shows its subagents: a row for each under it, the rows on tree lines, or the count alone",
 		Accepted:    SidebarSubagentRowsValues, Default: SidebarSubagentRowsRows,
+	},
+	{
+		Path: "appearance.sidebar.subagent_collapse", Type: OptionString, Section: "sidebar",
+		Description: "A heading line over each agent's subagents that opens and shuts their rows: off, or on and expanded or collapsed at the start",
+		Accepted:    SidebarSubagentCollapseValues, Default: SidebarSubagentCollapseOff,
+	},
+	{
+		Path: "appearance.sidebar.subagent_fields", Type: OptionString, Section: "sidebar",
+		Description: "What each subagent row shows, a comma list of mark, name, type, time and note",
+		Default:     DefaultSubagentFields, Check: CheckSubagentFields,
+	},
+	{
+		Path: "appearance.sidebar.subagent_max_rows", Type: OptionInt, Section: "sidebar",
+		Description: "The most lines one agent's subagents take, the +N more line included. 0 is no limit.",
+		Default:     "0", Min: 0, Max: SidebarSubagentMaxRowsMax,
+	},
+	{
+		Path: "appearance.sidebar.subagent_hide_finished", Type: OptionString, Section: "sidebar",
+		Description: "How long a finished subagent's row stays after it ends: a duration such as 30s, or off to keep it until the daemon drops it",
+		Default:     SubagentHideOff, Check: CheckSubagentHide,
 	},
 	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
@@ -1429,6 +1453,11 @@ func (o Option) checkValue(value string) error {
 	}
 	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
 		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))
+	}
+	if o.Check != nil {
+		if err := o.Check(value); err != nil {
+			return fmt.Errorf("%s: %w", o.Path, err)
+		}
 	}
 	return nil
 }

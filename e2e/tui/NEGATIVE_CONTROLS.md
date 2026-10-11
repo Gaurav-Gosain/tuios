@@ -3878,6 +3878,43 @@ The design named `◐` for the waiting mark. The frames drawn by
 `internal/shot`, with the Go Mono it embeds, showed it as a missing glyph.
 The mark is `◊`, which Go Mono and Menlo both have. Kiro and Qwen Code also
 put `◐` in their window titles as a spinner.
+## Subagent rail styles
+
+`e2e/tui/subagent_rail_style_test.go` runs the stand-in `claude` of "Subagent
+list" to four running subagents under a real client, with the rail at 24
+columns and the agents section alone. `TestSubagentRailStyles` checks the
+default rows, `subagent_rows = "tree"`, the `subagent_collapse` heading
+(closed by a click, opened by `space`), a client that starts with
+`subagent_collapse = "collapsed"`, `subagent_fields = "mark,type"`,
+`subagent_max_rows = 2`, a right rail with its own `subagent_rows`, and
+`subagent_hide_finished = "2s"` while the daemon still lists the finished
+subagents. `TestSubagentHideTimer` sets `subagent_hide_finished = "8s"` before
+anything ends and sends nothing to the client after the start. The finished
+rows must stay 4 seconds after the end and be gone by 14, while the daemon
+still lists them. Only the frame that `subagentHideCmd` arms can take them
+away.
+
+Each control below was run on 2026-10-11 on branch
+`feat/subagent-rail-style`. Each one builds `cmd/tuios` with one piece of
+wiring cut and runs `TestSubagentRailStyles` and `TestSubagentHideTimer`
+against it. The controls marked 2026-10-12 were run again after the review
+fixes. The script and the
+logs are in `~/.cache/agent-tmp/subrail/neg/`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| The tree lead in `sidebarChildLead` (always the blank indent) | "subagent_rows = tree does not draw tree lines" | **caught** |
+| The `sidebarRowSubagentToggle` case in the rail's click handler | "a click on the heading did not shut the rows" | **caught** |
+| The `agent_subagents` branch in `SidebarAgentAction` (2026-10-12) | "space on the heading did not open the rows" | **caught** |
+| The per-edge `SidebarSubagents` swap in `renderSecondarySidebar` | "the right rail does not draw its own subagent style" | **caught** |
+| The filter in `sidebarSubagentsShown` (finished rows never hidden) (2026-10-12) | Both tests: "subagent_hide_finished = 2s did not take the finished rows away", and "... = 8s did not take the finished rows away by 14.0s after the end" | **caught** |
+| `subagentHideCmd` returns nil (no frame armed for the hide) (2026-10-12) | `TestSubagentHideTimer`: "subagent_hide_finished = 8s did not take the finished rows away by 14.0s after the end". `TestSubagentRailStyles` still passes: other frames redraw the rail there, so it does not cover the timer | **caught** |
+| The heading lines in the section's demand (`sidebarSubagentDemand` replaced by the subagent count) | "subagent_collapse = expanded draws no heading over the rows": the section fell to step 3 and drew "+2 more" | **caught** |
+| The `subagent_collapse = "collapsed"` start in `sidebarSubagentsOpen` | "subagent_collapse = collapsed does not start with the heading alone" | **caught** |
+
+The first run of the filter control failed earlier, at the tree step. Each
+later run of that control alone failed at the hide step, which is the
+assertion it is for.
 ### Mail seen state
 
 Run on 2026-10-10 on branch `feat/mail-seen`. Each control cuts one thing from

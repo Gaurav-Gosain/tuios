@@ -533,8 +533,9 @@ const (
 var SidebarFileDeletes = []string{SidebarFileDeleteTrash, SidebarFileDeletePermanent}
 
 // How the rail shows the subagents of an agent row. Rows draws one row per
-// subagent under its pane's row, as space allows; count draws only the count on
-// the pane's row, as the rail did before it knew more than the count.
+// subagent under its pane's row, as space allows; tree draws the same rows on
+// tree lines (SidebarSubagentRowsTree); count draws only the count on the
+// pane's row, as the rail did before it knew more than the count.
 const (
 	SidebarSubagentRowsRows  = "rows"
 	SidebarSubagentRowsCount = "count"
@@ -542,7 +543,7 @@ const (
 
 // SidebarSubagentRowsValues lists the valid values for
 // appearance.sidebar.subagent_rows.
-var SidebarSubagentRowsValues = []string{SidebarSubagentRowsRows, SidebarSubagentRowsCount}
+var SidebarSubagentRowsValues = []string{SidebarSubagentRowsRows, SidebarSubagentRowsTree, SidebarSubagentRowsCount}
 
 // FormatWindowTitle expands WindowTitleFormat for one window. The placeholders
 // are {title} (the custom or terminal-reported title), {index} (the window's

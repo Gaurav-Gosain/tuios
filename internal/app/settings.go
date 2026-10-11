@@ -497,6 +497,10 @@ func (m *OS) settingsCategories() []settingsCategory {
 		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{
 			opt("appearance.sidebar.agent_rest_fold"),
 			opt("appearance.sidebar.subagent_rows"),
+			opt("appearance.sidebar.subagent_collapse"),
+			opt("appearance.sidebar.subagent_fields"),
+			opt("appearance.sidebar.subagent_max_rows"),
+			opt("appearance.sidebar.subagent_hide_finished"),
 		})...)
 	}
 

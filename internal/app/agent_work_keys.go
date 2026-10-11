@@ -89,7 +89,7 @@ func (m *OS) SidebarCursorOnAgent() bool {
 		return false
 	}
 	row, ok := m.sidebarCursorRow()
-	return ok && row.Kind == sidebarRowAgent && row.WindowID != ""
+	return ok && (row.Kind == sidebarRowAgent || row.Kind == sidebarRowSubagentToggle) && row.WindowID != ""
 }
 
 // SidebarAgentAction runs one of the agent rows' actions on the row under
@@ -97,7 +97,15 @@ func (m *OS) SidebarCursorOnAgent() bool {
 // own binding for the key then runs.
 func (m *OS) SidebarAgentAction(action string) (cmd tea.Cmd, handled bool) {
 	row, ok := m.sidebarCursorRow()
-	if !ok || row.Kind != sidebarRowAgent {
+	if !ok {
+		return nil, false
+	}
+	// The subagents' heading answers its own key and no other: the rest
+	// fall through to the rail's binding.
+	if action == config.ActionAgentSubagents && (row.Kind == sidebarRowAgent || row.Kind == sidebarRowSubagentToggle) {
+		return nil, m.SidebarToggleSubagents(row.SessionID, row.WindowID)
+	}
+	if row.Kind != sidebarRowAgent {
 		return nil, false
 	}
 	switch action {

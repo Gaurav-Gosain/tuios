@@ -1347,6 +1347,20 @@ type OS struct {
 	// or a pane is focused. See
 	// sidebarFoldAgents.
 	sidebarAgentsUnfolded bool
+	// sidebarSubagentFold is the open or shut state the person gave each
+	// pane's subagent heading on this rail, keyed by sidebarSubagentKey. A
+	// pane not in it takes appearance.sidebar.subagent_collapse. Client
+	// memory only: it lasts as long as the client.
+	sidebarSubagentFold map[string]bool
+	// sidebarSubagentFoldGen counts the toggles of any rail's headings, for
+	// the rails' signatures.
+	sidebarSubagentFoldGen int
+	// subagentHideDue is the earliest moment a finished subagent's row is
+	// due to go under appearance.sidebar.subagent_hide_finished, noted while
+	// the rail is drawn, and subagentHideArmed the moment a frame was last
+	// asked for. See subagentHideCmd.
+	subagentHideDue   time.Time
+	subagentHideArmed time.Time
 	// sidebarReveal is what the last frame was drawn for, so a focus change
 	// can scroll the terminals and sessions sections to the row that now
 	// matters and a frame with no change leaves them alone. See

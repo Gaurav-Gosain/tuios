@@ -539,6 +539,7 @@ var ActionDescriptions = map[string]string{
 	"agent_snooze":        "Agents: snooze the pane's Inbox item",
 	"agent_reply":         "Agents: reply to the agent",
 	"agent_review":        "Agents: review the pane's changes",
+	"agent_subagents":     "Agents: open or close the subagent rows",
 	"agent_cancel_queued": "Agents: drop the newest queued message",
 	"peek_approve":        "Inbox prompt: approve",
 	"peek_approve_always": "Inbox prompt: approve and do not ask again",

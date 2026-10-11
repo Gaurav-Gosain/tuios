@@ -13,6 +13,14 @@ type SidebarEdgeConfig struct {
 	Width    int                  `toml:"width,omitempty"`
 	Sections string               `toml:"sections,omitempty"`
 	Custom   *SidebarCustomConfig `toml:"custom,omitempty"`
+	// The subagent keys of [appearance.sidebar], set again for this edge's
+	// rail. An unset key takes the value [appearance.sidebar] gives it. See
+	// ResolveSidebarSubagentView.
+	SubagentRows         string `toml:"subagent_rows,omitempty"`
+	SubagentCollapse     string `toml:"subagent_collapse,omitempty"`
+	SubagentFields       string `toml:"subagent_fields,omitempty"`
+	SubagentMaxRows      *int   `toml:"subagent_max_rows,omitempty"`
+	SubagentHideFinished string `toml:"subagent_hide_finished,omitempty"`
 }
 
 // SidebarEdgeResolved is the effective rail settings on one side of the

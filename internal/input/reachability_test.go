@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -353,6 +354,15 @@ func reachAgentsOS(t *testing.T) *app.OS {
 	// A message waits in its queue, so x on the row drops it rather than
 	// falling through to the rail's menu, which it does on a row with none.
 	o.Windows[0].AgentQueued = 1
+	// One running subagent and the heading drawn over it, so space on the
+	// row opens or shuts its subagent rows. Without a subagent there is no
+	// heading and space falls through to the rail.
+	o.Windows[0].AgentSubagents = 1
+	o.Windows[0].AgentSubagentList = []sessiontree.Subagent{{
+		ID: "sa-1", Type: "Explore", Description: "Look around", State: "running",
+		StartedAt: time.Now().UnixNano(),
+	}}
+	o.Settings.SidebarSubagents.Collapse = config.SidebarSubagentCollapseExpanded
 	o.ExitSidebarFocus()
 	o.EnterSidebarFocus()
 	o.View()

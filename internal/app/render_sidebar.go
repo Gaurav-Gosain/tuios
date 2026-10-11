@@ -127,6 +127,11 @@ const (
 	// one. Activating it shows them until the rail loses the keyboard. See
 	// sidebarFoldAgents.
 	sidebarRowAgentFold
+	// sidebarRowSubagentToggle is the heading line over a pane's subagent
+	// rows, drawn when appearance.sidebar.subagent_collapse is not off.
+	// Activating it opens or shuts the rows. It carries the pane's session
+	// and window. See SidebarToggleSubagents.
+	sidebarRowSubagentToggle
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -492,11 +497,21 @@ type sidebarAgentEntry struct {
 	// had no room for: how many. Lead says rows of them come before it.
 	More int
 	Lead bool
+	// Head is set on the heading line over a pane's subagent rows, drawn
+	// when appearance.sidebar.subagent_collapse is not off. HeadKids are the
+	// subagents it stands for, and Open whether their rows are drawn under
+	// it.
+	Head     bool
+	HeadKids []sessiontree.Subagent
+	Open     bool
+	// Last marks the last line under a pane's row, where a tree line ends.
+	Last bool
 }
 
 // sidebarSubRow reports whether an entry is a row under a pane's row rather
-// than a pane: a subagent's row, or the "+N more" after them.
-func (e sidebarAgentEntry) sidebarSubRow() bool { return e.Child != nil || e.More > 0 }
+// than a pane: a subagent's row, the "+N more" after them, or the heading
+// over them.
+func (e sidebarAgentEntry) sidebarSubRow() bool { return e.Child != nil || e.More > 0 || e.Head }
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
 // showing, whether that is the attached session or a peeked one.
@@ -1207,8 +1222,12 @@ func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
 		sections = config.SidebarDefaultSections
 	}
 	primarySections, primaryCache := m.Settings.SidebarSections, m.sidebarCache
+	primarySubagents := m.Settings.SidebarSubagents
 	m.swapSecondaryRail()
 	m.Settings.SidebarSections = sections
+	// The subagent options resolve per edge: this edge's table over
+	// [appearance.sidebar].
+	m.Settings.SidebarSubagents = config.ResolveSidebarSubagentView(m.UserConfig.Appearance.Sidebar, cfg)
 	m.sidebarCache = m.secondarySidebarCache
 	m.sidebarDrawing = true
 	m.sidebarDrawingEdge = edge
@@ -1217,6 +1236,7 @@ func (m *OS) renderSecondarySidebar() *lipgloss.Layer {
 	m.secondarySidebarCache = m.sidebarCache
 	m.sidebarCache = primaryCache
 	m.Settings.SidebarSections = primarySections
+	m.Settings.SidebarSubagents = primarySubagents
 	m.sidebarDrawing = false
 	m.swapSecondaryRail()
 	m.secondarySidebarHits = append(m.secondarySidebarHits[:0], m.secondaryRailView.hits...)
@@ -1523,7 +1543,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				continue
 			}
 			demand := slices.Clone(planRows)
-			demand[i] = nA + sidebarAgentChildCount(agents)
+			demand[i] = nA + m.sidebarSubagentDemand(agents)
 			room := sidebarBudgetLines(avail, plans, demand, planRowH)[i]
 			plan := m.sidebarAgentChildren(agents, room)
 			agents, childCut = plan.rows, plan.cut
@@ -1997,6 +2017,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionAgents] {
 			idx := start[sidebarSectionAgents] + i
 			e := agents[idx]
+			if e.Head {
+				// The heading over a pane's subagent rows: the mouse and the
+				// keyboard both reach it, and activating it opens or shuts
+				// the rows.
+				st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowSubagentToggle, e.SessionID, e.WindowID))
+				recordHit(sidebarRowSubagentToggle, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
+				lines = append(lines, compose(st.mark(pal, m.sidebarChildRow(e, cw, pal, st, false))))
+				if rowH[sidebarSectionAgents] > 1 {
+					lines = append(lines, compose(st.mark(pal, m.sidebarChildRow(e, cw, pal, st, true))))
+				}
+				continue
+			}
 			if e.sidebarSubRow() {
 				// A subagent's row: a click on it goes to its pane, and the
 				// keyboard steps over it, from the pane's row to the next.
@@ -2382,6 +2414,12 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	case sidebarRowAgentFold:
 		for i, e := range agents {
 			if e.Fold > 0 {
+				return sidebarSectionAgents, i, true
+			}
+		}
+	case sidebarRowSubagentToggle:
+		for i, e := range agents {
+			if e.Head && e.WindowID == target.WindowID && e.SessionID == target.SessionID {
 				return sidebarSectionAgents, i, true
 			}
 		}

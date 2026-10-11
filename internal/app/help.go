@@ -230,6 +230,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	add(agentRowKey(config.ActionAgentUnread), "Rail agent row: mark its finished turn unread")
 	add(agentRowKey(config.ActionAgentSnooze), "Rail agent row: snooze its Inbox item")
 	add(agentRowKey(config.ActionAgentCancelQueued), "Rail agent row: drop the newest queued message")
+	add(agentRowKey(config.ActionAgentSubagents), "Rail agent row: open or close its subagent rows")
 
 	inbox := func(action, desc string) {
 		add(registry.GetInboxKeys(action), desc)

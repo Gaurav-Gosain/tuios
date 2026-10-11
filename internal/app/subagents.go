@@ -1,13 +1,16 @@
 package app
 
 import (
+	"image/color"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -258,9 +261,129 @@ func subagentDetailLines(list []sessiontree.Subagent) []string {
 type sidebarChildPlan struct {
 	// rows is the section's entries with the child entries in place.
 	rows []sidebarAgentEntry
-	// cut says some subagent has no row of its own: finished ones were left
-	// out, or a parent's rows end in "+N more", or no parent has any.
+	// cut says some subagent has no row of its own for want of room: finished
+	// ones were left out, or a parent's rows end in "+N more", or no parent
+	// has any. A row the options hide (a shut heading, the row cap, an early
+	// hide) is not a cut: the person chose it, and the room it frees may still
+	// go to the second lines.
 	cut bool
+}
+
+// sidebarChildParent is what the plan knows of one parent row's subagents.
+type sidebarChildParent struct {
+	// kids are the subagents the options leave on the rail, in start order.
+	kids []sessiontree.Subagent
+	// running is how many of kids run.
+	running int
+	// head says the parent has a heading line over its rows.
+	head bool
+	// open says the rows under the heading are drawn. Always true without a
+	// heading.
+	open bool
+}
+
+// rowLines is how many lines n subagents take under this parent, the
+// heading included, with the row cap applied.
+func (c sidebarChildParent) rowLines(n int, v config.SidebarSubagentView) int {
+	if n <= 0 {
+		return 0
+	}
+	lines := 0
+	if c.head {
+		lines++
+	}
+	if c.open {
+		lines += sidebarCapRows(n, v)
+	}
+	return lines
+}
+
+// sidebarCapRows is n under appearance.sidebar.subagent_max_rows.
+func sidebarCapRows(n int, v config.SidebarSubagentView) int {
+	if v.MaxRows > 0 {
+		return min(n, v.MaxRows)
+	}
+	return n
+}
+
+// sidebarSubagentKey is the identity a heading's open or shut state is kept
+// under: the pane.
+func sidebarSubagentKey(sessionID, windowID string) string {
+	return sessionID + "\x00" + windowID
+}
+
+// sidebarSubagentsOpen reports whether a pane's subagent rows are open under
+// their heading: what the person last chose for the pane on this rail, else
+// what appearance.sidebar.subagent_collapse starts with.
+func (m *OS) sidebarSubagentsOpen(sessionID, windowID string) bool {
+	if open, ok := m.sidebarSubagentFold[sidebarSubagentKey(sessionID, windowID)]; ok {
+		return open
+	}
+	return m.Settings.SidebarSubagents.Collapse != config.SidebarSubagentCollapseCollapsed
+}
+
+// SidebarToggleSubagents opens or shuts a pane's subagent rows under their
+// heading, and keeps the choice for this rail until the client ends. It
+// reports false when the pane has no heading on this rail (no rows, no
+// collapse option, or no subagent left after the hide option), so the key
+// falls through and nothing is stored for a heading nobody can see.
+func (m *OS) SidebarToggleSubagents(sessionID, windowID string) bool {
+	v := m.Settings.SidebarSubagents
+	if !v.Rows || !v.Collapsible() || windowID == "" {
+		return false
+	}
+	if len(m.sidebarSubagentsShown(m.paneSubagentList(sessionID, windowID), time.Now())) == 0 {
+		return false
+	}
+	open := m.sidebarSubagentsOpen(sessionID, windowID)
+	if m.sidebarSubagentFold == nil {
+		m.sidebarSubagentFold = make(map[string]bool, 1)
+	}
+	m.sidebarSubagentFold[sidebarSubagentKey(sessionID, windowID)] = !open
+	m.sidebarSubagentFoldGen++
+	m.sidebarCache.invalidate()
+	return true
+}
+
+// sidebarSubagentsShown is list without the finished subagents that
+// appearance.sidebar.subagent_hide_finished hides by now. It notes the
+// earliest hide still to come, so Update can ask for a frame then.
+func (m *OS) sidebarSubagentsShown(list []sessiontree.Subagent, now time.Time) []sessiontree.Subagent {
+	v := m.Settings.SidebarSubagents
+	if !v.Hide || len(list) == 0 {
+		return list
+	}
+	var out []sessiontree.Subagent
+	for i, s := range list {
+		if s.Running() || s.EndedAt <= 0 {
+			if out != nil {
+				out = append(out, s)
+			}
+			continue
+		}
+		at := time.Unix(0, s.EndedAt).Add(v.HideAfter)
+		if at.After(now) {
+			m.noteSubagentHide(at)
+			if out != nil {
+				out = append(out, s)
+			}
+			continue
+		}
+		if out == nil {
+			out = make([]sessiontree.Subagent, i, len(list))
+			copy(out, list[:i])
+		}
+	}
+	if out == nil {
+		return list
+	}
+	return out
+}
+
+// sidebarSubagentHidden reports whether the hide option hides a subagent at
+// now. The rail's signature folds it, so a row goes on the frame it should.
+func sidebarSubagentHidden(v config.SidebarSubagentView, s sessiontree.Subagent, now time.Time) bool {
+	return v.Hide && !s.Running() && s.EndedAt > 0 && !time.Unix(0, s.EndedAt).Add(v.HideAfter).After(now)
 }
 
 // sidebarAgentChildren puts a row for each subagent under its pane's row,
@@ -274,36 +397,52 @@ type sidebarChildPlan struct {
 //     started last, and a parent with more than its rows ends in "+N more";
 //  4. else none, and the parent's row says the count, as before.
 //
-// With appearance.sidebar.subagent_rows = "count" it is always step 4.
+// With appearance.sidebar.subagent_rows = "count" it is always step 4. The
+// other subagent options act before the steps: a hidden finished row is not
+// there to place, a heading line costs one line, a shut heading costs only
+// that line, and subagent_max_rows caps each parent's lines.
 func (m *OS) sidebarAgentChildren(parents []sidebarAgentEntry, room int) sidebarChildPlan {
-	all, running := 0, 0
-	for _, p := range parents {
-		all += len(p.Children)
-		running += runningSubagents(p.Children)
-	}
-	if all == 0 {
+	v := m.Settings.SidebarSubagents
+	if !v.Rows || !sidebarAgentsHaveChildren(parents) {
 		return sidebarChildPlan{rows: parents}
 	}
-	if !m.Settings.SidebarSubagentRows {
+	now := time.Now()
+	info := make([]sidebarChildParent, len(parents))
+	all, running := 0, 0
+	anyRunning := false
+	for i, p := range parents {
+		kids := m.sidebarSubagentsShown(p.Children, now)
+		c := sidebarChildParent{kids: kids, running: runningSubagents(kids), head: v.Collapsible() && len(kids) > 0, open: true}
+		if c.head {
+			c.open = m.sidebarSubagentsOpen(p.SessionID, p.WindowID)
+		}
+		info[i] = c
+		all += c.rowLines(len(kids), v)
+		running += c.rowLines(c.running, v)
+		anyRunning = anyRunning || c.running > 0
+	}
+	if all == 0 {
 		return sidebarChildPlan{rows: parents}
 	}
 	n := len(parents)
 	switch {
 	case n+all <= room:
-		return sidebarChildPlan{rows: sidebarWithChildren(parents, nil, false)}
-	case running > 0 && n+running <= room:
-		return sidebarChildPlan{rows: sidebarWithChildren(parents, nil, true), cut: true}
+		return sidebarChildPlan{rows: sidebarWithChildren(parents, info, nil, false, v)}
+	case anyRunning && n+running <= room:
+		return sidebarChildPlan{rows: sidebarWithChildren(parents, info, nil, true, v), cut: true}
 	}
 	// Step 3: the parents with running subagents, in the order they get
-	// their rows.
+	// their rows. Each takes its heading and, when open, one row.
 	slots := room - n
 	var order []int
-	for i, p := range parents {
-		if runningSubagents(p.Children) > 0 {
+	need := 0
+	for i, c := range info {
+		if c.running > 0 {
 			order = append(order, i)
+			need += c.rowLines(1, v)
 		}
 	}
-	if len(order) == 0 || slots < len(order) {
+	if len(order) == 0 || slots < need {
 		return sidebarChildPlan{rows: parents, cut: true}
 	}
 	newest := func(p sidebarAgentEntry) int64 {
@@ -333,13 +472,15 @@ func (m *OS) sidebarAgentChildren(parents []sidebarAgentEntry, room int) sidebar
 	})
 	alloc := make([]int, len(parents))
 	for _, i := range order {
-		alloc[i] = 1
+		if info[i].open {
+			alloc[i] = 1
+		}
 	}
-	slots -= len(order)
+	slots -= need
 	for slots > 0 {
 		gave := false
 		for _, i := range order {
-			if slots > 0 && alloc[i] < runningSubagents(parents[i].Children) {
+			if slots > 0 && info[i].open && alloc[i] < sidebarCapRows(info[i].running, v) {
 				alloc[i]++
 				slots--
 				gave = true
@@ -349,53 +490,81 @@ func (m *OS) sidebarAgentChildren(parents []sidebarAgentEntry, room int) sidebar
 			break
 		}
 	}
-	return sidebarChildPlan{rows: sidebarWithChildren(parents, alloc, true), cut: true}
+	return sidebarChildPlan{rows: sidebarWithChildren(parents, info, alloc, true, v), cut: true}
 }
 
-// sidebarWithChildren is parents with their child entries after each one.
-// alloc, when not nil, is how many rows each parent may use, the last of them
-// "+N more" when its running subagents are more. runningOnly leaves the
-// finished subagents out.
-func sidebarWithChildren(parents []sidebarAgentEntry, alloc []int, runningOnly bool) []sidebarAgentEntry {
+// sidebarWithChildren is parents with their child entries after each one: a
+// heading when the parent has one, then a row per subagent while it is open.
+// alloc, when not nil, is how many row lines each parent may use, and a
+// parent at zero gets no lines at all; nil is each parent's capped count.
+// When the lines are fewer than the subagents the last of them is "+N more".
+// runningOnly leaves the finished subagents out.
+func sidebarWithChildren(parents []sidebarAgentEntry, info []sidebarChildParent, alloc []int, runningOnly bool, v config.SidebarSubagentView) []sidebarAgentEntry {
 	out := make([]sidebarAgentEntry, 0, len(parents)*2)
 	for i, p := range parents {
+		c := info[i]
 		var kids []sessiontree.Subagent
-		for _, s := range p.Children {
+		for _, s := range c.kids {
 			if !runningOnly || s.Running() {
 				kids = append(kids, s)
 			}
 		}
-		more := 0
+		if len(kids) == 0 || (alloc != nil && c.running == 0) {
+			p.ChildRows = 0
+			out = append(out, p)
+			continue
+		}
+		lines := sidebarCapRows(len(kids), v)
 		if alloc != nil {
-			switch a := alloc[i]; {
-			case a == 0:
+			lines = alloc[i]
+		}
+		if !c.open {
+			lines = 0
+		}
+		more := 0
+		if lines < len(kids) {
+			if lines == 0 {
+				// A shut heading stands for them all.
 				kids = nil
-			case a < len(kids):
+			} else {
 				// The newest of them, in start order, then the count of the
 				// rest.
-				more = len(kids) - (a - 1)
-				kids = kids[len(kids)-(a-1):]
+				more = len(kids) - (lines - 1)
+				kids = kids[len(kids)-(lines-1):]
 			}
 		}
 		p.ChildRows = len(kids)
 		if more > 0 {
 			p.ChildRows++
 		}
+		if c.head {
+			p.ChildRows++
+		}
 		out = append(out, p)
-		for j := range kids {
-			child := sidebarAgentEntry{
+		sub := func() sidebarAgentEntry {
+			return sidebarAgentEntry{
 				SessionID: p.SessionID, WindowID: p.WindowID, WindowIndex: p.WindowIndex,
 				Title: p.Title, State: p.State, DoneSeen: p.DoneSeen, Foreign: p.Foreign, Host: p.Host,
-				Child: &kids[j],
 			}
+		}
+		if c.head {
+			h := sub()
+			h.Head = true
+			h.HeadKids = c.kids
+			h.Open = c.open
+			h.Last = len(kids) == 0 && more == 0
+			out = append(out, h)
+		}
+		for j := range kids {
+			child := sub()
+			child.Child = &kids[j]
+			child.Last = j == len(kids)-1 && more == 0
 			out = append(out, child)
 		}
 		if more > 0 {
-			out = append(out, sidebarAgentEntry{
-				SessionID: p.SessionID, WindowID: p.WindowID, WindowIndex: p.WindowIndex,
-				Title: p.Title, State: p.State, DoneSeen: p.DoneSeen, Foreign: p.Foreign, Host: p.Host,
-				More: more, Lead: len(kids) > 0,
-			})
+			mr := sub()
+			mr.More, mr.Lead, mr.Last = more, len(kids) > 0, true
+			out = append(out, mr)
 		}
 	}
 	return out
@@ -406,34 +575,117 @@ func sidebarWithChildren(parents []sidebarAgentEntry, alloc []int, runningOnly b
 // parent's entry.
 const sidebarChildIndent = sidebarNameCol + 1
 
+// sidebarChildLead is the indent in front of a child row's mark, and on its
+// second line in front of the note: blanks for the rows as a list, and tree
+// lines from the parent's mark column for subagent_rows = "tree". It is
+// sidebarChildIndent cells wide on the first line either way, so the names
+// line up whichever the person picks.
+func (m *OS) sidebarChildLead(e sidebarAgentEntry, rowBg color.Color, pal overlay.Palette, second bool) string {
+	pad := sidebarStyle(rowBg, nil)
+	if !m.Settings.SidebarSubagents.Tree {
+		return pad.Render(strings.Repeat(" ", sidebarChildIndent))
+	}
+	branch := m.Settings.GetRailTreeBranch()
+	if e.Last {
+		branch = m.Settings.GetRailTreeLast()
+	}
+	if second {
+		branch = " "
+		if !e.Last {
+			branch = sidebarTreePipe(m.Settings.GetRailTreeBranch())
+		}
+	}
+	lead := " " + branch
+	w := lipgloss.Width(lead)
+	if w > sidebarChildIndent {
+		lead = overlay.Truncate(lead, sidebarChildIndent)
+		w = lipgloss.Width(lead)
+	}
+	return sidebarStyle(rowBg, pal.FgMute).Render(lead) + pad.Render(strings.Repeat(" ", sidebarChildIndent-w))
+}
+
+// sidebarTreePipe is the line a tree branch continues down with: │ under ├,
+// | under the ASCII set's |-, and a blank under a glyph set's own branch it
+// cannot read a line from.
+func sidebarTreePipe(branch string) string {
+	switch {
+	case strings.HasPrefix(branch, "├"):
+		return "│"
+	case strings.HasPrefix(branch, "|"):
+		return "|"
+	}
+	return " "
+}
+
+// sidebarSubagentNames is the second line of a shut heading on a tall
+// section: the names of the subagents it holds, as the fold line names the
+// rows it folded.
+func sidebarSubagentNames(list []sessiontree.Subagent) string {
+	names := make([]string, 0, len(list))
+	for _, s := range list {
+		names = append(names, subagentName(s))
+	}
+	return strings.Join(names, ", ")
+}
+
 // sidebarChildRow draws one line of a subagent's row. The first line is its
 // mark, its name and how long it ran at the right edge; the second, under
 // a tall section, is the tool it runs or how it ended, in the quiet ink. A
 // finished row is drawn muted, its mark too unless it failed, so the rows
 // that still run stand out until the daemon takes the finished ones away.
+// appearance.sidebar.subagent_fields says which of those it draws, and the
+// heading line and the "+N more" line are drawn here too.
 func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, st sidebarRowState, second bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	pad := sidebarStyle(rowBg, nil)
+	fields := m.Settings.SidebarSubagents.Fields
+	lead := m.sidebarChildLead(e, rowBg, pal, second)
+	if e.Head {
+		// The heading says how many; the agent's own row already says how
+		// many of them run.
+		if second {
+			if e.Open || len(e.HeadKids) == 0 {
+				return sidebarFit(lead, cw, rowBg)
+			}
+			indent := sidebarChildIndent + 2
+			return sidebarFit(lead+pad.Render("  ")+
+				sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(sidebarSubagentNames(e.HeadKids), max(cw-indent, 1))), cw, rowBg)
+		}
+		mark := m.Settings.GetRailFoldOpenGlyph()
+		if !e.Open {
+			mark = m.Settings.GetRailFoldShutGlyph()
+		}
+		fg := pal.FgDim
+		if st.lit() {
+			fg = pal.Fg
+		}
+		avail := max(cw-sidebarChildIndent-2, 1)
+		return sidebarFit(lead+sidebarStyle(rowBg, pal.FgMute).Render(mark)+pad.Render(" ")+
+			sidebarStyle(rowBg, fg).Render(overlay.Truncate(session.SubagentsText(len(e.HeadKids)), avail)), cw, rowBg)
+	}
 	if e.More > 0 {
 		text := "+" + strconv.Itoa(e.More) + " more"
 		if !e.Lead {
 			text = session.SubagentsText(e.More)
 		}
 		if second {
-			return sidebarFit(pad.Render(""), cw, rowBg)
+			return sidebarFit(lead, cw, rowBg)
 		}
 		fg := pal.FgMute
 		if st.lit() {
 			fg = pal.Fg
 		}
-		return sidebarFit(pad.Render(strings.Repeat(" ", sidebarChildIndent+2))+
+		return sidebarFit(lead+pad.Render("  ")+
 			sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(cw-sidebarChildIndent-2, 1))), cw, rowBg)
 	}
 	s := *e.Child
 	ended := !s.Running()
 	if second {
+		if !fields.Note {
+			return sidebarFit(lead, cw, rowBg)
+		}
 		indent := sidebarChildIndent + 2
-		return sidebarFit(pad.Render(strings.Repeat(" ", indent))+
+		return sidebarFit(lead+pad.Render("  ")+
 			sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(subagentNote(s), max(cw-indent, 1))), cw, rowBg)
 	}
 	markState := subagentMarkState(s)
@@ -449,16 +701,19 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 		nameFg = pal.Fg
 	}
 	mark := " "
-	if m.Settings.SidebarShowGlyphs {
+	if m.Settings.SidebarShowGlyphs && fields.Mark {
 		mark = agentStateIndicator(markState)
 	}
-	age := subagentAge(s, time.Now())
-	if age == "" && st.lit() {
-		end := time.Now()
-		if s.EndedAt > 0 {
-			end = time.Unix(0, s.EndedAt)
+	age := ""
+	if fields.Time {
+		age = subagentAge(s, time.Now())
+		if age == "" && st.lit() {
+			end := time.Now()
+			if s.EndedAt > 0 {
+				end = time.Unix(0, s.EndedAt)
+			}
+			age = agentElapsed(string(session.AgentStateWorking), s.StartedAt, end)
 		}
-		age = agentElapsed(string(session.AgentStateWorking), s.StartedAt, end)
 	}
 	right := ""
 	if age != "" {
@@ -469,9 +724,27 @@ func (m *OS) sidebarChildRow(e sidebarAgentEntry, cw int, pal overlay.Palette, s
 		rightW++
 	}
 	avail := max(cw-sidebarChildIndent-2-rightW, 1)
-	body := pad.Render(strings.Repeat(" ", sidebarChildIndent)) +
-		sidebarStyle(rowBg, markFg).Render(mark) + pad.Render(" ") +
-		sidebarStyle(rowBg, nameFg).Render(overlay.Truncate(subagentName(s), avail))
+	name, kind := "", ""
+	if fields.Name {
+		name = subagentName(s)
+	}
+	if fields.Type {
+		kind = printableTitle(s.Type)
+		if name == "" && kind == "" {
+			kind = "subagent"
+		}
+	}
+	text := sidebarStyle(rowBg, nameFg).Render(overlay.Truncate(name, avail))
+	switch {
+	case name == "":
+		text = sidebarStyle(rowBg, nameFg).Render(overlay.Truncate(kind, avail))
+	case kind != "" && kind != name:
+		nameW := min(lipgloss.Width(name), avail)
+		if rest := avail - nameW - 1; rest > 1 {
+			text += pad.Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(overlay.Truncate(kind, rest))
+		}
+	}
+	body := lead + sidebarStyle(rowBg, markFg).Render(mark) + pad.Render(" ") + text
 	if right == "" {
 		return sidebarFit(body, cw, rowBg)
 	}
@@ -485,11 +758,110 @@ func sidebarAgentsHaveChildren(agents []sidebarAgentEntry) bool {
 	return slices.ContainsFunc(agents, func(e sidebarAgentEntry) bool { return len(e.Children) > 0 })
 }
 
-// sidebarAgentChildCount is how many subagents the agent rows list.
-func sidebarAgentChildCount(agents []sidebarAgentEntry) int {
+// sidebarSubagentDemand is how many lines the subagents under the agent
+// rows ask for: a row each, a heading per agent when the rail draws one, no
+// more than subagent_max_rows each, and none for an agent whose heading is
+// shut. It asks; sidebarAgentChildren fits what it gets.
+func (m *OS) sidebarSubagentDemand(agents []sidebarAgentEntry) int {
+	v := m.Settings.SidebarSubagents
+	if !v.Rows {
+		return 0
+	}
 	n := 0
 	for _, e := range agents {
-		n += len(e.Children)
+		if len(e.Children) == 0 {
+			continue
+		}
+		c := sidebarChildParent{head: v.Collapsible(), open: true}
+		if c.head {
+			c.open = m.sidebarSubagentsOpen(e.SessionID, e.WindowID)
+		}
+		n += c.rowLines(len(e.Children), v)
 	}
 	return n
+}
+
+// subagentHideMsg is the frame asked for when a finished subagent's row is
+// due to go under appearance.sidebar.subagent_hide_finished.
+type subagentHideMsg struct{}
+
+// noteSubagentHide keeps at as the next hide due, when it is the earliest.
+func (m *OS) noteSubagentHide(at time.Time) {
+	if m.subagentHideDue.IsZero() || at.Before(m.subagentHideDue) {
+		m.subagentHideDue = at
+	}
+}
+
+// subagentHideCmd arms one frame for the earliest finished row due to go,
+// so the row goes then even when nothing else draws a frame. Update asks it
+// after every message, like loadingFrameCmd. It reads the attached
+// session's panes and the due the last rail draw noted, which covers the
+// panes of other sessions, and costs nothing while the option is off.
+func (m *OS) subagentHideCmd() tea.Cmd {
+	if !m.subagentHideOn() {
+		m.subagentHideDue = time.Time{}
+		return nil
+	}
+	now := time.Now()
+	due := m.subagentHideDue
+	if !due.After(now) {
+		due = time.Time{}
+	}
+	for _, w := range m.Windows {
+		if w == nil {
+			continue
+		}
+		for _, s := range w.AgentSubagentList {
+			if s.Running() || s.EndedAt <= 0 {
+				continue
+			}
+			at := time.Unix(0, s.EndedAt).Add(m.subagentHideAfter())
+			if at.After(now) && (due.IsZero() || at.Before(due)) {
+				due = at
+			}
+		}
+	}
+	m.subagentHideDue = time.Time{}
+	// A frame already armed at or before due covers it. One armed later, as
+	// after a config change shortened the hide, does not: arm the earlier
+	// one too. The later tick still comes and draws nothing new.
+	if due.IsZero() || (m.subagentHideArmed.After(now) && !m.subagentHideArmed.After(due)) {
+		return nil
+	}
+	m.subagentHideArmed = due
+	return tea.Tick(due.Sub(now), func(time.Time) tea.Msg { return subagentHideMsg{} })
+}
+
+// subagentHideOn reports whether either rail hides finished rows early.
+func (m *OS) subagentHideOn() bool {
+	if m.Settings.SidebarSubagents.Hide {
+		return true
+	}
+	return m.secondarySubagentView().Hide
+}
+
+// subagentHideAfter is the shorter hide delay of the two rails, for the
+// frame that has to come at the first of them.
+func (m *OS) subagentHideAfter() time.Duration {
+	a, b := m.Settings.SidebarSubagents, m.secondarySubagentView()
+	switch {
+	case a.Hide && b.Hide:
+		return min(a.HideAfter, b.HideAfter)
+	case b.Hide:
+		return b.HideAfter
+	}
+	return a.HideAfter
+}
+
+// secondarySubagentView is the subagent view of the rail on the other edge,
+// the zero view when there is none.
+func (m *OS) secondarySubagentView() config.SidebarSubagentView {
+	if m.UserConfig == nil || m.secondarySidebarWidth() == 0 {
+		return config.SidebarSubagentView{}
+	}
+	cfg := m.UserConfig.Appearance.Sidebar.Left
+	if m.legacySidebarEdge() == sidebarLeft {
+		cfg = m.UserConfig.Appearance.Sidebar.Right
+	}
+	return config.ResolveSidebarSubagentView(m.UserConfig.Appearance.Sidebar, cfg)
 }

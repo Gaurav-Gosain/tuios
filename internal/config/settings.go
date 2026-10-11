@@ -222,9 +222,12 @@ type Settings struct {
 	// Zero never folds. From appearance.sidebar.agent_rest_fold.
 	SidebarAgentRestFold time.Duration
 
-	// SidebarSubagentRows draws a row per subagent under its agent's row.
-	// False draws the count alone. From appearance.sidebar.subagent_rows.
-	SidebarSubagentRows bool
+	// SidebarSubagents is how the rail draws the subagents under an agent
+	// row: rows or the count, tree lines, the heading line that folds them,
+	// the fields, the row cap and when a finished row goes. From the
+	// appearance.sidebar.subagent_* keys and the rail's edge table. The rail
+	// on the other edge resolves its own; see renderSecondarySidebar.
+	SidebarSubagents SidebarSubagentView
 
 	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
 	SidebarFileDelete string
@@ -787,7 +790,7 @@ func DefaultSettings() Settings {
 		SidebarFileDelete:           SidebarFileDeleteTrash,
 		SidebarAgentRow:             DefaultSidebarAgentRow(),
 		SidebarAgentRestFold:        DefaultAgentRestFold,
-		SidebarSubagentRows:         true,
+		SidebarSubagents:            DefaultSidebarSubagentView(),
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,

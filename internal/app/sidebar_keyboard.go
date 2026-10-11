@@ -183,7 +183,7 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
-	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold:
+	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail, sidebarRowAgentFold, sidebarRowSubagentToggle:
 		return sidebarSectionAgents
 	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
 		return sidebarSectionFiles
@@ -242,6 +242,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowAgentFold:
 		m.SidebarUnfoldAgents()
+	case sidebarRowSubagentToggle:
+		m.SidebarToggleSubagents(row.SessionID, row.WindowID)
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:

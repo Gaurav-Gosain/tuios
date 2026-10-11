@@ -86,15 +86,17 @@ func (m *OS) withSecondaryRail(action func() bool) bool {
 	if cfg != nil && cfg.Sections != "" {
 		sections = cfg.Sections
 	}
-	oldSections := m.Settings.SidebarSections
+	oldSections, oldSubagents := m.Settings.SidebarSections, m.Settings.SidebarSubagents
 	m.swapSecondaryRail()
 	m.Settings.SidebarSections = sections
+	m.Settings.SidebarSubagents = config.ResolveSidebarSubagentView(m.UserConfig.Appearance.Sidebar, cfg)
 	m.sidebarDrawing = true
 	m.sidebarDrawingEdge = edge
 	m.sidebarDrawingWidth = m.secondarySidebarWidth()
 	defer func() {
 		m.sidebarDrawing = false
 		m.Settings.SidebarSections = oldSections
+		m.Settings.SidebarSubagents = oldSubagents
 		m.swapSecondaryRail()
 	}()
 	return action()

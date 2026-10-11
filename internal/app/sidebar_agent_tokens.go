@@ -388,9 +388,10 @@ func sidebarAgentMetaValue(meta []sessiontree.MetaToken, key string) string {
 func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) bool {
 	now := time.Now()
 	for _, e := range agents {
-		// A subagent's row always has a second line: its tool, or how it
-		// ended.
-		if e.sidebarSubRow() || len(m.sidebarAgentTokensFor(e, variant, true, now).Note) > 0 {
+		// A subagent's row has a second line, its tool or how it ended,
+		// unless appearance.sidebar.subagent_fields leaves the note out.
+		// The heading over the rows has none.
+		if (!e.Head && e.sidebarSubRow() && m.Settings.SidebarSubagents.Fields.Note) || len(m.sidebarAgentTokensFor(e, variant, true, now).Note) > 0 {
 			return true
 		}
 	}

@@ -868,6 +868,11 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A load a handler started gets its loading frame armed here, for the
 	// same reason: one check rather than a timer in each place a load starts.
 	loading := m.loadingFrameCmd()
+	// A finished subagent's row that subagent_hide_finished hides gets its
+	// frame armed here on the same beat.
+	if hide := m.subagentHideCmd(); hide != nil {
+		loading = tea.Batch(loading, hide)
+	}
 	// The motion clock: armed here, after whatever the message changed, so an
 	// overlay opened by any of the handlers starts its fade on the frame it
 	// first appears in. See motion.go.
@@ -1606,6 +1611,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
+
+	case subagentHideMsg:
+		// A finished subagent's row is due to go, so the rail is drawn now,
+		// rebuilt for the rows of other sessions its signature does not read.
+		m.sidebarCache.invalidate()
+		m.secondarySidebarCache.invalidate()
+		m.renderSkipped = false
+		return m, nil
 
 	case loadingShownMsg:
 		// A load may have run past the loading delay, so its state is drawn
