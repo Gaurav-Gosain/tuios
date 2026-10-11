@@ -4102,7 +4102,82 @@ the rest as committed. The driver and each log are in
 | Relay needs all six capabilities | `expandRelay`: `config.LinkCapabilities` in place of `LinkRelayCapabilities` | `TestAnOldFiveCapAllowStillRelays` (a five-capability table could not relay) | **caught** |
 | Transfer events reach any link | `eventInScope`: the link check made false | `TestTransferEventsReachOnlyAFilesLink` (a list-only link got the event) | **caught** |
 
-`TestADarwinCaseFoldedDenyNameIsRefused` skips on Linux. Its control (the
-fold cut from `pathUnder`) still has to run on macOS. Windows has no E2E
-runner: `plainLinkPath` and the trim are checked by cross-build vet, and the
-trim by the unit test above.
+`TestADarwinCaseFoldedDenyNameIsRefused` skips on Linux. Its control ran on
+macOS in the third review, below. Windows has no E2E runner: `plainLinkPath`
+and the trim are checked by cross-build vet, and the trim by the unit test
+above.
+
+## The third review of link file access: copies a link starts, limits, reads
+
+The tests are in `file_limits_test.go`, with the far daemon of
+`host_attach_test.go` as build. Each saves its record under
+`TUIOS_E2E_FRAMES`.
+
+- `TestALinkTransferStartKeepsToTheLinkPolicy`: build lets the hub relay and
+  use files. `transfer-start` over the link of a private key into the receive
+  folder, of a file onto `.bashrc`, of a file outside the write roots, and a
+  move of a file outside them, must each answer `forbidden` before a job
+  exists. `drop-files` of a private key is `forbidden` too. Nothing lands. The
+  positive half: a copy into the receive folder ends done and checked.
+- `TestALinkJobKeepsItsPolicyAcrossARestart`: the hub starts a copy of 2 GiB
+  on build into the receive folder, build's daemon is killed with SIGKILL,
+  its `files_roots` is narrowed to `~/elsewhere`, and it starts again. The
+  journal entry must name the link, and the resumed copy must end failed as
+  `forbidden`, with nothing in place.
+- `TestTheDropFolderTakesOnlyDropsWithinItsBudget`: a write and a `file-mkdir`
+  at the top of the drop folder are `forbidden`. A 300 MiB write into a drop
+  is `disk_full` before a byte moves, and leaves nothing. The positive half:
+  5 bytes go into the drop.
+- `TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps`: with `files_min_free` past
+  the disk's size, a write is `disk_full`, names the setting and leaves no
+  part. With the reserve off, the ninth open write stream is `busy`, and so
+  is the part after the 64th.
+- `TestALinkReadsOnlyItsReadRoots`: with `files_read_roots = ["~/share"]`, a
+  read in `~/share` and in the receive folder works. `file-read`, `file-stat`,
+  `file-list` and `file-hash` elsewhere are `forbidden` and name the setting.
+- `TestALinkCannotLookInsideDeniedFolders`: `file-list ~/.ssh`,
+  `file-stat ~/.ssh/id_ed25519`, `file-read ~/.bash_history`, and on Linux
+  `file-list /proc/self/fd` and `file-stat /proc/self/cwd`, are `forbidden`.
+  The positive half: a stat and a listing in the home folder work.
+- `TestADarwinCaseFoldedDenyNameIsRefused` also checks that no second folder
+  is made beside `.ssh`.
+
+**Repro.** The same six tests ran against a binary built from fb2fd838, the
+head before these fixes, over the same real daemon pair. Every one failed:
+`transfer-start` copied a file onto `.bashrc` and outside the write roots,
+`drop-files` read a private key, a file and a part landed at the top of the
+drop folder, a 300 MiB write into a drop was taken, a write ignored the
+reserve, nine streams and 90 parts were opened, reads ignored
+`files_read_roots`, and `~/.ssh`, `/proc/self/fd` and `~/.bash_history` were
+listed and read. The log is
+`~/.cache/agent-tmp/te-sec/artifacts/repro.log`, with each test's record
+beside it.
+
+The controls ran on 2026-10-11 on Linux on 8025ec91, each on a binary built
+with the one change. The driver is
+`~/.cache/agent-tmp/te-sec/nc/controls2.py`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No check at transfer-start | `checkTransferEnds` returns at once | `TestALinkTransferStartKeepsToTheLinkPolicy` (all four copies started) | **caught** |
+| A job keeps no link | `transferLinkOf` returns nil | `TestALinkJobKeepsItsPolicyAcrossARestart` (the resumed copy ended done outside the roots) | **caught** |
+| The journal drops the link | `recordLocked`: `Link` not set | `TestALinkJobKeepsItsPolicyAcrossARestart` (the same) | **caught** |
+| drop-files reads anything | `verbDropFiles`: the read check cut | `TestALinkTransferStartKeepsToTheLinkPolicy` (a private key was dropped) | **caught** |
+| Writes at the top of the drop folder | `linkWriteFS`: the drop rule made false | `TestTheDropFolderTakesOnlyDropsWithinItsBudget` (the file and the folder were made) | **caught** |
+| No drop budget | `claimLinkWrite`: the budget check made false | `TestTheDropFolderTakesOnlyDropsWithinItsBudget` (the 300 MiB write was taken and left a part) | **caught** |
+| No free-space reserve | `claimLinkWrite`: the reserve check made false | `TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps` (the write was taken and left a part) | **caught** |
+| No stream cap | `claimLinkWrite`: the stream check made false | `TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps` (nine streams) | **caught** |
+| No part cap | `claimLinkWrite`: the part check made false | `TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps` (88 parts) | **caught** |
+| files_read_roots not enforced | `checkLinkRead`: the roots check made false | `TestALinkReadsOnlyItsReadRoots` (all four verbs answered) | **caught** |
+| file-stat without the read check | `verbFileStat`: the check made false | `TestALinkCannotLookInsideDeniedFolders` (`~/.ssh/id_ed25519` and `/proc/self/cwd`) | **caught** |
+| file-list without the read check | `verbFileList`: the check made false | `TestALinkCannotLookInsideDeniedFolders` (`~/.ssh` and `/proc/self/fd`) | **caught** |
+| No history in the read deny list | `.bash_history` cut from `linkReadDenyHome` | `TestALinkCannotLookInsideDeniedFolders` (the history was read) | **caught** |
+
+On macOS (the person's MacBook, a scratch clone of d6af80e7 under
+`~/.cache/agent-tmp`, the test harness's own XDG folders), the tests that
+match `TestADarwinCaseFoldedDenyNameIsRefused|TestALink.*|TestTheDrop.*`
+pass: 13 pass, and `TestALinkCannotReadProcOrTheDaemonFolder` skips. The
+control for the darwin test cuts the fold from `denyUnder`, the function the
+deny check calls (an earlier note named `pathUnder`, which is the roots
+check). The copy to `~/.ſsh/authorized_keys` then ended done and APFS wrote
+the attacker's key into `~/.ssh/authorized_keys`: **caught**.
