@@ -2942,6 +2942,7 @@ tuios call list-sessions
 
 # A verb with params
 tuios call list-windows '{"session":"work"}'
+```
 
 ### `tuios pane-view`
 
