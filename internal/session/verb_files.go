@@ -223,6 +223,8 @@ func fileError(what, path string, err error) *verbError {
 	switch {
 	case errors.Is(err, errNotRegular):
 		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is not a regular file, so tuios does not read or write it")
+	case errors.Is(err, errHardLinked):
+		return newVerbError(ErrVerbForbidden, what+": "+echoName(path)+" has other names (hard links), so tuios does not write it. Remove it, then copy again")
 	case errors.Is(err, syscall.EISDIR):
 		return newVerbError(ErrVerbInvalidParams, what+": "+echoName(path)+" is a folder")
 	case errors.Is(err, fs.ErrNotExist):
@@ -270,8 +272,18 @@ func openPart(fsys fileFS, part string) (*os.File, error) {
 		_ = f.Close()
 		return nil, notRegular
 	}
+	// A part with a second name is a hard link: its truncate and write, and
+	// the mode and time commitPart sets, would land in the other file too,
+	// such as a ~/.bashrc linked into the receive folder.
+	if n, err := fileLinks(f); err != nil || n > 1 {
+		_ = f.Close()
+		return nil, &fs.PathError{Op: "write", Path: part, Err: errHardLinked}
+	}
 	return f, nil
 }
+
+// errHardLinked is a file with more than one name where a copy writes.
+var errHardLinked = errors.New("the file has other names (hard links), so tuios does not write it")
 
 // partPath is the part file a copy to dst writes into: hidden, beside it, and
 // named by the copy's part id when it has one.
@@ -560,6 +572,12 @@ func (d *Daemon) verbFileRename(cs *connState, params json.RawMessage) (any, *ve
 	if strings.HasPrefix(to+string(filepath.Separator), from+string(filepath.Separator)) {
 		return nil, invalidParam("to", "a folder cannot move into itself")
 	}
+	if cs != nil && cs.viaLink && (isPartName(filepath.Base(from)) || isPartName(filepath.Base(to))) {
+		// A part is the copy's own. A rename onto a part name could put a
+		// file the copy did not make, such as a hard link, where the copy
+		// writes, and one off it could move a copy's bytes in place unchecked.
+		return nil, newVerbError(ErrVerbForbidden, "move: "+echoName(filepath.Base(from))+" or "+echoName(filepath.Base(to))+" is a copy's part file, which a linked machine does not move")
+	}
 	fsys, verr := d.linkWriteFS(cs, from, to)
 	if verr != nil {
 		return nil, verr
@@ -837,6 +855,13 @@ func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict s
 		return "", "", fileError("check", part, err)
 	} else if !fi.Mode().IsRegular() {
 		return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
+	}
+	if pf, err := fsys.OpenFile(part, os.O_RDONLY|oNoFollow|oNonBlock, 0); err == nil {
+		n, lerr := fileLinks(pf)
+		_ = pf.Close()
+		if lerr != nil || n > 1 {
+			return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errHardLinked})
+		}
 	}
 	got, _, err := hashRangeIn(ctx, fsys, part, 0, -1)
 	if err != nil {
