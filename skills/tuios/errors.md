@@ -20,8 +20,8 @@ Over the socket every failure carries a stable code in the error envelope:
 `repo_not_found`, `not_repo`, `no_notes`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
 `no_buffer`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
-`no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `cross_device`,
-`disk_full`, `no_transfer`, `internal`. `internal` is a failure inside the daemon
+`no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `source_changed`,
+`cross_device`, `disk_full`, `no_transfer`, `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
 
@@ -67,10 +67,27 @@ Not one of these is a timeout. Retrying one unchanged fails the same way, except
 | `unknown_pane` | A pane id on the far machine is gone. Drop it. |
 | `not_worktree`, `worktree_dirty`, `git_failed`, `repo_not_found` | From the worktree verbs and `start-agent`. A dirty worktree is left alone until you pass `--stash` or `--force`. `repo_not_found` means that machine has no checkout of the origin: pass `--clone`. |
 | `no_file`, `file_exists`, `no_permission` | From the file verbs and `transfer-start`: the path is not there, the destination is there and the call did not say what to do with it, or the user the daemon runs as may not touch it. Nothing was changed. For `file_exists`, ask the person, then pass `conflict`. |
-| `hash_mismatch` | A copy's bytes did not match the original's sha256. The copy was removed, and the transfer copies that file once more by itself. A second mismatch fails the transfer: the disk or the file may be changing. |
+| `hash_mismatch` | A copy's bytes did not match the original's sha256. The copy was removed, and the transfer copies that file once more by itself. A second mismatch fails the transfer: the disk or the file may be changing. `tuios cp` exits 6. |
+| `source_changed` | A file changed on its machine while it was copied: its size or time is not what the copy started from. Nothing was put in place for it. Copy it again when nothing writes it. `tuios cp` exits 6. |
 | `cross_device` | `file-rename` cannot move a path to another disk. Copy it with `transfer-start` and `move`. |
 | `disk_full` | The disk had no room. What was written stays in the part, and `transfer-resume` goes on from it once there is space. |
 | `no_transfer` | No transfer has that id. A finished transfer leaves the list 30 minutes after it ends. |
+
+## The exit codes of tuios cp
+
+`tuios cp` and `tuios transfers wait` fold the codes into exit codes
+(`tuios --skill files`):
+
+| Exit | What it means |
+| --- | --- |
+| `0` | Every file was copied, or was there with the same bytes |
+| `1` | The copy failed. The message names the cause and the fix |
+| `2` | The command line is wrong: `invalid_params`, or `unknown_host` |
+| `3` | Done, but some items were not copied: links, pipes, devices, files made at the destination during the copy, or files that differ with no `--conflict` given |
+| `4` | `forbidden`: your pane grants or the host's link policy. That is the person's decision. Tell them |
+| `5` | `host_unreachable` or `host_refused` for `--timeout`. The copy still waits in the daemon |
+| `6` | `hash_mismatch` twice, or `source_changed` |
+| `130` | Cancelled |
 
 ## When the daemon is not running
 

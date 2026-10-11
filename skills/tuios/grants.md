@@ -16,7 +16,8 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
 | `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
-| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach. Includes `read`, `write` and `fan`, never `respond` |
+| `files` | Copy files with `tuios cp`, and see and control your own copies with `tuios transfers` |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach. Includes `read`, `write`, `fan` and `files`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human`,
@@ -31,6 +32,17 @@ and not another pane's. `set-buffer` makes a buffer with no name, and a `-b`
 name that is not yours answers `no_buffer`. A connection restricted to its own session
 (`tuios mcp` without `--scope all`) reaches no buffers, since every session
 shares them.
+
+The `files` grant reaches the copies that stay near your work. A copy may
+start when each end on this machine is inside your pane's folder (its
+session's worktree, else its working folder), after links are resolved. Each
+end on a host must be under its home folder, or be its receive folder
+(`HOST:`). A copy out of the project into the person's other folders, or into
+a host's system folders, needs the person. `files` sees, pauses, resumes,
+cancels, answers and clears only the copies your pane started, never the
+person's or another pane's. Every copy carries the name of the pane that
+started it, whatever the pane holds. A refusal is `forbidden`, and
+`tuios cp` exits 4.
 
 `TUIOS_PANE_GRANTS` is what the pane held when its process started;
 `tuios pane-grants` is what it holds now.

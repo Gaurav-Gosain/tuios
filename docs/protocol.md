@@ -1556,6 +1556,7 @@ catalog.
 | `file_exists` | The destination exists, and the call was not told what to do with it (`conflict`, or `replace` for `file-rename`). Nothing was changed. |
 | `no_permission` | The user the daemon runs as may not read or change that path. Nothing was changed. |
 | `hash_mismatch` | A part's bytes did not match the sender's sha256, so the part was removed and nothing was put in place. A transfer copies that file once more by itself. |
+| `source_changed` | A file changed on its machine while it was copied: its size or modification time is not what the copy started from. Nothing was put in place for that file. |
 | `cross_device` | `file-rename` cannot move a path to another disk. Nothing was moved. |
 | `disk_full` | The disk had no room for the write. What was written stays in the part. |
 | `no_transfer` | No transfer has that id. A finished one leaves the list 30 minutes after it ends. |
@@ -1776,7 +1777,8 @@ person configured) is held to nothing new.
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | What `write` allows, in the sessions of its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane in its reach, and type into a pane on `needs_input` |
-| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, and the client protocol (attach, and `run-command`, which sends a client protocol message). Implies `read`, `write` and `fan`, never `respond` |
+| `files` | The transfer verbs, held to two rules. `transfer-start`: each end on this machine is inside the pane's folder (its session's worktree, else its working folder), after links, and each end on a host is under that host's home or is its receive folder (no `path`). The other transfer verbs see and act on only the copies the pane started |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, and the client protocol (attach, and `run-command`, which sends a client protocol message). Implies `read`, `write`, `fan` and `files`, never `respond` |
 
 Whatever it holds, a pane may call `hello`, `list-verbs`, `unsubscribe`,
 `restrict-connection`, `pane-grants` and `resolve-pane`, and report about
@@ -5395,13 +5397,17 @@ this section is the contract around them.
 | `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). Part files are not listed. |
 | `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
 | `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
-| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. |
-| `file-mkdir` | Makes a folder and its parents. |
+| `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. |
+| `file-mkdir` | Makes a folder and its parents. With `receive`, it ignores `path` and makes the receive folder: where a copy from the caller lands when it names no folder. For a linked machine that is the first folder of its `files_roots`, else `~/Downloads/tuios`. The reply's `path` names it. |
 | `file-rename` | Moves a path on one disk. It does not replace what is at `to` unless `replace` is set. Another disk answers `cross_device`. |
 | `file-remove` | Deletes a path. A folder that holds files needs `recursive`. The home folder and `/` are refused. |
 | `open-file-stream` | Turns the connection into the bytes of one file; see below. |
-| `file-commit` | Checks a written part against the sender's `sha256` and renames it into place, with `conflict` (`replace`, `keep-both`, `fail`), `perm` and `mtime`. A part that does not match is removed (`hash_mismatch`). |
+| `file-commit` | Checks a written part against the sender's `sha256` and renames it into place, with `conflict` (`replace`, `keep-both`, `skip`, `fail`), `perm` and `mtime`. `label` names a keep-both copy `name (LABEL).ext`, and without it the copy is `name 2.ext`. `skip` finds the file there, removes the part and answers `skipped`. A part that does not match is removed (`hash_mismatch`). |
 | `file-abort` | Removes the part a copy left. |
+| `file-check` | Describes many files under a `root` at once, for a copy that leaves out what is there already: for each of `rels`, `exists`, `kind`, `size`, `mtime`, and with `hash` its `sha256`. At most 2000 files, and 512 MiB hashed, in one call. |
+| `open-tree-stream` | Turns the connection into a tree stream: many small files of a folder in one stream. See below. |
+| `speed-test` | The far end of a link speed test. `ping` answers at once. `sink` takes `bytes` after the reply and drops them, then answers one line `{bytes, ms}`. `source` sends `bytes` of random data after the reply, then closes. At most 1 GiB. |
+| `host-speed-test` | Measures the link to `host` the way a copy uses it: the middle of five round trips of `speed-test` `ping` (`rtt_ms`), then `bytes` (64 MiB unless set) up and down on bulk streams (`up` and `down` in bytes a second, `up_ms`, `down_ms`). The bytes are random, so compression does not help them. `tuios hosts test --speed` calls it. |
 | `file-drop-dir` | Makes a private folder (0700) for files dropped on a pane, under the daemon's runtime folder. Drops are kept 24 hours and 256 MiB together. |
 | `drop-files` | Gives a pane on a machine the paths of files on this one: this machine's paths as they are, or, for a host, the paths in a new drop folder there and the transfers that copy them. |
 
@@ -5428,12 +5434,87 @@ the copy into a failure, not a write to the link's target. `file-commit` sets
 the original's permission bits and modification time on the part, renames it
 into place, and syncs the folder.
 
+**Tree streams.** A folder copy sends each file of 8 MiB or less in one tree
+stream each way, with no round trip between files. A file sent by itself
+costs several round trips, so a folder of 20,000 small files on a link of
+50 ms would spend over an hour waiting. A larger file goes by itself, which
+resumes from the middle after a dropped link. A file in a tree stream is sent
+again whole.
+
+`open-tree-stream` takes `root` and `mode`. With `mode` `read` (and
+`compress`), the caller writes one request line per file, `{"rel","size","mtime"}`,
+and `{"end":true}` after the last. The daemon answers one record per file in
+the same order, then `{"end":true}`. A `size` and `mtime` that no longer match
+the file answer a header with `code` `source_changed`. With `mode` `write`
+(and `part_id`), the caller writes records and `{"end":true}`. The daemon
+puts each file in place and answers one ack line per file, then
+`{"end":true}`. An ack is `{"rel","path","sha256","skipped"}` for a file in
+place, or `{"rel","code","error"}`.
+
+A record is a header line, the bytes, and a trailer line:
+
+```
+{"rel":"src/a.go","kind":"file","size":1234,"perm":420,"mtime":1786611217427,"z":true}
+<size bytes, or one flate stream of them when z>
+{"sha256":"9f2c..."}
+```
+
+- A folder is a header with `kind` `dir` and nothing after it.
+- A file the reading side could not read is a header with `code` and `error`,
+  and nothing after it.
+- A file that got shorter while it was read keeps its length, padded with
+  zeros, and the trailer has `code` `source_changed`. The writing side drops
+  it.
+- On the write side, the header can carry `conflict` (as `file-commit` takes
+  it) and `label`.
+
+The trailer carries the hash that the reading side took while it read. The
+writing side hashes what it writes, and puts the file in place only when the
+two match. Each `rel` is checked on the writing side: it must be a path under
+`root`. A write that came over a link is held to the link's roots, deny list
+and write limits for each file, as an `open-file-stream` write is. The whole
+stream counts as one of the link's 8 write streams. A header, trailer,
+request or ack line is at most 64 KiB.
+
 **Transfers.** `transfer-start` makes a job in the daemon that answers it, so
 the client may quit. `src` and `dst` are `{host, path}`, with `host` empty for
 this machine, so one call copies this machine to a host, a host to this
-machine, or one host to another (through this machine). A folder copies its
-whole tree; a folder into a folder that is there needs `conflict` `merge`, and
-inside it every file is replaced. Each file goes through its part, a sha256 of
+machine, or one host to another (through this machine). A `dst` with no
+`path` is the receive folder of its machine (see `file-mkdir` `receive`), and
+the copy goes inside it. A folder copies its whole tree. A folder into a
+folder that is there needs `conflict` `merge`.
+
+`place` says how to read `dst`. Omitted, `dst` is the full path of the copy.
+`auto` reads it as `cp` does: a folder that is there gets the copy inside it,
+and anything else is the new name. A `dst` that ends in `/` with `auto` is
+`into`. `into` needs a folder that is there. `contents` copies what a folder
+holds into `dst`, and a file as `auto` does.
+
+`conflict` says what to do when `dst` is there: `replace`, `keep-both`,
+`merge`, `skip`, `ask` or `fail`, the default, which answers `file_exists`.
+`each` says what to do with each file that is there and differs inside a
+folder copy: `replace`, `keep-both`, `skip` or `ask`. Omitted, it follows
+`conflict`, which for `merge` and `replace` is `replace`. A file that is there
+with the same sha256 is never copied again, whatever the policy: the row
+counts it in `same`. `keep-both` names a copy between two machines
+`name (from HOST).ext`, with the source machine's name. `keep_from` false, or a
+copy on one machine, names it `name 2.ext`.
+
+`perms` and `times` (both true unless set) give each file the original's
+permission bits and modification time. `compress` (true unless set) lets a
+link carry the bytes as flate when they compress well. `rate_limit` is the
+most bytes a second, 0 for no limit.
+
+**The conflict state.** Before it copies, a copy compares each file with what
+is there. With `ask`, the files that are there and differ make the copy wait
+in state `conflict`. At most 200 are listed at a time. Its row lists the files in `conflicts`, each with `rel`,
+`path`, `src_size`, `src_mtime`, `dst_size` and `dst_mtime`, and counts them in
+`conflict_count`. `transfer-answer` takes `id` and `choice` (`replace`,
+`keep-both` or `skip`) for one `rel`, several `rels`, or `all`. `all` holds
+for the files of the copy that come later too. The copy goes on when every file
+it waits on has an answer. A folder or a link where a file goes, and a file
+made at the destination during the copy, are never replaced: the row counts
+them in `conflicts_left`. Each file goes through its part, a sha256 of
 the original and of the part, and the rename, and keeps the original's
 permission bits and modification time, never its owner. A link that drops
 leaves the part: the job waits (`waiting`, with `retry_in_ms`), and when the
@@ -5443,12 +5524,17 @@ copied once more; a second failure fails the job. At most three jobs move
 bytes at once; the rest are `queued`.
 
 `transfer-list`, `transfer-pause`, `transfer-resume` and `transfer-cancel` take
-an `id`. A row has `id`, `name`, `src`, `dst`, `final`, `kind`, `move`,
-`state` (`queued`, `running`, `verifying`, `waiting`, `paused`, `done`,
-`failed`, `cancelled`), `size`, `done`, `rate`, `eta_ms`, `files`,
-`files_done`, `current`, `error`, `code`, `resumed_from`, `resumes`, `sha256`,
-`verified`, `created`, `started`, `ended`, `retry_in_ms`, `skipped` and
-`skipped_items`. `transfer-resume` goes on with a paused job, tries a waiting
+an `id`. A row has `id`, `name`, `src`, `dst`, `target`, `final`, `kind`,
+`move`, `state` (`queued`, `running`, `verifying`, `waiting`, `paused`,
+`conflict`, `done`, `failed`, `cancelled`), `size`, `done`, `wire` (the bytes
+that crossed a link, fewer than `done` when compressed), `rate`, `eta_ms`,
+`files`, `files_done`, `current`, `current_done`, `current_size`, `error`,
+`code`, `resumed_from`, `resumes`, `sha256`, `verified`, `created`,
+`started`, `ended`, `retry_in_ms`, `skipped`, `skipped_items`, `same`,
+`conflicts_skipped`, `conflicts_left`, `conflicts`, `conflict_count`,
+`failed_files`, and `pane` and `pane_session` for a copy started from a
+pane. `transfer-clear` removes the jobs that ended, or only `ids`, and
+answers `cleared`. `transfer-resume` goes on with a paused job, tries a waiting
 one now, or tries a failed one again from its parts. `transfer-cancel` removes
 the part of the file in flight. A finished job stays listed for 30 minutes; a
 failed one takes its parts with it when it leaves the list.
@@ -5580,8 +5666,8 @@ the one before. The configuration is in
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
-| `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
-| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `drop-files` (they make this daemon use its own links) |
+| `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`, `file-check`, `open-tree-stream`, `speed-test`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
+| every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `transfer-answer`, `transfer-clear`, `host-speed-test`, `drop-files` (they make this daemon use its own links) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and
@@ -6079,6 +6165,7 @@ Event types:
 | `transcript` | The transcript that a pane is joined to grew. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
 | `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state` or `ended`, and `transfer` is its row as `transfer-list` returns it. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
 | `transfer-progress` | A copy's row while its bytes move, at most four a second per copy. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action` (`progress`), `transfer` |
+| `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 
 ### What fires when
 

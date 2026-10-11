@@ -15,6 +15,9 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Remote Control Commands](#remote-control-commands)
   - [Inspection Commands](#inspection-commands)
   - [More Commands](#more-commands)
+    - [tuios hosts test](#tuios-hosts-test)
+    - [tuios cp](#tuios-cp)
+    - [tuios transfers](#tuios-transfers)
   - [Scripting Examples](#scripting-examples)
   - [tuios ssh](#tuios-ssh)
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
@@ -3553,7 +3556,9 @@ An enabled plugin runs with your rights. See
 | `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox. A host with mail waiting here for its link says how many |
 | `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link; `--repos-root DIR` says where the host keeps its checkouts, for `fan --host`, `worktree new --host` and `start-agent -s HOST:SESSION`, and is kept when the host is added again without it, as its link policy fields are |
 | `tuios hosts remove <name>` | Remove a machine |
-| `tuios hosts test <name>` | Open one link to a host and report what happened. `--start` starts the daemon there when it does not run. `--dry-run`, `--json`. See [below](#tuios-hosts-test) |
+| `tuios hosts test <name>` | Open one link to a host and report what happened. `--start` starts the daemon there when it does not run. `--speed` measures how fast a copy to the host can be. `--dry-run`, `--json`. See [below](#tuios-hosts-test) |
+| `tuios cp SRC... DST` | Copy files and folders between this machine and its hosts, or between two hosts. See [below](#tuios-cp) |
+| `tuios transfers` | List the copies the daemon runs, and pause, resume, cancel, wait for or clear them (also `tuios copies`). See [below](#tuios-transfers) |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
 | `tuios hosts signin [name]` | Open the Tailscale sign-in page of each host that waits for one, or of the named host. With no desktop, it prints the address. `--print`, `--json`. See [Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode) |
 | `tuios hosts sync [host...]` | Install the tuios version of this machine on the hosts in the `[hosts]` table, every host when none is named. `--dev` builds a checkout (`--src DIR`, or the current folder), `--binary PATH` sends a file, and a release build fetches its own release. The daemon on a host keeps its old version unless `--restart` is given, which lists what a restart ends and asks first (`--yes` without a terminal). `--start` starts each daemon that does not run, after the install. `--dry-run`, `--json`, `--local`. See [below](#tuios-hosts-sync) |
@@ -3784,10 +3789,12 @@ Open one link to a host and report what happened.
 tuios hosts test build                    # dial build and report
 tuios hosts test build --start            # start the daemon on build if it does not run
 tuios hosts test build --start --dry-run  # show what --start does, and change nothing
+tuios hosts test build --speed            # how fast a copy to build can be
 ```
 
 | Flag | What it does |
 |------|--------------|
+| `--speed` | Measure the daemon's link to the host: the round trip, and bytes a second each way |
 | `--start` | Start the daemon on the host when it does not run |
 | `--dry-run` | Show what `--start` would do and change nothing |
 | `--json` | Print the result as JSON |
@@ -3812,6 +3819,20 @@ nothing: run `tuios hosts sync NAME --start` to install tuios and then start
 the daemon. The JSON is the host report, with `action` (`daemon started`,
 `would start daemon`, `none` or `start failed`), `before` (the status before
 the start) and `start_command`.
+
+`--speed` measures the link that the daemon holds to the host, the way a copy
+uses it. It needs a running daemon and a link that is up. It takes the middle
+of five round trips of a small call. Then it sends 64 MiB of random bytes up
+and 64 MiB down, on the same bulk streams that a copy uses. Random bytes do
+not compress, so the result is the speed of the link itself:
+
+```
+build: round trip 12.4 ms, up 48.2 MiB/s, down 51.7 MiB/s (64.0 MiB each way, random bytes).
+```
+
+With `--json` the result has `host`, `bytes` (each way), `rtt_ms`, `up` and
+`down` (bytes a second), `up_ms` and `down_ms`. The protocol verb is
+`host-speed-test` (see [protocol.md](protocol.md#files-and-transfers)).
 
 ### `tuios hosts sync`
 
@@ -3891,6 +3912,271 @@ in `--json` it has `"error_kind": "tailscale_check"` and `approval_url`. A
 login the tailnet policy refuses has `"error_kind": "tailscale_policy"`. See
 [Tailscale SSH check mode](SESSIONS.md#tailscale-ssh-check-mode).
 
+### `tuios cp`
+
+Copy files and folders between this machine and the machines in `tuios hosts`.
+
+**Usage:**
+```bash
+tuios cp [flags] SRC... DST
+```
+
+The daemon runs the copy. A closed terminal does not stop it, and it goes on
+after a dropped link or a daemon restart. `tuios cp` starts the daemon when
+none runs. Every file is checked with sha256 before it is put in place.
+
+**Examples:**
+```bash
+tuios cp ./build.tar build:                        # to the receive folder on build
+tuios cp build:~/logs ./                           # a folder from build to here
+tuios cp build:/var/log/app.log gpu:/tmp/          # from one host to another
+tuios cp -m ./dist build:~/www/                    # move: remove the original after the check
+tuios cp --contents ./site/ build:~/www/           # what is inside site, not site itself
+tuios cp --json --conflict replace ./a.bin build:~/  # for a script
+tuios cp --detach ./big.iso build:~/iso/           # start the copy and return
+```
+
+#### Paths
+
+| Path | What it names |
+|------|---------------|
+| `/abs/path`, `./rel`, `~/x`, `rel` | A path on this machine. A relative path is relative to the folder you run the command in |
+| `HOST:/abs/path` | An absolute path on the host |
+| `HOST:~/x` | A path under the home folder on the host |
+| `HOST:rel` | A relative path on a host is under its home folder: `build:logs` is `~/logs` on build |
+| `HOST:` | The receive folder of the host (see below) |
+| `local:PATH` | A path on this machine. Use it for a path with a colon in it, or write the path as `./a:b` |
+
+The word before the first colon is a host when it is the name of a host in
+`[hosts]`, or `local`. A path that starts with `/`, `.` or `~` is always on
+this machine. A word before a colon that can be a host name, and is not the
+name of a host, is an error with exit code 2. The message suggests the
+nearest host name. Write such a path on this machine as `./a:b`.
+
+`HOST:` alone is the receive folder of the host: `~/Downloads/tuios`, or the
+first folder of `files_roots` in the config on that host. A host lets another
+machine write only in its `files_roots`. So a copy to `build:~/` needs
+`files_roots = ["~"]` in the config on build (see
+[CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here)).
+
+#### Files and folders
+
+The rules are the rules of `cp`:
+
+- A DST that is a folder, or that ends in `/`, gets each SRC inside it.
+- A DST that does not exist, with one SRC, is the new name.
+- Several SRCs need a DST that is a folder and exists.
+- A folder copies with all that it holds. `-r` is accepted and changes nothing.
+- `--contents` copies what is inside a SRC folder instead of the folder.
+- A folder into a folder that exists merges into it, file by file.
+
+Links, named pipes, sockets and devices in a folder are not copied. The
+summary names them.
+
+#### Files that are there
+
+A file that is there with the same bytes (sha256) is never copied again. So a
+second run of the same copy is a quick check. A file that is there and
+differs follows `--conflict`:
+
+| Policy | Short flag | What it does |
+|--------|------------|--------------|
+| `ask` | | Ask for each file. The default when stdin and stderr are a terminal, without `--json` |
+| `skip` | `-n` | Leave the file there as it is. The default in other cases |
+| `replace` | `-f` | Replace the file there |
+| `keep-both` | `-b` | Keep the file there, and give the copy a new name |
+
+`keep-both` names a copy from another machine `name (from HOST).ext`, such as
+`report (from build).pdf`. A copy on one machine gets a number:
+`report 2.pdf`. Give one policy only. Two of `--conflict`, `-n`, `-f` and `-b`
+with different policies are an error.
+
+`ask` shows each file, which one is newer and how the sizes differ:
+
+```
+~/www/index.html is there on build. The new one is newer, and the new one is 1.20 KiB larger.
+Replace it, keep both, or skip? [r/k/s, or R/K/S for all files]
+```
+
+An upper case letter gives the same answer for every file of the copy.
+`ask` needs a terminal. Without one, the command stops with exit code 2.
+
+#### What a copy keeps
+
+A copy keeps the permission bits and the modification time of each file.
+`--no-perms` gives each file the default permission bits. `--no-times` gives
+each file the time of the copy. A copy never keeps the owner.
+
+On a link the daemon compresses the bytes of a file that compresses well.
+`--no-compress` turns this off. `--bwlimit` sets the most bytes a second, such
+as `500K` or `5M`. `K`, `M` and `G` are 1024, 1024² and 1024³.
+
+#### Flags
+
+| Flag | What it does |
+|------|--------------|
+| `-m`, `--move` | Remove each original after its copy is checked. A folder move removes only what it copied |
+| `-r`, `--recursive` | Accepted. A folder always copies with all that it holds |
+| `--contents` | Copy what is inside a SRC folder, not the folder itself |
+| `--conflict POLICY` | What to do with a file that is there and differs: `ask`, `skip`, `replace` or `keep-both` |
+| `-n`, `--no-clobber` | The same as `--conflict skip` |
+| `-f`, `--force` | The same as `--conflict replace` |
+| `-b`, `--keep-both` | The same as `--conflict keep-both` |
+| `--no-perms` | Do not copy permission bits |
+| `--no-times` | Do not copy modification times |
+| `--no-compress` | Do not compress the bytes on a link |
+| `--bwlimit RATE` | At most this many bytes a second, such as `500K` or `5M` |
+| `--json` | Print the events of the copy as JSON lines on stdout |
+| `-q`, `--quiet` | Print only errors |
+| `--detach` | Start the copy, print its id, and return |
+| `--timeout DURATION` | Exit 5 when a host stays unreachable this long. The copy goes on |
+| `--cancel-on-timeout` | With `--timeout`, cancel the copy too |
+
+#### Output
+
+On a terminal, `tuios cp` draws the progress on stderr: the copy, a bar, the
+rate and the time left. A folder copy also shows the file it copies now.
+Without a terminal it prints one line for each change of state, and at most
+one progress line each ten seconds. At the end it prints one line on stdout
+for each copy:
+
+```
+Copied 1,204 files, 38.2 MiB, to build:~/www/site (checked).
+```
+
+The lines after it name the files that were not copied, and why.
+
+`--detach` prints the id of each copy on stdout and returns. Follow the copy
+with `tuios transfers wait ID`.
+
+#### JSON events
+
+`--json` prints one JSON object on each line of stdout. The `event` field names
+the kind:
+
+| `event` | Fields |
+|---------|--------|
+| `started` | `id`, `src`, `dst`, `files`, `bytes` |
+| `progress` | `id`, `state`, `done`, `size`, `rate`, `eta_ms`, `files`, `files_done`, `current`, `wire_bytes`. At most four a second for each copy |
+| `file` | `id`, `rel`, `state` (`done`, `same`, `skipped`, `conflict` or `failed`), `sha256`, `code` |
+| `waiting` | `id`, `host`, `retry_in_ms`, `message`. A host is not reachable. The copy goes on when it is back |
+| `conflict` | `id`, `rel`, `path`, `src_size`, `src_mtime`, `dst_size`, `dst_mtime`. Only with `--conflict ask` |
+| `done` | `id`, `dst`, `files`, `files_done`, `bytes`, `wire_bytes`, `same`, `conflicts_skipped`, `conflicts_left`, `skipped`, `verified`, `sha256`, `exit` |
+| `failed`, `cancelled` | `id`, `code`, `message`, `exit`. A copy that did not start has `src` instead of `id` |
+| `timeout` | `exit` (5). A host was not reachable for `--timeout` |
+
+```json
+{"event":"started","id":"3f9a1c2b7d00","src":{"path":"/home/me/a.bin"},"dst":{"host":"build","path":"~/"},"files":1,"bytes":52428800}
+{"event":"done","id":"3f9a1c2b7d00","dst":"build:~/a.bin","files":1,"files_done":1,"bytes":52428800,"wire_bytes":52428800,"same":0,"conflicts_skipped":0,"conflicts_left":0,"skipped":0,"verified":true,"sha256":"9f2c...","exit":0}
+```
+
+`exit` is the exit code this copy gives. The command exits with the worst of
+them.
+
+#### A host that goes away
+
+When a host is not reachable, the copy waits for it in the daemon. It goes on
+from where it stopped when the host is back. `--timeout 10m` makes the
+command exit 5 when a host stays unreachable for ten minutes. The copy goes
+on waiting in the daemon. Add `--cancel-on-timeout` to cancel the copy too.
+
+#### Ctrl+C
+
+On a terminal, Ctrl+C asks a question:
+
+```
+Cancel the copy, or keep it running? [c/k]
+```
+
+`k` keeps the copy running in the daemon, and the command returns. Follow the
+copy with `tuios transfers`. `c`, or a second Ctrl+C, cancels the copy, and the
+command exits 130. Without a terminal, with `--json`, or on SIGTERM, the
+command cancels the copy at once.
+
+#### In a pane
+
+A copy started in a pane carries the name of the pane, and the pane grants
+decide if the copy may start. `admin` may copy anything. `files` may copy only
+inside the folder of the pane, and under the home folders or to the receive
+folders of the hosts (see
+[`tuios pane-grants`](#tuios-pane-grants)).
+
+#### Exit codes of tuios cp
+
+| Code | What it means |
+|------|---------------|
+| `0` | Every file was copied, or was there with the same bytes |
+| `1` | The copy failed. The message says why and what to do |
+| `2` | The command line is wrong, or a host name is not known |
+| `3` | The copy is done, but some items were not copied: files skipped by the default `--conflict`, links, pipes and devices, or files made at the destination during the copy |
+| `4` | Refused: the pane grants or the link policy of the host do not allow the copy |
+| `5` | A host was not reachable for `--timeout` |
+| `6` | A file did not match its original twice, or the file changed during the copy |
+| `130` | Cancelled with Ctrl+C |
+
+A file skipped by a `--conflict` policy that you gave does not give exit 3.
+
+### `tuios transfers`
+
+List the copies that the daemon runs, and control them. `tuios copies` is the
+same command.
+
+**Usage:**
+```bash
+tuios transfers [--json]
+tuios transfers pause ID... [--json]
+tuios transfers resume ID... [--json]
+tuios transfers cancel ID... [--json]
+tuios transfers wait [ID...] [--json] [-q]
+tuios transfers clear [ID...] [--json]
+```
+
+The list has the copies that `tuios cp` started and the copies that other
+clients started. A copy that ended stays in the list for 30 minutes, or until
+`tuios transfers clear`. In a pane that holds the `files` grant and not
+`admin`, the list has only the copies that the pane started. The other
+subcommands act only on those copies.
+
+```
+╭──────────────┬─────────┬─────────┬──────────────────┬─────────────────────┬───────────────────────────────────────────┬────────────┬──────╮
+│ ID           │ STATE   │ NAME    │ FROM             │ TO                  │ DONE                                      │ RATE       │ LEFT │
+├──────────────┼─────────┼─────────┼──────────────────┼─────────────────────┼───────────────────────────────────────────┼────────────┼──────┤
+│ 3f9a1c2b7d00 │ running │ big.iso │ /home/me/big.iso │ build:~/iso/big.iso │ 1.20 GiB / 4.00 GiB                       │ 48.0 MiB/s │ 59s  │
+│ 8c01de4f9a77 │ done    │ site/   │ /home/me/site    │ build:~/www/site    │ 38.2 MiB / 38.2 MiB, 1,204 of 1,204 files │            │      │
+╰──────────────┴─────────┴─────────┴──────────────────┴─────────────────────┴───────────────────────────────────────────┴────────────┴──────╯
+```
+
+The states are `queued`, `running`, `verifying`, `waiting` (for a host that
+went away), `paused`, `conflict` (waits for an answer), `done`, `failed` and
+`cancelled`.
+
+| Subcommand | What it does |
+|------------|--------------|
+| `pause ID...` | Pause copies. What they copied stays |
+| `resume ID...` | Go on with paused copies, try waiting copies now, or try failed copies again from where they stopped |
+| `cancel ID...` | Cancel copies, and remove the part of the file in flight |
+| `wait [ID...]` | Wait for the copies named, or for every copy that did not end. Show the progress as `tuios cp` does |
+| `clear [ID...]` | Remove the copies that ended from the list, or only the copies named |
+
+`pause`, `resume` and `cancel` exit 1 when one id fails. `--json` prints the
+new rows. `clear --json` prints `{"cleared": N}`.
+
+`wait` takes `--json` and `-q` as `tuios cp` does, and prints the same events.
+Its exit code is the code `tuios cp` gives for the worst of the copies: `0`,
+`1`, `3`, `4`, `5`, `6`, or `130` for a cancelled copy. A copy whose files
+were skipped because they differ exits 3.
+
+**Examples:**
+```bash
+tuios transfers
+tuios transfers --json
+tuios transfers pause 3f9a1c2b7d00
+tuios transfers resume 3f9a1c2b7d00
+tuios transfers cancel 3f9a1c2b7d00
+tuios transfers wait 3f9a1c2b7d00 --json
+tuios transfers clear
+```
+
 ### `tuios pane-grants`
 
 Show what the pane this command runs in may do through tuios.
@@ -3910,7 +4196,8 @@ them, however it was made:
 | `write` | Type into the panes of its own session that hold nothing it does not, and leave mail there |
 | `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
 | `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
-| `admin` | Everything else, as every pane could before grants, such as `run-command` and `attach`. Includes `read`, `write` and `fan`, never `respond` |
+| `files` | Copy files with `tuios cp`: a copy whose ends on this machine are inside the folder of the pane, and whose ends on a host are under its home folder or are its receive folder. It sees and controls only its own copies |
+| `admin` | Everything else, as every pane could before grants, such as `run-command` and `attach`. Includes `read`, `write`, `fan` and `files`, never `respond` |
 
 A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`,
 `queue`) into another pane only when that pane holds nothing it does not,
@@ -5459,6 +5746,9 @@ tuios list-verbs --json          # for scripting
 
 `tuios run` exits with the status of the command it ran, and `tuios popup
 --wait` with its command's status (`130` when the popup is closed).
+
+`tuios cp` and `tuios transfers wait` have their own exit codes: see
+[Exit codes of tuios cp](#exit-codes-of-tuios-cp).
 
 A `tuios attach` that ends because its session was killed, or because the daemon
 was lost, exits `1`. A normal detach exits `0`.

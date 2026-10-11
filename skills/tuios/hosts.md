@@ -120,16 +120,21 @@ tuios stash get -s build:api "$path" flame.png
 A message queued for a host whose link is down keeps its paths as written, so
 attach only stashed paths to it.
 
-For a file over 8 MB, or a folder, copy it with `transfer-start`, which the
-daemon runs, resumes after a dropped link, and checks with sha256
-(`tuios --skill files`).
+For a file over 8 MB, or a folder, copy it with `tuios cp`. The daemon runs
+the copy, goes on after a dropped link, and checks each file with sha256
+(`tuios --skill files`):
+
+```sh
+tuios cp --json --conflict skip ./flame.png build:
+```
 
 ## What another machine allows
 
 Each machine decides what other machines may do to it: `list`, `mail`, `open`,
 `write`, `respond` and `files`. By default a machine may do all of that but
-`respond`. `files` writes only in that machine's home folder, and never in its
-keys, credentials or shell start files. A
+`respond`. `files` writes only in that machine's `files_roots`: its receive
+folder, `~/Downloads/tuios`, unless the person there added more. It never
+writes in its keys, credentials or shell start files. A
 call the far machine does not allow fails with `forbidden`, naming the
 capability, and nothing was done. That is the other owner's decision: tell the
 person, do not look for another verb.

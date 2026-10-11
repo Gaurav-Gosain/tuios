@@ -991,7 +991,7 @@ component:
 [dock]
 left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
-right  = ["notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
+right  = ["transfers", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
 [dock.clock]
 format = "15:04"
@@ -1003,6 +1003,11 @@ on-click = "tuios new-window log -- git log --oneline -20"
 ```
 
 The lists above are the default: omit the whole table and the bar is unchanged.
+`transfers` shows the copies between machines. It shows nothing while no copy
+exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
+count and a percent, `3 copies 42%`. `waiting` means a link is down, and
+`1 failed` stays until you open the Copies panel. A click opens the panel. Add
+`transfers` to your own `right` list to see it there.
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 
@@ -1612,7 +1617,8 @@ Every pane holds grants that say what a process in it may do through tuios:
 `read` (its own session and fan group), `write` (type into its own session,
 into panes that hold nothing it does not), `fan` (write in its fan group and
 start agents), `respond` (answer prompts without you, and type into a pane
-waiting on one) and `admin` (everything else, as before grants). A pane started
+waiting on one), `files` (copy files with `tuios cp`, see below) and `admin`
+(everything else, as before grants). A pane started
 with `--grants` (`tuios start-agent`, `fan`, `new-window`) or given grants
 with `tuios set-pane-grants` holds those. Every other pane holds the default
 this table sets:
@@ -1631,6 +1637,19 @@ nothing but the right to report about itself. Any other `mode` is read as
 warnings, and both fail toward less. `admin` never includes `respond`, and no
 default gives it, so listing `respond` here is how you let every pane answer
 prompts for you.
+
+`files` lets a pane copy files without `admin`. A copy may start when each
+end on this machine is inside the pane's folder (its worktree, else its
+working folder). Each end on a host must be under its home folder, or be its
+receive folder. The pane sees and controls only the copies it started.
+`admin` includes `files`. To let every pane copy near its work under
+`strict`, add it to the list:
+
+```toml
+[agents.permissions]
+mode = "strict"
+grants = ["read", "write", "fan", "files"]
+```
 
 The daemon reads the table when it starts and again when the file changes. A
 change that gives panes less reaches every pane on the default at its next

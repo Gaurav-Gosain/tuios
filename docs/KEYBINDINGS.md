@@ -25,7 +25,7 @@ To inspect your own effective bindings, use the binary rather than any document:
 `tuios keybinds list` shows every action and the keys that run it, as your
 `config.toml` sets them. It has one table for each scope: global, window mode,
 terminal mode, the sidebar and its files and agent rows, the Inbox, its prompt,
-the mailbox, copy mode, the prefix and each prefix menu, and tape playback. A key in a
+the mailbox, the Copies panel, copy mode, the prefix and each prefix menu, and tape playback. A key in a
 prefix menu shows with its chord, such as `ctrl+b L 5`. The command keys have a
 table of their own.
 
@@ -80,6 +80,13 @@ session runs on.
 `Shift+Enter` needs a terminal that reports modified Enter, such as one that
 uses the Kitty keyboard protocol. On other terminals, use the Edit row in the
 context menu of a file, or bind `file_edit` to a different key.
+
+`S` sends the selected file or folder to another machine. tuios asks which
+machine, then which folder. The folder field starts as `~/Downloads/tuios/`.
+tuios makes the folder when it is not there. A file that is there stays, and
+the copy gets the name `name (from HOST).ext`. The context menu of a row has a
+Send to machine row that does the same. The binding is `file_send` in
+`[keybindings.sidebar_files]`.
 
 `Ctrl+B f` searches file names below the directory of the focused pane. It also
 works while you type in a pane. `Ctrl+F` searches below the folder that the
@@ -935,6 +942,37 @@ they go when the daemon stops. `[paste_buffers]` in `config.toml` sets how
 many to keep. The commands `tuios list-buffers`, `show-buffer`, `set-buffer`,
 `delete-buffer` and `paste-buffer` read and change the same buffers, and so
 does `tmux` under the tmux shim.
+
+## Copies between machines
+
+`Ctrl+B u` opens the Copies panel. It shows one row for each copy between
+machines, the newest first. The dock item `transfers` opens it too, with a
+click. The command palette row is "Copies between machines".
+
+| Key | Action | What it does |
+| --- | --- | --- |
+| `j` `k` `Down` `Up` | `transfers_down` `transfers_up` | Move the cursor |
+| `p` | `transfers_pause` | Pause the copy, or go on with it |
+| `x` | `transfers_cancel` | Cancel the copy. tuios asks first |
+| `r` | `transfers_retry` | Try a failed copy again from where it stopped |
+| `c` | `transfers_clear` | Remove the copies that ended |
+| `Enter` | `transfers_answer` | Answer a copy that waits for an answer |
+| `Esc` `q` | `transfers_close` | Close the panel |
+
+The keys are in `[keybindings.transfers]`. The panel key is
+`prefix_transfers` in `[keybindings.prefix_mode]`.
+
+A copy waits for an answer when a file is there on the other machine and the
+copy was started with `conflict = "ask"`. The dock says `1 copy asks`. Press
+`Enter` on the row to choose Replace, Keep both or Skip. Press `Space` to use
+the answer for the other files of the copy. tuios does not open this question
+by itself, because `tuios cp` in a pane asks the same question there.
+
+When you drop files on a pane whose program runs on another machine, the
+terminal pastes their paths. tuios asks whether to send the files to that
+machine. Send copies them to a private drop folder there. When the copy is
+checked, tuios pastes the path on that machine. Paste the text pastes the paths
+as they are. A paste into a pane on this machine is not changed.
 
 ## Screenshots over a panel
 
