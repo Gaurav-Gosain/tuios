@@ -4708,3 +4708,15 @@ pipelines, `env -C`, `CDPATH`, variables, `~user`, and the writes of `curl`,
 `TestLinksResolveBeforeTheyCompare` in `internal/risk`;
 `TestApprovalRootIsFixed` and `TestAgentStartDirIsFirstWins` in
 `internal/session`.
+## window_size defaults to latest, and a larger client keeps its own edges
+
+Run on 2026-10-11 on branch `fix/window-size-default-latest`. The setup is the
+report: a session on one machine, a laptop attached over a host link at 140x40
+with a 31 column rail on the right, and the desktop attached locally at 200x50
+with a 28 column rail on the right.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole fix removed | `origin/main` (`377bc074`) | `TestWindowSizeLinkClientsUseTheirOwnEdges/default` (the policy is smallest), `TestWindowSizeLinkClientsUseTheirOwnEdges/latest` ("the desktop's rail is not at its right edge while the laptop sets the size": the rail is at column 112, inside the laptop's 140 columns), `TestWindowSizeSmallestFillsTheLeftover` (the rail is inside the small client's 80 columns), `TestWindowSizeDefaultIsLatest` (80x24 under smallest) | **caught** |
+| The latest client's own reserve cut from `calculateSessionReserve` (the largest reserve again) | mutant of this branch | `TestWindowSizeLinkClientsUseTheirOwnEdges/default` and `/latest` ("the desktop's panes do not reach its rail": three blank columns before the rail) | **caught** |
+| The positive half | this branch | none: the same fixtures pass, with the rail at each client's own edge, the dots and the hint while the laptop sets the size, and the panes against the rail once the desktop does | **guard** |
