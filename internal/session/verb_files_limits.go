@@ -41,6 +41,9 @@ type linkFileUsage struct {
 	// dropClaimed is the bytes the open writes into the drop folder may
 	// still add.
 	dropClaimed int64
+	// fsClaimed is the same for each other filesystem, by fsKey: the free
+	// space a disk reports does not yet count the writes that are open on it.
+	fsClaimed map[string]int64
 }
 
 // linkPeerKey names the machine on cs for the limits.
@@ -118,6 +121,7 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 	}
 
 	inDrop := false
+	fs := ""
 	if drop, err := d.dropRoot(); err == nil && pathUnder(realParent(path), realPath(drop)) {
 		inDrop = true
 		held := dirBytes(realPath(drop))
@@ -125,7 +129,12 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 			return none, newVerbError(ErrVerbDiskFull, "the drop folder holds at most "+strconv.Itoa(dropKeepBytes>>20)+" MiB, and this file does not fit. Nothing was written.")
 		}
 	} else if policy.FilesMinFree > 0 {
-		if free := diskFree(filepath.Dir(realParent(path))); free >= 0 && free-grow < policy.FilesMinFree {
+		dir := filepath.Dir(realParent(path))
+		fs = fsKey(dir)
+		if u.fsClaimed == nil {
+			u.fsClaimed = map[string]int64{}
+		}
+		if free := diskFree(dir); free >= 0 && free-u.fsClaimed[fs]-grow < policy.FilesMinFree {
 			return none, newVerbError(ErrVerbDiskFull, "the disk on this machine would have less than "+sizeWords(policy.FilesMinFree)+" free after this file, so it was not written. Free space, or lower files_min_free in the config on this machine.")
 		}
 	}
@@ -135,6 +144,9 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 	if inDrop {
 		u.dropClaimed += grow
 	}
+	if fs != "" {
+		u.fsClaimed[fs] += grow
+	}
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -142,6 +154,12 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 			u.streams[peer]--
 			if inDrop {
 				u.dropClaimed -= grow
+			}
+			if fs != "" {
+				u.fsClaimed[fs] -= grow
+				if u.fsClaimed[fs] <= 0 {
+					delete(u.fsClaimed, fs)
+				}
 			}
 			u.mu.Unlock()
 		})
