@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -242,8 +243,17 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		if rootsWiden {
 			widened = true
 		}
+		readRoots, readWiden := narrowReadRoots(was, now)
+		if readWiden {
+			widened = true
+		}
+		minFree := max(was.FilesMinFree, now.FilesMinFree)
+		if now.FilesMinFree < was.FilesMinFree {
+			widened = true
+		}
 		h := next[key]
 		h.Allow, h.HoldMail, h.HostedGrace, h.FilesRoots = allow, &hold, grace.String(), roots
+		h.FilesReadRoots, h.FilesMinFree = readRoots, strconv.FormatInt(minFree, 10)
 		merged[key] = h
 	}
 	d.SetLinkPolicies(merged)
@@ -258,6 +268,40 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 // folder that was not allowed before, which waits for tuios config apply.
 func narrowFilesRoots(was, now config.LinkPolicy) (roots []string, widens bool) {
 	a, b := linkRootPaths(was), linkRootPaths(now)
+	roots = []string{}
+	add := func(r string) {
+		if !slices.Contains(roots, r) {
+			roots = append(roots, r)
+		}
+	}
+	for _, r := range b {
+		if slices.ContainsFunc(a, func(w string) bool { return pathUnder(r, w) }) {
+			add(r)
+		} else {
+			widens = true
+		}
+	}
+	for _, r := range a {
+		if slices.ContainsFunc(b, func(n string) bool { return pathUnder(r, n) }) {
+			add(r)
+		}
+	}
+	return roots, widens
+}
+
+// narrowReadRoots is the read roots both policies allow. Nil is no limit, so
+// a limit that was not there before applies at once, and dropping one waits
+// for tuios config apply like any other widening.
+func narrowReadRoots(was, now config.LinkPolicy) (roots []string, widens bool) {
+	switch {
+	case now.FilesReadRoots == nil && was.FilesReadRoots == nil:
+		return nil, false
+	case was.FilesReadRoots == nil:
+		return linkPathsOf(now.FilesReadRoots), false
+	case now.FilesReadRoots == nil:
+		return linkPathsOf(was.FilesReadRoots), true
+	}
+	a, b := linkPathsOf(was.FilesReadRoots), linkPathsOf(now.FilesReadRoots)
 	roots = []string{}
 	add := func(r string) {
 		if !slices.Contains(roots, r) {

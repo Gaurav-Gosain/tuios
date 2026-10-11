@@ -125,7 +125,7 @@ func (d *Daemon) verbFileDropDir(_ *connState, params json.RawMessage) (any, *ve
 // one. For this machine the paths are the answer. For a host, each file is
 // copied into a new drop folder there, and the answer has the paths there and
 // the transfers that carry them.
-func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host  string   `json:"host"`
 		Paths []string `json:"paths"`
@@ -145,6 +145,10 @@ func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verb
 	for _, raw := range p.Paths {
 		path, verr := expandPath(raw)
 		if verr != nil {
+			return nil, verr
+		}
+		// A linked machine drops only files its own file verbs could read.
+		if verr := d.checkLinkRead(cs, path); verr != nil {
 			return nil, verr
 		}
 		fi, err := os.Stat(path)
@@ -184,7 +188,7 @@ func (d *Daemon) verbDropFiles(_ *connState, params json.RawMessage) (any, *verb
 	used := map[string]bool{}
 	for _, path := range local {
 		dst := strings.TrimSuffix(dir, "/") + "/" + dropName(filepath.Base(path), used)
-		j, err := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both", true)
+		j, err := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both", true, d.transferLinkOf(cs))
 		if err != nil {
 			return nil, busyTransferError(err)
 		}

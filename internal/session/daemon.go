@@ -242,6 +242,9 @@ type Daemon struct {
 	stash *stashStore
 	// transfers holds the copies this daemon runs. See transfer.go.
 	transfers *transferManager
+	// linkFiles counts the write streams and part files each linked machine
+	// has open here. See verb_files_limits.go.
+	linkFiles linkFileUsage
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore

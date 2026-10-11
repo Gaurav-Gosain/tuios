@@ -61,20 +61,23 @@ type transferRecord struct {
 	Move     bool     `json:"move,omitempty"`
 	Conflict string   `json:"conflict,omitempty"`
 	Private  bool     `json:"private,omitempty"`
-	Created  int64    `json:"created"`
-	State    string   `json:"state"`
-	Final    string   `json:"final,omitempty"`
-	Finished []string `json:"finished,omitempty"`
-	Error    string   `json:"error,omitempty"`
-	Code     string   `json:"code,omitempty"`
-	Ended    int64    `json:"ended,omitempty"`
+	// Link is the linked machine the job runs for, absent for the person's
+	// own job. A resumed job is held to that machine's link policy.
+	Link     *transferLink `json:"link,omitempty"`
+	Created  int64         `json:"created"`
+	State    string        `json:"state"`
+	Final    string        `json:"final,omitempty"`
+	Finished []string      `json:"finished,omitempty"`
+	Error    string        `json:"error,omitempty"`
+	Code     string        `json:"code,omitempty"`
+	Ended    int64         `json:"ended,omitempty"`
 }
 
 // record is the job as the journal keeps it. The caller holds j.mu.
 func (j *transferJob) recordLocked(socket string) transferRecord {
 	r := transferRecord{
 		Version: 1, ID: j.id, Socket: socket, Src: j.src, Dst: j.dst, Move: j.move,
-		Conflict: j.conflict, Private: j.private, Created: j.created.UnixMilli(),
+		Conflict: j.conflict, Private: j.private, Link: j.link, Created: j.created.UnixMilli(),
 		State: j.state, Final: j.final, Error: j.errText, Code: j.errCode,
 	}
 	if !j.ended.IsZero() {
@@ -273,7 +276,7 @@ func (m *transferManager) load() {
 		}
 		j := &transferJob{
 			id: rec.ID, src: rec.Src, dst: rec.Dst, move: rec.Move, conflict: rec.Conflict,
-			private: rec.Private, created: time.UnixMilli(rec.Created), final: rec.Final,
+			private: rec.Private, link: rec.Link, created: time.UnixMilli(rec.Created), final: rec.Final,
 			finished: map[string]bool{}, wake: make(chan struct{}, 1),
 		}
 		for _, rel := range rec.Finished {

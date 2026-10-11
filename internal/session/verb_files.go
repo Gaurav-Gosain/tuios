@@ -284,7 +284,7 @@ func partPath(dst, id string) string {
 }
 
 // verbFileStat describes one path.
-func (d *Daemon) verbFileStat(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
 		Part   bool   `json:"part"`
@@ -298,6 +298,11 @@ func (d *Daemon) verbFileStat(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
+		return nil, verr
+	}
+	// What a path is, or that it is there, is read like its bytes: a link
+	// may not look inside the folders it may not read.
+	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
 	target := path
@@ -320,7 +325,7 @@ func (d *Daemon) verbFileStat(_ *connState, params json.RawMessage) (any, *verbE
 
 // verbFileList lists a folder a page at a time: folders first, then names in
 // natural order, with the details a file manager shows.
-func (d *Daemon) verbFileList(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Dir    string `json:"dir"`
 		Offset int    `json:"offset"`
@@ -332,6 +337,9 @@ func (d *Daemon) verbFileList(_ *connState, params json.RawMessage) (any, *verbE
 	}
 	dir, verr := expandPath(p.Dir)
 	if verr != nil {
+		return nil, verr
+	}
+	if verr := d.checkLinkRead(cs, dir); verr != nil {
 		return nil, verr
 	}
 	limit := p.Limit
@@ -753,29 +761,41 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			return nil, fileError("write", dir, err)
 		}
 		part := partPath(path, p.PartID)
+		// The room is claimed before the part is made, so a write that
+		// does not fit leaves nothing behind.
+		release, verr := d.claimLinkWrite(cs, fsys.confine(path), fsys.confine(part), p.Offset, p.Length)
+		if verr != nil {
+			return nil, verr
+		}
 		f, err := openPart(fsys, fsys.confine(part))
 		if err != nil {
+			release()
 			return nil, fileError("write", part, err)
 		}
 		d.transfers.parts.note(filepath.Dir(fsys.confine(part)))
 		fi, err := f.Stat()
 		if err != nil {
+			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		if p.Offset > fi.Size() {
+			release()
 			_ = f.Close()
 			return nil, invalidParam("offset", "offset "+strconv.FormatInt(p.Offset, 10)+" is past the part's "+strconv.FormatInt(fi.Size(), 10)+" bytes")
 		}
 		if err := f.Truncate(p.Offset); err != nil {
+			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		if _, err := f.Seek(p.Offset, io.SeekStart); err != nil {
+			release()
 			_ = f.Close()
 			return nil, fileError("write", part, err)
 		}
 		cs.takeover = func(br *bufio.Reader) {
+			defer release()
 			defer func() { _ = f.Close() }()
 			_ = cs.conn.SetReadDeadline(time.Time{})
 			n, cerr := io.CopyBuffer(f, io.LimitReader(br, p.Length), make([]byte, 256<<10))
@@ -906,6 +926,9 @@ func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *ve
 	}
 	defer fsys.Close()
 	final, sum, verr := commitPart(d.ctx, fsys, fsys.confine(path), p.PartID, p.SHA256, p.Conflict, p.Perm, p.MTime)
+	if _, err := os.Lstat(fsys.confine(partPath(path, p.PartID))); err != nil {
+		d.linkFiles.partDone(cs, fsys.confine(partPath(path, p.PartID)))
+	}
 	if verr != nil {
 		return nil, verr
 	}
@@ -938,6 +961,7 @@ func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *ver
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fileError("remove the part of", path, err)
 	}
+	d.linkFiles.partDone(cs, fsys.confine(part))
 	return map[string]any{"path": path}, nil
 }
 

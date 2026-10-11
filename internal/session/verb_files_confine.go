@@ -175,6 +175,36 @@ var linkReadDenyHome = []string{
 	".config/hub",
 	".config/op",
 	".local/share/keyrings",
+	// Shell and program histories: a command line often holds a token.
+	".bash_history",
+	".zsh_history",
+	".zhistory",
+	".histfile",
+	".sh_history",
+	".local/share/fish/fish_history",
+	".python_history",
+	".node_repl_history",
+	".psql_history",
+	".mysql_history",
+	".sqlite_history",
+	".lesshst",
+	".viminfo",
+	".local/state/nvim/shada",
+	// Browser profiles: cookies are signed-in sessions.
+	".mozilla",
+	".config/google-chrome",
+	".config/chromium",
+	".config/BraveSoftware",
+	".config/microsoft-edge",
+	"Library/Application Support/Google/Chrome",
+	"Library/Application Support/Firefox",
+	"Library/Application Support/BraveSoftware",
+	"Library/Cookies",
+	"Library/Safari",
+	// Password managers and the tokens of other tools.
+	".config/Bitwarden",
+	".config/1Password",
+	".config/github-copilot",
 	// Windows credentials and the DPAPI keys that open them.
 	"AppData/Roaming/Microsoft/Credentials",
 	"AppData/Local/Microsoft/Credentials",
@@ -435,6 +465,12 @@ func linkRootPaths(policy config.LinkPolicy) []string {
 			raw = []string{def}
 		}
 	}
+	return linkPathsOf(raw)
+}
+
+// linkPathsOf is the real paths of roots as a config names them: absolute or
+// starting with ~. Others are left out.
+func linkPathsOf(raw []string) []string {
 	home, _ := os.UserHomeDir()
 	out := make([]string, 0, len(raw))
 	for _, r := range raw {
@@ -593,8 +629,17 @@ func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 	}
 	real := realPath(path)
 	lp := d.linkPrivateDirs()
+	policy := d.linkPolicy(cs)
+	if policy.FilesReadRoots != nil && plainLinkPath(path) {
+		_, writeRoots := d.linkWriteRoots(policy)
+		roots := append(linkPathsOf(policy.FilesReadRoots), writeRoots...)
+		if !slices.ContainsFunc(roots, func(r string) bool { return pathUnder(real, r) }) {
+			LogBasic("Link %s (peer %q) refused a file read of %s: outside the read roots", cs.clientID, policy.Peer, path)
+			return d.linkReadRootsError(policy, home, path)
+		}
+	}
 	if !plainLinkPath(path) || !plainLinkPath(real) || linkReadDenied(real, home, lp) || linkReadDenied(path, home, lp) {
-		peer := d.linkPolicy(cs).Peer
+		peer := policy.Peer
 		if peer == "" {
 			peer = "A linked machine"
 		}
@@ -604,6 +649,31 @@ func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 		})
 	}
 	return nil
+}
+
+// linkReadRootsError refuses a read outside files_read_roots and says how to
+// allow it.
+func (d *Daemon) linkReadRootsError(policy config.LinkPolicy, home, path string) *verbError {
+	here := d.hostedPaneHostName()
+	if here == "" {
+		here = "this machine"
+	}
+	table := `[hosts."*"]`
+	if policy.Peer != "" {
+		table = "[hosts." + policy.Peer + "]"
+	}
+	shown := []string{}
+	for _, r := range linkPathsOf(policy.FilesReadRoots) {
+		shown = append(shown, tildePath(r, home))
+	}
+	where := "nothing but the folders it may write"
+	if len(shown) > 0 {
+		where = strings.Join(shown, ", ") + " and the folders it may write"
+	}
+	want := echoName(tildePath(path, home))
+	return hintedVerbError(ErrVerbForbidden, peerName(policy.Peer)+" cannot read "+want+". "+here+" lets other machines read only "+where+". To allow "+want+", add it to files_read_roots in "+table+" in the config on "+here+".", &VerbHint{
+		Detail: "Nothing was read.",
+	})
 }
 
 // linkWriteFS is where a file verb on cs may write the given paths. For a
@@ -647,6 +717,17 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 			return fileFS{}, hintedVerbError(ErrVerbForbidden, peer+" cannot write "+echoName(tildePath(real, home))+". "+d.linkRootsMessage(home, linkRootPaths(policy), filepath.Dir(real), table), &VerbHint{
 				Detail: "Nothing was written.",
 			})
+		}
+		if drop, err := d.dropRoot(); err == nil && pathUnder(real, realPath(drop)) {
+			// In the drop folder a link writes only inside a drop that
+			// file-drop-dir made: never a file or a folder of its own at
+			// the top, which pruneDrops would not see.
+			if rel, err := filepath.Rel(realPath(drop), real); err != nil || !strings.Contains(rel, string(filepath.Separator)) {
+				LogBasic("Link %s (peer %q) refused a file write to %s: the top of the drop folder", cs.clientID, peer, p)
+				return fileFS{}, hintedVerbError(ErrVerbForbidden, peer+" cannot write "+echoName(tildePath(real, home))+". In the drop folder, files go only into a drop that file-drop-dir makes.", &VerbHint{
+					Detail: "Nothing was written.",
+				})
+			}
 		}
 		if chosen != "" && chosen != root {
 			return fileFS{}, newVerbError(ErrVerbCrossDevice, "the paths are in two folders that a link writes apart, so tuios does not move between them")

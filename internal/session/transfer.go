@@ -96,6 +96,11 @@ type transferJob struct {
 	// private keeps every file it writes owner only, as a drop folder's are,
 	// instead of taking the original's permission bits.
 	private bool
+	// link, when not nil, says a linked machine started the job. Every read
+	// and write the job makes on this machine is then held to that machine's
+	// link policy, as its own file verbs would be. The journal keeps it, so a
+	// job that resumes after a restart is held the same way.
+	link    *transferLink
 	created time.Time
 
 	done atomic.Int64
@@ -134,6 +139,31 @@ type transferJob struct {
 	stop    string // "pause" or "cancel" while an attempt is being stopped
 	wake    chan struct{}
 	retryAt time.Time
+}
+
+// transferLink is the linked machine a job runs for.
+type transferLink struct {
+	// Peer is the name the machine linked in under, empty when it gave none.
+	Peer string `json:"peer,omitempty"`
+}
+
+// gate is a stand-in connection for the machine a job runs for, which the
+// link checks read the policy through. It is nil for the person's own job.
+func (j *transferJob) gate() *connState {
+	if j.link == nil {
+		return nil
+	}
+	return &connState{viaLink: true, linkPeer: j.link.Peer, clientID: "transfer " + j.id}
+}
+
+// end is one end of the job: this machine's disk, under the job's link
+// policy when a linked machine started it, or a host's.
+func (m *transferManager) end(j *transferJob, host string) fileEnd {
+	e := fileEnd{d: m.d, host: host}
+	if host == "" {
+		e.gate = j.gate()
+	}
+	return e
 }
 
 type rateSample struct {
@@ -182,7 +212,7 @@ func busyKey(dst Endpoint) string {
 // start makes a job and runs it in the background. A copy to the same place
 // as a copy that has not ended is refused: one of the two would replace the
 // other's file.
-func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool) (*transferJob, error) {
+func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, private bool, link *transferLink) (*transferJob, error) {
 	j := &transferJob{
 		id:       newTransferID(),
 		src:      src,
@@ -190,6 +220,7 @@ func (m *transferManager) start(src, dst Endpoint, move bool, conflict string, p
 		move:     move,
 		conflict: conflict,
 		private:  private,
+		link:     link,
 		created:  time.Now(),
 		state:    transferQueued,
 		finished: map[string]bool{},
@@ -434,8 +465,8 @@ func classify(err error) error {
 
 // attempt runs the job once from where its parts are.
 func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
-	src := fileEnd{d: m.d, host: j.src.Host}
-	dst := fileEnd{d: m.d, host: j.dst.Host}
+	src := m.end(j, j.src.Host)
+	dst := m.end(j, j.dst.Host)
 
 	info, err := src.stat(ctx, j.src.Path)
 	if err != nil {
@@ -904,6 +935,41 @@ func (m *transferManager) rows() []TransferRow {
 type fileEnd struct {
 	d    *Daemon
 	host string
+	// gate, for this machine's disk, is the linked machine the job runs
+	// for: each read and write is checked as that machine's file verbs
+	// would be, and each write goes through an os.Root at its root. Nil is
+	// the person's own job, which reads and writes like the person.
+	gate *connState
+}
+
+// callError turns a refusal of the link checks into the error a job ends on.
+func callError(verr *verbError) error {
+	return &VerbCallError{Code: verr.Code, Message: verr.Message}
+}
+
+// readable checks a read of path on this machine against the gate.
+func (e fileEnd) readable(path string) error {
+	if e.gate == nil {
+		return nil
+	}
+	if verr := e.d.checkLinkRead(e.gate, path); verr != nil {
+		return callError(verr)
+	}
+	return nil
+}
+
+// writeFS is where a write of paths on this machine goes: the plain file
+// system for the person's job, an os.Root under the gate's policy for a
+// linked machine's. The caller closes it.
+func (e fileEnd) writeFS(paths ...string) (fileFS, error) {
+	if e.gate == nil {
+		return fileFS{}, nil
+	}
+	fsys, verr := e.d.linkWriteFS(e.gate, paths...)
+	if verr != nil {
+		return fileFS{}, callError(verr)
+	}
+	return fsys, nil
 }
 
 type statResult struct {
@@ -922,6 +988,9 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 		p, verr := expandPath(path)
 		if verr != nil {
 			return statResult{}, &VerbCallError{Code: verr.Code, Message: verr.Message}
+		}
+		if err := e.readable(p); err != nil {
+			return statResult{}, err
 		}
 		fi, err := os.Stat(p)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -945,7 +1014,12 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 
 func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 	if e.local() {
-		fi, err := os.Lstat(partPath(path, id))
+		fsys, err := e.writeFS(partPath(path, id))
+		if err != nil {
+			return 0, err
+		}
+		defer fsys.Close()
+		fi, err := fsys.Lstat(fsys.confine(partPath(path, id)))
 		if errors.Is(err, fs.ErrNotExist) {
 			return 0, nil
 		}
@@ -965,6 +1039,9 @@ func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 // is negative.
 func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
 	if e.local() {
+		if err := e.readable(path); err != nil {
+			return "", err
+		}
 		sum, _, err := hashRange(ctx, path, off, length)
 		return sum, err
 	}
@@ -983,7 +1060,12 @@ func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (stri
 // writes for path.
 func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int64) (string, error) {
 	if e.local() {
-		sum, _, err := hashRange(ctx, partPath(path, id), off, length)
+		fsys, err := e.writeFS(partPath(path, id))
+		if err != nil {
+			return "", err
+		}
+		defer fsys.Close()
+		sum, _, err := hashRangeIn(ctx, fsys, fsys.confine(partPath(path, id)), off, length)
 		return sum, err
 	}
 	params := map[string]any{"path": path, "offset": off, "part": true, "part_id": id, "length": length}
@@ -996,6 +1078,9 @@ func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int6
 
 func (e fileEnd) openRead(ctx context.Context, path string, off int64) (io.ReadCloser, error) {
 	if e.local() {
+		if err := e.readable(path); err != nil {
+			return nil, err
+		}
 		f, _, err := openRegular(path)
 		if err != nil {
 			return nil, err
@@ -1028,32 +1113,43 @@ func (r *readCloser) Close() error { return r.c.Close() }
 // ends the write and reports whether every byte landed.
 func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int64) (io.WriteCloser, func() error, error) {
 	if e.local() {
+		fsys, err := e.writeFS(path, partPath(path, id))
+		if err != nil {
+			return nil, nil, err
+		}
+		defer fsys.Close()
 		dir := filepath.Dir(path)
-		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		if fi, err := fsys.Stat(fsys.confineDir(dir)); err != nil || !fi.IsDir() {
 			if err == nil {
 				err = &fs.PathError{Op: "write", Path: dir, Err: fs.ErrNotExist}
 			}
 			return nil, nil, err
 		}
-		f, err := openPart(fileFS{}, partPath(path, id))
+		release, verr := e.d.claimLinkWrite(e.gate, fsys.confine(path), fsys.confine(partPath(path, id)), off, length)
+		if verr != nil {
+			return nil, nil, callError(verr)
+		}
+		f, err := openPart(fsys, fsys.confine(partPath(path, id)))
 		if err != nil {
+			release()
 			return nil, nil, err
 		}
-		e.d.transfers.parts.note(dir)
+		w := &partWriter{File: f, release: release}
+		e.d.transfers.parts.note(filepath.Dir(fsys.confine(partPath(path, id))))
 		if err := f.Truncate(off); err != nil {
-			_ = f.Close()
+			_ = w.Close()
 			return nil, nil, err
 		}
 		if _, err := f.Seek(off, io.SeekStart); err != nil {
-			_ = f.Close()
+			_ = w.Close()
 			return nil, nil, err
 		}
-		return f, func() error {
+		return w, func() error {
 			if err := f.Sync(); err != nil {
-				_ = f.Close()
+				_ = w.Close()
 				return err
 			}
-			return f.Close()
+			return w.Close()
 		}, nil
 	}
 	c, err := e.d.dialHostFiles(ctx, e.host, true)
@@ -1091,6 +1187,19 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 	return c, finish, nil
 }
 
+// partWriter is a part file of this machine that gives back the room its
+// write claimed (claimLinkWrite) when it closes.
+type partWriter struct {
+	*os.File
+	release func()
+}
+
+func (w *partWriter) Close() error {
+	err := w.File.Close()
+	w.release()
+	return err
+}
+
 // writeReplyError reads the line the far side writes after the bytes of an
 // open-file-stream write, and returns nil when the part holds want bytes. A
 // code the far side gives, such as disk_full or no_permission, is its word
@@ -1120,7 +1229,15 @@ func writeReplyError(line []byte, host string, want int64) error {
 
 func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, perm uint32, mtime int64) (string, error) {
 	if e.local() {
-		final, _, verr := commitPart(ctx, fileFS{}, path, id, sum, conflict, perm, mtime)
+		fsys, err := e.writeFS(path, partPath(path, id))
+		if err != nil {
+			return "", err
+		}
+		defer fsys.Close()
+		final, _, verr := commitPart(ctx, fsys, fsys.confine(path), id, sum, conflict, perm, mtime)
+		if e.gate != nil {
+			e.d.linkFiles.partDone(e.gate, fsys.confine(partPath(path, id)))
+		}
 		if verr != nil {
 			return "", &VerbCallError{Code: verr.Code, Message: verr.Message}
 		}
@@ -1142,7 +1259,15 @@ func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, per
 
 func (e fileEnd) abort(ctx context.Context, path, id string) error {
 	if e.local() {
-		err := os.Remove(partPath(path, id))
+		fsys, err := e.writeFS(partPath(path, id))
+		if err != nil {
+			return err
+		}
+		defer fsys.Close()
+		err = fsys.Remove(fsys.confine(partPath(path, id)))
+		if e.gate != nil {
+			e.d.linkFiles.partDone(e.gate, fsys.confine(partPath(path, id)))
+		}
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
@@ -1153,23 +1278,36 @@ func (e fileEnd) abort(ctx context.Context, path, id string) error {
 
 func (e fileEnd) mkdir(ctx context.Context, path string) error {
 	if e.local() {
-		return os.MkdirAll(path, 0o755) //nolint:gosec // a folder of a copy the person asked for, with the mode mkdir gives
+		fsys, err := e.writeFS(path)
+		if err != nil {
+			return err
+		}
+		defer fsys.Close()
+		return fsys.MkdirAll(fsys.confineDir(path), 0o755)
 	}
 	return e.call(ctx, "file-mkdir", map[string]any{"path": path}, nil)
 }
 
 func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error {
 	if e.local() {
-		if recursive {
-			return os.RemoveAll(path)
+		fsys, err := e.writeFS(path)
+		if err != nil {
+			return err
 		}
-		return os.Remove(path)
+		defer fsys.Close()
+		if recursive {
+			return fsys.RemoveAll(fsys.confine(path))
+		}
+		return fsys.Remove(fsys.confine(path))
 	}
 	return e.call(ctx, "file-remove", map[string]any{"path": path, "recursive": recursive}, nil)
 }
 
 func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	if e.local() {
+		if err := e.readable(path); err != nil {
+			return walkResult{}, err
+		}
 		w, err := walkTree(path)
 		if errors.Is(err, errWalkTooLarge) {
 			return walkResult{}, permanent(ErrVerbInvalidParams, err.Error())
@@ -1192,7 +1330,12 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 // freeName is the first free "name 2", "name 3" ... for a path on this end.
 func (e fileEnd) freeName(ctx context.Context, path string) (string, error) {
 	if e.local() {
-		return freeName(path), nil
+		fsys, err := e.writeFS(path)
+		if err != nil {
+			return "", err
+		}
+		defer fsys.Close()
+		return freeNameIn(fsys, fsys.confine(path)), nil
 	}
 	dir, base := filepath.Split(path)
 	ext := filepath.Ext(base)
@@ -1351,7 +1494,47 @@ func (d *Daemon) checkEndpoint(name string, e *Endpoint) *verbError {
 	return d.checkHostParam(e.Host)
 }
 
-func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *verbError) {
+// transferLinkOf is the link a job started on cs runs for, or nil for the
+// person's own connection.
+func (d *Daemon) transferLinkOf(cs *connState) *transferLink {
+	if cs == nil || !cs.viaLink {
+		return nil
+	}
+	return &transferLink{Peer: d.linkPolicy(cs).Peer}
+}
+
+// checkTransferEnds refuses, before a job exists, a copy from a linked
+// machine whose ends on this machine its file verbs could not reach: a
+// source it may not read (or, for a move, remove) and a destination outside
+// its write roots or in the deny list. The job checks each file again as it
+// goes.
+func (d *Daemon) checkTransferEnds(cs *connState, src, dst Endpoint, move bool) *verbError {
+	if cs == nil || !cs.viaLink {
+		return nil
+	}
+	if src.Host == "" {
+		if verr := d.checkLinkRead(cs, src.Path); verr != nil {
+			return verr
+		}
+		if move {
+			fsys, verr := d.linkWriteFS(cs, src.Path)
+			if verr != nil {
+				return verr
+			}
+			fsys.Close()
+		}
+	}
+	if dst.Host == "" {
+		fsys, verr := d.linkWriteFS(cs, dst.Path, partPath(dst.Path, ""))
+		if verr != nil {
+			return verr
+		}
+		fsys.Close()
+	}
+	return nil
+}
+
+func (d *Daemon) verbTransferStart(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Src      Endpoint `json:"src"`
 		Dst      Endpoint `json:"dst"`
@@ -1375,11 +1558,16 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 	if p.Src == p.Dst {
 		return nil, invalidParam("dst", "the copy would land on the file it copies")
 	}
+	if verr := d.checkTransferEnds(cs, p.Src, p.Dst, p.Move); verr != nil {
+		return nil, verr
+	}
+	link := d.transferLinkOf(cs)
+	probe := &transferJob{link: link}
 	// A destination that is there is the caller's question to put to the
 	// person, so it is answered before a job exists.
 	if p.Conflict == "" || p.Conflict == "fail" {
 		ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second)
-		st, err := fileEnd{d: d, host: p.Dst.Host}.stat(ctx, p.Dst.Path)
+		st, err := d.transfers.end(probe, p.Dst.Host).stat(ctx, p.Dst.Path)
 		cancel()
 		if err != nil {
 			var ve *VerbCallError
@@ -1396,7 +1584,7 @@ func (d *Daemon) verbTransferStart(_ *connState, params json.RawMessage) (any, *
 			})
 		}
 	}
-	j, err := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false)
+	j, err := d.transfers.start(p.Src, p.Dst, p.Move, p.Conflict, false, link)
 	if err != nil {
 		return nil, busyTransferError(err)
 	}
