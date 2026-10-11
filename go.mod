@@ -80,5 +80,5 @@ require (
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.42.0
 )
