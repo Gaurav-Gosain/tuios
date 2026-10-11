@@ -713,8 +713,8 @@ reads the image on your machine and sends it over the link. The other machine
 writes it to a file and tuios pastes the path of that file into the pane. An
 agent in the pane, such as Claude Code, can then read the image. The file is
 8 MB or less, only you can read it, and it is deleted after one hour. The
-other machine needs a tuios with `paste-pane-image`. See [Paste an
-image](KEYBINDINGS.md#paste-an-image).
+other machine needs a tuios with `paste-pane-image`, and it must allow
+`files` from this machine. See [Paste an image](KEYBINDINGS.md#paste-an-image).
 
 ### What it needs
 

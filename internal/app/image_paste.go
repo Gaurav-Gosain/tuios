@@ -316,6 +316,10 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) {
 			m.ShowNotification("This daemon cannot take a pasted image. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
 			return
 		}
+		if text := m.imagePasteRefusal(msg.Window, msg.Err); text != "" {
+			m.ShowNotification(text, "error", m.Settings.NotificationDuration*3)
+			return
+		}
 		m.ShowNotification("The image was not pasted: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 		return
 	}
@@ -366,4 +370,34 @@ func pastePathText(path string) string {
 		return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 	}
 	return path
+}
+
+// imagePasteRefusal is the message for a paste the pane's machine refused by
+// its link policy, or "" for any other error. That machine names the
+// capabilities it lacks and its config table that grants them. The pane's
+// machine is the window's host, or the host this client is attached through.
+func (m *OS) imagePasteRefusal(window string, err error) string {
+	callErr, ok := errors.AsType[*session.VerbCallError](err)
+	if !ok || callErr.Code != session.ErrVerbForbidden || callErr.Hint == nil || len(callErr.Hint.Missing) == 0 {
+		return ""
+	}
+	host := m.AttachedHost
+	if w := m.windowByID(window); w != nil && w.Host != "" {
+		host = w.Host
+	}
+	if callErr.Hint.Host != "" {
+		host = callErr.Hint.Host
+	}
+	where := "The other machine"
+	on := "on the other machine"
+	if host != "" {
+		where = "Host " + host
+		on = "on " + host
+	}
+	missing := strings.Join(callErr.Hint.Missing, " and ")
+	table := callErr.Hint.Table
+	if table == "" {
+		table = "[hosts]"
+	}
+	return "Cannot paste the image. " + where + " does not allow " + missing + " from this machine. Add " + missing + " to allow in " + table + " " + on + "."
 }

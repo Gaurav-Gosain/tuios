@@ -161,12 +161,22 @@ type VerbHint struct {
 	// it back as confirm and the write goes to that set, or is refused again
 	// if the set changed. See selector.go.
 	Confirm string `json:"confirm,omitempty"`
+	// Missing lists the link capabilities a forbidden refusal over a link
+	// lacks, such as "files".
+	Missing []string `json:"missing,omitempty"`
+	// Table is the config table on the refusing machine that grants Missing,
+	// such as [hosts.laptop].
+	Table string `json:"table,omitempty"`
+	// Host is the [hosts] entry, on the caller's side, of the machine that
+	// refused, when a daemon passes on a refusal it got over its link.
+	Host string `json:"host,omitempty"`
 }
 
 // empty reports whether the hint carries nothing worth serializing.
 func (h *VerbHint) empty() bool {
 	return h == nil || (h.Verb == "" && h.Command == "" && h.Param == "" &&
-		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "")
+		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "" &&
+		len(h.Missing) == 0 && h.Table == "" && h.Host == "")
 }
 
 // hintedVerbError builds a *verbError carrying a hint. A hint with no populated

@@ -79,6 +79,9 @@ unaffected.
 | `did_you_mean` | The closest match to what the caller asked for, when one is close enough to suggest. |
 | `available` | What does exist: session names, addressable windows, verb names, option keys. |
 | `detail` | One sentence of context that does not fit the fields above. |
+| `missing` | On a `forbidden` refusal over a link: the link capabilities the caller lacks, such as `files`. |
+| `table` | With `missing`: the config table on the refusing machine that grants them, such as `[hosts.laptop]`. |
+| `host` | With `missing`, when a daemon passes on a refusal it got from a host: that host's name on the caller's side. |
 
 A hint is advisory. Acting on `command` or `did_you_mean` is always optional, and
 the absence of a hint never changes what `code` means.
@@ -2680,7 +2683,10 @@ Response:
 
 `host` is present only when the file is on another machine. A host that
 cannot take the image is `host_unreachable`. Over a link, `paste-image` needs
-`write`, and the nonce must come from an attach on the `link-human` socket.
+`write` and `files`, and the nonce must come from an attach on the
+`link-human` socket. A host whose policy refuses the image gives `forbidden`.
+The daemon passes that refusal on with the host's hint and sets `hint.host` to
+the host's name here.
 
 ### run
 
@@ -5354,7 +5360,7 @@ returns `pane`, `path` and `bytes`. `token` is the `calls_token` of the
 `open-pane` reply. Only the daemon that owns the window has it, and that daemon
 sends this call only for a `paste-image` of the person. A wrong or missing
 token is `forbidden`. An unknown pane is `unknown_pane`. Over a link it needs
-`open`.
+`open` and `files`.
 
 ### Files and transfers
 
@@ -5551,9 +5557,11 @@ the one before. The configuration is in
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
-| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
-| `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
+| `open` and `files` | `paste-pane-image` |
+| `write` and `files` | `paste-image` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
 | `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `drop-files` (they make this daemon use its own links) |

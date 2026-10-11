@@ -434,6 +434,11 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 		defer cancel()
 		path, err := rp.pasteImage(ctx, data)
 		if err != nil {
+			// A refusal by the far machine's link policy is passed on as it
+			// is, so the client can say which capability to add and where.
+			if far, ok := errors.AsType[*verbError](err); ok && far.Code == ErrVerbForbidden {
+				return nil, hintedVerbError(ErrVerbForbidden, "paste-image: "+rp.host+" refused the image: "+far.Message, refusedOn(far.Hint, rp.host))
+			}
 			return nil, hintedVerbError(ErrVerbHostUnreachable, "paste-image: the image did not reach "+rp.host+": "+err.Error(), &VerbHint{
 				Detail: "Nothing was pasted. Check that the link to " + rp.host + " is up and that its tuios is current.",
 			})
@@ -553,4 +558,16 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 		return "", errors.New("the reply named no path")
 	}
 	return resp.Result.Path, nil
+}
+
+// refusedOn is a copy of the far machine's hint with the host that refused,
+// as this machine names it.
+func refusedOn(h *VerbHint, host string) *VerbHint {
+	out := &VerbHint{}
+	if h != nil {
+		c := *h
+		out = &c
+	}
+	out.Host = host
+	return out
 }

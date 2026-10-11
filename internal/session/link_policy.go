@@ -164,9 +164,11 @@ var verbCapabilities = map[string][]string{
 	// paste-pane-image writes a file for a hosted pane, which the peer
 	// opened, and needs the pane's token as well. paste-image writes a file
 	// and has its path typed into a pane, which is what write already
-	// reaches. Its handler also wants the person.
-	"paste-pane-image": {config.LinkAllowOpen},
-	"paste-image":      {config.LinkAllowWrite},
+	// reaches. Its handler also wants the person. Both put a file from the
+	// other machine on this one, so both need files too: a person who took
+	// files away from a machine expects nothing it sends to land on disk.
+	"paste-pane-image": {config.LinkAllowOpen, config.LinkAllowFiles},
+	"paste-image":      {config.LinkAllowWrite, config.LinkAllowFiles},
 
 	"refresh-dock":    {config.LinkAllowWrite},
 	"pip":             {config.LinkAllowWrite},
@@ -451,7 +453,12 @@ func linkForbidden(d *Daemon, cs *connState, what string, missing []string, reas
 		}
 		detail = "Nothing was done. To allow it, add " + strings.Join(quoted, ", ") + " to allow in " + table + " in the config on " + here + "."
 	}
-	return hintedVerbError(ErrVerbForbidden, what+" is refused: "+reason, &VerbHint{Detail: detail})
+	hint := &VerbHint{Detail: detail}
+	if len(missing) > 0 {
+		hint.Missing = slices.Clone(missing)
+		hint.Table = table
+	}
+	return hintedVerbError(ErrVerbForbidden, what+" is refused: "+reason, hint)
 }
 
 // verbLinkPeer is the handshake: `tuios stdio-proxy` names the machine a link
