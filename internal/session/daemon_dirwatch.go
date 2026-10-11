@@ -207,18 +207,25 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 		timeout = time.Duration(p.Timeout) * time.Millisecond
 	}
 	dir := filepath.Clean(p.Dir)
-	// Over a link a wait tells when a folder's names change, so it keeps to
-	// the read rules a listing keeps to.
-	if verr := d.checkLinkRead(cs, dir); verr != nil {
-		return nil, verr
-	}
 
+	// The watch starts before the read check. The check takes a few
+	// milliseconds on macOS, and a change in that time would be lost to a
+	// caller that listed the folder just before it asked to wait.
 	events := make(chan struct{}, 1)
 	w, err := dirwatch.Watch(dir, func() { dirwatch.Nudge(events) })
 	if err != nil {
+		if verr := d.checkLinkRead(cs, dir); verr != nil {
+			return nil, verr
+		}
 		return nil, newVerbError(ErrVerbInternal, "cannot watch "+echoName(dir)+": "+err.Error())
 	}
 	defer w.Close()
+	// Over a link a wait tells when a folder's names change, so it keeps to
+	// the read rules a listing keeps to. Nothing about the folder is sent
+	// before this check.
+	if verr := d.checkLinkRead(cs, dir); verr != nil {
+		return nil, verr
+	}
 
 	// The caller going away ends the wait. The watch on the connection
 	// sleeps in the poller, so a far daemon holding a wait for a near one
