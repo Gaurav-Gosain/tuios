@@ -34,16 +34,50 @@ const leaseInterval = 100 * time.Millisecond
 // a second. Leases that come faster are recorded at once and applied together
 // when the interval ends, so the pane always ends at the newest of them.
 
+// A fit lease is a viewer's that shows the pane on its own, such as tuios
+// pane-view in a terminal that draws its own panes. While no TUI client shows
+// the session, nobody else decides the pane's size, so a fit lease does: the
+// pane takes the size of the largest fit lease held. While a client shows the
+// session the client decides, and a fit lease only holds the pane smaller, as
+// any lease does.
+//
+// The choice is made here, under streamMu, from noClients, which the daemon
+// sets on every attach, detach and disconnect (see PTY.setNoClients). The
+// viewer used to make it itself: it asked whether a client was attached on
+// one connection and resized on another, so a client attaching between the
+// two was overridden, and the pane kept the viewer's size after the viewer
+// left.
+
 // paneLease is one holder's leased size.
 type paneLease struct {
 	width, height int
+	// fit marks a viewer's lease that sizes the pane while no client shows
+	// the session.
+	fit bool
 }
 
 // leasedSizeLocked is the size the pane takes when its clients ask for width
-// by height: each dimension clamped to the smallest lease held. streamMu is
-// held.
+// by height. With no client attached and a fit lease held, that is the
+// largest fit lease. Then each dimension is clamped to the smallest of the
+// other leases, and of the fit leases too while a client is attached.
+// streamMu is held.
 func (p *PTY) leasedSizeLocked(width, height int) (int, int) {
+	detached := p.noClients.Load()
+	if detached {
+		fw, fh := 0, 0
+		for _, l := range p.leases {
+			if l.fit {
+				fw, fh = max(fw, l.width), max(fh, l.height)
+			}
+		}
+		if fw > 0 && fh > 0 {
+			width, height = fw, fh
+		}
+	}
 	for _, l := range p.leases {
+		if l.fit && detached {
+			continue
+		}
 		if width > 0 && l.width < width {
 			width = l.width
 		}
@@ -54,11 +88,39 @@ func (p *PTY) leasedSizeLocked(width, height int) (int, int) {
 	return width, height
 }
 
+// setNoClients records whether no TUI client shows the pane's session, and
+// sizes the pane again when that changes and a fit lease is held: a viewer
+// that sized a pane on its own gives way to a client that attaches, and
+// takes it back when the client leaves.
+func (p *PTY) setNoClients(none bool) {
+	p.streamMu.Lock()
+	defer p.streamMu.Unlock()
+	if p.noClients.Swap(none) == none {
+		return
+	}
+	fit := false
+	for _, l := range p.leases {
+		fit = fit || l.fit
+	}
+	if !fit || p.ctx.Err() != nil {
+		return
+	}
+	if err := p.applyLeasesLocked(); err != nil {
+		LogBasic("PTY %s: a viewer lease could not resize the pane: %v", shortID(p.ID), err)
+	}
+}
+
 // SetLease holds the pane at most at width by height for holder, or with a
 // zero size releases holder's lease. The pane is resized to what the leases
 // now allow, or back to the size its clients last asked for: at once, or
 // when leaseInterval has passed since the last resize a lease made.
 func (p *PTY) SetLease(holder string, width, height int) error {
+	return p.SetViewerLease(holder, width, height, false)
+}
+
+// SetViewerLease is SetLease with fit: a fit lease sizes the pane while no
+// client shows the session. See paneLease.
+func (p *PTY) SetViewerLease(holder string, width, height int, fit bool) error {
 	p.streamMu.Lock()
 	defer p.streamMu.Unlock()
 	if width <= 0 || height <= 0 {
@@ -70,7 +132,7 @@ func (p *PTY) SetLease(holder string, width, height int) error {
 		if p.leases == nil {
 			p.leases = make(map[string]paneLease)
 		}
-		p.leases[holder] = paneLease{width: width, height: height}
+		p.leases[holder] = paneLease{width: width, height: height, fit: fit}
 	}
 	if wait := leaseInterval - time.Since(p.leaseAt); wait > 0 {
 		if p.leaseTimer == nil {

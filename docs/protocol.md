@@ -2719,6 +2719,15 @@ Params:
 - `boot_id` (optional): the `boot_id` of the stream that `from_seq` came from.
 - `lease_cols`, `lease_rows` (optional ints): hold a size lease from the
   start. See [The size lease](#the-size-lease).
+- `session_id` (optional): the session by its id, which a rename does not
+  change. It wins over `session`. The reply carries it.
+- `fit` (optional bool): make the lease a viewer's. See
+  [The size lease](#the-size-lease).
+- `viewer` (optional object): the terminal the stream shows the pane in:
+  `bg`, `fg` (`#rrggbb`), `palette` (sixteen comma-separated `#rrggbb`),
+  `kitty` and `sixel` (bool). While no TUI client shows the session, the
+  daemon answers the pane's OSC 10, 11 and 4, DA1 and kitty graphics queries
+  from the newest viewer's report. A client that attaches pushes its own.
 
 Request:
 
@@ -2766,7 +2775,7 @@ Frames from the daemon:
 | `O` (0x4F) | u64 seq, bytes | Output. Write the bytes into the emulator. `seq` is the stream position after the last byte. |
 | `R` (0x52) | u64 seq, u16 cols, u16 rows | The pane changed size at `seq`. Resize the emulator. |
 | `E` (0x45) | JSON `{"code", "message"}` | The daemon refused an `I` or `L` frame, or released a lease that the client did not renew (code `lease_expired`). The other codes are the verb error codes. The stream continues. |
-| `X` (0x58) | UTF-8 text | The stream ended, for example `exited 0` when the pane closed, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
+| `X` (0x58) | UTF-8 text | The stream ended: `exited N` when the pane's program exited with status N, `killed N` when signal N ended it, `closed` when its window closed first, `the daemon stopped`, or `refused: ...` when the caller may no longer read the pane. The daemon then closes the connection. |
 
 Frames from the client:
 
@@ -2837,6 +2846,14 @@ attached tuios client shows the smaller pane in the same rectangle.
 
 When two streams hold a lease on one pane, the smaller lease applies in each
 dimension.
+
+A stream opened with `fit` holds a viewer's lease. While no TUI client shows
+the session, the pane takes the size of the largest viewer's lease, which can
+make it larger than the size its clients asked for. When the last viewer's
+lease ends, the pane goes back to the size its clients asked for. While a
+client shows the session, a viewer's lease only holds the pane smaller, as any
+lease does. The daemon decides under the pane's lock, and decides again on
+every attach, detach and disconnect.
 
 Leases resize a pane at most once every 100 ms. A lease that comes sooner
 applies when the 100 ms end, and the pane takes the newest lease.

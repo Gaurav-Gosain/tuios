@@ -114,6 +114,10 @@ type paneStream struct {
 	cols   int
 	rows   int
 	snap   *TerminalState // the snapshot to send first, nil in resume mode
+	// fit makes the stream's lease a viewer's, and viewer says the stream
+	// reported its terminal. See pane_lease.go and pane_viewers.go.
+	fit    bool
+	viewer bool
 	// leaseMu guards leased and closed. The client's frames are read on a
 	// goroutine of their own, so a lease frame can arrive while the stream
 	// is closing, and closed keeps it from setting a lease nobody releases.
@@ -148,6 +152,15 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		BootID    string `json:"boot_id"`
 		LeaseCols int    `json:"lease_cols"`
 		LeaseRows int    `json:"lease_rows"`
+		// SessionID names the session by its id, which a rename does not
+		// change. It wins over Session.
+		SessionID string `json:"session_id"`
+		// Fit makes the stream's lease a viewer's: it sizes the pane while
+		// no client shows the session. See pane_lease.go.
+		Fit bool `json:"fit"`
+		// Viewer is the terminal the stream shows the pane in. See
+		// pane_viewers.go.
+		Viewer *ViewerReport `json:"viewer"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -161,9 +174,16 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	if verr := checkLeaseSize(p.LeaseCols, p.LeaseRows); verr != nil {
 		return nil, verr
 	}
-	sess, verr := d.resolveVerbSession(p.Session)
-	if verr != nil {
-		return nil, verr
+	var sess *Session
+	if p.SessionID != "" {
+		if sess = d.manager.GetSessionByID(p.SessionID); sess == nil {
+			return nil, newVerbError(ErrVerbSessionNotFound, "no session has id "+p.SessionID)
+		}
+	} else {
+		var verr *verbError
+		if sess, verr = d.resolveVerbSession(p.Session); verr != nil {
+			return nil, verr
+		}
 	}
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
@@ -176,7 +196,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	win := state.Windows[idx]
 	ps := &paneStream{d: d, cs: cs, sess: sess, window: win.ID, pty: pty, subID: cs.clientID,
-		inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
+		fit: p.Fit, inputQ: make(chan []byte, paneInputQueue), quit: make(chan struct{})}
 	if p.LeaseCols > 0 {
 		if verr := ps.admitLease(p.LeaseCols, p.LeaseRows); verr != nil {
 			return nil, verr
@@ -205,6 +225,11 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 
+	if p.Viewer != nil {
+		ps.viewer = true
+		sess.addViewer(ps.subID, *p.Viewer)
+	}
+
 	title := pty.Title()
 	if title == "" {
 		title = win.CustomName
@@ -216,15 +241,16 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	cs.replyFailed = ps.close
 	cs.takeover = func(br *bufio.Reader) { ps.run(br) }
 	return map[string]any{
-		"type":    "pane_stream",
-		"mode":    mode,
-		"seq":     ps.pos,
-		"cols":    ps.cols,
-		"rows":    ps.rows,
-		"boot_id": boot,
-		"session": sess.Name(),
-		"window":  win.ID,
-		"title":   title,
+		"type":       "pane_stream",
+		"mode":       mode,
+		"seq":        ps.pos,
+		"cols":       ps.cols,
+		"rows":       ps.rows,
+		"boot_id":    boot,
+		"session":    sess.Name(),
+		"session_id": sess.ID,
+		"window":     win.ID,
+		"title":      title,
 	}, nil
 }
 
@@ -308,6 +334,9 @@ func (ps *paneStream) close() {
 		if ps.leased {
 			_ = ps.pty.SetLease(ps.subID, 0, 0)
 		}
+		if ps.viewer {
+			ps.sess.removeViewer(ps.subID)
+		}
 		ps.leased, ps.closed = false, true
 		ps.leaseMu.Unlock()
 		close(ps.quit)
@@ -348,7 +377,15 @@ func (e *paneExit) Error() string { return e.reason }
 
 // exitReason says why the pane's stream ended.
 func (ps *paneStream) exitReason() *paneExit {
+	// A window closed by tuios ends its process with a signal of tuios's
+	// own; that is the window closing, not the program dying.
+	if ps.pty.ctx.Err() != nil {
+		return &paneExit{reason: "closed"}
+	}
 	if code, exited := ps.pty.ExitStatus(); exited {
+		if sig := ps.pty.ExitSignal(); sig > 0 {
+			return &paneExit{reason: "killed " + strconv.Itoa(sig)}
+		}
 		return &paneExit{reason: "exited " + strconv.Itoa(code)}
 	}
 	return &paneExit{reason: "closed"}
@@ -693,7 +730,10 @@ func (ps *paneStream) setLease(cols, rows int) error {
 	}
 	ps.leased = cols > 0
 	ps.leaseAt = time.Now().UnixNano()
-	return ps.pty.SetLease(ps.subID, cols, rows)
+	if ps.fit {
+		ps.pty.setNoClients(ps.sess.tuiClients.Load() == 0)
+	}
+	return ps.pty.SetViewerLease(ps.subID, cols, rows, ps.fit)
 }
 
 // expireLease releases the lease when the client has not renewed it for

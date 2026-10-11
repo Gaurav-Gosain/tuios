@@ -31,8 +31,9 @@ import (
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "pane-view"):
 //   - with queryFilter.Write returning its input unchanged, the pane reads two
 //     DA1 answers and TestPaneView fails at "answered twice".
-//   - with fit() returning at once, the pane keeps the session's 120 columns
-//     and TestPaneView fails at "did not follow the terminal".
+//   - with leasedSizeLocked ignoring noClients (no viewer lease sizes the
+//     pane), the pane keeps the session's size and TestPaneView fails at
+//     "did not follow the terminal".
 
 func TestPaneView(t *testing.T) {
 	base := t.TempDir()

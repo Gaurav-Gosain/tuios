@@ -40,14 +40,15 @@ const PaneStreamMaxInput = 32 << 10
 
 // PaneStreamReply is the verb's reply line.
 type PaneStreamReply struct {
-	Mode    string `json:"mode"`
-	Seq     uint64 `json:"seq"`
-	Cols    int    `json:"cols"`
-	Rows    int    `json:"rows"`
-	BootID  string `json:"boot_id"`
-	Session string `json:"session"`
-	Window  string `json:"window"`
-	Title   string `json:"title"`
+	Mode      string `json:"mode"`
+	Seq       uint64 `json:"seq"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+	BootID    string `json:"boot_id"`
+	Session   string `json:"session"`
+	SessionID string `json:"session_id"`
+	Window    string `json:"window"`
+	Title     string `json:"title"`
 }
 
 // PaneStream is one open stream-pane connection.

@@ -877,6 +877,9 @@ type PTY struct {
 	exited   bool
 	exitedMu sync.RWMutex
 	exitCode int
+	// exitSignal is the signal that ended the process, 0 when it exited on
+	// its own. See ExitSignal.
+	exitSignal atomic.Int32
 
 	// Single-goroutine VT writer channel. Closed by readOutput on exit so
 	// vtWriter's range terminates.
@@ -906,6 +909,9 @@ type PTY struct {
 	// guarded by streamMu. See pane_lease.go.
 	askedW, askedH int
 	leases         map[string]paneLease
+	// noClients is set while no TUI client shows the pane's session. A fit
+	// lease sizes the pane only then. See pane_lease.go.
+	noClients atomic.Bool
 	// leaseAt is when a lease last resized the pane, and leaseTimer the
 	// resize put off until leaseInterval has passed since. Both guarded by
 	// streamMu.
@@ -1128,6 +1134,11 @@ type Session struct {
 	// OSC 4.
 	reportPalHex string
 	reportPal    [16]color.Color
+	// tuiClients is how many TUI clients show the session, as
+	// Daemon.refreshTreeOps last counted. viewers are the streams that
+	// show a pane on their own. See pane_viewers.go.
+	tuiClients atomic.Int32
+	viewers    sessionViewers
 
 	// The last directory read out of each PTY's process, and when. See
 	// liveCwds: GetState is on the render path and reading a process
@@ -5543,6 +5554,10 @@ func (p *PTY) IsExited() bool {
 
 // ExitStatus returns the process's exit status and whether it has exited. A
 // process ended by a signal reports -1.
+// ExitSignal is the signal that ended the pane's process, 0 when it exited
+// on its own or is still running.
+func (p *PTY) ExitSignal() int { return int(p.exitSignal.Load()) }
+
 func (p *PTY) ExitStatus() (int, bool) {
 	p.exitedMu.RLock()
 	defer p.exitedMu.RUnlock()
@@ -5810,6 +5825,9 @@ func (p *PTY) monitorExit() {
 	code := 0
 	if p.cmd.ProcessState != nil {
 		code = p.cmd.ProcessState.ExitCode()
+		if sig := exitSignal(p.cmd.ProcessState); sig > 0 {
+			p.exitSignal.Store(int32(sig))
+		}
 	}
 	p.noteExit(code)
 }

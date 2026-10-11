@@ -867,6 +867,7 @@ func (d *Daemon) refreshTreeOps(sessionID string) {
 	}
 	session.SetLayoutTreeOps(on)
 	session.SetScratchWorkspaces(scratchWS)
+	session.noteTUIClients(tuiClients)
 }
 
 // treeOpsCounted runs in refreshTreeOps between the count and the change. It

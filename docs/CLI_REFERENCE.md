@@ -2958,17 +2958,31 @@ one `pane-view` for each tuios pane. Each pane then gets the terminal's own
 scrollback, selection and search.
 
 `pane-view` does not attach. It reads the pane through `stream-pane`, so the
-session's size and its clients do not change. The daemon answers the
-requests a program sends to its terminal, so `pane-view` keeps them from the
-outer terminal, which would answer them a second time.
+session's clients do not change. The daemon answers the requests a program
+sends to its terminal, so `pane-view` keeps them from the outer terminal,
+which would answer them a second time.
 
 With `--size follow` (the default), the pane takes this terminal's size while
-no tuios client shows the session. While a client shows it, the pane never
-grows past the size the client asks for. With `--size pane`, the pane keeps
-its size and only gets smaller to fit this terminal.
+no tuios client shows the session. With several viewers, the largest decides.
+When the last viewer leaves, the pane goes back to its own size. While a
+client shows the session, the pane only gets smaller to fit this terminal.
+With `--size pane`, the pane keeps its size and only gets smaller. The daemon
+makes these decisions, so a client that attaches or detaches, or a rename,
+changes the size at once.
+
+At start, `pane-view` asks this terminal for its colours and graphics, and
+tells the daemon. While no tuios client shows the session, a program in the
+pane that asks (OSC 10, 11 and 4, DA1, the kitty graphics query) gets this
+terminal's answers.
 
 Close the terminal to stop viewing. The pane and its session keep running.
-When the pane exits, `pane-view` exits with the pane's status.
+After a daemon restart, `pane-view` resumes on the new daemon.
+
+Exit status:
+- the status of the pane's program when it exits
+- 128 plus the signal that ended the pane's program, or ended `pane-view`
+- 3 when the pane's window closes while its program runs
+- 1 for an error, such as a pane or session that does not exist
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)

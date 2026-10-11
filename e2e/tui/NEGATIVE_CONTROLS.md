@@ -4383,3 +4383,20 @@ the fixed build and runs `TestPaneView`.
 | --- | --- | --- |
 | `queryFilter.Write` returning its input unchanged (the outer terminal sees every request) | `TestPaneView` ("the pane's DA1 request was answered twice") | **caught** |
 | `fit` returning at once (only the lease sizes the pane) | `TestPaneView` ("the pane did not follow the terminal to 160x50, larger than the session") | **caught** |
+
+### pane-view review
+
+Run on 2026-10-11 on branch `feat/pane-view`, after the review of #630. Each
+control cuts one thing from the fixed build and runs the test named.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The `viewer` report left out of the stream-pane call | `TestPaneViewTheme` (light and dark: the pane is told `0000/0000/0000`) | **caught** |
+| `leasedSizeLocked` ignoring `noClients` (fit never sizes the pane) | `TestPaneViewSizes` ("one viewer: the pane is 22 78, want 36 120") | **caught** |
+| `noteTUIClients` left out of `refreshTreeOps` (no refit on attach and detach) | `TestPaneViewSizes` ("a client attached and the pane kept the viewer's size") | **caught** |
+| `signal.Reset` in place of the handler | `TestPaneViewExit` ("SIGTERM left the terminal raw") | **caught** |
+| Every connect error retried | `TestPaneViewGone` (exit after 25 s, want within 10 s) | **caught** |
+| No resume after `the daemon stopped` | `TestPaneViewGone` ("pane-view did not resume after the daemon restarted") | **caught** |
+| The OSC rule back to "ends in `;?`" | `TestPaneViewFilter` ("title ending ;?: nothing reached the terminal") | **caught** |
+| A kitty command keeping its own `q=` | `TestPaneViewFilter` (the terminal got `q=2,a=d,q=1`) | **caught** |
+| The `ctx` check in `exitReason` (a closed window read as `killed 9`) | none in six runs | **not caught**: the stream sees the close first in every run here. One run before the guard gave `killed 9` (137). The guard stays. |
