@@ -223,6 +223,9 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
+	if id, _ := out["window_id"].(string); id != "" {
+		d.noteStartedBy(cs, id)
+	}
 	out["type"] = "worktree_created"
 	if cloned {
 		out["cloned"] = true
@@ -600,6 +603,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 		sess := d.manager.GetSession(out["session"].(string))
 		windowID := out["window_id"].(string)
+		d.noteStartedBy(cs, windowID)
 		go d.deliverFanPrompt(sess, windowID, launch.harness, prompt, readyTimeout)
 		sessions = append(sessions, map[string]any{
 			"session":   out["session"],

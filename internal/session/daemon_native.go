@@ -386,6 +386,9 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	// The grants the pane was given, omitted for a pane that holds the
 	// default, so the person sees in one listing which panes were narrowed.
 	// pane-grants says what the default is. See pane_grants.go.
+	if w.StartedBy != nil {
+		info["started_by"] = w.StartedBy
+	}
 	if w.Grants != nil {
 		info["grants"] = w.Grants
 	}

@@ -103,7 +103,7 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			now := time.Unix(100, 0)
 			for _, m := range tt.marks {
 				now = now.Add(time.Second)
-				for _, ev := range track.note(m, now) {
+				for _, ev := range track.note(m, now, markContext{}) {
 					got = append(got, ev.Type)
 				}
 			}
@@ -198,7 +198,7 @@ func TestShellTrackTellsPromptMarksOnly(t *testing.T) {
 				if s.expect {
 					track.expect()
 				}
-				for _, ev := range track.note(s.mark, time.Unix(100, 0)) {
+				for _, ev := range track.note(s.mark, time.Unix(100, 0), markContext{}) {
 					if ev.Type == EventPrompt {
 						prompts++
 					}

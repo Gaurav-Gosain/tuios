@@ -2161,6 +2161,9 @@ func init() {
 	maps.Copy(verbRegistry, transferVerbs())
 	maps.Copy(verbRegistry, dropVerbs())
 	maps.Copy(verbRegistry, previewVerbs())
+	// search-panes, command-history and list-ports. See verb_find.go and
+	// verb_ports.go.
+	maps.Copy(verbRegistry, findVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

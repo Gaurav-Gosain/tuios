@@ -1282,6 +1282,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentMessage = ws.AgentMessage
 	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
+	w.StartedBySession, w.StartedByWindow = startedByFromWire(ws.StartedBy)
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentQueued = ws.AgentQueued
 	w.AgentSubagents = ws.AgentSubagents
@@ -1411,6 +1412,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentMessage = ws.AgentMessage
 	window.AgentKind = ws.AgentKind
 	window.AgentHarness = ws.AgentHarness
+	window.StartedBySession, window.StartedByWindow = startedByFromWire(ws.StartedBy)
 	window.AgentMeta = agentMetaFromWire(nil, ws.AgentMeta)
 	window.AgentQueued = ws.AgentQueued
 	window.AgentSubagents = ws.AgentSubagents
@@ -2370,4 +2372,13 @@ func adoptWindowHost(w *terminal.Window, host string) {
 		return
 	}
 	w.Host = host
+}
+
+// startedByFromWire splits a window's started_by into its session and window,
+// both empty when no pane started it.
+func startedByFromWire(ref *session.PaneRef) (sessionName, window string) {
+	if ref == nil {
+		return "", ""
+	}
+	return ref.Session, ref.Window
 }

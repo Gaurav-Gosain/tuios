@@ -307,6 +307,9 @@ type Window struct {
 	// Repo and Branch describe the git checkout the pane's folder is in.
 	Repo   string `json:"repo,omitempty"`
 	Branch string `json:"branch,omitempty"`
+	// StartedBy names the pane whose call created this one, as list-windows
+	// reports it. Omitted when no pane did.
+	StartedBy *session.PaneRef `json:"started_by,omitempty"`
 }
 
 // Command is the JSON the renderer sends.
@@ -897,7 +900,7 @@ func (m *model) export() {
 			Border: w.BorderOffset(), Minimized: w.Minimized, Floating: w.IsFloating,
 			Zoomed: w.Zoomed, Agent: w.AgentState, AgentMsg: w.AgentMessage, AgentKind: w.AgentKind,
 			Cwd: cwd, Host: w.Host, Foreground: w.ForegroundCmd, Harness: w.AgentHarness, AgentAt: w.AgentStateAt / int64(time.Millisecond),
-			Repo: repo, Branch: branch,
+			Repo: repo, Branch: branch, StartedBy: startedByRef(w.StartedBySession, w.StartedByWindow),
 		})
 	}
 	for ws := 1; ws <= max(o.NumWorkspaces, 9); ws++ {
@@ -1105,4 +1108,13 @@ func (f *frameWriter) Close() {
 	f.cond.Signal()
 	f.mu.Unlock()
 	<-f.done
+}
+
+// startedByRef is a pane's started_by for a state row, nil when no pane
+// started it.
+func startedByRef(sessionName, window string) *session.PaneRef {
+	if window == "" {
+		return nil
+	}
+	return &session.PaneRef{Session: sessionName, Window: window}
 }

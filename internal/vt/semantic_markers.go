@@ -108,6 +108,16 @@ func (l *SemanticMarkerList) replace(markers []SemanticMarker) {
 	l.setMarkersLocked(markers)
 }
 
+// Trimmed is the list's origin: how many scrollback lines it has seen dropped
+// since it was made. A row read now plus Trimmed is a row that stays the same
+// line however much more the scrollback drops. A row stored that way is
+// turned back into today's row by subtracting Trimmed again.
+func (l *SemanticMarkerList) Trimmed() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.trimmed
+}
+
 // Len returns the number of markers.
 func (l *SemanticMarkerList) Len() int {
 	l.mu.Lock()

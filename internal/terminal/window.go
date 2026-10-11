@@ -445,6 +445,10 @@ type Window struct {
 	// AgentHarness is the harness id the reporting source named, empty when the
 	// state came from something that named none. Alert sinks pass it on.
 	AgentHarness string
+	// StartedBySession and StartedByWindow name the pane whose call created
+	// this one, as the daemon recorded it. Both are empty when no pane did.
+	StartedBySession string
+	StartedByWindow  string
 	// AgentMeta is what the pane reported about its agent through
 	// set-agent-meta, as the daemon synced it. The rail draws it. Replaced
 	// whole on every sync and never edited in place.
