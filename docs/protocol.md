@@ -5396,8 +5396,9 @@ link inside it cannot carry the write out. A write outside the roots is
 change.
 
 Inside every root, a write into these places is refused whatever
-`files_roots` says, with case and Unicode width folded the way the disk folds
-them, and a write to a folder that *holds* one of them (a rename of
+`files_roots` says, with case and Unicode width folded on every system (a
+Linux disk can ignore case too), with the dots and spaces that Windows drops
+at the end of a name dropped, and a write to a folder that *holds* one of them (a rename of
 `~/.config`, say) is refused too, so a link cannot carry a denied folder out
 and back: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`,
 `~/.netrc`, `~/.git-credentials`, `~/.config/git`, `~/.config/gh`,
@@ -5408,8 +5409,9 @@ start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
 `.xinitrc`, `~/.config/fish`, `~/.config/zsh`, `.gitconfig`, `.inputrc`), the
 login items (`~/.config/systemd`, `~/.config/autostart`,
 `~/.config/environment.d`, `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`,
-`.pam_environment`), the crontab spools, and tuios's own config, state and
-data folders.
+`.pam_environment`), the crontab spools, `/proc`, tuios's own config, state
+and data folders, and the daemon's socket folder (the mail stash) apart from
+its drop folder.
 
 **Reads over a link.** A read (`file-read`, `file-hash`, `file-walk`,
 `open-file-stream` read) from one of these is `forbidden` too, so a linked
@@ -5417,8 +5419,15 @@ machine cannot read keys or credentials out: `~/.ssh` (except a `*.pub` key),
 `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`,
 `~/.docker/config.json`, `~/.netrc`, `~/.git-credentials`,
 `~/.config/gh/hosts.yml`, `~/.password-store`, `~/Library/Keychains`, the
-Claude and Codex credential files, and tuios's own config, state and data. A
-read elsewhere in the home folder is allowed, so a copy out works.
+Claude and Codex credential files, the package and database credentials
+(`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
+`.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
+`~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
+`/proc` (every process's environment and memory), tuios's own config, state
+and data, and the daemon's socket folder apart from its drop folder. On
+Windows a linked machine must name a path with a drive letter and no other
+colon: a `\\?\` path, a UNC share and a stream name are refused. A read
+elsewhere is allowed, so a copy out works.
 
 A job is logged in the daemon log when it starts and ends, with both ends
 and the byte count.
@@ -5443,7 +5452,7 @@ the one before. The configuration is in
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
 | `open` and `write` | `verify-fan` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push` |
-| `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`. Writes are also held to the home folder and the deny list in [Files and transfers](#files-and-transfers). |
+| `files` | `file-read`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `drop-files` (they make this daemon use its own links) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,

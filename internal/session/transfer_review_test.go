@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -104,6 +105,41 @@ func TestSafeRelRefusesAWindowsEscape(t *testing.T) {
 	for _, rel := range []string{"a", "a/b/c.txt", "photos/2026 trip/img 1.jpg", ".hidden/x"} {
 		if !safeRel(rel) {
 			t.Errorf("safeRel refuses the ordinary name %q", rel)
+		}
+	}
+}
+
+// TestADenyNameMatchesEveryFold: the deny lists fold on every system, since a
+// Linux disk can ignore case too (ext4 casefold, vfat, exFAT), and a wider
+// deny match only refuses more. The root check stays exact on Linux. The
+// Windows trim drops the dots and spaces Windows drops when it opens a name,
+// so ".ssh." cannot pass for another folder. No runner has a casefold disk or
+// runs this package on Windows, so the fold is held here.
+func TestADenyNameMatchesEveryFold(t *testing.T) {
+	sep := string(filepath.Separator)
+	home := sep + filepath.Join("home", "u")
+	ssh := filepath.Join(home, ".ssh")
+	for _, p := range []string{
+		filepath.Join(home, ".SSH", "authorized_keys"),
+		filepath.Join(home, ".\u017fsh", "authorized_keys"),  // long s
+		filepath.Join(home, ".s\u00adsh", "authorized_keys"), // soft hyphen
+		home, // an ancestor, through denyContains
+	} {
+		if !denyContains(p, []string{ssh}) {
+			t.Errorf("%q passed the deny list for %q", p, ssh)
+		}
+	}
+	if denyContains(filepath.Join(home, "ssh-notes"), []string{ssh}) {
+		t.Errorf("a sibling name was denied")
+	}
+	for in, want := range map[string]string{
+		filepath.Join(home, ".ssh.", "authorized_keys"):   filepath.Join(home, ".ssh", "authorized_keys"),
+		filepath.Join(home, ".ssh . ", "authorized_keys"): filepath.Join(home, ".ssh", "authorized_keys"),
+		filepath.Join(home, "..", "u", "x"):               filepath.Join(home, "..", "u", "x"),
+		filepath.Join(home, "..."):                        filepath.Join(home, "..."),
+	} {
+		if got := trimWindowsNames(in); got != want {
+			t.Errorf("trimWindowsNames(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

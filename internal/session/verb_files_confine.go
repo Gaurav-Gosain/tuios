@@ -46,13 +46,21 @@ import (
 //     keeps a write out of ~/.ssh.
 //
 // A read over a link (file-read, file-hash, file-walk, open-file-stream read)
-// is held to the read deny list: keys, credentials and tuios's own state. A
-// read elsewhere in the home folder is allowed, so a copy out works.
+// is held to the read deny list: keys, credentials, /proc, the daemon's
+// socket folder and tuios's own state. A read elsewhere is allowed, so a copy
+// out works. A read does not go through a root, so on Windows a path must also
+// be a plain drive letter path (plainLinkPath).
 //
 // The deny check reads the real path before the call. A process on this
 // machine that swaps a folder for a link between the check and the write could
 // still steer a write within a root, but such a process already runs as the
-// user and needs no link to do that.
+// user and needs no link to do that. The link itself cannot make a link: no
+// verb creates one, a copy skips them, and a rename of a link whose target is
+// denied, or holds a denied folder, is refused. What is left is a link that
+// was already inside a root, pointing at a denied place that is also inside
+// it (files_roots = ["~"]), inside a folder the link renames between another
+// call's check and its open. That needs a root the person widened on purpose,
+// and a link the person made.
 
 // linkDenyHome is the write deny list, as paths under the home folder. A write
 // to one of them, to anything under it, or to a folder that holds it, is
@@ -115,6 +123,15 @@ var linkDenyAbsolute = []string{
 	"/var/spool/cron",
 	"/var/at/tabs",
 	"/var/cron/tabs",
+	"/proc",
+}
+
+// linkReadDenyAbsolute is the read deny list outside the home folder. /proc
+// holds every process's environment and memory as files a plain read returns:
+// /proc/self/environ and /proc/self/mem are the daemon's own, and the panes'
+// shells are its children.
+var linkReadDenyAbsolute = []string{
+	"/proc",
 }
 
 // linkReadDenyHome is the read deny list, as paths under the home folder. A
@@ -141,6 +158,19 @@ var linkReadDenyHome = []string{
 	".config/claude/.credentials.json",
 	".claude.json",
 	".codex/auth.json",
+	".npmrc",
+	".pypirc",
+	".gem/credentials",
+	".cargo/credentials",
+	".cargo/credentials.toml",
+	".vault-token",
+	".pgpass",
+	".my.cnf",
+	".terraform.d/credentials.tfrc.json",
+	".config/rclone",
+	".config/hub",
+	".config/op",
+	".local/share/keyrings",
 }
 
 // fileFS is where the file verbs write. A zero fileFS is the plain file
@@ -284,6 +314,9 @@ var foldPaths = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 // ".Ssh", ".ſsh" (long s) and a soft hyphen in ".s<ad>sh" each open ".ssh" on
 // APFS while strings.ToLower leaves them apart.
 func foldKey(p string) string {
+	if runtime.GOOS == "windows" {
+		p = trimWindowsNames(p)
+	}
 	p = norm.NFD.String(p)
 	var b strings.Builder
 	b.Grow(len(p))
@@ -298,6 +331,22 @@ func foldKey(p string) string {
 		b.WriteRune(foldRune(r))
 	}
 	return b.String()
+}
+
+// trimWindowsNames is p with the dots and spaces at the end of each name
+// removed. Windows drops them when it opens a path, and so does os.Root, so
+// ".ssh." and ".ssh " open ".ssh".
+func trimWindowsNames(p string) string {
+	parts := strings.Split(p, string(filepath.Separator))
+	for i, part := range parts {
+		if part == "." || part == ".." {
+			continue
+		}
+		if t := strings.TrimRight(part, ". "); t != "" {
+			parts[i] = t
+		}
+	}
+	return strings.Join(parts, string(filepath.Separator))
 }
 
 // foldRune is the smallest rune in r's Unicode simple-fold cycle, so every
@@ -318,6 +367,17 @@ func pathUnder(p, dir string) bool {
 	if foldPaths {
 		p, dir = foldKey(p), foldKey(dir)
 	}
+	if p == dir {
+		return true
+	}
+	return strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
+}
+
+// denyUnder is pathUnder for a deny list: it folds case and width on every
+// system. A Linux disk can ignore case too (an ext4 folder with casefold, a
+// vfat or exFAT stick), and a wider deny match only refuses more.
+func denyUnder(p, dir string) bool {
+	p, dir = foldKey(p), foldKey(dir)
 	if p == dir {
 		return true
 	}
@@ -410,7 +470,7 @@ func denyContains(p string, list []string) bool {
 		// The entry as named and its real path: a dotfile kept as a link
 		// into a plain folder (stow, chezmoi, yadm) is denied at its target.
 		for _, c := range []string{d, realPath(d)} {
-			if pathUnder(p, c) || pathUnder(c, p) {
+			if denyUnder(p, c) || denyUnder(c, p) {
 				return true
 			}
 		}
@@ -418,9 +478,38 @@ func denyContains(p string, list []string) bool {
 	return false
 }
 
+// linkPrivate is the daemon's own folders a link must not touch beside the
+// deny lists: sock is the real folder of the daemon's socket, which holds the
+// mail stash, the pid file and the sockets, and drop is the drop folder inside
+// it, which a link may use.
+type linkPrivate struct {
+	sock, drop string
+}
+
+// linkPrivateDirs is the daemon's linkPrivate.
+func (d *Daemon) linkPrivateDirs() linkPrivate {
+	if d == nil || d.manager == nil {
+		return linkPrivate{}
+	}
+	sp := d.manager.SocketPath()
+	if sp == "" {
+		return linkPrivate{}
+	}
+	sock := realPath(filepath.Clean(filepath.Dir(sp)))
+	return linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
+}
+
+// with is list plus the socket folder, unless p is in the drop folder.
+func (lp linkPrivate) with(list []string, p string) []string {
+	if lp.sock == "" || (lp.drop != "" && denyUnder(p, lp.drop)) {
+		return list
+	}
+	return append(list, lp.sock)
+}
+
 // linkDenied reports whether the real path p is in, under, or an ancestor of
 // the write deny list.
-func linkDenied(p, home string) bool {
+func linkDenied(p, home string, lp linkPrivate) bool {
 	var list []string
 	if home != "" {
 		for _, rel := range linkDenyHome {
@@ -436,13 +525,13 @@ func linkDenied(p, home string) bool {
 			list = append(list, filepath.Join(realPath(dir), "tuios"))
 		}
 	}
-	return denyContains(p, list)
+	return denyContains(p, lp.with(list, p))
 }
 
 // linkReadDenied reports whether the real path p is in or under the read deny
 // list. A public key in a denied .ssh folder is allowed.
-func linkReadDenied(p, home string) bool {
-	if home != "" && pathUnder(p, filepath.Join(home, ".ssh")) && strings.HasSuffix(strings.ToLower(p), ".pub") {
+func linkReadDenied(p, home string, lp linkPrivate) bool {
+	if home != "" && denyUnder(p, filepath.Join(home, ".ssh")) && strings.HasSuffix(strings.ToLower(p), ".pub") {
 		return false
 	}
 	var list []string
@@ -456,12 +545,32 @@ func linkReadDenied(p, home string) bool {
 			list = append(list, filepath.Join(realPath(dir), "tuios"))
 		}
 	}
-	for _, d := range list {
-		if pathUnder(p, d) || pathUnder(p, realPath(d)) {
+	for _, dir := range linkReadDenyAbsolute {
+		list = append(list, filepath.FromSlash(dir))
+	}
+	for _, d := range lp.with(list, p) {
+		if denyUnder(p, d) || denyUnder(p, realPath(d)) {
 			return true
 		}
 	}
 	return false
+}
+
+// plainLinkPath reports whether p is a path form the deny lists can judge. On
+// Windows that is a drive letter path with no other colon: a \\?\ or \\.\
+// prefix, a UNC share such as \\localhost\C$, and a stream name such as
+// "id_ed25519::$DATA" each open a file the deny list knows by another name.
+// os.Root refuses those forms for a write, but a read does not go through a
+// root. Every path is plain elsewhere: a colon is a valid name there.
+func plainLinkPath(p string) bool {
+	if runtime.GOOS != "windows" {
+		return true
+	}
+	vol := filepath.VolumeName(p)
+	if len(vol) != 2 || vol[1] != ':' {
+		return false
+	}
+	return !strings.ContainsAny(p[len(vol):], ":?*")
 }
 
 // checkLinkRead refuses a read of path that arrived over a link and lands in
@@ -475,7 +584,8 @@ func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 		home = realPath(filepath.Clean(h))
 	}
 	real := realPath(path)
-	if linkReadDenied(real, home) || linkReadDenied(path, home) {
+	lp := d.linkPrivateDirs()
+	if !plainLinkPath(path) || !plainLinkPath(real) || linkReadDenied(real, home, lp) || linkReadDenied(path, home, lp) {
 		peer := d.linkPolicy(cs).Peer
 		if peer == "" {
 			peer = "A linked machine"
@@ -507,10 +617,11 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 	if policy.Peer != "" {
 		table = "[hosts." + policy.Peer + "]"
 	}
+	lp := d.linkPrivateDirs()
 	chosen := ""
 	for _, p := range paths {
 		real := realParent(p)
-		if linkDenied(real, home) || linkDenied(realPath(p), home) || linkDenied(p, home) {
+		if !plainLinkPath(p) || linkDenied(real, home, lp) || linkDenied(realPath(p), home, lp) || linkDenied(p, home, lp) {
 			LogBasic("Link %s (peer %q) refused a file write to %s: the path is in the deny list", cs.clientID, peer, p)
 			return fileFS{}, hintedVerbError(ErrVerbForbidden, peer+" cannot write "+echoName(tildePath(real, home))+" on this machine. tuios does not let a linked machine change keys, credentials, shell start files or the tuios config.", &VerbHint{
 				Detail: "Nothing was written. To change this file, copy it to this machine yourself, then move it into place.",

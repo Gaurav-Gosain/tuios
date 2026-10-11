@@ -218,6 +218,58 @@ func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
 	}
 }
 
+// TestALinkCannotReadProcOrTheDaemonFolder is the second review's finding: a
+// read is not held to a root, only to the read deny list, and /proc holds
+// every process's environment and memory as plain files. /proc/self/environ
+// is the far daemon's own environment, and its socket folder holds the mail
+// stash. build has a wide root that also covers its runtime folder, so only
+// the deny lists stand between the link and those files.
+func TestALinkCannotReadProcOrTheDaemonFolder(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("/proc/self/environ is a Linux file")
+	}
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	rt := xdgDir(remote, "XDG_RUNTIME_DIR")
+	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\", \""+rt+"\"]\n")
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	sockDir := filepath.Join(rt, "tuios")
+	pid := filepath.Join(sockDir, "tuios.sock.pid")
+	before, err := os.ReadFile(pid)
+	if err != nil {
+		t.Fatalf("build's pid file: %v", err)
+	}
+
+	far := dialHostVerbs(t, base)
+	reads := map[string]any{}
+	for _, path := range []string{"/proc/self/environ", "/proc/self/mem", pid} {
+		_, err := far.call("file-read", map[string]any{"path": path})
+		reads[path] = errString(err)
+		if !forbidden(err) {
+			t.Errorf("ASSERTION: a link read %s: %v", path, err)
+		}
+	}
+	writes := map[string]any{}
+	for verb, params := range map[string]map[string]any{
+		"file-mkdir":  {"path": filepath.Join(sockDir, "stash", "planted")},
+		"file-rename": {"from": pid, "to": filepath.Join(rt, "moved.pid")},
+		"file-remove": {"path": sockDir, "recursive": true},
+	} {
+		_, err := far.call(verb, params)
+		writes[verb] = errString(err)
+		if !forbidden(err) {
+			t.Errorf("ASSERTION: a link ran %s in build's socket folder: %v", verb, err)
+		}
+	}
+	if after, err := os.ReadFile(pid); err != nil || string(after) != string(before) {
+		t.Errorf("ASSERTION: build's pid file changed: %q, %v", after, err)
+	}
+	if _, err := os.Stat(filepath.Join(sockDir, "stash", "planted")); err == nil {
+		t.Errorf("ASSERTION: a link made a folder in build's stash")
+	}
+	saveTransferArtifact(t, "files-proc-and-socket", map[string]any{"reads": reads, "writes": writes})
+}
+
 func forbidden(err error) bool {
 	var vf *verbFailure
 	return errors.As(err, &vf) && vf.Code == "forbidden"
