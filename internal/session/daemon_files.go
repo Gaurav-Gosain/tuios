@@ -54,6 +54,9 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 		return d.reply(cs, msg, MsgDirListing, d.remoteListing(host, dir, payload.Max))
 	}
 
+	if verr := d.checkLinkRead(cs, dir); verr != nil {
+		return d.reply(cs, msg, MsgDirListing, &DirListingPayload{Dir: payload.Dir, Err: verr.Message})
+	}
 	out := listDir(dir, payload.Max)
 	// Asked whether or not the directory could be read, because the two answers
 	// are independent and this is the one that changes what a person should do

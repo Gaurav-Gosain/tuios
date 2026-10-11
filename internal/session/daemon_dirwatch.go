@@ -207,6 +207,11 @@ func (d *Daemon) verbWaitDir(cs *connState, params json.RawMessage) (any, *verbE
 		timeout = time.Duration(p.Timeout) * time.Millisecond
 	}
 	dir := filepath.Clean(p.Dir)
+	// Over a link a wait tells when a folder's names change, so it keeps to
+	// the read rules a listing keeps to.
+	if verr := d.checkLinkRead(cs, dir); verr != nil {
+		return nil, verr
+	}
 
 	events := make(chan struct{}, 1)
 	w, err := dirwatch.Watch(dir, func() { dirwatch.Nudge(events) })

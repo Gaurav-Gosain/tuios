@@ -248,10 +248,10 @@ func (d *Daemon) verbPaneAgent(_ *connState, params json.RawMessage) (any, *verb
 // with the process is the machine with the files, and any other answer is a
 // listing of the wrong disk under the right path.
 //
-// It carries no authority the link did not already have. A configured host can
-// be asked for a shell, and reading the names in a directory is strictly less
-// than that.
-func (d *Daemon) verbReadDir(_ *connState, params json.RawMessage) (any, *verbError) {
+// Over a link it keeps to the same read rules as file-list
+// (verb_files_confine.go): a linked machine that may list panes is not
+// thereby one that may list ~/.ssh or /proc.
+func (d *Daemon) verbReadDir(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Dir string `json:"dir"`
 		Max int    `json:"max"`
@@ -261,6 +261,9 @@ func (d *Daemon) verbReadDir(_ *connState, params json.RawMessage) (any, *verbEr
 	}
 	if p.Dir == "" {
 		return nil, invalidParam("dir", "read-dir needs a directory to list.")
+	}
+	if verr := d.checkLinkRead(cs, filepath.Clean(p.Dir)); verr != nil {
+		return nil, verr
 	}
 	return listDir(filepath.Clean(p.Dir), p.Max), nil
 }

@@ -106,9 +106,9 @@ const (
 	// directory did not exist. The daemon that owns the pane owns the
 	// filesystem the pane is on, so the listing is asked for rather than taken.
 	//
-	// It carries no new authority over a link. Attaching a session on a host
-	// already gives a shell on it, and reading the names in a directory is
-	// strictly less than that.
+	// Over a link it keeps to the read rules file-list keeps to
+	// (verb_files_confine.go). A machine that may list panes is not thereby
+	// one that may list ~/.ssh or /proc.
 	MsgReadDir
 	MsgDirListing
 	// MsgClientFocus reports whether the host terminal of a TUI client has
