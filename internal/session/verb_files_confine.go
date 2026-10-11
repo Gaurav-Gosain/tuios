@@ -424,12 +424,14 @@ func denyUnder(p, dir string) bool {
 
 // realPath is p with every link in the part of it that exists resolved. The
 // part that does not exist yet, such as the folders a mkdir makes, is joined
-// on as given.
+// on as given. On macOS a path through /System/Volumes/Data is given by its
+// short name (trimDataVolume).
 func realPath(p string) string {
 	rest := ""
 	cur := p
 	for {
 		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			r = trimDataVolume(r)
 			if rest == "" {
 				return r
 			}

@@ -5438,7 +5438,9 @@ fish's history and others) and the browser and password manager profiles.
 
 A read over a link opens the file, then checks the path the system has for
 the open file against the same rules. A rename between the check and the open
-cannot swap a denied file in. A regular file with more than one name (a hard
+cannot swap a denied file in. On macOS a path through
+`/System/Volumes/Data` is judged by its short name, such as `/Users/...`, for
+reads and writes. A regular file with more than one name (a hard
 link) is `forbidden` to read, hash, stream or copy over a link, because no
 check of its path shows what else it is. To share such a file, copy it to a
 new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` keep to the
