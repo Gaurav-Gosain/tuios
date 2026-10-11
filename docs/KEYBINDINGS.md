@@ -1301,6 +1301,7 @@ Turn on your terminal's Option-as-Alt setting:
 | WezTerm | `send_composed_key_when_left_alt_is_pressed = false` |
 | Alacritty | `option_as_alt = "Both"` under `[window]` |
 | VS Code | turn on `terminal.integrated.macOptionIsMeta` |
+| Tern | set `option_as_alt` in Tern's `settings.json` |
 
 Ghostty needs two more lines, because its own keybinds rewrite the arrows
 before any encoding happens:

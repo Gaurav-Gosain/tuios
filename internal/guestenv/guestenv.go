@@ -138,11 +138,22 @@ func KittyAnimationVar(supported bool) string {
 // from a tuios pane inherits that pane's TUIOS_ variables, and its own panes
 // would name the outer pane, session and socket where they set none of their
 // own. The ones a pane sets for itself are set again after this filter.
+//
+// Tern is a multiplexing terminal and the same case again. Its TERN_ pane and
+// window variables name the Tern pane the daemon started in, so `tern open`,
+// Tern's agent verbs and its lens and completion hooks in a tuios pane would
+// act on that pane. Tern also answers as kitty and sets KITTY_WINDOW_ID and
+// KITTY_PID, which send `kitty @` to the same outer pane; a real kitty sets
+// them too, with the same effect. TERN_DAEMON_SOCKET, TERN_CONFIG_DIR and
+// TERN_BLOB_DIR stay: they name Tern's daemon and folders, not a pane.
 var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
 	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",
 	"TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN", "TUIOS_PANE_GRANTS", "TUIOS_PANE_HOSTED",
 	"TUIOS_PANE_TTY", "TUIOS_RESTORED",
+	"TERN_PANE", "TERN_PANE_SOCKET", "TERN_WINDOW_KEY", "TERN_WINDOW_SOCKET", "TERN_WINDOW_PANE",
+	"TERN_IDENTITY", "TERN_LENSES", "TERN_COMPLETE", "TERN_ACP",
+	"KITTY_WINDOW_ID", "KITTY_PID",
 }
 
 // WithoutHostMultiplexer returns env with every assignment of the variables

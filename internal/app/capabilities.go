@@ -288,6 +288,12 @@ func detectTerminalName(caps *HostCapabilities) {
 	if os.Getenv("WEZTERM_PANE") != "" {
 		caps.TerminalName = "wezterm"
 	}
+	// Tern sets KITTY_WINDOW_ID and answers XTVERSION as kitty, so it is
+	// named last. Its kitty graphics and keyboard support are kitty's, and the
+	// probe finds them either way: the name is for logs and crash reports.
+	if termProgram == "tern" {
+		caps.TerminalName = "tern"
+	}
 }
 
 func detectTrueColor(caps *HostCapabilities) {

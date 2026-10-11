@@ -22,6 +22,7 @@ const (
 	HostVSCode        HostTerminal = "VS Code"
 	HostRio           HostTerminal = "Rio"
 	HostWarp          HostTerminal = "Warp"
+	HostTern          HostTerminal = "Tern"
 )
 
 // DetectHostTerminal identifies the host terminal from the environment.
@@ -47,6 +48,10 @@ func detectHostTerminal(getenv func(string) string) HostTerminal {
 		return HostVSCode
 	case prog == "WarpTerminal":
 		return HostWarp
+	case prog == "tern":
+		// Tern answers XTVERSION as kitty and sets KITTY_WINDOW_ID, so it has
+		// to be named before the kitty checks below.
+		return HostTern
 	}
 	if getenv("KITTY_WINDOW_ID") != "" {
 		return HostKitty
@@ -113,6 +118,8 @@ func MacOptionAdvice(host HostTerminal, chord string) string {
 		fix = "set option_as_alt = \"Both\" under [window] in alacritty.toml"
 	case HostVSCode:
 		fix = "turn on terminal.integrated.macOptionIsMeta in VS Code settings"
+	case HostTern:
+		fix = "set \"option_as_alt\" in Tern's settings.json"
 	case HostWarp, HostRio, HostUnknown:
 		fix = "turn on your terminal's \"Option as Meta/Alt\" setting"
 	default:

@@ -35,3 +35,28 @@ func TestWithoutHostMultiplexerDropsOuterHerdrBin(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// TestWithoutHostMultiplexerDropsOuterTernPane covers a daemon started from a
+// Tern pane. Tern names its pane and window in TERN_ variables and, as it
+// answers XTVERSION as kitty, sets kitty's KITTY_WINDOW_ID and KITTY_PID. A
+// tuios pane that inherits them sends `tern open`, Tern's agent verbs and
+// `kitty @` to the Tern pane the daemon happened to start in. The variables
+// that name Tern's daemon and folders say nothing about a pane, so they stay.
+func TestWithoutHostMultiplexerDropsOuterTernPane(t *testing.T) {
+	env := []string{
+		"TERN_PANE=7", "TERN_PANE_SOCKET=/run/tern/pane.sock", "TERN_WINDOW_KEY=k",
+		"TERN_WINDOW_SOCKET=/tmp/tern/open.sock", "TERN_WINDOW_PANE=2", "TERN_IDENTITY=id",
+		"TERN_LENSES=1", "TERN_COMPLETE=1", "TERN_ACP=",
+		"KITTY_WINDOW_ID=1", "KITTY_PID=4242",
+		"TERN_DAEMON_SOCKET=/run/tern/daemon.sock", "TERN_CONFIG_DIR=/home/u/.config/tern",
+		"TERN_BLOB_DIR=/home/u/.cache/tern/blobs", "TERM_PROGRAM=tern",
+	}
+	got := WithoutHostMultiplexer(slices.Clone(env))
+	want := []string{
+		"TERN_DAEMON_SOCKET=/run/tern/daemon.sock", "TERN_CONFIG_DIR=/home/u/.config/tern",
+		"TERN_BLOB_DIR=/home/u/.cache/tern/blobs", "TERM_PROGRAM=tern",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
