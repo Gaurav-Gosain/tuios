@@ -2162,7 +2162,7 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 34,676,898 | 34,900,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 34,910,370 | 35,000,000 |
 | darwin/arm64 | 23,834,594 | 25,265,154 | 32,634,946 | 32,900,000 |
 
 The first budgets were about 3% above the size they were set at and below the
@@ -2501,6 +2501,13 @@ golang.org/x/text/unicode/norm. The deny lists need them: APFS opens a name
 in either Unicode normal form, so a deny match must compare both. The file
 previews of #597 stay off main, which keeps out about 217 KB of image
 decoders. The ceiling is now 40 MB.
+
+The linux/amd64 budget went to 35,000,000 for tuios pane-view (#630): the
+command, the stream-pane client, the query filter, the viewer leases and the
+viewer reports. The build measured 34,910,370 bytes in CI, 10,370 over the old
+budget; pane-view adds about 74 KB over main (34,705,568 to 34,779,296 with a
+local Go 1.26 build). darwin/arm64 stayed inside its budget. This is the last
+raise under 35 MB: the next feature looks for bytes to cut first.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
