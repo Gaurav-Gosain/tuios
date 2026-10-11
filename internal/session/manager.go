@@ -50,6 +50,11 @@ type Manager struct {
 	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
 	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
 	sshAgentFollow atomic.Bool
+	// displayFollow is [daemon] display = "follow" on a daemon with no
+	// display of its own. displaySource gives a new pane its session's
+	// display. See display_follow.go.
+	displayFollow atomic.Bool
+	displaySource atomic.Pointer[func(sessionID string) []string]
 	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
 	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
 	// spawn time through HerdrEnv. See herdr_compat.go.
@@ -302,6 +307,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.AgentEnv == nil {
 		cfg.AgentEnv = m.agentEnv
+	}
+	if cfg.DisplayEnv == nil {
+		cfg.DisplayEnv = m.displayEnv
 	}
 	if cfg.history == nil {
 		cfg.history = m.history

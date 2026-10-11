@@ -539,6 +539,24 @@ func init() {
 			},
 			handler: (*Daemon).verbSSHAgentPath,
 		},
+		"display-env": {
+			description: "Report the display a new pane of the session gets now: WAYLAND_DISPLAY naming the session's Wayland link, and DISPLAY and XAUTHORITY of the newest local client. It is empty unless [daemon] display is follow, the daemon has no display of its own, and a local client with a display is attached.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Required: true, Description: "Session whose display to report."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "Session name."},
+				{Name: "follow", Type: "bool", Description: "True when [daemon] display is follow and the daemon has no display of its own."},
+				{Name: "own", Type: "bool", Description: "True when the daemon has a WAYLAND_DISPLAY or DISPLAY of its own. Its panes keep it, and the follow is off."},
+				{Name: "link", Type: "string", Description: "The session's Wayland link. It exists only while an attached client has a Wayland socket."},
+				{Name: "target", Type: "string", Description: "The client socket the link points at. Absent when there is no link."},
+				{Name: "env", Type: "object", Description: "The variables a new pane gets: WAYLAND_DISPLAY, DISPLAY and XAUTHORITY, each only when set."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"display-env","params":{"session":"work"}}`,
+			},
+			handler: (*Daemon).verbDisplayEnv,
+		},
 		"new-worktree": {
 			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",
 			params: append([]verbParam{

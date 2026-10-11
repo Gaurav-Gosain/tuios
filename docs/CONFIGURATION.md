@@ -339,6 +339,26 @@ ssh_agent = "follow"
 
 A change in the config file applies to the next attach. New panes get the link while the option is on.
 
+`display` in `[daemon]` (default `"follow"`) can be `"off"`. A daemon that started without a display has no `WAYLAND_DISPLAY` or `DISPLAY`. This happens when a host link starts the daemon over ssh. With `"follow"`, the panes of such a daemon get the display of the local client that attached to the session or used it last. Then `wl-copy`, `wl-paste`, `xclip` and image paste work in the panes when you attach from the desktop.
+
+```toml
+[daemon]
+display = "follow"
+```
+
+- A daemon that has a `WAYLAND_DISPLAY` or a `DISPLAY` of its own keeps it. Its panes get the daemon's values, and the option does nothing.
+- Each session has a link to the Wayland socket of the client: `wayland-<session id>.sock` in the folder of the daemon socket. A new pane gets `WAYLAND_DISPLAY` set to the full path of the link.
+- The link moves to the socket of the newest client. A pane that started under one desktop client still reaches the display after that client detaches and another attaches.
+- A new pane also gets `DISPLAY` and `XAUTHORITY` of the client. `DISPLAY` is a name, not a path, so a pane keeps the value it started with.
+- A shell that started before a desktop client attached has no display. To get the display in that shell, run this line. To get it in every shell, add it to your shell rc: `eval "$(tuios display-env 2>/dev/null)"`
+- When the client detaches, the session uses the display of the client before it. When no attached client has a display, tuios removes the link, and new panes get no display.
+- tuios uses the display of `tuios attach` and `tuios new` only. The client must run on this machine, as your user, and outside every pane. tuios ignores a client that comes through a host link, a client of the tuios SSH server and a client of `tuios-web`.
+- `WAYLAND_DISPLAY` can be a full path or a name like `wayland-1`. tuios finds a name in the `XDG_RUNTIME_DIR` of the client, then in the one of the daemon, then in `/run/user/<uid>`. The client does not need `XDG_RUNTIME_DIR`.
+- The Wayland socket must be a Unix socket that you own. Every folder above it must be owned by you or by root, and no other user can write to it, unless it is sticky like `/tmp`.
+- `DISPLAY` must be a display on this machine, `:N` or `:N.S`. Its socket `/tmp/.X11-unix/XN` must be owned by you or by root. tuios ignores a forwarded display such as `localhost:10.0`.
+- `XAUTHORITY` must be a file that you own, in folders that pass the same checks.
+- The daemon removes its links when it stops and when you set the option to `"off"`. At start, it removes the links that a stopped daemon left.
+
 `[hints]` sets what hints mode (`Ctrl+B F`) labels. See [HINTS.md](HINTS.md).
 
 `[panes]` sets `label_keys`, the keys that the pane labels (`Ctrl+B Q`) use. The default is `1234567890`. Letters `a` to `z` and digits are allowed. See [KEYBINDINGS.md](KEYBINDINGS.md#pane-labels).

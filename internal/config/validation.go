@@ -105,6 +105,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateResumeAgents(cfg, result)
 	validateWindowSize(cfg, result)
 	validateSSHAgent(cfg, result)
+	validateDisplay(cfg, result)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
 	validateAgentWork(cfg, result)
@@ -237,6 +238,12 @@ func validateWindowSize(cfg *UserConfig, result *ValidationResult) {
 // allowed set. An unknown value is off.
 func validateSSHAgent(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "ssh_agent", cfg.Daemon.SSHAgent, SSHAgentModes, SSHAgentOff)
+}
+
+// validateDisplay warns when daemon.display holds a value outside its allowed
+// set. An unknown value is off.
+func validateDisplay(cfg *UserConfig, result *ValidationResult) {
+	warnEnum(result, "daemon", "display", cfg.Daemon.Display, DisplayModes, DisplayOff)
 }
 
 // minReadableNotification is the shortest message lifetime this config will

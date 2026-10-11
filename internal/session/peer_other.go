@@ -18,6 +18,10 @@ const peerPIDSupported = false
 
 func peerPID(net.Conn) int { return 0 }
 
+// peerUID is not read on these platforms. The display follow, the one caller,
+// takes no client's display when it cannot see the uid.
+func peerUID(net.Conn) (int, bool) { return 0, false }
+
 func readProcLineage(int) (int, int64, bool) { return 0, 0, false }
 
 func readProcEnvVar(int, string) (string, bool) { return "", false }

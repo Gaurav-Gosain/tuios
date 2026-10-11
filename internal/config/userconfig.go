@@ -256,6 +256,12 @@ type DaemonConfig struct {
 	// new panes SSH_AUTH_SOCK naming the link. "off", the default, or empty
 	// leaves SSH_AUTH_SOCK as the daemon has it.
 	SSHAgent string `toml:"ssh_agent"`
+	// Display is "follow", the default, to give the panes of a daemon that
+	// has no WAYLAND_DISPLAY or DISPLAY of its own the display of the local
+	// client that attached or used the session last. "off" leaves the
+	// panes with the daemon's environment. See
+	// internal/session/display_follow.go.
+	Display string `toml:"display"`
 }
 
 // Resume modes. See DaemonConfig.ResumeAgents.
@@ -276,6 +282,23 @@ const (
 
 // SSHAgentModes lists the valid values for daemon.ssh_agent.
 var SSHAgentModes = []string{SSHAgentOff, SSHAgentFollow}
+
+// Display modes. See DaemonConfig.Display.
+const (
+	DisplayOff    = "off"
+	DisplayFollow = "follow"
+)
+
+// DisplayModes lists the valid values for daemon.display.
+var DisplayModes = []string{DisplayFollow, DisplayOff}
+
+// DisplayFollows reports whether a daemon.display value follows the client's
+// display. Empty is the default, follow. An unknown value is off, so a typo
+// never turns the option on.
+func DisplayFollows(value string) bool {
+	v := strings.TrimSpace(value)
+	return v == "" || v == DisplayFollow
+}
 
 // Window size policies. See DaemonConfig.WindowSize.
 const (
@@ -971,6 +994,7 @@ func DefaultConfig() *UserConfig {
 			LogLevel:     "off",
 			ResumeAgents: ResumeAgentsAsk,
 			WindowSize:   WindowSizeSmallest,
+			Display:      DisplayFollow,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,

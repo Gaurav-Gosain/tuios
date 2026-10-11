@@ -47,6 +47,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.WindowSize = uc.Daemon.WindowSize
 	cfg.SingleClient = uc.Daemon.SingleClient
 	cfg.SSHAgent = uc.Daemon.SSHAgent
+	cfg.Display = uc.Daemon.Display
 	cfg.History = ResolveHistoryPolicy(uc.Daemon.PersistScrollback, uc.Daemon.PersistScrollbackLines, uc.Daemon.PersistScrollbackKB)
 	cfg.Hosts = HostsFromConfig(uc)
 	// The same table says what each machine linked to this one may do here.

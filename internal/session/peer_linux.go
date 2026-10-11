@@ -39,6 +39,27 @@ func peerPID(conn net.Conn) int {
 	return pid
 }
 
+// peerUID returns the uid of the process on the other end of a unix socket,
+// as the kernel recorded it at connect time. ok is false when conn is not a
+// unix socket or the kernel does not say.
+func peerUID(conn net.Conn) (uid int, ok bool) {
+	uc, isUnix := conn.(*net.UnixConn)
+	if !isUnix {
+		return 0, false
+	}
+	raw, err := uc.SyscallConn()
+	if err != nil {
+		return 0, false
+	}
+	_ = raw.Control(func(fd uintptr) {
+		cred, err := unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		if err == nil && cred != nil {
+			uid, ok = int(cred.Uid), true
+		}
+	})
+	return uid, ok
+}
+
 // readProcLineage returns a process's parent pid and its controlling terminal,
 // fields 4 and 7 of /proc/<pid>/stat. tty is 0 for a process with no
 // controlling terminal. ok is false when the process cannot be read.

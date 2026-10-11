@@ -109,6 +109,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	// The link only ever names a socket of the person's own client, so
 	// following it widens nothing a pane may do, and a file change applies.
 	d.SetSSHAgent(cfg.Daemon.SSHAgent)
+	// The display only ever comes from the person's own local client, so a
+	// file change applies at once, like the agent.
+	d.SetDisplay(cfg.Daemon.Display)
 	// [hosts] or ~/.ssh/config may forward the agent differently now, and a
 	// host that left the table leaves no agent link behind.
 	d.forgetHostForwards()

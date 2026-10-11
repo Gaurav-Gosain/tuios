@@ -4486,3 +4486,22 @@ The controls were run on 2026-10-12 on branch `fix/one-daemon-per-user`.
 | --- | --- | --- |
 | `pickLiveSocket` prefers `TUIOS_SOCKET` when it names the other socket and a daemon answers there | "list-windows -s old in a pane of its own daemon failed: it reached the other daemon" | **caught** |
 | `Start` pins the socket with `d.manager.SetSocketPath`, and the stop removes the pid file beside it (back to `GetPidFilePath`) | "kill-server of the /tmp daemon failed after 10.0s", and `tuios.sock`, `.pid`, `.link`, `.link-human` left in the /tmp folder | **caught** |
+## The display follow
+
+`TestDisplayFollowsTheLocalClient`, `TestDisplayFollowIgnoresAHostLinkClient`
+and `TestDisplayFollowLeavesADaemonWithADisplayAlone` start daemons with no
+`WAYLAND_DISPLAY` or `DISPLAY`, as a host link over ssh starts them. Fake
+Wayland and X11 servers answer each connection with a token, and a probe in a
+pane reads the token through the variables it was started with.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The feature is absent | build `origin/main` (b40891ff3) | all three ("display-env: exit status 1") | **caught** |
+| An attach does not record the display | `handleAttach`: the `displayNoteUse` call cut | `TestDisplayFollowsTheLocalClient` ("after the desktop client attached: ... no such file or directory"), and the positive half of the host test | **caught** |
+| Sockets are not checked | `resolveWayland` takes an absolute path as is, and `stillShown` skips `ownedSocket` | `TestDisplayFollowsTheLocalClient` ("a client with a WAYLAND_DISPLAY that is a file, not a socket moved the link") | **caught** |
+| A client in a pane counts | `displayOf`: the `mayActAsHuman` test cut | `TestDisplayFollowsTheLocalClient` ("a client inside a pane made the Wayland link of e2e-display-other point at ...") | **caught** |
+| The daemon takes a display over a link | `displayOf`: the `viaLink` test cut | none: the client sends no display through a host, so this guard is the second of two | **not caught alone**, expected |
+| Both link guards cut | the `viaLink` test cut, and `buildHello` sends `Display` through a host too | `TestDisplayFollowIgnoresAHostLinkClient` ("a client over a host link gave the far session the display") | **caught** |
+| New panes do not get the display | `Manager.CreateSession`: the `cfg.DisplayEnv` stamp cut | `TestDisplayFollowsTheLocalClient` ("the new pane did not reach the desktop's Wayland socket ... WL_GOT:none") | **caught** |
+| A daemon with its own display follows too | `SetDisplay` ignores `daemonHasDisplay` | `TestDisplayFollowLeavesADaemonWithADisplayAlone/own_display` ("display-env = {Follow:true Own:true ...}") | **caught** |
+| A leave does not move the link | `notifyClientLeft`: the `displayForget` call cut | `TestDisplayFollowsTheLocalClient` ("after the only client with a display left e2e-display-other: ... want (no link)") | **caught** |

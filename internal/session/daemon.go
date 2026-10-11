@@ -96,6 +96,9 @@ type Daemon struct {
 	singleClient atomic.Bool
 	// sshAgent keeps each session's ssh agent link. See ssh_agent_follow.go.
 	sshAgent agentFollow
+	// display keeps each session's Wayland link and the display of its
+	// newest local client. See display_follow.go.
+	display displayFollow
 	// latest is each session's latest client, for the latest policy.
 	latest latestState
 	// attachCount hands out connState.attachSeq.
@@ -527,6 +530,9 @@ type connState struct {
 	// agentRefused says this connection's ssh agent socket was refused and
 	// the refusal logged, so it is not logged again. See ssh_agent_follow.go.
 	agentRefused atomic.Bool
+	// displayRefused is agentRefused for the display the client sent. See
+	// display_follow.go.
+	displayRefused atomic.Bool
 	// viewOnly says the client's attach marked it as sending no input. Under
 	// largest and latest it does not count toward the session's size.
 	// Guarded by mu.
@@ -575,6 +581,11 @@ type connState struct {
 	// recorded it at connect time, or 0 where the platform does not say. For
 	// a link connection it is the pid of this machine's stdio-proxy.
 	peerPID int
+	// peerUID is the uid of that process, and peerUIDOK says the kernel gave
+	// it. Read at accept. The display follow takes a display only from a
+	// client of this daemon's own uid. See display_follow.go.
+	peerUID   int
+	peerUIDOK bool
 	// fromPane caches paneOrigin for peerPID, computed the first time a call
 	// needs it. See mayActAsHuman.
 	fromPaneOnce sync.Once
@@ -802,6 +813,10 @@ type DaemonConfig struct {
 	// SingleClient is [daemon] single_client: one client per session, and
 	// the newest attach wins. See detach_client.go.
 	SingleClient bool
+	// Display is [daemon] display: "follow", the default, gives a daemon
+	// with no display of its own the display of the session's newest local
+	// client. See display_follow.go.
+	Display string
 	// SSHAgent is [daemon] ssh_agent: "follow" keeps a link per session to
 	// the agent socket of the client that attached or used it last, and
 	// gives new panes SSH_AUTH_SOCK naming it. See ssh_agent_follow.go.
@@ -849,6 +864,9 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	}
 	d.singleClient.Store(cfg.SingleClient)
 	d.SetSSHAgent(cfg.SSHAgent)
+	displaySource := d.displayVars
+	d.manager.displaySource.Store(&displaySource)
+	d.SetDisplay(cfg.Display)
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.activity = newActivityStore(d.events.publish)
@@ -1188,6 +1206,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 func (d *Daemon) onSessionDeleted(s *Session) {
 	// The session's ssh agent link goes with it.
 	d.agentForgetSession(s.ID)
+	d.displayForgetSession(s.ID)
 	d.forgetLatest(s.ID)
 	d.herdrWorkspaceMeta.forget(s.ID)
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name()})
@@ -1313,6 +1332,7 @@ func (d *Daemon) Start() error {
 	// ssh agent links a killed daemon left go before a session is restored.
 	// See ssh_agent_follow.go.
 	d.startSSHAgent()
+	d.startDisplayFollow()
 	// Pasted images a killed daemon left behind go once they are past their
 	// TTL. A standalone client may share the directory, so only expired
 	// ones are taken.
@@ -1583,6 +1603,7 @@ func (d *Daemon) shutdown() error {
 		// client leaving moves a link, and no pane outlives the daemon to
 		// use one. See ssh_agent_follow.go.
 		d.stopSSHAgent()
+		d.stopDisplayFollow()
 
 		// Unlinking the socket is deliberately the last thing the daemon does,
 		// after the final resurrection saves and after the pid file. It is the
@@ -1773,6 +1794,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		// which nothing the peer sends can change. See human_origin.go.
 		peerPID: peerPID(conn),
 	}
+	cs.peerUID, cs.peerUIDOK = peerUID(conn)
 	// Placed now, while the process that connected is the one the pid
 	// names. A process that hands the connection to another and exits
 	// leaves its pid free for reuse; see peerChanged.

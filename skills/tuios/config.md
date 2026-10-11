@@ -99,6 +99,14 @@ on the link (`ssh_options = ["-A"]` or `ForwardAgent yes`), which tuios never
 turns on by itself. The option is in the file only. Do not change it, or the
 forwarding, unless the person asks.
 
+`daemon.display = "follow"` is the default. A daemon with no display of its
+own (one that a host link started over ssh) gives new panes the
+`WAYLAND_DISPLAY`, `DISPLAY` and `XAUTHORITY` of the newest local client.
+`WAYLAND_DISPLAY` names a link that follows the client. A shell that started
+earlier has no display: `eval "$(tuios display-env 2>/dev/null)"` gives it the
+current one. When `wl-paste` or `xclip` fails in a pane, run that line first.
+The option is in the file only. Do not change it unless the person asks.
+
 Hints mode (`Ctrl+B F`, the `hints` action) labels the URLs, paths, hashes and
 addresses in the focused pane, and a typed label copies one. The
 `hints_all_panes` action, or the `hints.all_panes` option, labels every pane

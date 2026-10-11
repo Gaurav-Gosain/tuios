@@ -84,6 +84,7 @@ var verbCapabilities = map[string][]string{
 	"list-host-agents":     {config.LinkAllowList},
 	"session-info":         {config.LinkAllowList},
 	"ssh-agent-path":       {config.LinkAllowList},
+	"display-env":          {config.LinkAllowList},
 	"list-windows":         {config.LinkAllowList},
 	"get-window":           {config.LinkAllowList},
 	"list-workspaces":      {config.LinkAllowList},

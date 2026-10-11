@@ -142,6 +142,7 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
 	// Every leave comes here, a detach and a dropped connection alike, so
 	// this is where the agent link moves back to the client before.
 	d.agentForget(sessionID, leavingClientID)
+	d.displayForget(sessionID, leavingClientID)
 	d.refreshLinkedViewer(sessionID)
 	clientCount := d.getSessionClientCount(sessionID)
 

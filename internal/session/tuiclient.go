@@ -65,6 +65,10 @@ type TUIClient struct {
 	// client that runs where the person is sets it: tuios attach and tuios
 	// new. A server that serves a remote viewer leaves it empty.
 	SSHAuthSock string
+	// Display is sent in the hello as HelloPayload.Display. Only tuios attach
+	// and tuios new set it, from their own environment, and a hello through
+	// a host never carries it. See display_follow.go.
+	Display ClientDisplay
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -386,6 +390,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// open-host-connection told this machine's daemon this socket.
 	if c.viaHost == "" {
 		hello.SSHAuthSock = c.SSHAuthSock
+		hello.Display = c.Display
 	}
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true

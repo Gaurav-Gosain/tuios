@@ -1492,6 +1492,10 @@ type SessionConfig struct {
 	// while [daemon] ssh_agent is follow, nil otherwise. The manager stamps
 	// it. See ssh_agent_follow.go.
 	AgentEnv func(sessionID string) []string
+	// DisplayEnv returns WAYLAND_DISPLAY, DISPLAY and XAUTHORITY of the
+	// session's newest local client while [daemon] display follows, nil
+	// otherwise. The manager stamps it. See display_follow.go.
+	DisplayEnv func(sessionID string) []string
 	// PaneToken returns the token a pane with the given window id is started
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
@@ -3362,6 +3366,20 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 		if agent := s.config.AgentEnv(s.ID); len(agent) > 0 {
 			env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "SSH_AUTH_SOCK=") })
 			env = append(env, agent...)
+		}
+	}
+	// The display of the session's newest local client, when the daemon has
+	// none of its own, unless the caller gave the pane a display itself.
+	if s.config != nil && s.config.DisplayEnv != nil && !slices.ContainsFunc(extra, func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(displayVarNames, k)
+	}) {
+		if disp := s.config.DisplayEnv(s.ID); len(disp) > 0 {
+			env = slices.DeleteFunc(env, func(kv string) bool {
+				k, _, _ := strings.Cut(kv, "=")
+				return slices.Contains(displayVarNames, k)
+			})
+			env = append(env, disp...)
 		}
 	}
 

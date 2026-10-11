@@ -1721,7 +1721,7 @@ What a restricted connection may call:
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path` | session in reach | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
@@ -2085,6 +2085,47 @@ through one, last. Input counts at most once a second. The link ssh to such a
 host starts with `SSH_AUTH_SOCK` naming that host's link. The link ssh to any
 other host starts with the daemon's environment, unchanged. A daemon too old to know `ssh_auth_sock` refuses it with
 `invalid_params`, and the client asks again without it.
+
+### display-env
+
+Report the display a new pane of a session gets now. With `[daemon] display =
+"follow"`, the default, a daemon with no `WAYLAND_DISPLAY` or `DISPLAY` of its
+own gives new panes the display of the local client that attached to the
+session or used it last.
+
+Params: `session` (required).
+
+The client sends `display` in its hello: `wayland_display`,
+`xdg_runtime_dir`, `display` and `xauthority`, each as the client has it.
+Only `tuios attach` and `tuios new` send it, and never through a host. A
+daemon that predates the field ignores it. The daemon follows a client only
+when the client is on its own socket, not over a link, has the daemon's uid
+by peer credentials, and may act as the person. A `wayland_display` name is
+looked up in the client's `xdg_runtime_dir`, then the daemon's, then
+`/run/user/<uid>`. The resolved path must be a Unix socket the user owns,
+with every folder above it owned by the user or root and not writable by
+another user unless sticky. `display` must be `:N` or `:N.S`, with a socket
+in `/tmp/.X11-unix` owned by the user or root. `xauthority` must be a file the
+user owns. The session's link, `wayland-<session id>.sock` beside the daemon
+socket, points at the newest client's Wayland socket. When the client leaves,
+the session uses the client before it, and with none left the link is
+removed.
+
+Request:
+
+```json
+{"verb": "display-env", "params": {"session": "work"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "display_env", "session": "work", "follow": true, "own": false, "link": "/tmp/tuios-1000/wayland-3f2a9c1d.sock", "target": "/run/user/1000/wayland-1", "env": {"WAYLAND_DISPLAY": "/tmp/tuios-1000/wayland-3f2a9c1d.sock", "DISPLAY": ":1"}}}
+```
+
+`target` is absent when there is no link, and `env` is empty when the session
+has no display to give. The verb reads one session: a pane needs `read` and
+the session in reach. Over a link it needs `list`.
 
 ### session-info
 
@@ -5508,7 +5549,7 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls`, `paste-pane-image` |
 | `write` | `send-keys`, `send-text`, `paste-image`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |

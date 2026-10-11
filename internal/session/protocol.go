@@ -259,6 +259,14 @@ type HelloPayload struct {
 	// the newest to attach or use the session. Only the tuios attach and new
 	// commands send it. See ssh_agent_follow.go.
 	SSHAuthSock string `json:"ssh_auth_sock,omitempty"`
+	// Display is the client's WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DISPLAY and
+	// XAUTHORITY. With [daemon] display = "follow" and a daemon that has no
+	// display of its own, new panes of the session get them while this
+	// client is the newest to attach or use the session. Only the tuios
+	// attach and new commands send it. gob drops it on a daemon that
+	// predates it, and a client that predates it sends none. See
+	// display_follow.go.
+	Display ClientDisplay `json:"display,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

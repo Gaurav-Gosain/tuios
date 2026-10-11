@@ -382,6 +382,10 @@ With `ssh_agent = "follow"` in `[daemon]`, `tuios attach` points the ssh
 agent link of the session at the `SSH_AUTH_SOCK` of this client. See
 [`tuios ssh-agent-path`](#tuios-ssh-agent-path).
 
+With `display = "follow"` in `[daemon]`, the default, `tuios attach` sends the
+display of this client. A daemon with no display of its own gives it to new
+panes of the session. See [`tuios display-env`](#tuios-display-env).
+
 Inside a tuios pane, `tuios attach` refuses to attach the session that holds
 the pane. A bare `tuios attach` or `tuios` in a pane also refuses, because
 it does not name a session. To show a different session in the pane, name
@@ -597,6 +601,31 @@ your shell rc:
 
 ```bash
 p=$(tuios ssh-agent-path 2>/dev/null) && export SSH_AUTH_SOCK="$p"
+```
+
+### `tuios display-env`
+
+Print the display of a session as export lines. A daemon that started without
+a display gives new panes the display of the local client that attached or
+used the session last. This is `display = "follow"` in `[daemon]`, the
+default. See [CONFIGURATION.md](CONFIGURATION.md).
+
+**Usage:**
+```bash
+tuios display-env [-s NAME] [--json]
+```
+
+**Flags:**
+- `-s, --session <name>`: Session whose display to print. In a pane, the default is the session of the pane
+- `--json`: Output as JSON, with `follow`, `own`, the Wayland `link`, the socket it points at (`target`) and the variables (`env`)
+
+The command prints an `export` line for each of `WAYLAND_DISPLAY`, `DISPLAY`
+and `XAUTHORITY` that the session has. It prints nothing when the session has
+no display to give. A shell that started before a desktop client attached
+has no display. Run this line in that shell, or add it to your shell rc:
+
+```bash
+eval "$(tuios display-env 2>/dev/null)"
 ```
 
 ### `tuios kill-session`

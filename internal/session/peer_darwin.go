@@ -62,3 +62,24 @@ func readProcEnvVar(pid int, name string) (string, bool) {
 	}
 	return procargsEnvVar(buf, name)
 }
+
+// peerUID returns the uid of the process on the other end of a unix socket,
+// from LOCAL_PEERCRED. ok is false when conn is not a unix socket or the
+// kernel does not say.
+func peerUID(conn net.Conn) (uid int, ok bool) {
+	uc, isUnix := conn.(*net.UnixConn)
+	if !isUnix {
+		return 0, false
+	}
+	raw, err := uc.SyscallConn()
+	if err != nil {
+		return 0, false
+	}
+	_ = raw.Control(func(fd uintptr) {
+		cred, err := unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
+		if err == nil && cred != nil {
+			uid, ok = int(cred.Uid), true
+		}
+	})
+	return uid, ok
+}

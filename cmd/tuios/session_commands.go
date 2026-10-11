@@ -359,6 +359,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// internal/session/ssh_agent_follow.go. Through a host it goes to this
 	// machine's daemon, whose link forwards it, not to the host.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
+	// The display this process runs in, for a daemon started without one.
+	// See internal/session/display_follow.go.
+	client.Display = session.ClientDisplayFromEnv()
 	if host == "" && createNew {
 		// Only tuios new sets it. A session the attach finds is not moved.
 		client.StartDir = newSessionDir
