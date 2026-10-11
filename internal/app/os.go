@@ -1119,6 +1119,9 @@ type OS struct {
 	// stopInbox ends the watcher. Both nil until the watcher starts.
 	inboxEvents chan tea.Msg
 	stopInbox   func()
+	// transfers is the mirror of the daemon's copies between machines, the
+	// Copies panel and its dialogs. See transfers.go.
+	transfers transfersState
 	// agentsSwitchedOff is the agent switch as applyAgentsSwitch last saw
 	// it, so a config change that did not touch it does nothing.
 	agentsSwitchedOff bool
@@ -2030,6 +2033,7 @@ func (m *OS) Cleanup() {
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	m.endInboxWatch()
+	m.endTransfersWatch()
 	m.stopFileWatch()
 	// The dock's components are subprocesses this client started, and a push
 	// component is a process that never exits on its own. An ephemeral SSH or

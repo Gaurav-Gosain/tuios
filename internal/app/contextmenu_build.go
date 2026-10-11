@@ -535,6 +535,9 @@ func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
 		// clipboard and not a target. It overwrites nothing, which is why it is
 		// live here with no dialog behind it; see SidebarFilePaste.
 		m.item(glyphPaste, "Paste", "file_paste", !on || m.fileClip.Empty()),
+		// Send copies the row to another machine, after it asks which one
+		// and which folder there. See transfers_dialog.go.
+		m.item(glyphCopy, "Send to machine", "file_send", !hasTarget),
 		separator(),
 		m.item(glyphNew, "New file or folder", "file_create", !on),
 		m.item(glyphRename, "Rename", "file_rename", !hasTarget),

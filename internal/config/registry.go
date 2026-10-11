@@ -52,6 +52,7 @@ type sectionMaps struct {
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
+	transfers                                             map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -108,6 +109,7 @@ func (r *KeybindRegistry) buildMappings() {
 		inbox:           r.sectionKeyMap(kb.Inbox),
 		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
 		mail:            r.sectionKeyMap(kb.Mail),
+		transfers:       r.sectionKeyMap(kb.Transfers),
 		copyMode:        r.sectionKeyMap(kb.CopyMode),
 	}
 }
@@ -332,6 +334,17 @@ func (r *KeybindRegistry) GetInboxKeys(action string) []string {
 	return nil
 }
 
+// GetTransfersAction returns the action a key runs in the Copies panel.
+func (r *KeybindRegistry) GetTransfersAction(key string) string {
+	return r.lookupKey(key, r.sections.transfers)
+}
+
+// GetTransfersKeys is GetKeys for the Copies panel, for its key hints and the
+// help overlay.
+func (r *KeybindRegistry) GetTransfersKeys(action string) []string {
+	return r.config.Keybindings.Transfers[action]
+}
+
 // GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
 // overlay.
 func (r *KeybindRegistry) GetSidebarFilesKeys(action string) []string {
@@ -467,7 +480,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeCopyMode:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode:
 		return true
 	}
 	return false
@@ -505,6 +518,16 @@ var ActionDescriptions = map[string]string{
 	"file_open":           "Files: open this folder, or copy this file's path",
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
+	"file_send":           "Files: send this file or folder to another machine",
+	// The Copies panel: the copies between machines.
+	"transfers_down":   "Copies: next copy",
+	"transfers_up":     "Copies: previous copy",
+	"transfers_pause":  "Copies: pause or go on with the copy",
+	"transfers_cancel": "Copies: cancel the copy, after a question",
+	"transfers_retry":  "Copies: try a failed copy again",
+	"transfers_clear":  "Copies: remove the copies that ended",
+	"transfers_answer": "Copies: answer a copy that waits for an answer",
+	"transfers_close":  "Copies: close the panel",
 
 	// The Inbox, the prompt open over it, and the mailbox. Each acts only
 	// while its overlay is up.
@@ -793,6 +816,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_last_message":       "Show the last message in full",
 	"prefix_mail":               "Open the Inbox on its mail",
 	"prefix_inbox":              "Open the Inbox",
+	"prefix_transfers":          "Show the copies between machines",
 	"prefix_next_attention":     "Jump to the oldest item needing you",
 	"prefix_review":             "Review the focused pane's changes",
 	"prefix_next_finished":      "Jump to the newest unseen finished turn",

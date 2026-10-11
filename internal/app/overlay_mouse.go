@@ -205,6 +205,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.WorkspaceSwitcherSelected = idx
 	case overlayKindBuffers:
 		m.BufferChooserSelect(idx)
+	case overlayKindTransfers:
+		m.TransfersSelect(idx)
+	case overlayKindCopyDialog:
+		m.CopyDialogSelect(idx)
 	case "navigator":
 		m.NavigatorSelect(idx)
 	case "aggregate":
@@ -283,6 +287,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.WorkspaceSwitcherMove(wheelDelta(up), n)
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
+	case overlayKindTransfers:
+		m.TransfersMove(wheelDelta(up))
 	case "navigator":
 		m.NavigatorMove(wheelDelta(up))
 	case "layout":
@@ -445,6 +451,15 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.WorkspaceSwitcherActivate(row.Idx)
 	case overlayKindBuffers:
 		return m.BufferChooserActivate(row.Idx)
+	case overlayKindTransfers:
+		// A click puts the cursor on the copy; a copy that waits for an
+		// answer opens its question.
+		m.TransfersSelect(row.Idx)
+		if r, ok := m.selectedTransfer(); ok && r.State == "conflict" {
+			m.TransfersAnswer()
+		}
+	case overlayKindCopyDialog:
+		return m.CopyDialogActivate(row.Idx)
 	case "navigator":
 		// A click on a session or a workspace row folds it, and a click on
 		// a pane goes to it, as enter does.
@@ -573,6 +588,10 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseWorkspaceSwitcher()
 	case overlayKindBuffers:
 		m.CloseBufferChooser()
+	case overlayKindTransfers:
+		m.CloseTransfers()
+	case overlayKindCopyDialog:
+		m.CloseCopyDialog()
 	case "navigator":
 		m.CloseNavigator()
 	case overlayKindShot:

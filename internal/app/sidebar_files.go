@@ -52,11 +52,12 @@ import (
 // # What it is not
 //
 // It is not a file manager. It lists, it walks in and out, it hands a path to
-// the clipboard and a directory to a shell, and it does the six file actions
-// named in sidebar_file_ops.go: create, rename, delete, copy, cut and paste.
-// That is the whole set. There is no multi-select, no tree, no filter and no
-// drag and drop, because yeetui does all of that far better than twenty-six
-// columns ever will, and it runs in a pane.
+// the clipboard and a directory to a shell, and it does the seven file actions
+// named in sidebar_file_ops.go: create, rename, delete, copy, cut, paste and
+// send. That is the whole set. There is no multi-select, no tree and no
+// filter, because yeetui does all of that far better than twenty-six columns
+// ever will, and it runs in a pane. A drop of files is not the rail's: see
+// DropPaste.
 
 // fileEntry is one row of a listing. Only what the rail draws and what a click
 // needs is kept: the rest of an os.DirEntry costs a stat per file and answers
@@ -619,7 +620,7 @@ func spoofCheckApplies(attachedHost string) bool { return attachedHost == "" }
 // # What it costs to be wrong
 //
 // A false positive is a read-only listing: the names, the navigation and the
-// path copy all still work, and only the six file actions go. A file manager
+// path copy all still work, and only the seven file actions go. A file manager
 // running in a pane and reporting its own browsing over OSC 7 is the one honest
 // program this will refuse, and refusing it is the same answer as for the
 // dishonest one, because from here they are the same event.

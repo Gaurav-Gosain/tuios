@@ -60,6 +60,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_last_message", handlePrefixLastMessage)
 	d.Register("prefix_mail", handlePrefixMail)
 	d.Register("prefix_inbox", handlePrefixInbox)
+	d.Register("prefix_transfers", handlePrefixTransfers)
 	d.Register("prefix_next_attention", handlePrefixNextAttention)
 	d.Register("prefix_review", handlePrefixReview)
 	d.Register("prefix_next_finished", handlePrefixNextFinished)

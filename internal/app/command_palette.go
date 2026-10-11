@@ -1039,6 +1039,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The copies between machines: the Copies panel.
+			Name:     "Copies between machines",
+			Shortcut: "prefix+u",
+			Category: "Files",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenTransfers()
+			},
+		},
+		{
 			Name:     "Agents: go to the oldest waiting",
 			Shortcut: "prefix+o",
 			Bind:     "prefix_next_attention",

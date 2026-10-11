@@ -68,6 +68,8 @@ const (
 	// file_copy_path copies the row's path whatever the row is. file_open
 	// copies a file's path too, but on a folder it opens the folder.
 	sidebarActFileCopyPath = "file_copy_path"
+	// sidebarActFileSend sends the row's file or folder to another machine.
+	sidebarActFileSend = "file_send"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -252,7 +254,7 @@ func (d *ActionDispatcher) registerHandlers() {
 		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
 		sidebarActFilePaste, sidebarActFileOpen, sidebarActFileEdit,
-		sidebarActFileCopyPath,
+		sidebarActFileCopyPath, sidebarActFileSend,
 	} {
 		d.Register(action, makeSidebarFileHandler(action))
 	}

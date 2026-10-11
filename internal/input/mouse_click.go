@@ -125,6 +125,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// unconditionally and before the ones whose columns move with the
 		// layout, because a component sits between them on the bar.
 		if name := o.DockCustomComponentAt(X, Y); name != "" {
+			// The copies' cell opens the Copies panel.
+			if name == config.DockComponentTransfers {
+				if msg.Button == tea.MouseLeft {
+					return o, o.OpenTransfers()
+				}
+				return o, nil
+			}
 			if o.RunDockComponentClick(name, int(msg.Button)) {
 				return o, nil
 			}

@@ -145,6 +145,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			if msg.Content == "" {
 				return o, o.PasteImageOnEmptyPaste()
 			}
+			// Files dropped on a pane whose program runs on another machine
+			// arrive as a paste of their paths. tuios asks whether to send
+			// them there. See app.DropPaste.
+			if cmd := o.DropPaste(msg.Content); cmd != nil {
+				return o, cmd
+			}
 			forwardPasteToFocused(o, msg.Content)
 		}
 		return o, nil
@@ -245,6 +251,15 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 	// pane, so a paste while one is open is dropped rather than typed into a
 	// shell nobody can see.
 	if o.MessageViewOpen() || o.ShowLogs {
+		return true
+	}
+	// A copy's question takes a paste as the folder it asks for, on one
+	// line, and the Copies panel drops it: nothing under them may get it.
+	if o.CopyDialogOpen() {
+		o.CopyDialogPaste(strings.Join(strings.Fields(content), " "))
+		return true
+	}
+	if o.TransfersOpen() {
 		return true
 	}
 	return false
@@ -457,6 +472,15 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// confirmation that is asking about a delete.
 	if o.FilePromptOpen() {
 		return handleFilePromptInput(msg, o)
+	}
+	// A copy's question and the Copies panel, the same way: the rail and
+	// the dock open them, and their keys must reach them. The question is
+	// over the panel, so it is first.
+	if o.CopyDialogOpen() {
+		return handleCopyDialogInput(msg, o)
+	}
+	if o.TransfersOpen() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+		return handleTransfersInput(msg, o)
 	}
 
 	// The sidebar rail owns the keyboard while focused, in both terminal and

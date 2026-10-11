@@ -226,7 +226,7 @@ func (m *OS) renderDockString() (string, int) {
 			}
 			w := lipgloss.Width(cell)
 			dockItemsStr.WriteString(cell)
-			if strings.HasPrefix(name, config.DockCustomPrefix) {
+			if dockCellClickable(name) {
 				centerCustom = append(centerCustom, dockCustomHit{X0: relX, X1: relX + w, Name: name})
 			}
 			relX += w
@@ -335,7 +335,7 @@ func (m *OS) renderDockString() (string, int) {
 		case config.DockComponentTape:
 			chunk = styledTapeText
 		default:
-			chunk, custom = m.dockCustomCell(name), strings.HasPrefix(name, config.DockCustomPrefix)
+			chunk, custom = m.dockCustomCell(name), dockCellClickable(name)
 		}
 		if chunk == "" {
 			continue

@@ -23,6 +23,9 @@ const (
 	DockComponentRAM             = "ram"
 	DockComponentClock           = "clock"
 	DockComponentSessionControls = "session-controls"
+	// DockComponentTransfers is the copies between machines: a bar and a
+	// percent while a copy runs. It draws nothing while no copy exists.
+	DockComponentTransfers = "transfers"
 )
 
 // DockCustomPrefix marks a name in one of the dock lists as referring to a
@@ -44,6 +47,7 @@ var dockBuiltins = []string{
 	DockComponentRAM,
 	DockComponentClock,
 	DockComponentSessionControls,
+	DockComponentTransfers,
 }
 
 // DockBuiltinComponents returns the built-in component names, sorted. Used by
@@ -92,6 +96,7 @@ var (
 	defaultDockLeft   = []string{DockComponentMode, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
 	defaultDockCenter = []string{DockComponentWindows}
 	defaultDockRight  = []string{
+		DockComponentTransfers,
 		DockComponentNotifications, DockComponentCopyHelp,
 		DockComponentCPU, DockComponentRAM, DockComponentClock,
 		DockComponentSessionControls,

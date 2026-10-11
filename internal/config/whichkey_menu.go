@@ -226,7 +226,9 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// and a row more pushes it off the bottom.
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
-		row("prefix_file_search", "Search files"),
+		// The copies between machines share the files line, for the same
+		// reason: one more row pushes the menu off an 80x24 screen.
+		pair("Search files/copies", part("prefix_file_search", "Search files"), part("prefix_transfers", "Copies")),
 	)
 	menus := menuSection{title: "Menus", rows: []menuRow{
 		subRow("prefix_workspace", "Workspace"),

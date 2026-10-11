@@ -421,6 +421,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// The copies between machines, kept current by the daemon's transfer
+	// events. See transfers.go.
+	if cmd := m.startTransfersWatch(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for the daemon events that end this client.
 	if cmd := ListenForDaemonExit(m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -2141,6 +2147,27 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case inboxWatchMsg:
 		return m, m.handleInboxWatch(msg)
+
+	case transfersWatchMsg:
+		return m, m.handleTransfersWatch(msg)
+
+	case transfersLingerMsg:
+		m.applyTransfersLinger(msg)
+		return m, nil
+
+	case transferCallMsg:
+		return m, m.applyTransferCall(msg)
+
+	case transfersClearedMsg:
+		m.applyTransfersCleared(msg)
+		return m, nil
+
+	case dropProbeMsg:
+		m.applyDropProbe(msg)
+		return m, nil
+
+	case dropSentMsg:
+		return m, m.applyDropSent(msg)
 
 	case foreignListingRefreshedMsg:
 		return m, nil

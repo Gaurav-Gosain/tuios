@@ -910,6 +910,9 @@ type KeybindingsConfig struct {
 	// Mail binds are live while the mailbox is open and no reply is being
 	// written.
 	Mail map[string][]string `toml:"mail"`
+	// Transfers binds are live while the Copies panel is open: the copies
+	// between machines. See getDefaultTransfersKeybinds.
+	Transfers map[string][]string `toml:"transfers"`
 	// CopyMode binds are live while a pane is in copy mode, in normal and
 	// visual selection. Copy mode's vim motions are fixed keys and are not
 	// here. See getDefaultCopyModeKeybinds.
@@ -1243,6 +1246,10 @@ func DefaultConfig() *UserConfig {
 				// list takes #, the key tmux gives list-buffers.
 				"paste_buffer":  {"]"},
 				"choose_buffer": {"#"},
+				// u for the copies between machines. f searches files, c
+				// makes a window and t is the window prefix. y is the key the
+				// multifocus docs tell people to bind, so it stays free.
+				"prefix_transfers": {"u"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -1344,6 +1351,7 @@ func DefaultConfig() *UserConfig {
 			Inbox:         getDefaultInboxKeybinds(),
 			InboxPeek:     getDefaultInboxPeekKeybinds(),
 			Mail:          getDefaultMailKeybinds(),
+			Transfers:     getDefaultTransfersKeybinds(),
 			CopyMode:      getDefaultCopyModeKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
@@ -1507,6 +1515,36 @@ func getDefaultInboxKeybinds() map[string][]string {
 	}
 }
 
+// The actions of the Copies panel, named once so the input path, the key
+// hints and the defaults cannot drift apart.
+const (
+	ActionTransfersDown   = "transfers_down"
+	ActionTransfersUp     = "transfers_up"
+	ActionTransfersPause  = "transfers_pause"
+	ActionTransfersCancel = "transfers_cancel"
+	ActionTransfersRetry  = "transfers_retry"
+	ActionTransfersClear  = "transfers_clear"
+	ActionTransfersAnswer = "transfers_answer"
+	ActionTransfersClose  = "transfers_close"
+)
+
+// getDefaultTransfersKeybinds returns the Copies panel's keys, live while it
+// is open. p pauses and resumes, x cancels after it asks, r tries a failed
+// copy again, c clears the copies that ended, and enter answers a copy that
+// waits for an answer.
+func getDefaultTransfersKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionTransfersDown:   {"j", "down"},
+		ActionTransfersUp:     {"k", "up"},
+		ActionTransfersPause:  {"p"},
+		ActionTransfersCancel: {"x"},
+		ActionTransfersRetry:  {"r"},
+		ActionTransfersClear:  {"c"},
+		ActionTransfersAnswer: {"enter"},
+		ActionTransfersClose:  {"esc", "q"},
+	}
+}
+
 // getDefaultSidebarAgentsKeybinds returns the keys of the rail's agent rows,
 // live only while the rail owns the keyboard and the cursor is on an agent
 // row. They are consulted before the rail's own, like the files section's, so
@@ -1592,6 +1630,9 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		// Enter on a folder opens it, so a folder's path needs a key of its
 		// own. Y is yank with shift, next to y for the file itself.
 		"file_copy_path": {"Y"},
+		// S sends the file or folder to another machine. Capital, because it
+		// starts a copy over a link, and one shift from nothing else here.
+		"file_send": {"S"},
 	}
 }
 
@@ -3025,6 +3066,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Mail == nil {
 		cfg.Keybindings.Mail = make(map[string][]string)
 	}
+	if cfg.Keybindings.Transfers == nil {
+		cfg.Keybindings.Transfers = make(map[string][]string)
+	}
 	if cfg.Keybindings.CopyMode == nil {
 		cfg.Keybindings.CopyMode = make(map[string][]string)
 	}
@@ -3089,6 +3133,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
+	// The Copies panel's section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
 	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
 
@@ -3117,6 +3163,10 @@ var yieldingDefaults = map[string]bool{
 	// ] and # after the prefix, new in the release after v0.8.5.
 	"paste_buffer":  true,
 	"choose_buffer": true,
+	// u after the prefix and S on a rail file row, new with the copies
+	// between machines.
+	"prefix_transfers": true,
+	"file_send":        true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,
@@ -3265,6 +3315,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.Inbox, d.Inbox},
 		{c.InboxPeek, d.InboxPeek},
 		{c.Mail, d.Mail},
+		{c.Transfers, d.Transfers},
 		{c.CopyMode, d.CopyMode},
 		{c.Global, d.Global},
 		{c.Script, d.Script},

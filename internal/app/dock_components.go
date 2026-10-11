@@ -219,6 +219,11 @@ func (m *OS) dockCustomCell(name string) string {
 	if name == config.DockComponentClock && (!m.Settings.ShowClock || m.Settings.HideClock) {
 		return ""
 	}
+	// The copies between machines draw from the mirror, not from the
+	// engine, and nothing while no copy exists. See transfers_render.go.
+	if name == config.DockComponentTransfers {
+		return m.transfersDockCell()
+	}
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
 		// The clock is a built-in that carries a value, so it draws through the
@@ -257,7 +262,15 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // dockCellComponent reports whether a component draws as a bar cell from a
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentClock
+	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentClock ||
+		name == config.DockComponentTransfers
+}
+
+// dockCellClickable reports whether a cell records where it was drawn, for a
+// click: a custom component, which runs its on-click command, and the
+// copies, which open the Copies panel.
+func dockCellClickable(name string) bool {
+	return strings.HasPrefix(name, config.DockCustomPrefix) || name == config.DockComponentTransfers
 }
 
 // dockCustomWidth is the room a side's custom cells want.
@@ -413,7 +426,8 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		text   string
 		width  int
 		name   string
-		custom bool // records a hit rectangle, and yields first when room runs out
+		custom bool // yields first when room runs out
+		hit    bool // records a hit rectangle
 		meters bool // stands for whatever is left of the CPU and RAM readouts
 	}
 
@@ -441,6 +455,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 				width:  lipgloss.Width(cell),
 				name:   name,
 				custom: strings.HasPrefix(name, config.DockCustomPrefix),
+				hit:    dockCellClickable(name),
 			})
 		}
 	}
@@ -455,7 +470,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 				text = meterStyle.Render(strings.Join(meters, " "))
 				width = lipgloss.Width(text)
 			}
-			if seg.custom {
+			if seg.hit {
 				hits = append(hits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
 			}
 			b.WriteString(text)

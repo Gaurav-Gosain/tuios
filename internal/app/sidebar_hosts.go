@@ -1062,7 +1062,17 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 	// cost the name: the alarm outranks a label, a shut group's count is the
 	// only sign the fold is not empty, and the add control's click span is
 	// worked out before this row is drawn.
+	// A machine with a copy shows its progress at the end of the row,
+	// "→ 61%", in front of whatever else the row shows there.
 	if up {
+		if fig, w := m.transfersHostFigure(node.Host, rowBg, pal); w > 0 {
+			if right != "" {
+				right = fig + sidebarStyle(rowBg, nil).Render(" ") + right
+				rightW += w + 1
+			} else {
+				right, rightW = fig, w
+			}
+		}
 		nameRoom = sidebarNameAvail(cw, rightW)
 	}
 	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
