@@ -519,3 +519,49 @@ func TestDisplayFollowLeavesADaemonWithADisplayAlone(t *testing.T) {
 		})
 	}
 }
+
+// TestDisplayFollowReachesTheDesktopFromANewPane is the person's case with
+// nothing but the pane: a daemon with no display, a desktop client with a
+// Wayland socket, and a new pane that connects to it through
+// WAYLAND_DISPLAY, the way wl-paste does. It calls no tuios command the
+// feature added, so a build without the feature fails on the connect itself.
+//
+// Negative controls: see NEGATIVE_CONTROLS.md, "The display follow".
+func TestDisplayFollowReachesTheDesktopFromANewPane(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	noDisplay(t)
+	probe := displayProbe(t, base)
+	const sess = "e2e-display-pane"
+	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	sock := fakeWayland(t, privateDir(t, "wl", 0o700), "wayland-p", "TOKEN-P")
+	term := displayClient(t, base, sess, "WAYLAND_DISPLAY="+sock)
+	// The attach and the first new pane can cross, so a pane that started
+	// before the daemon took the display is not a failure. A new one is
+	// tried until the deadline.
+	deadline := time.Now().Add(uiTimeout)
+	var got map[string]string
+	for i := 0; ; i++ {
+		name := fmt.Sprintf("p%d", i)
+		if out, err := tuiosCLI(t, base, "new-window", "-s", sess, name); err != nil {
+			t.Fatalf("new-window: %v\n%s", err, out)
+		}
+		got = runProbe(t, base, sess, name, probe)
+		if got["WL_GOT"] == "TOKEN-P" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a new pane never reached the desktop client's Wayland socket: %v\n%s", got, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !filepath.IsAbs(got["WL"]) || got["WL"] == sock {
+		t.Fatalf("WAYLAND_DISPLAY is %q, want the session's link, not the client's socket %s", got["WL"], sock)
+	}
+	if err := term.WaitForText("PROBE WL_GOT=TOKEN-P", uiTimeout); err != nil {
+		t.Fatalf("the probe's summary never showed: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "display-pane-connect")
+}

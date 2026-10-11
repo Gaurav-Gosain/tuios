@@ -4488,8 +4488,9 @@ The controls were run on 2026-10-12 on branch `fix/one-daemon-per-user`.
 | `Start` pins the socket with `d.manager.SetSocketPath`, and the stop removes the pid file beside it (back to `GetPidFilePath`) | "kill-server of the /tmp daemon failed after 10.0s", and `tuios.sock`, `.pid`, `.link`, `.link-human` left in the /tmp folder | **caught** |
 ## The display follow
 
-`TestDisplayFollowsTheLocalClient`, `TestDisplayFollowIgnoresAHostLinkClient`
-and `TestDisplayFollowLeavesADaemonWithADisplayAlone` start daemons with no
+`TestDisplayFollowsTheLocalClient`, `TestDisplayFollowReachesTheDesktopFromANewPane`,
+`TestDisplayFollowIgnoresAHostLinkClient` and
+`TestDisplayFollowLeavesADaemonWithADisplayAlone` start daemons with no
 `WAYLAND_DISPLAY` or `DISPLAY`, as a host link over ssh starts them. Fake
 Wayland and X11 servers answer each connection with a token, and a probe in a
 pane reads the token through the variables it was started with.
@@ -4497,6 +4498,7 @@ pane reads the token through the variables it was started with.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The feature is absent | build `origin/main` (b40891ff3) | all three ("display-env: exit status 1") | **caught** |
+| The feature is absent, with no new command in the test | build `origin/main` (b40891ff3) | `TestDisplayFollowReachesTheDesktopFromANewPane` ("a new pane never reached the desktop client's Wayland socket: map[WL: WL_GOT:none ...]") | **caught** |
 | An attach does not record the display | `handleAttach`: the `displayNoteUse` call cut | `TestDisplayFollowsTheLocalClient` ("after the desktop client attached: ... no such file or directory"), and the positive half of the host test | **caught** |
 | Sockets are not checked | `resolveWayland` takes an absolute path as is, and `stillShown` skips `ownedSocket` | `TestDisplayFollowsTheLocalClient` ("a client with a WAYLAND_DISPLAY that is a file, not a socket moved the link") | **caught** |
 | A client in a pane counts | `displayOf`: the `mayActAsHuman` test cut | `TestDisplayFollowsTheLocalClient` ("a client inside a pane made the Wayland link of e2e-display-other point at ...") | **caught** |
