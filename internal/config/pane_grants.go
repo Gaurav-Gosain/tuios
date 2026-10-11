@@ -37,6 +37,12 @@ const (
 	// with respond, without the person's attach nonce. No mode gives it by
 	// default, and admin does not imply it.
 	PaneGrantRespond = "respond"
+	// PaneGrantFiles copies files with tuios cp: a copy whose ends on this
+	// machine are inside the pane's own folder (its worktree, else its
+	// working folder) and whose ends on a host are under that host's home,
+	// and it sees, pauses, resumes and cancels the copies it started. Admin
+	// implies it.
+	PaneGrantFiles = "files"
 	// PaneGrantAdmin is everything else a pane could do before grants
 	// existed: every session, the listings across sessions, windows,
 	// layouts, options, attach and the rest. It implies read, write and fan.
@@ -44,7 +50,7 @@ const (
 )
 
 // PaneGrantNames is every grant, in the order they are documented.
-var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantFan, PaneGrantRespond, PaneGrantAdmin}
+var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantFan, PaneGrantRespond, PaneGrantFiles, PaneGrantAdmin}
 
 // Permission modes, the values of mode.
 const (

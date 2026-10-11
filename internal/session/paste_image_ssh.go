@@ -175,7 +175,7 @@ func (d *Daemon) pasteToHost(ctx context.Context, host string, data []byte) (str
 	}
 	defer d.pastes.remove(local)
 	dst := strings.TrimSuffix(out.Dir, "/") + "/" + dropName(filepath.Base(local), map[string]bool{})
-	j, err := d.transfers.start(Endpoint{Path: local}, Endpoint{Host: host, Path: dst}, false, "keep-both", true, nil)
+	j, err := d.transfers.start(Endpoint{Path: local}, Endpoint{Host: host, Path: dst}, transferOptions{Conflict: "keep-both", Private: true})
 	if err != nil {
 		return "", err
 	}

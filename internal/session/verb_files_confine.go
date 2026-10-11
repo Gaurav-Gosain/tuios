@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -545,33 +547,117 @@ func (d *Daemon) linkPrivateDirs() linkPrivate {
 	return linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
 }
 
-// with is list plus the socket folder, unless p is in the drop folder.
-func (lp linkPrivate) with(list []string, p string) []string {
-	if lp.sock == "" || (lp.drop != "" && denyUnder(p, lp.drop)) {
-		return list
+// denyKeys is a deny list made ready to compare: each entry as named and its
+// real path, folded once (foldKey). Folding every entry again for every path
+// cost a folder copy over a link most of its time: tens of entries, each
+// resolved through its links and folded rune by rune, for each file.
+type denyKeys []denyKey
+
+// denyKey is one folded entry, and the same with a separator at its end,
+// which a path inside it starts with.
+type denyKey struct{ key, dir string }
+
+func newDenyKey(p string) denyKey {
+	k := foldKey(p)
+	return denyKey{key: k, dir: strings.TrimSuffix(k, string(filepath.Separator)) + string(filepath.Separator)}
+}
+
+func makeDenyKeys(list []string) denyKeys {
+	out := make(denyKeys, 0, 2*len(list))
+	for _, d := range list {
+		out = append(out, newDenyKey(d), newDenyKey(realPath(d)))
 	}
-	return append(list, lp.sock)
+	return out
+}
+
+// under reports whether the folded path a is b or inside it.
+func (a denyKey) under(b denyKey) bool {
+	return a.key == b.key || strings.HasPrefix(a.key, b.dir)
+}
+
+// holds reports whether p is at, inside, or an ancestor of an entry, as
+// denyContains does.
+func (k denyKeys) holds(p string) bool {
+	fp := newDenyKey(p)
+	for _, c := range k {
+		if fp.under(c) || c.under(fp) {
+			return true
+		}
+	}
+	return false
+}
+
+// covers reports whether p is at or inside an entry.
+func (k denyKeys) covers(p string) bool {
+	fp := newDenyKey(p)
+	for _, c := range k {
+		if fp.under(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// denyKeysTTL is how long a prepared deny list is used. Its entries change
+// only when the person moves a dotfile link on this machine; a linked machine
+// has no verb that makes a link.
+const denyKeysTTL = 2 * time.Second
+
+var denyKeysCache struct {
+	sync.Mutex
+	m map[string]denyKeysEntry
+}
+
+type denyKeysEntry struct {
+	at   time.Time
+	keys denyKeys
+}
+
+// cachedDenyKeys is the prepared deny list for key, built by list when it is
+// not cached or older than denyKeysTTL.
+func cachedDenyKeys(key string, list func() []string) denyKeys {
+	denyKeysCache.Lock()
+	e, ok := denyKeysCache.m[key]
+	denyKeysCache.Unlock()
+	if ok && time.Since(e.at) < denyKeysTTL {
+		return e.keys
+	}
+	keys := makeDenyKeys(list())
+	denyKeysCache.Lock()
+	if denyKeysCache.m == nil {
+		denyKeysCache.m = map[string]denyKeysEntry{}
+	}
+	denyKeysCache.m[key] = denyKeysEntry{at: time.Now(), keys: keys}
+	denyKeysCache.Unlock()
+	return keys
 }
 
 // linkDenied reports whether the real path p is in, under, or an ancestor of
 // the write deny list.
 func linkDenied(p, home string, lp linkPrivate) bool {
-	var list []string
-	if home != "" {
-		for _, rel := range linkDenyHome {
-			list = append(list, filepath.Join(home, filepath.FromSlash(rel)))
+	withSock := lp.sock != "" && (lp.drop == "" || !denyUnder(p, lp.drop))
+	key := "write\x00" + home + "\x00" + lp.sock + "\x00" + strconv.FormatBool(withSock)
+	return cachedDenyKeys(key, func() []string {
+		var list []string
+		if home != "" {
+			for _, rel := range linkDenyHome {
+				list = append(list, filepath.Join(home, filepath.FromSlash(rel)))
+			}
 		}
-	}
-	for _, dir := range linkDenyAbsolute {
-		list = append(list, filepath.FromSlash(dir))
-	}
-	// tuios's own folders, wherever the XDG variables put them.
-	for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
-		if dir != "" {
-			list = append(list, filepath.Join(realPath(dir), "tuios"))
+		for _, dir := range linkDenyAbsolute {
+			list = append(list, filepath.FromSlash(dir))
 		}
-	}
-	return denyContains(p, lp.with(list, p))
+		// tuios's own folders, wherever the XDG variables put them.
+		for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
+			if dir != "" {
+				list = append(list, filepath.Join(realPath(dir), "tuios"))
+			}
+		}
+		if withSock {
+			list = append(list, lp.sock)
+		}
+		return list
+	}).holds(p)
 }
 
 // linkReadDenied reports whether the real path p is in or under the read deny
@@ -580,26 +666,28 @@ func linkReadDenied(p, home string, lp linkPrivate) bool {
 	if home != "" && denyUnder(p, filepath.Join(home, ".ssh")) && strings.HasSuffix(strings.ToLower(p), ".pub") {
 		return false
 	}
-	var list []string
-	if home != "" {
-		for _, rel := range linkReadDenyHome {
-			list = append(list, filepath.Join(home, filepath.FromSlash(rel)))
+	withSock := lp.sock != "" && (lp.drop == "" || !denyUnder(p, lp.drop))
+	key := "read\x00" + home + "\x00" + lp.sock + "\x00" + strconv.FormatBool(withSock)
+	return cachedDenyKeys(key, func() []string {
+		var list []string
+		if home != "" {
+			for _, rel := range linkReadDenyHome {
+				list = append(list, filepath.Join(home, filepath.FromSlash(rel)))
+			}
 		}
-	}
-	for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
-		if dir != "" {
-			list = append(list, filepath.Join(realPath(dir), "tuios"))
+		for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
+			if dir != "" {
+				list = append(list, filepath.Join(realPath(dir), "tuios"))
+			}
 		}
-	}
-	for _, dir := range linkReadDenyAbsolute {
-		list = append(list, filepath.FromSlash(dir))
-	}
-	for _, d := range lp.with(list, p) {
-		if denyUnder(p, d) || denyUnder(p, realPath(d)) {
-			return true
+		for _, dir := range linkReadDenyAbsolute {
+			list = append(list, filepath.FromSlash(dir))
 		}
-	}
-	return false
+		if withSock {
+			list = append(list, lp.sock)
+		}
+		return list
+	}).covers(p)
 }
 
 // plainLinkPath reports whether p is a path form the deny lists can judge. On
@@ -814,6 +902,23 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 		return fileFS{}, fileError("open", chosen, err)
 	}
 	return fileFS{root: r, dir: chosen}, nil
+}
+
+// receiveFolder is the folder a copy to this machine lands in when it names
+// no folder: for a link, the first folder of its write roots (files_roots, or
+// the receive folder when files_roots says nothing); for the person, the
+// receive folder, config.DefaultFilesRoot.
+func (d *Daemon) receiveFolder(cs *connState) (string, *verbError) {
+	var roots []string
+	if cs != nil && cs.viaLink {
+		roots = linkRootPaths(d.linkPolicy(cs))
+	} else if def := config.DefaultFilesRoot(); def != "" {
+		roots = []string{def}
+	}
+	if len(roots) == 0 {
+		return "", newVerbError(ErrVerbForbidden, "this machine has no folder that another machine may write to. Set files_roots in the config here.")
+	}
+	return roots[0], nil
 }
 
 // linkRootsMessage says where a link may write and how to allow more, in

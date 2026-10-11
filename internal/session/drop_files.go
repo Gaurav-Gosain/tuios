@@ -188,7 +188,7 @@ func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *ver
 	used := map[string]bool{}
 	for _, path := range local {
 		dst := strings.TrimSuffix(dir, "/") + "/" + dropName(filepath.Base(path), used)
-		j, err := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, false, "keep-both", true, d.transferLinkOf(cs))
+		j, err := d.transfers.start(Endpoint{Path: path}, Endpoint{Host: p.Host, Path: dst}, transferOptions{Conflict: "keep-both", Private: true, Link: d.transferLinkOf(cs)})
 		if err != nil {
 			return nil, busyTransferError(err)
 		}

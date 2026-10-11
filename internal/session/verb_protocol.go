@@ -2276,6 +2276,10 @@ func init() {
 	maps.Copy(verbRegistry, fileVerbs())
 	maps.Copy(verbRegistry, transferVerbs())
 	maps.Copy(verbRegistry, dropVerbs())
+	// The tree stream, the check-ahead and the link speed test. See
+	// transfer_tree.go and transfer_speed.go.
+	maps.Copy(verbRegistry, treeVerbs())
+	maps.Copy(verbRegistry, speedVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

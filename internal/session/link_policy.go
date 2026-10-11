@@ -131,6 +131,11 @@ var verbCapabilities = map[string][]string{
 	"file-commit":      {config.LinkAllowFiles},
 	"file-abort":       {config.LinkAllowFiles},
 	"file-drop-dir":    {config.LinkAllowFiles},
+	"file-check":       {config.LinkAllowFiles},
+	"open-tree-stream": {config.LinkAllowFiles},
+	// A speed test moves bytes that are no file's, and it is how a person
+	// learns what a copy would get.
+	"speed-test": {config.LinkAllowFiles},
 	// A transfer and a drop make this daemon open connections on its own
 	// links, as open-host-connection does, so they need what a relay needs,
 	// and files, because they move file bytes.
@@ -139,6 +144,9 @@ var verbCapabilities = map[string][]string{
 	"transfer-cancel": {capRelay, config.LinkAllowFiles},
 	"transfer-pause":  {capRelay, config.LinkAllowFiles},
 	"transfer-resume": {capRelay, config.LinkAllowFiles},
+	"transfer-answer": {capRelay, config.LinkAllowFiles},
+	"transfer-clear":  {capRelay, config.LinkAllowFiles},
+	"host-speed-test": {capRelay, config.LinkAllowFiles},
 	"drop-files":      {capRelay, config.LinkAllowFiles},
 
 	"send-agent-message":  {config.LinkAllowMail},

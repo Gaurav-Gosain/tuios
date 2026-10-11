@@ -527,14 +527,40 @@ func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verb
 // verbFileMkdir makes a folder and its parents.
 func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path string `json:"path"`
+		Path    string `json:"path"`
+		Receive bool   `json:"receive"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Receive {
+		// The receive folder: where the caller may write here when it
+		// names no folder. A daemon from before receive makes path, which
+		// a caller sets to ~.
+		dir, verr := d.receiveFolder(cs)
+		if verr != nil {
+			return nil, verr
+		}
+		// A receive folder that is there is not made again: it may be the
+		// home folder itself (files_roots = ["~"]), which a link may write
+		// under but not change.
+		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+			return map[string]any{"path": dir}, nil
+		}
+		p.Path = dir
+	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
 		return nil, verr
+	}
+	// A folder that is there is not made again, and nothing is written: a
+	// copy into the home folder itself (files_roots = ["~"]) asks for it,
+	// and a link may write under the home folder but not change it. That it
+	// is there is read like a stat.
+	if verr := d.checkLinkRead(cs, path); verr == nil {
+		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+			return map[string]any{"path": path}, nil
+		}
 	}
 	fsys, verr := d.linkWriteFS(cs, path)
 	if verr != nil {
@@ -724,19 +750,26 @@ func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verb
 // verbOpenFileStream turns the connection into a byte stream of one file.
 //
 // mode read: the reply says the size, then the connection carries the bytes
-// from offset to that size and closes. mode write: the part file is cut to
-// offset (which must not be past the part's end), the reply says where it
-// starts, then the connection carries length bytes into it. When they are all
-// written and synced the daemon writes one JSON line with the part's size and
-// closes. Either side ending early leaves the part as it is, which is what a
-// resume starts from.
+// from offset to that size and closes. With compress "auto" this daemon reads
+// a sample of the file, and when it compresses well the bytes go as one
+// flate stream and the reply says compressed. mode write: the part file is
+// cut to offset (which must not be past the part's end), the reply says where
+// it starts, then the connection carries length bytes into it, as one flate
+// stream when compress is set. When they are all written and synced the
+// daemon writes one JSON line with the part's size and closes. Either side
+// ending early leaves the part as it is, which is what a resume starts from.
+//
+// A write from offset 0 is hashed as it lands, so file-commit does not read
+// the part again (partSums).
 func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path   string `json:"path"`
-		Mode   string `json:"mode"`
-		Offset int64  `json:"offset"`
-		Length int64  `json:"length"`
-		PartID string `json:"part_id"`
+		Path     string          `json:"path"`
+		Mode     string          `json:"mode"`
+		Offset   int64           `json:"offset"`
+		Length   int64           `json:"length"`
+		PartID   string          `json:"part_id"`
+		Compress json.RawMessage `json:"compress"`
+		Sum      bool            `json:"sum"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -750,6 +783,16 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 	if p.Offset < 0 || p.Length < 0 {
 		return nil, invalidParam("offset", "offset and length cannot be negative")
+	}
+	compress := ""
+	switch c := strings.TrimSpace(string(p.Compress)); c {
+	case "", "false", "null":
+	case "true":
+		compress = "on"
+	case `"auto"`:
+		compress = "auto"
+	default:
+		return nil, invalidParam("compress", "compress is true, false or \"auto\"")
 	}
 	switch p.Mode {
 	case "read", "":
@@ -765,6 +808,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			_ = f.Close()
 			return nil, invalidParam("offset", "offset is past the end of the file")
 		}
+		z := compress == "on" || compress == "auto" && compressibleFile(f, path, size-p.Offset, p.Offset)
 		if _, err := f.Seek(p.Offset, io.SeekStart); err != nil {
 			_ = f.Close()
 			return nil, fileError("read", path, err)
@@ -772,11 +816,46 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		cs.takeover = func(_ *bufio.Reader) {
 			defer func() { _ = f.Close() }()
 			_ = cs.conn.SetWriteDeadline(time.Time{})
-			_, _ = io.CopyBuffer(cs.conn, io.LimitReader(f, size-p.Offset), make([]byte, 256<<10))
+			h := sha256.New()
+			body := io.TeeReader(io.LimitReader(f, size-p.Offset), h)
+			bw := bufio.NewWriterSize(cs.conn, 256<<10)
+			var n int64
+			var err error
+			if z {
+				fw := getFlateWriter(bw)
+				n, err = io.CopyBuffer(fw, body, make([]byte, 256<<10))
+				if err == nil {
+					err = fw.Close()
+				}
+				putFlateWriter(fw)
+			} else {
+				n, err = io.CopyBuffer(bw, body, make([]byte, 256<<10))
+			}
+			if err == nil && p.Sum {
+				// The hash of what was read and sent, and whether the file
+				// is still the one the reply described.
+				t := map[string]any{"sha256": hex.EncodeToString(h.Sum(nil))}
+				if now, serr := f.Stat(); n < size-p.Offset || serr != nil || now.Size() != size || !now.ModTime().Equal(fi.ModTime()) {
+					t = map[string]any{"error": echoName(path) + " changed while it was copied. Copy it again when it is not being written."}
+				}
+				line, _ := json.Marshal(t)
+				_, _ = bw.Write(append(line, '\n'))
+			}
+			_ = bw.Flush()
 			_ = cs.conn.Close()
 		}
-		return map[string]any{"path": path, "mode": "read", "size": size, "offset": p.Offset, "mtime": fi.ModTime().UnixMilli()}, nil
+		out := map[string]any{"path": path, "mode": "read", "size": size, "offset": p.Offset, "mtime": fi.ModTime().UnixMilli()}
+		if z {
+			out["compressed"] = true
+		}
+		if p.Sum {
+			out["sum"] = true
+		}
+		return out, nil
 	case "write":
+		if compress == "auto" {
+			return nil, invalidParam("compress", "a write says whether its bytes are compressed: true or false")
+		}
 		// The destination is checked with the part, so a copy that file-commit
 		// would refuse is refused before its bytes move.
 		fsys, verr := d.linkWriteFS(cs, path, partPath(path, p.PartID))
@@ -794,16 +873,17 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		part := partPath(path, p.PartID)
 		// The room is claimed before the part is made, so a write that
 		// does not fit leaves nothing behind.
-		release, verr := d.claimLinkWrite(cs, fsys.confine(path), fsys.confine(part), p.Offset, p.Length)
+		confined := fsys.confine(part)
+		release, verr := d.claimLinkWrite(cs, fsys.confine(path), confined, p.Offset, p.Length)
 		if verr != nil {
 			return nil, verr
 		}
-		f, err := openPart(fsys, fsys.confine(part))
+		f, err := openPart(fsys, confined)
 		if err != nil {
 			release()
 			return nil, fileError("write", part, err)
 		}
-		d.transfers.parts.note(filepath.Dir(fsys.confine(part)))
+		d.transfers.parts.note(filepath.Dir(confined))
 		fi, err := f.Stat()
 		if err != nil {
 			release()
@@ -829,8 +909,25 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			defer release()
 			defer func() { _ = f.Close() }()
 			_ = cs.conn.SetReadDeadline(time.Time{})
-			n, cerr := io.CopyBuffer(f, io.LimitReader(br, p.Length), make([]byte, 256<<10))
-			syncErr := f.Sync()
+			var src io.Reader = br
+			var fr io.ReadCloser
+			if compress == "on" {
+				fr = getFlateReader(br)
+				src = fr
+			}
+			h := sha256.New()
+			var dst io.Writer = f
+			if p.Offset == 0 {
+				dst = io.MultiWriter(f, h)
+			}
+			n, cerr := io.CopyBuffer(dst, io.LimitReader(src, p.Length), make([]byte, 256<<10))
+			if fr != nil {
+				if cerr == nil && n == p.Length {
+					cerr = flateEnd(fr)
+				}
+				putFlateReader(fr)
+			}
+			syncErr := syncData(f)
 			reply := map[string]any{"part_size": p.Offset + n, "written": n}
 			switch {
 			case cerr != nil:
@@ -841,6 +938,10 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 				reply["error"], reply["code"] = ve.Message, ve.Code
 			case n < p.Length:
 				reply["error"] = "the sender stopped after " + strconv.FormatInt(n, 10) + " of " + strconv.FormatInt(p.Length, 10) + " bytes"
+			default:
+				if p.Offset == 0 {
+					d.transfers.sums.put(confined, f, hex.EncodeToString(h.Sum(nil)))
+				}
 			}
 			line, _ := json.Marshal(reply)
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -853,45 +954,70 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 }
 
+// commitOpts are the rest of what commitPart takes.
+type commitOpts struct {
+	// known is the part's sha256 as the writer computed it while the bytes
+	// went in, so the part is not read again. Empty reads it.
+	known string
+	// label names the copy keep-both makes: "name (LABEL).ext". Empty
+	// numbers it: "name 2.ext".
+	label string
+	// noDirSync leaves the folder's sync to the caller, which syncs each
+	// folder once after many files.
+	noDirSync bool
+}
+
 // commitPart checks a finished part against the sender's hash and renames it
 // into place. conflict says what to do when path exists: replace it, keep both
-// (the new file gets " 2", " 3" ... before its extension), or fail. perm, when
-// not zero, is the original's permission bits: the part is owner only while
-// it is written, and the finished file gets the original's. mtime, when not
-// zero, is the original's modification time in Unix ms, which the finished
-// file gets too.
-func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict string, perm uint32, mtime int64) (string, string, *verbError) {
+// (the new file gets a free name, see freeNameIn), skip (the part is removed
+// and the file there stays), or fail. perm, when not zero, is the original's
+// permission bits: the part is owner only while it is written, and the
+// finished file gets the original's. mtime, when not zero, is the original's
+// modification time in Unix ms, which the finished file gets too. skipped
+// reports a copy that conflict skip left out.
+func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict string, perm uint32, mtime int64, o commitOpts) (final, sum string, skipped bool, verr *verbError) {
 	part := partPath(path, partID)
 	// The part is checked and moved by its name, so it must still be the
 	// regular file the copy wrote, not a link put there since.
 	if fi, err := fsys.Lstat(part); err != nil {
-		return "", "", fileError("check", part, err)
+		return "", "", false, fileError("check", part, err)
 	} else if !fi.Mode().IsRegular() {
-		return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
+		return "", "", false, fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errNotRegular})
 	}
 	if pf, err := fsys.OpenFile(part, os.O_RDONLY|oNoFollow|oNonBlock, 0); err == nil {
 		n, lerr := fileLinks(pf)
 		_ = pf.Close()
 		if lerr != nil || n > 1 {
-			return "", "", fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errHardLinked})
+			return "", "", false, fileError("check", part, &fs.PathError{Op: "check", Path: part, Err: errHardLinked})
 		}
 	}
-	got, _, err := hashRangeIn(ctx, fsys, part, 0, -1)
-	if err != nil {
-		return "", "", fileError("check", part, err)
+	got := o.known
+	if got == "" {
+		var err error
+		got, _, err = hashRangeIn(ctx, fsys, part, 0, -1)
+		if err != nil {
+			return "", "", false, fileError("check", part, err)
+		}
 	}
 	if want != "" && !strings.EqualFold(got, want) {
 		_ = fsys.Remove(part)
-		return "", got, newVerbError(ErrVerbHashMismatch, "the copy of "+echoName(filepath.Base(path))+" does not match the original, so it was removed")
+		return "", got, false, newVerbError(ErrVerbHashMismatch, "the copy of "+echoName(filepath.Base(path))+" does not match the original, so it was removed")
 	}
-	final := path
-	if _, err := fsys.Lstat(path); err == nil {
+	final = path
+	if fi, err := fsys.Lstat(path); err == nil {
+		if fi.IsDir() {
+			_ = fsys.Remove(part)
+			return "", got, false, newVerbError(ErrVerbFileExists, echoName(path)+" is a folder, so a file cannot go there")
+		}
 		switch conflict {
 		case "replace":
 		case "keep-both":
-			final = freeNameIn(fsys, path)
+			final = freeNameIn(fsys, path, o.label)
+		case "skip":
+			_ = fsys.Remove(part)
+			return path, got, true, nil
 		default:
-			return "", got, newVerbError(ErrVerbFileExists, echoName(path)+" already exists")
+			return "", got, false, newVerbError(ErrVerbFileExists, echoName(path)+" already exists")
 		}
 	}
 	if perm != 0 {
@@ -902,27 +1028,61 @@ func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict s
 		_ = fsys.Chtimes(part, t, t)
 	}
 	if err := fsys.Rename(part, final); err != nil {
-		return "", got, fileError("finish", final, err)
+		return "", got, false, fileError("finish", final, err)
 	}
-	if dir, err := fsys.OpenFile(filepath.Dir(final), os.O_RDONLY, 0); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
+	if !o.noDirSync {
+		syncDir(fsys, filepath.Dir(final))
 	}
-	return final, got, nil
+	return final, got, false, nil
 }
 
-// freeNameIn is path with " 2", " 3" ... before its extension, the first
-// that is free in fsys.
-func freeNameIn(fsys fileFS, path string) string {
+// syncDir writes a folder's entries to the disk, so a rename in it lasts.
+func syncDir(fsys fileFS, dir string) {
+	if f, err := fsys.OpenFile(dir, os.O_RDONLY, 0); err == nil {
+		_ = f.Sync()
+		_ = f.Close()
+	}
+}
+
+// keepLabelMax bounds a keep-both label.
+const keepLabelMax = 64
+
+// checkKeepLabel refuses a label that could not be part of one file name.
+func checkKeepLabel(label string) *verbError {
+	if len(label) > keepLabelMax {
+		return invalidParam("label", "a label is at most 64 bytes")
+	}
+	for _, r := range label {
+		if r == '/' || r == '\\' || r < 0x20 || r == 0x7f {
+			return invalidParam("label", "a label cannot hold a slash or a control character")
+		}
+	}
+	return nil
+}
+
+// freeNameIn is the name keep-both gives a copy of path in fsys: with a
+// label, "name (LABEL).ext", then "name (LABEL) 2.ext"; without one,
+// "name 2.ext", then "name 3.ext". It is the first such name that is free.
+func freeNameIn(fsys fileFS, path, label string) string {
 	dir, base := filepath.Split(path)
 	ext := filepath.Ext(base)
 	stem := strings.TrimSuffix(base, ext)
 	if ext == base {
 		stem, ext = base, ""
 	}
+	free := func(cand string) bool {
+		_, err := fsys.Lstat(cand)
+		return errors.Is(err, fs.ErrNotExist)
+	}
+	if label != "" {
+		stem += " (" + label + ")"
+		if cand := filepath.Join(dir, stem+ext); free(cand) {
+			return cand
+		}
+	}
 	for i := 2; ; i++ {
 		cand := filepath.Join(dir, fmt.Sprintf("%s %d%s", stem, i, ext))
-		if _, err := fsys.Lstat(cand); errors.Is(err, fs.ErrNotExist) {
+		if free(cand) {
 			return cand
 		}
 	}
@@ -937,6 +1097,7 @@ func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *ve
 		Perm     uint32 `json:"perm"`
 		MTime    int64  `json:"mtime"`
 		PartID   string `json:"part_id"`
+		Label    string `json:"label"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -944,28 +1105,37 @@ func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *ve
 	if verr := checkPartID(p.PartID); verr != nil {
 		return nil, verr
 	}
+	if verr := checkKeepLabel(p.Label); verr != nil {
+		return nil, verr
+	}
 	path, verr := expandPath(p.Path)
 	if verr != nil {
 		return nil, verr
 	}
 	switch p.Conflict {
-	case "", "fail", "replace", "keep-both":
+	case "", "fail", "replace", "keep-both", "skip":
 	default:
-		return nil, invalidParam("conflict", "conflict is replace, keep-both or fail", "replace", "keep-both", "fail")
+		return nil, invalidParam("conflict", "conflict is replace, keep-both, skip or fail", "replace", "keep-both", "skip", "fail")
 	}
 	fsys, verr := d.linkWriteFS(cs, path, partPath(path, p.PartID))
 	if verr != nil {
 		return nil, verr
 	}
 	defer fsys.Close()
-	final, sum, verr := commitPart(d.ctx, fsys, fsys.confine(path), p.PartID, p.SHA256, p.Conflict, p.Perm, p.MTime)
-	if _, err := os.Lstat(fsys.confine(partPath(path, p.PartID))); err != nil {
-		d.linkFiles.partDone(cs, fsys.confine(partPath(path, p.PartID)))
+	target := fsys.confine(path)
+	known := d.transfers.sums.take(fsys, partPath(target, p.PartID))
+	final, sum, skipped, verr := commitPart(d.ctx, fsys, target, p.PartID, p.SHA256, p.Conflict, p.Perm, p.MTime, commitOpts{known: known, label: p.Label})
+	if _, err := os.Lstat(partPath(target, p.PartID)); err != nil {
+		d.linkFiles.partDone(cs, partPath(target, p.PartID))
 	}
 	if verr != nil {
 		return nil, verr
 	}
-	return map[string]any{"path": final, "sha256": sum}, nil
+	out := map[string]any{"path": final, "sha256": sum}
+	if skipped {
+		out["skipped"] = true
+	}
+	return out, nil
 }
 
 // verbFileAbort removes the part a copy left, for a copy that was cancelled.
@@ -998,8 +1168,14 @@ func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"path": path}, nil
 }
 
-// fileWalkMax bounds the files one folder copy carries.
-const fileWalkMax = 20000
+// fileWalkMax bounds the entries one folder copy carries. A walk on another
+// machine streams its entries one line each (file-walk with stream), so the
+// bound is the memory of the copy, not the size of one answer.
+const fileWalkMax = 1_000_000
+
+// fileWalkReplyMax bounds the entries of a walk answered in one JSON reply,
+// which a reader takes as one line.
+const fileWalkReplyMax = 20000
 
 // fileWalkSkippedMax bounds the skipped items a walk names. It counts all of
 // them.
@@ -1053,9 +1229,26 @@ func skippedKind(m fs.FileMode) string {
 // a pipe, a socket and a device are not copied, and the walk names them, so
 // the person learns what stayed behind. A part file of a copy in flight is
 // neither copied nor named.
-func walkTree(root string) (walkResult, error) {
+func walkTree(root string, limit int) (walkResult, error) {
 	var out walkResult
-	err := filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
+	err := walkTreeTo(root, limit, func(e WalkEntry) error {
+		out.entries = append(out.entries, e)
+		out.total += e.Size
+		return nil
+	}, func(s SkippedItem) {
+		out.skippedCount++
+		if len(out.skipped) < fileWalkSkippedMax {
+			out.skipped = append(out.skipped, s)
+		}
+	})
+	return out, err
+}
+
+// walkTreeTo is walkTree that hands each entry to emit as it is found, and
+// each skipped item to skip.
+func walkTreeTo(root string, limit int, emit func(WalkEntry) error, skip func(SkippedItem)) error {
+	n := 0
+	return filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -1064,12 +1257,13 @@ func walkTree(root string) (walkResult, error) {
 		}
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
-		if len(out.entries) >= fileWalkMax {
-			return errWalkTooLarge
+		if n >= limit {
+			return errWalkTooLarge(limit)
 		}
 		switch {
 		case de.IsDir():
-			out.entries = append(out.entries, WalkEntry{Rel: rel, Dir: true})
+			n++
+			return emit(WalkEntry{Rel: rel, Dir: true})
 		case de.Type().IsRegular():
 			if isPartName(de.Name()) {
 				return nil
@@ -1078,25 +1272,37 @@ func walkTree(root string) (walkResult, error) {
 			if err != nil {
 				return err
 			}
-			out.entries = append(out.entries, WalkEntry{Rel: rel, Size: fi.Size(), Perm: uint32(fi.Mode().Perm()), MTime: fi.ModTime().UnixMilli()})
-			out.total += fi.Size()
+			n++
+			return emit(WalkEntry{Rel: rel, Size: fi.Size(), Perm: uint32(fi.Mode().Perm()), MTime: fi.ModTime().UnixMilli()})
 		default:
-			out.skippedCount++
-			if len(out.skipped) < fileWalkSkippedMax {
-				out.skipped = append(out.skipped, SkippedItem{Rel: rel, Kind: skippedKind(de.Type())})
-			}
+			skip(SkippedItem{Rel: rel, Kind: skippedKind(de.Type())})
 		}
 		return nil
 	})
-	return out, err
 }
 
-var errWalkTooLarge = errors.New("the folder holds more than " + strconv.Itoa(fileWalkMax) + " files")
+// walkTooLarge is a folder with more entries than a walk carries.
+type walkTooLarge struct{ limit int }
 
-// verbFileWalk lists every file under a folder, for a folder copy.
+func (e walkTooLarge) Error() string {
+	return "the folder holds more than " + strconv.Itoa(e.limit) + " files and folders"
+}
+
+func errWalkTooLarge(limit int) error { return walkTooLarge{limit} }
+
+func isWalkTooLarge(err error) bool {
+	var w walkTooLarge
+	return errors.As(err, &w)
+}
+
+// verbFileWalk lists every file under a folder, for a folder copy. With
+// stream, the reply is the folder alone, and then the connection carries one
+// JSON line per entry and a last line with the totals, so a folder of a
+// million files is not one answer.
 func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path string `json:"path"`
+		Path   string `json:"path"`
+		Stream bool   `json:"stream"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -1109,9 +1315,47 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	w, err := walkTree(root)
-	if errors.Is(err, errWalkTooLarge) {
-		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error())
+	if p.Stream {
+		fi, err := os.Stat(root)
+		if err != nil {
+			return nil, fileError("list", path, err)
+		}
+		if !fi.IsDir() {
+			return nil, invalidParam("path", echoName(path)+" is not a folder")
+		}
+		cs.takeover = func(_ *bufio.Reader) {
+			_ = cs.conn.SetWriteDeadline(time.Time{})
+			bw := bufio.NewWriterSize(cs.conn, 64<<10)
+			enc := json.NewEncoder(bw)
+			var total int64
+			var skipped []SkippedItem
+			count := 0
+			err := walkTreeTo(root, fileWalkMax, func(e WalkEntry) error {
+				total += e.Size
+				return enc.Encode(e)
+			}, func(s SkippedItem) {
+				count++
+				if len(skipped) < fileWalkSkippedMax {
+					skipped = append(skipped, s)
+				}
+			})
+			end := map[string]any{"end": true, "bytes": total, "skipped": skipped, "skipped_count": count}
+			if err != nil {
+				v := fileError("list", path, err)
+				if isWalkTooLarge(err) {
+					v = newVerbError(ErrVerbInvalidParams, "copy: "+err.Error())
+				}
+				end = map[string]any{"end": true, "code": v.Code, "error": v.Message}
+			}
+			_ = enc.Encode(end)
+			_ = bw.Flush()
+			_ = cs.conn.Close()
+		}
+		return map[string]any{"path": path, "stream": true}, nil
+	}
+	w, err := walkTree(root, fileWalkReplyMax)
+	if isWalkTooLarge(err) {
+		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error()+". Ask with stream for a larger folder")
 	}
 	if err != nil {
 		return nil, fileError("list", path, err)
@@ -1184,10 +1428,13 @@ func fileVerbs() map[string]verbEntry {
 		},
 		"file-mkdir": {
 			description: "Make a folder on this machine, with its parents.",
-			params:      []verbParam{pathParam("The folder.")},
-			returns:     []verbParam{{Name: "path", Type: "string", Description: "The folder, made absolute."}},
-			examples:    []string{`{"id":1,"verb":"file-mkdir","params":{"path":"~/new"}}`},
-			handler:     (*Daemon).verbFileMkdir,
+			params: []verbParam{
+				pathParam("The folder."),
+				{Name: "receive", Type: "bool", Description: "Make the receive folder instead, and ignore path: where a copy from the caller lands when it names no folder. For a linked machine it is the first folder of its files_roots, else ~/Downloads/tuios."},
+			},
+			returns:  []verbParam{{Name: "path", Type: "string", Description: "The folder, made absolute."}},
+			examples: []string{`{"id":1,"verb":"file-mkdir","params":{"path":"~/new"}}`, `{"id":2,"verb":"file-mkdir","params":{"path":"~","receive":true}}`},
+			handler:  (*Daemon).verbFileMkdir,
 		},
 		"file-rename": {
 			description: "Move or rename a path on this machine. It does not replace a path that is there unless replace is set. A move to another disk answers cross_device: copy it with transfer-start and move set.",
@@ -1230,8 +1477,11 @@ func fileVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbFileHash,
 		},
 		"file-walk": {
-			description: "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries. Links are not followed: a link, a named pipe, a socket and a device are not copied, and skipped names them.",
-			params:      []verbParam{pathParam("The folder.")},
+			description: "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries in one reply; with stream, up to 1000000 entries, one JSON line each after the reply, and a last line {end, bytes, skipped, skipped_count} or {end, code, error}. Links are not followed: a link, a named pipe, a socket and a device are not copied, and skipped names them.",
+			params: []verbParam{
+				pathParam("The folder."),
+				{Name: "stream", Type: "bool", Description: "Send the entries after the reply, one JSON line each, for a folder of more than 20000 entries."},
+			},
 			returns: []verbParam{
 				{Name: "entries", Type: "[]object", Description: "rel (the path under the folder, slash separated), size, dir, perm, mtime (Unix ms). A folder comes before what it holds."},
 				{Name: "bytes", Type: "int", Description: "The bytes of every file together."},
@@ -1249,10 +1499,14 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "offset", Type: "int", Description: "Where the bytes start. A write's offset cannot be past the part's end.", Default: "0"},
 				{Name: "length", Type: "int", Description: "write only: how many bytes the caller sends."},
 				partIDParam,
+				{Name: "sum", Type: "bool", Description: "read: after the last byte, one line {sha256} with the hash of the bytes sent, or {error} when the file changed while it was read."},
+				{Name: "compress", Type: "any", Description: "read: \"auto\" lets this machine compress the bytes with flate when a sample of the file compresses well, and the reply says compressed. write: true when the caller sends the bytes as one flate stream."},
 			},
 			returns: []verbParam{
 				{Name: "size", Type: "int", Description: "read: the file's size. The connection carries size minus offset bytes."},
 				{Name: "mtime", Type: "int", Description: "read: the file's modification time, Unix ms."},
+				{Name: "compressed", Type: "bool", Description: "read: the bytes come as one flate stream."},
+				{Name: "sum", Type: "bool", Description: "read: a {sha256} line follows the bytes."},
 				{Name: "part_size", Type: "int", Description: "write: the part's size before it was cut to offset."},
 			},
 			examples: []string{
@@ -1266,7 +1520,8 @@ func fileVerbs() map[string]verbEntry {
 			params: []verbParam{
 				pathParam("The file the copy is for."),
 				{Name: "sha256", Type: "string", Description: "The sender's hash, hex. Omit to skip the check."},
-				{Name: "conflict", Type: "string", Description: "When the path exists: replace it, keep both (the copy gets a number), or fail.", Accepted: []string{"replace", "keep-both", "fail"}, Default: "fail"},
+				{Name: "conflict", Type: "string", Description: "When the path exists: replace it, keep both (the copy gets a new name), skip (the part is removed and the file there stays), or fail.", Accepted: []string{"replace", "keep-both", "skip", "fail"}, Default: "fail"},
+				{Name: "label", Type: "string", Description: "keep-both names the copy \"name (LABEL).ext\", such as \"report (from build).pdf\". Omit to name it \"name 2.ext\"."},
 				{Name: "perm", Type: "int", Description: "The original's permission bits, which the finished file gets. Omit to keep it owner only."},
 				{Name: "mtime", Type: "int", Description: "The original's modification time, Unix ms, which the finished file gets. Omit to keep the time of the copy."},
 				partIDParam,
@@ -1274,6 +1529,7 @@ func fileVerbs() map[string]verbEntry {
 			returns: []verbParam{
 				{Name: "path", Type: "string", Description: "Where the file is now."},
 				{Name: "sha256", Type: "string", Description: "The part's hash."},
+				{Name: "skipped", Type: "bool", Description: "conflict skip found a file at path, so the copy was removed and the file there stays."},
 			},
 			examples: []string{`{"id":1,"verb":"file-commit","params":{"path":"~/big.iso","sha256":"9f86d0...","conflict":"keep-both"}}`},
 			handler:  (*Daemon).verbFileCommit,

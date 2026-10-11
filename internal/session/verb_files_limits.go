@@ -86,6 +86,41 @@ func dirBytes(dir string) int64 {
 // returns release, which the caller runs when the stream ends. A call that
 // did not come over a link passes with a release that does nothing.
 func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length int64) (release func(), verr *verbError) {
+	return d.claimLinkWriteIn(cs, path, part, offset, length, true)
+}
+
+// claimLinkStream counts one write stream of cs against linkWriteStreamsMax:
+// a tree stream, whose files claim their room and parts without a stream
+// each (claimLinkWriteIn with stream false).
+func (d *Daemon) claimLinkStream(cs *connState) (release func(), verr *verbError) {
+	none := func() {}
+	if cs == nil || !cs.viaLink {
+		return none, nil
+	}
+	peer := linkPeerKey(cs)
+	u := &d.linkFiles
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.streams == nil {
+		u.streams, u.parts = map[string]int{}, map[string]map[string]bool{}
+	}
+	if u.streams[peer] >= linkWriteStreamsMax {
+		return none, newVerbError(ErrVerbBusy, "this machine already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(d.linkPolicy(cs).Peer)+". Wait for one to end, then try again.")
+	}
+	u.streams[peer]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			u.mu.Lock()
+			u.streams[peer]--
+			u.mu.Unlock()
+		})
+	}, nil
+}
+
+// claimLinkWriteIn is claimLinkWrite; stream says whether the write counts
+// as a stream of its own.
+func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, length int64, stream bool) (release func(), verr *verbError) {
 	none := func() {}
 	if cs == nil || !cs.viaLink {
 		return none, nil
@@ -105,7 +140,7 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 	if u.streams == nil {
 		u.streams, u.parts = map[string]int{}, map[string]map[string]bool{}
 	}
-	if u.streams[peer] >= linkWriteStreamsMax {
+	if stream && u.streams[peer] >= linkWriteStreamsMax {
 		return none, newVerbError(ErrVerbBusy, "this machine already takes "+strconv.Itoa(linkWriteStreamsMax)+" copies at once from "+peerName(policy.Peer)+". Wait for one to end, then try again.")
 	}
 	if u.parts[peer] == nil {
@@ -139,7 +174,9 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 		}
 	}
 
-	u.streams[peer]++
+	if stream {
+		u.streams[peer]++
+	}
 	u.parts[peer][part] = true
 	if inDrop {
 		u.dropClaimed += grow
@@ -151,7 +188,9 @@ func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length
 	return func() {
 		once.Do(func() {
 			u.mu.Lock()
-			u.streams[peer]--
+			if stream {
+				u.streams[peer]--
+			}
 			if inDrop {
 				u.dropClaimed -= grow
 			}

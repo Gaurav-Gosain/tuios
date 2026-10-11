@@ -167,6 +167,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"transfer-cancel#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
 	"transfer-pause#0":   {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
 	"transfer-resume#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
+	"transfer-answer#0":  {errCode: ErrVerbNoTransfer, why: "the example's id is a placeholder"},
+	"host-speed-test#0":  {errCode: ErrVerbUnknownHost, why: "the fixture daemon has no hosts"},
+	"open-tree-stream#0": {errCode: ErrVerbNoFile, why: "~/src does not exist here"},
 	// A blocked agent's pane, named by an id the example invents. The pair is
 	// proved against a real pane running a fake agent in verb_respond_test.go.
 	"peek-prompt#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},

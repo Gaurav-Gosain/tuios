@@ -92,7 +92,11 @@ const (
 	// four times a second per copy. It reaches only a subscriber that names
 	// it in types, and it is not kept for replay: the next one replaces it.
 	EventTransferProgress = "transfer-progress"
-	EventSubscribed       = "subscribed" // subscribe ack result type
+	// EventTransferFile is one file of a copy: Action and File.State are
+	// done, same, skipped, conflict or failed. It reaches only a subscriber
+	// that names it in types, and it is not kept for replay.
+	EventTransferFile = "transfer-file"
+	EventSubscribed   = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -184,6 +188,8 @@ type streamEvent struct {
 	Cursor string `json:"cursor,omitempty"`
 	// Transfer is a transfer or transfer-progress event's copy.
 	Transfer *TransferRow `json:"transfer,omitempty"`
+	// File is a transfer-file event's file.
+	File *TransferFile `json:"file,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -332,7 +338,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true}
+var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -389,6 +395,8 @@ type eventHub struct {
 	// lastProgressSeq is the same for transfer-progress events, which the
 	// next one replaces.
 	lastProgressSeq uint64
+	// lastFileSeq is the same for transfer-file events.
+	lastFileSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -489,7 +497,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 	case filter.admitsOutput() && h.lastOutputSeq > from.afterSeq,
 		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq,
 		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq,
-		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq:
+		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq,
+		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -521,6 +530,9 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventTransferProgress:
 		h.lastProgressSeq = ev.Seq
+		return
+	case EventTransferFile:
+		h.lastFileSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {
