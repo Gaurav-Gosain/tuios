@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -122,6 +123,12 @@ type LinkPolicy struct {
 	// starting with ~. Nil is the receive folder, DefaultFilesRoot. Empty is
 	// no folder at all.
 	FilesRoots []string
+	// FilesReadRoots are the folders files_read_roots names, as written. Nil
+	// is no limit beyond the read deny list.
+	FilesReadRoots []string
+	// FilesMinFree is the free space in bytes a write over the link must
+	// leave on its disk.
+	FilesMinFree int64
 	// Source names the table the policy came from, for an error that tells
 	// the caller which key to change: hosts.laptop, hosts."*", or empty for
 	// the built-in default.
@@ -140,7 +147,38 @@ func (p LinkPolicy) Allows(caps ...string) bool {
 
 // DefaultLinkPolicy is the policy with nothing configured.
 func DefaultLinkPolicy() LinkPolicy {
-	return LinkPolicy{Allow: slices.Clone(DefaultLinkAllow), HostedGrace: DefaultHostedGrace}
+	return LinkPolicy{Allow: slices.Clone(DefaultLinkAllow), HostedGrace: DefaultHostedGrace, FilesMinFree: DefaultFilesMinFree}
+}
+
+// DefaultFilesMinFree is the free space a write over a link leaves on its
+// disk when files_min_free says nothing: 1 GiB.
+const DefaultFilesMinFree = 1 << 30
+
+// ParseFilesMinFree reads files_min_free: a whole number of bytes with an
+// optional unit, B, KB, MB, GB, TB (powers of 1000) or KiB, MiB, GiB, TiB
+// (powers of 1024). "0" turns the reserve off.
+func ParseFilesMinFree(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	units := []struct {
+		suffix string
+		mul    int64
+	}{
+		{"KiB", 1 << 10}, {"MiB", 1 << 20}, {"GiB", 1 << 30}, {"TiB", 1 << 40},
+		{"KB", 1e3}, {"MB", 1e6}, {"GB", 1e9}, {"TB", 1e12}, {"B", 1},
+	}
+	mul := int64(1)
+	num := s
+	for _, u := range units {
+		if n, ok := strings.CutSuffix(s, u.suffix); ok {
+			num, mul = strings.TrimSpace(n), u.mul
+			break
+		}
+	}
+	n, err := strconv.ParseInt(num, 10, 64)
+	if err != nil || n < 0 || n > (1<<62)/mul {
+		return 0, fmt.Errorf("%q is not a size such as \"2GiB\" or \"500MB\"", s)
+	}
+	return n * mul, nil
 }
 
 // LinkPolicyFor resolves the policy for a machine that linked in as peer:
@@ -167,6 +205,14 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 		}
 		if h.FilesRoots != nil {
 			p.FilesRoots = cleanFilesRoots(h.FilesRoots)
+		}
+		if h.FilesReadRoots != nil {
+			p.FilesReadRoots = cleanFilesRoots(h.FilesReadRoots)
+		}
+		if h.FilesMinFree != "" {
+			if n, err := ParseFilesMinFree(h.FilesMinFree); err == nil {
+				p.FilesMinFree = n
+			}
 		}
 		p.Source = "hosts." + key
 	}
@@ -312,6 +358,24 @@ func validateLinkPolicies(cfg *UserConfig, result *ValidationResult) {
 					Field:   "hosts." + name,
 					Key:     "files_roots",
 					Message: fmt.Sprintf("'%s' is not an absolute path or a path that starts with ~; it is ignored", r),
+				})
+			}
+		}
+		for _, r := range h.FilesReadRoots {
+			if !validFilesRoot(strings.TrimSpace(r)) {
+				result.Warnings = append(result.Warnings, ValidationError{
+					Field:   "hosts." + name,
+					Key:     "files_read_roots",
+					Message: fmt.Sprintf("'%s' is not an absolute path or a path that starts with ~; it is ignored", r),
+				})
+			}
+		}
+		if h.FilesMinFree != "" {
+			if _, err := ParseFilesMinFree(h.FilesMinFree); err != nil {
+				result.Warnings = append(result.Warnings, ValidationError{
+					Field:   "hosts." + name,
+					Key:     "files_min_free",
+					Message: err.Error() + "; the inherited value is used",
 				})
 			}
 		}

@@ -82,10 +82,22 @@ type HostConfig struct {
 	// an empty list lets the machine write nowhere but the drop folder. The
 	// deny list in internal/session applies inside every root.
 	FilesRoots []string `toml:"files_roots,omitempty"`
+	// FilesReadRoots are the folders here that the machine may read files
+	// from over the link: file-read, file-hash, file-walk, a copy out, and
+	// file-stat and file-list. Nil inherits [hosts."*"] and then no limit
+	// beyond the read deny list in internal/session. A list holds reads to
+	// those folders and the write roots. The read deny list applies inside
+	// every root.
+	FilesReadRoots []string `toml:"files_read_roots,omitempty"`
+	// FilesMinFree is the free space a write over the link must leave on the
+	// disk it lands on, such as "2GiB" or "500MB". Empty inherits
+	// [hosts."*"] and then DefaultFilesMinFree.
+	FilesMinFree string `toml:"files_min_free,omitempty"`
 }
 
 // HasLinkPolicy reports whether the entry says anything about what the
 // machine of its name may do here.
 func (h HostConfig) HasLinkPolicy() bool {
-	return h.Allow != nil || h.HoldMail != nil || h.HostedGrace != "" || h.FilesRoots != nil
+	return h.Allow != nil || h.HoldMail != nil || h.HostedGrace != "" || h.FilesRoots != nil ||
+		h.FilesReadRoots != nil || h.FilesMinFree != ""
 }
