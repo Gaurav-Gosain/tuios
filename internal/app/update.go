@@ -2108,6 +2108,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ClientJoinedMsg:
 		// Another client joined the session
+		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2*time.Second)
 		// Continue listening for more client events
 		return m, ListenForClientEvents(m.ClientEventChan)
@@ -2267,6 +2268,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ClientLeftMsg:
 		// Another client left the session
+		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2*time.Second)
 		// Continue listening for more client events
 		return m, ListenForClientEvents(m.ClientEventChan)
@@ -2275,8 +2277,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The box the panes are laid out in from here on is this answer's,
 		// so the next push says so. See session/layout_gen.go.
 		m.layoutGenApplied = max(m.layoutGenApplied, msg.Generation)
-		// Effective session size changed (min of all clients)
-		// Set the effective size. GetRenderWidth/Height will use min(terminal, effective)
+		m.sessionClients = msg.ClientCount
+		// The session's size or chrome reserve changed. See pane_view.go for
+		// how a size that differs from this client's is drawn.
 		//
 		// The agreed chrome reserve is half of the same answer and moves the
 		// panes' box exactly as the size does, so a change to either one is a

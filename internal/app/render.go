@@ -386,6 +386,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		if mark := m.renderViewMark(); mark != nil {
 			layers = append(layers, mark)
 		}
+
+		// The part of this client's pane area a smaller session leaves.
+		layers = m.renderLeftover(layers)
 	} else {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.
@@ -822,9 +825,10 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.panesBorderless() {
 		return nil, false
 	}
-	// A view of a larger session is the compositor's: the fast path draws the
-	// pane at the origin of the screen, unshifted.
-	if m.ViewCropped() {
+	// A view of a larger or smaller session is the compositor's: the fast
+	// path draws the pane at the origin of the screen, unshifted, and draws
+	// no leftover.
+	if m.viewShifted() {
 		return nil, false
 	}
 	// The picture-in-picture view is a layer over the pane. The fast path

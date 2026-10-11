@@ -316,8 +316,10 @@ func (m *OS) GetUsableHeight() int {
 }
 
 // GetRenderWidth returns the width to use for rendering.
-// In multi-client mode, this is the minimum of the terminal width and
-// the effective session width (min of all connected clients).
+// Against a daemon that sizes sessions by window_size it is the terminal's
+// width: the session's panes are drawn as a view inside it (see
+// pane_view.go). Against an older daemon it is the minimum of the terminal
+// width and the session's.
 func (m *OS) GetRenderWidth() int {
 	// If terminal size not yet known, use effective size if available
 	if m.Width == 0 {
@@ -325,6 +327,9 @@ func (m *OS) GetRenderWidth() int {
 			return m.EffectiveWidth
 		}
 		return 0
+	}
+	if m.windowSizeAware() {
+		return m.Width
 	}
 	// Use minimum of terminal and effective size
 	if m.EffectiveWidth > 0 && m.EffectiveWidth < m.Width {
@@ -503,8 +508,25 @@ func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 // The consequence is deliberate: a client with less chrome than the session
 // agreed leaves the difference blank rather than handing it to the panes. A
 // client absorbs its own chrome; it never moves the panes to make room.
+//
+// Under window_size latest the daemon agrees on the latest client's reserve
+// alone. A client whose size or chrome differs from the latest client's along
+// an axis draws the session as a view inside its own chrome, so along that
+// axis it takes the session's reserve as it is. Floored by its own chrome
+// there, it would lay the panes out in a box no other client uses.
 func (m *OS) paneReserve() session.LayoutReserve {
-	return m.OwnLayoutReserve().Max(m.SessionReserve)
+	own := m.OwnLayoutReserve()
+	r := own.Max(m.SessionReserve)
+	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest {
+		return r
+	}
+	if m.widthDiffers() {
+		r.Left, r.Right = m.SessionReserve.Left, m.SessionReserve.Right
+	}
+	if m.heightDiffers() {
+		r.Top, r.Bottom = m.SessionReserve.Top, m.SessionReserve.Bottom
+	}
+	return r
 }
 
 // GetLeftMargin returns the columns reserved on the left before any pane is
@@ -543,9 +565,8 @@ func (m *OS) GetContentWidth() int {
 	return max(m.GetLayoutWidth()-m.GetLeftMargin()-m.GetRightMargin(), 0)
 }
 
-// GetRenderHeight returns the height to use for rendering.
-// In multi-client mode, this is the minimum of the terminal height and
-// the effective session height (min of all connected clients).
+// GetRenderHeight returns the height to use for rendering. See
+// GetRenderWidth.
 func (m *OS) GetRenderHeight() int {
 	// If terminal size not yet known, use effective size if available
 	if m.Height == 0 {
@@ -553,6 +574,9 @@ func (m *OS) GetRenderHeight() int {
 			return m.EffectiveHeight
 		}
 		return 0
+	}
+	if m.windowSizeAware() {
+		return m.Height
 	}
 	// Use minimum of terminal and effective size
 	if m.EffectiveHeight > 0 && m.EffectiveHeight < m.Height {

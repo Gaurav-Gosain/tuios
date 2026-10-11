@@ -42,6 +42,18 @@ import (
 // shifted forward. Nothing is cached per offset, so the style cache and the
 // per-pane cell layers are reused as the view moves.
 
+// A session smaller than this client.
+//
+// The same mapping places a session smaller than the terminal. Under latest
+// another client may own the size, and under smallest a smaller client does.
+// The rail, the dock and the rest of the chrome stay at this client's own
+// edges, the session's panes sit at the top left of the pane area between
+// them, and the rest of that area is the leftover, drawn by renderLeftover:
+// a dotted pattern, as tmux fills it, and a line that names the client that
+// sets the size. Before this the whole client was drawn in the session's
+// size, so a right rail sat just past the panes and a blank strip ran from
+// there to the screen's edge, which read as a bug.
+
 // windowSizeAware reports whether the daemon may hand this client a session
 // larger than its terminal. Against a daemon that predates the policy the
 // session is never larger, and this keeps the client drawing as it did.
@@ -64,10 +76,58 @@ func (m *OS) ViewCropped() bool {
 	return m.cropsWidth() || m.cropsHeight()
 }
 
+// widthDiffers reports whether the session's panes are drawn as a view in
+// this client's frame across: the session is narrower or wider than this
+// client, or, under latest, its agreed left and right reserve is not this
+// client's own chrome (see reserveDiffers).
+func (m *OS) widthDiffers() bool {
+	if !m.windowSizeAware() {
+		return false
+	}
+	if m.Width > 0 && m.EffectiveWidth > 0 && m.EffectiveWidth != m.Width {
+		return true
+	}
+	own, agreed, ok := m.reserveDiffers()
+	return ok && (own.Left != agreed.Left || own.Right != agreed.Right)
+}
+
+// heightDiffers is widthDiffers for the height.
+func (m *OS) heightDiffers() bool {
+	if !m.windowSizeAware() {
+		return false
+	}
+	if m.Height > 0 && m.EffectiveHeight > 0 && m.EffectiveHeight != m.Height {
+		return true
+	}
+	own, agreed, ok := m.reserveDiffers()
+	return ok && (own.Top != agreed.Top || own.Bottom != agreed.Bottom)
+}
+
+// reserveDiffers returns this client's own chrome and the session's agreed
+// reserve, with ok true under latest. Under latest the agreed reserve is the
+// latest client's own, so another client of the same size with other chrome
+// (a wider rail, or none) cannot lay the panes out around its own: it would
+// put them in a box no other client uses. It lays them out around the agreed
+// reserve, like every client, and draws them as a view inside its own
+// chrome. Under smallest and largest the agreed reserve is the largest, so
+// it is never less than a client's own, and nothing changes.
+func (m *OS) reserveDiffers() (own, agreed session.LayoutReserve, ok bool) {
+	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest {
+		return own, agreed, false
+	}
+	return m.OwnLayoutReserve(), m.SessionReserve, true
+}
+
+// viewShifted reports whether the panes are drawn through the session view:
+// the session is larger or smaller than this client along some axis.
+func (m *OS) viewShifted() bool {
+	return m.widthDiffers() || m.heightDiffers()
+}
+
 // GetLayoutWidth is the width the panes are laid out in: the session's when
-// it is wider than this client, otherwise the render width.
+// its size differs from this client's, otherwise the render width.
 func (m *OS) GetLayoutWidth() int {
-	if m.cropsWidth() {
+	if m.widthDiffers() {
 		return m.EffectiveWidth
 	}
 	return m.GetRenderWidth()
@@ -75,23 +135,24 @@ func (m *OS) GetLayoutWidth() int {
 
 // GetLayoutHeight is the height the panes are laid out in. See GetLayoutWidth.
 func (m *OS) GetLayoutHeight() int {
-	if m.cropsHeight() {
+	if m.heightDiffers() {
 		return m.EffectiveHeight
 	}
 	return m.GetRenderHeight()
 }
 
 // viewReserve is the chrome this client takes around its own screen. Along
-// an axis the session fits, it is the layout's reserve. Along an axis the
-// session overflows, only this client's own chrome is kept: the session's
-// agreed reserve is a layout quantity, and the view has no blank band to leave.
+// an axis where the session is this client's size, it is the layout's
+// reserve. Along an axis where it is larger or smaller, only this client's
+// own chrome is kept: the session's agreed reserve is a layout quantity, and
+// the view has no blank band to leave.
 func (m *OS) viewReserve() session.LayoutReserve {
 	r := m.paneReserve()
 	own := m.OwnLayoutReserve()
-	if m.cropsWidth() {
+	if m.widthDiffers() {
 		r.Left, r.Right = own.Left, own.Right
 	}
-	if m.cropsHeight() {
+	if m.heightDiffers() {
 		r.Top, r.Bottom = own.Top, own.Bottom
 	}
 	w, h := m.GetRenderWidth(), m.GetRenderHeight()
@@ -103,9 +164,11 @@ func (m *OS) viewReserve() session.LayoutReserve {
 	}
 }
 
-// ViewContentWidth is the width of this client's pane area on its own screen.
+// ViewContentWidth is the width of this client's pane area on its own
+// screen: the room between its own chrome. With a session smaller than this
+// client it is more than the session's panes take, and the rest is leftover.
 func (m *OS) ViewContentWidth() int {
-	if !m.cropsWidth() {
+	if !m.widthDiffers() {
 		return m.GetContentWidth()
 	}
 	r := m.viewReserve()
@@ -114,7 +177,7 @@ func (m *OS) ViewContentWidth() int {
 
 // ViewUsableHeight is the height of this client's pane area on its own screen.
 func (m *OS) ViewUsableHeight() int {
-	if !m.cropsHeight() {
+	if !m.heightDiffers() {
 		return m.GetUsableHeight()
 	}
 	r := m.viewReserve()
@@ -126,8 +189,12 @@ type sessionView struct {
 	on bool
 	// dx and dy are added to a layout position to place it on the screen.
 	dx, dy int
-	// clip is the view's pane area, on the screen.
+	// clip is the part of the screen the session's panes are drawn in.
 	clip image.Rectangle
+	// frame is this client's whole pane area, on the screen. It is clip
+	// unless the session is smaller than the area along some axis, and then
+	// what frame has beyond clip is the leftover.
+	frame image.Rectangle
 	// box is the session's pane area, in the layout frame, and off is how far
 	// into it the view starts.
 	box  image.Rectangle
@@ -159,15 +226,19 @@ func (v sessionView) visible() image.Rectangle {
 // mode tuios follows the copy-mode cursor. Only a pane with no position to
 // follow shows its own top left corner.
 func (m *OS) computeSessionView() sessionView {
-	if !m.ViewCropped() {
+	if !m.viewShifted() {
 		return sessionView{}
 	}
 	box := image.Rect(m.GetLeftMargin(), m.GetTopMargin(),
 		m.GetLeftMargin()+m.GetContentWidth(), m.GetTopMargin()+m.GetUsableHeight())
 	view := m.viewReserve()
-	clip := image.Rect(view.Left, view.Top,
+	frame := image.Rect(view.Left, view.Top,
 		view.Left+m.ViewContentWidth(), view.Top+m.ViewUsableHeight())
-	v := sessionView{on: true, box: box, clip: clip}
+	// The panes take the top left of the frame, no more of it than the
+	// session's pane area.
+	clip := image.Rect(frame.Min.X, frame.Min.Y,
+		frame.Min.X+min(frame.Dx(), box.Dx()), frame.Min.Y+min(frame.Dy(), box.Dy()))
+	v := sessionView{on: true, box: box, clip: clip, frame: frame}
 
 	cx, cy, cursor := m.viewTarget()
 	v.offX = followOffset(cx-box.Min.X, box.Dx(), clip.Dx(), cursor, false)
@@ -349,7 +420,7 @@ const viewMarkLayerID = "view-mark"
 // one place left. Nil when the whole session is on the screen.
 func (m *OS) renderViewMark() *lipgloss.Layer {
 	v := m.sessionView
-	if !v.on || v.clip.Empty() {
+	if !v.on || v.clip.Empty() || (v.clip.Dx() >= v.box.Dx() && v.clip.Dy() >= v.box.Dy()) {
 		return nil
 	}
 	var arrows uint8

@@ -199,6 +199,14 @@ type OS struct {
 	activitySince   time.Time
 	// viewMark is the last mark renderViewMark built. See viewMarkCache.
 	viewMark viewMarkCache
+	// leftoverRight and leftoverBottom are the last strips renderLeftover
+	// built. See pane_leftover.go.
+	leftoverRight, leftoverBottom leftoverCache
+	// sessionClients is how many clients the daemon last said the session
+	// has, 0 before it said. The leftover is drawn only while it is not 1:
+	// a client alone in its session sees a smaller session only for the
+	// moment between its own resize and the daemon's answer.
+	sessionClients int
 	// pointerSeenX/Y is where the host last reported the pointer, whether or
 	// not that motion reached Update. LastMouseX/Y is the position of the
 	// last motion that did reach it, which is what the filter's "moved a
@@ -1968,6 +1976,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	// terminal, and neither is the session just left.
 	m.Width, m.Height = savedWidth, savedHeight
 	m.EffectiveWidth, m.EffectiveHeight = savedWidth, savedHeight
+	m.sessionClients = 0
 	if state != nil && state.Width > 0 && state.Height > 0 {
 		m.EffectiveWidth, m.EffectiveHeight = state.Width, state.Height
 	}
