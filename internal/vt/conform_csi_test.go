@@ -3,6 +3,8 @@ package vt_test
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // CSI parameter parsing and cursor motion. Parameters are where a guest's
@@ -293,6 +295,16 @@ func TestConform_Erase(t *testing.T) {
 			in:     fill + "\x1b[2;3H\x1b[2J",
 			cursor: "2,1",
 			want:   "",
+		},
+		{
+			// ED 2 erases to the pen's background, as ED 0, ED 1 and EL do.
+			// neovim clears with its colour scheme's background set and then
+			// draws only its text, so a clear to the default background left
+			// every cell past the text in the host's colour (#624).
+			name:  "ED 2 erases to the current background",
+			in:    fill + "\x1b[41m\x1b[2J",
+			want:  "",
+			cells: []cellWant{{x: 0, y: 0, bg: ansi.Red}, {x: 5, y: 3, bg: ansi.Red}},
 		},
 		{
 			name: "EL ignores the scroll region",

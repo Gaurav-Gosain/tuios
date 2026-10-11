@@ -101,10 +101,15 @@ func (e *Emulator) eraseDisplay(params ansi.Params, selective bool, fill func(*u
 		fill(e.scr.blankCell(), uv.Rect(0, y, min(x+1, width), 1))
 		// Don't clear images for ED 1: commonly used by apps
 	case 2: // erase screen (clear command)
+		// ED 2 erases to the pen's background, as ED 0 and ED 1 do. A
+		// full-screen program that clears with a background set (neovim
+		// with a colour scheme) then draws only its text, trusting the
+		// clear to have painted the rest, so a clear to the default
+		// background leaves every cell past the text in the wrong colour.
 		if selective {
 			fill(nil, e.scr.Bounds())
 		} else {
-			e.scr.Clear()
+			fill(e.scr.blankCell(), e.scr.Bounds())
 		}
 		e.KittyState().ClearPlacements()
 		// Drop on-screen semantic markers so stale prompt/command markers

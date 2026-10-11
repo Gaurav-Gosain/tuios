@@ -4345,3 +4345,20 @@ in `sameBackendCutStreams` at every byte between two libghostty emulators.
 
 `TestWireCarriesAnOpenCluster` records a known gap: it fails when the
 snapshot starts to carry an open character cluster.
+
+## ED 2 keeps the program's background (#624)
+
+`TestEraseDisplayKeepsTheProgramBackground` sets a truecolor background, sends
+ED 2, writes one word and holds the screen. It reads cells the program never
+wrote and checks that they carry the program's background. It also checks the
+word's own cell, which is the positive half: the colour reaches the screen at
+all.
+
+The control was run on 2026-10-11 on branch `fix/nvim-erase-background`. It
+builds `cmd/tuios` with the ED 2 case of `eraseDisplay` in
+`internal/vt/csi_screen.go` back on `e.scr.Clear()`, the call it made before
+the fix.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| ED 2 fills with `e.scr.blankCell()` (back to `e.scr.Clear()`) | "cells the clear painted lost the program's background": all three probes on the terminal's own background | **caught** |
