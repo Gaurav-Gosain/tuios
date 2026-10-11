@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 35,037,346 | 35,500,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 32,904,754 | 33,400,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 35,565,730 | 35,700,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 33,463,378 | 33,600,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2524,6 +2524,16 @@ image paste work in the panes of a daemon that ssh started. The CI build
 measured 35,037,346 bytes, 37,346 over the old budget, on top of the one
 daemon per user change (#635) that landed just before. The budget has about
 460 KB of room again, under the 40 MB ceiling.
+
+The budgets went to 35,700,000 (linux/amd64) and 33,600,000 (darwin/arm64)
+for `tuios cp`, `tuios transfers` and the copies in the TUI: the tree stream,
+check-ahead, compression with skip, the conflict state, the speed test, the
+two commands and their progress output, the dock item, the Copies panel and
+the send and drop flows. On origin/main at b228b387 (34,840,738 and
+32,769,954 bytes on Go 1.26.9) the branch measured 35,483,810 and 33,379,042,
+643,072 and 609,088 bytes more. Rebased on 377bc074, after pane-view, it
+measured 35,565,730 and 33,463,378. The compression is compress/flate, which the
+binary held already. No dependency was added.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
