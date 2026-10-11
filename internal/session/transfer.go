@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
@@ -154,6 +155,63 @@ func (j *transferJob) gate() *connState {
 		return nil
 	}
 	return &connState{viaLink: true, linkPeer: j.link.Peer, clientID: "transfer " + j.id}
+}
+
+// linkAllowed reports whether the machine a job runs for may still copy here:
+// relay and files, as transfer-start needs. A policy reload or a restart that
+// took them away ends the job, as forbidden. A job of the person's always may.
+func (m *transferManager) linkAllowed(j *transferJob) error {
+	if j.link == nil {
+		return nil
+	}
+	if verr := m.d.checkLinkCaps(j.gate(), "transfer-start", []string{capRelay, config.LinkAllowFiles}); verr != nil {
+		return permanent(verr.Code, verr.Message)
+	}
+	return nil
+}
+
+// failRevoked ends every job that has not ended and runs for a machine the
+// link policy no longer lets copy here. A running job stops at once; one that
+// waits, queues or is paused ends where it is. It runs after each policy
+// reload.
+func (m *transferManager) failRevoked() {
+	m.mu.Lock()
+	jobs := make([]*transferJob, 0, len(m.order))
+	for _, id := range m.order {
+		jobs = append(jobs, m.jobs[id])
+	}
+	m.mu.Unlock()
+	for _, j := range jobs {
+		if j.link == nil || transferEnded(j.getState()) {
+			continue
+		}
+		err := m.linkAllowed(j)
+		if err == nil {
+			continue
+		}
+		var te *transferError
+		_ = errors.As(err, &te)
+		var cancel context.CancelFunc
+		j.set(func(j *transferJob) {
+			j.state = transferFailed
+			j.errText, j.errCode = te.msg, te.code
+			j.ended = time.Now()
+			if j.cancel != nil {
+				j.stop = "revoke"
+				cancel = j.cancel
+			}
+		})
+		LogBasic("Transfer %s stops: the link policy no longer lets %q copy here", j.id, j.link.Peer)
+		if cancel != nil {
+			cancel()
+			continue
+		}
+		m.note(j, false)
+		select {
+		case j.wake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // end is one end of the job: this machine's disk, under the job's link
@@ -308,7 +366,7 @@ func (m *transferManager) run(j *transferJob) {
 			case <-ctx.Done():
 				return
 			}
-		} else if st == transferCancelled {
+		} else if st == transferCancelled || st == transferFailed {
 			return
 		}
 
@@ -322,7 +380,7 @@ func (m *transferManager) run(j *transferJob) {
 		// with no attempt to stop. It must not start one now.
 		held := false
 		j.set(func(j *transferJob) {
-			if j.state == transferPaused || j.state == transferCancelled {
+			if j.state == transferPaused || j.state == transferCancelled || j.state == transferFailed {
 				held = true
 				return
 			}
@@ -374,6 +432,11 @@ func (m *transferManager) run(j *transferJob) {
 			m.note(j, false)
 			tries = 0
 			continue
+		case stop == "revoke":
+			// failRevoked set the state; the parts stay for a copy the
+			// person may start again.
+			m.note(j, false)
+			return
 		case ctx.Err() != nil:
 			// The daemon is stopping. The journal keeps the job, and the
 			// next start goes on with it.
@@ -465,6 +528,9 @@ func classify(err error) error {
 
 // attempt runs the job once from where its parts are.
 func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
+	if err := m.linkAllowed(j); err != nil {
+		return err
+	}
 	src := m.end(j, j.src.Host)
 	dst := m.end(j, j.dst.Host)
 
@@ -576,6 +642,9 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 		if doneAlready {
 			base += e.Size
 			continue
+		}
+		if err := m.linkAllowed(j); err != nil {
+			return err
 		}
 		j.set(func(j *transferJob) { j.current = e.Rel })
 		perm := e.Perm

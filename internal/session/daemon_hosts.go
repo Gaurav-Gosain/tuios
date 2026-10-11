@@ -257,6 +257,10 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		merged[key] = h
 	}
 	d.SetLinkPolicies(merged)
+	// A machine that lost relay or files stops the copies it started here.
+	if d.transfers != nil {
+		d.transfers.failRevoked()
+	}
 	if widened {
 		log.Printf("[FEDERATION] A link policy in config.toml gives another machine more than before. That part applies after tuios config apply from outside tuios, or a daemon restart.")
 	}
