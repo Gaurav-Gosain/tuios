@@ -6,7 +6,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"tuios.dev/progstatus"
 )
 
 // Callbacks represents a set of callbacks for a terminal.

@@ -7,11 +7,15 @@
 // per id. This package holds the parts every user of the protocol shares: the
 // parser, which applies every discard rule before anything is stored; the
 // record store, with its limits, eviction, id hierarchy and lifetime events;
-// the summary rule that picks the record a pane shows; and the encoder the
-// tuios status command and the host forwarding use.
+// the summary rule that picks the record a pane shows; and the encoder a
+// program uses to write a report.
 //
-// It imports nothing from tuios, so the emulator, the daemon and the client
-// can all use it.
+// A terminal emulator calls Parse on the body of each OSC 7501 sequence and
+// hands the result to a Store. A program calls Sequence to build a report.
+// The package uses only the standard library. tuios uses it in its emulator,
+// its daemon and its client, and for the tuios status command.
+//
+// The API is at v0 and can change between minor versions.
 package progstatus
 
 import (
@@ -688,8 +692,9 @@ func Summary(recs []Record) (Record, bool) {
 }
 
 // Encode builds the body of a report for r, without OSC and ST: the pairs
-// joined with ":", title and msg in standard base64. It does not check r;
-// Valid does.
+// joined with ":", title and msg in standard base64. It does not check r: a
+// caller that builds a report from outside input runs the result through
+// Parse, or makes each value fit first with FitText and FitSegment.
 func Encode(r Report) string {
 	pairs := []string{"state=" + string(r.State)}
 	if r.ID != "" {

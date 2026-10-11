@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"tuios.dev/progstatus"
 )
 
 // TestGhosttyDiffProgramStatus feeds the same OSC 7501 input to the pure

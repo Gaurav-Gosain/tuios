@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	"github.com/spf13/cobra"
+	"tuios.dev/progstatus"
 )
 
 // statusOptions are the flags of tuios status.

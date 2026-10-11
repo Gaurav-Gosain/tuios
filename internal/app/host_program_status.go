@@ -10,7 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"tuios.dev/progstatus"
 )
 
 // tuios as a program that reports to the terminal it runs in.

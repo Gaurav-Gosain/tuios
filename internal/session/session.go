@@ -30,9 +30,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/progstatus"
 )
 
 // debugEnabled returns true if debug logging is enabled via TUIOS_DEBUG_INTERNAL env var

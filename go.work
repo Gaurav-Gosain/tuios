@@ -1,0 +1,9 @@
+go 1.26.6
+
+toolchain go1.26.9
+
+use (
+	.
+	./e2e/tui
+	./progstatus
+)

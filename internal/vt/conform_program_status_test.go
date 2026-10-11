@@ -2,7 +2,7 @@ package vt_test
 
 // Conformance for OSC 7501, the Program Status Protocol (revision 0.2), on
 // the backend this build selects. The grammar and the discard rules are
-// tested in internal/progstatus; this is the emulator's part: the sequence is
+// tested in tuios.dev/progstatus; this is the emulator's part: the sequence is
 // recognised with either terminator and across writes, the query gets the one
 // fixed reply in the query's own form, a report gets no reply at all, and a
 // full reset (RIS) reaches the owner while a soft reset (DECSTR) does not.
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/progstatus"
 )
 
 // programStatusEvents writes each chunk to a fresh terminal of this build's

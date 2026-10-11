@@ -3,11 +3,11 @@ package vt
 import (
 	"io"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"tuios.dev/progstatus"
 )
 
 // The Program Status Protocol (OSC 7501) as both backends read it. The parsing
-// and every discard rule are in internal/progstatus; this is the part that
+// and every discard rule are in tuios.dev/progstatus; this is the part that
 // knows about the sequence's terminator and the emulator's reply pipe.
 
 // parseProgramStatusOSC reads one OSC 7501 payload ("7501;..."). query says it

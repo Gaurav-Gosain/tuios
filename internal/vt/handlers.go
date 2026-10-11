@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/progstatus"
 )
 
 // DcsHandler is a function that handles a DCS escape sequence.

@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	gh "go.mitchellh.com/libghostty"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progstatus"
+	"tuios.dev/progstatus"
 )
 
 // This file holds the scanner hooks: the sequences tuios observes or owns on
