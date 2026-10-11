@@ -131,8 +131,15 @@ asks about a host key. Run ssh to the machine once by hand to accept its key.
 --start starts the daemon on the host when it does not run. It uses the
 tuios binary the link found there, over the same ssh. When tuios is missing on
 the host, --start does nothing: run 'tuios hosts sync NAME --start' to install
-it and start the daemon.`,
+it and start the daemon.
+
+--speed measures the link the daemon holds to the host, the way a copy uses
+it: the round trip of a small call, then 64 MiB of random bytes up and 64 MiB
+down. It needs the daemon and the link up.`,
 		Example: `  tuios hosts test build
+
+  # How fast a copy to build can be
+  tuios hosts test build --speed
 
   # Start the daemon on the host if it does not run
   tuios hosts test build --start
@@ -142,9 +149,13 @@ it and start the daemon.`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeConfiguredHosts,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if testOpts.speed {
+				return runHostSpeed(args[0], testOpts.json)
+			}
 			return runHostTest(args[0], testOpts)
 		},
 	}
+	testCmd.Flags().BoolVar(&testOpts.speed, "speed", false, "Measure the daemon's link to the host: round trip, and bytes a second each way")
 	testCmd.Flags().BoolVar(&testOpts.start, "start", false, "Start the daemon on the host when it does not run")
 	testCmd.Flags().BoolVar(&testOpts.dryRun, "dry-run", false, "Show what --start would do and change nothing")
 	testCmd.Flags().BoolVar(&testOpts.json, "json", false, "Print the result as JSON")
@@ -283,6 +294,7 @@ const hostTestGrace = 3 * time.Second
 
 // hostTestOptions are the flags of `tuios hosts test`.
 type hostTestOptions struct {
+	speed  bool
 	start  bool
 	dryRun bool
 	json   bool
@@ -643,4 +655,41 @@ func describeConfigApplied(raw []byte) string {
 		}
 	}
 	return b.String()
+}
+
+// runHostSpeed measures the daemon's link to a host with host-speed-test.
+func runHostSpeed(name string, jsonOut bool) error {
+	if err := requireDaemon(); err != nil {
+		return reportVerbError(err, jsonOut)
+	}
+	ctl, err := dialVerb()
+	if err != nil {
+		return reportVerbError(err, jsonOut)
+	}
+	defer func() { _ = ctl.Close() }()
+	if !jsonOut {
+		fmt.Printf("Measuring the link to %s: 64 MiB each way...\n", name)
+	}
+	raw, err := ctl.CallWithTimeout("host-speed-test", map[string]any{"host": name}, 11*time.Minute)
+	if err != nil {
+		return reportVerbError(explainVerbError("host-speed-test", err), jsonOut)
+	}
+	var r struct {
+		Host  string  `json:"host"`
+		Bytes int64   `json:"bytes"`
+		RTT   float64 `json:"rtt_ms"`
+		Up    float64 `json:"up"`
+		Down  float64 `json:"down"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return err
+	}
+	if jsonOut {
+		var v any
+		_ = json.Unmarshal(raw, &v)
+		outputJSON(v)
+		return nil
+	}
+	fmt.Printf("%s: round trip %.1f ms, up %s/s, down %s/s (%s each way, random bytes).\n", r.Host, r.RTT, humanBytes(int64(r.Up)), humanBytes(int64(r.Down)), humanBytes(r.Bytes))
+	return nil
 }
