@@ -4577,3 +4577,51 @@ remote shell naming itself refused a good paste. These controls were run on
 | The comparison takes the host name only | another user, another port, the jump host case | **caught** |
 | The comparison also takes a first label | `a host that shares a first label` and the jump host case | **caught** |
 | The tunnel gate in `paneRemoteHost` | `a tunnel`: this machine holds 0 pasted images | **caught** |
+## Copies between machines in the TUI
+
+`copies_tui_test.go` drives a real client against a hub daemon and a linked
+daemon. On 2026-10-11 each control below cut one line of wiring, built a
+binary, and ran the named test. The same tests passed on the branch build.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| The `transfers` branch in `dockCustomCell` | `TestCopiesShowInTheDockRailAndPanel` (no bar for a running copy) | **caught** |
+| `m.startTransfersWatch()` in Init | `TestCopiesShowInTheDockRailAndPanel` (no bar for a running copy) | **caught** |
+| The `transfersHostFigure` call in `sidebarHostRowLit` | `TestCopiesShowInTheDockRailAndPanel` (build's rail row has no mark) | **caught** |
+| The `ActionTransfersPause` case in `handleTransfersInput` | `TestCopiesShowInTheDockRailAndPanel` (the copy never reached paused) | **caught** |
+| `copyConflictWire[idx]` sent as the choice (sent `replace`) | `TestCopiesConflictKeepBoth` (the file there was replaced) | **caught** |
+| The `o.DropPaste` call in the paste route | `TestADroppedFileOnAFarPaneIsSent` (no question on a pane on build) | **caught** |
+| The local-pane gate in `DropPaste` (every pane read as on build) | `TestADroppedFileOnAFarPaneIsSent` (a paste into a local pane asked to send) | **caught** |
+| `sidebarActFileSend` in the dispatcher's file actions | `TestSendFromTheRailFilesList` (the menu row did not ask for a machine) | **caught** |
+| The `#` fill of the bar (filled cells drawn as `-`) | `TestCopiesReadAtLowColour/16`, `/256` (the bar does not read) | **caught** |
+| The linger timer in `applyTransferEvents` | `TestCopiesShowInTheDockRailAndPanel` | **not caught**: another redraw comes within the linger in this session (the end notice going away, the hosts refresh), so the item leaves without the timer. The timer matters to an idle client with nothing else on the screen to redraw it |
+
+## tuios cp and the tree stream
+
+On 2026-10-11 each control below cut one line, built a binary, and ran the
+named test against it with `TUIOS_E2E_BIN`. The same tests passed on the
+branch build. The small files test ran on a link that holds every byte from
+the far side 50 ms.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| The same-sha256 check in `checkAhead` (a file that is there with the same bytes is copied again) | `TestCopyAFileAndAFolderToAHostAndBack` (the second run exits 3 on conflicts instead of finding every file the same) | **caught** |
+| `m.abortParts(j)` on a cancel in `run` | `TestCopyPauseResumeAndCancel` (the cancelled copy leaves `.big-two.bin.tuios-part-ID`) | **caught** |
+| The pane folder check in `transferGrantStart` | `TestAStrictPaneCopiesOnlyWithTheFilesGrant` (a copy from outside the pane's folder exits 0) | **caught** |
+| The rows drawn after the lock in `follower.draw` (`block` under `f.mu`, which `rateText` takes again) | `TestCopyOnATerminalAsksAndKeepsRunning` (the pane never shows the progress block: the command hangs) | **caught** |
+| The receive folder for `HOST:` in `parseCpPath` (`HOST:` is `~` again) | `TestCopyExitCodes` ("0 into the receive folder" exits 3) | **caught** |
+| The `from HOST` label of keep-both in `verbTransferStart` | `TestCopyConflictsFollowThePolicy` (`f0003 (from HOST).txt` is not on build) | **caught** |
+| `linkWriteFS` in `takeTreeFile` (a plain file system instead) | `TestATreeStreamKeepsToTheDenyList` (`.ssh/authorized_keys` lands on build) | **caught** |
+| The tree stream in `attemptDir` (every small file sent by itself) | `TestAFolderOfSmallFilesCopiesFastOverASlowLink` (2,000 files take 7m3s, over the budget of 60 s) | **caught** |
+
+The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
+50 ms:
+
+| Build | Time | Files a second |
+| --- | --- | --- |
+| origin/main b228b387 (one file at a time; each empty file got a byte, since that engine cannot copy an empty file in a folder) | 500.1 s | 4.0 |
+| This branch, the tree stream (the empty files kept) | 4.1 s | 490 |
+
+20,000 files (61 MB) took 37.8 s with a sync of each file by itself, and
+21.4 s with the batched syncs of `serveTreeWrite`.
+
