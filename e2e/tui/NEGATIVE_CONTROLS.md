@@ -3892,9 +3892,6 @@ the fixed build and runs `TestMailSeen*`.
 | `noteMailSeen` for the person's thread | `TestMailSeenInboxRow` (`list-attention` has no `[1 seen]`, the row never says seen) | **caught** |
 | The `SeenIDs` branch of `noteAgentMail` (the receipt) | `TestMailSeenMailbox` (the open mailbox keeps saying unread) | **caught** |
 | The `seen` case of `agentMailThreadRow` | `TestMailSeenMailbox` (the list keeps saying unread) | **caught** |
-All 43 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
-pass on the branch (`~/.cache/agent-tmp/proof/v2/wave4/review/bridge-suite.txt`).
-## Files, transfers, drops and previews across a link
 
 ## Files, transfers and drops across a link
 
