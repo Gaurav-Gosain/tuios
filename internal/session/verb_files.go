@@ -873,13 +873,8 @@ func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict s
 	return final, got, nil
 }
 
-// freeName is path with " 2", " 3" ... before its extension, the first that is
-// free.
-func freeName(path string) string {
-	return freeNameIn(fileFS{}, path)
-}
-
-// freeNameIn is freeName through fsys.
+// freeNameIn is path with " 2", " 3" ... before its extension, the first
+// that is free in fsys.
 func freeNameIn(fsys fileFS, path string) string {
 	dir, base := filepath.Split(path)
 	ext := filepath.Ext(base)
