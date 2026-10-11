@@ -495,14 +495,14 @@ func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	if verr := d.checkLinkRead(cs, path); verr != nil {
-		return nil, verr
-	}
 	length := p.Length
 	if length <= 0 || length > fileReadMax {
 		length = fileReadMax
 	}
-	f, fi, err := openRegular(path)
+	f, fi, verr, err := d.openLinkRead(cs, path)
+	if verr != nil {
+		return nil, verr
+	}
 	if errors.Is(err, syscall.EISDIR) {
 		return nil, invalidParam("path", echoName(path)+" is a folder: list it with file-list")
 	}
@@ -642,6 +642,11 @@ func hashRangeIn(ctx context.Context, fsys fileFS, path string, offset, length i
 		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
+	return hashOpen(ctx, f, offset, length)
+}
+
+// hashOpen is hashRange of a file that is open already.
+func hashOpen(ctx context.Context, f *os.File, offset, length int64) (string, int64, error) {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return "", 0, err
 	}
@@ -701,7 +706,15 @@ func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verb
 	if p.Length != nil {
 		length = *p.Length
 	}
-	sum, n, err := hashRange(d.ctx, target, max(p.Offset, 0), length)
+	f, _, verr, err := d.openLinkRead(cs, target)
+	if verr != nil {
+		return nil, verr
+	}
+	if err != nil {
+		return nil, fileError("hash", target, err)
+	}
+	defer func() { _ = f.Close() }()
+	sum, n, err := hashOpen(d.ctx, f, max(p.Offset, 0), length)
 	if err != nil {
 		return nil, fileError("hash", target, err)
 	}
@@ -740,10 +753,10 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 	switch p.Mode {
 	case "read", "":
-		if verr := d.checkLinkRead(cs, path); verr != nil {
+		f, fi, verr, err := d.openLinkRead(cs, path)
+		if verr != nil {
 			return nil, verr
 		}
-		f, fi, err := openRegular(path)
 		if err != nil {
 			return nil, fileError("read", path, err)
 		}
@@ -1092,10 +1105,11 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	if verr := d.checkLinkRead(cs, path); verr != nil {
+	root, verr := d.linkWalkRoot(cs, path)
+	if verr != nil {
 		return nil, verr
 	}
-	w, err := walkTree(path)
+	w, err := walkTree(root)
 	if errors.Is(err, errWalkTooLarge) {
 		return nil, newVerbError(ErrVerbInvalidParams, "copy: "+err.Error())
 	}

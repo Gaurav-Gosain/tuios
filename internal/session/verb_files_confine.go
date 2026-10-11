@@ -651,6 +651,73 @@ func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 	return nil
 }
 
+// openLinkRead opens a regular file to read it for cs. For a call over a
+// link the path is judged before the open, and the file that was opened is
+// judged again by the path the system has for it now. A check on the path
+// alone races a rename: a folder that holds a link to ~/.ssh can be moved in
+// under the checked name between the check and the open. The file must also
+// have one name only. A hard link to a key in a root reads as the key, and
+// no path check sees it. err is the open's own error, verr a refusal.
+func (d *Daemon) openLinkRead(cs *connState, path string) (f *os.File, fi fs.FileInfo, verr *verbError, err error) {
+	if verr := d.checkLinkRead(cs, path); verr != nil {
+		return nil, nil, verr, nil
+	}
+	f, fi, err = openRegular(path)
+	if err != nil || cs == nil || !cs.viaLink {
+		return f, fi, nil, err
+	}
+	if verr := d.checkOpenedForLink(cs, f, path); verr != nil {
+		_ = f.Close()
+		return nil, nil, verr, nil
+	}
+	return f, fi, nil, nil
+}
+
+// checkOpenedForLink judges a file opened for a read over a link: by the
+// path the system has for it now, and by its number of names.
+func (d *Daemon) checkOpenedForLink(cs *connState, f *os.File, path string) *verbError {
+	if real, ok := fdPath(f); ok {
+		if verr := d.checkLinkRead(cs, real); verr != nil {
+			return verr
+		}
+	}
+	if fi, err := f.Stat(); err == nil && fi.Mode().IsRegular() {
+		if n, err := fileLinks(f); err == nil && n > 1 {
+			policy := d.linkPolicy(cs)
+			LogBasic("Link %s (peer %q) refused a file read of %s: the file has %d names", cs.clientID, policy.Peer, path, n)
+			return hintedVerbError(ErrVerbForbidden, peerName(policy.Peer)+" cannot read "+echoName(path)+". The file has other names (hard links), so tuios cannot tell what it is, and a linked machine does not read it.", &VerbHint{
+				Detail: "Nothing was read. To share it, copy it to a new file first.",
+			})
+		}
+	}
+	return nil
+}
+
+// linkWalkRoot is the folder a walk over a link lists: the path the system
+// has for the folder once it is open, judged by the read rules, so a rename
+// cannot swap another folder in under the checked name.
+func (d *Daemon) linkWalkRoot(cs *connState, path string) (string, *verbError) {
+	if verr := d.checkLinkRead(cs, path); verr != nil {
+		return "", verr
+	}
+	if cs == nil || !cs.viaLink {
+		return path, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return path, nil
+	}
+	defer func() { _ = f.Close() }()
+	real, ok := fdPath(f)
+	if !ok {
+		return path, nil
+	}
+	if verr := d.checkLinkRead(cs, real); verr != nil {
+		return "", verr
+	}
+	return real, nil
+}
+
 // linkReadRootsError refuses a read outside files_read_roots and says how to
 // allow it.
 func (d *Daemon) linkReadRootsError(policy config.LinkPolicy, home, path string) *verbError {

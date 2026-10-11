@@ -1039,10 +1039,19 @@ func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 // is negative.
 func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
 	if e.local() {
-		if err := e.readable(path); err != nil {
+		if e.gate == nil {
+			sum, _, err := hashRange(ctx, path, off, length)
+			return sum, err
+		}
+		f, _, verr, err := e.d.openLinkRead(e.gate, path)
+		if verr != nil {
+			return "", callError(verr)
+		}
+		if err != nil {
 			return "", err
 		}
-		sum, _, err := hashRange(ctx, path, off, length)
+		defer func() { _ = f.Close() }()
+		sum, _, err := hashOpen(ctx, f, off, length)
 		return sum, err
 	}
 	params := map[string]any{"path": path, "offset": off}
@@ -1078,10 +1087,10 @@ func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int6
 
 func (e fileEnd) openRead(ctx context.Context, path string, off int64) (io.ReadCloser, error) {
 	if e.local() {
-		if err := e.readable(path); err != nil {
-			return nil, err
+		f, _, verr, err := e.d.openLinkRead(e.gate, path)
+		if verr != nil {
+			return nil, callError(verr)
 		}
-		f, _, err := openRegular(path)
 		if err != nil {
 			return nil, err
 		}
@@ -1305,10 +1314,11 @@ func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error 
 
 func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	if e.local() {
-		if err := e.readable(path); err != nil {
-			return walkResult{}, err
+		root, verr := e.d.linkWalkRoot(e.gate, path)
+		if verr != nil {
+			return walkResult{}, callError(verr)
 		}
-		w, err := walkTree(path)
+		w, err := walkTree(root)
 		if errors.Is(err, errWalkTooLarge) {
 			return walkResult{}, permanent(ErrVerbInvalidParams, err.Error())
 		}
