@@ -64,7 +64,8 @@ func (m *OS) noteAgentsSeen() {
 }
 
 // prefixMenuGroups is the which-key menu after the prefix key, in its
-// sections. The Inbox's lines wait until an agent has been seen, and a section
+// sections. The Copies line waits until a copy exists. The Inbox's lines wait
+// until an agent has been seen, and a section
 // they leave empty goes with them; the keys work either way. The review line
 // is left out on a daemon that cannot review, where the key does what an
 // unbound key does.
@@ -90,6 +91,9 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		}
 		if !agentsTab {
 			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsAgentsSettingsPrefixKeybinding)
+		}
+		if len(m.transfers.rows) == 0 {
+			g.Bindings = slices.DeleteFunc(g.Bindings, config.IsTransfersPrefixKeybinding)
 		}
 		if len(g.Bindings) > 0 {
 			out = append(out, g)

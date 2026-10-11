@@ -226,9 +226,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// and a row more pushes it off the bottom.
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
-		// The copies between machines share the files line, for the same
-		// reason: one more row pushes the menu off an 80x24 screen.
-		pair("Search files/copies", part("prefix_file_search", "Search files"), part("prefix_transfers", "Copies")),
+		row("prefix_file_search", "Search files"),
 	)
 	menus := menuSection{title: "Menus", rows: []menuRow{
 		subRow("prefix_workspace", "Workspace"),
@@ -244,6 +242,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		row("prefix_settings", "Settings"),
 		row("prefix_keybinds", "Keybindings"),
 		row("prefix_screenshot", "Screenshot"),
+		row("prefix_transfers", "Copies"),
 		row("prefix_jump_notif", "Newest message"),
 		row("prefix_last_message", "Show last message"),
 		row("prefix_help", "Help"),
@@ -270,6 +269,14 @@ func IsAgentPrefixKeybinding(k Keybinding) bool {
 		return true
 	}
 	return false
+}
+
+// IsTransfersPrefixKeybinding reports whether a prefix menu line is the one
+// that opens the Copies panel. The client leaves it out while no copy exists,
+// as it draws nothing else for copies then; the key works either way. An
+// 80x24 screen has no row to spare for it.
+func IsTransfersPrefixKeybinding(k Keybinding) bool {
+	return k.Action == "prefix_transfers"
 }
 
 // IsAgentsSettingsPrefixKeybinding reports whether a prefix menu line is the
