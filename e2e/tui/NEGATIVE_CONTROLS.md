@@ -4507,3 +4507,33 @@ pane reads the token through the variables it was started with.
 | New panes do not get the display | `Manager.CreateSession`: the `cfg.DisplayEnv` stamp cut | `TestDisplayFollowsTheLocalClient` ("the new pane did not reach the desktop's Wayland socket ... WL_GOT:none") | **caught** |
 | A daemon with its own display follows too | `SetDisplay` ignores `daemonHasDisplay` | `TestDisplayFollowLeavesADaemonWithADisplayAlone/own_display` ("display-env = {Follow:true Own:true ...}") | **caught** |
 | A leave does not move the link | `notifyClientLeft`: the `displayForget` call cut | `TestDisplayFollowsTheLocalClient` ("after the only client with a display left e2e-display-other: ... want (no link)") | **caught** |
+## An image paste on another machine
+
+`TestAnImagePasteNeedsFilesOnTheFarMachine` pastes into a pane on a host by
+both routes: a session attached with `attach --host`, and a window on a host
+in a session of this machine. The far machine sets `allow` with `files` and
+without it. With `files`, the image lands on the far machine (the positive
+half). Without it, the dock says what to add and where, the shell shows that
+nothing was typed (`pasted:2`), and neither machine holds a pasted file.
+
+`TestAnImagePastedIntoAnSSHShellGoesToThatMachine` pastes into a pane of this
+machine whose foreground program reports a folder on another machine over
+OSC 7 and then holds the terminal, as ssh does. The `matched host` case names
+`buildbox`, the address of `[hosts.build]`. Its file must be in the far
+machine's drop folder, and this machine must keep no copy. The case with
+`files` denied shows the refusal toast. The `no host` case names `farbox`,
+which no entry names, and must type nothing and write nothing.
+
+`TestAnImagePastedIntoASessionOnAHostIsAFileOnThatMachine` has no control. It
+passes on main: the paste for a session on a host already went to the far
+daemon. It stays so that route keeps its coverage.
+
+The controls were run on 2026-10-11 on branch
+`fix/paste-image-session-on-host`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `paste-image` and `paste-pane-image` back on `write` and `open` alone in `verbCapabilities` | both `files denied` cases: no toast, the image was pasted | **caught** |
+| The `imagePasteRefusal` call in `applyImagePasted` | both `files denied` cases: the generic error toast, not the one that names files | **caught** |
+| The pass-through of a far `forbidden` in `verbPasteImage` for a hosted window | `window on a host/files denied`: the refusal turned into `host_unreachable` | **caught** |
+| The `paneElsewhere` branch in `verbPasteImage` | `matched host`: no file in the far drop folder. `matched host without files` and `no host`: no toast | **caught** |

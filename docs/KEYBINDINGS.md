@@ -436,6 +436,26 @@ The file is in the `paste` folder next to the tuios socket. The folder keeps
 at most 50 images and 100 MB. When it is full, tuios deletes the oldest image.
 If the `paste` folder is a symbolic link, tuios does not paste.
 
+### A pane on another machine
+
+A pane can run on another machine in three ways. In each, tuios writes the
+image on that machine:
+
+- A session on a host, attached with `tuios attach --host NAME`. The daemon on
+  the host writes the file.
+- A window on a host in a session of this machine. The daemon on the host
+  writes the file.
+- A pane of this machine that runs `ssh` or `mosh` to another machine. tuios
+  finds that machine in the `[hosts]` table by name or by address. It copies
+  the image to the drop folder of that host and pastes the path there. tuios
+  knows the machine from the folder report (OSC 7) of the remote shell, or
+  from the `ssh` command line.
+
+The other machine must allow `files` from this machine. If it does not, tuios
+pastes nothing and shows which line to add to the config on that machine. If
+no `[hosts]` entry is the machine of an ssh pane, tuios pastes nothing. Add the
+machine with `tuios hosts add NAME ADDR`.
+
 tuios does not read the clipboard in these cases:
 
 - The client runs in a browser. Save the image to a file and paste the path.

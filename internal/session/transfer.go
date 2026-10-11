@@ -1518,15 +1518,16 @@ func (c *hostFiles) call(ctx context.Context, verb string, params any, timeout t
 	var resp struct {
 		Result json.RawMessage `json:"result"`
 		Error  *struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code    string    `json:"code"`
+			Message string    `json:"message"`
+			Hint    *VerbHint `json:"hint"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(r.line, &resp); err != nil {
 		return nil, fmt.Errorf("the answer to %s did not decode: %w", verb, err)
 	}
 	if resp.Error != nil {
-		return nil, &VerbCallError{Code: resp.Error.Code, Message: resp.Error.Message}
+		return nil, &VerbCallError{Code: resp.Error.Code, Message: resp.Error.Message, Hint: resp.Error.Hint}
 	}
 	return resp.Result, nil
 }

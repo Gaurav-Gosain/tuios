@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -320,4 +321,172 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 		}
 	}
 	alive(t, term, "after a refused image paste")
+}
+
+// A pane of this machine whose shell is on another machine: the person ran
+// ssh in it. The program that reads the pasted path is over there, so the
+// image goes there, by the drop folder and a transfer, when that machine is a
+// [hosts] entry. When it is not, nothing is written and nothing is typed.
+//
+// The program in the foreground stands in for ssh, as in
+// TestFilesDoNotListALocalFolderForAnSSHShell: it reports a folder on another
+// machine over OSC 7, then runs a shell that holds the terminal. That shell is
+// on this machine, which shares a file system with the remote stand-in, so it
+// can read a file the remote daemon wrote, and only that file proves where it
+// went.
+//
+// Negative control: with the paneElsewhere branch cut from verbPasteImage,
+// the matched case pastes a path under this machine's paste folder and the
+// unmatched case pastes a path at all.
+func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
+	cases := []struct {
+		name   string
+		report string // the host the OSC 7 report names
+		allow  string // the far machine's allow for this one, "" for the default
+	}{
+		{"matched host", "buildbox", ""},
+		{"matched host without files", "buildbox", `"list", "mail", "open", "write"`},
+		{"no host", "farbox", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			remote := remoteMachine(t)
+			if tc.allow != "" {
+				writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = ["+tc.allow+"]\n")
+			}
+			ssh := writeFakeSSHTo(t, base, remote)
+			writeOneHostConfig(t, base, tuiosBin)
+			img := fakeImage()
+			env := append(fakeClipboardEnv(t, img), "TUIOS_SSH="+ssh)
+			// The far machine's daemon, which writes the dropped file.
+			if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+				t.Fatalf("start the far daemon: %v\n%s", err, out)
+			}
+
+			term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+			waitBoot(t, term)
+			waitForHostListing(t, base, func(s string) bool {
+				return containsAll(s, "build", "up")
+			}, "the daemon never reported build up")
+			newWindow(t, term)
+			waitWindowCount(t, term, 1, "opening a shell")
+			enterTerminalMode(t, term)
+			runInShell(t, term,
+				`sh -c 'printf "\033]7;file://`+tc.report+`%s\033\\\\" "$PWD"; echo on""-`+tc.report+`; exec sh'`,
+				"on-"+tc.report, uiTimeout)
+
+			switch tc.name {
+			case "matched host":
+				if err := term.SendKeys("wc -c "); err != nil {
+					t.Fatal(err)
+				}
+				if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
+					t.Fatal(err)
+				}
+				checkDropped(t, term, img, remote, base)
+			case "matched host without files":
+				refusedPaste(t, term, base, remote)
+				if files := droppedFiles(t, remote); len(files) != 0 {
+					t.Fatalf("ASSERTION: a refused paste wrote %v", files)
+				}
+			default:
+				refusedPasteNoLink(t, term, base, remote, tc.report)
+			}
+		})
+	}
+}
+
+// droppedFiles lists the pasted images in a machine's drop folders.
+func droppedFiles(t *testing.T, base string) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "drop", "*", "tuios-paste-*.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+// checkDropped waits for the shell to print the image's size for the pasted
+// path, then checks the file is in the far machine's drop folder alone, with
+// the image's bytes and the owner's permissions, and that this machine kept
+// no copy.
+func checkDropped(t *testing.T, term *tuitest.Terminal, img []byte, remote, base string) {
+	t.Helper()
+	size := strconv.Itoa(len(img)) + " "
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return contains(s.Text(), "tuios-paste-")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: no path was pasted into the pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return contains(s.Text(), size)
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the shell never printed the image's size %q for the pasted path: %v\n%s", size, err, term.Snapshot())
+	}
+	files := droppedFiles(t, remote)
+	if len(files) != 1 {
+		t.Fatalf("ASSERTION: the far machine holds %d dropped images, want 1: %v\n%s", len(files), files, term.Snapshot())
+	}
+	// The pane is narrow, so the path wraps. Read it with the frame and the
+	// line breaks taken out.
+	flat := strings.NewReplacer("│", "", " ", "", "\n", "").Replace(term.Screen().Text())
+	if !strings.Contains(flat, filepath.Base(filepath.Dir(files[0]))+"/"+filepath.Base(files[0])) {
+		t.Fatalf("ASSERTION: the pasted path is not the far file %s:\n%s", files[0], term.Snapshot())
+	}
+	got, err := os.ReadFile(files[0])
+	if err != nil || !bytes.Equal(got, img) {
+		t.Fatalf("the far file holds %d bytes (%v), want the clipboard's %d", len(got), err, len(img))
+	}
+	if info, err := os.Stat(files[0]); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the far file's mode is %v (%v), want 0600", info.Mode().Perm(), err)
+	}
+	if left := append(pastedFiles(t, base), droppedFiles(t, base)...); len(left) != 0 {
+		t.Errorf("ASSERTION: this machine kept a copy: %v", left)
+	}
+	saveArtifact(t, term, artifactDir(t), "dropped")
+	alive(t, term, "after pasting an image into an ssh shell")
+}
+
+// refusedPasteNoLink pastes into a pane on a machine with no [hosts] entry,
+// and checks the toast, that nothing was typed, and that no file was written.
+func refusedPasteNoLink(t *testing.T, term *tuitest.Terminal, base, remote, machine string) {
+	t.Helper()
+	if err := term.SendKeys("echo pasted:"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
+		t.Fatal(err)
+	}
+	toast := "Cannot paste the image. The pane runs on " + machine
+	if err := term.WaitForText(toast, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: no toast said the pane's machine has no link: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("$((1+1))", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return contains(s.Text(), "pasted:2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: something was typed into the pane: %v\n%s", err, term.Snapshot())
+	}
+	row, col := findText(t, term, toast)
+	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "The pane runs on "+machine, "Add the machine with tuios hosts add.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the full message does not say how to add the machine: %v\n%s", err, term.Snapshot())
+	}
+	dir := artifactDir(t)
+	saveArtifact(t, term, dir, "no-link")
+	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "no-link")
+	for _, m := range []string{remote, base} {
+		if files := append(pastedFiles(t, m), droppedFiles(t, m)...); len(files) != 0 {
+			t.Fatalf("ASSERTION: a refused paste wrote %v", files)
+		}
+	}
+	alive(t, term, "after a paste with no link")
 }

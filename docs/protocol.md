@@ -2652,6 +2652,16 @@ an image. Then the client pastes the path into the window as text. For a
 window whose process runs on a host, the daemon sends the image to that host
 with `paste-pane-image` on a new link connection. The host writes the file.
 
+A window of this daemon whose shell is on another machine (it runs `ssh` or
+`mosh`) gets the file on that machine. The daemon knows the machine from the
+shell's OSC 7 report or from the foreground `ssh` or `mosh` command line. It
+looks for a `[hosts]` entry with that name, or with that host in its `addr`. A
+name with no dot also matches the first label of a dotted address. The daemon
+asks the host for a drop folder (`file-drop-dir`) and copies the image there
+with a transfer. The answer has the host and the path there. With no matching
+entry, nothing is written and the error is `unknown_host`, with the sentence
+for the person in `hint.detail`.
+
 Params: `session` (optional), `window` (optional, the focused window when
 empty), `content` (required), `human_nonce` (required).
 

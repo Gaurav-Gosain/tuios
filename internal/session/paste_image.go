@@ -446,6 +446,30 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 		return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "host": rp.host, "path": path, "bytes": len(data)}, nil
 	}
 
+	// A pane whose shell is on another machine (ssh in the pane) gets the
+	// file on that machine. See paste_image_ssh.go.
+	if machine, names, elsewhere := paneElsewhere(pty); elsewhere {
+		host := d.hostNamed(names)
+		if host == "" {
+			return nil, hintedVerbError(ErrVerbUnknownHost, "paste-image: "+errPasteNoLink{machine}.Error(), &VerbHint{
+				Command: "tuios hosts add <name> <addr>",
+				Detail:  "The pane runs on " + machine + ", and tuios has no link to it. Add the machine with tuios hosts add.",
+			})
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), pasteHostedBudget)
+		defer cancel()
+		path, err := d.pasteToHost(ctx, host, data)
+		if err != nil {
+			if far, ok := errors.AsType[*VerbCallError](err); ok && far.Code == ErrVerbForbidden {
+				return nil, hintedVerbError(ErrVerbForbidden, "paste-image: "+host+" refused the image: "+far.Message, refusedOn(far.Hint, host))
+			}
+			return nil, hintedVerbError(ErrVerbHostUnreachable, "paste-image: the image did not reach "+host+": "+err.Error(), &VerbHint{
+				Detail: "Nothing was pasted. Check that the link to " + host + " is up and that its tuios is current.",
+			})
+		}
+		return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "host": host, "path": path, "bytes": len(data)}, nil
+	}
+
 	path, err := d.pastes.save(data)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "paste-image: cannot write the image: "+err.Error())

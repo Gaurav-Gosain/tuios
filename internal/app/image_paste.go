@@ -316,6 +316,10 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) {
 			m.ShowNotification("This daemon cannot take a pasted image. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
 			return
 		}
+		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok && callErr.Code == session.ErrVerbUnknownHost && callErr.Hint != nil && callErr.Hint.Detail != "" {
+			m.ShowNotification("Cannot paste the image. "+callErr.Hint.Detail, "error", m.Settings.NotificationDuration*3)
+			return
+		}
 		if text := m.imagePasteRefusal(msg.Window, msg.Err); text != "" {
 			m.ShowNotification(text, "error", m.Settings.NotificationDuration*3)
 			return
