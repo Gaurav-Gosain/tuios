@@ -66,7 +66,8 @@ ln -sf "$(command -v tuios)" ~/.local/lib/tuios-tmux/tmux
 ~/.local/lib/tuios-tmux/tmux -S "$XDG_RUNTIME_DIR/tuios/tmux/socket" list-sessions
 ```
 
-Without `XDG_RUNTIME_DIR`, the socket is `/tmp/tuios-UID/tmux/socket`. Do
+Without `XDG_RUNTIME_DIR`, the socket is `/run/user/UID/tuios/tmux/socket`,
+or `/tmp/tuios-UID/tmux/socket` when there is no `/run/user/UID`. Do
 not put the link on your PATH. A call without `-S` and without `TMUX` goes to
 the real tmux.
 

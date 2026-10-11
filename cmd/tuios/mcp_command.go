@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -98,27 +95,14 @@ func mcpVerbDocs() []mcp.VerbDoc {
 }
 
 // mcpSocketPath finds the daemon's socket. A harness may start its MCP servers
-// with a pared-down environment, and XDG_RUNTIME_DIR is one of the variables
-// such a harness drops, which would send the server to the /tmp fallback while
-// the daemon listens under /run/user. So TUIOS_SOCKET, which every pane
-// exports, comes first, and when XDG_RUNTIME_DIR is unset the systemd default
-// is tried before the fallback.
+// with a pared-down environment, so TUIOS_SOCKET, which every pane exports,
+// comes first. Without it, the socket is the one every command uses, which
+// finds the daemon under /run/user when XDG_RUNTIME_DIR is unset.
 func mcpSocketPath() (string, error) {
 	if s := os.Getenv("TUIOS_SOCKET"); s != "" {
 		return s, nil
 	}
-	path, err := session.GetSocketPath()
-	if err != nil {
-		return "", err
-	}
-	if _, statErr := os.Stat(path); statErr == nil || os.Getenv("XDG_RUNTIME_DIR") != "" || runtime.GOOS != "linux" {
-		return path, nil
-	}
-	alt := filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "tuios", "tuios.sock")
-	if _, err := os.Stat(alt); err == nil {
-		return alt, nil
-	}
-	return path, nil
+	return session.GetSocketPath()
 }
 
 func dialMCPConn() (mcp.Conn, error) {

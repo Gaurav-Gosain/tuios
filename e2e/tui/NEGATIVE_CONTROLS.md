@@ -4456,3 +4456,19 @@ The test is also run on `origin/main`, where it fails the same way.
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | `borderStale` always false (the cached layer is not keyed on the border colour) | `TestTerminalModeRecolorsTheFocusedBorder` ("the focused border kept the window mode colour #AFFFFF after entering terminal mode") | **caught** |
+## One daemon per user, with and without XDG_RUNTIME_DIR
+
+`TestOneDaemonWithAndWithoutXDGRuntimeDir` starts a daemon with
+`XDG_RUNTIME_DIR` set to a stand-in for `/run/user/<uid>`. It then runs `ls`,
+`new` and a host link's `stdio-proxy` without the variable, and checks that
+all of them reach that daemon. `TestADaemonAnOlderLinkStartedIsFoundNotSplit`
+starts a daemon in the stand-in for `/tmp/tuios-<uid>`, checks that a client
+without the variable joins it, and then checks the warning when both run.
+
+The controls were run on 2026-10-11 on branch `fix/one-daemon-per-user`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `sockpath.RuntimeDir` finds `/run/user/<uid>` and `pickLiveSocket` looks in the other folder (both cut: the behaviour before the fix) | "without XDG_RUNTIME_DIR, ls does not list the desktop session", "a second daemon socket exists", "the link does not reach session desk on build"; and "with both daemons running, ls did not use the one in the runtime folder" | **caught** |
+| `pickLiveSocket` looks in the other folder (cut alone) | "the daemon in /tmp is not found" | **caught** |
+| The `sockpath.PrivateDir` check on the other folder in `pickLiveSocket` (unit test `TestOtherDaemonInAnOpenFolderIsNotUsed`) | "with the other folder open to everyone, GetSocketPath gave .../tuios-1000/tuios.sock" | **caught** |

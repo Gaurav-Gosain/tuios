@@ -477,7 +477,7 @@ is always false, because tuios does not serve herdr's client protocol.
 
 The daemon makes the link when it starts, beside its socket:
 `$XDG_RUNTIME_DIR/tuios/herdr/bin/herdr`, or `/tmp/tuios-<uid>/herdr/bin/herdr`
-when `XDG_RUNTIME_DIR` is not set. tuios does not put the link on `PATH`, so a
+when there is no runtime directory. tuios does not put the link on `PATH`, so a
 real herdr on your `PATH` still runs as herdr. Run `"$HERDR_BIN_PATH"` in a
 pane, as plugins do:
 

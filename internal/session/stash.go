@@ -124,8 +124,9 @@ func newStashStore(socketPath func() string) *stashStore {
 // rootDir returns the stash root, creating it on first use. Callers hold s.mu.
 //
 // The root sits beside the daemon socket: $XDG_RUNTIME_DIR/tuios/stash when that
-// variable is set, and /tmp/tuios-$UID/stash when it is not, which is the same
-// fallback the socket itself takes. There is deliberately no third choice. Both
+// variable is set (or /run/user/$UID is found), and /tmp/tuios-$UID/stash when
+// there is no runtime folder, which is the same fallback the socket itself
+// takes. There is deliberately no third choice. Both
 // of these go away with the boot, so the honest worst case for a daemon that is
 // killed and never restarted is that the files sit in a per-boot directory; a
 // fallback into the user's home would make them permanent, and permanent is the

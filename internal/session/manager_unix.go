@@ -25,15 +25,18 @@ func GetSocketPath() (string, error) {
 	return path, nil
 }
 
-// defaultSocketPath is the daemon socket the environment's directories name.
+// defaultSocketPath is the daemon socket this user reaches: the one in
+// sockpath.Dir, unless only a daemon in the other folder answers. See
+// pickLiveSocket.
 func defaultSocketPath() (string, error) {
-	// $XDG_RUNTIME_DIR/tuios when there is a runtime directory, and
-	// /tmp/tuios-$UID otherwise.
+	// $XDG_RUNTIME_DIR/tuios when there is a runtime directory (found at
+	// /run/user/$UID when the variable is unset), and /tmp/tuios-$UID
+	// otherwise.
 	socketDir := sockpath.Dir()
 	if err := ensureSocketDir(socketDir); err != nil {
 		return "", err
 	}
-	return filepath.Join(socketDir, "tuios.sock"), nil
+	return pickLiveSocket(filepath.Join(socketDir, "tuios.sock")), nil
 }
 
 // GetPidFilePath returns the path to the daemon PID file.

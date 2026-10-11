@@ -6268,7 +6268,7 @@ another. It holds no authority the caller's own tuios CLI does not. See
 Create a detached session, drive it, and read it back:
 
 ```sh
-SOCK="${XDG_RUNTIME_DIR:-/tmp/tuios-$(id -u)}/tuios/tuios.sock"
+SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tuios/tuios.sock"
 
 # List windows in the most recently active session.
 printf '{"id":1,"verb":"list-windows"}\n' | socat - "UNIX-CONNECT:$SOCK" | jq .

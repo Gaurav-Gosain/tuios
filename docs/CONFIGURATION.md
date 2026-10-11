@@ -1773,8 +1773,8 @@ The daemon's links never ask for a password, a passphrase or a code. They
 run ssh with `BatchMode=yes`. A client that can ask you, such as tuios-gpui,
 signs in to a machine itself and keeps that connection open as an ssh master
 in the folder `cm` beside the daemon's socket. That folder is
-`$XDG_RUNTIME_DIR/tuios/cm`, or `/tmp/tuios-<uid>/cm` when
-`XDG_RUNTIME_DIR` is not set. When that folder and its parent exist, are not
+`$XDG_RUNTIME_DIR/tuios/cm`, `/run/user/<uid>/tuios/cm` when
+`XDG_RUNTIME_DIR` is not set, or `/tmp/tuios-<uid>/cm` when neither exists. When that folder and its parent exist, are not
 symbolic links, belong to you and only you can open them, each link and
 `tuios hosts test` run ssh with `-o ControlMaster=no` and `-o ControlPath=<folder>/%C`. The link then
 uses the master when one is open for that machine, and connects as usual when

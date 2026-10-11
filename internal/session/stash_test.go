@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -45,7 +46,16 @@ func writeBytes(t *testing.T, path string, n int, seed byte) {
 // XDG_RUNTIME_DIR unset the socket, and therefore the stash, must still land in
 // a per-boot directory and never anywhere under the user's home.
 func TestStashHasNoPermanentFallback(t *testing.T) {
+	// Both roots moved: with XDG_RUNTIME_DIR unset the real /run/user/<uid>
+	// and /tmp/tuios-<uid> would be used, and their daemons dialled.
+	tmp, err := os.MkdirTemp("/tmp", "tu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
+	defer sockpath.SetRootsForTest(filepath.Join(tmp, "no-run-user"), tmp)()
 	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("TUIOS_E2E", "")
 
 	sock, err := GetSocketPath()
 	if err != nil {

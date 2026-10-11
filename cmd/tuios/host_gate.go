@@ -19,6 +19,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 )
 
 // Tailscale SSH in check mode, for the commands that run ssh on a host.
@@ -296,7 +297,7 @@ func newSSHShare(bin string) *sshShare {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
-	base := os.Getenv("XDG_RUNTIME_DIR")
+	base := sockpath.RuntimeDir()
 	if base == "" {
 		// The socket path is limited to about 100 bytes, and the temp
 		// folder of macOS is long, so /tmp comes first.

@@ -1116,18 +1116,44 @@ a match in a pane are the same colour.
 |---|---|
 | Saved session state | `$XDG_STATE_HOME/tuios/sessions/<name>.json` (typically `~/.local/state/tuios/sessions/`) |
 | Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/`, pruned after 14 days |
-| Daemon socket | `$XDG_RUNTIME_DIR/tuios/tuios.sock`, falling back to `/tmp/tuios-<uid>/tuios.sock` |
+| Daemon socket | `$XDG_RUNTIME_DIR/tuios/tuios.sock`. Without `XDG_RUNTIME_DIR`, `/run/user/<uid>/tuios/tuios.sock` on Linux, falling back to `/tmp/tuios-<uid>/tuios.sock` |
 | Daemon PID file | the socket path with `.pid` appended |
 
 The socket lives in the runtime directory and does not survive a reboot, which is
-correct: the daemon does not either. Saved session state lives in the state
+correct: the daemon does not either.
+
+### One daemon per user
+
+A desktop session sets `XDG_RUNTIME_DIR`. A command run over ssh often does
+not: a host link, `tuios hosts sync`, or a paired device. tuios picks the same
+socket for both, so one user on one machine always reaches one daemon:
+
+1. `$XDG_RUNTIME_DIR/tuios`, when the variable is set.
+2. `/run/user/<uid>/tuios`, when the variable is unset and `/run/user/<uid>`
+   is a directory that belongs to you and has mode `0700`. systemd makes it at
+   login, for ssh logins too. macOS skips this step.
+3. `/tmp/tuios-<uid>` otherwise.
+
+An older tuios started its daemon in `/tmp/tuios-<uid>` when it ran over ssh.
+When the socket from steps 1 or 2 is `/run/user/<uid>/tuios/tuios.sock`, a
+command also looks for a live daemon in `/tmp/tuios-<uid>`:
+
+- Only the daemon in `/tmp` answers: the command uses it. It does not start a
+  second daemon. After that daemon stops, the next one starts in `/run/user`.
+- Both answer: the daemon in `/run/user` wins. A command at a terminal says so
+  once, with the process ID of the other daemon. See
+  [Two daemons on one machine](CLI_REFERENCE.md#two-daemons-on-one-machine).
+
+tuios looks in `/tmp/tuios-<uid>` only when that directory belongs to you and
+only you can open it. Saved session state lives in the state
 directory and does survive, which is why a session can be resurrected after a
 reboot.
 
 ### Running a separate daemon
 
 `XDG_RUNTIME_DIR` chooses the daemon every `tuios` command reaches (on Windows,
-`LOCALAPPDATA`). To run a second daemon, for a test or a script, give it its own
+`LOCALAPPDATA`). A directory other than `/run/user/<uid>` gives a daemon of its
+own, and tuios does not look in `/tmp` for it. To run a second daemon, for a test or a script, give it its own
 runtime and state directories, so it has its own socket and keeps its own saved
 sessions:
 

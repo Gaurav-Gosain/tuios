@@ -3,10 +3,15 @@
 package session
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 )
 
 // The socket directory is a security boundary: whoever controls it can swap
@@ -95,5 +100,66 @@ func TestSocketDirThatIsAFileIsRefused(t *testing.T) {
 	_, err := socketPathIn(t, runtime)
 	if err == nil || !strings.Contains(err.Error(), "tuios") {
 		t.Fatalf("a file where the socket dir goes gave %v, want an error naming it", err)
+	}
+}
+
+// Without XDG_RUNTIME_DIR, a client also looks for a live daemon in
+// /tmp/tuios-<uid>, a folder any local user can create first. A listening
+// socket in that folder must be dialled only when the folder passes the same
+// checks as the socket folder: this user's, not a link, closed to others.
+func TestOtherDaemonInAnOpenFolderIsNotUsed(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS has no /run/user")
+	}
+	short := func() string {
+		dir, err := os.MkdirTemp("/tmp", "tu")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+	run, tmp := short(), short()
+	defer sockpath.SetRootsForTest(run, tmp)()
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("TUIOS_E2E", "")
+	uid := strconv.Itoa(os.Getuid())
+	if err := os.Mkdir(filepath.Join(run, uid), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	primary := filepath.Join(run, uid, "tuios", "tuios.sock")
+
+	legacyDir := filepath.Join(tmp, "tuios-"+uid)
+	if err := os.Mkdir(legacyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", filepath.Join(legacyDir, "tuios.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+
+	if err := os.Chmod(legacyDir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := GetSocketPath(); err != nil || got != primary {
+		t.Fatalf("with the other folder open to everyone, GetSocketPath gave %q, %v; want %s", got, err, primary)
+	}
+	// The same folder closed: the live daemon there is the one to use. This is
+	// what shows the refusal above came from the folder check.
+	if err := os.Chmod(legacyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := GetSocketPath(); err != nil || got != ln.Addr().String() {
+		t.Fatalf("with the other folder private, GetSocketPath gave %q, %v; want %s", got, err, ln.Addr())
 	}
 }

@@ -4076,7 +4076,8 @@ marked as data, not instructions. See [restrict-connection](protocol.md#restrict
 
 The daemon's socket is `TUIOS_SOCKET` when the harness passes it, else the one
 `tuios` always uses. A harness that starts its MCP servers without
-`XDG_RUNTIME_DIR` still finds a daemon under `/run/user/<uid>` on Linux.
+`XDG_RUNTIME_DIR` still finds the daemon under `/run/user/<uid>` on Linux, as
+every command does.
 
 **Registering it:**
 
@@ -5146,8 +5147,12 @@ tuios config edit
 ### `XDG_RUNTIME_DIR`, and `TUIOS_SOCKET`
 
 `XDG_RUNTIME_DIR` chooses the daemon a command reaches: its socket is
-`$XDG_RUNTIME_DIR/tuios/tuios.sock`, or `/tmp/tuios-<uid>/tuios.sock` when the
-variable is unset (`%LOCALAPPDATA%\tuios\tuios.sock` on Windows). Set it, with
+`$XDG_RUNTIME_DIR/tuios/tuios.sock` (`%LOCALAPPDATA%\tuios\tuios.sock` on
+Windows). When the variable is unset, the socket is
+`/run/user/<uid>/tuios/tuios.sock` on Linux if `/run/user/<uid>` is yours and
+has mode `0700`, and `/tmp/tuios-<uid>/tuios.sock` otherwise. So a command over
+ssh reaches the same daemon as your desktop. See
+[One daemon per user](SESSIONS.md#one-daemon-per-user). Set it, with
 `XDG_STATE_HOME` for separate saved sessions, to run a separate daemon. See
 [Running a separate daemon](SESSIONS.md#running-a-separate-daemon).
 
@@ -5288,6 +5293,39 @@ There are three distinct versions of this, and they have different fixes:
 | "is not running" | No socket exists. The daemon has never run, or was stopped. | `tuios new` |
 | "a stale socket is left over at ..." | The daemon crashed without cleaning up. | `tuios kill-server`, which removes it |
 | "Permission denied ... socket" | The socket belongs to another user, or its mode changed. | Check `ls -l` on the path; set `XDG_RUNTIME_DIR` to a directory you own |
+
+### Two daemons on one machine
+
+A session you made on one machine does not show in `tuios ls` on that same
+machine, or a host link shows other sessions than your desktop. Two daemons
+run for your user, each with its own sessions. Two sessions with one name,
+such as `session-0`, can make them look like one.
+
+The cause is an older tuios. It put the socket in `/tmp/tuios-<uid>` when a
+command ran without `XDG_RUNTIME_DIR`, as a command over ssh often does. The
+desktop used `/run/user/<uid>/tuios`. tuios now uses `/run/user/<uid>/tuios`
+for both. See [One daemon per user](SESSIONS.md#one-daemon-per-user).
+
+To find the daemons, look at both sockets:
+
+```bash
+ls -l /run/user/$(id -u)/tuios/tuios.sock /tmp/tuios-$(id -u)/tuios.sock
+```
+
+When both daemons run, tuios uses the one in `/run/user`. A command at a
+terminal says once that the other one runs, and gives its process ID. To move
+the sessions of the daemon in `/tmp`:
+
+1. Stop it: `kill $(cat /tmp/tuios-$(id -u)/tuios.sock.pid)`. It saves every
+   session when it stops.
+2. List what it saved: `tuios resurrect`.
+3. Restore each session: `tuios resurrect NAME`.
+
+A session name that both daemons used has one saved file. Rename one of the
+two sessions before you stop that daemon if you need both.
+
+Upgrade tuios on every machine. A machine with the older tuios still starts a
+daemon in `/tmp` over ssh.
 
 ### The daemon is older than the CLI
 
