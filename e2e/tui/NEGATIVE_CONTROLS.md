@@ -4178,3 +4178,95 @@ control for the darwin test cuts the fold from `denyUnder`, the function the
 deny check calls (an earlier note named `pathUnder`, which is the roots
 check). The copy to `~/.ſsh/authorized_keys` then ended done and APFS wrote
 the attacker's key into `~/.ssh/authorized_keys`: **caught**.
+
+## The review of 217e663d: hard links, the read rename race, claims, revoked copies
+
+The tests are in `file_confine_test.go`, with the far daemon of
+`host_attach_test.go` as build. The protected file is a scratch file in
+build's temporary home folder that holds `ORIGINAL`. The key is a dummy file
+at `~/.ssh/id_ed25519` in that home folder that holds `DUMMY-KEY-MARKER`. No
+test reads or writes a real file of the person who runs the suite. Each test
+saves its record under `TUIOS_E2E_FRAMES`.
+
+- `TestALinkCannotWriteThroughAHardLinkedPart`: a part file in the receive
+  folder is a hard link to the protected file. A write stream into it must be
+  `forbidden`. A rename over the link of a hard link onto a part name, of a
+  plain file onto a part name, and of a part off its name must each be
+  `forbidden`. The protected file must still hold `ORIGINAL`. The positive
+  half: a write into a new part works.
+- `TestALinkReadCannotRaceARename`: the receive folder holds `evil/k`, a
+  symlink to `~/.ssh`, and `good/k/id_ed25519`, a harmless file. This process
+  swaps the two folders under the name `x` in a tight loop while the link
+  reads `x/k/id_ed25519` up to 6000 times or for 60 s. No read may return the
+  dummy key. The reads must see both folders, so the race ran. A Linux run
+  on the fixed build: 6000 reads, 709 harmless, 3541 refused, about 1.4
+  million swaps.
+- `TestOpenLinkWritesCountAgainstTheFreeSpaceReserve`: `files_min_free` is
+  set 1 GiB under the free space of the disk. Two write streams of 768 MiB
+  are opened and nothing is written. The second must be `disk_full` and leave
+  no part. The positive half: once the first stream closes, a third opens.
+- `TestALinkCopyStopsWhenItsFilesCapabilityGoes`: the link starts a copy of
+  2 GiB on build. In one subtest build's daemon is killed with SIGKILL and
+  starts again with `files` taken away from `allow` (relay stays). In the
+  other the copy is paused, `files` is taken away and `tuios config apply`
+  reloads the policy. Both times the copy must end failed as `forbidden`,
+  with nothing in place.
+- `TestALinkListsNoDeniedFolderOutsideTheFileVerbs`: `read-dir`, `wait-dir`
+  and a hand-built binary `MsgReadDir` frame of `~/.ssh` and, on Linux,
+  `/proc/self/fd` must be refused, and must not list the dummy key. The
+  positive half: each lists the home folder.
+- `TestALinkCannotReadAFileWithTwoNames`: the receive folder holds a hard link
+  to the dummy key. `file-read`, `file-hash` and an `open-file-stream` read
+  must be `forbidden`, and a copy of it the link starts must end failed as
+  `forbidden`, with nothing in place. The positive half: a file with one name
+  reads.
+- `TestADarwinLinkCannotReadThroughTheDataVolume` (macOS): a `file-read` of
+  the dummy key, a `file-stat` of it, and a `file-list` and `read-dir` of its
+  folder, each through `/System/Volumes/Data`, must be `forbidden`. The
+  positive half: an ordinary file reads through it.
+
+The Linux controls ran on 2026-10-11 on the fixes of 945b43d3 to 91de7c72,
+each on a binary built with the one change. The driver is
+`~/.cache/agent-tmp/te-sec4/nc/controls.py`, and each log is beside it.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A part with two names is written | `openPart`: the `fileLinks` check made false | `TestALinkCannotWriteThroughAHardLinkedPart` (the write went into the protected file, which then held the payload) | **caught** |
+| A link renames onto and off a part name | `verbFileRename`: the part name check made false | `TestALinkCannotWriteThroughAHardLinkedPart` (all three renames ran; the next write met the hard link and was refused) | **caught** |
+| No check of the opened file by its path | `checkOpenedForLink`: the `fdPath` check made false | `TestALinkReadCannotRaceARename` (the dummy key was read after 1, 10, 18 and 12 reads in four runs) | **caught** |
+| The reserve ignores open claims | `claimLinkWrite`: `fsClaimed` left out of the comparison | `TestOpenLinkWritesCountAgainstTheFreeSpaceReserve` (the second stream opened and left a part) | **caught** |
+| An attempt does not check the capabilities | `attempt`: both `linkAllowed` checks made false | `TestALinkCopyStopsWhenItsFilesCapabilityGoes/on_resume_after_a_restart` (the resumed copy ended done and was put in place) | **caught** |
+| A reload ends no job | `reloadLinkPolicies`: the `failRevoked` call cut | `TestALinkCopyStopsWhenItsFilesCapabilityGoes/after_a_policy_reload` (the copy stayed paused) | **caught** |
+| read-dir without the read check | `verbReadDir`: the check made false | `TestALinkListsNoDeniedFolderOutsideTheFileVerbs` (`~/.ssh` listed the dummy key, `/proc/self/fd` listed) | **caught** |
+| wait-dir without the read check | `verbWaitDir`: the check after the watch starts made false, on 9d8e58fb | `TestALinkListsNoDeniedFolderOutsideTheFileVerbs` (both waits ran) | **caught** |
+| MsgReadDir without the read check | `handleReadDir`: the check made false | `TestALinkListsNoDeniedFolderOutsideTheFileVerbs` (`~/.ssh` and `/proc/self/fd` listed) | **caught** |
+| A link reads a file with two names | `checkOpenedForLink`: the `fileLinks` check made false | `TestALinkCannotReadAFileWithTwoNames` (read, hash and stream answered, and the copy put the dummy key in place) | **caught** |
+
+On macOS the first form of the `wait-dir` check, run before the watch
+started, made `TestFilesFollowAWindowOnAHost` miss a removed file in three
+runs out of three. It passed on 217e663d and on b2dd5b88, and failed on
+91de7c72. The check takes a few milliseconds there, which widened the gap
+after the listing. 9d8e58fb starts the watch first, and the test passed three
+runs out of three.
+
+`commitPart` checks the number of names of a part again before it hashes it.
+No test reaches that check alone, because `openPart` refuses the same part
+first.
+
+On macOS (the person's MacBook, a scratch clone under `~/.cache/agent-tmp`,
+the test harness's own XDG folders), `F_GETPATH` names an open file by its
+short path. A file opened through `/System/Volumes/Data/Users/...` comes back
+as `/Users/...`, and one under `/var/folders` as `/private/var/folders/...`,
+which is also what `EvalSymlinks` gives for the roots. So `files_read_roots`
+keeps matching: `TestALinkReadsOnlyItsReadRoots` passes there. The data
+volume was a hole of its own. `EvalSymlinks` does not follow a firmlink, so
+on 217e663d a path through `/System/Volumes/Data` missed the deny list, and a
+link read and listed the dummy key that way. `realPath` now trims the prefix
+when the short path is the same file. The macOS controls:
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No check of the opened file by its path | `checkOpenedForLink`: the `fdPath` check made false | `TestALinkReadCannotRaceARename` (the dummy key was read after 3 reads) | **caught** |
+| A link reads a file with two names | `checkOpenedForLink`: the `fileLinks` check made false | `TestALinkCannotReadAFileWithTwoNames` (read, hash, stream and copy) | **caught** |
+| No data volume trim | `realPath`: the `trimDataVolume` call cut | `TestADarwinLinkCannotReadThroughTheDataVolume` (`file-stat`, `file-list` and `read-dir` showed the dummy key; the read stayed refused by the check after the open) | **caught** |
+| No check after the open, before the trim | `checkOpenedForLink`: the `fdPath` check made false, on e5a21555 | `TestADarwinLinkCannotReadThroughTheDataVolume` (the dummy key was read through the data volume) | **caught** |
