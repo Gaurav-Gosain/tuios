@@ -2911,18 +2911,29 @@ tuios call <verb> [params]
 ```
 
 `params` is a JSON object, or `-` to read it from standard input. Omit it for
-a verb that takes none. The reply is the daemon's result object as it is. A
-verb error prints `{"error": {"code", "message", "hint"}}` and exits 1.
+a verb that takes none. The reply is the daemon's result object as it is.
 
 Use it from a program that can start a process but cannot write to the
 socket, such as a Tern plugin. The daemon checks the call as it checks any
-other, so a pane is held to its grants. `tuios list-verbs` lists every verb.
-`subscribe`, `stream-pane` and `open-file-stream` turn the connection into a
-stream, so `call` refuses them. Use `tuios subscribe`, `tuios pane-view` or
-`tuios transfers`.
+other, so a pane is held to its grants, and the verbs only the person may
+call stay refused from a pane. `tuios list-verbs` lists every verb.
+
+`call` refuses the verbs that hold the connection open after their reply:
+`subscribe` (use `tuios subscribe`), `stream-pane`, `open-file-stream`,
+`open-pane`, `pane-calls`, `link-peer` and `open-host-connection`.
+
+The call waits 30 seconds, or for the verb's own `timeout` param (in
+milliseconds) and 10 seconds more. `--timeout` sets the wait.
+
+Exit status:
+- 1: the daemon answered with an error, printed as `{"error": {"code", "message", "hint"}}`
+- 2: the arguments or params are wrong
+- 3: the daemon could not be reached, or did not answer in time
 
 **Flags:**
 - `--pretty`: Indent the JSON
+- `--json`: Print bad input and transport errors as JSON too, with the code `invalid_input` or `transport`
+- `--timeout <duration>`: How long to wait for the reply
 
 **Examples:**
 ```bash

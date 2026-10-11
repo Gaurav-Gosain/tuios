@@ -4370,3 +4370,7 @@ the fixed build and runs `TestCallVerb`.
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The params left out of `client.Call` | `TestCallVerb` ("params did not reach the daemon") | **caught** |
+| A fixed 30 s wait in place of the verb's own timeout | `TestCallVerbTransport` (the 32 s wait-for exits 3 at 30 s) | **caught** |
+| `open-pane` left out of the stream verbs | `TestCallVerb` (call open-pane opened a pane) | **caught** |
+| One exit status for every failure | `TestCallVerb` (a stream verb refused with status 1) | **caught** |
+| `TestCallVerbFromAPane` | No control: the refusal is the daemon's, and `call` adds nothing to cut. The test holds that `call` is no way around it. | n/a |

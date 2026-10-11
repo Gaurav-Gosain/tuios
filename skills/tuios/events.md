@@ -21,6 +21,15 @@ reading one JSON line back per request:
 {"id":1,"verb":"list-agents","params":{"session":"work"}}
 ```
 
+`tuios call VERB '{...}'` sends one verb and prints its reply as JSON, for a
+program that can start a process but cannot open the socket. A verb error
+exits 1, bad input 2 and a daemon it cannot reach 3. It refuses the verbs
+that hold the connection open, such as `subscribe`.
+
+```sh
+tuios call list-windows '{"session":"work"}'
+```
+
 A parameter the verb does not take is refused, not ignored, and the failure
 lists what it does take. `invalid_params` naming a parameter you believed in
 means the daemon is older than you think.

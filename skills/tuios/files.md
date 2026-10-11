@@ -1,9 +1,10 @@
 # Files and copies between machines
 
 The daemon reads and writes files with the file verbs, and runs copies between
-this machine and its hosts with the transfer verbs. They have no command
-wrapper yet. Write JSON to `$TUIOS_SOCKET` (`tuios --skill events`), and ask
-`list-verbs` for every parameter:
+this machine and its hosts with the transfer verbs. They have no command of
+their own. Send one with `tuios call VERB '{...}'`, or write JSON to
+`$TUIOS_SOCKET` (`tuios --skill events`), and ask `list-verbs` for every
+parameter:
 
 ```sh
 tuios list-verbs transfer-start
