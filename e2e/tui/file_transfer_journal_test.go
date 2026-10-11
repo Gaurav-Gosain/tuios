@@ -186,12 +186,14 @@ func TestACopySurvivesADaemonRestart(t *testing.T) {
 }
 
 // TestTwoCopiesToOnePathKeepTheirParts copies two files of 32 MiB from build
-// to one file here at the same time, over a link of 24 MB/s, so both are in
-// flight together. The two paths name the file through two folders, one a
-// link to the other, so nothing but the part names keeps the copies apart.
+// to one file on build at the same time, over a link of 24 MB/s, so both are
+// in flight together. The two paths name the file through two folders on
+// build, one a link to the other. The busy rule compares a path on another
+// machine as given, so nothing but the part names keeps the copies apart.
 // Each must end checked, and the file in place must be one of the two
 // originals. A third copy to the first path, while the first runs, is
-// refused as busy.
+// refused as busy. Here, where the busy rule resolves links, a copy through
+// a link to the path a running copy writes is refused as busy too.
 func TestTwoCopiesToOnePathKeepTheirParts(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -201,25 +203,41 @@ func TestTwoCopiesToOnePathKeepTheirParts(t *testing.T) {
 	wantA, wantB := randomFile(t, a, size), randomFile(t, b, size)
 	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 24<<20, 1<<20))
 
-	real := filepath.Join(base, "real")
+	farHome := xdgDir(remote, "HOME")
+	real := filepath.Join(farHome, "real")
 	if err := os.MkdirAll(real, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	alias := filepath.Join(base, "alias")
+	alias := filepath.Join(farHome, "alias")
 	if err := os.Symlink(real, alias); err != nil {
 		t.Fatal(err)
 	}
+	here := filepath.Join(base, "here")
+	if err := os.MkdirAll(here, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hereAlias := filepath.Join(base, "here-alias")
+	if err := os.Symlink(here, hereAlias); err != nil {
+		t.Fatal(err)
+	}
 	c := dialFileVerbs(t, base)
-	var ra, rb transferRow
+	var ra, rb, rc transferRow
 	c.must("transfer-start", map[string]any{
-		"src": map[string]any{"host": "build", "path": a}, "dst": map[string]any{"path": filepath.Join(real, "same.bin")}, "conflict": "replace",
+		"src": map[string]any{"host": "build", "path": a}, "dst": map[string]any{"host": "build", "path": filepath.Join(real, "same.bin")}, "conflict": "replace",
 	}, &ra)
 	c.must("transfer-start", map[string]any{
-		"src": map[string]any{"host": "build", "path": b}, "dst": map[string]any{"path": filepath.Join(alias, "same.bin")}, "conflict": "replace",
+		"src": map[string]any{"host": "build", "path": b}, "dst": map[string]any{"host": "build", "path": filepath.Join(alias, "same.bin")}, "conflict": "replace",
 	}, &rb)
 	_, busyErr := c.call("transfer-start", map[string]any{
-		"src": map[string]any{"host": "build", "path": b}, "dst": map[string]any{"path": filepath.Join(real, "same.bin")}, "conflict": "replace",
+		"src": map[string]any{"host": "build", "path": b}, "dst": map[string]any{"host": "build", "path": filepath.Join(real, "same.bin")}, "conflict": "replace",
 	})
+	c.must("transfer-start", map[string]any{
+		"src": map[string]any{"host": "build", "path": a}, "dst": map[string]any{"path": filepath.Join(here, "x.bin")}, "conflict": "replace",
+	}, &rc)
+	_, hereBusyErr := c.call("transfer-start", map[string]any{
+		"src": map[string]any{"host": "build", "path": b}, "dst": map[string]any{"path": filepath.Join(hereAlias, "x.bin")}, "conflict": "replace",
+	})
+	c.must("transfer-cancel", map[string]any{"id": rc.ID}, nil)
 	var both []string
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
@@ -239,10 +257,14 @@ func TestTwoCopiesToOnePathKeepTheirParts(t *testing.T) {
 	saveTransferArtifact(t, "two-copies-one-path", map[string]any{
 		"a": endA, "b": endB, "parts_in_flight": both, "parts_after": left,
 		"sha256_a": wantA, "sha256_b": wantB, "sha256_in_place": got, "busy": errString(busyErr),
+		"busy_through_a_link_here": errString(hereBusyErr),
 	})
 	var vf *verbFailure
 	if !errors.As(busyErr, &vf) || vf.Code != "busy" {
 		t.Errorf("ASSERTION: a third copy to the path the first writes was not refused as busy: %v", busyErr)
+	}
+	if !errors.As(hereBusyErr, &vf) || vf.Code != "busy" {
+		t.Errorf("ASSERTION: a copy through a link to the path a running copy writes here was not refused as busy: %v", hereBusyErr)
 	}
 	if len(both) != 2 {
 		t.Errorf("ASSERTION: the two copies did not write two parts at once: %v", both)
