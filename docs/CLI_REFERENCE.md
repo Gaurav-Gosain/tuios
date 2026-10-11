@@ -1700,7 +1700,7 @@ name alone. Some of them:
 | `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
 | `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch terminal that `Ctrl+B g` shows (default `80%`) |
 | `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch terminal (default `80%`) |
-| `daemon.window_size` | `smallest`, `largest`, `latest` | The client whose size the session uses: the smallest (default), the largest, or the client that last had input. The daemon applies it to the session at once. It is not saved to the config file |
+| `daemon.window_size` | `latest`, `smallest`, `largest` | The client whose size the session uses: the client that last had input (default), the smallest, or the largest. The daemon applies it to the session at once. It is not saved to the config file |
 
 **Examples:**
 ```bash
@@ -3266,7 +3266,7 @@ workspace      1 of 9
 tiling         tiling
 size           120x40
 attached       true
-window size    smallest
+window size    latest
 named          2=review
 ```
 
@@ -3295,7 +3295,7 @@ and `host focus` only while a client is attached.
   "tui_attached": true,
   "width": 120,
   "window_count": 2,
-  "window_size": "smallest",
+  "window_size": "latest",
   "workspace_names": {},
   "workspace_order": null
 }
@@ -4532,7 +4532,7 @@ ssh -p 2222 localhost attach mysession
 ```
 
 **Multi-Client Behavior:**
-- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the smallest client (the default), the largest client, or the client that last had input. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
+- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the client that last had input (the default), the smallest client, or the largest client. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
 - State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
 - Clients are notified when others join or leave the session
 
@@ -4681,7 +4681,7 @@ tuios-web --ephemeral
 ```
 
 **Multi-Client Behavior:**
-- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the smallest client (the default), the largest client, or the client that last had input. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
+- When multiple clients connect to the same session, `window_size` in `[daemon]` sets the size of the session: the client that last had input (the default), the smallest client, or the largest client. See [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)
 - State changes (window create/move, workspace switch, etc.) are broadcast to all clients in real-time
 - Clients are notified when others join or leave the session
 

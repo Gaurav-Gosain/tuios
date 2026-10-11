@@ -82,12 +82,13 @@ be at most 8 cells wide, with no control characters. To remove the whole pill,
 remove `"mode"` from `[dock] left`.
 
 `daemon.window_size` sets the size of a session with more than one client:
-`smallest` (the default), `largest`, or `latest`, the client that last had
-input. `tuios set-config daemon.window_size latest` applies it to the session
+`latest` (the default), the client that last had input, `smallest`, or
+`largest`. `tuios set-config daemon.window_size latest` applies it to the session
 at once, and `session-info` reports the policy in use as `window_size`. A
 client smaller than the session shows the part around the focused pane's
-cursor, so a pane can be wider than a person's screen. Change it only when the
-person asks.
+cursor, so a pane can be wider than a person's screen. A larger client shows
+dots in the space the session does not use, with a line that names the client
+that sets the size. Change it only when the person asks.
 
 `daemon.ssh_agent = "follow"` keeps a link for each session to the ssh agent
 socket of the client that attached or used it last. New panes get

@@ -114,7 +114,11 @@ func newRigSized(t *testing.T, panes, cols, rows int, opts ...func(*rig)) *rig {
 	t.Setenv("SHELL", rigShell())
 	t.Setenv("PS1", "$ ")
 
-	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})
+	// Smallest, set on purpose. The rig's control client (ctl below) is a
+	// TUI client with no chrome that attaches first. Under latest, the
+	// default, it would own the session's size and reserve for good, and the
+	// clients under test would draw a view of a session sized for nobody.
+	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true, WindowSize: config.WindowSizeSmallest})
 	if err := d.Start(); err != nil {
 		t.Fatalf("daemon start: %v", err)
 	}

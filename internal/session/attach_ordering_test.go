@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // A client attaching has no read loop yet. It writes MsgAttach and then reads
@@ -90,7 +92,8 @@ func TestAttachIsNeverOutrunByABroadcast(t *testing.T) {
 // itself, and it would catch a fix for the ordering that bought it by leaving
 // the joiner uninformed.
 func TestAttachReplyCarriesWhatTheSessionSettledOn(t *testing.T) {
-	d, _ := startTestDaemon(t)
+	// Smallest, so the joiner is the size the session settles on.
+	d, _ := startTestDaemonSized(t, config.WindowSizeSmallest)
 	sess := makeSessionWithWindow(t, d, "settled")
 
 	// One client already here, wider than the joiner and reserving a rail.

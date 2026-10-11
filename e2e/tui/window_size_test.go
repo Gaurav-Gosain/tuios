@@ -162,7 +162,22 @@ func TestWindowSizeLatestFollowsInput(t *testing.T) {
 	waitMark(t, small, true, "the small client, after the big one took the session back")
 }
 
-// TestWindowSizeSmallestIgnoresInput holds the default: the session is the
+// TestWindowSizeDefaultIsLatest holds the default: with no window_size in
+// the config the policy is latest, as in tmux since 3.1, and the big client,
+// which attached first and is the only one anybody has used, keeps the size.
+//
+// NEGATIVE CONTROL: on a build whose default is smallest, the policy check
+// fails.
+func TestWindowSizeDefaultIsLatest(t *testing.T) {
+	_, small, base := windowSizePair(t, "", "", nil)
+	waitWSSize(t, base, wsBigCols, wsBigRows, "with both attached and no input")
+	if _, _, policy := wsSize(t, base); policy != "latest" {
+		t.Fatalf("the default policy is %q, want latest", policy)
+	}
+	waitMark(t, small, true, "the small client under the default")
+}
+
+// TestWindowSizeSmallestIgnoresInput holds smallest: the session is the
 // smallest client's size whoever types. Then set-config changes the policy of
 // the running session.
 //
@@ -170,10 +185,10 @@ func TestWindowSizeLatestFollowsInput(t *testing.T) {
 // option says, the session is the big client's 200x50 (it attached first)
 // and the first check fails.
 func TestWindowSizeSmallestIgnoresInput(t *testing.T) {
-	big, small, base := windowSizePair(t, "", "", nil)
+	big, small, base := windowSizePair(t, "smallest", "", nil)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "with both attached")
 	if _, _, policy := wsSize(t, base); policy != "smallest" {
-		t.Fatalf("the default policy is %q, want smallest", policy)
+		t.Fatalf("the policy is %q, want smallest", policy)
 	}
 	for _, term := range []*tuitest.Terminal{big, small, big} {
 		time.Sleep(wsHoldGap)
@@ -263,7 +278,8 @@ func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 	const other = "other"
 	base := t.TempDir()
-	writeConfig(t, base, "")
+	// The other session is smallest, from the file. ws is set to latest below.
+	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	killDaemon(t, base)
 	for _, name := range []string{other, wsSession} {
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
@@ -350,7 +366,7 @@ func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 // as reports.
 func TestWindowSizeSmallestSendsNoActivity(t *testing.T) {
 	t.Setenv("TUIOS_LOG_LEVEL", "messages")
-	_, small, base := windowSizePair(t, "", "", nil)
+	_, small, base := windowSizePair(t, "smallest", "", nil)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "under smallest")
 	reports := func() int {
 		data, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log"))

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
@@ -221,7 +222,8 @@ func TestProbeRelayedIntoOwnPaneIsRefused(t *testing.T) {
 // goes back to the size of the client that is left.
 func TestLateProbeDetachesTheClient(t *testing.T) {
 	skipWithoutPeerPID(t)
-	d, sp := startTestDaemon(t)
+	// Smallest, so the nested client shrinks the session while it is attached.
+	d, sp := startTestDaemonSized(t, config.WindowSizeSmallest)
 	sess, _, b := twoWindowSession(t, d, "late")
 
 	// A client outside every pane, at 100x30.

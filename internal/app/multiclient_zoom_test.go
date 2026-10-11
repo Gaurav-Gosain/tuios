@@ -134,8 +134,14 @@ func winByPTY(m *OS, ptyID string) *terminal.Window {
 // is left out on purpose: it lists every pane by name whatever the layout is
 // doing, so a frame read whole says "HIDDEN is on screen" for a pane that
 // is not being drawn at all.
+//
+// With the session drawn as a view (pane_view.go), the panes are on the
+// screen where the view puts them, not at their layout columns.
 func paneFrame(m *OS) string {
 	left, width := m.GetLeftMargin(), m.GetContentWidth()
+	if v := m.computeSessionView(); v.on {
+		left, width = v.clip.Min.X, v.clip.Dx()
+	}
 	var b strings.Builder
 	for row := range strings.SplitSeq(frame(m), "\n") {
 		r := []rune(row)

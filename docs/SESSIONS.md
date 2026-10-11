@@ -124,10 +124,21 @@ A pane has one size, so a session has one size for all of its clients.
 `window_size` in `[daemon]` selects the client that sets it. The values are
 the values of the tmux `window-size` option.
 
-- `smallest` is the default. The session uses the smallest client. Every
-  client shows the full session. A larger client shows empty space around it.
+- `latest` is the default, as in tmux since 3.1. The session uses the client
+  that last had input.
+- `smallest`: the session uses the smallest client. Every client shows the
+  full session.
 - `largest`: the session uses the largest client.
-- `latest`: the session uses the client that last had input.
+
+A client that is larger than the session shows the session's panes at the
+top left of its pane area. Dots fill the rest of the area, as tmux does. A
+line in that area names the machine of the client that sets the size and
+tells you what to do. Under `latest`, type in the larger client to give it
+the size. The rail and the dock stay at the edges of each client's screen.
+
+Under `latest`, the panes are laid out around the rail and the dock of the
+latest client. Under `smallest` and `largest`, they are laid out around the
+largest rail and dock of all the clients.
 
 For `latest`, input is a key, a paste, a click, a drag or a turn of the mouse
 wheel. A resize is not input. A focus change is not input. A reply that your
@@ -178,7 +189,7 @@ report input in the same way, so each of them can be the latest client.
 A client that cannot send input, such as `tuios-web --read-only`, does not set
 the size under `largest` or `latest`. A viewer with a large browser window
 does not make the session larger than the people who type can see. Under
-`smallest` it counts like every other client, so the default does not change.
+`smallest` it counts like every other client.
 If only viewers are attached, they set the size. A tool
 that uses the verb socket only, such as Collie, is not a client with a size.
 It does not change the size of the session.

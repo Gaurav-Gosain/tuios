@@ -169,6 +169,15 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**The default window_size is latest.** A daemon with no `[daemon]
+window_size` now uses `latest`, so `session-info` reports `window_size:
+"latest"` where it reported `smallest`. Under `latest` the session's agreed
+chrome reserve is the latest client's own, not the largest of all clients. On
+the client protocol, a hello can carry `Machine`, the client's short host
+name, and `MsgAttached` and `MsgSessionResize` can carry `SizedBy`, the
+machine of the client that set the size. Both are labels for the hint a larger
+client shows, and an older peer ignores them.
+
 **A client that is not tuios can stream a pane and answer the Inbox.** Three
 additions serve a native phone app on `ssh host tuios stdio-proxy`:
 
@@ -307,7 +316,7 @@ verbs:
 **A session's size follows its window_size policy.** The daemon reads
 `[daemon] window_size` and a session's own `daemon.window_size` (see
 [SESSIONS.md](SESSIONS.md#session-size-with-more-than-one-client)). With the
-default, `smallest`, nothing changes. What changes for a caller:
+default of that release, `smallest`, nothing changes. What changes for a caller:
 
 - `session-info` gains `window_size`, `session_width` and `session_height`.
 - `set-option` of `daemon.window_size` is applied by the daemon, not by a
@@ -2160,7 +2169,7 @@ Response:
   "height": 40,
   "tui_attached": true,
   "host_focus": "focused",
-  "window_size": "smallest",
+  "window_size": "latest",
   "session_width": 120,
   "session_height": 40
 }}

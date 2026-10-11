@@ -10,13 +10,16 @@ import (
 // The window_size policy: which client's size a session with several clients
 // takes. It is tmux's window-size option, with the same names.
 //
+//   - latest: the client that last had input. A smaller client shows the
+//     part of the session around the focused pane's cursor, and a larger one
+//     fills the rest of its screen with a dotted pattern, as tmux does. This
+//     is the default, as it is in tmux since 3.1. The session's chrome
+//     reserve is the latest client's too, so its panes reach its own rail.
 //   - smallest: the smallest client in each dimension. Every client sees the
-//     whole session. This is the default, and what every build did before
-//     the option existed.
+//     whole session. It was the default up to v0.9.2, and is what every
+//     build did before the option existed.
 //   - largest: the largest client in each dimension. A smaller client shows
-//     the part of the session around the focused pane's cursor.
-//   - latest: the client that last had input. A smaller client shows a part,
-//     as for largest, and a larger one shows the rest as unused space.
+//     a part, as for latest.
 //
 // What counts as input is the client's to say, because the client is the only
 // side that sees it: a key or a click that tuios itself handles (window
@@ -56,14 +59,14 @@ const latestHold = time.Second
 // that each recalculate the session's size. See handleClientActivity.
 const activityRecalcGap = 50 * time.Millisecond
 
-// windowSizePolicy resolves a window_size value. Anything unknown is
-// smallest, the default, which is the policy no client can be surprised by.
+// windowSizePolicy resolves a window_size value. Anything empty or unknown
+// is latest, the default.
 func windowSizePolicy(v string) string {
 	switch v {
-	case config.WindowSizeLargest, config.WindowSizeLatest:
+	case config.WindowSizeLargest, config.WindowSizeSmallest:
 		return v
 	}
-	return config.WindowSizeSmallest
+	return config.WindowSizeLatest
 }
 
 // optionWindowSize is the option path of the policy. set-option records it on

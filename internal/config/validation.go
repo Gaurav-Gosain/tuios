@@ -229,9 +229,9 @@ func validateResumeAgents(cfg *UserConfig, result *ValidationResult) {
 }
 
 // validateWindowSize warns when daemon.window_size holds a value outside its
-// allowed set. An unknown value falls back to smallest.
+// allowed set. An unknown value falls back to latest, the default.
 func validateWindowSize(cfg *UserConfig, result *ValidationResult) {
-	warnEnum(result, "daemon", "window_size", cfg.Daemon.WindowSize, WindowSizeModes, "smallest")
+	warnEnum(result, "daemon", "window_size", cfg.Daemon.WindowSize, WindowSizeModes, WindowSizeLatest)
 }
 
 // validateSSHAgent warns when daemon.ssh_agent holds a value outside its

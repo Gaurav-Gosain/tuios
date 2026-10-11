@@ -926,8 +926,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "daemon.window_size", Type: OptionString, Section: "daemon",
-		Description: "The size of a session with more than one client: the smallest client, the largest client, or the client that last had input",
-		Accepted:    WindowSizeModes, Default: WindowSizeSmallest,
+		Description: "The size of a session with more than one client: the client that last had input, the smallest client, or the largest client",
+		Accepted:    WindowSizeModes, Default: WindowSizeLatest,
 	},
 	{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",

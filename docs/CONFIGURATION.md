@@ -303,9 +303,11 @@ focus-key mappings and protocol behaviour.
 
 | Value | Size of the session |
 |---|---|
-| `smallest` (default) | The smallest client. Every client shows the full session. |
+| `latest` (default) | The client that last had input. A smaller client shows a part of the session. |
+| `smallest` | The smallest client. Every client shows the full session. |
 | `largest` | The largest client. A smaller client shows a part of the session. |
-| `latest` | The client that last had input. A smaller client shows a part of the session. |
+
+A client that is larger than the session fills the space the session does not use with dots. A line in that space names the client that sets the size. The rail and the dock stay at the edges of each client's screen.
 
 To change the value of one session while it runs, use `tuios set-config daemon.window_size latest -s NAME`. The value is not saved to the config file. A change in the config file applies when the daemon starts again.
 

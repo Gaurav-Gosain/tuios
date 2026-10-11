@@ -242,10 +242,11 @@ type DaemonConfig struct {
 	// lines.
 	PersistScrollbackKB int `toml:"persist_scrollback_kb"`
 	// WindowSize decides the size of a session with more than one client
-	// attached, as tmux's window-size option does: "smallest" (the default)
-	// takes the smallest client, "largest" the largest, and "latest" the
-	// client that last had input. A client smaller than the session shows
-	// the part of it around the focused pane's cursor.
+	// attached, as tmux's window-size option does: "latest" (the default, as
+	// in tmux since 3.1) takes the client that last had input, "smallest" the
+	// smallest client, and "largest" the largest. A client smaller than the
+	// session shows the part of it around the focused pane's cursor, and a
+	// client larger than it fills the rest with a dotted pattern.
 	WindowSize string `toml:"window_size"`
 	// SingleClient keeps one client per session, like tmux's attach -d on
 	// every attach: a client that attaches takes the other clients off the
@@ -996,7 +997,7 @@ func DefaultConfig() *UserConfig {
 		Daemon: DaemonConfig{
 			LogLevel:     "off",
 			ResumeAgents: ResumeAgentsAsk,
-			WindowSize:   WindowSizeSmallest,
+			WindowSize:   WindowSizeLatest,
 			Display:      DisplayFollow,
 		},
 		Startup: StartupConfig{

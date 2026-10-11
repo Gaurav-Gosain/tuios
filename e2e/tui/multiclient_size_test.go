@@ -80,9 +80,12 @@ func attachSmall(t *testing.T, base, session string, o startOpts) *tuitest.Termi
 }
 
 // twoClientSession creates a detached session and attaches a big client to it.
+// The session is smallest, set on purpose: the tests on it are about a
+// session that every client shows whole.
 func twoClientSession(t *testing.T, name string, cols, rows int) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
+	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
 		t.Fatalf("create session %s: %v: %s", name, err, out)
