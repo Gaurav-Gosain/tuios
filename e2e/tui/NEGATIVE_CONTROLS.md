@@ -3491,3 +3491,18 @@ against it. It failed where shown, and passed on the branch build.
 | Control: what was cut | Where it failed |
 | --- | --- |
 | The `reviewHighlight` call in the review-diff handler | both `func` lines have no `hl` keyword span and no `changed` range |
+
+## Finding text, command history, ports and started_by
+
+`find_ports_tree_test.go` has one test, `TestFindPortsAndStartedBy`. It runs
+search-panes, command-history, list-ports and list-windows against a real
+daemon, with a bash that marks its commands with OSC 133. On 2026-10-11 each
+control below was built into a binary and the test was run against it. Each
+control failed where shown. The same test passed on the branch build.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| `paneLines` skips the history rows | search for `findme-` finds 2 matches, not 3: the first marker is in the history |
+| `verbCommandHistory` keeps every run of a command | the command run twice is listed twice |
+| `walkProcTree` reads no children, only each pane's own process | list-ports never lists python's port: python runs under `sh -c` |
+| `noteStartedBy` records nothing | the child window's `started_by` is nil in list-windows and list-agents |

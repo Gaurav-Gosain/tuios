@@ -166,6 +166,20 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A pane records the pane that started it.** When a process in a pane calls
+`new-window`, `split-window`, `start-agent`, `fan` or `new-worktree`, the pane
+it makes records the caller's pane. What changes for a caller:
+
+- `list-windows`, `get-window` and every `list-agents` entry gain
+  `started_by`, `{"session", "window"}`. It is omitted when no pane started
+  the window: the call came from outside every pane, or over a link.
+- The synced window state gains `started_by`, taken from the daemon's own
+  state on every client push, and saved with the session. An older peer drops
+  it. The gui-bridge `state` window rows gain it too.
+- The new verbs `search-panes`, `command-history` and `list-ports` read pane
+  text, the shell commands a pane ran, and the TCP ports a pane's processes
+  listen on (see [search-panes](#search-panes)).
+
 **A pane's OSC 7501 reports are part of its state.** A program in a pane can
 report what it does with the Program Status Protocol (see
 [PROGRAM_STATUS.md](PROGRAM_STATUS.md)). What changes for a caller:
@@ -2082,6 +2096,10 @@ A window whose process runs on this machine also has `pid`, the process the
 pane started, and `tty`, the path of its terminal device. A zoomed window has
 `zoomed: true`.
 
+A window that a process in another pane opened has `started_by`, that pane
+as `{"session", "window"}`. See
+[Which pane started a pane](#which-pane-started-a-pane).
+
 ### get-window
 
 Describe one window, as the client protocol's `GetWindow` command does. With
@@ -2692,6 +2710,105 @@ exactly like `recent`; it is now rejected rather than silently ignored, because
 the emulator does not record which rows are continuations and unwrapping them
 would mean guessing. A caller that needs logical lines should widen the pane
 with `resize` before capturing.
+
+### search-panes
+
+Find text in the history and the screen of every pane on this machine.
+
+Params: `query` (required, at most 512 bytes), `regex` (bool, default false:
+`query` is literal text), `case` (`smart`, the default, ignores case unless
+the query has a capital letter; `sensitive`; `insensitive`), `sessions`
+(list, default every session), `max` (default 200, at most 1000), `per_pane`
+(default 20, at most 200). A pattern is a Go regular expression, which runs in
+linear time. A pattern that matches an empty line is `invalid_params`.
+
+```json
+{"verb": "search-panes", "params": {"query": "panic:"}}
+```
+
+```json
+{"result": {
+  "matches": [
+    {"session": "work", "window": "7e02...", "name": "build", "workspace": 1,
+     "row": 812, "text": "panic: runtime error", "start": 0, "end": 6,
+     "age_rows": 30}
+  ],
+  "panes_searched": 4,
+  "truncated": false
+}}
+```
+
+`row` counts the pane's history rows from the top, then its screen rows: row
+`history_rows` is the top row of the screen. `age_rows` is how many rows the
+row is above the bottom of the screen. `text` is the row, cut to 400
+characters around the match, and `start` and `end` are the first match's
+character offsets in `text`. In each pane the newest match comes first, and
+the pane with the newest output comes first. Each pane gets 50 ms. `truncated`
+is true when `max` or `per_pane` cut the matches, or when a pane took longer.
+
+A restricted connection under scope own may not call it. Over a link it needs
+`list`.
+
+### command-history
+
+The commands that shells in panes on this machine ran, newest first. Only a
+shell that sends OSC 133 marks reports its commands (see [run](#run)). A pane
+keeps its last 200 finished commands. A command that ran again in the same
+pane is listed once, at its newest run.
+
+Params: `session` and `window` (both optional; without either, every pane),
+`limit` (default 200, at most 2000), `query` (only the commands whose text
+holds it; smart case, as for `search-panes`).
+
+```json
+{"result": {"commands": [
+  {"session": "work", "window": "7e02...", "name": "build", "seq": 41,
+   "cmdline": "go test ./...", "exit": 1, "at": 1791712193354,
+   "duration_ms": 8120, "cwd": "/home/me/src/api", "row": 790}
+]}}
+```
+
+`seq` is the pane's `command_seq` when the command finished. `cmdline` is cut
+to 512 bytes, with likely secrets masked. `exit` is null when the shell sent
+no status. `at` is when the command started, in Unix milliseconds. `cwd` is
+the folder the shell last reported over OSC 7 when the command started, empty
+when it never reported one. `row` is the history row of the command's prompt,
+numbered as in `search-panes`, and -1 when the prompt has left the history.
+
+### list-ports
+
+The TCP ports that processes in panes on this machine listen on. A pane's
+processes are its program and every process under it. A process that left the
+pane's process tree, such as a daemon that detached, is not listed.
+
+Params: `session` (optional; default every session).
+
+```json
+{"result": {"supported": true, "ports": [
+  {"session": "api-feat", "window": "7e02...", "port": 5173,
+   "addr": "127.0.0.1", "pid": 41234, "comm": "node",
+   "worktree": "/home/me/.local/share/tuios/worktrees/api/feat"}
+]}}
+```
+
+On Linux the daemon reads `/proc/net/tcp`, `/proc/net/tcp6` and each
+process's open files. On macOS it runs `lsof` for the panes' processes, with a
+1 second limit. Elsewhere `supported` is false and `ports` is empty. `addr` is
+the address the socket listens on (`0.0.0.0` or `::` for every address).
+`worktree` is the session's worktree folder, empty for a session that is not a
+worktree session. An answer can be up to 1 second old.
+
+Over a link it needs `list`.
+
+### Which pane started a pane
+
+When a process in a pane calls `new-window`, `split-window`, `start-agent`,
+`fan` or `new-worktree`, each pane the call makes records the caller's pane as
+`started_by`, `{"session": "work", "window": "7e02..."}`. The daemon finds the
+caller's pane the way pane grants do, from the kernel's record of its pid. A
+call from outside every pane, or over a link, records nothing. `list-windows`,
+`get-window` and `list-agents` show it, and it is saved with the session. A
+session rename updates it.
 
 ### screenshot
 
