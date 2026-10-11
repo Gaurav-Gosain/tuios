@@ -965,8 +965,8 @@ func TestDiffFilterDropsOnlyAReflowAfterProtection(t *testing.T) {
 // TestGhosttyDivergence_BackgroundColourErase pins which operations carry the
 // current background into the cells they blank.
 //
-// The pure emulator applies background-colour erase to EL, IL, DL and SU; the
-// library applies it to ED and to nothing else. xterm with bce set fills all
+// The pure emulator applies background-colour erase to ED, EL, IL, DL and SU;
+// the library applies it to none of them. xterm with bce set fills all
 // of them, so the pure emulator is the compatible side. What a user sees on
 // the library backend is a coloured application (anything with a themed
 // background) growing default-coloured bands wherever it inserts, deletes or
@@ -984,12 +984,11 @@ func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 		wantPure bool
 		wantGh   bool
 	}{
-		// ED is the odd one out on BOTH sides: neither carries the
-		// background into a cleared screen, though xterm with bce does.
-		// It stays here as the case that guards the probe, and as a note
-		// that the pure emulator is inconsistent with itself: it applies
-		// bce to the four operations below but not to this one.
-		{"ED carries the background on neither", "\x1b[41m\x1b[2J", 0, 0, false, false},
+		// ED 2 carries the background on the pure emulator, as xterm with
+		// bce does. neovim clears with its colour scheme's background and
+		// draws only the text, so a clear without it left the rest of each
+		// line on the host's background (#624). The library does not.
+		{"ED carries it only on the pure emulator", "\x1b[41m\x1b[2J", 0, 0, true, false},
 		{"EL carries it only on the pure emulator", "ABCD\x1b[H\x1b[41m\x1b[K", 0, 0, true, false},
 		{"IL carries it only on the pure emulator", "\x1b[41m\x1b[3L", 0, 0, true, false},
 		{"DL carries it only on the pure emulator", "A\r\nB\r\nC\x1b[H\x1b[41m\x1b[2M", 0, 10, true, false},
