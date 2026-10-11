@@ -2901,6 +2901,38 @@ tuios pip agent
 tuios pip --off
 ```
 
+### `tuios call`
+
+Send one verb to the daemon and print its reply as JSON.
+
+**Usage:**
+```bash
+tuios call <verb> [params]
+```
+
+`params` is a JSON object, or `-` to read it from standard input. Omit it for
+a verb that takes none. The reply is the daemon's result object as it is. A
+verb error prints `{"error": {"code", "message", "hint"}}` and exits 1.
+
+Use it from a program that can start a process but cannot write to the
+socket, such as a Tern plugin. The daemon checks the call as it checks any
+other, so a pane is held to its grants. `tuios list-verbs` lists every verb.
+`subscribe`, `stream-pane` and `open-file-stream` turn the connection into a
+stream, so `call` refuses them. Use `tuios subscribe`, `tuios pane-view` or
+`tuios transfers`.
+
+**Flags:**
+- `--pretty`: Indent the JSON
+
+**Examples:**
+```bash
+# Every session, as the daemon reports it
+tuios call list-sessions
+
+# A verb with params
+tuios call list-windows '{"session":"work"}'
+```
+
 ### `tuios list-windows`
 
 List all windows in a TUIOS session.

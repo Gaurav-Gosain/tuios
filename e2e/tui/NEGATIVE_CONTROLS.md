@@ -4362,3 +4362,11 @@ the fix.
 | Control: what was cut | Where it failed | Verdict |
 | --- | --- | --- |
 | ED 2 fills with `e.scr.blankCell()` (back to `e.scr.Clear()`) | "cells the clear painted lost the program's background": all three probes on the terminal's own background | **caught** |
+### tuios call
+
+Run on 2026-10-11 on branch `feat/call-verb`. The control cuts one thing from
+the fixed build and runs `TestCallVerb`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The params left out of `client.Call` | `TestCallVerb` ("params did not reach the daemon") | **caught** |
