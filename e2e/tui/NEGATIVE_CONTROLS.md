@@ -4046,3 +4046,63 @@ on a binary built with the one change and the rest as committed.
 
 `TestACancelledCopyStopsReadingItsSource` reads `/proc` and skips on macOS,
 where these controls ran; it runs on Linux CI.
+
+## The second review of link file access: write roots and the read deny list
+
+The E2E tests are in `file_roots_test.go`, with the far daemon of
+`host_attach_test.go` as build. Unless a test says so, build gives a linked
+machine the wide root `~`, so the test proves the deny lists alone.
+
+- `TestALinkWritesOnlyInItsRoots`: build sets no `files_roots`. A copy to
+  `~` fails as `forbidden`, and the refusal names `~/Downloads/tuios` and
+  `files_roots`. The positive half: a copy into the receive folder arrives
+  checked.
+- `TestALinkCannotWriteThroughARenamedAncestor`: a rename and a remove of
+  `~/.config`, which holds the fish config, are refused and the config keeps
+  its bytes.
+- `TestALinkCannotWriteAStowedDotfile`: `~/.ssh` and `~/.bashrc` are links
+  into `~/dotfiles`. A copy to the link targets is refused.
+- `TestALinkCannotReadKeys`: `file-read` and `file-hash` of a private key are
+  refused. The positive half: a `.pub` key and an ordinary file are read.
+- `TestALinkCannotReadProcOrTheDaemonFolder`: build's roots also cover its
+  runtime folder. A read of `/proc/self/environ`, `/proc/self/mem` and the
+  daemon's pid file is refused, and so are `file-mkdir` in the stash,
+  `file-rename` of the pid file and `file-remove` of the socket folder.
+- `TestADarwinCaseFoldedDenyNameIsRefused` (macOS only): a copy to
+  `~/.ſsh/authorized_keys` is refused.
+- `TestTwoCopiesToOnePathKeepTheirParts` changed. The busy rule now resolves
+  links in a local path, so the two copies meet on build, where the path is
+  compared as given. A copy here through a link to a path that a running
+  copy writes must answer `busy`.
+
+The unit tests in `internal/session/transfer_review_test.go` hold what no E2E
+runner reaches: `TestADenyNameMatchesEveryFold` (a casefold disk on Linux, the
+Windows trim), `TestAFarWriteErrorCodeIsNotRetried`,
+`TestAnOldFiveCapAllowStillRelays` and `TestTransferEventsReachOnlyAFilesLink`.
+
+The controls were run on 2026-10-11 on Linux, on the branch rebased onto
+origin/main at a8ae79e4. Each ran on a binary built with the one change and
+the rest as committed. The driver and each log are in
+`~/.cache/agent-tmp/te-sec/nc/`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No write roots | `linkWriteRoots`: the home folder added to the roots | `TestALinkWritesOnlyInItsRoots` (the copy to `~` ended done) | **caught** |
+| An ancestor of a denied folder passes | `denyContains`: only `denyUnder(p, c)` | `TestALinkCannotWriteThroughARenamedAncestor` (the rename and the remove went through, the fish config was gone) | **caught** |
+| The deny list read by name only | `denyContains`: the entry's real path not compared | `TestALinkCannotWriteAStowedDotfile` (both copies done, `authorized_keys` holds the attacker's key) | **caught** |
+| No read check | `checkLinkRead` returns at once | `TestALinkCannotReadKeys` (the key was read and hashed) | **caught** |
+| /proc readable | `linkReadDenyAbsolute` empty | `TestALinkCannotReadProcOrTheDaemonFolder` (`/proc/self/environ` was read) | **caught** |
+| The socket folder not denied | `linkPrivate.with` returns the list as given | `TestALinkCannotReadProcOrTheDaemonFolder` (the pid file was read and moved, the stash got a folder, the socket folder was removed) | **caught** |
+| The drop folder not carved out | `linkPrivate.with`: the socket folder added for the drop folder too | `TestDropFilesOnAPaneOnAHost`, `TestADropNamesEachFileSafely` (each drop refused) | **caught** |
+| The busy rule reads a local path as given | `busyKey`: `filepath.Clean` without `realParent` | `TestTwoCopiesToOnePathKeepTheirParts` (the copy through the link here started) | **caught** |
+| One part name per path | `partPath`: the id not added to the name | `TestTwoCopiesToOnePathKeepTheirParts` (no two parts in flight, both copies failed their check) | **caught** |
+| The deny fold only on macOS and Windows | `denyUnder` is `pathUnder` | `TestADenyNameMatchesEveryFold` (`.SSH`, `.ſsh` and a soft hyphen passed) | **caught** |
+| No Windows trim | `trimWindowsNames` returns its input | `TestADenyNameMatchesEveryFold` (`.ssh.` and `.ssh . ` kept) | **caught** |
+| The far write code dropped | `writeReplyError`: the code not kept | `TestAFarWriteErrorCodeIsNotRetried` (`disk_full` became `host_unreachable` and was retried) | **caught** |
+| Relay needs all six capabilities | `expandRelay`: `config.LinkCapabilities` in place of `LinkRelayCapabilities` | `TestAnOldFiveCapAllowStillRelays` (a five-capability table could not relay) | **caught** |
+| Transfer events reach any link | `eventInScope`: the link check made false | `TestTransferEventsReachOnlyAFilesLink` (a list-only link got the event) | **caught** |
+
+`TestADarwinCaseFoldedDenyNameIsRefused` skips on Linux. Its control (the
+fold cut from `pathUnder`) still has to run on macOS. Windows has no E2E
+runner: `plainLinkPath` and the trim are checked by cross-build vet, and the
+trim by the unit test above.
