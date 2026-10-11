@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 34,046,114 | 34,600,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 32,043,810 | 32,600,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 34,676,898 | 34,900,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 32,634,946 | 32,900,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2489,6 +2489,18 @@ pairing listener. With #607 the build measured 34,046,114 and 32,043,810
 bytes, 46,114 and 43,810 over the old budgets. Both budgets again have about
 550 KB of room, and linux/amd64 is now within 400 KB of the 35 MB ceiling, so
 the next feature that needs room should look for bytes to cut first.
+
+The budgets went to 34,900,000 (linux/amd64) and 32,900,000 (darwin/arm64)
+for the file transfer engine (#620): bulk streams on the link, the file
+verbs, copies the daemon runs and journals, and the confinement of link file
+access to `files_roots` and the deny lists. With it the build measured
+34,676,898 and 32,634,946 bytes, 524,288 and 489,328 bytes over origin/main
+at a8ae79e4 (34,152,610 and 32,145,618), and 76,898 and 34,946 bytes over the
+old budgets. Of that, 106,496 bytes are the Unicode normalisation tables of
+golang.org/x/text/unicode/norm. The deny lists need them: APFS opens a name
+in either Unicode normal form, so a deny match must compare both. The file
+previews of #597 stay off main, which keeps out about 217 KB of image
+decoders. The ceiling is now 40 MB.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
