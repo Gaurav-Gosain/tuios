@@ -4168,6 +4168,16 @@ with the one change. The driver is
 | files_read_roots not enforced | `checkLinkRead`: the roots check made false | `TestALinkReadsOnlyItsReadRoots` (all four verbs answered) | **caught** |
 | file-stat without the read check | `verbFileStat`: the check made false | `TestALinkCannotLookInsideDeniedFolders` (`~/.ssh/id_ed25519` and `/proc/self/cwd`) | **caught** |
 | file-list without the read check | `verbFileList`: the check made false | `TestALinkCannotLookInsideDeniedFolders` (`~/.ssh` and `/proc/self/fd`) | **caught** |
+
+**The part loop flaked on CI.** On 26b9449c the part half of
+`TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps` stopped at 26 and 49 parts
+with a broken pipe. The daemons were sound. `writeStream` wrote an empty body
+with a zero-length `Write`, which is still a write(2) on the socket. With
+length 0 the far daemon writes its closing line and closes at once, and the
+hub's relay closes the test's end. A slow runner let the close win the race.
+Under `taskset -c 0-1` and `GOMAXPROCS=1` it failed 6 runs in 20. With the
+empty write skipped it passed 100 runs in 100, and a binary with the part cap
+cut still failed at 88 parts.
 | No history in the read deny list | `.bash_history` cut from `linkReadDenyHome` | `TestALinkCannotLookInsideDeniedFolders` (the history was read) | **caught** |
 
 On macOS (the person's MacBook, a scratch clone of d6af80e7 under

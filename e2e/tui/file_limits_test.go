@@ -199,8 +199,15 @@ func writeStream(c *fileVerbConn, path, partID string, length int64, body []byte
 	if _, err := c.call("open-file-stream", params); err != nil {
 		return nil, err
 	}
-	if _, err := c.conn.Write(body); err != nil {
-		return nil, err
+	// An empty body is not written at all. A zero-length Write is still a
+	// write(2) on the socket, and with length 0 the far daemon sends its
+	// closing line and closes as soon as the stream opens. The hub's relay
+	// then closes this end, so the empty write raced the close and failed
+	// with a broken pipe on a slow runner. The reply is in the buffer anyway.
+	if len(body) > 0 {
+		if _, err := c.conn.Write(body); err != nil {
+			return nil, err
+		}
 	}
 	line, err := c.br.ReadBytes('\n')
 	if err != nil {
