@@ -94,15 +94,12 @@ func TestALinkTransferStartKeepsToTheLinkPolicy(t *testing.T) {
 		if forbidden(err) {
 			continue
 		}
+		t.Errorf("ASSERTION: transfer-start of %s over the link was not refused before a job started: %v", what, err)
 		// A job that started must still end refused, with nothing written.
 		var row transferRow
 		_ = json.Unmarshal(raw, &row)
 		if row.ID != "" {
-			row = farTransfer(t, far, row.ID, 30*time.Second)
-			record[what] = row
-		}
-		if row.State != "failed" || row.Code != "forbidden" {
-			t.Errorf("ASSERTION: transfer-start of %s over the link was not refused: %v, %+v", what, err, row)
+			record[what] = farTransfer(t, far, row.ID, 30*time.Second)
 		}
 	}
 	_, dropErr := far.call("drop-files", map[string]any{"paths": []string{"~/.ssh/id_ed25519"}})
