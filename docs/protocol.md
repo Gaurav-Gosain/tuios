@@ -5409,7 +5409,8 @@ start files (`.profile`, `.bashrc`, `.bashrc.d`, `.bash_profile`,
 `.xinitrc`, `~/.config/fish`, `~/.config/zsh`, `.gitconfig`, `.inputrc`), the
 login items (`~/.config/systemd`, `~/.config/autostart`,
 `~/.config/environment.d`, `~/Library/LaunchAgents`, `~/Library/LaunchDaemons`,
-`.pam_environment`), the crontab spools, `/proc`, tuios's own config, state
+`.pam_environment`, and on Windows the Startup folder and the PowerShell
+profiles), the crontab spools, `/proc`, tuios's own config, state
 and data folders, and the daemon's socket folder (the mail stash) apart from
 its drop folder.
 
@@ -5423,6 +5424,7 @@ Claude and Codex credential files, the package and database credentials
 (`.npmrc`, `.pypirc`, `.gem/credentials`, `.cargo/credentials`,
 `.vault-token`, `.pgpass`, `.my.cnf`, the Terraform credentials,
 `~/.config/rclone`, `~/.config/hub`, `~/.config/op`), `~/.local/share/keyrings`,
+the Windows credential stores and DPAPI keys,
 `/proc` (every process's environment and memory), tuios's own config, state
 and data, and the daemon's socket folder apart from its drop folder. On
 Windows a linked machine must name a path with a drive letter and no other

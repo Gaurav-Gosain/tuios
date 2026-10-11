@@ -114,6 +114,10 @@ var linkDenyHome = []string{
 	".config/zsh",
 	".gitconfig",
 	".inputrc",
+	// The Windows start folder and PowerShell profiles.
+	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+	"Documents/PowerShell",
+	"Documents/WindowsPowerShell",
 }
 
 // linkDenyAbsolute is the write deny list outside the home folder: the crontab
@@ -171,6 +175,10 @@ var linkReadDenyHome = []string{
 	".config/hub",
 	".config/op",
 	".local/share/keyrings",
+	// Windows credentials and the DPAPI keys that open them.
+	"AppData/Roaming/Microsoft/Credentials",
+	"AppData/Local/Microsoft/Credentials",
+	"AppData/Roaming/Microsoft/Protect",
 }
 
 // fileFS is where the file verbs write. A zero fileFS is the plain file
