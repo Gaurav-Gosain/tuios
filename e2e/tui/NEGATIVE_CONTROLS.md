@@ -4374,3 +4374,12 @@ the fixed build and runs `TestCallVerb`.
 | `open-pane` left out of the stream verbs | `TestCallVerb` (call open-pane opened a pane) | **caught** |
 | One exit status for every failure | `TestCallVerb` (a stream verb refused with status 1) | **caught** |
 | `TestCallVerbFromAPane` | No control: the refusal is the daemon's, and `call` adds nothing to cut. The test holds that `call` is no way around it. | n/a |
+### pane-view
+
+Run on 2026-10-11 on branch `feat/pane-view`. Each control cuts one thing from
+the fixed build and runs `TestPaneView`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `queryFilter.Write` returning its input unchanged (the outer terminal sees every request) | `TestPaneView` ("the pane's DA1 request was answered twice") | **caught** |
+| `fit` returning at once (only the lease sizes the pane) | `TestPaneView` ("the pane did not follow the terminal to 160x50, larger than the session") | **caught** |

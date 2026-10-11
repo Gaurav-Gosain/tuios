@@ -2942,6 +2942,46 @@ tuios call list-sessions
 
 # A verb with params
 tuios call list-windows '{"session":"work"}'
+
+### `tuios pane-view`
+
+Show one pane in this terminal, with no tuios around it.
+
+**Usage:**
+```bash
+tuios pane-view -w <window> [flags]
+```
+
+The pane's output goes to this terminal as it is. What you type goes to the
+pane, Ctrl-C included. A terminal that draws its own panes, such as Tern, runs
+one `pane-view` for each tuios pane. Each pane then gets the terminal's own
+scrollback, selection and search.
+
+`pane-view` does not attach. It reads the pane through `stream-pane`, so the
+session's size and its clients do not change. The daemon answers the
+requests a program sends to its terminal, so `pane-view` keeps them from the
+outer terminal, which would answer them a second time.
+
+With `--size follow` (the default), the pane takes this terminal's size while
+no tuios client shows the session. While a client shows it, the pane never
+grows past the size the client asks for. With `--size pane`, the pane keeps
+its size and only gets smaller to fit this terminal.
+
+Close the terminal to stop viewing. The pane and its session keep running.
+When the pane exits, `pane-view` exits with the pane's status.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <window>`: The pane to show, by ID or name
+- `--size follow|pane`: Whether the pane takes this terminal's size (default: follow)
+
+**Examples:**
+```bash
+# Show the pane named build of the session work
+tuios pane-view -s work -w build
+
+# Keep the pane at the size the session gives it
+tuios pane-view -s work -w build --size pane
 ```
 
 ### `tuios list-windows`
