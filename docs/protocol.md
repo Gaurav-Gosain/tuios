@@ -5436,6 +5436,14 @@ under a write root, and the refusal names the setting. The read deny list
 also holds the shell and program histories (`.bash_history`, `.zsh_history`,
 fish's history and others) and the browser and password manager profiles.
 
+A read over a link opens the file, then checks the path the system has for
+the open file against the same rules. A rename between the check and the open
+cannot swap a denied file in. A regular file with more than one name (a hard
+link) is `forbidden` to read, hash, stream or copy over a link, because no
+check of its path shows what else it is. To share such a file, copy it to a
+new file first. `read-dir`, `wait-dir` and the binary `MsgReadDir` keep to the
+read rules too, so a machine with only `list` cannot list `~/.ssh` or `/proc`.
+
 **Copies a link starts.** `transfer-start` and `drop-files` called over a link
 read and write this machine's disk for that machine, so they keep to the same
 rules. A source here must pass the read rules, a destination here must pass
@@ -5443,7 +5451,10 @@ the write rules, and a move must also be allowed to remove its source. The
 call is `forbidden` before a job exists when an end fails, and the job checks
 each file again as it goes, through an `os.Root` at the write root. The job
 keeps the name of the machine in the journal (`link`), so after a restart it
-is held to that machine's policy as it is then.
+is held to that machine's policy as it is then. Before each try and each file,
+the job checks that the machine may still start a copy here: `files` and the
+five capabilities a relay needs. A reload that takes one away ends the job as
+`forbidden`, also when the job is paused or waits. A restart does the same.
 
 **How much a link may write.** An `open-file-stream` write over a link is
 checked before a byte moves:
@@ -5453,7 +5464,11 @@ checked before a byte moves:
   hold at most 256 MiB, counting what other open writes into the folder have
   claimed, and a write past that is `disk_full`.
 - Anywhere else, the write must leave the machine's `files_min_free` (1 GiB
-  unless set) free on its disk, or it is `disk_full`.
+  unless set) free on its disk, counting what other open writes to that disk
+  have claimed, or it is `disk_full`.
+- A part file with more than one name (a hard link) is not written, and the
+  write is `forbidden`. A linked machine cannot rename a file onto a part name
+  or off one.
 - One machine may have at most 8 write streams and 64 unfinished part files
   open. Past that the write is `busy`, which a copy retries.
 

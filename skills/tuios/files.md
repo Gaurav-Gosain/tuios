@@ -26,7 +26,8 @@ this one. A write that arrives over the link lands only under that machine's
 `files_roots` (one receive folder, `~/Downloads/tuios`, unless the person
 added more), plus the drop folder. It never reaches `~/.ssh`, `~/.gnupg`,
 credentials, shell start files, login items or tuios's own config, whatever
-`files_roots` says, and a read never returns keys or credentials. A refusal is
+`files_roots` says, and a read never returns keys or credentials. A read of a
+file with more than one name (a hard link) is refused too. A refusal is
 `forbidden`: the write refusal names where writes may land and which setting to
 change, and the read refusal names the path. Do not try another path to the
 same file. To copy into a folder the far machine does not yet allow, tell the

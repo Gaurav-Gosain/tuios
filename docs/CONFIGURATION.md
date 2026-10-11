@@ -1663,7 +1663,9 @@ files_read_roots = ["~/share"]
 
 The rule covers `file-read`, `file-hash`, `file-walk`, a copy out, and the
 names and sizes `file-stat` and `file-list` show. The read deny list still
-holds inside every root. A reload that removes or widens `files_read_roots`
+holds inside every root. A file with more than one name (a hard link) is never
+read over a link, inside a root or outside one. Copy it to a new file to share
+it. A reload that removes or widens `files_read_roots`
 waits for `tuios config apply`. A reload that narrows it applies at once.
 
 **How much a link may write.** A write over a link must leave
@@ -1683,7 +1685,8 @@ files_min_free = "5GiB"
 ```
 
 A copy that another machine starts here with `transfer-start` or `drop-files`
-is held to these rules too, also after tuios restarts.
+is held to these rules too, also after tuios restarts. When a reload or a
+restart takes `files` away from that machine, its copies here stop.
 
 > **Trust.** A machine with `files` can write any file inside its roots and
 > read any file outside the deny list (or inside `files_read_roots`). A file copy is a way to run code: a
