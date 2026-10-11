@@ -21,6 +21,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
+	cs.machine = payload.Machine
 	attachedTo := cs.sessionID
 	cs.mu.Unlock()
 	// A second hello on an attached connection can change what the client
@@ -346,6 +347,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Generation:  session.LayoutGeneration(),
 		HumanNonce:  humanNonce,
 		Policy:      session.WindowSizePolicy(),
+		SizedBy:     session.SizedBy(),
 	})
 	attachLocked = false
 	session.attachMu.Unlock()

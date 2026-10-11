@@ -267,6 +267,10 @@ type HelloPayload struct {
 	// predates it, and a client that predates it sends none. See
 	// display_follow.go.
 	Display ClientDisplay `json:"display,omitzero"`
+	// Machine is the short host name of the machine the client runs on. A
+	// larger client names it in the hint over the space a smaller session
+	// leaves. It is a label and nothing else: no check reads it.
+	Machine string `json:"machine,omitempty"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -425,6 +429,9 @@ type AttachedPayload struct {
 	// sent to the client it answers, so the reply has to say it. Empty from
 	// an older daemon, which leaves the client reporting all input.
 	Policy string `json:"policy,omitempty"`
+	// SizedBy names the machine of the client whose size the session took,
+	// for the hint a larger client shows. Empty when it is not known.
+	SizedBy string `json:"sized_by,omitempty"`
 }
 
 // NewPayload requests creation of a new session.
@@ -865,6 +872,9 @@ type SessionResizePayload struct {
 	// Policy is the window_size policy the size was settled under:
 	// smallest, largest or latest. Empty from a daemon that predates it.
 	Policy string `json:"policy,omitempty"`
+	// SizedBy names the machine of the client whose size the session took.
+	// See AttachedPayload.SizedBy.
+	SizedBy string `json:"sized_by,omitempty"`
 }
 
 // Error codes

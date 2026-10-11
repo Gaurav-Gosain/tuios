@@ -1283,8 +1283,10 @@ type Session struct {
 	// layoutGen counts settlements of the two above. See
 	// SessionResizePayload.Generation.
 	layoutGen uint64
-	// sizePolicy is the window_size policy the size above was settled under.
+	// sizePolicy is the window_size policy the size above was settled under,
+	// and sizedBy the machine of the client that set it.
 	sizePolicy string
+	sizedBy    string
 	sizeMu     sync.RWMutex
 
 	// Lifecycle
@@ -3247,16 +3249,24 @@ func (s *Session) SettleLayout(width, height int, r LayoutReserve) uint64 {
 }
 
 // swapWindowSizePolicy records the window_size policy the session's size was
-// last settled under and reports whether it changed. Guarded by sizeMu with
-// the size it describes.
-func (s *Session) swapWindowSizePolicy(policy string) bool {
+// last settled under, and the machine of the client that set it, and reports
+// whether either changed. Guarded by sizeMu with the size it describes.
+func (s *Session) swapWindowSizePolicy(policy, sizedBy string) bool {
 	s.sizeMu.Lock()
 	defer s.sizeMu.Unlock()
-	if s.sizePolicy == policy {
+	if s.sizePolicy == policy && s.sizedBy == sizedBy {
 		return false
 	}
-	s.sizePolicy = policy
+	s.sizePolicy, s.sizedBy = policy, sizedBy
 	return true
+}
+
+// SizedBy is the machine of the client that set the session's size, "" when
+// it is not known.
+func (s *Session) SizedBy() string {
+	s.sizeMu.RLock()
+	defer s.sizeMu.RUnlock()
+	return s.sizedBy
 }
 
 // WindowSizePolicy is the window_size policy in force for the session's size:

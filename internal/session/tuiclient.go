@@ -223,6 +223,9 @@ type TUIClient struct {
 	lastActivity time.Time
 	// sizePolicy is the window_size policy of the last session resize.
 	sizePolicy atomic.Pointer[string]
+	// sizedBy is the machine of the client whose size the session took, from
+	// the last attach reply or session resize.
+	sizedBy atomic.Pointer[string]
 	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
 	// WatchDir.
 	dirWatchSupported bool
@@ -370,6 +373,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		Height:         height,
 		PreferredCodec: "gob",
 		Protocol:       ProtocolVersion,
+		Machine:        localHostLabel(),
 	}
 
 	// Add graphics capabilities if provided
@@ -578,6 +582,7 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	c.multiClientMu.Unlock()
 	c.noteSessionLayout(payload.Generation, payload.Reserve)
 	c.noteSizePolicy(payload.Policy)
+	c.sizedBy.Store(&payload.SizedBy)
 	return payload.State, nil
 }
 
@@ -1911,6 +1916,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			policy := payload.Policy
 			c.sizePolicy.Store(&policy)
 		}
+		c.sizedBy.Store(&payload.SizedBy)
 
 		// Same shape as MsgStateSync above: one lock over the handler read and
 		// the retention, so a broadcast arriving before the handler exists is

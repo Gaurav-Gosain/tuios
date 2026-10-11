@@ -39,6 +39,18 @@ func (c *TUIClient) SessionWindowSize() string {
 	return ""
 }
 
+// SessionSizedBy is the machine of the client whose size the session took,
+// or "" when the daemon has not said.
+func (c *TUIClient) SessionSizedBy() string {
+	if c == nil {
+		return ""
+	}
+	if p := c.sizedBy.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
 // noteSizePolicy records the session's window_size policy, from an attach
 // reply. Empty, from a daemon that does not say it, records it as unknown.
 func (c *TUIClient) noteSizePolicy(policy string) {

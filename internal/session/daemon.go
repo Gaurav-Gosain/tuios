@@ -512,6 +512,9 @@ type connState struct {
 	// activity and can draw a session larger than itself. Set at hello,
 	// read under mu. See window_size.go.
 	windowSizeCap bool
+	// machine is the host name the client's hello gave, a label for the
+	// leftover hint. Guarded by mu. See Daemon.clientLabel.
+	machine string
 	// lastActivity is when the person at this client last gave input, from
 	// MsgClientActivity. Guarded by mu.
 	lastActivity time.Time
@@ -808,7 +811,7 @@ type DaemonConfig struct {
 	// grants existed. See pane_grants.go.
 	Permissions config.ResolvedPermissions
 	// WindowSize is [daemon] window_size: smallest, largest or latest. An
-	// empty or unknown value is smallest. See window_size.go.
+	// empty or unknown value is latest, the default. See window_size.go.
 	WindowSize string
 	// SingleClient is [daemon] single_client: one client per session, and
 	// the newest attach wins. See detach_client.go.
