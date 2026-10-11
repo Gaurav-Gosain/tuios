@@ -186,6 +186,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
+	d.noteStartedBy(cs, win.ID)
 	if p.Protocol != "" {
 		markMu.Lock()
 		if !exited {

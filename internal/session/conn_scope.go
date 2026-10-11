@@ -127,9 +127,13 @@ var verbScopes = map[string]scopeKind{
 	"list-themes":        scopeGlobal,
 	"list-glyphs":        scopeGlobal,
 	"list-hooks":         scopeGlobal,
+	// search-panes takes a list of sessions, and every session without one.
+	"search-panes": scopeGlobal,
 
 	"session-info":    scopeRead,
 	"list-windows":    scopeRead,
+	"command-history": scopeRead,
+	"list-ports":      scopeRead,
 	"get-window":      scopeRead,
 	"list-workspaces": scopeRead,
 	"capture-pane":    scopeRead,

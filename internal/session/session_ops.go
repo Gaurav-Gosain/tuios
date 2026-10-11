@@ -697,6 +697,42 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 	})
 }
 
+// setStartedBy records ref as the pane that started window.
+func (s *Session) setStartedBy(window string, ref *PaneRef) {
+	_ = s.mutateState(func(state *SessionState) error {
+		idx, err := findWindowStateIndex(state.Windows, window)
+		if err != nil {
+			return err
+		}
+		state.Windows[idx].StartedBy = ref
+		return nil
+	})
+}
+
+// renameStartedBy follows a session rename in the started_by of this
+// session's panes. It changes nothing, and publishes nothing, when no pane
+// names the old session.
+func (s *Session) renameStartedBy(old, name string) {
+	hit := false
+	for _, w := range s.GetState().Windows {
+		if w.StartedBy != nil && w.StartedBy.Session == old {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		return
+	}
+	_ = s.mutateState(func(state *SessionState) error {
+		for i := range state.Windows {
+			if ref := state.Windows[i].StartedBy; ref != nil && ref.Session == old {
+				state.Windows[i].StartedBy = &PaneRef{Session: name, Window: ref.Window}
+			}
+		}
+		return nil
+	})
+}
+
 // RenameDaemonWindow sets the CustomName of the window matching target.
 func (s *Session) RenameDaemonWindow(target, name string) error {
 	return s.mutateState(func(state *SessionState) error {

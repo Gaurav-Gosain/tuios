@@ -470,6 +470,10 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 			_ = s.SetWorktree(&moved)
 		}
 	}
+	// So do the panes a pane of this session started, in any session.
+	for _, s := range append(others, sess) {
+		s.renameStartedBy(old, newName)
+	}
 
 	// The new file is written before the old one goes, so a crash between
 	// the two leaves the session saved under one name or both, never none.

@@ -343,6 +343,8 @@ type Daemon struct {
 	// paneCreators maps a window id to the window of the pane that opened
 	// it, for the typing rule with the agent features off.
 	paneCreators sync.Map
+	// ports is list-ports' last reading of the system. See verb_ports.go.
+	ports portsCache
 
 	// evidenceClock is the time the detection verbs measure evidence_age_ms
 	// against. Nil means time.Now; tests replace it. See agent_evidence.go.

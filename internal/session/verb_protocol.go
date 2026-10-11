@@ -2294,6 +2294,9 @@ func init() {
 	// transfer_tree.go and transfer_speed.go.
 	maps.Copy(verbRegistry, treeVerbs())
 	maps.Copy(verbRegistry, speedVerbs())
+	// search-panes, command-history and list-ports. See verb_find.go and
+	// verb_ports.go.
+	maps.Copy(verbRegistry, findVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

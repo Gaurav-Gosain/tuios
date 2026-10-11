@@ -288,9 +288,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	var offers []resumeOffer
 	ids := make(map[string]WindowState, len(kept))
 	grants := make(map[string][]string)
+	startedBy := make(map[string]*PaneRef)
 	for _, w := range kept {
 		if w.Grants != nil {
 			grants[w.ID] = w.Grants
+		}
+		if w.StartedBy != nil {
+			startedBy[w.ID] = w.StartedBy
 		}
 		if w.AgentSessionID == "" {
 			continue
@@ -366,6 +370,17 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			for i := range st.Windows {
 				if g, ok := grants[st.Windows[i].ID]; ok {
 					st.Windows[i].Grants = grantNamesPtr(savedGrants(g))
+				}
+			}
+			return nil
+		})
+	}
+	// Which pane started each pane goes back on for the same reason.
+	if len(startedBy) > 0 {
+		_ = sess.mutateState(func(st *SessionState) error {
+			for i := range st.Windows {
+				if ref, ok := startedBy[st.Windows[i].ID]; ok {
+					st.Windows[i].StartedBy = ref
 				}
 			}
 			return nil

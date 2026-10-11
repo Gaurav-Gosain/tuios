@@ -157,6 +157,13 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(w.ScratchName)
 		str(w.ForegroundCmd)
 		num(w.ShellPID)
+		if w.StartedBy != nil {
+			str(w.StartedBy.Session)
+			str(w.StartedBy.Window)
+		} else {
+			str("")
+			str("")
+		}
 		num(len(w.Grants))
 		for _, g := range w.Grants {
 			str(g)

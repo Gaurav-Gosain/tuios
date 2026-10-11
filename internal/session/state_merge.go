@@ -257,6 +257,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// A pane's OSC 7501 records are the daemon's alone, like the agent meta:
 	// only the pane's emulator writes them.
 	programStatus := make(map[string][]ProgramStatusRecord)
+	// Which pane started a pane is the daemon's record of a call, so
+	// canonical wins unconditionally, like the grants.
+	startedBy := make(map[string]*PaneRef)
 	// A window's start folder is fixed by the daemon when it makes the
 	// window, and a grant is held to it, so canonical wins unconditionally:
 	// a push can neither set one nor move it, even where canonical has none.
@@ -265,6 +268,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w := &canonical.Windows[i]
 		if w.StartDir != "" {
 			startDirs[w.ID] = w.StartDir
+		}
+		if w.StartedBy != nil {
+			startedBy[w.ID] = w.StartedBy
 		}
 		if w.Grants != nil {
 			paneGrants[w.ID] = w.Grants
@@ -390,6 +396,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentSubagentList = subagentLists[w.ID]
 		w.ProgramStatus = programStatus[w.ID]
 		w.Grants = paneGrants[w.ID]
+		w.StartedBy = startedBy[w.ID]
 	}
 }
 

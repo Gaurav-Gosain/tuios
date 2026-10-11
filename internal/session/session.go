@@ -322,6 +322,19 @@ type WindowState struct {
 	// this copy, and it is saved so a restored pane holds what it held.
 	// Older peers and older state read it as absent, which is the default.
 	Grants []string `json:"grants,omitempty"`
+	// StartedBy names the pane whose call created this one: a process in
+	// that pane ran new-window, split-window, start-agent, fan or
+	// new-worktree. Nil when the call came from outside every pane or over a
+	// link. Daemon-owned like Grants: a client sync can neither set nor clear
+	// it, and it is saved so a restored pane keeps it. Older peers and older
+	// state read it as absent.
+	StartedBy *PaneRef `json:"started_by,omitempty"`
+}
+
+// PaneRef names a pane by its session and window id.
+type PaneRef struct {
+	Session string `json:"session"`
+	Window  string `json:"window"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -1058,6 +1071,9 @@ type PTY struct {
 	// place is where the shell is: its directory from OSC 7 (seeded from the
 	// spawn directory) and the git branch there. See session_place.go.
 	place placeRecord
+	// marks is the emulator's OSC 133 marker list, kept for its origin: a
+	// command's prompt row is stored against it. See shell_commands.go.
+	marks *vt.SemanticMarkerList
 	// cwdCheck paces the read of where the shell is that output drives. See
 	// pane_cwd_check.go.
 	cwdCheck paneCwdCheck
@@ -2279,6 +2295,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// app-driven title change, and alt-screen mode toggles. These fire from the
 	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
 	// so it never re-enters the terminal lock held during Write.
+	pty.marks = terminal.SemanticMarkers()
 	terminal.SetCallbacks(vt.Callbacks{
 		Bell: func() { pty.emit(SessionEvent{Type: EventBell}) },
 		Title: func(title string) {

@@ -203,6 +203,36 @@ func (d *Daemon) notePaneCreator(cs *connState, window string) {
 	if pa := d.paneAuthority(cs); pa != nil && pa.window != "" {
 		d.paneCreators.Store(window, pa.window)
 	}
+	d.noteStartedBy(cs, window)
+}
+
+// callerPaneRef is the pane the caller on cs runs in, nil when it runs in no
+// pane of this daemon, cannot be placed, or calls over a link.
+func (d *Daemon) callerPaneRef(cs *connState) *PaneRef {
+	pa := d.paneAuthority(cs)
+	if pa == nil || pa.hosted || pa.window == "" || pa.window == unplacedWindow {
+		return nil
+	}
+	sess := d.sessionHoldingWindow(pa.window)
+	if sess == nil {
+		return nil
+	}
+	return &PaneRef{Session: sess.Name(), Window: pa.window}
+}
+
+// noteStartedBy records on window the pane the caller on cs runs in, as the
+// pane that started it. It records nothing for a caller in no pane.
+func (d *Daemon) noteStartedBy(cs *connState, window string) {
+	if cs == nil || window == "" {
+		return
+	}
+	ref := d.callerPaneRef(cs)
+	if ref == nil || ref.Window == window {
+		return
+	}
+	if sess := d.sessionHoldingWindow(window); sess != nil {
+		sess.setStartedBy(window, ref)
+	}
 }
 
 // offTypingAllowed reports whether a pane without respond may type into

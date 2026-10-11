@@ -282,6 +282,9 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// The pane's OSC 7501 records, the root first.
 			"program_status": programStatusList(w.ProgramStatus),
 		})
+		if w.StartedBy != nil {
+			agents[len(agents)-1]["started_by"] = w.StartedBy
+		}
 	}
 	return agents
 }
