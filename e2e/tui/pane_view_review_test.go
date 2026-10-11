@@ -32,6 +32,16 @@ func pvSession(t *testing.T, name string) (string, string) {
 	return base, firstWindow(t, base, name).ID
 }
 
+// pvReady waits until the viewer shows the pane: a line typed through the
+// daemon comes back through pane-view. The prompt is no sign, since it
+// differs between shells.
+func pvReady(ft *fakeTerm, t *testing.T, base, session, window string) bool {
+	t.Helper()
+	pvSend(t, base, session, window, "echo RDY-$((6*7))")
+	_, ok := ft.waitFor(regexp.MustCompile(`RDY-42`), shellTimeout)
+	return ok
+}
+
 // pvSend types a line into the pane through the daemon, not through a viewer.
 func pvSend(t *testing.T, base, session, window, line string) {
 	t.Helper()
@@ -59,7 +69,7 @@ func TestPaneViewTheme(t *testing.T) {
 			base, win := pvSession(t, "pvt-"+tc.name)
 			ft := startFakeTerm(t, base, 90, 25, fakeTermOpts{fg: "rgb:4c4c/4f4f/6969", bg: tc.bg, sixel: tc.sixel},
 				"pane-view", "-s", "pvt-"+tc.name, "-w", win)
-			if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+			if ok := pvReady(ft, t, base, "pvt-"+tc.name, win); !ok {
 				t.Fatalf("pane-view never drew the prompt: %q", ft.output())
 			}
 			pvSend(t, base, "pvt-"+tc.name, win,
@@ -145,7 +155,7 @@ func TestPaneViewExit(t *testing.T) {
 
 	// SIGTERM: the terminal comes back cooked, and the status is 128+15.
 	ft := startFakeTerm(t, base, 80, 24, opts, "pane-view", "-s", "pve", "-w", win)
-	if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+	if ok := pvReady(ft, t, base, "pve", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
 	}
 	_ = ft.cmd.Process.Signal(syscall.SIGTERM)
@@ -159,7 +169,7 @@ func TestPaneViewExit(t *testing.T) {
 
 	// The pane's program killed by SIGKILL: 128+9.
 	ft = startFakeTerm(t, base, 80, 24, opts, "pane-view", "-s", "pve", "-w", win)
-	if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+	if ok := pvReady(ft, t, base, "pve", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
 	}
 	pvSend(t, base, "pve", win, `echo PID=$$=DIP`)
@@ -184,7 +194,7 @@ func TestPaneViewExit(t *testing.T) {
 		var win2 string
 		base2, win2 = pvSession(t, name)
 		ft = startFakeTerm(t, base2, 80, 24, opts, "pane-view", "-s", name, "-w", win2)
-		if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+		if ok := pvReady(ft, t, base2, name, win2); !ok {
 			t.Fatalf("no prompt: %q", ft.output())
 		}
 		pvSend(t, base2, name, win2, "sleep 300")
@@ -219,7 +229,7 @@ func TestPaneViewExit(t *testing.T) {
 func TestPaneViewFilter(t *testing.T) {
 	base, win := pvSession(t, "pvf")
 	ft := startFakeTerm(t, base, 120, 30, fakeTermOpts{bg: "rgb:0000/0000/0000"}, "pane-view", "-s", "pvf", "-w", win)
-	if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+	if ok := pvReady(ft, t, base, "pvf", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
 	}
 	cases := []struct {
@@ -298,7 +308,7 @@ func TestPaneViewTuitestSmoke(t *testing.T) {
 func TestPaneViewGone(t *testing.T) {
 	base, win := pvSession(t, "pvg")
 	ft := startFakeTerm(t, base, 80, 24, fakeTermOpts{bg: "rgb:0000/0000/0000"}, "pane-view", "-s", "pvg", "-w", win)
-	if _, ok := ft.waitFor(regexp.MustCompile(`sh-[0-9.]+\$`), shellTimeout); !ok {
+	if ok := pvReady(ft, t, base, "pvg", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
 	}
 	// The daemon restarts and restores the session: pane-view resumes on
