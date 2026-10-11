@@ -5627,3 +5627,17 @@ is `~/.cache/agent-tmp/gui-port/proof/nc-review.txt`.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The nonce is checked for no session | `verbReviewStage`: `reviewAuthorOf` given `""` in place of `sess.ID` | `TestReviewStageKeepsToTheNonceScope` (the presence for `rs` could not stage in `rs`) | **caught** |
+## Finding text, command history, ports and started_by
+
+`find_ports_tree_test.go` has one test, `TestFindPortsAndStartedBy`. It runs
+search-panes, command-history, list-ports and list-windows against a real
+daemon, with a bash that marks its commands with OSC 133. On 2026-10-11 each
+control below was built into a binary and the test was run against it. Each
+control failed where shown. The same test passed on the branch build.
+
+| Control: what was cut | Where it failed |
+| --- | --- |
+| `paneLines` skips the history rows | search for `findme-` finds 2 matches, not 3: the first marker is in the history |
+| `verbCommandHistory` keeps every run of a command | the command run twice is listed twice |
+| `walkProcTree` reads no children, only each pane's own process | list-ports never lists python's port: python runs under `sh -c` |
+| `noteStartedBy` records nothing | the child window's `started_by` is nil in list-windows and list-agents |
