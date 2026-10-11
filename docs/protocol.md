@@ -5415,7 +5415,8 @@ and data folders, and the daemon's socket folder (the mail stash) apart from
 its drop folder.
 
 **Reads over a link.** A read (`file-read`, `file-hash`, `file-walk`,
-`open-file-stream` read) from one of these is `forbidden` too, so a linked
+`open-file-stream` read), and a look at a path's name and size (`file-stat`,
+`file-list`), from one of these is `forbidden` too, so a linked
 machine cannot read keys or credentials out: `~/.ssh` (except a `*.pub` key),
 `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`,
 `~/.docker/config.json`, `~/.netrc`, `~/.git-credentials`,
@@ -5429,7 +5430,32 @@ the Windows credential stores and DPAPI keys,
 and data, and the daemon's socket folder apart from its drop folder. On
 Windows a linked machine must name a path with a drive letter and no other
 colon: a `\\?\` path, a UNC share and a stream name are refused. A read
-elsewhere is allowed, so a copy out works.
+elsewhere is allowed, so a copy out works, unless the machine's
+`files_read_roots` is set: then a read must be under one of those folders or
+under a write root, and the refusal names the setting. The read deny list
+also holds the shell and program histories (`.bash_history`, `.zsh_history`,
+fish's history and others) and the browser and password manager profiles.
+
+**Copies a link starts.** `transfer-start` and `drop-files` called over a link
+read and write this machine's disk for that machine, so they keep to the same
+rules. A source here must pass the read rules, a destination here must pass
+the write rules, and a move must also be allowed to remove its source. The
+call is `forbidden` before a job exists when an end fails, and the job checks
+each file again as it goes, through an `os.Root` at the write root. The job
+keeps the name of the machine in the journal (`link`), so after a restart it
+is held to that machine's policy as it is then.
+
+**How much a link may write.** An `open-file-stream` write over a link is
+checked before a byte moves:
+
+- In the drop folder, only inside a drop that `file-drop-dir` made. A file or
+  folder at the top of the drop folder is `forbidden`. The drops together
+  hold at most 256 MiB, counting what other open writes into the folder have
+  claimed, and a write past that is `disk_full`.
+- Anywhere else, the write must leave the machine's `files_min_free` (1 GiB
+  unless set) free on its disk, or it is `disk_full`.
+- One machine may have at most 8 write streams and 64 unfinished part files
+  open. Past that the write is `busy`, which a copy retries.
 
 A job is logged in the daemon log when it starts and ends, with both ends
 and the byte count.

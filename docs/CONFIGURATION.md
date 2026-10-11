@@ -1649,8 +1649,44 @@ write outside the roots is refused, and the refusal says where writes may land
 and which setting to change. A reload that widens `files_roots`, like one that
 widens `allow`, waits for `tuios config apply`.
 
+**Where a link may read: `files_read_roots`.** Unset, a machine with `files`
+reads any file you can read, apart from the read deny list: keys, credentials,
+keyrings, shell histories, browser profiles, `/proc` and tuios's own state. A
+deny list can never name every secret on a machine. Set `files_read_roots` to
+hold reads to the folders you name, plus the folders the machine may write.
+That is the stronger choice:
+
+```toml
+[hosts.laptop]
+files_read_roots = ["~/share"]
+```
+
+The rule covers `file-read`, `file-hash`, `file-walk`, a copy out, and the
+names and sizes `file-stat` and `file-list` show. The read deny list still
+holds inside every root. A reload that removes or widens `files_read_roots`
+waits for `tuios config apply`. A reload that narrows it applies at once.
+
+**How much a link may write.** A write over a link must leave
+`files_min_free` free on its disk: `"1GiB"` unless you set it. The value is a
+whole number with `B`, `KB`, `MB`, `GB`, `TB`, `KiB`, `MiB`, `GiB` or `TiB`.
+`"0"` turns the check off, and a reload that lowers it waits for
+`tuios config apply`. A write that does not fit is refused as
+`disk_full` before a byte moves. One machine may have at most 8 write streams
+and 64 unfinished part files here at once. Past that, a write is `busy`, and
+a copy waits and tries again. The drop folder holds at most 256 MiB for all
+drops together, and a machine writes there only inside a drop that
+`file-drop-dir` made.
+
+```toml
+[hosts."*"]
+files_min_free = "5GiB"
+```
+
+A copy that another machine starts here with `transfer-start` or `drop-files`
+is held to these rules too, also after tuios restarts.
+
 > **Trust.** A machine with `files` can write any file inside its roots and
-> read any file outside the deny list. A file copy is a way to run code: a
+> read any file outside the deny list (or inside `files_read_roots`). A file copy is a way to run code: a
 > binary dropped on your `PATH`, a config a program reads. Give `files`, and a
 > wide `files_roots`, only to machines you trust as you trust your own.
 

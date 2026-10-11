@@ -30,7 +30,14 @@ credentials, shell start files, login items or tuios's own config, whatever
 `forbidden`: the write refusal names where writes may land and which setting to
 change, and the read refusal names the path. Do not try another path to the
 same file. To copy into a folder the far machine does not yet allow, tell the
-person to add it to `files_roots` for this machine in the config there.
+person to add it to `files_roots` for this machine in the config there. A
+machine can also hold reads to `files_read_roots`. That refusal names the
+setting in the same way.
+
+A write over a link must leave `files_min_free` (1 GiB unless set) free on
+the far disk, or it fails with `disk_full`. A machine may have 8 write
+streams and 64 unfinished copies open on another at once. Past that a call
+is `busy`. Wait, then try again.
 
 ## Copy a file or a folder
 
