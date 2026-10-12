@@ -271,6 +271,9 @@ func TestMCPServerOverStdioIsHeldToItsPane(t *testing.T) {
 // TestMCPServerWithoutAPaneReachesNothing: a server restricted to its own
 // session that cannot prove a pane is refused everything that reads a session.
 func TestMCPServerWithoutAPaneReachesNothing(t *testing.T) {
+	// A run started in a tuios pane would hand the server that pane.
+	t.Setenv("TUIOS_PANE_ID", "")
+	t.Setenv("TUIOS_PANE_TOKEN", "")
 	c := startSubscribeDaemon(t)
 	if _, err := c.Call("new-session", map[string]any{"name": "any"}); err != nil {
 		t.Fatal(err)
