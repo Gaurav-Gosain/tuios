@@ -414,8 +414,8 @@ func (e *Emulator) handleHyperlink(cmd int, data []byte) {
 		return
 	}
 
-	e.scr.cur.Link.Params = StripControls(string(parts[1]))
-	e.scr.cur.Link.URL = StripControls(string(parts[2]))
+	e.scr.cur.Link.Params = LinkParams(string(parts[1]))
+	e.scr.cur.Link.URL = LinkURI(string(parts[2]))
 	// An empty URI closes the link, whatever parameters came with it. Keeping
 	// the parameters would leave every following cell carrying a link value
 	// with no address, which no reader of a cell expects.
@@ -453,6 +453,82 @@ func StripControls(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// LinkURI is a link's address as tuios keeps it in a cell and writes it to
+// the host: without control bytes, and with every other byte outside printable
+// ASCII percent-encoded, which a browser reads as the same address.
+//
+// The OSC 8 spec allows only printable ASCII in a link's address. A raw UTF-8
+// address is not safe even with every control rune stripped: the continuation
+// bytes of many runes are 0x80-0x9f, and a parser that reads 8-bit controls
+// (charmbracelet/x/ansi, tmux, and the terminals that do the same) takes them
+// as C1. 0x9c is ST, so the sequence ends in the middle of the address and the
+// rest of it is printed as text. "术" is E6 9C AF. The row is then wider than
+// the pane, and everything after it on screen is drawn in the wrong place
+// (issue #649). The cell keeps the encoded form, so every renderer that writes
+// the cell back out, and a frame read back in, agree on the address.
+func LinkURI(s string) string { return hostLinkURI(StripControls(s)) }
+
+// LinkParams is a link's parameters made safe the same way: only printable
+// ASCII, and no ';', which would end them.
+func LinkParams(s string) string { return hostLinkParams(s) }
+
+// SetHostHyperlink returns the OSC 8 that opens a link in a frame written to
+// the host, with LinkURI and LinkParams applied. A cell the vt emulator filled
+// is already safe. A bare URL tuios finds in the text, and a cell from another
+// backend, may not be.
+func SetHostHyperlink(url, params string) string {
+	return ansi.SetHyperlink(LinkURI(url), LinkParams(params))
+}
+
+// hostLinkByte reports whether b may stand for itself in an OSC 8 written to
+// the host: printable ASCII, without the space.
+func hostLinkByte(b byte) bool { return b > 0x20 && b < 0x7f }
+
+// hostLinkURI percent-encodes every byte of s that hostLinkByte refuses.
+func hostLinkURI(s string) string {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if !hostLinkByte(s[i]) {
+			n++
+		}
+	}
+	if n == 0 {
+		return s
+	}
+	const hex = "0123456789ABCDEF"
+	b := make([]byte, 0, len(s)+2*n)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if hostLinkByte(c) {
+			b = append(b, c)
+			continue
+		}
+		b = append(b, '%', hex[c>>4], hex[c&0x0f])
+	}
+	return string(b)
+}
+
+// hostLinkParams drops every byte of s that hostLinkByte refuses, and ';'.
+func hostLinkParams(s string) string {
+	clean := true
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; !hostLinkByte(c) || c == ';' {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; hostLinkByte(c) && c != ';' {
+			b = append(b, c)
+		}
+	}
+	return string(b)
 }
 
 // handleNotify9 handles OSC 9 (iTerm2 desktop notification): "9;<msg>".

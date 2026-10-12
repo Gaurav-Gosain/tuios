@@ -99,7 +99,7 @@ func parsePenExtras(out []byte) (uv.Link, bool) {
 		if end := bytes.Index(rest, []byte("\x1b\\")); end >= 0 {
 			params, uri, ok := strings.Cut(string(rest[:end]), ";")
 			if ok {
-				link = uv.Link{URL: StripControls(uri), Params: params}
+				link = uv.Link{URL: LinkURI(uri), Params: LinkParams(params)}
 			}
 		}
 	}

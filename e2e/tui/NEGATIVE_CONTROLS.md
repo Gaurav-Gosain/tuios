@@ -4726,3 +4726,22 @@ with a 28 column rail on the right.
 | The `PointerSwallowed` check cut from `HandleInput` | mutant of this branch | `TestWindowSizeLeftoverTakesNoClick` ("a click on the dots at columns [36 38 ... 78] moved the focus" from the left pane to the right one) | **caught**. The first version of the test passed on the mutant: the focus was already on the pane the dots cover, so a leaked click changed nothing. The test now puts the focus on the other pane first, and clicks each pane as its positive half |
 | The `ViewChrome` check cut from `calculateSessionReserve` (an old client's chrome dropped when it is not the session's size) | mutant of this branch | `TestWindowSizeOldClientChromeCounts` ("the session's panes start at column 20, want 30"), with `TUIOS_VIEW_CHROME_LEGACY=1` and with `TUIOS_E2E_OLD_CLIENT` set to an `origin/main` build (`377bc074`) | **caught** both ways. The fixed build passes both ways |
 | The `SidebarBandContains` check cut from `pointerOverLeftover` (a rail opened for the keyboard over the dots loses its clicks) | mutant of this branch | `TestWindowSizeRailOverLeftoverTakesClicks` ("a click on the rail's row at 178,3 over the dots never moved the focus") | **caught**. The fixed build passes, and its frame shows the hint wrapped clear of the rail |
+
+## A link address with Chinese characters keeps its row inside the pane (#649)
+
+Run on 2026-10-12 on branch `fix/link-address-ascii`. The test is
+`TestAUnicodeURLStaysInsideItsPane`. It prints a bare URL and an OSC 8 link
+whose address holds `技术/方案`, and checks each row while the pane is focused
+and again while it is unfocused. "术" is E6 9C AF, and 0x9c is ST to a parser
+that reads 8-bit controls.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole fix removed | `origin/main` (`f56dd568`) | `TestAUnicodeURLStaysInsideItsPane` (focused: both rows start with the tail of the address, "TAIL" and "END" are moved, the right border is at column 94 instead of 89, and no frame carries the encoded address) | **caught** |
+| `renderTerminal` writes the bare URL's address raw (`ansi.SetHyperlink` in place of `vt.SetHostHyperlink`) | mutant of this branch | `TestAUnicodeURLStaysInsideItsPane` (focused: the bare URL's row moves and its border is at column 94) | **caught** |
+| `handleHyperlink` keeps the guest's address raw (`StripControls` in place of `LinkURI`) | mutant of this branch | `TestAUnicodeURLStaysInsideItsPane` (unfocused: the OSC 8 row starts with the tail of the address and "END" is moved) | **caught** |
+| The positive half | this branch | none: both rows keep their text and border in both states, the frame carries `https://example.com/%E6%8A%80%E6%9C%AF/%E6%96%B9%E6%A1%88`, and a ctrl+click opens `https://example.com/技术/方案` | **guard** |
+
+Not covered here: the same change in `frameRenderer` (`frame_render.go`) and in
+the ghostty backend's link readers. Every cell that reaches them in this
+fixture is already encoded, so cutting them changes nothing the test can see.

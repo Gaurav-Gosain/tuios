@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The marks a pane paints over its own output: the selection, the search
@@ -762,7 +761,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 						builder.WriteString(resetHyperlink)
 					}
 					if cellLink.URL != "" {
-						builder.WriteString(ansi.SetHyperlink(cellLink.URL, cellLink.Params))
+						builder.WriteString(vt.SetHostHyperlink(cellLink.URL, cellLink.Params))
 					}
 					openLink = cellLink
 				}
