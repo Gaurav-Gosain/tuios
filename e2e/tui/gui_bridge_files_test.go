@@ -78,6 +78,17 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		t.Fatalf("a verb with no host did not run here: home %s", hereList.Home)
 	}
 
+	// Quick Look on build's file: build's daemon reads it and sends the text.
+	prev := b.verbOn("build", "file-preview", map[string]any{"path": filepath.Join(farDir, "report.txt")})
+	var pv struct {
+		Kind string `json:"kind"`
+		Text string `json:"text"`
+	}
+	_ = json.Unmarshal(prev.Result, &pv)
+	if !prev.OK || pv.Kind != "text" || pv.Text != "from build\n" {
+		t.Fatalf("ASSERTION: file-preview on build through the bridge: %s %s %s", prev.Code, prev.Error, prev.Result)
+	}
+
 	// A copy from build, which this machine's daemon runs.
 	dst := filepath.Join(base, "report.txt")
 	start := b.verb("transfer-start", map[string]any{
