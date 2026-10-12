@@ -175,8 +175,10 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	pty, cmd, err := ptyspawn.Spawn(width, height, func() *exec.Cmd {
 		var cmd *exec.Cmd
 		if len(spec.Command) > 0 {
+			//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
 			cmd = exec.Command(spec.Command[0], spec.Command[1:]...)
 		} else {
+			//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
 			cmd = exec.Command(shell)
 		}
 		cmd.Env = env

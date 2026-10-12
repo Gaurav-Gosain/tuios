@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Following a pane into ssh.
@@ -385,7 +387,7 @@ var resolveSSHHostName = func(l remoteLogin) string {
 	if strings.HasPrefix(l.dest, "-") {
 		args = append(args, "--")
 	}
-	cmd := exec.CommandContext(ctx, l.bin, append(args, l.dest)...)
+	cmd := childproc.CommandContext(ctx, l.bin, append(args, l.dest)...)
 	cmd.Stdin = nil
 	// A Match exec in ~/.ssh/config runs a child that can outlive ssh and
 	// hold its output open. ssh gets a process group of its own, the whole

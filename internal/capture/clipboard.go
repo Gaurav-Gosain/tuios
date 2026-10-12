@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Native image clipboard.
@@ -98,13 +100,13 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 	var cmd *exec.Cmd
 	switch r.Tool {
 	case "wl-copy":
-		cmd = exec.CommandContext(ctx, "wl-copy", "-t", mediaType)
+		cmd = childproc.CommandContext(ctx, "wl-copy", "-t", mediaType)
 		cmd.Stdin = strings.NewReader(string(data))
 	case "xclip":
 		// xclip forks a process that keeps serving the selection after the
 		// write returns. Without this it would be killed with its parent and
 		// the clipboard would be empty by the time anyone pasted.
-		cmd = exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-t", mediaType, "-i")
+		cmd = childproc.CommandContext(ctx, "xclip", "-selection", "clipboard", "-t", mediaType, "-i")
 		cmd.Stdin = strings.NewReader(string(data))
 		cmd.SysProcAttr = detachAttr()
 	case "osascript":
@@ -112,7 +114,7 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 			return "", fmt.Errorf("this machine can only copy PNG images")
 		}
 		script := fmt.Sprintf(`set the clipboard to (read (POSIX file %q) as «class PNGf»)`, path)
-		cmd = exec.CommandContext(ctx, "osascript", "-e", script)
+		cmd = childproc.CommandContext(ctx, "osascript", "-e", script)
 	case "powershell":
 		if mediaType != "image/png" {
 			return "", fmt.Errorf("this machine can only copy PNG images")
@@ -120,7 +122,7 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		script := fmt.Sprintf(
 			`Add-Type -AssemblyName System.Windows.Forms;`+
 				`[System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile(%q))`, path)
-		cmd = exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", script)
+		cmd = childproc.CommandContext(ctx, "powershell", "-NoProfile", "-Command", script)
 	default:
 		return "", fmt.Errorf("no clipboard helper")
 	}

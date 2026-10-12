@@ -150,6 +150,7 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		return refuse(perr.Code, perr.Msg)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	//tuios:allow-exec detach sets CREATE_NO_WINDOW with the flags the job needs
 	cmd := exec.Command(program, j.Command[1:]...) //nolint:gosec // an enabled plugin's own manifest names the command
 	cmd.Dir = j.Plugin.PluginRoot
 	cmd.Env = append(cleanEnv(os.Environ()), j.Env...)

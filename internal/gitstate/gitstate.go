@@ -21,12 +21,13 @@ import (
 	"bufio"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // State is what a rail row can say about a directory's repository.
@@ -338,7 +339,7 @@ func upstreamOf(commondir, branch string) string {
 var countCommits = func(root, head, upstream string) (ahead, behind int, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "rev-list", "--left-right", "--count", head+"..."+upstream)
+	cmd := childproc.CommandContext(ctx, "git", "rev-list", "--left-right", "--count", head+"..."+upstream)
 	cmd.Dir = root
 	// A repository is read with the user's git but never with the user's
 	// pager, editor or prompt: this runs unattended behind a sidebar.
@@ -388,7 +389,7 @@ func ReadDirty(root string) (Dirty, bool) {
 	// format is frozen by git's own compatibility promise. Untracked files are
 	// counted but not walked into: a directory of a thousand new files is one
 	// line and one number, not a thousand.
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain",
+	cmd := childproc.CommandContext(ctx, "git", "status", "--porcelain",
 		"--untracked-files=normal", "--no-renames")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GIT_PAGER=cat", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")

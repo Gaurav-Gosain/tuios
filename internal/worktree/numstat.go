@@ -5,10 +5,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Comparing the attempts of a fan: how much each one changed against its
@@ -236,7 +237,7 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 // runCtx is runEnv bounded by ctx: a git that takes longer than the caller
 // can wait is killed.
 func runCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := childproc.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
 	cmd.Env = append(cmd.Env, env...)

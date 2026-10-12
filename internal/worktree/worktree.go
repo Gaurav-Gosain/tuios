@@ -19,10 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
@@ -158,7 +159,7 @@ func ValidBranch(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("branch name is empty")
 	}
-	cmd := exec.Command("git", "check-ref-format", "--branch", name)
+	cmd := childproc.Command("git", "check-ref-format", "--branch", name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%q is not a valid branch name", name)
 	}
@@ -290,7 +291,7 @@ func run(dir string, args ...string) (string, error) {
 
 // runEnv is run with extra environment entries.
 func runEnv(dir string, env []string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := childproc.Command("git", args...)
 	cmd.Dir = dir
 	// Nothing here is interactive, and a git that waits on a terminal for a
 	// credential or an editor would hang the daemon.

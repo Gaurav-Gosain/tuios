@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
@@ -256,7 +257,7 @@ func markUntracked(ctx context.Context, dir string, files []File, spec []string)
 func streamUnified(ctx context.Context, dir string, args []string, files []File, lim Limits) (bool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := childproc.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = gitEnv(nil)
 	var stderr bytes.Buffer
@@ -404,7 +405,7 @@ func revParse(ctx context.Context, dir, rev string) (string, error) {
 
 // emptyTree is the hash of the empty tree in the repository's hash format.
 func emptyTree(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "hash-object", "-t", "tree", "--stdin")
+	cmd := childproc.CommandContext(ctx, "git", "hash-object", "-t", "tree", "--stdin")
 	cmd.Dir = dir
 	cmd.Env = gitEnv(nil)
 	cmd.Stdin = strings.NewReader("")
@@ -432,7 +433,7 @@ func gitEnv(extra []string) []string {
 // git runs one git command in dir, bounded by ctx, and returns its stdout. A
 // failure carries git's own message.
 func git(ctx context.Context, dir string, extra []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := childproc.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = gitEnv(extra)
 	var stdout, stderr bytes.Buffer

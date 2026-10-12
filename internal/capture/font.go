@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Finding the font a capture should be drawn in.
@@ -199,7 +201,7 @@ func runFcMatch(pattern, format string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), fontLookupTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "fc-match", pattern, "-f", format).Output()
+	out, err := childproc.CommandContext(ctx, "fc-match", pattern, "-f", format).Output()
 	if err != nil {
 		return "", err
 	}

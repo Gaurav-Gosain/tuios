@@ -2154,8 +2154,10 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		ptyInstance, cmd, err = ptyspawn.SpawnTTY(width, height, func(tty string) *exec.Cmd {
 			var cmd *exec.Cmd
 			if len(sp.command) > 0 {
+				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
 				cmd = exec.Command(sp.command[0], sp.command[1:]...)
 			} else {
+				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)

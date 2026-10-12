@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // SSHConfig is what ssh -G says it would use for a host: the options of the
@@ -103,7 +105,7 @@ func ResolveSSH(args []string) (SSHConfig, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), sshConfigTimeout)
 	defer cancel()
 	args = append([]string{"-G"}, args...)
-	cmd := exec.CommandContext(ctx, SSHBinary(), args...)
+	cmd := childproc.CommandContext(ctx, SSHBinary(), args...)
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = sshConfigWaitDelay
 	out, err := cmd.Output()

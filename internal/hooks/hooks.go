@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Event represents a hook event type.
@@ -247,7 +249,7 @@ func (m *Manager) HasHooks() bool {
 // which is what makes a failing hook visible instead of silent.
 func executeHook(cmdStr string, ctx Context) hookResult {
 	// Use sh -c for shell interpretation
-	cmd := exec.Command("sh", "-c", cmdStr)
+	cmd := childproc.Command("sh", "-c", cmdStr)
 
 	// Set environment variables
 	cmd.Env = append(os.Environ(),

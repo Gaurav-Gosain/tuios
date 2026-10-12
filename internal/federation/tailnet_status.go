@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // The half of tailnet discovery that talks to tailscaled. It is left out of
@@ -106,7 +108,7 @@ func readTailnetStatus(ctx context.Context, socket string) (*tailnetStatus, erro
 			lastErr = err
 			continue
 		}
-		cmd := exec.CommandContext(ctx, path, args...)
+		cmd := childproc.CommandContext(ctx, path, args...)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		runErr := cmd.Run()

@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 
 	"github.com/adrg/xdg"
 )
@@ -294,7 +295,7 @@ func clone(remote, parent, protocols string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "clone", "--quiet", "--", remote, dest)
+	cmd := childproc.CommandContext(ctx, "git", "clone", "--quiet", "--", remote, dest)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ALLOW_PROTOCOL="+protocols)
 	if os.Getenv("GIT_SSH_COMMAND") == "" && os.Getenv("GIT_SSH") == "" {
 		cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")

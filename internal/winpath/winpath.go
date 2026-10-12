@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Mounts is what a root-relative POSIX path maps onto.
@@ -255,7 +257,7 @@ func cygpathRoot() string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "-w", "/").Output()
+	out, err := childproc.CommandContext(ctx, bin, "-w", "/").Output()
 	if err != nil {
 		return ""
 	}

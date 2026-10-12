@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Transport is one open pipe to a remote proxy. Diagnostic carries whatever the
@@ -195,7 +197,7 @@ func commandDialerEnv(env []string, name string, args ...string) Dialer {
 		// The context is not attached to the command: a dial context expires
 		// once the handshake is done, and CommandContext would kill the child
 		// at that moment. Close ends the process.
-		cmd := exec.Command(name, args...)
+		cmd := childproc.Command(name, args...)
 		cmd.Env = env
 		stdin, err := cmd.StdinPipe()
 		if err != nil {

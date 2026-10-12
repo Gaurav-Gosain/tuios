@@ -19,6 +19,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // PR states, lower case.
@@ -121,7 +123,7 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, path, args...)
+	cmd := childproc.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_PAGER=", "PAGER=cat",
