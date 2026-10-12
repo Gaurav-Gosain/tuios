@@ -17,7 +17,8 @@
 //   - multi: one image (i=20) placed at several points. Two frames, each a
 //     synchronized update that deletes all placements (d=a) and places the
 //     image three times without p=. Then twice with p=7, which the second
-//     a=p moves.
+//     a=p moves, and once with p=2147483649.
+//   - flood: one image placed 20000 times without p=, never deleted.
 //   - reply: uploads and placements that ask for an answer, and some that do
 //     not. The guest reads its input for a while and prints each answer as a
 //     REPLY line, with spaces as underscores.
@@ -81,6 +82,8 @@ func main() {
 		return
 	case "multi":
 		multi()
+	case "flood":
+		flood()
 	default:
 		frames()
 	}
@@ -146,6 +149,25 @@ func multi() {
 	_, _ = out.WriteString("\x1b[13;3H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
 	time.Sleep(300 * time.Millisecond)
 	_, _ = out.WriteString("\x1b[13;31H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
+	// A p= in the range tuios once took its own slots from.
+	_, _ = out.WriteString("\x1b[13;51H\x1b_Ga=p,i=20,p=2147483649,q=2,C=1\x1b\\")
+	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
+}
+
+// flood places one image 20000 times without p= and never deletes, the way
+// a guest that redraws by placing again does.
+func flood() {
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,i=21,m=0;%s\x1b\\", pngOf(20, 20, 60))
+	var b strings.Builder
+	for n := range 20000 {
+		fmt.Fprintf(&b, "\x1b[%d;%dH\x1b_Ga=p,i=21,q=2,C=1\x1b\\", 2+n%10, 2+(n/10)%60)
+		if b.Len() > 1<<16 {
+			_, _ = out.WriteString(b.String())
+			b.Reset()
+		}
+	}
+	_, _ = out.WriteString(b.String())
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 

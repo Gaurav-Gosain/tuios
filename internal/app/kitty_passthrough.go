@@ -54,6 +54,9 @@ type KittyPassthrough struct {
 	writeInFlight   atomic.Bool
 
 	placements map[string]map[placementKey]*PassthroughPlacement
+	// placeIdx is the lookups over placements, per window. See
+	// kitty_placement_keys.go.
+	placeIdx   map[string]*placementIndex
 	imageIDMap map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	// virtualImages holds the host ids this window has virtual placements for,
 	// as (windowID -> set of hostImageID). A virtual placement is not a
@@ -245,7 +248,13 @@ type PassthroughPlacement struct {
 	GuestPlacementID uint32
 	// slot is this record's key beside its host image id. Zero is the
 	// placement an upload makes itself.
-	slot         uint32
+	slot uint32
+	// seq orders the records of a window, oldest first.
+	seq uint64
+	// sentAsIs says forwardPlace put this placement on the host whole, at
+	// HostX and HostY in Cols by DisplayRows cells, and the refresh pass has
+	// not looked at it yet.
+	sentAsIs     bool
 	WindowID     string
 	GuestX       int
 	AbsoluteLine int // Absolute line position (scrollbackLen + cursorY at placement time)

@@ -528,7 +528,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		}
 		return nil
 	}
-	kp.placements[windowID][imageKey(hostID)] = &PassthroughPlacement{
+	kp.putPlacement(windowID, imageKey(hostID), &PassthroughPlacement{
 		GuestImageID:      pending.ImageID,
 		GuestPlacementID:  pending.PlacementID,
 		HostImageID:       hostID,
@@ -559,7 +559,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		// terminal cell sizes.
 		ImagePixelWidth:  pending.Width,
 		ImagePixelHeight: pending.Height,
-	}
+	})
 
 	// Return PlacementResult if the original transmission was a TransmitPlace.
 	// This triggers whitespace reservation in the guest terminal so the cursor
@@ -631,7 +631,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			imgRows, imgCols := kp.calculateImageCells(cmd)
 			if p.Rows != imgRows || p.Cols != imgCols {
 				kp.deleteOnePlacement(p)
-				delete(kp.placements[windowID], imageKey(hostID))
+				kp.dropPlacement(windowID, imageKey(hostID))
 			}
 		}
 	}
@@ -919,7 +919,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kittyPassthroughLog("forwardFileTransmit: refreshed placement hostID=%d in place", hostID)
 		return
 	}
-	kp.placements[windowID][imageKey(hostID)] = &PassthroughPlacement{
+	kp.putPlacement(windowID, imageKey(hostID), &PassthroughPlacement{
 		GuestImageID:      cmd.ImageID,
 		GuestPlacementID:  cmd.PlacementID,
 		HostImageID:       hostID,
@@ -950,7 +950,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		// the only exact answer available.
 		ImagePixelWidth:  cmd.Width,
 		ImagePixelHeight: cmd.Height,
-	}
+	})
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
 }
 
@@ -1196,7 +1196,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 			}
 			kp.remoteVideo[windowID][hostID] = st
 		}
-		delete(kp.placements[windowID], imageKey(hostID))
+		kp.dropPlacement(windowID, imageKey(hostID))
 		// Record what the frame itself defines: content-relative position and
 		// intrinsic size. The HOST geometry (st.hostX/hostY/showCols/showRows)
 		// is owned by RefreshAllPlacements, which recomputes it from the live
@@ -1315,7 +1315,7 @@ func (kp *KittyPassthrough) trackInlinePlacement(
 		existing.ImagePixelHeight = cmd.Height
 		return
 	}
-	kp.placements[windowID][imageKey(hostID)] = &PassthroughPlacement{
+	kp.putPlacement(windowID, imageKey(hostID), &PassthroughPlacement{
 		GuestImageID:      cmd.ImageID,
 		GuestPlacementID:  cmd.PlacementID,
 		HostImageID:       hostID,
@@ -1340,7 +1340,7 @@ func (kp *KittyPassthrough) trackInlinePlacement(
 		PlacedOnAltScreen: isAltScreen,
 		ImagePixelWidth:   cmd.Width,
 		ImagePixelHeight:  cmd.Height,
-	}
+	})
 }
 
 // buildInlineChunks encodes raw image bytes as a kitty direct-transmission
@@ -1559,31 +1559,36 @@ func (kp *KittyPassthrough) forwardPlace(
 		displayRows = contentHeight
 	}
 
-	if kp.placements[windowID] == nil {
-		kp.placements[windowID] = make(map[placementKey]*PassthroughPlacement)
-	}
-	// Each a=p is a placement of its own, as in kitty. With p= it replaces
-	// the placement the guest gave that p= before, and takes over its host
-	// ids, so the host moves it in place. Without p= it is a new one.
-	key := placementKey{hostID, cmd.PlacementID}
+	// Each a=p is a placement of its own, as in kitty. With a p= the guest
+	// used for this image before, it replaces that placement and takes over
+	// its host ids, so the host moves it in place. Without p=, it is a new
+	// one. See kitty_placement_keys.go.
+	var key placementKey
 	var base uint32
-	if cmd.PlacementID == 0 {
-		key.slot = kp.freshSlot(windowID, hostID)
-	} else if old := kp.placements[windowID][key]; old != nil {
-		base = old.PlacementID
-		for i := 1; i < old.placedSlices; i++ {
+	var oldSlices int
+	if cmd.PlacementID != 0 {
+		if slot, ok := kp.guestSlot(windowID, hostID, cmd.PlacementID); ok {
+			key = placementKey{hostID, slot}
+			if old := kp.placements[windowID][key]; old != nil {
+				base, oldSlices = old.PlacementID, old.placedSlices
+			}
+		}
+	}
+	if base == 0 {
+		key = placementKey{hostID, kp.freshSlot(windowID, hostID)}
+		base = kp.allocBase(windowID, hostID)
+	}
+
+	// The placement goes out now, with the guest's frame, so it is never
+	// held behind the guest's next synchronized update. The refresh pass
+	// that follows sends it again only if what it would draw differs (see
+	// sentAsIs): sent from both, every placement went out twice per frame.
+	if oldSlices > 1 {
+		for i := 1; i < oldSlices; i++ {
 			kp.pendingOutput = fmt.Appendf(kp.pendingOutput,
 				"\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", hostID, base+uint32(i))
 		}
-	} else if own := kp.placements[windowID][imageKey(hostID)]; own != nil && own.GuestPlacementID == cmd.PlacementID {
-		// The upload placed it under this p= itself.
-		kp.deleteOnePlacement(own)
-		delete(kp.placements[windowID], imageKey(hostID))
 	}
-	if base == 0 {
-		base = kp.placementBase(windowID, hostID)
-	}
-
 	var buf bytes.Buffer
 	buf.WriteString("\x1b7") // Save cursor position
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", hostY+1, hostX+1)
@@ -1633,8 +1638,8 @@ func (kp *KittyPassthrough) forwardPlace(
 		HostImageID:      hostID,
 		PlacementID:      base,
 		GuestPlacementID: cmd.PlacementID,
-		slot:             key.slot,
 		placedSlices:     1,
+		sentAsIs:         true,
 		WindowID:         windowID,
 		GuestX:           cursorX,
 		AbsoluteLine:     scrollbackLen + cursorY,
@@ -1669,7 +1674,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	// guest's id. Keyed by the guest id, delete-by-id could not find this
 	// placement (RefreshAllPlacements kept re-emitting a=p forever), and a
 	// guest id equal to another image's host id overwrote that entry.
-	kp.placements[windowID][key] = placement
+	kp.putPlacement(windowID, key, placement)
 }
 
 // placeCells is the cell size of a placement. An a=p carries no pixel size,
@@ -1691,7 +1696,7 @@ func (kp *KittyPassthrough) placeCells(cmd *vt.KittyCommand, pixelW, pixelH int)
 // terminal and clears the placement tracking. The images and their ids stay.
 func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string) {
 	kp.deleteWindowImages(windowID, false)
-	kp.placements[windowID] = nil
+	kp.dropWindowPlacements(windowID)
 	kp.forgetBitmaps(windowID, 0)
 }
 
@@ -1733,7 +1738,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			if !left {
 				for k := range kp.placements[windowID] {
 					if k.host == hostID {
-						delete(kp.placements[windowID], k)
+						kp.dropPlacement(windowID, k)
 					}
 				}
 				kp.pendingOutput = fmt.Appendf(kp.pendingOutput, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)

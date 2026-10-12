@@ -5192,3 +5192,15 @@ standalone and daemon.
 | --- | --- | --- |
 | The slot in `forwardPlace` (every a=p keyed by its image, one record per image as before) | `TestKittyMultiplePlacements` ("host image 1 has 1 placements up, want 4") | **caught** |
 | The reuse of a p= placement's host ids in `forwardPlace` (a repeated p= adds a placement) | `TestKittyMultiplePlacements` ("host image 1 has 5 placements up, want 4") | **caught** |
+
+### kitty multiple placements, review (#651)
+
+Run on 2026-10-12 on branch `fix/kitty-multiple-placements`, after the review
+of #651. Each control cuts one thing from the fixed build and runs the test
+named, standalone and daemon where the test runs both.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The `enforcePlacementCaps` call in `putPlacement` | `TestKittyPlacementFlood` ("20000 placements of one image are up on the host, want at most 256") | **caught** |
+| The `sentAsIs` check in the refresh pass (forwardPlace and the refresh both send) | `TestKittyMultiplePlacements` ("the guest placed the image 9 times and the host was told 18 times") | **caught** |
+| The guest's p= used as the slot again, in place of the per-image table | `TestKittyMultiplePlacements` ("host image 1 has 6 placements up, want 5") | **caught** |

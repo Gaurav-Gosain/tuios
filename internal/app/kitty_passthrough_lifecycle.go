@@ -64,7 +64,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	}
 
 	kp.deleteWindowImages(windowID, false)
-	delete(kp.placements, windowID)
+	kp.dropWindowPlacements(windowID)
 	for _, hostID := range kp.imageIDMap[windowID] {
 		kp.releaseHostID(windowID, hostID)
 	}
@@ -133,7 +133,7 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	for _, p := range placements {
 		kp.deleteOnePlacement(p)
 	}
-	kp.placements[windowID] = nil
+	kp.dropWindowPlacements(windowID)
 	kp.deleteRemoteVideoImages(windowID)
 	// A screen clear takes the placeholder cells with it, so nothing names
 	// these images any more and their data would sit in the host until the

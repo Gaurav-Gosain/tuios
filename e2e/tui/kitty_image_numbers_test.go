@@ -805,9 +805,12 @@ func TestKittyUploadFileFromAnotherMachine(t *testing.T) {
 // kept one placement per image, so every a=p of an image replaced the last.
 //
 // The stand-in places one image three times in each of two frames, each frame
-// starting with d=a, then twice with p=7. On the host, four placements of the
-// image must be up at the end, at the points the guest gave: three in a row,
-// and the p=7 one where the second a=p moved it.
+// starting with d=a, then twice with p=7, then once with p=2147483649, a p=
+// in the range tuios once took its own slots from. On the host, five
+// placements of the image must be up at the end, at the points the guest
+// gave: three in a row, the p=7 one where the second a=p moved it, and the
+// last. Each a=p goes to the host once: 2 frames of 3, and 3 more, is 9.
+// Sent from forwardPlace and again from the refresh pass, it was twice.
 func TestKittyMultiplePlacements(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
@@ -823,14 +826,23 @@ func TestKittyMultiplePlacements(t *testing.T) {
 					t.Errorf("a placement reached the host with no p=, so tuios cannot move or remove it alone")
 				}
 			}
-			if len(live) != 4 {
-				t.Fatalf("host image %d has %d placements up, want 4", id, len(live))
+			placed := 0
+			for _, c := range cmds {
+				if c.keys["a"] == "p" && c.num("i") == id {
+					placed++
+				}
+			}
+			if placed != 9 {
+				t.Errorf("the guest placed the image 9 times and the host was told %d times", placed)
+			}
+			if len(live) != 5 {
+				t.Fatalf("host image %d has %d placements up, want 5", id, len(live))
 			}
 			minRow, minCol := 1<<30, 1<<30
 			for _, at := range live {
 				minRow, minCol = min(minRow, at[0]), min(minCol, at[1])
 			}
-			want := map[[2]int]bool{{0, 0}: true, {0, 18}: true, {0, 38}: true, {10, 28}: true}
+			want := map[[2]int]bool{{0, 0}: true, {0, 18}: true, {0, 38}: true, {10, 28}: true, {10, 48}: true}
 			for _, at := range live {
 				rel := [2]int{at[0] - minRow, at[1] - minCol}
 				if !want[rel] {
@@ -892,4 +904,32 @@ func hostPlacements(stream []byte, id int) map[string][2]int {
 		}
 	}
 	return live
+}
+
+// A guest that places an image again and again without p=, and never
+// deletes, adds a placement each time, as in kitty. tuios looked each one up
+// by scanning every placement of the pane, so 16,000 of them took 11.7
+// seconds with the passthrough locked, and it kept them all. Now the lookups
+// are constant time, and past 256 placements of one image the oldest go.
+//
+// The stand-in places one image 20,000 times. It must be done within 20
+// seconds, and the host must end with at most 256 placements of the image.
+// Placements must still reach the host, which is the positive half.
+func TestKittyPlacementFlood(t *testing.T) {
+	start := time.Now()
+	stream, _ := runImageNumbers(t, "flood", false, false)
+	took := time.Since(start)
+	cmds := parseNumberedStream(stream)
+	id := hostIDBySize(t, cmds, 20, 20)
+	live := hostPlacements(stream, id)
+	t.Logf("20000 placements took %v, and %d are up on the host", took, len(live))
+	if took > 20*time.Second {
+		t.Errorf("20000 placements took %v", took)
+	}
+	if len(live) == 0 {
+		t.Fatalf("no placement of the image reached the host")
+	}
+	if len(live) > 256 {
+		t.Errorf("%d placements of one image are up on the host, want at most 256", len(live))
+	}
 }
