@@ -176,6 +176,12 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**list-worktrees reports a merged branch.** With `changes`, each row gains
+`merged`, and `merged_into` when `merged` is true. See
+[list-worktrees](#list-worktrees). A worktree record gains `start_commit`, the
+commit its branch was at when `new-worktree` made it. An older peer ignores
+all three.
+
 **The default window_size is latest.** A daemon with no `[daemon]
 window_size` now uses `latest`, so `session-info` reports `window_size:
 "latest"` where it reported `smallest`. Under `latest` the session's agreed
@@ -3441,8 +3447,8 @@ the same way, by reading the directory. `list-sessions` carries the record as
 List the sessions whose directory is a git worktree.
 
 Params: `repo` (filter by repository name), `group` (filter by fan-out stem),
-`changes` (run git status in each and report `changes` and `ahead`; off by
-default).
+`changes` (run git in each and report `changes`, `ahead`, `merged` and
+`merged_into`; off by default).
 
 Request:
 
@@ -3457,8 +3463,20 @@ Response:
   {"session": "api-feat-retry", "repo": "api", "repo_root": "/src/api", "branch": "feat/retry",
    "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "base": "main", "group": "",
    "managed": true, "gone": false, "state": "working", "harness": "claude-code", "windows": 1,
-   "attached": false, "prompt_status": "", "prompt_note": "", "changes": 3, "ahead": 1}]}}
+   "attached": false, "prompt_status": "", "prompt_note": "", "changes": 3, "ahead": 1,
+   "merged": false}]}}
 ```
+
+`merged` is true when the branch has commits of its own and merging it into
+`base` changes nothing: `git merge-tree --write-tree` gives the tree of the
+base itself. A merge commit, a fast-forward, a rebase and a squash all count.
+The daemon checks `base`, then the upstream of `base` when it has one, as git
+last fetched it. It never fetches. `merged_into` names the ref, and is present
+only when `merged` is true. Own commits count from the commit the branch was
+at when `new-worktree` made it. A worktree from before that record counts
+from the merge base, so it can read false after a fast-forward. With no
+`base`, the daemon checks the branch the main checkout has checked out. The
+answer is cached per branch tip and base tip.
 
 `gone` is true when the worktree directory no longer exists. The session is
 kept, so what its agent printed can still be read. `state` is the agent state

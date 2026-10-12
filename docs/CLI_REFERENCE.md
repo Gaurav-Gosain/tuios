@@ -674,7 +674,7 @@ tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <s
 ```bash
 tuios worktree new feat/retry                          # A new branch from HEAD, attached
 tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
-tuios worktree ls                                      # Repo, branch, agent state, changes
+tuios worktree ls                                      # Repo, branch, agent state, changes, merged
 tuios worktree rm api-feat-retry --stash               # Keep the changes in git stash
 ```
 
@@ -686,6 +686,14 @@ Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`.
 discards them, and is the only option that does. The branch is never deleted.
 A session whose worktree directory was removed under it shows `gone` in the
 listing and is kept.
+
+The MERGED column of `worktree ls` shows `into <ref>` when the branch is
+merged. A branch is merged when it has commits of its own, and merging it into
+its base changes nothing. tuios checks the base, then the upstream of the base,
+such as `origin/main`. It does not fetch. A merge commit, a fast-forward, a
+rebase and a squash merge all count. A new branch with no commits is not
+merged. `--json` gives `merged` and `merged_into`. tuios does not remove a
+merged worktree. Use `worktree rm` to remove it.
 
 **On another machine.** `--host` runs `worktree new` and `worktree ls` on a
 machine from the `[hosts]` table, and `worktree rm` takes `HOST:SESSION`. Run

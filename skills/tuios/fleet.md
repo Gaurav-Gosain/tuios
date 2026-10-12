@@ -72,7 +72,10 @@ The session is named `<repo>-<branch>` with slashes turned into hyphens.
 `--agent` names an agent CLI the way you type it and starts it instead of a
 shell. `worktree ls` (the `list-worktrees` verb) reports each session's rolled-up
 `state` and `gone` when the directory was removed; the verb with
-`"changes": true` also counts uncommitted changes and commits ahead of the base.
+`"changes": true` also counts uncommitted changes and commits ahead of the base,
+and reports `merged`: true when the branch has commits of its own and its base,
+or the upstream of the base, already holds them. `merged_into` names that ref.
+A merge commit, a fast-forward, a rebase and a squash all count. No fetch runs.
 
 ## Fan-out
 
