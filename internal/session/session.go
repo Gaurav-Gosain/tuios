@@ -1104,6 +1104,10 @@ type Session struct {
 	// first process started, fixed then and never moved by the shell's cd or
 	// its OSC 7. See noteStartDir.
 	startDirs sync.Map
+	// places is each local PTY, by PTY id, kept beside ptys so a reader
+	// holding the state lock can see where a pane runs without taking the
+	// PTY lock. See paneRunDir.
+	places sync.Map
 	// attachMu serialises attaches to the session from the moment a client
 	// is placed on it through its reply. exclusiveSeq is the attachSeq of the
 	// newest attach that detaches the others. See detach_client.go.
@@ -2340,6 +2344,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		terminal.SetReportPalette(s.reportPal)
 	}
 	s.ptys[id] = pty
+	if sp.host == "" {
+		s.places.Store(id, pty)
+	}
 
 	// Start VT writer goroutine (single, persistent)
 	go pty.vtWriter()
@@ -2433,6 +2440,7 @@ func (s *Session) ClosePTY(id string) error {
 	}
 
 	delete(s.ptys, id)
+	s.places.Delete(id)
 	return pty.Close()
 }
 
@@ -3179,6 +3187,7 @@ func (s *Session) Stop() {
 	for id, pty := range s.ptys {
 		_ = pty.Close()
 		delete(s.ptys, id)
+		s.places.Delete(id)
 	}
 }
 

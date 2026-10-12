@@ -651,7 +651,7 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 			it.Kind = AttentionApproval
 			// An approval nobody holds is marked from the line its pane
 			// reported. A held one keeps what its hold marked (upsertLocked).
-			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot))
+			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot, ev.hookRunDir))
 		}
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
 		a.upsertLocked(it)

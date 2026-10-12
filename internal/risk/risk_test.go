@@ -158,7 +158,7 @@ func TestBuiltinRules(t *testing.T) {
 		{"no tool", "", "git push --force", []string{RuleForcePush}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, Home: home}))
+			got := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, RunDir: root, Home: home}))
 			if !slices.Equal(got, tc.want) {
 				t.Errorf("Match(%q, %q) = %q, want %q", tc.tool, tc.text, got, tc.want)
 			}
@@ -182,8 +182,9 @@ func TestNoRootFailsClosed(t *testing.T) {
 			{"Bash", "echo x > /etc/motd", false, []string{RuleOutsideWorktree}},
 			{"Bash", "cp a /usr/local/bin/a", false, []string{RuleOutsideWorktree}},
 			{"Bash", "echo x > /etc/m***", true, []string{RuleOutsideWorktree}},
-			// Relative paths and the harmless devices stay inside.
-			{"Write", "main.go", false, nil},
+			// With no root a relative path is outside too. The harmless
+			// devices stay inside.
+			{"Write", "main.go", false, []string{RuleOutsideWorktree}},
 			{"Bash", "make >/dev/null 2>&1", false, nil},
 		} {
 			got := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, Home: "/home/me", Shown: tc.shown}))
@@ -191,6 +192,43 @@ func TestNoRootFailsClosed(t *testing.T) {
 				t.Errorf("root %q: Match(%q, %q) = %q, want %q", root, tc.tool, tc.text, got, tc.want)
 			}
 		}
+	}
+}
+
+// TestRelativePathsFollowTheRunFolder is a security boundary: a relative
+// path is resolved against the folder the call runs in, which the pane moves.
+// Ways it could fail: a relative path read as inside whatever the run folder;
+// a run folder outside the root, or unknown, read as inside; a cd earlier in
+// the line not followed; a cd to a folder that cannot be known (cd -, a
+// variable) read as staying put; a ".." that climbs out read as inside.
+func TestRelativePathsFollowTheRunFolder(t *testing.T) {
+	const root = "/work/api"
+	for _, tc := range []struct {
+		name, tool, text, run string
+		outside               bool
+	}{
+		{"inside, run at root", "Write", "main.go", root, false},
+		{"inside, run below root", "Bash", "echo x > notes.txt", root + "/sub", false},
+		{"climbs out with ..", "Bash", "echo x > ../../etc/motd", root, true},
+		{"run folder outside root", "Write", "main.go", "/", true},
+		{"run folder beside root", "Bash", "touch x", "/work/api2", true},
+		{"run folder unknown", "Write", "main.go", "", true},
+		{"run folder relative", "Write", "main.go", "work/api", true},
+		{"cd out first", "Bash", "cd / && rm etc/motd", root, true},
+		{"cd home first", "Bash", "cd && touch .zshrc", root, true},
+		{"cd - first", "Bash", "cd - && touch x", root, true},
+		{"cd to a variable", "Bash", "cd $DIR && touch x", root, true},
+		{"cd inside first", "Bash", "cd sub && touch x", root, false},
+		{"cd back into root", "Bash", "cd / && cd /work/api && touch x", "/", false},
+		{"cd in sh -c", "Bash", "sh -c 'cd / && touch etc/x'", root, true},
+		{"shown and cut inside", "Bash", "echo x > sub/a***", root, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hits := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, RunDir: tc.run, Home: "/home/me", Shown: strings.Contains(tc.text, "***")}))
+			if got := slices.Contains(hits, RuleOutsideWorktree); got != tc.outside {
+				t.Errorf("Match(%q, %q) from %q = %q, want outside %v", tc.tool, tc.text, tc.run, hits, tc.outside)
+			}
+		})
 	}
 }
 
@@ -251,7 +289,7 @@ func TestCustomRules(t *testing.T) {
 	}
 	// Merged with the shipped rules, both kinds match, each once.
 	merged := append(Builtin(), kube)
-	got := Names(Match(merged, Call{Tool: "Bash", Text: "kubectl delete x && rm -rf y && kubectl apply z"}))
+	got := Names(Match(merged, Call{Tool: "Bash", Text: "kubectl delete x && rm -rf y && kubectl apply z", Root: "/r", RunDir: "/r"}))
 	want := []string{RuleRecursiveDelete, RuleInfrastructure, "kubectl apply"}
 	if !slices.Equal(got, want) {
 		t.Errorf("merged rules = %q, want %q", got, want)

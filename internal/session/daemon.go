@@ -1116,6 +1116,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane seen, or a new kind or message on a pane whose state did not
 		// change, is news for the Inbox only: it is not a stream event and
 		// raises no hook.
+		// An approval line is marked from the folder its pane runs in now.
+		// paneRunDir takes no lock: this sink runs under the state lock.
+		if ev.Type == EventAgentState || ev.Type == eventAttentionDetail {
+			ev.hookRunDir = s.paneRunDir(ev.PTYID, false)
+		}
 		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail || ev.Type == eventPaneFocused {
 			d.attention.noteSessionEvent(name, ev)
 			return

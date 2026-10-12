@@ -25,6 +25,10 @@ import (
 // measure from the folder the pane started in, which nothing the pane does
 // moves.
 //
+// Five more panes write to a relative path. From a pane at /, or from a held
+// call whose harness says it runs in /, the write is marked. From a pane in
+// its start folder it is not.
+//
 // Negative controls (NEGATIVE_CONTROLS.md): with the whole fix removed, no
 // item is marked. With only the session side removed (paneRoot and the
 // lifecycle root back on the working folder and the detected worktree), the
@@ -78,7 +82,11 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 
 	type pane struct {
 		session, window, startIn, moveTo, tool, target string
-		detect                                         bool
+		// harnessCwd is the cwd the hook payload carries, "" for none.
+		harnessCwd string
+		detect     bool
+		// safe says the write stays inside the root and must not be marked.
+		safe bool
 	}
 	cases := []*pane{
 		{session: "edit-root", moveTo: "/", tool: "Edit", target: outsidePath},
@@ -89,6 +97,13 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		{session: "bash-wt", moveTo: linked, tool: "Bash", target: inLinked, detect: true},
 		{session: "edit-home", startIn: home, moveTo: home, tool: "Edit", target: inHome},
 		{session: "bash-home", startIn: home, moveTo: home, tool: "Bash", target: inHome},
+		// A relative path is read from where the call runs: the pane's own
+		// folder, or the cwd the harness sends with a held call.
+		{session: "edit-rel-root", moveTo: "/", tool: "Edit", target: "etc/notes.txt"},
+		{session: "bash-rel-root", moveTo: "/", tool: "Bash", target: "etc/notes.txt"},
+		{session: "bash-rel-cwd", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: "/"},
+		{session: "edit-rel-in", moveTo: start, tool: "Edit", target: "notes-copy.txt", safe: true},
+		{session: "bash-rel-in", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: start, safe: true},
 	}
 	for _, c := range cases {
 		if c.startIn == "" {
@@ -119,7 +134,7 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 			continue
 		}
 		// The hook holds the pane's prompt until it is answered.
-		startHeldBashHook(t, base, c.session, "cp notes.txt "+c.target)
+		startHeldBashHook(t, base, c.session, "cp notes.txt "+c.target, c.harnessCwd)
 	}
 
 	for _, c := range cases {
@@ -129,9 +144,9 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		} else {
 			it = waitHeldRiskItem(t, base, c.session)
 		}
-		t.Logf("%s (at %s): %q risk %v", c.session, c.moveTo, it.Summary, it.Risk)
-		if !slices.Contains(it.Risk, "outside the worktree") {
-			t.Errorf("ASSERTION: %s: a write to %s from a pane at %s is marked %v, want outside the worktree", c.session, c.target, c.moveTo, it.Risk)
+		t.Logf("%s (at %s, harness cwd %q): %q risk %v", c.session, c.moveTo, c.harnessCwd, it.Summary, it.Risk)
+		if got := slices.Contains(it.Risk, "outside the worktree"); got == c.safe {
+			t.Errorf("ASSERTION: %s: a write to %s from a pane at %s (harness cwd %q) is marked %v, want outside the worktree %v", c.session, c.target, c.moveTo, c.harnessCwd, it.Risk, !c.safe)
 		}
 	}
 	saveRiskItems(t, base, "risk-root-start-folder-items.json")
@@ -140,14 +155,18 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 // startHeldBashHook runs Claude Code's PermissionRequest hook for a Bash call
 // in window 0 of session, in the background. The hook holds the prompt; the
 // test's cleanup ends it.
-func startHeldBashHook(t *testing.T, base, session, command string) {
+func startHeldBashHook(t *testing.T, base, session, command, cwd string) {
 	t.Helper()
-	payload, err := json.Marshal(map[string]any{
+	body := map[string]any{
 		"hook_event_name": "PermissionRequest",
 		"session_id":      "e2e-" + session,
 		"tool_name":       "Bash",
 		"tool_input":      map[string]string{"command": command},
-	})
+	}
+	if cwd != "" {
+		body["cwd"] = cwd
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatal(err)
 	}

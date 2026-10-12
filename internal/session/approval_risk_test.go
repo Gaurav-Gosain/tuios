@@ -57,7 +57,7 @@ func itemRisk(it map[string]any) []string {
 func TestRiskyHeldApprovalNeedsTheAcknowledgement(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, b := twoWindowSession(t, d, "work")
+	_, a, b := riskSession(t, d)
 	makeSessionWithWindow(t, d, "other")
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
@@ -113,7 +113,7 @@ func TestRiskyHeldApprovalNeedsTheAcknowledgement(t *testing.T) {
 func TestRiskFromTheLineWhenTheHookNamesNoCall(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, b := twoWindowSession(t, d, "work")
+	_, a, b := riskSession(t, d)
 	makeSessionWithWindow(t, d, "other")
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
@@ -146,7 +146,7 @@ func TestRiskFromTheLineWhenTheHookNamesNoCall(t *testing.T) {
 func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, _ := twoWindowSession(t, d, "work")
+	_, a, _ := riskSession(t, d)
 	c := dialVerb(t, sp)
 
 	for _, tc := range []struct {
@@ -222,7 +222,7 @@ func holdPlan(t *testing.T, c *verbConn, sp, window string, options ...string) (
 func TestPlanIsHeldAndAnsweredByDigest(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, nil)
-	_, a, b := twoWindowSession(t, d, "work")
+	_, a, b := riskSession(t, d)
 	makeSessionWithWindow(t, d, "other")
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
@@ -281,7 +281,7 @@ func TestPlanIsHeldAndAnsweredByDigest(t *testing.T) {
 func TestPlanRequestRefusals(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	enableRiskyApprovals(t, d, 30*time.Second, func(p *ApprovalPolicy) { p.Plans = false })
-	_, a, _ := twoWindowSession(t, d, "work")
+	_, a, _ := riskSession(t, d)
 	c := dialVerb(t, sp)
 	setAgentState(t, c, "work", a, "needs_input", "approval", "plan: x")
 	base := func(extra map[string]any) map[string]any {
@@ -401,4 +401,22 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 	if got := ag.received(); got != "1" {
 		t.Errorf("the agent read %q, want 1", got)
 	}
+}
+
+// riskSession is twoWindowSession with each window given the folder its shell
+// runs in as its start folder, as a window made from a folder has. A window
+// with none has no root, and the risk rules read every path in it as outside.
+func riskSession(t *testing.T, d *Daemon) (*Session, string, string) {
+	t.Helper()
+	sess, a, b := twoWindowSession(t, d, "work")
+	st := sess.GetState()
+	for _, id := range []string{a, b} {
+		w, _ := findWindowState(st, id)
+		dir := sess.paneRunDir(w.PTYID, true)
+		if dir == "" {
+			t.Fatalf("window %s has no folder", id)
+		}
+		sess.noteStartDir(id, dir)
+	}
+	return sess, a, b
 }

@@ -55,6 +55,9 @@ func translateQwen(in Input, p fields) Decision {
 		}
 		d := send(Qwen, event, identity(Report{State: "needs_input", Kind: "approval", Message: "approve " + ToolSummary(tool, input)}, p))
 		d.Approval = qwenApproval(tool, input)
+		if d.Approval != nil {
+			d.Approval.Cwd = p.str("cwd")
+		}
 		return d
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
 		return send(Qwen, event, identity(Report{State: "working", IfState: claudeClearsBlock}, p))

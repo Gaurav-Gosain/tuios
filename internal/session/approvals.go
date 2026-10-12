@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -223,9 +224,10 @@ type approvalHold struct {
 	// tool and target are the call the risk rules read, as the hook named
 	// it. Empty when the hook did not.
 	tool, target string
-	// root is the pane's worktree root, else its working directory, when
-	// the hold began: where the outside-the-worktree rule measures from.
-	root string
+	// root is the pane's fixed root (paneRoot) when the hold began: where
+	// the outside-the-worktree rule measures from. runDir is the folder the
+	// call runs in, which a relative path is resolved against.
+	root, runDir string
 	// risk are the rules the call matched. An allow needs risk_ack naming
 	// exactly these.
 	risk []risk.Hit
@@ -259,7 +261,7 @@ type holdSpec struct {
 	scope   []string
 	expires time.Time
 	// tool, target and root are the call as the risk rules read it.
-	tool, target, root string
+	tool, target, root, runDir string
 	// risk are the rules the call matched, computed before the hold opens.
 	risk []risk.Hit
 	// plan is a plan's text.
@@ -307,6 +309,7 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 		tool:        spec.tool,
 		target:      spec.target,
 		root:        spec.root,
+		runDir:      spec.runDir,
 		risk:        slices.Clone(spec.risk),
 		denyMessage: spec.denyMessage,
 		done:        make(chan approvalOutcome, 1),
@@ -364,7 +367,7 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		// reason for, so the item is the pane's approval again, marked by
 		// what its line says now.
 		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
-		it.Risk = risk.Names(a.riskOfLine(it.Summary, h.root))
+		it.Risk = risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir))
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
 		a.changedLocked()
@@ -540,6 +543,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		Tool        string `json:"tool"`
 		Target      string `json:"target"`
 		DenyMessage bool   `json:"deny_message"`
+		Cwd         string `json:"cwd"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -644,12 +648,13 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		tool:        p.Tool,
 		target:      p.Target,
 		root:        paneRoot(st.Worktree, sess.windowStartDir(w.ID)),
+		runDir:      approvalRunDir(p.Cwd, sess.paneRunDir(w.PTYID, true)),
 		denyMessage: p.DenyMessage,
 	}
 	if isPlan {
 		spec.kind, spec.plan, spec.tool, spec.target = AttentionPlan, p.Plan, "", ""
 	} else {
-		spec.risk = d.attention.riskOfCall(spec.tool, spec.target, summary, spec.root)
+		spec.risk = d.attention.riskOfCall(spec.tool, spec.target, summary, spec.root, spec.runDir)
 	}
 	holdFor := policy.holdFor()
 	spec.expires = time.Now().Add(holdFor)
@@ -943,4 +948,13 @@ func watchPeerGone(conn net.Conn) (<-chan struct{}, func()) {
 		<-finished
 		_ = conn.SetReadDeadline(time.Time{})
 	}
+}
+
+// approvalRunDir is the folder a held call runs in: the cwd the harness sent
+// with it, when that is an absolute path, else the pane's live folder.
+func approvalRunDir(harnessCwd, live string) string {
+	if harnessCwd != "" && filepath.IsAbs(harnessCwd) {
+		return filepath.Clean(harnessCwd)
+	}
+	return live
 }

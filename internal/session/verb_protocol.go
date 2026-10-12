@@ -2044,6 +2044,7 @@ func init() {
 				{Name: "tool", Type: "string", Description: "The tool the call is for, as the harness names it (Bash, Edit), which the risk rules match on."},
 				{Name: "target", Type: "string", Description: "What the tool acts on: the command line, or the path."},
 				{Name: "deny_message", Type: "bool", Description: "Whether the harness passes a reason with a deny to its model, so the Inbox may offer to type one.", Default: "false"},
+				{Name: "cwd", Type: "string", Description: "The folder the call runs in, as the harness sent it. The risk rules resolve a relative path against it. Omit it and the pane's own folder is used."},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold's id, empty when nothing was held."},

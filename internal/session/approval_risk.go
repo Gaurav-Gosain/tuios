@@ -70,15 +70,15 @@ func (a *attentionStore) setRisk(rules []risk.Rule) {
 
 // riskOfCall matches the rules against a call: its tool and target when the
 // hook named them, else its line.
-func (a *attentionStore) riskOfCall(tool, target, line, root string) []risk.Hit {
+func (a *attentionStore) riskOfCall(tool, target, line, root, runDir string) []risk.Hit {
 	if tool == "" && target == "" {
-		return a.riskOfLine(line, root)
+		return a.riskOfLine(line, root, runDir)
 	}
 	set := a.risk.Load()
 	if set == nil || len(set.rules) == 0 {
 		return nil
 	}
-	return risk.Match(set.rules, risk.Call{Tool: tool, Text: target, Root: root, Home: set.home})
+	return risk.Match(set.rules, risk.Call{Tool: tool, Text: target, Root: root, RunDir: runDir, Home: set.home})
 }
 
 // riskOfLine matches the rules against the line a pane reported for its
@@ -89,7 +89,7 @@ func (a *attentionStore) riskOfCall(tool, target, line, root string) []risk.Hit 
 // not there to match. Such a line is marked cut short on top of
 // whatever the rules found, which holds the allow to two presses and keeps a
 // pane with the respond grant from allowing it: fail closed.
-func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
+func (a *attentionStore) riskOfLine(line, root, runDir string) []risk.Hit {
 	set := a.risk.Load()
 	if set == nil || len(set.rules) == 0 || strings.HasPrefix(line, integration.PlanSummaryPrefix) {
 		return nil
@@ -101,7 +101,7 @@ func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
 	// read as outside it. A "..." the line did not get from a clip is part
 	// of the path, so Clipped is set only for a line Clip cut.
 	clipped := integration.Clipped(line)
-	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home, Shown: true, Clipped: clipped})
+	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, RunDir: runDir, Home: set.home, Shown: true, Clipped: clipped})
 	// A line cut to length, a run redacted from it, or a dialog that shows
 	// only part of the call (harness.PartialSuffix) may hide what a rule
 	// would match.
@@ -179,6 +179,46 @@ func paneRoot(wt *WorktreeInfo, startDir string) string {
 		return ""
 	}
 	return dir
+}
+
+// paneRunDir is the folder a pane's process runs in now: the folder its shell
+// announced, else the folder read from the process. A relative path in an
+// approval is resolved against it (risk.Call.RunDir). It is "" for a pane on
+// another machine, or one running ssh, or when no folder is known, and then
+// every relative path is read as outside.
+//
+// fresh reads the process now, a system call. Without it the last read the
+// output check made is used (pane_cwd_check.go), which takes no lock but the
+// check's own: the event sink calls it with the state lock held.
+func (s *Session) paneRunDir(ptyID string, fresh bool) string {
+	if s == nil || ptyID == "" {
+		return ""
+	}
+	v, ok := s.places.Load(ptyID)
+	if !ok {
+		return ""
+	}
+	p := v.(*PTY)
+	if p.place.Elsewhere() != "" {
+		return ""
+	}
+	if p.place.announced.Load() {
+		return p.place.Cwd()
+	}
+	if fresh {
+		if cwd, ok := p.ProcessCwd(); ok && cwd != "" {
+			return cwd
+		}
+		return ""
+	}
+	p.cwdCheck.mu.Lock()
+	seen := p.cwdCheck.seen
+	p.cwdCheck.mu.Unlock()
+	if seen != "" {
+		return seen
+	}
+	// No read yet: the folder the shell was started in.
+	return p.place.Cwd()
 }
 
 // wideRoots remembers holdsHome's answer by folder. paneRoot runs on every

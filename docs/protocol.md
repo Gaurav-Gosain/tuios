@@ -1167,7 +1167,7 @@ The older verbs change as follows, and a
 caller that sends nothing new is answered as before:
 
 - `request-approval` takes `kind` (`approval` or `plan`), `plan`, `tool`,
-  `target` and `deny_message` (see [Risky approvals and
+  `target`, `cwd` and `deny_message` (see [Risky approvals and
   plans](#risky-approvals-and-plans)). An unknown `kind` is `invalid_params`.
 - `reply-approval` takes `risk_ack` and `plan_sha`, and `respond` takes
   `risk_ack`. What changes for a caller that sends neither is under [Risky
@@ -5091,7 +5091,10 @@ or, for the last word of a clipped line, up to the `...` the clip adds. A
 from the pane's root: the session's worktree when tuios made it, else the
 folder the pane started in. A `cd` or an OSC 7 does not move it. A pane with
 no root, or a root of the home folder or above, has every absolute or `~` path
-read as outside. `outside the worktree` names a
+read as outside. A relative path is read from the folder the call runs in: the
+`cwd` the hook sends on `request-approval`, else the pane's own folder. A `cd`
+earlier in the command moves that folder. A relative path is outside when that
+folder is not known or is outside the root. `outside the worktree` names a
 cut path only when the part the line shows already leaves the worktree. A
 Codex `apply_patch` line always carries `cut short`, because every patch
 starts with `*** Begin Patch`. A daemon that
@@ -5140,8 +5143,8 @@ carries it so the Inbox offers to type one. The reason itself is
 names the call as; longer is `invalid_params`.
 
 Wire compatibility: every field is additive. A hook sends `kind`, `plan`,
-`tool`, `target` and `deny_message` only to a daemon whose `request-approval`
-lists them, and does not hold a plan at all with a daemon that does not list
+`tool`, `target`, `cwd` and `deny_message` only to a daemon whose
+`request-approval` lists them, and does not hold a plan at all with a daemon that does not list
 `plan`, which would hold it as a plain approval.
 
 ### get-approval

@@ -257,6 +257,10 @@ type SessionEvent struct {
 	// session state under its own lock. It is never the pane's working
 	// folder, which the pane sets.
 	hookRoot string
+	// hookRunDir is the pane's live folder when the event was dispatched
+	// (Session.paneRunDir), which a relative path in an approval line is
+	// resolved against. Filled by the daemon off the state lock.
+	hookRunDir string
 }
 
 // eventCompletionSeen is raised when an attached client's state push shows it

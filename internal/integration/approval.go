@@ -102,6 +102,10 @@ type Approval struct {
 	// plan.
 	Tool   string `json:"tool,omitempty"`
 	Target string `json:"target,omitempty"`
+	// Cwd is the folder the call runs in, as the harness sent it (the hook
+	// payload's cwd). The risk rules resolve a relative Target against it.
+	// Empty when the harness did not send one.
+	Cwd string `json:"cwd,omitempty"`
 	// Plan is a plan's text, whole. Set only for KindPlan.
 	Plan string `json:"plan,omitempty"`
 	// DenyMessage says the harness hands the model a reason with a deny, so
@@ -350,6 +354,7 @@ func claudeApproval(p fields) *Approval {
 		Options:     []string{DecisionOnce, DecisionDeny},
 		Tool:        tool,
 		Target:      input.str(claudeWholeTools[tool].key),
+		Cwd:         p.str("cwd"),
 		DenyMessage: true,
 	}
 	if scope, rules, ok := claudeScope(p["permission_suggestions"]); ok {

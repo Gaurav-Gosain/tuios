@@ -4685,6 +4685,18 @@ were added.
 | B: the session side only (`paneRoot`, the lifecycle root and `paneFolder` back to #636's head; the `internal/risk` change kept) | The panes at `/` stay marked, since the rules now read `/` as no root. The held `cp` from the folder above and both writes in the detected worktree are marked `[]`. The reported Edit from the folder above stays marked: the lifecycle root read the stored folder, which only the detected worktree moved | **caught** |
 | C: `holdsHome` in `paneRoot` (a start folder of the home folder or above is a root) | Both home panes are marked `[]` | **caught** |
 
+Two more controls cut the reading of relative paths. Five more panes write
+to a relative path. Three are expected to be marked: from a pane at `/` (an
+Edit and a held `cp`), and a held `cp` whose hook payload says it runs in `/`.
+Two must stay unmarked: an Edit and a held `cp` from a pane in its start
+folder.
+
+| Control: what was cut | Assertion | Verdict |
+| --- | --- | --- |
+| D: `outside` in `internal/risk` reads every relative path as inside again | The three relative writes from `/` are marked `[]` | **caught** |
+| E: `approvalRunDir` ignores the cwd the harness sends | The held `cp` whose harness runs in `/` is marked `[]` | **caught** |
+
 `TestNoRootFailsClosed` (`internal/risk`) fails with the `internal/risk` change
 cut, and `TestPaneRootIsFixed` (`internal/session`) fails on its five home
-cases with `holdsHome` cut.
+cases with `holdsHome` cut. `TestRelativePathsFollowTheRunFolder`
+(`internal/risk`) covers the cd and `..` cases of a relative path.

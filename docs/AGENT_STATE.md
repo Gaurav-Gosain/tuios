@@ -2926,6 +2926,11 @@ after a `cd` does not change it either. A pane with no root, or with a root of
 your home folder or a folder above it, has no limit. Then every absolute or
 `~` path counts as outside, and the call is marked.
 
+A relative path is read from the folder the call runs in. That is the folder
+the harness sends with the approval, else the pane's own folder. A `cd`
+earlier in the command moves it. If tuios does not know that folder, or the
+folder is outside the root, a relative path counts as outside.
+
 Add your own, or turn the shipped ones off, in the config:
 
 ```toml

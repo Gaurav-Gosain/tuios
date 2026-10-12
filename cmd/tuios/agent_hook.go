@@ -348,6 +348,9 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 		if a.Target != "" {
 			extra["target"] = a.Target
 		}
+		if a.Cwd != "" {
+			extra["cwd"] = a.Cwd
+		}
 	}
 	if out.Approval.DenyMessage {
 		extra["deny_message"] = true

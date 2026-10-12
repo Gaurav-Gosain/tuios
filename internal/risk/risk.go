@@ -36,6 +36,11 @@ type Call struct {
 	// such folder: every absolute path and every path under ~ is then read
 	// as outside, so the rule fails closed.
 	Root string
+	// RunDir is the folder the call runs in: the cwd the harness sent with
+	// the approval, else the pane's live folder. A relative path is resolved
+	// against it. Empty means it is not known, and then every relative path
+	// is read as outside.
+	RunDir string
 	// Home is the home directory a leading ~ stands for.
 	Home string
 	// Shown says Text is the one-line summary a pane reported for the call,
@@ -236,10 +241,14 @@ func (r Rule) matches(call Call, in input) bool {
 		}
 		return false
 	case r.command != nil && isShell(call.Tool):
+		// A cd earlier in the line moves where the later commands run, so
+		// each command is read from the folder the ones before it left.
+		cur := call
 		for _, c := range in.pathCmds {
-			if r.command(c, call) {
+			if r.command(c, cur) {
 				return true
 			}
+			cur.RunDir = runDirAfter(c, cur)
 		}
 	case r.path != nil && isFile(call.Tool):
 		return r.path(strings.TrimSpace(in.pathText), call)
@@ -265,8 +274,9 @@ func ParseSummary(line string) (tool, text string) {
 
 // outside reports whether path, as written in a command, names a place
 // outside root: an absolute path, or one under ~, that is not root or under
-// it. A relative path is read as inside, since it is relative to where the
-// command runs. The null device and the terminal are never outside.
+// it. A relative path is resolved against call.RunDir, the folder the call
+// runs in, and is outside when that folder is unknown or itself outside root.
+// The null device and the terminal are never outside.
 func outside(path string, call Call) bool {
 	if path == "" {
 		return false
@@ -284,7 +294,17 @@ func outside(path string, call Call) bool {
 		}
 		path = filepath.Join(call.Home, strings.TrimPrefix(path, "$HOME"))
 	case !strings.HasPrefix(path, "/"):
-		return false
+		// Relative to where the call runs. The pane moves that folder, so
+		// a run folder outside the root, or one nobody knows, makes every
+		// relative path outside.
+		root := fixedRoot(call.Root)
+		run := filepath.Clean(call.RunDir)
+		if root == "" || call.RunDir == "" || !filepath.IsAbs(run) || (run != root && !strings.HasPrefix(run, root+string(filepath.Separator))) {
+			return true
+		}
+		// Joined as text, so that the "***" and the clip in a shown path
+		// are still there for shownPart to find.
+		path = run + string(filepath.Separator) + path
 	}
 	root := fixedRoot(call.Root)
 	if shown, cut := shownPart(path, call); cut {
@@ -393,4 +413,44 @@ func FromConfig(cfg config.RiskConfig) []Rule {
 		rules = append(rules, r)
 	}
 	return rules
+}
+
+// runDirAfter is the folder the commands after c run in: c's target when c is
+// a cd or pushd, else the folder c ran in. "" when it cannot be known: a cd -,
+// a popd, a target with a variable or a substitution in it, or a relative one
+// from an unknown folder. An unknown folder makes every relative path after
+// it outside.
+func runDirAfter(c command, call Call) string {
+	switch c.name() {
+	case "cd", "pushd":
+	case "popd":
+		return ""
+	default:
+		return call.RunDir
+	}
+	ops := operands(c.args())
+	if len(ops) == 0 {
+		return call.Home
+	}
+	dir := strings.Trim(ops[0], `"'`)
+	switch {
+	case dir == "-" || strings.ContainsAny(dir, "$`*?[") && !strings.HasPrefix(dir, "$HOME"):
+		return ""
+	case dir == "~" || strings.HasPrefix(dir, "~/"):
+		if call.Home == "" {
+			return ""
+		}
+		return filepath.Join(call.Home, strings.TrimPrefix(dir, "~"))
+	case strings.HasPrefix(dir, "$HOME"):
+		rest := strings.TrimPrefix(dir, "$HOME")
+		if call.Home == "" || strings.ContainsAny(rest, "$`*?[") {
+			return ""
+		}
+		return filepath.Join(call.Home, rest)
+	case filepath.IsAbs(dir):
+		return filepath.Clean(dir)
+	case call.RunDir == "":
+		return ""
+	}
+	return filepath.Join(call.RunDir, dir)
 }

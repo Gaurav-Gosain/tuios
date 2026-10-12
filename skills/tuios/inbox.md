@@ -174,7 +174,9 @@ risky prompt with `tuios respond`, and an allow is refused with `forbidden`.
 
 The pane's root is where the pane started, or the session's worktree when tuios
 made it. A `cd` or an OSC 7 does not move it. A pane that started in the home
-folder or above has no root, and every absolute path counts as outside.
+folder or above has no root, and every absolute path counts as outside. A
+relative path counts as outside when you run it from a folder outside the
+root.
 
 What it means for you:
 
