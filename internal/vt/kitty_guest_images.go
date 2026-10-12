@@ -307,11 +307,11 @@ func (g *KittyGuestImages) startUpload(cmd *KittyCommand, write func([]byte)) {
 		return
 	}
 	r := kittyReplyOf(cmd)
-	if bad := kittyPNGHeadError(cmd); bad != "" {
-		r.failed = bad
-	} else {
-		g.know(cmd.ImageID)
-	}
+	r.failed = kittyPNGHeadError(cmd)
+	// The id is recorded even for a PNG that fails the check: the upload
+	// still goes to the host, which decides for itself, and a placement of
+	// it is no business of this record to drop.
+	g.know(cmd.ImageID)
 	if cmd.More {
 		g.pending = &r
 		return
