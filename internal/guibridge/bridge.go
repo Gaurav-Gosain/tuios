@@ -995,10 +995,27 @@ func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea
 				continue
 			}
 			id := string(body[1 : 1+int(body[0])])
+			reportInput(client.Load())
 			if err := client.Load().WritePTY(id, body[1+int(body[0]):]); err != nil {
 				log.Printf("gui-bridge: input to %s: %v", id, err)
 			}
 		}
+	}
+}
+
+// reportInput tells the daemon the person typed in the renderer, as a
+// terminal client does for a key (app.OS.reportActivity). Under window_size
+// latest it makes this client the latest one, so the session takes the
+// renderer's size while the person uses it. Both reports are throttled in the
+// client.
+func reportInput(c *session.TUIClient) {
+	if c == nil {
+		return
+	}
+	now := time.Now()
+	c.ReportUsed(now)
+	if p := c.SessionWindowSize(); p == "" || p == config.WindowSizeLatest {
+		c.ReportActivity(now)
 	}
 }
 
