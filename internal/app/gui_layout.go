@@ -203,7 +203,10 @@ func (m *OS) CurrentSessionView() SessionView {
 		Cols: m.GetLayoutWidth(), Rows: m.GetLayoutHeight(),
 		ClientCols: m.Width, ClientRows: m.Height,
 	}
-	if sv := m.computeSessionView(); sv.on {
+	// The view is on whenever the session's size differs from this
+	// client's, smaller included (see viewShifted). Only a larger session
+	// crops, and only a crop has an offset.
+	if sv := m.computeSessionView(); sv.on && m.ViewCropped() {
 		v.Cropped = true
 		v.OffsetX, v.OffsetY = sv.offX, sv.offY
 	}
