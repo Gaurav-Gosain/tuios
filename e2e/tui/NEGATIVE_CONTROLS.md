@@ -4637,6 +4637,11 @@ the far side 50 ms.
 | `paneFolder` back to the old `paneRoot` (the pane's working folder) (2026-10-12) | `TestAFilesGrantFolderIsTheOneThePaneStartedIn` (after the pane prints an OSC 7 of `/`, a copy of a file outside its folder exits 0 and reaches build). The step after `cd` alone was refused under the control too: the daemon's copy of a pane's folder follows `cd` only on a save, and OSC 7 at once | **caught** |
 | `escapeC1` returning its line (2026-10-12) | `TestEventsCarryAFarNameWithC1ControlsEscaped` (the daemon's event lines carry raw U+009B) | **caught** |
 
+| `opts.Bounded, opts.Bound` in `addWindowFor` (a pane's new window starts where it asks) (2026-10-12) | `TestAFilesGrantFolderHoldsThroughOtherPanes` (an agent started after `cd` to the parent copies the parent's file to build, exit 0) | **caught** |
+| The explicit folder check in `childWindowBound` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (`start-agent --cwd` the parent is not refused, and the agent runs; the clamp still starts it in the pane's folder) | **caught** |
+| The files folder rule in `typingRefusal` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (text typed into a sibling started in the parent copies the file to build) | **caught** |
+| `tooWideFolder` in `windowFolder` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (a pane started in the home folder copies a file there to build) | **caught** |
+
 The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
 50 ms:
 

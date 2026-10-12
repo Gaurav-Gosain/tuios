@@ -673,7 +673,10 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	if _, err := os.Stat(cwd); err != nil {
 		return nil, herdrErr("plugin_pane_open_failed", "cannot start the pane in "+echoName(cwd)+": "+err.Error())
 	}
-	win, err := sess.AddDaemonWindowWith(opts, onExit)
+	win, bverr, err := d.addWindowFor(cs, "plugin.pane.open", sess, opts, onExit)
+	if bverr != nil {
+		return nil, herdrErr("plugin_pane_open_failed", bverr.Message)
+	}
 	if err != nil {
 		if errors.Is(err, ErrScratchExists) {
 			return nil, herdrErr("ui_busy", err.Error())

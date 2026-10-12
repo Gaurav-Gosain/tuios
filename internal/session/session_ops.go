@@ -260,6 +260,14 @@ type NewWindowOptions struct {
 	// default of [agents.permissions]. It is in force before the process
 	// starts, and it is saved with the window. See pane_grants.go.
 	Grants *Grants
+	// Bounded says a pane without admin asked for the window, and Bound is
+	// the folder that pane's files grant reaches ("" for none). The new
+	// window starts inside Bound: a folder it inherits from the focused pane
+	// that is outside it is replaced by Bound, and with no Bound the window
+	// gets no start folder, so its files grant reaches nothing. A caller
+	// checks an explicit Cwd against Bound first (Daemon.childWindowBound).
+	Bounded bool
+	Bound   string
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -334,6 +342,17 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	if cwd == "" && opts.Host == "" {
 		cwd = s.StartDir()
 	}
+	// A pane without admin cannot start a window whose folder is wider than
+	// its own, by cd before the call or by the focused pane's folder.
+	noStartDir := false
+	if opts.Bounded && opts.Host == "" {
+		switch {
+		case opts.Bound == "":
+			noStartDir = true
+		case cwd == "" || !pathUnder(realPath(cwd), realPath(opts.Bound)):
+			cwd = opts.Bound
+		}
+	}
 
 	// A command can exit before its window is in the state: one that fails
 	// at once does. onExit finds the window by its PTY (close_on_exit and
@@ -355,7 +374,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
 		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants,
-		workspace: opts.Workspace,
+		workspace: opts.Workspace, noStartDir: noStartDir,
 	})
 	if err != nil {
 		return WindowState{}, err

@@ -317,7 +317,7 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 			d.closeWindowOfPTY(sess, ptyID, false)
 		}
 	}
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+	win, bverr, err := d.addWindowFor(cs, "new-window", sess, NewWindowOptions{
 		Title:     p.Name,
 		Cwd:       p.Cwd,
 		Workspace: p.Workspace,
@@ -327,6 +327,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		Host:      p.Host,
 		Grants:    grants,
 	}, onExit)
+	if bverr != nil {
+		return nil, bverr
+	}
 	if errors.Is(err, ErrScratchExists) {
 		return nil, invalidParam("scratch", err.Error())
 	}
@@ -426,7 +429,7 @@ func (d *Daemon) awaitPlacement(sess *Session, windowID, ptyID string, limit tim
 // opening one on a session nobody is looking at runs a program in a box no one
 // can see or type into. Refusing says so while the caller can still do something
 // about it.
-func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string   `json:"session"`
 		Name      string   `json:"name"`
@@ -555,7 +558,10 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		opts.stdout = w
 		capture = newPopupCapture(r)
 	}
-	win, err := sess.AddDaemonWindowWith(opts, onExit)
+	win, bverr, err := d.addWindowFor(cs, "popup", sess, opts, onExit)
+	if bverr != nil {
+		return nil, bverr
+	}
 	// The process holds its own copy of the write end once it has started,
 	// so the daemon's copy is closed here, and the read ends when the process
 	// and its children have closed theirs. On a failed start this also ends

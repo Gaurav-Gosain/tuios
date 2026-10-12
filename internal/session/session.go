@@ -1554,7 +1554,7 @@ func (s *Session) noteStartDir(windowID, dir string) {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	s.startDirs.LoadOrStore(windowID, filepath.Clean(dir))
+	s.startDirs.LoadOrStore(windowID, startDirEntry{dir: filepath.Clean(dir), at: time.Now()})
 }
 
 // windowStartDir is a window's start folder, or "" when none was recorded.
@@ -1562,9 +1562,15 @@ func (s *Session) noteStartDir(windowID, dir string) {
 // copy to (transfer_grants.go).
 func (s *Session) windowStartDir(windowID string) string {
 	if v, ok := s.startDirs.Load(windowID); ok {
-		return v.(string)
+		return v.(startDirEntry).dir
 	}
 	return ""
+}
+
+// startDirEntry is a window's start folder and when it was recorded.
+type startDirEntry struct {
+	dir string
+	at  time.Time
 }
 
 // StartDir is the directory set with SetStartDir, or "".
@@ -2035,6 +2041,10 @@ type ptySpawn struct {
 	// workspace is the workspace the window is being made on, for the
 	// shell's HERDR_TAB_ID. 0 takes it from the state. See herdrTabFor.
 	workspace int
+	// noStartDir records no start folder for the window: a pane without
+	// admin and with no folder of its own asked for it. See
+	// NewWindowOptions.Bounded.
+	noStartDir bool
 }
 
 // createPTY starts a pane's process. sp.command, when non-empty, is an argv
@@ -2063,7 +2073,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
 		sp.grants = s.recordedGrants(sp.windowID)
 	}
-	if sp.restored == nil && sp.host == "" && sp.windowID != "" {
+	if sp.restored == nil && sp.host == "" && sp.windowID != "" && !sp.noStartDir {
 		dir := s.StartDir()
 		if sp.cwd != "" {
 			if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
@@ -2861,9 +2871,20 @@ func (s *Session) ResurrectionState() *SessionState {
 			}
 		}
 	}
+	live := make(map[string]bool, len(state.Windows))
 	for i := range state.Windows {
+		live[state.Windows[i].ID] = true
 		state.Windows[i].StartDir = s.windowStartDir(state.Windows[i].ID)
 	}
+	// A window that closed takes its start folder with it. One recorded in
+	// the last minute may be a window whose process started and that is not
+	// in the state yet, so it stays until a later save.
+	s.startDirs.Range(func(k, v any) bool {
+		if !live[k.(string)] && time.Since(v.(startDirEntry).at) > time.Minute {
+			s.startDirs.Delete(k)
+		}
+		return true
+	})
 	// The first window's directory is the session's, and this is the one place
 	// it is read on a cadence: a save happens only when the state changed, so a
 	// shell that moved into or out of a worktree is noticed here and an idle

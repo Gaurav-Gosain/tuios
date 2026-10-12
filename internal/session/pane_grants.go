@@ -946,6 +946,16 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 		return "window " + shortWindowID(target.ID) + " holds " + held.String() + ", more than this pane holds, and what is typed there runs with that. " +
 			"A pane types only into panes that hold nothing it does not"
 	}
+	// files reaches a folder, so holding it too is not enough: what is typed
+	// into a pane whose folder is wider would copy from the wider folder.
+	if !pa.grants.Has(GrantAdmin) && held.Has(GrantFiles) {
+		if tf := d.windowFolder(target.ID); tf != "" {
+			if pf := d.paneFolder(pa); pf == "" || !pathUnder(realPath(tf), realPath(pf)) {
+				return "window " + shortWindowID(target.ID) + " holds files for " + echoName(tf) + ", a folder this pane's files grant does not reach, and what is typed there copies from it. " +
+					"A pane types only into panes whose folder is inside its own"
+			}
+		}
+	}
 	if !pa.grants.Has(GrantRespond) && d.agentsOff.Load() && !d.offTypingAllowed(pa, target) {
 		// With the agent features off nothing knows which pane waits on a
 		// prompt, so the rule fails closed: every other pane may be on one.

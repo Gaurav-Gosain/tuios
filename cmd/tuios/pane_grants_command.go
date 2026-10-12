@@ -60,8 +60,8 @@ func newSetPaneGrantsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set-pane-grants",
 		Short: "Give a pane grants, or the default back",
-		Long: `Say what a pane may do through tuios: read, write, fan, respond, admin, or
-none. See 'tuios pane-grants' for what each allows. --reset gives the pane the
+		Long: `Say what a pane may do through tuios: read, write, fan, files, respond,
+admin, or none. See 'tuios pane-grants' for what each allows. --reset gives the pane the
 default of [agents.permissions] again, which then follows the config.
 
 From outside every pane anything may be given. From inside a pane, a pane may
@@ -95,7 +95,7 @@ TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 	}
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Session of the pane (default: this pane's, else the most recently active)")
 	cmd.Flags().StringVarP(&window, "window", "w", "", "The pane, by name or id (default: this pane)")
-	cmd.Flags().StringSliceVar(&grants, "grants", nil, "The grants, comma separated: read, write, fan, respond, admin, or none")
+	cmd.Flags().StringSliceVar(&grants, "grants", nil, "The grants, comma separated: read, write, fan, files, respond, admin, or none")
 	cmd.Flags().BoolVar(&reset, "reset", false, "Give the pane the default of [agents.permissions]")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)

@@ -24,7 +24,7 @@ const (
 	defaultVerbSessionHeight = 24
 )
 
-func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Name       string   `json:"name"`
 		Width      int      `json:"width"`
@@ -83,6 +83,10 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 		})
 	}
 
+	// A pane without admin starts a session only inside its own folder.
+	if _, _, verr := d.childWindowBound(cs, "new-session", p.Cwd); verr != nil {
+		return nil, verr
+	}
 	sess, err := d.manager.CreateSession(name, &SessionConfig{}, width, height)
 	if err != nil {
 		// The name check above is racy by nature, so the manager's own refusal
@@ -118,7 +122,7 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 
 	sessionID := sess.ID
 	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+	win, bverr, err := d.addWindowFor(cs, "new-session", sess, NewWindowOptions{
 		Title:     p.WindowName,
 		Name:      p.WindowName,
 		Cwd:       p.Cwd,
@@ -126,6 +130,9 @@ func (d *Daemon) verbNewSession(_ *connState, params json.RawMessage) (any, *ver
 		Command:   p.Command,
 		Workspace: 0,
 	}, onExit)
+	if bverr != nil {
+		return nil, bverr
+	}
 	if err != nil {
 		// The session is left standing rather than rolled back. It exists, it is
 		// listed, and a caller that wants it gone kills it; deleting it here

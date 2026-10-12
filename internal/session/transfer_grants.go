@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -90,7 +91,7 @@ func (d *Daemon) transferGrantStart(cs *connState, src, dst *Endpoint, o *transf
 			continue
 		}
 		if root == "" {
-			return deny("the pane has no fixed folder to copy in. The files grant reaches only the folder a pane started in, or its session's tuios worktree")
+			return deny(noFolderReason)
 		}
 		if !pathUnder(realPath(e.Path), realPath(root)) {
 			return deny(echoName(e.Path) + " is outside the pane's folder " + echoName(root) + ", and the files grant reaches only that")
@@ -122,24 +123,89 @@ func underTilde(p string) bool {
 // fixed by the daemon. The pane's working folder is not used: the pane moves
 // it with cd, or with an OSC 7 it prints, so a pane could name / as its
 // folder. A detected worktree is not used either, since it follows the first
-// pane's folder. It is "" when there is no fixed folder, or the folder is a
-// file system root, and then the copy is refused.
+// pane's folder. It is "" when there is no fixed folder, and for the home
+// folder or any folder above it, and then the copy is refused.
 func (d *Daemon) paneFolder(pa *paneAuth) string {
-	sess := d.sessionHoldingWindow(pa.window)
+	return d.windowFolder(pa.window)
+}
+
+// windowFolder is paneFolder for a window id.
+func (d *Daemon) windowFolder(windowID string) string {
+	sess := d.sessionHoldingWindow(windowID)
 	if sess == nil {
 		return ""
 	}
+	dir := ""
 	if wt := sess.Worktree(); wt != nil && wt.Managed && wt.Path != "" {
-		return filepath.Clean(wt.Path)
+		dir = wt.Path
+	} else {
+		dir = sess.windowStartDir(windowID)
 	}
-	dir := sess.windowStartDir(pa.window)
 	if dir == "" {
 		return ""
 	}
 	dir = filepath.Clean(dir)
-	if filepath.Dir(dir) == dir {
-		// A root holds every file: no folder at all.
+	if tooWideFolder(dir) {
 		return ""
 	}
 	return dir
+}
+
+// tooWideFolder reports whether dir holds the home folder: a file system
+// root, /home or /Users, or the home folder itself. A grant held to one of
+// those reaches the keys and every project, which is no folder at all.
+func tooWideFolder(dir string) bool {
+	if filepath.Dir(dir) == dir {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	real := realPath(dir)
+	return pathUnder(realPath(filepath.Clean(home)), real)
+}
+
+// noFolderReason is the refusal of a copy from a pane with no folder the
+// files grant can reach.
+const noFolderReason = "the pane has no folder the files grant can reach. It reaches the folder a pane started in, or its session's tuios worktree, " +
+	"and never the home folder or a folder above it. Start the pane in a project folder or a worktree, then give it files"
+
+// childWindowBound holds a window that cs asks for to the caller's folder,
+// when cs is a pane without admin. cwd is the folder the call names, "" for
+// none. An explicit folder outside the caller's folder is refused. bounded
+// says the window must be held (NewWindowOptions.Bounded), and bound is the
+// folder ("" when the caller has none).
+func (d *Daemon) childWindowBound(cs *connState, verb, cwd string) (bound string, bounded bool, verr *verbError) {
+	pa := d.paneAuthority(cs)
+	if pa == nil || pa.grants.Has(GrantAdmin) {
+		return "", false, nil
+	}
+	bound = d.paneFolder(pa)
+	if cwd != "" && (bound == "" || !pathUnder(realPath(cwd), realPath(bound))) {
+		where := "this pane has no folder of its own"
+		if bound != "" {
+			where = "this pane's folder is " + echoName(bound)
+		}
+		return "", true, grantForbidden(verb, pa, echoName(cwd)+" is outside the folder of the pane that asks, and "+where+
+			". A pane without admin starts windows only inside its own folder")
+	}
+	return bound, true, nil
+}
+
+// addWindowFor makes a window that cs asked for with verb, held to the
+// caller's folder when cs is a pane without admin (childWindowBound). Every
+// verb a pane may reach that starts a process in a folder of its choosing
+// goes through it, so a pane cannot start a window, which may inherit its
+// files grant, in a folder wider than its own.
+func (d *Daemon) addWindowFor(cs *connState, verb string, sess *Session, opts NewWindowOptions, onExit func(ptyID string)) (WindowState, *verbError, error) {
+	if opts.Host == "" {
+		bound, bounded, verr := d.childWindowBound(cs, verb, opts.Cwd)
+		if verr != nil {
+			return WindowState{}, verr, nil
+		}
+		opts.Bounded, opts.Bound = bounded, bound
+	}
+	win, err := sess.AddDaemonWindowWith(opts, onExit)
+	return win, nil, err
 }
