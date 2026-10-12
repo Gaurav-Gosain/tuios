@@ -4627,3 +4627,15 @@ The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
 20,000 files (61 MB) took 37.8 s with a sync of each file by itself, and
 21.4 s with the batched syncs of `serveTreeWrite`.
 
+
+On 2026-10-12 one more control cut the escape of far names in the CLI. It
+made `shown` in `cmd/tuios/transfer_follow.go` return its input, built a
+binary, and ran `TestCopyShowsAFarNameWithEscapesAsText` against it. The test
+was run three times, each time with the earlier assertions turned off, so
+that each assertion was seen to fail by itself.
+
+| Control: what was cut | Assertion | Verdict |
+| --- | --- | --- |
+| `shown` returns its input | Plain run: stdout holds the raw `\x1b]0;PWNED\x07` in the list of skipped files | **caught** |
+| `shown` returns its input | Pane: the conflict question shows `ab.txt`, not the visible `a\x1b]0;PWNED\x07b.txt` | **caught** |
+| `shown` returns its input | Pane: the title of the pane becomes `PWNED` | **caught** |

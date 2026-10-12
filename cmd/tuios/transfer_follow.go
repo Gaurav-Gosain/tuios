@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -74,6 +75,12 @@ type copyRow struct {
 func (r copyRow) ended() bool {
 	return r.State == "done" || r.State == "failed" || r.State == "cancelled"
 }
+
+// shownName is the copy's name, safe to print (see shown).
+func (r copyRow) shownName() string { return shown(r.Name) }
+
+// shownWhere is where, safe to print.
+func (r copyRow) shownWhere() string { return shown(r.where()) }
 
 // where is the copy's destination as a person writes it.
 func (r copyRow) where() string {
@@ -265,7 +272,66 @@ func (f *follower) add(r copyRow) {
 
 func (f *follower) emit(v map[string]any) {
 	line, _ := json.Marshal(v)
-	_, _ = fmt.Fprintln(f.stdout, string(line))
+	_, _ = fmt.Fprintln(f.stdout, jsonSafe(string(line)))
+}
+
+// jsonSafe escapes the code points encoding/json writes raw that a terminal
+// still acts on: DEL and the C1 controls (U+0080 to U+009F, where U+009B is
+// a CSI). They can only be inside strings, so the escape keeps the JSON
+// valid and the value the same.
+func jsonSafe(line string) string {
+	if !strings.ContainsFunc(line, func(r rune) bool { return r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
+		return line
+	}
+	var b strings.Builder
+	for _, r := range line {
+		if r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			fmt.Fprintf(&b, `\u%04x`, r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// shown makes a string that came from the daemon or a far host safe to print
+// on a terminal. A file name may hold any byte but NUL and /, so a name on a
+// host can carry an escape sequence that sets the title, moves the cursor or
+// writes to the clipboard of whoever copies it. Each control character, each
+// byte that is not UTF-8, and each bidirectional override is written as a
+// visible escape instead: \x1b, \xff, \u202e.
+func shown(s string) string {
+	if !strings.ContainsFunc(s, func(r rune) bool { return r == utf8.RuneError || unsafeRune(r) }) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && n <= 1:
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case r < 0x80 && unsafeRune(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		case unsafeRune(r):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteString(s[i : i+n])
+		}
+		i += n
+	}
+	return b.String()
+}
+
+// unsafeRune is a code point a terminal acts on instead of drawing: C0, DEL,
+// C1, and the bidirectional controls that reorder what follows them.
+func unsafeRune(r rune) bool {
+	switch {
+	case r < 0x20, r >= 0x7f && r <= 0x9f:
+		return true
+	case r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x200e, r == 0x200f, r == 0x061c:
+		return true
+	}
+	return false
 }
 
 // allEnded reports whether every copy followed has ended.
@@ -388,7 +454,7 @@ func (f *follower) plainRow(r copyRow, was string) {
 		f.said[key] = true
 		f.mu.Unlock()
 		if !said {
-			_, _ = fmt.Fprintf(f.stderr, "%s: %s\n", r.Name, stateWords(r))
+			_, _ = fmt.Fprintf(f.stderr, "%s: %s\n", r.shownName(), stateWords(r))
 		}
 	}
 	if r.State == "running" {
@@ -399,7 +465,7 @@ func (f *follower) plainRow(r copyRow, was string) {
 		}
 		f.mu.Unlock()
 		if due && r.Size > 0 {
-			_, _ = fmt.Fprintf(f.stderr, "%s: %s of %s (%d%%)%s\n", r.Name, humanBytes(r.Done), humanBytes(r.Size), percent(r.Done, r.Size), f.rateText(r))
+			_, _ = fmt.Fprintf(f.stderr, "%s: %s of %s (%d%%)%s\n", r.shownName(), humanBytes(r.Done), humanBytes(r.Size), percent(r.Done, r.Size), f.rateText(r))
 		}
 	}
 }
@@ -568,6 +634,9 @@ func (f *follower) draw(final bool) {
 		return
 	}
 	f.lastDraw = time.Now()
+	if w, _, err := term.GetSize(int(os.Stderr.Fd())); err == nil && w > 20 {
+		f.width = w
+	}
 	// The rows are taken under the lock and drawn after it: block reads the
 	// smoothed rate, which takes the lock itself.
 	f.mu.Lock()
@@ -590,7 +659,12 @@ func (f *follower) draw(final bool) {
 		lines = append(lines, f.block(r)...)
 	}
 	if waiting > 0 {
-		lines = append(lines, f.dim(fmt.Sprintf("  %d more %s wait.", waiting, pluralWord(waiting, "copy", "copies"))))
+		lines = append(lines, f.dim(fmt.Sprintf("  %d more %s %s.", waiting, pluralWord(waiting, "copy", "copies"), pluralWord(waiting, "waits", "wait"))))
+	}
+	// The block moves up by its line count to draw again, which is right
+	// only while no line wraps: each one is cut to the width of the terminal.
+	for i, l := range lines {
+		lines[i] = truncateCells(l, f.width-1)
 	}
 	var b strings.Builder
 	if f.drawn > 0 {
@@ -621,13 +695,16 @@ func (f *follower) dim(s string) string { return f.style(f.pal.FgDim).Render(s) 
 // block is the lines of one copy on a terminal.
 func (f *follower) block(r copyRow) []string {
 	pal := f.pal
-	name := r.Name
+	name := r.shownName()
 	if r.Kind == "dir" {
 		name += "/"
 	}
-	head := truncateCells(f.style(pal.Fg).Bold(true).Render(name)+f.dim("  to "+r.where()), f.width-1)
+	head := f.style(pal.Fg).Bold(true).Render(name) + f.dim("  to "+r.shownWhere())
 	lines := []string{head}
-	barW := max(min(f.width-34, 44), 10)
+	// The rest of a bar line, at its longest, is about 64 cells: the label,
+	// the percent, both sizes, the rate and the time left. draw cuts what
+	// is still too long.
+	barW := max(min(f.width-66, 44), 10)
 	switch r.State {
 	case "waiting":
 		return append(lines, "  "+f.style(pal.Warning).Render(stateWords(r)))
@@ -639,9 +716,9 @@ func (f *follower) block(r copyRow) []string {
 	if r.Kind == "dir" {
 		now := ""
 		if r.Current != "" {
-			now = "  now: " + r.Current
+			now = "  now: " + shown(r.Current)
 		}
-		lines = append(lines, truncateCells("  "+fmt.Sprintf("%s of %s files", commas(r.FilesDone), commas(r.Files))+f.dim(now), f.width-1))
+		lines = append(lines, "  "+fmt.Sprintf("%s of %s files", commas(r.FilesDone), commas(r.Files))+f.dim(now))
 		if r.CurrentSize > 0 {
 			lines = append(lines, "  "+f.dim("file ")+" "+f.bar(r.CurrentDone, r.CurrentSize, barW)+fmt.Sprintf("  %3d%%  %s of %s", percent(r.CurrentDone, r.CurrentSize), humanBytes(r.CurrentDone), humanBytes(r.CurrentSize)))
 		}
@@ -692,9 +769,18 @@ func (f *follower) summary() int {
 				_, _ = fmt.Fprintln(f.stdout, doneLine(r))
 			}
 		case "cancelled":
-			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s was cancelled. Nothing more is written.\n", r.Name, r.where())
+			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s was cancelled. Nothing more is written.\n", r.shownName(), r.shownWhere())
+		case "failed":
+			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s failed: %s\n", r.shownName(), r.shownWhere(), copyFailText(r))
 		default:
-			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s failed: %s\n", r.Name, r.where(), copyFailText(r))
+			// The command stopped following a copy that has not ended, after
+			// --timeout: it goes on in the daemon.
+			why := ""
+			if r.Error != "" {
+				why = " " + shown(r.Error)
+			}
+			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s still waits in the daemon.%s\n", r.shownName(), r.shownWhere(), why)
+			continue
 		}
 		if f.out == outQuiet && r.State == "done" {
 			continue
@@ -728,9 +814,9 @@ func (f *follower) notes(r copyRow) {
 				_, _ = fmt.Fprintf(w, "  and %d more\n", count-20)
 				break
 			}
-			line := "  " + n.rel
+			line := "  " + shown(n.rel)
 			if n.msg != "" {
-				line += ": " + n.msg
+				line += ": " + shown(n.msg)
 			}
 			_, _ = fmt.Fprintln(w, line)
 		}
@@ -763,16 +849,16 @@ func doneLine(r copyRow) string {
 	if r.Kind != "dir" {
 		switch {
 		case r.Same > 0:
-			return fmt.Sprintf("%s is on %s already, with the same bytes. Nothing was copied.", r.Name, r.where())
+			return fmt.Sprintf("%s is on %s already, with the same bytes. Nothing was copied.", r.shownName(), r.shownWhere())
 		case r.ConflictsSkipped > 0 || r.ConflictsLeft > 0:
-			return fmt.Sprintf("%s was not copied: %s is there and differs.", r.Name, r.where())
+			return fmt.Sprintf("%s was not copied: %s is there and differs.", r.shownName(), r.shownWhere())
 		}
-		return fmt.Sprintf("Copied %s, %s, to %s%s.", r.Name, humanBytes(r.Size), r.where(), check)
+		return fmt.Sprintf("Copied %s, %s, to %s%s.", r.shownName(), humanBytes(r.Size), r.shownWhere(), check)
 	}
 	if copied <= 0 && r.Same > 0 {
-		return fmt.Sprintf("The %s %s of %s %s on %s already, with the same bytes. Nothing was copied.", commas(r.Same), pluralWord(r.Same, "file", "files"), r.Name, pluralWord(r.Same, "is", "are"), r.where())
+		return fmt.Sprintf("The %s %s of %s %s on %s already, with the same bytes. Nothing was copied.", commas(r.Same), pluralWord(r.Same, "file", "files"), r.shownName(), pluralWord(r.Same, "is", "are"), r.shownWhere())
 	}
-	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), pluralWord(copied, "file", "files"), humanBytes(r.Size), r.where(), check)
+	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), pluralWord(copied, "file", "files"), humanBytes(r.Size), r.shownWhere(), check)
 	if r.Same > 0 {
 		line += fmt.Sprintf(" %s %s the same already.", commas(r.Same), pluralWord(r.Same, "file was", "files were"))
 	}
@@ -781,15 +867,18 @@ func doneLine(r copyRow) string {
 
 // copyFailText is why a copy failed and what to do.
 func copyFailText(r copyRow) string {
-	msg := r.Error
+	msg := shown(r.Error)
 	if msg == "" {
-		msg = r.Code
+		msg = shown(r.Code)
 	}
 	switch r.Code {
 	case session.ErrVerbForbidden:
-		return msg + "\nThat is the decision of the person who set up " + r.host() + ". Ask them, or copy to a folder it allows."
+		if h := r.host(); h != "" && farRefusal(r.Error) {
+			return msg + "\nThat is the decision of the person who set up " + h + ". Ask them, or copy to a folder it allows."
+		}
+		return msg + "\nThat is the decision of the person who set the pane's grants. Ask them, or copy to a folder they allow."
 	case session.ErrVerbDiskFull:
-		return msg + "\nMake space on that machine, then run: tuios transfers resume " + r.ID
+		return msg + "\nMake space on " + machineName(r.Dst.Host) + ", then run: tuios transfers resume " + r.ID
 	case session.ErrVerbHashMismatch, session.ErrVerbSourceChanged:
 		return msg
 	}
@@ -797,6 +886,18 @@ func copyFailText(r copyRow) string {
 		return msg + "\nTry the files that failed again with: tuios transfers resume " + r.ID
 	}
 	return msg
+}
+
+// farRefusal reports whether a forbidden message came from the far side of a
+// link. The refusals a host gives name what it lets other machines do and
+// the setting that changes it. A refusal by the pane's grants names neither.
+func farRefusal(msg string) bool {
+	for _, w := range []string{"files_roots", "files_read_roots", "linked machine", "other machines", "another machine"} {
+		if strings.Contains(msg, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- words and numbers ------------------------------------------------------

@@ -3914,7 +3914,7 @@ login the tailnet policy refuses has `"error_kind": "tailscale_policy"`. See
 
 ### `tuios cp`
 
-Copy files and folders between this machine and the machines in `tuios hosts`.
+Copy files and folders between this machine and the hosts in `tuios hosts`.
 
 **Usage:**
 ```bash
@@ -3954,7 +3954,7 @@ name of a host, is an error with exit code 2. The message suggests the
 nearest host name. Write such a path on this machine as `./a:b`.
 
 `HOST:` alone is the receive folder of the host: `~/Downloads/tuios`, or the
-first folder of `files_roots` in the config on that host. A host lets another
+first folder of `files_roots` in the config on that host. A host lets this
 machine write only in its `files_roots`. So a copy to `build:~/` needs
 `files_roots = ["~"]` in the config on build (see
 [CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here)).
@@ -3982,7 +3982,7 @@ differs follows `--conflict`:
 | Policy | Short flag | What it does |
 |--------|------------|--------------|
 | `ask` | | Ask for each file. The default when stdin and stderr are a terminal, without `--json` |
-| `skip` | `-n` | Leave the file there as it is. The default in other cases |
+| `skip` | `-n` | Leave the file there as it is. The default in other cases, and always with `--detach` |
 | `replace` | `-f` | Replace the file there |
 | `keep-both` | `-b` | Keep the file there, and give the copy a new name |
 
@@ -3998,8 +3998,11 @@ with different policies are an error.
 Replace it, keep both, or skip? [r/k/s, or R/K/S for all files]
 ```
 
-An upper case letter gives the same answer for every file of the copy.
-`ask` needs a terminal. Without one, the command stops with exit code 2.
+An upper case letter gives the same answer for every file of the copy. Another
+key is not an answer, and the command asks again. Ctrl+C at the question
+cancels the copy and gives no answer. When the terminal cannot be read, the
+command also cancels the copy. `ask` needs a terminal. Without one, the
+command stops with exit code 2.
 
 #### What a copy keeps
 
@@ -4047,7 +4050,8 @@ Copied 1,204 files, 38.2 MiB, to build:~/www/site (checked).
 The lines after it name the files that were not copied, and why.
 
 `--detach` prints the id of each copy on stdout and returns. Follow the copy
-with `tuios transfers wait ID`.
+with `tuios transfers wait ID`. A detached copy has nobody to answer a
+question, so its default `--conflict` is `skip`.
 
 #### JSON events
 
@@ -4078,7 +4082,8 @@ them.
 When a host is not reachable, the copy waits for it in the daemon. It goes on
 from where it stopped when the host is back. `--timeout 10m` makes the
 command exit 5 when a host stays unreachable for ten minutes. The copy goes
-on waiting in the daemon. Add `--cancel-on-timeout` to cancel the copy too.
+on waiting in the daemon, and the command says that it still waits. Add
+`--cancel-on-timeout` to cancel the copy too.
 
 #### Ctrl+C
 
@@ -4163,8 +4168,11 @@ new rows. `clear --json` prints `{"cleared": N}`.
 
 `wait` takes `--json` and `-q` as `tuios cp` does, and prints the same events.
 Its exit code is the code `tuios cp` gives for the worst of the copies: `0`,
-`1`, `3`, `4`, `5`, `6`, or `130` for a cancelled copy. A copy whose files
-were skipped because they differ exits 3.
+`1`, `3`, `4`, `6`, or `130` for a cancelled copy. An id that no copy has
+exits 1. A copy that waits for a host has not ended, so `wait` goes on
+waiting. `wait` cannot see the `--conflict` policy of a copy. So a file that
+was there and differs always gives exit 3, as with the default policy of
+`tuios cp`.
 
 **Examples:**
 ```bash

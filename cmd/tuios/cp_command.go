@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -55,7 +56,7 @@ func newCpCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cp SRC... DST",
 		Short: "Copy files and folders between this machine and its hosts",
-		Long: `Copy files and folders between this machine and the machines in 'tuios hosts'.
+		Long: `Copy files and folders between this machine and the hosts in 'tuios hosts'.
 
 A path is HOST:PATH for a path on a host, or a plain path for this machine.
 The word before the first colon is a host when it is a host name or "local",
@@ -63,7 +64,7 @@ as in -s HOST:SESSION. Write a path with a colon in it on this machine as
 ./a:b, or local:a:b. A relative path on a host is under its home folder, so
 build:logs is ~/logs on build. HOST: alone is the host's receive folder:
 ~/Downloads/tuios, or the first folder of files_roots in the host's config.
-A host lets another machine write only in its files_roots, so a copy to
+A host lets this machine write only in its files_roots. So a copy to
 build:~/ needs files_roots = ["~"] in the config on build.
 
 The rules are the ones cp has:
@@ -80,24 +81,25 @@ second run of the same copy is a quick check. A file that is there and
 differs follows --conflict:
 
   ask        ask for each file (the default on a terminal)
-  skip       leave the file there as it is (the default otherwise, -n)
+  skip       leave the file there as it is (-n). This is the default
+             without a terminal, with --json and with --detach.
   replace    replace it (-f)
   keep-both  keep it, and name the copy "name (from HOST).ext" (-b)
 
-The copy runs in the daemon. It keeps permission bits and modification times,
-checks every file with sha256 before it puts it in place, waits for a host
-that goes away, and goes on from where it stopped. Ctrl+C asks whether to
-cancel the copy or keep it running; a second Ctrl+C cancels it. Follow a copy
-that keeps running with 'tuios transfers'.
+The copy runs in the daemon. It keeps permission bits and modification times.
+It checks every file with sha256 before it puts it in place. When a host goes
+away, the copy waits for it and goes on from where it stopped. Ctrl+C asks
+whether to cancel the copy or keep it running. A second Ctrl+C cancels it.
+Follow a copy that keeps running with 'tuios transfers'.
 
 Exit codes:
 
   0    every file was copied, or was there with the same bytes
   1    the copy failed (the message says why and what to do)
   2    the command line is wrong
-  3    done, but some items were not copied: files skipped by the
-       default --conflict, links, pipes and devices, or files made at the
-       destination during the copy
+  3    done, but some items were not copied. These are files skipped by
+       the default --conflict, links, pipes and devices, or files made at
+       the destination during the copy.
   4    refused: the pane's grants or the host's link policy do not allow it
   5    a host was not reachable for --timeout
   6    a file did not match its original twice, or changed during the copy
@@ -354,7 +356,8 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 	interactive := isTerminal(os.Stdin) && isTerminal(os.Stderr)
 	if !explicit {
 		policy = "skip"
-		if interactive && !o.json {
+		// A detached copy has nobody to answer a question.
+		if interactive && !o.json && !o.detach {
 			policy = "ask"
 		}
 	}
@@ -490,10 +493,10 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 	}
 
 	stop := make(chan struct{})
-	result := make(chan int, 1)
+	result := make(chan struct{})
 	go func() {
 		fl.run(stop)
-		result <- fl.summary()
+		close(result)
 	}()
 
 	sigs := make(chan os.Signal, 2)
@@ -509,8 +512,8 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 	waitingSince := map[string]time.Time{}
 	for {
 		select {
-		case c := <-result:
-			return exitStatusError(worseExit(code, c))
+		case <-result:
+			return exitStatusError(worseExit(code, fl.summary()))
 		case sig := <-sigs:
 			if sig == syscall.SIGTERM || !interactive || o.json {
 				cancelCopies(ctl, fl)
@@ -546,9 +549,12 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 				<-result
 				fl.draw(true)
 				if o.cancelOnTimeout {
-					for _, id := range fl.ids {
-						_, _ = ctl.Call("transfer-cancel", map[string]any{"id": id})
-					}
+					cancelCopies(ctl, fl)
+					// Read the rows again, so the summary says cancelled.
+					fl.refresh()
+				}
+				fl.summary()
+				if o.cancelOnTimeout {
 					_, _ = fmt.Fprintf(os.Stderr, "A host was not reachable for %v, so the copy was cancelled.\n", o.timeout)
 				} else {
 					_, _ = fmt.Fprintf(os.Stderr, "A host was not reachable for %v. The copy waits for it in the daemon. Follow it with: tuios transfers\n", o.timeout)
@@ -580,44 +586,54 @@ func cancelCopies(ctl *session.VerbClient, fl *follower) {
 	}
 }
 
+// keyCtrlC is Ctrl+C as a raw terminal reads it.
+const keyCtrlC = 3
+
 // readKey reads one key from the terminal, raw, so the person does not have
-// to press Enter. A second Ctrl+C reads as c.
-func readKey() byte {
+// to press Enter. In raw mode Ctrl+C is the byte keyCtrlC, not a signal.
+func readKey() (byte, error) {
 	fd := int(os.Stdin.Fd())
-	old, err := term.MakeRaw(fd)
-	if err != nil {
-		var b [1]byte
-		_, _ = os.Stdin.Read(b[:])
-		return b[0]
+	if old, err := term.MakeRaw(fd); err == nil {
+		defer func() { _ = term.Restore(fd, old) }()
 	}
-	defer func() { _ = term.Restore(fd, old) }()
 	var b [1]byte
-	if _, err := os.Stdin.Read(b[:]); err != nil {
-		return 'k'
+	n, err := os.Stdin.Read(b[:])
+	if err == nil && n == 0 {
+		err = io.EOF
 	}
-	if b[0] == 3 {
-		return 'c'
+	if err != nil {
+		return 0, err
 	}
-	return b[0]
+	return b[0], nil
 }
 
 // keepOrCancel asks the person what Ctrl+C means. It reports true for keep.
+// A second Ctrl+C cancels. A terminal that cannot be read keeps the copy,
+// which the daemon runs either way.
 func keepOrCancel(sigs <-chan os.Signal) bool {
 	_, _ = fmt.Fprint(os.Stderr, "Cancel the copy, or keep it running? [c/k] ")
-	keys := make(chan byte, 1)
-	go func() { keys <- readKey() }()
+	type key struct {
+		b   byte
+		err error
+	}
+	keys := make(chan key, 1)
+	read := func() { b, err := readKey(); keys <- key{b, err} }
+	go read()
 	for {
 		select {
 		case k := <-keys:
 			_, _ = fmt.Fprintln(os.Stderr)
-			switch k {
+			if k.err != nil {
+				return true
+			}
+			switch k.b {
 			case 'k', 'K':
 				return true
-			case 'c', 'C':
+			case 'c', 'C', keyCtrlC:
 				return false
 			}
 			_, _ = fmt.Fprint(os.Stderr, "Press c to cancel the copy or k to keep it running. [c/k] ")
-			go func() { keys <- readKey() }()
+			go read()
 		case <-sigs:
 			_, _ = fmt.Fprintln(os.Stderr)
 			return false
@@ -631,13 +647,24 @@ func askConflicts(fl *follower, r copyRow) bool {
 	answered := false
 	fl.paused.Store(true)
 	defer func() { fl.paused.Store(false) }()
+	cancel := func(why string) bool {
+		_, _ = fmt.Fprintln(os.Stderr)
+		_, _ = fmt.Fprintln(os.Stderr, why)
+		_, _ = fl.ctl.Call("transfer-cancel", map[string]any{"id": r.ID})
+		return true
+	}
 	for _, c := range r.Conflicts {
-		_, _ = fmt.Fprintf(os.Stderr, "%s is there on %s. %s\n", c.Path, machineName(r.Dst.Host), compareText(c))
+		_, _ = fmt.Fprintf(os.Stderr, "%s is there on %s. %s\n", shown(c.Path), machineName(r.Dst.Host), compareText(c))
 		_, _ = fmt.Fprint(os.Stderr, "Replace it, keep both, or skip? [r/k/s, or R/K/S for all files] ")
 		var choice string
 		var all bool
 		for choice == "" {
-			k := readKey()
+			k, err := readKey()
+			if err != nil {
+				// No answer can come. Guessing one could replace a file, so
+				// the copy stops instead.
+				return cancel("The terminal could not be read, so no answer was given. The copy is cancelled.")
+			}
 			switch k {
 			case 'r', 'R':
 				choice, all = "replace", k == 'R'
@@ -645,11 +672,10 @@ func askConflicts(fl *follower, r copyRow) bool {
 				choice, all = "keep-both", k == 'K'
 			case 's', 'S':
 				choice, all = "skip", k == 'S'
-			case 'c':
-				// Ctrl+C: the copy is cancelled.
-				_, _ = fmt.Fprintln(os.Stderr)
-				_, _ = fl.ctl.Call("transfer-cancel", map[string]any{"id": r.ID})
-				return true
+			case keyCtrlC:
+				return cancel("No answer was given. The copy is cancelled.")
+			default:
+				_, _ = fmt.Fprint(os.Stderr, "\nPress r to replace, k to keep both, or s to skip. Press R, K or S for all files. ")
 			}
 		}
 		_, _ = fmt.Fprintln(os.Stderr, choice)
@@ -660,7 +686,7 @@ func askConflicts(fl *follower, r copyRow) bool {
 			params["rel"] = c.Rel
 		}
 		if _, err := fl.ctl.Call("transfer-answer", params); err != nil {
-			reportCommandError(err)
+			reportCommandError(errors.New(shown(err.Error())))
 			return answered
 		}
 		answered = true
@@ -710,7 +736,7 @@ func explainCopyStart(src, dst cpPath, err error) error {
 	case session.ErrVerbForbidden:
 		return &diagnosticError{
 			What:   fmt.Sprintf("The copy of %s to %s was refused.", src.arg, dst.arg),
-			Cause:  call.Message,
+			Cause:  shown(call.Message),
 			Fix:    "this is the decision of the person who set the grants or the link policy. Ask them, or copy to a place that is allowed.",
 			Status: status, Err: err,
 		}
@@ -721,7 +747,7 @@ func explainCopyStart(src, dst cpPath, err error) error {
 			Status: status, Err: err,
 		}
 	case session.ErrVerbUnknownHost:
-		return &diagnosticError{What: call.Message, Fix: "run 'tuios hosts' to see the hosts.", Status: status, Err: err}
+		return &diagnosticError{What: shown(call.Message), Fix: "run 'tuios hosts' to see the hosts.", Status: status, Err: err}
 	}
-	return &diagnosticError{What: fmt.Sprintf("The copy of %s to %s did not start: %s", src.arg, dst.arg, call.Message), Status: status, Err: err}
+	return &diagnosticError{What: fmt.Sprintf("The copy of %s to %s did not start: %s", src.arg, dst.arg, shown(call.Message)), Status: status, Err: err}
 }

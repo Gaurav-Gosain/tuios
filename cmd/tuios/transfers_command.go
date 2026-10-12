@@ -62,9 +62,22 @@ copies that pane started, and the other commands act only on those.`,
 		Use:   "wait [ID...]",
 		Short: "Wait for copies to end, and exit as tuios cp does",
 		Long: `Wait for the copies named, or for every copy that has not ended, and show
-their progress as tuios cp does. The exit code is the one tuios cp gives for
-the worst of them: 0, 1, 3, 4, 5, 6, or 130 for a cancelled copy. A copy
-whose files were skipped because they differ exits 3.`,
+their progress as tuios cp does.
+
+Exit codes, the same as tuios cp for the worst of the copies:
+
+  0    every file was copied, or was there with the same bytes
+  1    a copy failed, or no copy has an ID that was given
+  3    done, but some items were not copied. These are files that were
+       there and differ, links, pipes and devices, or files made at the
+       destination during the copy.
+  4    refused: the pane's grants or the host's link policy do not allow it
+  6    a file did not match its original twice, or changed during the copy
+  130  a copy was cancelled
+
+A copy that waits for a host has not ended, so wait goes on waiting. The
+command cannot see the --conflict policy of a copy. So a file that was there
+and differs always gives exit 3, as with the default policy of tuios cp.`,
 		Example: `  tuios transfers wait
   tuios transfers wait 3f9a1c2b7d00 --json`,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -130,8 +143,8 @@ func runTransfersList(jsonOut bool) error {
 	pal := theme.UI()
 	data := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		from := r.Src.String()
-		name := r.Name
+		from := shown(r.Src.String())
+		name := r.shownName()
 		if r.Kind == "dir" {
 			name += "/"
 		}
@@ -147,9 +160,9 @@ func runTransfersList(jsonOut bool) error {
 			left = humanDuration(time.Duration(r.ETAms) * time.Millisecond)
 		}
 		if r.Error != "" && (r.State == "failed" || r.State == "waiting") {
-			left = r.Error
+			left = shown(r.Error)
 		}
-		data = append(data, []string{r.ID, r.State, name, from, r.where(), done, rate, left})
+		data = append(data, []string{r.ID, r.State, name, from, r.shownWhere(), done, rate, left})
 	}
 	t := table.New().
 		Headers("ID", "STATE", "NAME", "FROM", "TO", "DONE", "RATE", "LEFT").
@@ -201,7 +214,7 @@ func runTransfersControl(verb, done string, ids []string, jsonOut bool) error {
 		if !jsonOut {
 			var r copyRow
 			_ = json.Unmarshal(raw, &r)
-			fmt.Printf("The copy %s of %s %s.\n", r.ID, r.Name, doneWord(done, r))
+			fmt.Printf("The copy %s of %s %s.\n", r.ID, r.shownName(), doneWord(done, r))
 		}
 	}
 	if jsonOut {

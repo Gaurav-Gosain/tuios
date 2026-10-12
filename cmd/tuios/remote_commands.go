@@ -2235,9 +2235,13 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 
 // outputJSON outputs a value as JSON to stdout.
 func outputJSON(v any) {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return
+	}
+	// jsonSafe escapes the C1 controls encoding/json leaves raw, so a name
+	// from a far host cannot drive the terminal the JSON is shown on.
+	_, _ = fmt.Fprintln(os.Stdout, jsonSafe(string(out)))
 }
 
 // runCommandEntry is one row of 'tuios run-command --list'.

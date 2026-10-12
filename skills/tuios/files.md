@@ -26,7 +26,7 @@ Paths:
   `~/logs` on build.
 - `HOST:` alone is the host's receive folder: `~/Downloads/tuios`, or the
   first folder of `files_roots` in the config on that host.
-- A host lets another machine write only in its `files_roots`. A copy to
+- A host lets this machine write only in its `files_roots`. A copy to
   `build:~/` works only when the person set `files_roots = ["~"]` there.
 
 Folders follow the rules of `cp`. A folder copies with all it holds, and `-r`
@@ -46,6 +46,7 @@ is there and differs follows `--conflict`:
 Each file keeps its permission bits and modification time. `--no-perms` and
 `--no-times` turn that off. `--bwlimit 5M` caps the rate. `--no-compress`
 sends the bytes as they are. `--detach` prints the copy's id and returns.
+A detached copy skips a file that differs unless you pass `--conflict`.
 
 ## The JSON events
 
@@ -94,7 +95,8 @@ tuios transfers clear
 ```
 
 `wait` prints the same events as `tuios cp --json` and exits with the same
-codes. `resume` also tries a waiting copy now, and a failed copy again from
+codes, except `2` and `5`. It has no `--timeout`, so it waits for a host as
+long as the copy does. `resume` also tries a waiting copy now, and a failed copy again from
 where it stopped. A copy that ended stays in the list for 30 minutes, or until
 `clear`.
 
