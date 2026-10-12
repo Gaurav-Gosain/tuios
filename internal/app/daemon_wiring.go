@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -27,32 +28,45 @@ import (
 // TestEveryDaemonHandlerIsWiredHere pins that no entry point registers one of
 // these itself.
 
+// queueSidebarSessionState keeps the newest state for one rail when the UI is
+// slower than daemon pushes. A mutex also keeps an old client's late callback
+// from evicting a newer generation between receive and send. The UI only
+// receives; it never writes this channel.
+func queueSidebarSessionState(events chan sidebarSessionEvent, mu *sync.Mutex, event sidebarSessionEvent) {
+	mu.Lock()
+	defer mu.Unlock()
+	select {
+	case queued := <-events:
+		if queued.generation > event.generation ||
+			(queued.generation == event.generation && queued.state != nil && event.state != nil &&
+				queued.state.SnapshotSeq > 0 && event.state.SnapshotSeq > 0 && queued.state.SnapshotSeq > event.state.SnapshotSeq) {
+			event = queued
+		}
+	default:
+	}
+	events <- event // one buffered slot; only this function sends to it
+}
+
 // WireSidebarSessionClient wires the separate passive viewer. Capture the
 // channels on the UI goroutine so shutdown cannot race a daemon callback.
 func (m *OS) WireSidebarSessionClient(client *session.TUIClient, edge sidebarEdge, generation uint64) {
-	events, done := m.sidebarSessionEvents, m.sidebarSessionDone
-	queue := func(event sidebarSessionEvent) {
-		if event.kind == "ended" {
-			// State snapshots may be replaced; terminal events cannot be lost.
-			select {
-			case events <- event:
-			case <-done:
-			}
-			return
-		}
+	events, states, done := m.sidebarSessionEvents, m.sidebarSessionStateEvents[edge], m.sidebarSessionDone
+	stateMu := &m.sidebarSessionStateMu[edge]
+	queueTerminal := func(event sidebarSessionEvent) {
+		// The terminal event has its own queue and is never displaced by state.
 		select {
 		case events <- event:
-		default:
+		case <-done:
 		}
 	}
 	client.OnStateSync(func(state *session.SessionState, _, _ string) {
-		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "state", state: state})
+		queueSidebarSessionState(states, stateMu, sidebarSessionEvent{edge: edge, generation: generation, kind: "state", state: state})
 	})
 	client.OnSessionEnded(func(_, reason string) {
-		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: fmt.Errorf("session ended: %s", reason)})
+		queueTerminal(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: fmt.Errorf("session ended: %s", reason)})
 	})
 	client.OnDisconnect(func(err error) {
-		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: err})
+		queueTerminal(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: err})
 	})
 }
 

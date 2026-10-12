@@ -47,6 +47,15 @@ type sidebarSessionEvent struct {
 
 type sidebarSessionNotice struct{ sidebarSessionEvent }
 
+// resetFailuresWhenReady leaves post-attach snapshot and subscription failures
+// in the same backoff sequence as connect failures. An empty session is ready
+// immediately; otherwise every visible pane must be subscribed first.
+func (v *sidebarSessionView) resetFailuresWhenReady() {
+	if len(v.pending) == 0 {
+		v.failures = 0
+	}
+}
+
 // A failed attachment backs off; the generation invalidates obsolete retries.
 func (m *OS) retrySidebarSession(edge sidebarEdge) tea.Cmd {
 	v := &m.sidebarSessions[edge]
@@ -158,10 +167,14 @@ func (m *OS) listenSidebarSession() tea.Cmd {
 	// Capture the shutdown channel before starting the async command. Stop
 	// closes it and clears the OS field; reading that field later could race
 	// with shutdown or leave a listener parked on a nil channel forever.
-	events, done := m.sidebarSessionEvents, m.sidebarSessionDone
+	events, states, done := m.sidebarSessionEvents, m.sidebarSessionStateEvents, m.sidebarSessionDone
 	return func() tea.Msg {
 		select {
 		case event := <-events:
+			return sidebarSessionNotice{event}
+		case event := <-states[sidebarLeft]:
+			return sidebarSessionNotice{event}
+		case event := <-states[sidebarRight]:
 			return sidebarSessionNotice{event}
 		case <-done:
 			return nil
@@ -335,11 +348,12 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 			return m.retrySidebarSession(event.edge)
 		}
 		v.client = event.client
-		v.failures = 0
 		edge, generation := event.edge, v.generation
 		m.WireSidebarSessionClient(v.client, edge, generation)
 		v.client.StartReadLoop()
-		return m.applySidebarSessionState(edge, event.state)
+		cmd := m.applySidebarSessionState(edge, event.state)
+		v.resetFailuresWhenReady() // an empty session needs no subscriptions
+		return cmd
 	case "state":
 		if v.client != nil {
 			return m.applySidebarSessionState(event.edge, event.state)
@@ -380,6 +394,7 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 		} else {
 			// Crop the subscribed guest to its rail frame. The shared daemon
 			// PTY keeps the dimensions chosen by ordinary session clients.
+			v.resetFailuresWhenReady()
 			m.layoutSidebarSessionPanes(event.edge)
 		}
 		m.MarkAllDirty()

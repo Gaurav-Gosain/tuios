@@ -346,6 +346,9 @@ func (m *OS) Init() tea.Cmd {
 	if m.sidebarSessionEvents == nil {
 		m.sidebarSessionEvents = make(chan sidebarSessionEvent, 64)
 		m.sidebarSessionDone = make(chan struct{})
+		for edge := range m.sidebarSessionStateEvents {
+			m.sidebarSessionStateEvents[edge] = make(chan sidebarSessionEvent, 1)
+		}
 	}
 
 	cmds := []tea.Cmd{

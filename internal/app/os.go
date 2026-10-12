@@ -1403,16 +1403,18 @@ type OS struct {
 	SidebarHits []sidebarRowHit
 	// A docked session owns its own daemon connection and terminal snapshot;
 	// neither is part of the center session's window list or state sync.
-	sidebarSessions      [2]sidebarSessionView
-	sidebarSessionEvents chan sidebarSessionEvent
-	sidebarSessionDone   chan struct{}
-	sidebarSessionFocus  int // 0 none, 1 left, 2 right
-	SidebarScrollS       int
-	SidebarScrollT       int
-	SidebarScrollA       int
-	SidebarScrollF       int
-	SidebarScrollG       int
-	SidebarScrollC       int
+	sidebarSessions           [2]sidebarSessionView
+	sidebarSessionEvents      chan sidebarSessionEvent
+	sidebarSessionStateEvents [2]chan sidebarSessionEvent // latest snapshot for each rail
+	sidebarSessionStateMu     [2]sync.Mutex               // serialize replacements from old/new clients
+	sidebarSessionDone        chan struct{}
+	sidebarSessionFocus       int // 0 none, 1 left, 2 right
+	SidebarScrollS            int
+	SidebarScrollT            int
+	SidebarScrollA            int
+	SidebarScrollF            int
+	SidebarScrollG            int
+	SidebarScrollC            int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
