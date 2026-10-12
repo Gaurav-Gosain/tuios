@@ -3133,7 +3133,7 @@ the terminal's foreground, so it never lands in an editor or another agent. A
 Resume row closes when the command is typed, when the pane goes to `working` or
 `needs_input` (you ran the agent yourself), or when the pane closes.
 
-The bundled manifests carry `[resume]` for Claude Code, Codex, opencode,
+The bundled manifests carry `[resume]` for Claude Code, Codex, opencode, pi,
 Copilot, Cursor Agent, Devin, Droid, Grok, Hermes, Kilo, Kimi, Qoder, Qwen and
 Antigravity, after herdr's resume table. A harness has to report its session id
 for any of this to apply, which the integrations from `tuios integration

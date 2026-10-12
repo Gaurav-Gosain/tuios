@@ -23,6 +23,7 @@ func TestResumeArgvBuildsTheCommand(t *testing.T) {
 		{"codex", []string{"codex", "resume", "3f2a-9c"}},
 		{"copilot", []string{"copilot", "--resume=3f2a-9c"}},
 		{"opencode", []string{"opencode", "--session", "3f2a-9c"}},
+		{"pi", []string{"pi", "--session", "3f2a-9c"}},
 		{"qoder", []string{"qodercli", "--resume", "3f2a-9c"}},
 	} {
 		got, err := r.ResumeArgv(tc.harness, "3f2a-9c")
