@@ -44,6 +44,13 @@ var railMarkRe = regexp.MustCompile(`(→|->) (\d+)%`)
 // passes build's bytes at rate. Build lets a link write in its own root.
 func copiesMachines(t *testing.T, rate int, env ...string) (base, remote string, term *tuitest.Terminal) {
 	t.Helper()
+	return copiesMachinesConf(t, rate, "", env...)
+}
+
+// copiesMachinesConf is copiesMachines with more lines in this machine's
+// config.toml, such as keys bound again.
+func copiesMachinesConf(t *testing.T, rate int, conf string, env ...string) (base, remote string, term *tuitest.Terminal) {
+	t.Helper()
 	base = t.TempDir()
 	remote = remoteMachine(t)
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\", \""+remote+"\"]\n")
@@ -52,6 +59,17 @@ func copiesMachines(t *testing.T, rate int, env ...string) (base, remote string,
 	}
 	ssh := writeSlowFakeSSH(t, base, remote, rate, 1<<20)
 	writeOneHostConfig(t, base, tuiosBin)
+	if conf != "" {
+		path := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("\n" + conf); err != nil {
+			t.Fatal(err)
+		}
+		_ = f.Close()
+	}
 	env = append(env, "TUIOS_SSH="+ssh)
 	term = startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
@@ -178,7 +196,7 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	// The panel lists it, and p pauses the bytes.
 	openCopies(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "big.bin", "here -> build")
+		return containsAll(s.Text(), "big.bin", "this machine -> build")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the panel does not list the copy: %v\n%s", err, term.Snapshot())
 	}
@@ -378,12 +396,12 @@ func TestSendFromTheRailFilesList(t *testing.T) {
 		t.Fatalf("no file row:\n%s", term.Snapshot())
 	}
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
-	if err := term.WaitForText("Send to machine", uiTimeout); err != nil {
+	if err := term.WaitForText("Send to host", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the file row's menu has no send: %v\n%s", err, term.Snapshot())
 	}
-	mcol, mrow, _ := findOnGrid(term.Screen(), "Send to machine")
+	mcol, mrow, _ := findOnGrid(term.Screen(), "Send to host")
 	mouseClick(t, term, mcol+2, mrow, tuitest.MouseLeft, 0)
-	if err := term.WaitForText("Send send-me.txt to which machine?", uiTimeout); err != nil {
+	if err := term.WaitForText("Send send-me.txt to which host?", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: send did not ask for a machine: %v\n%s", err, term.Snapshot())
 	}
 	copiesFrame(t, term, "copies-send-machine")
@@ -493,4 +511,148 @@ func TestADroppedFileOnAFarPaneIsSent(t *testing.T) {
 		t.Fatalf("ASSERTION: the pasted path is not the copy in build's drop folder:\n%s", term.Snapshot())
 	}
 	alive(t, term, "after a drop")
+}
+
+// TestCopiesPanelGivesKeysToAPanelOverIt opens Settings over the Copies
+// panel with its prefix chord. Esc then closes Settings, the panel in front,
+// and the Copies panel stays. Before the fix the Copies panel took every key
+// while it was up, so esc closed it behind Settings and Settings stayed.
+func TestCopiesPanelGivesKeysToAPanelOverIt(t *testing.T) {
+	_, _, term := copiesMachines(t, 64<<20)
+	openCopies(t, term)
+	if err := term.WaitForText("No copies.", uiTimeout); err != nil {
+		t.Fatalf("the empty panel did not open: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Settings", uiTimeout); err != nil {
+		t.Fatalf("prefix , did not open Settings over the Copies panel: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-settings-over-panel")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return !strings.Contains(txt, "Settings") && strings.Contains(txt, "No copies.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not close Settings and leave the Copies panel: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-settings-closed")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "No copies.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: esc did not close the Copies panel once it was in front: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after Settings over the Copies panel")
+}
+
+// TestCopiesLeaveThePanelWhenCleared ends two copies with the panel open.
+// One is cleared by tuios transfers clear from outside the client, and the
+// other leaves the daemon's list on its own when it is due, which a short
+// TUIOS_TRANSFER_KEEP_SECONDS makes seconds. Each row has to leave the open
+// panel. Before the fix neither said anything on the event stream, so both
+// rows stayed until the client listed the copies again.
+func TestCopiesLeaveThePanelWhenCleared(t *testing.T) {
+	base, remote, term := copiesMachines(t, 64<<20, "TUIOS_TRANSFER_KEEP_SECONDS=20")
+	openCopies(t, term)
+	if err := term.WaitForText("No copies.", uiTimeout); err != nil {
+		t.Fatalf("the empty panel did not open: %v\n%s", err, term.Snapshot())
+	}
+	start := func(name string) string {
+		src := filepath.Join(base, name)
+		if err := os.WriteFile(src, []byte(name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return startHubCopy(t, base, map[string]any{
+			"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": filepath.Join(remote, name)},
+		})
+	}
+	cleared := start("cleared.txt")
+	waitTransferState(t, base, cleared, "done", 30*time.Second)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "cleared.txt")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the panel does not list the copy: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "transfers", "clear", cleared); err != nil {
+		t.Fatalf("tuios transfers clear: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "cleared.txt")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a copy cleared outside the client stays in the panel: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-cleared-outside")
+
+	expired := start("expired.txt")
+	waitTransferState(t, base, expired, "done", 30*time.Second)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "expired.txt")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the panel does not list the copy: %v\n%s", err, term.Snapshot())
+	}
+	// Nothing lists the copies here: the panel must hear the expiry itself.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "expired.txt") && strings.Contains(s.Text(), "No copies.")
+	}, 40*time.Second); err != nil {
+		t.Fatalf("ASSERTION: a copy that left the daemon's list on its own stays in the panel: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-expired")
+	alive(t, term, "after copies left the list")
+}
+
+// TestCopiesNameTheKeysBoundNow binds the rail's send and the panel's answer
+// to other keys. The empty panel and a copy that waits for an answer have
+// to name those keys, and the answer key has to open the question. A folder
+// copy with two files that differ says the second one in the singular.
+func TestCopiesNameTheKeysBoundNow(t *testing.T) {
+	conf := "[keybindings.sidebar_files]\nfile_send = [\"Y\"]\n\n[keybindings.transfers]\ntransfers_answer = [\"a\"]\n"
+	base, remote, term := copiesMachinesConf(t, 64<<20, conf)
+	openCopies(t, term)
+	if err := term.WaitForText("No copies. Press Y on a file in the rail", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the empty panel does not name the send key bound now: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-empty-bound-key")
+
+	src := filepath.Join(base, "docs")
+	dst := filepath.Join(remote, "docs")
+	for _, dir := range []string{src, dst} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"one.txt", "two.txt"} {
+		if err := os.WriteFile(filepath.Join(src, name), []byte("new "+name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), []byte("old "+name+", longer\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := startHubCopy(t, base, map[string]any{
+		"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": dst},
+		"conflict": "merge", "each": "ask", "place": "contents",
+	})
+	waitTransferState(t, base, id, "conflict", uiTimeout)
+	if err := term.WaitForText("Press a to say what to do with the files that are there.", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the copy that waits does not name the answer key bound now: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "Press enter") {
+		t.Fatalf("ASSERTION: the panel names enter, which answers nothing now:\n%s", term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-conflict-bound-key")
+	if err := term.SendKeys("a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("1 other file of this copy is there too.", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the bound key did not open the question, or the question does not say one other file in the singular: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "copies-conflict-singular")
+	dialFileVerbs(t, base).must("transfer-cancel", map[string]any{"id": id}, nil)
+	alive(t, term, "after keys bound again")
 }

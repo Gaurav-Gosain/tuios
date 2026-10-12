@@ -4596,6 +4596,24 @@ binary, and ran the named test. The same tests passed on the branch build.
 | The `#` fill of the bar (filled cells drawn as `-`) | `TestCopiesReadAtLowColour/16`, `/256` (the bar does not read) | **caught** |
 | The linger timer in `applyTransferEvents` | `TestCopiesShowInTheDockRailAndPanel` | **not caught**: another redraw comes within the linger in this session (the end notice going away, the hosts refresh), so the item leaves without the timer. The timer matters to an idle client with nothing else on the screen to redraw it |
 
+The review fixes of 2026-10-12 added three tests. Each control below cut one
+call site in a copy of the branch, built a binary, and ran the named test. The
+same tests passed on the branch build.
+
+| Control: what was cut | Test | Verdict |
+| --- | --- | --- |
+| `o.TransfersOwnsKeys()` in `routeKey` (back to `o.TransfersOpen()`) | `TestCopiesPanelGivesKeysToAPanelOverIt` (esc closed the Copies panel behind Settings) | **caught** |
+| The `removed` publish in `dropLocked` | `TestCopiesLeaveThePanelWhenCleared` (a copy cleared by `tuios transfers clear` stays in the panel) | **caught** |
+| `m.expireLater(j)` in `note` | `TestCopiesLeaveThePanelWhenCleared` (a copy past `TUIOS_TRANSFER_KEEP_SECONDS` stays in the panel) | **caught** |
+| The `transferRemovedEvent` branch in `applyTransferEvents` | `TestCopiesLeaveThePanelWhenCleared` (a cleared copy stays in the panel) | **caught** |
+| `m.railSendKey()` in `transfersEmptyText` (the fixed `S`) | `TestCopiesNameTheKeysBoundNow` (the empty panel does not name `Y`) | **caught** |
+| The answer key from `transfersPressTo` in `transferDetail` (the fixed `enter`) | `TestCopiesNameTheKeysBoundNow` (the waiting copy does not name `a`) | **caught** |
+| The singular branch in `conflictLines` | `TestCopiesNameTheKeysBoundNow` ("1 other files ... are there too") | **caught** |
+
+The positive halves: the Copies panel closes on esc once it is in front again,
+the first copy leaves by the clear within 10 s while its expiry is 20 s, and
+the bound key `a` opens the question.
+
 ## tuios cp and the tree stream
 
 On 2026-10-11 each control below cut one line, built a binary, and ran the
