@@ -4517,12 +4517,23 @@ half). Without it, the dock says what to add and where, the shell shows that
 nothing was typed (`pasted:2`), and neither machine holds a pasted file.
 
 `TestAnImagePastedIntoAnSSHShellGoesToThatMachine` pastes into a pane of this
-machine whose foreground program reports a folder on another machine over
-OSC 7 and then holds the terminal, as ssh does. The `matched host` case names
-`buildbox`, the address of `[hosts.build]`. Its file must be in the far
-machine's drop folder, and this machine must keep no copy. The case with
-`files` denied shows the refusal toast. The `no host` case names `farbox`,
-which no entry names, and must type nothing and write nothing.
+machine whose foreground is a script named `ssh`. The daemon reads its command
+line and resolves it with the real `ssh -G`. The script can print an OSC 7
+report, then runs each line typed at it. `[hosts.build]` is
+`someone@buildbox` unless the case says otherwise.
+
+- `login to the host` (`ssh someone@buildbox`) is the positive half. The file
+  must be in the far machine's drop folder, the shell must read it, and this
+  machine must keep no copy.
+- `login to the host without files` shows the files toast.
+- `another user on the host`, `another port on the host` and `a host that
+  shares a first label` (an entry at `someone@buildbox.lan`) must refuse: the
+  same host name alone is not the same machine.
+- `no host` (`someone@farbox`) refuses.
+- `ssh inside ssh` reports `deepbox` over OSC 7 inside a login to buildbox,
+  and must refuse rather than paste on buildbox.
+- `a tunnel` (`ssh -N -L`) and `a report with no ssh` (OSC 7 for buildbox
+  from a plain shell) must save the image on this machine.
 
 `TestAnImagePastedIntoASessionOnAHostIsAFileOnThatMachine` has no control. It
 passes on main: the paste for a session on a host already went to the far
@@ -4536,4 +4547,17 @@ The controls were run on 2026-10-11 on branch
 | `paste-image` and `paste-pane-image` back on `write` and `open` alone in `verbCapabilities` | both `files denied` cases: no toast, the image was pasted | **caught** |
 | The `imagePasteRefusal` call in `applyImagePasted` | both `files denied` cases: the generic error toast, not the one that names files | **caught** |
 | The pass-through of a far `forbidden` in `verbPasteImage` for a hosted window | `window on a host/files denied`: the refusal turned into `host_unreachable` | **caught** |
-| The `paneElsewhere` branch in `verbPasteImage` | `matched host`: no file in the far drop folder. `matched host without files` and `no host`: no toast | **caught** |
+| The `paneElsewhere` branch in `verbPasteImage` (first version of the ssh route) | `matched host`: no file in the far drop folder. `matched host without files` and `no host`: no toast | **caught** |
+
+The review of #638 found that the first version matched a `[hosts]` entry by
+host name, first label or OSC 7 report. The controls below were run on
+2026-10-12 against the fix, each cutting one line in
+`internal/session/paste_image_ssh.go`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `got == want` compares the host name only | `another user on the host` and `another port on the host`: the image went to build, no toast | **caught** |
+| `got == want` also takes a first label | `a host that shares a first label`: no toast | **caught** |
+| The OSC 7 check for a further hop | `ssh inside ssh`: the image went to buildbox, no toast | **caught** |
+| `login.notShell` in the login gate | `a tunnel`: this machine holds 0 pasted images | **caught** |
+| An OSC 7 report taken as the login when no ssh runs | `a report with no ssh`: no path was pasted | **caught** |

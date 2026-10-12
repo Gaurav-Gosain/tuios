@@ -445,16 +445,26 @@ image on that machine:
   the host writes the file.
 - A window on a host in a session of this machine. The daemon on the host
   writes the file.
-- A pane of this machine that runs `ssh` or `mosh` to another machine. tuios
-  finds that machine in the `[hosts]` table by name or by address. It copies
-  the image to the drop folder of that host and pastes the path there. tuios
-  knows the machine from the folder report (OSC 7) of the remote shell, or
-  from the `ssh` command line.
+- A pane of this machine that runs an `ssh` or `mosh` login to another
+  machine. tuios reads the login from the process. It resolves the login and
+  each `[hosts]` entry with `ssh -G` and compares the host name, the user and
+  the port. When exactly one entry is the same, tuios copies the image to the
+  drop folder of that host and pastes the path there.
 
 The other machine must allow `files` from this machine. If it does not, tuios
-pastes nothing and shows which line to add to the config on that machine. If
-no `[hosts]` entry is the machine of an ssh pane, tuios pastes nothing. Add the
-machine with `tuios hosts add NAME ADDR`.
+pastes nothing and shows the line to add to the config on that machine.
+
+tuios pastes nothing in an ssh pane in these cases. A message says why.
+
+- No `[hosts]` entry is the machine of the login. Add the machine with
+  `tuios hosts add NAME ADDR`.
+- More than one `[hosts]` entry is that machine. Keep one of them.
+- The shell over there reports a folder on a third machine: the pane runs ssh
+  inside ssh.
+
+An ssh tunnel (`ssh -N`), an ssh with a remote command, and a folder report
+with no ssh login in the pane are not a pane on another machine. tuios saves
+the image on this machine for them.
 
 tuios does not read the clipboard in these cases:
 

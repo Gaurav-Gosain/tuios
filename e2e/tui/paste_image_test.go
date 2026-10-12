@@ -308,7 +308,7 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 	row, col := findText(t, term, toast)
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "does not allow files from this machine.", "Add files to allow in [hosts.", "on build.")
+		return containsAll(s.Text(), "does not allow files from this machine.", `Add "files" to the allow list in [hosts.`, "on build.")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the full message does not say to add files and where: %v\n%s", err, term.Snapshot())
 	}
@@ -325,28 +325,42 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 
 // A pane of this machine whose shell is on another machine: the person ran
 // ssh in it. The program that reads the pasted path is over there, so the
-// image goes there, by the drop folder and a transfer, when that machine is a
-// [hosts] entry. When it is not, nothing is written and nothing is typed.
+// image goes there, by the drop folder and a transfer, when exactly one
+// [hosts] entry is that machine. When none is, or the pane is a tunnel or
+// only prints that it is elsewhere, the paste goes to the right place or is
+// refused.
 //
-// The program in the foreground stands in for ssh, as in
-// TestFilesDoNotListALocalFolderForAnSSHShell: it reports a folder on another
-// machine over OSC 7, then runs a shell that holds the terminal. That shell is
-// on this machine, which shares a file system with the remote stand-in, so it
-// can read a file the remote daemon wrote, and only that file proves where it
-// went.
+// The pane runs a script named ssh, which is what the daemon reads from the
+// process: its command line, resolved with the real ssh -G. The script
+// optionally prints an OSC 7 report and then runs each line typed at it. It
+// runs on this machine, which shares a file system with the remote stand-in,
+// so a line run there can read a file the remote daemon wrote, and only that
+// file proves where the image went.
 //
-// Negative control: with the paneElsewhere branch cut from verbPasteImage,
-// the matched case pastes a path under this machine's paste folder and the
-// unmatched case pastes a path at all.
+// Negative controls are in NEGATIVE_CONTROLS.md, one per rule.
 func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 	cases := []struct {
-		name   string
-		report string // the host the OSC 7 report names
-		allow  string // the far machine's allow for this one, "" for the default
+		name string
+		// addr is the address of [hosts.build].
+		addr string
+		// line is what the pane runs. SSH is the stand-in's path.
+		line string
+		// allow is the far machine's allow for this one, "" for the default.
+		allow string
+		// want is "far" for the far drop folder, "here" for this machine's
+		// paste folder, "no-files" for the files toast, or the machine the
+		// no-link toast names.
+		want string
 	}{
-		{"matched host", "buildbox", ""},
-		{"matched host without files", "buildbox", `"list", "mail", "open", "write"`},
-		{"no host", "farbox", ""},
+		{"login to the host", "someone@buildbox", "SSH someone@buildbox", "", "far"},
+		{"login to the host without files", "someone@buildbox", "SSH someone@buildbox", `"list", "mail", "open", "write"`, "no-files"},
+		{"another user on the host", "someone@buildbox", "SSH other@buildbox", "", "buildbox"},
+		{"another port on the host", "someone@buildbox", "SSH -p 2223 someone@buildbox", "", "buildbox"},
+		{"a host that shares a first label", "someone@buildbox.lan", "SSH someone@buildbox", "", "buildbox"},
+		{"no host", "someone@buildbox", "SSH someone@farbox", "", "farbox"},
+		{"ssh inside ssh", "someone@buildbox", "FAKE_OSC7=deepbox SSH someone@buildbox", "", "deepbox"},
+		{"a tunnel", "someone@buildbox", "SSH -N -L 18080:localhost:80 someone@buildbox", "", "here"},
+		{"a report with no ssh", "someone@buildbox", `sh -c 'printf "\033]7;file://buildbox%s\033\\\\" "$PWD"; echo far""-ready; exec sh'`, "", "here"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -356,7 +370,7 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 				writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = ["+tc.allow+"]\n")
 			}
 			ssh := writeFakeSSHTo(t, base, remote)
-			writeOneHostConfig(t, base, tuiosBin)
+			writeHostConfigAt(t, base, tuiosBin, tc.addr)
 			img := fakeImage()
 			env := append(fakeClipboardEnv(t, img), "TUIOS_SSH="+ssh)
 			// The far machine's daemon, which writes the dropped file.
@@ -372,12 +386,11 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 			newWindow(t, term)
 			waitWindowCount(t, term, 1, "opening a shell")
 			enterTerminalMode(t, term)
-			runInShell(t, term,
-				`sh -c 'printf "\033]7;file://`+tc.report+`%s\033\\\\" "$PWD"; echo on""-`+tc.report+`; exec sh'`,
-				"on-"+tc.report, uiTimeout)
+			line := strings.ReplaceAll(tc.line, "SSH", fakeSSHLogin(t))
+			runInShell(t, term, line, "far-ready", uiTimeout)
 
-			switch tc.name {
-			case "matched host":
+			switch tc.want {
+			case "far":
 				if err := term.SendKeys("wc -c "); err != nil {
 					t.Fatal(err)
 				}
@@ -385,15 +398,58 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 					t.Fatal(err)
 				}
 				checkDropped(t, term, img, remote, base)
-			case "matched host without files":
+			case "here":
+				if err := term.SendKeys("wc -c "); err != nil {
+					t.Fatal(err)
+				}
+				if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
+					t.Fatal(err)
+				}
+				checkPasted(t, term, img, base, remote)
+				if files := droppedFiles(t, remote); len(files) != 0 {
+					t.Fatalf("ASSERTION: the far machine got the image: %v", files)
+				}
+			case "no-files":
 				refusedPaste(t, term, base, remote)
 				if files := droppedFiles(t, remote); len(files) != 0 {
 					t.Fatalf("ASSERTION: a refused paste wrote %v", files)
 				}
 			default:
-				refusedPasteNoLink(t, term, base, remote, tc.report)
+				refusedPasteNoLink(t, term, base, remote, tc.want)
 			}
 		})
+	}
+}
+
+// fakeSSHLogin writes a script named ssh that stands in for an ssh login. It
+// prints an OSC 7 report for $FAKE_OSC7 when that is set, then runs each line
+// typed at it, in its own process, so the pane's foreground stays the script.
+func fakeSSHLogin(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ssh")
+	script := "#!/bin/sh\n" +
+		"[ -n \"$FAKE_OSC7\" ] && printf '\\033]7;file://%s%s\\033\\\\' \"$FAKE_OSC7\" \"$PWD\"\n" +
+		"echo far\"\"-ready\n" +
+		"while printf 'far$ ' && IFS= read -r line; do eval \"$line\"; done\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// writeHostConfigAt is writeOneHostConfig with the address of build given.
+func writeHostConfigAt(t *testing.T, base, tuiosPath, addr string) {
+	t.Helper()
+	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	body := "[hosts.build]\n" +
+		"addr = \"" + addr + "\"\n" +
+		"command = \"" + tuiosPath + "\"\n" +
+		"connect_timeout = 5\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
 }
 
@@ -461,7 +517,9 @@ func refusedPasteNoLink(t *testing.T, term *tuitest.Terminal, base, remote, mach
 	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
 		t.Fatal(err)
 	}
-	toast := "Cannot paste the image. The pane runs on " + machine
+	// The dock cuts a long message, so the wait is for its start. The full
+	// view below names the machine.
+	toast := "Cannot paste the image. The pane runs"
 	if err := term.WaitForText(toast, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: no toast said the pane's machine has no link: %v\n%s", err, term.Snapshot())
 	}

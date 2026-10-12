@@ -398,10 +398,14 @@ func (m *OS) imagePasteRefusal(window string, err error) string {
 		where = "Host " + host
 		on = "on " + host
 	}
+	quoted := make([]string, 0, len(callErr.Hint.Missing))
+	for _, c := range callErr.Hint.Missing {
+		quoted = append(quoted, `"`+c+`"`)
+	}
 	missing := strings.Join(callErr.Hint.Missing, " and ")
 	table := callErr.Hint.Table
 	if table == "" {
 		table = "[hosts]"
 	}
-	return "Cannot paste the image. " + where + " does not allow " + missing + " from this machine. Add " + missing + " to allow in " + table + " " + on + "."
+	return "Cannot paste the image. " + where + " does not allow " + missing + " from this machine. Add " + strings.Join(quoted, " and ") + " to the allow list in " + table + " " + on + "."
 }

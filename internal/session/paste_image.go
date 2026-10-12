@@ -448,14 +448,15 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 
 	// A pane whose shell is on another machine (ssh in the pane) gets the
 	// file on that machine. See paste_image_ssh.go.
-	if machine, names, elsewhere := paneElsewhere(pty); elsewhere {
-		host := d.hostNamed(names)
-		if host == "" {
-			return nil, hintedVerbError(ErrVerbUnknownHost, "paste-image: "+errPasteNoLink{machine}.Error(), &VerbHint{
-				Command: "tuios hosts add <name> <addr>",
-				Detail:  "The pane runs on " + machine + ", and tuios has no link to it. Add the machine with tuios hosts add.",
-			})
+	host, elsewhere, err := d.paneRemoteHost(pty)
+	if refusal, ok := errors.AsType[pasteRefusal](err); ok {
+		hint := &VerbHint{Detail: refusal.detail}
+		if refusal.noLink {
+			hint.Command = "tuios hosts add <name> <addr>"
 		}
+		return nil, hintedVerbError(ErrVerbUnknownHost, "paste-image: "+refusal.detail, hint)
+	}
+	if elsewhere {
 		ctx, cancel := context.WithTimeout(context.Background(), pasteHostedBudget)
 		defer cancel()
 		path, err := d.pasteToHost(ctx, host, data)

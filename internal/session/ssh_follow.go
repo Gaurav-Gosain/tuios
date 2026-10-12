@@ -280,6 +280,11 @@ type remoteLogin struct {
 	dest string
 	// pid is the client process the line was read from.
 	pid int
+	// notShell says the line is not an interactive login: a tunnel (-N, -W),
+	// a client in the background (-f), one that reads no keys (-n), a
+	// subsystem (-s), or a remote command. Keys typed into the pane do not
+	// reach a shell over there. A split still follows the line, as a shell.
+	notShell bool
 }
 
 // argv builds the command line for the new pane. dir, when not empty, is the
@@ -468,6 +473,15 @@ const (
 	sshRefuse = "EFIGVQO"
 )
 
+// sshNotShellFlag are the flags that make an ssh line something other than an
+// interactive login, and sshNotShellConfig the -o keywords that do.
+const sshNotShellFlag = "Nfns"
+
+var sshNotShellConfig = map[string]bool{
+	"remotecommand": true, "sessiontype": true, "stdinnull": true,
+	"forkafterauthentication": true,
+}
+
 // sshAllowConfig are the -o keywords a followed line may carry, lower case,
 // and whether the new pane keeps the option. A keyword outside this table
 // makes the line not followed. A refusal list missed ProxyCommand split by a
@@ -516,6 +530,9 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		a := args[i]
 		if l.dest != "" && (terminated || a == "--" || !strings.HasPrefix(a, "-")) {
 			// The remote command starts here, and it is dropped.
+			if a != "--" || i+1 < len(args) {
+				l.notShell = true
+			}
 			break
 		}
 		if hasControl(a) || (i+1 < len(args) && hasControl(args[i+1]) && takesValue(a)) {
@@ -523,6 +540,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		if !terminated && a == "--" {
 			if l.dest != "" {
+				l.notShell = l.notShell || i+1 < len(args)
 				break
 			}
 			terminated = true
@@ -547,6 +565,9 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 					if refuse {
 						return remoteLogin{}, false
 					}
+					if c == 'W' || (c == 'o' && sshNotShellConfig[sshConfigKeyword(val)] && !strings.EqualFold(sshConfigValue(val), "none")) {
+						l.notShell = true
+					}
 					if keep {
 						l.opts = append(l.opts, "-"+string(c), val)
 					}
@@ -554,6 +575,9 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 				}
 				if strings.IndexByte(sshFlagOpts, c) < 0 {
 					return remoteLogin{}, false
+				}
+				if strings.IndexByte(sshNotShellFlag, c) >= 0 {
+					l.notShell = true
 				}
 				if strings.IndexByte(sshDropFlag, c) < 0 {
 					l.opts = append(l.opts, "-"+string(c))
@@ -563,6 +587,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		if l.dest != "" {
 			// The remote command starts here.
+			l.notShell = true
 			break
 		}
 		if a == "" {
@@ -570,6 +595,7 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		l.dest = a
 		if terminated {
+			l.notShell = l.notShell || i+1 < len(args)
 			break
 		}
 	}

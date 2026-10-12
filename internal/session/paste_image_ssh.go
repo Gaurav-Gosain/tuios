@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -15,73 +17,120 @@ import (
 // machine: the person ran ssh (or mosh) in the pane.
 //
 // The pane's process is here, but the program that reads the pasted path, a
-// shell or an agent, is over there, so a file here means nothing to it. The
-// daemon already knows when a pane is in that state: the shell over there
-// reported a folder on another machine (OSC 7, placeRecord.Elsewhere), or the
-// foreground of the pane is an ssh or mosh client (findRemoteLogin). The Files
-// rail and the ssh split use the same two signals.
+// shell or an agent, is over there, so a file here means nothing to it.
 //
-// When that machine is one of the [hosts] with a link that is up, the image
-// is copied there the way drop-files copies a dropped file: a private drop
-// folder on the host, then a transfer into it. The path there is the answer.
-// When no [hosts] entry is that machine, nothing is written and nothing is
-// typed: the path of a file here would be the wrong file, or none, over
-// there.
+// Where the pane is comes from the process, never from what the pane prints.
+// The foreground of the pane must be an interactive ssh or mosh login
+// (findRemoteLogin, the line the ssh split reads). A tunnel (ssh -N -L) or a
+// remote command is not one. An OSC 7 report alone moves nothing: any program
+// in the pane can print one, and a report outlives the ssh that made it until
+// the next prompt. A report is used one way only: when it names a machine
+// that is not the login's destination, the pane is on a further hop (ssh
+// inside ssh), and the paste is refused rather than sent to the jump host.
+//
+// The login's destination and each [hosts] entry are resolved the same way,
+// with ssh -G and the same user's ssh config, to a host name, a user and a
+// port. Exactly one entry must resolve to the same three. A nickname, a first
+// label or a host name alone is not enough: two machines share those easily,
+// and a file on the wrong machine is worse than none. No match, or more than
+// one, is refused, and nothing is written or typed.
+//
+// With one match, the image is copied there the way drop-files copies a
+// dropped file: a private drop folder on the host, then a transfer into it.
+// The path there is the answer.
 
-// errPasteNoLink is a pane on a machine that no [hosts] entry names.
-type errPasteNoLink struct{ machine string }
+// sshTarget is where an ssh line connects, as ssh -G resolves it.
+type sshTarget struct{ host, user, port string }
 
-func (e errPasteNoLink) Error() string {
-	return "the pane runs on " + e.machine + ", and tuios has no link to it"
-}
-
-// paneElsewhere names the machine a pane of this daemon runs its program on
-// when that is not this machine, and the names it may go by there. It is
-// false for a pane whose program is here.
-func paneElsewhere(pty *PTY) (machine string, names []string, ok bool) {
-	if host := pty.place.Elsewhere(); host != "" {
-		machine = host
-		names = append(names, strings.ToLower(host))
+// resolveSSHTarget runs ssh -G with args and reads the target, or reports
+// false when ssh cannot say. A variable so the tests can stand in for ssh.
+var resolveSSHTarget = func(args []string) (sshTarget, bool) {
+	bin, err := lookPath("ssh")
+	if err != nil {
+		return sshTarget{}, false
 	}
-	if login, found := findRemoteLogin(pty.ShellPID()); found {
-		if dest := destHost(login.dest); dest != "" {
-			if machine == "" {
-				machine = dest
-			}
-			names = append(names, dest)
+	ctx, cancel := context.WithTimeout(context.Background(), sshResolveTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, append([]string{"-G"}, args...)...)
+	cmd.Stdin = nil
+	// See resolveSSHHostName.
+	killGroupOnCancel(cmd)
+	cmd.WaitDelay = 500 * time.Millisecond
+	out, err := cmd.Output()
+	if err != nil {
+		return sshTarget{}, false
+	}
+	var t sshTarget
+	for line := range strings.Lines(string(out)) {
+		key, val, _ := strings.Cut(strings.TrimSpace(line), " ")
+		switch key {
+		case "hostname":
+			t.host = strings.ToLower(val)
+		case "user":
+			t.user = val
+		case "port":
+			t.port = val
 		}
 	}
-	return machine, names, machine != ""
+	return t, t.host != "" && t.user != "" && t.port != ""
 }
 
-// hostNamed is the [hosts] entry whose name or address is one of names. A
-// name with no dot also matches the first label of a dotted address, which
-// is what most machines call themselves.
-func (d *Daemon) hostNamed(names []string) string {
-	if d.federation == nil {
-		return ""
+// pasteRefusal is a paste into a pane on another machine that tuios cannot
+// place there. detail is the sentence the person reads.
+type pasteRefusal struct {
+	detail string
+	// noLink says no [hosts] entry is the machine, so adding one helps.
+	noLink bool
+}
+
+func (e pasteRefusal) Error() string { return e.detail }
+
+// paneRemoteHost is the [hosts] entry a pane of this daemon is logged in to
+// with ssh or mosh. ok is false for a pane whose program runs here, and then
+// the paste is written here. A pane on another machine that no single entry
+// is gives a pasteRefusal.
+func (d *Daemon) paneRemoteHost(pty *PTY) (host string, ok bool, err error) {
+	login, found := findRemoteLogin(pty.ShellPID())
+	if !found || login.notShell {
+		return "", false, nil
 	}
-	table := d.federation.Table()
-	for _, n := range names {
+	machine := destHost(login.dest)
+	if report := pty.place.Elsewhere(); report != "" && !login.reportMatches(report) {
+		return "", true, pasteRefusal{"The pane runs on " + report + " through " + machine + ", and tuios has no link to " + report + ". Add the machine with tuios hosts add.", true}
+	}
+	var args []string
+	if !login.mosh {
+		args = append(args, login.opts...)
+	}
+	if strings.HasPrefix(login.dest, "-") {
+		args = append(args, "--")
+	}
+	want, resolved := resolveSSHTarget(append(args, login.dest))
+	if !resolved {
+		return "", true, pasteRefusal{"The pane runs on " + machine + ", and ssh cannot tell where that is. Nothing was pasted.", false}
+	}
+	var matches []string
+	if d.federation != nil {
+		table := d.federation.Table()
 		for _, name := range table.Names() {
 			h, err := table.Lookup(name)
-			if err != nil {
+			if err != nil || h.Addr == "" {
 				continue
 			}
-			for _, key := range []string{strings.ToLower(h.Name), destHost(h.Addr)} {
-				if key == "" {
-					continue
-				}
-				if key == n {
-					return name
-				}
-				if first, _, dotted := strings.Cut(key, "."); dotted && !strings.Contains(n, ".") && first == n {
-					return name
-				}
+			got, ok := resolveSSHTarget(append(slices.Clone(h.SSHOptions), h.Addr))
+			if ok && got == want {
+				matches = append(matches, name)
 			}
 		}
 	}
-	return ""
+	switch len(matches) {
+	case 1:
+		return matches[0], true, nil
+	case 0:
+		return "", true, pasteRefusal{"The pane runs on " + machine + ", and tuios has no link to it. Add the machine with tuios hosts add.", true}
+	default:
+		return "", true, pasteRefusal{"The pane runs on " + machine + ", and the hosts " + strings.Join(matches, " and ") + " are all that machine. Keep one of them in [hosts].", false}
+	}
 }
 
 // pasteToHost copies an image to host's drop folder and returns its path
