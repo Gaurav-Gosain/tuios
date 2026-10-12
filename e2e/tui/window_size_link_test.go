@@ -269,3 +269,145 @@ func TestWindowSizeSmallestFillsTheLeftover(t *testing.T) {
 	saveSizeFrame(t, big, "smallest-big-16-colours")
 	saveSizeFrame(t, small, "smallest-small")
 }
+
+// leftRailConfig is a rail on the left edge, width columns wide.
+func leftRailConfig(width string) string {
+	return "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = " + width + "\n"
+}
+
+// TestWindowSizeLeftoverTakesNoClick clicks the dots a smaller session leaves
+// on the larger client. A click there acts on nothing: the focus stays.
+//
+// The setup is the one where the dots cover layout columns that hold a pane.
+// The 80x24 client has a rail on the left, so the session's panes start right
+// of it in the layout. The 200x50 client draws them from its own left edge,
+// and its dots start inside the columns the layout gives the panes. Before the
+// fix the click went to the window manager with its screen column, which the
+// layout read as a click on the second pane.
+//
+// The positive half: a click on each pane on the same screen moves the focus
+// to it, so the focus is a thing these clicks can change.
+//
+// NEGATIVE CONTROL: with the PointerSwallowed check cut from HandleInput, the
+// click on the dots moves the focus from the left pane to the right one.
+func TestWindowSizeLeftoverTakesNoClick(t *testing.T) {
+	home := t.TempDir()
+	writeConfigIn(t, home, leftRailConfig("24"))
+	big, _, base := windowSizePair(t, "smallest", rightRailConfig("28"), []string{"XDG_CONFIG_HOME=" + home})
+	waitWSSize(t, base, wsSmallCols, wsSmallRows, "under smallest")
+	rects, _ := focusedLayout(t, base, wsSession)
+	if len(rects) != 2 {
+		t.Fatalf("want two panes, got %+v", rects)
+	}
+	boxLeft := min(rects[0].X, rects[1].X)
+	if boxLeft == 0 {
+		t.Fatalf("the session's panes start at column 0, so the dots cover no pane column: %+v", rects)
+	}
+	// The focus goes to the left pane first. The dots cover layout columns
+	// of the right pane, so a click that leaks through would move it there.
+	left, right := rects[0], rects[1]
+	if right.X < left.X {
+		left, right = right, left
+	}
+	focusOn := func(r focusedRect, what string) {
+		t.Helper()
+		leftClick(t, big, r.X-boxLeft+2, r.Y+2)
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			if _, now := focusedLayout(t, base, wsSession); now == r.ID {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: a click on the pane never moved the focus to it\n%s", what, big.Snapshot())
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	focusOn(left, "the left pane")
+	focused := left.ID
+
+	// The first dot on a row inside the panes, and every dot after it that
+	// is still inside the session's 80 columns.
+	row := 5
+	var dots []int
+	waitSizeScreen(t, big, "the big client draws no dots", func(s tuitest.Screen) bool {
+		dots = dots[:0]
+		for x := range wsSmallCols {
+			if s.Cell(x, row).Content == leftoverDot {
+				dots = append(dots, x)
+			}
+		}
+		return len(dots) > 0
+	})
+	saveSizeFrame(t, big, "before-clicks")
+	for _, x := range dots {
+		leftClick(t, big, x, row)
+	}
+	time.Sleep(time.Second)
+	if _, now := focusedLayout(t, base, wsSession); now != focused {
+		saveSizeFrame(t, big, "failed")
+		t.Fatalf("a click on the dots at columns %v moved the focus from %s to %s", dots, focused, now)
+	}
+
+	// The positive half: a click inside the right pane, where the big client
+	// draws it, moves the focus there.
+	focusOn(right, "the right pane")
+}
+
+// TestWindowSizeOldClientChromeCounts runs a client from before ViewChrome
+// beside a current one under latest. The old client is smaller and has a
+// wider rail. It lays the panes out around its own rail whatever the session
+// agrees, so the session has to agree a box that leaves its rail room, even
+// though another client sets the size.
+//
+// TUIOS_VIEW_CHROME_LEGACY=1 makes this build behave as the old one.
+// TUIOS_E2E_OLD_CLIENT names a real old build to use instead.
+//
+// NEGATIVE CONTROL: with the ViewChrome check cut from
+// calculateSessionReserve, the session agrees the current client's 20 column
+// reserve, the old client pushes its own 30, and the panes start at column 20
+// while the old client draws them from 30.
+func TestWindowSizeOldClientChromeCounts(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, leftRailConfig("20")+"[startup]\nopen_default_window = true\ntiled = true\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", wsSession, "--detach"); err != nil {
+		t.Fatalf("create session: %v: %s", err, out)
+	}
+	home := t.TempDir()
+	writeConfigIn(t, home, leftRailConfig("30"))
+	var old *tuitest.Terminal
+	withBinary("TUIOS_E2E_OLD_CLIENT", func() {
+		old = startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", wsSession},
+			env: []string{"XDG_CONFIG_HOME=" + home, "TUIOS_VIEW_CHROME_LEGACY=1"}})
+	})
+	waitSizeScreen(t, old, "the old client never drew its rail", func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "sessions")
+	})
+	cur := attachIn(t, base, wsSession, startOpts{cols: 160, rows: 45})
+	time.Sleep(wsHoldGap)
+	activity(t, cur)
+	waitWSSize(t, base, 160, 45, "after input on the current client")
+	enableTiling(t, cur)
+	newWindow(t, cur)
+	waitWindowCount(t, cur, 2, "two windows on the current client")
+
+	// The panes start right of the old client's 30 column rail, and stay
+	// there: sampled over two seconds, since the bug was a layout the two
+	// clients kept pushing at each other.
+	for i := range 8 {
+		time.Sleep(250 * time.Millisecond)
+		rects, _ := focusedLayout(t, base, wsSession)
+		left := 1 << 30
+		for _, r := range rects {
+			left = min(left, r.X)
+		}
+		if left != 30 {
+			saveSizeFrame(t, old, "old-client")
+			saveSizeFrame(t, cur, "current-client")
+			t.Fatalf("sample %d: the session's panes start at column %d, want 30, the old client's rail: %+v", i, left, rects)
+		}
+	}
+	saveSizeFrame(t, old, "old-client")
+	saveSizeFrame(t, cur, "current-client")
+}
