@@ -120,15 +120,16 @@ type sizedClient struct {
 	seq      uint64
 }
 
-// sessionSizedClients lists the TUI clients attached to a session that have
-// a size.
+// sessionSizedClients lists clients that can determine a session's size.
+// Passive rail viewers crop the existing grid and must not resize the shared
+// session, even under the smallest policy or when they are its only viewer.
 func (d *Daemon) sessionSizedClients(sessionID string) []sizedClient {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 	var out []sizedClient
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient
+		match := cs.sessionID == sessionID && cs.isTUIClient && !cs.passive
 		c := sizedClient{
 			id: cs.clientID, w: cs.width, h: cs.height,
 			capable: cs.windowSizeCap, viewOnly: cs.viewOnly,

@@ -8,9 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// TestSidebarSessionGuestTopAlignment keeps all PTY content in the daemon but
-// presents an extra empty leading row of an idle sidebar shell at the same
-// level as the center shell. No byte is written to either PTY on attach.
+// TestSidebarSessionGuestTopAlignment keeps the daemon's leading blank rows
+// visible in both the rail and center. No byte is written to either PTY on attach.
 func TestSidebarSessionGuestTopAlignment(t *testing.T) {
 	const cfg = `[appearance.sidebar]
 enabled = true
@@ -29,7 +28,7 @@ session = "side"
 	}
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "sh-3.2$") >= 2
+		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "$") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("sessions did not attach: %v\n%s", err, term.Snapshot())
 	}
@@ -81,22 +80,21 @@ session = "side"
 				centerTop = y
 			}
 		}
-		return side >= 0 && center >= 0 && centerTop >= 0 && side == center-centerTop
+		return side >= 0 && center >= 0 && centerTop >= 0 && side == center-centerTop+1
 	}, uiTimeout); err != nil {
-		t.Fatalf("visible guest text did not begin at the same pane-relative row: %v\n%s", err, term.Snapshot())
+		t.Fatalf("guest's extra blank row was hidden: %v\n%s", err, term.Snapshot())
 	}
-	// Focus the shifted shell. The host cursor must follow the *displayed*
-	// prompt, not point one row below it at the original guest coordinate.
-	mousePress(t, term, 5, 2, tuitest.MouseLeft, 0)
-	mouseRelease(t, term, 5, 2, tuitest.MouseLeft, 0)
+	// The host cursor and mouse use the guest's original row coordinates.
+	mousePress(t, term, 5, 3, tuitest.MouseLeft, 0)
+	mouseRelease(t, term, 5, 3, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		x, y, visible := s.Cursor()
-		return visible && x > 2 && x < 35 && y == 3 && strings.Contains(s.Line(y), "sh-3.2$")
+		return visible && x > 2 && x < 35 && y == 4 && strings.Contains(s.Line(y), "$")
 	}, uiTimeout); err != nil {
-		t.Fatalf("cursor did not follow the normalized prompt: %v\n%s", err, term.Snapshot())
+		t.Fatalf("cursor did not follow the unshifted prompt: %v\n%s", err, term.Snapshot())
 	}
-	// Mouse tracking stays in the normal screen here. A click on the displayed
-	// SMARK row (screen row 2) belongs to guest row 2, hence SGR row 3.
+	// A click on the SMARK row (screen row 3) belongs to guest row 2,
+	// hence SGR row 3.
 	for _, command := range []string{
 		"stty -echo",
 		`stty -icanon min 1; printf '\033[?1000h\033[?1006h'; printf '%s\n' MOUSE""READY; od -An -tx1 -N9; printf '\033[?1000l\033[?1006l'; printf '%s\n' MOUSE""DONE; stty sane`,
@@ -111,14 +109,14 @@ session = "side"
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "MOUSEREADY") }, uiTimeout); err != nil {
 		t.Fatalf("mouse tracking not ready: %v\n%s", err, term.Snapshot())
 	}
-	mousePress(t, term, 5, 2, tuitest.MouseLeft, 0)
+	mousePress(t, term, 5, 3, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "MOUSEDONE") }, uiTimeout); err != nil {
-		t.Fatalf("shifted shell did not receive a tracked click: %v\n%s", err, term.Snapshot())
+		t.Fatalf("shell did not receive a tracked click: %v\n%s", err, term.Snapshot())
 	}
-	mouseRelease(t, term, 5, 2, tuitest.MouseLeft, 0)
+	mouseRelease(t, term, 5, 3, tuitest.MouseLeft, 0)
 	mouseOutput, err := tuiosCLI(t, base, "capture-pane", "-s", "side")
 	if err != nil || !strings.Contains(strings.Join(strings.Fields(mouseOutput), " "), "1b 5b 3c 30 3b 35 3b 33 4d") {
-		t.Fatalf("tracked click did not map screen row 2 to guest row 3: %v\n%s", err, mouseOutput)
+		t.Fatalf("tracked click did not map screen row 3 to guest row 3: %v\n%s", err, mouseOutput)
 	}
 
 	// An alternate-screen program with the same leading blank rows must not
@@ -133,7 +131,7 @@ session = "side"
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Line(3), "ALTTEST") }, uiTimeout); err != nil {
 		t.Fatalf("alternate-screen program was shifted: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Line(2), "SMARK") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Line(3), "SMARK") }, uiTimeout); err != nil {
 		t.Fatalf("shell display did not return after alternate screen: %v\n%s", err, term.Snapshot())
 	}
 	t.Logf("side guest preserved; shell content, cursor, mouse and alternate screen verified:\n%s", term.Snapshot())

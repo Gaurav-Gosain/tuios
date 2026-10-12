@@ -412,7 +412,7 @@ func (d *Daemon) sessionCellSize(sessionID string) (w, h int, ok bool) {
 	var firstSeq uint64
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient && cs.cellWidth > 0 && cs.cellHeight > 0
+		match := cs.sessionID == sessionID && cs.isTUIClient && !cs.passive && cs.cellWidth > 0 && cs.cellHeight > 0
 		id, seq, cw, ch := cs.clientID, cs.attachSeq, cs.cellWidth, cs.cellHeight
 		cs.mu.Unlock()
 		if !match {

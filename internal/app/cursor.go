@@ -85,11 +85,8 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 
-	// A normalized shell view hides only empty leading guest rows. Keep the
-	// hardware cursor on the same displayed cell as the shell's text.
-	visualY := pos.Y - window.DisplayRowOffset
 	// Bounds check: the cursor must be within the visible content area.
-	if pos.X < 0 || pos.X >= contentWidth || visualY < 0 || visualY >= contentHeight {
+	if pos.X < 0 || pos.X >= contentWidth || pos.Y < 0 || pos.Y >= contentHeight {
 		return nil
 	}
 
@@ -99,7 +96,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		borderOffset = 0
 	}
 	screenX := window.X + borderOffset + pos.X
-	screenY := window.Y + borderOffset + visualY
+	screenY := window.Y + borderOffset + pos.Y
 	// In a view of a larger session the pane is drawn shifted, and a cursor
 	// the view does not show is not drawn. See pane_view.go.
 	if v := m.sessionView; v.on && sidebarWindow == nil {

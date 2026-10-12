@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -25,6 +26,35 @@ import (
 //
 // TestEveryDaemonHandlerIsWiredHere pins that no entry point registers one of
 // these itself.
+
+// WireSidebarSessionClient wires the separate passive viewer. Capture the
+// channels on the UI goroutine so shutdown cannot race a daemon callback.
+func (m *OS) WireSidebarSessionClient(client *session.TUIClient, edge sidebarEdge, generation uint64) {
+	events, done := m.sidebarSessionEvents, m.sidebarSessionDone
+	queue := func(event sidebarSessionEvent) {
+		if event.kind == "ended" {
+			// State snapshots may be replaced; terminal events cannot be lost.
+			select {
+			case events <- event:
+			case <-done:
+			}
+			return
+		}
+		select {
+		case events <- event:
+		default:
+		}
+	}
+	client.OnStateSync(func(state *session.SessionState, _, _ string) {
+		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "state", state: state})
+	})
+	client.OnSessionEnded(func(_, reason string) {
+		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: fmt.Errorf("session ended: %s", reason)})
+	})
+	client.OnDisconnect(func(err error) {
+		queue(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: err})
+	})
+}
 
 // WireDaemonClient registers this model as the listener for everything the
 // daemon sends an attached client: routed verbs, state syncs, peers joining and

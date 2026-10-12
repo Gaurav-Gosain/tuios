@@ -46,21 +46,17 @@ into view.
 
 Both edge widths are considered before main-pane allocation. On a narrow host
 screen the optional edge contracts or hides before the original edge, leaving
-minimum space for the center. A rail attachment participates in daemon size
-negotiation with its rail dimensions and never switches the center client's
-session. Rail clients are passive for daemon window-manager command routing,
-not view-only: they still subscribe, accept input, and report their sizes.
+minimum space for the center. A rail attachment does not participate in daemon
+size negotiation and never switches the center client's session. Rail clients
+are passive for daemon window-manager command routing, not view-only: they
+still subscribe and accept input. With no ordinary viewer, the session keeps
+its last size.
 The center and two rail streams and render invalidations are separate; one
 rail's output or click must not leak into another pane.
 
-A shell can leave leading empty rows in its own terminal grid, particularly
-after a resize. A client may hide at most two *empty* leading rows in a
-bordered daemon-backed shell view so shell text in a narrow rail and the
-center begins at a consistent level. This is display-only: the daemon grid,
-history, and captured pane stay unchanged, and the cursor and mouse coordinates
-map to the original guest rows. Alternate-screen programs, known foreground
-commands, copy mode, scrolled-back views, and borderless tiled panes are not
-shifted. A row with visible text or a painted background is never discarded.
+A shell can leave leading empty rows in its own terminal grid, especially
+after a resize. The rail displays these rows as they are, cropping the shared
+daemon grid without resizing its PTY or shifting cursor and mouse coordinates.
 
 ## Visibility and lifecycle
 
@@ -83,5 +79,5 @@ that session has. Real-client end-to-end tests cover two independent rail
 sessions beside an unchanged center, stacked splits and per-pane input, active
 pane navigation and overflow, mouse tracking, guest sizing, workspace
 visibility, detach/reattach, missing-session retry, frame alignment, and
-non-destructive shell-content alignment. A live daemon must not be restarted
+non-destructive display of leading guest whitespace. A live daemon must not be restarted
 for a preview without explicit approval: its running programs would end.
