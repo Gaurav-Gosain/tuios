@@ -110,6 +110,16 @@ notify = true
 mkdirSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
 writeFileSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_CONFIG);
 
+// The config the multi-client server is served with. The suite is about a
+// session sized to the smallest viewport, which stopped being the default when
+// window_size became latest, so it is set here.
+export const SEEDED_MULTI_CONFIG = `[daemon]
+window_size = "smallest"
+`;
+
+mkdirSync(join(multi.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
+writeFileSync(join(multi.env.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_MULTI_CONFIG);
+
 // The config the fourth server is served with: a theme and nothing else.
 //
 // tokyo_night is the theme under test because of what it leaves out. It names

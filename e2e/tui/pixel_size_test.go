@@ -331,14 +331,15 @@ func cellOf(r [4]int) string {
 // TestPaneCellFollowsOneClient covers two clients with different fonts on
 // one session. The pane's cell used to be set by whichever client spoke
 // last, on every resize and attach, so a guest's pixel size flipped between
-// them. It is now the cell of one client: under window_size = smallest, the
-// default, the client that attached first.
+// them. It is now the cell of one client: under window_size = smallest, set
+// here, the client that attached first.
 //
 // The negative half: a second client with a 12x24 cell attaches, and every
 // report after it is still in client a's 8x16. The positive half: client a
 // leaves, and the cell moves to the client that is left.
 func TestPaneCellFollowsOneClient(t *testing.T) {
 	base := t.TempDir()
+	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	killDaemon(t, base)
 	guest := writePixelGuest(t)
 	if out, err := tuiosCLI(t, base, "new", "-d", "cells"); err != nil {

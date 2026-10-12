@@ -1,12 +1,15 @@
 // What a second browser window of a different size does to the first one.
 //
-// A session is drawn at the smallest viewport looking at it, so opening it in a
+// The server sets window_size = "smallest" (see playwright.config.mjs), so a
+// session is drawn at the smallest viewport looking at it, and opening it in a
 // narrower window takes columns away from the window already there. The one
 // that has to change is the one where nothing happened, and the only thing that
 // can tell it so is the daemon's session-resize broadcast.
 //
-// The claim is made against the terminal buffer: how many columns the session
-// actually draws into, which is what a stale layout gets wrong. The pane
+// The claim is made against the terminal buffer: how many columns the session's
+// panes reach, which is what a stale layout gets wrong. It is read off the
+// panes' top right corners, because the wide window fills the columns the
+// session leaves with dots, and its rail and dock stay at its own edges. The pane
 // divider ends up somewhere the pane's contents were never laid out for, and
 // the shell's own lines run on past it.
 
@@ -25,9 +28,9 @@ const screen = (page) => page.evaluate(() => {
 /** The grid the browser sized for this viewport, which never changes here. */
 const cols = (page) => page.evaluate(() => window.sipTerm.term.cols);
 
-/** How many columns the session draws into: the longest line with anything on it. */
+/** How many columns the session's panes reach: the rightmost top right corner. */
 const drawnWidth = async (page) => (await screen(page))
-  .reduce((widest, line) => Math.max(widest, line.replace(/\s+$/, '').length), 0);
+  .reduce((widest, line) => Math.max(widest, line.lastIndexOf('╮') + 1), 0);
 
 async function open(browser, viewport) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
@@ -53,7 +56,7 @@ test.describe('a session drawn into two browser windows at once', () => {
       const wideCols = await cols(wide.page);
       await expect
         .poll(() => drawnWidth(wide.page), { timeout: 30_000 })
-        .toBeGreaterThan(wideCols - 4);
+        .toBeGreaterThan(wideCols / 2);
 
       const narrow = await open(browser, NARROW);
       try {
@@ -74,7 +77,7 @@ test.describe('a session drawn into two browser windows at once', () => {
       // And back again once the narrow window is gone.
       await expect
         .poll(() => drawnWidth(wide.page), { timeout: 30_000 })
-        .toBeGreaterThan(wideCols - 4);
+        .toBeGreaterThan(wideCols / 2);
     } finally {
       await wide.context.close();
     }

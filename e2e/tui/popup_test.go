@@ -241,12 +241,13 @@ func TestPopupRunsAPickerAndTheSelectionLands(t *testing.T) {
 // That is exactly what a peer does to a float it has not been told about.
 //
 // The second client is started narrower than the first on purpose. The session
-// settles to the smaller of the two, so both end up rendering the same box here.
+// is smallest, set in the config, so it settles to the smaller of the two, and
+// both end up rendering the same box here.
 // The client-by-client arithmetic that box comes out of is not measured on its
 // own any more; the unit test that did so was removed.
 func TestPopupIsSharedBetweenClients(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\n")
+	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n[startup]\nopen_default_window = true\ntiled = true\n")
 
 	wide := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "shared"}})
 	waitWindowCount(t, wide, 1, "the first client's pane")

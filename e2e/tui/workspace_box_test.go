@@ -50,7 +50,8 @@ func TestCustomWorkspaceFollowsTheSessionSize(t *testing.T) {
 		t.Run(lay, func(t *testing.T) {
 			base := t.TempDir()
 			const name = "wsbox"
-			writeConfig(t, base, fmt.Sprintf("[startup]\nopen_default_window = true\ntiled = true\nlayout = %q\n", lay))
+			// Smallest, so the smaller client shrinks the session.
+			writeConfig(t, base, fmt.Sprintf("[daemon]\nwindow_size = \"smallest\"\n[startup]\nopen_default_window = true\ntiled = true\nlayout = %q\n", lay))
 			if out, err := tuiosCLI(t, base, "new", "-d", name); err != nil {
 				t.Fatalf("create the session: %v\n%s", err, out)
 			}

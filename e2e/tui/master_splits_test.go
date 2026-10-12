@@ -101,7 +101,10 @@ func TestMasterStackKeepsSplitsAcrossAResize(t *testing.T) {
 			saveArtifact(t, term, dir, "grown")
 
 			// A second client lays the panes out again from the session's
-			// state: smallest policy, so the session shrinks to it.
+			// state: smallest policy, set here, so the session shrinks to it.
+			if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "smallest", "-s", name); err != nil {
+				t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
+			}
 			small := attachIn(t, base, name, startOpts{cols: 100, rows: 32})
 			waitForShape(t, base, name, tc.panes, "the daemon with a smaller client attached", func(rects []winRect) error {
 				if _, _, w, _ := paneBoxOf(rects); w != 100 {
