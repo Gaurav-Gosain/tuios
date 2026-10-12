@@ -63,7 +63,8 @@ import (
 // in order.
 const transferMaxRunning = 3
 
-// transferKeepDone is how long a finished job stays in the list.
+// transferKeepDone is how long a finished job stays in the list, unless
+// TUIOS_TRANSFER_KEEP_SECONDS says otherwise (transfer_expiry.go).
 const transferKeepDone = 30 * time.Minute
 
 // transferTailCheck is the range a resume compares before it trusts a part.
@@ -415,13 +416,15 @@ func (m *transferManager) get(id string) *transferJob {
 // that leaves the list takes its parts and its journal entry with it: nothing
 // can resume it after that.
 func (m *transferManager) pruneLocked() {
+	keep := transferKeep()
 	m.dropLocked(func(j *transferJob) bool {
-		return !j.ended.IsZero() && time.Since(j.ended) > transferKeepDone
+		return !j.ended.IsZero() && time.Since(j.ended) >= keep
 	})
 }
 
 // dropLocked removes the jobs gone says to, with their journal entries and
-// the parts of the failed ones. gone is called with j.mu held.
+// the parts of the failed ones, and says each one on the event stream as a
+// transfer event with action removed. gone is called with j.mu held.
 func (m *transferManager) dropLocked(gone func(j *transferJob) bool) int {
 	keep := m.order[:0]
 	n := 0
@@ -437,6 +440,7 @@ func (m *transferManager) dropLocked(gone func(j *transferJob) bool) int {
 			if failed {
 				go m.abortParts(j)
 			}
+			m.publish(EventTransfer, transferRemoved, j)
 			n++
 			continue
 		}

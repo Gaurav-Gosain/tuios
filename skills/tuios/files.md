@@ -164,8 +164,9 @@ A copy with `ask` stops in state `conflict`, and its row lists the files in
 `keep-both` or `skip`, for one `rel`, several `rels`, or `all`. Do not answer
 for the person. Use `skip` or ask them.
 
-A `transfer` event has `action` `created`, `state` or `ended`, and
-`transfer`, the row. `transfer-progress` (the row while bytes move) and
+A `transfer` event has `action` `created`, `state`, `ended` or `removed`,
+and `transfer`, the row. `removed` says a copy that ended left the list,
+by `transfer-clear` or 30 minutes after it ended. `transfer-progress` (the row while bytes move) and
 `transfer-file` (one file ended) reach only a subscriber that names them.
 
 `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel` and

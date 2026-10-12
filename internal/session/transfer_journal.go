@@ -234,6 +234,9 @@ func (m *transferManager) note(j *transferJob, created bool) {
 		action = "ended"
 	}
 	m.publish(EventTransfer, action, j)
+	if action == "ended" {
+		m.expireLater(j)
+	}
 }
 
 func isMoving(state string) bool {
@@ -368,12 +371,20 @@ func (m *transferManager) load() {
 	})
 	m.pruneLocked()
 	paused := []*transferJob{}
+	var ended []*transferJob
 	for _, id := range m.order {
-		if j := m.jobs[id]; j.getState() == transferPaused {
+		switch j := m.jobs[id]; {
+		case j.getState() == transferPaused:
 			paused = append(paused, j)
+		case transferEnded(j.getState()):
+			ended = append(ended, j)
 		}
 	}
 	m.mu.Unlock()
+	// A copy that ended before the restart still leaves the list on time.
+	for _, j := range ended {
+		m.expireLater(j)
+	}
 	m.parts.sweep(m.partIDs(), time.Now())
 	for _, j := range resumed {
 		m.publish(EventTransfer, "state", j)

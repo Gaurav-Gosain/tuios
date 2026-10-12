@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -403,6 +404,10 @@ func (m *OS) applyTransfersSnapshot(msg transfersSnapshotMsg) {
 		byID[r.ID] = r
 	}
 	for _, ev := range msg.Early {
+		if transferRemovedEvent(ev) {
+			delete(byID, ev.Row.ID)
+			continue
+		}
 		if r, ok := byID[ev.Row.ID]; ok {
 			byID[ev.Row.ID] = newerTransferRow(r, ev.Row)
 		} else if ev.Type == session.EventTransfer {
@@ -462,11 +467,28 @@ func (m *OS) upsertTransferRow(row session.TransferRow) (prev session.TransferRo
 func (m *OS) applyTransferEvents(events []transferEvent) tea.Cmd {
 	var cmds []tea.Cmd
 	for _, ev := range events {
+		if transferRemovedEvent(ev) {
+			m.dropTransferRow(ev.Row.ID)
+			continue
+		}
 		cmds = append(cmds, m.applyTransferRow(ev.Row, ev.Type == session.EventTransferProgress))
 	}
 	m.transfersChanged()
 	cmds = append(cmds, m.transfersLingerCmd())
 	return tea.Batch(cmds...)
+}
+
+// transferRemovedEvent reports whether an event says a copy left the
+// daemon's list: transfer-clear removed it, or it ended long enough ago.
+func transferRemovedEvent(ev transferEvent) bool {
+	return ev.Type == session.EventTransfer && ev.Action == "removed"
+}
+
+// dropTransferRow takes a copy out of the mirror. Nothing of it comes after:
+// the daemon says a copy's end before its removal, and a progress event is
+// never published after the end.
+func (m *OS) dropTransferRow(id string) {
+	m.transfers.rows = slices.DeleteFunc(m.transfers.rows, func(r session.TransferRow) bool { return r.ID == id })
 }
 
 // applyTransferRow folds one row into the mirror. progress says it came from
@@ -565,7 +587,7 @@ func transferPlace(host string) string {
 	if host == "" || host == federation.LocalHostName {
 		return "this machine"
 	}
-	return host
+	return printableTitle(host)
 }
 
 // transferEndNotice is the dock message for a copy that ended. A cancelled
@@ -588,7 +610,11 @@ func (m *OS) transferEndNotice(row session.TransferRow) {
 		}
 		m.ShowNotification(text, "success", d)
 	case "failed":
-		m.ShowNotification(transferFailedText(row)+" Press "+m.transfersPanelKeys()+".", "error", d*2)
+		text := transferFailedText(row)
+		if how := m.transfersRetryHow(); how != "" {
+			text += " " + how
+		}
+		m.ShowNotification(text, "error", d*2)
 	}
 }
 
@@ -601,10 +627,18 @@ func transferFailedText(row session.TransferRow) string {
 	return text + "."
 }
 
-// transfersPanelKeys says how to reach the retry: the prefix chord that opens
-// the panel, then r.
-func (m *OS) transfersPanelKeys() string {
-	return m.pressFor("prefix_transfers", "the prefix key then u") + " then r to try again"
+// transfersRetryHow says how to reach the retry, with the keys bound now:
+// the chord that opens the panel, then the retry key. It is "" when nothing
+// opens the panel by a key.
+func (m *OS) transfersRetryHow() string {
+	open := m.pressFor("prefix_transfers", "")
+	if open == "" {
+		return ""
+	}
+	if retry := m.transfersKey(config.ActionTransfersRetry); retry != "" {
+		return "Press " + open + " then " + retry + " to try again."
+	}
+	return "Press " + open + " to see the copy."
 }
 
 // transferCaller is how the copies reach the daemon. Tests set call.
@@ -700,6 +734,27 @@ func (m *OS) selectedTransfer() (session.TransferRow, bool) {
 // TransfersOpen reports whether the Copies panel is up.
 func (m *OS) TransfersOpen() bool { return m.transfers.open }
 
+// TransfersOwnsKeys reports whether the Copies panel is up and nothing is
+// over it. A panel opened on top of it, Settings by its prefix chord for one,
+// is the one drawn in front, so it takes the keys: the Copies panel answering
+// for it closed the wrong panel on esc.
+//
+// The stacking order is reconciled here because a panel opened by the key
+// before this one has not been drawn yet. The overlays outside that order
+// (the screenshot preview, the tape dialogs, the scrollback browser) only
+// open over the panel, never under it, so any of them being up means the
+// panel is behind.
+func (m *OS) TransfersOwnsKeys() bool {
+	if !m.transfers.open {
+		return false
+	}
+	if m.ShotPreview.Open || m.ShowTapeManager || m.ShowTapeReview || m.ShowScrollbackBrowser {
+		return false
+	}
+	m.reconcileOverlayZOrder()
+	return m.topmostOverlayKind() == overlayKindTransfers
+}
+
 // OpenTransfers shows the Copies panel. The failed copies in it count as seen
 // from now on, so the dock item they kept goes away with the linger.
 func (m *OS) OpenTransfers() tea.Cmd {
@@ -760,7 +815,13 @@ func (m *OS) TransfersPause() tea.Cmd {
 	case "queued", "running", "verifying", "conflict":
 		return m.transferCallCmd("transfer-pause", row.Name, map[string]any{"id": row.ID})
 	}
-	m.ShowNotification("The copy of "+printableTitle(row.Name)+" ended. Press r to try a failed copy again.", "info", m.Settings.NotificationDuration)
+	text := "The copy of " + printableTitle(row.Name) + " ended."
+	if row.State == "failed" {
+		if press := m.transfersPressTo(config.ActionTransfersRetry, "try it again"); press != "" {
+			text += " " + press
+		}
+	}
+	m.ShowNotification(text, "info", m.Settings.NotificationDuration)
 	return nil
 }
 
@@ -784,7 +845,11 @@ func (m *OS) TransfersCancel() {
 		return
 	}
 	if transferEnded(row.State) {
-		m.ShowNotification("The copy of "+printableTitle(row.Name)+" ended. Press c to clear it.", "info", m.Settings.NotificationDuration)
+		text := "The copy of " + printableTitle(row.Name) + " ended."
+		if press := m.transfersPressTo(config.ActionTransfersClear, "clear it"); press != "" {
+			text += " " + press
+		}
+		m.ShowNotification(text, "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.openCopyDialog(&copyDialog{kind: copyDialogCancel, row: row})

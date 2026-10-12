@@ -163,6 +163,56 @@ func (m *OS) transfersKeyHint(action, label string) (overlay.Hint, bool) {
 	return overlay.Hint{Key: key, Label: label}, true
 }
 
+// transfersKey is the first key bound now to a Copies action, as a sentence
+// names it, or "" when the config binds it to nothing.
+func (m *OS) transfersKey(action string) string {
+	reg := m.KeybindRegistry
+	if reg == nil {
+		reg = defaultInboxKeys()
+	}
+	for _, k := range reg.GetTransfersKeys(action) {
+		if k = strings.TrimSpace(k); k != "" {
+			return k
+		}
+	}
+	return ""
+}
+
+// transfersPressTo is "Press KEY to WHAT." for a Copies action, or "" when the
+// action has no key: a sentence that names a dead key is worse than none.
+func (m *OS) transfersPressTo(action, what string) string {
+	if key := m.transfersKey(action); key != "" {
+		return "Press " + key + " to " + what + "."
+	}
+	return ""
+}
+
+// railSendKey is the key bound now to send a file from the rail's files
+// list, or "".
+func (m *OS) railSendKey() string {
+	reg := m.KeybindRegistry
+	if reg == nil {
+		reg = defaultInboxKeys()
+	}
+	for _, k := range reg.GetSidebarFilesKeys("file_send") {
+		if k = strings.TrimSpace(k); k != "" {
+			return k
+		}
+	}
+	return ""
+}
+
+// transfersEmptyText is what the empty panel says: how to send a file.
+func (m *OS) transfersEmptyText() string {
+	if m.transfers.unsupported {
+		return "This daemon cannot copy files to a host. Restart it with a newer tuios."
+	}
+	if key := m.railSendKey(); key != "" {
+		return "No copies. Press " + key + " on a file in the rail to send it to a host."
+	}
+	return "No copies. Open the menu of a file in the rail to send it to a host."
+}
+
 // transfersHints is the panel's footer, for the copy under the cursor.
 func (m *OS) transfersHints() []overlay.Hint {
 	var out []overlay.Hint
@@ -197,10 +247,7 @@ func (m *OS) transfersHints() []overlay.Hint {
 func (m *OS) renderTransfers() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.transfers.rows
 	m.clampTransfersSelection()
-	empty := "No copies. Press S on a file in the rail to send it to another machine."
-	if m.transfers.unsupported {
-		empty = "This daemon cannot copy between machines. Restart it with a newer tuios."
-	}
+	empty := m.transfersEmptyText()
 	return m.renderListOverlay(listOverlay{
 		Title:      "Copies",
 		Width:      transfersPanelWidth,
@@ -219,20 +266,14 @@ func (m *OS) renderTransfers() (string, overlay.Geometry, []overlayRowHit) {
 			if !ok {
 				return nil
 			}
-			return transferDetail(row, width)
+			return m.transferDetail(row, width)
 		},
 	})
 }
 
-// transferRoute is "here -> build": where a copy goes from and to.
+// transferRoute is "this machine -> build": where a copy goes from and to.
 func transferRoute(row session.TransferRow) string {
-	at := func(h string) string {
-		if h == "" {
-			return "here"
-		}
-		return printableTitle(h)
-	}
-	return at(row.Src.Host) + " -> " + at(row.Dst.Host)
+	return transferPlace(row.Src.Host) + " -> " + transferPlace(row.Dst.Host)
 }
 
 // transferStatus is the right-hand part of a panel row, and its ink.
@@ -317,7 +358,7 @@ func transferPanelRow(row session.TransferRow, selected bool, rowBg color.Color,
 
 // transferDetail is the lines under the list about the copy under the
 // cursor: where it goes, and what to do next.
-func transferDetail(row session.TransferRow, width int) []string {
+func (m *OS) transferDetail(row session.TransferRow, width int) []string {
 	cut := func(s string) string { return " " + overlay.Truncate(s, max(width-2, 1)) }
 	where := row.Dst.Path
 	if row.Final != "" {
@@ -334,14 +375,20 @@ func transferDetail(row session.TransferRow, width int) []string {
 	lines = append(lines, at("To "+transferPlace(row.Dst.Host), where))
 	switch row.State {
 	case "failed":
-		for _, l := range wrapPlain(transferFailedText(row)+" Press r to try again.", max(width-2, 1)) {
+		text := transferFailedText(row)
+		if press := m.transfersPressTo(config.ActionTransfersRetry, "try again"); press != "" {
+			text += " " + press
+		}
+		for _, l := range wrapPlain(text, max(width-2, 1)) {
 			lines = append(lines, " "+l)
 		}
 	case "waiting":
 		why := "The link to " + transferPlace(transferFarHost(row)) + " is down. The copy goes on when it is back."
 		lines = append(lines, cut(why))
 	case "conflict":
-		lines = append(lines, cut("Press enter to say what to do with the files that are there."))
+		if press := m.transfersPressTo(config.ActionTransfersAnswer, "say what to do with the files that are there"); press != "" {
+			lines = append(lines, cut(press))
+		}
 	case "running", "verifying":
 		if row.Kind == "dir" && row.Current != "" {
 			lines = append(lines, cut("Now: "+printableTitle(row.Current)+" ("+strconv.Itoa(row.FilesDone)+" of "+strconv.Itoa(row.Files)+" files)"))

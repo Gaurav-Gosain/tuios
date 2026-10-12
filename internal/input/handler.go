@@ -475,11 +475,13 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	// A copy's question and the Copies panel, the same way: the rail and
 	// the dock open them, and their keys must reach them. The question is
-	// over the panel, so it is first.
+	// over the panel, so it is first. A panel opened over the Copies panel,
+	// such as Settings, is in front of it and takes its keys in the mode
+	// handlers below.
 	if o.CopyDialogOpen() {
 		return handleCopyDialogInput(msg, o)
 	}
-	if o.TransfersOpen() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+	if o.TransfersOwnsKeys() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return handleTransfersInput(msg, o)
 	}
 

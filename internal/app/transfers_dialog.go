@@ -301,7 +301,7 @@ func (m *OS) SidebarFileSend() tea.Cmd {
 	src := session.Endpoint{Path: p}
 	switch {
 	case m.filesView.Host != "" && m.AttachedHost != "":
-		m.ShowNotification("tuios cannot send a file from a machine behind another machine.", "warning", m.Settings.NotificationDuration)
+		m.ShowNotification("tuios cannot send a file from a host that you reach through another host.", "warning", m.Settings.NotificationDuration)
 		return nil
 	case m.filesView.Host != "":
 		src.Host = m.filesView.Host
@@ -318,7 +318,7 @@ func (m *OS) SidebarFileSend() tea.Cmd {
 		}
 	}
 	if len(hosts) == 0 {
-		m.ShowNotification("No other machine is up. Add a machine in the settings, or wait for its link.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("No other host is up. Add a host in Settings, or wait for its link.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.openSendHosts(src, name, hosts)
@@ -536,7 +536,7 @@ func (m *OS) finishDrop(pd *pendingDrop) tea.Cmd {
 	}
 	w := m.windowByID(pd.window)
 	if w == nil {
-		m.ShowNotification("The pane closed before the path was pasted. The file is on "+pd.host+".", "warning", m.Settings.NotificationDuration)
+		m.ShowNotification("The pane closed before the path was pasted. The file is on "+transferPlace(pd.host)+".", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	quoted := make([]string, len(pd.paths))
@@ -544,14 +544,14 @@ func (m *OS) finishDrop(pd *pendingDrop) tea.Cmd {
 		quoted[i] = pastePathText(p)
 	}
 	if !m.PasteIntoWindow(w, strings.Join(quoted, " ")) {
-		m.ShowNotification("The file is on "+pd.host+", but its path was not pasted. Exit copy mode first.", "warning", m.Settings.NotificationDuration*2)
+		m.ShowNotification("The file is on "+transferPlace(pd.host)+", but its path was not pasted. Exit copy mode first.", "warning", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	what := "path"
 	if len(pd.paths) > 1 {
 		what = "paths"
 	}
-	m.ShowNotification("Copied to "+pd.host+" and checked. Pasted the "+what+" on "+pd.host+".", "success", m.Settings.NotificationDuration)
+	m.ShowNotification("Copied to "+transferPlace(pd.host)+" and checked. Pasted the "+what+" on "+transferPlace(pd.host)+".", "success", m.Settings.NotificationDuration)
 	return nil
 }
 
@@ -684,7 +684,7 @@ func (d *copyDialog) title() string {
 	case copyDialogConflict:
 		return "file is there"
 	case copyDialogSendHost:
-		return "send to machine"
+		return "send to host"
 	case copyDialogSendDir:
 		return "send to folder"
 	case copyDialogDrop:
@@ -703,15 +703,15 @@ func (d *copyDialog) lines() []string {
 	case copyDialogConflict:
 		return conflictLines(d.row)
 	case copyDialogSendHost:
-		return []string{"Send " + printableTitle(d.name) + " to which machine?", "Only machines whose link is up are listed."}
+		return []string{"Send " + printableTitle(d.name) + " to which host?", "Only hosts whose link is up are listed."}
 	case copyDialogSendDir:
 		return []string{"Send " + printableTitle(d.name) + " to " + transferPlace(d.host) + ".", "Type the folder. tuios makes it when it is not there."}
 	case copyDialogDrop:
 		a := d.drop
 		what := printableTitle(dropName(a.paths))
 		return []string{
-			"Send " + what + " (" + transferBytes(a.size) + ") to " + a.host + "?",
-			"The path on " + a.host + " is pasted when the copy is checked.",
+			"Send " + what + " (" + transferBytes(a.size) + ") to " + transferPlace(a.host) + "?",
+			"The path on " + transferPlace(a.host) + " is pasted when the copy is checked.",
 		}
 	}
 	return nil
@@ -749,7 +749,11 @@ func conflictLines(row session.TransferRow) []string {
 	second += size + "."
 	out := []string{first, second}
 	if row.ConflictCount > 1 {
-		out = append(out, countOf(row.ConflictCount-1, "other file")+" of this copy are there too.")
+		if others := row.ConflictCount - 1; others == 1 {
+			out = append(out, "1 other file of this copy is there too.")
+		} else {
+			out = append(out, countOf(others, "other file")+" of this copy are there too.")
+		}
 	}
 	return out
 }

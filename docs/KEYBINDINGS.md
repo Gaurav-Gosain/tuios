@@ -81,11 +81,11 @@ session runs on.
 uses the Kitty keyboard protocol. On other terminals, use the Edit row in the
 context menu of a file, or bind `file_edit` to a different key.
 
-`S` sends the selected file or folder to another machine. tuios asks which
-machine, then which folder. The folder field starts as `~/Downloads/tuios/`.
+`S` sends the selected file or folder to a host. tuios asks which host, then
+which folder. The folder field starts as `~/Downloads/tuios/`.
 tuios makes the folder when it is not there. A file that is there stays, and
 the copy gets the name `name (from HOST).ext`. The context menu of a row has a
-Send to machine row that does the same. The binding is `file_send` in
+Send to host row that does the same. The binding is `file_send` in
 `[keybindings.sidebar_files]`.
 
 `Ctrl+B f` searches file names below the directory of the focused pane. It also

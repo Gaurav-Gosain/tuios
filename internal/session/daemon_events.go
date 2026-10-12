@@ -85,8 +85,10 @@ const (
 	// only a subscriber that names it in types. See verb_agent_transcript.go.
 	EventTranscript = "transcript"
 	// EventTransfer is a change of a copy the daemon runs (transfer.go):
-	// Action is created, state or ended, and Transfer is the job's row as
-	// transfer-list gives it. A copy's state is said once per change.
+	// Action is created, state, ended or removed, and Transfer is the job's
+	// row as transfer-list gives it. A copy's state is said once per change.
+	// removed says a copy that ended left the list, by transfer-clear or 30
+	// minutes after it ended, and carries the last row it had.
 	EventTransfer = "transfer"
 	// EventTransferProgress is a copy's row while its bytes move, at most
 	// four times a second per copy. It reaches only a subscriber that names

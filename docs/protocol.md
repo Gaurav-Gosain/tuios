@@ -5534,7 +5534,8 @@ that crossed a link, fewer than `done` when compressed), `rate`, `eta_ms`,
 `conflicts_skipped`, `conflicts_left`, `conflicts`, `conflict_count`,
 `failed_files`, and `pane` and `pane_session` for a copy started from a
 pane. `transfer-clear` removes the jobs that ended, or only `ids`, and
-answers `cleared`. `transfer-resume` goes on with a paused job, tries a waiting
+answers `cleared`. Each job it removes is a `transfer` event with action
+`removed`. `transfer-resume` goes on with a paused job, tries a waiting
 one now, or tries a failed one again from its parts. `transfer-cancel` removes
 the part of the file in flight. A finished job stays listed for 30 minutes; a
 failed one takes its parts with it when it leaves the list.
@@ -6163,7 +6164,7 @@ Event types:
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 | `agent-activity` | One entry of an agent pane's activity ring, as [agent-activity](#agent-activity) returns it. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `entry` |
 | `transcript` | The transcript that a pane is joined to grew. Read it again with [agent-transcript](#agent-transcript). `cursor` is the cursor that a read to the end returns now. When you hold that cursor, there is nothing new. The event carries nothing from the file. It fires at most once for each read the daemon makes, after the 150 ms debounce. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `session`, `window`, `cursor` |
-| `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state` or `ended`, and `transfer` is its row as `transfer-list` returns it. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
+| `transfer` | A copy the daemon runs (see [Files and transfers](#files-and-transfers)) changed. `action` is `created`, `state`, `ended` or `removed`, and `transfer` is its row as `transfer-list` returns it. `removed` says a copy that ended left the list, by `transfer-clear` or 30 minutes after it ended, and carries its last row. A state is said once per change; a folder copy going between `running` and `verifying` for each file is not a change. A copy the daemon takes back from its journal at start says `state` once. | `action`, `transfer` |
 | `transfer-progress` | A copy's row while its bytes move, at most four a second per copy. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action` (`progress`), `transfer` |
 | `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 

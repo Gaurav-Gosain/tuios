@@ -518,7 +518,7 @@ var ActionDescriptions = map[string]string{
 	"file_open":           "Files: open this folder, or copy this file's path",
 	"file_edit":           "Files: edit this text file in a new pane",
 	"file_copy_path":      "Files: copy the path of this file or folder",
-	"file_send":           "Files: send this file or folder to another machine",
+	"file_send":           "Files: send this file or folder to a host",
 	// The Copies panel: the copies between machines.
 	"transfers_down":   "Copies: next copy",
 	"transfers_up":     "Copies: previous copy",
