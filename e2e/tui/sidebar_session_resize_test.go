@@ -11,10 +11,9 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// TestSidebarSessionResizeUsesRailGeometry checks the guest's actual PTY size,
-// not WindowState's layout fields: a passive rail has no session layout engine
-// to write those fields back to the daemon.
-func TestSidebarSessionResizeUsesRailGeometry(t *testing.T) {
+// TestSidebarSessionResizeDoesNotResizeSharedPTY checks a rail's viewport
+// resize does not send SIGWINCH to the daemon's shared guest PTY.
+func TestSidebarSessionResizeDoesNotResizeSharedPTY(t *testing.T) {
 	const cfg = `[appearance.sidebar]
 position = "right"
 enabled = true
@@ -32,7 +31,7 @@ session = "side"
 	}
 	term := startIn(t, base, startOpts{cols: 100, rows: 35, args: []string{"attach", "center"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "sh-3.2$") >= 2
+		return strings.Contains(s.Line(0), "╭") && strings.Count(s.Text(), "$") >= 2
 	}, bootTimeout); err != nil {
 		t.Fatalf("side rail did not attach: %v\n%s", err, term.Snapshot())
 	}
@@ -69,17 +68,11 @@ session = "side"
 	if err := term.WaitFor(func(s tuitest.Screen) bool { _, rows := s.Size(); return rows == 43 }, uiTimeout); err != nil {
 		t.Fatalf("host resize not visible: %v", err)
 	}
-	afterRows, afterCols := 0, 0
-	deadline := time.Now().Add(uiTimeout)
-	for attempt := 1; time.Now().Before(deadline); attempt++ {
-		afterRows, afterCols = guestSize(fmt.Sprintf("AFTERSIZE%d", attempt))
-		if afterRows > beforeRows {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	// Give the resized rail time to settle before asking the shared guest.
+	time.Sleep(300 * time.Millisecond)
+	afterRows, afterCols := guestSize("AFTERSIZE")
+	if beforeCols < 36 || beforeRows < 10 || afterCols != beforeCols || afterRows != beforeRows {
+		t.Fatalf("rail viewport resized the shared PTY: %dx%d -> %dx%d\n%s", beforeCols, beforeRows, afterCols, afterRows, term.Snapshot())
 	}
-	if beforeCols > 36 || beforeCols < 20 || afterCols != beforeCols || afterRows <= beforeRows {
-		t.Fatalf("PTY failed to follow 36-column rail and increased height: %dx%d -> %dx%d\n%s", beforeCols, beforeRows, afterCols, afterRows, term.Snapshot())
-	}
-	t.Logf("rail guest PTY follows viewport: %dx%d -> %dx%d\n%s", beforeCols, beforeRows, afterCols, afterRows, term.Snapshot())
+	t.Logf("rail viewport resized without changing guest PTY: %dx%d -> %dx%d\n%s", beforeCols, beforeRows, afterCols, afterRows, term.Snapshot())
 }

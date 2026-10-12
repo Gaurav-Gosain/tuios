@@ -34,12 +34,6 @@ var daemonOwnedCommands = map[string]bool{
 	// because it has no viewport. It says so with WindowState.Unplaced instead of
 	// guessing, and the client that receives the push places it.
 	"NewWindow": true,
-	// Focus is also daemon-owned session state. A session may be shown by a
-	// rail-only client with no full OS command executor; asking that client to
-	// handle navigation silently leaves the focused pane unchanged.
-	"NextWindow":  true,
-	"PrevWindow":  true,
-	"FocusWindow": true,
 }
 
 // tapeResultTTL is how long the daemon keeps a tape exec's request open for

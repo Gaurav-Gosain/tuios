@@ -7,6 +7,17 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## PR #626: a rail must not resize a shared session
+
+`TestSidebarSessionDoesNotShrinkAnotherViewer` attaches a 120x40 ordinary
+client to `side`, then displays `side` in a 36-column rail beside `center`.
+It checks both the daemon's settled size and live rail output. Before the
+sizing fix this failed `120x40 -> 36x33 (smallest)`; with passive viewers
+excluded from size ownership and rail PTY resize removed it passes. The
+historical rail-only resize and shell-row normalization controls below record
+the original feature contract; their assertions were changed in this review
+to preserve the shared PTY and display the guest's real leading blank rows.
+
 ## Two rules for every control
 
 Three green suites hid three real defects in one week. All three had a negative

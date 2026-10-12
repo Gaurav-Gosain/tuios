@@ -101,8 +101,8 @@ session = "side-right"
 	}, uiTimeout); err != nil {
 		t.Fatalf("both rail panes did not remain visible, stacked top to bottom: %v\n%s", err, term.Snapshot())
 	}
-	// Both daemon PTYs must see their own half-height, not the old 80x24
-	// startup size or the full height of the rail.
+	// Both daemon PTYs remain larger than the rail halves: stacking crops
+	// each viewer without sending a resize to either shared guest.
 	for _, target := range []struct{ id, marker string }{
 		{first.Windows[0].ID, "TOPSIZE"}, {secondID, "BOTSZ"},
 	} {
@@ -123,13 +123,13 @@ session = "side-right"
 					match := matches[len(matches)-1]
 					rows, _ := strconv.Atoi(match[1])
 					cols, _ := strconv.Atoi(match[2])
-					if rows >= 4 && rows <= 20 && cols >= 10 && cols <= 36 {
+					if rows >= 20 && cols > 36 {
 						break
 					}
 				}
 			}
 			if time.Now().After(deadline) {
-				t.Fatalf("%s guest PTY did not settle to a rail half: %v\n%s\n%s", target.marker, err, out, term.Snapshot())
+				t.Fatalf("%s shared guest PTY was squeezed to a rail half: %v\n%s\n%s", target.marker, err, out, term.Snapshot())
 			}
 			time.Sleep(100 * time.Millisecond)
 		}

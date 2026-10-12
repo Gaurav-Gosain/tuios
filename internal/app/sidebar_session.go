@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -32,6 +31,7 @@ type sidebarSessionView struct {
 	width      int
 	height     int
 	problem    string
+	failures   int // consecutive failed attachments, for bounded reconnect backoff
 }
 
 type sidebarSessionEvent struct {
@@ -47,11 +47,13 @@ type sidebarSessionEvent struct {
 
 type sidebarSessionNotice struct{ sidebarSessionEvent }
 
-// A failed rail attachment is retried without polling healthy, idle sessions.
-// The generation makes a retry harmless after a reassignment or a hidden rail.
+// A failed attachment backs off; the generation invalidates obsolete retries.
 func (m *OS) retrySidebarSession(edge sidebarEdge) tea.Cmd {
-	generation := m.sidebarSessions[edge].generation
-	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+	v := &m.sidebarSessions[edge]
+	generation := v.generation
+	delay := min(2*time.Second*time.Duration(1<<min(v.failures, 4)), 30*time.Second)
+	v.failures = min(v.failures+1, 4)
+	return tea.Tick(delay, func(time.Time) tea.Msg {
 		return sidebarSessionEvent{edge: edge, generation: generation, kind: "retry"}
 	})
 }
@@ -98,6 +100,7 @@ func (m *OS) refreshSidebarSessions() tea.Cmd {
 				m.closeSidebarSession(edge)
 				v = &m.sidebarSessions[edge]
 				v.name, v.width, v.height = name, width, height
+				v.failures = 0
 				if name != "" {
 					v.generation++
 					cmds = append(cmds, m.connectSidebarSession(edge, v.generation, name, width, height))
@@ -108,29 +111,10 @@ func (m *OS) refreshSidebarSessions() tea.Cmd {
 		if v.width != width || v.height != height {
 			v.width, v.height = width, height
 			m.layoutSidebarSessionPanes(edge)
-			if v.client != nil {
-				client := v.client
-				cmds = append(cmds, func() tea.Msg { _ = client.NotifyTerminalSize(width, height); return nil })
-			}
 			m.MarkAllDirty()
 		}
 	}
 	return tea.Batch(cmds...)
-}
-
-// settleSidebarSessionSizes announces only the last size of a host resize
-// burst to each guest; visual-only steps have already moved their frames.
-func (m *OS) settleSidebarSessionSizes() {
-	for _, edge := range []sidebarEdge{sidebarLeft, sidebarRight} {
-		v := &m.sidebarSessions[edge]
-		if m.sidebarSessionVisible(edge) {
-			for _, pane := range v.panes {
-				if w := v.windows[pane.PTYID]; w != nil {
-					w.Resize(w.Width, w.Height)
-				}
-			}
-		}
-	}
 }
 
 func (m *OS) closeSidebarSession(edge sidebarEdge) {
@@ -167,18 +151,6 @@ func (m *OS) connectSidebarSession(edge sidebarEdge, generation uint64, name str
 			return sidebarSessionEvent{edge: edge, generation: generation, kind: "connect", err: err}
 		}
 		return sidebarSessionEvent{edge: edge, generation: generation, kind: "connect", client: client, state: state}
-	}
-}
-
-func (m *OS) queueSidebarSessionEvent(event sidebarSessionEvent) {
-	if m.sidebarSessionEvents == nil {
-		return
-	}
-	select {
-	case m.sidebarSessionEvents <- event:
-	default:
-		// A later state sync contains the whole session, not a delta. The next
-		// subscription update or reconnect will redraw if the queue is full.
 	}
 }
 
@@ -228,11 +200,8 @@ func (m *OS) layoutSidebarSessionPanes(edge sidebarEdge) {
 	body := max(1, v.height)
 	if w := v.windows[v.zoomPTY]; v.zoomPTY != "" && w != nil {
 		w.X, w.Y = sidebarEdgeX(edge, v.width, m.GetRenderWidth()), m.viewReserve().Top
-		if m.viewportResizing {
-			w.ResizeVisual(v.width, body)
-		} else {
-			w.Resize(v.width, body)
-		}
+		w.ResizeVisual(v.width, body)
+		w.MarkContentDirty()
 		return
 	}
 	y := m.viewReserve().Top
@@ -243,11 +212,8 @@ func (m *OS) layoutSidebarSessionPanes(edge sidebarEdge) {
 		}
 		if w := v.windows[pane.PTYID]; w != nil {
 			w.X, w.Y = sidebarEdgeX(edge, v.width, m.GetRenderWidth()), y
-			if m.viewportResizing {
-				w.ResizeVisual(v.width, h)
-			} else {
-				w.Resize(v.width, h)
-			}
+			w.ResizeVisual(v.width, h)
+			w.MarkContentDirty()
 		}
 		y += h
 	}
@@ -356,8 +322,11 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 	switch event.kind {
 	case "retry":
 		if v.client == nil {
+			failures := v.failures
 			m.closeSidebarSession(event.edge)
-			return m.refreshSidebarSessions()
+			cmd := m.refreshSidebarSessions()
+			m.sidebarSessions[event.edge].failures = failures
+			return cmd
 		}
 	case "connect":
 		if event.err != nil {
@@ -366,17 +335,10 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 			return m.retrySidebarSession(event.edge)
 		}
 		v.client = event.client
-		client, edge, generation := v.client, event.edge, v.generation
-		client.OnStateSync(func(state *session.SessionState, _, _ string) {
-			m.queueSidebarSessionEvent(sidebarSessionEvent{edge: edge, generation: generation, kind: "state", state: state})
-		})
-		client.OnSessionEnded(func(_, reason string) {
-			m.queueSidebarSessionEvent(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: fmt.Errorf("session ended: %s", reason)})
-		})
-		client.OnDisconnect(func(err error) {
-			m.queueSidebarSessionEvent(sidebarSessionEvent{edge: edge, generation: generation, kind: "ended", err: err})
-		})
-		client.StartReadLoop()
+		v.failures = 0
+		edge, generation := event.edge, v.generation
+		m.WireSidebarSessionClient(v.client, edge, generation)
+		v.client.StartReadLoop()
 		return m.applySidebarSessionState(edge, event.state)
 	case "state":
 		if v.client != nil {
@@ -401,7 +363,6 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 		w.CustomName = event.pane.CustomName
 		w.ForegroundCmd = event.pane.ForegroundCmd
 		w.DaemonWriteFunc = func(data []byte) error { return client.WritePTY(ptyID, data) }
-		w.DaemonResizeFunc = func(width, height int) error { return client.ResizePTY(ptyID, width, height) }
 		w.StartDaemonResponseReader()
 		w.SetStreamOwnsSize(true)
 		w.ResizeEmulatorToSnapshot(event.terminal.Width, event.terminal.Height)
@@ -417,10 +378,9 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 			v.problem = err.Error()
 			return m.retrySidebarSession(event.edge)
 		} else {
-			// Detached sessions may still have their 80x24 startup PTY.
-			// Each visible guest gets its own share of the rail height.
+			// Crop the subscribed guest to its rail frame. The shared daemon
+			// PTY keeps the dimensions chosen by ordinary session clients.
 			m.layoutSidebarSessionPanes(event.edge)
-			w.Resize(w.Width, w.Height) // attachment must announce even during an initial viewport settle
 		}
 		m.MarkAllDirty()
 	case "ended":

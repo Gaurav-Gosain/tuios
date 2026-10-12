@@ -1127,10 +1127,10 @@ pane's title bar focuses that pane. Each pane uses its normal title and title
 position, not the assigned session ID. Its close and minimize buttons target
 that daemon pane; zoom temporarily expands the pane within the rail. The
 session assignment remains in Settings. There is no extra row above the rail
-pane's normal border. To align idle shells, the client can hide up to two *empty*
-leading guest rows in its view, translating cursor and mouse coordinates with
-them. It does not clear the daemon's screen or history; full-screen programs
-and copy mode use the original grid. All visible panes remain on screen. If
+pane's normal border. The rail crops the daemon's existing grid; it does not
+resize a PTY, suppress leading guest whitespace, or shift cursor and mouse
+coordinates. A narrow rail does not change the size seen by another viewer.
+All visible panes remain on screen. If
 the rail is too short to give every pane at least six rows, it shows a
 contiguous group containing
 the active pane; cycling focus brings the others into view.

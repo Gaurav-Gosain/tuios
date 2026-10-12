@@ -133,9 +133,8 @@ func (w *Window) LastGeometry() GeometrySnapshot {
 func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bool) {
 	off := w.BorderOffset()
 	termX = screenX - w.X - off
-	visualY := screenY - w.Y - off
-	termY = visualY + w.DisplayRowOffset
-	ok = termX >= 0 && visualY >= 0 && visualY < w.ContentHeight() && termY < w.ContentHeight() && termX < w.ContentWidth()
+	termY = screenY - w.Y - off
+	ok = termX >= 0 && termY >= 0 && termY < w.ContentHeight() && termX < w.ContentWidth()
 	return
 }
 
