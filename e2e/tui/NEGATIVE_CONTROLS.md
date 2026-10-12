@@ -5641,3 +5641,9 @@ control failed where shown. The same test passed on the branch build.
 | `verbCommandHistory` keeps every run of a command | the command run twice is listed twice |
 | `walkProcTree` reads no children, only each pane's own process | list-ports never lists python's port: python runs under `sh -c` |
 | `noteStartedBy` records nothing | the child window's `started_by` is nil in list-windows and list-agents |
+
+On main (replaces #632), the `noteStartedBy` control was run again on
+2026-10-12 on branch `feat/gui-search-ports-tree`, after the merge with
+main's start folders in `retainDaemonExclusive`. It failed where shown above
+(the child's `started_by` is nil in list-windows and list-agents). The log is
+`~/.cache/agent-tmp/gui-port/proof/nc-find.txt`.
