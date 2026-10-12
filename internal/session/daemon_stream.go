@@ -214,6 +214,11 @@ func takeChunk(batch []byte, c ptyChunk, sub *ptySubscriber) []byte {
 // subscribers only, a pane on a hidden workspace outlived its program and
 // stayed listed until somebody showed its workspace and closed it by hand.
 func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
+	// A pane moved to another session is closed in the one that holds it
+	// now, not the one its exit callback was made in.
+	if holder := d.sessionHoldingPTY(ptyID); holder != nil {
+		sessionID = holder.ID
+	}
 	debugLog("[DEBUG] notifyPTYClosed: sessionID=%s, ptyID=%s", shortID(sessionID), shortID(ptyID))
 
 	d.clientsMu.RLock()

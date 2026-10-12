@@ -210,6 +210,7 @@ type herdrArgs struct {
 	Window    string  `json:"window,omitempty"`
 	Name      *string `json:"name,omitempty"`
 	Workspace int     `json:"workspace,omitempty"`
+	ToSession string  `json:"to_session,omitempty"`
 	Focus     *bool   `json:"focus,omitempty"`
 	Cwd       string  `json:"cwd,omitempty"`
 	Text      string  `json:"text,omitempty"`

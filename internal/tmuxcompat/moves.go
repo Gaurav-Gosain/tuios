@@ -269,7 +269,17 @@ func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 		return OutcomeError, nil, errors.New("source and target panes must be different")
 	}
 	if src.sess != dst.sess {
-		return OutcomeError, nil, errors.New("join pane failed: tuios moves a pane only within its session")
+		// Another tmux session is another tuios session: the pane moves
+		// there with its process running, onto the target pane's workspace.
+		if _, err := s.Caller.Call("move-window", map[string]any{"session": src.sess.name, "window": src.ID, "to_session": dst.sess.name, "workspace": dst.Workspace, "follow": false}); err != nil {
+			return OutcomeError, nil, err
+		}
+		if !p.Has('d') {
+			if _, err := s.Caller.Call("focus-window", map[string]any{"session": dst.sess.name, "window": src.ID}); err != nil {
+				return OutcomeError, nil, err
+			}
+		}
+		return OutcomeOK, nil, nil
 	}
 	if src.Workspace == dst.Workspace {
 		// Already in that window: tmux would move it beside the target,

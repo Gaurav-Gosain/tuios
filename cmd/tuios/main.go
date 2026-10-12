@@ -1474,35 +1474,56 @@ other two forms work on a detached session.`,
 
 	var moveWindowSession string
 	var moveWindowWindow string
+	var moveWindowToSession string
 	var moveWindowFollow bool
 	var moveWindowJSON bool
 	moveWindowCmd := &cobra.Command{
-		Use:   "move-window <workspace>",
-		Short: "Move a window to another workspace",
+		Use:   "move-window [workspace]",
+		Short: "Move a window to another workspace or session",
 		Long: `Move a window to another workspace and report where it came from.
 
 Works on a detached session. Pass --follow to switch to that workspace after
-the move instead of staying put.`,
+the move instead of staying put.
+
+With --to-session, the window moves to another session. The program in it
+keeps running, and the window keeps its id and its scrollback. The workspace
+is optional then: without it, the window goes to the workspace that session
+shows. A popup, a scratch pane and a pane on another machine cannot move.`,
 		Example: `  # Move the focused window to workspace 3
   tuios move-window 3
 
   # Move a named window and go with it
-  tuios move-window 2 -w build --follow`,
-		Args: cobra.ExactArgs(1),
+  tuios move-window 2 -w build --follow
+
+  # Move a window to the session "review"
+  tuios move-window -s work -w build --to-session review
+
+  # Move it to workspace 2 of "review" and focus it there
+  tuios move-window 2 -w build --to-session review --follow`,
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			workspace, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("workspace must be a number, got %q", args[0])
+			workspace := 0
+			if len(args) == 1 {
+				n, err := strconv.Atoi(args[0])
+				if err != nil || n < 1 {
+					return fmt.Errorf("workspace must be a number from 1, got %q", args[0])
+				}
+				workspace = n
 			}
-			return runMoveWindow(moveWindowSession, moveWindowWindow, workspace,
+			if workspace == 0 && moveWindowToSession == "" {
+				return errors.New("give the workspace to move the window to, or a session with --to-session")
+			}
+			return runMoveWindow(moveWindowSession, moveWindowWindow, moveWindowToSession, workspace,
 				moveWindowFollow, moveWindowJSON)
 		},
 	}
 	moveWindowCmd.Flags().StringVarP(&moveWindowSession, "session", "s", "", "Target session (default: most recently active)")
 	moveWindowCmd.Flags().StringVarP(&moveWindowWindow, "window", "w", "", "Window to move by name or ID (default: focused)")
+	moveWindowCmd.Flags().StringVar(&moveWindowToSession, "to-session", "", "Session to move the window to")
 	moveWindowCmd.Flags().BoolVar(&moveWindowFollow, "follow", false, "Switch to that workspace after moving")
 	moveWindowCmd.Flags().BoolVar(&moveWindowJSON, "json", false, "Output result as JSON")
 	_ = moveWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = moveWindowCmd.RegisterFlagCompletionFunc("to-session", completeSessionNames)
 
 	var setWindowSession string
 	var setWindowWindow string

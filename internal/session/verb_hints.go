@@ -135,6 +135,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbDiskFull, "The disk had no room for the write. What was written stays in the part file. Free space, then resume the transfer."},
 	{ErrVerbSourceChanged, "A file changed on its machine while it was copied: its size or time is not what the copy started from. Nothing was put in place for it. Copy it again when it is not being written."},
 	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
+	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},
+	{ErrVerbPaneNotMovable, "move-window cannot move the window to another session: it is a popup, a scratch pane, or a pane that runs on another machine. Nothing moved."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

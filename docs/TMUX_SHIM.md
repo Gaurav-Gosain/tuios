@@ -202,7 +202,7 @@ Some values come from tuios facts:
 | `select-window`, `rename-window` | Show a workspace, name a workspace |
 | `next-window`, `previous-window` | Show the next or previous workspace that holds panes, wrapping around (`select-workspace`) |
 | `break-pane` | Moves a pane to the lowest empty workspace, or the empty one `-t` names (`move-window`). `-d` keeps the view where it is, `-n` names the workspace, `-P -F` prints the pane |
-| `join-pane`, `move-pane` | Move the `-s` pane to the workspace of the `-t` pane (`move-window`). Where it lands is the tuios layout's answer: `-b`, `-f`, `-h`, `-v` and `-l` do not change it |
+| `join-pane`, `move-pane` | Move the `-s` pane to the workspace of the `-t` pane (`move-window`). A `-t` pane in another session takes the `-s` pane to that session, and its program keeps running. Where it lands is the tuios layout's answer: `-b`, `-f`, `-h`, `-v` and `-l` do not change it |
 | `swap-pane` | Refused. tuios has no verb that exchanges two panes' places |
 | `rename-session` | Renames a session (`rename-session` verb) |
 | `respawn-pane -k` | Replaces the process of a pane the shim opened, keeping the pane and its id. See below |

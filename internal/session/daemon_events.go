@@ -324,11 +324,15 @@ func (f eventFilter) match(ev streamEvent) bool {
 			return false
 		}
 	}
+	// A filter that names a window or a pane follows it to another session:
+	// window and PTY ids are unique on this machine, and a pane moved with
+	// move-window's to_session goes on running there.
+	follows := ev.Host == "" && ((f.window != "" && ev.Window == f.window) || (f.ptyID != "" && ev.PTYID == f.ptyID))
 	if f.sess != nil {
-		if ev.Session != f.sess.Name() {
+		if ev.Session != f.sess.Name() && !follows {
 			return false
 		}
-	} else if f.session != "" && ev.Session != f.session {
+	} else if f.session != "" && ev.Session != f.session && !follows {
 		return false
 	}
 	if f.window != "" && ev.Window != f.window {

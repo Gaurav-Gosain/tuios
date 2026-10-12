@@ -1112,21 +1112,27 @@ func init() {
 			handler: (*Daemon).verbFocusWindow,
 		},
 		"move-window": {
-			description: "Move a window to another workspace.",
+			description: "Move a window to another workspace, or with to_session to another session. The program in the window keeps running, and the window keeps its id and its scrollback.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to move. Omit to move the focused one."},
-				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to move the window to."},
-				{Name: "follow", Type: "bool", Description: "Switch to that workspace after moving.", Default: "false"},
+				{Name: "workspace", Type: "int", Description: "Workspace number to move the window to. Required without to_session. With to_session, omit it to use the workspace the destination shows."},
+				{Name: "follow", Type: "bool", Description: "Switch to that workspace after moving. With to_session, focus the window in the destination.", Default: "false"},
+				{Name: "to_session", Type: "string", Description: "Session to move the window to, by name or id. A popup, a scratch pane and a pane on another machine cannot move (pane_not_movable). The window's own session is refused (same_session)."},
 			},
 			returns: []verbParam{
-				{Name: "window_id", Type: "string", Description: "Id of the window that moved."},
+				{Name: "window_id", Type: "string", Description: "Id of the window that moved. A move to another session keeps it."},
+				{Name: "session", Type: "string", Description: "Session the window is in now."},
+				{Name: "from_session", Type: "string", Description: "Session the window left. Only with to_session."},
 				{Name: "from_workspace", Type: "int", Description: "Workspace it was on."},
 				{Name: "workspace", Type: "int", Description: "Workspace it is on now."},
-				{Name: "current_workspace", Type: "int", Description: "Workspace showing after the call. It changes only when follow is true."},
+				{Name: "current_workspace", Type: "int", Description: "Workspace the window's session shows after the call. It changes only when follow is true."},
 			},
-			examples: []string{`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","workspace":2,"follow":true}}`},
-			handler:  (*Daemon).verbMoveWindow,
+			examples: []string{
+				`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","workspace":2,"follow":true}}`,
+				`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","to_session":"review"}}`,
+			},
+			handler: (*Daemon).verbMoveWindow,
 		},
 		"set-window": {
 			description: "Change a window's name or minimized state. Pass only the fields to change.",
@@ -2506,6 +2512,9 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 	// A session named by a name it was renamed from is named by its current
 	// one from here on. See session_rename.go.
 	params = d.followRenamedSession(verb, params)
+	// A window moved out of the session named goes to the one it is in now.
+	// See window_move_session.go.
+	params = d.followMovedWindow(params)
 	granted, verr := d.checkGrants(cs, verb, params)
 	if verr != nil {
 		return verbEntry{}, nil, verr

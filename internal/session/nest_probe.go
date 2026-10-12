@@ -107,15 +107,16 @@ type nestSighting struct {
 
 // scanNestProbes records every probe in data against this pane's session.
 func (p *PTY) scanNestProbes(data []byte) {
-	if p.sessionID == "" {
+	sessionID := p.ownerID()
+	if sessionID == "" {
 		return
 	}
 	if len(p.probeTail) > 0 {
 		// A probe split across the last read and this one.
 		joined := append(append([]byte(nil), p.probeTail...), data[:min(len(data), nestProbeMax)]...)
-		recordNestProbes(joined, p.sessionID)
+		recordNestProbes(joined, sessionID)
 	}
-	recordNestProbes(data, p.sessionID)
+	recordNestProbes(data, sessionID)
 	keep := min(len(data), nestProbeMax-1)
 	p.probeTail = append(p.probeTail[:0], data[len(data)-keep:]...)
 }

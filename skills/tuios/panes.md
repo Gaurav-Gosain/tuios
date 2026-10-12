@@ -333,6 +333,7 @@ tuios list-workspaces -s work
 tuios focus-window -s work build               # focus a named pane, on any workspace
 tuios focus-window -s work --relative next
 tuios move-window -s work 2 -w build --follow  # send a pane to workspace 2
+tuios move-window -s work -w build --to-session review  # send it to another session
 tuios select-workspace -s work 2
 tuios set-window -s work -w build --name "api tests"
 tuios set-window -s work -w build --minimize

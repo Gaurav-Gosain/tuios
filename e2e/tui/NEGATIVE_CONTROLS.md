@@ -5661,3 +5661,21 @@ log is `~/.cache/agent-tmp/gui-port/proof/nc-search.txt`.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The whole history copied under the lock before the budget is read | `verb_find.go` as it was before the fix (`paneLines`) | `TestSearchPanesKeepsToItsBudget` (2.39 s median, 1.29 to 2.56 s) | **caught** |
+## Move a window to another session
+
+Run on 2026-10-12 on branch `feat/move-window-session`. `TestMoveWindowToSession`
+moves a pane that prints its pid from session alpha to beta with the verb,
+types into it there, and moves it back with the CLI. A real client is
+attached to each session. Each control cuts one call site and rebuilds.
+
+| Control | Build | Where the test fails | Verdict |
+| --- | --- | --- | --- |
+| The PTY is not put in the destination's PTY map (`s.ptys[pty.ID] = pty` cut from `Session.adoptWindow`) | mutant of this branch | "in session beta never showed MOVED-PANE-MARK": capture-pane answers `pty_not_found`, though beta lists the window | **caught** |
+| The `to_session` branch cut from `verbMoveWindow` | mutant of this branch | "a move to the window's own session = invalid_params ... want same_session" | **caught** |
+| The `followMovedWindow` call cut from `admitVerb` | mutant of this branch | "a report naming the old session did not reach the moved pane" | **caught** |
+| `joinPane` in the tmux shim as on `origin/main` (a join across sessions refused) | mutant of this branch | `TestTmuxShimJoinPaneAcrossSessions`: join-pane exits 1 with "tuios moves a pane only within its session" | **caught** |
+| The positive half | this branch | none: the source client draws the pane before the move and not after, the destination client draws its old output and the answer typed after the move, with the same pid, and the refusals are `same_session` and `session_not_found` | **guard** |
+
+The passing run writes `TestMoveWindowToSession.json` (every call and reply)
+and the screens of both clients to `$TUIOS_E2E_FRAMES`. Run it with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios TUIOS_E2E_FRAMES=/tmp/frames go test -count=1 -run '^TestMoveWindowToSession$' .`

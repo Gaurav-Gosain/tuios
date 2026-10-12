@@ -816,9 +816,12 @@ type PTY struct {
 	largeSlot     chan struct{}
 	largeSlotOnce sync.Once
 	largeSince    atomic.Int64
-	// sessionID is the session the pane belongs to, which a nesting probe
-	// seen in its output is recorded against. See nest_probe.go.
+	// sessionID is the session the pane was made in. home is the session
+	// it belongs to now, which move-window with to_session changes. Every
+	// callback the pane makes reads home, so its events, focus and place
+	// reach the session that shows it. See window_move_session.go.
 	sessionID string
+	home      atomic.Pointer[Session]
 	// probeTail is the end of the last output chunk, so a probe split across
 	// two reads is still seen. Only readOutput touches it.
 	probeTail []byte
@@ -1086,6 +1089,19 @@ type PTY struct {
 	runClaim atomic.Bool
 }
 
+// owner is the session the pane belongs to now. It is never nil for a pane
+// made by a session.
+func (p *PTY) owner() *Session { return p.home.Load() }
+
+// ownerID is the ID of the session the pane belongs to now, or the one it
+// was made in when it has no owner recorded.
+func (p *PTY) ownerID() string {
+	if s := p.home.Load(); s != nil {
+		return s.ID
+	}
+	return p.sessionID
+}
+
 // Title returns the last title this PTY's application set, or "" if it has set
 // none.
 func (p *PTY) Title() string {
@@ -1269,6 +1285,12 @@ type Session struct {
 	// count as a focus move, so a stale push still keeps its own focus. Only
 	// a FocusIfShown window sets it. See ExecuteCommandPayload.FocusIfShown.
 	focusNeutral bool
+	// movingWindow is set inside mutateState by the half of a move to
+	// another session that runs here, guarded by stateMu. The window that
+	// leaves raises no window-closed, and the one that arrives raises
+	// window-moved rather than window-created, because the pane goes on. See
+	// window_move_session.go.
+	movingWindow string
 
 	// stateDirty is set by every change to the session's structure and consumed
 	// by the resurrection saver, which is how a new window reaches disk in a
@@ -2284,11 +2306,12 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
 	// ID. It routes through the session's event sink so events reach the daemon's
 	// event hub; when no sink is installed it is a cheap no-op.
-	pty.hasFocus = func() bool { return s.paneHasFocus(sp.windowID) }
+	pty.home.Store(s)
+	pty.hasFocus = func() bool { return pty.owner().paneHasFocus(sp.windowID) }
 	pty.emit = func(ev SessionEvent) {
 		ev.Window = sp.windowID
 		ev.PTYID = id
-		s.emit(ev)
+		pty.owner().emit(ev)
 	}
 
 	// Raise control-plane events from the daemon-side VT emulator: bell, an
@@ -2318,7 +2341,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 				return
 			}
 			if pty.place.announce(raw) {
-				s.publishPlaceMove()
+				pty.owner().publishPlaceMove()
 			}
 		},
 		// Parked rather than applied: this fires with the terminal lock held, and
@@ -2348,7 +2371,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	})
 
 	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
-	terminal.SetSixelAdvertised(s.SixelAdvertised)
+	terminal.SetSixelAdvertised(func() bool { return pty.owner().SixelAdvertised() })
 
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.
@@ -2362,12 +2385,12 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	terminal.SetKittyFilesElsewhere(remotePane)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
-			if response := s.kittyQueryResponse(cmd, remotePane); response != nil {
+			if response := pty.owner().kittyQueryResponse(cmd, remotePane); response != nil {
 				terminal.WriteResponse(response)
 			}
 			return
 		}
-		if response := kittyAnimationRefusal(cmd, remotePane, s.kittyAnimation.Load()); response != nil {
+		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
 		}
 		// With no client attached to this pane, nothing will read the object
@@ -3216,7 +3239,18 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 // channel sends; it never re-enters the session.
 func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 	events := diffLifecycle(before, snapshotLifecycle(s.state))
+	moving := s.movingWindow
+	s.movingWindow = ""
 	for _, ev := range events {
+		if moving != "" && ev.Window == moving {
+			switch ev.Type {
+			case EventWindowClosed:
+				// The pane left for another session, which reports it.
+				continue
+			case EventWindowCreated:
+				ev = SessionEvent{Type: EventWindowMoved, Window: ev.Window, PTYID: ev.PTYID, Workspace: ev.hookWorkspace, hookTitle: ev.hookTitle, hookWorkspace: ev.hookWorkspace}
+			}
+		}
 		s.emit(ev)
 	}
 }

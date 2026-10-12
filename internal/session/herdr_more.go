@@ -202,12 +202,13 @@ type herdrMove struct {
 	FocusedPaneID       string        `json:"focused_pane_id"`
 }
 
-// herdrPaneMove moves a pane to another tab of its workspace, or to a new
-// tab there, as move-window does, and needs what move-window needs. A tuios
-// window stays in its session, so a tab of another workspace and a new
-// workspace fail with unsupported. tuios places the pane in the tab's layout
-// itself: target_pane_id, split and ratio are not followed. The pane keeps
-// its id.
+// herdrPaneMove moves a pane to another tab, or to a new tab, as move-window
+// does, and needs what move-window needs. A herdr workspace is a tuios
+// session, so a tab of another workspace is a workspace of another session:
+// the pane moves there with its process running (move-window's to_session),
+// and its pane id changes with its workspace. A new workspace fails with
+// unsupported. tuios places the pane in the tab's layout itself:
+// target_pane_id, split and ratio are not followed.
 func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	dest := in.Destination
 	switch dest.Type {
@@ -223,10 +224,11 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		PreviousPaneID: site.pane.PaneID, PreviousWorkspaceID: site.pane.WorkspaceID, PreviousTabID: site.pane.TabID,
 	}
 	st := site.sess.GetState()
+	to := site.sess
 	ws := 0
 	switch dest.Type {
 	case "new_workspace":
-		return nil, herdrErr("unsupported", "tuios keeps a pane in its own workspace, so it cannot move one to a new workspace. Move it to a tab of its workspace")
+		return nil, herdrErr("unsupported", "tuios cannot make a new workspace for a pane. Make the workspace first, then move the pane to a new tab there")
 	case "tab":
 		if dest.TabID == "" || dest.Split == "" {
 			return nil, herdrErr("invalid_request", "invalid request: missing field `"+map[bool]string{true: "tab_id", false: "split"}[dest.TabID == ""]+"`")
@@ -238,39 +240,47 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		if ierr != nil {
 			return nil, ierr.herdr()
 		}
-		if sess != site.sess {
-			return nil, herdrErr("unsupported", "tuios keeps a pane in its own workspace, so it cannot move one to a tab of another workspace")
-		}
-		ws = n
+		to, ws = sess, n
 	case "new_tab":
 		if dest.WorkspaceID != "" {
 			sess, ierr := d.herdrFindSession(dest.WorkspaceID)
 			if ierr != nil {
 				return nil, ierr.herdr()
 			}
-			if sess != site.sess {
-				return nil, herdrErr("unsupported", "tuios keeps a pane in its own workspace, so it cannot move one to a new tab of another workspace")
-			}
+			to = sess
 		}
-		for _, n := range herdrWorkspaceOrder(st) {
-			if !herdrListedWorkspace(st, n) {
+		toState := to.GetState()
+		for _, n := range herdrWorkspaceOrder(toState) {
+			if !herdrListedWorkspace(toState, n) {
 				ws = n
 				break
 			}
 		}
 		if ws == 0 {
-			return nil, herdrErr("pane_move_failed", fmt.Sprintf("every one of the %d tabs of this workspace is in use. Close a tab first", st.workspaceBound()))
+			return nil, herdrErr("pane_move_failed", fmt.Sprintf("every one of the %d tabs of this workspace is in use. Close a tab first", toState.workspaceBound()))
+		}
+	}
+	across := to != site.sess
+	if across {
+		if why := movableRefusal(site.win); why != "" {
+			return nil, herdrErr("unsupported", "the pane cannot move to another workspace: "+why)
 		}
 	}
 	if herr := d.herdrAdmit(cs, "move-window", site.sess); herr != nil {
 		return nil, herr
 	}
+	if across {
+		if herr := d.herdrAdmit(cs, "move-window", to); herr != nil {
+			return nil, herr
+		}
+	}
 	switch {
-	case ws == site.win.Workspace:
+	case !across && ws == site.win.Workspace:
 		res.Reason = "same_tab"
 	case herdrZoomedIn(st, site.win.Workspace) != "":
 		res.Reason = "zoomed_tab"
 	}
+	paneID := site.pane.PaneID
 	if res.Reason == "" {
 		const fail = "pane_move_failed"
 		label := ""
@@ -278,47 +288,61 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			label = strings.TrimSpace(*dest.Label)
 		}
 		if label != "" {
-			if _, herr := d.herdrVerb(cs, "set-workspace-name", herdrArgs{Session: site.sess.Name(), Workspace: ws, Name: &label}, fail); herr != nil {
+			if _, herr := d.herdrVerb(cs, "set-workspace-name", herdrArgs{Session: to.Name(), Workspace: ws, Name: &label}, fail); herr != nil {
 				return nil, herr
 			}
 		}
 		args := herdrWin(site.sess, site.win.ID)
 		args.Workspace = ws
+		if across {
+			args.ToSession = to.Name()
+		}
 		if _, herr := d.herdrVerb(cs, "move-window", args, fail); herr != nil {
 			return nil, herr
 		}
 		res.Changed = true
+		if across {
+			paneID = herdrPaneID(to.ID, site.win.ID)
+		}
 		if in.Focus {
-			if _, herr := d.herdrFocusPane(cs, site.pane.PaneID); herr != nil {
+			if _, herr := d.herdrFocusPane(cs, paneID); herr != nil {
 				return nil, herr
 			}
 		}
 	}
-	v, herr := d.herdrSessionView(cs, site.sess)
+	v, herr := d.herdrSessionView(cs, to)
 	if herr != nil {
 		return nil, herr
 	}
-	p := v.pane(site.pane.PaneID)
+	p := v.pane(paneID)
 	if p == nil {
 		return nil, herdrErr("pane_move_failed", "source pane could not be moved")
 	}
 	res.Pane = *p
 	for i := range v.layouts {
-		switch v.layouts[i].TabID {
-		case p.TabID:
+		if v.layouts[i].TabID == p.TabID {
 			res.TargetLayout = v.layouts[i]
 			res.FocusedPaneID = v.layouts[i].FocusedPaneID
-		case res.PreviousTabID:
-			if res.Changed {
-				res.SourceLayout = &v.layouts[i]
-			}
 		}
 	}
 	if res.Changed {
+		// The tab the pane left is in the source's view, which is another
+		// view when the pane changed workspace.
+		sv := v
+		if across {
+			if sv, herr = d.herdrSessionView(cs, site.sess); herr != nil {
+				return nil, herr
+			}
+		}
+		for i := range sv.layouts {
+			if sv.layouts[i].TabID == res.PreviousTabID {
+				res.SourceLayout = &sv.layouts[i]
+			}
+		}
 		if dest.Type == "new_tab" {
 			res.CreatedTab = v.tab(p.TabID)
 		}
-		if v.tab(res.PreviousTabID) == nil {
+		if sv.tab(res.PreviousTabID) == nil {
 			res.ClosedTabID = res.PreviousTabID
 		}
 	}

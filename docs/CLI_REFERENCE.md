@@ -3505,7 +3505,7 @@ Some commands also answer to a short name: `attach` to `a`, `new` to `n`,
 | Command | What it does |
 |---------|--------------|
 | `tuios focus-window [window]` | Move the focus to a pane, by name, id, `--relative next` or `--direction left` |
-| `tuios move-window <workspace>` | Move a window to another workspace (`--follow` goes with it) |
+| `tuios move-window [workspace]` | Move a window to another workspace (`--follow` goes with it). `--to-session NAME` moves it to another session, and its program keeps running |
 | `tuios select-workspace <workspace>` | Show a workspace |
 | `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
 | `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |

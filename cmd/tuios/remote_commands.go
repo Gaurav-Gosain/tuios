@@ -390,20 +390,27 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 	return nil
 }
 
-// runMoveWindow moves a window to another workspace.
-func runMoveWindow(sessionName, windowTarget string, workspace int, follow, jsonOutput bool) error {
+// runMoveWindow moves a window to another workspace, or with toSession to
+// another session.
+func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, follow, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("move-window", map[string]any{
-		"session":   sessionName,
-		"window":    windowTarget,
-		"workspace": workspace,
-		"follow":    follow,
-	})
+	params := map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"follow":  follow,
+	}
+	if workspace != 0 {
+		params["workspace"] = workspace
+	}
+	if toSession != "" {
+		params["to_session"] = toSession
+	}
+	raw, err := client.Call("move-window", params)
 	if err != nil {
 		return reportVerbError(explainVerbError("move-window", err), jsonOutput)
 	}
@@ -411,12 +418,18 @@ func runMoveWindow(sessionName, windowTarget string, workspace int, follow, json
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res struct {
-		WindowID string `json:"window_id"`
-		From     int    `json:"from_workspace"`
-		To       int    `json:"workspace"`
+		WindowID    string `json:"window_id"`
+		From        int    `json:"from_workspace"`
+		To          int    `json:"workspace"`
+		Session     string `json:"session"`
+		FromSession string `json:"from_session"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.FromSession != "" {
+		fmt.Printf("moved %s from session %s to session %s, workspace %d\n", shortWindowID(res.WindowID), res.FromSession, res.Session, res.To)
+		return nil
 	}
 	fmt.Printf("moved %s from workspace %d to %d\n", shortWindowID(res.WindowID), res.From, res.To)
 	return nil

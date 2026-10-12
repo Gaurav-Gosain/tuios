@@ -705,6 +705,10 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 // popupOnly set, a window that is not a popup is left open.
 func (d *Daemon) closeWindowOfPTY(sess *Session, ptyID string, popupOnly bool) {
 	d.goTracked(func() {
+		// A pane moved to another session closes there.
+		if holder := d.sessionHoldingPTY(ptyID); holder != nil {
+			sess = holder
+		}
 		for _, w := range sess.GetState().Windows {
 			if w.PTYID == ptyID {
 				if popupOnly && !w.Popup {

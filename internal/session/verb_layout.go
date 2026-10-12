@@ -129,6 +129,7 @@ func focusResult(sess *Session) map[string]any {
 }
 
 // verbMoveWindow moves a window to another workspace, optionally following it.
+// With to_session it moves the window to another session.
 //
 // The tape command behind this only ever moved the focused window, so moving a
 // named one meant focusing it first, which is a visible change to the session
@@ -140,16 +141,23 @@ func (d *Daemon) verbMoveWindow(_ *connState, params json.RawMessage) (any, *ver
 		Window    string `json:"window"`
 		Workspace int    `json:"workspace"`
 		Follow    bool   `json:"follow"`
+		ToSession string `json:"to_session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Workspace == 0 {
+	if p.Workspace == 0 && p.ToSession == "" {
 		return nil, invalidParam("workspace", "workspace is required and is the workspace number to move the window to, e.g. 2")
+	}
+	if p.Workspace < 0 {
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2")
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+	if p.ToSession != "" {
+		return d.moveWindowAcross(sess, p.Window, p.ToSession, p.Workspace, p.Follow)
 	}
 
 	target := p.Window
@@ -182,9 +190,80 @@ func (d *Daemon) verbMoveWindow(_ *connState, params json.RawMessage) (any, *ver
 	return map[string]any{
 		"type":              "window_moved",
 		"window_id":         windowID,
+		"session":           sess.Name(),
 		"from_workspace":    from,
 		"workspace":         p.Workspace,
 		"current_workspace": sess.GetState().CurrentWorkspace,
+	}, nil
+}
+
+// moveWindowAcross is move-window with to_session: the window leaves sess and
+// joins the session toName names, with its process still running.
+func (d *Daemon) moveWindowAcross(sess *Session, target, toName string, workspace int, follow bool) (any, *verbError) {
+	dst := d.findTargetSession(toName)
+	if dst == nil {
+		dst = d.manager.GetSessionByID(toName)
+	}
+	if dst == nil {
+		available := d.sessionNames()
+		return nil, hintedVerbError(ErrVerbSessionNotFound, "session "+echoName(toName)+" not found", &VerbHint{
+			Param:      "to_session",
+			Command:    "tuios ls",
+			DidYouMean: closestMatch(toName, available),
+			Available:  available,
+			Detail:     "to_session names the session to move the window to. Create it first with 'tuios new " + toName + " --detach'.",
+		})
+	}
+	if target == "" {
+		id, err := focusedWindowID(sess.GetState())
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	state := sess.GetState()
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	win := state.Windows[idx]
+	if dst == sess {
+		return nil, hintedVerbError(ErrVerbSameSession, "the window is already in session "+sess.Name(), &VerbHint{
+			Param:  "to_session",
+			Detail: "Name another session in to_session. To move the window in its own session, leave out to_session and give workspace.",
+		})
+	}
+	if why := movableRefusal(win); why != "" {
+		return nil, hintedVerbError(ErrVerbPaneNotMovable, "the window cannot move to another session: "+why, &VerbHint{
+			Param:  "window",
+			Detail: "Only a local pane that is not a popup or a scratch pane can move to another session.",
+		})
+	}
+	if workspace != 0 {
+		if st := dst.GetState(); !st.workspaceAccepts(workspace) || IsScratchWorkspace(workspace) {
+			return nil, hintedVerbError(ErrVerbInvalidParams, fmt.Sprintf("workspace %d does not exist in session %s", workspace, dst.Name()), &VerbHint{
+				Param:  "workspace",
+				Verb:   "list-workspaces",
+				Detail: fmt.Sprintf("session %s has workspaces 1 to %d. Leave out workspace to use the workspace it shows.", dst.Name(), st.workspaceBound()),
+			})
+		}
+	}
+
+	moved, err := d.moveWindowToSession(sess, dst, win.ID, workspace, follow)
+	if err != nil {
+		if why, ok := isPaneNotMovable(err); ok {
+			return nil, newVerbError(ErrVerbPaneNotMovable, "the window cannot move to another session: "+why)
+		}
+		return nil, moveErr(err, dst, workspace)
+	}
+	return map[string]any{
+		"type":              "window_moved",
+		"window_id":         moved.ID,
+		"session":           dst.Name(),
+		"from_session":      sess.Name(),
+		"from_workspace":    win.Workspace,
+		"workspace":         moved.Workspace,
+		"current_workspace": dst.GetState().CurrentWorkspace,
 	}, nil
 }
 

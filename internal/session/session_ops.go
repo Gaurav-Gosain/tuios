@@ -573,35 +573,12 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 			return err
 		}
 
-		closed = state.Windows[idx]
-		workspace := closed.Workspace
-		state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
-		state.FocusHistory = RemoveFocus(state.FocusHistory, closed.ID)
+		closed = s.removeWindowLocked(state, idx)
 		// The window is gone, so nothing owns its agent state any more. The
 		// detector sweeps stale claims on its own tick too, but only when it is
 		// running, and a claim can now come from a source that is not the detector.
 		delete(s.agentClaims, closed.ID)
 		delete(s.agentHarnessPIDs, closed.ID)
-
-		// Repair focus if we removed the focused window.
-		if state.FocusedWindowID == closed.ID {
-			state.FocusedWindowID = focusAfterClose(state, workspace, closed.ID)
-		}
-		if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == closed.ID {
-			delete(state.WorkspaceFocus, workspace)
-			if state.FocusedWindowID != "" {
-				// Only re-point the workspace focus at a window that is actually on it.
-				for i := range state.Windows {
-					if state.Windows[i].ID == state.FocusedWindowID && state.Windows[i].Workspace == workspace {
-						state.WorkspaceFocus[workspace] = state.FocusedWindowID
-						break
-					}
-				}
-			}
-		}
-		// The last pane on the workspace on screen takes the person back
-		// to where they came from. See empty_workspace.go.
-		s.returnFromEmptyLocked(state, workspace)
 		return nil
 	})
 	if err != nil {
@@ -613,6 +590,38 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		_ = s.ClosePTY(closed.PTYID)
 	}
 	return closed.ID, nil
+}
+
+// removeWindowLocked takes the window at idx out of the window set, repairs
+// the focus it held, and returns it. The caller holds stateMu, inside a
+// mutation. Closing a window and moving it to another session both leave
+// through here.
+func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
+	gone := state.Windows[idx]
+	workspace := gone.Workspace
+	state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
+	state.FocusHistory = RemoveFocus(state.FocusHistory, gone.ID)
+
+	// Repair focus if we removed the focused window.
+	if state.FocusedWindowID == gone.ID {
+		state.FocusedWindowID = focusAfterClose(state, workspace, gone.ID)
+	}
+	if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == gone.ID {
+		delete(state.WorkspaceFocus, workspace)
+		if state.FocusedWindowID != "" {
+			// Only re-point the workspace focus at a window that is actually on it.
+			for i := range state.Windows {
+				if state.Windows[i].ID == state.FocusedWindowID && state.Windows[i].Workspace == workspace {
+					state.WorkspaceFocus[workspace] = state.FocusedWindowID
+					break
+				}
+			}
+		}
+	}
+	// The last pane on the workspace on screen takes the person back
+	// to where they came from. See empty_workspace.go.
+	s.returnFromEmptyLocked(state, workspace)
+	return gone
 }
 
 // FocusDaemonWindow makes the window matching target the focused window,

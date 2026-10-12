@@ -1011,6 +1011,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// next detection poll. Throttled per PTY so a busy pane pays no cost.
 		if ev.Type == EventWindowClosed {
 			d.paneCreators.Delete(ev.Window)
+			forgetMovedWindow(ev.Window)
 		}
 		if ev.Type == eventProgramStatus {
 			if s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load()) {

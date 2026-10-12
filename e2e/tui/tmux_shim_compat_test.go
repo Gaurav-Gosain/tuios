@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -350,6 +351,35 @@ func TestTmuxShimMovesPanes(t *testing.T) {
 	tr.ok("rename-session", "-t", "mv", "moved")
 	if got := tr.ok("list-sessions", "-F", "#{session_name}"); got != "moved" {
 		t.Errorf("sessions after rename-session = %q", got)
+	}
+}
+
+// TestTmuxShimJoinPaneAcrossSessions: join-pane with a -t pane in another
+// session moves the -s pane to that session, as tmux does, and the pane keeps
+// its tuios window id.
+//
+// NEGATIVE CONTROL: with the join refused across sessions (the code before
+// move-window took to_session), join-pane exits 1 with "tuios moves a pane
+// only within its session" and the pane stays in src.
+func TestTmuxShimJoinPaneAcrossSessions(t *testing.T) {
+	_, tr := shimDaemon(t, "src", "dst")
+	tr.ok("split-window", "-d", "-t", "src")
+	ids := func(session string) []string {
+		return strings.Fields(tr.ok("list-panes", "-t", session, "-F", "#{tuios_window_id}"))
+	}
+	src, dst := ids("src"), ids("dst")
+	if len(src) != 2 || len(dst) != 1 {
+		t.Fatalf("panes before the join: src %v, dst %v, want 2 and 1", src, dst)
+	}
+	srcPanes := strings.Fields(tr.ok("list-panes", "-t", "src", "-F", "#{pane_id}"))
+	dstPane := strings.TrimSpace(tr.ok("list-panes", "-t", "dst", "-F", "#{pane_id}"))
+	tr.ok("join-pane", "-d", "-s", srcPanes[1], "-t", dstPane)
+	after := ids("dst")
+	if got := ids("src"); len(got) != 1 || got[0] != src[0] {
+		t.Errorf("src after join-pane = %v, want only %s", got, src[0])
+	}
+	if len(after) != 2 || !slices.Contains(after, src[1]) {
+		t.Errorf("dst after join-pane = %v, want %s beside %s", after, src[1], dst[0])
 	}
 }
 

@@ -454,6 +454,13 @@ func freshWorkSession(t *testing.T, d *Daemon) {
 			t.Fatalf("add window %q: %v", name, err)
 		}
 	}
+	// The session move-window's to_session example moves a window to.
+	if d.manager.GetSession("review") != nil {
+		_ = d.manager.DeleteSession("review")
+	}
+	if _, err := d.manager.CreateSession("review", &SessionConfig{}, 80, 24); err != nil {
+		t.Fatalf("create the session the move-window example names: %v", err)
+	}
 	// The paste buffers the buffer examples name, fresh for each example
 	// since delete-buffer and paste-buffer with delete remove one.
 	d.buffers = pastebuf.New(pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes)
