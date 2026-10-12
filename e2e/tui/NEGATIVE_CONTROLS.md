@@ -4437,3 +4437,13 @@ control cuts one thing from the fixed build and runs the test named.
 | The OSC rule back to "ends in `;?`" | `TestPaneViewFilter` ("title ending ;?: nothing reached the terminal") | **caught** |
 | A kitty command keeping its own `q=` | `TestPaneViewFilter` (the terminal got `q=2,a=d,q=1`) | **caught** |
 | The `ctx` check in `exitReason` (a closed window read as `killed 9`) | none in six runs | **not caught**: the stream sees the close first in every run here. One run before the guard gave `killed 9` (137). The guard stays. |
+
+### Palette shortcuts from the keybinds (#634)
+
+Run on 2026-10-12 on branch `fix/palette-shortcuts-from-keybinds`. The
+control cuts one thing from the fixed build and runs
+`TestPaletteShortcutsFollowKeybinds`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The `m.liveShortcuts(static)` call in `rebuildPaletteItems` | `TestPaletteShortcutsFollowKeybinds` ("global-unbound: the \"Run a program\" row shows \"alt+space\", want \"prefix+a\"") | **caught** |
