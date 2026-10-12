@@ -90,7 +90,7 @@ func (d *Daemon) transferGrantStart(cs *connState, src, dst *Endpoint, o *transf
 			continue
 		}
 		if root == "" {
-			return deny("the pane's folder could not be found")
+			return deny("the pane has no fixed folder to copy in. The files grant reaches only the folder a pane started in, or its session's tuios worktree")
 		}
 		if !pathUnder(realPath(e.Path), realPath(root)) {
 			return deny(echoName(e.Path) + " is outside the pane's folder " + echoName(root) + ", and the files grant reaches only that")
@@ -117,21 +117,29 @@ func underTilde(p string) bool {
 	return true
 }
 
-// paneFolder is where a pane's work is rooted: its session's worktree, else
-// the pane's working folder, as the approvals read it (paneRoot).
+// paneFolder is the folder the files grant holds a pane to: its session's
+// worktree when tuios made it, else the folder the pane started in. Both are
+// fixed by the daemon. The pane's working folder is not used: the pane moves
+// it with cd, or with an OSC 7 it prints, so a pane could name / as its
+// folder. A detected worktree is not used either, since it follows the first
+// pane's folder. It is "" when there is no fixed folder, or the folder is a
+// file system root, and then the copy is refused.
 func (d *Daemon) paneFolder(pa *paneAuth) string {
 	sess := d.sessionHoldingWindow(pa.window)
 	if sess == nil {
 		return ""
 	}
-	st := sess.GetState()
-	w, ok := findWindowState(st, pa.window)
-	if !ok {
+	if wt := sess.Worktree(); wt != nil && wt.Managed && wt.Path != "" {
+		return filepath.Clean(wt.Path)
+	}
+	dir := sess.windowStartDir(pa.window)
+	if dir == "" {
 		return ""
 	}
-	root := paneRoot(st, w)
-	if root == "" {
+	dir = filepath.Clean(dir)
+	if filepath.Dir(dir) == dir {
+		// A root holds every file: no folder at all.
 		return ""
 	}
-	return filepath.Clean(root)
+	return dir
 }

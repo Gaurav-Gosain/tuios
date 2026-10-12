@@ -243,6 +243,10 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// the new shell's first instruction. Without this a pane narrowed on
 		// purpose would come back holding the default, which under open is
 		// admin.
+		// The start folder comes back from the saved state, which only the
+		// daemon writes. It is not taken from the restored shell's folder,
+		// which the pane chose.
+		sess.noteStartDir(w.ID, w.StartDir)
 		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), history[w.ID], w.Workspace, onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)

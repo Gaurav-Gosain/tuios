@@ -131,7 +131,9 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 		if t.host != "" {
 			line = t.result(json.RawMessage(line))
 		}
-		if _, err := fmt.Fprintln(out, string(line)); err != nil {
+		// The daemon escapes C1 controls itself; a daemon on another
+		// machine may be older, so the line is escaped here too.
+		if _, err := fmt.Fprintln(out, jsonSafe(string(line))); err != nil {
 			return err
 		}
 	}

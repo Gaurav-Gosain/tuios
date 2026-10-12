@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -133,6 +134,84 @@ func TestCopyShowsAFarNameWithEscapesAsText(t *testing.T) {
 		artifact["pane_title"] = w.Title
 		if w.WindowID == pane && strings.Contains(w.Title, "PWNED") {
 			t.Fatalf("ASSERTION: a far file name set the pane's title to %q", w.Title)
+		}
+	}
+}
+
+// TestEventsCarryAFarNameWithC1ControlsEscaped copies a folder from build
+// whose file names hold U+009B (CSI) and U+009D (OSC), while tuios subscribe
+// prints the copy's events. encoding/json leaves those runes raw, and a
+// terminal reads them as the start of a sequence. Both the call's --json
+// output and the daemon's event lines must hold them only as \u escapes, and each name
+// must decode to the exact name on build.
+//
+// Negative control: with escapeC1 returning its input, the event lines carry
+// the raw bytes C2 9B and C2 9D.
+func TestEventsCarryAFarNameWithC1ControlsEscaped(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	names := []string{"csi\u009b31mred.txt", "osc\u009d0;PWNED\u009cend.txt"}
+	far := filepath.Join(farHome(remote), "c1")
+	if err := os.MkdirAll(far, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(far, n), []byte(n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The daemon's own event lines, read from its socket, so the test sees
+	// what every consumer gets and not only what the CLI cleans.
+	sub := dialFileVerbs(t, base)
+	sub.must("subscribe", map[string]any{"types": []string{"transfer", "transfer-file"}}, nil)
+	var events bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			_ = sub.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			line, err := sub.br.ReadBytes('\n')
+			events.Write(line)
+			if err != nil {
+				return
+			}
+		}
+	}()
+	dst := filepath.Join(base, "here")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := runTuios(t, base, "cp", "--json", "--conflict", "replace", "build:~/c1", dst+"/")
+	time.Sleep(time.Second)
+	_ = sub.conn.Close()
+	<-done
+	saveTransferArtifact(t, "cp-far-names-c1", map[string]any{"cp": r, "events": events.String()})
+	if r.Code != 0 {
+		t.Fatalf("the copy failed: %d\n%s\n%s", r.Code, r.Stdout, r.Stderr)
+	}
+	for what, out := range map[string][]byte{"tuios cp --json": []byte(r.Stdout), "the daemon's events": events.Bytes()} {
+		if bytes.Contains(out, []byte("\u009b")) || bytes.Contains(out, []byte("\u009d")) {
+			t.Fatalf("ASSERTION: %s printed a raw C1 control:\n%q", what, out)
+		}
+	}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(events.String(), "\n") {
+		var ev struct {
+			File *struct {
+				Rel string `json:"rel"`
+			} `json:"file"`
+		}
+		if json.Unmarshal([]byte(line), &ev) == nil && ev.File != nil {
+			seen[ev.File.Rel] = true
+		}
+	}
+	for _, n := range names {
+		if !seen[n] {
+			t.Fatalf("ASSERTION: no event named %q exactly; the events:\n%s", n, events.String())
+		}
+		if _, err := os.Stat(filepath.Join(dst, "c1", n)); err != nil {
+			t.Fatalf("ASSERTION: %q did not land: %v", n, err)
 		}
 	}
 }

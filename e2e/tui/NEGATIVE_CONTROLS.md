@@ -4634,6 +4634,9 @@ the far side 50 ms.
 
 | `o.PaneRoot = root` in `transferGrantStart` (2026-10-12: a files-grant copy reads and writes as the person) | `TestAFilesGrantCopyCannotWriteThroughALink` (`dropped.sh` lands in the folder the pane's link points at, exit 0) | **caught** |
 
+| `paneFolder` back to the old `paneRoot` (the pane's working folder) (2026-10-12) | `TestAFilesGrantFolderIsTheOneThePaneStartedIn` (after the pane prints an OSC 7 of `/`, a copy of a file outside its folder exits 0 and reaches build). The step after `cd` alone was refused under the control too: the daemon's copy of a pane's folder follows `cd` only on a save, and OSC 7 at once | **caught** |
+| `escapeC1` returning its line (2026-10-12) | `TestEventsCarryAFarNameWithC1ControlsEscaped` (the daemon's event lines carry raw U+009B) | **caught** |
+
 The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
 50 ms:
 

@@ -303,7 +303,7 @@ func (d *Daemon) writeEventLine(cs *connState, ev streamEvent) error {
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
+	data = append(escapeC1(data), '\n')
 
 	cs.sendMu.Lock()
 	defer cs.sendMu.Unlock()

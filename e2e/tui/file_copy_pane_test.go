@@ -410,3 +410,89 @@ func TestAFilesGrantCopyCannotWriteThroughALink(t *testing.T) {
 		t.Fatalf("ASSERTION: a copy that could not land through the link exited 0\n%s", errText)
 	}
 }
+
+// TestAFilesGrantFolderIsTheOneThePaneStartedIn gives a strict pane the files
+// grant and tries to copy a file from outside its folder to build three ways:
+// from the folder it started in, after cd to a folder above, and after
+// printing an OSC 7 that names /. Each is refused with exit 4 and nothing
+// reaches build. A copy from the start folder still lands.
+//
+// Negative control: with paneFolder taking the pane's working folder (the
+// old paneRoot), the copy after cd exits 0 and the file lands on build.
+func TestAFilesGrantFolderIsTheOneThePaneStartedIn(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	cfg := configPathIn(base)
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, append(body, []byte("\n[agents.permissions]\nmode = \"strict\"\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pane, cwd := copyTestPane(t, base, "work")
+	secret := filepath.Join(base, "secret.txt")
+	if err := os.WriteFile(secret, []byte("not the pane's\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, "mine.txt"), []byte("the pane's\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	codes := filepath.Join(base, "codes")
+	if err := os.MkdirAll(codes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(name, line string) (int, string) {
+		t.Helper()
+		out := filepath.Join(codes, name)
+		_ = os.Remove(out)
+		_ = os.Remove(out + ".err")
+		typeInPane(t, base, "work", pane, line+" 2>"+out+".err; echo $? >"+out)
+		code := waitPaneExit(t, base, "work", pane, out, 60*time.Second)
+		errText, _ := os.ReadFile(out + ".err")
+		return code, string(errText)
+	}
+	cp := tuiosBin + " cp --conflict replace "
+	// Strict mode reloads from the config file: wait until the pane, with no
+	// files grant yet, is refused.
+	deadline := time.Now().Add(20 * time.Second)
+	code, errText := run("strict", cp+filepath.Join(cwd, "mine.txt")+" build:~/strict.txt")
+	for code != 4 && time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		code, errText = run("strict", cp+filepath.Join(cwd, "mine.txt")+" build:~/strict.txt")
+	}
+	if code != 4 {
+		t.Fatalf("ASSERTION: strict mode never held for the pane: exit %d\n%s", code, errText)
+	}
+	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", pane, "--grants", "read,files"); err != nil {
+		t.Fatalf("set-pane-grants: %v\n%s", err, out)
+	}
+	results := map[string]any{}
+	code, errText = run("start", cp+secret+" build:~/from-start.txt")
+	results["start"] = map[string]any{"code": code, "stderr": errText}
+	code2, errText2 := run("after-cd", "cd "+base+" && "+cp+secret+" build:~/after-cd.txt")
+	results["after_cd"] = map[string]any{"code": code2, "stderr": errText2}
+	code3, errText3 := run("after-osc7", "printf '\\033]7;file://localhost/\\007'; "+cp+secret+" build:~/after-osc7.txt")
+	results["after_osc7"] = map[string]any{"code": code3, "stderr": errText3}
+	code4, errText4 := run("inside", "cd "+cwd+" && "+cp+"./mine.txt build:~/mine.txt")
+	results["inside"] = map[string]any{"code": code4, "stderr": errText4}
+	saveTransferArtifact(t, "cp-files-grant-folder", results)
+	for _, c := range []struct {
+		name, file, stderr string
+		code               int
+	}{{"from the start folder", "from-start.txt", errText, code}, {"after cd", "after-cd.txt", errText2, code2}, {"after an OSC 7 of /", "after-osc7.txt", errText3, code3}} {
+		if c.code != 4 {
+			t.Errorf("ASSERTION: a copy of a file outside the pane's folder %s exited %d, want 4\n%s", c.name, c.code, c.stderr)
+		}
+		if _, err := os.Stat(filepath.Join(farHome(remote), c.file)); err == nil {
+			t.Errorf("ASSERTION: the copy %s reached build", c.name)
+		}
+	}
+	if code4 != 0 {
+		t.Fatalf("ASSERTION: a copy from the pane's own folder failed: exit %d\n%s", code4, errText4)
+	}
+	if got, _ := os.ReadFile(filepath.Join(farHome(remote), "mine.txt")); string(got) != "the pane's\n" {
+		t.Fatalf("ASSERTION: the copy from the pane's folder is not on build: %q", got)
+	}
+}

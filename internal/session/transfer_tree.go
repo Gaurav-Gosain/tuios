@@ -897,6 +897,9 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 	// could not send. A file in neither did not land, whatever the stream
 	// said at its end.
 	answered := make(map[string]bool, len(files))
+	// relayed is every file the read side sent and this daemon passed on, so
+	// a file that was never answered names the side that stopped.
+	relayed := make(map[string]bool, len(files))
 	acked := make(chan struct{})
 	go func() {
 		defer close(acked)
@@ -972,6 +975,9 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 			if err := m.relayTreeFile(ctx, j, in, out.remote, bw, hdr, task, perm, mtime, buf); err != nil {
 				return err
 			}
+			mu.Lock()
+			relayed[hdr.Rel] = true
+			mu.Unlock()
 		}
 	}
 	if err := send(); err != nil {
@@ -1002,7 +1008,11 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 	for _, f := range files {
 		if !answered[f.e.Rel] {
 			// Once more would meet the same far side, so the copy ends.
-			return nil, permanent(ErrVerbInternal, fmt.Sprintf("%s ended the copy before it put %s in place. The copy is not done.", dst.name(), echoName(f.e.Rel)))
+			msg := fmt.Sprintf("%s ended the copy before it put %s in place. The copy is not done.", dst.name(), echoName(f.e.Rel))
+			if !relayed[f.e.Rel] {
+				msg = fmt.Sprintf("%s ended the copy before it sent %s. The copy is not done.", src.name(), echoName(f.e.Rel))
+			}
+			return nil, permanent(ErrVerbInternal, msg)
 		}
 	}
 	return failed, nil

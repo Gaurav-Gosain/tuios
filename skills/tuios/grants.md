@@ -34,8 +34,10 @@ name that is not yours answers `no_buffer`. A connection restricted to its own s
 shares them.
 
 The `files` grant reaches the copies that stay near your work. A copy may
-start when each end on this machine is inside your pane's folder (its
-session's worktree, else its working folder), after links are resolved. Each
+start when each end on this machine is inside your pane's folder. That is
+the session's worktree when tuios made it, else the folder the pane started
+in. A `cd` or an OSC 7 does not move it. Every file the copy reads or writes
+here stays inside it, and a link does not lead out. Each
 end on a host must be under its home folder, or be its receive folder
 (`HOST:`). A copy out of the project into the person's other folders, or into
 a host's system folders, needs the person. `files` sees, pauses, resumes,

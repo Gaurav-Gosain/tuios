@@ -121,6 +121,10 @@ type WindowState struct {
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
 	Cwd string `json:"cwd,omitempty"`
+	// StartDir is the folder the window's first process started in. The
+	// daemon fixes it when it makes the window, and the shell's cd and OSC 7
+	// never move it, so a grant can be held to it. Clients never set it.
+	StartDir string `json:"start_dir,omitempty"`
 	// CwdHost names the machine the pane's shell last reported its folder on,
 	// when that is not the machine the pane runs on: the pane is running ssh.
 	// Empty otherwise. A live fact, filled into every snapshot and never
@@ -1096,6 +1100,10 @@ func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
 // Session represents a persistent TUIOS session.
 // The daemon manages PTYs and stores state; the client runs the TUI.
 type Session struct {
+	// startDirs is each local window's start folder, by window id: where its
+	// first process started, fixed then and never moved by the shell's cd or
+	// its OSC 7. See noteStartDir.
+	startDirs sync.Map
 	// attachMu serialises attaches to the session from the moment a client
 	// is placed on it through its reply. exclusiveSeq is the attachSeq of the
 	// newest attach that detaches the others. See detach_client.go.
@@ -1535,6 +1543,28 @@ func absStartDir(dir string) string {
 		return abs
 	}
 	return dir
+}
+
+// noteStartDir records a window's start folder, once. A later process in the
+// same window keeps the first one.
+func (s *Session) noteStartDir(windowID, dir string) {
+	if windowID == "" || dir == "" {
+		return
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	s.startDirs.LoadOrStore(windowID, filepath.Clean(dir))
+}
+
+// windowStartDir is a window's start folder, or "" when none was recorded.
+// Nothing the pane does moves it: it is the folder the files grant holds a
+// copy to (transfer_grants.go).
+func (s *Session) windowStartDir(windowID string) string {
+	if v, ok := s.startDirs.Load(windowID); ok {
+		return v.(string)
+	}
+	return ""
 }
 
 // StartDir is the directory set with SetStartDir, or "".
@@ -2032,6 +2062,15 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// taken, so the two locks are never held together here.
 	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
 		sp.grants = s.recordedGrants(sp.windowID)
+	}
+	if sp.restored == nil && sp.host == "" && sp.windowID != "" {
+		dir := s.StartDir()
+		if sp.cwd != "" {
+			if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
+				dir = sp.cwd
+			}
+		}
+		s.noteStartDir(sp.windowID, dir)
 	}
 
 	s.ptysMu.Lock()
@@ -2821,6 +2860,9 @@ func (s *Session) ResurrectionState() *SessionState {
 				state.Windows[i].Cwd = cwd
 			}
 		}
+	}
+	for i := range state.Windows {
+		state.Windows[i].StartDir = s.windowStartDir(state.Windows[i].ID)
 	}
 	// The first window's directory is the session's, and this is the one place
 	// it is read on a cadence: a save happens only when the state changed, so a

@@ -2603,7 +2603,7 @@ func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
 		// Should not happen; fall back to a minimal internal error line.
 		data = []byte(`{"error":{"code":"internal","message":"failed to encode response"}}`)
 	}
-	data = append(data, '\n')
+	data = append(escapeC1(data), '\n')
 
 	cs.sendMu.Lock()
 	defer cs.sendMu.Unlock()
