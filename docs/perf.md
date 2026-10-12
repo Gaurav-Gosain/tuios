@@ -2163,7 +2163,7 @@ a binary is over its budget.
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
 | linux/amd64 | 25,182,370 | 26,681,504 | 34,910,370 | 35,000,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 32,634,946 | 32,900,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 32,904,754 | 33,400,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2508,6 +2508,15 @@ viewer reports. The build measured 34,910,370 bytes in CI, 10,370 over the old
 budget; pane-view adds about 74 KB over main (34,705,568 to 34,779,296 with a
 local Go 1.26 build). darwin/arm64 stayed inside its budget. This is the last
 raise under 35 MB: the next feature looks for bytes to cut first.
+
+The darwin/arm64 budget went to 33,400,000 for the subagent rail options
+(#640): tree lines, the heading that opens and closes the rows, the field
+list, the row cap and the early hide, each settable per rail edge. The build
+measured 32,904,754 bytes in CI, 4,754 over the old budget. The feature adds
+about 50 KB over main (32,674,210 to 32,724,722 with a local Go 1.26 build).
+No single dependency grew: it is rail code and option checks. The budget has
+about 500 KB of room again, under the 40 MB ceiling. linux/amd64 stayed
+inside its budget.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
