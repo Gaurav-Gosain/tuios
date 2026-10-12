@@ -1120,7 +1120,9 @@ a match in a pane are the same colour.
 | Daemon PID file | the socket path with `.pid` appended |
 
 The socket lives in the runtime directory and does not survive a reboot, which is
-correct: the daemon does not either.
+correct: the daemon does not either. Saved session state lives in the state
+directory and does survive, which is why a session can be resurrected after a
+reboot.
 
 ### One daemon per user
 
@@ -1140,14 +1142,14 @@ command also looks for a live daemon in `/tmp/tuios-<uid>`:
 
 - Only the daemon in `/tmp` answers: the command uses it. It does not start a
   second daemon. After that daemon stops, the next one starts in `/run/user`.
-- Both answer: the daemon in `/run/user` wins. A command at a terminal says so
-  once, with the process ID of the other daemon. See
+- Both answer: the daemon in `/run/user` wins, except for a command in a pane
+  of the daemon in `/tmp`. That command reaches its own daemon, which
+  `TUIOS_SOCKET` names. Otherwise, a command at a terminal says once that the
+  other daemon runs, and gives its process ID. See
   [Two daemons on one machine](CLI_REFERENCE.md#two-daemons-on-one-machine).
 
 tuios looks in `/tmp/tuios-<uid>` only when that directory belongs to you and
-only you can open it. Saved session state lives in the state
-directory and does survive, which is why a session can be resurrected after a
-reboot.
+only you can open it.
 
 ### Running a separate daemon
 

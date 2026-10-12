@@ -4472,3 +4472,17 @@ The controls were run on 2026-10-11 on branch `fix/one-daemon-per-user`.
 | `sockpath.RuntimeDir` finds `/run/user/<uid>` and `pickLiveSocket` looks in the other folder (both cut: the behaviour before the fix) | "without XDG_RUNTIME_DIR, ls does not list the desktop session", "a second daemon socket exists", "the link does not reach session desk on build"; and "with both daemons running, ls did not use the one in the runtime folder" | **caught** |
 | `pickLiveSocket` looks in the other folder (cut alone) | "the daemon in /tmp is not found" | **caught** |
 | The `sockpath.PrivateDir` check on the other folder in `pickLiveSocket` (unit test `TestOtherDaemonInAnOpenFolderIsNotUsed`) | "with the other folder open to everyone, GetSocketPath gave .../tuios-1000/tuios.sock" | **caught** |
+
+### One daemon per user: review fixes
+
+`TestAPaneOfTheTmpDaemonStaysWithIt` starts a daemon in the stand-in for
+`/tmp/tuios-<uid>` before `/run/user/<uid>` exists, then makes that folder and
+starts a second daemon there. It types `tuios list-windows -s old` into a pane
+of the first daemon, then stops both daemons and times the stop of the first.
+
+The controls were run on 2026-10-12 on branch `fix/one-daemon-per-user`.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| `pickLiveSocket` prefers `TUIOS_SOCKET` when it names the other socket and a daemon answers there | "list-windows -s old in a pane of its own daemon failed: it reached the other daemon" | **caught** |
+| `Start` pins the socket with `d.manager.SetSocketPath`, and the stop removes the pid file beside it (back to `GetPidFilePath`) | "kill-server of the /tmp daemon failed after 10.0s", and `tuios.sock`, `.pid`, `.link`, `.link-human` left in the /tmp folder | **caught** |

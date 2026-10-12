@@ -26,10 +26,17 @@ import (
 //   - only the other one answers: it is used, so its sessions stay reachable
 //     until it is stopped. The next daemon then starts in Dir.
 //   - neither answers: Dir, where a new daemon starts.
+//
+// One exception: TUIOS_SOCKET names the other socket and a daemon answers
+// there. The command runs in a pane of that daemon and stays with it.
 
 // livePrimary remembers the sockets in Dir found answering, so a process
 // that resolves the path many times dials the other folder once.
 var livePrimary sync.Map
+
+// liveOther remembers the other socket found answering for a pane of its
+// daemon. See pickLiveSocket.
+var liveOther sync.Map
 
 // otherDaemonWarned makes the warning once per process.
 var otherDaemonWarned sync.Once
@@ -53,6 +60,15 @@ func pickLiveSocket(primary string) string {
 	// controls is never dialled.
 	if !sockpath.PrivateDir(otherDir, os.Getuid()) {
 		return primary
+	}
+	// A pane exports the socket of the daemon that runs it. A command in a
+	// pane of the daemon in the other folder belongs to that daemon, even
+	// when the one in Dir runs too: its session, its hooks, its notify.
+	if env := os.Getenv(SocketEnv); env != "" && filepath.Clean(env) == filepath.Clean(other) {
+		if _, ok := liveOther.Load(other); ok || isDaemonRunningAt(other) {
+			liveOther.Store(other, true)
+			return other
+		}
 	}
 	if _, ok := livePrimary.Load(primary); ok {
 		return primary

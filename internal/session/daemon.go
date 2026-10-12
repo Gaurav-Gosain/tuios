@@ -1212,6 +1212,10 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 // Start starts the daemon.
 func (d *Daemon) Start() error {
 	socketPath := d.manager.SocketPath()
+	// Pinned: the path is resolved once. Resolved again at shutdown, it can
+	// name another folder (/run/user/<uid> made after this daemon started in
+	// /tmp), and the stop would then clean that folder and leave this one.
+	d.manager.SetSocketPath(socketPath)
 
 	// Held until shutdown so the stale-socket recovery below can never run
 	// against a daemon that is itself between bind and listen.
@@ -1587,10 +1591,7 @@ func (d *Daemon) shutdown() error {
 		// start a new daemon, and race a write from the old one. Closing the
 		// listener is not a usable signal for the same reason, since it happens
 		// at the top of shutdown while state is still unsaved.
-		pidPath, err := GetPidFilePath()
-		if err == nil {
-			_ = os.Remove(pidPath)
-		}
+		_ = os.Remove(d.manager.SocketPath() + ".pid")
 
 		_ = os.Remove(d.manager.SocketPath())
 
@@ -2283,10 +2284,7 @@ func isDaemonRunningAt(socketPath string) bool {
 }
 
 func (d *Daemon) writePidFile() error {
-	pidPath, err := GetPidFilePath()
-	if err != nil {
-		return err
-	}
+	pidPath := d.manager.SocketPath() + ".pid"
 	return os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0600)
 }
 

@@ -257,3 +257,65 @@ func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
 		t.Fatalf("ASSERTION: the stopped daemon's sessions are not offered by resurrect:\n%s", out)
 	}
 }
+
+// TestAPaneOfTheTmpDaemonStaysWithIt: an older tuios started a daemon in
+// /tmp/tuios-<uid> before /run/user/<uid> existed, and later the desktop
+// daemon started in /run/user. A command typed in a pane of the /tmp daemon
+// carries that daemon's TUIOS_SOCKET and must reach it, not the desktop one.
+// Then the /tmp daemon stops, with /run/user/<uid> present now, and must clean
+// its own folder and stop at once.
+func TestAPaneOfTheTmpDaemonStaysWithIt(t *testing.T) {
+	m := newOneMachine(t)
+	if err := os.Remove(m.sys); err != nil {
+		t.Fatal(err)
+	}
+	// No runtime folder yet: this daemon and its panes resolve to /tmp.
+	m.mustCLI(t, m.sshEnv(), "new", "old", "--detach")
+	if _, err := os.Stat(m.legacySocket()); err != nil {
+		t.Fatalf("the old daemon is not at %s: %v", m.legacySocket(), err)
+	}
+	if err := os.Mkdir(m.sys, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(m.sys, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
+
+	// Typed into the old daemon's pane. oldLinkEnv reaches only that daemon,
+	// so the send itself does not depend on the code under test.
+	out := filepath.Join(m.base, "pane-out")
+	line := tuiosBin + " list-windows -s old > " + out + ".tmp 2>&1; echo \"exit=$?\" >> " + out + ".tmp; mv " + out + ".tmp " + out + "\n"
+	m.mustCLI(t, m.oldLinkEnv(), "send-text", "-s", "old", line)
+	deadline := time.Now().Add(15 * time.Second)
+	var got []byte
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(out); err == nil {
+			got = data
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Logf("list-windows in a pane of the /tmp daemon:\n%s", got)
+	if got == nil {
+		t.Fatalf("the command in the pane never finished")
+	}
+	if !strings.Contains(string(got), "exit=0") {
+		t.Errorf("ASSERTION: list-windows -s old in a pane of its own daemon failed: it reached the other daemon:\n%s", got)
+	}
+
+	// The /tmp daemon stops cleanly though /run/user/<uid> now exists.
+	m.mustCLI(t, m.desktopEnv(), "kill-server")
+	start := time.Now()
+	if o, err := m.cli(t, m.sshEnv(), "kill-server"); err != nil {
+		t.Errorf("ASSERTION: kill-server of the /tmp daemon failed after %v: %v\n%s", time.Since(start), err, o)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("ASSERTION: kill-server of the /tmp daemon took %v: it waited on a socket that was never removed", took)
+	}
+	for _, suffix := range []string{"", ".pid", ".link", ".link-human"} {
+		if _, err := os.Lstat(m.legacySocket() + suffix); err == nil {
+			t.Errorf("ASSERTION: %s is left after the /tmp daemon stopped", m.legacySocket()+suffix)
+		}
+	}
+}

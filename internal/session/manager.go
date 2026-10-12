@@ -27,7 +27,9 @@ type Manager struct {
 	aliases map[string]string
 
 	// Configuration
-	socketPath string // Path to socket
+	// socketPath is the pinned socket, a string. Atomic: the daemon pins it
+	// in Start while its goroutines may already read it.
+	socketPath atomic.Value
 	// scrollbackLines is stamped into every session made here, so each pane
 	// keeps the history depth the daemon was configured with.
 	scrollbackLines int
@@ -237,15 +239,15 @@ func (m *Manager) HostName() string {
 	return h
 }
 
-// SetSocketPath sets the socket path (for testing).
+// SetSocketPath pins the socket path. The daemon pins the one it listens on.
 func (m *Manager) SetSocketPath(path string) {
-	m.socketPath = path
+	m.socketPath.Store(path)
 }
 
 // SocketPath returns the configured socket path.
 func (m *Manager) SocketPath() string {
-	if m.socketPath != "" {
-		return m.socketPath
+	if p, _ := m.socketPath.Load().(string); p != "" {
+		return p
 	}
 	path, _ := GetSocketPath()
 	return path

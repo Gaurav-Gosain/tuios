@@ -5312,7 +5312,8 @@ To find the daemons, look at both sockets:
 ls -l /run/user/$(id -u)/tuios/tuios.sock /tmp/tuios-$(id -u)/tuios.sock
 ```
 
-When both daemons run, tuios uses the one in `/run/user`. A command at a
+When both daemons run, tuios uses the one in `/run/user`. A command in a pane
+of the daemon in `/tmp` still reaches that daemon. A command at a
 terminal says once that the other one runs, and gives its process ID. To move
 the sessions of the daemon in `/tmp`:
 

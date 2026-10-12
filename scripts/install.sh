@@ -72,18 +72,45 @@ done
 
 command -v go >/dev/null || die "go not found. Install Go from https://go.dev/dl and re-run."
 
-# The same socket the daemon picks; see internal/session/manager_unix.go.
+# The same sockets the daemon uses; see internal/sockpath/sockpath_unix.go.
+# Without XDG_RUNTIME_DIR, /run/user/<uid> counts when it is a real directory
+# of this user with mode 0700 (not on macOS). A daemon an older tuios started
+# in /tmp/tuios-<uid> is also looked at when the socket is under /run/user.
+uid=$(id -u)
+run_user=/run/user/$uid
+private_dir() {
+    [ -d "$1" ] && [ ! -L "$1" ] || return 1
+    # ls -ldn prints the mode and the numeric owner: drwx------ N uid ...
+    # shellcheck disable=SC2046
+    set -- $(ls -ldn "$1" 2>/dev/null)
+    # A trailing . is an SELinux label. A + is an ACL, which may let others in.
+    case ${1:-} in
+        drwx------ | drwx------.) [ "${3:-}" = "$uid" ] ;;
+        *) return 1 ;;
+    esac
+}
+legacy=/tmp/tuios-$uid/tuios.sock
 if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
     socket=$XDG_RUNTIME_DIR/tuios/tuios.sock
+elif [ "$(uname -s)" != Darwin ] && private_dir "$run_user"; then
+    socket=$run_user/tuios/tuios.sock
 else
-    socket=/tmp/tuios-$(id -u)/tuios.sock
+    socket=$legacy
+fi
+other=
+if [ "$socket" = "$run_user/tuios/tuios.sock" ] && private_dir "/tmp/tuios-$uid"; then
+    other=$legacy
 fi
 
 # Prints the pid of a live daemon, or fails. The pid file outlives a crash, so
 # the signal probe is what makes the answer true.
 daemon_pid() {
-    [ -f "$socket.pid" ] || return 1
-    _pid=$(cat "$socket.pid" 2>/dev/null) || return 1
+    pid_at "$socket" || { [ -n "$other" ] && pid_at "$other"; }
+}
+
+pid_at() {
+    [ -f "$1.pid" ] || return 1
+    _pid=$(cat "$1.pid" 2>/dev/null) || return 1
     [ -n "$_pid" ] || return 1
     kill -0 "$_pid" 2>/dev/null || return 1
     printf '%s\n' "$_pid"
