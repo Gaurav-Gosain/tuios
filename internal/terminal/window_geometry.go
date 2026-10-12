@@ -134,7 +134,7 @@ func (w *Window) ScreenToTerminal(screenX, screenY int) (termX, termY int, ok bo
 	off := w.BorderOffset()
 	termX = screenX - w.X - off
 	termY = screenY - w.Y - off
-	ok = termX >= 0 && termY >= 0 && termY < w.ContentHeight() && termX < w.ContentWidth()
+	ok = termX >= 0 && termY >= 0 && termX < w.ContentWidth() && termY < w.ContentHeight()
 	return
 }
 
