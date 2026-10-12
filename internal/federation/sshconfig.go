@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,23 @@ type SSHConfig struct {
 	// ControlPath is the controlpath value, "" when ssh -G printed none.
 	// "none" means no path.
 	ControlPath string
+	// Target is where ssh connects, through what. Two lines with one target
+	// reach one machine as one user.
+	Target SSHTarget
+}
+
+// SSHTarget is the part of ssh -G's answer that says which machine a line
+// reaches and as whom: the host name, the user and the port, and the jump
+// hosts or proxy command on the way. The same host name through another
+// jump host can be another machine (two private networks).
+type SSHTarget struct {
+	HostName, User, Port    string
+	ProxyJump, ProxyCommand string
+}
+
+// Complete reports whether ssh named a host, a user and a port.
+func (t SSHTarget) Complete() bool {
+	return t.HostName != "" && t.User != "" && t.Port != ""
 }
 
 // sshConfigTimeout bounds one ssh -G. It reaches no network, but a Match
@@ -75,9 +93,16 @@ func ForgetSSHConfig() {
 }
 
 func querySSHConfig(h Host) (SSHConfig, bool) {
+	return ResolveSSH(append(slices.Clone(h.SSHOptions), "--", h.Addr))
+}
+
+// ResolveSSH asks ssh -G what it would do for an ssh command line: args are
+// the options and the destination, without the program and without -G. It is
+// not cached. ok is false when ssh -G failed or timed out.
+func ResolveSSH(args []string) (SSHConfig, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), sshConfigTimeout)
 	defer cancel()
-	args := append(append([]string{"-G"}, h.SSHOptions...), "--", h.Addr)
+	args = append([]string{"-G"}, args...)
 	cmd := exec.CommandContext(ctx, SSHBinary(), args...)
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = sshConfigWaitDelay
@@ -96,6 +121,16 @@ func querySSHConfig(h Host) (SSHConfig, bool) {
 			c.ForwardAgent = v
 		case "controlpath":
 			c.ControlPath = v
+		case "hostname":
+			c.Target.HostName = strings.ToLower(v)
+		case "user":
+			c.Target.User = v
+		case "port":
+			c.Target.Port = v
+		case "proxyjump":
+			c.Target.ProxyJump = v
+		case "proxycommand":
+			c.Target.ProxyCommand = v
 		}
 	}
 	return c, true

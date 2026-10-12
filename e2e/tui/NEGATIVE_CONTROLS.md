@@ -4518,22 +4518,22 @@ nothing was typed (`pasted:2`), and neither machine holds a pasted file.
 
 `TestAnImagePastedIntoAnSSHShellGoesToThatMachine` pastes into a pane of this
 machine whose foreground is a script named `ssh`. The daemon reads its command
-line and resolves it with the real `ssh -G`. The script can print an OSC 7
-report, then runs each line typed at it. `[hosts.build]` is
-`someone@buildbox` unless the case says otherwise.
+line. TUIOS_SSH is a wrapper that runs the real `ssh -G` and sends the rest to
+the remote stand-in. The script can print an OSC 7 report, then runs each
+line typed at it. `[hosts.build]` is `someone@buildbox` unless the case says
+otherwise.
 
-- `login to the host` (`ssh someone@buildbox`) is the positive half. The file
-  must be in the far machine's drop folder, the shell must read it, and this
-  machine must keep no copy.
-- `login to the host without files` shows the files toast.
-- `another user on the host`, `another port on the host` and `a host that
-  shares a first label` (an entry at `someone@buildbox.lan`) must refuse: the
-  same host name alone is not the same machine.
-- `no host` (`someone@farbox`) refuses.
-- `ssh inside ssh` reports `deepbox` over OSC 7 inside a login to buildbox,
-  and must refuse rather than paste on buildbox.
-- `a tunnel` (`ssh -N -L`) and `a report with no ssh` (OSC 7 for buildbox
-  from a plain shell) must save the image on this machine.
+- To the far drop folder, read there by the shell, with no copy here:
+  `ssh someone@buildbox` (the positive half), `ssh -t someone@buildbox tmux`,
+  `ssh someone@buildbox -t 'tmux a'`, `ssh someone@127.0.0.1` whose shell
+  reports `ip-10-0-0-5`, and `ssh -J bastion` to an entry with the same `-J`.
+- Refused, nothing typed or written: another user, another port, an entry
+  that shares only a first label (`buildbox.lan`), `-J bastion` to a direct
+  entry, `farbox` with no entry, `-F /dev/null` (a line tuios cannot read),
+  and an OSC 7 report of `deepbox`, a second entry, inside a login to
+  buildbox (ssh inside ssh).
+- `files` denied on the far side shows the files toast.
+- Saved here: `ssh -N -L` (a tunnel) and an OSC 7 report with no ssh.
 
 `TestAnImagePastedIntoASessionOnAHostIsAFileOnThatMachine` has no control. It
 passes on main: the paste for a session on a host already went to the far
@@ -4561,3 +4561,19 @@ host name, first label or OSC 7 report. The controls below were run on
 | The OSC 7 check for a further hop | `ssh inside ssh`: the image went to buildbox, no toast | **caught** |
 | `login.notShell` in the login gate | `a tunnel`: this machine holds 0 pasted images | **caught** |
 | An OSC 7 report taken as the login when no ssh runs | `a report with no ssh`: no path was pasted | **caught** |
+
+The second review of #638 found that a remote command, an unreadable ssh
+line and a jump host each led to a path on the wrong machine, and that a
+remote shell naming itself refused a good paste. These controls were run on
+2026-10-12, each cutting one line.
+
+| Control: what was cut | Where it failed | Verdict |
+| --- | --- | --- |
+| A remote command marks the line a tunnel again (`parseSSHArgs`) | `tmux over ssh with a tty` and `a remote command after the host`: no file on the far machine | **caught** |
+| An unreadable ssh line falls back to this machine (`paneRemoteHost`) | `an ssh line tuios cannot read`: no toast | **caught** |
+| `proxyjump` and `proxycommand` left out of the comparison | `a jump host the entry does not have`: no toast | **caught** |
+| Any OSC 7 host that is not the destination refuses (the first version) | `an address whose shell names itself`: no path pasted. `ssh inside ssh`: the wrong message | **caught** |
+| The check for a report from another `[hosts]` machine | `ssh inside ssh`: no toast | **caught** |
+| The comparison takes the host name only | another user, another port, the jump host case | **caught** |
+| The comparison also takes a first label | `a host that shares a first label` and the jump host case | **caught** |
+| The tunnel gate in `paneRemoteHost` | `a tunnel`: this machine holds 0 pasted images | **caught** |

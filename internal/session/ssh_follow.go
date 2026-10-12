@@ -145,22 +145,29 @@ func safeFolder(dir string, me int) bool {
 // whose shell is shellPID: the group leader first, then the members under it.
 // The first client found decides: when it is not one to follow, nothing is.
 func findRemoteLogin(shellPID int) (remoteLogin, bool) {
+	login, ok, _ := findRemoteClient(shellPID)
+	return login, ok
+}
+
+// findRemoteClient is findRemoteLogin, and also says whether an ssh or mosh
+// client was seen in the foreground at all, followed or not. A client that
+// is there and cannot be read (an option this file does not know, -F, a
+// wrapper it does not trust) is still a sign the pane is on another machine.
+func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool) {
 	if shellPID <= 0 {
-		return remoteLogin{}, false
+		return remoteLogin{}, false, false
 	}
 	uid := os.Geteuid()
-	leader, ok := foregroundPGID(shellPID)
-	if !ok || leader <= 0 {
-		return remoteLogin{}, false
+	leader, found := foregroundPGID(shellPID)
+	if !found || leader <= 0 {
+		return remoteLogin{}, false, false
 	}
-	// found says a client was seen, followed or not.
-	found := false
 	try := func(pid int) (remoteLogin, bool) {
 		argv := readArgvExact(pid)
 		if remoteClientName(argv) == "" {
 			return remoteLogin{}, false
 		}
-		found = true
+		seen = true
 		if !startedByShell(pid, shellPID, uid) {
 			return remoteLogin{}, false
 		}
@@ -168,20 +175,19 @@ func findRemoteLogin(shellPID int) (remoteLogin, bool) {
 		login.pid = pid
 		return login, ok
 	}
-	if login, ok := try(leader); ok || found {
-		return login, ok
+	// The first client seen decides: when it is not one to follow, nothing is.
+	if login, ok = try(leader); ok || seen {
+		return login, ok, seen
 	}
 	walk := foregroundGroup(leader, sshFollowWalkLimit, sshFollowWalkDepth)
 	if walk == nil {
-		return remoteLogin{}, false
+		return remoteLogin{}, false, false
 	}
-	var login remoteLogin
-	var hit bool
 	walk(func(info foregroundInfo) bool {
-		login, hit = try(info.pid)
-		return !hit && !found
+		login, ok = try(info.pid)
+		return !ok && !seen
 	})
-	return login, hit
+	return login, ok, seen
 }
 
 // startedByShell reports whether pid is the pane's shell or was started by it
@@ -280,11 +286,16 @@ type remoteLogin struct {
 	dest string
 	// pid is the client process the line was read from.
 	pid int
-	// notShell says the line is not an interactive login: a tunnel (-N, -W),
-	// a client in the background (-f), one that reads no keys (-n), a
-	// subsystem (-s), or a remote command. Keys typed into the pane do not
-	// reach a shell over there. A split still follows the line, as a shell.
-	notShell bool
+	// tunnel says the line carries no session that reads the pane's keys:
+	// -N, or a client in the background (-f), one that reads no keys (-n) or
+	// a stdio forward (-W) with no tty asked for (-t). A remote command is
+	// not a tunnel: tmux or a shell over there reads what is typed. A split
+	// still follows the line, as a shell.
+	tunnel bool
+	// tty says the line asked for a tty with -t.
+	tty bool
+	// forward is -f, -n or -W, or the -o settings that do the same.
+	forward bool
 }
 
 // argv builds the command line for the new pane. dir, when not empty, is the
@@ -473,13 +484,10 @@ const (
 	sshRefuse = "EFIGVQO"
 )
 
-// sshNotShellFlag are the flags that make an ssh line something other than an
-// interactive login, and sshNotShellConfig the -o keywords that do.
-const sshNotShellFlag = "Nfns"
-
-var sshNotShellConfig = map[string]bool{
-	"remotecommand": true, "sessiontype": true, "stdinnull": true,
-	"forkafterauthentication": true,
+// sshTunnelConfig are the -o keywords, and the values, that make an ssh line
+// carry no session or read no keys.
+var sshTunnelConfig = map[string]string{
+	"sessiontype": "none", "stdinnull": "yes", "forkafterauthentication": "yes",
 }
 
 // sshAllowConfig are the -o keywords a followed line may carry, lower case,
@@ -530,9 +538,6 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		a := args[i]
 		if l.dest != "" && (terminated || a == "--" || !strings.HasPrefix(a, "-")) {
 			// The remote command starts here, and it is dropped.
-			if a != "--" || i+1 < len(args) {
-				l.notShell = true
-			}
 			break
 		}
 		if hasControl(a) || (i+1 < len(args) && hasControl(args[i+1]) && takesValue(a)) {
@@ -540,7 +545,6 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		if !terminated && a == "--" {
 			if l.dest != "" {
-				l.notShell = l.notShell || i+1 < len(args)
 				break
 			}
 			terminated = true
@@ -565,8 +569,13 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 					if refuse {
 						return remoteLogin{}, false
 					}
-					if c == 'W' || (c == 'o' && sshNotShellConfig[sshConfigKeyword(val)] && !strings.EqualFold(sshConfigValue(val), "none")) {
-						l.notShell = true
+					if c == 'W' {
+						l.forward = true
+					}
+					if c == 'o' {
+						if want, ok := sshTunnelConfig[sshConfigKeyword(val)]; ok && strings.EqualFold(sshConfigValue(val), want) {
+							l.forward = true
+						}
 					}
 					if keep {
 						l.opts = append(l.opts, "-"+string(c), val)
@@ -576,8 +585,13 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 				if strings.IndexByte(sshFlagOpts, c) < 0 {
 					return remoteLogin{}, false
 				}
-				if strings.IndexByte(sshNotShellFlag, c) >= 0 {
-					l.notShell = true
+				switch c {
+				case 'N':
+					l.tunnel = true
+				case 'f', 'n':
+					l.forward = true
+				case 't':
+					l.tty = true
 				}
 				if strings.IndexByte(sshDropFlag, c) < 0 {
 					l.opts = append(l.opts, "-"+string(c))
@@ -587,7 +601,6 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		if l.dest != "" {
 			// The remote command starts here.
-			l.notShell = true
 			break
 		}
 		if a == "" {
@@ -595,13 +608,13 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 		}
 		l.dest = a
 		if terminated {
-			l.notShell = l.notShell || i+1 < len(args)
 			break
 		}
 	}
 	if l.dest == "" {
 		return remoteLogin{}, false
 	}
+	l.tunnel = l.tunnel || (l.forward && !l.tty)
 	return l, true
 }
 

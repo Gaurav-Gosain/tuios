@@ -445,26 +445,29 @@ image on that machine:
   the host writes the file.
 - A window on a host in a session of this machine. The daemon on the host
   writes the file.
-- A pane of this machine that runs an `ssh` or `mosh` login to another
-  machine. tuios reads the login from the process. It resolves the login and
-  each `[hosts]` entry with `ssh -G` and compares the host name, the user and
-  the port. When exactly one entry is the same, tuios copies the image to the
-  drop folder of that host and pastes the path there.
+- A pane of this machine that runs `ssh` or `mosh` to another machine, such
+  as `ssh build` or `ssh -t build tmux`. tuios reads the ssh command line from
+  the process. It resolves that line and each `[hosts]` entry with `ssh -G`.
+  It compares the host name, the user, the port and the jump hosts. When
+  exactly one entry is the same, tuios copies the image to the drop folder of
+  that host and pastes the path there.
 
 The other machine must allow `files` from this machine. If it does not, tuios
 pastes nothing and shows the line to add to the config on that machine.
 
 tuios pastes nothing in an ssh pane in these cases. A message says why.
 
-- No `[hosts]` entry is the machine of the login. Add the machine with
+- No `[hosts]` entry is the machine of the ssh command. Add the machine with
   `tuios hosts add NAME ADDR`.
 - More than one `[hosts]` entry is that machine. Keep one of them.
-- The shell over there reports a folder on a third machine: the pane runs ssh
-  inside ssh.
+- tuios cannot read the ssh command line, for example because it has `-F` or
+  `-o ProxyCommand`.
+- The shell over there reports a folder on another `[hosts]` machine: the pane
+  runs ssh inside ssh. Paste the image in a pane on that machine.
 
-An ssh tunnel (`ssh -N`), an ssh with a remote command, and a folder report
-with no ssh login in the pane are not a pane on another machine. tuios saves
-the image on this machine for them.
+An ssh tunnel (`ssh -N`, or `-f`, `-n` or `-W` without `-t`) does not read
+what you type. tuios saves the image on this machine for it. So does a pane
+that only reports a folder on another machine and runs no ssh.
 
 tuios does not read the clipboard in these cases:
 

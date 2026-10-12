@@ -2652,19 +2652,22 @@ an image. Then the client pastes the path into the window as text. For a
 window whose process runs on a host, the daemon sends the image to that host
 with `paste-pane-image` on a new link connection. The host writes the file.
 
-A window of this daemon whose foreground is an interactive `ssh` or `mosh`
-login gets the file on the machine of the login. The daemon reads the login
-from the process, never from what the pane prints. It resolves the login and
-each `[hosts]` entry (`ssh_options` and `addr`) with `ssh -G`, and an entry
-matches only when the host name, the user and the port are the same. With
-exactly one match, the daemon asks the host for a drop folder
-(`file-drop-dir`), copies the image there with a transfer, and answers with
-the host and the path there. With no match, more than one, or an OSC 7 report
-from a machine that is not the login's (ssh inside ssh), nothing is written
-and the error is `unknown_host`, with the sentence for the person in
-`hint.detail`. A tunnel (`-N`, `-W`), a client in the background (`-f`), one
-with `-n` or `-s`, and one with a remote command are not a login. Their image
-is written here.
+A window of this daemon with an `ssh` or `mosh` client in its foreground gets
+the file on the machine of that client. The daemon reads the command line from
+the process, never from what the pane prints. It resolves the line and each
+`[hosts]` entry (`ssh_options` and `addr`) with `ssh -G`, through the same
+program the links use. An entry matches only when the host name, the user, the
+port, `proxyjump` and `proxycommand` are the same. A remote command, such as
+`ssh -t host tmux`, is a session over there. With exactly one match, the daemon
+asks the host for a drop folder (`file-drop-dir`), copies the image there with
+a transfer, and answers with the host and the path there.
+
+The paste is refused with `unknown_host`, and the sentence for the person in
+`hint.detail`, when no entry matches, when more than one does, when the line
+cannot be read (`-F`, an `-o` the daemon does not know), or when the shell
+over there reports, with OSC 7, a folder on another `[hosts]` machine (ssh
+inside ssh). Nothing is written then. A tunnel (`-N`, or `-f`, `-n` or `-W`
+without `-t`) reads no keys, and its image is written here.
 
 Params: `session` (optional), `window` (optional, the focused window when
 empty), `content` (required), `human_nonce` (required).
