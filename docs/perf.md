@@ -2162,7 +2162,7 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 34,910,370 | 35,000,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 35,037,346 | 35,500,000 |
 | darwin/arm64 | 23,834,594 | 25,265,154 | 32,904,754 | 33,400,000 |
 
 The first budgets were about 3% above the size they were set at and below the
@@ -2517,6 +2517,13 @@ about 50 KB over main (32,674,210 to 32,724,722 with a local Go 1.26 build).
 No single dependency grew: it is rail code and option checks. The budget has
 about 500 KB of room again, under the 40 MB ceiling. linux/amd64 stayed
 inside its budget.
+
+The linux/amd64 budget went to 35,500,000 for the display follow (#637): a
+desktop client hands new panes its Wayland and X11 display, so clipboard and
+image paste work in the panes of a daemon that ssh started. The CI build
+measured 35,037,346 bytes, 37,346 over the old budget, on top of the one
+daemon per user change (#635) that landed just before. The budget has about
+460 KB of room again, under the 40 MB ceiling.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
