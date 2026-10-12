@@ -5514,3 +5514,44 @@ The control was run on 2026-10-14 on branch `feat/gui-bridge`. The log is
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The resync command does nothing | `model.handle`: the `ResyncPaneStream` call cut | `TestGUIBridgeResyncsOnePaneOnRequest` (no fresh snapshot of the flooding pane) | **caught** |
+## File previews on the read rules, and the bridge's verb on a host (replaces #597)
+
+Main has the transfer engine (#620) and `tuios cp` (#636), with the drops,
+copies and file verbs of #597. What #597 had beyond them is `file-preview`,
+which main took out while nothing called it, and the bridge's half: a verb
+with `host`, and the host of a pane held for another machine. The preview now
+keeps the rules `file-read` keeps.
+
+The tests are in `file_preview_test.go` and `gui_bridge_files_test.go`.
+
+- `TestFilePreviewOnAHost` previews on build a 3000 px PNG (1200 x 800 back,
+  smaller than the file), a table as text, a PDF page through `pdftoppm` and
+  `pdfinfo`, and a film frame and length through `ffmpeg` and `ffprobe`. The
+  tools read the open file as `/dev/fd/3`.
+- `TestFilePreviewKeepsToTheReadRules` asks build for a dummy key in `~/.ssh`,
+  the key through a symlink and through a hard link in the receive folder, and
+  `~/.ssh` itself. Each must be `forbidden`, and the marker must not come back.
+  The positive half previews an ordinary file in the same folder.
+- `TestFilePreviewNeedsTheFilesCapability` gives the hub only `list`. A listing
+  goes through and a preview is `forbidden`.
+- `TestFilePreviewOfAPipeADeviceAndAHugePicture` previews a named pipe and
+  `/dev/zero` within 5 s, and four previews of a 400 KB PNG of 10000 x 10000
+  pixels keep the daemon under 512 MB. An ordinary picture still previews.
+- `TestGUIBridgeVerbOnAHost` lists a folder through the bridge with `host`
+  build, and the home folder in the answer says build's daemon answered. It
+  previews a file there, copies it here, waits for a window that says `host`
+  build, and is refused `respond` with a host.
+
+Each control below was run on 2026-10-12 on branch `feat/gui-files`. The log
+is `~/.cache/agent-tmp/gui-port/proof/nc-files.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No link read rules | `verbFilePreview`: `openRegular` in place of `checkLinkRead` and `openLinkRead` | `TestFilePreviewKeepsToTheReadRules` (all four paths answered, the dummy key came back) | **caught** |
+| A preview needs only list | `verbCapabilities`: `file-preview` moved to `list` | `TestFilePreviewNeedsTheFilesCapability` (the secret came back as text) | **caught** |
+| The tools are not handed the open file | `previewTool`: `ExtraFiles` not set | `TestFilePreviewOnAHost` (no PDF page, no page count, no frame, no length) | **caught** |
+| A preview is not scaled | `previewImage`: `fit(img, maxPx)` cut | `TestFilePreviewOnAHost` (3000 x 2000, want 1200 x 800) | **caught** |
+| No decode cap | `previewImage`: the decoded size check made false | `TestFilePreviewOfAPipeADeviceAndAHugePicture` (daemon peak 1807 MB) | **caught** |
+| The bridge ignores host | `runVerb`: the `verbDialHost` branch made false | `TestGUIBridgeVerbOnAHost` (the listing's home is this machine's) | **caught** |
+| The nonce goes to the host | `runVerb`: the person-verb refusal made false | `TestGUIBridgeVerbOnAHost` (build answered forbidden, not this machine's refusal) | **caught** |
+| No host on a window | the state export: `Host: w.Host` cut | `TestGUIBridgeVerbOnAHost` (no window says build) | **caught** |
