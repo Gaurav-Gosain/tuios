@@ -321,3 +321,92 @@ func TestCopyOnATerminalAsksAndKeepsRunning(t *testing.T) {
 		t.Fatalf("ASSERTION: the kept copy is not the original")
 	}
 }
+
+// TestAFilesGrantCopyCannotWriteThroughALink gives a strict pane the files
+// grant, and puts a link in its folder that points out of it. A copy from
+// build into the folder that would land through the link is refused with
+// exit 4, and nothing reaches the folder the link points at. A copy that
+// stays inside the folder still lands.
+//
+// Negative control: with the job's os.Root at the pane's folder cut
+// (PaneRoot left empty in transferGrantStart), the host's file lands in the
+// folder outside.
+func TestAFilesGrantCopyCannotWriteThroughALink(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+	cfg := configPathIn(base)
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, append(body, []byte("\n[agents.permissions]\nmode = \"strict\"\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pane, cwd := copyTestPane(t, base, "work")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(cwd, "payload")); err != nil {
+		t.Fatal(err)
+	}
+	far := filepath.Join(farHome(remote), "payload")
+	if err := os.MkdirAll(far, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(far, "dropped.sh"), []byte("echo from build\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(farHome(remote), "fine.txt"), []byte("fine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	codes := filepath.Join(base, "codes")
+	if err := os.MkdirAll(codes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func(name, args string) (int, string) {
+		t.Helper()
+		out := filepath.Join(codes, name)
+		_ = os.Remove(out)
+		_ = os.Remove(out + ".err")
+		typeInPane(t, base, "work", pane, tuiosBin+" cp --conflict replace "+args+" 2>"+out+".err; echo $? >"+out)
+		code := waitPaneExit(t, base, "work", pane, out, 60*time.Second)
+		errText, _ := os.ReadFile(out + ".err")
+		return code, string(errText)
+	}
+	results := map[string]any{}
+	// Strict mode reloads from the config file. Wait until a pane without
+	// the files grant is refused, so the copies below run under strict.
+	deadline := time.Now().Add(20 * time.Second)
+	code, errText := run("strict", "build:~/fine.txt ./")
+	for code != 4 && time.Now().Before(deadline) {
+		_ = os.Remove(filepath.Join(cwd, "fine.txt"))
+		time.Sleep(500 * time.Millisecond)
+		code, errText = run("strict", "build:~/fine.txt ./")
+	}
+	if code != 4 {
+		t.Fatalf("ASSERTION: strict mode never held for the pane: exit %d\n%s", code, errText)
+	}
+	_ = os.Remove(filepath.Join(cwd, "fine.txt"))
+	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", pane, "--grants", "read,files"); err != nil {
+		t.Fatalf("set-pane-grants: %v\n%s", err, out)
+	}
+	code, errText = run("inside", "build:~/fine.txt ./")
+	results["inside"] = map[string]any{"code": code, "stderr": errText}
+	if code != 0 {
+		t.Fatalf("ASSERTION: a copy inside the pane's folder failed: exit %d\n%s", code, errText)
+	}
+	if got, _ := os.ReadFile(filepath.Join(cwd, "fine.txt")); string(got) != "fine\n" {
+		t.Fatalf("ASSERTION: the copy inside the folder did not land: %q", got)
+	}
+	code, errText = run("through-link", "build:~/payload ./")
+	results["through_link"] = map[string]any{"code": code, "stderr": errText}
+	saveTransferArtifact(t, "cp-files-grant-link", results)
+	if _, err := os.Stat(filepath.Join(outside, "dropped.sh")); err == nil {
+		t.Fatalf("ASSERTION: a files-grant copy wrote through a link out of the pane's folder (exit %d)\n%s", code, errText)
+	}
+	if code == 0 {
+		t.Fatalf("ASSERTION: a copy that could not land through the link exited 0\n%s", errText)
+	}
+}

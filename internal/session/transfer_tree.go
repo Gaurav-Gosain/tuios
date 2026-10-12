@@ -137,7 +137,7 @@ var errTreeStream = errors.New("the tree stream is out of step")
 // cs is the connection the stream came on. For a link each file is opened
 // under the link read rules (openLinkRead), and a refused file is a record
 // that says so.
-func serveTreeRead(ctx context.Context, d *Daemon, cs *connState, root string, compress bool, in *bufio.Reader, out io.Writer) error {
+func serveTreeRead(ctx context.Context, d *Daemon, acc access, root string, compress bool, in *bufio.Reader, out io.Writer) error {
 	bw := bufio.NewWriterSize(out, 256<<10)
 	buf := make([]byte, 256<<10)
 	for {
@@ -166,7 +166,7 @@ func serveTreeRead(ctx context.Context, d *Daemon, cs *connState, root string, c
 			continue
 		}
 		p := filepath.Join(root, filepath.FromSlash(req.Rel))
-		if err := sendTreeFile(d, cs, bw, p, req, compress, buf); err != nil {
+		if err := sendTreeFile(d, acc, bw, p, req, compress, buf); err != nil {
 			return err
 		}
 	}
@@ -174,8 +174,8 @@ func serveTreeRead(ctx context.Context, d *Daemon, cs *connState, root string, c
 
 // sendTreeFile writes one file's record. An error it returns is the stream's;
 // a file it cannot read is a record that says so.
-func sendTreeFile(d *Daemon, cs *connState, bw *bufio.Writer, p string, req treeRequest, compress bool, buf []byte) error {
-	f, fi, verr, err := d.openLinkRead(cs, p)
+func sendTreeFile(d *Daemon, acc access, bw *bufio.Writer, p string, req treeRequest, compress bool, buf []byte) error {
+	f, fi, verr, err := d.accOpenRead(acc, p)
 	if verr != nil {
 		return writeTreeLine(bw, treeHeader{Rel: req.Rel, Code: verr.Code, Error: verr.Message})
 	}
@@ -245,10 +245,10 @@ func (zeroReader) Read(p []byte) (int, error) {
 // parts, the copy's id. cs is the connection the stream came on: a write over
 // a link is held to the link's roots, deny list and write limits for each
 // file (linkWriteFS, claimLinkWrite), as an open-file-stream write is.
-func serveTreeWrite(ctx context.Context, d *Daemon, cs *connState, root, partID string, in *bufio.Reader, out io.Writer) error {
+func serveTreeWrite(ctx context.Context, d *Daemon, acc access, root, partID string, in *bufio.Reader, out io.Writer) error {
 	// The stream is one write stream of the link's, whatever the number of
 	// files in it.
-	releaseStream, verr := d.claimLinkStream(cs)
+	releaseStream, verr := d.claimLinkStream(acc.cs)
 	if verr != nil {
 		_ = writeTreeLine(out, treeAck{End: true, Code: verr.Code, Error: verr.Message})
 		return errors.New(verr.Message)
@@ -364,7 +364,7 @@ func serveTreeWrite(ctx context.Context, d *Daemon, cs *connState, root, partID 
 		}
 		p := filepath.Join(root, filepath.FromSlash(hdr.Rel))
 		if hdr.Kind == "dir" {
-			fsys, verr := d.linkWriteFS(cs, p)
+			fsys, verr := d.accWriteFS(acc, p)
 			if verr == nil {
 				last.Close()
 				last = fsys
@@ -384,7 +384,7 @@ func serveTreeWrite(ctx context.Context, d *Daemon, cs *connState, root, partID 
 			_ = bw.Flush()
 			return errTreeStream
 		}
-		a, pf, err := takeTreeFile(d, cs, p, partID, hdr, in, buf)
+		a, pf, err := takeTreeFile(d, acc, p, partID, hdr, in, buf)
 		if err != nil {
 			return err
 		}
@@ -491,7 +491,7 @@ func syncPending(batch []*treePending) {
 // says why, and its bytes are read and dropped so the next record is in step.
 // A file that did land in its part is a treePending, which the caller syncs
 // and puts in place with the rest of its batch.
-func takeTreeFile(d *Daemon, cs *connState, p, partID string, hdr treeHeader, in *bufio.Reader, buf []byte) (treeAck, *treePending, error) {
+func takeTreeFile(d *Daemon, acc access, p, partID string, hdr treeHeader, in *bufio.Reader, buf []byte) (treeAck, *treePending, error) {
 	part := partPath(p, partID)
 	var src io.Reader = in
 	var fr io.ReadCloser
@@ -519,7 +519,8 @@ func takeTreeFile(d *Daemon, cs *connState, p, partID string, hdr treeHeader, in
 	if verr := checkKeepLabel(hdr.Label); verr != nil {
 		return drop(verr.Code, verr.Message)
 	}
-	fsys, verr := d.linkWriteFS(cs, p, part)
+	cs := acc.cs
+	fsys, verr := d.accWriteFS(acc, p, part)
 	if verr != nil {
 		return drop(verr.Code, verr.Message)
 	}
@@ -651,7 +652,7 @@ func (d *Daemon) verbOpenTreeStream(cs *connState, params json.RawMessage) (any,
 		}
 		cs.takeover = func(br *bufio.Reader) {
 			_ = cs.conn.SetDeadline(time.Time{})
-			_ = serveTreeRead(d.ctx, d, cs, real, p.Compress, br, cs.conn)
+			_ = serveTreeRead(d.ctx, d, access{cs: cs}, real, p.Compress, br, cs.conn)
 			_ = cs.conn.Close()
 		}
 	case "write":
@@ -675,7 +676,7 @@ func (d *Daemon) verbOpenTreeStream(cs *connState, params json.RawMessage) (any,
 		}
 		cs.takeover = func(br *bufio.Reader) {
 			_ = cs.conn.SetDeadline(time.Time{})
-			if err := serveTreeWrite(d.ctx, d, cs, root, p.PartID, br, cs.conn); err != nil && !errors.Is(err, io.EOF) {
+			if err := serveTreeWrite(d.ctx, d, access{cs: cs}, root, p.PartID, br, cs.conn); err != nil && !errors.Is(err, io.EOF) {
 				LogBasic("A tree stream into %s ended: %v", root, err)
 			}
 			_ = cs.conn.Close()
@@ -701,7 +702,7 @@ type FileCheck struct {
 //
 // For cs over a link a hash is a read, so each file is opened under the link
 // read rules (openLinkRead) and a refused file is reported without its sum.
-func (d *Daemon) checkFiles(ctx context.Context, cs *connState, root string, rels []string, hash bool) ([]FileCheck, error) {
+func (d *Daemon) checkFiles(ctx context.Context, acc access, root string, rels []string, hash bool) ([]FileCheck, error) {
 	out := make([]FileCheck, len(rels))
 	var hashed int64
 	for i, rel := range rels {
@@ -713,7 +714,7 @@ func (d *Daemon) checkFiles(ctx context.Context, cs *connState, root string, rel
 		// What a path is, or that it is there, is read like its bytes, as
 		// file-stat judges it: a link learns nothing of a file it may not
 		// read.
-		if d.checkLinkRead(cs, p) != nil {
+		if d.accCheckRead(acc, p) != nil {
 			continue
 		}
 		fi, err := os.Lstat(p)
@@ -722,7 +723,7 @@ func (d *Daemon) checkFiles(ctx context.Context, cs *connState, root string, rel
 		}
 		out[i].Exists, out[i].Kind, out[i].Size, out[i].MTime = true, kindOf(fi.Mode()), fi.Size(), fi.ModTime().UnixMilli()
 		if hash && fi.Mode().IsRegular() && hashed+fi.Size() <= fileCheckHashBytes {
-			f, _, verr, err := d.openLinkRead(cs, p)
+			f, _, verr, err := d.accOpenRead(acc, p)
 			if verr != nil {
 				continue
 			}
@@ -763,7 +764,7 @@ func (d *Daemon) verbFileCheck(cs *connState, params json.RawMessage) (any, *ver
 	if verr != nil {
 		return nil, verr
 	}
-	out, err := d.checkFiles(d.ctx, cs, root, p.Rels, p.Hash)
+	out, err := d.checkFiles(d.ctx, access{cs: cs}, root, p.Rels, p.Hash)
 	if err != nil {
 		return nil, fileError("check", root, err)
 	}
@@ -787,7 +788,7 @@ func (e fileEnd) openTreeRead(ctx context.Context, root string, compress bool) (
 		reqR, reqW := io.Pipe()
 		recR, recW := io.Pipe()
 		go func() {
-			err := serveTreeRead(ctx, e.d, e.gate, root, false, bufio.NewReaderSize(reqR, 64<<10), recW)
+			err := serveTreeRead(ctx, e.d, e.acc, root, false, bufio.NewReaderSize(reqR, 64<<10), recW)
 			_ = recW.CloseWithError(err)
 			_ = reqR.CloseWithError(err)
 		}()
@@ -814,7 +815,7 @@ func (e fileEnd) openTreeWrite(ctx context.Context, root, partID string) (*treeC
 		recR, recW := io.Pipe()
 		ackR, ackW := io.Pipe()
 		go func() {
-			err := serveTreeWrite(ctx, e.d, e.gate, root, partID, bufio.NewReaderSize(recR, 256<<10), ackW)
+			err := serveTreeWrite(ctx, e.d, e.acc, root, partID, bufio.NewReaderSize(recR, 256<<10), ackW)
 			_ = ackW.CloseWithError(err)
 			_ = recR.CloseWithError(err)
 		}()
@@ -892,6 +893,10 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 	// The acks, as the write side puts each file in place.
 	var mu sync.Mutex
 	var failed []treeResult
+	// answered is every file the write side acked or the read side said it
+	// could not send. A file in neither did not land, whatever the stream
+	// said at its end.
+	answered := make(map[string]bool, len(files))
 	acked := make(chan struct{})
 	go func() {
 		defer close(acked)
@@ -908,6 +913,9 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 				}
 				return
 			}
+			mu.Lock()
+			answered[a.Rel] = true
+			mu.Unlock()
 			if a.Code != "" {
 				mu.Lock()
 				failed = append(failed, treeResult{rel: a.Rel, code: a.Code, msg: a.Error})
@@ -955,6 +963,7 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 			}
 			if hdr.Code != "" {
 				mu.Lock()
+				answered[hdr.Rel] = true
 				failed = append(failed, treeResult{rel: hdr.Rel, code: hdr.Code, msg: hdr.Error})
 				mu.Unlock()
 				m.fileEvent(j, hdr.Rel, "failed", "", hdr.Code, hdr.Error)
@@ -985,6 +994,16 @@ func (m *transferManager) treeCopy(ctx context.Context, j *transferJob, src, dst
 	case err := <-errs:
 		return nil, err
 	default:
+	}
+	// A far side that ended the stream early, or acked a file the copy did
+	// not send, must not make the copy look done.
+	mu.Lock()
+	defer mu.Unlock()
+	for _, f := range files {
+		if !answered[f.e.Rel] {
+			// Once more would meet the same far side, so the copy ends.
+			return nil, permanent(ErrVerbInternal, fmt.Sprintf("%s ended the copy before it put %s in place. The copy is not done.", dst.name(), echoName(f.e.Rel)))
+		}
 	}
 	return failed, nil
 }

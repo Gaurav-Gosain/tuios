@@ -70,6 +70,7 @@ type transferRecord struct {
 	RateLimit   int64    `json:"rate_limit,omitempty"`
 	Pane        string   `json:"pane,omitempty"`
 	PaneSession string   `json:"pane_session,omitempty"`
+	PaneRoot    string   `json:"pane_root,omitempty"`
 	// Link is the linked machine the job runs for, absent for the person's
 	// own job. A resumed job is held to that machine's link policy.
 	Link     *transferLink `json:"link,omitempty"`
@@ -97,7 +98,7 @@ func (j *transferJob) recordLocked(socket string) transferRecord {
 		Version: 1, ID: j.id, Socket: socket, Src: j.src, Dst: j.dst, Move: o.Move,
 		Conflict: o.Conflict, Each: o.Each, Place: o.Place, Label: o.Label, Private: o.Private,
 		NoPerms: o.NoPerms, NoTimes: o.NoTimes, NoCompress: o.NoCompress, RateLimit: o.RateLimit,
-		Pane: o.Pane, PaneSession: o.PaneSession, Link: o.Link, Created: j.created.UnixMilli(),
+		Pane: o.Pane, PaneSession: o.PaneSession, PaneRoot: o.PaneRoot, Link: o.Link, Created: j.created.UnixMilli(),
 		State: j.state, Target: j.target, Final: j.final, Same: j.same, Skips: j.conflictsSkipped,
 		Error: j.errText, Code: j.errCode,
 	}
@@ -331,7 +332,7 @@ func (m *transferManager) load() {
 		j := newJob(rec.ID, rec.Src, rec.Dst, transferOptions{
 			Move: rec.Move, Conflict: rec.Conflict, Each: rec.Each, Place: rec.Place, Label: rec.Label,
 			Private: rec.Private, NoPerms: rec.NoPerms, NoTimes: rec.NoTimes, NoCompress: rec.NoCompress,
-			RateLimit: max(rec.RateLimit, 0), Pane: rec.Pane, PaneSession: rec.PaneSession, Link: rec.Link,
+			RateLimit: max(rec.RateLimit, 0), Pane: rec.Pane, PaneSession: rec.PaneSession, PaneRoot: rec.PaneRoot, Link: rec.Link,
 		})
 		j.created = time.UnixMilli(rec.Created)
 		j.target, j.final = rec.Target, rec.Final

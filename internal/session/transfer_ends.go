@@ -32,6 +32,9 @@ type fileEnd struct {
 	// would be, and each write goes through an os.Root at its root. Nil is
 	// the person's own job, which reads and writes like the person.
 	gate *connState
+	// acc is the gate and, for a copy a pane started with the files grant,
+	// the pane's folder, which every read and write here is held to.
+	acc access
 }
 
 // callError turns a refusal of the link checks into the error a job ends on.
@@ -41,10 +44,10 @@ func callError(verr *verbError) error {
 
 // readable checks a read of path on this machine against the gate.
 func (e fileEnd) readable(path string) error {
-	if e.gate == nil {
+	if e.acc == (access{}) {
 		return nil
 	}
-	if verr := e.d.checkLinkRead(e.gate, path); verr != nil {
+	if verr := e.d.accCheckRead(e.acc, path); verr != nil {
 		return callError(verr)
 	}
 	return nil
@@ -54,10 +57,10 @@ func (e fileEnd) readable(path string) error {
 // system for the person's job, an os.Root under the gate's policy for a
 // linked machine's. The caller closes it.
 func (e fileEnd) writeFS(paths ...string) (fileFS, error) {
-	if e.gate == nil {
+	if e.acc == (access{}) {
 		return fileFS{}, nil
 	}
-	fsys, verr := e.d.linkWriteFS(e.gate, paths...)
+	fsys, verr := e.d.accWriteFS(e.acc, paths...)
 	if verr != nil {
 		return fileFS{}, callError(verr)
 	}
@@ -139,11 +142,11 @@ func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 // is negative.
 func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
 	if e.local() {
-		if e.gate == nil {
+		if e.acc == (access{}) {
 			sum, _, err := hashRange(ctx, path, off, length)
 			return sum, err
 		}
-		f, _, verr, err := e.d.openLinkRead(e.gate, path)
+		f, _, verr, err := e.d.accOpenRead(e.acc, path)
 		if verr != nil {
 			return "", callError(verr)
 		}
@@ -206,7 +209,7 @@ func (s *readStream) Close() error               { return s.close() }
 // side to compress the bytes when a sample says it is worth it.
 func (e fileEnd) openRead(ctx context.Context, path string, off int64, compress bool) (*readStream, error) {
 	if e.local() {
-		f, fi, verr, err := e.d.openLinkRead(e.gate, path)
+		f, fi, verr, err := e.d.accOpenRead(e.acc, path)
 		if verr != nil {
 			return nil, callError(verr)
 		}
@@ -499,7 +502,7 @@ func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error 
 // so a folder of up to fileWalkMax entries is no one answer.
 func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	if e.local() {
-		root, verr := e.d.linkWalkRoot(e.gate, path)
+		root, verr := e.d.accWalkRoot(e.acc, path)
 		if verr != nil {
 			return walkResult{}, callError(verr)
 		}
@@ -624,7 +627,7 @@ const (
 // folder of any size is a few round trips.
 func (e fileEnd) check(ctx context.Context, root string, rels []string, hash bool) ([]FileCheck, error) {
 	if e.local() {
-		return e.d.checkFiles(ctx, e.gate, root, rels, hash)
+		return e.d.checkFiles(ctx, e.acc, root, rels, hash)
 	}
 	out := make([]FileCheck, 0, len(rels))
 	for len(rels) > 0 {

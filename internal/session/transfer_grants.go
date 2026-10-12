@@ -96,6 +96,10 @@ func (d *Daemon) transferGrantStart(cs *connState, src, dst *Endpoint, o *transf
 			return deny(echoName(e.Path) + " is outside the pane's folder " + echoName(root) + ", and the files grant reaches only that")
 		}
 	}
+	// The check above is of the top paths only. The job holds every read
+	// and write below them to the folder too, through an os.Root, so a
+	// link in the folder cannot carry a file out of it or into it.
+	o.PaneRoot = root
 	return nil
 }
 

@@ -4614,6 +4614,8 @@ the far side 50 ms.
 | `linkWriteFS` in `takeTreeFile` (a plain file system instead) | `TestATreeStreamKeepsToTheDenyList` (`.ssh/authorized_keys` lands on build) | **caught** |
 | The tree stream in `attemptDir` (every small file sent by itself) | `TestAFolderOfSmallFilesCopiesFastOverASlowLink` (2,000 files take 7m3s, over the budget of 60 s) | **caught** |
 
+| `o.PaneRoot = root` in `transferGrantStart` (2026-10-12: a files-grant copy reads and writes as the person) | `TestAFilesGrantCopyCannotWriteThroughALink` (`dropped.sh` lands in the folder the pane's link points at, exit 0) | **caught** |
+
 The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
 50 ms:
 

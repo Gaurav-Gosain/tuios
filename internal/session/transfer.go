@@ -136,6 +136,10 @@ type transferOptions struct {
 	// Pane and PaneSession name the pane that started the copy, for a copy
 	// started from a pane.
 	Pane, PaneSession string
+	// PaneRoot, for a copy a pane started with the files grant and no
+	// admin, is the pane's folder. Every read and write the job makes on
+	// this machine goes through an os.Root at it (transfer_access.go).
+	PaneRoot string
 	// Link, when not nil, says a linked machine started the job. Every read
 	// and write the job makes on this machine is then held to that machine's
 	// link policy, as its own file verbs would be. The journal keeps it, so a
@@ -289,6 +293,7 @@ func (m *transferManager) end(j *transferJob, host string) fileEnd {
 	e := fileEnd{d: m.d, host: host, wire: &j.wire}
 	if host == "" {
 		e.gate = j.gate()
+		e.acc = access{cs: e.gate, pane: j.opts.PaneRoot}
 	}
 	return e
 }
@@ -1644,7 +1649,9 @@ func (j *transferJob) rateLocked() float64 {
 func (m *transferManager) abortParts(j *transferJob) {
 	ctx, cancel := context.WithTimeout(m.d.ctx, 10*time.Second)
 	defer cancel()
-	dst := fileEnd{d: m.d, host: j.dst.Host}
+	// Through the job's own ends, so a pane's copy removes its part only
+	// inside the pane's folder.
+	dst := m.end(j, j.dst.Host)
 	j.mu.Lock()
 	isDir, final, current, target := j.isDir, j.final, j.current, j.target
 	j.mu.Unlock()
