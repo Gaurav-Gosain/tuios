@@ -179,7 +179,8 @@ On this machine, or on a host through `open-host-connection`:
 - `file-list` lists a folder, folders first, in natural order. `file-stat`
   describes one path.
 - `file-read` reads up to 4 MiB, base64. `file-hash` is the sha256 of a file
-  or a range of it.
+  or a range of it. `file-preview` makes a small preview of a file: a scaled
+  image, a PDF page, a film frame, or the start of a text file.
 - `file-mkdir`, `file-rename` and `file-remove` change files. `file-mkdir`
   with `receive` makes the receive folder and answers its path.
   `file-remove` of a folder that holds files needs `recursive`, and never

@@ -1766,7 +1766,7 @@ That is the stronger choice:
 files_read_roots = ["~/share"]
 ```
 
-The rule covers `file-read`, `file-hash`, `file-walk`, a copy out, and the
+The rule covers `file-read`, `file-preview`, `file-hash`, `file-walk`, a copy out, and the
 names and sizes `file-stat` and `file-list` show. The read deny list still
 holds inside every root. A file with more than one name (a hard link) is never
 read over a link, inside a root or outside one. Copy it to a new file to share

@@ -159,6 +159,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"file-read#0":        {errCode: ErrVerbNoFile, why: "~/notes.md does not exist here"},
 	"file-rename#0":      {errCode: ErrVerbNoFile, why: "~/a.txt does not exist here"},
 	"file-hash#0":        {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
+	"file-preview#0":     {errCode: ErrVerbNoFile, why: "~/Pictures/cat.jpg does not exist here"},
 	"file-walk#0":        {errCode: ErrVerbNoFile, why: "~/photos does not exist here"},
 	"file-commit#0":      {errCode: ErrVerbNoFile, why: "no copy to ~/big.iso is in flight here"},
 	"open-file-stream#0": {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
