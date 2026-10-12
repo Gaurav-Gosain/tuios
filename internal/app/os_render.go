@@ -138,11 +138,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			if w.HasNewOutput.Swap(false) {
 				w.MarkContentDirty()
 				hasChanges = true
+				m.cachedViewContent = "" // the rail is composed into the cached frame
 			}
 		}
-	}
-	if hasChanges {
-		m.cachedViewContent = ""
 	}
 	return hasChanges
 }
