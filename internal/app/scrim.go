@@ -92,6 +92,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: "quit", open: func(m *OS) bool { return m.ShowQuitMenu }, scrim: true},
 	{id: "sessionclose", open: func(m *OS) bool { return m.ShowSessionClose }, scrim: true},
 	{id: "filedialog", open: func(m *OS) bool { return m.FilePromptOpen() }, scrim: true},
+	{id: "worktreeprompt", open: func(m *OS) bool { return m.WorktreePromptOpen() }, scrim: true},
 	{id: overlayKindCopyDialog, open: func(m *OS) bool { return m.CopyDialogOpen() }, scrim: true},
 	{id: "help", open: func(m *OS) bool { return m.ShowHelp }, scrim: true},
 	{id: "tape-manager", open: func(m *OS) bool { return m.ShowTapeManager }, scrim: true},

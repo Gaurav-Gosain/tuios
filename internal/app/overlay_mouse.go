@@ -592,6 +592,10 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseTransfers()
 	case overlayKindCopyDialog:
 		m.CloseCopyDialog()
+	case "worktreeprompt":
+		// Click-away cancels, matching Esc: nothing was asked yet, so nothing
+		// is lost.
+		m.WorktreePromptCancel()
 	case "navigator":
 		m.CloseNavigator()
 	case overlayKindShot:
