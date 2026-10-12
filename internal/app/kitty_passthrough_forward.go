@@ -130,6 +130,14 @@ func (kp *KittyPassthrough) ForwardCommand(
 		return nil
 	}
 
+	// A guest that names its images by number (I=) is keyed by id from here
+	// on, like every other guest.
+	rawData, ok := kp.resolveImageNumber(cmd, rawData, windowID)
+	if !ok {
+		kittyPassthroughLog("ForwardCommand: dropping action=%c naming image number %d, which no image was sent under", cmd.Action, cmd.ImageNumber)
+		return nil
+	}
+
 	// Remember what size the guest says this image is, on whichever path the
 	// bytes take. Only the first chunk of a chunked transmission carries s= and
 	// v=, and a continuation must not overwrite them with zero, so this records
@@ -1663,6 +1671,7 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 	if clearImageMap {
 		kp.imageIDMap[windowID] = nil
 		kp.forgetImagePixels(windowID, 0)
+		kp.forgetImageNumbers(windowID)
 		// The placeholder images go with the id map: once the guest ids are
 		// forgotten nothing can name these again.
 		kp.deleteVirtualImages(windowID)

@@ -5125,3 +5125,12 @@ Run on 2026-10-14 on Linux. `TestARightClickCancelsADrag` in `bsp_drop_zone_test
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |
 | The `o.CancelWindowDrag()` call at the top of `handleMouseClick` in `internal/input/mouse_click.go` | `TestARightClickCancelsADrag` ("after the right click C is not back in its slot"): the right press starts a resize, its release opens the pane menu, and C stays at the pointer over A | **caught** |
+### kitty image numbers (#644)
+
+Run on 2026-10-12 on branch `fix/kitty-image-numbers`. The control cuts one
+thing from the fixed build and runs `TestKittyImageNumbers`. The test also
+fails on origin/main with the same messages.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The `resolveImageNumber` call in `ForwardCommand` (I= reaches the host as the guest wrote it) | `TestKittyImageNumbers` (standalone and daemon: "an image number reached the host", "image I=7 (40x40) never reached the host") | **caught** |

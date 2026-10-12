@@ -72,6 +72,7 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		kp.releaseHostID(windowID, hostID)
 	}
 	delete(kp.imageIDMap, windowID)
+	kp.forgetImageNumbers(windowID)
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
 	kp.deleteRemoteVideoImages(windowID)
