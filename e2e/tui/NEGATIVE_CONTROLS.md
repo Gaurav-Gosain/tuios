@@ -5081,3 +5081,21 @@ Run on 2026-10-14 on macOS on branch `pr700-review`, the review round of `pr/ver
 | The positive half | this branch | none: at the bound both hellos keep the 64 byte TERM (and the verb hello `COLORTERM=24bit`), each bad case keeps the good value beside the dropped one, the hello is answered rather than refused, and the pane reads the fallback `xterm-256color` or `truecolor` for the dropped value | **guard** |
 
 Not covered here: a control character or a space in `TERM`. On Unix `PaneTerm` refuses those too, so the pane reads the fallback with or without the check; only Windows, which this suite cannot run, passes `TERM` through unchecked. The cases put them in `COLORTERM`, which nothing else checks.
+## worktree ls reports a merged branch
+
+Run on 2026-10-12 on branch `feat/worktree-merged` with
+`TestWorktreeLsMerged`. The fixture makes six worktrees with `tuios worktree
+new`. Five get a commit and read `merged: false` first. Then each lands one way:
+fast-forward, merge commit, squash, merge of a worktree made without `--base`,
+and a push to `origin/main` only. The positive half is the sixth worktree: it
+has no commits, and must stay `merged: false` while every other row turns true.
+The test saves `transcript.txt`, every tuios call and its output, in the
+artifact directory.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The `worktree.Merged` call cut from `verbListWorktrees` (`into := ""`) | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-ff: merged=false`, want true into `main`) | **caught** |
+| The own-commits gate in `mergedInto` made a no-op | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-fresh: merged=true merged_into="main"`, want false) | **caught** |
+| `start_commit` not recorded at `new-worktree` (the merge base fallback for every worktree) | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-ff: merged=false` after the fast-forward) | **caught** |
+| The upstream of the base never checked | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-up: merged=false`, want true into `origin/main`) | **caught** |
+| The positive half | this branch | none: four rows turn true into `main`, one into `origin/main`, and the fresh one stays false | **guard** |
