@@ -13,6 +13,8 @@ on:
     paths: &clienttests-paths
       - "go.mod"
       - "go.sum"
+      - "go.work"
+      - "progstatus/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"

@@ -23,6 +23,9 @@ on:
       - .dockerignore
       - go.mod
       - go.sum
+      - go.work
+      - go.work.sum
+      - progstatus/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -31,6 +34,9 @@ on:
       - .dockerignore
       - go.mod
       - go.sum
+      - go.work
+      - go.work.sum
+      - progstatus/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:

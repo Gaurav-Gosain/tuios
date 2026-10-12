@@ -1,0 +1,78 @@
+name: Go libraries
+
+# The Go libraries in this repository, each a module of its own under a
+# tuios.dev import path (progstatus/ is the first). CI and local builds use the
+# folders through go.work. `go install .../cmd/tuios@vX` and the release use
+# the versions go.mod pins. This workflow keeps the two in step, and tests each
+# library alone, as an importer gets it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pins:
+    name: library pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A pin names a commit or a library tag, so the check needs history.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/libraries.yml
+
+      # Each pinned version holds the same files as its folder, go.work
+      # replaces it with that folder, tuios builds without go.work, and go.work
+      # changes no dependency of tuios. The libraries come from their pinned
+      # commits here. The release runs the same check through tuios.dev.
+      - name: Check the library pins
+        run: scripts/library-pins.sh check
+
+  module:
+    name: ${{ matrix.dir }} alone
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [progstatus]
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    env:
+      # The module as an importer builds it: no workspace, and the oldest Go
+      # its go.mod allows.
+      GOWORK: "off"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ matrix.dir }}/go.mod
+          cache-dependency-path: ${{ matrix.dir }}/go.mod
+
+      - name: Tidy
+        run: go mod tidy -diff
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...

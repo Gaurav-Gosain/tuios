@@ -35,8 +35,8 @@ cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
 # the sip version go.mod already pins. The js build does not import sip, so
 # nothing has downloaded it yet on a cold module cache, and go list -m would
 # print an empty directory. Download it first.
-go mod download github.com/Gaurav-Gosain/sip
-sip=$(go list -m -f '{{.Dir}}' github.com/Gaurav-Gosain/sip)
+go mod download -modfile "$modfile" github.com/Gaurav-Gosain/sip
+sip=$(go list -modfile "$modfile" -m -f '{{.Dir}}' github.com/Gaurav-Gosain/sip)
 if [ -z "$sip" ] || [ ! -f "$sip/static/webterm.js" ]; then
 	echo "build.sh: sip's webterm bundle not found (sip dir: '$sip')" >&2
 	exit 1

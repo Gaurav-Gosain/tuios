@@ -42,6 +42,15 @@ jobs:
           version: v2.14.0
           args: --timeout 20m
 
+      # ./... stops at a nested module, so each Go library of this repository
+      # is linted from its own folder, with the same .golangci.yml.
+      - name: golangci-lint (progstatus)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: progstatus
+          args: --timeout 10m
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
@@ -83,4 +92,4 @@ jobs:
       - name: Vet
         env:
           GOOS: ${{ matrix.goos }}
-        run: go vet ./...
+        run: go vet ./... ./progstatus/...

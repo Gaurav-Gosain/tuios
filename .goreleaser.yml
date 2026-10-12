@@ -3,6 +3,21 @@
 
 version: 2
 
+# A release builds what `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@<tag>`
+# builds: the Go libraries in this repository (such as progstatus/) at the
+# versions go.mod pins, not the folders go.work points at. The release
+# workflow checks first that the two hold the same code (scripts/library-pins.sh).
+env:
+  - GOWORK=off
+
+# A library in this repository is tagged with its folder as a prefix, such as
+# progstatus/v0.1.0. Those tags are not tuios releases. git describe skips them
+# with this pattern. The release workflow also passes GORELEASER_PREVIOUS_TAG,
+# because GoReleaser compares the tags at the previous commit by exact name.
+git:
+  ignore_tags:
+    - "*/v*"
+
 before:
   hooks:
     # Ensure dependencies are up to date

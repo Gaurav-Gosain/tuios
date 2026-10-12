@@ -28,18 +28,30 @@ export GOWORK=off
 cd "$root"
 mkdir -p "$out"
 
+# -modfile does not work with go.work, so the copy replaces each Go library
+# that go.work takes from this repository (such as progstatus/) with its
+# folder, as go.work does. Every go command below reads the copy.
+cp go.mod "$out/go.wasm.mod"
+cp go.sum "$out/go.wasm.sum"
+printf '\n' >>"$out/go.wasm.mod"
+sed -n 's|^[[:space:]]*\./\([^[:space:]]*\)$|\1|p' go.work | while read -r dir; do
+	[ "$dir" = e2e/tui ] && continue
+	module=$(awk '$1 == "module" { print $2 }' "$dir/go.mod")
+	printf 'replace %s => ./%s\n' "$module" "$dir" >>"$out/go.wasm.mod"
+done
+
 # go list -m prints an empty directory for a module that is not in the module
 # cache yet, which is the case on a cold cache such as a fresh CI runner, so
 # the two modules copied below are downloaded first.
-go mod download charm.land/bubbletea/v2 github.com/creack/pty
+go mod download -modfile "$out/go.wasm.mod" charm.land/bubbletea/v2 github.com/creack/pty
 
-bt=$(go list -m -f '{{.Dir}}' charm.land/bubbletea/v2)
+bt=$(go list -modfile "$out/go.wasm.mod" -m -f '{{.Dir}}' charm.land/bubbletea/v2)
 rm -rf "$out/bubbletea"
 cp -R "$bt" "$out/bubbletea"
 chmod -R u+w "$out/bubbletea"
 cp "$here/stubs/bubbletea_tty_js.go.in" "$out/bubbletea/tty_js.go"
 
-pty=$(go list -m -f '{{.Dir}}' github.com/creack/pty)
+pty=$(go list -modfile "$out/go.wasm.mod" -m -f '{{.Dir}}' github.com/creack/pty)
 rm -rf "$out/pty"
 cp -R "$pty" "$out/pty"
 chmod -R u+w "$out/pty"
@@ -53,9 +65,7 @@ rm -f "$out"/pty/*.bak
 # so the unsupported StartWithSize goes in again under a js name.
 cp "$out/pty/start_windows.go" "$out/pty/start_js.go"
 
-cp go.mod "$out/go.wasm.mod"
-cp go.sum "$out/go.wasm.sum"
 # -modfile resolves relative replace paths against the main module root.
-printf '\nreplace charm.land/bubbletea/v2 => ./.wasm-build/bubbletea\n' >>"$out/go.wasm.mod"
+printf 'replace charm.land/bubbletea/v2 => ./.wasm-build/bubbletea\n' >>"$out/go.wasm.mod"
 printf 'replace github.com/creack/pty => ./.wasm-build/pty\n' >>"$out/go.wasm.mod"
 echo "$out/go.wasm.mod"

@@ -40,6 +40,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The tidy check builds each Go library of this repository from the
+          # commit go.mod pins (scripts/library-pins.sh), so it needs history.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v7
         with:
@@ -68,19 +72,27 @@ jobs:
         # updates to go.mod needed" from a module the change had not touched by
         # name. That has happened twice. This says which module and says it in
         # the job the change belongs to.
+        #
+        # go mod tidy ignores go.work, so it needs each Go library of this
+        # repository (progstatus/) at the version go.mod pins. The libraries
+        # come from a GOPROXY directory built from the pinned commits, so the
+        # check does not depend on tuios.dev.
         run: |
-          for dir in . e2e/tui; do
-            if ! (cd "$dir" && go mod tidy -diff); then
+          scripts/library-pins.sh proxy "$RUNNER_TEMP/libproxy"
+          export GOPROXY="file://$RUNNER_TEMP/libproxy,$(go env GOPROXY)" GONOSUMDB=tuios.dev
+          for dir in . e2e/tui progstatus; do
+            if ! (cd "$dir" && GOWORK=off go mod tidy -diff); then
               echo "$dir/go.mod is not tidy; run: (cd $dir && go mod tidy)" >&2
               exit 1
             fi
           done
 
+      # ./... stops at a nested module, so the libraries are named too.
       - name: Vet
-        run: go vet ./...
+        run: go vet ./... ./progstatus/...
 
       - name: Build
-        run: go build ./...
+        run: go build ./... ./progstatus/...
 
       - name: Example tapes validate
         # Every example under examples/ is held to the parser the release
@@ -103,7 +115,7 @@ jobs:
         # -count=1 because the test cache replays a pass across a change the
         # cache key does not see, which is how a mutation sweep can come back
         # green on code that no longer exists.
-        run: go test ./... -count=1 -timeout 20m
+        run: go test ./... ./progstatus/... -count=1 -timeout 20m
 
   windows:
     name: go test (windows)
@@ -146,4 +158,4 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Test with the race detector
-        run: go test ./... -race -count=1 -timeout 80m
+        run: go test ./... ./progstatus/... -race -count=1 -timeout 80m

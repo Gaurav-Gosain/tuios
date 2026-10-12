@@ -13,6 +13,8 @@ on:
     paths: &learn-web-paths
       - "go.mod"
       - "go.sum"
+      - "go.work"
+      - "progstatus/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

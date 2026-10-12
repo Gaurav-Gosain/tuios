@@ -34,7 +34,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The Go libraries in this repository (progstatus/ and the rest go.work
+  # lists) are built from their folders in CI and from the versions go.mod
+  # pins by `go install` and by this release. This proves the pins hold the
+  # same code as the folders at the tag, and that tuios builds without go.work
+  # with each library fetched through tuios.dev, as a user's go install does.
+  library-pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/release.yml
+
+      - name: Check the library pins
+        run: scripts/library-pins.sh check --network
+
   goreleaser:
+    needs: library-pins
     # A dispatch with ghostty_darwin_only set leaves the published release,
     # the Homebrew tap and the AUR alone.
     if: ${{ !inputs.ghostty_darwin_only }}
@@ -94,6 +121,13 @@ jobs:
             echo "args=release --clean" >> "$GITHUB_OUTPUT"
           fi
 
+      # A library tag such as progstatus/v0.1.0 can be the nearest tag to a
+      # release, and GoReleaser would then name it as the previous release in
+      # the changelog. Only a tag that starts with v and a digit is a release.
+      - name: Find the previous release
+        id: previous
+        run: echo "tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "refs/tags/${TAG}^")" >> "$GITHUB_OUTPUT"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -103,6 +137,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
           # .goreleaser.yml builds the ghostty CC and PKG_CONFIG_PATH paths
           # from .Env.PWD. The action starts GoReleaser without a shell, so
           # nothing sets PWD unless it is given here.
@@ -115,9 +150,10 @@ jobs:
   # runner and attach to the same release.
   ghostty-darwin:
     runs-on: macos-14
-    needs: goreleaser
-    # Runs after GoReleaser, or alone when a dispatch skipped it.
-    if: ${{ !cancelled() && (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') }}
+    needs: [library-pins, goreleaser]
+    # Runs after GoReleaser, or alone when a dispatch skipped it. Never when
+    # the library pins failed: GoReleaser is then skipped too.
+    if: ${{ !cancelled() && needs.library-pins.result == 'success' && (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') }}
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -145,6 +181,8 @@ jobs:
       - name: Build and upload darwin ghostty binaries
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Build what go install builds, as .goreleaser.yml does.
+          GOWORK: "off"
         run: |
           set -eu
           version="${TAG#v}"
