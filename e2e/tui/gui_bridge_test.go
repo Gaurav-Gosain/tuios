@@ -1026,20 +1026,36 @@ func TestGUIBridgeSessionSize(t *testing.T) {
 }
 
 // TestGUIBridgeInputTakesTheSession: under window_size latest, the default, a
-// terminal client that attaches after the bridge takes the session's size. Typing
-// in a pane through the bridge is the person using the renderer, so the
-// session goes back to the bridge's size, and the smaller terminal client
-// shows a part of it. Without the activity report the session stays at the
+// terminal client with input takes the session's size. Typing in a pane
+// through the bridge is the person using the renderer, so the session goes
+// back to the bridge's size, and the smaller terminal client shows a part of
+// it. Without the activity report the session stays at the
 // terminal client's size however much is typed in the renderer.
 func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	base := t.TempDir()
 	b := startBridge(t, base, "gb", 160, 50)
 	b.tiledPanes(2)
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
-	term := attachIn(t, base, "gb", startOpts{cols: 80, rows: 24})
+	// The terminal client takes the session with input of its own: under
+	// latest the client that last had input holds it, and the bridge has
+	// had none yet. Alt+Esc is the window manager's own key, so it types
+	// nothing into a shell. It is pressed until the session follows,
+	// because a key that lands before the attach settles is not counted.
+	term := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"attach", "gb"}})
+	deadline := time.Now().Add(shellTimeout)
+	for {
+		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
+		b.mu.Lock()
+		small := b.state != nil && b.state.SessionSize.Cols > 0 && b.state.SessionSize.Cols <= 80
+		b.mu.Unlock()
+		if small || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
 	st := b.waitState(func(s *wireState) bool {
 		return s.SessionSize.Cols > 0 && s.SessionSize.Cols <= 80
-	}, "the session at the newest client's size")
+	}, "the session at the terminal client's size after its input")
 	// The session is smaller than the bridge, so the bridge shows all of
 	// it: no viewport, which is only for a larger session.
 	if st.Viewport != nil {
@@ -1055,6 +1071,11 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	if pty == "" {
 		t.Fatalf("no pane to type in: %+v", st.Windows)
 	}
+	// The terminal client holds the session for a second after its last
+	// key (latestHold), and the loop above may have pressed one more after
+	// the switch. The hand-over is tested past the hold, as in
+	// window_size_test.go.
+	time.Sleep(1500 * time.Millisecond)
 	b.input(pty, "echo TYPED-IN-THE-GUI\r")
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after input through it")
 	if err := term.WaitForText("Part of session", shellTimeout); err != nil {
