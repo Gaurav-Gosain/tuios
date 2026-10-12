@@ -14,6 +14,10 @@
 //     placed. Then d=a takes every placement down.
 //   - delplace: one upload under I=2, placed twice (p=1 and p=2). Then d=N
 //     with p=1 deletes one placement, and a=p places the image again (p=3).
+//   - multi: one image (i=20) placed at several points. Two frames, each a
+//     synchronized update that deletes all placements (d=a) and places the
+//     image three times without p=. Then twice with p=7, which the second
+//     a=p moves.
 //   - reply: uploads and placements that ask for an answer, and some that do
 //     not. The guest reads its input for a while and prints each answer as a
 //     REPLY line, with spaces as underscores.
@@ -75,6 +79,8 @@ func main() {
 		// cbirds quits when its frames are done, and so does this.
 		cbirdsrun(len(os.Args) > 2 && os.Args[2] == "exit")
 		return
+	case "multi":
+		multi()
 	default:
 		frames()
 	}
@@ -123,6 +129,23 @@ func delplace() {
 	time.Sleep(300 * time.Millisecond)
 	_, _ = out.WriteString("\x1b_Ga=d,d=N,I=2,p=1,q=2\x1b\\")
 	_, _ = out.WriteString("\x1b[2;40H\x1b_Ga=p,I=2,p=3,q=2,C=1\x1b\\")
+	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
+}
+
+func multi() {
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,i=20,m=0;%s\x1b\\", pngOf(40, 40, 120))
+	for range 2 {
+		_, _ = out.WriteString("\x1b[?2026h\x1b_Ga=d,d=a,q=2\x1b\\")
+		for _, col := range []int{3, 21, 41} {
+			_, _ = fmt.Fprintf(out, "\x1b[3;%dH\x1b_Ga=p,i=20,q=2,C=1\x1b\\", col)
+		}
+		_, _ = out.WriteString("\x1b[?2026l")
+		time.Sleep(300 * time.Millisecond)
+	}
+	_, _ = out.WriteString("\x1b[13;3H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
+	time.Sleep(300 * time.Millisecond)
+	_, _ = out.WriteString("\x1b[13;31H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 

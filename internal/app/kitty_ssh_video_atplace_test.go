@@ -80,7 +80,7 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 	// The reused image must be handed off to the self-placing path, i.e. removed
 	// from placements so RefreshAllPlacements cannot delete-and-replace it.
 	kp.mu.Lock()
-	_, stillTracked := kp.placements[winID][hostIDForGuest(kp, winID, 1)]
+	_, stillTracked := kp.placements[winID][imageKey(hostIDForGuest(kp, winID, 1))]
 	inRemoteVideo := len(kp.remoteVideo[winID]) > 0
 	kp.mu.Unlock()
 	if stillTracked {

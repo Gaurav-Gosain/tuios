@@ -224,7 +224,7 @@ func (kp *KittyPassthrough) editShowsAtOnce(windowID string, hostID uint32) bool
 			return false
 		}
 	}
-	p := kp.placements[windowID][hostID]
+	p := kp.placements[windowID][imageKey(hostID)]
 	return p != nil && !p.Hidden && !p.DataDirty && p.PlacementID != 0
 }
 

@@ -265,11 +265,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			kp.heldGeom[windowID] = g
 		}
 		if info == nil {
-			for _, p := range placements {
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
-				}
-			}
+			kp.deleteWindowImages(windowID, true)
 			delete(kp.placements, windowID)
 			delete(kp.resizeFreezeSize, windowID)
 			continue
@@ -314,14 +310,16 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// room for the pieces it can add, so a marquee dragged across an
 		// image keeps the whole picture outside its edges rather than falling
 		// back to the largest single rectangle.
-		sliceLimit := maxVisibleSlices + 3*len(kp.chromeOccluders)
+		// A placement has placementStride host ids for its slices.
+		sliceLimit := min(maxVisibleSlices+3*len(kp.chromeOccluders), int(placementStride))
 		// Reused for every image in this window, and across frames.
 		slices := kp.sliceScratch[:0]
 
 		// Collect IDs to delete (for altscreen cleanup)
-		var idsToDelete []uint32
+		var idsToDelete []placementKey
 
-		for hostID, p := range placements {
+		for key, p := range placements {
+			hostID := key.host
 			// Handle screen mode mismatch:
 			// - Images placed on normal screen should be hidden when altscreen is active
 			// - Images placed on altscreen should be DELETED when back to normal screen
@@ -337,7 +335,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// This cleans up images from TUI apps like yazi when they exit
 				if !info.IsAltScreen && p.PlacedOnAltScreen {
 					kittyPassthroughLog("RefreshPlacement: cleaning up altscreen placement hostID=%d", hostID)
-					idsToDelete = append(idsToDelete, hostID)
+					idsToDelete = append(idsToDelete, key)
 				}
 				continue
 			}
@@ -681,8 +679,15 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 	kp.flushToHost()
 }
 
-// deleteOnePlacement removes the image and all its placements from graphics memory.
+// deleteOnePlacement takes a placement down. A placement that shares its
+// image with others takes down only its own host placement ids. The image's
+// own placement, alone, takes down every placement of the image, which also
+// clears one the host was given without a p=.
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
+	if p.slot != 0 || kp.sharesImage(p) {
+		kp.deletePlacementIDs(p)
+		return
+	}
 	if !kp.guestCapture {
 		// tuios is hiding this image itself; a held placement must not
 		// show it again. See kitty_sync_hold.go.

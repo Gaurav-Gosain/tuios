@@ -5182,3 +5182,13 @@ fixed build and runs the test named.
 | `RestoreKittyGuestImages` in `ApplyTerminalState` (a late client numbers images from the start) | `TestKittyImageIDsForALateClient` ("late client: the guest placed I=2 by the id it was told, and the host never placed image 1") | **caught** |
 | The `case 'A'` in `forwardDelete` (d=A takes placements down and frees nothing) | `TestKittyImagesFreedOnExitAndClose` ("the second run started with 5 images of the first still on the host") | **caught** |
 | The id map wiped again by the placement-only deletes in `forwardDelete` | `TestKittyImagesFreedOnExitAndClose` ("5 images are left on the host after both runs and the close") | **caught** |
+### kitty multiple placements
+
+Run on 2026-10-12 on branch `fix/kitty-multiple-placements`. Each control cuts
+one thing from the fixed build and runs `TestKittyMultiplePlacements`,
+standalone and daemon.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The slot in `forwardPlace` (every a=p keyed by its image, one record per image as before) | `TestKittyMultiplePlacements` ("host image 1 has 1 placements up, want 4") | **caught** |
+| The reuse of a p= placement's host ids in `forwardPlace` (a repeated p= adds a placement) | `TestKittyMultiplePlacements` ("host image 1 has 5 placements up, want 4") | **caught** |

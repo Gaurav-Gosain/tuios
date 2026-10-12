@@ -99,7 +99,8 @@ func TestKittyImageNumberReupload(t *testing.T) {
 
 // d=N with p= deletes one placement of the image a number names. The image
 // and its number stay while other placements remain. The first fix dropped
-// the number on any d=N, so the guest could no longer place its image.
+// the number on any d=N, so the guest could no longer place its image. At the
+// end the host must show p=2 and p=3, 20 columns apart, and not p=1.
 func TestKittyImageNumberDeletePlacement(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
@@ -108,31 +109,30 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 			logNumbered(t, cmds)
 			id := hostIDBySize(t, cmds, 40, 40)
 
-			deleted, placedAfter := -1, false
-			placements := map[string]bool{}
-			for i, c := range cmds {
-				if c.num("i") != id {
-					continue
+			// p=1 at column 2, p=2 at column 20, then p=1 deleted by
+			// number and p=3 placed at column 40. Each guest placement
+			// has host placement ids of its own, so the host's state is
+			// replayed rather than read off one command.
+			live := hostPlacements(stream, id)
+			t.Logf("placements of host image %d at the end: %v", id, live)
+			cols := map[int]bool{}
+			row := -1
+			for _, at := range live {
+				cols[at[1]] = true
+				if row >= 0 && at[0] != row {
+					t.Errorf("the placements are on different rows: %v", live)
 				}
-				switch {
-				case c.keys["a"] == "p" && deleted < 0:
-					placements[c.keys["p"]] = true
-				case c.keys["a"] == "d" && c.keys["d"] == "I" && c.keys["p"] == "1":
-					deleted = i
-				case c.keys["a"] == "p" && c.keys["p"] == "3" && deleted >= 0:
-					// With no cell count the refresh pass takes the
-					// placement down again at once.
-					placedAfter = c.num("c") > 0 && c.num("r") > 0
-				}
+				row = at[0]
 			}
-			if !placements["1"] || !placements["2"] {
-				t.Fatalf("the image was not placed as p=1 and p=2 first: %v", placements)
+			if len(live) != 2 {
+				t.Fatalf("host image %d has %d placements up, want p=2 and p=3", id, len(live))
 			}
-			if deleted < 0 {
-				t.Fatalf("d=N,I=2,p=1 never reached the host as a=d,d=I,i=%d,p=1", id)
+			minCol := 1 << 30
+			for c := range cols {
+				minCol = min(minCol, c)
 			}
-			if !placedAfter {
-				t.Errorf("after d=N with p=1, I=2 no longer named its image, or lost its size: no p=3 placement with a cell count reached the host")
+			if !cols[minCol+20] {
+				t.Errorf("after d=N with p=1, I=2 no longer named its image, or p=1 stayed up: placements at %v", live)
 			}
 		})
 	}
@@ -797,4 +797,99 @@ func TestKittyUploadFileFromAnotherMachine(t *testing.T) {
 	if a := here["i=11"]; !strings.HasPrefix(a.msg, "ENOENT:") {
 		t.Errorf("a pane on this machine uploaded a missing file and was answered %q, want ENOENT", a.msg)
 	}
+}
+
+// One image can be placed at several points, as cbirds places one sprite
+// for every bird that shows it. Each a=p without p= is a placement of its
+// own, and an a=p with a p= the guest used before moves that placement. tuios
+// kept one placement per image, so every a=p of an image replaced the last.
+//
+// The stand-in places one image three times in each of two frames, each frame
+// starting with d=a, then twice with p=7. On the host, four placements of the
+// image must be up at the end, at the points the guest gave: three in a row,
+// and the p=7 one where the second a=p moved it.
+func TestKittyMultiplePlacements(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(modeName(daemon), func(t *testing.T) {
+			stream, _ := runImageNumbers(t, "multi", daemon, false)
+			cmds := parseNumberedStream(stream)
+			logNumbered(t, cmds)
+			id := hostIDBySize(t, cmds, 40, 40)
+
+			live := hostPlacements(stream, id)
+			t.Logf("placements of host image %d at the end: %v", id, live)
+			for p := range live {
+				if strings.HasPrefix(p, "anonymous") {
+					t.Errorf("a placement reached the host with no p=, so tuios cannot move or remove it alone")
+				}
+			}
+			if len(live) != 4 {
+				t.Fatalf("host image %d has %d placements up, want 4", id, len(live))
+			}
+			minRow, minCol := 1<<30, 1<<30
+			for _, at := range live {
+				minRow, minCol = min(minRow, at[0]), min(minCol, at[1])
+			}
+			want := map[[2]int]bool{{0, 0}: true, {0, 18}: true, {0, 38}: true, {10, 28}: true}
+			for _, at := range live {
+				rel := [2]int{at[0] - minRow, at[1] - minCol}
+				if !want[rel] {
+					t.Errorf("a placement is at %v from the first, which the guest never placed at; want %v", rel, want)
+				}
+				delete(want, rel)
+			}
+		})
+	}
+}
+
+// movedPlacementRE is a cursor move followed by a graphics command, the way the
+// passthrough positions every a=p.
+var movedPlacementRE = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;[^\x1b]*)?\x1b\\`)
+
+// hostPlacements replays the host stream's placements and deletes of one host
+// image and returns where each placement still up is, by host placement id.
+// A placement with no p= gets an id of its own, as the host gives it one.
+func hostPlacements(stream []byte, id int) map[string][2]int {
+	live := map[string][2]int{}
+	anon := 0
+	row, col := 0, 0
+	for _, m := range movedPlacementRE.FindAllSubmatch(stream, -1) {
+		if len(m[1]) > 0 {
+			row, _ = strconv.Atoi(string(m[1]))
+			col, _ = strconv.Atoi(string(m[2]))
+		}
+		keys := map[string]string{}
+		for _, kv := range strings.Split(string(m[3]), ",") {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				keys[k] = v
+			}
+		}
+		switch keys["a"] {
+		case "p", "T":
+			if keys["i"] != strconv.Itoa(id) || (keys["a"] == "T" && keys["p"] == "") {
+				continue
+			}
+			p := keys["p"]
+			if p == "" {
+				anon++
+				p = fmt.Sprintf("anonymous-%d", anon)
+			}
+			live[p] = [2]int{row, col}
+		case "d":
+			switch keys["d"] {
+			case "a", "A", "":
+				clear(live)
+			case "i", "I":
+				if keys["i"] != strconv.Itoa(id) {
+					continue
+				}
+				if p := keys["p"]; p != "" {
+					delete(live, p)
+				} else {
+					clear(live)
+				}
+			}
+		}
+	}
+	return live
 }

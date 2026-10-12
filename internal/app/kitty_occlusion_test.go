@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -307,7 +309,7 @@ func TestACornerCoverKeepsBothStrips(t *testing.T) {
 	}
 	// The two pieces must use different placement ids or the second replaces
 	// the first.
-	if !strings.Contains(out, "p=1") || !strings.Contains(out, "p=2") {
+	if ids := placedIDs(out); len(ids) < 2 {
 		t.Errorf("the two pieces did not get distinct placement ids:\n%q", out)
 	}
 }
@@ -326,15 +328,31 @@ func TestSlicesShrinkBackToOne(t *testing.T) {
 		WindowX: 12, WindowY: 6, Width: 40, Height: 30,
 		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
 	}
-	if out := h.refresh(); strings.Count(out, "a=p,i=") < 2 {
-		t.Fatalf("setup did not produce two pieces:\n%q", out)
+	two := h.refresh()
+	if strings.Count(two, "a=p,i=") < 2 {
+		t.Fatalf("setup did not produce two pieces:\n%q", two)
 	}
+	ids := placedIDs(two)
 
 	// Move the window so it covers a full-height band instead: one piece.
 	h.infos["over"].WindowY = 0
 	out := h.refresh()
 
-	if !strings.Contains(out, "a=d,d=i,i=1,p=2") {
+	if !strings.Contains(out, fmt.Sprintf("a=d,d=i,i=1,p=%s,", ids[len(ids)-1])) {
 		t.Errorf("the second piece was not deleted when it stopped being needed:\n%q", out)
 	}
+}
+
+// placedIDs is the distinct placement ids the a=p commands in out use, in
+// order.
+func placedIDs(out string) []string {
+	var ids []string
+	seen := map[string]bool{}
+	for _, m := range regexp.MustCompile(`a=p,i=[0-9]+,p=([0-9]+)`).FindAllStringSubmatch(out, -1) {
+		if !seen[m[1]] {
+			seen[m[1]] = true
+			ids = append(ids, m[1])
+		}
+	}
+	return ids
 }

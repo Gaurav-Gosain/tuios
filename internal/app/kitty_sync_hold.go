@@ -281,20 +281,27 @@ func (h *heldUpdate) names(hostID uint32) bool {
 // release does not show the image again. A placement taken out is undone by
 // the hide anyway, whichever order the host saw them in. Callers hold kp.mu.
 func (kp *KittyPassthrough) dropHeldPlacements(hostID uint32) {
+	kp.dropHeldPlacementRange(hostID, 0, 0)
+}
+
+// dropHeldPlacementRange is dropHeldPlacements for the n placement ids from
+// first up, and leaves the image's other placements held. n == 0 means all.
+func (kp *KittyPassthrough) dropHeldPlacementRange(hostID, first, n uint32) {
 	for _, h := range kp.held {
 		if len(h.buf) == 0 {
 			continue
 		}
 		before := len(h.buf)
-		h.buf = stripKittyPlacements(h.buf, hostID)
+		h.buf = stripKittyPlacements(h.buf, hostID, first, n)
 		h.ids, h.scanned = nil, 0
 		kp.heldBytes -= before - len(h.buf)
 	}
 }
 
 // stripKittyPlacements removes the a=p commands naming a host image from buf,
-// in place.
-func stripKittyPlacements(buf []byte, hostID uint32) []byte {
+// in place: all of them when n is 0, or those with p= one of the n ids from
+// first up.
+func stripKittyPlacements(buf []byte, hostID, first, n uint32) []byte {
 	var id [16]byte
 	want := strconv.AppendUint(append(id[:0], "i="...), uint64(hostID), 10)
 	out := buf[:0]
@@ -318,12 +325,27 @@ func stripKittyPlacements(buf []byte, hostID uint32) []byte {
 			ctl = ctl[:len(ctl)-2]
 		}
 		out = append(out, buf[:i]...)
-		if !(hasKittyKey(ctl, []byte("a=p")) && hasKittyKey(ctl, want)) {
+		if !(hasKittyKey(ctl, []byte("a=p")) && hasKittyKey(ctl, want) && inPlacementRange(ctl, first, n)) {
 			out = append(out, seq...)
 		}
 		buf = buf[end:]
 	}
 	return out
+}
+
+// inPlacementRange reports whether a kitty control string's p= is one of the
+// n ids from first up. n == 0 matches any.
+func inPlacementRange(ctl []byte, first, n uint32) bool {
+	if n == 0 {
+		return true
+	}
+	for field := range bytes.SplitSeq(ctl, []byte{','}) {
+		if v, ok := bytes.CutPrefix(field, []byte("p=")); ok {
+			id, err := strconv.ParseUint(string(v), 10, 32)
+			return err == nil && uint32(id) >= first && uint32(id)-first < n
+		}
+	}
+	return false
 }
 
 // hasKittyKey reports whether a kitty control string has key=value kv.

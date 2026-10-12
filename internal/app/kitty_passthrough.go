@@ -53,7 +53,7 @@ type KittyPassthrough struct {
 	pacedUntilNanos atomic.Int64
 	writeInFlight   atomic.Bool
 
-	placements map[string]map[uint32]*PassthroughPlacement
+	placements map[string]map[placementKey]*PassthroughPlacement
 	imageIDMap map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
 	// virtualImages holds the host ids this window has virtual placements for,
 	// as (windowID -> set of hostImageID). A virtual placement is not a
@@ -238,7 +238,14 @@ type placementSlice struct {
 type PassthroughPlacement struct {
 	GuestImageID uint32
 	HostImageID  uint32
-	PlacementID  uint32
+	// PlacementID is the first of the host placement ids this record puts
+	// up, one per slice. See kitty_placement_keys.go.
+	PlacementID uint32
+	// GuestPlacementID is the p= the guest gave, or 0.
+	GuestPlacementID uint32
+	// slot is this record's key beside its host image id. Zero is the
+	// placement an upload makes itself.
+	slot         uint32
 	WindowID     string
 	GuestX       int
 	AbsoluteLine int // Absolute line position (scrollbackLen + cursorY at placement time)
@@ -495,7 +502,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		remoteClient:      opts.RemoteClient,
 		caps:              caps,
 		hostOut:           hostOut,
-		placements:        make(map[string]map[uint32]*PassthroughPlacement),
+		placements:        make(map[string]map[placementKey]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		virtualImages:     make(map[string]map[uint32]bool),
 		remoteVideo:       make(map[string]map[uint32]*remoteVideoState),

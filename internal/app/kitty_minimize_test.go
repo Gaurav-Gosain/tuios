@@ -29,8 +29,8 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 	}
 
 	const hostID uint32 = 1
-	kp.placements[win.ID] = map[uint32]*PassthroughPlacement{
-		hostID: {
+	kp.placements[win.ID] = map[placementKey]*PassthroughPlacement{
+		imageKey(hostID): {
 			GuestImageID: 1,
 			HostImageID:  hostID,
 			WindowID:     win.ID,
@@ -54,14 +54,14 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 
 	// Visible: placement becomes active.
 	m.GetKittyGraphicsCmd()
-	if p := kp.placements[win.ID][hostID]; p == nil || p.Hidden {
+	if p := kp.placements[win.ID][imageKey(hostID)]; p == nil || p.Hidden {
 		t.Fatalf("after visible refresh: expected placed (not hidden), got %+v", p)
 	}
 
 	// Minimize the window, then refresh: hide but KEEP tracking.
 	win.Minimized = true
 	m.GetKittyGraphicsCmd()
-	p := kp.placements[win.ID][hostID]
+	p := kp.placements[win.ID][imageKey(hostID)]
 	if p == nil {
 		t.Fatal("BUG: minimizing destroyed the placement; image cannot reappear on restore")
 	}
@@ -72,7 +72,7 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 	// Restore: re-placed from surviving tracking.
 	win.Minimized = false
 	m.GetKittyGraphicsCmd()
-	if p := kp.placements[win.ID][hostID]; p == nil || p.Hidden {
+	if p := kp.placements[win.ID][imageKey(hostID)]; p == nil || p.Hidden {
 		t.Fatalf("after restore refresh: expected re-placed (not hidden), got %+v", p)
 	}
 }
@@ -89,23 +89,23 @@ func TestKittyPlacementSurvivesWorkspaceSwitch(t *testing.T) {
 		Workspace: 1, Tiled: true,
 	}
 	const hostID uint32 = 1
-	kp.placements[win.ID] = map[uint32]*PassthroughPlacement{
-		hostID: {HostImageID: hostID, WindowID: win.ID, Cols: 5, Rows: 3, DisplayRows: 3, Hidden: true},
+	kp.placements[win.ID] = map[placementKey]*PassthroughPlacement{
+		imageKey(hostID): {HostImageID: hostID, WindowID: win.ID, Cols: 5, Rows: 3, DisplayRows: 3, Hidden: true},
 	}
 	m := &OS{Settings: config.Global, Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp, Windows: []*terminal.Window{win}}
 
 	m.GetKittyGraphicsCmd()
-	if kp.placements[win.ID][hostID].Hidden {
+	if kp.placements[win.ID][imageKey(hostID)].Hidden {
 		t.Fatal("expected placed while on current workspace")
 	}
 
 	// Switch to another workspace: window is now off-current; keep tracking.
 	m.CurrentWorkspace = 2
 	m.GetKittyGraphicsCmd()
-	if kp.placements[win.ID] == nil || kp.placements[win.ID][hostID] == nil {
+	if kp.placements[win.ID] == nil || kp.placements[win.ID][imageKey(hostID)] == nil {
 		t.Fatal("BUG: switching workspace destroyed the placement")
 	}
-	if !kp.placements[win.ID][hostID].Hidden {
+	if !kp.placements[win.ID][imageKey(hostID)].Hidden {
 		t.Fatal("off-workspace placement should be hidden")
 	}
 }
@@ -117,8 +117,8 @@ func TestKittyPlacementDeletedWhenWindowGone(t *testing.T) {
 	kp := newTestKittyPassthrough(t)
 	winID := "test-window-id-abcdef12"
 
-	kp.placements[winID] = map[uint32]*PassthroughPlacement{
-		1: {HostImageID: 1, WindowID: winID, Cols: 5, Rows: 3, Hidden: false},
+	kp.placements[winID] = map[placementKey]*PassthroughPlacement{
+		imageKey(1): {HostImageID: 1, WindowID: winID, Cols: 5, Rows: 3, Hidden: false},
 	}
 
 	// No windows in the model -> the window is genuinely gone.

@@ -42,7 +42,10 @@ func TestForwardPlaceKeyedByHostID(t *testing.T) {
 	kp.mu.Lock()
 	hostID, mapped := kp.imageIDMap[winID][guestID]
 	placements := kp.placements[winID]
-	_, keyedByHost := placements[hostID]
+	keyedByHost := false
+	for k := range placements {
+		keyedByHost = keyedByHost || k.host == hostID
+	}
 	kp.mu.Unlock()
 
 	if !mapped {
@@ -69,10 +72,10 @@ func TestForwardPlaceKeyedByHostID(t *testing.T) {
 	}
 }
 
-func placementKeys(m map[uint32]*PassthroughPlacement) []uint32 {
+func placementKeys(m map[placementKey]*PassthroughPlacement) []uint32 {
 	keys := make([]uint32, 0, len(m))
 	for k := range m {
-		keys = append(keys, k)
+		keys = append(keys, k.host)
 	}
 	return keys
 }

@@ -81,7 +81,7 @@ func TestKittyClearOnED2(t *testing.T) {
 	frame1Count := len(kp.placements[winID])
 	frame1HostIDs := make([]uint32, 0, frame1Count)
 	for hid := range kp.placements[winID] {
-		frame1HostIDs = append(frame1HostIDs, hid)
+		frame1HostIDs = append(frame1HostIDs, hid.host)
 	}
 	kp.mu.Unlock()
 	if frame1Count != 3 {
