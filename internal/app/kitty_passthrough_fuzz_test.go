@@ -262,10 +262,9 @@ func FuzzKittyPassthrough(f *testing.F) {
 			}
 			return out
 		}
-		// uploadID is the id of the transmission each pane has open, so a
-		// reply to its last chunk, which names no image itself, can be
-		// matched to the id its first chunk gave.
-		uploadID := map[string]uint32{}
+		// Each pane's emulator turns image numbers into ids before the
+		// passthrough sees a command. The harness stands in for it.
+		guestImages := map[string]*vt.KittyGuestImages{}
 		for n, st := range steps {
 			win := wins[st.win]
 			kp.mu.Lock()
@@ -276,6 +275,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 				switch st.op {
 				case "close":
 					kp.OnWindowClose(win)
+					delete(guestImages, win)
 				case "clear":
 					kp.ClearWindow(win)
 				case "refresh":
@@ -319,6 +319,12 @@ func FuzzKittyPassthrough(f *testing.F) {
 			if err != nil || cmd == nil {
 				t.Fatalf("step %d: the harness built an unparseable command %q", n, st.body)
 			}
+			if guestImages[win] == nil {
+				guestImages[win] = &vt.KittyGuestImages{}
+			}
+			if !guestImages[win].Resolve(cmd) {
+				continue
+			}
 			raw := []byte("\x1b_G" + st.body + "\x1b\\")
 			var replies [][]byte
 			kp.ForwardCommand(cmd, raw, win, 10*st.win, 2, 30, 10, 1, 1, 0, 0, 0, false,
@@ -355,21 +361,13 @@ func FuzzKittyPassthrough(f *testing.F) {
 					delete(owner, uint64(id))
 				}
 			}
-			want := cmd.ImageID
-			if cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace {
-				if want != 0 {
-					uploadID[win] = want
-				} else {
-					want = uploadID[win]
-				}
-			}
 			for _, r := range replies {
 				m := regexp.MustCompile(`\x1b_Gi=([0-9]+)`).FindSubmatch(r)
 				if m == nil {
 					continue
 				}
-				if got, _ := strconv.ParseUint(string(m[1]), 10, 32); uint32(got) != want {
-					t.Fatalf("step %d: a reply to %s's %q names image %d, the guest used %d", n, win[:6], st.body, got, want)
+				if got, _ := strconv.ParseUint(string(m[1]), 10, 32); uint32(got) != cmd.ImageID {
+					t.Fatalf("step %d: a reply to %s's %q names image %d, the guest used %d", n, win[:6], st.body, got, cmd.ImageID)
 				}
 			}
 		}

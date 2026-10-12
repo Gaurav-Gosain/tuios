@@ -8,105 +8,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// imageNumberIDBase is where the ids tuios gives to numbered images start.
-// Kitty assigns the id itself when a guest transmits with I= and no i=, and
-// the guest may name the image by that id later. Starting high keeps the ids
-// clear of the small ones guests choose for themselves.
-const imageNumberIDBase uint32 = 1 << 31
-
-// resolveImageNumber turns a command that names its image by number (I=) and
-// not by id (i=) into one that names it by id, which is all the rest of the
-// passthrough keys on. It returns the command's bytes with I=<n> replaced by
-// i=<id>, and false when the command names a number no image was transmitted
-// under, which kitty answers with ENOENT and draws nothing for.
+// resolveImageNumber finishes, for the host, what the emulator did for a
+// command that names its image by number (I=). The emulator has already
+// given the image an id (see vt.KittyGuestImages), so the rest of the
+// passthrough keys on that id like on any other. What is left is the bytes:
+// I=<n> becomes i=<id>, so the host files the image under the id tuios
+// translates. An image the number named before is retired, to be freed once
+// it has no placement left.
 //
-// Every transmission under a number is a new image with a new id, as in
-// kitty, and the number names the newest of them from then on. The image it
-// named before keeps its placements, and is freed once it has none left (see
-// freeRetiredNumbered), so a guest that sends a new picture under one number
-// every frame does not pile up images on the host.
+// It returns false for a command that still names a number with no id. Only
+// a caller that skipped the emulator can send one, and it names nothing.
 //
 // cbirds names every sprite this way. Before this, its transmissions reached
 // the host with I= intact, and every placement went out under one host id that
 // nothing was ever transmitted under (#644).
 func (kp *KittyPassthrough) resolveImageNumber(cmd *vt.KittyCommand, rawData []byte, windowID string) ([]byte, bool) {
-	if cmd.ImageNumber == 0 || cmd.ImageID != 0 {
+	if cmd.ImageNumber == 0 || cmd.Action == vt.KittyActionQuery {
 		return rawData, true
 	}
-	number := cmd.ImageNumber
-	numbers := kp.imageNumbers[windowID]
-
-	switch cmd.Action {
-	case vt.KittyActionTransmit, vt.KittyActionTransmitPlace:
-		if numbers == nil {
-			numbers = make(map[uint32]uint32)
-			if kp.imageNumbers == nil {
-				kp.imageNumbers = make(map[string]map[uint32]uint32)
-			}
-			kp.imageNumbers[windowID] = numbers
-		}
-		if older, ok := numbers[number]; ok {
-			kp.retireNumbered(windowID, older)
-		}
-		id := kp.allocateNumberedID(windowID)
-		numbers[number] = id
-		cmd.ImageID = id
-
-	case vt.KittyActionDelete:
-		// Only d=n and d=N name an image by number. Every other target
-		// ignores I=.
-		if cmd.Delete != vt.KittyDeleteByNumber && cmd.Delete != vt.KittyDeleteByNumberPlacement {
+	if cmd.ImageID == 0 {
+		if cmd.Action == vt.KittyActionDelete &&
+			cmd.Delete != vt.KittyDeleteByNumber && cmd.Delete != vt.KittyDeleteByNumberPlacement {
 			return rawData, true
 		}
-		id, ok := numbers[number]
-		if !ok {
-			return rawData, false
-		}
-		cmd.ImageID = id
-		if cmd.Delete == vt.KittyDeleteByNumber {
-			cmd.Delete = vt.KittyDeleteByID
-		} else {
-			cmd.Delete = vt.KittyDeleteByIDAndPlacement
-			// d=N frees the image's data, after which the number names
-			// nothing. With p= it deletes that one placement, and the
-			// image stays while its other placements remain.
-			if cmd.PlacementID == 0 {
-				delete(numbers, number)
-			}
-		}
-
-	case vt.KittyActionQuery:
-		return rawData, true
-
-	default:
-		id, ok := numbers[number]
-		if !ok {
-			return rawData, false
-		}
-		cmd.ImageID = id
+		return rawData, false
 	}
-
+	if cmd.ReplacedImageID != 0 {
+		kp.retireNumbered(windowID, cmd.ReplacedImageID)
+	}
 	kittyPassthroughLog("resolveImageNumber: window=%s number=%d -> guestID=%d",
-		windowID[:min(8, len(windowID))], number, cmd.ImageID)
+		windowID[:min(8, len(windowID))], cmd.ImageNumber, cmd.ImageID)
 	return renameKittyImageNumber(rawData, cmd.ImageID), true
-}
-
-// allocateNumberedID picks an id for a numbered image that no image of this
-// window holds.
-func (kp *KittyPassthrough) allocateNumberedID(windowID string) uint32 {
-	if kp.nextNumberedID < imageNumberIDBase {
-		kp.nextNumberedID = imageNumberIDBase
-	}
-	for {
-		id := kp.nextNumberedID
-		kp.nextNumberedID++
-		if kp.nextNumberedID == 0 {
-			kp.nextNumberedID = imageNumberIDBase
-		}
-		if _, used := kp.imageIDMap[windowID][id]; !used {
-			return id
-		}
-	}
 }
 
 // retireNumbered marks an image that its number no longer names. It is freed
@@ -144,61 +76,10 @@ func (kp *KittyPassthrough) freeRetiredNumbered(windowID string) {
 	}
 }
 
-// forgetImageNumbers drops what numbers this window's images were sent under.
+// forgetImageNumbers drops the numbered images of this window waiting to
+// be freed.
 func (kp *KittyPassthrough) forgetImageNumbers(windowID string) {
-	delete(kp.imageNumbers, windowID)
 	delete(kp.retiredNumbered, windowID)
-	delete(kp.uploadReplies, windowID)
-}
-
-// uploadReply is the answer owed to a transmission that named its image.
-type uploadReply struct {
-	id, number, placement uint32
-	quiet                 int
-}
-
-// answerUpload answers a transmission the way kitty does, once its last chunk
-// is in: i=<id>, with I=<n> and p=<p> when the guest gave them, and OK. q=1
-// and q=2 both suppress an OK. A transmission that names no image gets no
-// answer. The id is the one the guest knows the image by, and for an image
-// sent by number this answer is the only way the guest learns it.
-//
-// The host is not asked. Its answer would carry the host's id, and it comes
-// back on tuios's input, not the pane's.
-func (kp *KittyPassthrough) answerUpload(cmd *vt.KittyCommand, windowID string, ptyInput func([]byte)) {
-	var r uploadReply
-	if cmd.ImageID != 0 {
-		r = uploadReply{id: cmd.ImageID, number: cmd.ImageNumber, placement: cmd.PlacementID, quiet: cmd.Quiet}
-		if cmd.More {
-			if kp.uploadReplies == nil {
-				kp.uploadReplies = make(map[string]uploadReply)
-			}
-			kp.uploadReplies[windowID] = r
-			return
-		}
-	} else {
-		if cmd.More {
-			return
-		}
-		pending, ok := kp.uploadReplies[windowID]
-		if !ok {
-			return
-		}
-		r = pending
-	}
-	delete(kp.uploadReplies, windowID)
-	if r.quiet >= 1 || ptyInput == nil {
-		return
-	}
-	reply := fmt.Appendf(nil, "\x1b_Gi=%d", r.id)
-	if r.number != 0 {
-		reply = fmt.Appendf(reply, ",I=%d", r.number)
-	}
-	if r.placement != 0 {
-		reply = fmt.Appendf(reply, ",p=%d", r.placement)
-	}
-	reply = append(reply, ";OK\x1b\\"...)
-	ptyInput(reply)
 }
 
 // renameKittyImageNumber returns an APC sequence with its I= parameter

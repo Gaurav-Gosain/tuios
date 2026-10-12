@@ -81,10 +81,11 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 		}
 		switch {
 		case kittyHeaderNamesObject(cmd, dataPart):
-			// The payload of a shared memory or temp file transmission is
-			// only the object's name. The reader still needs it: the daemon
-			// deletes the frames no client reads, and with no name it
-			// deletes nothing and /dev/shm fills up.
+			// The payload of a file medium transmission is only the
+			// object's name. The reader still needs it: the daemon deletes
+			// the frames no client reads, and with no name it deletes
+			// nothing and /dev/shm fills up. It also opens a file before it
+			// answers OK for it.
 			decoded, err := DecodeKittyPayload(dataPart)
 			if err != nil {
 				cmd.PayloadErr = err
@@ -209,9 +210,12 @@ func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
 const maxKittyObjectName = 8192
 
 // kittyHeaderNamesObject reports whether ParseKittyHeader decodes the payload
-// of cmd as the name of a shared memory object or temp file.
+// of cmd as the name of a shared memory object, temp file or file. The daemon
+// needs the name to delete unread frames, and to check that a file it
+// answers OK for can be opened.
 func kittyHeaderNamesObject(cmd *KittyCommand, payload []byte) bool {
-	return (cmd.Medium == KittyMediumSharedMemory || cmd.Medium == KittyMediumTempFile) &&
+	return (cmd.Medium == KittyMediumSharedMemory || cmd.Medium == KittyMediumTempFile ||
+		cmd.Medium == KittyMediumFile) &&
 		len(payload) <= maxKittyObjectName
 }
 

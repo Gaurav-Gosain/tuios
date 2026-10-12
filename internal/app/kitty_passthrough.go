@@ -55,16 +55,9 @@ type KittyPassthrough struct {
 
 	placements map[string]map[uint32]*PassthroughPlacement
 	imageIDMap map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
-	// imageNumbers maps (windowID, image number) -> the guest image id tuios
-	// gave the image a guest sent under I=. See resolveImageNumber.
-	imageNumbers map[string]map[uint32]uint32
 	// retiredNumbered holds, per window, the guest ids of numbered images a
 	// newer upload under the same number replaced. See freeRetiredNumbered.
 	retiredNumbered map[string]map[uint32]struct{}
-	nextNumberedID  uint32
-	// uploadReplies holds the answer owed to a chunked transmission until
-	// its last chunk. See answerUpload.
-	uploadReplies map[string]uploadReply
 	// virtualImages holds the host ids this window has virtual placements for,
 	// as (windowID -> set of hostImageID). A virtual placement is not a
 	// placement tuios positions, so it is not in `placements` and the teardown

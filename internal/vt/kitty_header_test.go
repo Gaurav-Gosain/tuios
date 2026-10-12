@@ -73,9 +73,10 @@ func FuzzKittyHeader(f *testing.F) {
 }
 
 // namesObject reports whether the header parse must name the object of cmd:
-// a shared memory or temp file transmission whose name decodes.
+// a shared memory, temp file or file transmission whose name decodes.
 func namesObject(cmd *vt.KittyCommand) bool {
-	return (cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile) &&
+	return (cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile ||
+		cmd.Medium == vt.KittyMediumFile) &&
 		len(cmd.RawPayload) <= 8192
 }
 
@@ -84,6 +85,7 @@ func namesObject(cmd *vt.KittyCommand) bool {
 //   - the header parse leaves FilePath empty for t=s, so the daemon has no name
 //     to delete and every unread frame stays in /dev/shm;
 //   - the same for t=t, so unread temp files stay on disk;
+//   - the same for t=f, so the daemon answers OK for a file it never opened;
 //   - the name decoded for a medium whose payload is image data (t=d), which
 //     throws away the saving the header parse exists for;
 //   - a q=2 command (no reply owed) skipped, which is how a video stream sends.
@@ -96,7 +98,7 @@ func TestKittyHeaderNamesTheObject(t *testing.T) {
 		{"a=t,t=s,i=7;" + enc("shm-frame"), "shm-frame"},
 		{"a=T,t=t,f=100,q=2;" + enc("/tmp/tty-graphics-protocol-x.png"), "/tmp/tty-graphics-protocol-x.png"},
 		{"a=T,t=d,f=24,s=1,v=1,q=2;" + enc("abc"), ""},
-		{"a=T,t=f,q=2;" + enc("/home/u/pic.png"), ""},
+		{"a=T,t=f,q=2;" + enc("/home/u/pic.png"), "/home/u/pic.png"},
 	} {
 		cmd, err := vt.ParseKittyHeader([]byte(tc.body))
 		if err != nil {

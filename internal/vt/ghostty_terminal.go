@@ -154,6 +154,8 @@ type GhosttyTerminal struct {
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 	// kittyHeaderOnly: see Emulator.SetKittyHeaderOnly.
 	kittyHeaderOnly bool
+	// kittyImages: see Emulator.kittyImages.
+	kittyImages KittyGuestImages
 	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
 	// See kitty_placeholder.go.
 	kittyImageIDTranslator KittyImageIDTranslator

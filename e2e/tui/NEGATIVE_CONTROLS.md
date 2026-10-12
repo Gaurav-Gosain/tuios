@@ -5148,3 +5148,19 @@ named, standalone and daemon.
 | The PNG size read in the a=T path of `forwardTransmit` | `TestKittyImageNumberReupload` ("the two placed uploads under I=1 were never on the host at once") | **caught** |
 | The `answerUpload` call in `ForwardCommand` | `TestKittyUploadReply` ("the upload I=3 got no answer", the same for i=4 and I=6) | **caught** |
 | The `PlacementID == 0` check on d=N (the number is dropped on every d=N) | `TestKittyImageNumberDeletePlacement` ("the p=3 placement never reached the host") | **caught** |
+
+### kitty upload answers from one place (#646)
+
+Run on 2026-10-12 on branch `fix/kitty-image-numbers`. The answer to an
+upload and the ids of image numbers moved from the client's passthrough to
+`vt.KittyGuestImages`, in the emulator. So the `answerUpload` row above names
+code that is gone. Each control cuts one thing from the fixed build and runs
+the tests named.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The `kittyImages.Handle` call in the pure emulator's graphics handler | `TestKittyUploadReply` (standalone and daemon) and `TestKittyUploadReplyTwoClients` ("the upload I=3 got no answer", "got 0 answers, want 6") | **caught** |
+| The drain in `StartDaemonResponseReader` (each client also answers the pane) | `TestKittyUploadReplyTwoClients` ("the upload I=3 was answered twice", "got 18 answers, want 6") | **caught** |
+| The `kittyUploadFileError` call (every file upload answered OK) | `TestKittyUploadReply` ("the upload of a missing file was answered "OK", want ENOENT") | **caught** |
+| A new id per upload, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberReupload` ("uploads under one number share a host id: 1, 1, 1") | **caught** |
+| The `PlacementID == 0` check on d=N, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberDeletePlacement` ("the p=3 placement never reached the host") | **caught** |

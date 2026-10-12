@@ -114,7 +114,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kittyPassthroughLog("ForwardCommand: dropping action=%c with an undecodable payload: %v", cmd.Action, cmd.PayloadErr)
 		delete(kp.pendingDirectData, windowID)
 		delete(kp.directFrames, windowID)
-		delete(kp.uploadReplies, windowID)
 		if isTransmit && cmd.More {
 			if kp.discardingChunks == nil {
 				kp.discardingChunks = make(map[string]bool)
@@ -139,9 +138,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 		return nil
 	}
 	defer kp.freeRetiredNumbered(windowID)
-	if isTransmit {
-		kp.answerUpload(cmd, windowID, ptyInput)
-	}
 
 	// Remember what size the guest says this image is, on whichever path the
 	// bytes take. Only the first chunk of a chunked transmission carries s= and

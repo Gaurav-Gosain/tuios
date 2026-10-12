@@ -35,7 +35,7 @@ import (
 func TestKittyImageNumbers(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
-			stream, _ := runImageNumbers(t, "frames", daemon)
+			stream, _ := runImageNumbers(t, "frames", daemon, false)
 			assertImageNumbers(t, stream)
 		})
 	}
@@ -54,7 +54,7 @@ func TestKittyImageNumbers(t *testing.T) {
 func TestKittyImageNumberReupload(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
-			stream, _ := runImageNumbers(t, "reupload", daemon)
+			stream, _ := runImageNumbers(t, "reupload", daemon, false)
 			cmds := parseNumberedStream(stream)
 			logNumbered(t, cmds)
 			first := hostIDBySize(t, cmds, 40, 40)
@@ -108,7 +108,7 @@ func TestKittyImageNumberReupload(t *testing.T) {
 func TestKittyImageNumberDeletePlacement(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
-			stream, _ := runImageNumbers(t, "delplace", daemon)
+			stream, _ := runImageNumbers(t, "delplace", daemon, false)
 			cmds := parseNumberedStream(stream)
 			logNumbered(t, cmds)
 			id := hostIDBySize(t, cmds, 40, 40)
@@ -141,57 +141,80 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 	}
 }
 
-// Kitty answers an upload that names its image, unless q= says not to: an
-// OK with the image's id, and its number when it has one. A guest that sends
-// by number learns its image's id only from that answer. tuios answered no
-// upload, by number or by id.
+// Kitty answers an upload that names its image, unless q= says not to: OK
+// with the image's id, and its number when it has one. A guest that sends by
+// number learns its image's id only from that answer. tuios answered no
+// upload, by number or by id. An upload sent as a file is answered OK only
+// when the file can be opened, and with an error when it cannot.
 //
-// The stand-in sends I=3 and i=4 with no q, I=5 with q=1, i=8 with q=2, and
-// I=6 in two chunks. Exactly three answers must come back: I=3, i=4 and I=6,
-// the chunked one once, after its last chunk.
+// The stand-in sends I=3 and i=4 with no q, I=5 with q=1, i=8 with q=2, I=6
+// in two chunks, and three files: i=10 exists, i=11 does not, and i=12 is a
+// temporary file. Exactly six answers must come back, each once.
 func TestKittyUploadReply(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
-			_, term := runImageNumbers(t, "reply", daemon)
-			var replies []string
-			for _, m := range regexp.MustCompile(`REPLY (\S+)`).FindAllStringSubmatch(term.Snapshot(), -1) {
-				replies = append(replies, m[1])
-			}
-			t.Logf("answers the guest got: %q", replies)
-
-			idOf := map[string]string{}
-			for _, r := range replies {
-				m := regexp.MustCompile(`^i=([1-9][0-9]*)(?:,I=([0-9]+))?;OK$`).FindStringSubmatch(r)
-				if m == nil {
-					t.Errorf("an answer is not an OK naming an image: %q", r)
-					continue
-				}
-				key := "i=" + m[1]
-				if m[2] != "" {
-					key = "I=" + m[2]
-				}
-				if _, dup := idOf[key]; dup {
-					t.Errorf("the upload %s was answered twice", key)
-				}
-				idOf[key] = m[1]
-			}
-			for _, key := range []string{"I=3", "i=4", "I=6"} {
-				if _, ok := idOf[key]; !ok {
-					t.Errorf("the upload %s got no answer", key)
-				}
-			}
-			for _, key := range []string{"I=5", "i=8"} {
-				if _, ok := idOf[key]; ok {
-					t.Errorf("the upload %s was answered through its q=", key)
-				}
-			}
-			if len(replies) != 3 {
-				t.Errorf("got %d answers, want 3", len(replies))
-			}
-			if idOf["I=3"] != "" && idOf["I=3"] == idOf["I=6"] {
-				t.Errorf("two uploads by number were given one id: %s", idOf["I=3"])
-			}
+			_, term := runImageNumbers(t, "reply", daemon, false)
+			assertUploadReplies(t, term)
 		})
+	}
+}
+
+// With two clients attached to one daemon pane, each client's emulator sees
+// the upload. Answered by every client, the guest got one answer per client.
+// The daemon answers instead, so the guest gets exactly one, and still gets
+// it.
+func TestKittyUploadReplyTwoClients(t *testing.T) {
+	_, term := runImageNumbers(t, "reply", true, true)
+	assertUploadReplies(t, term)
+}
+
+func assertUploadReplies(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	var replies []string
+	for _, m := range regexp.MustCompile(`REPLY (\S+)`).FindAllStringSubmatch(term.Snapshot(), -1) {
+		replies = append(replies, m[1])
+	}
+	t.Logf("answers the guest got: %q", replies)
+
+	type answer struct{ id, msg string }
+	got := map[string]answer{}
+	for _, r := range replies {
+		m := regexp.MustCompile(`^i=([1-9][0-9]*)(?:,I=([0-9]+))?;(OK|E[A-Z]+:\S*)$`).FindStringSubmatch(r)
+		if m == nil {
+			t.Errorf("an answer is not one kitty gives an upload: %q", r)
+			continue
+		}
+		key := "i=" + m[1]
+		if m[2] != "" {
+			key = "I=" + m[2]
+		}
+		if _, dup := got[key]; dup {
+			t.Errorf("the upload %s was answered twice", key)
+		}
+		got[key] = answer{m[1], m[3]}
+	}
+	for _, key := range []string{"I=3", "i=4", "I=6", "i=10", "i=12"} {
+		if a, ok := got[key]; !ok {
+			t.Errorf("the upload %s got no answer", key)
+		} else if a.msg != "OK" {
+			t.Errorf("the upload %s was answered %q, want OK", key, a.msg)
+		}
+	}
+	if a, ok := got["i=11"]; !ok {
+		t.Errorf("the upload of a missing file got no answer")
+	} else if !strings.HasPrefix(a.msg, "ENOENT:") {
+		t.Errorf("the upload of a missing file was answered %q, want ENOENT", a.msg)
+	}
+	for _, key := range []string{"I=5", "i=8"} {
+		if _, ok := got[key]; ok {
+			t.Errorf("the upload %s was answered through its q=", key)
+		}
+	}
+	if len(replies) != 6 {
+		t.Errorf("got %d answers, want 6", len(replies))
+	}
+	if got["I=3"].id != "" && got["I=3"].id == got["I=6"].id {
+		t.Errorf("two uploads by number were given one id: %s", got["I=3"].id)
 	}
 }
 
@@ -210,9 +233,10 @@ func btoi(b bool) int {
 }
 
 // runImageNumbers runs the stand-in in one mode in a fresh tuios and returns
-// what the host was sent from the launch on. It saves that stream and the
-// screen as the test's artifacts.
-func runImageNumbers(t *testing.T, mode string, daemon bool) ([]byte, *tuitest.Terminal) {
+// what the host was sent from the launch on. With second, a second client
+// attaches to the daemon session before the launch, with a kitty host of its
+// own. It saves the stream and the screen as the test's artifacts.
+func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *tuitest.Terminal) {
 	t.Helper()
 	bin := buildImageNumbers(t)
 	host := newKittyHost()
@@ -232,6 +256,10 @@ func runImageNumbers(t *testing.T, mode string, daemon bool) ([]byte, *tuitest.T
 	waitWindowCount(t, term, 1, "one pane")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+	if second {
+		attachSecondKittyClient(t, base)
+	}
 
 	host.mark("launch")
 	typeLine(t, term, bin+" "+mode)
@@ -253,6 +281,39 @@ func runImageNumbers(t *testing.T, mode string, daemon bool) ([]byte, *tuitest.T
 	saveArtifact(t, term, dir, "screen")
 	t.Logf("host stream and screen saved in %s", dir)
 	return stream, term
+}
+
+// attachSecondKittyClient attaches one more client to the only session of
+// the daemon under base, on a host that draws kitty graphics, and waits until
+// it shows the pane.
+func attachSecondKittyClient(t *testing.T, base string) {
+	t.Helper()
+	var session string
+	deadline := time.Now().Add(uiTimeout)
+	for session == "" && time.Now().Before(deadline) {
+		if names := attachedSessions(base); len(names) == 1 {
+			session = names[0]
+		} else {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if session == "" {
+		t.Fatalf("no attached session to join under %s", base)
+	}
+	host := newKittyHost()
+	other := startIn(t, base, startOpts{
+		cols: 120, rows: 40,
+		env:  []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out:  host,
+		args: []string{"attach", session},
+	})
+	host.answerProbe(t, other)
+	if err := other.WaitForText("IMAGEPANE", bootTimeout); err != nil {
+		t.Fatalf("the second client never showed the pane: %v\n%s", err, other.Snapshot())
+	}
+	if n := len(attachedSessions(base)); n != 1 {
+		t.Fatalf("the second client attached elsewhere: %d attached sessions", n)
+	}
 }
 
 func logNumbered(t *testing.T, cmds []numberedCmd) {

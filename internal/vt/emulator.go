@@ -197,6 +197,9 @@ type Emulator struct {
 	// kittyHeaderOnly parses graphics commands with ParseKittyHeader and
 	// passes no rawData. See SetKittyHeaderOnly.
 	kittyHeaderOnly bool
+	// kittyImages is what the guest's image numbers stand for, and the
+	// answer owed to an upload still arriving. See KittyGuestImages.
+	kittyImages KittyGuestImages
 	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
 	// See kitty_placeholder.go.
 	kittyImageIDTranslator KittyImageIDTranslator
@@ -1767,6 +1770,12 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			if cmd.Action == KittyActionQuery {
 				return true
 			}
+		}
+
+		// Image numbers become ids, and an upload that named its image is
+		// answered, here and nowhere else. See KittyGuestImages.
+		if !e.kittyImages.Handle(cmd, func(b []byte) { _, _ = e.pipe.Write(b) }) {
+			return true
 		}
 
 		if e.kittyPassthroughFunc != nil {

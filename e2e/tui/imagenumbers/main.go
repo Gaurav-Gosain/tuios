@@ -14,8 +14,9 @@
 //     placed. Then d=a takes every placement down.
 //   - delplace: one upload under I=2, placed twice (p=1 and p=2). Then d=N
 //     with p=1 deletes one placement, and a=p places the image again (p=3).
-//   - reply: uploads that ask for an answer, and some that do not. The guest
-//     reads its input for a while and prints each answer as a REPLY line.
+//   - reply: uploads that ask for an answer, and some that do not, sent as
+//     bytes and as files. The guest reads its input for a while and prints
+//     each answer as a REPLY line, with spaces as underscores.
 //
 // Every command in the first three modes carries q=2, as cbirds sends it.
 package main
@@ -30,7 +31,9 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -112,9 +115,11 @@ func delplace() {
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 
-// reply sends uploads with every quiet level, by number and by id, and one
-// in two chunks, then prints each answer the terminal gave. Kitty answers
-// I=3, i=4 and I=6, and no other.
+// reply sends uploads with every quiet level, by number and by id, one in
+// two chunks, and three as files: a file that exists (i=10), one that does
+// not (i=11) and a temporary file (i=12). Then it prints each answer the
+// terminal gave. Kitty answers I=3, i=4, I=6, i=10, i=11 with an error and
+// i=12, and no other.
 func reply() {
 	raw := exec.Command("stty", "raw", "-echo")
 	raw.Stdin = os.Stdin
@@ -137,6 +142,26 @@ func reply() {
 	cut := len(chunked) / 8 * 4
 	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=6,m=1;%s\x1b\\", chunked[:cut])
 	_, _ = fmt.Fprintf(out, "\x1b_Gm=0;%s\x1b\\", chunked[cut:])
+
+	dir, err := os.MkdirTemp("", "imagenumbers")
+	if err != nil {
+		fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
+		return
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	png8, _ := base64.StdEncoding.DecodeString(pngOf(8, 8, 6))
+	file := filepath.Join(dir, "frame.png")
+	temp := filepath.Join(dir, "tty-graphics-protocol-frame.png")
+	for _, name := range []string{file, temp} {
+		if err := os.WriteFile(name, png8, 0o600); err != nil {
+			fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
+			return
+		}
+	}
+	enc := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=f,f=100,i=10;%s\x1b\\", enc(file))
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=f,f=100,i=11;%s\x1b\\", enc(filepath.Join(dir, "missing.png")))
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=t,f=100,i=12;%s\x1b\\", enc(temp))
 
 	got := make(chan []byte, 64)
 	go func() {
@@ -163,7 +188,7 @@ read:
 		}
 	}
 	for _, m := range regexp.MustCompile(`\x1b_G([^\x1b]*)\x1b\\`).FindAllSubmatch(in, -1) {
-		_, _ = fmt.Fprintf(out, "\r\nREPLY %s", m[1])
+		_, _ = fmt.Fprintf(out, "\r\nREPLY %s", strings.ReplaceAll(string(m[1]), " ", "_"))
 	}
 	_, _ = out.WriteString("\r\nIMAGENUMBERS-DONE\r\n")
 }

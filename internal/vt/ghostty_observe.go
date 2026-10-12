@@ -689,6 +689,12 @@ func (t *GhosttyTerminal) handleKittyAPC(payload []byte) {
 		}
 	}
 
+	// The same as the pure emulator: image numbers become ids, and an
+	// upload that named its image is answered here.
+	if !t.kittyImages.Handle(cmd, func(b []byte) { _, _ = t.pipe.Write(b) }) {
+		return
+	}
+
 	if fn := t.kittyPassthroughFunc; fn != nil {
 		t.callUnlocked(func() { fn(cmd, rawData) })
 		return
