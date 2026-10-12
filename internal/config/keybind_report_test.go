@@ -193,7 +193,10 @@ func TestTerminalKeysAreReportedFromTheirSection(t *testing.T) {
 		"alt+space":    "global",
 		"shift+up":     "terminal_mode",
 		"shift+down":   "terminal_mode",
+		"shift+pgup":   "terminal_mode",
+		"shift+pgdown": "terminal_mode",
 		"ctrl+shift+v": "terminal_mode",
+		"middle":       "terminal_mode",
 	}
 	seen := map[string]bool{}
 	for _, s := range r.TerminalModeSwallowed() {

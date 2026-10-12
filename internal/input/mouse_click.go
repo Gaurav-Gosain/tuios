@@ -257,6 +257,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A middle press over pane content can be a terminal-mode binding. It is
+	// looked up before guest mouse forwarding, so the shipped paste gesture also
+	// works over a program that tracks the mouse; removing or changing the
+	// binding hands the press back to that program.
+	if next, cmd, handled := handleTerminalMouseBinding(msg, o, clickedWindowIndex); handled {
+		return next, cmd
+	}
+
 	// Ctrl + left press on a window: multi-select on a click, or grab the pane
 	// for moving on a drag. On the content it arms the click-vs-drag decision
 	// (committed past the threshold in handleMouseMotion, then moved through the

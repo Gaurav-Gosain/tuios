@@ -31,7 +31,8 @@ table of their own.
 
 After the scopes, the list shows the fixed keys. tuios reads these keys itself,
 and you cannot rebind them: copy mode, hints mode, the message view, the ways
-out of the spotlight, the list keys and the mouse. The help overlay
+out of the spotlight, the list keys and the fixed mouse gestures. The middle
+button is an exception: terminal mode binds it like a key. The help overlay
 (`Ctrl+B ?`) shows the same rows. The last table shows the actions that have no
 default key. Bind one in `config.toml`, or run it from the command palette.
 
@@ -117,6 +118,10 @@ A key in `config.toml` can spell a modifier in more than one way. tuios reads ea
 | `control+` | `ctrl+` | all platforms |
 
 The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`. This applies to `leader_key`, to every binding table, and to `tuios keybinds explain`, `free` and `unbind`. `tuios keybinds explain opt+f12` shows `opt+f12 (tuios reads it as alt+f12)`. `tuios keybinds doctor` lists each key that tuios cannot read.
+
+In `[keybindings.terminal_mode]`, `middle` names a press of the middle mouse
+button. It accepts modifiers, such as `ctrl+middle`. Other mouse gestures are
+fixed.
 
 You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
 
@@ -421,11 +426,13 @@ the path of that file into the pane. The pane can run on this machine or on a
 host. Claude Code, Codex and other agents read an image from a path in the
 prompt. The action is `paste_image`, and the command palette has it too.
 
-The paste key also pastes an image. The paste key is `Ctrl+Shift+V`, `Super+V`
-or `paste_clipboard`. When the clipboard holds an image and no text, the paste
-key pastes the image. When the clipboard holds text, the paste key pastes the
-text. Some terminals send an empty paste when the clipboard holds only an
-image. tuios then pastes the image.
+The paste binding also pastes an image. `terminal_paste_host` in
+`[keybindings.terminal_mode]` is bound to `Ctrl+Shift+V`, `Super+V`,
+`Shift+Super+V` and the middle mouse button by default. `paste_clipboard` runs
+the same operation outside terminal mode. When the clipboard holds an image
+and no text, the paste binding pastes the image. When the clipboard holds text,
+it pastes the text. Some terminals send an empty paste when the clipboard holds
+only an image. tuios then pastes the image.
 
 A browser can put a link or text beside a copied image. The paste key then
 pastes the text. `Ctrl+B V` always pastes the image.
@@ -1328,7 +1335,7 @@ protocol gives it. A key the protocol has no number for goes in its legacy
 form. Caps Lock, Num Lock and a modifier key pressed alone reach that program
 only when it asks for every key.
 
-### Shift+Up and Shift+Down
+### Shift+Up, Shift+Down, Shift+PageUp and Shift+PageDown
 
 `shift+up` and `shift+down` scroll the pane into its history. They do this
 only when all of these are true:
@@ -1336,12 +1343,14 @@ only when all of these are true:
 - The program is on the main screen.
 - The program did not turn on a mouse mode.
 
-In other panes, tuios sends the keys to the program. Programs that use the
-full screen, such as nvim, less and htop, get them. When the pane is in copy
-mode, the keys scroll. This is the same rule as the mouse wheel, and the same
-rule as kitty.
+`shift+pgup` and `shift+pgdown` follow the same rules, but scroll one visible
+pane page at a time. In other panes, tuios sends the keys to the program.
+Programs that use the full screen, such as nvim, less and htop, get them. When
+the pane is in copy mode, the keys scroll. This is the same rule as the mouse
+wheel, and the same rule as kitty.
 
-To change the keys, set `terminal_scroll_up` and `terminal_scroll_down` in
+To change the keys, set `terminal_scroll_up`, `terminal_scroll_down`,
+`terminal_scroll_page_up` and `terminal_scroll_page_down` in
 `[keybindings.terminal_mode]`.
 
 ## macOS

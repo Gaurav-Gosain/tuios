@@ -1653,16 +1653,18 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 func getDefaultTerminalModeKeybinds() map[string][]string {
 	if isMacOS() {
 		return map[string][]string{
-			"terminal_next_window": {"opt+tab", "alt+n"},
-			"terminal_prev_window": {"opt+shift+tab", "alt+p"},
-			"terminal_exit_mode":   {"opt+esc"},
-			"terminal_focus_left":  {"alt+left"},
-			"terminal_focus_right": {"alt+right"},
-			"terminal_focus_up":    {"alt+up"},
-			"terminal_focus_down":  {"alt+down"},
-			"terminal_scroll_up":   {"shift+up"},
-			"terminal_scroll_down": {"shift+down"},
-			"terminal_paste_host":  {"ctrl+shift+v", "super+v", "shift+super+v"},
+			"terminal_next_window":      {"opt+tab", "alt+n"},
+			"terminal_prev_window":      {"opt+shift+tab", "alt+p"},
+			"terminal_exit_mode":        {"opt+esc"},
+			"terminal_focus_left":       {"alt+left"},
+			"terminal_focus_right":      {"alt+right"},
+			"terminal_focus_up":         {"alt+up"},
+			"terminal_focus_down":       {"alt+down"},
+			"terminal_scroll_up":        {"shift+up"},
+			"terminal_scroll_down":      {"shift+down"},
+			"terminal_scroll_page_up":   {"shift+pgup"},
+			"terminal_scroll_page_down": {"shift+pgdown"},
+			"terminal_paste_host":       {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
 		}
 	}
 	return map[string][]string{
@@ -1674,12 +1676,14 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		// directional focus on the arrows is what zellij and most tiling window
 		// managers do, and because each of the four is a separate action a user
 		// can set to [] to hand back. See docs/KEYBINDINGS.md.
-		"terminal_focus_left":  {"alt+left"},
-		"terminal_focus_right": {"alt+right"},
-		"terminal_focus_up":    {"alt+up"},
-		"terminal_focus_down":  {"alt+down"},
-		"terminal_scroll_up":   {"shift+up"},
-		"terminal_scroll_down": {"shift+down"},
+		"terminal_focus_left":       {"alt+left"},
+		"terminal_focus_right":      {"alt+right"},
+		"terminal_focus_up":         {"alt+up"},
+		"terminal_focus_down":       {"alt+down"},
+		"terminal_scroll_up":        {"shift+up"},
+		"terminal_scroll_down":      {"shift+down"},
+		"terminal_scroll_page_up":   {"shift+pgup"},
+		"terminal_scroll_page_down": {"shift+pgdown"},
 		// Plain ctrl+v is deliberately not here: it has to reach the pane as 0x16
 		// for vim's visual block, which is the tmux and zellij convention.
 		//
@@ -1688,7 +1692,7 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		// before super, and the lookup compares the spelling as written. The
 		// chord was dead for as long as it was written the other way round, and
 		// nothing said so until the reachability table pressed it.
-		"terminal_paste_host": {"ctrl+shift+v", "super+v", "shift+super+v"},
+		"terminal_paste_host": {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
 	}
 }
 

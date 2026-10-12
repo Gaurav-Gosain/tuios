@@ -164,6 +164,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			enterTerminalOnRelease = true
 		}
 	}
+	// A terminal-mode middle-button binding consumed the press, so its release
+	// is tuios's too. In particular, never send a mouse-tracking program an
+	// unmatched release after the paste binding took the press.
+	if terminalMouseBindingConsumesRelease(msg, o) {
+		return o, nil
+	}
 	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()

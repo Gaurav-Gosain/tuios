@@ -849,16 +849,18 @@ var ActionDescriptions = map[string]string{
 	"debug_prefix_cancel":     "Cancel debug prefix",
 
 	// Terminal Mode (direct keybinds, no prefix required)
-	"terminal_next_window": "Next window (terminal mode)",
-	"terminal_prev_window": "Previous window (terminal mode)",
-	"terminal_exit_mode":   "Exit terminal mode (to window mode)",
-	"terminal_focus_left":  "Focus the pane to the left",
-	"terminal_focus_right": "Focus the pane to the right",
-	"terminal_focus_up":    "Focus the pane above",
-	"terminal_focus_down":  "Focus the pane below",
-	"terminal_scroll_up":   "Scroll into the pane's scrollback",
-	"terminal_scroll_down": "Scroll back down toward live output",
-	"terminal_paste_host":  "Paste from the host clipboard",
+	"terminal_next_window":      "Next window (terminal mode)",
+	"terminal_prev_window":      "Previous window (terminal mode)",
+	"terminal_exit_mode":        "Exit terminal mode (to window mode)",
+	"terminal_focus_left":       "Focus the pane to the left",
+	"terminal_focus_right":      "Focus the pane to the right",
+	"terminal_focus_up":         "Focus the pane above",
+	"terminal_focus_down":       "Focus the pane below",
+	"terminal_scroll_up":        "Scroll into the pane's scrollback",
+	"terminal_scroll_down":      "Scroll back down toward live output",
+	"terminal_scroll_page_up":   "Scroll up one page",
+	"terminal_scroll_page_down": "Scroll down one page",
+	"terminal_paste_host":       "Paste from the host clipboard",
 
 	// Global (window mode and terminal mode alike)
 	"command_palette": "Open the command palette",

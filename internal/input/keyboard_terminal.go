@@ -94,46 +94,18 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleCacheStatsKey(msg, o)
 	}
 
-	// Shift+Up/Shift+Down: scroll the scrollback, the keyboard spelling of the
-	// wheel. Handled BEFORE the copy mode check so subsequent presses also
-	// scroll instead of being consumed by the copy mode key handler, and it
-	// enters copy mode the same silent way the wheel does.
+	// The configured line/page scroll actions are handled BEFORE the copy mode
+	// check so subsequent presses also scroll instead of being consumed by the
+	// copy mode key handler. They enter copy mode the same silent way the wheel
+	// does.
 	//
 	// Only a pane on the main screen with no mouse mode scrolls, as with the
 	// wheel and as in kitty. A full-screen program (nvim, less, htop, a
 	// compositor) gets the key itself: it has no scrollback to show, and
 	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
-	if focusedWindow != nil && keyScrollsPane(focusedWindow) {
-		scroll := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
-		if scroll == "terminal_scroll_up" || scroll == "terminal_scroll_down" {
-			// Recorded here because this route answers the key itself instead of
-			// going through Dispatch, and a route that records nothing is a route
-			// the reachability table cannot see. See NoteAction.
-			o.NoteAction(scroll)
-			// One line per press, the way it has always been, but through the
-			// same viewport helpers the wheel uses.
-			// In multi copy mode the scroll moves every pane of the set, the
-			// way every other copy-mode key does. The panes stay in copy mode
-			// at the bottom: the mode is held, not implicit.
-			if o.MultiCopy.Has(focusedWindow.ID) {
-				for _, w := range o.MultiCopyWindows() {
-					if scroll == "terminal_scroll_up" {
-						scrollCopyModeUpBy(w, 1)
-					} else {
-						scrollCopyModeDownBy(w, 1)
-					}
-				}
-				return o, nil
-			}
-			if scroll == "terminal_scroll_up" {
-				if !focusedWindow.InCopyMode() && focusedWindow.ScrollbackLen() > 0 {
-					focusedWindow.EnterCopyModeImplicit()
-				}
-				scrollCopyModeUpBy(focusedWindow, 1)
-			} else if focusedWindow.InCopyMode() {
-				scrollCopyModeDownBy(focusedWindow, 1)
-				leaveCopyModeAtBottom(focusedWindow)
-			}
+	if focusedWindow != nil {
+		action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
+		if handleTerminalScrollBinding(action, o, focusedWindow) {
 			return o, nil
 		}
 	}
@@ -250,10 +222,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
 	// through to the passthrough block and reaches the child PTY as 0x16 (needed
 	// for vim visual-block, etc.), matching the tmux/zellij convention.
-	if terminalAction == "terminal_paste_host" {
+	if terminalAction == terminalPasteHost {
 		// Recorded here for the same reason the scroll binds above are. See
 		// NoteAction.
-		o.NoteAction("terminal_paste_host")
+		o.NoteAction(terminalPasteHost)
 		if focusedWindow != nil {
 			// Ask the terminal for its clipboard via OSC 52. The reply arrives
 			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
@@ -359,8 +331,8 @@ func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// keyScrollsPane reports whether terminal_scroll_up and terminal_scroll_down
-// act on w, or its key goes to the program in it. They act on a pane in copy
+// keyScrollsPane reports whether a terminal-mode line or page scroll action
+// acts on w, or its key goes to the program in it. It acts on a pane in copy
 // mode, and on a pane on the main screen that has no mouse mode on.
 func keyScrollsPane(w *terminal.Window) bool {
 	if w.InCopyMode() {

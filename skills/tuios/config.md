@@ -390,6 +390,10 @@ leader, every binding table, `explain`, `free` and `unbind` read all spellings
 as one key. `explain` and `doctor` show the spelling tuios matches, for example
 `opt+f12 (tuios reads it as alt+f12)`.
 
+In `[keybindings.terminal_mode]`, `middle` is the middle mouse button and can
+take a modifier, such as `ctrl+middle`. By default, `shift+pgup` and
+`shift+pgdown` scroll a pane page and `middle` pastes the host clipboard.
+
 On a layout for a non-Latin script, bindings match the physical key. A key that
 types `ш` on a Ukrainian layout runs the binding on `i`, the US key at the same
 position, unless `ш` has a binding of its own. This needs Ghostty, kitty,

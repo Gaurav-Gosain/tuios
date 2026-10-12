@@ -373,11 +373,12 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 	return bindings
 }
 
-// generateMouseBindings lists the pointer gestures. They are written out rather
-// than derived because there is no registry for them: the gestures are decided
-// by internal/input's press/motion/release handlers, and this list is the only
-// place a user can read what those handlers do. Rail gestures live in the
-// Sidebar section, next to the rail's keys.
+// generateMouseBindings lists the fixed pointer gestures. They are written out
+// rather than derived because there is no registry for them: the gestures are
+// decided by internal/input's press/motion/release handlers, and this list is
+// the only place a user can read what those handlers do. The configurable
+// middle-button binding comes from the terminal-mode registry instead. Rail
+// gestures live in the Sidebar section, next to the rail's keys.
 func generateMouseBindings() []HelpBinding {
 	const cat = "Mouse"
 	return []HelpBinding{

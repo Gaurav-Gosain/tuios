@@ -131,7 +131,7 @@ func reachSections(t *testing.T) []bindingSection {
 		sub("layout_prefix", "prefix_layout", k.LayoutPrefix),
 
 		// The terminal-mode section is the binds that answer while typing into a
-		// shell. Two of them (the scroll pair) and the host paste are answered
+		// shell. The two scroll pairs and the host paste are answered
 		// inside HandleTerminalModeKey rather than by the dispatcher, so they
 		// are only live there.
 		{name: "terminal_mode", binds: k.TerminalMode, modes: []app.Mode{app.TerminalMode}, newOS: reachOS},
@@ -248,7 +248,7 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 						if sec.gate != "" {
 							o = pressKey(t, o, gateKey(t, k, sec.gate))
 						}
-						o = pressKey(t, o, key)
+						o = pressBinding(t, o, key)
 						got := o.RecentActions()
 						if len(got) == 0 || got[len(got)-1] != action {
 							t.Errorf("pressing %s did not reach %q (actions run: %v)",
@@ -572,6 +572,39 @@ func pressKey(t *testing.T, o *app.OS, spec string) *app.OS {
 	t.Helper()
 	next, _ := HandleKeyPress(keyEventFor(t, spec), o)
 	return next
+}
+
+// pressBinding sends either a keyboard binding or the terminal-mode middle
+// button binding through the real input entry point. Mouse presses are bindings
+// too, but they are not KeyPressMsg values and pretending otherwise would let
+// a listed mouse default stay disconnected from its handler.
+func pressBinding(t *testing.T, o *app.OS, spec string) *app.OS {
+	t.Helper()
+	base := spec
+	var mod tea.KeyMod
+	for {
+		name, rest, ok := strings.Cut(base, "+")
+		if !ok || rest == "" {
+			break
+		}
+		bit, isMod := bindingMods[name]
+		if !isMod {
+			break
+		}
+		mod |= bit
+		base = rest
+	}
+	if base != "middle" {
+		return pressKey(t, o, spec)
+	}
+	next, _ := HandleInput(tea.MouseClickMsg{
+		X: 10, Y: 10, Button: tea.MouseMiddle, Mod: mod,
+	}, o)
+	got, ok := next.(*app.OS)
+	if !ok {
+		t.Fatalf("middle binding returned %T, want *app.OS", next)
+	}
+	return got
 }
 
 // keyEventFor builds the key event a terminal sends for a binding spelling, and

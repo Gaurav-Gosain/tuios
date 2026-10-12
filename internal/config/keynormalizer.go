@@ -630,6 +630,10 @@ var validSpecialKeys = map[string]bool{
 	"up": true, "down": true, "left": true, "right": true,
 	"home": true, "end": true, "pgup": true, "pageup": true,
 	"pgdown": true, "pagedown": true, "insert": true,
+	// Bubble Tea spells a middle-button press "middle". It is accepted in the
+	// terminal_mode table, where that event has an unambiguous name (unlike the
+	// left and right buttons, which collide with the arrow-key names).
+	"middle": true,
 	// Keys Bubble Tea names that most keyboards have but that a terminal
 	// reports only under the Kitty keyboard protocol. They suit a held-key
 	// binding, which needs that protocol anyway.
