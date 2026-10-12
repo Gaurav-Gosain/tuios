@@ -5573,3 +5573,20 @@ is `~/.cache/agent-tmp/gui-port/proof/nc-preview-review.txt`.
 | The decoder's coefficients not counted | `decodeCost`: the progressive term cut | `TestFilePreviewHoldsItsDecodeCap` (353 MB for the progressive JPEG, 421 MB after the grey one) | **caught** |
 | The CatmullRom scale | `fit`: `draw.CatmullRom` in place of `ApproxBiLinear` | `TestFilePreviewHoldsItsDecodeCap` (542 MB scaling the grey JPEG) | **caught** |
 | No ffmpeg whitelists | `previewVideo`, `videoDuration`: the whitelist flags cut | `TestFilePreviewOpensOnlyFilmContainers` (a frame of 6460 bytes, 2000 ms) | **caught** |
+## The bridge's output path (replaces #598)
+
+An output frame is now queued as two entries, its head and the daemon's own
+payload, under one hold of the lock, and the model's emulator of each pane
+drops its history, which the renderer keeps. `TestGUIBridgeFloodArrivesWhole`
+(`gui_bridge_output_test.go`) runs `seq 1 100000` in a pane through the
+bridge. Every line must arrive in order with nothing between, and a title set
+after the flood must reach the state.
+
+Each control below was run on 2026-10-12 on branch
+`perf/gui-bridge-output-cost`. The log is
+`~/.cache/agent-tmp/gui-port/proof/nc-perf.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The body is lost | `frameWriter.push`: the second entry not queued | `TestGUIBridgeFloodArrivesWhole` (no output reached the renderer) | **caught** |
+| The body goes before its head | `frameWriter.push`: the two entries swapped | `TestGUIBridgeFloodArrivesWhole` (the last line of seq never arrived) | **caught** |
