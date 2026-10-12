@@ -61,11 +61,17 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	// A viewer whose input is dropped sends no input, so under the largest
 	// and latest window_size policies it does not size the session.
 	client.ViewOnly = opts.ViewOnly
+	// The hint over a larger client's leftover names this client by what
+	// serves it, since its machine is the server's.
+	client.Kind = session.ClientKindWeb
 	// An SSH client could still run in a pane of the session it asks for: ssh
 	// from a pane into this server. Its process is the ssh client in that
 	// pane, which the daemon cannot see, so the probe goes down the channel to
 	// be seen in the pane instead. A browser never feeds a pane, so the web
 	// server writes none.
+	if opts.SSHSession != nil {
+		client.Kind = session.ClientKindSSH
+	}
 	if w, ok := any(opts.SSHSession).(io.Writer); ok && w != nil {
 		if term, _ := app.SSHClientTerm(opts.SSHSession); session.NestProbeSafe(term) {
 			client.SetNestProbe(session.WriteNestProbe(w))

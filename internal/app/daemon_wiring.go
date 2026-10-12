@@ -172,6 +172,9 @@ func (m *OS) QueueClientEvent(ev ClientEvent) (displaced bool) {
 // which session is live heard from local clients only. A session switch runs
 // the same window steps through rebuildForSession.
 func (m *OS) RestoreAttachedSession(state *session.SessionState) {
+	if m.DaemonClient != nil {
+		m.sessionClients = m.DaemonClient.AttachClientCount()
+	}
 	if state != nil && len(state.Windows) > 0 {
 		m.LogInfo("Restoring %d windows from session state", len(state.Windows))
 		if err := m.RestoreFromState(state); err != nil {

@@ -76,8 +76,10 @@ func (d *Daemon) settleSessionSize(sessionID string) (width, height int, policy,
 }
 
 // sizeOwner is the client a session's size came from: latest when it is one
-// of the clients, otherwise the client that attached first of those whose
-// width is the session's, and then of those whose height is.
+// of the clients, otherwise the client that attached first of those that are
+// the session's size along both axes. It is "" when no one client is, as
+// under smallest with one client setting the width and another the height:
+// the hint then names no machine, since either name would be half wrong.
 //
 // The order is the attach order, never the order clients come in: that is a
 // map's, so two clients of one size would swap as the owner from one call to
@@ -88,23 +90,17 @@ func sizeOwner(clients []sizedClient, latest string, width, height int) string {
 			return c.id
 		}
 	}
-	first := func(match func(w, h int) bool) string {
-		var best *sizedClient
-		for i := range clients {
-			c := &clients[i]
-			if w, h := clampClientSize(c.w, c.h); match(w, h) && (best == nil || c.seq < best.seq) {
-				best = c
-			}
+	var best *sizedClient
+	for i := range clients {
+		c := &clients[i]
+		if w, h := clampClientSize(c.w, c.h); w == width && h == height && (best == nil || c.seq < best.seq) {
+			best = c
 		}
-		if best == nil {
-			return ""
-		}
-		return best.id
 	}
-	if id := first(func(w, _ int) bool { return w == width }); id != "" {
-		return id
+	if best == nil {
+		return ""
 	}
-	return first(func(_, h int) bool { return h == height })
+	return best.id
 }
 
 // calculateSessionReserve returns the chrome reserve the session's panes are
@@ -125,7 +121,11 @@ func sizeOwner(clients []sizedClient, latest string, width, height int) string {
 // between its panes and its rail. A client of another size draws the session
 // as a view inside its own chrome (see pane_view.go in internal/app), so it
 // needs no room in the session for its chrome. A client of the same size has
-// no room to spare, so it still counts, as under smallest.
+// no room to spare, so it still counts, as under smallest. So does a client
+// whose hello did not offer ViewChrome, such as a build from before this
+// rule: it lays the panes out around its own chrome whatever the session
+// says, and pushes that layout, so a box without its chrome is a box it
+// would not use.
 func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width, height int) LayoutReserve {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -137,12 +137,13 @@ func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width,
 		match := cs.sessionID == sessionID && cs.isTUIClient
 		r := cs.reserve
 		id := cs.clientID
+		view := cs.viewChrome
 		cw, ch := clampClientSize(cs.width, cs.height)
 		cs.mu.Unlock()
 		if !match {
 			continue
 		}
-		if latest && id != owner {
+		if latest && view && id != owner {
 			if cw != width {
 				r.Left, r.Right = 0, 0
 			}
@@ -155,34 +156,63 @@ func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width,
 	return agreed
 }
 
-// clientLabel names the machine a client runs on, for the hint a larger
-// client shows: the link peer for a client that came over a link, then the
-// host name the client's hello gave, then this machine's host name for a
-// client from before that field. "" when none is known.
-func (d *Daemon) clientLabel(clientID string) string {
+// clientLabel names a client for the hint a larger client shows. Its
+// machine is the link peer for a client that came over a link, then the host
+// name the client's hello gave, then this machine's host name for a client
+// from before that field. Its kind is the hello's ClientKind. A zero
+// SizeOwner when the client is not known.
+func (d *Daemon) clientLabel(clientID string) SizeOwner {
 	if clientID == "" {
-		return ""
+		return SizeOwner{}
 	}
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		id, peer, machine, link := cs.clientID, cs.linkPeer, cs.machine, cs.viaLink
+		id, peer, machine, kind, link := cs.clientID, cs.linkPeer, cs.machine, cs.kind, cs.viaLink
 		cs.mu.Unlock()
-		switch {
-		case id != clientID:
+		if id != clientID {
 			continue
-		case peer != "":
-			return peer
-		case machine != "":
-			return machine
-		case link:
-			return ""
 		}
-		return localHostLabel()
+		owner := SizeOwner{Kind: kind, Client: clientID}
+		switch {
+		case peer != "":
+			owner.Machine = peer
+		case machine != "":
+			owner.Machine = machine
+		case !link:
+			owner.Machine = localHostLabel()
+		}
+		return owner
+	}
+	return SizeOwner{}
+}
+
+// helloMachine is the hello's Machine when it is a valid machine name, the
+// rule a link peer's name follows, and "" otherwise. It is shown to other
+// clients, and over a link it comes from another machine.
+func helloMachine(name string) string {
+	if ValidLinkPeerName(name) != nil {
+		return ""
+	}
+	return name
+}
+
+// helloKind is the hello's ClientKind when it is one the hint names, and ""
+// otherwise.
+func helloKind(kind string) string {
+	switch kind {
+	case ClientKindSSH, ClientKindWeb:
+		return kind
 	}
 	return ""
 }
+
+// The client kinds a hello can name. See HelloPayload.ClientKind.
+const (
+	ClientKindSSH = "ssh"
+	ClientKindWeb = "web"
+)
 
 // localHostLabel is this machine's short host name, or "" when it cannot be
 // read.
@@ -319,7 +349,7 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 	oldWidth, oldHeight := session.Size()
 	oldReserve := session.LayoutReserve()
 	sizedBy := d.clientLabel(owner)
-	policyChanged := session.swapWindowSizePolicy(policy, sizedBy, owner)
+	policyChanged := session.swapWindowSizePolicy(policy, sizedBy)
 	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve && !policyChanged {
 		return newWidth, newHeight, newReserve
 	}
@@ -335,8 +365,9 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 		Reserve:       newReserve,
 		Generation:    gen,
 		Policy:        policy,
-		SizedBy:       sizedBy,
-		SizedByClient: owner,
+		SizedBy:       sizedBy.Machine,
+		SizedByClient: sizedBy.Client,
+		SizedByKind:   sizedBy.Kind,
 	}
 	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
 	LogBasic("Session %s resized to %dx%d, chrome %+v (%s of %d clients)",

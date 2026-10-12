@@ -172,11 +172,15 @@ is an answer, and each entry says which.
 **The default window_size is latest.** A daemon with no `[daemon]
 window_size` now uses `latest`, so `session-info` reports `window_size:
 "latest"` where it reported `smallest`. Under `latest` the session's agreed
-chrome reserve is the latest client's own, not the largest of all clients. On
-the client protocol, a hello can carry `Machine`, the client's short host
-name, and `MsgAttached` and `MsgSessionResize` can carry `SizedBy`, the
-machine of the client that set the size. Both are labels for the hint a larger
-client shows, and an older peer ignores them.
+chrome reserve counts only the clients of the session's size along each axis,
+and every client whose hello does not offer `ViewChrome`. On the client
+protocol, a hello can carry `Machine` (the client's short host name, kept only
+when it is a valid machine name), `ClientKind` (`ssh` or `web`) and
+`ViewChrome`. `MsgAttached` can carry `ClientID`, `ClientCount`, `SizedBy`,
+`SizedByClient` and `SizedByKind`, and `MsgSessionResize` the three `SizedBy`
+fields. They name the client that set the size for the hint a larger client
+shows, and tell a client whether it is that client. An older peer ignores all
+of them.
 
 **A client that is not tuios can stream a pane and answer the Inbox.** Three
 additions serve a native phone app on `ssh host tuios stdio-proxy`:

@@ -121,7 +121,8 @@ func (m *OS) reserveDiffers() (own, agreed session.LayoutReserve, ok bool) {
 	// With no size from the daemon yet (an empty session's attach carries
 	// none), there is no agreed box to lay out around, and the floor stays.
 	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest ||
-		!m.DaemonClient.SessionSizedByOther() || m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
+		!m.DaemonClient.ViewChrome() || !m.DaemonClient.SessionSizedByOther() ||
+		m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
 		return own, agreed, false
 	}
 	return m.OwnLayoutReserve(), m.SessionReserve, true
@@ -358,12 +359,24 @@ func (m *OS) ScreenPoint(x, y int) (int, int) {
 // for itself and for the drag and the release that follow it, so a pane
 // dragged over the rail stays a pane drag. internal/input calls it first for
 // every mouse event and clears the mark with SetPointerInLayout(false) after.
+//
+// The leftover (pane_leftover.go) is its own region. A mouse event over it, or
+// a drag or release that follows a press on it, is swallowed: see
+// PointerSwallowed. Without that it reached the window manager with screen
+// positions, which the panes read in the layout frame, so a click on the dots
+// focused, moved or resized whichever pane those positions named.
 func (m *OS) MapPointer(msg tea.Msg) tea.Msg {
 	m.pointerInLayout = false
+	m.pointerSwallowed = false
 	if !m.sessionView.on {
 		if _, ok := msg.(tea.MouseMsg); ok {
 			m.pressInLayout = false
+			m.pressInLeftover = false
 		}
+		return msg
+	}
+	if m.leftoverTakes(msg) {
+		m.pointerSwallowed = true
 		return msg
 	}
 	switch e := msg.(type) {
@@ -393,6 +406,51 @@ func (m *OS) MapPointer(msg tea.Msg) tea.Msg {
 	}
 	return msg
 }
+
+// leftoverTakes reports whether a mouse event belongs to the leftover: one
+// over it, or a drag or release that follows a press that landed on it. A
+// press there is remembered, so the drag after it stays the leftover's even
+// when the pointer moves onto a pane.
+func (m *OS) leftoverTakes(msg tea.Msg) bool {
+	mouse, ok := msg.(tea.MouseMsg)
+	if !ok {
+		return false
+	}
+	ev := mouse.Mouse()
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		m.pressInLeftover = m.pointerOverLeftover(ev.X, ev.Y)
+		return m.pressInLeftover
+	case tea.MouseReleaseMsg:
+		held := m.pressInLeftover
+		m.pressInLeftover = false
+		return held
+	case tea.MouseMotionMsg:
+		if ev.Button != tea.MouseNone {
+			return m.pressInLeftover
+		}
+	}
+	return m.pointerOverLeftover(ev.X, ev.Y)
+}
+
+// pointerOverLeftover reports whether a pointer on the screen is over the
+// leftover with nothing drawn above it there.
+func (m *OS) pointerOverLeftover(x, y int) bool {
+	v := m.sessionView
+	p := image.Pt(x, y)
+	if !p.In(v.frame) || p.In(v.clip) {
+		return false
+	}
+	if m.ContextMenuActive() || m.AnyOverlayOpen() || m.OverlayActive() ||
+		m.Renaming() || m.CaptureActive() || m.ReviewOpen() || m.ShowScrollbackBrowser {
+		return false
+	}
+	return !m.PiPAt(x, y)
+}
+
+// PointerSwallowed reports whether the mouse event MapPointer last mapped
+// belongs to the leftover. internal/input then does nothing with it.
+func (m *OS) PointerSwallowed() bool { return m.pointerSwallowed }
 
 // mouseToLayout maps a mouse event's position to the layout frame and marks
 // the event being handled as mapped.

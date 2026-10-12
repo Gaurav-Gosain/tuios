@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -65,14 +66,29 @@ func (v sessionView) leftoverStrips() (right, bottom image.Rectangle) {
 
 // leftoverHint is the line the leftover carries: which client sets the
 // session's size, and what makes this client's screen the size instead.
+//
+// A client that a server runs (SSH, web) is named by its kind, since the
+// machine its hello names is the server's. A terminal on this client's own
+// machine is "another client on this machine", so the line never names the
+// reader's machine as if it were someone else's. With no one client to name,
+// as under smallest when one client sets the width and another the height,
+// it says "another client".
 func (m *OS) leftoverHint() string {
 	who := "Another client sets the session size."
 	policy := ""
-	if m.DaemonClient != nil {
-		if name := m.DaemonClient.SessionSizedBy(); name != "" {
+	if c := m.DaemonClient; c != nil {
+		name := c.SessionSizedBy()
+		switch {
+		case c.SessionSizedByKind() == session.ClientKindSSH:
+			who = "An SSH client sets the session size."
+		case c.SessionSizedByKind() == session.ClientKindWeb:
+			who = "A web client sets the session size."
+		case name != "" && name == c.Machine() && c.Kind == "":
+			who = "Another client on this machine sets the session size."
+		case name != "":
 			who = "The client on " + name + " sets the session size."
 		}
-		policy = m.DaemonClient.SessionWindowSize()
+		policy = c.SessionWindowSize()
 	}
 	switch policy {
 	case config.WindowSizeLatest:

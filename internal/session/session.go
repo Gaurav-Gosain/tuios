@@ -1284,12 +1284,10 @@ type Session struct {
 	// SessionResizePayload.Generation.
 	layoutGen uint64
 	// sizePolicy is the window_size policy the size above was settled under,
-	// sizedBy the machine of the client that set it, and sizedByClient that
-	// client's connection ID.
-	sizePolicy    string
-	sizedBy       string
-	sizedByClient string
-	sizeMu        sync.RWMutex
+	// and sizedBy the client that set it.
+	sizePolicy string
+	sizedBy    SizeOwner
+	sizeMu     sync.RWMutex
 
 	// Lifecycle
 	Created time.Time
@@ -3250,26 +3248,32 @@ func (s *Session) SettleLayout(width, height int, r LayoutReserve) uint64 {
 	return s.layoutGen
 }
 
+// SizeOwner is the client that set a session's size, as the hint over the
+// leftover names it. Every field is "" when it is not known.
+type SizeOwner struct {
+	// Machine is the client's machine, Kind its ClientKind, and Client its
+	// connection ID.
+	Machine, Kind, Client string
+}
+
 // swapWindowSizePolicy records the window_size policy the session's size was
-// last settled under, and the machine and connection ID of the client that
-// set it, and reports whether any of them changed. Guarded by sizeMu with the
-// size it describes.
-func (s *Session) swapWindowSizePolicy(policy, sizedBy, sizedByClient string) bool {
+// last settled under, and the client that set it, and reports whether either
+// changed. Guarded by sizeMu with the size it describes.
+func (s *Session) swapWindowSizePolicy(policy string, by SizeOwner) bool {
 	s.sizeMu.Lock()
 	defer s.sizeMu.Unlock()
-	if s.sizePolicy == policy && s.sizedBy == sizedBy && s.sizedByClient == sizedByClient {
+	if s.sizePolicy == policy && s.sizedBy == by {
 		return false
 	}
-	s.sizePolicy, s.sizedBy, s.sizedByClient = policy, sizedBy, sizedByClient
+	s.sizePolicy, s.sizedBy = policy, by
 	return true
 }
 
-// SizedBy is the machine and the connection ID of the client that set the
-// session's size, "" when they are not known.
-func (s *Session) SizedBy() (machine, client string) {
+// SizedBy is the client that set the session's size.
+func (s *Session) SizedBy() SizeOwner {
 	s.sizeMu.RLock()
 	defer s.sizeMu.RUnlock()
-	return s.sizedBy, s.sizedByClient
+	return s.sizedBy
 }
 
 // WindowSizePolicy is the window_size policy in force for the session's size:

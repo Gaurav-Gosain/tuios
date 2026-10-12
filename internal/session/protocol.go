@@ -269,8 +269,20 @@ type HelloPayload struct {
 	Display ClientDisplay `json:"display,omitzero"`
 	// Machine is the short host name of the machine the client runs on. A
 	// larger client names it in the hint over the space a smaller session
-	// leaves. It is a label and nothing else: no check reads it.
+	// leaves. It is a label and nothing else: no check reads it. The daemon
+	// keeps it only when it is a valid link peer name.
 	Machine string `json:"machine,omitempty"`
+	// ClientKind says what serves the client when it is not a terminal on
+	// Machine: "ssh" for the SSH server, "web" for tuios-web. The hint names
+	// such a client by its kind, since Machine is the server's.
+	ClientKind string `json:"client_kind,omitempty"`
+	// ViewChrome says the client draws a session of another size, or one
+	// whose agreed reserve is less than its own chrome, as a view inside its
+	// own chrome. Under latest the daemon leaves the chrome of such a client
+	// out of the agreed reserve when it is not the session's size. A client
+	// without it lays the panes out around its own chrome whatever the
+	// session says, so its chrome always counts. See calculateSessionReserve.
+	ViewChrome bool `json:"view_chrome,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -438,6 +450,11 @@ type AttachedPayload struct {
 	// the agreed reserve alone. Empty from an older daemon.
 	SizedByClient string `json:"sized_by_client,omitempty"`
 	ClientID      string `json:"client_id,omitempty"`
+	// SizedByKind is that client's ClientKind. See HelloPayload.ClientKind.
+	SizedByKind string `json:"sized_by_kind,omitempty"`
+	// ClientCount is how many TUI clients the session has with this one. A
+	// client alone in its session draws no leftover.
+	ClientCount int `json:"client_count,omitempty"`
 }
 
 // NewPayload requests creation of a new session.
@@ -884,6 +901,8 @@ type SessionResizePayload struct {
 	// SizedByClient is the connection ID of that client. See
 	// AttachedPayload.SizedByClient.
 	SizedByClient string `json:"sized_by_client,omitempty"`
+	// SizedByKind is that client's ClientKind.
+	SizedByKind string `json:"sized_by_kind,omitempty"`
 }
 
 // Error codes

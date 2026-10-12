@@ -21,7 +21,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.scratchWS = payload.ScratchWorkspaces
 	sizeCapChanged := cs.windowSizeCap != payload.WindowSize
 	cs.windowSizeCap = payload.WindowSize
-	cs.machine = payload.Machine
+	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
+	cs.viewChrome = payload.ViewChrome
 	attachedTo := cs.sessionID
 	cs.mu.Unlock()
 	// A second hello on an attached connection can change what the client
@@ -336,7 +337,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
-	sizedBy, sizedByClient := session.SizedBy()
+	sizedBy := session.SizedBy()
 	err = d.sendAttachReply(cs, msg, &AttachedPayload{
 		SessionName:   session.Name(),
 		SessionID:     session.ID,
@@ -348,9 +349,11 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Generation:    session.LayoutGeneration(),
 		HumanNonce:    humanNonce,
 		Policy:        session.WindowSizePolicy(),
-		SizedBy:       sizedBy,
-		SizedByClient: sizedByClient,
+		SizedBy:       sizedBy.Machine,
+		SizedByClient: sizedBy.Client,
+		SizedByKind:   sizedBy.Kind,
 		ClientID:      cs.clientID,
+		ClientCount:   d.getSessionClientCount(session.ID),
 	})
 	attachLocked = false
 	session.attachMu.Unlock()

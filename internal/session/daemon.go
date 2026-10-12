@@ -513,8 +513,12 @@ type connState struct {
 	// read under mu. See window_size.go.
 	windowSizeCap bool
 	// machine is the host name the client's hello gave, a label for the
-	// leftover hint. Guarded by mu. See Daemon.clientLabel.
-	machine string
+	// leftover hint, and kind its ClientKind. viewChrome is the hello's
+	// ViewChrome. Guarded by mu. See Daemon.clientLabel and
+	// calculateSessionReserve.
+	machine    string
+	kind       string
+	viewChrome bool
 	// lastActivity is when the person at this client last gave input, from
 	// MsgClientActivity. Guarded by mu.
 	lastActivity time.Time

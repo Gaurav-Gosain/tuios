@@ -28,6 +28,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// in the session's layout frame. See app.MapPointer.
 	msg = o.MapPointer(msg)
 	defer o.SetPointerInLayout(false)
+	// A mouse event on the dots a smaller session leaves acts on nothing.
+	if o.PointerSwallowed() {
+		return o, nil
+	}
 
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:

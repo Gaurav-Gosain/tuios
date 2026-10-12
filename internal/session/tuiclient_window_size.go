@@ -14,6 +14,21 @@ func legacyWindowSize() bool {
 	return os.Getenv("TUIOS_WINDOW_SIZE_LEGACY") == "1"
 }
 
+// legacyViewChrome makes this client behave as a build from before
+// HelloPayload.ViewChrome: its hello leaves ViewChrome out, and it lays the
+// panes out around its own chrome whatever the session agreed. It is
+// TUIOS_VIEW_CHROME_LEGACY=1, so the mixed-version case can be tested without
+// an old build.
+func legacyViewChrome() bool {
+	return os.Getenv("TUIOS_VIEW_CHROME_LEGACY") == "1"
+}
+
+// ViewChrome reports whether this client's hello offered ViewChrome: it may
+// lay the panes out around an agreed reserve smaller than its own chrome.
+func (c *TUIClient) ViewChrome() bool {
+	return c != nil && c.viewChrome
+}
+
 // activityInterval is the shortest gap between two MsgClientActivity sends.
 // The daemon holds the latest client for a second after its last input (see
 // latestHold), so a report at most this stale costs nothing, and a person
@@ -42,7 +57,7 @@ func (c *TUIClient) SessionWindowSize() string {
 // sessionSizer is the client whose size the session took: its machine and its
 // connection ID.
 type sessionSizer struct {
-	machine, client string
+	machine, client, kind string
 }
 
 // SessionSizedBy is the machine of the client whose size the session took,
@@ -55,6 +70,30 @@ func (c *TUIClient) SessionSizedBy() string {
 		return p.machine
 	}
 	return ""
+}
+
+// SessionSizedByKind is the ClientKind of the client whose size the session
+// took: ClientKindSSH, ClientKindWeb, or "".
+func (c *TUIClient) SessionSizedByKind() string {
+	if c == nil {
+		return ""
+	}
+	if p := c.sizedBy.Load(); p != nil {
+		return p.kind
+	}
+	return ""
+}
+
+// Machine is the host name this client's hello gives the daemon.
+func (c *TUIClient) Machine() string { return localHostLabel() }
+
+// AttachClientCount is how many clients the session had with this one when
+// the last attach reply was written, or 0 when the daemon did not say.
+func (c *TUIClient) AttachClientCount() int {
+	if c == nil {
+		return 0
+	}
+	return int(c.attachClients.Load())
 }
 
 // SessionSizedByOther reports whether the daemon said that another client

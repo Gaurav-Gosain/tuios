@@ -53,6 +53,10 @@ type TUIClient struct {
 	// viewer started with --read-only. It is sent with every attach. See
 	// AttachPayload.ViewOnly.
 	ViewOnly bool
+	// Kind is the hello's ClientKind: ClientKindSSH or ClientKindWeb for a
+	// client a server runs for a remote viewer, "" for a terminal on this
+	// machine. Set it before Connect.
+	Kind string
 	// DetachOthers is sent with the next AttachSession, as tuios attach -d
 	// asks: the other clients of the session are detached. AttachSession
 	// clears it, so a later attach on this client (a session switch, a host
@@ -228,6 +232,11 @@ type TUIClient struct {
 	// the attach reply.
 	sizedBy atomic.Pointer[sessionSizer]
 	selfID  atomic.Pointer[string]
+	// viewChrome is what this client's hello said as ViewChrome.
+	viewChrome bool
+	// attachClients is the session's client count from the last attach
+	// reply, 0 from a daemon that does not say.
+	attachClients atomic.Int64
 	// dirWatchSupported says the daemon's welcome offered MsgWatchDir. See
 	// WatchDir.
 	dirWatchSupported bool
@@ -376,6 +385,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		PreferredCodec: "gob",
 		Protocol:       ProtocolVersion,
 		Machine:        localHostLabel(),
+		ClientKind:     c.Kind,
 	}
 
 	// Add graphics capabilities if provided
@@ -401,6 +411,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	hello.LayoutTreeOps = true
 	hello.ScratchWorkspaces = true
 	hello.WindowSize = !legacyWindowSize()
+	hello.ViewChrome = hello.WindowSize && !legacyViewChrome()
+	c.viewChrome = hello.ViewChrome
 
 	// Send hello with capabilities
 	msg, err := NewMessage(MsgHello, hello)
@@ -584,8 +596,9 @@ func (c *TUIClient) takeAttachReply(resp *Message) (*SessionState, error) {
 	c.multiClientMu.Unlock()
 	c.noteSessionLayout(payload.Generation, payload.Reserve)
 	c.noteSizePolicy(payload.Policy)
-	c.sizedBy.Store(&sessionSizer{machine: payload.SizedBy, client: payload.SizedByClient})
+	c.sizedBy.Store(&sessionSizer{machine: payload.SizedBy, client: payload.SizedByClient, kind: payload.SizedByKind})
 	c.selfID.Store(&payload.ClientID)
+	c.attachClients.Store(int64(payload.ClientCount))
 	return payload.State, nil
 }
 
@@ -1919,7 +1932,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			policy := payload.Policy
 			c.sizePolicy.Store(&policy)
 		}
-		c.sizedBy.Store(&sessionSizer{machine: payload.SizedBy, client: payload.SizedByClient})
+		c.sizedBy.Store(&sessionSizer{machine: payload.SizedBy, client: payload.SizedByClient, kind: payload.SizedByKind})
 
 		// Same shape as MsgStateSync above: one lock over the handler read and
 		// the retention, so a broadcast arriving before the handler exists is
