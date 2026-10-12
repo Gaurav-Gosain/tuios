@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -303,6 +304,9 @@ func Load(path string) (*Plugin, *Error) {
 	} else {
 		return nil, errf("plugin_manifest_not_found", "%v", err)
 	}
+	// herdr's plugins.json names a manifest by its \\?\ path on Windows, and
+	// the plugin's commands run in the folder taken from it (issue #654).
+	abs = winpath.StripExtended(abs)
 	data, err := os.ReadFile(abs) //nolint:gosec // the path is a plugin the person listed
 	if err != nil {
 		return nil, errf("plugin_manifest_read_failed", "%v", err)

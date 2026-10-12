@@ -122,3 +122,42 @@ func TestFindMounts(t *testing.T) {
 		})
 	}
 }
+
+// The ways StripExtended could fail, written down before the code:
+//   - A drive path keeps \\?\, so a program started there cannot resolve a
+//     relative path against it: node view.mjs fails with EISDIR, lstat 'C:'
+//     (issue #654).
+//   - \\?\UNC\server\share loses a leading backslash, or keeps the UNC\.
+//   - The UNC marker is matched only in upper case, though Windows takes
+//     \\?\unc\ too.
+//   - A prefixed path with no plain form (a volume GUID path, a device path)
+//     is cut into something that names a different place, or nothing.
+//   - \\?\ alone, or \\?\UNC\ with no server or share, becomes "" or a bare
+//     \\, which reads as the current folder.
+//   - A path with no prefix, a plain UNC path or a POSIX path changes.
+//   - A drive-relative form (\\?\C:x) loses the root and becomes relative.
+func TestStripExtended(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`\\?\C:\Users\x\herdr-plugins\herdr-glow`, `C:\Users\x\herdr-plugins\herdr-glow`},
+		{`\\?\C:\`, `C:\`},
+		{`\\?\c:\x`, `c:\x`},
+		{`\\?\UNC\server\share\plugins\glow`, `\\server\share\plugins\glow`},
+		{`\\?\unc\server\share`, `\\server\share`},
+		{`\\?\Volume{b75e2c83-0000-0000-0000-602f00000000}\x`, `\\?\Volume{b75e2c83-0000-0000-0000-602f00000000}\x`},
+		{`\\?\GLOBALROOT\Device\HarddiskVolume1\x`, `\\?\GLOBALROOT\Device\HarddiskVolume1\x`},
+		{`\\?\`, `\\?\`},
+		{`\\?\UNC\`, `\\?\UNC\`},
+		{`\\?\UNC\server`, `\\?\UNC\server`},
+		{`\\?\C:`, `\\?\C:`},
+		{`\\?\C:x`, `\\?\C:x`},
+		{`C:\Users\x`, `C:\Users\x`},
+		{`\\server\share\x`, `\\server\share\x`},
+		{`/home/x`, `/home/x`},
+		{``, ``},
+	}
+	for _, c := range cases {
+		if got := StripExtended(c.in); got != c.want {
+			t.Errorf("StripExtended(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

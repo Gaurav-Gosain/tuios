@@ -261,3 +261,31 @@ func cygpathRoot() string {
 	}
 	return strings.TrimRight(strings.TrimSpace(string(out)), `\`)
 }
+
+// StripExtended turns an extended-length path into the plain path that names
+// the same place: \\?\C:\x becomes C:\x, and \\?\UNC\server\share\x becomes
+// \\server\share\x. Any other path is returned unchanged, a prefixed one with
+// no plain form among them, such as a volume GUID path.
+//
+// Windows takes the prefix when it opens a file, but not every program does
+// in its working folder. herdr writes plugin manifests to plugins.json with
+// it, and a Node plugin started in that folder cannot resolve its own script:
+// node view.mjs fails with EISDIR, lstat 'C:' (issue #654).
+func StripExtended(p string) string {
+	rest, ok := strings.CutPrefix(p, `\\?\`)
+	if !ok {
+		return p
+	}
+	if len(rest) >= 4 && strings.EqualFold(rest[:4], `UNC\`) {
+		server, tail, _ := strings.Cut(rest[4:], `\`)
+		share, _, _ := strings.Cut(tail, `\`)
+		if server == "" || share == "" {
+			return p
+		}
+		return `\\` + rest[4:]
+	}
+	if len(rest) >= 3 && isLetter(rest[:1]) && rest[1] == ':' && rest[2] == '\\' {
+		return rest
+	}
+	return p
+}
