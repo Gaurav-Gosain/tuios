@@ -4642,6 +4642,9 @@ the far side 50 ms.
 | The files folder rule in `typingRefusal` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (text typed into a sibling started in the parent copies the file to build) | **caught** |
 | `tooWideFolder` in `windowFolder` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (a pane started in the home folder copies a file there to build) | **caught** |
 
+| The start folder stored as given and resolved at each check, and the spawn folder not resolved (2026-10-12, the final review) | `TestAFilesGrantFolderHoldsThroughOtherPanes` (an agent started in `app/link`, with the link then repointed to the parent, copies the parent's file to build) | **caught** |
+| `ownedByDaemonUser` in `windowFolder` | `TestAFilesGrantFolderHoldsThroughOtherPanes` (a pane started in `/etc` copies `/etc/passwd` to build) | **caught** |
+
 The small files test measured, with 2,000 files of up to 6 KiB (6.1 MB) at
 50 ms:
 

@@ -1554,7 +1554,9 @@ func (s *Session) noteStartDir(windowID, dir string) {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	s.startDirs.LoadOrStore(windowID, startDirEntry{dir: filepath.Clean(dir), at: time.Now()})
+	// Resolved once, here. A link in the path that is repointed later must
+	// not move the folder a grant is held to, so no check resolves it again.
+	s.startDirs.LoadOrStore(windowID, startDirEntry{dir: realPath(filepath.Clean(dir)), at: time.Now()})
 }
 
 // windowStartDir is a window's start folder, or "" when none was recorded.

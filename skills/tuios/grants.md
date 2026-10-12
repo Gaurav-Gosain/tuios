@@ -37,8 +37,8 @@ The `files` grant reaches the copies that stay near your work. A copy may
 start when each end on this machine is inside your pane's folder. That is
 the session's worktree when tuios made it, else the folder the pane started
 in. A `cd` or an OSC 7 does not move it. Every file the copy reads or writes
-here stays inside it, and a link does not lead out. The home folder and the
-folders above it are never a pane's folder: start the pane in a project
+here stays inside it, and a link does not lead out. The home folder, the
+folders above it and a folder another user owns are never a pane's folder: start the pane in a project
 folder or a worktree. A pane without admin starts windows and agents only
 inside its folder, and types only into panes whose folder is inside its
 own. Each end on a host must be under its home folder, or be its receive folder

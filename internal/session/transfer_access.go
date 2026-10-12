@@ -31,7 +31,13 @@ func paneRefused(path, pane string) *verbError {
 
 // paneFS is an os.Root at the pane's folder.
 func (a access) paneFS() (fileFS, *verbError) {
-	dir := realPath(a.pane)
+	dir := a.pane
+	// The folder was resolved when the grant was checked. One replaced by a
+	// link since then is refused: a root opened through it would hold the
+	// copy to wherever the link points.
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() || realPath(dir) != dir {
+		return fileFS{}, paneRefused(dir, a.pane)
+	}
 	r, err := os.OpenRoot(dir)
 	if err != nil {
 		return fileFS{}, fileError("open", a.pane, err)
@@ -43,7 +49,7 @@ func (a access) paneFS() (fileFS, *verbError) {
 // make.
 func (d *Daemon) accCheckRead(a access, path string) *verbError {
 	if a.pane != "" {
-		if !pathUnder(realPath(path), realPath(a.pane)) {
+		if !pathUnder(realPath(path), a.pane) {
 			return paneRefused(path, a.pane)
 		}
 		return nil
@@ -90,7 +96,7 @@ func (d *Daemon) accWriteFS(a access, paths ...string) (fileFS, *verbError) {
 	if a.pane == "" {
 		return d.linkWriteFS(a.cs, paths...)
 	}
-	dir := realPath(a.pane)
+	dir := a.pane
 	for _, p := range paths {
 		if !pathUnder(realParent(p), dir) {
 			return fileFS{}, paneRefused(p, a.pane)

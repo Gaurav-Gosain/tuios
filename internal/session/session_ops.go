@@ -349,8 +349,13 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		switch {
 		case opts.Bound == "":
 			noStartDir = true
-		case cwd == "" || !pathUnder(realPath(cwd), realPath(opts.Bound)):
+		case cwd == "" || !pathUnder(realPath(cwd), opts.Bound):
 			cwd = opts.Bound
+		default:
+			// The process starts in the resolved folder, and that is the
+			// folder recorded for it: a link repointed after this check
+			// moves neither.
+			cwd = realPath(cwd)
 		}
 	}
 

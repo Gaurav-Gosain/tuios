@@ -93,7 +93,7 @@ func (d *Daemon) transferGrantStart(cs *connState, src, dst *Endpoint, o *transf
 		if root == "" {
 			return deny(noFolderReason)
 		}
-		if !pathUnder(realPath(e.Path), realPath(root)) {
+		if !pathUnder(realPath(e.Path), root) {
 			return deny(echoName(e.Path) + " is outside the pane's folder " + echoName(root) + ", and the files grant reaches only that")
 		}
 	}
@@ -137,15 +137,21 @@ func (d *Daemon) windowFolder(windowID string) string {
 	}
 	dir := ""
 	if wt := sess.Worktree(); wt != nil && wt.Managed && wt.Path != "" {
-		dir = wt.Path
+		dir = filepath.Clean(wt.Path)
 	} else {
 		dir = sess.windowStartDir(windowID)
 	}
 	if dir == "" {
 		return ""
 	}
-	dir = filepath.Clean(dir)
-	if tooWideFolder(dir) {
+	// The folder is used as it was recorded, resolved. One that is now a
+	// link, or that resolves elsewhere, was replaced after it was recorded,
+	// and is no folder: following it would carry the grant to wherever the
+	// link points.
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() || realPath(dir) != dir {
+		return ""
+	}
+	if tooWideFolder(dir) || !ownedByDaemonUser(dir) {
 		return ""
 	}
 	return dir
@@ -153,14 +159,18 @@ func (d *Daemon) windowFolder(windowID string) string {
 
 // tooWideFolder reports whether dir holds the home folder: a file system
 // root, /home or /Users, or the home folder itself. A grant held to one of
-// those reaches the keys and every project, which is no folder at all.
+// those reaches the keys and every project, which is no folder at all. It
+// is true when the home folder cannot be found. It takes a resolved path
+// and keeps no result.
 func tooWideFolder(dir string) bool {
 	if filepath.Dir(dir) == dir {
 		return true
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return false
+		// With no home folder to compare, nothing is known to be narrow
+		// enough.
+		return true
 	}
 	real := realPath(dir)
 	return pathUnder(realPath(filepath.Clean(home)), real)
@@ -169,7 +179,7 @@ func tooWideFolder(dir string) bool {
 // noFolderReason is the refusal of a copy from a pane with no folder the
 // files grant can reach.
 const noFolderReason = "the pane has no folder the files grant can reach. It reaches the folder a pane started in, or its session's tuios worktree, " +
-	"and never the home folder or a folder above it. Start the pane in a project folder or a worktree, then give it files"
+	"and never the home folder, a folder above it, or a folder another user owns. Start the pane in a project folder or a worktree, then give it files"
 
 // childWindowBound holds a window that cs asks for to the caller's folder,
 // when cs is a pane without admin. cwd is the folder the call names, "" for
@@ -182,7 +192,7 @@ func (d *Daemon) childWindowBound(cs *connState, verb, cwd string) (bound string
 		return "", false, nil
 	}
 	bound = d.paneFolder(pa)
-	if cwd != "" && (bound == "" || !pathUnder(realPath(cwd), realPath(bound))) {
+	if cwd != "" && (bound == "" || !pathUnder(realPath(cwd), bound)) {
 		where := "this pane has no folder of its own"
 		if bound != "" {
 			where = "this pane's folder is " + echoName(bound)

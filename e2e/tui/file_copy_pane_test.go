@@ -512,6 +512,10 @@ func TestAFilesGrantFolderIsTheOneThePaneStartedIn(t *testing.T) {
 // to build. A pane whose start folder is the home folder is refused, and the
 // message says to start the pane in a project folder.
 //
+// An agent started in a link inside the folder keeps the folder the link
+// named then, after the link is repointed to the parent, and a pane started
+// in /etc, which another user owns, is refused.
+//
 // Negative control: with addWindowFor not holding the window to the
 // caller's folder (Bounded left false), the agent started after cd base
 // copies the file to build.
@@ -677,6 +681,48 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 	if !strings.Contains(string(he), "project folder") {
 		t.Errorf("ASSERTION: the refusal does not say to start the pane in a project folder:\n%s", he)
 	}
+
+	// 7. A link in the folder an agent started in, repointed after it
+	// started, does not move the agent's folder.
+	sub2 := filepath.Join(cwd, "sub2")
+	if err := os.MkdirAll(sub2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(cwd, "link")
+	if err := os.Symlink(sub2, link); err != nil {
+		t.Fatal(err)
+	}
+	trigger := filepath.Join(codes, "repoint.go")
+	out = filepath.Join(codes, "repoint")
+	script = filepath.Join(codes, "repoint.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nwhile [ ! -e "+trigger+" ]; do sleep 0.2; done\n"+cp+secret+" build:~/repoint.txt 2>"+out+".err; echo $? >"+out+"\nexec sleep 600\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, errText = run("repoint-start", tuiosBin+" start-agent --ready-timeout 500 --cwd "+link+" "+script)
+	results["start-agent in a link"] = map[string]any{"code": code, "stderr": errText}
+	time.Sleep(2 * time.Second)
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(parent, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trigger, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, errText = waitFile(out)
+	refused("an agent whose start link was repointed to the parent", "repoint.txt", code, errText)
+
+	// 8. A pane started in a folder another user owns.
+	sysID := personWindow(t, base, "/etc")
+	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", sysID, "--grants", "read,files"); err != nil {
+		t.Fatalf("set-pane-grants on the /etc pane: %v\n%s", err, out)
+	}
+	sysCode := filepath.Join(codes, "etc")
+	typeInPane(t, base, "work", sysID, cp+"/etc/passwd build:~/etc.txt 2>"+sysCode+".err; echo $? >"+sysCode)
+	code = waitPaneExit(t, base, "work", sysID, sysCode, 60*time.Second)
+	se, _ := os.ReadFile(sysCode + ".err")
+	refused("a copy from a pane started in /etc", "etc.txt", code, string(se))
 	saveTransferArtifact(t, "cp-files-grant-other-panes", results)
 }
 

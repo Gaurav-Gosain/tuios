@@ -950,7 +950,7 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 	// into a pane whose folder is wider would copy from the wider folder.
 	if !pa.grants.Has(GrantAdmin) && held.Has(GrantFiles) {
 		if tf := d.windowFolder(target.ID); tf != "" {
-			if pf := d.paneFolder(pa); pf == "" || !pathUnder(realPath(tf), realPath(pf)) {
+			if pf := d.paneFolder(pa); pf == "" || !pathUnder(tf, pf) {
 				return "window " + shortWindowID(target.ID) + " holds files for " + echoName(tf) + ", a folder this pane's files grant does not reach, and what is typed there copies from it. " +
 					"A pane types only into panes whose folder is inside its own"
 			}
