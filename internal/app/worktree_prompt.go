@@ -9,7 +9,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // The rail's worktree dialog: a branch name asked over a repository, and a
@@ -87,7 +86,7 @@ func (m *OS) WorktreePromptSessionName() string { return strings.TrimSpace(m.wor
 func (m *OS) BeginWorktreePromptForSession(name string) {
 	info := m.sessionWorktreeInfo(name)
 	if info == nil {
-		m.ShowNotification("The rail doesn't know which repository this session is in.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The rail does not know which repository this session is in.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.openWorktreePrompt(info.RepoRoot)
@@ -100,7 +99,7 @@ func (m *OS) BeginWorktreePromptForSession(name string) {
 func (m *OS) BeginWorktreePromptForRepo(repo string) {
 	root := m.worktreeRepoRoot(repo)
 	if root == "" {
-		m.ShowNotification("No session in this repository right now.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("The rail has no session in this repository.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.openWorktreePrompt(root)
@@ -216,24 +215,28 @@ func (m *OS) worktreePromptRepo() string {
 // of minutes and this runs on the Update goroutine. The dialog closes when the
 // work is handed off; the worktreeCreatedMsg handler says what became of it.
 //
-// The two checks here are the ones the user can fix without a round trip.
-// The daemon owns the real refusals — a taken branch, a taken session name —
-// and those come back as a notification.
+// The two checks here are the ones the user can fix without a round trip,
+// and both are pure, so the Update goroutine never runs git: an empty branch,
+// and a session name the daemon would refuse anyway — said here so the dialog
+// is still open to show it. The daemon owns the real refusals — a taken
+// branch, a taken session name — and those come back as a notification.
 func (m *OS) WorktreePromptSubmit() tea.Cmd {
 	if !m.WorktreePromptOpen() {
 		return nil
 	}
 	branch := m.WorktreePromptBranch()
 	if branch == "" {
-		m.worktreePrompt.Err = "A branch name is required."
+		m.worktreePrompt.Err = "Type a branch name."
 		return nil
 	}
-	if err := worktree.ValidBranch(branch); err != nil {
-		m.worktreePrompt.Err = err.Error()
-		return nil
+	sessionName := m.WorktreePromptSessionName()
+	if sessionName != "" {
+		if err := session.ValidateSessionName(sessionName); err != nil {
+			m.worktreePrompt.Err = err.Error()
+			return nil
+		}
 	}
 	repoRoot := m.worktreePrompt.RepoRoot
-	sessionName := m.WorktreePromptSessionName()
 	m.WorktreePromptCancel()
 	// Acknowledge the hand-off at once: the dialog is closed, and checking out
 	// a large repository can take a while, so without this the enter reads as
@@ -294,7 +297,7 @@ type worktreeCreatedMsg struct {
 // and not in the command.
 func (m *OS) handleWorktreeCreated(msg worktreeCreatedMsg) tea.Cmd {
 	if msg.Err != nil {
-		m.ShowNotification("Worktree: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
 	if msg.Session == "" {

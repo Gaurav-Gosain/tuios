@@ -136,7 +136,7 @@ func (m *OS) worktreePromptContext(width int) string {
 // the keyboard is in.
 func (m *OS) worktreePromptNote() string {
 	if m.worktreePrompt.Field == worktreeFieldName {
-		return "The name the session is addressed by; empty derives one."
+		return "Type a session name. Leave it empty to use the name shown."
 	}
 	return "The branch the worktree checks out."
 }

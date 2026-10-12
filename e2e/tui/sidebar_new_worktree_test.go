@@ -98,12 +98,14 @@ func TestRailRightClickMakesAWorktree(t *testing.T) {
 	}
 
 	// The new session joins the repository's group on the rail once the
-	// client's listing carries it — the rail is the screen the user is looking
-	// at, and it is the first place the create shows.
+	// client's listing carries it, and the client is attached to it: the rail
+	// is the screen the user is looking at, and the gutter mark on the row is
+	// the screen's own word for "this is the session you are in".
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return railLineWith(s, "feat/ui") >= 0
+		r := railLineWith(s, "feat/ui")
+		return r >= 0 && strings.Contains(s.Line(r), "▎")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the rail never showed the created worktree: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the rail never showed the created worktree as the attached session: %v\n%s", err, term.Snapshot())
 	}
 
 	saveFrame(t, term, "rail-worktree-created")
@@ -163,7 +165,7 @@ func TestRailWorktreeRefusals(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("submit the empty dialog: %v", err)
 	}
-	if err := term.WaitForText("A branch name is required.", uiTimeout); err != nil {
+	if err := term.WaitForText("Type a branch name.", uiTimeout); err != nil {
 		t.Fatalf("the dialog did not refuse an empty branch: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "rail-worktree-empty-branch")
