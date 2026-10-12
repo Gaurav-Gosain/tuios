@@ -996,9 +996,12 @@ func (b *guiBridge) waitKeybinds(n int) *wireKeybinds {
 }
 
 // TestGUIBridgeSessionSize: with a smaller terminal client on the session, the
-// bridge says the session is that client's size and its own is larger.
+// bridge says the session is that client's size and its own is larger. It
+// runs under window_size smallest, which makes the smaller client win; the
+// default, latest, is TestGUIBridgeInputTakesTheSession.
 func TestGUIBridgeSessionSize(t *testing.T) {
 	base := t.TempDir()
+	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	b := startBridge(t, base, "gb", 160, 50)
 	b.tiledPanes(2)
 	st := b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
@@ -1020,6 +1023,44 @@ func TestGUIBridgeSessionSize(t *testing.T) {
 		t.Errorf("the tree is laid out past the session's width: %+v", tr)
 	}
 	_ = term
+}
+
+// TestGUIBridgeInputTakesTheSession: under window_size latest, the default, a
+// terminal client that attaches after the bridge takes the session's size. Typing
+// in a pane through the bridge is the person using the renderer, so the
+// session goes back to the bridge's size, and the smaller terminal client
+// shows a part of it. Without the activity report the session stays at the
+// terminal client's size however much is typed in the renderer.
+func TestGUIBridgeInputTakesTheSession(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "gb", 160, 50)
+	b.tiledPanes(2)
+	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
+	term := attachIn(t, base, "gb", startOpts{cols: 80, rows: 24})
+	st := b.waitState(func(s *wireState) bool {
+		return s.SessionSize.Cols > 0 && s.SessionSize.Cols <= 80
+	}, "the session at the newest client's size")
+	// The session is smaller than the bridge, so the bridge shows all of
+	// it: no viewport, which is only for a larger session.
+	if st.Viewport != nil {
+		t.Errorf("viewport %+v is set, but the session is smaller than the bridge", *st.Viewport)
+	}
+	var pty string
+	for _, w := range st.Windows {
+		if !w.Minimized && w.PTY != "" {
+			pty = w.PTY
+			break
+		}
+	}
+	if pty == "" {
+		t.Fatalf("no pane to type in: %+v", st.Windows)
+	}
+	b.input(pty, "echo TYPED-IN-THE-GUI\r")
+	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after input through it")
+	if err := term.WaitForText("Part of session", shellTimeout); err != nil {
+		t.Errorf("the terminal client does not show a part of the larger session: %v\n%s", err, term.Snapshot())
+	}
+	b.saveLog("input-takes-the-session")
 }
 
 // TestGUIBridgeSessionName: a switch made from inside the session moves the
