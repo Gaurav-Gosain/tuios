@@ -14,9 +14,14 @@
 //     placed. Then d=a takes every placement down.
 //   - delplace: one upload under I=2, placed twice (p=1 and p=2). Then d=N
 //     with p=1 deletes one placement, and a=p places the image again (p=3).
-//   - reply: uploads that ask for an answer, and some that do not, sent as
-//     bytes and as files. The guest reads its input for a while and prints
-//     each answer as a REPLY line, with spaces as underscores.
+//   - reply: uploads and placements that ask for an answer, and some that do
+//     not. The guest reads its input for a while and prints each answer as a
+//     REPLY line, with spaces as underscores.
+//   - late: an upload under I=1, then a wait for a key, then an upload under
+//     I=2 that the guest places by the id the answer gave.
+//   - cbirdsrun [exit]: five uploads by number and two frames of placements,
+//     the way cbirds draws. With exit, the d=A cbirds sends as it quits.
+//     Without, a d=c, which frees nothing.
 //
 // Every command in the first three modes carries q=2, as cbirds sends it.
 package main
@@ -64,6 +69,12 @@ func main() {
 		delplace()
 	case "reply":
 		reply()
+	case "late":
+		late()
+	case "cbirdsrun":
+		// cbirds quits when its frames are done, and so does this.
+		cbirdsrun(len(os.Args) > 2 && os.Args[2] == "exit")
+		return
 	default:
 		frames()
 	}
@@ -115,43 +126,44 @@ func delplace() {
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 
-// reply sends uploads with every quiet level, by number and by id, one in
-// two chunks, and three as files: a file that exists (i=10), one that does
-// not (i=11) and a temporary file (i=12). Then it prints each answer the
-// terminal gave. Kitty answers I=3, i=4, I=6, i=10, i=11 with an error and
-// i=12, and no other.
+// reply sends uploads and placements that kitty answers, and some it does
+// not, then prints each answer the terminal gave. See TestKittyUploadReply
+// for the list.
 func reply() {
-	raw := exec.Command("stty", "raw", "-echo")
-	raw.Stdin = os.Stdin
-	if err := raw.Run(); err != nil {
-		fmt.Printf("IMAGENUMBERS-ERR stty: %v\r\n", err)
+	restore, ok := rawInput()
+	if !ok {
 		return
 	}
-	defer func() {
-		sane := exec.Command("stty", "sane")
-		sane.Stdin = os.Stdin
-		_ = sane.Run()
-	}()
+	defer restore()
 
 	out := os.Stdout
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=3;%s\x1b\\", pngOf(8, 8, 1))
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,i=4;%s\x1b\\", pngOf(8, 8, 2))
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=5,q=1;%s\x1b\\", pngOf(8, 8, 3))
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,i=8,q=2;%s\x1b\\", pngOf(8, 8, 4))
+	send := func(format string, args ...any) { _, _ = fmt.Fprintf(out, format, args...) }
+	send("\x1b_Ga=t,f=100,I=3;%s\x1b\\", pngOf(8, 8, 1))
+	send("\x1b_Ga=t,f=100,i=4;%s\x1b\\", pngOf(8, 8, 2))
+	send("\x1b_Ga=t,f=100,I=5,q=1;%s\x1b\\", pngOf(8, 8, 3))
+	send("\x1b_Ga=t,f=100,i=8,q=2;%s\x1b\\", pngOf(8, 8, 4))
 	chunked := pngOf(8, 8, 5)
 	cut := len(chunked) / 8 * 4
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=6,m=1;%s\x1b\\", chunked[:cut])
-	_, _ = fmt.Fprintf(out, "\x1b_Gm=0;%s\x1b\\", chunked[cut:])
+	send("\x1b_Ga=t,f=100,I=6,m=1;%s\x1b\\", chunked[:cut])
+	send("\x1b_Gm=0;%s\x1b\\", chunked[cut:])
 
+	// Files: one that exists, one that does not, and a temporary file in a
+	// temporary directory with the name kitty asks for.
 	dir, err := os.MkdirTemp("", "imagenumbers")
 	if err != nil {
 		fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
 		return
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+	tmp, err := os.MkdirTemp("/tmp", "imagenumbers")
+	if err != nil {
+		fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
+		return
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
 	png8, _ := base64.StdEncoding.DecodeString(pngOf(8, 8, 6))
 	file := filepath.Join(dir, "frame.png")
-	temp := filepath.Join(dir, "tty-graphics-protocol-frame.png")
+	temp := filepath.Join(tmp, "tty-graphics-protocol-frame.png")
 	for _, name := range []string{file, temp} {
 		if err := os.WriteFile(name, png8, 0o600); err != nil {
 			fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
@@ -159,10 +171,108 @@ func reply() {
 		}
 	}
 	enc := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=f,f=100,i=10;%s\x1b\\", enc(file))
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=f,f=100,i=11;%s\x1b\\", enc(filepath.Join(dir, "missing.png")))
-	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,t=t,f=100,i=12;%s\x1b\\", enc(temp))
+	send("\x1b_Ga=t,t=f,f=100,i=10;%s\x1b\\", enc(file))
+	send("\x1b_Ga=t,t=f,f=100,i=11;%s\x1b\\", enc(filepath.Join(dir, "missing.png")))
+	send("\x1b_Ga=t,t=t,f=100,i=12;%s\x1b\\", enc(temp))
 
+	// Both i= and I=: an error.
+	send("\x1b_Ga=t,f=100,i=14,I=13;%s\x1b\\", pngOf(8, 8, 7))
+	// Placements: an image the pane has, one it does not, a number it does
+	// not.
+	send("\x1b_Ga=t,f=100,i=19,q=2;%s\x1b\\", pngOf(8, 8, 8))
+	send("\x1b_Ga=p,i=19,C=1\x1b\\")
+	send("\x1b_Ga=p,i=99,C=1\x1b\\")
+	send("\x1b_Ga=p,I=77,C=1\x1b\\")
+	// q=2 on the last chunk only: no answer.
+	send("\x1b_Ga=t,f=100,I=15,m=1;%s\x1b\\", chunked[:cut])
+	send("\x1b_Gm=0,q=2;%s\x1b\\", chunked[cut:])
+	// A last chunk that names its number again keeps the first chunk's id,
+	// so the next number gets the id after it.
+	send("\x1b_Ga=t,f=100,I=16,m=1;%s\x1b\\", chunked[:cut])
+	send("\x1b_GI=16,m=0;%s\x1b\\", chunked[cut:])
+	send("\x1b_Ga=t,f=100,I=17;%s\x1b\\", pngOf(8, 8, 9))
+	// Not a PNG.
+	send("\x1b_Ga=t,f=100,i=18;%s\x1b\\", enc("this is not a PNG image at all"))
+
+	for _, r := range readReplies(3 * time.Second) {
+		send("\r\nREPLY %s", strings.ReplaceAll(r, " ", "_"))
+	}
+	_, _ = out.WriteString("\r\nIMAGENUMBERS-DONE\r\n")
+}
+
+// late uploads I=1, waits for a key, then uploads I=2, learns its id from
+// the answer and places the image by that id.
+func late() {
+	restore, ok := rawInput()
+	if !ok {
+		return
+	}
+	defer restore()
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=1,q=2;%s\x1b\\", pngOf(40, 40, 200))
+	_, _ = out.WriteString("\r\nLATE-WAIT\r\n")
+	key := make([]byte, 1)
+	if _, err := os.Stdin.Read(key); err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=2;%s\x1b\\", pngOf(30, 60, 90))
+	id := ""
+	for _, r := range readReplies(2 * time.Second) {
+		if m := regexp.MustCompile(`^i=([0-9]+),I=2;OK$`).FindStringSubmatch(r); m != nil {
+			id = m[1]
+		}
+	}
+	if id == "" {
+		_, _ = out.WriteString("\r\nLATE-NOID\r\n")
+		return
+	}
+	_, _ = fmt.Fprintf(out, "\x1b[3;3H\x1b_Ga=p,i=%s,q=2,C=1\x1b\\", id)
+	_, _ = fmt.Fprintf(out, "\x1b[20;1HIMAGENUMBERS-DONE id=%s\r\n", id)
+}
+
+// cbirdsrun does what one cbirds run does to the terminal: it uploads its
+// sprites by number, draws two frames, and with "exit" frees every image
+// with d=A as it quits.
+func cbirdsrun(exit bool) {
+	out := os.Stdout
+	for n := 1; n <= 5; n++ {
+		_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,I=%d,m=0;%s\x1b\\", n, pngOf(10+n, 10+n, byte(n*40)))
+	}
+	for range 2 {
+		_, _ = out.WriteString("\x1b[?2026h\x1b_Ga=d,d=a,q=2\x1b\\")
+		for n := 1; n <= 5; n++ {
+			_, _ = fmt.Fprintf(out, "\x1b[3;%dH\x1b_Ga=p,I=%d,q=2,C=1\x1b\\", 4*n, n)
+		}
+		_, _ = out.WriteString("\x1b[?2026l")
+		time.Sleep(300 * time.Millisecond)
+	}
+	if exit {
+		_, _ = out.WriteString("\x1b_Ga=d,d=A,q=2\x1b\\")
+	} else {
+		// A delete at the cursor takes placements down and frees nothing.
+		_, _ = out.WriteString("\x1b_Ga=d,d=c,q=2\x1b\\")
+	}
+	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
+}
+
+// rawInput puts the terminal in raw mode so an answer arrives byte for byte,
+// and returns what puts it back.
+func rawInput() (func(), bool) {
+	raw := exec.Command("stty", "raw", "-echo")
+	raw.Stdin = os.Stdin
+	if err := raw.Run(); err != nil {
+		fmt.Printf("IMAGENUMBERS-ERR stty: %v\r\n", err)
+		return nil, false
+	}
+	return func() {
+		sane := exec.Command("stty", "sane")
+		sane.Stdin = os.Stdin
+		_ = sane.Run()
+	}, true
+}
+
+// readReplies reads input for d and returns the graphics answers in it.
+func readReplies(d time.Duration) []string {
 	got := make(chan []byte, 64)
 	go func() {
 		buf := make([]byte, 4096)
@@ -177,7 +287,7 @@ func reply() {
 		}
 	}()
 	var in []byte
-	deadline := time.After(2 * time.Second)
+	deadline := time.After(d)
 read:
 	for {
 		select {
@@ -187,8 +297,9 @@ read:
 			break read
 		}
 	}
+	var out []string
 	for _, m := range regexp.MustCompile(`\x1b_G([^\x1b]*)\x1b\\`).FindAllSubmatch(in, -1) {
-		_, _ = fmt.Fprintf(out, "\r\nREPLY %s", strings.ReplaceAll(string(m[1]), " ", "_"))
+		out = append(out, string(m[1]))
 	}
-	_, _ = out.WriteString("\r\nIMAGENUMBERS-DONE\r\n")
+	return out
 }

@@ -48,9 +48,9 @@ func TestKittyImageNumbers(t *testing.T) {
 //
 // Three uploads go out under I=1: two placed as they go, one not placed.
 // Then d=a takes every placement down. The host must have held both placed
-// images at once, under two ids. Once their placements are gone, the two
-// older images must be freed, as nothing but their id names them, and the
-// newest must not.
+// images at once, under two ids. d=a frees no image, and kitty keeps the
+// older images under a number until they are deleted, so none of the three
+// may be freed.
 func TestKittyImageNumberReupload(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
@@ -87,15 +87,10 @@ func TestKittyImageNumberReupload(t *testing.T) {
 				t.Errorf("the two placed uploads under I=1 were never on the host at once")
 			}
 
-			for _, id := range []int{first, second} {
-				if last := lastNaming(cmds, id); last.keys["a"] != "d" || last.keys["d"] != "I" {
-					t.Errorf("host image %d lost its placements and was not freed; the last command naming it is %q",
-						id, last.rawParam)
-				}
-			}
 			for _, c := range cmds {
-				if c.num("i") == third && c.keys["a"] == "d" && c.keys["d"] == "I" {
-					t.Errorf("the newest image under I=1 was freed: %q", c.rawParam)
+				if id := c.num("i"); (id == first || id == second || id == third) &&
+					c.keys["a"] == "d" && c.keys["d"] == "I" {
+					t.Errorf("an image under I=1 was freed, and nothing deleted it: %q", c.rawParam)
 				}
 			}
 		})
@@ -143,15 +138,21 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 	}
 }
 
-// Kitty answers an upload that names its image, unless q= says not to: OK
-// with the image's id, and its number when it has one. A guest that sends by
-// number learns its image's id only from that answer. tuios answered no
-// upload, by number or by id. An upload sent as a file is answered OK only
-// when the file can be opened, and with an error when it cannot.
+// Kitty answers an upload that names its image, and a placement, unless q=
+// says not to: OK with the image's id, and its number when it has one, or an
+// error. A guest that sends by number learns its image's id only from that
+// answer. tuios answered no upload, by number or by id.
 //
-// The stand-in sends I=3 and i=4 with no q, I=5 with q=1, i=8 with q=2, I=6
-// in two chunks, and three files: i=10 exists, i=11 does not, and i=12 is a
-// temporary file. Exactly six answers must come back, each once.
+// The stand-in sends, and kitty answers as listed:
+//   - I=3 and i=4 with no q: OK. I=5 with q=1 and i=8 with q=2: nothing.
+//   - I=6 in two chunks: OK once, after the last.
+//   - files: i=10 exists, OK; i=11 does not, ENOENT; i=12 a temporary file, OK.
+//   - i=14 with I=13: EINVAL.
+//   - a=p of i=19, which it has: OK. Of i=99 and I=77, which it has not: ENOENT.
+//   - I=15 in two chunks, q=2 on the last only: nothing.
+//   - I=16 in two chunks, the last naming I=16 again: OK, and I=17 right after
+//     gets the next id, so the second chunk took no id of its own.
+//   - i=18 whose payload is not a PNG: EBADPNG.
 func TestKittyUploadReply(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(modeName(daemon), func(t *testing.T) {
@@ -172,52 +173,64 @@ func TestKittyUploadReplyTwoClients(t *testing.T) {
 
 func assertUploadReplies(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
-	var replies []string
-	for _, m := range regexp.MustCompile(`REPLY (\S+)`).FindAllStringSubmatch(term.Snapshot(), -1) {
-		replies = append(replies, m[1])
+	got := uploadReplies(t, term.Snapshot())
+	want := map[string]string{
+		"I=3": "OK", "i=4": "OK", "I=6": "OK",
+		"i=10": "OK", "i=11": "ENOENT:", "i=12": "OK",
+		"I=13": "EINVAL:", "i=19": "OK", "i=99": "ENOENT:", "I=77": "ENOENT:",
+		"I=16": "OK", "I=17": "OK", "i=18": "EBADPNG:",
 	}
-	t.Logf("answers the guest got: %q", replies)
-
-	type answer struct{ id, msg string }
-	got := map[string]answer{}
-	for _, r := range replies {
-		m := regexp.MustCompile(`^i=([1-9][0-9]*)(?:,I=([0-9]+))?;(OK|E[A-Z]+:\S*)$`).FindStringSubmatch(r)
-		if m == nil {
-			t.Errorf("an answer is not one kitty gives an upload: %q", r)
-			continue
-		}
-		key := "i=" + m[1]
-		if m[2] != "" {
-			key = "I=" + m[2]
-		}
-		if _, dup := got[key]; dup {
-			t.Errorf("the upload %s was answered twice", key)
-		}
-		got[key] = answer{m[1], m[3]}
-	}
-	for _, key := range []string{"I=3", "i=4", "I=6", "i=10", "i=12"} {
-		if a, ok := got[key]; !ok {
-			t.Errorf("the upload %s got no answer", key)
-		} else if a.msg != "OK" {
-			t.Errorf("the upload %s was answered %q, want OK", key, a.msg)
+	for key, msg := range want {
+		a, ok := got[key]
+		switch {
+		case !ok:
+			t.Errorf("%s got no answer", key)
+		case !strings.HasPrefix(a.msg, msg):
+			t.Errorf("%s was answered %q, want %s", key, a.msg, msg)
 		}
 	}
-	if a, ok := got["i=11"]; !ok {
-		t.Errorf("the upload of a missing file got no answer")
-	} else if !strings.HasPrefix(a.msg, "ENOENT:") {
-		t.Errorf("the upload of a missing file was answered %q, want ENOENT", a.msg)
-	}
-	for _, key := range []string{"I=5", "i=8"} {
-		if _, ok := got[key]; ok {
-			t.Errorf("the upload %s was answered through its q=", key)
+	for key := range got {
+		if _, ok := want[key]; !ok {
+			t.Errorf("%s was answered, and kitty does not answer it", key)
 		}
-	}
-	if len(replies) != 6 {
-		t.Errorf("got %d answers, want 6", len(replies))
 	}
 	if got["I=3"].id != "" && got["I=3"].id == got["I=6"].id {
 		t.Errorf("two uploads by number were given one id: %s", got["I=3"].id)
 	}
+	if a, b := got["I=16"].id, got["I=17"].id; a != "" && b != "" {
+		x, _ := strconv.Atoi(a)
+		y, _ := strconv.Atoi(b)
+		if y != x+1 {
+			t.Errorf("I=16 is %s and I=17 is %s: the second chunk of I=16 took an id of its own", a, b)
+		}
+	}
+}
+
+type uploadAnswer struct{ id, msg string }
+
+// uploadReplies reads the REPLY lines the stand-in printed, keyed by the
+// image number when the answer names one and by the id when not.
+func uploadReplies(t *testing.T, screen string) map[string]uploadAnswer {
+	t.Helper()
+	got := map[string]uploadAnswer{}
+	for _, m := range regexp.MustCompile(`REPLY (\S+)`).FindAllStringSubmatch(screen, -1) {
+		r := m[1]
+		p := regexp.MustCompile(`^(?:i=([1-9][0-9]*))?,?(?:I=([0-9]+))?(?:,p=[0-9]+)?;(OK|E[A-Z]+:\S*)$`).FindStringSubmatch(r)
+		if p == nil || (p[1] == "" && p[2] == "") {
+			t.Errorf("an answer is not one kitty gives: %q", r)
+			continue
+		}
+		key := "i=" + p[1]
+		if p[2] != "" {
+			key = "I=" + p[2]
+		}
+		if _, dup := got[key]; dup {
+			t.Errorf("%s was answered twice", key)
+		}
+		got[key] = uploadAnswer{p[1], p[3]}
+	}
+	t.Logf("answers the guest got: %v", got)
+	return got
 }
 
 func modeName(daemon bool) string {
@@ -260,7 +273,7 @@ func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *t
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 
 	if second {
-		attachSecondKittyClient(t, base)
+		_ = attachSecondKittyClient(t, base)
 	}
 
 	host.mark("launch")
@@ -288,7 +301,7 @@ func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *t
 // attachSecondKittyClient attaches one more client to the only session of
 // the daemon under base, on a host that draws kitty graphics, and waits until
 // it shows the pane.
-func attachSecondKittyClient(t *testing.T, base string) {
+func attachSecondKittyClient(t *testing.T, base string) *kittyHost {
 	t.Helper()
 	var session string
 	deadline := time.Now().Add(uiTimeout)
@@ -316,6 +329,7 @@ func attachSecondKittyClient(t *testing.T, base string) {
 	if n := len(attachedSessions(base)); n != 1 {
 		t.Fatalf("the second client attached elsewhere: %d attached sessions", n)
 	}
+	return host
 }
 
 func logNumbered(t *testing.T, cmds []numberedCmd) {
@@ -576,3 +590,211 @@ var (
 	imageNumbersBin  string
 	imageNumbersErr  error
 )
+
+// A client that attaches after the guest sent images by number has not seen
+// those uploads. It used to number the next upload from the start, while the
+// daemon, which answers the guest, counted on. The guest places the image by
+// the id the daemon told it, and on the late client that id named nothing, or
+// another image. The client now takes the daemon's ids with the snapshot.
+//
+// The guest uploads I=1, a second client attaches, and the guest uploads I=2
+// and places it by the id in the answer. On the late client's host, that
+// placement must name the image the I=2 upload put there. The first client
+// is the positive half: it saw every upload, and gets the same.
+func TestKittyImageIDsForALateClient(t *testing.T) {
+	bin := buildImageNumbers(t)
+	host := newKittyHost()
+	term, base := start(t, startOpts{
+		cols: 120, rows: 40,
+		env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
+		out:           host,
+		daemonDefault: true,
+	})
+	killDaemon(t, base)
+	host.answerProbe(t, term)
+	waitBoot(t, term)
+	newWindow(t, term)
+	enableTiling(t, term)
+	waitWindowCount(t, term, 1, "one pane")
+	enterTerminalMode(t, term)
+	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+	typeLine(t, term, bin+" late")
+	if err := term.WaitForText("LATE-WAIT", shellTimeout); err != nil {
+		t.Fatalf("the guest never uploaded I=1: %v\n%s", err, term.Snapshot())
+	}
+	lateHost := attachSecondKittyClient(t, base)
+	lateHost.mark("attached")
+	if err := term.Type("x"); err != nil {
+		t.Fatalf("send the key: %v", err)
+	}
+	if err := term.WaitForText("IMAGENUMBERS-DONE", shellTimeout); err != nil {
+		t.Fatalf("the guest never placed I=2: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(2 * time.Second)
+
+	dir := artifactDir(t)
+	for name, h := range map[string]*kittyHost{"first": host, "late": lateHost} {
+		stream := h.bytes()
+		if err := os.WriteFile(filepath.Join(dir, name+"-host-stream.bin"), stream, 0o644); err != nil {
+			t.Errorf("save the host stream: %v", err)
+		}
+		cmds := parseNumberedStream(stream)
+		logNumbered(t, cmds)
+		id := hostIDBySize(t, cmds, 30, 60)
+		placed := false
+		for _, c := range cmds {
+			if c.keys["a"] == "p" && c.num("i") == id && c.num("c") > 0 {
+				placed = true
+			}
+		}
+		if !placed {
+			t.Errorf("%s client: the guest placed I=2 by the id it was told, and the host never placed image %d", name, id)
+		}
+	}
+	saveArtifact(t, term, dir, "screen")
+}
+
+// cbirds frees its images with d=A as it quits. tuios forgot the images'
+// ids without deleting them on the host, so every run left its sprites in
+// the outer terminal, and closing the pane freed nothing either, because
+// nothing named them any more.
+//
+// Two cbirds-like runs in one pane: the first quits with d=A, the second
+// ends with d=c, which takes placements down and frees nothing. Then the pane
+// closes. The first run's images must be deleted from the host before the
+// second run uploads, and every image either run put there by the end. The
+// images are on the host during each run, which is the positive half.
+func TestKittyImagesFreedOnExitAndClose(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(modeName(daemon), func(t *testing.T) {
+			bin := buildImageNumbers(t)
+			host := newKittyHost()
+			term, base := start(t, startOpts{
+				cols: 120, rows: 40,
+				env:           []string{"TUIOS_SIXEL_GRAPHICS=0"},
+				out:           host,
+				daemonDefault: daemon,
+			})
+			if daemon {
+				killDaemon(t, base)
+			}
+			host.answerProbe(t, term)
+			waitBoot(t, term)
+			newWindow(t, term)
+			enableTiling(t, term)
+			waitWindowCount(t, term, 1, "one pane")
+			enterTerminalMode(t, term)
+			runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
+
+			host.mark("launch")
+			typeLine(t, term, bin+" cbirdsrun exit; "+bin+" cbirdsrun & sleep 2; echo RUNS\"\"-DONE")
+			if err := term.WaitForText("RUNS-DONE", shellTimeout); err != nil {
+				t.Fatalf("the runs never finished: %v\n%s", err, term.Snapshot())
+			}
+			time.Sleep(time.Second)
+			leaveTerminalMode(t, term)
+			closeFocusedWindow(t, term, 0)
+			time.Sleep(2 * time.Second)
+
+			stream := host.bytes()
+			if i := bytes.Index(stream, []byte(phaseMark+"launch")); i >= 0 {
+				stream = stream[i:]
+			}
+			dir := artifactDir(t)
+			if err := os.WriteFile(filepath.Join(dir, "host-stream.bin"), stream, 0o644); err != nil {
+				t.Errorf("save the host stream: %v", err)
+			}
+			cmds := parseNumberedStream(stream)
+			logNumbered(t, cmds)
+			live := map[int]bool{}
+			most, uploads := 0, 0
+			for _, c := range cmds {
+				id := c.num("i")
+				switch {
+				case (c.keys["a"] == "t" || c.keys["a"] == "T") && id != 0:
+					uploads++
+					if uploads == 6 && len(live) != 0 {
+						t.Errorf("the second run started with %d images of the first still on the host: d=A freed nothing", len(live))
+					}
+					live[id] = true
+				case c.keys["a"] == "d" && c.keys["d"] == "I" && c.keys["p"] == "":
+					delete(live, id)
+				}
+				most = max(most, len(live))
+			}
+			if most < 5 {
+				t.Fatalf("the runs never had their 5 images on the host: at most %d", most)
+			}
+			if len(live) != 0 {
+				t.Errorf("%d images are left on the host after both runs and the close: %v", len(live), live)
+			}
+		})
+	}
+}
+
+// A pane on another machine names a file for an upload. The path is a path
+// over there, and this machine's daemon, which answers for the pane, used to
+// open it here: OK, ENOENT and EBADF told the far pane which files exist on
+// this machine. The daemon now refuses every file upload from such a pane
+// without looking at the file.
+//
+// The stand-in runs in a pane on alpha and in a pane on this machine, in one
+// session. On alpha every file upload is refused. On this machine the file
+// that exists is OK and the one that does not is ENOENT, which is the
+// positive half: the refusal is about where the pane runs.
+func TestKittyUploadFileFromAnotherMachine(t *testing.T) {
+	bin := buildImageNumbers(t)
+	f := startGlobalFleet(t)
+
+	run := func(host string) map[string]uploadAnswer {
+		before := sessionWindowHosts(t, f.here, f.env, "home")
+		args := []string{"new-window", "-s", "home"}
+		if host != "" {
+			args = append(args, "--host", host)
+		}
+		if out, err := tuiosCLIEnv(t, f.here, f.env, args...); err != nil {
+			t.Fatalf("open a pane on %q: %v\n%s", host, err, out)
+		}
+		id, _, ok := waitNewWindow(t, f.here, f.env, "home", before, 10*time.Second)
+		if !ok {
+			t.Fatalf("the pane on %q never appeared", host)
+		}
+		time.Sleep(time.Second)
+		if out, err := tuiosCLIEnv(t, f.here, f.env, "send-text", "-s", "home", "-w", id, bin+" reply"); err != nil {
+			t.Fatalf("type the stand-in in %s: %v\n%s", id, err, out)
+		}
+		if out, err := tuiosCLIEnv(t, f.here, f.env, "send-keys", "-s", "home", "-w", id, "Enter"); err != nil {
+			t.Fatalf("run the stand-in in %s: %v\n%s", id, err, out)
+		}
+		deadline := time.Now().Add(shellTimeout)
+		var screen string
+		for time.Now().Before(deadline) {
+			out, _ := tuiosCLIEnv(t, f.here, f.env, "capture-pane", "-s", "home", "-w", id)
+			screen = out
+			if strings.Contains(out, "IMAGENUMBERS-DONE") {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		if !strings.Contains(screen, "IMAGENUMBERS-DONE") {
+			t.Fatalf("the stand-in never finished on %q:\n%s", host, screen)
+		}
+		_ = os.WriteFile(filepath.Join(artifactDir(t), "pane-"+map[bool]string{true: "far", false: "here"}[host != ""]+".txt"), []byte(screen), 0o644)
+		return uploadReplies(t, screen)
+	}
+
+	far := run("alpha")
+	for _, key := range []string{"i=10", "i=11", "i=12"} {
+		if a, ok := far[key]; !ok || !strings.HasPrefix(a.msg, "ENOTSUPPORTED:") {
+			t.Errorf("a pane on alpha uploaded the file %s and was answered %q, want ENOTSUPPORTED", key, a.msg)
+		}
+	}
+	here := run("")
+	if a := here["i=10"]; a.msg != "OK" {
+		t.Errorf("a pane on this machine uploaded a file that exists and was answered %q, want OK", a.msg)
+	}
+	if a := here["i=11"]; !strings.HasPrefix(a.msg, "ENOENT:") {
+		t.Errorf("a pane on this machine uploaded a missing file and was answered %q, want ENOENT", a.msg)
+	}
+}

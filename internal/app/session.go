@@ -1952,6 +1952,11 @@ func (m *OS) wireDaemonPTY(window *terminal.Window, subscribe func()) {
 		return m.DaemonClient.ResizePTY(ptyID, width, height)
 	}
 
+	// The daemon's emulator answers the guest's kitty uploads. This one's
+	// answers would be drained, and it must not open the files they name.
+	if window.Terminal != nil {
+		window.Terminal.SetKittyUploadAnswers(false)
+	}
 	window.StartDaemonResponseReader()
 
 	if window.Workspace == m.CurrentWorkspace {

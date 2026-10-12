@@ -79,6 +79,13 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 		if len(dataPart) <= maxKittyResponsePayload {
 			cmd.RawPayload = string(dataPart)
 		}
+		if kittyHasPNGHead(cmd) {
+			// The PNG header is in the first 33 bytes, 44 characters.
+			n := min(len(dataPart), 44) / 4 * 4
+			if head, err := DecodeKittyPayload(dataPart[:n]); err == nil {
+				cmd.pngHead = head
+			}
+		}
 		switch {
 		case kittyHeaderNamesObject(cmd, dataPart):
 			// The payload of a file medium transmission is only the
@@ -120,11 +127,22 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 				cmd.FilePath = string(decoded)
 			default:
 				cmd.Data = decoded
+				if kittyHasPNGHead(cmd) {
+					cmd.pngHead = decoded[:min(len(decoded), 33)]
+				}
 			}
 		}
 	}
 
 	return cmd, nil
+}
+
+// kittyHasPNGHead reports whether a command's payload starts a PNG the
+// emulator checks. See kittyPNGHeadError.
+func kittyHasPNGHead(cmd *KittyCommand) bool {
+	return (cmd.Action == KittyActionTransmit || cmd.Action == KittyActionTransmitPlace) &&
+		cmd.Format == KittyFormatPNG && cmd.Medium == KittyMediumDirect &&
+		cmd.Compression != KittyCompressionZlib
 }
 
 // DecodeKittyPayload decodes a kitty graphics payload, padded or not.

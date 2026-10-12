@@ -258,6 +258,17 @@ type Terminal interface {
 	// SetKittyHeaderOnly says whether the passthrough acts on the control
 	// keys alone, so the payload is not decoded. See ParseKittyHeader.
 	SetKittyHeaderOnly(on bool)
+	// SetKittyUploadAnswers says whether this emulator answers the guest's
+	// kitty uploads and placements. A client emulator of a daemon pane does
+	// not: the daemon's does. See KittyGuestImages.
+	SetKittyUploadAnswers(on bool)
+	// SetKittyFilesElsewhere says the pane runs on another machine, so a file
+	// it names for an upload is refused without a look at it.
+	SetKittyFilesElsewhere(on bool)
+	// KittyGuestImagesState and RestoreKittyGuestImages carry the ids given
+	// to kitty image numbers from the daemon to a client that attaches.
+	KittyGuestImagesState() *KittyGuestImagesState
+	RestoreKittyGuestImages(s *KittyGuestImagesState)
 	// SetKittyImageIDTranslator installs the guest-to-host image id mapping
 	// used for kitty Unicode placeholder cells. See kitty_placeholder.go.
 	SetKittyImageIDTranslator(fn KittyImageIDTranslator)

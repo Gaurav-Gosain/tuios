@@ -115,11 +115,9 @@ type KittyCommand struct {
 	// 32-bit build, so it needs its own width.
 	BackgroundColor uint32
 
-	// ReplacedImageID is set by KittyGuestImages on a transmission under an
-	// image number (I=) that was used before. It is the id the number named
-	// until now. The image keeps its placements, but no number names it any
-	// more.
-	ReplacedImageID uint32
+	// pngHead is the start of a PNG upload's first chunk, decoded, so the
+	// emulator can answer a corrupt one. See kittyPNGHeadError.
+	pngHead []byte
 
 	// otherKeys is set when the control data named a key other than the
 	// image, image number and placement ids, which are the only keys a reply

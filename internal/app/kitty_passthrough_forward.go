@@ -137,7 +137,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kittyPassthroughLog("ForwardCommand: dropping action=%c naming image number %d, which no image was sent under", cmd.Action, cmd.ImageNumber)
 		return nil
 	}
-	defer kp.freeRetiredNumbered(windowID)
 
 	// Remember what size the guest says this image is, on whichever path the
 	// bytes take. Only the first chunk of a chunked transmission carries s= and
@@ -1670,22 +1669,14 @@ func (kp *KittyPassthrough) placeCells(cmd *vt.KittyCommand, pixelW, pixelH int)
 	return kp.calculateImageCells(&sized)
 }
 
-// deleteAllWindowPlacements removes all placements for a window from the host terminal
-// and clears the placement tracking. If clearImageMap is true, also clears the imageIDMap.
-func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImageMap bool) {
+// deleteAllWindowPlacements removes all placements for a window from the host
+// terminal and clears the placement tracking. The images and their ids stay.
+func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string) {
 	for _, p := range kp.placements[windowID] {
 		kp.deleteOnePlacement(p)
 	}
 	kp.placements[windowID] = nil
 	kp.forgetBitmaps(windowID, 0)
-	if clearImageMap {
-		kp.imageIDMap[windowID] = nil
-		kp.forgetImagePixels(windowID, 0)
-		kp.forgetImageNumbers(windowID)
-		// The placeholder images go with the id map: once the guest ids are
-		// forgotten nothing can name these again.
-		kp.deleteVirtualImages(windowID)
-	}
 }
 
 func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string) {
@@ -1699,7 +1690,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 
 	switch cmd.Delete {
 	case vt.KittyDeleteAll, 0:
-		kp.deleteAllWindowPlacements(windowID, false)
+		kp.deleteAllWindowPlacements(windowID)
 
 	case vt.KittyDeleteByID:
 		// d=i takes the image's placements down and keeps its data, so
@@ -1744,16 +1735,40 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
 		}
 
+	case 'A':
+		// d=A frees every image as well. Each is deleted on the host, and
+		// its host id goes back for reuse. Forgetting the ids without that
+		// left the images on the host for good: nothing could name them
+		// any more, not even the window's close.
+		kp.freeWindowImages(windowID)
+
 	default:
-		// Handles DeleteOnScreen, DeleteAtCursor, DeleteAtCursorCell, and unknown types.
-		// For simplicity, all of these clear all placements and the imageID map.
+		// The rest delete placements by where they are: at the cursor, in
+		// a cell, a column, a row or a z-index. tuios takes every placement
+		// down, which covers those, and keeps the images and their ids, so
+		// the guest can place them again and the window's close still
+		// frees them.
 		if cmd.Delete != vt.KittyDeleteOnScreen &&
 			cmd.Delete != vt.KittyDeleteAtCursor &&
 			cmd.Delete != vt.KittyDeleteAtCursorCell {
-			kittyPassthroughLog("forwardDelete: UNHANDLED delete type=%c (%d), clearing all as fallback", cmd.Delete, cmd.Delete)
+			kittyPassthroughLog("forwardDelete: delete type=%c (%d) takes every placement down", cmd.Delete, cmd.Delete)
 		}
-		kp.deleteAllWindowPlacements(windowID, true)
+		kp.deleteAllWindowPlacements(windowID)
 	}
+}
+
+// freeWindowImages deletes every image of a window on the host and forgets
+// them, the way a guest's d=A asks.
+func (kp *KittyPassthrough) freeWindowImages(windowID string) {
+	kp.deleteAllWindowPlacements(windowID)
+	for _, hostID := range kp.imageIDMap[windowID] {
+		kp.releaseHostID(windowID, hostID)
+	}
+	kp.imageIDMap[windowID] = nil
+	kp.forgetImagePixels(windowID, 0)
+	kp.forgetFrameHashes(windowID)
+	kp.deleteRemoteVideoImages(windowID)
+	kp.deleteVirtualImages(windowID)
 }
 
 // rememberImagePixels records the pixel size a guest declared for one of its

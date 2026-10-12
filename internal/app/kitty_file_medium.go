@@ -32,10 +32,6 @@ import (
 //
 // A t=s name is a path only on Linux; see kittyMediumPath.
 
-// sensitiveDirs are the places no file medium may name. /dev/shm is the one
-// part of /dev that holds image data, and it is allowed.
-var sensitiveDirs = []string{"/proc", "/sys", "/dev"}
-
 // kittyMediumPath returns the path on this machine that cmd's file medium
 // names, or false when it must not be read or forwarded.
 func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool) {
@@ -81,7 +77,7 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		if filepath.Dir(resolved) != "/dev/shm" {
 			return "", false
 		}
-	} else if kittySensitivePath(resolved) {
+	} else if vt.KittySensitivePath(resolved) {
 		return "", false
 	}
 	info, err := os.Stat(resolved)
@@ -96,12 +92,12 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		}
 		// The kitty spec asks a t=t path to carry this text. Its clients
 		// always name their temporary files so.
-		if cmd.Medium == vt.KittyMediumTempFile && !strings.Contains(filepath.Base(resolved), kittyTempMarker) {
+		if cmd.Medium == vt.KittyMediumTempFile && !strings.Contains(filepath.Base(resolved), vt.KittyTempMarker) {
 			return "", false
 		}
 	}
 
-	if !kp.hostReadsFiles() && cmd.Medium != vt.KittyMediumSharedMemory && !kittyInTempDir(resolved) {
+	if !kp.hostReadsFiles() && cmd.Medium != vt.KittyMediumSharedMemory && !vt.KittyInTempDir(resolved) {
 		return "", false
 	}
 	return resolved, true
@@ -112,80 +108,4 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 func kittyShmHasPath() bool {
 	info, err := os.Stat("/dev/shm")
 	return err == nil && info.IsDir()
-}
-
-// kittySensitivePath reports whether path lies in a place no file medium may
-// name.
-func kittySensitivePath(path string) bool {
-	if path == "/dev/shm" || strings.HasPrefix(path, "/dev/shm/") {
-		return false
-	}
-	for _, dir := range sensitiveDirs {
-		if path == dir || strings.HasPrefix(path, dir+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-// kittyTempMarker is the text the kitty spec asks for in a t=t file name.
-const kittyTempMarker = "tty-graphics-protocol"
-
-// kittyFixedTempDirs are the temporary directories on every unix. A variable
-// so a test, whose own home is under /tmp, can take them away.
-var kittyFixedTempDirs = []string{"/tmp", "/dev/shm", "/var/tmp"}
-
-// kittyTempDirs lists the temporary directories: the fixed ones and TMPDIR.
-// TMPDIR is ignored when it is /, the home directory or a parent of it, since
-// that would make every file of the user a temporary one. Inside the home
-// directory it counts only under ~/tmp or ~/.tmp.
-func kittyTempDirs() []string {
-	dirs := append([]string(nil), kittyFixedTempDirs...)
-	tmp := os.Getenv("TMPDIR")
-	if tmp == "" || !filepath.IsAbs(tmp) {
-		return dirs
-	}
-	tmp = filepath.Clean(tmp)
-	if tmp == "/" {
-		return dirs
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		home = filepath.Clean(home)
-		if r, err := filepath.EvalSymlinks(home); err == nil {
-			home = r
-		}
-		t := tmp
-		if r, err := filepath.EvalSymlinks(t); err == nil {
-			t = r
-		}
-		if t == home || strings.HasPrefix(home, strings.TrimSuffix(t, "/")+"/") {
-			return dirs
-		}
-		// Inside the home directory, only ~/tmp and ~/.tmp count. Anywhere
-		// else there (~/.ssh, ~/.config) holds the user's own files.
-		if rel, err := filepath.Rel(home, t); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
-			first, _, _ := strings.Cut(rel, "/")
-			if first != "tmp" && first != ".tmp" {
-				return dirs
-			}
-		}
-	}
-	return append(dirs, tmp)
-}
-
-// kittyInTempDir reports whether path lies in a temporary directory: /tmp,
-// /var/tmp, /dev/shm, or the one TMPDIR names.
-func kittyInTempDir(path string) bool {
-	for _, dir := range kittyTempDirs() {
-		if dir == "" {
-			continue
-		}
-		if r, err := filepath.EvalSymlinks(dir); err == nil {
-			dir = r
-		}
-		if strings.HasPrefix(path, strings.TrimSuffix(dir, "/")+"/") {
-			return true
-		}
-	}
-	return false
 }

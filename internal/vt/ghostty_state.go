@@ -503,6 +503,34 @@ func (t *GhosttyTerminal) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, raw
 	t.kittyPassthroughFunc = fn
 }
 
+// SetKittyUploadAnswers: see Emulator.SetKittyUploadAnswers.
+func (t *GhosttyTerminal) SetKittyUploadAnswers(on bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kittyImages.SetAnswers(on)
+}
+
+// SetKittyFilesElsewhere: see Emulator.SetKittyFilesElsewhere.
+func (t *GhosttyTerminal) SetKittyFilesElsewhere(on bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kittyImages.SetFilesElsewhere(on)
+}
+
+// KittyGuestImagesState: see Emulator.KittyGuestImagesState.
+func (t *GhosttyTerminal) KittyGuestImagesState() *KittyGuestImagesState {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.kittyImages.State()
+}
+
+// RestoreKittyGuestImages: see Emulator.RestoreKittyGuestImages.
+func (t *GhosttyTerminal) RestoreKittyGuestImages(s *KittyGuestImagesState) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kittyImages.Restore(s)
+}
+
 // SetKittyHeaderOnly says whether the passthrough acts on the control keys
 // alone. See Emulator.SetKittyHeaderOnly.
 func (t *GhosttyTerminal) SetKittyHeaderOnly(on bool) {

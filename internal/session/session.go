@@ -2317,6 +2317,10 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	// payload of a frame that only the clients draw.
 	remotePane := sp.host != ""
 	terminal.SetKittyHeaderOnly(true)
+	// A file a pane on another machine names for an upload is a path over
+	// there. Checked here, the answer would tell that pane what files this
+	// machine has.
+	terminal.SetKittyFilesElsewhere(remotePane)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
 			if response := s.kittyQueryResponse(cmd, remotePane); response != nil {
@@ -4276,6 +4280,7 @@ func beginTerminalState(t vt.Terminal, width, height, maxScrollback, have int, p
 		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
 		// The main screen's stack, under a program on the alternate one.
 		KittyKbdMainStack: t.KittyKeyboardMainStack(),
+		KittyImages:       t.KittyGuestImagesState(),
 		// Set once by an editor at start, like the kitty flags, so it
 		// cannot be recovered from the output buffer either.
 		ModifyOtherKeys:      t.ModifyOtherKeys(),
@@ -4682,6 +4687,7 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// that attached under the program left the shell's flags behind when it
 	// quit.
 	t.RestoreKittyKeyboardMainStack(state.KittyKbdMainStack)
+	t.RestoreKittyGuestImages(state.KittyImages)
 	// modifyOtherKeys is the other way a guest asks for keys the legacy
 	// encoding cannot tell apart (vim sends CSI > 4 ; 2 m once at start). It
 	// is applied when it is off too: an emulator that survived a workspace
@@ -5108,11 +5114,16 @@ type TerminalState struct {
 	// KittyKbdMainStack is the main screen's kitty keyboard flag stack,
 	// carried only while the alternate screen is active, when KittyKbdStack
 	// is the alternate screen's.
-	KittyKbdMainStack    []int         `json:"kitty_kbd_main_stack,omitempty"`
-	ModifyOtherKeys      int           `json:"modify_other_keys,omitempty"`
-	ModifyOtherKeysKnown bool          `json:"modify_other_keys_known,omitempty"`
-	Screen               [][]CellState `json:"screen"`
-	Scrollback           [][]CellState `json:"scrollback,omitempty"`
+	KittyKbdMainStack []int `json:"kitty_kbd_main_stack,omitempty"`
+	// KittyImages is the ids the daemon gave the guest's kitty image numbers
+	// (I=), and which ids hold an image. A client restoring this gives the
+	// same ids from here on, so an image the guest places by the id it was
+	// told is the same image on every client. Nil from an older daemon.
+	KittyImages          *vt.KittyGuestImagesState `json:"kitty_images,omitempty"`
+	ModifyOtherKeys      int                       `json:"modify_other_keys,omitempty"`
+	ModifyOtherKeysKnown bool                      `json:"modify_other_keys_known,omitempty"`
+	Screen               [][]CellState             `json:"screen"`
+	Scrollback           [][]CellState             `json:"scrollback,omitempty"`
 	// MainScreen is the normal screen, carried only while the alternate one is
 	// active. It is the shell's screen underneath a full-screen program, which
 	// quitting that program puts back on display. The alternate screen needs no

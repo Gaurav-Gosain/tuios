@@ -72,7 +72,6 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 		kp.releaseHostID(windowID, hostID)
 	}
 	delete(kp.imageIDMap, windowID)
-	kp.forgetImageNumbers(windowID)
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
 	kp.deleteRemoteVideoImages(windowID)
@@ -144,8 +143,6 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	// window closed. A pager walked through a directory of pictures is exactly
 	// the case that accumulates them.
 	kp.deleteVirtualImages(windowID)
-	// The same holds for numbered images a newer upload replaced.
-	kp.freeRetiredNumbered(windowID)
 }
 
 func (m *OS) setupKittyPassthrough(window *terminal.Window) {

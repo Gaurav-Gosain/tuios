@@ -322,7 +322,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 			if guestImages[win] == nil {
 				guestImages[win] = &vt.KittyGuestImages{}
 			}
-			if !guestImages[win].Resolve(cmd) {
+			if !guestImages[win].Handle(cmd, nil) {
 				continue
 			}
 			raw := []byte("\x1b_G" + st.body + "\x1b\\")

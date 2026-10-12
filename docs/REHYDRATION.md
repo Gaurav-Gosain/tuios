@@ -14,7 +14,7 @@ records where the implementations differ.
 daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
-modifyOtherKeys level, the alternate-screen flag, the cells DECSCA protected,
+ids given to the guest's kitty image numbers, the modifyOtherKeys level, the alternate-screen flag, the cells DECSCA protected,
 the cursor DECSC saved on each screen, the character REP repeats, the tab
 stops, the titles and the title stack, the colours the guest set with OSC 4,
 10, 11 and 12, insert mode and newline mode, the sequence the parser is part

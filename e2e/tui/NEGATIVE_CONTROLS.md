@@ -5165,3 +5165,20 @@ the tests named.
 | A new id per upload, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberReupload` ("uploads under one number share a host id: 1, 1, 1") | **caught** |
 | The `PlacementID == 0` check on d=N, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberDeletePlacement` ("the p=3 placement never reached the host") | **caught** |
 | `forgetImagePixels` on every d=I, as before (the image loses its size when one placement goes) | `TestKittyImageNumberDeletePlacement` ("no p=3 placement with a cell count reached the host") | **caught** |
+
+### kitty image numbers, second review (#646)
+
+Run on 2026-10-12 on branch `fix/kitty-image-numbers`, after the second
+review of #646. Older images under a reused number now stay until the guest
+deletes them, as in kitty, so `freeRetiredNumbered` is gone and its row
+above names code that no longer exists. Each control cuts one thing from the
+fixed build and runs the test named.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `SetKittyFilesElsewhere(remotePane)` in `createPTY` (the daemon opens a far pane's file) | `TestKittyUploadFileFromAnotherMachine` ("a pane on alpha uploaded the file i=10 and was answered "OK", want ENOTSUPPORTED", the same for i=11 with ENOENT and i=12) | **caught** |
+| `O_NONBLOCK` in `kittyOpenRegular` | `TestKittyOpenRegularDoesNotWaitOnAFIFO` ("opening a FIFO waited for a writer") | **caught** |
+| `checkFileAsync` in `finishUpload` (the file is checked on the emulator's lock) | `TestKittyFileUploadIsCheckedOffTheLock` ("Handle waited for the file check, under the emulator's lock") | **caught** |
+| `RestoreKittyGuestImages` in `ApplyTerminalState` (a late client numbers images from the start) | `TestKittyImageIDsForALateClient` ("late client: the guest placed I=2 by the id it was told, and the host never placed image 1") | **caught** |
+| The `case 'A'` in `forwardDelete` (d=A takes placements down and frees nothing) | `TestKittyImagesFreedOnExitAndClose` ("the second run started with 5 images of the first still on the host") | **caught** |
+| The id map wiped again by the placement-only deletes in `forwardDelete` | `TestKittyImagesFreedOnExitAndClose` ("5 images are left on the host after both runs and the close") | **caught** |

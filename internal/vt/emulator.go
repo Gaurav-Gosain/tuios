@@ -1817,6 +1817,22 @@ func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []
 	e.kittyPassthroughFunc = fn
 }
 
+// SetKittyUploadAnswers says whether this emulator answers kitty uploads and
+// placements. See KittyGuestImages.
+func (e *Emulator) SetKittyUploadAnswers(on bool) { e.kittyImages.SetAnswers(on) }
+
+// SetKittyFilesElsewhere says the pane runs on another machine. See
+// KittyGuestImages.SetFilesElsewhere.
+func (e *Emulator) SetKittyFilesElsewhere(on bool) { e.kittyImages.SetFilesElsewhere(on) }
+
+// KittyGuestImagesState returns the ids given to the guest's image numbers,
+// for a client that attaches. Nil when there are none.
+func (e *Emulator) KittyGuestImagesState() *KittyGuestImagesState { return e.kittyImages.State() }
+
+// RestoreKittyGuestImages takes the daemon's ids for the guest's image
+// numbers. Nil leaves them as they are.
+func (e *Emulator) RestoreKittyGuestImages(s *KittyGuestImagesState) { e.kittyImages.Restore(s) }
+
 // SetKittyHeaderOnly says whether the passthrough acts on the control keys
 // alone. When it does, commands are parsed with ParseKittyHeader and the
 // passthrough gets a nil rawData.

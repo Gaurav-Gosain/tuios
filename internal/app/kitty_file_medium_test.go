@@ -168,9 +168,9 @@ func TestKittyShmNameWithSlashIsNotForwarded(t *testing.T) {
 // clears TMPDIR.
 func useKittyTempDirs(t *testing.T, dirs ...string) {
 	t.Helper()
-	prev := kittyFixedTempDirs
-	kittyFixedTempDirs = dirs
-	t.Cleanup(func() { kittyFixedTempDirs = prev })
+	prev := vt.KittyFixedTempDirs
+	vt.KittyFixedTempDirs = dirs
+	t.Cleanup(func() { vt.KittyFixedTempDirs = prev })
 	t.Setenv("TMPDIR", "")
 }
 
