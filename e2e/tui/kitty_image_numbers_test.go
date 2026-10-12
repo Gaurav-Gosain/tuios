@@ -125,7 +125,9 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 				case c.keys["a"] == "d" && c.keys["d"] == "I" && c.keys["p"] == "1":
 					deleted = i
 				case c.keys["a"] == "p" && c.keys["p"] == "3" && deleted >= 0:
-					placedAfter = true
+					// With no cell count the refresh pass takes the
+					// placement down again at once.
+					placedAfter = c.num("c") > 0 && c.num("r") > 0
 				}
 			}
 			if !placements["1"] || !placements["2"] {
@@ -135,7 +137,7 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 				t.Fatalf("d=N,I=2,p=1 never reached the host as a=d,d=I,i=%d,p=1", id)
 			}
 			if !placedAfter {
-				t.Errorf("after d=N with p=1, I=2 no longer named its image: the p=3 placement never reached the host")
+				t.Errorf("after d=N with p=1, I=2 no longer named its image, or lost its size: no p=3 placement with a cell count reached the host")
 			}
 		})
 	}

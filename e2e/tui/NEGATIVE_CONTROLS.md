@@ -5164,3 +5164,4 @@ the tests named.
 | The `kittyUploadFileError` call (every file upload answered OK) | `TestKittyUploadReply` ("the upload of a missing file was answered "OK", want ENOENT") | **caught** |
 | A new id per upload, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberReupload` ("uploads under one number share a host id: 1, 1, 1") | **caught** |
 | The `PlacementID == 0` check on d=N, now in `KittyGuestImages.Resolve` | `TestKittyImageNumberDeletePlacement` ("the p=3 placement never reached the host") | **caught** |
+| `forgetImagePixels` on every d=I, as before (the image loses its size when one placement goes) | `TestKittyImageNumberDeletePlacement` ("no p=3 placement with a cell count reached the host") | **caught** |

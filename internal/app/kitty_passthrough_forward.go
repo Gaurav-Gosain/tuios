@@ -1736,8 +1736,10 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			if cmd.PlacementID == 0 {
 				// Nothing is left on the host to free when the window goes.
 				delete(kp.virtualImages[windowID], hostID)
+				// The image is gone. With p= only one placement is, and
+				// the next a=p of the image still needs its size.
+				kp.forgetImagePixels(windowID, cmd.ImageID)
 			}
-			kp.forgetImagePixels(windowID, cmd.ImageID)
 			kp.forgetFrameHashes(windowID)
 			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
 		}
