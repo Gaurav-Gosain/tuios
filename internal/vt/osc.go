@@ -470,16 +470,45 @@ func StripControls(s string) string {
 // the cell back out, and a frame read back in, agree on the address.
 func LinkURI(s string) string { return hostLinkURI(StripControls(s)) }
 
-// LinkParams is a link's parameters made safe the same way: only printable
-// ASCII, and no ';', which would end them.
-func LinkParams(s string) string { return hostLinkParams(s) }
+// LinkParams is a link's parameters made safe the same way. A byte outside
+// printable ASCII, and ';', which would end them, is percent-encoded rather
+// than dropped, so id=链 and id=接 stay two ids.
+func LinkParams(s string) string { return hostLinkParams(StripControls(s)) }
+
+// MaxHostLinkURI is the longest address written to the host in an OSC 8, in
+// bytes as written. It is VTE's limit, and the one the scrollback ring keeps
+// links to. A longer link is drawn as plain text: the frame writes the address
+// again each time the link starts on a row, and an OSC payload can be 4 MiB.
+const MaxHostLinkURI = 2083
 
 // SetHostHyperlink returns the OSC 8 that opens a link in a frame written to
-// the host, with LinkURI and LinkParams applied. A cell the vt emulator filled
-// is already safe. A bare URL tuios finds in the text, and a cell from another
-// backend, may not be.
+// the host, with LinkURI and LinkParams applied, or "" for an address longer
+// than MaxHostLinkURI. A cell the vt emulator filled is already encoded. A
+// bare URL tuios finds in the text, and a cell from another backend, may not
+// be.
 func SetHostHyperlink(url, params string) string {
-	return ansi.SetHyperlink(LinkURI(url), LinkParams(params))
+	uri := LinkURI(url)
+	if len(uri) > MaxHostLinkURI {
+		return ""
+	}
+	return ansi.SetHyperlink(uri, LinkParams(params))
+}
+
+// LinkURIDecodedLen is the length in bytes of a LinkURI address with its
+// percent escapes decoded: the length of the address the program wrote.
+func LinkURIDecodedLen(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) && isHexByte(s[i+1]) && isHexByte(s[i+2]) {
+			i += 2
+		}
+		n++
+	}
+	return n
+}
+
+func isHexByte(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // hostLinkByte reports whether b may stand for itself in an OSC 8 written to
@@ -487,10 +516,13 @@ func SetHostHyperlink(url, params string) string {
 func hostLinkByte(b byte) bool { return b > 0x20 && b < 0x7f }
 
 // hostLinkURI percent-encodes every byte of s that hostLinkByte refuses.
-func hostLinkURI(s string) string {
+func hostLinkURI(s string) string { return percentEncode(s, hostLinkByte) }
+
+// percentEncode writes every byte of s that keep refuses as %XX.
+func percentEncode(s string, keep func(byte) bool) string {
 	n := 0
 	for i := 0; i < len(s); i++ {
-		if !hostLinkByte(s[i]) {
+		if !keep(s[i]) {
 			n++
 		}
 	}
@@ -501,7 +533,7 @@ func hostLinkURI(s string) string {
 	b := make([]byte, 0, len(s)+2*n)
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if hostLinkByte(c) {
+		if keep(c) {
 			b = append(b, c)
 			continue
 		}
@@ -510,25 +542,10 @@ func hostLinkURI(s string) string {
 	return string(b)
 }
 
-// hostLinkParams drops every byte of s that hostLinkByte refuses, and ';'.
+// hostLinkParams percent-encodes every byte of s that hostLinkByte refuses,
+// and ';'.
 func hostLinkParams(s string) string {
-	clean := true
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; !hostLinkByte(c) || c == ';' {
-			clean = false
-			break
-		}
-	}
-	if clean {
-		return s
-	}
-	b := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; hostLinkByte(c) && c != ';' {
-			b = append(b, c)
-		}
-	}
-	return string(b)
+	return percentEncode(s, func(c byte) bool { return hostLinkByte(c) && c != ';' })
 }
 
 // handleNotify9 handles OSC 9 (iTerm2 desktop notification): "9;<msg>".

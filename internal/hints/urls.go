@@ -1,6 +1,9 @@
 package hints
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // One URL detector serves every surface that finds an address in plain text:
 // the url hint, and the pointer's hover and click over a pane. They used to be
@@ -21,6 +24,11 @@ import "strings"
 //     closes a bracket opened before it, so it ends the URL. A balanced pair
 //     stays, which is what keeps "wiki/Go_(language)" whole.
 //   - Trailing sentence punctuation goes back to the sentence.
+//   - CJK and full-width punctuation ends a URL: the ideographic space and
+//     the CJK symbols block (U+3000-303F), and the full-width forms of ASCII
+//     punctuation (U+FF01-FF0F, U+FF1A-FF20). Chinese and Japanese text
+//     follows a URL with no space, so "https://a.com/x，这个" is the address
+//     and then a sentence. Other non-ASCII stays: an address can hold "中文".
 //   - A scheme with nothing after it is a word, not an address.
 
 // urlSchemes are the prefixes a match may start with, longest first where one
@@ -37,6 +45,14 @@ func urlStop(c byte) bool {
 		return true
 	}
 	return c < 0x20 || c == 0x7f
+}
+
+// urlStopRune reports whether r, a rune past ASCII, ends a URL. See the rules
+// at the top of the file.
+func urlStopRune(r rune) bool {
+	return (r >= 0x3000 && r <= 0x303f) ||
+		(r >= 0xff01 && r <= 0xff0f) ||
+		(r >= 0xff1a && r <= 0xff20)
 }
 
 // urlWordByte reports whether c, right before a scheme, makes the scheme the
@@ -69,6 +85,14 @@ scan:
 		c := s[e]
 		if urlStop(c) {
 			break
+		}
+		if c >= utf8.RuneSelf {
+			r, size := utf8.DecodeRuneInString(s[e:])
+			if urlStopRune(r) {
+				break
+			}
+			e += size - 1
+			continue
 		}
 		switch c {
 		case '(':

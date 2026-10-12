@@ -107,6 +107,10 @@ const internCap = 1 << 20
 // so without a bound a guest could leave one link of several megabytes open
 // and have every line it prints afterwards store a copy. A longer link
 // scrolls into the ring without its link.
+//
+// The emulator keeps an address percent-encoded (see LinkURI), which makes a
+// CJK character nine bytes where it was three. The bound is on the address
+// the program wrote, so the stored form is measured decoded.
 const (
 	maxStoredLinkURL    = 2083
 	maxStoredLinkParams = 256
@@ -370,7 +374,7 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 // A link past the stored bounds is written as no link.
 func (sb *Scrollback) appendLink(buf []byte, l uv.Link) []byte {
 	buf = append(buf, sbLink)
-	if l == (uv.Link{}) || len(l.URL) > maxStoredLinkURL || len(l.Params) > maxStoredLinkParams {
+	if l == (uv.Link{}) || LinkURIDecodedLen(l.URL) > maxStoredLinkURL || len(l.Params) > maxStoredLinkParams {
 		return append(buf, 0)
 	}
 	for k := range sb.lineLinks {

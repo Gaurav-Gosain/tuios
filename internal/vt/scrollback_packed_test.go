@@ -477,6 +477,10 @@ func TestScrollbackDropsAnOversizedLink(t *testing.T) {
 	}{
 		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL)}, true},
 		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL+1)}, false},
+		// The emulator keeps an address percent-encoded, so a CJK character
+		// is nine bytes stored. The bound is on the address as written.
+		{uv.Link{URL: strings.Repeat("%E6%8A%80", maxStoredLinkURL/3) + "u"}, true},
+		{uv.Link{URL: strings.Repeat("%E6%8A%80", maxStoredLinkURL/3) + "uu"}, false},
 		{uv.Link{URL: "u", Params: strings.Repeat("p", maxStoredLinkParams)}, true},
 		{uv.Link{URL: "u", Params: strings.Repeat("p", maxStoredLinkParams+1)}, false},
 	} {

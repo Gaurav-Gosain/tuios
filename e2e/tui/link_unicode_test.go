@@ -25,8 +25,12 @@ import (
 // address, as the OSC 8 spec asks. tuitest reads 8-bit controls the way the
 // hosts in the report do, so the broken frame shows here as the same overflow.
 
-// unicodeLinkURL is the address the pane prints. "术" carries the 0x9c byte.
+// unicodeLinkURL is the bare URL the pane prints. "术" carries the 0x9c byte.
 const unicodeLinkURL = "https://example.com/技术/方案"
+
+// unicodeMarkedURL is the OSC 8 link's address. It differs from the bare URL,
+// so the hover label naming it is not the bare URL's text read off the screen.
+const unicodeMarkedURL = "https://example.com/文档/技术"
 
 // percentEncodeHigh percent-encodes every byte of s outside printable ASCII,
 // the form the frame must carry.
@@ -104,7 +108,8 @@ func unicodeRowsStayInPane(t *testing.T, term *tuitest.Terminal, when string) (i
 // keeps the pane's width, focused and unfocused: its text is where the pane put
 // it and the pane's right border has not moved. The frame carries the bare
 // URL's address percent-encoded, and a ctrl+click still opens the address the
-// pane printed.
+// pane printed. The OSC 8 link's hover label shows its address decoded, and a
+// ctrl+click opens it encoded.
 //
 // Negative control, confirmed red (see NEGATIVE_CONTROLS.md): with the address
 // written raw into the OSC 8, the text after the URL and the border move.
@@ -119,7 +124,7 @@ func TestAUnicodeURLStaysInsideItsPane(t *testing.T) {
 	body := "#!/bin/sh\n" +
 		"printf 'R: a plain row\\n'\n" +
 		"printf 'U: " + unicodeLinkURL + " TAIL\\n'\n" +
-		"printf 'G: \\033]8;;" + unicodeLinkURL + "\\033\\\\label\\033]8;;\\033\\\\ END\\n'\n" +
+		"printf 'G: \\033]8;;" + unicodeMarkedURL + "\\033\\\\label\\033]8;;\\033\\\\ END\\n'\n" +
 		"printf 'UNI''DONE\\n'\n"
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
@@ -150,9 +155,20 @@ func TestAUnicodeURLStaysInsideItsPane(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// The link still opens the address the pane printed.
+	// The bare URL still opens the address the pane printed.
 	mouseClick(t, term, col+6, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{unicodeLinkURL}, "ctrl+click on a URL with Chinese characters")
+
+	// The OSC 8 link's hover label shows the address as the program wrote it,
+	// and a ctrl+click opens it in the encoded form tuios keeps.
+	gcol, grow := mustFind(t, term, "G: label")
+	mouseHover(t, term, gcol+5, grow)
+	if err := term.WaitForText(unicodeMarkedURL, uiTimeout); err != nil {
+		t.Errorf("the hover label does not show %q: %v\n%s", unicodeMarkedURL, err, term.Snapshot())
+	}
+	mouseClick(t, term, gcol+5, grow, tuitest.MouseLeft, tuitest.ModCtrl)
+	waitOpened(t, record, []string{unicodeLinkURL, percentEncodeHigh(unicodeMarkedURL)},
+		"ctrl+click on an OSC 8 link with Chinese characters")
 
 	// An unfocused pane is drawn by another path, the emulator's own renderer.
 	newWindow(t, term)

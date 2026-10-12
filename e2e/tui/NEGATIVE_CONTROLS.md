@@ -4740,8 +4740,19 @@ that reads 8-bit controls.
 | The whole fix removed | `origin/main` (`f56dd568`) | `TestAUnicodeURLStaysInsideItsPane` (focused: both rows start with the tail of the address, "TAIL" and "END" are moved, the right border is at column 94 instead of 89, and no frame carries the encoded address) | **caught** |
 | `renderTerminal` writes the bare URL's address raw (`ansi.SetHyperlink` in place of `vt.SetHostHyperlink`) | mutant of this branch | `TestAUnicodeURLStaysInsideItsPane` (focused: the bare URL's row moves and its border is at column 94) | **caught** |
 | `handleHyperlink` keeps the guest's address raw (`StripControls` in place of `LinkURI`) | mutant of this branch | `TestAUnicodeURLStaysInsideItsPane` (unfocused: the OSC 8 row starts with the tail of the address and "END" is moved) | **caught** |
-| The positive half | this branch | none: both rows keep their text and border in both states, the frame carries `https://example.com/%E6%8A%80%E6%9C%AF/%E6%96%B9%E6%A1%88`, and a ctrl+click opens `https://example.com/技术/方案` | **guard** |
+| The hover label shows the stored address (`linkDisplayAddress` cut from `renderLinkLabel`) | mutant of the review round | `TestAUnicodeURLStaysInsideItsPane` ("the hover label does not show `https://example.com/文档/技术`": it shows the `%E6...` form) | **caught** |
+| `handleHyperlink` keeps the guest's address raw, run again with the OSC 8 click | mutant of the review round | `TestAUnicodeURLStaysInsideItsPane` (the ctrl+click on the OSC 8 link opens `https://example.com/文档/技术`, not the encoded address) | **caught** |
+| The positive half | this branch | none: both rows keep their text and border in both states, the frame carries `https://example.com/%E6%8A%80%E6%9C%AF/%E6%96%B9%E6%A1%88`, a ctrl+click on the bare URL opens `https://example.com/技术/方案`, the OSC 8 link's label shows `https://example.com/文档/技术`, and a ctrl+click on it opens `https://example.com/%E6%96%87%E6%A1%A3/%E6%8A%80%E6%9C%AF` | **guard** |
 
 Not covered here: the same change in `frameRenderer` (`frame_render.go`) and in
 the ghostty backend's link readers. Every cell that reaches them in this
 fixture is already encoded, so cutting them changes nothing the test can see.
+
+Unit controls from the review round, outside this suite:
+
+- `TestScrollbackDropsAnOversizedLink` gained two rows for an encoded address
+  at the bound. With the ring measuring the stored bytes again (`len(l.URL)`
+  in `appendLink`), the row at the bound loses its link: **caught**.
+- `TestURLs` gained cases for full-width and CJK punctuation after a URL, and
+  `zh.wikipedia.org/wiki/中文`. With `urlStopRune` cut from `urlEnd`, six of
+  them fail and the Wikipedia case still passes: **caught**.

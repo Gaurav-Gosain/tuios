@@ -18,6 +18,9 @@ import (
 //     the tag with it.
 //   - It finds a scheme in the middle of a word, or a bare scheme with
 //     nothing after it.
+//   - It runs on into the Chinese or Japanese sentence after a URL, which
+//     follows with no space, or it stops at the first non-ASCII rune and cuts
+//     an address that holds one.
 //   - It misses the second of two URLs on one line, or the column test is
 //     wrong at either end of a match.
 //
@@ -54,6 +57,13 @@ func TestURLs(t *testing.T) {
 		{"ssh and ftp", "ssh://host/repo ftp://h/f", []string{"ssh://host/repo", "ftp://h/f"}},
 		{"non-ascii path", "https://example.com/café/文档", []string{"https://example.com/café/文档"}},
 		{"html closing tag only", "</p>", nil},
+		{"full-width comma ends it", "看https://example.com/docx/a1这个，定位", []string{"https://example.com/docx/a1这个"}},
+		{"ideographic full stop", "见https://example.com/a。下一句", []string{"https://example.com/a"}},
+		{"ideographic space", "https://example.com/a\u3000next", []string{"https://example.com/a"}},
+		{"corner bracket", "「https://example.com/a」です", []string{"https://example.com/a"}},
+		{"full-width parens", "（https://example.com/a）", []string{"https://example.com/a"}},
+		{"full-width colon and question", "https://example.com/a：https://example.com/b？", []string{"https://example.com/a", "https://example.com/b"}},
+		{"chinese wikipedia", "https://zh.wikipedia.org/wiki/中文 ok", []string{"https://zh.wikipedia.org/wiki/中文"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

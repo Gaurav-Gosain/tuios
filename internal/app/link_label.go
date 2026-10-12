@@ -62,7 +62,7 @@ func (m *OS) renderLinkLabel() *lipgloss.Layer {
 	pal := theme.UI()
 	renderW := m.GetRenderWidth()
 
-	body := overlay.Truncate(sanitizeLinkText(link.URL), linkLabelMax)
+	body := overlay.Truncate(sanitizeLinkText(linkDisplayAddress(link.URL)), linkLabelMax)
 	text := body
 	if hint := linkLabelHint(&m.Settings); hint != "" {
 		text += "  " + hint
