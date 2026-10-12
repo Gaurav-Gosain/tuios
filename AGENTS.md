@@ -99,6 +99,32 @@ docker build -t tuios .
 docker run -it --rm tuios
 ```
 
+### Go libraries in this repository
+
+Some parts of tuios are Go modules of their own, published under
+`tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
+that points the go command at the folder in this repository. The first is
+`progstatus/` (`tuios.dev/progstatus`).
+
+- `go.work` makes the app, `e2e/tui` and each library one workspace, so a
+  change to a library and to the app lands in one pull request. Never add a
+  `replace` for a library to `go.mod`: `go install .../cmd/tuios@vX` ignores
+  `go.work` and must resolve the library by its pin.
+- `go.mod` pins each library at a commit or a library tag. The pinned version
+  must hold the same files as the folder. After a change to a library folder,
+  commit it, then move the pin:
+
+  ```bash
+  GOWORK=off go get tuios.dev/progstatus@<commit>
+  scripts/library-pins.sh sync    # point go.work at the pin, tidy both modules
+  scripts/library-pins.sh check   # what CI and the release check
+  ```
+
+- `./...` from the root stops at a nested module. Name a library to test it:
+  `go test ./progstatus/...`.
+- A library tag has the folder as a prefix, such as `progstatus/v0.1.0`.
+  Tagging is the maintainer's call.
+
 ## Code Organization
 
 ```
@@ -155,7 +181,6 @@ tuios/
 │   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
-│   ├── progstatus/         # OSC 7501, the Program Status Protocol: parser, record store, encoder (docs/PROGRAM_STATUS.md)
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── tmuxcompat/         # The opt-in tmux shim (tuios tmux-shim) and its pane holder; see docs/TMUX_SHIM.md
 │   ├── shimlink/           # The tmux and herdr links that run tuios as another program
@@ -176,6 +201,7 @@ tuios/
 │   └── ui/                 # Animation system
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
+├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── pkg/                    # Embeddable facade (tuios), applist, fuzzy
 ├── docs/                   # Documentation
 │   ├── ARCHITECTURE.md     # Technical architecture diagrams

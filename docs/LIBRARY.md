@@ -2,6 +2,10 @@
 
 TUIOS can be imported and used as a library in your own Go applications. This allows you to embed a full-featured terminal window manager in your Bubble Tea applications.
 
+This page is about embedding the whole window manager. Smaller parts of tuios
+are Go modules of their own, such as `tuios.dev/progstatus`. See
+[the libraries section](https://tuios.dev/docs/libraries) on tuios.dev.
+
 ## Installation
 
 ```bash
