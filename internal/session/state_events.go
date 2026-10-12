@@ -64,8 +64,9 @@ type lifecycleSnapshot struct {
 }
 
 // snapshotLifecycle captures the lifecycle-relevant parts of state. The caller
-// must hold the session's state lock.
-func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
+// must hold the session's state lock. startDir is each window's fixed start
+// folder (Session.windowStartDir), or nil when none is known.
+func snapshotLifecycle(state *SessionState, startDir func(windowID string) string) lifecycleSnapshot {
 	snap := lifecycleSnapshot{index: make(map[string]int)}
 	if state == nil {
 		return snap
@@ -80,16 +81,16 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 		maps.DeleteFunc(snap.wsNames, func(ws int, _ string) bool { return IsScratchWorkspace(ws) })
 	}
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
-	worktreeRoot := ""
-	if state.Worktree != nil {
-		worktreeRoot = state.Worktree.Path
-	}
 	for i := range state.Windows {
 		w := &state.Windows[i]
-		root := worktreeRoot
-		if root == "" {
-			root = w.Cwd
+		// root is what the risk rules mark an unheld approval against
+		// (attention.go), so it is the fixed folder paneRoot gives, never
+		// w.Cwd: the pane moves that with cd or an OSC 7 it prints.
+		dir := ""
+		if startDir != nil {
+			dir = startDir(w.ID)
 		}
+		root := paneRoot(state.Worktree, dir)
 		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
 			id:            w.ID,

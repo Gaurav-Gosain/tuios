@@ -256,6 +256,11 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 	case SelectorName:
 		return glob(t.Name)
 	case SelectorCwd:
+		// t.Cwd is the folder the pane last reported, which the pane sets
+		// itself with cd or an OSC 7 it prints. A cwd: term only narrows
+		// which panes a caller addresses: every write to a matched pane is
+		// still checked on its own (resolveSelection, then the verb's own
+		// grant check). Never let it decide what a pane may do; use paneRoot.
 		if t.Cwd == "" {
 			return false
 		}

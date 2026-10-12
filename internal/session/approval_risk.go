@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
@@ -146,13 +148,58 @@ func planLineCount(plan string) int {
 	return strings.Count(plan, "\n") + 1
 }
 
-// paneRoot is where a pane's work is rooted: its session's worktree, else the
-// pane's working directory.
-func paneRoot(st *SessionState, w WindowState) string {
-	if st != nil && st.Worktree != nil && st.Worktree.Path != "" {
-		return st.Worktree.Path
+// paneRoot is the folder the risk rules hold a pane's calls to, and the
+// files grant holds its copies to: the session's worktree when tuios made it,
+// else the folder the window's first process started in (noteStartDir). Both
+// are fixed by the daemon, so nothing the pane does moves them.
+//
+// The pane's working folder is never used. The pane moves it with cd, or
+// names any folder with an OSC 7 it prints, so a pane at / would make every
+// path look inside. A worktree tuios did not make is not used either: it is
+// detected from the first window's working folder (refreshWorktree), so it
+// follows a cd into another repository.
+//
+// It is "" when there is no fixed folder, or when the folder is the home
+// folder or a folder above it, a file system root among them: such a folder
+// holds the person's whole account, so a limit to it means nothing. The risk
+// rules then read every absolute path as outside (risk.Call.Root), and the
+// files grant refuses the copy.
+func paneRoot(wt *WorktreeInfo, startDir string) string {
+	dir := ""
+	switch {
+	case wt != nil && wt.Managed && wt.Path != "":
+		dir = wt.Path
+	case startDir != "":
+		dir = startDir
+	default:
+		return ""
 	}
-	return w.Cwd
+	dir = filepath.Clean(dir)
+	if filepath.Dir(dir) == dir || holdsHome(dir) {
+		return ""
+	}
+	return dir
+}
+
+// wideRoots remembers holdsHome's answer by folder. paneRoot runs on every
+// state change (snapshotLifecycle), and the answer reads the file system.
+var wideRoots sync.Map
+
+// holdsHome reports whether dir is the home folder or a folder above it,
+// with symlinks resolved on both sides. With no home folder known, nothing
+// is too wide but a file system root.
+func holdsHome(dir string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	key := dir + "\x00" + home
+	if v, ok := wideRoots.Load(key); ok {
+		return v.(bool)
+	}
+	wide := pathUnder(filepath.Clean(home), dir) || pathUnder(realPath(home), realPath(dir))
+	wideRoots.Store(key, wide)
+	return wide
 }
 
 // errRiskUnacknowledged is an allow of a risky call without risk_ack naming

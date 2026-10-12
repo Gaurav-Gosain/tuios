@@ -5087,7 +5087,11 @@ that matched are the item's `risk`. That line is clipped and redacted, so a line
 that does not show the whole call also carries `cut short` in `risk`, which is
 acknowledged like a rule. A path in such a line is read only up to the `***`,
 or, for the last word of a clipped line, up to the `...` the clip adds. A
-`...` at any other place is part of the path. `outside the worktree` names a
+`...` at any other place is part of the path. `outside the worktree` measures
+from the pane's root: the session's worktree when tuios made it, else the
+folder the pane started in. A `cd` or an OSC 7 does not move it. A pane with
+no root, or a root of the home folder or above, has every absolute or `~` path
+read as outside. `outside the worktree` names a
 cut path only when the part the line shows already leaves the worktree. A
 Codex `apply_patch` line always carries `cut short`, because every patch
 starts with `*** Begin Patch`. A daemon that

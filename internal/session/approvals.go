@@ -643,7 +643,7 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		scope:       p.Scope,
 		tool:        p.Tool,
 		target:      p.Target,
-		root:        paneRoot(st, w),
+		root:        paneRoot(st.Worktree, sess.windowStartDir(w.ID)),
 		denyMessage: p.DenyMessage,
 	}
 	if isPlan {

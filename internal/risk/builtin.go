@@ -282,9 +282,6 @@ func infrastructure(c command, _ Call) bool {
 // writesOutside is the outside-the-worktree rule for a command: a redirect,
 // or a program that writes the files it names, pointing outside the root.
 func writesOutside(c command, call Call) bool {
-	if call.Root == "" {
-		return false
-	}
 	for _, w := range c.writes {
 		if outside(w, call) {
 			return true

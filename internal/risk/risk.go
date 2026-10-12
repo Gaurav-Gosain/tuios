@@ -30,8 +30,11 @@ type Call struct {
 	// Text is what the tool acts on: the command line for a shell tool, the
 	// path for a file tool.
 	Text string
-	// Root is the pane's worktree root, else its working directory. Empty
-	// turns the outside-the-worktree rule off.
+	// Root is the folder the pane's work is held to. It must be a folder
+	// the pane cannot move (see paneRoot in internal/session), never its
+	// working folder. Empty, or a file system root, means the pane has no
+	// such folder: every absolute path and every path under ~ is then read
+	// as outside, so the rule fails closed.
 	Root string
 	// Home is the home directory a leading ~ stands for.
 	Home string
@@ -265,7 +268,7 @@ func ParseSummary(line string) (tool, text string) {
 // it. A relative path is read as inside, since it is relative to where the
 // command runs. The null device and the terminal are never outside.
 func outside(path string, call Call) bool {
-	if call.Root == "" || path == "" {
+	if path == "" {
 		return false
 	}
 	path = strings.Trim(path, `"'`)
@@ -283,7 +286,7 @@ func outside(path string, call Call) bool {
 	case !strings.HasPrefix(path, "/"):
 		return false
 	}
-	root := filepath.Clean(call.Root)
+	root := fixedRoot(call.Root)
 	if shown, cut := shownPart(path, call); cut {
 		return shownOutside(shown, root)
 	}
@@ -291,10 +294,28 @@ func outside(path string, call Call) bool {
 	if slices.Contains(harmlessDevices, path) || strings.HasPrefix(path, "/dev/fd/") {
 		return false
 	}
+	if root == "" {
+		// No fixed folder: nothing absolute is inside.
+		return true
+	}
 	if path == root {
 		return false
 	}
-	return !strings.HasPrefix(path, root+string(filepath.Separator)) && root != "/"
+	return !strings.HasPrefix(path, root+string(filepath.Separator))
+}
+
+// fixedRoot is call.Root cleaned, or "" when there is none. A file system
+// root is no root at all: it would hold every path, so it is read as none and
+// the rule fails closed.
+func fixedRoot(root string) string {
+	if root == "" {
+		return ""
+	}
+	root = filepath.Clean(root)
+	if filepath.Dir(root) == root {
+		return ""
+	}
+	return root
 }
 
 // shownPart is the part of a path from a shown line that the line shows as
@@ -324,9 +345,14 @@ func shownPart(path string, call Call) (shown string, cut bool) {
 // to it, or when they are above it and the unfinished name cannot become the
 // next name on the way. An unfinished name that may still become ".." can
 // climb anywhere, so it is never outside for sure.
+//
+// With no root ("") every absolute start is outside.
 func shownOutside(shown, root string) bool {
-	if !strings.HasPrefix(shown, "/") || root == "/" {
+	if !strings.HasPrefix(shown, "/") {
 		return false
+	}
+	if root == "" {
+		return true
 	}
 	i := strings.LastIndex(shown, "/")
 	dir, name := filepath.Clean(shown[:i+1]), shown[i+1:]

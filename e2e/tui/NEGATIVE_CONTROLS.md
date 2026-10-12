@@ -4668,3 +4668,23 @@ that each assertion was seen to fail by itself.
 | `shown` returns its input | Plain run: stdout holds the raw `\x1b]0;PWNED\x07` in the list of skipped files | **caught** |
 | `shown` returns its input | Pane: the conflict question shows `ab.txt`, not the visible `a\x1b]0;PWNED\x07b.txt` | **caught** |
 | `shown` returns its input | Pane: the title of the pane becomes `PWNED` | **caught** |
+
+## The approval risk root is fixed
+
+On 2026-10-12 three controls cut the fixed root of the risk rules. Each built a
+binary and ran `TestRiskRootIsTheStartFolder` against it. The panes start in a
+plain folder. Six move: `cd` and an OSC 7 to `/`, to the folder above, or into a
+git worktree tuios did not make (detected as the session's worktree). Two start
+in the home folder. Each raises an Edit (reported) and a Bash `cp` (held) to a
+path outside its start folder. Controls A and B ran before the two home panes
+were added.
+
+| Control: what was cut | Assertion | Verdict |
+| --- | --- | --- |
+| A: the whole fix (`internal/risk` and `internal/session` back to #636's head: the root is the detected worktree, else the working folder, and an empty or `/` root marks nothing) | All six items are marked `[]` | **caught** |
+| B: the session side only (`paneRoot`, the lifecycle root and `paneFolder` back to #636's head; the `internal/risk` change kept) | The panes at `/` stay marked, since the rules now read `/` as no root. The held `cp` from the folder above and both writes in the detected worktree are marked `[]`. The reported Edit from the folder above stays marked: the lifecycle root read the stored folder, which only the detected worktree moved | **caught** |
+| C: `holdsHome` in `paneRoot` (a start folder of the home folder or above is a root) | Both home panes are marked `[]` | **caught** |
+
+`TestNoRootFailsClosed` (`internal/risk`) fails with the `internal/risk` change
+cut, and `TestPaneRootIsFixed` (`internal/session`) fails on its five home
+cases with `holdsHome` cut.

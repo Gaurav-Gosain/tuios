@@ -2913,7 +2913,18 @@ x; fi` and `(cd build && rm -rf out)` read as `rm`:
 | wide permissions | `chmod -R 777`, `chown -R` on `/` or `~` |
 | database | `DROP TABLE`, `DROP DATABASE`, `TRUNCATE TABLE`, in any case |
 | infrastructure | `terraform apply` or `destroy`, `kubectl delete`, `docker system prune`, `npm publish`, `cargo publish` |
-| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i` and the like naming an absolute or `~` path outside the pane's worktree root (else its working directory), or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside |
+| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i` and the like naming an absolute or `~` path outside the pane's root, or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside. See the pane's root below |
+
+The pane's root is fixed when tuios makes the pane, and nothing the pane does
+moves it:
+
+- The session's worktree, when tuios made it (`tuios worktree new`, a fan-out).
+- Else the folder the pane's first process started in.
+
+A `cd` or an OSC 7 does not move the root. A git worktree that tuios finds
+after a `cd` does not change it either. A pane with no root, or with a root of
+your home folder or a folder above it, has no limit. Then every absolute or
+`~` path counts as outside, and the call is marked.
 
 Add your own, or turn the shipped ones off, in the config:
 

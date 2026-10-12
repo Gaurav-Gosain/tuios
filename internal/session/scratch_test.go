@@ -322,7 +322,7 @@ func TestScratchWorkspaceRaisesNoWorkspaceEvent(t *testing.T) {
 		CurrentWorkspace: ScratchWorkspaceBase,
 		WorkspaceNames:   map[int]string{ScratchWorkspaceBase: "scratch"},
 	}
-	for _, ev := range diffLifecycle(snapshotLifecycle(before), snapshotLifecycle(after)) {
+	for _, ev := range diffLifecycle(snapshotLifecycle(before, nil), snapshotLifecycle(after, nil)) {
 		if ev.Type == EventWorkspaceRenamed || ev.Type == EventWorkspaceSwitched {
 			t.Fatalf("event %+v reports a scratch workspace", ev)
 		}

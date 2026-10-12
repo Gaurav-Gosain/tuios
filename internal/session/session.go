@@ -3028,7 +3028,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	}
 	state.BaseVersion = 0
 
-	before := snapshotLifecycle(prev)
+	before := snapshotLifecycle(prev, s.windowStartDir)
 	if prev != nil && !focusViewOf(prev).sameFocus(focusViewOf(state)) {
 		if s.clientFocusMoved == nil {
 			s.clientFocusMoved = make(map[string]int)
@@ -3107,7 +3107,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	before := snapshotLifecycle(s.state)
+	before := snapshotLifecycle(s.state, s.windowStartDir)
 	focusBefore := focusViewOf(s.state)
 	s.focusIntent, s.focusNeutral = false, false
 	if err := fn(s.state); err != nil {
@@ -3139,7 +3139,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 // safe because the sink only stamps a sequence number and does non-blocking
 // channel sends; it never re-enters the session.
 func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
-	events := diffLifecycle(before, snapshotLifecycle(s.state))
+	events := diffLifecycle(before, snapshotLifecycle(s.state, s.windowStartDir))
 	for _, ev := range events {
 		s.emit(ev)
 	}

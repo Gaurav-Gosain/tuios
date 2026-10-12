@@ -166,6 +166,34 @@ func TestBuiltinRules(t *testing.T) {
 	}
 }
 
+// TestNoRootFailsClosed is a security boundary: a pane with no fixed root,
+// or one whose root is a file system root, must not have its writes read as
+// inside. Before, an empty root turned the rule off and "/" held every path,
+// so a pane that named / as its folder made every write look safe.
+func TestNoRootFailsClosed(t *testing.T) {
+	for _, root := range []string{"", "/", "//"} {
+		for _, tc := range []struct {
+			tool, text string
+			shown      bool
+			want       []string
+		}{
+			{"Write", "/etc/hosts", false, []string{RuleOutsideWorktree}},
+			{"Edit", "~/.zshrc", false, []string{RuleOutsideWorktree}},
+			{"Bash", "echo x > /etc/motd", false, []string{RuleOutsideWorktree}},
+			{"Bash", "cp a /usr/local/bin/a", false, []string{RuleOutsideWorktree}},
+			{"Bash", "echo x > /etc/m***", true, []string{RuleOutsideWorktree}},
+			// Relative paths and the harmless devices stay inside.
+			{"Write", "main.go", false, nil},
+			{"Bash", "make >/dev/null 2>&1", false, nil},
+		} {
+			got := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, Home: "/home/me", Shown: tc.shown}))
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("root %q: Match(%q, %q) = %q, want %q", root, tc.tool, tc.text, got, tc.want)
+			}
+		}
+	}
+}
+
 func TestCustomRules(t *testing.T) {
 	kube, err := Custom("kubectl apply", []string{"Bash", "shell"}, `\bkubectl\s+(apply|delete)\b`)
 	if err != nil {

@@ -370,7 +370,7 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 		},
 		FocusedWindowID:  "gone",
 		CurrentWorkspace: 1,
-	})
+	}, nil)
 	after := snapshotLifecycle(&SessionState{
 		Windows: []WindowState{
 			{ID: "stays", PTYID: "pty-stays", Workspace: 2, CustomName: "named", Minimized: true},
@@ -378,7 +378,7 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 		},
 		FocusedWindowID:  "fresh",
 		CurrentWorkspace: 2,
-	})
+	}, nil)
 
 	var got []string
 	for _, ev := range diffLifecycle(before, after) {
@@ -403,10 +403,10 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 // event stream.
 func TestDiffLifecycleIgnoresNoise(t *testing.T) {
 	base := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 0, Y: 0, Width: 80, Height: 24}}
-	before := snapshotLifecycle(&SessionState{Windows: base, FocusedWindowID: "w", CurrentWorkspace: 1})
+	before := snapshotLifecycle(&SessionState{Windows: base, FocusedWindowID: "w", CurrentWorkspace: 1}, nil)
 
 	moved := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 10, Y: 5, Width: 40, Height: 12, Z: 3, IsAltScreen: true}}
-	after := snapshotLifecycle(&SessionState{Windows: moved, FocusedWindowID: "w", CurrentWorkspace: 1})
+	after := snapshotLifecycle(&SessionState{Windows: moved, FocusedWindowID: "w", CurrentWorkspace: 1}, nil)
 
 	if events := diffLifecycle(before, after); len(events) != 0 {
 		t.Fatalf("geometry/z/alt-screen changes raised events: %+v", events)
@@ -421,12 +421,12 @@ func TestDiffLifecycleIgnoresShellTitle(t *testing.T) {
 		Windows:          []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "bash"}},
 		FocusedWindowID:  "w",
 		CurrentWorkspace: 1,
-	})
+	}, nil)
 	after := snapshotLifecycle(&SessionState{
 		Windows:          []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "vim"}},
 		FocusedWindowID:  "w",
 		CurrentWorkspace: 1,
-	})
+	}, nil)
 
 	if events := diffLifecycle(before, after); len(events) != 0 {
 		t.Fatalf("shell title change raised events: %+v", events)
@@ -502,7 +502,7 @@ func TestDiffLifecycleAttentionDetail(t *testing.T) {
 	win := func(state AgentState, kind, msg string) lifecycleSnapshot {
 		return snapshotLifecycle(&SessionState{Windows: []WindowState{{
 			ID: "w", PTYID: "p", Workspace: 1, AgentState: state, AgentKind: kind, AgentMessage: msg, CompletionSeq: 2,
-		}}})
+		}}}, nil)
 	}
 	events := diffLifecycle(win(AgentStateNeedsInput, "question", "which branch?"), win(AgentStateNeedsInput, "approval", "which branch?"))
 	if len(events) != 1 || events[0].Type != eventAttentionDetail || events[0].hookKind != "approval" {
