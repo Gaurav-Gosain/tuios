@@ -5429,3 +5429,33 @@ is `~/.cache/agent-tmp/proof/v2/wave4/review/negative-controls-bridge.txt`.
 
 All 43 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch (`~/.cache/agent-tmp/proof/v2/wave4/review/bridge-suite.txt`).
+
+## The GUI bridge on main: stacks under a stale push, the viewport, and typing under latest
+
+Main defaults `window_size` to `latest`, and its session view is on for a
+session smaller than the client too. Three things in the bridge did not hold
+there. `TestGUIBridgeStack` failed in three of four runs: a stack edit pushed
+just after another change came back with the collapsed member open. The
+bridge sent a viewport for a session smaller than the renderer. And typing in
+the renderer never made the GUI the latest client.
+
+`TestGUIBridgeSessionSize` now sets `window_size = "smallest"`, the policy it
+is about. `TestGUIBridgeInputTakesTheSession` is the default: a terminal
+client that attaches last takes the session's size, the bridge sends no
+viewport while the session is smaller than it, and typing through the bridge
+takes the size back while the terminal client shows a part.
+`TestReconcileStaleKeepsAStackEditsMinimized` in `internal/session` is the
+deterministic half of the stack race: the stale merge of a stack, a
+stack-open and an unstack, and a pane in no stack.
+
+Each control below was run on 2026-10-12 on branch `feat/gui-bridge`, rebased
+on main. The log is `~/.cache/agent-tmp/gui-port/proof/`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The stale merge takes the daemon's flag for a stack member | `reconcileStale`: the stack condition made `true` | `TestGUIBridgeStack` (2 of 4 runs: charlie's title row not in bravo's columns), `TestReconcileStaleKeepsAStackEditsMinimized` (all three stack cases) | **caught** |
+| Any session view is a crop | `CurrentSessionView`: the `ViewCropped` check cut | `TestGUIBridgeSessionSize`, `TestGUIBridgeInputTakesTheSession` (viewport set for a smaller session) | **caught** |
+| Renderer input is not activity | `readCommands`: the `reportInput` call cut | `TestGUIBridgeInputTakesTheSession` (the session stayed at the terminal client's size) | **caught** |
+
+All 44 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
+pass on the branch.
