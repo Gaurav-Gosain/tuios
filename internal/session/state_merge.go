@@ -425,7 +425,16 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 		}
 		win.CustomName = cw.CustomName
 		win.Workspace = cw.Workspace
-		win.Minimized = cw.Minimized
+		// A stack member's minimized flag says which member is open, and it
+		// goes with the tree op the same client sent for the edit, which the
+		// daemon took (tree ops are never stale). The stack key and order
+		// come from the push as well. Taking canonical's flag here split the
+		// two: a stack edit pushed just after another change came back with
+		// the member it collapsed open and with no tile, and every client's
+		// tiler gave it a new tile beside the stack.
+		if win.Stack == "" && cw.Stack == "" {
+			win.Minimized = cw.Minimized
+		}
 		seen[win.ID] = true
 		kept = append(kept, win)
 	}
