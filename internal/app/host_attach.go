@@ -67,6 +67,10 @@ type hostDial struct {
 	// sshAuthSock is the agent socket of the client the dial replaces. See
 	// session.TUIClient.SSHAuthSock.
 	sshAuthSock string
+	// kind, served and viewOnly are the replaced client's Kind, Served and
+	// ViewOnly, so a served or read-only client stays one on the new machine.
+	kind             string
+	served, viewOnly bool
 }
 
 func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
@@ -75,6 +79,9 @@ func (m *OS) hostDialFor(host, name string, create, global bool) hostDial {
 		reserve:     m.DaemonClient.OwnLayoutReserve(),
 		version:     m.DaemonClient.ClientVersion(),
 		sshAuthSock: m.DaemonClient.SSHAuthSock,
+		kind:        m.DaemonClient.Kind,
+		served:      m.DaemonClient.Served,
+		viewOnly:    m.DaemonClient.ViewOnly,
 		width:       m.Width, height: m.Height,
 		caps: m.clientCapabilities(),
 	}
@@ -88,6 +95,7 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 	client.SetOwnLayoutReserve(d.reserve)
 	client.StartDir = d.cwd
 	client.SSHAuthSock = d.sshAuthSock
+	client.Kind, client.Served, client.ViewOnly = d.kind, d.served, d.viewOnly
 	var err error
 	if d.host == federation.LocalHostName {
 		err = client.ConnectWithCapabilities(d.version, d.width, d.height, d.caps)

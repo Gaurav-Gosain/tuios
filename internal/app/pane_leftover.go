@@ -39,9 +39,12 @@ type leftoverKey struct {
 	w, h   int
 	x0, y0 int // the strip's screen origin, which the dot phase follows
 	hint   string
-	ascii  bool
-	dot    color.Color
-	text   color.Color
+	// textX and textW are the columns of the strip the hint is written in:
+	// the whole strip, less any rail drawn over it.
+	textX, textW int
+	ascii        bool
+	dot          color.Color
+	text         color.Color
 }
 
 // leftoverCache keeps one strip's content across frames: the strips change
@@ -108,29 +111,63 @@ func (m *OS) renderLeftover(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	}
 	pal := theme.GroundUI()
 	hint := m.leftoverHint()
-	// The hint goes in the right strip when it is wide enough, else in the
-	// bottom one.
+	// The hint goes in the right strip when the part of it no rail covers is
+	// wide enough, else in the bottom one.
+	rx, rw := m.leftoverTextSpan(right)
+	bx, bw := m.leftoverTextSpan(bottom)
 	rightHint, bottomHint := "", ""
 	switch {
-	case right.Dx() >= leftoverHintMinWidth:
+	case rw >= leftoverHintMinWidth:
 		rightHint = hint
-	case bottom.Dx() >= leftoverHintMinWidth:
+	case bw >= leftoverHintMinWidth:
 		bottomHint = hint
 	}
 	base := leftoverKey{ascii: m.Settings.UseASCIIOnly, dot: pal.FgMute, text: pal.FgDim}
 	if !right.Empty() {
 		k := base
 		k.w, k.h, k.x0, k.y0, k.hint = right.Dx(), right.Dy(), right.Min.X, right.Min.Y, rightHint
+		k.textX, k.textW = rx, rw
 		layers = append(layers, lipgloss.NewLayer(m.leftoverRight.content(k)).
 			X(right.Min.X).Y(right.Min.Y).Z(leftoverZ).ID(leftoverRightID))
 	}
 	if !bottom.Empty() {
 		k := base
 		k.w, k.h, k.x0, k.y0, k.hint = bottom.Dx(), bottom.Dy(), bottom.Min.X, bottom.Min.Y, bottomHint
+		k.textX, k.textW = bx, bw
 		layers = append(layers, lipgloss.NewLayer(m.leftoverBottom.content(k)).
 			X(bottom.Min.X).Y(bottom.Min.Y).Z(leftoverZ).ID(leftoverBottomID))
 	}
 	return layers
+}
+
+// leftoverTextSpan is the part of a strip no rail covers, as the column it
+// starts at inside the strip and its width. A rail opened over the panes for
+// the keyboard is out of the reserve, so it can sit on the strip, and the
+// hint under it would be cut. The rails are at the screen's edges, so what
+// is left is one run of columns.
+func (m *OS) leftoverTextSpan(strip image.Rectangle) (x, w int) {
+	left, right := strip.Min.X, strip.Max.X
+	rw := m.GetRenderWidth()
+	cut := func(railX, railW int) {
+		if railW <= 0 || railX >= right || railX+railW <= left {
+			return
+		}
+		if railX <= left {
+			left = max(left, railX+railW)
+		} else {
+			right = min(right, railX)
+		}
+	}
+	cut(sidebarEdgeX(m.legacySidebarEdge(), m.GetSidebarWidth(), rw), m.GetSidebarWidth())
+	opposite := sidebarRight
+	if m.legacySidebarEdge() == sidebarRight {
+		opposite = sidebarLeft
+	}
+	cut(sidebarEdgeX(opposite, m.secondarySidebarWidth(), rw), m.secondarySidebarWidth())
+	if right <= left {
+		return 0, 0
+	}
+	return left - strip.Min.X, right - left
 }
 
 // content is the strip's text for key, built again only when key changed.
@@ -155,7 +192,7 @@ func leftoverBody(k leftoverKey) string {
 
 	var hintLines []string
 	if k.hint != "" {
-		wrapped := lipgloss.NewStyle().Width(k.w - 4).Render(k.hint)
+		wrapped := lipgloss.NewStyle().Width(k.textW - 4).Render(k.hint)
 		for line := range strings.SplitSeq(wrapped, "\n") {
 			hintLines = append(hintLines, strings.TrimRight(line, " "))
 		}
@@ -190,12 +227,12 @@ func leftoverBody(k leftoverKey) string {
 			if i >= 0 && i < len(hintLines) {
 				text = hintLines[i]
 			}
-			out.WriteString(pattern(0, 1))
+			out.WriteString(pattern(0, k.textX+1))
 			out.WriteString(" ")
-			body := textStyle.Render(text)
-			out.WriteString(body)
-			pad := k.w - 2 - lipgloss.Width(text)
+			out.WriteString(textStyle.Render(text))
+			pad := k.textW - 2 - lipgloss.Width(text)
 			out.WriteString(strings.Repeat(" ", max(pad, 0)))
+			out.WriteString(pattern(k.textX+k.textW, k.w))
 		default:
 			out.WriteString(pattern(0, k.w))
 		}

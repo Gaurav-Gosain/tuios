@@ -445,6 +445,11 @@ func (m *OS) pointerOverLeftover(x, y int) bool {
 		m.Renaming() || m.CaptureActive() || m.ReviewOpen() || m.ShowScrollbackBrowser {
 		return false
 	}
+	// A rail opened over the panes for the keyboard (OwnLayoutReserve leaves
+	// it out of the reserve) can sit on the leftover. It is the rail's.
+	if m.SidebarBandContains(x, y) {
+		return false
+	}
 	return !m.PiPAt(x, y)
 }
 

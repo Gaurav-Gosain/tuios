@@ -191,9 +191,12 @@ func (m *OS) handleHostReconnectTick(msg hostReconnectTickMsg) tea.Cmd {
 	version := m.clientVersionForReconnect()
 	caps := m.clientCapabilities()
 	reserve := m.ownLayoutReserveForReconnect()
-	agent := ""
+	agent, kind := "", ""
+	served, viewOnly := false, false
 	if m.DaemonClient != nil {
 		agent = m.DaemonClient.SSHAuthSock
+		// A served or read-only client stays one after the reconnect.
+		kind, served, viewOnly = m.DaemonClient.Kind, m.DaemonClient.Served, m.DaemonClient.ViewOnly
 	}
 	return func() tea.Msg {
 		client := session.NewTUIClient()
@@ -202,6 +205,7 @@ func (m *OS) handleHostReconnectTick(msg hostReconnectTickMsg) tea.Cmd {
 		// not detach the other clients under single_client.
 		client.Reconnect = true
 		client.SSHAuthSock = agent
+		client.Kind, client.Served, client.ViewOnly = kind, served, viewOnly
 		if _, err := client.ConnectThroughHost(host, version, width, height, caps); err != nil {
 			_ = client.Close()
 			return hostReconnectResultMsg{gen: gen, err: err}

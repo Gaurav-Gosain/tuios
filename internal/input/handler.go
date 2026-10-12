@@ -28,8 +28,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// in the session's layout frame. See app.MapPointer.
 	msg = o.MapPointer(msg)
 	defer o.SetPointerInLayout(false)
-	// A mouse event on the dots a smaller session leaves acts on nothing.
+	// A mouse event on the dots a smaller session leaves acts on nothing. A
+	// release still ends the announcement hold its press armed, as every
+	// release does below.
 	if o.PointerSwallowed() {
+		if _, ok := msg.(tea.MouseReleaseMsg); ok {
+			o.ReleaseGestureAnnouncements()
+		}
 		return o, nil
 	}
 
