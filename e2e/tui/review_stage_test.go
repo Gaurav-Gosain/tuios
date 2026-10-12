@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -335,4 +336,60 @@ func TestReviewDiffHighlight(t *testing.T) {
 	if !comment {
 		t.Errorf("the comment line has no comment span: %s", res.Result)
 	}
+}
+
+// TestReviewStageKeepsToTheNonceScope: a presence made for one session proves
+// the person for acts in that session only (docs/protocol.md, "Nonce
+// scope"). review-stage checks the nonce against the session of the pane it
+// stages in, as review-note does. With a presence for rs, a stage in a pane of
+// rs goes through, and a stage in a pane of other, in the same repository, is
+// refused as not_human and leaves the index as it was.
+func TestReviewStageKeepsToTheNonceScope(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	file := filepath.Join(repo, "list.txt")
+	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, repo, "add", "list.txt")
+	testutil.Git(t, repo, "commit", "-q", "-m", "list")
+	if err := os.WriteFile(file, []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"rs", "other"} {
+		if out, err := tuiosCLIIn(t, base, repo, "new", name, "--detach"); err != nil {
+			t.Fatalf("new session %s in the repository: %v: %s", name, err, out)
+		}
+	}
+	cached := func() string { return testutil.Git(t, repo, "diff", "--cached") }
+
+	c := dialFileVerbs(t, base)
+	var pres struct {
+		Nonce string `json:"human_nonce"`
+	}
+	c.must("attach-presence", map[string]any{"session": "rs"}, &pres)
+	stage := func(session string) error {
+		_, err := c.call("review-stage", map[string]any{"session": session, "action": "stage", "path": "list.txt", "human_nonce": pres.Nonce})
+		return err
+	}
+	record := map[string]any{}
+	err := stage("other")
+	record["stage in other"] = errString(err)
+	var vf *verbFailure
+	if !errors.As(err, &vf) || vf.Code != "not_human" {
+		t.Errorf("ASSERTION: a presence for rs staged in other: %v", err)
+	}
+	if got := cached(); got != "" {
+		t.Errorf("ASSERTION: the index changed after the refused stage:\n%s", got)
+	}
+	err = stage("rs")
+	record["stage in rs"] = errString(err)
+	if err != nil {
+		t.Errorf("ASSERTION: a presence for rs could not stage in rs: %v", err)
+	}
+	if got := cached(); !strings.Contains(got, "+two") {
+		t.Errorf("ASSERTION: the stage in rs left the index without +two:\n%s", got)
+	}
+	saveTransferArtifact(t, "review-stage-nonce-scope", record)
 }
