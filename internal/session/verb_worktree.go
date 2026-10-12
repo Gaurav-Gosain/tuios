@@ -163,6 +163,12 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 		Base:    base,
 		Managed: true,
 	}
+	// Where the branch starts, so list-worktrees can tell a branch with
+	// commits of its own from a fresh one. A failure leaves it empty, and the
+	// listing falls back to the merge base.
+	if start, err := worktree.HeadCommit(path); err == nil {
+		info.StartCommit = start
+	}
 	if record != nil {
 		record(info)
 	}
@@ -303,6 +309,14 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 				if n, err := worktree.Ahead(wt.Path, wt.Base); err == nil {
 					row["ahead"] = n
 				}
+			}
+			// Merged into its base, or into the base's upstream. Cached per
+			// tip in the worktree package, so a polled listing runs git
+			// again only when a branch moves.
+			into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.StartCommit, wt.Base)
+			row["merged"] = into != ""
+			if into != "" {
+				row["merged_into"] = into
 			}
 		}
 		rows = append(rows, row)

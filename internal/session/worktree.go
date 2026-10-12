@@ -26,6 +26,11 @@ type WorktreeInfo struct {
 	worktree.Info
 	// Base is the ref the branch was created from, when tuios created it.
 	Base string `json:"base,omitempty"`
+	// StartCommit is the commit the branch was at when tuios made the
+	// worktree. list-worktrees counts the branch's own commits from it, so a
+	// branch with none never reads as merged. Empty on a record from before
+	// the field, and on a detected worktree.
+	StartCommit string `json:"start_commit,omitempty"`
 	// Group names the fan-out this session belongs to: the branch stem the
 	// siblings share. Empty for a worktree made on its own.
 	Group string `json:"group,omitempty"`

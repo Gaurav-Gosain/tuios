@@ -47,6 +47,8 @@ type worktreeRow struct {
 	Agent        string   `json:"agent"`
 	Changes      *int     `json:"changes"`
 	Ahead        *int     `json:"ahead"`
+	Merged       bool     `json:"merged"`
+	MergedInto   string   `json:"merged_into,omitempty"`
 	PR           *ghpr.PR `json:"pr,omitempty"`
 }
 
@@ -131,7 +133,10 @@ directory on the host instead.`,
 		Long: `List every session whose directory is a git worktree.
 
 Each row shows the session, repository, branch, the agent state in it, how
-many uncommitted changes it holds, and what became of a fan prompt. A row
+many uncommitted changes it holds, whether its branch is merged, and what
+became of a fan prompt. A branch is merged when it has commits of its own and
+its base, or the upstream of its base, already holds all of them. A merge
+commit, a fast-forward, a rebase and a squash all count. No fetch is run. A row
 marked gone is a session whose worktree directory was removed under it. The
 session is kept, so what the agent printed can still be read.`,
 		Example: `  tuios worktree ls
@@ -582,9 +587,13 @@ func renderWorktreeTable(rows []worktreeRow) string {
 		if badge := r.PR.Badge(); badge != "" {
 			pr = plainLine(strings.TrimPrefix(badge, "PR "))
 		}
-		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, prompt, pr, status})
+		merged := "-"
+		if r.Merged {
+			merged = "into " + r.MergedInto
+		}
+		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, merged, prompt, pr, status})
 	}
-	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "PROMPT", "PR", "STATUS"}, cells)
+	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "MERGED", "PROMPT", "PR", "STATUS"}, cells)
 }
 
 // renderTable draws a listing with the border and colours of the session
