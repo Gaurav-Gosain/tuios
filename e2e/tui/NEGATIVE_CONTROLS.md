@@ -5590,6 +5590,7 @@ Each control below was run on 2026-10-12 on branch
 | --- | --- | --- | --- |
 | The body is lost | `frameWriter.push`: the second entry not queued | `TestGUIBridgeFloodArrivesWhole` (no output reached the renderer) | **caught** |
 | The body goes before its head | `frameWriter.push`: the two entries swapped | `TestGUIBridgeFloodArrivesWhole` (the last line of seq never arrived) | **caught** |
+
 ## Staging by hunk and by line (review-stage)
 
 `review_stage_test.go` has one test, `TestReviewStageByHunkAndLine`. It runs
@@ -5611,3 +5612,18 @@ against it. It failed where shown, and passed on the branch build.
 | Control: what was cut | Where it failed |
 | --- | --- |
 | The `reviewHighlight` call in the review-diff handler | both `func` lines have no `hl` keyword span and no `changed` range |
+
+### review-stage on main: the nonce scope (replaces #605)
+
+Main binds a nonce to the session of the act: a presence made for one
+session proves the person for that session only. review-stage checks the
+nonce against the session of the pane it stages in, as review-note does.
+`TestReviewStageKeepsToTheNonceScope` stages with a presence for `rs` in a
+pane of `rs`, and is refused as `not_human` in a pane of `other`.
+
+The control was run on 2026-10-12 on branch `feat/gui-review-stage`. The log
+is `~/.cache/agent-tmp/gui-port/proof/nc-review.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The nonce is checked for no session | `verbReviewStage`: `reviewAuthorOf` given `""` in place of `sess.ID` | `TestReviewStageKeepsToTheNonceScope` (the presence for `rs` could not stage in `rs`) | **caught** |
