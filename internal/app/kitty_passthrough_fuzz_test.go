@@ -135,7 +135,12 @@ func decodeKittySteps(in []byte) []kittyStep {
 		payload := base64.StdEncoding.EncodeToString(px)
 		ids := ""
 		if id != 0 {
-			ids = ",i=" + strconv.Itoa(int(id))
+			// By id, or by number as cbirds names its images.
+			key := ",i="
+			if b1&0x20 != 0 {
+				key = ",I="
+			}
+			ids = key + strconv.Itoa(int(id))
 		}
 		var body string
 		switch b2 % 13 {
@@ -146,7 +151,7 @@ func decodeKittySteps(in []byte) []kittyStep {
 		case 2:
 			body = "a=p" + ids + ",c=" + strconv.Itoa(int(b3%5)) + ",r=" + strconv.Itoa(int(b3>>4%5))
 		case 3:
-			body = "a=d,d=" + string("aAiIpPcCzZ"[int(b3)%10]) + ids
+			body = "a=d,d=" + string("aAiIpPcCzZnN"[int(b3)%12]) + ids
 		case 4:
 			// The first chunk of a chunked transmission.
 			half := len(payload) / 8 * 4
@@ -188,6 +193,10 @@ func FuzzKittyPassthrough(f *testing.F) {
 	// Both panes place an image, then a refresh, a clear and a close.
 	f.Add([]byte{0x02, 0x05, 0x00, 0x10, 0x03, 0x05, 0x00, 0x20, 0x02, 0x00, 0x0c, 0x03,
 		0x03, 0x00, 0x0b, 0x00, 0x02, 0x00, 0x0a, 0x00, 0x03, 0x00, 0x0c, 0x01})
+	// Pane A sends image number 1 twice, placing each, then deletes all
+	// placements, which frees the first, and deletes by number.
+	f.Add([]byte{0x02, 0x20, 0x00, 0x10, 0x02, 0x20, 0x00, 0x20, 0x02, 0x00, 0x03, 0x00,
+		0x02, 0x20, 0x02, 0x00, 0x02, 0x20, 0x03, 0x0b})
 
 	f.Fuzz(func(t *testing.T, in []byte) {
 		steps := decodeKittySteps(in)
@@ -253,6 +262,10 @@ func FuzzKittyPassthrough(f *testing.F) {
 			}
 			return out
 		}
+		// uploadID is the id of the transmission each pane has open, so a
+		// reply to its last chunk, which names no image itself, can be
+		// matched to the id its first chunk gave.
+		uploadID := map[string]uint32{}
 		for n, st := range steps {
 			win := wins[st.win]
 			kp.mu.Lock()
@@ -317,6 +330,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 			if bad != "" {
 				t.Fatalf("step %d (%s %q): host got %s", n, win[:6], st.body, bad)
 			}
+			deleted := map[uint64]bool{}
 			for _, body := range apcs {
 				m := apcImageID.FindStringSubmatch(body)
 				if m == nil {
@@ -330,14 +344,32 @@ func FuzzKittyPassthrough(f *testing.F) {
 					t.Fatalf("step %d: %s sent %q and the host got image id %d, which tuios never allocated to that pane (owner %q):\n%q",
 						n, win[:6], st.body, hostID, got, body)
 				}
+				if apcFreesImage.MatchString(body) {
+					deleted[hostID] = true
+				}
+			}
+			// A numbered image a newer upload replaced is freed during a
+			// command, as a close frees its pane's images.
+			for id := range freeIDs() {
+				if deleted[uint64(id)] {
+					delete(owner, uint64(id))
+				}
+			}
+			want := cmd.ImageID
+			if cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace {
+				if want != 0 {
+					uploadID[win] = want
+				} else {
+					want = uploadID[win]
+				}
 			}
 			for _, r := range replies {
 				m := regexp.MustCompile(`\x1b_Gi=([0-9]+)`).FindSubmatch(r)
 				if m == nil {
 					continue
 				}
-				if got, _ := strconv.ParseUint(string(m[1]), 10, 32); uint32(got) != cmd.ImageID {
-					t.Fatalf("step %d: a reply to %s's %q names image %d, the guest used %d", n, win[:6], st.body, got, cmd.ImageID)
+				if got, _ := strconv.ParseUint(string(m[1]), 10, 32); uint32(got) != want {
+					t.Fatalf("step %d: a reply to %s's %q names image %d, the guest used %d", n, win[:6], st.body, got, want)
 				}
 			}
 		}

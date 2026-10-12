@@ -114,6 +114,7 @@ func (kp *KittyPassthrough) ForwardCommand(
 		kittyPassthroughLog("ForwardCommand: dropping action=%c with an undecodable payload: %v", cmd.Action, cmd.PayloadErr)
 		delete(kp.pendingDirectData, windowID)
 		delete(kp.directFrames, windowID)
+		delete(kp.uploadReplies, windowID)
 		if isTransmit && cmd.More {
 			if kp.discardingChunks == nil {
 				kp.discardingChunks = make(map[string]bool)
@@ -136,6 +137,10 @@ func (kp *KittyPassthrough) ForwardCommand(
 	if !ok {
 		kittyPassthroughLog("ForwardCommand: dropping action=%c naming image number %d, which no image was sent under", cmd.Action, cmd.ImageNumber)
 		return nil
+	}
+	defer kp.freeRetiredNumbered(windowID)
+	if isTransmit {
+		kp.answerUpload(cmd, windowID, ptyInput)
 	}
 
 	// Remember what size the guest says this image is, on whichever path the
@@ -407,6 +412,15 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	hostY := pending.WindowY + pending.ContentOffsetY + pending.CursorY
 
 	contentWidth, contentHeight := pending.ContentCols, pending.ContentRows
+
+	// A PNG usually comes without s= and v=, as its size is in its own
+	// header. Without it the placement below had no cells, and the refresh
+	// pass never put an a=T PNG on the host.
+	if (pending.Width <= 0 || pending.Height <= 0) && pending.Format == vt.KittyFormatPNG {
+		if w, h, ok := pngSize(pending.Data, pending.Compression == vt.KittyCompressionZlib); ok {
+			pending.Width, pending.Height = w, h
+		}
+	}
 
 	// Calculate image cell dimensions
 	imgRows := pending.Rows

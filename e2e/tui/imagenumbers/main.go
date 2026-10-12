@@ -1,16 +1,23 @@
 // Command imagenumbers stands in for a guest that names its kitty images by
-// number (I=) and never by id (i=), the way cbirds --render kitty does:
-// every image is transmitted once as a PNG under I=, and every frame is a
-// synchronized update that deletes all placements (d=a) and places each image
-// again by its number at a cursor position.
+// number (I=) and not by id (i=), the way cbirds --render kitty does.
 //
-// Two images go out by number: I=7 is 40x40 pixels and I=9 is 30x60. One more,
-// 20x20, goes out by id (i=5) and is placed by id, as a guest that uses ids
-// does. After two frames the guest frees I=9 by number (d=N) and keeps the
-// rest on screen.
+// Usage: imagenumbers [MODE]
 //
-// Nothing is sent with q= other than 2, as cbirds sends it, so no answer is
-// expected.
+// MODE is one of:
+//
+//   - frames (the default): two PNGs go out by number, I=7 at 40x40 pixels
+//     and I=9 at 30x60, and one by id, i=5 at 20x20. Two frames follow, each a
+//     synchronized update that deletes all placements (d=a) and places each
+//     image again. Then the guest frees I=9 by number (d=N).
+//   - reupload: three uploads under I=1, at 40x40, 30x60 and 20x20. The first
+//     two are placed as they go (a=T) at rows 1 and 11. The third is not
+//     placed. Then d=a takes every placement down.
+//   - delplace: one upload under I=2, placed twice (p=1 and p=2). Then d=N
+//     with p=1 deletes one placement, and a=p places the image again (p=3).
+//   - reply: uploads that ask for an answer, and some that do not. The guest
+//     reads its input for a while and prints each answer as a REPLY line.
+//
+// Every command in the first three modes carries q=2, as cbirds sends it.
 package main
 
 import (
@@ -21,7 +28,9 @@ import (
 	"image/color"
 	"image/png"
 	"os"
+	"os/exec"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 )
@@ -41,6 +50,29 @@ func pngOf(w, h int, shade byte) string {
 }
 
 func main() {
+	mode := "frames"
+	if len(os.Args) > 1 && os.Args[1] != "" {
+		mode = os.Args[1]
+	}
+	switch mode {
+	case "reupload":
+		reupload()
+	case "delplace":
+		delplace()
+	case "reply":
+		reply()
+	default:
+		frames()
+	}
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	select {
+	case <-stop:
+	case <-time.After(60 * time.Second):
+	}
+}
+
+func frames() {
 	out := os.Stdout
 	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,I=7,m=0;%s\x1b\\", pngOf(40, 40, 200))
 	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,I=9,m=0;%s\x1b\\", pngOf(30, 60, 90))
@@ -56,11 +88,82 @@ func main() {
 	}
 	_, _ = out.WriteString("\x1b_Ga=d,d=N,I=9,q=2\x1b\\")
 	_, _ = out.WriteString("\x1b[10;1HIMAGENUMBERS-DONE\r\n")
+}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	select {
-	case <-stop:
-	case <-time.After(60 * time.Second):
+func reupload() {
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b[1;1H\x1b_Ga=T,q=2,f=100,I=1,C=1,m=0;%s\x1b\\", pngOf(40, 40, 200))
+	_, _ = fmt.Fprintf(out, "\x1b[11;1H\x1b_Ga=T,q=2,f=100,I=1,C=1,m=0;%s\x1b\\", pngOf(30, 60, 90))
+	time.Sleep(time.Second)
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,I=1,m=0;%s\x1b\\", pngOf(20, 20, 40))
+	time.Sleep(500 * time.Millisecond)
+	_, _ = out.WriteString("\x1b_Ga=d,d=a,q=2\x1b\\")
+	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
+}
+
+func delplace() {
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,I=2,m=0;%s\x1b\\", pngOf(40, 40, 200))
+	_, _ = out.WriteString("\x1b[2;2H\x1b_Ga=p,I=2,p=1,q=2,C=1\x1b\\")
+	_, _ = out.WriteString("\x1b[2;20H\x1b_Ga=p,I=2,p=2,q=2,C=1\x1b\\")
+	time.Sleep(300 * time.Millisecond)
+	_, _ = out.WriteString("\x1b_Ga=d,d=N,I=2,p=1,q=2\x1b\\")
+	_, _ = out.WriteString("\x1b[2;40H\x1b_Ga=p,I=2,p=3,q=2,C=1\x1b\\")
+	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
+}
+
+// reply sends uploads with every quiet level, by number and by id, and one
+// in two chunks, then prints each answer the terminal gave. Kitty answers
+// I=3, i=4 and I=6, and no other.
+func reply() {
+	raw := exec.Command("stty", "raw", "-echo")
+	raw.Stdin = os.Stdin
+	if err := raw.Run(); err != nil {
+		fmt.Printf("IMAGENUMBERS-ERR stty: %v\r\n", err)
+		return
 	}
+	defer func() {
+		sane := exec.Command("stty", "sane")
+		sane.Stdin = os.Stdin
+		_ = sane.Run()
+	}()
+
+	out := os.Stdout
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=3;%s\x1b\\", pngOf(8, 8, 1))
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,i=4;%s\x1b\\", pngOf(8, 8, 2))
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=5,q=1;%s\x1b\\", pngOf(8, 8, 3))
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,i=8,q=2;%s\x1b\\", pngOf(8, 8, 4))
+	chunked := pngOf(8, 8, 5)
+	cut := len(chunked) / 8 * 4
+	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,f=100,I=6,m=1;%s\x1b\\", chunked[:cut])
+	_, _ = fmt.Fprintf(out, "\x1b_Gm=0;%s\x1b\\", chunked[cut:])
+
+	got := make(chan []byte, 64)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := os.Stdin.Read(buf)
+			if n > 0 {
+				got <- append([]byte(nil), buf[:n]...)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	var in []byte
+	deadline := time.After(2 * time.Second)
+read:
+	for {
+		select {
+		case b := <-got:
+			in = append(in, b...)
+		case <-deadline:
+			break read
+		}
+	}
+	for _, m := range regexp.MustCompile(`\x1b_G([^\x1b]*)\x1b\\`).FindAllSubmatch(in, -1) {
+		_, _ = fmt.Fprintf(out, "\r\nREPLY %s", m[1])
+	}
+	_, _ = out.WriteString("\r\nIMAGENUMBERS-DONE\r\n")
 }

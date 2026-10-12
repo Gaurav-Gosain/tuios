@@ -5134,3 +5134,17 @@ fails on origin/main with the same messages.
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The `resolveImageNumber` call in `ForwardCommand` (I= reaches the host as the guest wrote it) | `TestKittyImageNumbers` (standalone and daemon: "an image number reached the host", "image I=7 (40x40) never reached the host") | **caught** |
+
+### kitty image numbers review (#646)
+
+Run on 2026-10-12 on branch `fix/kitty-image-numbers`, after the review of
+#646. Each control cuts one thing from the fixed build and runs the test
+named, standalone and daemon.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| A new id per upload (an upload under a known number reuses its id) | `TestKittyImageNumberReupload` ("uploads under one number share a host id: 1, 1, 1") | **caught** |
+| The `freeRetiredNumbered` call in `ForwardCommand` | `TestKittyImageNumberReupload` ("host image 1 lost its placements and was not freed") | **caught** |
+| The PNG size read in the a=T path of `forwardTransmit` | `TestKittyImageNumberReupload` ("the two placed uploads under I=1 were never on the host at once") | **caught** |
+| The `answerUpload` call in `ForwardCommand` | `TestKittyUploadReply` ("the upload I=3 got no answer", the same for i=4 and I=6) | **caught** |
+| The `PlacementID == 0` check on d=N (the number is dropped on every d=N) | `TestKittyImageNumberDeletePlacement` ("the p=3 placement never reached the host") | **caught** |

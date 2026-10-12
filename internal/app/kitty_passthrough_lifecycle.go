@@ -144,6 +144,8 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	// window closed. A pager walked through a directory of pictures is exactly
 	// the case that accumulates them.
 	kp.deleteVirtualImages(windowID)
+	// The same holds for numbered images a newer upload replaced.
+	kp.freeRetiredNumbered(windowID)
 }
 
 func (m *OS) setupKittyPassthrough(window *terminal.Window) {
