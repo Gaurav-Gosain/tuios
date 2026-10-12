@@ -4447,3 +4447,12 @@ control cuts one thing from the fixed build and runs
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
 | The `m.liveShortcuts(static)` call in `rebuildPaletteItems` | `TestPaletteShortcutsFollowKeybinds` ("global-unbound: the \"Run a program\" row shows \"alt+space\", want \"prefix+a\"") | **caught** |
+### Terminal mode border colour (#642)
+
+Run on 2026-10-12 on branch `fix/terminal-mode-border-colour`. The control cuts
+one thing from the fixed build and runs `TestTerminalModeRecolorsTheFocusedBorder`.
+The test is also run on `origin/main`, where it fails the same way.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `borderStale` always false (the cached layer is not keyed on the border colour) | `TestTerminalModeRecolorsTheFocusedBorder` ("the focused border kept the window mode colour #AFFFFF after entering terminal mode") | **caught** |

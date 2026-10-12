@@ -222,7 +222,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			zIndex += scratchBackdropZ
 		}
 
-		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
+		// A layer drawn with another border colour is stale whatever the dirty
+		// flags say: a mode switch, a focus change or a session tint recolours
+		// the border without touching the pane. Keying the layer on the colour
+		// covers every path that changes one of those, so none of them has to
+		// remember to invalidate the cache (#642).
+		borderStale := window.CachedLayer != nil && !sameColor(window.CachedLayerBorder, borderColorObj)
+
+		if window.CachedLayer != nil && !borderStale && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			if renderTraceEnabled {
 				traceLayerHold(window, isFocused, "clean")
 			}
@@ -245,7 +252,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// arrives when the guest closes sync renders the finished screen. Only
 		// hold when nothing but content changed (position/z match the cache).
 		if window.Terminal != nil && window.Terminal.IsSyncActive() &&
-			window.CachedLayer != nil &&
+			window.CachedLayer != nil && !borderStale &&
 			window.CachedLayer.GetX() == window.X &&
 			window.CachedLayer.GetY() == window.Y &&
 			window.CachedLayer.GetZ() == zIndex {
@@ -261,7 +268,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			continue
 		}
 
-		needsRedraw := window.CachedLayer == nil ||
+		needsRedraw := window.CachedLayer == nil || borderStale ||
 			window.Dirty || window.ContentDirty || window.PositionDirty ||
 			window.CachedLayer.GetX() != window.X ||
 			window.CachedLayer.GetY() != window.Y ||
@@ -300,6 +307,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		}
 
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
+		window.CachedLayerBorder = borderColorObj
 		layers = append(layers, window.CachedLayer)
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
@@ -1325,4 +1333,15 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 	kittyPassthroughLog("GetKittyGraphicsCmd: flushing %d bytes, preview=%q", len(data), preview)
 	m.KittyPassthrough.WriteToHost(data)
 	return nil
+}
+
+// sameColor reports whether a and b are the same colour. Two nil colours are
+// the same, and a nil colour differs from every other one.
+func sameColor(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }

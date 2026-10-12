@@ -4,6 +4,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"log"
 	"os"
 	"os/exec"
@@ -149,6 +150,12 @@ type Window struct {
 	PositionDirty bool
 	CachedContent string
 	CachedLayer   *lipgloss.Layer
+	// CachedLayerBorder is the border colour CachedLayer was drawn with. The
+	// border colour depends on things outside the pane (focus, the input mode,
+	// the session tint), so the renderer reuses the layer only while the colour
+	// it wants matches this one. Issue #642: entering terminal mode on an idle
+	// pane kept the window mode border until the guest drew something.
+	CachedLayerBorder color.Color
 	// reportKey names the OSC 10 and 11 answer the emulator was last given.
 	// Written on the UI goroutine only. See SetReportColors.
 	reportKey string
