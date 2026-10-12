@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -83,7 +84,10 @@ func (m *OS) worktreePromptField(field worktreeField, label string, width int, p
 		}
 	}
 
-	marker, ink := " ", pal.FgDim
+	// The inactive marker is padded to the sigil's width so the labels sit in
+	// one column whether or not the field has the keyboard; the sigil is two
+	// cells, a bare space would leave the inactive label one cell to the left.
+	marker, ink := strings.Repeat(" ", lipgloss.Width(overlay.Sigil())), pal.FgDim
 	if active {
 		marker, ink = overlay.Sigil(), pal.Fg
 	}
@@ -118,8 +122,14 @@ func labelPad(label string) string {
 // every other path in these dialogs, so the tail — the name the rail's group
 // header shows — is the part that survives.
 func (m *OS) worktreePromptContext(width int) string {
-	root := truncPathLeft(shortenHome(m.worktreePrompt.RepoRoot), max(width-16, 1))
-	return "Worktree of " + printableTitle(m.worktreePromptRepo()) + " (" + root + ")"
+	// The budget is what the path may take of the line, so the tail — the
+	// part that names the checkout — survives the truncation and the line
+	// still closes its paren. dialogBodyLine spends one cell on its leading
+	// space and truncates to width-1, so the composed line is one short of
+	// the width it is handed.
+	prefix := "Worktree of " + printableTitle(m.worktreePromptRepo()) + " ("
+	root := truncPathLeft(shortenHome(m.worktreePrompt.RepoRoot), max(width-lipgloss.Width(prefix)-2, 1))
+	return prefix + root + ")"
 }
 
 // worktreePromptNote is the standing hint under the fields, for whichever one

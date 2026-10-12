@@ -4887,3 +4887,4 @@ cut is to the wiring, and the logs are `/tmp/wt-ctl-<name>.log`.
 | `repo-carry`: `handleRepoNewWorktree` reads `TakeMenuSession` instead of `TakeMenuRepo` | `TestRailRightClickMakesAWorktree` ("the menu row did not open the dialog") | **caught** |
 | `wrap-create`: the verb's error is returned without `failed to create the worktree` | `TestRailWorktreeRefusals` ("the daemon's refusal did not say which step failed") | **caught** |
 | `route-key`: the `WorktreePromptOpen` route cut from `routeKey` | both ("did not derive the session name", "did not refuse an empty branch") | **caught** |
+| `attach`: the `SwitchToSession` call cut from `handleWorktreeCreated` | `TestRailRightClickMakesAWorktree` ("the rail never showed the created worktree as the attached session") | **caught** |
