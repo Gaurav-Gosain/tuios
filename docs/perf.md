@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 35,565,730 | 35,700,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 33,463,378 | 33,600,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 35,672,226 | 35,900,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 33,564,050 | 33,800,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2534,6 +2534,12 @@ the send and drop flows. On origin/main at b228b387 (34,840,738 and
 643,072 and 609,088 bytes more. Rebased on 377bc074, after pane-view, it
 measured 35,565,730 and 33,463,378. The compression is compress/flate, which the
 binary held already. No dependency was added.
+
+They went on to 35,900,000 and 33,800,000 with the review fixes of #636 (the
+pane's start folder, the os.Root for a pane's copy, the escaping of far names
+in the CLI and of C1 controls in the daemon's lines) and main's rail options.
+Rebased on e70a72fe the build measured 35,672,226 and 33,564,050 bytes on Go
+1.26.9, which left under 40 KB of room.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
