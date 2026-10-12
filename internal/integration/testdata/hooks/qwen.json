@@ -2,7 +2,7 @@
   {
     "name": "SessionStart",
     "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1", "source": "startup", "cwd": "/src", "transcript_path": "/tmp/qw-1.jsonl"},
-    "want": {"state": "idle", "agent_session_id": "qw-1", "transcript_path": "/tmp/qw-1.jsonl"}
+    "want": {"agent_cwd": "/src", "state": "idle", "agent_session_id": "qw-1", "transcript_path": "/tmp/qw-1.jsonl"}
   },
   {
     "name": "SessionStart on resume",

@@ -46,9 +46,11 @@ type lifecycleWindow struct {
 	// program rides along for the attention queue too: a pane whose state
 	// comes from OSC 7501 is named by its id as well as its title.
 	program bool
-	// root rides along for the risk rules: the session's worktree root, else
-	// the window's working directory.
-	root string
+	// worktree and agentSession ride along for the risk rules: the
+	// session's worktree when tuios made it, and the window's agent session
+	// id. The sink turns them into the approval root (windowApprovalRoot),
+	// off this snapshot, since that reads the file system.
+	worktree, agentSession string
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -64,9 +66,8 @@ type lifecycleSnapshot struct {
 }
 
 // snapshotLifecycle captures the lifecycle-relevant parts of state. The caller
-// must hold the session's state lock. startDir is each window's fixed start
-// folder (Session.windowStartDir), or nil when none is known.
-func snapshotLifecycle(state *SessionState, startDir func(windowID string) string) lifecycleSnapshot {
+// must hold the session's state lock.
+func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	snap := lifecycleSnapshot{index: make(map[string]int)}
 	if state == nil {
 		return snap
@@ -81,16 +82,9 @@ func snapshotLifecycle(state *SessionState, startDir func(windowID string) strin
 		maps.DeleteFunc(snap.wsNames, func(ws int, _ string) bool { return IsScratchWorkspace(ws) })
 	}
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
+	worktree := managedWorktreePath(state.Worktree)
 	for i := range state.Windows {
 		w := &state.Windows[i]
-		// root is what the risk rules mark an unheld approval against
-		// (attention.go), so it is the fixed folder paneRoot gives, never
-		// w.Cwd: the pane moves that with cd or an OSC 7 it prints.
-		dir := ""
-		if startDir != nil {
-			dir = startDir(w.ID)
-		}
-		root := paneRoot(state.Worktree, dir)
 		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
 			id:            w.ID,
@@ -106,7 +100,8 @@ func snapshotLifecycle(state *SessionState, startDir func(windowID string) strin
 			agentKind:     agentBlockedBy(*w),
 			completionSeq: w.CompletionSeq,
 			program:       len(w.ProgramStatus) > 0,
-			root:          root,
+			worktree:      worktree,
+			agentSession:  w.AgentSessionID,
 		})
 	}
 	return snap
@@ -205,7 +200,8 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookMessage:   w.agentMessage,
 
 				hookKind:          w.agentKind,
-				hookRoot:          w.root,
+				hookWorktree:      w.worktree,
+				hookAgentSession:  w.agentSession,
 				hookProgram:       w.program,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: prev.completionSeq,
@@ -226,7 +222,8 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookMessage:   w.agentMessage,
 
 				hookKind:          w.agentKind,
-				hookRoot:          w.root,
+				hookWorktree:      w.worktree,
+				hookAgentSession:  w.agentSession,
 				hookProgram:       w.program,
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: w.completionSeq,

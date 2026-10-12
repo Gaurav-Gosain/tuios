@@ -290,7 +290,32 @@ func writesOutside(c command, call Call) bool {
 	args := c.args()
 	ops := operands(args)
 	switch c.name() {
+	case "curl":
+		if anyOutside(flagValues(args, "o", "--output"), call) {
+			return true
+		}
+	case "wget":
+		if anyOutside(flagValues(args, "O", "--output-document"), call) || anyOutside(flagValues(args, "P", "--directory-prefix"), call) {
+			return true
+		}
+	case "tar":
+		short, long := flags(args)
+		if (strings.Contains(short, "x") || slices.Contains(long, "--extract") || slices.Contains(long, "--get")) &&
+			anyOutside(flagValues(args, "C", "--directory"), call) {
+			return true
+		}
+	case "git":
+		// git clone <repository> <folder>: the folder is written.
+		if len(ops) >= 3 && ops[0] == "clone" {
+			dir := ops[len(ops)-1]
+			if !strings.Contains(dir, "://") && !strings.Contains(dir, "@") && outside(dir, call) {
+				return true
+			}
+		}
 	case "cp", "mv", "ln", "install", "rsync":
+		if anyOutside(flagValues(args, "", "--target-directory"), call) {
+			return true
+		}
 		// The destination is the last operand.
 		if len(ops) >= 2 && outside(ops[len(ops)-1], call) {
 			return true
@@ -319,4 +344,43 @@ func writesOutside(c command, call Call) bool {
 		}
 	}
 	return false
+}
+
+// anyOutside reports whether any of paths is outside the root.
+func anyOutside(paths []string, call Call) bool {
+	return slices.ContainsFunc(paths, func(p string) bool { return outside(p, call) })
+}
+
+// flagValues are the values given to a flag that takes one: -o X, -oX (short
+// is the letter, "" for none), --output X and --output=X (long).
+func flagValues(args []string, short, long string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return out
+		case long != "" && a == long:
+			if i+1 < len(args) {
+				out = append(out, args[i+1])
+				i++
+			}
+		case long != "" && strings.HasPrefix(a, long+"="):
+			out = append(out, strings.TrimPrefix(a, long+"="))
+		case short != "" && strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 1:
+			// The letter may close a bundle (-xzC dir) or carry its value
+			// (-oFILE).
+			j := strings.Index(a[1:], short)
+			if j < 0 {
+				continue
+			}
+			if rest := a[1+j+1:]; rest != "" {
+				out = append(out, rest)
+			} else if i+1 < len(args) {
+				out = append(out, args[i+1])
+				i++
+			}
+		}
+	}
+	return out
 }

@@ -224,7 +224,7 @@ type approvalHold struct {
 	// tool and target are the call the risk rules read, as the hook named
 	// it. Empty when the hook did not.
 	tool, target string
-	// root is the pane's fixed root (paneRoot) when the hold began: where
+	// root is the pane's fixed root (approvalRoot) when the hold began: where
 	// the outside-the-worktree rule measures from. runDir is the folder the
 	// call runs in, which a relative path is resolved against.
 	root, runDir string
@@ -647,8 +647,8 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		scope:       p.Scope,
 		tool:        p.Tool,
 		target:      p.Target,
-		root:        paneRoot(st.Worktree, sess.windowStartDir(w.ID)),
-		runDir:      approvalRunDir(p.Cwd, sess.paneRunDir(w.PTYID, true)),
+		root:        sess.windowApprovalRoot(managedWorktreePath(st.Worktree), w.ID, w.AgentSessionID),
+		runDir:      resolvedRunDir(approvalRunDir(p.Cwd, sess.paneRunDir(w.PTYID))),
 		denyMessage: p.DenyMessage,
 	}
 	if isPlan {
@@ -957,4 +957,13 @@ func approvalRunDir(harnessCwd, live string) string {
 		return filepath.Clean(harnessCwd)
 	}
 	return live
+}
+
+// resolvedRunDir is a run folder with its links resolved, so it compares
+// with the resolved root. "" stays "".
+func resolvedRunDir(dir string) string {
+	if dir == "" || !filepath.IsAbs(dir) {
+		return ""
+	}
+	return realPath(filepath.Clean(dir))
 }

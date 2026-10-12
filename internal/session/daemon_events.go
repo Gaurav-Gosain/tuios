@@ -252,15 +252,15 @@ type SessionEvent struct {
 	hookKind          string
 	completionSeq     uint64
 	prevCompletionSeq uint64
-	// hookRoot is the window's fixed root (paneRoot): where the risk rules
-	// measure "outside the worktree" from, carried so the queue never reads
-	// session state under its own lock. It is never the pane's working
-	// folder, which the pane sets.
-	hookRoot string
-	// hookRunDir is the pane's live folder when the event was dispatched
-	// (Session.paneRunDir), which a relative path in an approval line is
-	// resolved against. Filled by the daemon off the state lock.
-	hookRunDir string
+	// hookWorktree and hookAgentSession are what the approval root is made
+	// from beside the window's start folder (windowApprovalRoot). hookRoot
+	// is that root and hookRunDir the pane's folder now, both filled by the
+	// daemon's sink before the queue reads them, so the queue never reads
+	// session state under its own lock. Neither is the pane's reported
+	// folder alone, which the pane sets.
+	hookWorktree, hookAgentSession string
+	hookRoot                       string
+	hookRunDir                     string
 }
 
 // eventCompletionSeen is raised when an attached client's state push shows it

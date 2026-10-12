@@ -3,6 +3,7 @@ package risk
 import (
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -25,6 +26,18 @@ type command struct {
 	fedBy [][]string
 	// sudo is set when the command runs under sudo or doas.
 	sudo bool
+	// scope names the shell the command runs in: "" for the line's own,
+	// then a part for each subshell ( ), sh -c line and substitution it is
+	// inside. A cd changes the folder of its own scope and the scopes inside
+	// it, never an outer one.
+	scope string
+	// inPipe says the command is one stage of a pipeline, which the shell
+	// runs in a subshell of its own: a cd there changes nothing after it.
+	inPipe bool
+	// chdir says a wrapper moved the command to another folder (env -C,
+	// env --chdir). cdpath says the command sets CDPATH, after which a cd
+	// cannot be followed.
+	chdir, cdpath bool
 }
 
 // name is the command's program: the base name of argv[0].
@@ -50,26 +63,42 @@ func (c command) args() []string {
 // separators, subshells and groups, the reserved words that can come before a
 // command, pipes and redirects, and nothing else.
 func parseCommands(text string, depth int) []command {
+	return parseCommandsIn(text, depth, "")
+}
+
+// parseCommandsIn is parseCommands with every command's scope under prefix.
+func parseCommandsIn(text string, depth int, prefix string) []command {
 	var out []command
 	var nested []string
 	segments := splitSegments(text, &nested)
 	var pipeline [][]string
-	for _, seg := range segments {
+	for si, seg := range segments {
 		words, writes := tokenize(seg.text, &nested)
-		c := command{raw: stripLeadRaw(strings.TrimSpace(seg.text)), writes: writes}
+		c := command{raw: stripLeadRaw(strings.TrimSpace(seg.text)), writes: writes, scope: prefix + seg.scope}
+		c.inPipe = seg.piped || (si+1 < len(segments) && segments[si+1].piped)
 		for {
 			n := len(words)
 			for len(words) > 0 && leadWords[words[0]] {
 				words = words[1:]
 			}
 			for len(words) > 0 && isAssignment(words[0]) {
+				if strings.HasPrefix(words[0], "CDPATH=") {
+					c.cdpath = true
+				}
 				words = words[1:]
 			}
 			if len(words) == n {
 				break
 			}
 		}
-		words, c.sudo = unwrap(words)
+		if len(words) > 0 && (words[0] == "export" || words[0] == "declare" || words[0] == "typeset" || words[0] == "readonly" || words[0] == "set") {
+			for _, w := range words[1:] {
+				if strings.HasPrefix(w, "CDPATH") {
+					c.cdpath = true
+				}
+			}
+		}
+		words, c.sudo, c.chdir = unwrap(words)
 		c.argv = words
 		if !seg.piped {
 			pipeline = nil
@@ -97,13 +126,18 @@ func parseCommands(text string, depth int) []command {
 		}
 		out = append(out, c)
 		// sh -c 'command' and eval 'command' run a command line of their own.
+		// eval runs it in this shell, so its cd stays; sh -c in a new one.
 		if hasLine {
-			out = append(out, parseCommands(line, depth+1)...)
+			scope := c.scope + "/c" + strconv.Itoa(si)
+			if c.name() == "eval" {
+				scope = c.scope
+			}
+			out = append(out, parseCommandsIn(line, depth+1, scope)...)
 		}
 	}
 	if depth < maxDepth {
-		for _, n := range nested {
-			out = append(out, parseCommands(n, depth+1)...)
+		for i, n := range nested {
+			out = append(out, parseCommandsIn(n, depth+1, prefix+"/s"+strconv.Itoa(i))...)
 		}
 	}
 	return out
@@ -203,13 +237,14 @@ var wrappers = map[string]bool{
 var wrapperTakesValue = map[string]bool{
 	"-u": true, "-g": true, "-n": true, "-C": true, "-p": true, "-h": true,
 	"-U": true, "-r": true, "-t": true, "-I": true, "-P": true, "-L": true,
-	"-s": true, "-k": true,
+	"-s": true, "-k": true, "-D": true, "--chdir": true,
 }
 
 // unwrap drops the wrapper programs in front of a command, reporting whether
-// one of them was sudo or doas.
-func unwrap(words []string) ([]string, bool) {
-	sudo := false
+// one of them was sudo or doas, and whether one moved the command to another
+// folder (env -C, env --chdir) or set CDPATH.
+func unwrap(words []string) ([]string, bool, bool) {
+	sudo, chdir := false, false
 	for len(words) > 0 && wrappers[filepath.Base(words[0])] {
 		w := filepath.Base(words[0])
 		if w == "sudo" || w == "doas" {
@@ -218,13 +253,19 @@ func unwrap(words []string) ([]string, bool) {
 		words = words[1:]
 		for len(words) > 0 && (strings.HasPrefix(words[0], "-") || isAssignment(words[0]) || (w == "timeout" && isDuration(words[0]))) {
 			flag := words[0]
+			if w == "env" && (flag == "-C" || strings.HasPrefix(flag, "--chdir") || (strings.HasPrefix(flag, "-") && !strings.HasPrefix(flag, "--") && strings.Contains(flag, "C"))) {
+				chdir = true
+			}
+			if strings.HasPrefix(flag, "CDPATH=") || (w == "sudo" && strings.HasPrefix(flag, "--chdir")) || (w == "sudo" && flag == "-D") {
+				chdir = true
+			}
 			words = words[1:]
 			if wrapperTakesValue[flag] && len(words) > 0 {
 				words = words[1:]
 			}
 		}
 	}
-	return words, sudo
+	return words, sudo, chdir
 }
 
 // isDuration reports whether a word reads as timeout's duration: 10, 5s, 1.5m.
@@ -255,6 +296,9 @@ func isAssignment(w string) bool {
 type segment struct {
 	text  string
 	piped bool
+	// scope names the subshells the segment is inside, "/g<n>" for each,
+	// outermost first. See command.scope.
+	scope string
 	// subst is the text inside each $( ), backtick pair, <( ) and >( ) in
 	// the segment.
 	subst []string
@@ -270,6 +314,10 @@ func splitSegments(text string, nested *[]string) []segment {
 	var cur strings.Builder
 	var subst []string
 	piped := false
+	// groups is the subshells open at this point, by number, and opened
+	// counts every one so far, so two subshells never share a scope.
+	var groups []string
+	opened := 0
 	flush := func(nextPiped bool) {
 		if strings.TrimSpace(cur.String()) == "" && len(subst) == 0 {
 			// Nothing between two separators, as between ) and |: the
@@ -278,7 +326,11 @@ func splitSegments(text string, nested *[]string) []segment {
 			piped = piped || nextPiped
 			return
 		}
-		out = append(out, segment{text: cur.String(), piped: piped, subst: subst})
+		scope := ""
+		for _, g := range groups {
+			scope += "/g" + g
+		}
+		out = append(out, segment{text: cur.String(), piped: piped, subst: subst, scope: scope})
 		cur.Reset()
 		subst = nil
 		piped = nextPiped
@@ -334,6 +386,12 @@ func splitSegments(text string, nested *[]string) []segment {
 		case ch == '(' || ch == ')':
 			// A subshell opens or closes: what follows ( is a command.
 			flush(false)
+			if ch == '(' {
+				opened++
+				groups = append(groups, strconv.Itoa(opened))
+			} else if len(groups) > 0 {
+				groups = groups[:len(groups)-1]
+			}
 			continue
 		case ch == ';' || ch == '\n':
 			flush(false)

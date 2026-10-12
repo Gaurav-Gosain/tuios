@@ -31,7 +31,7 @@ type Call struct {
 	// path for a file tool.
 	Text string
 	// Root is the folder the pane's work is held to. It must be a folder
-	// the pane cannot move (see paneRoot in internal/session), never its
+	// the pane cannot move (see approvalRoot in internal/session), never its
 	// working folder. Empty, or a file system root, means the pane has no
 	// such folder: every absolute path and every path under ~ is then read
 	// as outside, so the rule fails closed.
@@ -41,6 +41,10 @@ type Call struct {
 	// against it. Empty means it is not known, and then every relative path
 	// is read as outside.
 	RunDir string
+	// Resolve resolves a path's links (realPath), so that a path written
+	// through a link compares with the resolved root. Root must be resolved
+	// already. Nil compares paths as written.
+	Resolve func(string) string
 	// Home is the home directory a leading ~ stands for.
 	Home string
 	// Shown says Text is the one-line summary a pane reported for the call,
@@ -242,13 +246,29 @@ func (r Rule) matches(call Call, in input) bool {
 		return false
 	case r.command != nil && isShell(call.Tool):
 		// A cd earlier in the line moves where the later commands run, so
-		// each command is read from the folder the ones before it left.
-		cur := call
+		// each command is read from the folder the ones before it left in
+		// its own shell. dirs holds that folder by scope (command.scope): a
+		// cd in a subshell, an sh -c line or a substitution moves its own
+		// scope and the ones inside it, never an outer one.
+		dirs := map[string]string{"": call.RunDir}
 		for _, c := range in.pathCmds {
+			cur := call
+			cur.RunDir = dirIn(dirs, c.scope)
+			if c.chdir {
+				cur.RunDir = ""
+			}
 			if r.command(c, cur) {
 				return true
 			}
-			cur.RunDir = runDirAfter(c, cur)
+			switch {
+			case c.chdir || c.cdpath:
+				// The folder cannot be followed from here on.
+				dirs[c.scope] = ""
+			case c.inPipe:
+				// A pipeline stage is a subshell: its cd ends with it.
+			default:
+				dirs[c.scope] = runDirAfter(c, cur)
+			}
 		}
 	case r.path != nil && isFile(call.Tool):
 		return r.path(strings.TrimSpace(in.pathText), call)
@@ -282,31 +302,29 @@ func outside(path string, call Call) bool {
 		return false
 	}
 	path = strings.Trim(path, `"'`)
-	switch {
-	case path == "~" || strings.HasPrefix(path, "~/"):
-		if call.Home == "" {
-			return true
-		}
-		path = filepath.Join(call.Home, strings.TrimPrefix(path, "~"))
-	case strings.HasPrefix(path, "$HOME"):
-		if call.Home == "" {
-			return true
-		}
-		path = filepath.Join(call.Home, strings.TrimPrefix(path, "$HOME"))
-	case !strings.HasPrefix(path, "/"):
+	// A path that names a variable, a substitution or another user's home
+	// is not known until the shell expands it, so it is outside. $HOME and
+	// ${HOME} at the start are the one exception: Home says what they are.
+	path, known := expandHome(path, call.Home)
+	if !known {
+		return true
+	}
+	root := fixedRoot(call.Root)
+	if !strings.HasPrefix(path, "/") {
 		// Relative to where the call runs. The pane moves that folder, so
 		// a run folder outside the root, or one nobody knows, makes every
 		// relative path outside.
-		root := fixedRoot(call.Root)
-		run := filepath.Clean(call.RunDir)
-		if root == "" || call.RunDir == "" || !filepath.IsAbs(run) || (run != root && !strings.HasPrefix(run, root+string(filepath.Separator))) {
+		run := ""
+		if call.RunDir != "" && filepath.IsAbs(call.RunDir) {
+			run = call.resolve(filepath.Clean(call.RunDir))
+		}
+		if root == "" || run == "" || !under(run, root) {
 			return true
 		}
 		// Joined as text, so that the "***" and the clip in a shown path
 		// are still there for shownPart to find.
 		path = run + string(filepath.Separator) + path
 	}
-	root := fixedRoot(call.Root)
 	if shown, cut := shownPart(path, call); cut {
 		return shownOutside(shown, root)
 	}
@@ -318,10 +336,47 @@ func outside(path string, call Call) bool {
 		// No fixed folder: nothing absolute is inside.
 		return true
 	}
-	if path == root {
-		return false
+	return !under(call.resolve(path), root)
+}
+
+// under reports whether path is dir or inside it. Both are clean.
+func under(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
+// resolve is call.Resolve, or the path as it is when there is none.
+func (call Call) resolve(path string) string {
+	if call.Resolve == nil {
+		return path
 	}
-	return !strings.HasPrefix(path, root+string(filepath.Separator))
+	return call.Resolve(path)
+}
+
+// expandHome expands a leading ~, $HOME or ${HOME} with home. known is false
+// for a path the shell would expand some other way: a ~user, a variable or a
+// substitution anywhere, or a home that is not known.
+func expandHome(path, home string) (string, bool) {
+	rest := ""
+	switch {
+	case path == "~" || strings.HasPrefix(path, "~/"):
+		rest = strings.TrimPrefix(path, "~")
+	case strings.HasPrefix(path, "~"):
+		return "", false
+	case path == "$HOME" || strings.HasPrefix(path, "$HOME/"):
+		rest = strings.TrimPrefix(path, "$HOME")
+	case path == "${HOME}" || strings.HasPrefix(path, "${HOME}/"):
+		rest = strings.TrimPrefix(path, "${HOME}")
+	default:
+		if strings.ContainsAny(path, "$`") {
+			return "", false
+		}
+		return path, true
+	}
+	if home == "" || strings.ContainsAny(rest, "$`") {
+		return "", false
+	}
+	// Joined as text, for shownPart, like a relative path.
+	return strings.TrimSuffix(home, "/") + rest, true
 }
 
 // fixedRoot is call.Root cleaned, or "" when there is none. A file system
@@ -415,11 +470,25 @@ func FromConfig(cfg config.RiskConfig) []Rule {
 	return rules
 }
 
+// dirIn is the folder a command in scope runs in: the folder its own scope
+// or the nearest outer one was left in.
+func dirIn(dirs map[string]string, scope string) string {
+	for {
+		if d, ok := dirs[scope]; ok {
+			return d
+		}
+		if scope == "" {
+			return ""
+		}
+		scope = scope[:strings.LastIndex(scope, "/")]
+	}
+}
+
 // runDirAfter is the folder the commands after c run in: c's target when c is
 // a cd or pushd, else the folder c ran in. "" when it cannot be known: a cd -,
-// a popd, a target with a variable or a substitution in it, or a relative one
-// from an unknown folder. An unknown folder makes every relative path after
-// it outside.
+// a popd, a target with a variable, a substitution or a ~user in it, or a
+// relative one from an unknown folder. An unknown folder makes every relative
+// path after it outside.
 func runDirAfter(c command, call Call) string {
 	switch c.name() {
 	case "cd", "pushd":
@@ -432,21 +501,10 @@ func runDirAfter(c command, call Call) string {
 	if len(ops) == 0 {
 		return call.Home
 	}
-	dir := strings.Trim(ops[0], `"'`)
+	dir, known := expandHome(strings.Trim(ops[0], `"'`), call.Home)
 	switch {
-	case dir == "-" || strings.ContainsAny(dir, "$`*?[") && !strings.HasPrefix(dir, "$HOME"):
+	case !known || dir == "-" || strings.ContainsAny(dir, "*?["):
 		return ""
-	case dir == "~" || strings.HasPrefix(dir, "~/"):
-		if call.Home == "" {
-			return ""
-		}
-		return filepath.Join(call.Home, strings.TrimPrefix(dir, "~"))
-	case strings.HasPrefix(dir, "$HOME"):
-		rest := strings.TrimPrefix(dir, "$HOME")
-		if call.Home == "" || strings.ContainsAny(rest, "$`*?[") {
-			return ""
-		}
-		return filepath.Join(call.Home, rest)
 	case filepath.IsAbs(dir):
 		return filepath.Clean(dir)
 	case call.RunDir == "":

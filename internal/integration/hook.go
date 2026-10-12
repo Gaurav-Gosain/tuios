@@ -140,6 +140,9 @@ type Report struct {
 	Message        string `json:"message,omitempty"`
 	SessionID      string `json:"agent_session_id,omitempty"`
 	TranscriptPath string `json:"transcript_path,omitempty"`
+	// Cwd is the folder the harness names in the hook payload. The daemon
+	// keeps the first one of a session as the agent's start folder.
+	Cwd string `json:"agent_cwd,omitempty"`
 	// IfState is a comma-separated state list: the report applies only when
 	// the pane is in one of them.
 	IfState string `json:"if_state,omitempty"`
@@ -417,5 +420,6 @@ func (f fields) first(keys ...string) string {
 func identity(r Report, p fields) Report {
 	r.SessionID = p.str("session_id")
 	r.TranscriptPath = p.str("transcript_path")
+	r.Cwd = p.str("cwd")
 	return r
 }

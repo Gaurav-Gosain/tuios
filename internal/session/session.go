@@ -1104,6 +1104,10 @@ type Session struct {
 	// first process started, fixed then and never moved by the shell's cd or
 	// its OSC 7. See noteStartDir.
 	startDirs sync.Map
+	// agentDirs is each agent session's start folder, by window id and
+	// then agent session id. See noteAgentStartDir.
+	agentDirsMu sync.Mutex
+	agentDirs   map[string]map[string]string
 	// places is each local PTY, by PTY id, kept beside ptys so a reader
 	// holding the state lock can see where a pane runs without taking the
 	// PTY lock. See paneRunDir.
@@ -3036,7 +3040,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	}
 	state.BaseVersion = 0
 
-	before := snapshotLifecycle(prev, s.windowStartDir)
+	before := snapshotLifecycle(prev)
 	if prev != nil && !focusViewOf(prev).sameFocus(focusViewOf(state)) {
 		if s.clientFocusMoved == nil {
 			s.clientFocusMoved = make(map[string]int)
@@ -3115,7 +3119,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	before := snapshotLifecycle(s.state, s.windowStartDir)
+	before := snapshotLifecycle(s.state)
 	focusBefore := focusViewOf(s.state)
 	s.focusIntent, s.focusNeutral = false, false
 	if err := fn(s.state); err != nil {
@@ -3147,7 +3151,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 // safe because the sink only stamps a sequence number and does non-blocking
 // channel sends; it never re-enters the session.
 func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
-	events := diffLifecycle(before, snapshotLifecycle(s.state, s.windowStartDir))
+	events := diffLifecycle(before, snapshotLifecycle(s.state))
 	for _, ev := range events {
 		s.emit(ev)
 	}

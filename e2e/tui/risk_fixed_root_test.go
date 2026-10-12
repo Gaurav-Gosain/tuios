@@ -14,39 +14,27 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// TestRiskRootIsTheStartFolder starts agent panes in a plain folder. Each pane
-// then moves: it does cd to / and prints an OSC 7 that names /, or does the
-// same for the folder above its start folder, or does cd into a git worktree
-// that tuios did not make, which the daemon then detects as the session's
-// worktree. Two more panes start in the home folder and stay there. Each pane
-// raises an approval for a write outside the folder it
-// started in: an Edit, which the hook only reports, or a Bash cp, which the
-// hook holds. Every item is marked outside the worktree. The risk rules
-// measure from the folder the pane started in, which nothing the pane does
-// moves.
+// TestRiskRootIsTheStartFolder raises approvals from panes that try to make
+// a write outside their root look inside, and from panes whose writes are
+// inside. The home folder is the one the harness gives the daemon.
 //
-// Five more panes write to a relative path. From a pane at /, or from a held
-// call whose harness says it runs in /, the write is marked. From a pane in
-// its start folder it is not.
+// Marked outside the worktree, each from a pane started in a plain folder:
 //
-// Negative controls (NEGATIVE_CONTROLS.md): with the whole fix removed, no
-// item is marked. With only the session side removed (paneRoot and the
-// lifecycle root back on the working folder and the detected worktree), the
-// panes at / are still marked, since the rules read / as no root. The held
-// cp from the folder above and both writes in the detected worktree are not.
-// With only the home check removed from paneRoot, the panes in the home
-// folder are not marked.
+//   - after cd and an OSC 7 to /, to the folder above, or into a git
+//     worktree tuios did not make (which the daemon then detects);
+//   - from a pane that started in the home folder and has no agent;
+//   - a relative write from a pane at /, from a held call whose harness runs
+//     in /, and from a pane whose OSC 7 names its start folder while its
+//     process runs in /.
+//
+// Not marked: a relative write from a pane in its start folder; writes in a
+// start folder written through a link, or resolved; and from a pane started
+// in the home folder that did cd into a project and started an agent there,
+// a write in the project, also after the agent moves on.
+//
+// Each case raises an Edit, which the hook only reports, or a Bash cp, which
+// the hook holds. Negative controls are in NEGATIVE_CONTROLS.md.
 func TestRiskRootIsTheStartFolder(t *testing.T) {
-	base := t.TempDir()
-	killDaemon(t, base)
-	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("mkdir config: %v", err)
-	}
-	body := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n"
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 	// The folders are at a short path with a short name: t.TempDir() carries
 	// the test's name and a random suffix, a run the line redacts to "***",
 	// and a line that hides part of its path cannot be read as outside.
@@ -58,8 +46,42 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	if resolved, err := filepath.EvalSymlinks(up); err == nil {
 		up = resolved
 	}
+	// The isolation root is short too. The harness gives the daemon and
+	// the panes its HOME (xdgKeys), so that is the home folder here.
+	base, err := os.MkdirTemp("", "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	if resolved, err := filepath.EvalSymlinks(base); err == nil {
+		base = resolved
+	}
+	killDaemon(t, base)
+	home := xdgDir(base, "HOME")
+	proj := filepath.Join(home, "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	body := "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	start := filepath.Join(up, "start")
 	if err := os.MkdirAll(start, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A start folder reached through a link, as /home is a link to
+	// /var/home on Fedora Silverblue.
+	real := filepath.Join(up, "real")
+	link := filepath.Join(up, "link")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
 	// Outside the start folder, inside the folder above it, and not under
@@ -71,20 +93,21 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	linked := filepath.Join(up, "wt")
 	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "elsewhere", linked)
 	inLinked := filepath.Join(linked, "notes.txt")
-
-	// A pane that starts in the home folder has no root at all: a write
-	// anywhere in the account is outside. The file is never written.
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	inHome := filepath.Join(home, ".tuios-e2e-risk-probe")
+	inHome := filepath.Join(home, "notes.txt")
 
 	type pane struct {
 		session, window, startIn, moveTo, tool, target string
+		// announce is the folder the pane's OSC 7 names, when it is not
+		// moveTo: the pane says one thing and its process is in another.
+		announce string
 		// harnessCwd is the cwd the hook payload carries, "" for none.
 		harnessCwd string
-		detect     bool
+		// agent says an agent starts in moveTo, through a hook that names
+		// it, before the approval. agentMovesTo is where that agent goes
+		// after, with a hook that names the new folder.
+		agent        bool
+		agentMovesTo string
+		detect       bool
 		// safe says the write stays inside the root and must not be marked.
 		safe bool
 	}
@@ -98,26 +121,44 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		{session: "edit-home", startIn: home, moveTo: home, tool: "Edit", target: inHome},
 		{session: "bash-home", startIn: home, moveTo: home, tool: "Bash", target: inHome},
 		// A relative path is read from where the call runs: the pane's own
-		// folder, or the cwd the harness sends with a held call.
+		// process, or the cwd the harness sends with a held call.
 		{session: "edit-rel-root", moveTo: "/", tool: "Edit", target: "etc/notes.txt"},
 		{session: "bash-rel-root", moveTo: "/", tool: "Bash", target: "etc/notes.txt"},
 		{session: "bash-rel-cwd", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: "/"},
+		{session: "bash-rel-osc7", moveTo: "/", announce: start, tool: "Bash", target: "notes-copy.txt"},
 		{session: "edit-rel-in", moveTo: start, tool: "Edit", target: "notes-copy.txt", safe: true},
 		{session: "bash-rel-in", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: start, safe: true},
+		// A start folder through a link: a write in it is inside, written
+		// through the link or resolved.
+		{session: "edit-link-real", startIn: link, moveTo: link, tool: "Edit", target: filepath.Join(real, "main.go"), safe: true},
+		{session: "edit-link-link", startIn: link, moveTo: link, tool: "Edit", target: filepath.Join(link, "main.go"), safe: true},
+		{session: "bash-link-real", startIn: link, moveTo: link, tool: "Bash", target: filepath.Join(real, "main.go"), safe: true},
+		// tuios started in the home folder, then cd proj && claude: the
+		// agent's start folder is the root.
+		{session: "agent-in", startIn: home, moveTo: proj, tool: "Edit", target: filepath.Join(proj, "main.go"), agent: true, safe: true},
+		{session: "agent-in-bash", startIn: home, moveTo: proj, tool: "Bash", target: filepath.Join(proj, "main.go"), agent: true, safe: true},
+		{session: "agent-out", startIn: home, moveTo: proj, tool: "Edit", target: inHome, agent: true},
+		{session: "agent-moved", startIn: home, moveTo: proj, tool: "Edit", target: filepath.Join(proj, "main.go"), agent: true, agentMovesTo: "/", safe: true},
+		{session: "agent-moved-out", startIn: home, moveTo: proj, tool: "Edit", target: "/etc/notes.txt", agent: true, agentMovesTo: "/"},
 	}
 	for _, c := range cases {
 		if c.startIn == "" {
 			c.startIn = start
 		}
-		if out, err := tuiosCLIIn(t, base, c.startIn, "new", c.session, "--detach"); err != nil {
+		if c.announce == "" {
+			c.announce = c.moveTo
+		}
+		// PWD names the folder as the test wrote it, so a link stays a
+		// link in the folder tuios records.
+		if out, err := tuiosCLIInDir(t, base, c.startIn, []string{"PWD=" + c.startIn}, "new", c.session, "--detach"); err != nil {
 			t.Fatalf("create %s: %v\n%s", c.session, err, out)
 		}
 		c.window = onlyWindow(t, base, c.session)
-		typeInPane(t, base, c.session, c.window, "cd "+c.moveTo+" && printf '\\033]7;file://localhost"+c.moveTo+"\\007'")
+		typeInPane(t, base, c.session, c.window, "cd "+c.moveTo+" && printf '\\033]7;file://localhost"+c.announce+"\\007'")
 	}
 	// Precondition: the daemon reads the new folder as each pane's folder.
 	for _, c := range cases {
-		waitWindowCwd(t, base, c.session, c.window, c.moveTo)
+		waitWindowCwd(t, base, c.session, c.window, c.announce)
 	}
 	// Precondition: the daemon detects the linked worktree as the session's
 	// worktree. It looks on a save, which a change of state brings.
@@ -126,11 +167,31 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 			waitDetectedWorktree(t, base, c.session, linked)
 		}
 	}
+	// The agents start, and some move on.
+	for _, c := range cases {
+		if !c.agent {
+			continue
+		}
+		fireClaudeHook(t, base, c.session, map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": "go", "cwd": c.moveTo})
+		if c.agentMovesTo != "" {
+			typeInPane(t, base, c.session, c.window, "cd "+c.agentMovesTo+" && printf '\\033]7;file://localhost"+c.agentMovesTo+"\\007'")
+			waitWindowCwd(t, base, c.session, c.window, c.agentMovesTo)
+			fireClaudeHook(t, base, c.session, map[string]any{"hook_event_name": "UserPromptSubmit", "prompt": "go on", "cwd": c.agentMovesTo})
+		}
+	}
 
 	for _, c := range cases {
 		if c.tool == "Edit" {
 			// The hook reports the pane blocked and exits.
-			fireEditHook(t, base, c.session, c.target)
+			fields := map[string]any{
+				"hook_event_name": "PermissionRequest",
+				"tool_name":       "Edit",
+				"tool_input":      map[string]string{"file_path": c.target, "old_string": "hi", "new_string": "hello"},
+			}
+			if c.agentMovesTo != "" {
+				fields["cwd"] = c.agentMovesTo
+			}
+			fireClaudeHook(t, base, c.session, fields)
 			continue
 		}
 		// The hook holds the pane's prompt until it is answered.
@@ -144,12 +205,33 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		} else {
 			it = waitHeldRiskItem(t, base, c.session)
 		}
-		t.Logf("%s (at %s, harness cwd %q): %q risk %v", c.session, c.moveTo, c.harnessCwd, it.Summary, it.Risk)
+		t.Logf("%s (at %s, says %s, harness cwd %q): %q risk %v", c.session, c.moveTo, c.announce, c.harnessCwd, it.Summary, it.Risk)
 		if got := slices.Contains(it.Risk, "outside the worktree"); got == c.safe {
 			t.Errorf("ASSERTION: %s: a write to %s from a pane at %s (harness cwd %q) is marked %v, want outside the worktree %v", c.session, c.target, c.moveTo, c.harnessCwd, it.Risk, !c.safe)
 		}
 	}
 	saveRiskItems(t, base, "risk-root-start-folder-items.json")
+}
+
+// fireClaudeHook runs Claude Code's hook for an event in window 0 of
+// session, with the payload fields given beside the session id.
+func fireClaudeHook(t *testing.T, base, session string, fields map[string]any) {
+	t.Helper()
+	fields["session_id"] = "e2e-" + session
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", "0")
+	cmd.Dir = workDirIn(t, base)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Stdin = bytes.NewReader(payload)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("agent-hook %v for %s: %v\n%s", fields["hook_event_name"], session, err, out)
+	}
 }
 
 // startHeldBashHook runs Claude Code's PermissionRequest hook for a Bash call

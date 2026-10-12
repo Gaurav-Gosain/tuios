@@ -4671,32 +4671,40 @@ that each assertion was seen to fail by itself.
 
 ## The approval risk root is fixed
 
-On 2026-10-12 three controls cut the fixed root of the risk rules. Each built a
-binary and ran `TestRiskRootIsTheStartFolder` against it. The panes start in a
-plain folder. Six move: `cd` and an OSC 7 to `/`, to the folder above, or into a
-git worktree tuios did not make (detected as the session's worktree). Two start
-in the home folder. Each raises an Edit (reported) and a Bash `cp` (held) to a
-path outside its start folder. Controls A and B ran before the two home panes
-were added.
+`TestRiskRootIsTheStartFolder` raises an approval from each of 22 panes: an
+Edit, which the hook reports, or a Bash `cp`, which the hook holds. The home
+folder is the one the harness gives the daemon (`xdgKeys` passes `HOME`).
+
+- Marked: panes that `cd` and print an OSC 7 to `/`, to the folder above, or
+  into a git worktree tuios did not make. Panes started in the home folder.
+  Relative writes from a pane at `/`, from a held call whose harness runs in
+  `/`, and from a pane whose OSC 7 names its start folder while its process
+  is at `/`. An agent's write outside its start folder.
+- Not marked: relative writes from a pane in its start folder. Writes in a
+  start folder reached through a link, written either way. An agent started
+  in `~/proj` from a pane started in the home folder, writing in `~/proj`,
+  also after it moves to `/` and reports that.
+
+On 2026-10-12 each control below built a binary from the branch with one
+part cut, and ran the test against it. Controls A and B ran on the first
+version of the branch, with 6 panes.
 
 | Control: what was cut | Assertion | Verdict |
 | --- | --- | --- |
 | A: the whole fix (`internal/risk` and `internal/session` back to #636's head: the root is the detected worktree, else the working folder, and an empty or `/` root marks nothing) | All six items are marked `[]` | **caught** |
-| B: the session side only (`paneRoot`, the lifecycle root and `paneFolder` back to #636's head; the `internal/risk` change kept) | The panes at `/` stay marked, since the rules now read `/` as no root. The held `cp` from the folder above and both writes in the detected worktree are marked `[]`. The reported Edit from the folder above stays marked: the lifecycle root read the stored folder, which only the detected worktree moved | **caught** |
-| C: `holdsHome` in `paneRoot` (a start folder of the home folder or above is a root) | Both home panes are marked `[]` | **caught** |
+| B: the session side only (the root back to the working folder and the detected worktree; the `internal/risk` change kept) | The held `cp` from the folder above and both writes in the detected worktree are marked `[]` | **caught** |
+| C: the `tooWideFolder` and `ownedByDaemonUser` check in `usableFolder` (a home folder start is a root) | `edit-home`, `bash-home` and `agent-out` are marked `[]` | **caught** |
+| D: `outside` in `internal/risk` reads every relative path as inside | The four relative writes that leave the root are marked `[]` | **caught** |
+| E: `approvalRunDir` ignores the cwd the harness sends | `bash-rel-cwd` is marked `[]` | **caught** |
+| F: links not resolved in the run folder and the tool paths (#636 resolves the start folder when it records it) | `edit-link-link`, a write through the link, is marked outside | **caught** |
+| G: the agent's start folder is not a source of the root | `agent-in`, `agent-in-bash` and `agent-moved` are marked outside | **caught** |
+| H: `paneRunDir` takes the OSC 7 report before the process | `bash-rel-osc7` is marked `[]` | **caught** |
+| I: a later report moves the agent's start folder | `agent-moved` is marked outside | **caught** |
 
-Two more controls cut the reading of relative paths. Five more panes write
-to a relative path. Three are expected to be marked: from a pane at `/` (an
-Edit and a held `cp`), and a held `cp` whose hook payload says it runs in `/`.
-Two must stay unmarked: an Edit and a held `cp` from a pane in its start
-folder.
-
-| Control: what was cut | Assertion | Verdict |
-| --- | --- | --- |
-| D: `outside` in `internal/risk` reads every relative path as inside again | The three relative writes from `/` are marked `[]` | **caught** |
-| E: `approvalRunDir` ignores the cwd the harness sends | The held `cp` whose harness runs in `/` is marked `[]` | **caught** |
-
-`TestNoRootFailsClosed` (`internal/risk`) fails with the `internal/risk` change
-cut, and `TestPaneRootIsFixed` (`internal/session`) fails on its five home
-cases with `holdsHome` cut. `TestRelativePathsFollowTheRunFolder`
-(`internal/risk`) covers the cd and `..` cases of a relative path.
+Unit tests on the same boundaries: `TestNoRootFailsClosed`,
+`TestRelativePathsFollowTheRunFolder` (`..`, the `cd` forms, subshells,
+pipelines, `env -C`, `CDPATH`, variables, `~user`, and the writes of `curl`,
+`wget`, `tar -C`, `git clone` and `cp --target-directory=`) and
+`TestLinksResolveBeforeTheyCompare` in `internal/risk`;
+`TestApprovalRootIsFixed` and `TestAgentStartDirIsFirstWins` in
+`internal/session`.

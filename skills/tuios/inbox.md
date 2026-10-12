@@ -173,10 +173,11 @@ allows it only with a second press. With the `respond` grant you may deny a
 risky prompt with `tuios respond`, and an allow is refused with `forbidden`.
 
 The pane's root is where the pane started, or the session's worktree when tuios
-made it. A `cd` or an OSC 7 does not move it. A pane that started in the home
-folder or above has no root, and every absolute path counts as outside. A
-relative path counts as outside when you run it from a folder outside the
-root.
+made it. A pane that started in the home folder takes the folder its agent
+started in. A `cd`, an OSC 7 or a later report does not move it. A pane with
+no root has every absolute path counted as outside. A relative path counts as
+outside when you run it from a folder outside the root. A path with a variable
+in it counts as outside.
 
 What it means for you:
 

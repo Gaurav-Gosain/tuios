@@ -2,7 +2,7 @@
   {
     "name": "SessionStart startup",
     "payload": {"session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "cwd": "/src", "hook_event_name": "SessionStart", "source": "startup", "model": "claude-opus"},
-    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "activity": {"event": "session_start", "text": "startup"}}
+    "want": {"agent_cwd": "/src", "state": "idle", "agent_session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "activity": {"event": "session_start", "text": "startup"}}
   },
   {
     "name": "SessionStart resume",

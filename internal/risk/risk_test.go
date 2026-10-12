@@ -48,8 +48,8 @@ func TestBuiltinRules(t *testing.T) {
 		{"if condition", "Bash", "if git push -f; then echo ok; fi", []string{RuleForcePush}},
 		{"elif else", "Bash", "if a; then b; elif c; then d; else rm -rf x; fi", []string{RuleRecursiveDelete}},
 		{"negation", "Bash", "! rm -rf x", []string{RuleRecursiveDelete}},
-		{"for do", "Bash", "for d in a b; do rm -rf $d; done", []string{RuleRecursiveDelete}},
-		{"while do", "Bash", "while read f; do rm -rf $f; done < list", []string{RuleRecursiveDelete}},
+		{"for do", "Bash", "for d in a b; do rm -rf $d; done", []string{RuleRecursiveDelete, RuleOutsideWorktree}},
+		{"while do", "Bash", "while read f; do rm -rf $f; done < list", []string{RuleRecursiveDelete, RuleOutsideWorktree}},
 		{"until", "Bash", "until git push -f; do sleep 1; done", []string{RuleForcePush}},
 		{"function body", "Bash", "f() { rm -rf x; }; f", []string{RuleRecursiveDelete}},
 		{"subshell quoted as text", "Bash", `echo "(rm -rf x)"`, nil},
@@ -222,11 +222,73 @@ func TestRelativePathsFollowTheRunFolder(t *testing.T) {
 		{"cd back into root", "Bash", "cd / && cd /work/api && touch x", "/", false},
 		{"cd in sh -c", "Bash", "sh -c 'cd / && touch etc/x'", root, true},
 		{"shown and cut inside", "Bash", "echo x > sub/a***", root, false},
+		// A path the shell expands some other way is not known.
+		{"a variable", "Bash", "echo x > $OUT", root, true},
+		{"a variable in braces", "Bash", "echo x > ${OUT}/a", root, true},
+		{"a variable after HOME", "Bash", "echo x > $HOME/$X", root, true},
+		{"another user's home", "Write", "~root/.bashrc", root, true},
+		{"a substitution", "Bash", "touch `pwd`/x", root, true},
+		// Folders that cannot be followed.
+		{"env -C", "Bash", "env -C / touch x", root, true},
+		{"env --chdir=", "Bash", "env --chdir=/ touch x", root, true},
+		{"env -C, then a relative write", "Bash", "env -C sub true; touch x", root, true},
+		{"CDPATH before cd", "Bash", "CDPATH=/ cd etc && touch x", root, true},
+		{"export CDPATH", "Bash", "export CDPATH=/; cd etc; touch x", root, true},
+		// A cd in a subshell or a pipeline ends with it.
+		{"cd in a subshell", "Bash", "(cd /) && touch x", root, false},
+		{"cd in a subshell, write inside it", "Bash", "(cd / && touch x)", root, true},
+		{"cd out after a subshell", "Bash", "(cd sub) ; cd / ; touch x", root, true},
+		{"cd in a pipeline", "Bash", "cd / | true; touch x", root, false},
+		{"cd in sh -c ends with it", "Bash", "sh -c 'cd /'; touch x", root, false},
+		{"cd in eval stays", "Bash", "eval 'cd /'; touch x", root, true},
+		// More programs that write.
+		{"cp --target-directory=", "Bash", "cp --target-directory=/etc a", root, true},
+		{"curl -o", "Bash", "curl -o /etc/x https://e.x", root, true},
+		{"curl --output=", "Bash", "curl --output=/etc/x https://e.x", root, true},
+		{"curl -o inside", "Bash", "curl -sSLo out.txt https://e.x", root, false},
+		{"wget -O", "Bash", "wget -O /etc/x https://e.x", root, true},
+		{"tar -C", "Bash", "tar -xzf a.tgz -C /etc", root, true},
+		{"tar -C inside", "Bash", "tar -xzf a.tgz -C sub", root, false},
+		{"git clone into", "Bash", "git clone https://e.x/r.git /etc/r", root, true},
+		{"git clone here", "Bash", "git clone https://e.x/r.git", root, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hits := Names(Match(Builtin(), Call{Tool: tc.tool, Text: tc.text, Root: root, RunDir: tc.run, Home: "/home/me", Shown: strings.Contains(tc.text, "***")}))
 			if got := slices.Contains(hits, RuleOutsideWorktree); got != tc.outside {
 				t.Errorf("Match(%q, %q) from %q = %q, want outside %v", tc.tool, tc.text, tc.run, hits, tc.outside)
+			}
+		})
+	}
+}
+
+// TestLinksResolveBeforeTheyCompare is a security boundary: with links
+// resolved (Resolve), a path through a link compares by where it leads. Ways
+// it could fail: a path written through a link to the root read as outside,
+// or a link inside the root that leads out read as inside.
+func TestLinksResolveBeforeTheyCompare(t *testing.T) {
+	const root = "/var/home/me/proj"
+	links := map[string]string{"/home": "/var/home", "/var/home/me/proj/out": "/etc"}
+	resolve := func(p string) string {
+		for from, to := range links {
+			if p == from || strings.HasPrefix(p, from+"/") {
+				return to + strings.TrimPrefix(p, from)
+			}
+		}
+		return p
+	}
+	for _, tc := range []struct {
+		name, text, run string
+		outside         bool
+	}{
+		{"through a link to the root", "/home/me/proj/main.go", root, false},
+		{"relative from a run folder through a link", "main.go", "/home/me/proj", false},
+		{"a link inside that leads out", "/var/home/me/proj/out/passwd", root, true},
+		{"relative through a link that leads out", "out/passwd", root, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hits := Names(Match(Builtin(), Call{Tool: "Write", Text: tc.text, Root: root, RunDir: tc.run, Resolve: resolve}))
+			if got := slices.Contains(hits, RuleOutsideWorktree); got != tc.outside {
+				t.Errorf("%q from %q: %q, want outside %v", tc.text, tc.run, hits, tc.outside)
 			}
 		})
 	}

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
@@ -78,7 +77,7 @@ func (a *attentionStore) riskOfCall(tool, target, line, root, runDir string) []r
 	if set == nil || len(set.rules) == 0 {
 		return nil
 	}
-	return risk.Match(set.rules, risk.Call{Tool: tool, Text: target, Root: root, RunDir: runDir, Home: set.home})
+	return risk.Match(set.rules, risk.Call{Tool: tool, Text: target, Root: root, RunDir: runDir, Home: set.home, Resolve: realPath})
 }
 
 // riskOfLine matches the rules against the line a pane reported for its
@@ -101,7 +100,7 @@ func (a *attentionStore) riskOfLine(line, root, runDir string) []risk.Hit {
 	// read as outside it. A "..." the line did not get from a clip is part
 	// of the path, so Clipped is set only for a line Clip cut.
 	clipped := integration.Clipped(line)
-	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, RunDir: runDir, Home: set.home, Shown: true, Clipped: clipped})
+	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, RunDir: runDir, Home: set.home, Shown: true, Clipped: clipped, Resolve: realPath})
 	// A line cut to length, a run redacted from it, or a dialog that shows
 	// only part of the call (harness.PartialSuffix) may hide what a rule
 	// would match.
@@ -148,49 +147,153 @@ func planLineCount(plan string) int {
 	return strings.Count(plan, "\n") + 1
 }
 
-// paneRoot is the folder the risk rules hold a pane's calls to, and the
-// files grant holds its copies to: the session's worktree when tuios made it,
-// else the folder the window's first process started in (noteStartDir). Both
-// are fixed by the daemon, so nothing the pane does moves them.
+// approvalRoot is the folder the risk rules hold a pane's calls to. It is
+// the first of these that is a usable folder (usableFolder):
 //
-// The pane's working folder is never used. The pane moves it with cd, or
-// names any folder with an OSC 7 it prints, so a pane at / would make every
-// path look inside. A worktree tuios did not make is not used either: it is
-// detected from the first window's working folder (refreshWorktree), so it
-// follows a cd into another repository.
+//   - the session's worktree, when tuios made it;
+//   - the folder the window's first process started in (noteStartDir);
+//   - the folder the pane's agent started in, as its harness reported it on
+//     the first report of its session (noteAgentStartDir).
 //
-// It is "" when there is no fixed folder, or when the folder is the home
-// folder or a folder above it, a file system root among them: such a folder
-// holds the person's whole account, so a limit to it means nothing. The risk
-// rules then read every absolute path as outside (risk.Call.Root), and the
-// files grant refuses the copy.
-func paneRoot(wt *WorktreeInfo, startDir string) string {
-	dir := ""
-	switch {
-	case wt != nil && wt.Managed && wt.Path != "":
-		dir = wt.Path
-	case startDir != "":
-		dir = startDir
-	default:
+// Each is fixed and resolved when it is recorded, so nothing the pane does
+// later moves it. The pane's working folder is never used: the pane moves
+// it with cd, or names any folder with an OSC 7 it prints. A worktree tuios
+// did not make is not used either: it is detected from the first window's
+// working folder (refreshWorktree), so it follows a cd into another
+// repository.
+//
+// The root is resolved, so it compares with a resolved path. It is "" when
+// no source is usable, and the risk rules then read every absolute path as
+// outside (risk.Call.Root).
+//
+// It reads the file system, so it is called only for an approval, never on
+// every state change. It takes no session lock: the event sink calls it
+// with the state lock held, which is why it does not call windowFolder.
+func approvalRoot(managedWorktree, startDir, agentDir string) string {
+	for _, dir := range []string{managedWorktree, startDir, agentDir} {
+		if dir = usableFolder(dir); dir != "" {
+			return dir
+		}
+	}
+	return ""
+}
+
+// usableFolder is dir when it is a folder a pane can be held to, else "".
+// It is the check windowFolder makes for the files grant: the folder as it
+// was recorded, resolved, still a folder that resolves to itself, narrower
+// than the home folder (tooWideFolder) and owned by the daemon's user
+// (ownedByDaemonUser). A managed worktree path is recorded unresolved, so it
+// is cleaned and taken as it is; a link there fails the check.
+func usableFolder(dir string) string {
+	if dir == "" {
 		return ""
 	}
 	dir = filepath.Clean(dir)
-	if filepath.Dir(dir) == dir || holdsHome(dir) {
+	if fi, err := os.Lstat(dir); err != nil || !fi.IsDir() || realPath(dir) != dir {
+		return ""
+	}
+	if tooWideFolder(dir) || !ownedByDaemonUser(dir) {
 		return ""
 	}
 	return dir
 }
 
-// paneRunDir is the folder a pane's process runs in now: the folder its shell
-// announced, else the folder read from the process. A relative path in an
-// approval is resolved against it (risk.Call.RunDir). It is "" for a pane on
-// another machine, or one running ssh, or when no folder is known, and then
-// every relative path is read as outside.
-//
-// fresh reads the process now, a system call. Without it the last read the
-// output check made is used (pane_cwd_check.go), which takes no lock but the
-// check's own: the event sink calls it with the state lock held.
-func (s *Session) paneRunDir(ptyID string, fresh bool) string {
+// managedWorktreePath is the session's worktree path when tuios made it,
+// else "".
+func managedWorktreePath(wt *WorktreeInfo) string {
+	if wt != nil && wt.Managed {
+		return wt.Path
+	}
+	return ""
+}
+
+// windowApprovalRoot is approvalRoot for one window of the session. agentSID
+// is the window's agent session id (WindowState.AgentSessionID).
+func (s *Session) windowApprovalRoot(managedWorktree, windowID, agentSID string) string {
+	return approvalRoot(managedWorktree, s.windowStartDir(windowID), s.agentStartDir(windowID, agentSID))
+}
+
+// agentStartDirsPerWindow bounds how many agent sessions one window keeps a
+// start folder for. A report names its session itself, so a pane could name
+// a new one on every call.
+const agentStartDirsPerWindow = 16
+
+// noteAgentStartDir records the folder an agent session started in, the
+// first time a report of that session names one. Later reports of the same
+// session never move it. dir must already be resolved (realPath). The
+// caller checks dir against the pane's own folder first (verbSetAgentState).
+func (s *Session) noteAgentStartDir(windowID, agentSID, dir string) {
+	if windowID == "" || agentSID == "" || dir == "" {
+		return
+	}
+	s.agentDirsMu.Lock()
+	defer s.agentDirsMu.Unlock()
+	if s.agentDirs == nil {
+		s.agentDirs = make(map[string]map[string]string)
+	}
+	byID := s.agentDirs[windowID]
+	if byID == nil {
+		byID = make(map[string]string)
+		s.agentDirs[windowID] = byID
+	}
+	if _, ok := byID[agentSID]; ok || len(byID) >= agentStartDirsPerWindow {
+		return
+	}
+	byID[agentSID] = dir
+}
+
+// noteReportedAgentDir keeps the folder a hook reported for an agent session
+// as that session's start folder, the first time a report of the session
+// names one. It is kept only when the window's agent is that session now,
+// and the folder is the one the pane's process runs in, read from the
+// process: a report that names some other folder records nothing. The
+// folder is stored resolved (realPath).
+func (d *Daemon) noteReportedAgentDir(sess *Session, target, agentSID, cwd string) {
+	if !filepath.IsAbs(cwd) {
+		return
+	}
+	// The report names its window as the caller did: an id, an index or a
+	// name.
+	st := sess.GetState()
+	idx, err := findWindowStateIndex(st.Windows, target)
+	if err != nil {
+		return
+	}
+	w := st.Windows[idx]
+	if w.AgentSessionID != agentSID || sess.agentStartDir(w.ID, agentSID) != "" {
+		return
+	}
+	live := sess.paneRunDir(w.PTYID)
+	if live == "" {
+		return
+	}
+	dir := realPath(filepath.Clean(cwd))
+	if dir != realPath(filepath.Clean(live)) {
+		return
+	}
+	sess.noteAgentStartDir(w.ID, agentSID, dir)
+}
+
+// agentStartDir is the start folder recorded for an agent session in a
+// window, or "".
+func (s *Session) agentStartDir(windowID, agentSID string) string {
+	if windowID == "" || agentSID == "" {
+		return ""
+	}
+	s.agentDirsMu.Lock()
+	defer s.agentDirsMu.Unlock()
+	return s.agentDirs[windowID][agentSID]
+}
+
+// paneRunDir is the folder a pane's process runs in now: the folder read
+// from the process, else the folder its shell last announced with OSC 7, else
+// the folder it started in. A report never wins over the process, since the
+// pane prints what it likes. A relative path in an approval is resolved
+// against it (risk.Call.RunDir). It is "" for a pane on another machine, or
+// one running ssh, or when no folder is known, and then every relative path
+// is read as outside. It takes no session lock, so the event sink may call
+// it with the state lock held; the process read is one system call.
+func (s *Session) paneRunDir(ptyID string) string {
 	if s == nil || ptyID == "" {
 		return ""
 	}
@@ -202,44 +305,10 @@ func (s *Session) paneRunDir(ptyID string, fresh bool) string {
 	if p.place.Elsewhere() != "" {
 		return ""
 	}
-	if p.place.announced.Load() {
-		return p.place.Cwd()
+	if cwd, ok := p.ProcessCwd(); ok && cwd != "" {
+		return cwd
 	}
-	if fresh {
-		if cwd, ok := p.ProcessCwd(); ok && cwd != "" {
-			return cwd
-		}
-		return ""
-	}
-	p.cwdCheck.mu.Lock()
-	seen := p.cwdCheck.seen
-	p.cwdCheck.mu.Unlock()
-	if seen != "" {
-		return seen
-	}
-	// No read yet: the folder the shell was started in.
 	return p.place.Cwd()
-}
-
-// wideRoots remembers holdsHome's answer by folder. paneRoot runs on every
-// state change (snapshotLifecycle), and the answer reads the file system.
-var wideRoots sync.Map
-
-// holdsHome reports whether dir is the home folder or a folder above it,
-// with symlinks resolved on both sides. With no home folder known, nothing
-// is too wide but a file system root.
-func holdsHome(dir string) bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return false
-	}
-	key := dir + "\x00" + home
-	if v, ok := wideRoots.Load(key); ok {
-		return v.(bool)
-	}
-	wide := pathUnder(filepath.Clean(home), dir) || pathUnder(realPath(home), realPath(dir))
-	wideRoots.Store(key, wide)
-	return wide
 }
 
 // errRiskUnacknowledged is an allow of a risky call without risk_ack naming

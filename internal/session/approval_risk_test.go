@@ -412,7 +412,7 @@ func riskSession(t *testing.T, d *Daemon) (*Session, string, string) {
 	st := sess.GetState()
 	for _, id := range []string{a, b} {
 		w, _ := findWindowState(st, id)
-		dir := sess.paneRunDir(w.PTYID, true)
+		dir := sess.paneRunDir(w.PTYID)
 		if dir == "" {
 			t.Fatalf("window %s has no folder", id)
 		}

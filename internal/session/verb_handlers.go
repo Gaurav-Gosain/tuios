@@ -1238,6 +1238,10 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		TranscriptPath string `json:"transcript_path"`
 		IfState        string `json:"if_state"`
 		HarnessPID     int    `json:"harness_pid"`
+		// AgentCwd is the folder the harness reported for its session. The
+		// first one for a session is kept as the agent's start folder. See
+		// noteReportedAgentDir.
+		AgentCwd string `json:"agent_cwd"`
 		// Activity is one hook event for the pane's activity ring. It is
 		// recorded when the report passes the identity guard, whether or not
 		// the state part applies. See agent_activity.go.
@@ -1354,6 +1358,10 @@ func (d *Daemon) verbSetAgentState(cs *connState, params json.RawMessage) (any, 
 		// then found a nested run: the ring made for it holds nothing of the
 		// pane's agent.
 		d.activity.forgetIfEmpty(sess.ID, windowID)
+	}
+	if p.AgentCwd != "" && p.AgentSessionID != "" &&
+		reason != agentRefusedForeignSession && reason != agentRefusedForeignHarness {
+		d.noteReportedAgentDir(sess, target, p.AgentSessionID, p.AgentCwd)
 	}
 	transcriptRefused := ""
 	if applied && p.TranscriptPath != "" {

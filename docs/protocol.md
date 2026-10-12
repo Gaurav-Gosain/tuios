@@ -5088,13 +5088,17 @@ that does not show the whole call also carries `cut short` in `risk`, which is
 acknowledged like a rule. A path in such a line is read only up to the `***`,
 or, for the last word of a clipped line, up to the `...` the clip adds. A
 `...` at any other place is part of the path. `outside the worktree` measures
-from the pane's root: the session's worktree when tuios made it, else the
-folder the pane started in. A `cd` or an OSC 7 does not move it. A pane with
-no root, or a root of the home folder or above, has every absolute or `~` path
-read as outside. A relative path is read from the folder the call runs in: the
-`cwd` the hook sends on `request-approval`, else the pane's own folder. A `cd`
-earlier in the command moves that folder. A relative path is outside when that
-folder is not known or is outside the root. `outside the worktree` names a
+from the pane's root: the first of the session's worktree when tuios made it,
+the folder the pane started in, and the folder its agent started in
+(`agent_cwd` on the first `set-agent-state` of the agent session) that is
+narrower than the home folder. A `cd`, an OSC 7 or a later report does not
+move it. A pane with no root has every absolute or `~` path read as outside.
+Links are resolved before paths are compared. A relative path is read from
+the folder the call runs in: the `cwd` the hook sends on `request-approval`,
+else the folder the pane's process is in. A `cd` earlier in the command moves
+that folder, and a `cd` in a subshell or a pipeline ends with it. A relative
+path is outside when that folder is not known or is outside the root. A path
+with a variable in it, other than a leading `$HOME`, is outside. `outside the worktree` names a
 cut path only when the part the line shows already leaves the worktree. A
 Codex `apply_patch` line always carries `cut short`, because every patch
 starts with `*** Begin Patch`. A daemon that

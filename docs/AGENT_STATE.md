@@ -2913,23 +2913,39 @@ x; fi` and `(cd build && rm -rf out)` read as `rm`:
 | wide permissions | `chmod -R 777`, `chown -R` on `/` or `~` |
 | database | `DROP TABLE`, `DROP DATABASE`, `TRUNCATE TABLE`, in any case |
 | infrastructure | `terraform apply` or `destroy`, `kubectl delete`, `docker system prune`, `npm publish`, `cargo publish` |
-| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i` and the like naming an absolute or `~` path outside the pane's root, or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside. See the pane's root below |
+| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i`, `curl -o`, `wget -O`, `tar -x -C`, `git clone` into a folder and the like naming a path outside the pane's root, or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside. See the pane's root below |
 
-The pane's root is fixed when tuios makes the pane, and nothing the pane does
-moves it:
+The pane's root is the first of these that is inside your home folder, not
+the home folder itself:
 
 - The session's worktree, when tuios made it (`tuios worktree new`, a fan-out).
-- Else the folder the pane's first process started in.
+- The folder the pane's first process started in.
+- The folder the pane's agent started in. tuios keeps the folder the agent's
+  hook names on its first report, when it is the folder the pane runs in and
+  you own it. So `cd proj && claude` in a pane started in your home folder
+  gives the root `proj`.
 
-A `cd` or an OSC 7 does not move the root. A git worktree that tuios finds
-after a `cd` does not change it either. A pane with no root, or with a root of
-your home folder or a folder above it, has no limit. Then every absolute or
-`~` path counts as outside, and the call is marked.
+Nothing the pane does later moves the root. A `cd` or an OSC 7 does not move
+it. A git worktree that tuios finds after a `cd` does not change it. A later
+report from the agent does not change it. If no folder qualifies, the pane
+has no root. Then every absolute or `~` path counts as outside, and the call
+is marked.
+
+tuios resolves links before it compares paths. A start folder of
+`/home/you/proj` and a path of `/var/home/you/proj/main.go` match when
+`/home` is a link to `/var/home`.
 
 A relative path is read from the folder the call runs in. That is the folder
-the harness sends with the approval, else the pane's own folder. A `cd`
-earlier in the command moves it. If tuios does not know that folder, or the
-folder is outside the root, a relative path counts as outside.
+the harness sends with the approval, else the folder the pane's process is in.
+The folder a pane announces with OSC 7 is used only when the process cannot
+be read. A `cd` earlier in the command moves the folder. A `cd` in a subshell,
+a pipeline or an `sh -c` line ends with it. If tuios does not know the folder,
+or the folder is outside the root, a relative path counts as outside. tuios
+does not know the folder after `cd -`, `popd`, `env -C` or a `CDPATH`
+setting, or after a `cd` to a path with a variable in it.
+
+A path with a variable in it, other than a leading `$HOME`, counts as
+outside. So does a path that starts with `~user`.
 
 Add your own, or turn the shipped ones off, in the config:
 

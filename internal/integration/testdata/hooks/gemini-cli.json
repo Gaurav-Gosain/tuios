@@ -2,7 +2,7 @@
   {
     "name": "SessionStart",
     "payload": {"session_id": "g-1", "transcript_path": "/home/u/.gemini/tmp/chat.json", "cwd": "/src", "hook_event_name": "SessionStart", "timestamp": "2026-09-22T10:00:00Z", "source": "startup"},
-    "want": {"state": "idle", "agent_session_id": "g-1", "transcript_path": "/home/u/.gemini/tmp/chat.json"}
+    "want": {"agent_cwd": "/src", "state": "idle", "agent_session_id": "g-1", "transcript_path": "/home/u/.gemini/tmp/chat.json"}
   },
   {
     "name": "BeforeAgent",
