@@ -76,25 +76,35 @@ func (d *Daemon) settleSessionSize(sessionID string) (width, height int, policy,
 }
 
 // sizeOwner is the client a session's size came from: latest when it is one
-// of the clients, otherwise the first whose width is the session's, and then
-// the first whose height is.
+// of the clients, otherwise the client that attached first of those whose
+// width is the session's, and then of those whose height is.
+//
+// The order is the attach order, never the order clients come in: that is a
+// map's, so two clients of one size would swap as the owner from one call to
+// the next, and every swap is a broadcast to every client.
 func sizeOwner(clients []sizedClient, latest string, width, height int) string {
 	for _, c := range clients {
 		if latest != "" && c.id == latest {
 			return c.id
 		}
 	}
-	for _, c := range clients {
-		if w, _ := clampClientSize(c.w, c.h); w == width {
-			return c.id
+	first := func(match func(w, h int) bool) string {
+		var best *sizedClient
+		for i := range clients {
+			c := &clients[i]
+			if w, h := clampClientSize(c.w, c.h); match(w, h) && (best == nil || c.seq < best.seq) {
+				best = c
+			}
 		}
-	}
-	for _, c := range clients {
-		if _, h := clampClientSize(c.w, c.h); h == height {
-			return c.id
+		if best == nil {
+			return ""
 		}
+		return best.id
 	}
-	return ""
+	if id := first(func(w, _ int) bool { return w == width }); id != "" {
+		return id
+	}
+	return first(func(_, h int) bool { return h == height })
 }
 
 // calculateSessionReserve returns the chrome reserve the session's panes are
@@ -106,31 +116,39 @@ func sizeOwner(clients []sizedClient, latest string, width, height int) string {
 // the rail is, and it must not take those columns off the panes, so the only
 // reserve every client can honour at once is the biggest one.
 //
-// Under latest it is the latest client's own. The session is that client's
-// size, so its panes have to reach its own rail and dock: with the largest
-// reserve, a client with a 28 column rail beside one with a 31 column rail
-// left three blank columns between its panes and its rail. Every other client
-// draws the session as a view inside its own chrome (see pane_view.go in
-// internal/app), so it needs no room in the session for its chrome.
-func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string) LayoutReserve {
+// Under latest, an edge counts only the clients that are the session's size
+// along its axis: the latest client, and any other client exactly as wide (for
+// the left and right edges) or as tall (for the top and bottom). The session
+// is the latest client's size, so its panes have to reach its own rail and
+// dock. With the largest reserve of every client, a client with a 28 column
+// rail beside a smaller one with a 31 column rail left three blank columns
+// between its panes and its rail. A client of another size draws the session
+// as a view inside its own chrome (see pane_view.go in internal/app), so it
+// needs no room in the session for its chrome. A client of the same size has
+// no room to spare, so it still counts, as under smallest.
+func (d *Daemon) calculateSessionReserve(sessionID, policy, owner string, width, height int) LayoutReserve {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
+	latest := policy == config.WindowSizeLatest && owner != ""
 	var agreed LayoutReserve
 	for _, cs := range d.clients {
 		cs.mu.Lock()
 		match := cs.sessionID == sessionID && cs.isTUIClient
 		r := cs.reserve
 		id := cs.clientID
+		cw, ch := clampClientSize(cs.width, cs.height)
 		cs.mu.Unlock()
 		if !match {
 			continue
 		}
-		if policy == config.WindowSizeLatest && owner != "" {
-			if id == owner {
-				return r
+		if latest && id != owner {
+			if cw != width {
+				r.Left, r.Right = 0, 0
 			}
-			continue
+			if ch != height {
+				r.Top, r.Bottom = 0, 0
+			}
 		}
 		agreed = agreed.Max(r)
 	}
@@ -296,12 +314,12 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 	// The reserve settles with the size, and a change to either has to be
 	// announced: the panes' box is the size less the reserve, so a client told
 	// only about the size would lay them out in a box nobody else is using.
-	newReserve := d.calculateSessionReserve(sessionID, policy, owner)
+	newReserve := d.calculateSessionReserve(sessionID, policy, owner, newWidth, newHeight)
 
 	oldWidth, oldHeight := session.Size()
 	oldReserve := session.LayoutReserve()
 	sizedBy := d.clientLabel(owner)
-	policyChanged := session.swapWindowSizePolicy(policy, sizedBy)
+	policyChanged := session.swapWindowSizePolicy(policy, sizedBy, owner)
 	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve && !policyChanged {
 		return newWidth, newHeight, newReserve
 	}
@@ -311,13 +329,14 @@ func (d *Daemon) recalculateSize(sessionID, excludeClientID string) (width, heig
 	gen := session.SettleLayout(newWidth, newHeight, newReserve)
 
 	payload := &SessionResizePayload{
-		Width:       newWidth,
-		Height:      newHeight,
-		ClientCount: d.getSessionClientCount(sessionID),
-		Reserve:     newReserve,
-		Generation:  gen,
-		Policy:      policy,
-		SizedBy:     sizedBy,
+		Width:         newWidth,
+		Height:        newHeight,
+		ClientCount:   d.getSessionClientCount(sessionID),
+		Reserve:       newReserve,
+		Generation:    gen,
+		Policy:        policy,
+		SizedBy:       sizedBy,
+		SizedByClient: owner,
 	}
 	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
 	LogBasic("Session %s resized to %dx%d, chrome %+v (%s of %d clients)",

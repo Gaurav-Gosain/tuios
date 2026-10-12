@@ -336,18 +336,21 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 
 	// The reply, and with it this client's admission to the session's
 	// broadcasts. See sendAttachReply for why those are one step.
+	sizedBy, sizedByClient := session.SizedBy()
 	err = d.sendAttachReply(cs, msg, &AttachedPayload{
-		SessionName: session.Name(),
-		SessionID:   session.ID,
-		Width:       effectiveWidth,
-		Height:      effectiveHeight,
-		WindowCount: len(state.Windows),
-		State:       state,
-		Reserve:     effectiveReserve,
-		Generation:  session.LayoutGeneration(),
-		HumanNonce:  humanNonce,
-		Policy:      session.WindowSizePolicy(),
-		SizedBy:     session.SizedBy(),
+		SessionName:   session.Name(),
+		SessionID:     session.ID,
+		Width:         effectiveWidth,
+		Height:        effectiveHeight,
+		WindowCount:   len(state.Windows),
+		State:         state,
+		Reserve:       effectiveReserve,
+		Generation:    session.LayoutGeneration(),
+		HumanNonce:    humanNonce,
+		Policy:        session.WindowSizePolicy(),
+		SizedBy:       sizedBy,
+		SizedByClient: sizedByClient,
+		ClientID:      cs.clientID,
 	})
 	attachLocked = false
 	session.attachMu.Unlock()

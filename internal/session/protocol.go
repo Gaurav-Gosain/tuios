@@ -432,6 +432,12 @@ type AttachedPayload struct {
 	// SizedBy names the machine of the client whose size the session took,
 	// for the hint a larger client shows. Empty when it is not known.
 	SizedBy string `json:"sized_by,omitempty"`
+	// SizedByClient is the connection ID of that client, and ClientID is
+	// this client's own. Together they tell a client whether it sets the
+	// size. Under latest a client that does not lays the panes out around
+	// the agreed reserve alone. Empty from an older daemon.
+	SizedByClient string `json:"sized_by_client,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
 }
 
 // NewPayload requests creation of a new session.
@@ -875,6 +881,9 @@ type SessionResizePayload struct {
 	// SizedBy names the machine of the client whose size the session took.
 	// See AttachedPayload.SizedBy.
 	SizedBy string `json:"sized_by,omitempty"`
+	// SizedByClient is the connection ID of that client. See
+	// AttachedPayload.SizedByClient.
+	SizedByClient string `json:"sized_by_client,omitempty"`
 }
 
 // Error codes

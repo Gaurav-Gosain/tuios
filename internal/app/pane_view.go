@@ -88,7 +88,7 @@ func (m *OS) widthDiffers() bool {
 		return true
 	}
 	own, agreed, ok := m.reserveDiffers()
-	return ok && (own.Left != agreed.Left || own.Right != agreed.Right)
+	return ok && (own.Left > agreed.Left || own.Right > agreed.Right)
 }
 
 // heightDiffers is widthDiffers for the height.
@@ -100,19 +100,28 @@ func (m *OS) heightDiffers() bool {
 		return true
 	}
 	own, agreed, ok := m.reserveDiffers()
-	return ok && (own.Top != agreed.Top || own.Bottom != agreed.Bottom)
+	return ok && (own.Top > agreed.Top || own.Bottom > agreed.Bottom)
 }
 
 // reserveDiffers returns this client's own chrome and the session's agreed
-// reserve, with ok true under latest. Under latest the agreed reserve is the
-// latest client's own, so another client of the same size with other chrome
-// (a wider rail, or none) cannot lay the panes out around its own: it would
-// put them in a box no other client uses. It lays them out around the agreed
-// reserve, like every client, and draws them as a view inside its own
-// chrome. Under smallest and largest the agreed reserve is the largest, so
-// it is never less than a client's own, and nothing changes.
+// reserve, with ok true under latest while another client sets the size.
+// Under latest the agreed reserve counts only the clients of the session's
+// size, so a client of another size, or one whose chrome the daemon has not
+// counted yet, can have more chrome than the agreed reserve. Floored by its
+// own, it would put the panes in a box no other client uses. Along an axis
+// where its chrome is larger, it lays them out around the agreed reserve,
+// like every client, and draws them as a view inside its own chrome. Where
+// its chrome is smaller, the floor changes nothing.
+//
+// The client that sets the size keeps its own chrome as the floor, so a
+// change to its rail moves its panes at once, before the daemon has agreed
+// the new reserve. Under smallest and largest the agreed reserve is the
+// largest, so it is never less than a client's own, and nothing changes.
 func (m *OS) reserveDiffers() (own, agreed session.LayoutReserve, ok bool) {
-	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest {
+	// With no size from the daemon yet (an empty session's attach carries
+	// none), there is no agreed box to lay out around, and the floor stays.
+	if m.DaemonClient == nil || m.DaemonClient.SessionWindowSize() != config.WindowSizeLatest ||
+		!m.DaemonClient.SessionSizedByOther() || m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
 		return own, agreed, false
 	}
 	return m.OwnLayoutReserve(), m.SessionReserve, true

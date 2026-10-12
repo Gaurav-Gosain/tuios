@@ -39,6 +39,12 @@ func (c *TUIClient) SessionWindowSize() string {
 	return ""
 }
 
+// sessionSizer is the client whose size the session took: its machine and its
+// connection ID.
+type sessionSizer struct {
+	machine, client string
+}
+
 // SessionSizedBy is the machine of the client whose size the session took,
 // or "" when the daemon has not said.
 func (c *TUIClient) SessionSizedBy() string {
@@ -46,9 +52,20 @@ func (c *TUIClient) SessionSizedBy() string {
 		return ""
 	}
 	if p := c.sizedBy.Load(); p != nil {
-		return *p
+		return p.machine
 	}
 	return ""
+}
+
+// SessionSizedByOther reports whether the daemon said that another client
+// sets the session's size. It is false when this client sets it, and when
+// the daemon has not said, as an older daemon never does.
+func (c *TUIClient) SessionSizedByOther() bool {
+	if c == nil {
+		return false
+	}
+	owner, self := c.sizedBy.Load(), c.selfID.Load()
+	return owner != nil && self != nil && owner.client != "" && *self != "" && owner.client != *self
 }
 
 // noteSizePolicy records the session's window_size policy, from an attach

@@ -1284,10 +1284,12 @@ type Session struct {
 	// SessionResizePayload.Generation.
 	layoutGen uint64
 	// sizePolicy is the window_size policy the size above was settled under,
-	// and sizedBy the machine of the client that set it.
-	sizePolicy string
-	sizedBy    string
-	sizeMu     sync.RWMutex
+	// sizedBy the machine of the client that set it, and sizedByClient that
+	// client's connection ID.
+	sizePolicy    string
+	sizedBy       string
+	sizedByClient string
+	sizeMu        sync.RWMutex
 
 	// Lifecycle
 	Created time.Time
@@ -3249,24 +3251,25 @@ func (s *Session) SettleLayout(width, height int, r LayoutReserve) uint64 {
 }
 
 // swapWindowSizePolicy records the window_size policy the session's size was
-// last settled under, and the machine of the client that set it, and reports
-// whether either changed. Guarded by sizeMu with the size it describes.
-func (s *Session) swapWindowSizePolicy(policy, sizedBy string) bool {
+// last settled under, and the machine and connection ID of the client that
+// set it, and reports whether any of them changed. Guarded by sizeMu with the
+// size it describes.
+func (s *Session) swapWindowSizePolicy(policy, sizedBy, sizedByClient string) bool {
 	s.sizeMu.Lock()
 	defer s.sizeMu.Unlock()
-	if s.sizePolicy == policy && s.sizedBy == sizedBy {
+	if s.sizePolicy == policy && s.sizedBy == sizedBy && s.sizedByClient == sizedByClient {
 		return false
 	}
-	s.sizePolicy, s.sizedBy = policy, sizedBy
+	s.sizePolicy, s.sizedBy, s.sizedByClient = policy, sizedBy, sizedByClient
 	return true
 }
 
-// SizedBy is the machine of the client that set the session's size, "" when
-// it is not known.
-func (s *Session) SizedBy() string {
+// SizedBy is the machine and the connection ID of the client that set the
+// session's size, "" when they are not known.
+func (s *Session) SizedBy() (machine, client string) {
 	s.sizeMu.RLock()
 	defer s.sizeMu.RUnlock()
-	return s.sizedBy
+	return s.sizedBy, s.sizedByClient
 }
 
 // WindowSizePolicy is the window_size policy in force for the session's size:

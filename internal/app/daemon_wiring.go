@@ -182,6 +182,11 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 	} else {
 		m.LogInfo("No existing state to restore")
 		m.adoptEmptySessionVersion(state)
+		// The reserve the daemon agreed, as RestoreFromState takes it for a
+		// session with windows.
+		if m.DaemonClient != nil {
+			m.SessionReserve = m.DaemonClient.SessionLayoutReserve()
+		}
 	}
 
 	m.reportFocusChange()
