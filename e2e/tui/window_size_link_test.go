@@ -411,3 +411,60 @@ func TestWindowSizeOldClientChromeCounts(t *testing.T) {
 	saveSizeFrame(t, old, "old-client")
 	saveSizeFrame(t, cur, "current-client")
 }
+
+// TestWindowSizeRailOverLeftoverTakesClicks opens a hidden right rail for the
+// keyboard on the larger client. That rail is out of the reserve, so it is
+// drawn over the dots. A click on its row for the other pane moves the focus
+// there: the dots under the rail do not take the click.
+//
+// NEGATIVE CONTROL: with the SidebarBandContains check cut from
+// pointerOverLeftover, the click is swallowed and the focus stays.
+func TestWindowSizeRailOverLeftoverTakesClicks(t *testing.T) {
+	cfg := "[appearance.sidebar]\nenabled = false\nposition = \"right\"\nwidth = 28\n"
+	big, _, base := windowSizePair(t, "smallest", cfg, nil)
+	waitWSSize(t, base, wsSmallCols, wsSmallRows, "under smallest")
+	_, focused := focusedLayout(t, base, wsSession)
+	if focused == "" {
+		t.Fatal("no pane is focused")
+	}
+	if err := big.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatalf("open the rail: %v", err)
+	}
+	// The row of the pane that is not focused, in the rail at the right edge.
+	railX := wsBigCols - linkRail
+	row, col := -1, -1
+	waitSizeScreen(t, big, "the rail never opened with both terminal rows", func(s tuitest.Screen) bool {
+		row, col = -1, -1
+		n := 0
+		for y := range wsBigRows {
+			line := []rune(s.Line(y))
+			if len(line) <= railX {
+				continue
+			}
+			tail := string(line[railX:])
+			i := strings.Index(tail, "Terminal ")
+			if i < 0 {
+				continue
+			}
+			n++
+			id := strings.Fields(tail[i+len("Terminal "):])
+			if len(id) > 0 && !strings.HasPrefix(focused, id[0]) {
+				row, col = y, railX+len([]rune(tail[:i]))+2
+			}
+		}
+		return n == 2 && row >= 0
+	})
+	saveSizeFrame(t, big, "rail-over-dots")
+	leftClick(t, big, col, row)
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if _, now := focusedLayout(t, base, wsSession); now != focused {
+			return
+		}
+		if time.Now().After(deadline) {
+			saveSizeFrame(t, big, "failed")
+			t.Fatalf("a click on the rail's row at %d,%d over the dots never moved the focus\n%s", col, row, big.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
