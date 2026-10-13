@@ -5555,3 +5555,21 @@ is `~/.cache/agent-tmp/gui-port/proof/nc-files.txt`.
 | The bridge ignores host | `runVerb`: the `verbDialHost` branch made false | `TestGUIBridgeVerbOnAHost` (the listing's home is this machine's) | **caught** |
 | The nonce goes to the host | `runVerb`: the person-verb refusal made false | `TestGUIBridgeVerbOnAHost` (build answered forbidden, not this machine's refusal) | **caught** |
 | No host on a window | the state export: `Host: w.Host` cut | `TestGUIBridgeVerbOnAHost` (no window says build) | **caught** |
+
+### file-preview after review: the decode cap and the film containers
+
+`TestFilePreviewHoldsItsDecodeCap` previews a baseline JPEG that fits (scaled
+here to 1200 x 800), a 9000 x 7000 progressive JPEG (sent as it is, the
+daemon under 300 MB), a grey 9000 x 7000 baseline JPEG (scaled here to 1600,
+the daemon under 300 MB) and a WebP (sent as it is).
+`TestFilePreviewOpensOnlyFilmContainers` previews an MPEG transport stream
+named .mp4, which must get no frame and no length.
+
+Each control below was run on 2026-10-13 on branch `feat/gui-files`. The log
+is `~/.cache/agent-tmp/gui-port/proof/nc-preview-review.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The decoder's coefficients not counted | `decodeCost`: the progressive term cut | `TestFilePreviewHoldsItsDecodeCap` (353 MB for the progressive JPEG, 421 MB after the grey one) | **caught** |
+| The CatmullRom scale | `fit`: `draw.CatmullRom` in place of `ApproxBiLinear` | `TestFilePreviewHoldsItsDecodeCap` (542 MB scaling the grey JPEG) | **caught** |
+| No ffmpeg whitelists | `previewVideo`, `videoDuration`: the whitelist flags cut | `TestFilePreviewOpensOnlyFilmContainers` (a frame of 6460 bytes, 2000 ms) | **caught** |
