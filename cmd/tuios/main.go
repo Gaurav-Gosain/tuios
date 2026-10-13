@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -35,6 +36,7 @@ var (
 // Global flags
 var (
 	debugMode      bool
+	serverName     string
 	cpuProfile     string
 	pprofAddr      string
 	listThemes     bool
@@ -53,6 +55,14 @@ func main() {
 	app.SetBuildStamp(version, commit)
 	// XTVERSION names the build to the programs in a pane.
 	vt.SetBuildVersion(version)
+
+	// The server a pane's daemon was started for reaches every tuios run in
+	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it
+	// is applied before either can take over. --server replaces it later.
+	if err := serverscope.Apply(os.Getenv(serverscope.Env)); err != nil {
+		fmt.Fprintf(os.Stderr, "tuios: %s: %v\n", serverscope.Env, err)
+		os.Exit(1)
+	}
 
 	// Run through the `tmux` link that tuios tmux-shim installs, this binary
 	// is tmux: the shim answers, or hands the call to the real tmux.

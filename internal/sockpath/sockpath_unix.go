@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
 // The roots the folder is chosen from. They are variables so a test can move
@@ -21,16 +23,22 @@ var (
 	tmpRoot = "/tmp"
 )
 
-// Dir is the folder the daemon's socket lives in: $XDG_RUNTIME_DIR/tuios, or
+// Dir is the folder the daemon's socket lives in: BaseDir for the default
+// server, and BaseDir/servers/<name> for a named one. It only names the
+// folder; the daemon creates and checks it.
+func Dir() string {
+	return serverscope.SocketDir(BaseDir())
+}
+
+// BaseDir is the default server's socket folder: $XDG_RUNTIME_DIR/tuios, or
 // /run/user/<uid>/tuios when XDG_RUNTIME_DIR is unset and that folder is this
-// user's own private runtime folder, or /tmp/tuios-<uid> otherwise. It only
-// names the folder; the daemon creates and checks it.
+// user's own private runtime folder, or /tmp/tuios-<uid> otherwise.
 //
 // The /run/user step is what keeps one user on one daemon. A desktop session
 // sets XDG_RUNTIME_DIR, and a command run over ssh (a host link, hosts sync,
 // a paired device) often does not. Without the step the two picked different
 // folders and started two daemons that could not see each other's sessions.
-func Dir() string {
+func BaseDir() string {
 	if rt := RuntimeDir(); rt != "" {
 		return filepath.Join(rt, "tuios")
 	}
@@ -60,7 +68,8 @@ func LegacyDir() string {
 // or "" when there is none to look at. It is LegacyDir when Dir is the systemd
 // runtime folder, whether XDG_RUNTIME_DIR named it or it was found: a daemon
 // an older tuios started over ssh is there. A runtime folder set to anything
-// else (a test, a script that wants a daemon of its own) has no other folder.
+// else (a test, a script that wants a daemon of its own) has no other folder,
+// and neither has a named server: no older tuios started one.
 func OtherDir() string {
 	sys := systemRuntimeDir()
 	if sys == "" || filepath.Clean(Dir()) != filepath.Join(sys, "tuios") {

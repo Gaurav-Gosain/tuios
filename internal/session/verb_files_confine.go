@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/adrg/xdg"
 	"golang.org/x/text/unicode/norm"
 )
@@ -544,7 +545,14 @@ func (d *Daemon) linkPrivateDirs() linkPrivate {
 		return linkPrivate{}
 	}
 	sock := realPath(filepath.Clean(filepath.Dir(sp)))
-	return linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
+	lp := linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
+	// A named server's socket folder is <default's>/servers/<name>. The
+	// default's folder holds every server's, so it is the one denied, and a
+	// link to one server cannot reach another's sockets or stash.
+	if serverscope.Name() != "" {
+		lp.sock = filepath.Dir(filepath.Dir(sock))
+	}
+	return lp
 }
 
 // denyKeys is a deny list made ready to compare: each entry as named and its
@@ -647,17 +655,28 @@ func linkDenied(p, home string, lp linkPrivate) bool {
 		for _, dir := range linkDenyAbsolute {
 			list = append(list, filepath.FromSlash(dir))
 		}
-		// tuios's own folders, wherever the XDG variables put them.
-		for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
-			if dir != "" {
-				list = append(list, filepath.Join(realPath(dir), "tuios"))
-			}
-		}
+		list = append(list, tuiosOwnDirs()...)
 		if withSock {
 			list = append(list, lp.sock)
 		}
 		return list
 	}).holds(p)
+}
+
+// tuiosOwnDirs is tuios's own folders, wherever the XDG variables put them.
+// The state folders are those of every server, not only the current one's, so
+// a link to one server cannot reach another server's files.
+func tuiosOwnDirs() []string {
+	var list []string
+	for _, dir := range []string{xdg.ConfigHome, serverscope.BaseStateHome(), xdg.DataHome} {
+		if dir != "" {
+			list = append(list, filepath.Join(realPath(dir), "tuios"))
+		}
+	}
+	if base := serverscope.BaseStateHome(); base != "" {
+		list = append(list, filepath.Join(realPath(base), serverscope.StateDirName))
+	}
+	return list
 }
 
 // linkReadDenied reports whether the real path p is in or under the read deny
@@ -675,11 +694,7 @@ func linkReadDenied(p, home string, lp linkPrivate) bool {
 				list = append(list, filepath.Join(home, filepath.FromSlash(rel)))
 			}
 		}
-		for _, dir := range []string{xdg.ConfigHome, xdg.StateHome, xdg.DataHome} {
-			if dir != "" {
-				list = append(list, filepath.Join(realPath(dir), "tuios"))
-			}
-		}
+		list = append(list, tuiosOwnDirs()...)
 		for _, dir := range linkReadDenyAbsolute {
 			list = append(list, filepath.FromSlash(dir))
 		}

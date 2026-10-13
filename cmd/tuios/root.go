@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/skills"
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -89,6 +90,16 @@ comprehensive keyboard/mouse interactions.`,
 		SilenceUsage: true,
 	}
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
+	rootCmd.PersistentFlags().StringVar(&serverName, "server", "", "Use the daemon named NAME: its own socket, saved sessions and daemon log, apart from the default daemon and every other named one. Configuration is shared. TUIOS_SERVER=NAME does the same for a whole shell, and --server \"\" picks the default daemon")
+	// The server is chosen before any subcommand runs, so every one of them
+	// reaches the same daemon. main has already applied TUIOS_SERVER; the
+	// flag, when given, replaces it.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if !cmd.Flags().Changed("server") {
+			return nil
+		}
+		return serverscope.Apply(serverName)
+	}
 	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuprofile", "", "Write CPU profile to file")
 	rootCmd.PersistentFlags().StringVar(&pprofAddr, "pprof", "", "Serve /debug/pprof profiles on this address, for example :6060. With no host, it listens on 127.0.0.1 only. The profiles have no password")
 

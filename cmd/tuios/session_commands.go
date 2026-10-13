@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"golang.org/x/term"
@@ -604,10 +605,20 @@ func reportSessionExit(sessionName, host string, reason app.ExitReason, killed b
 // lsEntry is a row of 'tuios ls --json'. It is the wire type plus the one fact
 // the wire cannot carry: a session that exists only on disk, because no daemon
 // is holding it. The flag is omitted for live sessions, so a listing from a
-// running daemon is unchanged.
+// running daemon is unchanged. Server names the server the row belongs to and
+// is omitted for the default one, whose listing is unchanged too.
 type lsEntry struct {
 	session.SessionInfo
-	Saved bool `json:"saved,omitempty"`
+	Saved  bool   `json:"saved,omitempty"`
+	Server string `json:"server,omitempty"`
+}
+
+// printServerLine says which named server a command reached. The default
+// server prints nothing, so its output is what it always was.
+func printServerLine(socketPath string) {
+	if name := serverscope.Name(); name != "" {
+		fmt.Printf("Server: %s (%s)\n", name, socketPath)
+	}
 }
 
 // runListClients prints the daemon's current client connections.
@@ -682,13 +693,14 @@ func runListSessions(jsonOutput bool) error {
 	if jsonOutput {
 		entries := make([]lsEntry, 0, len(sessions))
 		for _, s := range sessions {
-			entries = append(entries, lsEntry{SessionInfo: s})
+			entries = append(entries, lsEntry{SessionInfo: s, Server: serverscope.Name()})
 		}
 		return printJSON(entries)
 	}
 
 	if len(sessions) == 0 {
 		fmt.Println("No sessions. Create one with 'tuios new', or run 'tuios resurrect' to see saved sessions.")
+		printServerLine(diag.SocketPath)
 		return nil
 	}
 
@@ -726,6 +738,7 @@ func runListSessions(jsonOutput bool) error {
 	if anyRestored {
 		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
 	}
+	printServerLine(diag.SocketPath)
 	return nil
 }
 
@@ -750,7 +763,8 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 					WindowCount: info.WindowCount,
 					LastActive:  savedUnix(info.SavedAt),
 				},
-				Saved: true,
+				Saved:  true,
+				Server: serverscope.Name(),
 			})
 		}
 		if err := printJSON(entries); err != nil {
@@ -775,6 +789,7 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 		fmt.Printf("%s: %s.\n\n", session.SavedTag, session.SavedNote)
 	}
 
+	printServerLine(diag.SocketPath)
 	fmt.Println(diag.Explain())
 	return &statusError{code: noDaemonStatus}
 }
@@ -1112,6 +1127,7 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 
 func runKillDaemon() error {
 	diag := session.DiagnoseDaemon()
+	printServerLine(diag.SocketPath)
 
 	switch diag.State {
 	case session.DaemonRunning:

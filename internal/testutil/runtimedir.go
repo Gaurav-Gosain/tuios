@@ -5,19 +5,24 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
 // A unix socket address is a fixed-size field in the kernel, not a string:
-// 104 bytes on Darwin, 108 on Linux, including the terminator. bind() answers
-// a longer path with EINVAL, which surfaces as "bind: invalid argument" and
-// names neither the path nor the length, so the failure reads like a broken
-// socket rather than a long one.
+// 104 bytes on Darwin, 108 on Linux, including the terminator, so 103 and 107
+// characters are the most bind() accepts. bind() answers a longer path with
+// EINVAL, which surfaces as "bind: invalid argument" and names neither the
+// path nor the length, so the failure reads like a broken socket rather than
+// a long one.
 const maxSocketPath = 104
 
 // sockNameAllowance is what the caller still has to append to the directory
 // this returns. The daemon puts its socket at <dir>/tuios/tuios.sock and its
-// pid file at that plus ".pid", which is the longest of them.
-const sockNameAllowance = len("/tuios/tuios.sock.pid")
+// pid file at that plus ".pid", the longest of the default server's. A named
+// server's sockets sit one folder deeper, at <dir>/tuios/servers/<name>/..., so
+// the allowance leaves room for the longest name too.
+const sockNameAllowance = len("/tuios/tuios.sock.pid") + serverscope.SocketPathGrowth
 
 // RuntimeDir returns a directory to use as XDG_RUNTIME_DIR in a test that
 // starts a daemon, short enough that the socket path inside it still fits in a
@@ -48,7 +53,7 @@ func RuntimeDir(t testing.TB) string {
 	// Fail here rather than at bind, where the kernel reports EINVAL and says
 	// nothing about the length. Nothing in the tree should reach this, but a
 	// machine with an unusual temp root would otherwise get the old mystery.
-	if n := len(dir) + sockNameAllowance; n > maxSocketPath {
+	if n := len(dir) + sockNameAllowance; n >= maxSocketPath {
 		t.Fatalf("testutil: runtime dir %s leaves a %d byte socket path, over the %d byte limit", dir, n, maxSocketPath)
 	}
 	return filepath.Clean(dir)

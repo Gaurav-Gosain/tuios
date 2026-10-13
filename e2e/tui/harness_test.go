@@ -165,6 +165,9 @@ func runE2E(m *testing.M) int {
 	// names the person's daemon, and tuiosCLI passes the environment on. The
 	// commands would dial it to check it; the suite has no business there.
 	_ = os.Unsetenv("TUIOS_SOCKET")
+	// A pane of a named server exports TUIOS_SERVER, which would put every
+	// tuios the suite spawns on that server. Tests that want one name it.
+	_ = os.Unsetenv("TUIOS_SERVER")
 	// The harnesses' own directory overrides. HOME is redirected per test, but
 	// each of these names a directory outright, so one set in the developer's
 	// shell would point an integration install or uninstall at their real
@@ -1223,31 +1226,56 @@ func disableTiling(t *testing.T, term *tuitest.Terminal) {
 // terminator, so this is the smaller one less the terminator.
 const unixSocketPathMax = 103
 
-// longestRuntimeSocket is the longest socket tuios binds under its runtime
-// directory, relative to it: a tmux shim wait-for socket, a channel hash of
-// eight hex digits and a locker named by the time in thirteen base 36
-// digits. A pane holder's socket (tmux/p/2147483647.sock), the daemon's
-// tuios.sock and its link sockets (tuios.sock.link-human is the longest) are
-// shorter. A runtime directory is measured against this one, since measuring
-// it against tuios.sock alone let a root through whose daemon bound and whose
-// pane holders could not. A session's ssh agent link, named by the whole
-// session id, is longer still: ssh in a pane connects to it by that path.
-var longestRuntimeSocket = filepath.Join("tuios", "agent-00000000-0000-0000-0000-000000000000.sock")
+// longestRuntimeSocket is the longest socket tuios ever binds under its
+// runtime directory, relative to it, and decides only whether a directory
+// needs redirecting at all (see xdgDir), never whether the redirect itself
+// has room: that is shortPathSocket, a shorter bound, below. It is a host's
+// agent-forwarding link (internal/session/ssh_agent_follow.go) under a server
+// named at tuios's own fourteen character maximum
+// (internal/serverscope.MaxNameLen; this module cannot import that package,
+// see the package doc's "why a separate module" section, so the number is
+// repeated here): tuios/servers/<14 chars>/agent-link-<32 chars>-<8 hex>.sock.
+// Every other socket tuios binds, including the daemon's own tuios.sock and a
+// session's agent-<uuid>.sock, is shorter.
+var longestRuntimeSocket = filepath.Join("tuios", "servers", strings.Repeat("n", 14),
+	"agent-link-"+strings.Repeat("h", 32)+"-"+strings.Repeat("0", 8)+".sock")
+
+// shortPathSocket is what xdgDir's redirected short path is sized to leave
+// room for: a session's agent-<uuid>.sock under a server named at the full
+// fourteen character maximum. It omits the host-link case longestRuntimeSocket
+// covers, because the two together do not fit under any short path at all (a
+// host link already spends the whole budget a bare socket path allows, see
+// internal/serverscope.MaxNameLen's doc comment), and no test combines a host
+// link with a near-maximum server name. A test that someday does will panic in
+// xdgDir rather than fail at bind with a path nobody can read the length of.
+var shortPathSocket = filepath.Join("tuios", "servers", strings.Repeat("n", 14),
+	"agent-"+strings.Repeat("0", 36)+".sock")
 
 // shortRuntimeRoot is where a runtime directory goes when the isolation root
-// is too long to hold one. Per user and per test process. It was per user
-// only, and the suite removes it on exit, so a second run on the same machine
-// (one package run beside a full one, say) deleted the sockets of every daemon
-// the first run still had up: the first run's tests then read "the daemon is
-// not running", and its cleanups could not reach those daemons to stop them.
-// sweepShortRuntimeRoots removes the roots of runs that are gone.
-var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tuios-e2e-%d-%d", os.Getuid(), os.Getpid()))
+// is too long to hold one. Per test process, through its pid rather than a
+// hash, because sweepShortRuntimeRoots has to read it back to ask whether that
+// process still runs. The suite removes it on exit; sweepShortRuntimeRoots
+// removes the roots of runs that are gone, which a killed run leaves behind,
+// since a second run on the same machine (one package run beside a full one,
+// say) deleting the sockets of every daemon the first run still had up left
+// that run's tests reading "the daemon is not running" with no way to reach
+// those daemons to stop them.
+//
+// What is left of the socket budget once tuios/servers/<name>/agent-<uuid>.sock
+// is paid for (see shortPathSocket) is nowhere near enough for the readable
+// "tuios-e2e-<uid>-<pid>" this used to be, which is why this is terser than it
+// looks: every character here is spent against a budget with single digits of
+// slack left in it. "tue-" rather than something shorter still so that this
+// sweeps nothing it did not create: sweepShortRuntimeRoots removes whatever
+// matches, and a prefix generic enough to coincide with another tool's temp
+// directory would delete that tool's files rather than tuios's own.
+var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tue-%d", os.Getpid()))
 
 // sweepShortRuntimeRoots removes the short runtime roots of this user's test
 // processes that no longer exist, which a killed run leaves behind. The root
 // of a process still running is left alone.
 func sweepShortRuntimeRoots() {
-	prefix := fmt.Sprintf("tuios-e2e-%d-", os.Getuid())
+	const prefix = "tue-"
 	entries, err := os.ReadDir("/tmp")
 	if err != nil {
 		return
@@ -1296,10 +1324,15 @@ func commandLinesContaining(t *testing.T, needle string) []string {
 	return lines
 }
 
-// redirected remembers the isolation roots whose runtime directory has already
-// been moved, so the move and its cleanup happen once per root rather than
-// once per lookup.
-var redirected sync.Map
+// redirected remembers, for every short path already handed out, the base it
+// was computed for: xdgDir only hashes seven hex digits of base into it (see
+// xdgDir), not enough to rule out two different bases hashing to the same
+// short path over the life of the whole suite, so a lookup that finds a short
+// path already claimed by a different base is a collision, not a cache hit,
+// and must not be reused silently: the two would then share one runtime
+// directory, one daemon, one socket, and every test on either base would read
+// the other's as if it were its own.
+var redirected sync.Map // short path -> base
 
 // xdgDir is the directory one XDG variable points at for an isolation root,
 // and the only reason it is a function is the socket.
@@ -1332,10 +1365,21 @@ func xdgDir(base, key string) string {
 
 	// Named from the root it stands in for, so every caller that asks about one
 	// isolation root gets one answer without passing anything between them.
+	// Seven hex digits, not more, because what the socket budget leaves for
+	// this whole short path once a named server's longest socket is paid for
+	// (see shortPathSocket) has single digits of room in it.
 	sum := sha256.Sum256([]byte(base))
-	short := filepath.Join(shortRuntimeRoot, hex.EncodeToString(sum[:6]))
+	short := filepath.Join(shortRuntimeRoot, hex.EncodeToString(sum[:4])[:7])
+	if n := len(filepath.Join(short, shortPathSocket)); n > unixSocketPathMax {
+		panic(fmt.Sprintf("e2e: the redirected runtime dir %s leaves a %d byte socket path, over the %d byte limit -- pid %d has an unusually long decimal form, or this machine's /tmp is not where it is expected to be",
+			short, n, unixSocketPathMax, os.Getpid()))
+	}
+	prior, already := redirected.LoadOrStore(short, base)
+	if already && prior.(string) != base {
+		panic(fmt.Sprintf("e2e: %s and %s both hash to the short runtime path %s -- widen the hash in xdgDir", base, prior, short))
+	}
 	mustMkdir(short)
-	if _, already := redirected.LoadOrStore(short, true); !already {
+	if !already {
 		// Best effort, and only so a test that opens a file by joining the base
 		// itself still finds it. A test that compares the path as a string is
 		// not covered by a symlink and asks xdgDir for the answer instead.

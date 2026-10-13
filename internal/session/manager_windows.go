@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
 // GetSocketPath returns the path to the daemon socket. It refuses when
@@ -37,7 +39,7 @@ func defaultSocketPath() (string, error) {
 		localAppData = filepath.Join(userProfile, "AppData", "Local")
 	}
 
-	socketDir := filepath.Join(localAppData, "tuios")
+	socketDir := serverscope.SocketDir(filepath.Join(localAppData, "tuios"))
 	if err := os.MkdirAll(socketDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create socket directory: %w", err)
 	}

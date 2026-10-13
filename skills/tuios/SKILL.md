@@ -40,10 +40,11 @@ is also your address when another agent wants to reach you. The CLI presents
 `TUIOS_PANE_TOKEN` where the daemon needs it; never pass it by hand.
 
 `TUIOS_SOCKET` names the daemon that runs your pane. Setting it does not send a
-command to another daemon: `XDG_RUNTIME_DIR` chooses the daemon, and a command
-refuses when `TUIOS_SOCKET` names a socket where nothing listens. For a
-throwaway daemon of your own, set `XDG_RUNTIME_DIR` and `XDG_STATE_HOME` to
-fresh directories.
+command to another daemon, and a command refuses when `TUIOS_SOCKET` names a
+socket where nothing listens. For a throwaway daemon of your own, with its own
+socket and saved sessions, pass `--server NAME` (or set `TUIOS_SERVER=NAME`),
+and stop it with `tuios --server NAME kill-server`. A pane of a named server
+has `TUIOS_SERVER` set, so tuios run there reaches that server.
 
 `TMUX` and `TMUX_PANE` are not set in a tuios pane, even when tuios runs inside
 tmux, so do not drive panes with `tmux` here: use the tuios verbs. A tool that

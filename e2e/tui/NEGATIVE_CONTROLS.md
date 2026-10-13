@@ -4915,3 +4915,15 @@ Run on 2026-10-14 on macOS, on the change rebased onto the current main. The tes
 The rounding control does not fail the terminals subtest: 14 rows on 6 lines give a 3-line thumb over 3 lines of travel and 8 rows of scroll, and one notch rounds to `roundDiv(9, 8) = 1`, a middle position without the clamp. The custom fixture is the one sized to need it.
 
 `TestNarrowRailKeepsWhatAnAgentIsDoing` is unchanged and runs at the default 24-column rail. Its agents section overflows there, so it is also what keeps the thumb from costing a row its width.
+### tuios --server
+
+Run on 2026-10-12 on macOS. Each control cuts one wire from the fixed build and
+runs `TestNamedServersAreIsolated`, `TestKillServerStopsOnlyTheNamedDaemon` and
+`TestServerNamesAreChecked`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The root command's `PersistentPreRunE` returning nil in place of `serverscope.Apply` (the flag is parsed and ignored) | all three: every server lists every session, no `servers/foo` socket, foo's pane has no `TUIOS_SERVER`, `--server ../escape` is not refused | **caught** |
+| `main` validating `TUIOS_SERVER` without applying it | `TestNamedServersAreIsolated`, `TestKillServerStopsOnlyTheNamedDaemon` ("create foo's session": the daemon tuios starts never takes the name and cannot bind) | **caught** |
+| `sockpath.Dir` returning `BaseDir` (one socket for every server) | all three: every server lists every session, no per-server socket or state, `ok_name-1` gets no socket folder | **caught** |
+| `tuiosOwnDirs` denying the scoped `xdg.StateHome/tuios` and not `tuios-servers` (unit test in `internal/session`, a security boundary) | `TestLinkDenyCoversEveryServersState`: a link to foo may write the default server's grants record, and every link may reach bar's daemon log | **caught** |

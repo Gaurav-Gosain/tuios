@@ -1130,6 +1130,8 @@ a match in a pane are the same colour.
 | Archived bad state | `$XDG_STATE_HOME/tuios/sessions/archive/`, pruned after 14 days |
 | Daemon socket | `$XDG_RUNTIME_DIR/tuios/tuios.sock`. Without `XDG_RUNTIME_DIR`, `/run/user/<uid>/tuios/tuios.sock` on Linux, falling back to `/tmp/tuios-<uid>/tuios.sock` |
 | Daemon PID file | the socket path with `.pid` appended |
+| A named server's socket | `<socket folder>/servers/<name>/tuios.sock` (on Windows, `%LOCALAPPDATA%\tuios\servers\<name>\tuios.sock`) |
+| A named server's state | `$XDG_STATE_HOME/tuios-servers/<name>/tuios/`, holding its sessions and `daemon.log` |
 
 The socket lives in the runtime directory and does not survive a reboot, which is
 correct: the daemon does not either. Saved session state lives in the state
@@ -1165,18 +1167,40 @@ only you can open it.
 
 ### Running a separate daemon
 
-`XDG_RUNTIME_DIR` chooses the daemon every `tuios` command reaches (on Windows,
-`LOCALAPPDATA`). A directory other than `/run/user/<uid>` gives a daemon of its
-own, and tuios does not look in `/tmp` for it. To run a second daemon, for a test or a script, give it its own
-runtime and state directories, so it has its own socket and keeps its own saved
-sessions:
+`--server NAME` runs a command against a daemon of its own, named NAME. A named
+server has its own socket, its own saved sessions, resurrection archive and
+daemon log, and nothing in it is visible to the default daemon or to another
+named one. Configuration is shared by all of them.
+
+```bash
+tuios --server scratch new work --detach   # starts the scratch daemon
+tuios --server scratch ls                  # its sessions, and "Server: scratch (<socket>)"
+tuios ls                                   # the default daemon, unchanged
+tuios --server scratch kill-server         # stops only the scratch daemon
+```
+
+`TUIOS_SERVER=NAME` does the same for every `tuios` in a shell, and `--server`
+wins over it. A named server's daemon gives its panes `TUIOS_SERVER`, so a
+`tuios` run in one of them reaches that server, the `tmux` and `herdr` links
+included; `--server ""` reaches the default daemon from there. A name is 1 to
+14 letters, digits, `-` and `_`. `tuios ls --json` gives each row of a named
+server a `server` field; the default server's rows have none.
+
+The scope is held by tuios itself: `XDG_RUNTIME_DIR` and `XDG_STATE_HOME` keep
+their values, in tuios and in every pane, so programs in a pane that use those
+folders (a Wayland client, `systemctl --user`, an editor's undo history) find
+their own folders where they always are.
+
+`XDG_RUNTIME_DIR` (on Windows, `LOCALAPPDATA`) and `XDG_STATE_HOME` still choose
+where all of this lives, so pointing them at directories of your own gives a
+daemon, and every named server under it, a wholly separate tree. A runtime
+directory other than `/run/user/<uid>` gives a daemon of its own, and tuios does
+not look in `/tmp` for it:
 
 ```bash
 export XDG_RUNTIME_DIR=/tmp/scratch/run XDG_STATE_HOME=/tmp/scratch/state
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 tuios new scratch --detach      # starts a daemon at /tmp/scratch/run/tuios/tuios.sock
-tuios ls                        # that daemon's sessions
-tuios kill-server               # stops it
 ```
 
 `TUIOS_SOCKET` does not choose a daemon. tuios sets it in every pane to the

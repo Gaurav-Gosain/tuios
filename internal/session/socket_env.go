@@ -9,7 +9,8 @@ import (
 
 // TUIOS_SOCKET is set in every pane to the socket of the daemon that runs it.
 // It reports; it does not select. The daemon a command reaches is chosen by
-// XDG_RUNTIME_DIR (LOCALAPPDATA on Windows), as GetSocketPath says.
+// the server name (--server, TUIOS_SERVER) and XDG_RUNTIME_DIR (LOCALAPPDATA
+// on Windows), as GetSocketPath says.
 //
 // It cannot become the selector. Every process started from a pane inherits
 // it, so a script run from a pane that isolates itself with its own
@@ -70,8 +71,8 @@ func checkSocketEnv(path string) error {
 	if !isDaemonRunningAt(env) {
 		err = &SocketEnvError{msg: fmt.Sprintf("%s is set to %s, where no daemon is listening, and this command would use the daemon at %s instead. "+
 			"%s only reports the daemon a pane belongs to; it does not choose one. "+
-			"To use a separate daemon, set XDG_RUNTIME_DIR (LOCALAPPDATA on Windows) and XDG_STATE_HOME, so it keeps its own saved sessions, to directories of your own; "+
-			"its socket is then $XDG_RUNTIME_DIR/tuios/tuios.sock. Otherwise unset %s",
+			"To use a separate daemon, run the command with --server NAME (or set TUIOS_SERVER=NAME), which gives it its own socket and its own saved sessions. "+
+			"Otherwise unset %s",
 			SocketEnv, env, path, SocketEnv, SocketEnv)}
 	}
 	socketEnvCheck.env, socketEnvCheck.path, socketEnvCheck.err = env, path, err

@@ -149,6 +149,7 @@ tuios --standalone
 - `--no-animations`: Disable UI animations for instant transitions (`appearance.motion = none` for this run)
 - `--shared-borders`: Share borders between adjacent tiled windows
 - `--debug`: Enable debug logging
+- `--server <name>`: Use the daemon named `<name>`: its own socket, saved sessions and daemon log, apart from the default daemon and every other named one. Configuration is shared. `TUIOS_SERVER=<name>` does the same for a whole shell, and `--server ""` picks the default daemon. See [Running a separate daemon](SESSIONS.md#running-a-separate-daemon)
 - `--cpuprofile <file>`: Write CPU profile to file
 - `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`
 - `-h, --help`: Show help for tuios
@@ -156,7 +157,7 @@ tuios --standalone
 
 The interface flags, from `--theme` to `--shared-borders`, are also flags of
 `attach`, `new`, `ssh` and `tape play`, the commands that draw the interface.
-`--debug`, `--cpuprofile` and `--pprof` work on every command.
+`--debug`, `--server`, `--cpuprofile` and `--pprof` work on every command.
 
 **Examples:**
 ```bash

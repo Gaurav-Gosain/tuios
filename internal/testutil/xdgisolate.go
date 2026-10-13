@@ -70,6 +70,11 @@ func isolateXDG() (dir string, check func() error) {
 	if err := os.Unsetenv("TUIOS_SOCKET"); err != nil {
 		panic(fmt.Sprintf("testutil: unset TUIOS_SOCKET: %v", err))
 	}
+	// A pane of a named server exports TUIOS_SERVER; a test that runs tuios
+	// would otherwise land on that server.
+	if err := os.Unsetenv("TUIOS_SERVER"); err != nil {
+		panic(fmt.Sprintf("testutil: unset TUIOS_SERVER: %v", err))
+	}
 	xdg.Reload()
 
 	return tmp, func() error {
