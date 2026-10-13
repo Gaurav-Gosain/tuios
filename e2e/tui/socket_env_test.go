@@ -151,7 +151,7 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	if err == nil {
 		t.Errorf("a command with TUIOS_SOCKET naming no daemon ran:\n%s", out)
 	}
-	for _, want := range []string{"TUIOS_SOCKET", fresh, "XDG_RUNTIME_DIR"} {
+	for _, want := range []string{"TUIOS_SOCKET", fresh, "--server"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the refusal does not say %q:\n%s", want, out)
 		}
