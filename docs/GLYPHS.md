@@ -148,6 +148,10 @@ strip.
 `appearance.scrollbar.thumb` and `appearance.scrollbar.track` still exist and
 still win over the set, because they are the narrower statement.
 
+`scrollbar_thumb` also draws the scroll thumb of a rail section that
+overflows, which has no track. `appearance.scrollbar.thumb` does not reach
+it: it is the pane bar's. With no set, the rail's thumb is `┃`.
+
 ## Cell Widths
 
 Most roles must be exactly one cell, and a glyph that misses is dropped back to

@@ -155,6 +155,13 @@ func (s *Settings) GetRailExpandGlyph() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Expand }, "»", ">>")
 }
 
+// GetRailScrollThumb is the thumb of an overflowing rail section's scroll bar,
+// from the set's scrollbar_thumb role. The pane bar's own getter is not used:
+// its default style draws a full block, which is too heavy beside a list.
+func (s *Settings) GetRailScrollThumb() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.ScrollbarThumb }, "┃", "|")
+}
+
 // ResolvedGlyphs reports what is actually drawn for every role: the active
 // set's glyph where it names one, and the built-in beneath it where it does
 // not.

@@ -42,7 +42,8 @@ func TestNarrowRailKeepsWhatAnAgentIsDoing(t *testing.T) {
 }
 
 func narrowRailAgentRows(t *testing.T, tokens string, state bool) {
-	const cols, rows, width = 100, 24, 24
+	// 25, not 24: the overflowing agents section reserves a column for its scroll thumb.
+	const cols, rows, width = 100, 24, 25
 	const long, short = "deploy-the-api-gateway", "web"
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -51,7 +52,7 @@ func narrowRailAgentRows(t *testing.T, tokens string, state bool) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir config: %v", err)
 	}
-	config := "[appearance.sidebar]\nwidth = 24\n"
+	config := "[appearance.sidebar]\nwidth = 25\n"
 	if tokens != "" {
 		config += "\n[appearance.sidebar.agent_row]\ntokens = " + tokens + "\n"
 	}

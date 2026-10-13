@@ -4897,3 +4897,20 @@ Run on 2026-10-13 on macOS. The tests are in `rail_git_overflow_test.go`. The fi
 | --- | --- | --- |
 | The `+N` tail of `drawGit` (`if h := hidden[sidebarSectionGit]; h > 0 { ... overflowRow ... }`) | `TestRailGitOneLineOwnsUpToItsRows` ("the git section on one line does not end in +2") | **caught** |
 | `mixI(m.SidebarScrollG)` in `sidebarSignature` | `TestRailGitWheelRedraws` ("the wheel over the git section did not bring its branch row up") | **caught** |
+
+### Rail scrollbar on overflowing sections
+
+Run on 2026-10-14 on macOS. The tests are in `rail_scrollbar_test.go`. The section draws a thumb in its reserved last column and leaves the rest of that column blank. The custom fixture is 70 rows on 8 lines (`custom:25` on a 120x40 screen), so the thumb is 1 line with 7 lines of travel over 62 rows of scroll, and one wheel notch (3 rows) rounds to `roundDiv(21, 62) = 0`. The terminals fixture is 14 panes on 6 lines (`terminals:20`). Each control cuts one wire from the fixed build, builds it, restores the source, and runs every `TestRailScrollbar` test against the cut binary; the fixed build passes them all.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The thumb drawn for no section (`sidebarScrollThumb`'s result ignored), run again on the change rebased onto the current main | `TestRailScrollbarFollowsTheWheel`, all three rows, and `TestRailScrollbarOnAPeek` | **caught** |
+| The thumb skipped while the terminals section shows a peek, as the change first did | `TestRailScrollbarOnAPeek` ("the terminals section's thumb is \"no thumb\", want \"bottom\"": the peeked list had rows out of view above and nothing said so) | **caught** |
+| No draw: no section is `barred` and no cell is set, so rows keep the full width | `TestRailScrollbarFollowsTheWheel` (custom and custom-right: "thumb is \"\\\"…\\\" on line 0 of the column\", want \"top\"", the ellipsis of a row no longer cut short; terminals: "no thumb"), `TestRailScrollbarAbsentWhenTheSectionFits` ("no thumb", want "top", on the shrunk screen), `TestRailScrollbarDepthsAndASCII` (both subtests, the ellipsis or the ASCII "." in the column) | **caught** |
+| Always on: `sidebarScrollThumb` draws a thumb on a section that fits | `TestRailScrollbarAbsentWhenTheSectionFits` ("a rail whose sections fit draws a thumb") | **caught** |
+| Position frozen: the thumb is always at the top | `TestRailScrollbarFollowsTheWheel` (all three: "top", want "middle"), `TestRailScrollbarDepthsAndASCII` (both: "thumb on lines 0 to 0 of 8, +N on the last line false", want "bottom") | **caught** |
+| Rounding only: the `[1, travel-1]` clamp on a middle position dropped | `TestRailScrollbarFollowsTheWheel/custom` and `/custom-right` ("top", want "middle") | **caught** |
+
+The rounding control does not fail the terminals subtest: 14 rows on 6 lines give a 3-line thumb over 3 lines of travel and 8 rows of scroll, and one notch rounds to `roundDiv(9, 8) = 1`, a middle position without the clamp. The custom fixture is the one sized to need it.
+
+`TestNarrowRailKeepsWhatAnAgentIsDoing` moved from a 24-column to a 25-column rail with this change: its agents section overflows, so the reserved column leaves its rows the 24-column rail's content width, and the rows read the same as before. Its two issue 181 controls above were run again against the 25-column fixture. The tree before the change (`07a467ca`) fails `/state` ("the long name took the cells of the state beside it: \"│▎● deploy-the-api-gatew…\""), and the prefix token built with `Whole: false` fails `/shipped` ("the row kept a prefix beside a name it had cut: \"│▎● claude/deploy-the-a…┃\""). Both are **caught**.

@@ -1328,8 +1328,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(m.Settings.GetWindowBorderLeft())
 	}
 
-	// compose attaches the edge rule on the pane-facing side.
+	// The rail as drawn so far. len(lines) is the line compose is building, in
+	// the coordinates place measures the sections in below.
+	lines := make([]string, 0, height)
+	// The scroll bar's cell on each rail line, "" where there is none. Filled
+	// once the sections are windowed.
+	var barCell []string
+	// compose adds the scroll bar's cell for the line, if it has one, and
+	// attaches the edge rule on the pane-facing side.
 	compose := func(content string) string {
+		if y := len(lines); y < len(barCell) {
+			content += barCell[y]
+		}
 		if edgeLeft {
 			return content + edge
 		}
@@ -1702,6 +1712,41 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.sidebarRecordAgentAnchor(agents, start[sidebarSectionAgents], count[sidebarSectionAgents])
 	m.sidebarRecordReveal()
 
+	// The scroll thumb, in the last content column of every section with rows
+	// out of view. The column is reserved rather than drawn over: the section's
+	// rows are cut one cell narrower (rowW), so no figure touches the thumb and
+	// no cut name loses its ellipsis to it, and the rows hold still while the
+	// thumb moves. The rest of the column is blank: a track beside the edge rule
+	// read as a second border. A section that fits keeps the column. A peek is
+	// windowed like the section it is drawn in, so it gets a thumb too. A
+	// section with rows to hide has one-line rows (see the tall test above), so
+	// capRows is its lines.
+	var barred [sidebarSectionCount]bool
+	var thumb string
+	for s := range rowsIn {
+		top, size, ok := sidebarScrollThumb(start[s], rowsIn[s], capRows[s])
+		if !ok {
+			continue
+		}
+		if barCell == nil {
+			barCell = make([]string, height)
+			thumb = sidebarStyle(nil, pal.ScrollThumb).Render(m.Settings.GetRailScrollThumb())
+		}
+		barred[s] = true
+		for i := range min(capRows[s], height-place[s].top) {
+			barCell[place[s].top+i] = " "
+			if i >= top && i < top+size {
+				barCell[place[s].top+i] = thumb
+			}
+		}
+	}
+	rowW := func(s sidebarSection) int {
+		if barred[s] {
+			return cw - 1
+		}
+		return cw
+	}
+
 	// Hover, derived from the last motion seen inside the band, resolved against
 	// the placement above. Hover yields entirely to a drag.
 	var hoverRow [sidebarSectionCount]int
@@ -1751,7 +1796,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 
 	nav := make([]sidebarNavRow, 0, nS+nT+nA+len(files)+2)
-	lines := make([]string, 0, height)
 	// recordHit publishes a drawn row's rectangle and its nav row together, in
 	// drawn order, so the mouse and the keyboard address one target set. Hits
 	// only ever come from the renderer as it draws; nothing recomputes them.
@@ -1785,11 +1829,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			WindowIndex: windowIndex,
 		})
 	}
-	overflowRow := func(n, indent int) string {
+	overflowRow := func(n, indent, width int) string {
 		// Stands in for the rows it hides, so it starts where their names do.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
 		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol+indent)+
-			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
+			sidebarStyle(nil, pal.FgMute).Render(more), width, nil))
 	}
 	// recordToken publishes a header control's rectangle and its nav row, the
 	// column-scoped sibling of recordHit. Called before the header line is
@@ -1821,6 +1865,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		lines = append(lines, compose(sidebarHeaderRowRuled(label, add, cw, pal, &m.Settings)))
+		cw := rowW(sidebarSectionSessions)
 		// lazygit's excludeBlankColumns, on the rail's right spine. A one-window
 		// session is the common case, so a column that prints "1" against every
 		// row is a column of identical digits carrying nothing. It is dropped
@@ -1857,7 +1902,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(st.mark(pal, m.sidebarSessionRow(s, sessionIdx[s.ID], variant, cw, pal, st, dragged, showCounts))))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
-			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
+			lines = append(lines, overflowRow(h, m.sidebarRowIndent(), cw))
 		}
 	}
 
@@ -1906,6 +1951,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(termSpan, shown)
 		}
 		lines = append(lines, compose(sidebarHeaderRowRuled("terminals", right, cw, pal, &m.Settings)))
+		cw := rowW(sidebarSectionTerminals)
 		if emptyPeek {
 			hint := "no terminals"
 			lines = append(lines, compose(sidebarFit(
@@ -1922,7 +1968,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(st.mark(pal, m.sidebarTerminalRow(e, cw, pal, st, peeking))))
 		}
 		if h := hidden[sidebarSectionTerminals]; h > 0 {
-			lines = append(lines, overflowRow(h, 0))
+			lines = append(lines, overflowRow(h, 0, cw))
 		}
 	}
 
@@ -1933,6 +1979,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(cdSpan, "")
 		}
 		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, cw, pal)))
+		cw := rowW(sidebarSectionFiles)
 		if len(files) == 0 {
 			if count[sidebarSectionFiles] > 0 {
 				lines = append(lines, compose(sidebarFilesEmptyRow(cw, pal)))
@@ -1950,12 +1997,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(st.mark(pal, m.sidebarFileRow(row, cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {
-			lines = append(lines, overflowRow(h, 0))
+			lines = append(lines, overflowRow(h, 0, cw))
 		}
 	}
 
 	drawGit := func() {
 		lines = append(lines, compose(sidebarHeaderRowRuled("git", "", cw, pal, &m.Settings)))
+		cw := rowW(sidebarSectionGit)
 		for i := range count[sidebarSectionGit] {
 			idx := start[sidebarSectionGit] + i
 			if idx >= len(gitRows) {
@@ -1968,12 +2016,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// line the section is one short of what it was placed at, and every
 		// section below it draws a line above where hover finds it.
 		if h := hidden[sidebarSectionGit]; h > 0 {
-			lines = append(lines, overflowRow(h, 0))
+			lines = append(lines, overflowRow(h, 0, cw))
 		}
 	}
 
 	drawCustom := func() {
 		lines = append(lines, compose(sidebarHeaderRowRuled(m.railCustomTitle(), "", cw, pal, &m.Settings)))
+		cw := rowW(sidebarSectionCustom)
 		if len(customRows) == 0 {
 			// The title over an empty section: the one notional row draws
 			// as a blank line, so the heading is not the last thing on the
@@ -1992,7 +2041,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(st.mark(pal, m.sidebarCustomRow(customRows[idx], cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionCustom]; h > 0 {
-			lines = append(lines, overflowRow(h, 0))
+			lines = append(lines, overflowRow(h, 0, cw))
 		}
 	}
 
@@ -2010,6 +2059,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(tk, "")
 		}
 		lines = append(lines, compose(sidebarHeaderRowRuled("agents", controls, cw, pal, &m.Settings)))
+		cw := rowW(sidebarSectionAgents)
 		if emptyFilter {
 			// The hint is about the attached session ("here"), so it carries that
 			// identity: it is a second filter control, and without something to tell
@@ -2075,7 +2125,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
-			lines = append(lines, overflowRow(h, 0))
+			lines = append(lines, overflowRow(h, 0, cw))
 		}
 	}
 
