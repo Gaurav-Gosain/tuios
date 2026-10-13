@@ -11,6 +11,7 @@ import (
 	"hash/crc32"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"net"
 	"os"
@@ -338,5 +339,120 @@ func TestFilePreviewOfAPipeADeviceAndAHugePicture(t *testing.T) {
 	}
 	if pic.Kind != "image" || pic.ImageWidth != 500 {
 		t.Errorf("ASSERTION: an ordinary picture no longer previews: %+v", pic.Kind)
+	}
+}
+
+// TestFilePreviewHoldsItsDecodeCap previews pictures whose decode costs more
+// than the pixels say, and checks the daemon's memory. A 9000 x 7000
+// progressive JPEG keeps every block's coefficients while it decodes: Go's
+// decoder took the daemon to 1.25 GB for one, past the 256 MB cap the pixel
+// count alone allowed. It is now sent as it is for the client to decode. A
+// baseline JPEG that fits is still decoded and scaled here, and a WebP is
+// sent as it is. ImageMagick makes the progressive file; without it that half
+// is skipped.
+func TestFilePreviewHoldsItsDecodeCap(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	record := map[string]any{}
+	c := dialFileVerbs(t, base)
+
+	// A baseline JPEG that fits: decoded and scaled here.
+	small := filepath.Join(base, "photo.jpg")
+	var buf bytes.Buffer
+	_ = jpeg.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3000, 2000)), &jpeg.Options{Quality: 80})
+	if err := os.WriteFile(small, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var pic filePreview
+	c.must("file-preview", map[string]any{"path": small, "max_px": 1200}, &pic)
+	record["baseline"] = []any{pic.Kind, pic.Mime, pic.ImageWidth, pic.ImageHeight}
+	if pic.Kind != "image" || pic.ImageWidth != 1200 || pic.ImageHeight != 800 {
+		t.Errorf("ASSERTION: a baseline JPEG that fits was not scaled here: %s %s %dx%d", pic.Kind, pic.Mime, pic.ImageWidth, pic.ImageHeight)
+	}
+
+	magick, err := exec.LookPath("magick")
+	if err != nil {
+		t.Skipf("no ImageMagick here: the progressive JPEG and the WebP are skipped")
+	}
+	prog := filepath.Join(base, "huge.jpg")
+	if out, err := exec.Command(magick, "-size", "9000x7000", "xc:gray50", "-interlace", "JPEG", prog).CombinedOutput(); err != nil {
+		t.Fatalf("make the progressive JPEG: %v\n%s", err, out)
+	}
+	webp := filepath.Join(base, "pic.webp")
+	if out, err := exec.Command(magick, "-size", "64x48", "xc:red", webp).CombinedOutput(); err != nil {
+		t.Fatalf("make the WebP: %v\n%s", err, out)
+	}
+	peak0 := daemonPeakKB(t, base)
+	var big filePreview
+	c.must("file-preview", map[string]any{"path": prog, "max_px": 1600}, &big)
+	peak := daemonPeakKB(t, base)
+	file, _ := os.ReadFile(prog)
+	sent, _ := base64.StdEncoding.DecodeString(big.Image)
+	record["progressive"] = map[string]any{"kind": big.Kind, "mime": big.Mime, "width": big.Width, "sent_bytes": len(sent), "file_bytes": len(file), "peak_kb_before": peak0, "peak_kb_after": peak}
+	t.Logf("daemon peak %d kB before, %d kB after the progressive JPEG", peak0, peak)
+	if peak > 300<<10 {
+		t.Errorf("ASSERTION: a preview of a 9000 x 7000 progressive JPEG took the daemon to %d MB", peak>>10)
+	}
+	if big.Kind != "image" || big.Mime != "image/jpeg" || !bytes.Equal(sent, file) || big.Width != 9000 {
+		t.Errorf("ASSERTION: the progressive JPEG was not sent as it is for the client: %s %s width %d, %d of %d bytes", big.Kind, big.Mime, big.Width, len(sent), len(file))
+	}
+
+	// A grey baseline JPEG of the same size fits the cap: one byte a pixel.
+	// It is decoded and scaled here, and the scale must not build a buffer
+	// of the scaled width by the source's height (CatmullRom's, 358 MB).
+	grey := filepath.Join(base, "grey.jpg")
+	if out, err := exec.Command(magick, "-size", "9000x7000", "xc:gray50", "-colorspace", "Gray", "-interlace", "none", grey).CombinedOutput(); err != nil {
+		t.Fatalf("make the grey JPEG: %v\n%s", err, out)
+	}
+	var g filePreview
+	c.must("file-preview", map[string]any{"path": grey, "max_px": 1600}, &g)
+	gpeak := daemonPeakKB(t, base)
+	record["grey"] = map[string]any{"kind": g.Kind, "image": []int{g.ImageWidth, g.ImageHeight}, "peak_kb": gpeak}
+	t.Logf("daemon peak %d kB after the grey JPEG", gpeak)
+	if g.Kind != "image" || g.ImageWidth != 1600 {
+		t.Errorf("ASSERTION: a grey 9000 x 7000 baseline JPEG was not scaled here: %s %dx%d", g.Kind, g.ImageWidth, g.ImageHeight)
+	}
+	if gpeak > 300<<10 {
+		t.Errorf("ASSERTION: scaling a 9000 x 7000 picture took the daemon to %d MB", gpeak>>10)
+	}
+
+	var w filePreview
+	c.must("file-preview", map[string]any{"path": webp}, &w)
+	wfile, _ := os.ReadFile(webp)
+	wsent, _ := base64.StdEncoding.DecodeString(w.Image)
+	record["webp"] = []any{w.Kind, w.Mime, len(wsent)}
+	if w.Kind != "image" || w.Mime != "image/webp" || !bytes.Equal(wsent, wfile) {
+		t.Errorf("ASSERTION: the WebP was not sent as it is: %s %s %d bytes", w.Kind, w.Mime, len(wsent))
+	}
+	saveTransferArtifact(t, "file-preview-decode-cap", record)
+}
+
+// TestFilePreviewOpensOnlyFilmContainers previews a file named .mp4 that is an
+// MPEG transport stream. ffmpeg and ffprobe are held to the listed film
+// containers, so it gets no frame and no length. A playlist or concat list
+// named .mp4, whose demuxers open other files, is refused the same way. The
+// positive half is TestFilePreviewOnAHost's real MP4.
+func TestFilePreviewOpensOnlyFilmContainers(t *testing.T) {
+	ff, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("no ffmpeg here")
+	}
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	ts := filepath.Join(base, "not-really.mp4")
+	if out, err := exec.Command(ff, "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10", "-g", "5", "-f", "mpegts", ts).CombinedOutput(); err != nil {
+		t.Fatalf("make the transport stream: %v\n%s", err, out)
+	}
+	var v filePreview
+	dialFileVerbs(t, base).must("file-preview", map[string]any{"path": ts, "max_px": 160}, &v)
+	saveTransferArtifact(t, "file-preview-containers", v)
+	if v.Image != "" || v.DurationMs != 0 {
+		t.Errorf("ASSERTION: a transport stream named .mp4 was opened: frame %d bytes, length %d ms", len(v.Image), v.DurationMs)
 	}
 }
