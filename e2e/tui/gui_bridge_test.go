@@ -194,6 +194,8 @@ type guiBridge struct {
 	log []string
 	// pid is the bridge process, to stop it as a crash does.
 	pid int
+	// gate is held while the test plays a renderer that stopped reading.
+	gate sync.Mutex
 }
 
 // startBridge runs a bridge on session under the isolation root base, sized
@@ -311,6 +313,8 @@ func (b *guiBridge) read(r io.Reader) {
 	br := bufio.NewReaderSize(r, 256<<10)
 	var hdr [5]byte
 	for {
+		b.gate.Lock()
+		b.gate.Unlock() //nolint:staticcheck // a pause point, held by pauseReading
 		if _, err := io.ReadFull(br, hdr[:]); err != nil {
 			break
 		}

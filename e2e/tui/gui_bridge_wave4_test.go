@@ -752,3 +752,63 @@ func TestGUIBridgeSnapshotCarriesTabsAndTitle(t *testing.T) {
 	}
 	again.saveLog("snapshot-tabs-title")
 }
+
+// procPeakKB is a process's resident high-water mark, from /proc.
+func procPeakKB(t *testing.T, pid int) int64 {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("/proc", fmt.Sprint(pid), "status"))
+	if err != nil {
+		t.Skipf("no /proc here: %v", err)
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if rest, ok := strings.CutPrefix(line, "VmHWM:"); ok {
+			var n int64
+			_, _ = fmt.Sscan(strings.TrimSuffix(strings.TrimSpace(rest), " kB"), &n)
+			return n
+		}
+	}
+	return 0
+}
+
+// A renderer that stops reading while a pane floods: the bridge holds at most
+// its queue's worth of the pane's output, drops the rest, and once the
+// renderer reads again sends the pane a fresh snapshot and streams on from
+// it, so the renderer ends with the screen the pane has. The queue is set to
+// 1 MiB here and the flood is about 30 MB.
+//
+// What fails it: an unbounded queue (no fresh snapshot, and the bridge holds
+// the whole flood), and a writer that drops output and never resyncs (the
+// pane's last line never reaches the renderer).
+func TestGUIBridgeResyncsARendererThatFellBehind(t *testing.T) {
+	base := t.TempDir()
+	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "stall"}, env: []string{"TUIOS_GUI_BRIDGE_QUEUE_MAX=1048576"}, cols: 100, rows: 30, name: "stall"})
+	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
+	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 1 }, "one pane")
+	pty := st.Windows[0].PTY
+	b.input(pty, "echo READY-$((6*7))\r")
+	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("READY-42")) }, shellTimeout, "the shell")
+	b.mu.Lock()
+	snaps0 := b.snaps[pty]
+	b.mu.Unlock()
+	peak0 := procPeakKB(t, b.pid)
+
+	b.gate.Lock()
+	b.input(pty, "seq -f 'flood %g' 1 2500000; echo FLOOD-$((6*7))-DONE\r")
+	// The flood runs while the renderer reads nothing.
+	time.Sleep(15 * time.Second)
+	peak := procPeakKB(t, b.pid)
+	b.gate.Unlock()
+
+	b.waitFor(func() bool { return b.snaps[pty] > snaps0 }, 60*time.Second, "a fresh snapshot of the pane after the renderer read again")
+	// The end of the flood reaches the renderer: in the snapshot's screen,
+	// or in the output that follows it.
+	b.waitFor(func() bool {
+		return bytes.Contains(b.snapBytes[pty], []byte("FLOOD-42-DONE")) || bytes.Contains(b.outputs[pty], []byte("FLOOD-42-DONE"))
+	}, 60*time.Second, "the flood's last line at the renderer")
+	t.Logf("bridge peak %d kB before the stall, %d kB during it", peak0, peak)
+	saveTransferArtifact(t, "gui-bridge-resync", map[string]any{"peak_kb_before": peak0, "peak_kb_stalled": peak})
+	if peak-peak0 > 24<<10 {
+		t.Errorf("ASSERTION: the bridge grew %d kB while the renderer read nothing, with a 1 MiB queue", peak-peak0)
+	}
+	b.saveLog("resync")
+}
