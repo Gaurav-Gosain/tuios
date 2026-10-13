@@ -3,11 +3,13 @@ package tuie2e
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -372,4 +374,59 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		t.Errorf("write the artifact: %v", err)
 	}
 	t.Logf("answers written to %s", path)
+}
+
+// TestSearchPanesKeepsToItsBudget searches four panes of 150,000 history lines
+// each for text none of them holds. Each pane gets 50 ms, read from the bottom
+// up in chunks with the pane's lock let go between them, so an answer comes in
+// well under a second and says truncated. The search copied every pane's
+// whole history under its lock before it looked at the clock: 134 ms and
+// 5.7 MB for each 10,000 lines, so seconds here.
+func TestSearchPanesKeepsToItsBudget(t *testing.T) {
+	const session = "big"
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[appearance]\nscrollback_lines = 150000\n")
+	cli := func(args ...string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, args...)
+		if err != nil {
+			t.Fatalf("tuios %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(out)
+	}
+	cli("new", session, "--detach")
+	for i := range 4 {
+		cli("new-window", "-s", session, "--print-id", fmt.Sprintf("hist%d", i), "--", "sh", "-c", "seq -f 'history line %g' 1 150000; exec sleep 600")
+	}
+	c := dialFileVerbs(t, base)
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		var r findResult
+		c.must("search-panes", map[string]any{"query": "history line 150000", "sessions": []string{session}}, &r)
+		if len(r.Matches) >= 4 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the four panes never printed their history: %d matches", len(r.Matches))
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	var times []time.Duration
+	var last findResult
+	for range 5 {
+		start := time.Now()
+		c.must("search-panes", map[string]any{"query": "NOT-IN-ANY-PANE", "sessions": []string{session}}, &last)
+		times = append(times, time.Since(start))
+	}
+	slices.Sort(times)
+	median := times[len(times)/2]
+	t.Logf("search over four panes of 150,000 lines: %v (median of %v), truncated %v", median, times, last.Truncated)
+	saveTransferArtifact(t, "search-panes-budget", map[string]any{"median_ms": median.Milliseconds(), "truncated": last.Truncated, "panes": last.PanesSearched})
+	if median > 500*time.Millisecond {
+		t.Errorf("ASSERTION: a search of four 150,000-line panes took %v, budget 50 ms a pane", median)
+	}
+	if !last.Truncated || last.PanesSearched != 5 && last.PanesSearched != 4 {
+		t.Errorf("ASSERTION: the search did not say it was cut short: truncated %v over %d panes", last.Truncated, last.PanesSearched)
+	}
 }
