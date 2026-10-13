@@ -105,25 +105,34 @@ func (d *Daemon) localPanes(names []string) ([]searchPane, *verbError) {
 	return panes, nil
 }
 
-// paneLines reads a pane's history and main screen as plain text, one string
-// per row, history first, with trailing blanks cut. Row i is the row
-// search-panes reports as i.
-func (p *PTY) paneLines() []string {
+// searchChunkRows is how many history rows a search reads under one hold of
+// the pane's terminal lock. The lock is let go between chunks, so a search
+// never holds the pane's output back for more than a chunk's read.
+const searchChunkRows = 256
+
+// searchRowText is a row of cells as plain text, trailing blanks cut.
+func searchRowText(line uv.Line) string {
+	return strings.TrimRight(vt.StripSixelMarkers(line.String()), " ")
+}
+
+// scanLines calls fn for the pane's rows from the bottom up: the main screen,
+// then the history, newest first. Row i is the row search-panes reports as i:
+// history first from 0, then the screen, as the pane stood when the scan
+// began. fn returns false to stop. The history is read searchChunkRows at a
+// time, the lock let go between chunks, until deadline. A history line the
+// ring drops while the scan runs is not read; the scan follows the drop by
+// the marker list's count of trimmed lines. bottom is the last row, and
+// complete is false when the deadline cut the scan short.
+func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) (bottom int, complete bool) {
 	p.terminalMu.RLock()
-	defer p.terminalMu.RUnlock()
 	term := p.terminal
 	if term == nil {
-		return nil
+		p.terminalMu.RUnlock()
+		return -1, true
 	}
 	sbLen := term.ScrollbackLen()
 	width, height := term.Width(), term.Height()
-	lines := make([]string, 0, sbLen+height)
-	if sbLen > 0 {
-		term.ScrollbackRows(0, sbLen, func(_ int, line uv.Line) bool {
-			lines = append(lines, strings.TrimRight(vt.StripSixelMarkers(line.String()), " "))
-			return true
-		})
-	}
+	screen := make([]string, 0, height)
 	var b strings.Builder
 	for y := range height {
 		b.Reset()
@@ -138,9 +147,58 @@ func (p *PTY) paneLines() []string {
 				x += cell.Width - 1
 			}
 		}
-		lines = append(lines, strings.TrimRight(b.String(), " "))
+		screen = append(screen, strings.TrimRight(b.String(), " "))
 	}
-	return lines
+	trimmed0 := 0
+	if p.marks != nil {
+		trimmed0 = p.marks.Trimmed()
+	}
+	p.terminalMu.RUnlock()
+
+	bottom = sbLen + height - 1
+	for y := height - 1; y >= 0; y-- {
+		if !fn(sbLen+y, screen[y]) {
+			return bottom, true
+		}
+	}
+	// next is the end of what is left to read, in the rows of the start.
+	next := sbLen
+	chunk := make([]string, 0, searchChunkRows)
+	for next > 0 {
+		if time.Now().After(deadline) {
+			return bottom, false
+		}
+		p.terminalMu.RLock()
+		term = p.terminal
+		if term == nil {
+			p.terminalMu.RUnlock()
+			return bottom, true
+		}
+		dropped := 0
+		if p.marks != nil {
+			dropped = p.marks.Trimmed() - trimmed0
+		}
+		hi := min(next-dropped, term.ScrollbackLen())
+		if hi <= 0 {
+			// The rest of the history was dropped while the scan ran.
+			p.terminalMu.RUnlock()
+			return bottom, true
+		}
+		lo := max(hi-searchChunkRows, 0)
+		chunk = chunk[:0]
+		term.ScrollbackRows(lo, hi, func(_ int, line uv.Line) bool {
+			chunk = append(chunk, searchRowText(line))
+			return true
+		})
+		p.terminalMu.RUnlock()
+		for i := len(chunk) - 1; i >= 0; i-- {
+			if !fn(lo+dropped+i, chunk[i]) {
+				return bottom, true
+			}
+		}
+		next = lo + dropped
+	}
+	return bottom, true
 }
 
 // matchWindow cuts a line to at most searchTextMax runes around the match at
@@ -212,28 +270,18 @@ func (d *Daemon) verbSearchPanes(_ *connState, params json.RawMessage) (any, *ve
 			break
 		}
 		searched++
-		begin := time.Now()
-		lines := pane.pty.paneLines()
-		bottom := len(lines) - 1
 		found := 0
-		for row := bottom; row >= 0; row-- {
-			// The clock is read every 64 rows: a row costs well under a
-			// microsecond, and a pane of 10,000 rows reads it 157 times.
-			if row&63 == 0 && time.Since(begin) > searchPaneBudget {
-				truncated = true
-				break
-			}
-			line := lines[row]
+		bottom, complete := pane.pty.scanLines(time.Now().Add(searchPaneBudget), func(row int, line string) bool {
 			if line == "" {
-				continue
+				return true
 			}
 			loc := re.FindStringIndex(line)
 			if loc == nil {
-				continue
+				return true
 			}
 			if found >= perPane || len(matches) >= limit {
 				truncated = true
-				break
+				return false
 			}
 			text, start, end := matchWindow(line, loc[0], loc[1])
 			matches = append(matches, map[string]any{
@@ -245,9 +293,16 @@ func (d *Daemon) verbSearchPanes(_ *connState, params json.RawMessage) (any, *ve
 				"text":      text,
 				"start":     start,
 				"end":       end,
-				"age_rows":  bottom - row,
+				"age_rows":  -row, // set below, once the bottom is known
 			})
 			found++
+			return true
+		})
+		if !complete {
+			truncated = true
+		}
+		for _, m := range matches[len(matches)-found:] {
+			m["age_rows"] = bottom - m["row"].(int)
 		}
 	}
 	return map[string]any{
