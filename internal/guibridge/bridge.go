@@ -40,6 +40,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -448,6 +449,9 @@ func Run(opts Options) error {
 		tea.WithoutRenderer(),
 	}, app.ProgramOptions()...)
 	program := tea.NewProgram(m, popts...)
+	out.mu.Lock()
+	out.onResync = func() { program.Send(resyncMsg{}) }
+	out.mu.Unlock()
 	m.program = program
 	osModel.BindProgram(program)
 
@@ -542,6 +546,10 @@ func withOwnChrome(cfg *config.UserConfig) *config.UserConfig {
 
 // cmdMsg carries a renderer command into the Update loop.
 type cmdMsg Command
+
+// resyncMsg says the renderer has read everything the writer held after it
+// fell behind and pane output was dropped. Every pane gets a fresh snapshot.
+type resyncMsg struct{}
 
 // model wraps the client model: every message goes through it, and after each
 // one the session's layout is sent to the renderer if it changed.
@@ -654,6 +662,11 @@ func (m *model) View() tea.View { return tea.NewView("") }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	if _, ok := msg.(resyncMsg); ok {
+		m.out.endResync()
+		m.os.ResyncPaneStreams()
+		return m, nil
+	}
 	if g, ok := msg.(gitReadMsg); ok {
 		if m.gitSeen == nil {
 			m.gitSeen = map[string]gitEntry{}
@@ -1041,19 +1054,53 @@ func reportInput(c *session.TUIClient) {
 
 // frameWriter serializes frames onto the renderer's pipe from any goroutine.
 // Frames queue in memory, so a tap callback never blocks on the pipe.
+//
+// The queue is bounded. A renderer that stops reading while a pane floods
+// would otherwise hold every byte the pane prints in this process. Past
+// maxQueued bytes the writer drops the pane frames it holds (output,
+// snapshots and resizes) and takes no more, and the control frames go on.
+// Once the renderer has read everything left, the writer calls onResync,
+// and the model sends a fresh snapshot of every pane and streams on from it
+// (resyncMsg). After a failed write the renderer is gone: the queue is
+// dropped and nothing more is taken.
 type frameWriter struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
-	queue  [][]byte
+	queue  []queuedFrame
+	queued int
 	closed bool
-	done   chan struct{}
+	failed bool
+	// stale is set when pane frames were dropped, until the resync.
+	stale    bool
+	max      int
+	onResync func()
+	done     chan struct{}
 }
 
+// queuedFrame is one frame, or one part of one, and whether it belongs to a
+// pane's stream (dropped on a stall) or is a control frame (kept).
+type queuedFrame struct {
+	b    []byte
+	pane bool
+}
+
+// defaultQueueMax is how much the writer holds for a renderer that does not
+// read. TUIOS_GUI_BRIDGE_QUEUE_MAX sets another size in bytes, for tests.
+const defaultQueueMax = 32 << 20
+
 func newFrameWriter(w io.Writer) *frameWriter {
-	f := &frameWriter{done: make(chan struct{})}
+	f := &frameWriter{done: make(chan struct{}), max: defaultQueueMax}
+	if n, err := strconv.Atoi(os.Getenv("TUIOS_GUI_BRIDGE_QUEUE_MAX")); err == nil && n > 0 {
+		f.max = n
+	}
 	f.cond = sync.NewCond(&f.mu)
 	go f.run(w)
 	return f
+}
+
+// paneKind reports whether a frame of kind belongs to a pane's stream.
+func paneKind(kind byte) bool {
+	return kind == KindOutput || kind == KindSnap || kind == KindResize
 }
 
 func (f *frameWriter) Frame(kind byte, payload []byte) {
@@ -1061,11 +1108,42 @@ func (f *frameWriter) Frame(kind byte, payload []byte) {
 	binary.BigEndian.PutUint32(b, uint32(1+len(payload)))
 	b[4] = kind
 	b = append(b, payload...)
+	f.push(paneKind(kind), b)
+}
+
+func (f *frameWriter) push(pane bool, b []byte) {
 	f.mu.Lock()
-	if !f.closed {
-		f.queue = append(f.queue, b)
-		f.cond.Signal()
+	defer f.mu.Unlock()
+	if f.closed || f.failed || (pane && f.stale) {
+		return
 	}
+	if pane && f.queued+len(b) > f.max {
+		// The renderer is not keeping up. What it has not read of the
+		// panes is dropped; the resync replaces it.
+		kept := f.queue[:0]
+		f.queued = 0
+		for _, q := range f.queue {
+			if !q.pane {
+				kept = append(kept, q)
+				f.queued += len(q.b)
+			}
+		}
+		clear(f.queue[len(kept):])
+		f.queue = kept
+		f.stale = true
+		log.Printf("gui-bridge: the renderer fell %d bytes behind; dropping pane output until a resync", f.max)
+		return
+	}
+	f.queue = append(f.queue, queuedFrame{b: b, pane: pane})
+	f.queued += len(b)
+	f.cond.Signal()
+}
+
+// endResync lets pane frames in again. The model calls it on the Update
+// goroutine just before it sends the fresh snapshots.
+func (f *frameWriter) endResync() {
+	f.mu.Lock()
+	f.stale = false
 	f.mu.Unlock()
 }
 
@@ -1079,21 +1157,42 @@ func (f *frameWriter) JSON(v any) {
 func (f *frameWriter) run(w io.Writer) {
 	defer close(f.done)
 	bw := bufio.NewWriterSize(w, 256<<10)
+	fail := func() {
+		f.mu.Lock()
+		f.failed = true
+		clear(f.queue)
+		f.queue, f.queued = nil, 0
+		f.mu.Unlock()
+	}
+	resyncAsked := false
 	for {
 		f.mu.Lock()
 		for len(f.queue) == 0 && !f.closed {
+			if f.stale && !resyncAsked && f.onResync != nil {
+				// Everything held has been read: the renderer is back.
+				resyncAsked = true
+				go f.onResync()
+			}
 			f.cond.Wait()
 		}
 		q := f.queue
-		f.queue = nil
+		f.queue, f.queued = nil, 0
 		closed := f.closed
+		if !f.stale {
+			resyncAsked = false
+		}
 		f.mu.Unlock()
 		for _, b := range q {
-			if _, err := bw.Write(b); err != nil {
+			if _, err := bw.Write(b.b); err != nil {
+				fail()
 				return
 			}
 		}
-		if err := bw.Flush(); err != nil || (closed && len(q) == 0) {
+		if err := bw.Flush(); err != nil {
+			fail()
+			return
+		}
+		if closed && len(q) == 0 {
 			return
 		}
 	}

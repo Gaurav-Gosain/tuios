@@ -60,3 +60,23 @@ func (m *OS) snapshotHave(w *terminal.Window) int {
 	}
 	return w.ScrollbackLenSync()
 }
+
+// ResyncPaneStreams primes every streamed pane again from a fresh snapshot,
+// for a tap whose renderer lost part of the stream (tuios gui-bridge drops
+// pane output when its renderer stops reading). Each pane is unsubscribed,
+// which makes tapSnapshot report the new snapshot, and subscribed again from
+// the snapshot's end.
+func (m *OS) ResyncPaneStreams() {
+	if m.DaemonClient == nil {
+		return
+	}
+	for _, w := range m.Windows {
+		if w == nil || !w.DaemonMode || w.PTYID == "" || !m.SubscribedPTYs[w.PTYID] {
+			continue
+		}
+		m.DaemonClient.UnsubscribePTY(w.PTYID)
+		delete(m.SubscribedPTYs, w.PTYID)
+		w.SetStreamOwnsSize(false)
+		m.primePaneFromDaemon(w)
+	}
+}
