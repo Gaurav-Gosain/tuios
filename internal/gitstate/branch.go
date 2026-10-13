@@ -1,0 +1,54 @@
+package gitstate
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// headLimit bounds how much of HEAD Branch reads. It is one line, and a
+// directory that puts something else under that name is not a checkout worth
+// stalling on.
+const headLimit = 4096
+
+// Branch is the branch checked out in the working tree that holds dir, empty
+// when dir is in none. A detached HEAD reads as its short hash, which is what
+// git itself shows for one. It finds the tree with Locate, so a linked worktree
+// reports its own branch, and it reads one file: no cache, no subprocess.
+//
+// It is stricter than Read about a detached HEAD: the line must be a full
+// hexadecimal object name before its first seven characters are shown.
+func Branch(dir string) string {
+	gitdir, _, _, ok := Locate(dir)
+	if !ok {
+		return ""
+	}
+	f, err := os.Open(filepath.Join(gitdir, "HEAD"))
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	data, err := io.ReadAll(io.LimitReader(f, headLimit))
+	if err != nil {
+		return ""
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	line = strings.TrimSpace(line)
+	if ref, ok := strings.CutPrefix(line, "ref:"); ok {
+		return strings.TrimPrefix(strings.TrimSpace(ref), "refs/heads/")
+	}
+	if len(line) >= 40 && isHex(line) {
+		return line[:7]
+	}
+	return ""
+}
+
+func isHex(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}

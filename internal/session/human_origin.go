@@ -1,10 +1,19 @@
 package session
 
 import (
+	"net"
 	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
+
+// peerPID is the pid of the process on the other end of a unix socket, or 0
+// when the kernel does not say.
+func peerPID(conn net.Conn) int { return procinfo.PeerPID(conn) }
+
+// readEnvVarOf reads one variable of the environment a process was started
+// with, readable only for a process of the same user.
+func readEnvVarOf(pid int, name string) (string, bool) { return procinfo.EnvVar(pid, name) }
 
 // Who may act as the person.
 //
@@ -123,11 +132,11 @@ func (d *Daemon) paneOrigin(pid int) (bool, string) {
 	// hook command, which is automation and not the person, is placed the same
 	// way as a pane.
 	for _, name := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID"} {
-		if id, ok := readProcEnvVar(pid, name); ok && id != "" && d.holdsWindow(id) {
+		if id, ok := procinfo.EnvVar(pid, name); ok && id != "" && d.holdsWindow(id) {
 			return true, paneOriginEnv
 		}
 	}
-	if sock, ok := readProcEnvVar(pid, "TUIOS_SOCKET"); ok && sock != "" && sock == d.manager.SocketPath() {
+	if sock, ok := procinfo.EnvVar(pid, "TUIOS_SOCKET"); ok && sock != "" && sock == d.manager.SocketPath() {
 		return true, paneOriginEnv
 	}
 	return false, ""

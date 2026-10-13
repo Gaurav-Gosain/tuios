@@ -332,7 +332,7 @@ func (d *Daemon) serveHerdr(conn net.Conn) {
 		}
 	}()
 	_ = conn.SetDeadline(time.Now().Add(herdrIOTimeout))
-	cs := &connState{conn: conn, clientID: "herdr-" + newClientID(), done: make(chan struct{}), peerPID: peerPID(conn)}
+	cs := &connState{conn: conn, clientID: "herdr-" + newClientID(), done: make(chan struct{}), peerPID: procinfo.PeerPID(conn)}
 	if !d.herdrConns.take(cs.peerPID, herdrConnsPerCaller) {
 		// Read the request before the refusal. Closing a unix socket with
 		// the request still unread resets it, and an answer sent before the

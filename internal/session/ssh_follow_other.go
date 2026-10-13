@@ -10,6 +10,4 @@ func readParentAndOwner(int) (int, int, bool) { return 0, 0, false }
 
 func readArgvExact(int) []string { return nil }
 
-func readEnvVarOf(int, string) (string, bool) { return "", false }
-
 func fileOwner(os.FileInfo) (int, bool) { return 0, false }

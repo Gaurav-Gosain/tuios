@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // readParentAndOwner returns a process's parent pid and the user that owns it,
@@ -21,11 +23,7 @@ func readParentAndOwner(pid int) (ppid, uid int, ok bool) {
 	if !isStat {
 		return 0, 0, false
 	}
-	data, err := os.ReadFile(dir + "/stat")
-	if err != nil {
-		return 0, 0, false
-	}
-	ppid, ok = parseStatField(string(data), 4)
+	ppid, ok = procinfo.ParentPID(pid)
 	if !ok {
 		return 0, 0, false
 	}
@@ -45,16 +43,6 @@ func readArgvExact(pid int) []string {
 		s = s[:len(s)-1]
 	}
 	return strings.Split(s, "\x00")
-}
-
-// readEnvVarOf reads one variable of a process's environment. The file is
-// readable only for a process of the same user.
-func readEnvVarOf(pid int, name string) (string, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
-	if err != nil {
-		return "", false
-	}
-	return environVar(data, name)
 }
 
 // fileOwner is the uid that owns a file.

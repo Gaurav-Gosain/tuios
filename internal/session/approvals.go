@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
@@ -916,7 +917,7 @@ func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
 			}
 		}
 	}
-	if id, ok := readProcEnvVar(pid, "TUIOS_PANE_ID"); ok && id != "" && d.holdsWindow(id) {
+	if id, ok := procinfo.EnvVar(pid, "TUIOS_PANE_ID"); ok && id != "" && d.holdsWindow(id) {
 		return true, id
 	}
 	return true, ""

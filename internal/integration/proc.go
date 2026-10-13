@@ -1,8 +1,11 @@
 package integration
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // maxAncestors bounds the parent walk. A hook is rarely more than a handful of
@@ -23,6 +26,16 @@ func SelfProcess() (sid int, ancestors []int) {
 		ancestors = append(ancestors, pid)
 	}
 	return sid, ancestors
+}
+
+// parentPID returns the parent of pid, and the current process's parent for
+// pid 0. It is 0 when the platform cannot read it.
+func parentPID(pid int) int {
+	if pid == 0 {
+		return os.Getppid()
+	}
+	ppid, _ := procinfo.ParentPID(pid)
+	return ppid
 }
 
 // launcherNames are the programs a harness may start a hook command through:

@@ -9,3 +9,9 @@ func PeerPID(net.Conn) int { return 0 }
 
 // StartTime cannot be read here.
 func StartTime(int) (uint64, bool) { return 0, false }
+
+// ParentPID cannot be read here.
+func ParentPID(int) (int, bool) { return 0, false }
+
+// EnvVar cannot be read here.
+func EnvVar(int, string) (string, bool) { return "", false }

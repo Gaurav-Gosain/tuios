@@ -42,3 +42,26 @@ func StartTime(pid int) (uint64, bool) {
 	tv := kp.Proc.P_starttime
 	return uint64(tv.Sec)*1_000_000 + uint64(tv.Usec), true
 }
+
+// ParentPID returns a process's parent pid from its kinfo_proc.
+func ParentPID(pid int) (int, bool) {
+	if pid <= 0 {
+		return 0, false
+	}
+	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	if err != nil || kp == nil || int(kp.Proc.P_pid) != pid {
+		return 0, false
+	}
+	return int(kp.Eproc.Ppid), true
+}
+
+// EnvVar reads one variable of the environment process pid was started with,
+// from kern.procargs2, which the kernel gives only for a process of the same
+// user. A refusal reads as absent.
+func EnvVar(pid int, name string) (string, bool) {
+	buf, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return "", false
+	}
+	return ProcargsEnvVar(buf, name)
+}

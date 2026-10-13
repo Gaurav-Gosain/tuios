@@ -57,16 +57,6 @@ func readArgvExact(pid int) []string {
 	return argv
 }
 
-// readEnvVarOf reads one variable of a process's environment from
-// kern.procargs2, which the kernel gives only for a process of the same user.
-func readEnvVarOf(pid int, name string) (string, bool) {
-	buf, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return "", false
-	}
-	return procargsEnvVar(buf, name)
-}
-
 // fileOwner is the uid that owns a file.
 func fileOwner(fi os.FileInfo) (int, bool) {
 	st, ok := fi.Sys().(*syscall.Stat_t)

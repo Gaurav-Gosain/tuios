@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Attaching a session from one of its own panes.
@@ -323,7 +325,7 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 		cur = next
 	}
 	for _, name := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID"} {
-		id, ok := readProcEnvVar(pid, name)
+		id, ok := procinfo.EnvVar(pid, name)
 		if !ok || id == "" {
 			continue
 		}
@@ -333,8 +335,8 @@ func (d *Daemon) paneSession(pid int) (*Session, string) {
 			}
 		}
 	}
-	if sock, ok := readProcEnvVar(pid, SocketEnv); ok && sock != "" && sock == d.manager.SocketPath() {
-		if name, ok := readProcEnvVar(pid, "TUIOS_SESSION"); ok && name != "" {
+	if sock, ok := procinfo.EnvVar(pid, SocketEnv); ok && sock != "" && sock == d.manager.SocketPath() {
+		if name, ok := procinfo.EnvVar(pid, "TUIOS_SESSION"); ok && name != "" {
 			// A pane started before a rename holds the old name.
 			if sess, _ := d.manager.ResolveSession(name); sess != nil {
 				return sess, paneOriginEnv

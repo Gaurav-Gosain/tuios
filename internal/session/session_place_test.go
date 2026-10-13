@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
 // A session's place is what the rail labels an unnamed session with. These
@@ -141,7 +143,7 @@ func TestGitBranchReadsTheCheckoutLayouts(t *testing.T) {
 		{"detached HEAD", detached, "0123456"},
 		{"unreadable HEAD", garbage, ""},
 	} {
-		if got := gitBranch(tc.dir); got != tc.want {
+		if got := gitstate.Branch(tc.dir); got != tc.want {
 			t.Errorf("%s: gitBranch = %q, want %q", tc.name, got, tc.want)
 		}
 	}
@@ -165,7 +167,7 @@ func TestGitBranchAgreesWithGitInit(t *testing.T) {
 	if out, err := exec.Command(git, "-C", repo, "symbolic-ref", "HEAD", "refs/heads/from-git").CombinedOutput(); err != nil {
 		t.Fatalf("git symbolic-ref: %v: %s", err, out)
 	}
-	if got := gitBranch(repo); got != "from-git" {
+	if got := gitstate.Branch(repo); got != "from-git" {
 		t.Fatalf("gitBranch on a git-made checkout = %q, want from-git", got)
 	}
 }

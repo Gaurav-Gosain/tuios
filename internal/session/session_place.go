@@ -1,7 +1,6 @@
 package session
 
 import (
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
@@ -147,7 +147,7 @@ func (r *placeRecord) setCwdPath(path string) bool {
 	r.branch.Store(&empty)
 	gen := r.gen.Add(1)
 	go func() {
-		b := gitBranch(path)
+		b := gitstate.Branch(path)
 		if r.gen.Load() == gen {
 			r.branch.Store(&b)
 		}
@@ -322,94 +322,6 @@ func dirLabel(cwd, home string) string {
 		return "~"
 	}
 	return filepath.Base(cwd)
-}
-
-// gitHeadLimit bounds how much of a .git file or HEAD is read. Both are one
-// line, and a directory that puts something else under those names is not a
-// checkout worth stalling on.
-const gitHeadLimit = 4096
-
-// gitBranch is the branch checked out at dir or the nearest parent that is a
-// checkout, empty when none is. A detached HEAD reads as its short hash, which
-// is what git itself shows for one. The walk is bounded so a pathological path
-// cannot make it long.
-func gitBranch(dir string) string {
-	for range 64 {
-		if head := gitHeadPath(dir); head != "" {
-			return readHeadRef(head)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	return ""
-}
-
-// gitHeadPath is where HEAD lives for a checkout rooted at dir, or empty when
-// dir is not a checkout root. A plain checkout keeps it under the .git
-// directory. A worktree or submodule has a .git file instead, whose one line
-// names the directory that holds this checkout's HEAD.
-func gitHeadPath(dir string) string {
-	dotGit := filepath.Join(dir, ".git")
-	info, err := os.Stat(dotGit)
-	if err != nil {
-		return ""
-	}
-	if info.IsDir() {
-		return filepath.Join(dotGit, "HEAD")
-	}
-	line := readFirstLine(dotGit)
-	gitdir, ok := strings.CutPrefix(line, "gitdir:")
-	if !ok {
-		return ""
-	}
-	gitdir = strings.TrimSpace(gitdir)
-	if gitdir == "" {
-		return ""
-	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(dir, gitdir)
-	}
-	return filepath.Join(gitdir, "HEAD")
-}
-
-// readHeadRef reads a branch name out of a HEAD file.
-func readHeadRef(head string) string {
-	line := readFirstLine(head)
-	if ref, ok := strings.CutPrefix(line, "ref:"); ok {
-		return strings.TrimPrefix(strings.TrimSpace(ref), "refs/heads/")
-	}
-	if len(line) >= 40 && isHex(line) {
-		return line[:7]
-	}
-	return ""
-}
-
-// readFirstLine is the first line of a small file, trimmed, or empty on any
-// error. It reads at most gitHeadLimit bytes.
-func readFirstLine(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
-	data, err := io.ReadAll(io.LimitReader(f, gitHeadLimit))
-	if err != nil {
-		return ""
-	}
-	line, _, _ := strings.Cut(string(data), "\n")
-	return strings.TrimSpace(line)
-}
-
-func isHex(s string) bool {
-	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
-			return false
-		}
-	}
-	return true
 }
 
 // generatedSessionName matches the names GenerateSessionName hands out.

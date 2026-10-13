@@ -106,19 +106,6 @@ func readProcArgs(pid int) (string, []string) {
 	return exe, argv
 }
 
-// readAgentHintEnv reads TUIOS_AGENT from the environment section of
-// kern.procargs2. The argument reader above stops before that section on
-// purpose; this is the one variable detection reads, and only when a wrapper
-// it cannot see past might be naming its agent. A refused sysctl is an absent
-// hint.
-func readAgentHintEnv(pid int) (string, bool) {
-	buf, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return "", false
-	}
-	return procargsEnvVar(buf, AgentHintEnv)
-}
-
 // foregroundGroup walks the descendants of leader that share its process group,
 // depth first, reading at most limit processes no deeper than depth.
 //
