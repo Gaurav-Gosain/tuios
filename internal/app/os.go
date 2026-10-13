@@ -862,6 +862,9 @@ type OS struct {
 	// holds describes a session that no longer exists and must not be pushed.
 	// See SyncStateToDaemon, AddWindow and DeleteWindow.
 	daemonWindowIntent bool
+	// windowIntentErr is why the last window request did not go out, read
+	// once by addWindowInChecked.
+	windowIntentErr error
 	// paneRequests is, by workspace, when this client asked the daemon for
 	// the pane a switch to that empty workspace opens. A switch back to the
 	// workspace before the pane arrives asks for nothing more. A sync that

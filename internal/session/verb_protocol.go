@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"runtime"
 	"slices"
 	"time"
 
@@ -2767,5 +2768,8 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// grants and takes a pane's token with pane-grants, which the CLI
 		// presents where the kernel cannot name the caller's pane.
 		"pane_grants": true,
+		// os is the daemon's GOOS. A client attached from another machine
+		// builds a command line for this one: sh -c here, cmd /C on Windows.
+		"os": runtime.GOOS,
 	}, nil
 }

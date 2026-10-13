@@ -47,11 +47,21 @@ func farHomeWith(t *testing.T, script string) string {
 // this machine's key entries.
 func popupHostClient(t *testing.T, remote, home, keys string) (string, *tuitest.Terminal) {
 	t.Helper()
+	return popupHostClientGated(t, remote, home, keys, "")
+}
+
+// popupHostClientGated is popupHostClient whose link the file gate cuts,
+// with "" for a link that is never cut.
+func popupHostClientGated(t *testing.T, remote, home, keys, gate string) (string, *tuitest.Terminal) {
+	t.Helper()
 	if out, err := tuiosCLIEnv(t, remote, []string{"HOME=" + home}, "new", "far", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
 	base := t.TempDir()
 	ssh := writeFakeSSHTo(t, base, remote)
+	if gate != "" {
+		ssh = writeGatedFakeSSH(t, base, remote, gate)
+	}
 	writeOneHostConfig(t, base, tuiosBin)
 	path := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
 	hosts, err := os.ReadFile(path)
@@ -188,7 +198,9 @@ description = "Projects"
 	want := `Add "open" to the allow list`
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		flat := strings.Join(strings.Fields(strings.ReplaceAll(s.Text(), "│", " ")), " ")
-		return strings.Contains(flat, want) && strings.Contains(flat, "Host build does not allow open")
+		// build's allow list is in [hosts."*"], so that is the table to change.
+		return strings.Contains(flat, want) && strings.Contains(flat, "Host build does not allow open") &&
+			strings.Contains(flat, `[hosts."*"] on build`)
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the refusal does not say what to add: %v\n%s", err, term.Snapshot())
 	}
@@ -201,4 +213,51 @@ description = "Projects"
 	}
 	noLocalFar(t, base)
 	alive(t, term, "after a refused popup")
+}
+
+// A press while the link to build is down says so in plain words, and what to
+// do, rather than the error chain of the dial.
+func TestPopupEntryWhileTheLinkIsDown(t *testing.T) {
+	remote := remoteMachine(t)
+	home := farHomeWith(t, "echo FAR-POPUP-RAN; sleep 3\n")
+	gate := filepath.Join(t.TempDir(), "gate")
+	base, term := popupHostClientGated(t, remote, home, `
+[[keybindings.command]]
+key = "prefix+alt+o"
+type = "popup"
+command = "~/bin/prj"
+description = "Projects"
+`, gate)
+
+	// The positive half: with the link up the popup runs.
+	pressCommand(t, term, 'o')
+	if err := term.WaitForText("FAR-POPUP-RAN", uiTimeout); err != nil {
+		t.Fatalf("the popup did not run with the link up: %v\n%s", err, term.Snapshot())
+	}
+	waitGone(t, term, "the popup after its command", "FAR-POPUP-RAN")
+
+	cutTheLink(t, gate)
+	if err := term.WaitForText("Reconnecting to build", uiTimeout); err != nil {
+		t.Fatalf("the client did not see the link drop: %v\n%s", err, term.Snapshot())
+	}
+	pressCommand(t, term, 'o')
+	if err := term.WaitForText("did not run", 45*time.Second); err != nil {
+		t.Fatalf("ASSERTION: no message for a press while the link is down: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatalf("send prefix N: %v", err)
+	}
+	want := "The command Projects did not run. Cannot reach build. The link is reconnecting. Try again in a moment."
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(strings.Join(strings.Fields(strings.ReplaceAll(s.Text(), "│", " ")), " "), want)
+	}, uiTimeout); err != nil {
+		dumpLinkLogs(t, base, remote)
+		t.Fatalf("ASSERTION: the message is not the plain one: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("a press while the link is down:\n%s", term.Snapshot())
+	if strings.Contains(term.Screen().Text(), "FAR-POPUP-RAN") {
+		t.Fatal("ASSERTION: the popup ran while the link was down")
+	}
+	openTheLink(t, gate)
+	alive(t, term, "after a press while the link was down")
 }

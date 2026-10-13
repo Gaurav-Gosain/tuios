@@ -60,6 +60,8 @@ type DaemonHandshake struct {
 	// takes a pane's token with pane-grants. False for a daemon from before
 	// pane grants.
 	PaneGrants bool `json:"pane_grants"`
+	// OS is the daemon's GOOS. Empty for a daemon from before it was sent.
+	OS string `json:"os"`
 }
 
 // ProtocolMismatchError reports that the running daemon cannot speak the control

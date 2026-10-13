@@ -445,6 +445,12 @@ func linkForbidden(d *Daemon, cs *connState, what string, missing []string, reas
 		table = "[hosts." + peer + "]"
 		from = peer
 	}
+	// The table whose allow list is in force is the one to change. A grant
+	// added to [hosts.PEER] while [hosts."*"] holds the list would work too,
+	// but a grant added to [hosts."*"] while [hosts.PEER] holds it would not.
+	if policy.AllowSource != "" {
+		table = policy.AllowSource
+	}
 	if reason == "" {
 		words := make([]string, 0, len(missing))
 		for _, m := range missing {

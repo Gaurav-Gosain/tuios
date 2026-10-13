@@ -104,12 +104,27 @@ func scratchNameOf(w *terminal.Window) string {
 // answers.
 const scratchPendingMax = 10 * time.Second
 
+// scratchPendingHostMax is scratchPendingMax in a session on another machine.
+// The call there can take the link's 30 seconds to open, plus the create's
+// own wait, and a second press inside that time must not ask again.
+const scratchPendingHostMax = 45 * time.Second
+
+// scratchPendingLimit is the backstop in force for this session.
+func (m *OS) scratchPendingLimit() time.Duration {
+	if m.AttachedHost != "" {
+		return scratchPendingHostMax
+	}
+	return scratchPendingMax
+}
+
 // ScratchOpenedMsg reports the outcome of the call that creates the scratch
 // terminal in a daemon session.
 type ScratchOpenedMsg struct {
 	// Label names the scratch in a message.
 	Label string
-	Err   error
+	// Name is the scratch group the create was for.
+	Name string
+	Err  error
 }
 
 // scratchStoppedWait is how long the create waits to see whether the command
@@ -229,7 +244,7 @@ func (m *OS) planScratch(name string) scratchPlan {
 		}
 		return scratchPlan{action: scratchShow, index: i}
 	}
-	if m.scratchPending == name && time.Since(m.scratchPendingAt) < scratchPendingMax {
+	if m.scratchPending == name && time.Since(m.scratchPendingAt) < m.scratchPendingLimit() {
 		return scratchPlan{action: scratchNothing, index: -1}
 	}
 	return scratchPlan{action: scratchCreate, index: -1}
@@ -485,15 +500,18 @@ func localFolder(raw string) string {
 // createScratch makes the scratch terminal: through the daemon in a daemon
 // session, here otherwise.
 func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
-	dir := m.scratchDir()
 	if !m.IsDaemonSession || m.DaemonClient == nil {
-		m.createLocalScratch(dir, spec)
+		m.createLocalScratch(m.scratchDir(), spec)
 		return nil
 	}
+	var dir string
 	if m.AttachedHost != "" {
 		// The pane starts on the session's machine, so the folder is the
 		// focused pane's path there. Empty lets that daemon pick its own.
+		// scratchDir is not asked: it stats a folder here.
 		dir = m.remotePaneDir()
+	} else {
+		dir = m.scratchDir()
 	}
 	m.scratchPending = spec.Name
 	m.scratchPendingAt = time.Now()
@@ -509,9 +527,9 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		Host:      m.AttachedHost,
 		Build:     m.DaemonClient.ClientVersion(),
 	}
-	label := spec.Title
+	label, name := spec.Title, spec.Name
 	return func() tea.Msg {
-		return ScratchOpenedMsg{Label: label, Err: scratchOpener(req)}
+		return ScratchOpenedMsg{Label: label, Name: name, Err: scratchOpener(req)}
 	}
 }
 
@@ -639,6 +657,16 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 		return
 	}
 	m.scratchPending = ""
+	if scratchExists(msg.Err) && msg.Name != "" {
+		// The daemon has the pane already: a press that raced an earlier
+		// create, or a create whose answer was lost on the link. Show it.
+		// When this client does not hold it yet, the push brings it, and
+		// the create stays on its way until then.
+		m.scratchPending = msg.Name
+		m.scratchPendingAt = time.Now()
+		m.maybeFocusScratch()
+		return
+	}
 	if stopped, ok := errors.AsType[ScratchStoppedError](msg.Err); ok {
 		// The daemon closed the pane, but the push that removes it can come
 		// after this answer, on the client's own connection. Until then a
@@ -653,11 +681,19 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 		m.ShowNotification(fmt.Sprintf("The command %s stopped with exit code %d.", msg.Label, stopped.Code), "error", m.Settings.NotificationDuration)
 		return
 	}
-	if refusal := linkRefusal(m.AttachedHost, msg.Err); refusal != "" {
-		m.ShowNotification("The scratch terminal did not open. "+refusal, "error", m.Settings.NotificationDuration*3)
-		return
+	why := m.sessionCallFailure(msg.Err)
+	if why == "" {
+		why = plainCause(msg.Err)
 	}
-	m.ShowNotification("The scratch terminal did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)
+	m.ShowNotification("The scratch terminal did not open. "+why, "error", m.Settings.NotificationDuration*2)
+}
+
+// scratchExists reports the daemon's refusal of a second scratch pane of a
+// name, which means the pane is there to show.
+func scratchExists(err error) bool {
+	callErr, ok := errors.AsType[*session.VerbCallError](err)
+	return ok && callErr.Code == session.ErrVerbInvalidParams && callErr.Hint != nil &&
+		callErr.Hint.Param == "scratch" && callErr.Message == session.ErrScratchExists.Error()
 }
 
 // maybeFocusScratch ends the create on its way once its pane arrives, and
@@ -666,7 +702,7 @@ func (m *OS) maybeFocusScratch() {
 	if m.scratchPending == "" {
 		return
 	}
-	if time.Since(m.scratchPendingAt) >= scratchPendingMax {
+	if time.Since(m.scratchPendingAt) >= m.scratchPendingLimit() {
 		m.scratchPending = ""
 		return
 	}

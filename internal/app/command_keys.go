@@ -69,15 +69,22 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	dir := m.scratchDir()
+	var dir string
 	if m.AttachedHost != "" {
 		// Every pane is on the session's machine, so the folder is the
 		// focused pane's own path there, and this machine's home means
-		// nothing.
+		// nothing. scratchDir is not asked: it stats a folder here.
 		dir = m.remotePaneDir()
+	} else {
+		dir = m.scratchDir()
 	}
 	env := m.commandEnv(dir)
-	argv := commandArgv(c.Command, env)
+	// scratch, popup and pane run on the session's machine, so their line is
+	// built for its OS. A shell entry runs here.
+	argv := commandArgvFor(m.sessionGOOS(), c.Command, env)
+	if c.ResolvedType() == config.CommandTypeShell {
+		argv = commandArgv(c.Command, env)
+	}
 
 	switch c.ResolvedType() {
 	case config.CommandTypeScratch:
@@ -104,7 +111,10 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 		// A pane of the layout, next to the focused one, the way a new window
 		// opens: the user can keep it, move it or zoom it, and it closes when
 		// the command exits. The keyboard goes to it.
-		m.AddWindowIn(dir, c.Label(), argv...)
+		if err := m.addWindowInChecked(dir, c.Label(), argv...); err != nil {
+			m.ShowNotification(m.entryFailure(c.Label(), err), "error", m.Settings.NotificationDuration*2)
+			return nil
+		}
 		if m.IsDaemonSession && m.DaemonClient != nil {
 			m.pendingStartTerminalMode = true
 		} else {
@@ -124,11 +134,130 @@ func (m *OS) handleCommandRan(msg CommandRanMsg) {
 	if msg.Err == nil {
 		return
 	}
-	if refusal := linkRefusal(m.AttachedHost, msg.Err); refusal != "" {
-		m.ShowNotification("The command "+msg.Label+" did not run. "+refusal, "error", m.Settings.NotificationDuration*3)
-		return
+	m.ShowNotification(m.entryFailure(msg.Label, msg.Err), "error", m.Settings.NotificationDuration*2)
+}
+
+// errNoWindow is a pane entry whose window request did not reach the daemon
+// on this machine.
+var errNoWindow = errors.New("the request did not reach the daemon")
+
+// errPaneNotStarted is a pane entry whose pane this client could not start.
+var errPaneNotStarted = errors.New("the pane did not start")
+
+// addWindowInChecked is AddWindowIn that says when the window was not asked
+// for. In a daemon session the daemon makes the window later, so a nil error
+// means the request went out, not that the command started.
+func (m *OS) addWindowInChecked(dir, name string, command ...string) error {
+	if m.IsDaemonSession && m.DaemonClient != nil {
+		m.windowIntentErr = nil
+		m.addDaemonWindow(dir, name, "", command)
+		err := m.windowIntentErr
+		m.windowIntentErr = nil
+		if err != nil && m.AttachedHost == "" {
+			return errNoWindow
+		}
+		return err
 	}
-	m.ShowNotification(fmt.Sprintf("The command %s failed: %v", msg.Label, msg.Err), "error", m.Settings.NotificationDuration)
+	before := len(m.Windows)
+	m.addLocalWindow(dir, name, command)
+	if len(m.Windows) == before {
+		return errPaneNotStarted
+	}
+	return nil
+}
+
+// entryFailure is the dock message for a command entry that did not run or
+// failed: what happened, and what to do. label names the entry.
+func (m *OS) entryFailure(label string, err error) string {
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok && exit.ExitCode() >= 0 {
+		return fmt.Sprintf("The command %s stopped with exit code %d.", label, exit.ExitCode())
+	}
+	if why := m.sessionCallFailure(err); why != "" {
+		return "The command " + label + " did not run. " + why
+	}
+	return "The command " + label + " did not run. " + plainCause(err)
+}
+
+// sessionCallFailure says, in words a person acts on, why a call to the
+// session's daemon failed: a refusal by the link's allow list, a link that
+// is down, or a host that tuios does not know. It is "" for any other error.
+func (m *OS) sessionCallFailure(err error) string {
+	host := m.AttachedHost
+	if refusal := linkRefusal(host, err); refusal != "" {
+		return refusal
+	}
+	if host == "" {
+		if errors.Is(err, errNoWindow) {
+			return "The daemon on this machine did not answer. Try again in a moment."
+		}
+		return ""
+	}
+	if connErr, ok := errors.AsType[*session.HostConnectError](err); ok {
+		switch connErr.Code {
+		case session.ErrVerbUnknownHost:
+			return "This machine has no host named " + host + ". Add it to [hosts] in the config, then attach again."
+		case session.ErrVerbProtocolMismatch, session.ErrVerbUnknownVerb:
+			return plainCause(connErr)
+		}
+		return linkDownNotice(host)
+	}
+	if _, ok := errors.AsType[*session.ProtocolMismatchError](err); ok {
+		return "The tuios on " + host + " is a different version. Update tuios on " + host + ", then try again."
+	}
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
+		if callErr.Code == session.ErrVerbHostUnreachable {
+			return linkDownNotice(host)
+		}
+		// The far daemon answered. Its own words say what is wrong.
+		return ""
+	}
+	// No answer at all: the link dropped, or the call timed out on it.
+	return linkDownNotice(host)
+}
+
+// linkDownNotice is the message for a call that did not reach host.
+func linkDownNotice(host string) string {
+	return "Cannot reach " + host + ". The link is reconnecting. Try again in a moment."
+}
+
+// plainCause is an error as a sentence: the daemon's message without its
+// code, with a capital letter and a full stop.
+func plainCause(err error) string {
+	msg := err.Error()
+	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
+		msg = callErr.Message
+	}
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return "Try again."
+	}
+	msg = strings.ToUpper(msg[:1]) + msg[1:]
+	if !strings.HasSuffix(msg, ".") {
+		msg += "."
+	}
+	return msg
+}
+
+// sessionGOOS is the OS of the machine that holds the session, as Go names
+// it. For a session on another machine it is what that daemon's hello said
+// when the client attached. Until that answer is in, or from a daemon too
+// old to say, a focused pane in a drive folder means Windows, and anything
+// else means a Unix.
+func (m *OS) sessionGOOS() string {
+	if m.AttachedHost == "" {
+		return runtime.GOOS
+	}
+	if v, ok := m.attachedView(); ok && v.OS != "" {
+		return v.OS
+	}
+	if w := m.GetFocusedWindow(); w != nil {
+		if dir := remoteFolder(w.Cwd); dir != "" {
+			if _, ok := winpath.ForOS(dir, "windows"); ok && !strings.HasPrefix(dir, "/") {
+				return "windows"
+			}
+		}
+	}
+	return "linux"
 }
 
 // commandScratchSpec is the scratch spec of a scratch entry.

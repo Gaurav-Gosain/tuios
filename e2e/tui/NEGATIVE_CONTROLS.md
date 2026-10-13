@@ -4772,3 +4772,17 @@ from build, through a `~` expanded there.
 | `Host` cut from the scratch request in `createScratch` | mutant of this branch | `TestPopupEntryOpensOnTheSessionsMachine` (no `FAR-SCRATCH-56`) | **caught** |
 | The `linkRefusal` branch cut from `handleCommandRan` | mutant of this branch | `TestPopupEntryRefusedByTheHostsAllowList` (no "did not run" on the dock; the generic failure does not name `"open"`) | **caught** |
 | The positive half | this branch | none: the popup shows `FAR-POPUP-42` at 62x13 (40% of 160x40), writes the far pane's OSC 7 folder under build's HOME, leaves build's window list when it exits, the scratch entry opens on build, and with `allow = ["list", "write"]` on build the toast reads `Host build does not allow open from this machine. Add "open" to the allow list in [hosts.<peer>] on build.` | **guard** |
+
+Review round, same day. `TestPopupEntryWhileTheLinkIsDown` was added, and the
+refusal test now also reads the table name.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `handleCommandRan` shows the raw error again (`fmt.Sprintf("The command %s failed: %v")` in place of `entryFailure`) | mutant of the review round | `TestPopupEntryWhileTheLinkIsDown` (no "did not run" in 45 seconds), `TestPopupEntryRefusedByTheHostsAllowList` (no "did not run") | **caught** |
+| `linkForbidden` names `[hosts.<peer>]` again (the `AllowSource` lines cut) | mutant of the review round | `TestPopupEntryRefusedByTheHostsAllowList` (the toast names `[hosts.<peer>]`, while build's allow list is in `[hosts."*"]`) | **caught** |
+| The positive half | the review round | none: with the link up the popup runs, and with the link cut the toast reads `The command Projects did not run. Cannot reach build. The link is reconnecting. Try again in a moment.` | **guard** |
+
+Not covered here: the far OS (`os` in `hello`) picks `cmd /C` only for a
+Windows host, which this suite cannot run. The longer pending time and the
+answer to "already has a scratch terminal" need a create whose answer is lost
+on the link, which this suite cannot make on demand.

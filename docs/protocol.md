@@ -133,7 +133,8 @@ Result:
   "pid": 4242,
   "sessions": 2,
   "link_policy": true,
-  "pane_grants": true
+  "pane_grants": true,
+  "os": "linux"
 }}
 ```
 
@@ -147,6 +148,10 @@ for a link, and refuses when it is set. It is absent from an older daemon.
 platform where the daemon cannot read the peer's pid, the `tuios` CLI reads it
 and then presents `$TUIOS_PANE_ID` and `$TUIOS_PANE_TOKEN` on every
 connection it opens from a pane. It is absent from an older daemon.
+
+`os` is the operating system the daemon runs on, as Go names it: `linux`,
+`darwin`, `windows`. A client attached from another machine reads it to start
+a command entry with `sh -c` or `cmd /C`. It is absent from an older daemon.
 
 The handshake is optional, not a gate: a daemon serves every other verb whether
 or not `hello` was called, and a daemon older than the handshake answers

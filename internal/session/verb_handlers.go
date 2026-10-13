@@ -569,6 +569,11 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 	if opts.stdout != nil {
 		_ = opts.stdout.Close()
 	}
+	// A second press that raced the first past the early check above. The
+	// same answer, so the client shows the pane that is there.
+	if errors.Is(err, ErrScratchExists) {
+		return nil, invalidParam("scratch", err.Error())
+	}
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}

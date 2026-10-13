@@ -133,6 +133,9 @@ type LinkPolicy struct {
 	// the caller which key to change: hosts.laptop, hosts."*", or empty for
 	// the built-in default.
 	Source string
+	// AllowSource is the table the allow list came from, written as in the
+	// config: [hosts.laptop] or [hosts."*"]. Empty for the built-in default.
+	AllowSource string
 }
 
 // Allows reports whether the policy grants every capability in caps.
@@ -194,6 +197,7 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 		}
 		if h.Allow != nil {
 			p.Allow = cleanLinkAllow(h.Allow)
+			p.AllowSource = "[hosts." + key + "]"
 		}
 		if h.HoldMail != nil {
 			p.HoldMail = *h.HoldMail

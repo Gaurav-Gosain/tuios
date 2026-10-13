@@ -32,6 +32,9 @@ type attachedHostView struct {
 	Here string
 	// Err is why the list could not be read, if it could not.
 	Err error
+	// OS is the attached daemon's GOOS, from its hello. Empty for a daemon
+	// too old to say.
+	OS string
 }
 
 // AttachedHostsMsg carries a fresh attachedHostView into Update.
@@ -82,6 +85,9 @@ func fetchAttachedHosts(host, build string) attachedHostView {
 		return view
 	}
 	defer func() { _ = far.Close() }()
+	if hs := far.Daemon(); hs != nil {
+		view.OS = hs.OS
+	}
 	raw, err := far.Call("list-hosts", nil)
 	if err != nil {
 		view.Err = err

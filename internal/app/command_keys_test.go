@@ -122,7 +122,7 @@ func TestShellEntryRunsAndReportsAFailure(t *testing.T) {
 	}
 	fail := m.RunCommandBinding("command:fail")().(CommandRanMsg)
 	m.handleCommandRan(fail)
-	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "failed") {
+	if n := len(m.Notifications); n == 0 || !strings.Contains(m.Notifications[n-1].Message, "exit code 3") {
 		t.Fatalf("notifications = %+v", m.Notifications)
 	}
 }

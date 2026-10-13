@@ -669,6 +669,7 @@ func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
 	}
 	if err := m.DaemonClient.SendNewWindowIntent(dir, ws, sshFrom, "NewWindow", args...); err != nil {
 		m.LogError("Failed to ask the daemon for a new window: %v", err)
+		m.windowIntentErr = err
 		m.CancelPendingSplit()
 	} else {
 		// From here until the daemon says what it did, this client does not
