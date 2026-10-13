@@ -673,6 +673,10 @@ type OS struct {
 	// paneLabels is the display_panes labels while they are up, or nil. See
 	// pane_labels.go.
 	paneLabels *paneLabelsState
+	// dropZone is where the pane a drag holds would land if dropped where the
+	// pointer last was, or nil outside a drag: the press, the release and a
+	// lost release each clear it. See tiling_drop.go.
+	dropZone *Drop
 
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See

@@ -4988,3 +4988,23 @@ cursor shape tests. The test has its positive half (the colour is set) and its
 negative half (a pane that set no colour, and OSC 112, reset it) in one
 fixture. Run it with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestCursorColour' .`
+### BSP drop zones
+
+Run on 2026-10-13 on macOS, and the edge-branch and same-tree-guard controls again on 2026-10-14 on the change rebased onto the current main, with the same result. The tests are in `bsp_drop_zone_test.go`. Each control cuts one wire from the fixed build, builds it, runs the named tests against the cut binary, and restores the source; the fixed build passes every test in the file.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The edge branch at release (`TiledDropAt` never consulted in `handleMouseRelease`) | `TestADropOnAPaneEdgeSplitsIt`, all five rows: the drop swaps ("dropped on A's left edge: C {X:0 Y:0 Width:60 Height:38} and A {X:60 Y:19 ...}", "B should have taken the whole column"); `TestAnEdgeDropResizesTheGuestOnce` (one WINCH either way, so it fails on the split: "dropped on A's left edge: C {X:0 Y:0 Width:80 Height:43} and A {X:81 Y:22 ...}", "B should have taken the whole column (81,0 79x43)") | **caught** |
+| The `UpdateDropZone` call in the drag motion path | `TestADropOnAPaneEdgeSplitsIt`, all five rows ("outline cell (0,0) of the landing rectangle ... has ground {Kind:0 ...}"), `TestTheDropZoneShowsAt16Colours` ("outline cell (0,0) ... is not reverse video mid-drag"); the split itself still passes, so the highlight assertion is what fails | **caught** |
+| Both `applyDropZone` calls in `composeLayersIn` | The same rows as the line above, with the same messages | **caught** |
+| The BSP gate in `TiledDropAt` (`!m.UseBSPLayout \|\| m.UseScrollingLayout`) | `TestEdgeZonesAreBSPOnly/master-stack` ("cell (0,0), outside the landing rectangle, changed mid-drag"), `TestEdgeZonesAreBSPOnly/scrolling` ("cell (60,0), in the slot C left and outside the landing rectangle, is painted mid-drag") | **caught** |
+| The drag threshold in the motion path (`UpdateDropZone` called for every motion, short of the threshold the release checks). Run on 2026-10-14 | `TestAShortDragShowsNoDropZone` ("cell (60,35), in the slot C left and outside the landing rectangle, is painted mid-drag": a three-cell drag lit the same-tree zone the release then snapped back from) | **caught** |
+| The same-tree guard in `BSPTree.MoveWindow` | `TestAnEdgeDropThatRebuildsTheSameTreeChangesNothing` ("an edge drop that changes nothing moved a pane: {... Height:19}, was {... Height:13}": the divider went back to the middle) | **caught** |
+| A no-op edge drop reported as no drop (`TiledDropAt` returning false instead of landing on the pane's own slot), so the release falls through to the swap | `TestAnEdgeDropThatRebuildsTheSameTreeChangesNothing` ("moved a pane: {X:60 Y:13 Width:60 Height:25}, was {X:60 Y:0 Width:60 Height:13}": B and C swapped) | **caught** |
+| `dragged.IsBeingManipulated = false` in `MoveWindowIntoSplit` | `TestADropOnAPaneEdgeSplitsIt`, all five rows ("the drop left two panes overlapping", C left parked at the pointer) | **caught** |
+
+The scrolling row of `TestEdgeZonesAreBSPOnly` first passed under the gate control: the highlight landed inside the slot C left, which the check skipped. The check now holds that slot to the bare ground, and the row above is the run after that change.
+
+`TestAnEdgeDropResizesTheGuestOnce` first counted the WINCH rows only and passed under the edge-branch control: a swap into the full-height slot is one size change too. It now checks the split, and the row above is the run after that change.
+
+The `ClearDropZone` calls (press, release, lost release) have no control. Without them a stale highlight shows on a press until the first motion recomputes it, and the last drop's target pane is kept alive until the next drag; no test here makes two drags in one session or inspects memory.

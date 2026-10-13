@@ -89,6 +89,23 @@ How a resize is kept depends on the layout:
   `Shift+5`..`Shift+9` do nothing there (column heights are recomputed as
   equal spans on the next layout pass).
 
+### Moving a pane with the mouse
+
+A tiled pane is moved by dragging its title bar, or by `Ctrl+click` anywhere in it and dragging. Both drop the same way.
+
+In BSP, where the pane is dropped decides what happens:
+
+| Drop on another pane | Result |
+|---|---|
+| Its middle | The two panes swap places. |
+| Its left, right, top or bottom edge (the outer quarter of that side) | That pane is split in two, and the dragged pane takes the half toward the edge. The pane that shared a split with the dragged pane fills the space it left. The new split is even. |
+
+While the button is down, the rectangle the pane will land in is highlighted: outlined in the accent colour with a tint inside, or outlined in reverse video on a 16-colour terminal. A pane too small to hold two panes of the minimum size across one axis offers no edges on that axis. An edge drop that would leave the layout as it is (dropping a pane on the edge it already sits beside) highlights the pane's own slot and changes nothing, so a divider you have moved stays where it is.
+
+A drop that lands on no other pane puts the pane back where it was. Master-stack and the scrolling layout place panes by their own rules, so a drop there always swaps (the scrolling layout swaps columns), and nothing is highlighted. A floating pane stays where it is dropped. A zoomed pane cannot be dragged, and while any pane is zoomed, or a scratch group is shown, drops swap as in the other layouts.
+
+The new arrangement is session state: it reaches every client attached to the session and survives a reattach.
+
 ## Master-Stack Layout
 
 The master-stack layout puts the first panes of a workspace in a master area

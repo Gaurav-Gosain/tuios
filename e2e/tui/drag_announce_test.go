@@ -29,6 +29,14 @@ import (
 // it, which is what the two tests below need.
 func dragAnnouncePanes(t *testing.T) *tuitest.Terminal {
 	t.Helper()
+	term, _ := dragAnnounceBoard(t)
+	return term
+}
+
+// dragAnnounceBoard is dragAnnouncePanes with the isolation root, for a test
+// that also reads the geometry the daemon holds.
+func dragAnnounceBoard(t *testing.T) (*tuitest.Terminal, string) {
+	t.Helper()
 	base := t.TempDir()
 	writeConfig(t, base, "[appearance]\nshared_borders = true\nclick_to_type = 'double'\n")
 	term := startIn(t, base, startOpts{
@@ -53,7 +61,7 @@ func dragAnnouncePanes(t *testing.T) *tuitest.Terminal {
 	time.Sleep(2 * time.Second)
 	leaveTerminalMode(t, term)
 	time.Sleep(time.Second)
-	return term
+	return term, base
 }
 
 // TestDragIntoASameSizeSlotResizesNothing is the regression. The armed pane is

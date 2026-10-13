@@ -339,6 +339,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow.X = newX
 		focusedWindow.Y = newY
 		focusedWindow.MarkPositionDirty()
+		// Where a drop here would put the pane, for the highlight. The release
+		// asks the same question at the same point, and only past the same
+		// threshold.
+		if tiledDragDistance(o, mouse.X, mouse.Y) >= tiledDragThreshold {
+			o.UpdateDropZone(mouse.X, mouse.Y)
+		} else {
+			o.ClearDropZone()
+		}
 		return o, nil
 	}
 

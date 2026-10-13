@@ -606,6 +606,7 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	o.DragOffsetX = x - win.X
 	o.DragOffsetY = y - win.Y
 	win.IsBeingManipulated = true
+	o.ClearDropZone()
 	// In tiling mode, complete pending animations to avoid state conflicts,
 	// then record the slot for the swap-on-release. The scrolling strip
 	// included: its pane follows the pointer like any other tiled pane now, and

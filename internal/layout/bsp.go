@@ -255,53 +255,18 @@ func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction Spli
 
 	// Use default ratio if not specified
 	if ratio <= 0 || ratio >= 1 {
-		ratio = t.DefaultRatio
+		ratio = t.splitRatio()
 	}
 
-	// Create new internal node that replaces the target
 	// The target becomes the left child, new window becomes right child
-	oldLeaf := NewLeafNode(targetNode.WindowID)
-	internalNode := NewInternalNode(direction, ratio, oldLeaf, newLeaf)
-
-	// Replace target in tree
-	if targetNode.Parent == nil {
-		// Target was root
-		t.Root = internalNode
-	} else {
-		// Update parent's child pointer
-		internalNode.Parent = targetNode.Parent
-		if targetNode.IsLeftChild() {
-			targetNode.Parent.Left = internalNode
-		} else {
-			targetNode.Parent.Right = internalNode
-		}
-	}
-
-	// Update window-to-node mapping
-	t.WindowToNode[targetNode.WindowID] = oldLeaf
-	t.WindowToNode[windowID] = newLeaf
+	t.splitLeaf(targetNode, newLeaf, direction, false, ratio)
 }
 
 // InsertWindowWithPreselection adds a new window using preselection direction.
 // Preselection determines which side of the focused window to place the new window.
 func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int, preselect PreselectionDir, bounds Rect, gap int) {
-	var direction SplitType
-	var newWindowIsLeft bool
-
-	switch preselect {
-	case PreselectionLeft:
-		direction = SplitVertical
-		newWindowIsLeft = true
-	case PreselectionRight:
-		direction = SplitVertical
-		newWindowIsLeft = false
-	case PreselectionUp:
-		direction = SplitHorizontal
-		newWindowIsLeft = true
-	case PreselectionDown:
-		direction = SplitHorizontal
-		newWindowIsLeft = false
-	default:
+	direction, newWindowIsLeft := preselect.split()
+	if direction == SplitNone {
 		// No preselection, use normal insert
 		t.InsertWindow(windowID, focusedWindowID, SplitNone, t.DefaultRatio, bounds, gap)
 		return
@@ -332,30 +297,59 @@ func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int
 		}
 	}
 
-	// Create the split with correct ordering
-	oldLeaf := NewLeafNode(targetNode.WindowID)
-	var internalNode *TileNode
-	if newWindowIsLeft {
-		internalNode = NewInternalNode(direction, t.DefaultRatio, newLeaf, oldLeaf)
-	} else {
-		internalNode = NewInternalNode(direction, t.DefaultRatio, oldLeaf, newLeaf)
-	}
+	t.splitLeaf(targetNode, newLeaf, direction, newWindowIsLeft, t.splitRatio())
+}
 
-	// Replace target in tree
-	if targetNode.Parent == nil {
+// split is the split a preselection direction makes, and whether the window
+// placed toward it is the left (or top) child. PreselectionNone makes none.
+func (d PreselectionDir) split() (direction SplitType, first bool) {
+	switch d {
+	case PreselectionLeft:
+		return SplitVertical, true
+	case PreselectionRight:
+		return SplitVertical, false
+	case PreselectionUp:
+		return SplitHorizontal, true
+	case PreselectionDown:
+		return SplitHorizontal, false
+	}
+	return SplitNone, false
+}
+
+// splitRatio is the ratio a new split starts at: the tree's default, or an
+// even split when the tree has none. A tree read back from state written
+// without a default carries 0 there, and a split at 0 lays its near child out
+// zero cells wide.
+func (t *BSPTree) splitRatio() float64 {
+	if t.DefaultRatio <= 0 || t.DefaultRatio >= 1 {
+		return 0.5
+	}
+	return t.DefaultRatio
+}
+
+// splitLeaf puts a split in target's place holding target's window and
+// newLeaf, newLeaf as the left (or top) child when first is set.
+func (t *BSPTree) splitLeaf(target, newLeaf *TileNode, direction SplitType, first bool, ratio float64) {
+	oldLeaf := NewLeafNode(target.WindowID)
+	left, right := oldLeaf, newLeaf
+	if first {
+		left, right = newLeaf, oldLeaf
+	}
+	internalNode := NewInternalNode(direction, ratio, left, right)
+
+	if target.Parent == nil {
 		t.Root = internalNode
 	} else {
-		internalNode.Parent = targetNode.Parent
-		if targetNode.IsLeftChild() {
-			targetNode.Parent.Left = internalNode
+		internalNode.Parent = target.Parent
+		if target.IsLeftChild() {
+			target.Parent.Left = internalNode
 		} else {
-			targetNode.Parent.Right = internalNode
+			target.Parent.Right = internalNode
 		}
 	}
 
-	// Update mappings
-	t.WindowToNode[targetNode.WindowID] = oldLeaf
-	t.WindowToNode[windowID] = newLeaf
+	t.WindowToNode[target.WindowID] = oldLeaf
+	t.WindowToNode[newLeaf.WindowID] = newLeaf
 }
 
 // RemoveWindow removes a window from the tree and collapses the tree structure.
@@ -901,6 +895,32 @@ func (t *BSPTree) SwapWindows(windowID1, windowID2 int) {
 	// Update the lookup map
 	t.WindowToNode[windowID1] = node2
 	t.WindowToNode[windowID2] = node1
+}
+
+// MoveWindow takes windowID out of its slot, its sibling taking the space, and
+// splits targetID toward dir with windowID in the new half, at the tree's
+// default ratio.
+//
+// It reports false and changes nothing when either window is missing, when dir
+// names no side, or when the move would rebuild the tree it started from: the
+// window already beside the target on that side. That rebuild differs from the
+// tree in one way only, the divider between the two going back to the default,
+// so a drop that looks like it does nothing would undo a resize.
+func (t *BSPTree) MoveWindow(windowID, targetID int, dir PreselectionDir) bool {
+	direction, first := dir.split()
+	node, target := t.WindowToNode[windowID], t.WindowToNode[targetID]
+	if direction == SplitNone || node == nil || target == nil || node == target {
+		return false
+	}
+	if parent := node.Parent; parent != nil && parent == target.Parent &&
+		parent.SplitType == direction && node.IsLeftChild() == first {
+		return false
+	}
+	t.RemoveWindow(windowID)
+	// RemoveWindow keeps the sibling's node, so the target's is still the one
+	// in the map even when the target was that sibling.
+	t.splitLeaf(t.WindowToNode[targetID], NewLeafNode(windowID), direction, first, t.splitRatio())
+	return true
 }
 
 // EqualizeRatios sets all split ratios to 0.5

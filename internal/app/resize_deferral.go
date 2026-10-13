@@ -180,6 +180,7 @@ func (m *OS) endLostGesture() {
 	m.RightClickPending = false
 	m.InteractionMode = false
 	m.DraggedWindowIndex = -1
+	m.ClearDropZone()
 	// The scrollbar grab rides on Dragging but is read from its own flag, so
 	// clearing only Dragging left the thumb tracking a pointer with nothing held
 	// and, because the hover paths yield to it, swallowed hover for good.
