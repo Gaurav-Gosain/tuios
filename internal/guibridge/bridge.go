@@ -476,7 +476,7 @@ func Run(opts Options) error {
 
 	go func() {
 		err := readCommands(opts.In, cur, program)
-		if err != nil && !errors.Is(err, io.EOF) {
+		if !errors.Is(err, io.EOF) {
 			log.Printf("gui-bridge: renderer input: %v", err)
 		}
 		// The renderer is gone. Leave the session as a detach does, so the
