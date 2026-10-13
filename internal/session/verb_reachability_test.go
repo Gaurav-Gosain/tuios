@@ -92,6 +92,14 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"set-layout#0":    {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"set-layout#1":    {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
 	"split-window#0":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
+	// The fixture's session is in no space, so the space the examples name
+	// does not exist. The verbs are proved end to end in
+	// e2e/tui/space_cli_test.go.
+	"rename-space#0": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
+	"kill-space#0":   {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
+	"kill-space#1":   {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
+	"switch-space#0": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
+	"switch-space#1": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.

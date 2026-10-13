@@ -317,12 +317,15 @@ tuios new [session-name] [flags]
 - `--global`: Create a global session, which holds panes from more than one machine
 - `--hold`: After a failure, wait for enter before the command exits
 - `--cwd <dir>`: Directory the session's windows start in. The default is the current directory
+- `--space <name>`: File the session under a space, a named group of related sessions. It follows the session name rules
 - The appearance flags of the root command (`tuios new --help` lists them)
 
 The session's windows start in the directory where you run `tuios new`.
 `--cwd` names a different directory. The directory applies to the first
 window, and to each later window that has no pane to take a directory from.
 `--cwd` does not work with `--host`.
+
+`--space` files the session under the space as it is made, so `tuios ls` lists it with the space's other sessions. It does not work with `--host` or `--global`.
 
 **Examples:**
 ```bash
@@ -331,6 +334,7 @@ tuios new mysession            # Create session named "mysession"
 tuios new api --cwd ~/dev/api  # Create a session whose windows start in ~/dev/api
 tuios new work --theme dracula # Create session with Dracula theme
 tuios new ci --detach          # Create a headless session and return
+tuios new api --space payments # Create a session in the space payments
 tuios new --host build         # Create a session on the host build and attach it
 tuios new deploy --global      # Create a global session
 ```
@@ -464,6 +468,26 @@ tuios switch-session -s work api                   # From outside tuios: switch 
 
 See [Sessionizer](SESSIONS.md#sessionizer) for a key that opens a project.
 
+### `tuios switch-space`
+
+Switch an attached client to the session of a space the person used last, in place, as `switch-session` does. The pick is the latest `last_used` that `list-spaces` reports, then the latest activity, the same ranking a bare `tuios attach` uses. The client to switch is chosen as `switch-session` chooses it.
+
+**Usage:**
+```bash
+tuios switch-space <space> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Switch the client that shows this session
+- `--client <id>`: Switch the client with this id, from `tuios list-clients`
+- `--json`: Output as JSON
+
+**Examples:**
+```bash
+tuios switch-space payments            # From a pane: show the space payments
+tuios switch-space -s work payments    # From outside tuios: switch the client that shows work
+```
+
 ### `tuios ls`
 
 List all TUIOS sessions.
@@ -498,6 +522,8 @@ Shows a table with:
 │ dev           │ 2       │ attached │ 1 day ago     │ just now        │
 ╰───────────────┴─────────┴──────────┴───────────────┴─────────────────╯
 ```
+
+When any session is in a space, the listing is one table per space, in name order, each under a `Space: NAME` line, and the sessions in no space follow last under `No space`. `tuios ls --json` stays one flat list, with `space` on each row that has one.
 
 `tuios ls --json` prints one object per session. Two fields say where the session's focused pane is:
 
@@ -643,6 +669,35 @@ tuios kill-session <session-name>
 **Examples:**
 ```bash
 tuios kill-session mysession   # Kill session named "mysession"
+```
+
+### `tuios kill-space`
+
+Kill every session filed under a space, and every window in them, as `kill-session` does one session. It needs `--force`: without it nothing is killed, and the command names the sessions it would kill and exits non-zero.
+
+**Usage:**
+```bash
+tuios kill-space <space> --force
+```
+
+**Examples:**
+```bash
+tuios kill-space payments          # Kills nothing. Names the sessions it would kill
+tuios kill-space payments --force  # Kill every session in the space payments
+```
+
+### `tuios rename-space`
+
+Rename a space: every session filed under it is filed under the new name. If the new name is a space already, the two become one. The rename is made one session at a time, so if it stops part way some sessions are left under each name, and running the same command again moves the rest. Once nothing is left under the old name, running it again changes nothing and says so.
+
+**Usage:**
+```bash
+tuios rename-space <space> <new-name>
+```
+
+**Examples:**
+```bash
+tuios rename-space payments billing
 ```
 
 ### `tuios worktree`

@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
@@ -131,10 +135,21 @@ func (e *ProtocolMismatchError) Unwrap() error { return e.Cause }
 // and no error: refusing to talk to it would break the compatibility the verb
 // protocol promises.
 func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
+	// The same TERM detection client.go's sendHello uses for the binary
+	// protocol, so a session this connection creates (new-session,
+	// switch-session --create) gets the caller's real terminal rather than
+	// the daemon's blind default. A command with no terminal on stdout (a
+	// script, CI, an agent) detects NoTTY and names none, same as there.
+	termType, colorTerm := guestenv.DetectTerm()
+	if termType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
+		termType, colorTerm = "", ""
+	}
 	raw, err := c.Call("hello", map[string]any{
-		"client":   "tuios",
-		"version":  clientVersion,
-		"protocol": VerbProtocolVersion,
+		"client":     "tuios",
+		"version":    clientVersion,
+		"protocol":   VerbProtocolVersion,
+		"term":       termType,
+		"color_term": colorTerm,
 	})
 	if err == nil {
 		var hs DaemonHandshake

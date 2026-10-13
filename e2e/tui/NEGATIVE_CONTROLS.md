@@ -4795,3 +4795,37 @@ Run on 2026-10-13 on macOS. The control cuts one wire from the fixed build and r
 | --- | --- | --- |
 | The restore creating the session without `Space: state.Space` in its `SessionConfig` (the space is saved but the restore's client sync keeps the new session's empty one) | `TestSpaceSurvivesTheDaemon` ("after a restart, list-spaces is map[]") | **caught** |
 | `incoming.Space = canonical.Space` left out of `retainDaemonExclusive` | not run | **not covered**: the test attaches no client, so nothing pushes state. A client of the same build echoes the space it was sent, so only an older client's push could clear it, and the suite runs one build. The line stays, for the reason `Global` has its own. |
+
+### Space CLI
+
+Run on 2026-10-13 on macOS. The tests are in `space_cli_test.go`: `TestNewSpaceFilesTheSession`, `TestRenameSpaceMovesEveryMember`, `TestKillSpaceNeedsForceAndCascades`, `TestSwitchSpaceLandsOnTheLastUsedSession` and `TestLsGroupsSessionsBySpace`. Each control cuts one wire from the fixed build and runs the test named.
+
+`TestSwitchSpaceLandsOnTheLastUsedSession` puts three sessions in one space. The person types in `e2e-a`, then in `e2e-b`, then windows are opened in `e2e-c` from the CLI, which bumps its activity and is not the person. The client sits on a session in no space. So the right answer, `e2e-b`, is neither the first nor the last member by name nor the latest by activity.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `verbRenameSpace` stops after the first member | `TestRenameSpaceMovesEveryMember` ("rename-space did not report moving 2 sessions: ... 1 session (e2e-a)") | **caught** |
+| The `already` answer in `verbRenameSpace` (a rename with nothing left under the old name is refused) | `TestRenameSpaceMovesEveryMember` ("running the same rename again failed: ... no session is in space payments") | **caught** |
+| `verbRenameSpace` refuses a new name that holds sessions already (no merge) | `TestRenameSpaceMovesEveryMember` ("the rename that repairs a split failed: ... space exists") | **caught** |
+| The `force` check in `verbKillSpace` | `TestKillSpaceNeedsForceAndCascades` ("kill-space without --force succeeded: Killed space 'doomed': 2 sessions") | **caught** |
+| `verbKillSpace` kills only the first member | `TestKillSpaceNeedsForceAndCascades` ("the sessions are [e2e-doomed-2 e2e-kept e2e-loose], want [e2e-kept e2e-loose]") | **caught** |
+| `verbSwitchSpace` picks the first member by name | `TestSwitchSpaceLandsOnTheLastUsedSession` ("Switched to session e2e-a of space payments") | **caught** |
+| `verbSwitchSpace` ranks by activity (`mostRecentSession(..., false)`) | `TestSwitchSpaceLandsOnTheLastUsedSession` ("Switched to session e2e-c of space payments") | **caught** |
+| `verbNewSession` creates the session with `&SessionConfig{}` (the space dropped) | `TestNewSpaceFilesTheSession` ("after tuios new --space --detach, list-spaces is map[]") | **caught** |
+| `tuios new --space` without `--detach` falls through to the plain attach (the space dropped on the attached path only) | `TestNewSpaceFilesTheSession` ("after an attached tuios new --space, list-spaces is map[payments:[e2e-api]]") | **caught** |
+| `renderSpaceGroups` draws one table of every row | `TestLsGroupsSessionsBySpace` ("ls does not list \"Space: alpha\"") | **caught** |
+| `renderSpaceGroups` draws the sessions in no space first | `TestLsGroupsSessionsBySpace` ("ls does not list \"No space\" after what comes before it") | **caught** |
+
+A first cut of the attached-path control also removed the `--global` refusal and failed on that assertion instead, so it was narrowed to the attached branch and run again. The row above is the narrowed run.
+
+Not covered: a crash part way through `rename-space`. The test stands in for it by putting one member back under the old name with `set-session-space`, which is the state such a crash leaves, and checks the same rename moves it.
+
+### hello verb: the caller's terminal reaches a session it creates
+
+Run on 2026-10-13 on macOS. `new --space` goes through the `new-session` verb over the JSON verb connection (`VerbClient`), not the binary protocol `new`/`attach` use. The binary protocol's `MsgHello` sets `cs.hello` from the caller's real terminal, and `verbNewSession` (and `switch-session`'s `create`) read it; the JSON verb connection's own handshake, the `hello` verb, never set `cs.hello` at all, so every session a verb created got the daemon's own default (`xterm-256color`, no `COLORTERM`) regardless of the caller's real terminal. The `hello` verb now takes `term`/`color_term`, and `VerbClient`'s handshake sends them with the same detection `client.go`'s binary-protocol `sendHello` uses.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| `cs.hello = &HelloPayload{...}` in `verbHello` | `TestNewSpaceGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=xterm-ghostty COLORTERM=truecolor\"") | **caught** |
+
+`TestSessionMadeWithoutATerminalGivesItsPanesARealTerm` (`pane_term_headless_test.go`) is the other half: a caller with no terminal still gets the daemon's fallback, and still does after this change, since an empty `term`/`color_term` on the hello verb leaves `cs.hello` holding the same empty strings the binary protocol's no-terminal case already produces.

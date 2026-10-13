@@ -2814,6 +2814,13 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
+// Space is the space the session is filed under, "" for none.
+func (s *Session) Space() string {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.state.Space
+}
+
 // SetSpace files the session under the named space, propagated and persisted
 // exactly as SetDisplayName is. An empty space takes it out of any.
 func (s *Session) SetSpace(space string) error {

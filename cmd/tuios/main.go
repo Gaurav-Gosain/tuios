@@ -524,6 +524,7 @@ the remote client. See 'tuios hosts --help'.`,
 	var newGlobal bool
 	var newSSH bool
 	var newCwd string
+	var newSpace string
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -546,7 +547,10 @@ a directory from starts there too.
 With --host the session is created on another machine. tuios runs ssh to the
 host named in the [hosts] table and runs 'tuios new' there. The client you
 see is the remote one. With --detach the far side creates the session and
-returns. See 'tuios hosts --help'.`,
+returns. See 'tuios hosts --help'.
+
+With --space the session is filed under a space, a named group of related
+sessions that 'tuios ls' lists together.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
@@ -558,6 +562,9 @@ returns. See 'tuios hosts --help'.`,
 
   # Create a session whose windows start in ~/dev/api
   tuios new api --cwd ~/dev/api
+
+  # Create a session in the space payments
+  tuios new api --space payments --detach
 
   # Create a session on the machine named build and attach to it
   tuios new --host build
@@ -574,6 +581,9 @@ returns. See 'tuios hosts --help'.`,
 				if newCwd != "" {
 					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
 				}
+				if newSpace != "" {
+					return fmt.Errorf("--space files the session on this machine's daemon, so it cannot be used with --host")
+				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
 			dir, err := newSessionStartDir(newCwd)
@@ -581,6 +591,12 @@ returns. See 'tuios hosts --help'.`,
 				return err
 			}
 			newSessionDir = dir
+			if newSpace != "" {
+				if newGlobal {
+					return fmt.Errorf("--space cannot be used with --global. Create the global session, then file it with 'tuios call set-session-space'")
+				}
+				return runNewSessionInSpace(name, newSpace, newDetach)
+			}
 			if newGlobal {
 				// A global session is created with no windows whether or not
 				// --detach was asked for: its first window names a machine,
@@ -599,6 +615,7 @@ returns. See 'tuios hosts --help'.`,
 	newCmd.Flags().BoolVar(&newGlobal, "global", false, "Create a global session, which holds panes from more than one machine")
 	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
 	newCmd.Flags().StringVar(&newCwd, "cwd", "", "Directory the session's windows start in (default: the current directory)")
+	newCmd.Flags().StringVar(&newSpace, "space", "", "File the session under this space, a named group of related sessions")
 	registerHostNameCompletion(newCmd, "host")
 
 	var lsJSON bool
@@ -2973,6 +2990,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, listClientsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(newSwitchSessionCmd())
+	rootCmd.AddCommand(newRenameSpaceCmd(), newKillSpaceCmd(), newSwitchSpaceCmd())
 	rootCmd.AddCommand(newDetachClientCmd())
 	rootCmd.AddCommand(newSSHAgentPathCmd())
 	rootCmd.AddCommand(newDisplayEnvCmd())

@@ -262,11 +262,13 @@ var verbRegistry map[string]verbEntry
 func init() {
 	verbRegistry = map[string]verbEntry{
 		"hello": {
-			description: "Handshake: report the protocol version this daemon speaks and the version range it accepts.",
+			description: "Handshake: report the protocol version this daemon speaks and the version range it accepts. Also tells the daemon the caller's terminal, so a session this connection later creates (new-session, switch-session's create) gets it rather than the daemon's default.",
 			params: []verbParam{
 				{Name: "client", Type: "string", Description: "Name of the calling program, for the daemon log."},
 				{Name: "version", Type: "string", Description: "Version string of the calling program."},
 				{Name: "protocol", Type: "int", Description: "Protocol version the caller speaks. The daemon reports a mismatch rather than failing later."},
+				{Name: "term", Type: "string", Description: "The caller's TERM. Omit, or empty, for a caller with no terminal of its own (a script, CI, an agent)."},
+				{Name: "color_term", Type: "string", Description: "The caller's COLORTERM."},
 			},
 			examples: []string{`{"id":1,"verb":"hello","params":{"client":"tuios","version":"1.2.3","protocol":1}}`},
 			handler:  (*Daemon).verbHello,
@@ -465,9 +467,11 @@ func init() {
 				{Name: "window_name", Type: "string", Description: "Name for the first window. Omit to use the shell's title."},
 				{Name: "cwd", Type: "string", Description: "Directory the session's windows start in: the first window, and any later one with no directory to inherit. Omit to use the daemon's."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+				{Name: "space", Type: "string", Description: "Space to file the session under, as set-session-space does. It follows the session name rules. Omit for none."},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session. Use it as the session parameter of every later call."},
+				{Name: "space", Type: "string", Description: "Space the session is filed under. Absent when space was not given."},
 				{Name: "session_id", Type: "string", Description: "Id of the new session."},
 				{Name: "width", Type: "int", Description: "Nominal width the session was created at."},
 				{Name: "height", Type: "int", Description: "Nominal height the session was created at."},
@@ -480,6 +484,7 @@ func init() {
 				`{"id":1,"verb":"new-session"}`,
 				`{"id":1,"verb":"new-session","params":{"name":"work","window_name":"build","cwd":"/src/api"}}`,
 				`{"id":1,"verb":"new-session","params":{"name":"empty","window":false}}`,
+				`{"id":1,"verb":"new-session","params":{"name":"ledger","space":"accounts"}}`,
 			},
 			handler: (*Daemon).verbNewSession,
 		},
@@ -1627,6 +1632,59 @@ func init() {
 			examples: []string{`{"id":1,"verb":"list-spaces"}`},
 			handler:  (*Daemon).verbListSpaces,
 		},
+		"rename-space": {
+			description: "Rename a space: file every session in it under the new name. If the new name is a space already, the two become one. It is one change per session, not one transaction, so a failure part way leaves some sessions under each name, and calling it again with the same names moves the rest.",
+			params: []verbParam{
+				{Name: "space", Type: "string", Required: true, Description: "The space to rename."},
+				{Name: "name", Type: "string", Required: true, Description: "The new name. It follows the session name rules."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always space_renamed."},
+				{Name: "space", Type: "string", Description: "The space's new name."},
+				{Name: "old_space", Type: "string", Description: "The name it had before."},
+				{Name: "sessions", Type: "[]string", Description: "The sessions this call moved, by name. Empty with already."},
+				{Name: "already", Type: "bool", Description: "True when no session was left under the old name and the new name holds sessions: the rename was done before. Nothing changed."},
+			},
+			examples: []string{`{"id":1,"verb":"rename-space","params":{"space":"payments","name":"billing"}}`},
+			handler:  (*Daemon).verbRenameSpace,
+		},
+		"kill-space": {
+			description: "Terminate every session in a space, and every window in them, as kill-session does one session. Without force it kills nothing and names the sessions it would kill.",
+			params: []verbParam{
+				{Name: "space", Type: "string", Required: true, Description: "The space whose sessions to terminate."},
+				{Name: "force", Type: "bool", Description: "Go ahead. Without it the call is refused with invalid_params, and the hint lists the sessions.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always space_killed."},
+				{Name: "space", Type: "string", Description: "The space that was killed."},
+				{Name: "sessions", Type: "[]string", Description: "The sessions this call terminated, by name."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"kill-space","params":{"space":"payments","force":true}}`,
+				`{"id":1,"verb":"kill-space","params":{"space":"payments"}}`,
+			},
+			handler: (*Daemon).verbKillSpace,
+		},
+		"switch-space": {
+			description: "Switch an attached client to the session of a space the person used last: the latest last_used list-spaces reports, then the latest activity. The client is chosen as switch-session chooses it.",
+			params: []verbParam{
+				{Name: "space", Type: "string", Required: true, Description: "Space to switch to."},
+				{Name: "session", Type: "string", Description: "Session the client to switch shows."},
+				{Name: "client", Type: "string", Description: "Id of the client to switch, from list-clients."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always space_switched."},
+				{Name: "space", Type: "string", Description: "The space switched to."},
+				{Name: "session", Type: "string", Description: "Session of the space the client now shows."},
+				{Name: "client_id", Type: "string", Description: "Id of the client that switched."},
+				{Name: "already", Type: "bool", Description: "True when the client already showed that session. Nothing changed."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"switch-space","params":{"space":"payments"}}`,
+				`{"id":1,"verb":"switch-space","params":{"space":"payments","session":"work"}}`,
+			},
+			handler: (*Daemon).verbSwitchSpace,
+		},
 		"set-workspace-name": {
 			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",
 			params: []verbParam{
@@ -2749,13 +2807,23 @@ func describeVerb(name string, entry verbEntry) verbDoc {
 // protocol closes the connection, which the client reports as a mismatch too.
 func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Client   string `json:"client"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
+		Client    string `json:"client"`
+		Version   string `json:"version"`
+		Protocol  int    `json:"protocol"`
+		Term      string `json:"term"`
+		ColorTerm string `json:"color_term"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+
+	// Recorded the way the binary protocol's MsgHello sets cs.hello, so a
+	// verb that reads it (new-session, switch-session's create) gives the
+	// caller's own session the caller's terminal, not the daemon's default.
+	// This connection names no shell: every hello leaves that to the daemon's
+	// own resolution (appearance.preferred_shell, then $SHELL), the same way
+	// the binary protocol's hello always has.
+	cs.hello = &HelloPayload{Term: p.Term, ColorTerm: p.ColorTerm}
 
 	if p.Protocol > VerbProtocolVersion {
 		return nil, hintedVerbError(ErrVerbProtocolMismatch,
