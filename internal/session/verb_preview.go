@@ -22,9 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	_ "golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
-	_ "golang.org/x/image/webp"
 )
 
 // file-preview: what Quick Look shows, made on the machine the file is on.
@@ -57,10 +55,17 @@ const (
 	previewPDFBytesMax = 8 << 20
 	previewSVGMax      = 4 << 20
 	previewToolTimeout = 20 * time.Second
-	// previewDecodeMax bounds the memory one decoded image may take. A
-	// small file can hold a huge picture: a 400 KB PNG of 10000 x 10000
-	// pixels decodes to 400 MB, and the scale to more.
+	// previewDecodeMax bounds the memory one image's decode and scale may
+	// take, the decoder's own buffers counted (decodeCost). A small file can
+	// hold a huge picture: a 400 KB PNG of 10000 x 10000 pixels decodes to
+	// 400 MB, and an 8 MB progressive JPEG of 9000 x 7000 holds 945 MB of
+	// coefficients and planes while it decodes.
 	previewDecodeMax = 256 << 20
+	// previewPassMax is the largest picture sent as it is, for the client
+	// to decode: a WebP or a BMP, which this machine does not decode, and a
+	// picture too large to decode here within previewDecodeMax. The GUI
+	// decodes them with its own caps (tuios-gpui's tuios-preview crate).
+	previewPassMax = 16 << 20
 )
 
 // previewDecodeSlot lets one image decode at a time, so previews asked for
@@ -130,7 +135,7 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 
 	switch {
 	case previewImageExt[ext]:
-		if err := previewImage(ctx, f, fi.Size(), maxPx, out); err != nil {
+		if err := previewImage(ctx, f, ext, fi.Size(), maxPx, out); err != nil {
 			describeBinary(f, out, err.Error())
 		}
 		return out, nil
@@ -195,6 +200,16 @@ func previewTool(ctx context.Context, f *os.File, tool string, args ...string) (
 	return stdout.Bytes(), nil
 }
 
+// previewProtocols and previewFormats hold ffmpeg and ffprobe to the open
+// file and to the film containers a preview is made of. A file named .mp4
+// can hold a playlist (HLS) or a concat list that names other files, and an
+// ffmpeg that followed it would read them; the demuxers that do are not on
+// the list.
+const (
+	previewProtocols = "file"
+	previewFormats   = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi"
+)
+
 // fdArg is how a preview tool names the file it was handed.
 const fdArg = "/dev/fd/3"
 
@@ -217,8 +232,16 @@ func decodedBytesPerPixel(m color.Model) int64 {
 	return 4
 }
 
-// previewImage decodes an image and sends it at most maxPx on its long side.
-func previewImage(ctx context.Context, f *os.File, size int64, maxPx int, out map[string]any) error {
+// previewPassExt are the pictures sent as they are, never decoded here.
+var previewPassExt = map[string]string{".webp": "image/webp", ".bmp": "image/bmp"}
+
+// previewImage sends a picture at most maxPx on its long side, decoded and
+// scaled here when that fits in previewDecodeMax, and otherwise as it is for
+// the client to decode, when it is at most previewPassMax.
+func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx int, out map[string]any) error {
+	if mime, ok := previewPassExt[ext]; ok {
+		return passImage(f, size, mime, out)
+	}
 	if size > previewImageMax {
 		return errors.New("The image is too large to show.")
 	}
@@ -226,9 +249,13 @@ func previewImage(ctx context.Context, f *os.File, size int64, maxPx int, out ma
 	if err != nil {
 		return errors.New("The image could not be read.")
 	}
-	if cfg.Width > previewImageDimMax || cfg.Height > previewImageDimMax ||
-		int64(cfg.Width)*int64(cfg.Height)*decodedBytesPerPixel(cfg.ColorModel) > previewDecodeMax {
+	if cfg.Width > previewImageDimMax || cfg.Height > previewImageDimMax {
 		return errors.New("The image is too large to show.")
+	}
+	if decodeCost(f, size, format, cfg, maxPx) > previewDecodeMax {
+		out["width"] = cfg.Width
+		out["height"] = cfg.Height
+		return passImage(f, size, "image/"+format, out)
 	}
 	select {
 	case previewDecodeSlot <- struct{}{}:
@@ -263,7 +290,98 @@ func previewImage(ctx context.Context, f *os.File, size int64, maxPx int, out ma
 	return nil
 }
 
-// fit scales img down to at most maxPx on its long side.
+// passImage sends the picture's own bytes, for the client to decode.
+func passImage(f *os.File, size int64, mime string, out map[string]any) error {
+	if size > previewPassMax {
+		return errors.New("The image is too large to show.")
+	}
+	b, err := readAllOf(f, previewPassMax)
+	if err != nil {
+		return errors.New("The image could not be read.")
+	}
+	out["kind"] = "image"
+	out["mime"] = mime
+	out["image"] = base64.StdEncoding.EncodeToString(b)
+	return nil
+}
+
+// decodeCost is the most memory decoding the picture and scaling it to
+// maxPx takes: the decoded image, the decoder's own buffers, and the scaled
+// copy. A progressive JPEG keeps every block's coefficients, as int32, until
+// its last scan: four bytes a pixel for each component, on top of the planes.
+func decodeCost(f *os.File, size int64, format string, cfg image.Config, maxPx int) int64 {
+	px := int64(cfg.Width) * int64(cfg.Height)
+	cost := px * decodedBytesPerPixel(cfg.ColorModel)
+	if format == "png" {
+		// An interlaced PNG decodes each of its seven passes into an image
+		// of its own before it puts them together.
+		var ihdr [1]byte
+		if _, err := f.ReadAt(ihdr[:], 28); err == nil && ihdr[0] == 1 {
+			cost *= 2
+		}
+	}
+	if format == "jpeg" {
+		progressive, comps := jpegFrame(io.NewSectionReader(f, 0, size))
+		// The planes: one byte a pixel for each component at the most (no
+		// chroma subsampling).
+		cost = px * int64(comps)
+		if progressive {
+			cost += px * int64(comps) * 4
+		}
+	}
+	// The scaled copy, RGBA, at most maxPx on its long side.
+	sw, sh := int64(min(cfg.Width, maxPx)), int64(min(cfg.Height, maxPx))
+	return cost + sw*sh*4
+}
+
+// jpegFrame reads a JPEG's frame header: whether it is progressive, and how
+// many components it has (3 when the header is not found in the first MiB,
+// which costs the most a baseline file can).
+func jpegFrame(r io.ReaderAt) (progressive bool, comps int) {
+	const limit = 1 << 20
+	comps = 3
+	var hdr [4]byte
+	off := int64(2) // after SOI
+	for off < limit {
+		if _, err := r.ReadAt(hdr[:2], off); err != nil || hdr[0] != 0xff {
+			return true, comps // unknown: count it as the dearer kind
+		}
+		marker := hdr[1]
+		if marker == 0xff {
+			off++ // fill byte
+			continue
+		}
+		off += 2
+		if marker == 0x01 || (marker >= 0xd0 && marker <= 0xd9) {
+			continue // no length
+		}
+		if _, err := r.ReadAt(hdr[2:4], off); err != nil {
+			return true, comps
+		}
+		n := int64(hdr[2])<<8 | int64(hdr[3])
+		if marker >= 0xc0 && marker <= 0xcf && marker != 0xc4 && marker != 0xc8 && marker != 0xcc {
+			var sof [6]byte
+			if _, err := r.ReadAt(sof[:], off+2); err != nil {
+				return true, comps
+			}
+			if c := int(sof[5]); c >= 1 && c <= 4 {
+				comps = c
+			}
+			switch marker {
+			case 0xc2, 0xc6, 0xca, 0xce:
+				return true, comps
+			}
+			return false, comps
+		}
+		off += n
+	}
+	return true, comps
+}
+
+// fit scales img down to at most maxPx on its long side. ApproxBiLinear
+// samples the source in place; CatmullRom built a float buffer of the
+// destination's width by the source's height, 358 MB for a 9000 x 7000
+// picture at 1600 px.
 func fit(img image.Image, maxPx int) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -278,7 +396,7 @@ func fit(img image.Image, maxPx int) image.Image {
 		h = maxPx
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
 	return dst
 }
 
@@ -353,7 +471,7 @@ func previewVideo(ctx context.Context, f *os.File, maxPx int, out map[string]any
 		return
 	}
 	at := float64(durMs) * 0.05 / 1000
-	args := []string{"-v", "error", "-nostdin"}
+	args := []string{"-v", "error", "-nostdin", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats}
 	if at > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(at, 'f', 3, 64))
 	}
@@ -374,7 +492,7 @@ func previewVideo(ctx context.Context, f *os.File, maxPx int, out map[string]any
 
 // videoDuration is the film's length in ms from ffprobe, 0 when it cannot.
 func videoDuration(ctx context.Context, f *os.File) int64 {
-	b, err := previewTool(ctx, f, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", fdArg)
+	b, err := previewTool(ctx, f, "ffprobe", "-v", "error", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats, "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", fdArg)
 	if err != nil {
 		return 0
 	}
