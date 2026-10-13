@@ -730,6 +730,8 @@ var ActionDescriptions = map[string]string{
 	"prev_session":          "Previous session",
 	"next_session_in_space": "Next session in this space",
 	"prev_session_in_space": "Previous session in this space",
+	"next_space":            "Next space",
+	"prev_space":            "Previous space",
 	"switch_session_1":      "Switch to session 1",
 	"switch_session_2":      "Switch to session 2",
 	"switch_session_3":      "Switch to session 3",

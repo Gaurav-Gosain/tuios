@@ -1162,6 +1162,11 @@ func DefaultConfig() *UserConfig {
 				// table. No direct chord, for the dead-key reason above.
 				"next_session_in_space": {">"},
 				"prev_session_in_space": {"<"},
+				// The spaces themselves, on the curly brackets beside them:
+				// free in this table, and the pair tmux and vim already read
+				// as the next and the previous block.
+				"next_space": {"}"},
+				"prev_space": {"{"},
 				// The launcher's direct chord is alt+space, which macOS turns
 				// into a non-breaking space that matches nothing. This is the
 				// way in that does not depend on the terminal.
@@ -3191,6 +3196,9 @@ var yieldingDefaults = map[string]bool{
 	// > and < after the prefix, new in the release after v0.9.2.
 	"next_session_in_space": true,
 	"prev_session_in_space": true,
+	// } and { after the prefix, new in the release after v0.9.2.
+	"next_space": true,
+	"prev_space": true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables

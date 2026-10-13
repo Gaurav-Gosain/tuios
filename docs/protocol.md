@@ -2032,6 +2032,71 @@ session without `create` fails with `session_not_found`. No client to switch
 fails with `needs_client`. `already: true` says the client showed the session
 already. A pane needs the `admin` grant. Over a link the verb needs `write`.
 
+### switch-space
+
+Switch an attached client to the session of a space the person used last, in
+place, through `switch-session`.
+
+Params: `space`, `none`, `session`, `client`.
+
+- `space` names the space. `none: true` means the sessions in no space
+  instead, which the sidebar draws as its `none` row. Give exactly one of the
+  two: both, or neither, fails with `invalid_params`.
+- The pick is the latest use (the `last_used` `list-spaces` reports, compared
+  at full precision), then the latest activity, then the newer session, then
+  the lower name: the ranking a bare `tuios attach` uses.
+- A global session counts as in no space, whatever space it is filed under,
+  because the sidebar draws it above the machines and never inside a space.
+- `session` and `client` choose the client as `switch-session` does.
+
+Request:
+
+```json
+{"verb": "switch-space", "params": {"none": true, "session": "work"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "space_switched", "space": "", "none": true, "session": "notes", "client_id": "client-1790941960197517900", "created": false}}
+```
+
+A space, or for `none` the sessions in no space, that holds no session fails
+with `invalid_params`, and the hint lists the spaces there are. The rest is
+`switch-session`'s: `needs_client`, `already`, the `admin` grant for a pane,
+and `write` over a link.
+
+### pick-space
+
+Say which session `switch-space` would switch to, and switch nothing.
+
+Params: `space`, `none`, as `switch-space` takes them, with the same ranking,
+the same members and the same refusals.
+
+Request:
+
+```json
+{"verb": "pick-space", "params": {"space": "payments"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "space_pick", "space": "payments", "none": false, "session": "pay-api"}}
+```
+
+It reads only what `list-spaces` and `list-sessions` already show, so it is
+held as `list-spaces` is: a pane needs the `admin` grant, a connection
+restricted to its own session cannot call it, and over a link it needs `list`.
+
+The tuios client uses it for its space keys and the sidebar's space rows: it
+asks the daemon that holds its session (the far one, for a session attached
+on a host), then switches itself as a click on a session row does. It is a
+verb of its own, not a flag on `switch-space`, because it only reads and is
+held as `list-spaces` is, while `switch-space` moves a client and is held as
+`switch-session` is. A daemon that predates it answers `unknown_verb`, and
+the client then switches nothing and says the daemon is too old.
+
 ### detach-client
 
 Detach attached clients from their sessions, as tmux `detach-client` does.

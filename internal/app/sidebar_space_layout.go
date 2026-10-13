@@ -7,7 +7,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -167,45 +166,9 @@ func (m *OS) sidebarSpaceSwitchRow(node sessiontree.Node, current bool, cw int, 
 	return sidebarComposeGroupRow(0, gutter, glyph, name, right, cw, rowBg)
 }
 
-// sidebarSwitchSpace switches this client to the session of a space the person
-// used last, as switch-space does, or for "" to the one of the sessions in no
-// space. It goes through the same switch a session row does.
+// sidebarSwitchSpace switches this client to a space's row, "" for the none
+// row, through switchToSpaceCmd: the daemon picks the session, and the switch
+// to it is a session row's.
 func (m *OS) sidebarSwitchSpace(space string) {
-	if target := m.spaceSwitchTarget(space); target != "" {
-		m.sidebarSwitchSession(target)
-		// The listing the other rows are drawn from was taken while this
-		// client was on the session it just left, so it still counts this
-		// client as attached there. Ask for a fresh one now rather than at the
-		// next poll, or the space left behind reads as attached for seconds.
-		m.foreignSessionReplan = true
-	}
-}
-
-// spaceSwitchTarget is the session sidebarSwitchSpace lands on: of the rail's
-// own members of the space, the one ranked first by switch-space's rule (see
-// session.mostRecentSession), read off the listing the client holds. "" when
-// the space has no member here.
-func (m *OS) spaceSwitchTarget(space string) string {
-	var infos map[string]session.SessionInfo
-	if m.DaemonClient != nil {
-		cached := m.DaemonClient.CachedSessions()
-		infos = make(map[string]session.SessionInfo, len(cached))
-		for _, info := range cached {
-			infos[info.Name] = info
-		}
-	}
-	best, found := session.SessionInfo{}, false
-	for _, n := range localSessionNodes(m.BuildSessionTree().Sessions) {
-		if n.Kind != sessiontree.KindSession || sessiontree.SpaceOf(n) != space {
-			continue
-		}
-		info, ok := infos[n.ID]
-		if !ok {
-			info = session.SessionInfo{Name: n.ID}
-		}
-		if !found || session.RanksAboveByUse(info, best) {
-			best, found = info, true
-		}
-	}
-	return best.Name
+	m.queueSidebarCmd(m.switchToSpaceCmd(space))
 }

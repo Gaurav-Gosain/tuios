@@ -138,17 +138,19 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
 // [keybindings.terminal_mode] section, plus the handful of main-section actions
 // that must keep working while typing into a shell. It reports whether the key
-// was consumed.
-func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
+// was consumed, and the command the action returned, which the caller must
+// pass on: an action that does its work off the UI goroutine (a session
+// switch, a space pick) does it in that command.
+func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (bool, tea.Cmd) {
 	if o.KeybindRegistry == nil {
-		return false
+		return false, nil
 	}
 	action := lookupAction(o, msg, o.KeybindRegistry.GetTerminalModeAction)
 	if o.Mode == app.TerminalMode && isTerminalFocusAction(action) && o.ArmNvimNavigation(nvimNavigationDirection(action)) {
-		return false
+		return false, nil
 	}
-	if _, _, ok := dispatchAction(action, msg, o); ok {
-		return true
+	if _, cmd, ok := dispatchAction(action, msg, o); ok {
+		return true, cmd
 	}
 
 	// Workspace switching is bound in the main section and has to work from
@@ -157,14 +159,14 @@ func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	// Option glyph, which arrives with no modifier at all) are eligible, so
 	// rebinding a workspace onto a bare letter cannot start swallowing input.
 	if !isReservedTerminalChord(msg) {
-		return false
+		return false, nil
 	}
 	action = lookupAction(o, msg, o.KeybindRegistry.GetAction)
 	if !isTerminalSafeAction(action) {
-		return false
+		return false, nil
 	}
-	_, _, ok := dispatchAction(action, msg, o)
-	return ok
+	_, cmd, ok := dispatchAction(action, msg, o)
+	return ok, cmd
 }
 
 func isTerminalFocusAction(action string) bool {
@@ -199,7 +201,8 @@ func isTerminalSafeAction(action string) bool {
 		strings.HasPrefix(action, "switch_session_") ||
 		action == "next_workspace" || action == "prev_workspace" ||
 		action == "next_session" || action == "prev_session" ||
-		action == "next_session_in_space" || action == "prev_session_in_space"
+		action == "next_session_in_space" || action == "prev_session_in_space" ||
+		action == "next_space" || action == "prev_space"
 }
 
 // forwardKeyToFocusedWindow sends a key to the focused window's PTY, using CSI u

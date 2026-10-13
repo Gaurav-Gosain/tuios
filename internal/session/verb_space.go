@@ -214,21 +214,27 @@ func (d *Daemon) verbKillSpace(_ *connState, params json.RawMessage) (any, *verb
 // last, ranked as a bare attach ranks sessions: the latest use, then the latest
 // activity. The use is the same last_used list-spaces reports, compared at full
 // precision. Which client switches, and how, is switch-session's.
+//
+// none picks among the sessions in no space instead, which a client's rail
+// draws as the none row of its spaces section. It is a flag rather than an
+// empty space, which every other space verb refuses as a mistake.
+//
+// The pick is the daemon's alone, and pick-space answers it without switching
+// anything: the tuios client asks it and then switches itself, as a click on a
+// session row does. See spacePick.
 func (d *Daemon) verbSwitchSpace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Space   string `json:"space"`
+		None    bool   `json:"none"`
 		Session string `json:"session"`
 		Client  string `json:"client"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Space == "" {
-		return nil, invalidParam("space", "space is the space to switch to and cannot be empty")
-	}
-	target := mostRecentSession(d.sessionsInSpace(p.Space), true)
-	if target == nil {
-		return nil, d.noSuchSpace(p.Space)
+	target, verr := d.spacePick(p.Space, p.None)
+	if verr != nil {
+		return nil, verr
 	}
 
 	raw, err := json.Marshal(switchSessionParams{Name: target.Name(), Session: p.Session, Client: p.Client})
@@ -245,5 +251,105 @@ func (d *Daemon) verbSwitchSpace(cs *connState, params json.RawMessage) (any, *v
 	}
 	out["type"] = "space_switched"
 	out["space"] = p.Space
+	if p.None {
+		out["none"] = true
+	}
 	return out, nil
+}
+
+// pick-space answers which session switch-space would land on, and switches
+// nothing. It reads what list-spaces and list-sessions already show, so it is
+// held to what they are. The tuios client calls it for a space key or a click
+// on a space's row, on the daemon that holds its session, and then switches
+// itself; that keeps the ranking here and leaves the routed commands, and the
+// fence a client keeps against another machine's, out of it.
+//
+// It is a verb of its own rather than a flag on switch-space because it only
+// reads: it is held as list-spaces is (scopeGlobal, the list link capability),
+// while switch-space moves a client and is held as switch-session is (scopeDeny,
+// the write link capability). One verb could not carry both.
+func (d *Daemon) verbPickSpace(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Space string `json:"space"`
+		None  bool   `json:"none"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	target, verr := d.spacePick(p.Space, p.None)
+	if verr != nil {
+		return nil, verr
+	}
+	return map[string]any{"type": "space_pick", "space": p.Space, "none": p.None, "session": target.Name()}, nil
+}
+
+// spacePick is the session of space the person used last, or with none of the
+// sessions in no space: the latest use, then the latest activity, compared at
+// full precision (mostRecentSession). It refuses both and neither, and a set
+// with no session in it.
+func (d *Daemon) spacePick(space string, none bool) (*Session, *verbError) {
+	switch {
+	case none && space != "":
+		return nil, invalidParam("none", "none means the sessions in no space, so it cannot be passed with space "+echoName(space)+". Pass one of the two")
+	case !none && space == "":
+		return nil, invalidParam("space", "space cannot be empty. For the sessions in no space pass none")
+	}
+	if target := mostRecentSession(d.spacePickMembers(space), true); target != nil {
+		return target, nil
+	}
+	return nil, d.noSpacePickMembers(space)
+}
+
+// railSpace is the space a client's rail files a session under: its own,
+// except that a global session is drawn above the machines and never inside a
+// space (sessiontree.GroupBySpace), so it counts with the sessions in no space.
+// switch-space and pick-space choose by this, so a space row, or the none
+// row, lands among exactly the sessions the row stands for.
+func railSpace(sess *Session) string {
+	if sess.isGlobal() {
+		return ""
+	}
+	return sess.Space()
+}
+
+// spacePickMembers is the sessions spacePick chooses among for space, ""
+// for the sessions in no space.
+func (d *Daemon) spacePickMembers(space string) []*Session {
+	var members []*Session
+	for _, sess := range d.manager.AllSessions() {
+		if railSpace(sess) == space {
+			members = append(members, sess)
+		}
+	}
+	return members
+}
+
+// noSpacePickMembers is spacePick's refusal when spacePickMembers is
+// empty. The spaces it offers are counted the same way, so a space held only
+// by global sessions is not offered and then refused.
+func (d *Daemon) noSpacePickMembers(space string) *verbError {
+	seen := map[string]bool{}
+	var available []string
+	for _, sess := range d.manager.AllSessions() {
+		if sp := railSpace(sess); sp != "" && !seen[sp] {
+			seen[sp] = true
+			available = append(available, sp)
+		}
+	}
+	sort.Strings(available)
+	if space == "" {
+		return hintedVerbError(ErrVerbInvalidParams, "every session is in a space, so none has no session", &VerbHint{
+			Param:     "none",
+			Verb:      "list-spaces",
+			Available: available,
+			Detail:    "none means the sessions in no space. Name a space instead.",
+		})
+	}
+	return hintedVerbError(ErrVerbInvalidParams, "no session is in space "+echoName(space), &VerbHint{
+		Param:      "space",
+		Verb:       "list-spaces",
+		DidYouMean: closestMatch(space, available),
+		Available:  available,
+		Detail:     "a space exists while at least one session is filed under it. A global session is not counted in its space here, as the rail draws it on its own.",
+	})
 }

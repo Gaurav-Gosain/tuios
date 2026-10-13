@@ -1575,6 +1575,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case hostRetryMsg:
 		return m, m.applyHostRetry(msg)
 
+	case spacePickedMsg:
+		m.applySpacePicked(msg)
+		return m, nil
+
 	case NewWindowOnHostMsg:
 		// The window itself arrives on the daemon's state push, the way any
 		// window another client made arrives. This carries only the failure,

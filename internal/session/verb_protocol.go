@@ -1666,15 +1666,17 @@ func init() {
 			handler: (*Daemon).verbKillSpace,
 		},
 		"switch-space": {
-			description: "Switch an attached client to the session of a space the person used last: the latest last_used list-spaces reports, then the latest activity. The client is chosen as switch-session chooses it.",
+			description: "Switch an attached client to the session of a space the person used last: the latest last_used list-spaces reports, then the latest activity. With none, the same among the sessions in no space. A global session counts as in no space, as the rail draws it. The client is chosen as switch-session chooses it. Refused with invalid_params when space and none are both passed or neither is, and when the space, or for none the sessions in no space, holds no session.",
 			params: []verbParam{
-				{Name: "space", Type: "string", Required: true, Description: "Space to switch to."},
+				{Name: "space", Type: "string", Description: "Space to switch to. Required unless none is passed, and refused with it."},
+				{Name: "none", Type: "bool", Description: "Switch among the sessions in no space instead of a named space: the rail's none row.", Default: "false"},
 				{Name: "session", Type: "string", Description: "Session the client to switch shows."},
 				{Name: "client", Type: "string", Description: "Id of the client to switch, from list-clients."},
 			},
 			returns: []verbParam{
 				{Name: "type", Type: "string", Description: "Always space_switched."},
-				{Name: "space", Type: "string", Description: "The space switched to."},
+				{Name: "space", Type: "string", Description: "The space switched to, empty with none."},
+				{Name: "none", Type: "bool", Description: "True when the call switched among the sessions in no space."},
 				{Name: "session", Type: "string", Description: "Session of the space the client now shows."},
 				{Name: "client_id", Type: "string", Description: "Id of the client that switched."},
 				{Name: "already", Type: "bool", Description: "True when the client already showed that session. Nothing changed."},
@@ -1682,8 +1684,27 @@ func init() {
 			examples: []string{
 				`{"id":1,"verb":"switch-space","params":{"space":"payments"}}`,
 				`{"id":1,"verb":"switch-space","params":{"space":"payments","session":"work"}}`,
+				`{"id":1,"verb":"switch-space","params":{"none":true}}`,
 			},
 			handler: (*Daemon).verbSwitchSpace,
+		},
+		"pick-space": {
+			description: "Say which session switch-space would switch to, and switch nothing: the session of the space the person used last, or with none of the sessions in no space, ranked and refused exactly as switch-space ranks and refuses. The tuios client asks it for a space key or a click on a space's row, then switches itself.",
+			params: []verbParam{
+				{Name: "space", Type: "string", Description: "Space to pick from. Required unless none is passed, and refused with it."},
+				{Name: "none", Type: "bool", Description: "Pick among the sessions in no space instead of a named space.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always space_pick."},
+				{Name: "space", Type: "string", Description: "The space asked about, empty with none."},
+				{Name: "none", Type: "bool", Description: "True when the pick was among the sessions in no space."},
+				{Name: "session", Type: "string", Description: "The session switch-space would switch to."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"pick-space","params":{"space":"payments"}}`,
+				`{"id":1,"verb":"pick-space","params":{"none":true}}`,
+			},
+			handler: (*Daemon).verbPickSpace,
 		},
 		"set-workspace-name": {
 			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",

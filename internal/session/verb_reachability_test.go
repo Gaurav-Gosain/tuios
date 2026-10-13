@@ -100,6 +100,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"kill-space#1":   {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
 	"switch-space#0": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
 	"switch-space#1": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
+	// The fixture's session is in no space, so none finds it, and then there
+	// is no client to switch.
+	"switch-space#2": {errCode: ErrVerbNeedsClient, why: "switch-space moves an attached client"},
+	// pick-space#1 (none) picks the fixture's session and succeeds.
+	"pick-space#0": {errCode: ErrVerbInvalidParams, why: "no session in the fixture is in a space"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.

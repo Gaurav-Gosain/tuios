@@ -162,7 +162,7 @@ func TestRebindingATerminalModeKeyTakesEffect(t *testing.T) {
 	})
 	o.Mode = app.TerminalMode
 
-	if !handleTerminalModeBinds(tea.KeyPressMsg{Code: 'q', Mod: tea.ModAlt}, o) {
+	if ok, _ := handleTerminalModeBinds(tea.KeyPressMsg{Code: 'q', Mod: tea.ModAlt}, o); !ok {
 		t.Fatal("rebound terminal-mode key was not consumed")
 	}
 	if o.Mode != app.WindowManagementMode {
@@ -173,7 +173,7 @@ func TestRebindingATerminalModeKeyTakesEffect(t *testing.T) {
 		k.TerminalMode["terminal_exit_mode"] = []string{"alt+q"}
 	})
 	o2.Mode = app.TerminalMode
-	if handleTerminalModeBinds(tea.KeyPressMsg{Code: tea.KeyEscape, Mod: tea.ModAlt}, o2) {
+	if ok, _ := handleTerminalModeBinds(tea.KeyPressMsg{Code: tea.KeyEscape, Mod: tea.ModAlt}, o2); ok {
 		t.Error("replaced default alt+esc was still consumed")
 	}
 }
@@ -189,7 +189,7 @@ func TestUnboundKeysStillReachTheShell(t *testing.T) {
 	})
 	o.Mode = app.TerminalMode
 
-	if handleTerminalModeBinds(press("j"), o) {
+	if ok, _ := handleTerminalModeBinds(press("j"), o); ok {
 		t.Error("a bare letter was intercepted in terminal mode")
 	}
 	if o.CurrentWorkspace == 2 {

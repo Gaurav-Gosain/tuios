@@ -560,19 +560,14 @@ type ClientInfo struct {
 
 // SessionInfo describes a single session for listing.
 type SessionInfo struct {
-	Name       string `json:"name"`        // Session name
-	ID         string `json:"id"`          // Session unique ID
-	Created    int64  `json:"created"`     // Unix timestamp of creation
-	LastActive int64  `json:"last_active"` // Unix timestamp of last activity
-	// LastUsed is when the person last used the session, in unix seconds: the
-	// same last_used list-spaces reports, and what switch-space and a bare
-	// attach rank by. Omitted when the session was never used, which is also
-	// what an older daemon sends; a client then ranks by LastActive.
-	LastUsed    int64 `json:"last_used,omitempty"`
-	WindowCount int   `json:"window_count"` // Number of windows
-	Attached    bool  `json:"attached"`     // Whether a client is attached
-	Width       int   `json:"width"`        // Session width
-	Height      int   `json:"height"`       // Session height
+	Name        string `json:"name"`         // Session name
+	ID          string `json:"id"`           // Session unique ID
+	Created     int64  `json:"created"`      // Unix timestamp of creation
+	LastActive  int64  `json:"last_active"`  // Unix timestamp of last activity
+	WindowCount int    `json:"window_count"` // Number of windows
+	Attached    bool   `json:"attached"`     // Whether a client is attached
+	Width       int    `json:"width"`        // Session width
+	Height      int    `json:"height"`       // Session height
 	// Windows lists per-window summaries so a client can expand a non-attached
 	// session's tree from the listing alone. Omitted by older daemons, which
 	// older and newer clients both read back as "windows not known yet".

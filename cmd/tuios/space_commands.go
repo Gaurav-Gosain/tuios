@@ -115,13 +115,16 @@ Without it nothing is killed, and the command names the sessions it would kill.`
 
 func newSwitchSpaceCmd() *cobra.Command {
 	var fromSession, clientID string
-	var jsonOut bool
+	var jsonOut, none bool
 	cmd := &cobra.Command{
-		Use:   "switch-space <space>",
+		Use:   "switch-space <space> | --none",
 		Short: "Switch an attached client to a space",
 		Long: `Switch an attached client to the session of a space the person used last,
 in place, as switch-session does. A session nobody has used ranks by its
 latest activity.
+
+--none switches among the sessions in no space instead, the rail's none row. A
+global session counts as in no space, as the rail draws it.
 
 The client to switch is chosen as switch-session chooses it:
   - the client given with --client, from tuios list-clients
@@ -132,10 +135,26 @@ The client to switch is chosen as switch-session chooses it:
   tuios switch-space payments
 
   # From outside tuios: switch the client that shows work
-  tuios switch-space -s work payments`,
-		Args: cobra.ExactArgs(1),
+  tuios switch-space -s work payments
+
+  # The session in no space used last
+  tuios switch-space --none`,
+		Args: func(_ *cobra.Command, args []string) error {
+			switch {
+			case none && len(args) > 0:
+				return fmt.Errorf("--none switches to the sessions in no space, so it takes no space name (got %q)", args[0])
+			case !none && len(args) != 1:
+				return fmt.Errorf("name one space, or pass --none for the sessions in no space")
+			}
+			return nil
+		},
 		RunE: func(_ *cobra.Command, args []string) error {
-			params := map[string]any{"space": args[0]}
+			params := map[string]any{}
+			if none {
+				params["none"] = true
+			} else {
+				params["space"] = args[0]
+			}
 			if fromSession != "" {
 				params["session"] = fromSession
 			}
@@ -151,14 +170,19 @@ The client to switch is chosen as switch-session chooses it:
 			if err != nil || printed {
 				return err
 			}
+			where := "of space " + res.Space
+			if none {
+				where = "in no space"
+			}
 			if res.Already {
-				fmt.Printf("The client already shows session %s of space %s.\n", res.Session, res.Space)
+				fmt.Printf("The client already shows session %s %s.\n", res.Session, where)
 				return nil
 			}
-			fmt.Printf("Switched to session %s of space %s.\n", res.Session, res.Space)
+			fmt.Printf("Switched to session %s %s.\n", res.Session, where)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&none, "none", false, "Switch among the sessions in no space")
 	cmd.Flags().StringVarP(&fromSession, "session", "s", "", "Switch the client that shows this session")
 	cmd.Flags().StringVar(&clientID, "client", "", "Switch the client with this id, from tuios list-clients")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")

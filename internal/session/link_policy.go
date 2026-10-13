@@ -80,6 +80,7 @@ var verbCapabilities = map[string][]string{
 	"list-clients":         {config.LinkAllowList},
 	"list-worktrees":       {config.LinkAllowList},
 	"list-spaces":          {config.LinkAllowList},
+	"pick-space":           {config.LinkAllowList},
 	"list-hosts":           {config.LinkAllowList},
 	"list-host-sessions":   {config.LinkAllowList},
 	"list-host-agents":     {config.LinkAllowList},

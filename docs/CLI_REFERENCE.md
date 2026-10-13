@@ -470,14 +470,18 @@ See [Sessionizer](SESSIONS.md#sessionizer) for a key that opens a project.
 
 ### `tuios switch-space`
 
-Switch an attached client to the session of a space the person used last, in place, as `switch-session` does. The pick is the latest `last_used` that `list-spaces` reports, then the latest activity, the same ranking a bare `tuios attach` uses. The client to switch is chosen as `switch-session` chooses it.
+Switch an attached client to the session of a space the person used last, in place, as `switch-session` does. The pick is the latest `last_used` that `list-spaces` reports, then the latest activity, the same ranking a bare `tuios attach` uses. The client to switch is chosen as `switch-session` chooses it. `--none` picks the same way among the sessions in no space, which the sidebar draws as its `none` row; a global session counts as in no space there, as the sidebar draws it. The daemon is the only place that makes this pick. The sidebar's space rows and the `Ctrl+B }` / `Ctrl+B {` keys ask it with the `pick-space` verb, which answers the same session and switches nothing, and the client then switches itself.
 
 **Usage:**
 ```bash
 tuios switch-space <space> [flags]
+tuios switch-space --none [flags]
 ```
 
+The verb is refused (`invalid_params`) when it is given both a space and `none`, or neither, and when the space, or for `none` the sessions in no space, holds no session.
+
 **Flags:**
+- `--none`: Switch among the sessions in no space instead of a named space
 - `-s, --session <name>`: Switch the client that shows this session
 - `--client <id>`: Switch the client with this id, from `tuios list-clients`
 - `--json`: Output as JSON
@@ -486,6 +490,7 @@ tuios switch-space <space> [flags]
 ```bash
 tuios switch-space payments            # From a pane: show the space payments
 tuios switch-space -s work payments    # From outside tuios: switch the client that shows work
+tuios switch-space --none              # The session in no space used last
 ```
 
 ### `tuios ls`

@@ -63,7 +63,7 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 			kb.WindowManagement["next_session"] = []string{"alt+shift+n"}
 			kb.WindowManagement["close_window"] = []string{"alt+q"}
 		})
-		router := handleTerminalModeBinds(tc.msg, fresh)
+		router, _ := handleTerminalModeBinds(tc.msg, fresh)
 		if got := swallowed[tc.key]; got != router {
 			t.Errorf("key %q: the report says the pane loses it (%v), the router says (%v)",
 				tc.key, got, router)
