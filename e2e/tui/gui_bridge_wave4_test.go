@@ -721,3 +721,34 @@ func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
 		}
 	}
 }
+
+// A pane's snapshot through the bridge carries the tab stops and the title the
+// guest set, so a renderer primed from it lays a tab out and titles the pane
+// as the TUI's copy does. The bridge had an encoder of its own that dropped
+// both, and a pending wrap and a half-parsed sequence; it now uses the one
+// stream-pane uses (session.SnapshotVT).
+func TestGUIBridgeSnapshotCarriesTabsAndTitle(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "tabs", 100, 30)
+	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
+	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 1 }, "one pane")
+	pty := st.Windows[0].PTY
+	// Clear every stop, set one at column 13, and title the pane.
+	b.input(pty, "printf '\\033[3g\\033[1;13H\\033H\\033]2;GUI-TABS-TITLE\\007'; echo SET-$((6*7))\r")
+	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("SET-42")) }, shellTimeout, "the stops and title set")
+	_ = b.in.Close()
+	b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
+
+	again := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "tabs"}, cols: 100, rows: 30, keepDaemon: true, name: "tabs2"})
+	again.waitFor(func() bool { return len(again.snapBytes[pty]) > 0 }, uiTimeout, "the pane's snapshot")
+	again.mu.Lock()
+	snap := append([]byte(nil), again.snapBytes[pty]...)
+	again.mu.Unlock()
+	if !bytes.Contains(snap, []byte("\x1b]2;GUI-TABS-TITLE")) {
+		t.Errorf("ASSERTION: the snapshot does not set the pane's title")
+	}
+	if !bytes.Contains(snap, []byte("\x1b[3g")) || !bytes.Contains(snap, []byte("\x1b[1;13H\x1bH")) {
+		t.Errorf("ASSERTION: the snapshot does not set the tab stop at column 13 on a cleared table")
+	}
+	again.saveLog("snapshot-tabs-title")
+}
