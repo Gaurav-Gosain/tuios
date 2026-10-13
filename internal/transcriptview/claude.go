@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
 // The Claude Code record, as far as a conversation needs it. A user record's
@@ -319,7 +321,7 @@ func (r *reader) editDiff(file string, pairs [][2]string) *Diff {
 	d := &Diff{File: name}
 	shown := 0
 	for _, p := range pairs {
-		res := lineDiff(splitLines(p[0]), splitLines(p[1]), &r.lcsLeft)
+		res := lineDiff(linediff.Split(p[0]), linediff.Split(p[1]), &r.lcsLeft)
 		d.Added += res.added
 		d.Removed += res.removed
 		d.WholeReplace = d.WholeReplace || res.whole
@@ -392,18 +394,8 @@ func (r *reader) addHunk(d *Diff, h Hunk, shown int) int {
 	return shown + len(h.Lines)
 }
 
-func splitLines(s string) []string {
-	if s == "" {
-		return nil
-	}
-	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-}
-
 // diffOp is one line of an edit script.
-type diffOp struct {
-	op   byte
-	line string
-}
+type diffOp = linediff.Op
 
 // lineDiffResult is an edit script and what it counts.
 type lineDiffResult struct {
@@ -440,7 +432,7 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 	ctxB := a[len(a)-suf : len(a)-suf+min(suf, 3)]
 	ops := make([]diffOp, 0, len(ctxA)+len(ctxB)+min(len(ma)+len(mb), DiffLinesMax+2))
 	for _, l := range ctxA {
-		ops = append(ops, diffOp{' ', l})
+		ops = append(ops, diffOp{Op: ' ', Line: l})
 	}
 	cells := (len(ma) + 1) * (len(mb) + 1)
 	switch {
@@ -454,10 +446,10 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 		ops = appendSide(ops, '+', mb, DiffLinesMax/2, &res.cut)
 	default:
 		*budget -= cells
-		lcs := lcsOps(ma, mb)
+		lcs := linediff.LCS(ma, mb)
 		res.added, res.removed = 0, 0
 		for _, o := range lcs {
-			switch o.op {
+			switch o.Op {
 			case '+':
 				res.added++
 			case '-':
@@ -467,7 +459,7 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 		ops = append(ops, lcs...)
 	}
 	for _, l := range ctxB {
-		ops = append(ops, diffOp{' ', l})
+		ops = append(ops, diffOp{Op: ' ', Line: l})
 	}
 	res.ops = ops
 	return res
@@ -481,65 +473,7 @@ func appendSide(ops []diffOp, op byte, lines []string, keep int, cut *bool) []di
 		*cut = true
 	}
 	for _, l := range lines {
-		ops = append(ops, diffOp{op, l})
-	}
-	return ops
-}
-
-// lcsOps is the edit script of a and b by longest common subsequence. The
-// lines are numbered first, equal lines the same number, so the table
-// compares integers, not strings. The table is one block of uint16: the
-// caller keeps it within LCSCellsPerCall cells, so the shorter side, which
-// bounds every value in it, has fewer than 2048 lines.
-func lcsOps(a, b []string) []diffOp {
-	ids := make(map[string]int32, len(a)+len(b))
-	number := func(lines []string) []int32 {
-		out := make([]int32, len(lines))
-		for i, l := range lines {
-			id, ok := ids[l]
-			if !ok {
-				id = int32(len(ids))
-				ids[l] = id
-			}
-			out[i] = id
-		}
-		return out
-	}
-	ha, hb := number(a), number(b)
-	n, m := len(a), len(b)
-	w := m + 1
-	table := make([]uint16, (n+1)*w)
-	at := func(i, j int) uint16 { return table[i*w+j] }
-	for i := n - 1; i >= 0; i-- {
-		for j := m - 1; j >= 0; j-- {
-			if ha[i] == hb[j] {
-				table[i*w+j] = at(i+1, j+1) + 1
-			} else {
-				table[i*w+j] = max(at(i+1, j), at(i, j+1))
-			}
-		}
-	}
-	ops := make([]diffOp, 0, n+m)
-	i, j := 0, 0
-	for i < n && j < m {
-		switch {
-		case ha[i] == hb[j]:
-			ops = append(ops, diffOp{' ', a[i]})
-			i++
-			j++
-		case at(i+1, j) >= at(i, j+1):
-			ops = append(ops, diffOp{'-', a[i]})
-			i++
-		default:
-			ops = append(ops, diffOp{'+', b[j]})
-			j++
-		}
-	}
-	for ; i < n; i++ {
-		ops = append(ops, diffOp{'-', a[i]})
-	}
-	for ; j < m; j++ {
-		ops = append(ops, diffOp{'+', b[j]})
+		ops = append(ops, diffOp{Op: op, Line: l})
 	}
 	return ops
 }
@@ -550,7 +484,7 @@ func hunks(ops []diffOp, ctx, skip int) []Hunk {
 	var out []Hunk
 	for start := 0; start < len(ops); {
 		first := start
-		for first < len(ops) && ops[first].op == ' ' {
+		for first < len(ops) && ops[first].Op == ' ' {
 			first++
 		}
 		if first == len(ops) {
@@ -558,7 +492,7 @@ func hunks(ops []diffOp, ctx, skip int) []Hunk {
 		}
 		last := first
 		for k := first; k < len(ops); k++ {
-			if ops[k].op != ' ' {
+			if ops[k].Op != ' ' {
 				last = k
 				continue
 			}
@@ -570,23 +504,23 @@ func hunks(ops []diffOp, ctx, skip int) []Hunk {
 		hi := min(last+ctx+1, len(ops))
 		oldLine, newLine := 1+skip, 1+skip
 		for _, o := range ops[:lo] {
-			if o.op != '+' {
+			if o.Op != '+' {
 				oldLine++
 			}
-			if o.op != '-' {
+			if o.Op != '-' {
 				newLine++
 			}
 		}
 		h := Hunk{OldStart: oldLine, NewStart: newLine}
 		oldCount, newCount := 0, 0
 		for _, o := range ops[lo:hi] {
-			if o.op != '+' {
+			if o.Op != '+' {
 				oldCount++
 			}
-			if o.op != '-' {
+			if o.Op != '-' {
 				newCount++
 			}
-			h.Lines = append(h.Lines, DiffLine{Op: string(o.op), Text: o.line})
+			h.Lines = append(h.Lines, DiffLine{Op: string(o.Op), Text: o.Line})
 		}
 		// A side with no lines starts at the line before, as unified diffs
 		// write it: a new file is old_start 0.

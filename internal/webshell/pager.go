@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
 // A read-only file viewer that behaves enough like less and vim for a tour:
@@ -56,7 +58,7 @@ func cmdView(s *shell, args []string) int {
 		content = vimSplash
 		shown = "[No Name]"
 	}
-	v := &viewer{t: s.t, name: shown, lines: splitLines(content), vim: isVim}
+	v := &viewer{t: s.t, name: shown, lines: linediff.Split(content), vim: isVim}
 	if len(v.lines) == 0 {
 		v.lines = []string{""}
 	}
