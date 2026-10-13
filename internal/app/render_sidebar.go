@@ -1964,6 +1964,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false)
 			lines = append(lines, compose(st.mark(pal, m.sidebarGitRow(gitRows[idx], cw, pal, st))))
 		}
+		// A section given one line for its two rows spends it here. Without the
+		// line the section is one short of what it was placed at, and every
+		// section below it draws a line above where hover finds it.
+		if h := hidden[sidebarSectionGit]; h > 0 {
+			lines = append(lines, overflowRow(h, 0))
+		}
 	}
 
 	drawCustom := func() {

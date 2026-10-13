@@ -4888,3 +4888,11 @@ cut is to the wiring, and the logs are `/tmp/wt-ctl-<name>.log`.
 | `wrap-create`: the verb's error is returned without `failed to create the worktree` | `TestRailWorktreeRefusals` ("the daemon's refusal did not say which step failed") | **caught** |
 | `route-key`: the `WorktreePromptOpen` route cut from `routeKey` | both ("did not derive the session name", "did not refuse an empty branch") | **caught** |
 | `attach`: the `SwitchToSession` call cut from `handleWorktreeCreated` | `TestRailRightClickMakesAWorktree` ("the rail never showed the created worktree as the attached session") | **caught** |
+The `ClearDropZone` calls (press, release, lost release) have no control. Without them a stale highlight shows on a press until the first motion recomputes it, and the last drop's target pane is kept alive until the next drag; no test here makes two drags in one session or inspects memory.
+### Rail git section on one line
+
+Run on 2026-10-13 on macOS. The tests are in `rail_git_overflow_test.go`. The fixture (`sections = "sessions,custom:99,git:1"` on a 120x40 screen) gives the git section one line for its repository and branch rows. Each control cuts one wire from the fixed build, builds it, restores the source, and runs the test against the cut binary; the fixed build passes both tests.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `+N` tail of `drawGit` (`if h := hidden[sidebarSectionGit]; h > 0 { ... overflowRow ... }`) | `TestRailGitOneLineOwnsUpToItsRows` ("the git section on one line does not end in +2") | **caught** |
