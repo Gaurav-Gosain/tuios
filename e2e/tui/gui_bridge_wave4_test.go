@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -400,10 +401,14 @@ func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
 
 // farProxy finds the far side of the link to the remote machine at
 // remoteBase: the stdio-proxy whose runtime folder is that machine's.
-func farProxy(t *testing.T, remoteBase string) int {
-	t.Helper()
+// farProxies is every stdio-proxy that serves the far machine. A link can
+// have more than one: the daemon's link and a dial a client made through it.
+// Which one /proc lists first is not fixed, so a test that cuts the link
+// stops or kills them all.
+func farProxies(remoteBase string) []int {
 	want := "XDG_RUNTIME_DIR=" + xdgDir(remoteBase, "XDG_RUNTIME_DIR")
 	entries, _ := os.ReadDir("/proc")
+	var pids []int
 	for _, e := range entries {
 		pid := 0
 		if _, err := fmt.Sscan(e.Name(), &pid); err != nil {
@@ -416,12 +421,25 @@ func farProxy(t *testing.T, remoteBase string) int {
 		env, _ := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
 		for _, kv := range bytes.Split(env, []byte{0}) {
 			if string(kv) == want {
-				return pid
+				pids = append(pids, pid)
+				break
 			}
 		}
 	}
-	t.Fatalf("no stdio-proxy runs for the far machine")
-	return 0
+	return pids
+}
+
+// signalFarProxies sends sig to every stdio-proxy of the far machine.
+func signalFarProxies(t *testing.T, remoteBase string, sig syscall.Signal) []int {
+	t.Helper()
+	pids := farProxies(remoteBase)
+	if len(pids) == 0 {
+		t.Fatalf("no stdio-proxy runs for the far machine")
+	}
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, sig)
+	}
+	return pids
 }
 
 // A link that stops answering: a probe asked for after typing shows it as
@@ -481,14 +499,14 @@ func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
 	// Right after a probe: the next one is about 5 s away.
 	time.Sleep(500 * time.Millisecond)
 
-	pid := farProxy(t, remote)
-	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
-		t.Fatalf("stop the far proxy: %v", err)
-	}
+	pids := signalFarProxies(t, remote, syscall.SIGSTOP)
+	t.Logf("stopped the far proxies %v", pids)
 	resumed := false
 	defer func() {
 		if !resumed {
-			_ = syscall.Kill(pid, syscall.SIGCONT)
+			for _, pid := range pids {
+				_ = syscall.Kill(pid, syscall.SIGCONT)
+			}
 		}
 	}()
 	stopped := time.Now()
@@ -499,7 +517,9 @@ func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
 		t.Fatalf("ASSERTION: a stalled row carries no silent_since")
 	}
 
-	_ = syscall.Kill(pid, syscall.SIGCONT)
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, syscall.SIGCONT)
+	}
 	resumed = true
 	back := time.Now()
 	r = waitRow(func(r row) bool { return r.Health == "good" }, 2*time.Second, "build good again within 2 s of the far side answering")
@@ -658,10 +678,28 @@ func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
 	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("BEFORE-42")) }, shellTimeout, "the far shell's echo before the drop")
 
 	// The link drops: its far end goes away, as when the network does.
-	if err := syscall.Kill(farProxy(t, remote), syscall.SIGKILL); err != nil {
-		t.Fatalf("kill the far proxy: %v", err)
+	// The listing can miss a drop that is over before it looks, so the drop
+	// is seen as the proxies being replaced: none of the killed ones is
+	// running once the link is up again.
+	killed := signalFarProxies(t, remote, syscall.SIGKILL)
+	t.Logf("killed the far proxies %v", killed)
+	dropDeadline := time.Now().Add(30 * time.Second)
+	for {
+		now := farProxies(remote)
+		fresh := len(now) > 0
+		for _, p := range now {
+			if slices.Contains(killed, p) {
+				fresh = false
+			}
+		}
+		if fresh {
+			break
+		}
+		if time.Now().After(dropDeadline) {
+			t.Fatalf("ASSERTION: the link to build never came back on a new proxy (killed %v, running %v)", killed, now)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	waitForHostListing(t, base, func(s string) bool { return !strings.Contains(s, "│ up ") }, "the link to build drops")
 	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes back")
 
 	// The bridge dials the session again on its own. Keys sent until then
