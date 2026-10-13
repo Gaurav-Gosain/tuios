@@ -5459,3 +5459,30 @@ on main. The log is `~/.cache/agent-tmp/gui-port/proof/`.
 
 All 44 tests that match `TestGUIBridge|TestLinkRidesTheSharedSSHMaster|TestAttachOnAHost`
 pass on the branch.
+
+## The GUI bridge after review: idle cost, host polling, one snapshot encoder, a bounded queue
+
+- `TestGUIBridgeIdleCostsLittle` (`gui_bridge_idle_test.go`) leaves a
+  bridge on two idle shells with no hosts for 10 s. The bridge must take at
+  most 30 CPU ticks and the daemon at most 26 read calls (about 17 with the
+  fixes). A host added from the command line must then reach the renderer.
+- `TestSnapshotVTRebuildsThePane` (`internal/session`) is the conformance
+  corpus of the one snapshot encoder, now used by stream-pane and the bridge.
+  `TestGUIBridgeSnapshotCarriesTabsAndTitle` checks that a pane's snapshot
+  through the bridge sets its tab stops and title.
+- `TestGUIBridgeResyncsARendererThatFellBehind` stops reading the bridge for
+  15 s while a pane prints about 30 MB, with a 1 MiB queue. The renderer must
+  get a fresh snapshot and the flood's last line, and the bridge must not
+  grow by more than 24 MB.
+
+Each control below was run on 2026-10-13 on branch `feat/gui-bridge`. The
+log is `~/.cache/agent-tmp/gui-port/proof/nc-bridge-review.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The palette key printed from the config | `model.Update`: `fmt.Sprint(m.keysFrom)` back in the key | `TestGUIBridgeIdleCostsLittle` (89 ticks in 10 s) | **caught** |
+| list-hosts read every second with no hosts | `watchHosts`: the timer armed always | `TestGUIBridgeIdleCostsLittle` (35 and 40 daemon reads in 10 s) | **caught** |
+| No tab stops and no title in the encoder | `snapshotVT`: both blocks skipped | `TestSnapshotVTRebuildsThePane/tabs` and `/title`, `TestGUIBridgeSnapshotCarriesTabsAndTitle` | **caught** |
+| The kitty base entry pushed | `kittyStack`: every entry pushed | `TestSnapshotVTRebuildsThePane` (every case: stack `[0 0]`, want `[0]`) | **caught** |
+| An unbounded queue | `frameWriter.push`: the bound made false | `TestGUIBridgeResyncsARendererThatFellBehind` (no fresh snapshot) | **caught** |
+| Output dropped and never resynced | `frameWriter.run`: `onResync` not called | `TestGUIBridgeResyncsARendererThatFellBehind` (no fresh snapshot) | **caught** |
