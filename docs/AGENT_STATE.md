@@ -649,7 +649,7 @@ A refused call answers error `forbidden`, and nothing changes.
 | `workspace.list`, `workspace.get` | `list-windows` | |
 | `workspace.create` | `new-session`, `set-session-name` | `label` is the display name. `focus` does nothing |
 | `workspace.rename` | `set-session-name` | |
-| `workspace.close` | `kill-session` | |
+| `workspace.close` | `kill-session`, or `kill-space` with `force` | `close_group: true` closes every session in the session's space, and only the session when it is in no space. A plain close of a session in a space closes that session alone: herdr refuses it with `workspace_group_close_required`, since herdr's group is its linked worktree workspaces, and tuios does not |
 | `workspace.focus` | `select-workspace` grant, then the attached client | the client shows the session, as the session switcher does. The client is the one that shows the caller's session, else the one that shows the active workspace. Without a client it fails with `no_client` |
 | `tab.list`, `tab.get` | `list-windows` | |
 | `tab.create` | `new-window`, `set-workspace-name` | uses the first workspace that is not a tab. Fails with `tab_create_failed` when all are in use |

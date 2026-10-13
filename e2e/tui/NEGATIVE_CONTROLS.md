@@ -4857,3 +4857,19 @@ Run on 2026-10-13 on macOS. `new --space` goes through the `new-session` verb ov
 | `cs.hello = &HelloPayload{...}` in `verbHello` | `TestNewSpaceGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=xterm-ghostty COLORTERM=truecolor\"") | **caught** |
 
 `TestSessionMadeWithoutATerminalGivesItsPanesARealTerm` (`pane_term_headless_test.go`) is the other half: a caller with no terminal still gets the daemon's fallback, and still does after this change, since an empty `term`/`color_term` on the hello verb leaves `cs.hello` holding the same empty strings the binary protocol's no-terminal case already produces.
+
+### herdr workspace.close close_group
+
+Run on 2026-10-13 on macOS. The test is `TestHerdrWorkspaceCloseGroupKillsTheSpace` in `herdr_space_close_test.go`. Each control cuts one wire from the fixed build, builds it, restores the source, and runs the test against the cut binary; the fixed build passes.
+
+Sessions `e2e-a` and `e2e-b` are in space `s`, `e2e-d` and `e2e-e` in space `t`, and `e2e-c` in none. The test closes `e2e-a` with `close_group`, then `e2e-d` plainly, then `e2e-c` with `close_group`, reading the live sessions after each, and a herdr subscriber must see `workspace_closed` for both `e2e-a` and `e2e-b`.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| `close_group` never reaches the handler (`in.CloseGroup` read as `false`) | "after close_group on e2e-a the sessions are [e2e-b e2e-c e2e-d e2e-e], want [e2e-c e2e-d e2e-e]" | **caught** |
+| herdr's refusal copied: a plain close of a session in a space answers `workspace_group_close_required` | "workspace.close: map[code:workspace_group_close_required ...]" on the plain close of `e2e-d` | **caught** |
+| The space check dropped: `close_group` on a session in no space runs `kill-space` with an empty space | "workspace.close: map[code:invalid_params message:space is required ...]" on `e2e-c` | **caught** |
+| A plain close cascades to the space (`close_group` ignored, every spaced close runs `kill-space`) | "after a plain close of e2e-d the sessions are [e2e-c], want [e2e-c e2e-e]" | **caught** |
+| `workspace_closed` not emitted for a closed session (`herdrTranslator` returns nothing on session-closed) | "the stream ended before workspace_closed for e2e-a (...) and e2e-b (...): i/o timeout; saw map[]" | **caught** |
+
+The last control is outside this change: it shows the test's event assertion is live, so `kill-space` reaching each member through `DeleteSession` is what raises the two events, not a stream that reports anything.

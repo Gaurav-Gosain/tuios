@@ -96,6 +96,7 @@ type herdrIn struct {
 	Base         string   `json:"base"`
 	Path         string   `json:"path"`
 	Force        bool     `json:"force"`
+	CloseGroup   bool     `json:"close_group"`
 	Until        []string `json:"until"`
 	TimeoutMS    *int64   `json:"timeout_ms"`
 	Match        *struct {
@@ -230,6 +231,7 @@ type herdrArgs struct {
 	Branch    string  `json:"branch,omitempty"`
 	Base      string  `json:"base,omitempty"`
 	Force     bool    `json:"force,omitempty"`
+	Space     string  `json:"space,omitempty"`
 	Command   string  `json:"command,omitempty"`
 }
 
@@ -619,7 +621,16 @@ func (d *Daemon) herdrWorkspaceClose(cs *connState, in *herdrIn) (*herdrResult, 
 	if ierr != nil {
 		return nil, ierr.herdr()
 	}
-	if _, herr := d.herdrVerb(cs, "kill-session", herdrArgs{Session: sess.Name()}, "workspace_close_failed"); herr != nil {
+	// close_group closes the session's whole space, as herdr closes a
+	// workspace's group. A plain close of a session in a space is not refused,
+	// as herdr refuses one with workspace_group_close_required: herdr's group is
+	// its linked worktree workspaces, a space is the person's own grouping, and
+	// a herdr client that closes one workspace expects only that one to go.
+	verb, args := "kill-session", herdrArgs{Session: sess.Name()}
+	if space := sess.Space(); in.CloseGroup && space != "" {
+		verb, args = "kill-space", herdrArgs{Space: space, Force: true}
+	}
+	if _, herr := d.herdrVerb(cs, verb, args, "workspace_close_failed"); herr != nil {
 		return nil, herr
 	}
 	return herdrAck, nil
