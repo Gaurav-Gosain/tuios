@@ -55,6 +55,7 @@ func StateFingerprint(s *SessionState) uint64 {
 	str(s.DisplayName)
 	str(s.Accent)
 	flag(s.Restored)
+	str(s.Space)
 	str(s.FocusedWindowID)
 	num(s.CurrentWorkspace)
 	f64(s.MasterRatio)

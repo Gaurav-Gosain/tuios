@@ -1,8 +1,10 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -183,5 +185,49 @@ func TestLoadResurrectionIncompatibleVersionArchived(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Errorf("incompatible file still present at original path")
+	}
+}
+
+// TestResurrectionSpaceCompatibility pins the space field's place in the state
+// file schema, which changed without a ResurrectionVersion bump. A file written
+// before the field existed has to load as a session in no space, a session in
+// no space has to write no space key (so an older daemon reads exactly the file
+// it always did), and a space has to come back from disk.
+func TestResurrectionSpaceCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	defer useResurrectionDir(tmpDir)()
+
+	old := fmt.Sprintf(`{"name":"old","resurrection_version":%d,"windows":[{"id":"win-a","workspace":1,"pty_id":"pty-a"}]}`, ResurrectionVersion)
+	if err := os.WriteFile(filepath.Join(tmpDir, "old.json"), []byte(old), 0600); err != nil {
+		t.Fatalf("failed to seed pre-space file: %v", err)
+	}
+	loaded, err := LoadResurrectionState("old")
+	if err != nil {
+		t.Fatalf("LoadResurrectionState(old) failed: %v", err)
+	}
+	if loaded.Space != "" {
+		t.Errorf("pre-space file loaded with Space = %q, want empty", loaded.Space)
+	}
+
+	if err := SaveSessionForResurrection(&SessionState{Name: "plain", Windows: []WindowState{{ID: "win-a", Workspace: 1}}}); err != nil {
+		t.Fatalf("SaveSessionForResurrection(plain) failed: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(tmpDir, "plain.json"))
+	if err != nil {
+		t.Fatalf("reading plain.json: %v", err)
+	}
+	if strings.Contains(string(raw), `"space"`) {
+		t.Errorf("a session in no space wrote a space key: %s", raw)
+	}
+
+	if err := SaveSessionForResurrection(&SessionState{Name: "grouped", Space: "payments", Windows: []WindowState{{ID: "win-a", Workspace: 1}}}); err != nil {
+		t.Fatalf("SaveSessionForResurrection(grouped) failed: %v", err)
+	}
+	loaded, err = LoadResurrectionState("grouped")
+	if err != nil {
+		t.Fatalf("LoadResurrectionState(grouped) failed: %v", err)
+	}
+	if loaded.Space != "payments" {
+		t.Errorf("Space = %q after a round trip, want payments", loaded.Space)
 	}
 }

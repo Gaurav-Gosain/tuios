@@ -4786,3 +4786,12 @@ Not covered here: the far OS (`os` in `hello`) picks `cmd /C` only for a
 Windows host, which this suite cannot run. The longer pending time and the
 answer to "already has a scratch terminal" need a create whose answer is lost
 on the link, which this suite cannot make on demand.
+
+### Space persistence
+
+Run on 2026-10-13 on macOS. The control cuts one wire from the fixed build and runs `TestSpaceSurvivesTheDaemon`. Rerun on 2026-10-14 on macOS on the tree rebased onto upstream `main` (`7f25ec35`): the restore control is still caught, with the same message.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The restore creating the session without `Space: state.Space` in its `SessionConfig` (the space is saved but the restore's client sync keeps the new session's empty one) | `TestSpaceSurvivesTheDaemon` ("after a restart, list-spaces is map[]") | **caught** |
+| `incoming.Space = canonical.Space` left out of `retainDaemonExclusive` | not run | **not covered**: the test attaches no client, so nothing pushes state. A client of the same build echoes the space it was sent, so only an older client's push could clear it, and the suite runs one build. The line stays, for the reason `Global` has its own. |

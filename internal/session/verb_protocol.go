@@ -1601,6 +1601,32 @@ func init() {
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
+		"set-session-space": {
+			description: "File a session under a space, a named group of related sessions. A space exists while at least one session is in it. It survives a daemon restart with the session.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "space", Type: "string", Description: "The space's name. It must not hold a slash, a backslash, a control character or leading or trailing whitespace. Omit or pass an empty string to take the session out of any space."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always session_space_set."},
+				{Name: "session", Type: "string", Description: "The session's name."},
+				{Name: "space", Type: "string", Description: "The space the session is in now, empty for none."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":"payments"}}`,
+				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":""}}`,
+			},
+			handler: (*Daemon).verbSetSessionSpace,
+		},
+		"list-spaces": {
+			description: "List the spaces the daemon's sessions are filed under, each with its sessions. A session in no space is not listed.",
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always space_list."},
+				{Name: "spaces", Type: "[]object", Description: "One row per space, ordered by name: name, attached (whether a client is attached to any of its sessions), last_used (the latest unix time a person used one of its sessions, absent when never), and sessions, one row per member in session list order with name, id, attached and last_used."},
+			},
+			examples: []string{`{"id":1,"verb":"list-spaces"}`},
+			handler:  (*Daemon).verbListSpaces,
+		},
 		"set-workspace-name": {
 			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",
 			params: []verbParam{
