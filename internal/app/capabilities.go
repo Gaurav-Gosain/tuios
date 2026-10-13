@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"golang.org/x/term"
 
 	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
@@ -337,7 +338,7 @@ var da1Response = lazyre.New(`\x1b\[\?[0-9;]*c`)
 // the DA1 parameters and the kitty replies, and pixel geometry from the
 // XTWINOPS replies.
 func probeTerminal(caps *HostCapabilities) {
-	if !isTerminal(os.Stdin.Fd()) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		setDefaultCellSize(caps)
 		return
 	}
@@ -350,12 +351,12 @@ func probeTerminal(caps *HostCapabilities) {
 	}
 	defer func() { _ = tty.Close() }()
 
-	oldState, err := makeRaw(tty.Fd())
+	oldState, err := term.MakeRaw(int(tty.Fd()))
 	if err != nil {
 		setDefaultCellSize(caps)
 		return
 	}
-	defer restoreTerminal(tty.Fd(), oldState)
+	defer func() { _ = term.Restore(int(tty.Fd()), oldState) }()
 
 	// Probe direct transmission (i=1) and, if we can stage a file for it,
 	// file transmission (i=2). The ids let the two answers be told apart; the
