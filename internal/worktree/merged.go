@@ -8,20 +8,25 @@ import (
 
 // Whether a worktree's branch has landed in its base.
 //
-// A branch is merged when it has commits of its own and merging it into the
-// base would change nothing. The second half is asked of git directly: git
-// merge-tree --write-tree computes the merge without touching any checkout or
-// ref, and a merge whose tree is the base's own tree adds nothing. That one
-// question covers every way a branch lands: a merge commit, a fast-forward, a
-// rebase and a squash all leave the base holding the branch's changes.
+// A branch is merged when it has changes of its own and the base already holds
+// them. Two shapes of history answer that differently.
 //
-// The first half keeps a fresh branch from reading as merged: a branch with no
-// commits merges into its base as nothing, which is the same answer a landed
-// branch gives. Commits of its own are counted from the commit the branch
-// started at, which tuios records when it makes the worktree. A worktree made
-// before that record falls back to the merge base, which is the start point
-// until the branch lands and the branch tip after a fast-forward. So an old
-// worktree can read as not merged when it is, never the other way round.
+// When the branch tip is not in the base, the branch has commits the base does
+// not. It is merged when it changes something against its merge base with the
+// base, and merging it into the base would change nothing. git merge-tree
+// --write-tree computes that merge without touching a checkout or a ref, and a
+// merge whose tree is the base's own tree adds nothing. That covers a squash
+// and a rebase. The first half keeps a commit and its revert, a branch whose
+// net change is empty, from reading as merged.
+//
+// When the branch tip is in the base, a merge commit or a fast-forward landed
+// it, or the branch has nothing of its own and only fast-forwarded to commits
+// the base made. The graph cannot tell those apart, so the branch's reflog
+// does: a branch has commits of its own when one of its entries made a commit
+// (commit, amend, revert, cherry-pick, or a rebase that left work past its
+// onto commit) and that commit is in the branch past the commit it started
+// at. With no reflog, the branch reads as not merged. So the check can miss a
+// merged branch, never claim one that is not.
 
 // mergedCacheCap bounds the cache. The listing is polled, and a key that no
 // longer matches any tip is dead weight; clearing the whole map when it fills
@@ -95,33 +100,97 @@ func Merged(path, repoRoot, start, base string) (string, error) {
 	return into, nil
 }
 
-// mergedInto reports whether head, a commit with commits of its own past
-// start, merges into target as nothing. Any git failure, a conflict among
-// them, reads as not merged.
+// mergedInto reports whether head has changes of its own and target already
+// holds them. Any git failure, a conflict among them, reads as not merged.
 func mergedInto(path, start, head, target string) bool {
-	if start == "" || !HasCommit(path, start) {
-		mb, err := MergeBase(path, head, target)
-		if err != nil {
-			return false
-		}
-		start = mb
-	}
-	out, err := run(path, "rev-list", "--count", start+".."+head)
-	if err != nil || strings.TrimSpace(out) == "0" {
+	mb, err := MergeBase(path, head, target)
+	if err != nil {
 		return false
 	}
+	if mb == head {
+		// The base holds the tip. Merged only when the branch made commits.
+		return madeCommits(path, start, head)
+	}
+	// The branch has commits the base does not. Its net change against the
+	// merge base must not be empty, so a commit and its revert is not merged.
+	trees, err := revParse(path, head+"^{tree}", mb+"^{tree}", target+"^{tree}")
+	if err != nil || trees[0] == trees[1] {
+		return false
+	}
+	merged, err := mergeTree(path, target, head)
+	return err == nil && merged == trees[2]
+}
+
+// mergeTree is the tree git merge-tree --write-tree gives for merging head
+// into target.
+func mergeTree(path, target, head string) (string, error) {
 	// merge-tree prints the merged tree on its first line, and exits non-zero
 	// on a conflict, which run reports as an error.
-	merged, err := run(path, "merge-tree", "--write-tree", target, head)
+	out, err := run(path, "merge-tree", "--write-tree", target, head)
+	if err != nil {
+		return "", err
+	}
+	tree, _, _ := strings.Cut(out, "\n")
+	return strings.TrimSpace(tree), nil
+}
+
+// reflogScan bounds how many reflog entries madeCommits reads.
+const reflogScan = 64
+
+// madeCommits reports whether the branch checked out at path made a commit
+// that head holds and start does not. It reads the branch's reflog, newest
+// first. A detached HEAD, or a branch with no reflog, made none.
+func madeCommits(path, start, head string) bool {
+	branch, err := CurrentBranch(path)
+	if err != nil || branch == "" || strings.HasPrefix(branch, "-") {
+		return false
+	}
+	out, err := run(path, "log", "-g", fmt.Sprintf("-n%d", reflogScan), "--format=%H %gs", "refs/heads/"+branch, "--")
 	if err != nil {
 		return false
 	}
-	tree, _, _ := strings.Cut(merged, "\n")
-	baseTree, err := revParse(path, target+"^{tree}")
-	if err != nil {
+	for line := range strings.Lines(out) {
+		sha, subject, _ := strings.Cut(strings.TrimSpace(line), " ")
+		if !ownEntry(subject, sha) {
+			continue
+		}
+		if !isAncestor(path, sha, head) {
+			continue
+		}
+		if start != "" && isAncestor(path, sha, start) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// ownEntry reports whether a reflog entry with this subject, which set the
+// branch to sha, made a commit of the branch's own. A merge, a fast-forward,
+// a reset and the branch's creation make none. A rebase made some when it
+// left the branch past the commit it rebased onto.
+func ownEntry(subject, sha string) bool {
+	for _, p := range []string{"commit:", "commit (amend):", "commit (initial):", "revert:", "cherry-pick:"} {
+		if strings.HasPrefix(subject, p) {
+			return true
+		}
+	}
+	// "rebase (finish): refs/heads/b onto <sha>", also after "pull --rebase".
+	if _, onto, ok := strings.Cut(subject, "(finish): "); ok {
+		if _, onto, ok = strings.Cut(onto, " onto "); ok {
+			return strings.TrimSpace(onto) != sha
+		}
+	}
+	return false
+}
+
+// isAncestor reports whether commit a is b or an ancestor of b.
+func isAncestor(dir, a, b string) bool {
+	if strings.HasPrefix(a, "-") || strings.HasPrefix(b, "-") {
 		return false
 	}
-	return strings.TrimSpace(tree) == baseTree[0]
+	_, err := run(dir, "merge-base", "--is-ancestor", a, b)
+	return err == nil
 }
 
 // revParse resolves each rev to a full hash, in order.
