@@ -8,7 +8,7 @@ package perf
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -26,7 +26,7 @@ func (d *Dist) AddSince(t0 time.Time) { *d = append(*d, time.Since(t0)) }
 // sorted returns a sorted copy, leaving the caller's sample order alone.
 func (d Dist) sorted() Dist {
 	s := append(Dist(nil), d...)
-	sort.Slice(s, func(i, j int) bool { return s[i] < s[j] })
+	slices.Sort(s)
 	return s
 }
 

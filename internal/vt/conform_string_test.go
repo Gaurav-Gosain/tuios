@@ -146,10 +146,10 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "a\x1b]8;;" + url + "\x07bc\x1b]8;;\x07d",
 			want: "abcd",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "a", link: ptr("")},
-				{x: 1, y: 0, content: "b", link: ptr(url)},
-				{x: 2, y: 0, content: "c", link: ptr(url)},
-				{x: 3, y: 0, content: "d", link: ptr("")},
+				{x: 0, y: 0, content: "a", link: new("")},
+				{x: 1, y: 0, content: "b", link: new(url)},
+				{x: 2, y: 0, content: "c", link: new(url)},
+				{x: 3, y: 0, content: "d", link: new("")},
 			},
 		},
 		{
@@ -158,8 +158,8 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;;" + url + "\x1b\\b\x1b]8;;\x1b\\c",
 			want: "bc",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "b", link: ptr(url)},
-				{x: 1, y: 0, content: "c", link: ptr("")},
+				{x: 0, y: 0, content: "b", link: new(url)},
+				{x: 1, y: 0, content: "c", link: new("")},
 			},
 		},
 		{
@@ -168,7 +168,7 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;id=n1;" + url + "\x07b\x1b]8;;\x07",
 			want: "b",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "b", link: ptr(url)},
+				{x: 0, y: 0, content: "b", link: new(url)},
 			},
 		},
 		{
@@ -179,9 +179,9 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;;" + url + "\x07a\x1b]8;;https://example.invalid/y\x07b\x1b]8;;\x07c",
 			want: "abc",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "a", link: ptr(url)},
-				{x: 1, y: 0, content: "b", link: ptr("https://example.invalid/y")},
-				{x: 2, y: 0, content: "c", link: ptr("")},
+				{x: 0, y: 0, content: "a", link: new(url)},
+				{x: 1, y: 0, content: "b", link: new("https://example.invalid/y")},
+				{x: 2, y: 0, content: "c", link: new("")},
 			},
 		},
 		{
@@ -193,7 +193,7 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;id=a:x=y;https://example.invalid/p;q=1:2\x1b\\b\x1b]8;;\x1b\\",
 			want: "b",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "b", link: ptr("https://example.invalid/p;q=1:2"), linkParams: ptr("id=a:x=y")},
+				{x: 0, y: 0, content: "b", link: new("https://example.invalid/p;q=1:2"), linkParams: new("id=a:x=y")},
 			},
 		},
 		{
@@ -203,8 +203,8 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;id=n1;" + url + "\x07a\x1b]8;id=n1;\x07b",
 			want: "ab",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "a", link: ptr(url)},
-				{x: 1, y: 0, content: "b", link: ptr(""), linkParams: ptr("")},
+				{x: 0, y: 0, content: "a", link: new(url)},
+				{x: 1, y: 0, content: "b", link: new(""), linkParams: new("")},
 			},
 		},
 		{
@@ -213,8 +213,8 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			in:   "\x1b]8;;" + url + "\x07abcdef\x1b]8;;\x07",
 			want: "abcd\nef",
 			cells: []cellWant{
-				{x: 3, y: 0, content: "d", link: ptr(url)},
-				{x: 0, y: 1, content: "e", link: ptr(url)},
+				{x: 3, y: 0, content: "d", link: new(url)},
+				{x: 0, y: 1, content: "e", link: new(url)},
 			},
 		},
 	})

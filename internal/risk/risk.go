@@ -399,12 +399,12 @@ func fixedRoot(root string) string {
 // the rest. A "..." written in the path is not a clip and is read as it is.
 func shownPart(path string, call Call) (shown string, cut bool) {
 	if call.Shown {
-		if i := strings.Index(path, ShownRedacted); i >= 0 {
-			return path[:i], true
+		if before, _, ok := strings.Cut(path, ShownRedacted); ok {
+			return before, true
 		}
 	}
-	if i := strings.Index(path, clipMark); i >= 0 {
-		return path[:i], true
+	if before, _, ok := strings.Cut(path, clipMark); ok {
+		return before, true
 	}
 	return path, false
 }

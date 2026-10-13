@@ -305,10 +305,8 @@ func agentWait(args []string) (*Call, *UsageError) {
 	if len(args) == 0 {
 		return nil, usage(usageLine)
 	}
-	for _, a := range args[1:] {
-		if a == "help" {
-			return nil, &UsageError{Msg: usageLine, Code: 0}
-		}
+	if slices.Contains(args[1:], "help") {
+		return nil, &UsageError{Msg: usageLine, Code: 0}
 	}
 	p := map[string]any{"target": args[0]}
 	if err := untilTimeout(args[1:], p, nil); err != nil {

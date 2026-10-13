@@ -21,7 +21,7 @@ func TestConform_Overline(t *testing.T) {
 			name:      "SGR 53 is unhandled, and the rest of the SGR applies",
 			in:        "\x1b[1;53;31mX",
 			want:      "X",
-			cells:     []cellWant{{x: 0, y: 0, content: "X", attrs: ptr(uint8(uv.AttrBold)), fg: indexed(1)}},
+			cells:     []cellWant{{x: 0, y: 0, content: "X", attrs: new(uint8(uv.AttrBold)), fg: indexed(1)}},
 			unhandled: true,
 		}, {
 			name:      "SGR 55 is unhandled too",

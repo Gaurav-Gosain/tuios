@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-func strp(s string) *string { return &s }
-
 func metaKeys(tokens []AgentMetaToken) []string {
 	out := make([]string, len(tokens))
 	for i, t := range tokens {
@@ -23,13 +21,13 @@ func metaKeys(tokens []AgentMetaToken) []string {
 // move it, or every statusline tick would reshuffle the row.
 func TestApplyAgentMetaKeepsFirstArrivalOrder(t *testing.T) {
 	cur, _, err := applyAgentMeta(nil, AgentMetaUpdate{
-		Keys: []string{"model", "context"}, Values: []*string{strp("opus"), strp("10%")},
+		Keys: []string{"model", "context"}, Values: []*string{new("opus"), new("10%")},
 	}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	next, _, err := applyAgentMeta(cur, AgentMetaUpdate{
-		Keys: []string{"cost", "model", "context"}, Values: []*string{strp("$1"), strp("sonnet"), strp("42%")},
+		Keys: []string{"cost", "model", "context"}, Values: []*string{new("$1"), new("sonnet"), new("42%")},
 	}, 2)
 	if err != nil {
 		t.Fatal(err)
@@ -46,8 +44,8 @@ func TestApplyAgentMetaKeepsFirstArrivalOrder(t *testing.T) {
 // TestApplyAgentMetaRemovesAndClears covers the three ways a key goes: null,
 // clear by source, and clear of everything.
 func TestApplyAgentMetaRemovesAndClears(t *testing.T) {
-	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"a", "b"}, Values: []*string{strp("1"), strp("2")}, Source: "hook"}, 1)
-	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"c"}, Values: []*string{strp("3")}, Source: "statusline"}, 1)
+	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"a", "b"}, Values: []*string{new("1"), new("2")}, Source: "hook"}, 1)
+	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"c"}, Values: []*string{new("3")}, Source: "statusline"}, 1)
 
 	removed, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"a"}, Values: []*string{nil}}, 2)
 	if got := metaKeys(removed); !slices.Equal(got, []string{"b=2", "c=3"}) {
@@ -69,12 +67,12 @@ func TestApplyAgentMetaPerPaneLimit(t *testing.T) {
 	var cur []AgentMetaToken
 	for i := range AgentMetaMaxPerPane {
 		var err error
-		cur, _, err = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"k" + string(rune('a'+i%26)) + string(rune('a'+i/26))}, Values: []*string{strp("v")}}, 1)
+		cur, _, err = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"k" + string(rune('a'+i%26)) + string(rune('a'+i/26))}, Values: []*string{new("v")}}, 1)
 		if err != nil {
 			t.Fatalf("key %d refused: %v", i, err)
 		}
 	}
-	if _, _, err := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"one-more"}, Values: []*string{strp("v")}}, 1); err == nil {
+	if _, _, err := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"one-more"}, Values: []*string{new("v")}}, 1); err == nil {
 		t.Error("a pane took more than the per-pane limit")
 	}
 }
@@ -82,12 +80,12 @@ func TestApplyAgentMetaPerPaneLimit(t *testing.T) {
 // TestApplyAgentMetaTTL: an expired key is gone from the next write, and a key
 // with no TTL is not.
 func TestApplyAgentMetaTTL(t *testing.T) {
-	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"short"}, Values: []*string{strp("x")}, TTL: time.Second}, 0)
-	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{strp("y")}}, 0)
+	cur, _, _ := applyAgentMeta(nil, AgentMetaUpdate{Keys: []string{"short"}, Values: []*string{new("x")}, TTL: time.Second}, 0)
+	cur, _, _ = applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{new("y")}}, 0)
 	if cur[0].Expires != int64(time.Second) || cur[1].Expires != 0 {
 		t.Fatalf("expiry stamps = %d, %d", cur[0].Expires, cur[1].Expires)
 	}
-	later, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"z"}, Values: []*string{strp("z")}}, int64(2*time.Second))
+	later, _, _ := applyAgentMeta(cur, AgentMetaUpdate{Keys: []string{"z"}, Values: []*string{new("z")}}, int64(2*time.Second))
 	if got := metaKeys(later); !slices.Equal(got, []string{"long=y", "z=z"}) {
 		t.Errorf("after the TTL: %v", got)
 	}
@@ -134,7 +132,7 @@ func TestDecodeAgentMetaTokensKeepsOrder(t *testing.T) {
 func TestAgentMetaClearsWithTheAgent(t *testing.T) {
 	sess := newTestSessionWithWindow(t)
 	id := sess.GetState().Windows[0].ID
-	if _, err := sess.SetAgentMeta(id, AgentMetaUpdate{Keys: []string{"model"}, Values: []*string{strp("opus")}}); err != nil {
+	if _, err := sess.SetAgentMeta(id, AgentMetaUpdate{Keys: []string{"model"}, Values: []*string{new("opus")}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateWorking}); err != nil {
@@ -158,12 +156,12 @@ func TestAgentMetaTTLIsPrunedByTheDaemon(t *testing.T) {
 	sess := newTestSessionWithWindow(t)
 	id := sess.GetState().Windows[0].ID
 	if _, err := sess.SetAgentMeta(id, AgentMetaUpdate{
-		Keys: []string{"short", "long"}, Values: []*string{strp("x"), nil},
+		Keys: []string{"short", "long"}, Values: []*string{new("x"), nil},
 		TTL: 30 * time.Millisecond,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sess.SetAgentMeta(id, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{strp("y")}}); err != nil {
+	if _, err := sess.SetAgentMeta(id, AgentMetaUpdate{Keys: []string{"long"}, Values: []*string{new("y")}}); err != nil {
 		t.Fatal(err)
 	}
 	version := sess.GetState().Version

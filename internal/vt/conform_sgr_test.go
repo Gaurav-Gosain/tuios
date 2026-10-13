@@ -22,7 +22,7 @@ func TestConform_SGR(t *testing.T) {
 			in:   "\x1b[21mX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", underline: ptr(ansi.UnderlineDouble)},
+				{x: 0, y: 0, content: "X", underline: new(ansi.UnderlineDouble)},
 			},
 		},
 		{
@@ -33,7 +33,7 @@ func TestConform_SGR(t *testing.T) {
 			in:   "\x1b[4:7mX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", underline: ptr(underlineNone), attrs: ptr(uint8(0))},
+				{x: 0, y: 0, content: "X", underline: new(underlineNone), attrs: new(uint8(0))},
 			},
 		},
 		{
@@ -41,7 +41,7 @@ func TestConform_SGR(t *testing.T) {
 			in:   "\x1b[4:7;4:3mX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", underline: ptr(ansi.UnderlineCurly), attrs: ptr(uint8(0))},
+				{x: 0, y: 0, content: "X", underline: new(ansi.UnderlineCurly), attrs: new(uint8(0))},
 			},
 		},
 		{
@@ -51,7 +51,7 @@ func TestConform_SGR(t *testing.T) {
 			in:   "\x1b[1;38;0mX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", attrs: ptr(uint8(uv.AttrBold))},
+				{x: 0, y: 0, content: "X", attrs: new(uint8(uv.AttrBold))},
 			},
 		},
 	})

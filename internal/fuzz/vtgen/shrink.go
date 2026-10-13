@@ -1,6 +1,9 @@
 package vtgen
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Shrinking is what decides whether this generator is worth having. A failing
 // script is a few hundred sequences of noise around the two that matter, and
@@ -129,7 +132,7 @@ func simpler(seq Seq) []Seq {
 			final := body[last:]
 			params := body[:last]
 			parts := strings.Split(params, ";")
-			for drop := len(parts) - 1; drop >= 0; drop-- {
+			for drop := range slices.Backward(parts) {
 				kept := append(append([]string{}, parts[:drop]...), parts[drop+1:]...)
 				add("\x1b["+strings.Join(kept, ";")+final, seq.Desc+" (a parameter dropped)")
 			}

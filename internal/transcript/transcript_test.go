@@ -14,8 +14,8 @@ import (
 func jsonTagsOf(v any) []string {
 	t := reflect.TypeOf(v)
 	out := make([]string, 0, t.NumField())
-	for i := range t.NumField() {
-		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+	for field := range t.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		out = append(out, name)
 	}
 	return out

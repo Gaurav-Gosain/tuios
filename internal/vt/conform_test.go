@@ -357,9 +357,6 @@ func boxed(s string) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// ptr is a shorthand for the optional fields of cellWant.
-func ptr[T any](v T) *T { return &v }
-
 // underlineNone names the zero underline so a case can assert its absence
 // rather than leaving the field unset, which means "do not compare".
 var underlineNone = ansi.UnderlineNone

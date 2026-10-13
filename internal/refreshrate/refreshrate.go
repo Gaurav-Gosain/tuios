@@ -230,7 +230,7 @@ func parseXrandr(out []byte) float64 {
 	best := 0.0
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
-		for _, field := range strings.Fields(sc.Text()) {
+		for field := range strings.FieldsSeq(sc.Text()) {
 			if !strings.Contains(field, "*") {
 				continue
 			}

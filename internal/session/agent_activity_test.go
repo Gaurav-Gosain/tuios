@@ -12,8 +12,6 @@ import (
 // it and when, the reserved metadata keys it moves, what the session event
 // sink adds, the recap, and the agent-activity verb and event.
 
-func intp(n int) *int { return &n }
-
 // activityOf reads a pane's ring through the verb, the way a client does.
 func activityOf(t *testing.T, c *verbConn, params map[string]any) (entries []AgentActivityEntry, res map[string]any) {
 	t.Helper()
@@ -168,7 +166,7 @@ func TestShellCommandTargetIsCut(t *testing.T) {
 	s.setName("work")
 	store.add(s.ID, s.Name(), "w", AgentActivityEntry{Kind: ActivityPrompt, Text: "go"}, true)
 	long := "API_TOKEN=abc123def go test " + strings.Repeat("./pkg/x ", shellCmdlineMax/8)
-	store.noteSessionEvent(s, SessionEvent{Type: EventCommandFinished, Window: "w", Cmdline: long, ExitCode: intp(0)})
+	store.noteSessionEvent(s, SessionEvent{Type: EventCommandFinished, Window: "w", Cmdline: long, ExitCode: new(0)})
 	got, _, _ := store.read(s.ID, "w")
 	if len(got) != 2 {
 		t.Fatalf("ring = %+v", got)

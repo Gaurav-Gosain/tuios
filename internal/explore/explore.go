@@ -621,7 +621,7 @@ func wrap(s string, width int) []string {
 		return []string{s}
 	}
 	var out []string
-	for _, para := range strings.Split(s, "\n") {
+	for para := range strings.SplitSeq(s, "\n") {
 		w := lipgloss.Wrap(para, width, " ")
 		out = append(out, strings.Split(w, "\n")...)
 	}

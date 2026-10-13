@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -402,9 +403,7 @@ func modernResult(method string, result any) any {
 		return result
 	}
 	out := make(map[string]any, len(m)+3)
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	out["resultType"] = "complete"
 	switch method {
 	case "tools/list", "resources/list", "prompts/list", "server/discover":

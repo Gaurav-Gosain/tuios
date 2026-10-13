@@ -353,8 +353,7 @@ func Request(path, method string, params map[string]any, timeout time.Duration) 
 
 // NotRunning reports whether err is a socket nobody listens on.
 func NotRunning(err error) bool {
-	var c connError
-	if errors.As(err, &c) {
+	if c, ok := errors.AsType[connError](err); ok {
 		if e, ok := c["error"].(map[string]any); ok {
 			return e["code"] == "server_not_running"
 		}

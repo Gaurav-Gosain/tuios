@@ -212,7 +212,7 @@ func TestConform_Resets(t *testing.T) {
 			in:   "\x1b[31;4m\x1bcX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", fg: nil, underline: ptr(underlineNone)},
+				{x: 0, y: 0, content: "X", fg: nil, underline: new(underlineNone)},
 			},
 		},
 		{
@@ -280,7 +280,7 @@ func TestConform_DECSTRResetList(t *testing.T) {
 			in:   "\x1b[31;1;4m\x1b[!pX",
 			want: "X",
 			cells: []cellWant{
-				{x: 0, y: 0, content: "X", underline: ptr(underlineNone), attrs: ptr(uint8(0))},
+				{x: 0, y: 0, content: "X", underline: new(underlineNone), attrs: new(uint8(0))},
 			},
 		},
 		{
@@ -290,7 +290,7 @@ func TestConform_DECSTRResetList(t *testing.T) {
 			in:   "\x1b]8;;https://example.invalid/\x07a\x1b[!pb",
 			want: "ab",
 			cells: []cellWant{
-				{x: 1, y: 0, content: "b", link: ptr("")},
+				{x: 1, y: 0, content: "b", link: new("")},
 			},
 		},
 		{
