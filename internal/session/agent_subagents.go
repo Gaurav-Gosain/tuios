@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
 // The subagents an agent pane is running. A harness that hands work to
@@ -235,14 +237,14 @@ type subagentChange struct {
 
 // subagentChangeOf is the change an activity report makes.
 func subagentChangeOf(r *AgentActivityReport) subagentChange {
-	clean := func(s string) string { return attentionText(firstLine(s), subagentTextMax) }
+	clean := func(s string) string { return attentionText(integration.FirstLine(s), subagentTextMax) }
 	c := subagentChange{}
 	switch r.Event {
 	case ActivitySubagentStart, ActivitySubagentStop, ActivitySubagentUpdate:
 		c = subagentChange{
 			op:        r.Event,
 			id:        r.AgentID,
-			agentType: attentionText(firstLine(r.AgentType), activityToolMax),
+			agentType: attentionText(integration.FirstLine(r.AgentType), activityToolMax),
 			text:      clean(r.Text),
 			callID:    r.CallID,
 			tool:      attentionText(r.Tool, activityToolMax),
@@ -262,7 +264,7 @@ func subagentChangeOf(r *AgentActivityReport) subagentChange {
 	}
 	if r.Spawn {
 		c.spawn = true
-		c.agentType = attentionText(firstLine(r.AgentType), activityToolMax)
+		c.agentType = attentionText(integration.FirstLine(r.AgentType), activityToolMax)
 		c.spawnText = clean(r.Target)
 		c.callID = r.CallID
 	}

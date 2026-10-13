@@ -429,15 +429,6 @@ func checkActivityReport(a *AgentActivityReport, events []string) *verbError {
 	return nil
 }
 
-// firstLine is s up to its first line break, trimmed.
-func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
-		s = s[:i]
-	}
-	return strings.TrimSpace(s)
-}
-
 // activityEntryOf cleans a hook's report into a ring entry. Every string is
 // the agent's, so each is cut to one line, stripped of control characters and
 // masked for secrets before it is kept.
@@ -446,13 +437,13 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 		Kind:   r.Event,
 		Tool:   attentionText(r.Tool, activityToolMax),
 		Target: attentionText(r.Target, activityTextMax),
-		Text:   attentionText(firstLine(r.Text), activityTextMax),
+		Text:   attentionText(integration.FirstLine(r.Text), activityTextMax),
 	}
 	if subagentEvent(r.Event) {
 		// The entry says which kind of agent it was. Its id pairs a start
 		// with its stop in the daemon and says nothing to a reader.
 		// recordAgentActivity names it better once the daemon knows it.
-		e.Text = attentionText(firstLine(r.AgentType), activityToolMax)
+		e.Text = attentionText(integration.FirstLine(r.AgentType), activityToolMax)
 	}
 	if r.OK != nil {
 		ok := *r.OK

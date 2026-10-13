@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
@@ -142,7 +143,7 @@ func (m *transferManager) save(j *transferJob) {
 		return
 	}
 	m.journalMu.Lock()
-	err = writeFileAtomic(path, data)
+	err = atomicfile.WritePrivate(path, data, true)
 	m.journalMu.Unlock()
 	if err != nil {
 		LogError("Transfer %s: the journal entry could not be saved, so a restart loses this copy: %v", rec.ID, err)
@@ -166,50 +167,6 @@ func (m *transferManager) saveFinished(j *transferJob) {
 	if due {
 		m.save(j)
 	}
-}
-
-// writeFileAtomic writes data to path through a unique temporary file in the
-// same folder, fsynced, then renamed, owner only, so a crash leaves the old
-// file or the new one whole and never a half-written one. The folder is
-// fsynced too, so the rename survives a crash right after it.
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if df, err := os.Open(dir); err == nil {
-		_ = df.Sync()
-		_ = df.Close()
-	}
-	return nil
 }
 
 // note says a change of the job: it writes the journal and publishes a
@@ -472,7 +429,7 @@ func (p *partDirs) saveLocked() {
 	if err != nil {
 		return
 	}
-	if err := writeFileAtomic(p.file(), data); err != nil {
+	if err := atomicfile.WritePrivate(p.file(), data, true); err != nil {
 		LogError("The part folders could not be saved: %v", err)
 	}
 }

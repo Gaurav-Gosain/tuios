@@ -18,6 +18,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -715,9 +716,9 @@ func compareText(c session.ConflictItem) string {
 	}
 	switch d := c.SrcSize - c.DstSize; {
 	case d > 0:
-		parts = append(parts, "the new one is "+humanBytes(d)+" larger")
+		parts = append(parts, "the new one is "+units.Bytes(d)+" larger")
 	case d < 0:
-		parts = append(parts, "the new one is "+humanBytes(-d)+" smaller")
+		parts = append(parts, "the new one is "+units.Bytes(-d)+" smaller")
 	default:
 		parts = append(parts, "they are the same size with other bytes")
 	}

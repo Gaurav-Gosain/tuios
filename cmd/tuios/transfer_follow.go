@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 )
@@ -465,7 +466,7 @@ func (f *follower) plainRow(r copyRow, was string) {
 		}
 		f.mu.Unlock()
 		if due && r.Size > 0 {
-			_, _ = fmt.Fprintf(f.stderr, "%s: %s of %s (%d%%)%s\n", r.shownName(), humanBytes(r.Done), humanBytes(r.Size), percent(r.Done, r.Size), f.rateText(r))
+			_, _ = fmt.Fprintf(f.stderr, "%s: %s of %s (%d%%)%s\n", r.shownName(), units.Bytes(r.Done), units.Bytes(r.Size), percent(r.Done, r.Size), f.rateText(r))
 		}
 	}
 }
@@ -500,10 +501,10 @@ func (f *follower) rateText(r copyRow) string {
 	if rate <= 0 {
 		return ""
 	}
-	s := ", " + humanBytes(int64(rate)) + "/s"
+	s := ", " + units.Bytes(int64(rate)) + "/s"
 	if r.ETAms > 0 && rate > 0 {
 		left := time.Duration(float64(r.Size-r.Done)/rate) * time.Second
-		s += ", " + humanDuration(left) + " left"
+		s += ", " + units.Duration(left) + " left"
 	}
 	return s
 }
@@ -664,7 +665,7 @@ func (f *follower) draw(final bool) {
 	// The block moves up by its line count to draw again, which is right
 	// only while no line wraps: each one is cut to the width of the terminal.
 	for i, l := range lines {
-		lines[i] = truncateCells(l, f.width-1)
+		lines[i] = overlay.Truncate(l, f.width-1)
 	}
 	var b strings.Builder
 	if f.drawn > 0 {
@@ -720,12 +721,12 @@ func (f *follower) block(r copyRow) []string {
 		}
 		lines = append(lines, "  "+fmt.Sprintf("%s of %s files", commas(r.FilesDone), commas(r.Files))+f.dim(now))
 		if r.CurrentSize > 0 {
-			lines = append(lines, "  "+f.dim("file ")+" "+f.bar(r.CurrentDone, r.CurrentSize, barW)+fmt.Sprintf("  %3d%%  %s of %s", percent(r.CurrentDone, r.CurrentSize), humanBytes(r.CurrentDone), humanBytes(r.CurrentSize)))
+			lines = append(lines, "  "+f.dim("file ")+" "+f.bar(r.CurrentDone, r.CurrentSize, barW)+fmt.Sprintf("  %3d%%  %s of %s", percent(r.CurrentDone, r.CurrentSize), units.Bytes(r.CurrentDone), units.Bytes(r.CurrentSize)))
 		}
-		lines = append(lines, "  "+f.dim("total")+" "+f.bar(r.Done, r.Size, barW)+fmt.Sprintf("  %3d%%  %s of %s", percent(r.Done, r.Size), humanBytes(r.Done), humanBytes(r.Size))+f.rateLine(r))
+		lines = append(lines, "  "+f.dim("total")+" "+f.bar(r.Done, r.Size, barW)+fmt.Sprintf("  %3d%%  %s of %s", percent(r.Done, r.Size), units.Bytes(r.Done), units.Bytes(r.Size))+f.rateLine(r))
 		return lines
 	}
-	lines = append(lines, fmt.Sprintf("  %s of %s  %d%%", humanBytes(r.Done), humanBytes(r.Size), percent(r.Done, r.Size))+f.rateLine(r))
+	lines = append(lines, fmt.Sprintf("  %s of %s  %d%%", units.Bytes(r.Done), units.Bytes(r.Size), percent(r.Done, r.Size))+f.rateLine(r))
 	return append(lines, "  "+f.bar(r.Done, r.Size, barW))
 }
 
@@ -853,12 +854,12 @@ func doneLine(r copyRow) string {
 		case r.ConflictsSkipped > 0 || r.ConflictsLeft > 0:
 			return fmt.Sprintf("%s was not copied: %s is there and differs.", r.shownName(), r.shownWhere())
 		}
-		return fmt.Sprintf("Copied %s, %s, to %s%s.", r.shownName(), humanBytes(r.Size), r.shownWhere(), check)
+		return fmt.Sprintf("Copied %s, %s, to %s%s.", r.shownName(), units.Bytes(r.Size), r.shownWhere(), check)
 	}
 	if copied <= 0 && r.Same > 0 {
 		return fmt.Sprintf("The %s %s of %s %s on %s already, with the same bytes. Nothing was copied.", commas(r.Same), pluralWord(r.Same, "file", "files"), r.shownName(), pluralWord(r.Same, "is", "are"), r.shownWhere())
 	}
-	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), pluralWord(copied, "file", "files"), humanBytes(r.Size), r.shownWhere(), check)
+	line := fmt.Sprintf("Copied %s %s, %s, to %s%s.", commas(copied), pluralWord(copied, "file", "files"), units.Bytes(r.Size), r.shownWhere(), check)
 	if r.Same > 0 {
 		line += fmt.Sprintf(" %s %s the same already.", commas(r.Same), pluralWord(r.Same, "file was", "files were"))
 	}
@@ -937,46 +938,6 @@ func commas(n int) string {
 		b.WriteRune(c)
 	}
 	return b.String()
-}
-
-// humanBytes writes a size in the binary units: 2.00 GiB.
-func humanBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit && exp < 4; m /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(n) / float64(div)
-	units := "KMGTP"[exp : exp+1]
-	switch {
-	case v >= 100:
-		return fmt.Sprintf("%.0f %siB", v, units)
-	case v >= 10:
-		return fmt.Sprintf("%.1f %siB", v, units)
-	}
-	return fmt.Sprintf("%.2f %siB", v, units)
-}
-
-func humanDuration(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()+0.5))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm %02ds", int(d.Minutes()), int(d.Seconds())%60)
-	}
-	return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
-}
-
-// truncateCells cuts a styled line to width cells.
-func truncateCells(s string, width int) string {
-	if lipgloss.Width(s) <= width {
-		return s
-	}
-	return overlay.Truncate(s, width)
 }
 
 // errCode is the daemon's error code in err, or "".

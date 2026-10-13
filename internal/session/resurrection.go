@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/adrg/xdg"
 )
 
@@ -159,8 +160,9 @@ func CleanResurrectionDir() {
 	}
 	for _, entry := range entries {
 		// A completed write renames the temp file into place, so one still sitting
-		// here is the residue of a write that never finished.
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json.tmp") {
+		// here is the residue of a write that never finished. The name ends in
+		// .tmp, from atomicfile or, before it, a fixed <name>.json.tmp.
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tmp") {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
@@ -211,15 +213,8 @@ func SaveSessionForResurrection(state *SessionState) error {
 		return fmt.Errorf("failed to marshal session state: %w", err)
 	}
 
-	path := getResurrectionPath(state.Name)
-	// Write to temp file then rename for atomicity
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+	if err := atomicfile.Write(getResurrectionPath(state.Name), data, 0o600, false); err != nil {
 		return fmt.Errorf("failed to write resurrection file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename resurrection file: %w", err)
 	}
 
 	return nil
@@ -359,8 +354,8 @@ func startPeriodicSaveWith(getState func() *SessionState, takeDirty func() bool,
 	}()
 
 	// Waits for the saver to return. Session.Stop stops saving and then writes
-	// the state itself, and both writes go through the same fixed <name>.json.tmp
-	// path, so a stop that did not wait let the two interleave on it.
+	// the state itself, so a stop that did not wait could let the saver's
+	// older snapshot land after it.
 	return func() {
 		close(stopCh)
 		<-done

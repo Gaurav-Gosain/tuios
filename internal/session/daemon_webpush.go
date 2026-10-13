@@ -158,21 +158,6 @@ func pushDir() string { return filepath.Join(getResurrectionDir(), "push") }
 func pushDevicesPath() string { return filepath.Join(pushDir(), "subscriptions.json") }
 func pushKeyPath() string     { return filepath.Join(pushDir(), "vapid.pem") }
 
-// writePrivate writes data to path with mode 0600, in a directory with mode
-// 0700, through a temporary file.
-func writePrivate(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	_ = os.Chmod(filepath.Dir(path), 0o700) //nolint:gosec // a directory needs x, and 0700 opens it to its owner only
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	_ = os.Chmod(tmp, 0o600)
-	return os.Rename(tmp, path)
-}
-
 // loadLocked reads the phones from disk once. The caller holds mu.
 func (w *webPusher) loadLocked() {
 	if w.loaded {
@@ -213,7 +198,7 @@ func (w *webPusher) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	return writePrivate(pushDevicesPath(), data)
+	return writePrivateFile(pushDevicesPath(), data)
 }
 
 // keyLocked is the VAPID key, made and saved on first use. The caller holds
@@ -240,7 +225,7 @@ func (w *webPusher) keyLocked() (*pushnotify.VAPIDKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := writePrivate(pushKeyPath(), data); err != nil {
+	if err := writePrivateFile(pushKeyPath(), data); err != nil {
 		return nil, err
 	}
 	w.key = k
@@ -427,7 +412,7 @@ func fitPayload(p pushPayload) ([]byte, bool) {
 	}
 	p.Truncated = true
 	if len(p.Summary) > 64 {
-		p.Summary = clipUTF8(p.Summary, 64)
+		p.Summary = pushnotify.Clip(p.Summary, 64)
 		if data = marshal(p); len(data) <= pushnotify.MaxPayload {
 			return data, true
 		}
@@ -438,20 +423,9 @@ func fitPayload(p pushPayload) ([]byte, bool) {
 			return data, true
 		}
 		for _, f := range []*string{&p.Summary, &p.Name, &p.Session, &p.Window, &p.Host, &p.Harness, &p.Machine} {
-			*f = clipUTF8(*f, limit)
+			*f = pushnotify.Clip(*f, limit)
 		}
 	}
-}
-
-// clipUTF8 cuts s to at most n bytes on a rune boundary.
-func clipUTF8(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && s[n]&0xC0 == 0x80 {
-		n--
-	}
-	return s[:n]
 }
 
 // put queues a job, dropping the oldest when the queue is full.

@@ -923,10 +923,7 @@ func shortenDockItemNames(available int, allItems []DockItem) bool {
 	// entryWidthAt is what the entry draws with its name held to b cells: the
 	// circles it cannot lose plus a label rebuilt at that budget.
 	entryWidthAt := func(item DockItem, b int) int {
-		name := item.Name
-		if lipgloss.Width(name) > b {
-			name = overlay.Truncate(name, b)
-		}
+		name := overlay.Truncate(item.Name, b)
 		return item.Width - lipgloss.Width(item.Label) + lipgloss.Width(dockItemLabel(item.Number, name))
 	}
 	named := 0
@@ -971,11 +968,7 @@ func shortenDockItemNames(available int, allItems []DockItem) bool {
 	budget := lo
 	for i := range allItems {
 		item := &allItems[i]
-		name := item.Name
-		if lipgloss.Width(name) > budget {
-			name = overlay.Truncate(name, budget)
-		}
-		label := dockItemLabel(item.Number, name)
+		label := dockItemLabel(item.Number, overlay.Truncate(item.Name, budget))
 		item.Width += lipgloss.Width(label) - lipgloss.Width(item.Label)
 		item.Label = label
 	}

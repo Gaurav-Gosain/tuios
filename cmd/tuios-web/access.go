@@ -9,10 +9,10 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/user"
 	"strings"
 
 	"github.com/Gaurav-Gosain/sip"
+	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 )
 
 // Who may open a session.
@@ -142,7 +142,7 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 		}
 	case f.noAuth:
 		fmt.Fprintf(w, "\nWarning: tuios-web does not ask for a password. %s can open a shell as %s.\n\n",
-			whoCanReach(f.host), currentAccount())
+			whoCanReach(f.host), netutil.CurrentAccount())
 	case loopback:
 		fmt.Fprintln(w, "Note: other users on this machine can connect. Use --random-password to stop this.")
 	default:
@@ -296,7 +296,7 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
        tuios-web --host %s --port %s%s --no-auth
 
 `,
-		f.host, currentAccount(),
+		f.host, netutil.CurrentAccount(),
 		f.host, f.port, f.tlsArgs,
 		f.host, f.port, f.tlsArgs,
 		webPasswordEnv,
@@ -310,17 +310,6 @@ func whoCanReach(host string) string {
 		return "Anyone on this machine"
 	}
 	return "Anyone who reaches this port"
-}
-
-// currentAccount names the account a session's shells run as.
-func currentAccount() string {
-	if u, err := user.Current(); err == nil && u.Username != "" {
-		return u.Username
-	}
-	if name := os.Getenv("USER"); name != "" {
-		return name
-	}
-	return "the user running this server"
 }
 
 // authFlagsForMenu is the password part of the command line, repeated in the

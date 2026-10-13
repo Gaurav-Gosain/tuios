@@ -32,8 +32,8 @@ var patchFileHeaders = []string{"*** Update File: ", "*** Add File: ", "*** Dele
 // more than this either.
 const activityFilesMax = 16
 
-// firstLine is s up to its first line break, trimmed.
-func firstLine(s string) string {
+// FirstLine is s up to its first line break, trimmed.
+func FirstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
 		s = s[:i]
@@ -44,7 +44,7 @@ func firstLine(s string) string {
 // activityText is agent text as an activity entry carries it: the first
 // line, redacted and clipped.
 func activityText(s string) string {
-	return Clip(firstLine(s))
+	return Clip(FirstLine(s))
 }
 
 // ToolTarget is what a tool call acts on, the argument ToolSummary names:

@@ -5,7 +5,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
@@ -390,7 +389,7 @@ func InboxLine(p *Permission) string {
 		kind = "tool"
 	}
 	line := "approve " + kind + ": " + t.Title
-	if integration.Clip(line) != line || !printableLine(line) {
+	if integration.Clip(line) != line || !invisible.Printable(line) {
 		return ""
 	}
 	return line
@@ -408,17 +407,4 @@ func StateLine(p *Permission) string {
 		kind = "tool"
 	}
 	return integration.Clip("approve " + kind + ": " + oneLine(firstOf(p.Tool.Title, p.Tool.ID)))
-}
-
-// printableLine reports whether every rune of s is visible or a plain space.
-func printableLine(s string) bool {
-	if !utf8.ValidString(s) {
-		return false
-	}
-	for _, r := range s {
-		if !unicode.IsPrint(r) || invisible.Rune(r) {
-			return false
-		}
-	}
-	return true
 }

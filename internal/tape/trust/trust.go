@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -389,35 +390,8 @@ func (s *Store) saveLocked() error {
 		return fmt.Errorf("encoding tape trust store: %w", err)
 	}
 
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("creating tape trust store directory: %w", err)
-	}
-
-	tmp, err := os.CreateTemp(dir, ".tape-trust-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating tape trust store temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
-
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return fmt.Errorf("setting tape trust store permissions: %w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
+	if err := atomicfile.WritePrivate(s.path, data, false); err != nil {
 		return fmt.Errorf("writing tape trust store: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return fmt.Errorf("closing tape trust store temp file: %w", err)
-	}
-	if err := os.Rename(tmpName, s.path); err != nil {
-		cleanup()
-		return fmt.Errorf("replacing tape trust store: %w", err)
 	}
 	return nil
 }

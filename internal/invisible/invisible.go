@@ -115,3 +115,19 @@ func pictographic(r rune) bool {
 	}
 	return false
 }
+
+// Printable reports whether s reads on screen as it is: valid UTF-8, and
+// every rune a visible character or a plain space. A format character such as
+// a bidi override, which can make a line read differently from what it holds,
+// fails.
+func Printable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsPrint(r) || Rune(r) {
+			return false
+		}
+	}
+	return true
+}

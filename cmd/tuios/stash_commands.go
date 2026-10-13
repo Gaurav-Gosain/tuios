@@ -7,11 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/spf13/cobra"
 )
@@ -263,8 +263,8 @@ func underDir(path, dir string) bool {
 	if dir == "" || !filepath.IsAbs(path) {
 		return false
 	}
-	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	rel, ok := pathroot.Within(filepath.Clean(dir), filepath.Clean(path))
+	return ok && rel != "."
 }
 
 // readForTransfer reads a file here for a put on another machine, refusing one

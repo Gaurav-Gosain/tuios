@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/adrg/xdg"
 )
 
@@ -510,7 +511,7 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 
 	// The name gives way first, then the timestamp: a row that keeps its whole
 	// name at the cost of the panel's edge is not a row anyone can read.
-	size := formatFileSize(file.Size)
+	size := units.ShortBytes(file.Size)
 	stamp := file.Modified.Format("Jan 02 15:04")
 	nameW := max(width-lipgloss.Width(size)-lipgloss.Width(stamp)-6, 6)
 	if width < 40 {
@@ -528,15 +529,6 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 
 	gap := max(width-lipgloss.Width(row)-lipgloss.Width(right), 1)
 	return pal.Row(row+overlay.Style(rowBg).Render(strings.Repeat(" ", gap))+right, width, st, pal.Surface)
-}
-
-func formatFileSize(size int64) string {
-	if size < 1024 {
-		return fmt.Sprintf("%dB", size)
-	} else if size < 1024*1024 {
-		return fmt.Sprintf("%.1fKB", float64(size)/1024)
-	}
-	return fmt.Sprintf("%.1fMB", float64(size)/(1024*1024))
 }
 
 func truncateString(s string, maxLen int) string {

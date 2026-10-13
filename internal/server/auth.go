@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -260,7 +259,7 @@ func noAuthWarning(host, why string) string {
 	}
 	keyFile := defaultAuthorizedKeysPath()
 	return fmt.Sprintf("Warning: this SSH server does not check who connects. %s %s can open a shell as %s. To turn authentication on, add a public key to %s:\n  mkdir -p %s && cat %s >> %s",
-		why, who, currentAccount(), keyFile, filepath.Dir(keyFile), PublicKeyHint(), keyFile)
+		why, who, netutil.CurrentAccount(), keyFile, filepath.Dir(keyFile), PublicKeyHint(), keyFile)
 }
 
 // PublicKeyHint names a public key file of this user for the commands TUIOS
@@ -276,15 +275,4 @@ func PublicKeyHint() string {
 		}
 	}
 	return "<your public key file>"
-}
-
-// currentAccount names the account a session's shells run as.
-func currentAccount() string {
-	if u, err := user.Current(); err == nil && u.Username != "" {
-		return u.Username
-	}
-	if name := os.Getenv("USER"); name != "" {
-		return name
-	}
-	return "the user running this server"
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
 
@@ -690,6 +691,6 @@ func runHostSpeed(name string, jsonOut bool) error {
 		outputJSON(v)
 		return nil
 	}
-	fmt.Printf("%s: round trip %.1f ms, up %s/s, down %s/s (%s each way, random bytes).\n", r.Host, r.RTT, humanBytes(int64(r.Up)), humanBytes(int64(r.Down)), humanBytes(r.Bytes))
+	fmt.Printf("%s: round trip %.1f ms, up %s/s, down %s/s (%s each way, random bytes).\n", r.Host, r.RTT, units.Bytes(int64(r.Up)), units.Bytes(int64(r.Down)), units.Bytes(r.Bytes))
 	return nil
 }

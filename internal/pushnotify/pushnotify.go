@@ -95,7 +95,7 @@ func Build(it Item, content, webURL string) Message {
 		where = "tuios"
 	}
 	if content == config.NotifyContentTitle {
-		msg.Title = clip(kindTitle(it.Kind)+" in "+where, titleCap)
+		msg.Title = Clip(kindTitle(it.Kind)+" in "+where, titleCap)
 		return msg
 	}
 	who := it.Name
@@ -105,7 +105,7 @@ func Build(it Item, content, webURL string) Message {
 	if who == "" {
 		who = where
 	}
-	msg.Title = clip(kindTitle(it.Kind)+": "+who, titleCap)
+	msg.Title = Clip(kindTitle(it.Kind)+": "+who, titleCap)
 	body := it.Summary
 	if body == "" {
 		body = "Open the tuios Inbox to see it."
@@ -113,7 +113,7 @@ func Build(it Item, content, webURL string) Message {
 	if it.Session != "" {
 		body += "\n" + strings.ToUpper(where[:1]) + where[1:] + "."
 	}
-	msg.Body = clip(body, bodyCap)
+	msg.Body = Clip(body, bodyCap)
 	return msg
 }
 
@@ -149,8 +149,8 @@ func InboxLink(webURL, id string) string {
 	return link.String()
 }
 
-// clip cuts s to n bytes on a rune boundary.
-func clip(s string, n int) string {
+// Clip cuts s to n bytes on a rune boundary.
+func Clip(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 // What the copies draw: the dock item, the mark on a machine's rail row, and
@@ -291,7 +292,7 @@ func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color
 				text += "  " + transferBytes(int64(row.Rate)) + "/s"
 			}
 			if row.ETAms > 0 {
-				text += "  " + transferDuration(time.Duration(row.ETAms)*time.Millisecond)
+				text += "  " + units.Duration(time.Duration(row.ETAms)*time.Millisecond)
 			}
 		case "verifying":
 			text += "  checking"
@@ -304,7 +305,7 @@ func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color
 	case "waiting":
 		text := "waiting for " + transferPlace(transferFarHost(row))
 		if row.RetryInMs > 0 {
-			text += ", next try in " + transferDuration(time.Duration(row.RetryInMs)*time.Millisecond)
+			text += ", next try in " + units.Duration(time.Duration(row.RetryInMs)*time.Millisecond)
 		}
 		return st(pal.Warning).Render(text)
 	case "conflict":
@@ -399,25 +400,4 @@ func (m *OS) transferDetail(row session.TransferRow, width int) []string {
 		}
 	}
 	return lines
-}
-
-// transferDuration writes a time left: 17s, 3m 05s, 1h 02m.
-func transferDuration(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return strconv.Itoa(int(d.Seconds()+0.5)) + "s"
-	case d < time.Hour:
-		s := int(d.Seconds()) % 60
-		return strconv.Itoa(int(d.Minutes())) + "m " + padZero(s)
-	}
-	mi := int(d.Minutes()) % 60
-	return strconv.Itoa(int(d.Hours())) + "h " + padZero(mi)[:2] + "m"
-}
-
-// padZero writes n in two digits and an s: 05s.
-func padZero(n int) string {
-	if n < 10 {
-		return "0" + strconv.Itoa(n) + "s"
-	}
-	return strconv.Itoa(n) + "s"
 }

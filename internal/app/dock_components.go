@@ -197,9 +197,6 @@ func dockTruncateCell(text string, maxWidth int) string {
 	if maxWidth <= 0 {
 		maxWidth = config.DockCustomDefaultMaxWidth
 	}
-	if lipgloss.Width(text) <= maxWidth {
-		return text
-	}
 	return overlay.Truncate(text, maxWidth)
 }
 

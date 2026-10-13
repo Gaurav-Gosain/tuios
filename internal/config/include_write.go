@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -809,11 +810,11 @@ func displayPath(main, p string) string {
 		return filepath.Base(main)
 	}
 	dir := filepath.Dir(main)
-	if rel, err := filepath.Rel(dir, p); err == nil && !strings.HasPrefix(rel, "..") {
+	if rel, ok := pathroot.Within(dir, p); ok {
 		return rel
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if rel, err := filepath.Rel(home, p); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, ok := pathroot.Within(home, p); ok {
 			return filepath.Join("~", rel)
 		}
 	}

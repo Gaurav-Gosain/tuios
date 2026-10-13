@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -549,18 +550,7 @@ func saveStatusLineStamp(path string, st statusLineStamp) {
 	if err != nil {
 		return
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".statusline-*")
-	if err != nil {
-		return
-	}
-	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	_, werr := tmp.Write(data)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil || os.Chmod(name, 0o600) != nil {
-		return
-	}
-	_ = os.Rename(name, path)
+	_ = atomicfile.Write(path, data, 0o600, false)
 }
 
 // runStatusLineThen runs the person's status line command through the shell,

@@ -389,34 +389,6 @@ func (tomlBlock) block(t *Target, tuios string) string {
 	return b.String()
 }
 
-// splitTOMLBlock returns the file without tuios's block, and the block.
-func splitTOMLBlock(text string) (outside, block string, err error) {
-	start := strings.Index(text, tomlBlockBegin)
-	if start < 0 {
-		return text, "", nil
-	}
-	rel := strings.Index(text[start:], tomlBlockEnd)
-	if rel < 0 {
-		return "", "", errors.New("tuios's block has a start marker and no end marker")
-	}
-	end := start + rel + len(tomlBlockEnd)
-	if end < len(text) && text[end] == '\n' {
-		end++
-	}
-	block = text[start:end]
-	before := strings.TrimRight(text[:start], "\n")
-	after := text[end:]
-	switch {
-	case before == "":
-		outside = after
-	case after == "":
-		outside = before + "\n"
-	default:
-		outside = before + "\n\n" + after
-	}
-	return outside, block, nil
-}
-
 // inlineHooksRe finds a top-level hooks = [...] key, which [[hooks]] tables
 // cannot be added to.
 var inlineHooksRe = lazyre.New(`(?m)^\s*hooks\s*=`)
@@ -425,7 +397,7 @@ func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]
 	if !install && have == nil {
 		return nil, false, false, nil
 	}
-	outside, _, err := splitTOMLBlock(string(have))
+	outside, _, err := splitBlock(string(have), tomlBlockBegin, tomlBlockEnd)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -444,7 +416,7 @@ func (f tomlBlock) apply(t *Target, have []byte, tuios string, install bool) ([]
 }
 
 func (f tomlBlock) state(t *Target, have []byte, tuios string) (bool, bool, int, error) {
-	_, block, err := splitTOMLBlock(string(have))
+	_, block, err := splitBlock(string(have), tomlBlockBegin, tomlBlockEnd)
 	if err != nil || block == "" {
 		return false, false, 0, err
 	}

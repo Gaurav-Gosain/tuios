@@ -43,6 +43,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -337,12 +338,10 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 // written. Test-only.
 var historyWriteHook func(sessionName, windowID string)
 
-// writePrivateFile writes data to path through a temporary file and a rename,
-// with the directory 0700 and the file 0600. The temporary file gets a fresh
-// name from os.CreateTemp, so a leftover or planted file at a fixed name, a
-// symlink included, is never written through, and its mode never carries over
-// to the saved file. A directory that already existed with a wider mode is
-// narrowed.
+// writePrivateFile writes data to path through atomicfile, with the directory
+// 0700 and the file 0600. A directory that already existed with a wider mode
+// is narrowed. It does not fsync: history is written often, and losing the
+// last write to a power cut costs a few lines of scrollback.
 func writePrivateFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -352,33 +351,7 @@ func writePrivateFile(path string, data []byte) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".hist-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	ok := false
-	defer func() {
-		if !ok {
-			_ = os.Remove(tmp)
-		}
-	}()
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	ok = true
-	return nil
+	return atomicfile.Write(path, data, 0o600, false)
 }
 
 // otherHistoryBytes is what the session's files other than this pane's take on

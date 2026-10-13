@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
@@ -40,18 +41,11 @@ func appliedGrantsPath() string {
 
 // recordAppliedGrants writes the default now in force.
 func (d *Daemon) recordAppliedGrants(r config.ResolvedPermissions) {
-	path := appliedGrantsPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return
-	}
 	data, err := json.Marshal(appliedGrants{Strict: r.Strict, Grants: r.Grants})
 	if err != nil {
 		return
 	}
-	tmp := path + ".tmp"
-	if os.WriteFile(tmp, data, 0o600) == nil {
-		_ = os.Rename(tmp, path)
-	}
+	_ = atomicfile.WritePrivate(appliedGrantsPath(), data, false)
 }
 
 // inForce is the default the grant table holds now, as a config value.

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
@@ -221,17 +222,7 @@ func (o *hostOutbox) saveLocked() {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(o.path), 0o700); err != nil {
-		LogError("Failed to create the outbox directory: %v", err)
-		return
-	}
-	tmp := o.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		LogError("Failed to save the outbox: %v", err)
-		return
-	}
-	if err := os.Rename(tmp, o.path); err != nil {
-		_ = os.Remove(tmp)
+	if err := atomicfile.WritePrivate(o.path, data, false); err != nil {
 		LogError("Failed to save the outbox: %v", err)
 	}
 }

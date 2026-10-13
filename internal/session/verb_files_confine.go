@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/adrg/xdg"
 	"golang.org/x/text/unicode/norm"
@@ -225,8 +226,8 @@ type fileFS struct {
 
 // rel is path relative to the root.
 func (f fileFS) rel(path string) (string, error) {
-	r, err := filepath.Rel(f.dir, path)
-	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) || filepath.IsAbs(r) {
+	r, ok := pathroot.Within(f.dir, path)
+	if !ok {
 		return "", &fs.PathError{Op: "write", Path: path, Err: fs.ErrPermission}
 	}
 	return r, nil

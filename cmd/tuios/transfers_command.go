@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 )
@@ -148,16 +149,16 @@ func runTransfersList(jsonOut bool) error {
 		if r.Kind == "dir" {
 			name += "/"
 		}
-		done := fmt.Sprintf("%s / %s", humanBytes(r.Done), humanBytes(r.Size))
+		done := fmt.Sprintf("%s / %s", units.Bytes(r.Done), units.Bytes(r.Size))
 		if r.Kind == "dir" {
 			done += fmt.Sprintf(", %s of %s files", commas(r.FilesDone), commas(r.Files))
 		}
 		rate, left := "", ""
 		if r.Rate > 0 {
-			rate = humanBytes(int64(r.Rate)) + "/s"
+			rate = units.Bytes(int64(r.Rate)) + "/s"
 		}
 		if r.ETAms > 0 {
-			left = humanDuration(time.Duration(r.ETAms) * time.Millisecond)
+			left = units.Duration(time.Duration(r.ETAms) * time.Millisecond)
 		}
 		if r.Error != "" && (r.State == "failed" || r.State == "waiting") {
 			left = shown(r.Error)

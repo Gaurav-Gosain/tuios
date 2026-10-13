@@ -21,6 +21,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -340,22 +341,8 @@ func Save(path string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("could not create %s: %w", dir, err)
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
+	if err := atomicfile.Write(path, data, 0o600, false); err != nil {
 		return fmt.Errorf("could not write %s: %w", path, err)
-	}
-	tmpPath := tmp.Name()
-	_, werr := tmp.Write(data)
-	cerr := tmp.Close()
-	if werr == nil {
-		werr = cerr
-	}
-	if werr == nil {
-		werr = os.Rename(tmpPath, path)
-	}
-	if werr != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("could not write %s: %w", path, werr)
 	}
 	return nil
 }

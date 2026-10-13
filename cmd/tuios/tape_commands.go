@@ -16,6 +16,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
 func runTapeInteractive(tapeFile string) error {
@@ -202,7 +203,7 @@ func listTapeFiles(asJSON bool) error {
 	dateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
 	for _, file := range files {
-		sizeStr := formatFileSize(file.Size)
+		sizeStr := units.ShortBytes(file.Size)
 		dateStr := file.Modified.Format("2006-01-02 15:04")
 		fmt.Printf("  %s  %s  %s\n",
 			nameStyle.Render(fmt.Sprintf("%-30s", file.Name)),
@@ -291,13 +292,4 @@ func showTapeFile(name string) error {
 	fmt.Print(string(content))
 
 	return nil
-}
-
-func formatFileSize(size int64) string {
-	if size < 1024 {
-		return fmt.Sprintf("%dB", size)
-	} else if size < 1024*1024 {
-		return fmt.Sprintf("%.1fKB", float64(size)/1024)
-	}
-	return fmt.Sprintf("%.1fMB", float64(size)/(1024*1024))
 }

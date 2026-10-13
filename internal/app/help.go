@@ -1075,10 +1075,7 @@ func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overla
 	}
 
 	descMax := width - keyColW - 2 - tagW
-	desc := b.Description
-	if lipgloss.Width(desc) > descMax {
-		desc = overlay.Truncate(desc, descMax)
-	}
+	desc := overlay.Truncate(b.Description, descMax)
 
 	line := badges + overlay.Style(bg).Render("  ") + overlay.Style(bg).Foreground(pal.Fg).Render(desc)
 	if tag != "" {

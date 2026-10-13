@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
@@ -1097,17 +1098,7 @@ func writeAttentionFile(path string, data []byte) {
 	if data == nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		LogError("Failed to create the attention directory: %v", err)
-		return
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		LogError("Failed to save the attention queue: %v", err)
-		return
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := atomicfile.WritePrivate(path, data, false); err != nil {
 		LogError("Failed to save the attention queue: %v", err)
 	}
 }

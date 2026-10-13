@@ -39,6 +39,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -1503,7 +1504,7 @@ func checkAuthorizedKeysModes(path string, stderr io.Writer) error {
 	check := []string{path, filepath.Dir(path)}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		home = filepath.Clean(home)
-		if rel, err := filepath.Rel(home, filepath.Dir(path)); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		if rel, ok := pathroot.Within(home, filepath.Dir(path)); ok && rel != "." {
 			for dir := filepath.Dir(filepath.Dir(path)); ; dir = filepath.Dir(dir) {
 				check = append(check, dir)
 				if dir == home || dir == filepath.Dir(dir) {

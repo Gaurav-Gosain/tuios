@@ -359,7 +359,8 @@ const (
 	mcpTOMLEnd   = "# <<< tuios mcp"
 )
 
-// splitBlock is splitTOMLBlock for any pair of markers.
+// splitBlock returns the file without the block between begin and end, and
+// the block.
 func splitBlock(text, begin, end string) (outside, block string, err error) {
 	start := strings.Index(text, begin)
 	if start < 0 {
