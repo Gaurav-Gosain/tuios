@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // Protocols the package speaks, by the name start-agent --protocol takes.
@@ -58,8 +60,7 @@ func StartProcess(argv []string, dir string, env []string) (*Process, error) {
 	if len(argv) == 0 {
 		return nil, errors.New("no agent command")
 	}
-	//tuios:allow-exec detach starts it with DETACHED_PROCESS, so it has no console
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := childproc.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	detach(cmd)

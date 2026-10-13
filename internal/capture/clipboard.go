@@ -108,7 +108,7 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		// the clipboard would be empty by the time anyone pasted.
 		cmd = childproc.CommandContext(ctx, "xclip", "-selection", "clipboard", "-t", mediaType, "-i")
 		cmd.Stdin = strings.NewReader(string(data))
-		cmd.SysProcAttr = detachAttr()
+		detach(cmd)
 	case "osascript":
 		if mediaType != "image/png" {
 			return "", fmt.Errorf("this machine can only copy PNG images")

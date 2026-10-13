@@ -14,11 +14,20 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// daemonSysProcAttr detaches the spawned daemon from this console so it outlives
-// the client that started it.
+// daemonSysProcAttr starts the daemon on a console of its own with no window,
+// so it outlives the client that started it, and Ctrl+C in the client's
+// console does not reach it.
+//
+// It used to be DETACHED_PROCESS, which leaves the daemon with no console at
+// all. Then every console program the daemon started (git for a checkpoint,
+// ssh, a hook) got a new console, and with Windows Terminal as the default
+// terminal each one was a window (issue #656). A hidden console is inherited
+// instead. childproc still hides each child, for a daemon started some other
+// way.
 func daemonSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x00000008, // DETACHED_PROCESS
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
+		HideWindow:    true,
 	}
 }
 
