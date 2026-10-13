@@ -5486,3 +5486,17 @@ log is `~/.cache/agent-tmp/gui-port/proof/nc-bridge-review.txt`.
 | The kitty base entry pushed | `kittyStack`: every entry pushed | `TestSnapshotVTRebuildsThePane` (every case: stack `[0 0]`, want `[0]`) | **caught** |
 | An unbounded queue | `frameWriter.push`: the bound made false | `TestGUIBridgeResyncsARendererThatFellBehind` (no fresh snapshot) | **caught** |
 | Output dropped and never resynced | `frameWriter.run`: `onResync` not called | `TestGUIBridgeResyncsARendererThatFellBehind` (no fresh snapshot) | **caught** |
+
+## The GUI bridge says the renderer draws pictures
+
+`TestGUIBridgeAnswersGraphicsQueries` (`gui_bridge_graphics_test.go`) runs a
+python probe in a pane through the bridge. It sends a kitty graphics query
+and DA1 with the tty raw. The kitty query must be answered OK and DA1 must
+list sixel (4).
+
+The control was run on 2026-10-13 on branch `feat/gui-bridge`. The log is
+`~/.cache/agent-tmp/gui-port/proof/nc-graphics.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The hello carries the model's own capabilities | `Run`: the line that sets kitty, sixel and animation on the hello cut | `TestGUIBridgeAnswersGraphicsQueries` (no kitty answer, no sixel in DA1) | **caught** |
