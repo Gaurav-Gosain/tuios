@@ -102,15 +102,6 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 	return out
 }
 
-// prefixMenuBindings is prefixMenuGroups as one list.
-func (m *OS) prefixMenuBindings() []config.Keybinding {
-	var out []config.Keybinding
-	for _, g := range m.prefixMenuGroups() {
-		out = append(out, g.Bindings...)
-	}
-	return out
-}
-
 // agentIntegrationMsg reports that a harness on this machine has tuios's
 // hooks installed.
 type agentIntegrationMsg struct{}

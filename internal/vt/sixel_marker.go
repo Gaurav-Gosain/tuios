@@ -158,18 +158,3 @@ func BlankSixelCell(c *uv.Cell) bool {
 	c.Style.Bg = bg
 	return true
 }
-
-// BlankSixelLine is line with its image cells blanked, copied only when it
-// holds one.
-func BlankSixelLine(line uv.Line) uv.Line {
-	for i := range line {
-		if IsSixelMarker(line[i].Content) {
-			out := append(uv.Line(nil), line...)
-			for j := i; j < len(out); j++ {
-				BlankSixelCell(&out[j])
-			}
-			return out
-		}
-	}
-	return line
-}

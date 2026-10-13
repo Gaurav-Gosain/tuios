@@ -144,7 +144,9 @@ func proxyDialer(t *testing.T, d *stubDaemon) Dialer {
 	t.Helper()
 	return func(_ context.Context, _ Host) (Transport, error) {
 		hub, remote := duplexPipe(t)
-		go func() { _ = ServeProxy(remote, remote, d.dial) }()
+		go func() {
+			_ = ServeProxyFor(remote, remote, func(StreamOpen) (net.Conn, error) { return d.dial() })
+		}()
 		return hub, nil
 	}
 }

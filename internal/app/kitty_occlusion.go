@@ -158,19 +158,10 @@ func largestClearRect(r cellRect, blockers []cellRect) (cellRect, bool) {
 	return r, !r.empty()
 }
 
-// occludersAbove is the on-screen rectangle of every window drawn over this
-// one. A window that is not visible cannot cover anything, whatever geometry it
-// is still carrying from the last time it was.
-func occludersAbove(
-	windowZ int,
-	allWindows map[string]*WindowPositionInfo,
-	excludeWindowID string,
-) []cellRect {
-	return occludersAboveInto(nil, windowZ, allWindows, excludeWindowID)
-}
-
-// occludersAboveInto appends into dst, which a caller reuses across frames so a
-// refresh during a drag allocates nothing.
+// occludersAboveInto appends to dst the on-screen rectangle of every window
+// drawn over this one. A window that is not visible cannot cover anything,
+// whatever geometry it is still carrying from the last time it was. A caller
+// reuses dst across frames so a refresh during a drag allocates nothing.
 func occludersAboveInto(
 	dst []cellRect,
 	windowZ int,

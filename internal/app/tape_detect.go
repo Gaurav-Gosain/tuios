@@ -370,13 +370,3 @@ const (
 	tapeGlyphUntrusted  = "?" // untrusted, reviewable in a later stage
 	tapeGlyphIneligible = "!" // ineligible, cannot be trusted
 )
-
-// tapeIndicatorStatus exposes the current indicator status for tests and
-// callers that need to assert what the passive surface is showing. The bool is
-// false when no indicator is active.
-func (m *OS) tapeIndicatorStatus() (trust.Status, bool) {
-	if !m.tapeDetect.indicator.active {
-		return trust.StatusUntrusted, false
-	}
-	return m.tapeDetect.indicator.status, true
-}

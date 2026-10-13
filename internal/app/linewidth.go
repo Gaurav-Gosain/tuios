@@ -20,11 +20,6 @@ import (
 // run a grapheme segmentation, so the atomic add costs nothing measurable.
 var lineWidthFallbacks atomic.Uint64
 
-// LineWidthFallbackCount reports how many times the width fast path has
-// deferred to the reference implementation. Exposed for the render performance
-// guards in the test suite.
-func LineWidthFallbackCount() uint64 { return lineWidthFallbacks.Load() }
-
 // slowLineWidth records a fast-path miss and measures the line the reference
 // way.
 func slowLineWidth(line string) int {

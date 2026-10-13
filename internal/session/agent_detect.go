@@ -521,7 +521,28 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 // once. At the default two-second tick this is twelve seconds.
 const agentDetectMissLimit = 6
 
-// applyAgentDetection reconciles each window's agent state with the foreground
+// detectReading is what one pane's foreground read found, taken with no session
+// lock held. ptyID is the PTY the read was taken for, so a window whose PTY was
+// swapped while the read ran is not judged on a read of the old one.
+type detectReading struct {
+	ptyID   string
+	info    foregroundInfo
+	running bool
+	det     detection
+	isAgent bool
+}
+
+// detectOutcome counts what a detection pass changes. changed is agent states,
+// labels the row label and shell pid that ride the same read, and bookkeeping
+// the claim map alone: a miss counted, a sighting noted, a claim on a window
+// that is gone. Only the first two reach clients.
+type detectOutcome struct {
+	changed     int
+	labels      int
+	bookkeeping bool
+}
+
+// scanAgentDetection reconciles each window's agent state with the foreground
 // process of its pane, using the injected resolve and identify so it is testable
 // without a real /proc or a real agent. It returns how many windows it changed.
 //
@@ -550,38 +571,8 @@ const agentDetectMissLimit = 6
 // disappearance): a process name cannot honestly distinguish working from waiting
 // or idle, so it does not pretend to.
 //
-// Every pane is read. The daemon's poll goes through scanAgentDetection, which
-// backs off panes that have been quiet.
-func (s *Session) applyAgentDetection(
-	resolve func(ptyID string) (foregroundInfo, bool),
-	identify func(foregroundInfo) (detection, bool),
-) int {
-	return s.scanAgentDetection(resolve, identify, nil)
-}
-
-// detectReading is what one pane's foreground read found, taken with no session
-// lock held. ptyID is the PTY the read was taken for, so a window whose PTY was
-// swapped while the read ran is not judged on a read of the old one.
-type detectReading struct {
-	ptyID   string
-	info    foregroundInfo
-	running bool
-	det     detection
-	isAgent bool
-}
-
-// detectOutcome counts what a detection pass changes. changed is agent states,
-// labels the row label and shell pid that ride the same read, and bookkeeping
-// the claim map alone: a miss counted, a sighting noted, a claim on a window
-// that is gone. Only the first two reach clients.
-type detectOutcome struct {
-	changed     int
-	labels      int
-	bookkeeping bool
-}
-
-// scanAgentDetection is applyAgentDetection in the three steps that keep the
-// foreground reads off the session lock:
+// It works in the three steps that keep the foreground reads off the session
+// lock:
 //
 //  1. Under the read lock, list the panes to read.
 //  2. With no lock held, read each pane's foreground process and identify it.
@@ -886,7 +877,7 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 //     timer assigns, and without it a pane latched there for the rest of its
 //     life however hard the agent then worked.
 //
-// It obeys the same precedence as applyAgentDetection: it only ever touches a
+// It obeys the same precedence as scanAgentDetection: it only ever touches a
 // window the auto-detector owns, and it only resumes one whose state is the idle
 // a source no stronger than the detector left behind, so a harness reporting for
 // itself is never overwritten. It reports whether it changed state.

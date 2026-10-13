@@ -99,7 +99,7 @@ func resumeHarnessOf(w WindowState) string {
 
 // agentWasLive reports whether a saved window had an agent in it when the state
 // was written: an agent state or a harness attribution. Both are cleared when
-// the agent leaves the pane (see applyAgentDetection) and the conversation id
+// the agent leaves the pane (see scanAgentDetection) and the conversation id
 // is not, so the id alone says only that the pane ran an agent at some point.
 //
 // A restore does not carry either field onto the new shell, so the state the

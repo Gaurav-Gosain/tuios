@@ -511,22 +511,6 @@ func (d *Daemon) linkWriteRoots(policy config.LinkPolicy) (home string, roots []
 	return home, roots
 }
 
-// denyContains reports whether the real path p is at, inside, or an ancestor
-// of any folder in list, folding case. An ancestor is caught so a link cannot
-// rename a folder that holds a denied one out and back.
-func denyContains(p string, list []string) bool {
-	for _, d := range list {
-		// The entry as named and its real path: a dotfile kept as a link
-		// into a plain folder (stow, chezmoi, yadm) is denied at its target.
-		for _, c := range []string{d, realPath(d)} {
-			if denyUnder(p, c) || denyUnder(c, p) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // linkPrivate is the daemon's own folders a link must not touch beside the
 // deny lists: sock is the real folder of the daemon's socket, which holds the
 // mail stash, the pid file and the sockets, and drop is the drop folder inside
@@ -587,8 +571,9 @@ func (a denyKey) under(b denyKey) bool {
 	return a.key == b.key || strings.HasPrefix(a.key, b.dir)
 }
 
-// holds reports whether p is at, inside, or an ancestor of an entry, as
-// denyContains does.
+// holds reports whether p is at, inside, or an ancestor of an entry. An
+// ancestor is caught so a link cannot rename a folder that holds a denied one
+// out and back.
 func (k denyKeys) holds(p string) bool {
 	fp := newDenyKey(p)
 	for _, c := range k {

@@ -304,19 +304,6 @@ func (b copyFlashBand) position(x, row int) float64 {
 	return float64(x) - float64(row)*b.slope
 }
 
-// peakColumn is the column the light is brightest at on one row.
-//
-// The centre is a position along the sweep's own axis, not a column: for a
-// diagonal the two differ by the row's share of the lean, and for a vertical
-// sweep there is no column to speak of. Anything that wants to know where the
-// light is on a given row has to go through this rather than reading centre.
-func (b copyFlashBand) peakColumn(row int) float64 {
-	if b.vertical {
-		return 0
-	}
-	return b.centre + float64(row)*b.slope
-}
-
 // intensity is how lit one cell is, from 0 to 1.
 //
 // The falloff is what makes it read as light passing over the text rather than
@@ -485,9 +472,6 @@ type copyFlashBox struct {
 	top    int
 	bottom int
 }
-
-// rows is how many rows the block covers.
-func (b copyFlashBox) rows() int { return b.bottom - b.top + 1 }
 
 // copyFlashBoxOf measures the marked region, so the sweep can be sized to what
 // was copied rather than to the pane it sits in.

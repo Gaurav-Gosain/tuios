@@ -75,14 +75,6 @@ func newNavParser(ink navInk) *navParser {
 // Close lets the emulator go.
 func (p *navParser) Close() { _ = p.emu.Close() }
 
-// navParseStyled parses one capture with a parser of its own. The load uses
-// a navParser for each machine instead.
-func navParseStyled(content string, ink navInk, keep int) (plain, styled []string) {
-	p := newNavParser(ink)
-	defer p.Close()
-	return p.parse(content, keep)
-}
-
 // parse parses a styled capture into its last keep rows: each row as plain
 // text, for the search, and as SGR-styled text, for the preview. The blank
 // rows at the end are dropped first.

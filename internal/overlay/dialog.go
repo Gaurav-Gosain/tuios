@@ -128,24 +128,8 @@ func Cursor(ch string, bg, fg color.Color) string {
 	return Style(bg).Foreground(fg).Reverse(true).Render(ch)
 }
 
-// hintStrip renders key hints for a border: keys bright and bold, labels muted,
-// two cells between pairs.
-func hintStrip(hints []Hint, bg color.Color, pal Palette) (string, int) {
-	if len(hints) == 0 {
-		return "", 0
-	}
-	return renderHints(fittedHints{Hints: hints}, dialogSep, bg, pal)
-}
-
-// HintStrip renders key hints as one line on the given background, in the shape
-// every footer uses. It is for the surfaces that carry hints outside a panel of
-// their own, so they say what a key does the same way the panels do.
-func HintStrip(hints []Hint, bg color.Color, pal Palette) string {
-	s, _ := hintStrip(hints, bg, pal)
-	return s
-}
-
-// FitHintStrip is HintStrip no wider than width. It fits the hints by the
+// FitHintStrip renders key hints as one line on the given background, in the
+// shape every footer uses, no wider than width. It fits the hints by the
 // tiers a panel footer uses (see fitHints): modifier names shortened, then
 // whole hints dropped by priority. A key or a label is never cut in the
 // middle, and the esc hint stays. It returns the strip and its width. It is
@@ -157,7 +141,7 @@ func FitHintStrip(hints []Hint, width int, bg color.Color, pal Palette) (string,
 	return renderHints(fitHints(hints, width, dialogSep), dialogSep, bg, pal)
 }
 
-// HintStripWidth is the width HintStrip draws hints at, with none dropped.
+// HintStripWidth is the width FitHintStrip draws hints at, with none dropped.
 func HintStripWidth(hints []Hint) int {
 	return hintsWidth(hints, dialogSep, false)
 }

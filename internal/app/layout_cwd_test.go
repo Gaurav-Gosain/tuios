@@ -240,7 +240,7 @@ func TestLayoutTapeExportQuotesTheCd(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("tape does not parse: %v\n%s", errs, script)
 	}
-	want := "cd " + shellQuote(spoofedCwd)
+	want, _ := cdLine(spoofedCwd)
 	for _, c := range cmds {
 		if c.Type == tape.CommandTypeType {
 			if got := strings.Join(c.Args, " "); got != want {

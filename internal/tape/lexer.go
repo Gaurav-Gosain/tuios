@@ -346,17 +346,3 @@ func isDigit(ch byte) bool {
 func isIdentifierChar(ch byte) bool {
 	return unicode.IsLetter(rune(ch)) || isDigit(ch) || ch == '_'
 }
-
-// Tokenize returns all tokens from the input (useful for testing)
-func Tokenize(input string) []Token {
-	l := New(input)
-	var tokens []Token
-	for {
-		tok := l.NextToken()
-		tokens = append(tokens, tok)
-		if tok.Type == TokenEOF {
-			break
-		}
-	}
-	return tokens
-}

@@ -83,7 +83,7 @@ type navPane struct {
 	// set rather than on every key and frame.
 	lower []string
 	// Styled is Text with its colours and attributes, as SGR and printable
-	// text only (see navParseStyled). The preview draws it. It is empty for
+	// text only (see navParser). The preview draws it. It is empty for
 	// a pane this client draws, whose preview reads the live screen.
 	Styled []string
 	// TextSkipped says the load did not read the pane's screen, because it

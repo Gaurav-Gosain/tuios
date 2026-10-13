@@ -143,12 +143,6 @@ func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool) styleEntry {
 	return entry
 }
 
-// Get retrieves a cached style or builds and caches it if not found.
-// This is the main entry point for cached style access.
-func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool) lipgloss.Style {
-	return sc.getEntry(cell, isCursor).style
-}
-
 // GetWithANSI retrieves a cached style together with its derived ANSI escape
 // prefix and suffix, building and caching the entry on a miss. The escape is a
 // pure function of the style, so the render loop can emit the cached prefix and

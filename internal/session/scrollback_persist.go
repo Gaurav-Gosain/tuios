@@ -586,13 +586,6 @@ func (r *historyRows) state(lines int) *TerminalState {
 	return st
 }
 
-// historyStateOf is captureHistoryRows and state together, for a caller that
-// holds the emulator itself.
-func historyStateOf(t vt.Terminal, lines int) *TerminalState {
-	r := captureHistoryRows(t, lines)
-	return r.state(r.history.Len())
-}
-
 func encodeHistory(h *savedHistory) ([]byte, error) {
 	var buf bytes.Buffer
 	zw, err := gzip.NewWriterLevel(&buf, gzip.BestSpeed)

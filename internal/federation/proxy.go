@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-// ServeProxy is the remote end of a link: what `tuios stdio-proxy` runs.
+// ServeProxyFor is the remote end of a link: what `tuios stdio-proxy` runs.
 //
 // It writes the preamble, then reads frames from in and writes frames to out.
 // Every stream the hub opens gets its own connection to the local daemon
@@ -20,13 +20,10 @@ import (
 //
 // It returns when in ends, which is what happens when the hub closes the link
 // or ssh drops.
-func ServeProxy(in io.Reader, out io.Writer, dial func() (net.Conn, error)) error {
-	return ServeProxyFor(in, out, func(StreamOpen) (net.Conn, error) { return dial() })
-}
-
-// ServeProxyFor is ServeProxy with a dial that is told what the hub said about
-// each stream when it opened it. tuios stdio-proxy uses it to dial the
-// link-human socket for a stream the hub vouched for. See StreamOpen.
+//
+// dial is told what the hub said about each stream when it opened it. tuios
+// stdio-proxy uses it to dial the link-human socket for a stream the hub
+// vouched for. See StreamOpen.
 func ServeProxyFor(in io.Reader, out io.Writer, dial func(StreamOpen) (net.Conn, error)) error {
 	if _, err := io.WriteString(out, LinkPreamble+"\n"); err != nil {
 		return err

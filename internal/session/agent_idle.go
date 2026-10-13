@@ -127,14 +127,6 @@ func (g *idleGate) cancel(windowID string) {
 	}
 }
 
-// pendingFor reports whether a window has an idle reading waiting.
-func (g *idleGate) pendingFor(windowID string) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	_, ok := g.pending[windowID]
-	return ok
-}
-
 // schedule arms the look that confirms or cancels a pending reading, replacing
 // any look already armed for the window.
 func (g *idleGate) schedule(windowID string, after time.Duration, look func()) {

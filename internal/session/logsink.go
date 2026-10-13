@@ -231,16 +231,3 @@ func rotateDaemonLogLocked() {
 	daemonLogSize = 0
 	writeDaemonLogHeaderLocked()
 }
-
-// closeDaemonLogFile releases the file. Test-only: the daemon holds it for the
-// life of the process.
-func closeDaemonLogFile() {
-	daemonLogMu.Lock()
-	defer daemonLogMu.Unlock()
-	if daemonLogFH != nil {
-		_ = daemonLogFH.Close()
-		daemonLogFH = nil
-	}
-	daemonLogPath = ""
-	daemonLogSize = 0
-}

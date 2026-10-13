@@ -21,8 +21,9 @@ const screenScanInterval = 250 * time.Millisecond
 // ticker, so a pane that stays silent costs nothing.
 const screenSettleDelay = 400 * time.Millisecond
 
-// scanScreenForAgent matches the harness's screen rules against the bottom of a
-// pane and reports what they say.
+// screenVerdict matches the harness's screen rules against the bottom of the
+// pane. looked is false when there was nothing to read at all: no rules, or an
+// empty screen.
 //
 // It is the last-resort tier and reports as AgentSourceScreen, so it does not
 // write over a harness reporting for itself or an escape sequence the pane
@@ -37,17 +38,10 @@ const screenSettleDelay = 400 * time.Millisecond
 // blockerOverridesClaim. The claim goes back the moment a later look finds the
 // prompt gone.
 //
-// It reports whether a rule matched, which is a different question from whether
-// the report was accepted: a matching rule means the screen carries an answer
-// even when a higher-ranked source owns the window, and the silence timer needs
-// that fact to know it must not call the pane idle.
-func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
-	return s.lookAtPane(ptyID, reg, paneLook{screen: true})
-}
-
-// screenVerdict matches the harness's screen rules against the bottom of the
-// pane. looked is false when there was nothing to read at all: no rules, or an
-// empty screen.
+// A look reports whether a rule matched, which is a different question from
+// whether the report was accepted: a matching rule means the screen carries an
+// answer even when a higher-ranked source owns the window, and the silence
+// timer needs that fact to know it must not call the pane idle.
 func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict, looked bool) {
 	lines := reg.ScreenLines(hid)
 	if lines <= 0 {

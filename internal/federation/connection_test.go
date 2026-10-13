@@ -109,7 +109,7 @@ func TestAConnectionEndsWhenTheFarSideHasNoDaemon(t *testing.T) {
 	dialer := func(_ context.Context, _ Host) (Transport, error) {
 		hub, remote := duplexPipe(t)
 		go func() {
-			_ = ServeProxy(remote, remote, func() (net.Conn, error) {
+			_ = ServeProxyFor(remote, remote, func(StreamOpen) (net.Conn, error) {
 				dials++
 				if dials > 1 {
 					return nil, errors.New("connect: no such file or directory")

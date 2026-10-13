@@ -214,17 +214,12 @@ func isDefaultTitle(title, windowID string) bool {
 	return title == "Terminal "+windowID[:8]
 }
 
-// getWindowTitle returns the display name for a window, truncated to fit within maxWidth.
-// Returns empty string if title should be hidden or doesn't fit.
-// position is the window's 1-based place in its workspace, used by the {index}
-// placeholder of appearance.window_title_format.
-func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *config.Settings) string {
-	return windowTitleText(window, window.AgentState, position, maxWidth, s)
-}
-
-// windowTitleText is getWindowTitle with the state whose mark the title wears
-// given explicitly: the render passes windowMarkState, which knows whether a
-// finished pane has been looked at.
+// windowTitleText returns the display name for a window, truncated to fit
+// within maxWidth, or an empty string if the title should be hidden or does
+// not fit. position is the window's 1-based place in its workspace, used by
+// the {index} placeholder of appearance.window_title_format. markState is the
+// state whose mark the title wears: the render passes windowMarkState, which
+// knows whether a finished pane has been looked at.
 func windowTitleText(window *terminal.Window, markState string, position int, maxWidth int, s *config.Settings) string {
 	// Titles reach the badge as chrome, so launder the same decorative junk the
 	// sidebar and palette drop; our own state glyph is added below, untouched.

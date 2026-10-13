@@ -476,12 +476,6 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 	return nil
 }
 
-// compile compiles a rule on its own, the way parseManifest does, for a rule
-// built in code rather than read from a file.
-func (r *ScreenRule) compile(foldCase bool) error {
-	return r.Gate.compile(foldCase, 0, &gateBudget{})
-}
-
 // compilePatterns compiles each pattern with (?m), so ^ and $ mean lines: the
 // haystack is a pane tail joined with newlines, and anchoring the whole blob
 // is never what a rule about one rendered line wants.

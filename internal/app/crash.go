@@ -178,11 +178,6 @@ func crashMachineFacts() []CrashFact {
 	}
 }
 
-// baseFacts is the whole set for a report with no model behind it.
-func baseFacts(where string) []CrashFact {
-	return append(crashHeadFacts(where), crashMachineFacts()...)
-}
-
 // Title is the one-line summary, used as the issue title and as the overlay's
 // second line. It is the panic value on its own line, clipped, because that is
 // the part that tells two reports apart.

@@ -140,11 +140,3 @@ func PaneFrameSeq(payload []byte) (uint64, bool) {
 	}
 	return binary.BigEndian.Uint64(payload[:8]), true
 }
-
-// PaneFrameSize reads the cols and rows of an S or R frame.
-func PaneFrameSize(payload []byte) (int, int, bool) {
-	if len(payload) < 12 {
-		return 0, 0, false
-	}
-	return int(binary.BigEndian.Uint16(payload[8:10])), int(binary.BigEndian.Uint16(payload[10:12])), true
-}

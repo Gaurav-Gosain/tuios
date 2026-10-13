@@ -108,26 +108,6 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 	}
 }
 
-// TestShellQuoteSurvivesAHostileName. The path came off a filesystem and is
-// about to be typed at a prompt, so a folder named "; rm -rf ~" must arrive as
-// one argument.
-//
-// The expected strings are written out by hand from the POSIX rule (close the
-// quote, escape, reopen), not produced by the function under test.
-func TestShellQuoteSurvivesAHostileName(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"/tmp/plain", "'/tmp/plain'"},
-		{"/tmp/with space", "'/tmp/with space'"},
-		{"/tmp/; rm -rf ~", "'/tmp/; rm -rf ~'"},
-		{"/tmp/it's", `'/tmp/it'\''s'`},
-	}
-	for _, c := range cases {
-		if got := shellQuote(c.in); got != c.want {
-			t.Errorf("shellQuote(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 // TestFileReadRunsOffTheUpdateGoroutine is the claim this whole design rests on:
 // a directory that never answers must not hold the client.
 //

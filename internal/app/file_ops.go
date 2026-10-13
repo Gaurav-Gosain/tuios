@@ -39,7 +39,7 @@ import (
 // Not one of these builds a command line. A name off a filesystem can hold a
 // space, a quote, a semicolon or a newline, and every one of those is inert
 // here because it is an argument to a syscall and never a word in a sentence
-// somebody else parses. sidebar_files.go's shellQuote exists for the one place
+// somebody else parses. cdLine is the one place
 // that does type at a prompt, and no operation here goes near it.
 
 // createPath makes the file or folder raw names, under cwd.

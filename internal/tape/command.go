@@ -382,7 +382,7 @@ type KeyCombo struct {
 // ParseKeyCombo parses a key combo string like "Ctrl+B" or "Alt+Shift+1"
 func ParseKeyCombo(s string) (*KeyCombo, error) {
 	kc := &KeyCombo{}
-	parts := splitKeyComboParts(s)
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '+' })
 
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty key combo")
@@ -406,24 +406,4 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 	}
 
 	return kc, nil
-}
-
-// splitKeyComboParts splits "Ctrl+Alt+B" into ["Ctrl", "Alt", "B"]
-func splitKeyComboParts(s string) []string {
-	var parts []string
-	var current string
-	for i := range len(s) {
-		if s[i] == '+' {
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-		} else {
-			current += string(s[i])
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
 }

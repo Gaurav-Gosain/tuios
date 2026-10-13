@@ -317,14 +317,6 @@ func (a *attentionStore) wakeFired(gen uint64) {
 	a.wakeDueLocked()
 }
 
-// wakeDue wakes every timed snooze whose time has come and sets the timer for
-// the next.
-func (a *attentionStore) wakeDue() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.wakeDueLocked()
-}
-
 // wakeDueLocked is wakeDue for a caller holding mu.
 func (a *attentionStore) wakeDueLocked() {
 	if a.wakeTimer != nil {
@@ -777,11 +769,4 @@ func (d *Daemon) attentionItemSession(id string) string {
 		return ""
 	}
 	return d.sessionIDOf(it.Session)
-}
-
-// snoozedCount is how many items are asleep, for tests and diagnostics.
-func (a *attentionStore) snoozedCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return len(a.snoozed) + len(a.hostSnoozed)
 }

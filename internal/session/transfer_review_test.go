@@ -123,13 +123,13 @@ func TestADenyNameMatchesEveryFold(t *testing.T) {
 		filepath.Join(home, ".SSH", "authorized_keys"),
 		filepath.Join(home, ".\u017fsh", "authorized_keys"),  // long s
 		filepath.Join(home, ".s\u00adsh", "authorized_keys"), // soft hyphen
-		home, // an ancestor, through denyContains
+		home, // an ancestor
 	} {
-		if !denyContains(p, []string{ssh}) {
+		if !makeDenyKeys([]string{ssh}).holds(p) {
 			t.Errorf("%q passed the deny list for %q", p, ssh)
 		}
 	}
-	if denyContains(filepath.Join(home, "ssh-notes"), []string{ssh}) {
+	if makeDenyKeys([]string{ssh}).holds(filepath.Join(home, "ssh-notes")) {
 		t.Errorf("a sibling name was denied")
 	}
 	for in, want := range map[string]string{

@@ -54,13 +54,6 @@ const (
 // running while a test sets or restores it.
 var resurrectionDirOverride atomic.Value // string
 
-// setResurrectionDirOverride redirects resurrection state, and returns the value
-// it replaced. Test-only.
-func setResurrectionDirOverride(dir string) string {
-	prev, _ := resurrectionDirOverride.Swap(dir).(string)
-	return prev
-}
-
 // getResurrectionDir returns the directory for session resurrection files.
 func getResurrectionDir() string {
 	if override, _ := resurrectionDirOverride.Load().(string); override != "" {
@@ -320,8 +313,10 @@ func RemoveResurrectionState(sessionName string) {
 	RemoveHistory(sessionName)
 }
 
-// StartPeriodicSave starts a goroutine that saves session state, and returns a
-// stop function to halt it.
+// startPeriodicSaveWith starts a goroutine that saves session state with the
+// write it is given, and returns a stop function to halt it. A session
+// passes its own write, which drops a snapshot taken under a name the session
+// has since been renamed from (see Session.persist).
 //
 // takeDirty reports whether the session's structure changed since the last save
 // and clears the mark; nil means every tick is a full save. It is what makes the
@@ -332,13 +327,6 @@ func RemoveResurrectionState(sessionName string) {
 // a couple of seconds. Before this, a session created less than a full interval
 // before a SIGKILL was lost entirely, which is the worst case there is: it is the
 // session the user just made.
-func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
-	return startPeriodicSaveWith(getState, takeDirty, SaveSessionForResurrection)
-}
-
-// startPeriodicSaveWith is StartPeriodicSave with the write it makes. A session
-// passes its own, which drops a snapshot taken under a name the session has
-// since been renamed from (see Session.persist).
 func startPeriodicSaveWith(getState func() *SessionState, takeDirty func() bool, save func(*SessionState) error) func() {
 	stopCh := make(chan struct{})
 	done := make(chan struct{})

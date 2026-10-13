@@ -132,14 +132,8 @@ func submitPrompt(ctx context.Context, pane promptPane, text string, in harness.
 	return submitPromptStamped(ctx, pane, text, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
-// submitPromptTimed is submitPrompt with the waits as parameters.
-func submitPromptTimed(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) error {
-	_, err := submitPromptStamped(ctx, pane, text, in, quiet, maxWait)
-	return err
-}
-
-// submitPromptStamped is submitPromptTimed that also returns when the submit
-// key was sent.
+// submitPromptStamped is submitPrompt with the waits as parameters. It also
+// returns when the submit key was sent.
 func submitPromptStamped(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) (time.Time, error) {
 	if in.SubmitKey == "" {
 		in.SubmitKey = "\r"

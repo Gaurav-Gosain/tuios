@@ -106,7 +106,7 @@ func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
 		f.dials++
 		f.mu.Unlock()
 		go func() {
-			_ = federation.ServeProxy(remote, remote, dialFar)
+			_ = federation.ServeProxyFor(remote, remote, func(federation.StreamOpen) (net.Conn, error) { return dialFar() })
 			_ = remote.Close()
 		}()
 		return hub, nil

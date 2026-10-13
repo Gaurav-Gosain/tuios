@@ -161,11 +161,6 @@ func isScratch(w *terminal.Window) bool {
 	return w != nil && w.IsScratch
 }
 
-// scratchIndex is the index of a pane of the built-in scratch group, or -1.
-func (m *OS) scratchIndex() int {
-	return m.scratchIndexNamed(scratchName)
-}
-
 // scratchIndexNamed is the index of a pane of the group kept under name, or
 // -1. It is the pane the group had the focus on, when the client knows it.
 func (m *OS) scratchIndexNamed(name string) int {

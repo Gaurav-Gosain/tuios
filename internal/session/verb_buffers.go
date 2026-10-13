@@ -356,17 +356,6 @@ func (d *Daemon) dropUploads(cs *connState) {
 	d.uploadsMu.Unlock()
 }
 
-// uploadBytes reports how many bytes unfinished uploads hold.
-func (d *Daemon) uploadBytes() int {
-	d.uploadsMu.Lock()
-	defer d.uploadsMu.Unlock()
-	n := 0
-	for _, u := range d.uploads {
-		n += len(u.data)
-	}
-	return n
-}
-
 // b64Bytes is a base64 JSON string decoded straight from the request. The
 // decoder hands UnmarshalJSON a slice of the request itself, so the encoded
 // form is never copied: one request holds its line and the decoded bytes, and

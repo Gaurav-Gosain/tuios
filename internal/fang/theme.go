@@ -32,13 +32,6 @@ type ColorScheme struct {
 	ErrorDetails   color.Color
 }
 
-// DefaultTheme is the default colorscheme.
-//
-// Deprecated: use [DefaultColorScheme] instead.
-func DefaultTheme(isDark bool) ColorScheme {
-	return DefaultColorScheme(lipgloss.LightDark(isDark))
-}
-
 // DefaultColorScheme is the default colorscheme.
 func DefaultColorScheme(c lipgloss.LightDarkFunc) ColorScheme {
 	return ColorScheme{
@@ -58,26 +51,6 @@ func DefaultColorScheme(c lipgloss.LightDarkFunc) ColorScheme {
 			charmtone.Butter,
 			charmtone.Cherry,
 		},
-	}
-}
-
-// AnsiColorScheme is a ANSI colorscheme.
-func AnsiColorScheme(c lipgloss.LightDarkFunc) ColorScheme {
-	base := c(lipgloss.Black, lipgloss.White)
-	return ColorScheme{
-		Base:         base,
-		Title:        lipgloss.Blue,
-		Description:  base,
-		Comment:      c(lipgloss.BrightWhite, lipgloss.BrightBlack),
-		Flag:         lipgloss.Magenta,
-		FlagDefault:  lipgloss.BrightMagenta,
-		Command:      lipgloss.Cyan,
-		QuotedString: lipgloss.Green,
-		Argument:     base,
-		Help:         base,
-		Dash:         base,
-		ErrorHeader:  [2]color.Color{lipgloss.Black, lipgloss.Red},
-		ErrorDetails: lipgloss.Red,
 	}
 }
 

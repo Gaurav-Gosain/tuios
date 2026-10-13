@@ -159,14 +159,6 @@ func openRemotePane(ctx context.Context, fed paneFederation, host string, spec h
 	return p, nil
 }
 
-// openPaneOn sends open-pane on a fresh connection to the far daemon and reads
-// its reply. On success the connection is the pty from here on, and the reader
-// that is returned is the only one that may read it.
-func openPaneOn(stream io.ReadWriteCloser, spec hostedPaneSpec) (string, *bufio.Reader, error) {
-	opened, br, err := openPaneReply(stream, spec)
-	return opened.Pane, br, err
-}
-
 // paneOpened is the part of the open-pane reply the owner keeps. CallsToken is
 // empty from a far daemon too old to carry reports from the pane.
 type paneOpened struct {
@@ -178,7 +170,9 @@ type paneOpened struct {
 	Gap         bool   `json:"gap"`
 }
 
-// openPaneReply is openPaneOn with the whole reply.
+// openPaneReply sends open-pane on a fresh connection to the far daemon and
+// reads its whole reply. On success the connection is the pty from here on,
+// and the reader that is returned is the only one that may read it.
 //
 // A far daemon from before reports from hosted panes refuses the window param
 // with invalid_params, because every verb line is checked against the verb's
@@ -793,17 +787,4 @@ func (p *PTY) remoteForeground() (foregroundInfo, bool, bool) {
 	}
 	info, running := rp.Foreground()
 	return info, running, true
-}
-
-// refreshRemoteCwdOnOutput asks a pane on another machine where it is, if it
-// has been long enough since the last answer.
-//
-// Reading the cached value is what starts the ask, so this is a map read and a
-// clock comparison for a pane of this daemon's own, and at most one call a
-// second for one elsewhere. The answer landing is what publishes it; see
-// remotePane.Cwd and Session.PublishLiveFacts.
-func (p *PTY) refreshRemoteCwdOnOutput() {
-	if rp, ok := p.pty.(*remotePane); ok {
-		rp.Cwd()
-	}
 }

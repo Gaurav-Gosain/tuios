@@ -330,7 +330,7 @@ func TestHelperStdioProxy(t *testing.T) {
 	if sock == "" {
 		t.Skip("helper process only")
 	}
-	err := ServeProxy(os.Stdin, os.Stdout, func() (net.Conn, error) {
+	err := ServeProxyFor(os.Stdin, os.Stdout, func(StreamOpen) (net.Conn, error) {
 		return net.Dial("unix", sock)
 	})
 	if err != nil {

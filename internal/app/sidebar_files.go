@@ -994,16 +994,6 @@ func paneBusyReason(window *terminal.Window) (string, bool) {
 	return "", true
 }
 
-// shellQuote wraps a path in single quotes for a POSIX shell, escaping any
-// single quote in it the way a shell requires: close, escape, reopen.
-//
-// The path came off a filesystem, so it may hold a space, a quote, a newline or
-// a semicolon, and the string is about to be typed at a prompt. Quoting is
-// what keeps a directory called "; rm -rf ~" from being two commands.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // cdRefusedMessage is what the dock says when cdLine refuses a folder.
 const cdRefusedMessage = "tuios did not type a cd. The folder name holds a quote, a backslash or a control character."
 
@@ -1068,7 +1058,7 @@ const cdUnseenMessage = "tuios did not type a cd. It can not see that the shell 
 // cdLine is the cd command tuios types to move a shell to dir, or false when
 // dir must not be typed at all.
 //
-// shellQuote is correct for a POSIX shell, and the shell in a pane is not
+// Single quoting is correct for a POSIX shell, and the shell in a pane is not
 // always one. fish reads \' inside single quotes as an escaped quote, so the
 // POSIX escape for a quote ends the quoting there, and the rest of the name
 // runs as commands. No single quoting is right for every shell, so a folder
