@@ -440,7 +440,7 @@ func Run(opts Options) error {
 	// force, or keys go to a closed connection after the link comes back.
 	cur := &atomic.Pointer[session.TUIClient]{}
 	cur.Store(client)
-	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, host: opts.Host, tap: streams, client: cur}
+	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, host: opts.Host, tap: streams, client: cur, hostsWake: make(chan struct{}, 1)}
 	popts := append([]tea.ProgramOption{
 		tea.WithInput(nil),
 		tea.WithOutput(io.Discard),
@@ -468,7 +468,7 @@ func Run(opts Options) error {
 	stopFleet := make(chan struct{})
 	defer close(stopFleet)
 	go watchFleet(stopFleet, out, opts.Version)
-	go watchHosts(stopFleet, out, opts.Version)
+	go watchHosts(stopFleet, m.hostsWake, out, opts.Version)
 
 	go func() {
 		err := readCommands(opts.In, cur, program)
@@ -583,6 +583,9 @@ type model struct {
 	// client is the daemon client in force, which readCommands writes
 	// input to. See Run.
 	client *atomic.Pointer[session.TUIClient]
+	// hostsWake tells watchHosts the daemon pushed a change to its hosts
+	// table or a link, so it reads list-hosts at once. See hosts.go.
+	hostsWake chan struct{}
 }
 
 // sendKeybinds sends the keybinds event and notes the config it came from.
@@ -660,6 +663,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if c, ok := msg.(cmdMsg); ok {
 		cmd = m.handle(Command(c))
 	} else {
+		if _, ok := msg.(app.HostsChangedMsg); ok {
+			select {
+			case m.hostsWake <- struct{}{}:
+			default:
+			}
+		}
 		next, c := m.os.Update(msg)
 		if o, ok := next.(*app.OS); ok {
 			m.os = o

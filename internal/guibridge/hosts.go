@@ -258,7 +258,13 @@ func needsSignIn(detail string) bool {
 }
 
 // watchHosts keeps the renderer's machines current until stop closes.
-func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
+//
+// It reads list-hosts when the daemon pushes a change (wake), and on a timer
+// only while there is something a push does not cover: a link that is up,
+// whose probe and sessions move without a push, or a daemon it cannot reach
+// yet. With no hosts configured it waits for a push and reads nothing, so an
+// idle GUI with no hosts costs the daemon nothing.
+func watchHosts(stop <-chan struct{}, wake <-chan struct{}, out *frameWriter, version string) {
 	running := map[string]*prober{}
 	defer func() {
 		for name, p := range running {
@@ -335,11 +341,18 @@ func watchHosts(stop <-chan struct{}, out *frameWriter, version string) {
 			}
 			p.mu.Unlock()
 		}
-		tick.Reset(wait)
+		var timer <-chan time.Time
+		if !ev.Live || len(ev.Hosts) > 0 {
+			tick.Reset(wait)
+			timer = tick.C
+		} else {
+			tick.Stop()
+		}
 		select {
 		case <-stop:
 			return
-		case <-tick.C:
+		case <-wake:
+		case <-timer:
 		}
 	}
 }
