@@ -232,6 +232,18 @@ func decodedBytesPerPixel(m color.Model) int64 {
 	return 4
 }
 
+// previewNote is a sentence a preview without a picture shows the person, in
+// its note. It is an error so the image path can hand it back.
+type previewNote string
+
+func (n previewNote) Error() string { return string(n) }
+
+const (
+	noteTooLarge   previewNote = "The image is too large to show."
+	noteUnreadable previewNote = "The image could not be read."
+	noteTooSlow    previewNote = "The preview took too long. Try again."
+)
+
 // previewPassExt are the pictures sent as they are, never decoded here.
 var previewPassExt = map[string]string{".webp": "image/webp", ".bmp": "image/bmp"}
 
@@ -243,14 +255,14 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 		return passImage(f, size, mime, out)
 	}
 	if size > previewImageMax {
-		return errors.New("The image is too large to show.")
+		return noteTooLarge
 	}
 	cfg, format, err := image.DecodeConfig(io.NewSectionReader(f, 0, size))
 	if err != nil {
-		return errors.New("The image could not be read.")
+		return noteUnreadable
 	}
 	if cfg.Width > previewImageDimMax || cfg.Height > previewImageDimMax {
-		return errors.New("The image is too large to show.")
+		return noteTooLarge
 	}
 	if decodeCost(f, size, format, cfg, maxPx) > previewDecodeMax {
 		out["width"] = cfg.Width
@@ -261,7 +273,7 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 	case previewDecodeSlot <- struct{}{}:
 		defer func() { <-previewDecodeSlot }()
 	case <-ctx.Done():
-		return errors.New("The preview took too long. Try again.")
+		return noteTooSlow
 	}
 	var img image.Image
 	r := io.NewSectionReader(f, 0, size)
@@ -272,7 +284,7 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 		img, _, err = image.Decode(r)
 	}
 	if err != nil {
-		return errors.New("The image could not be read.")
+		return noteUnreadable
 	}
 	scaled := fit(img, maxPx)
 	data, mime, err := encodePreview(scaled, format == "jpeg")
@@ -293,11 +305,11 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 // passImage sends the picture's own bytes, for the client to decode.
 func passImage(f *os.File, size int64, mime string, out map[string]any) error {
 	if size > previewPassMax {
-		return errors.New("The image is too large to show.")
+		return noteTooLarge
 	}
 	b, err := readAllOf(f, previewPassMax)
 	if err != nil {
-		return errors.New("The image could not be read.")
+		return noteUnreadable
 	}
 	out["kind"] = "image"
 	out["mime"] = mime
