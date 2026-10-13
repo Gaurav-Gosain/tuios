@@ -5647,3 +5647,17 @@ On main (replaces #632), the `noteStartedBy` control was run again on
 main's start folders in `retainDaemonExclusive`. It failed where shown above
 (the child's `started_by` is nil in list-windows and list-agents). The log is
 `~/.cache/agent-tmp/gui-port/proof/nc-find.txt`.
+
+### search-panes after review: the budget holds
+
+`TestSearchPanesKeepsToItsBudget` searches four panes of 150,000 history
+lines each for text none of them holds. The median of five searches must be
+under 500 ms (50 ms a pane), and the answer must say truncated. With the fix
+it was 202 ms.
+
+The control was run on 2026-10-13 on branch `feat/gui-search-ports-tree`. The
+log is `~/.cache/agent-tmp/gui-port/proof/nc-search.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole history copied under the lock before the budget is read | `verb_find.go` as it was before the fix (`paneLines`) | `TestSearchPanesKeepsToItsBudget` (2.39 s median, 1.29 to 2.56 s) | **caught** |
