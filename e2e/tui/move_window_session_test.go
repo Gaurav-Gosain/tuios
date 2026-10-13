@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -343,4 +344,119 @@ func (a *moveArtifact) save(t *testing.T) {
 		return
 	}
 	t.Logf("artifact: %s", path)
+}
+
+// moveSetup makes the sessions alpha and beta in a fresh daemon, and a shell
+// window named name in alpha. It returns the base dir, a verb caller and the
+// window's id.
+func moveSetup(t *testing.T, art *moveArtifact, name string) (string, func(string, map[string]any) map[string]any, string) {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+	for _, s := range []string{"alpha", "beta"} {
+		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
+			t.Fatalf("create session %s: %v\n%s", s, err, out)
+		}
+	}
+	must := func(verb string, params map[string]any) map[string]any {
+		t.Helper()
+		raw, _ := json.Marshal(params)
+		out, err := tuiosCLI(t, base, "call", verb, string(raw))
+		var res map[string]any
+		_ = json.Unmarshal([]byte(strings.TrimSpace(out)), &res)
+		art.add(verb, params, res, out)
+		if err != nil {
+			t.Fatalf("%s %v: %v\n%s", verb, params, err, out)
+		}
+		return res
+	}
+	created := must("new-window", map[string]any{"session": "alpha", "name": name})
+	win, _ := created["window_id"].(string)
+	if win == "" {
+		t.Fatalf("new-window gave no window_id: %v", created)
+	}
+	return base, must, win
+}
+
+// paneDims reads "rows cols" as two numbers.
+func paneDims(t *testing.T, size string) (int, int) {
+	t.Helper()
+	var rows, cols int
+	if _, err := fmt.Sscanf(size, "%d %d", &rows, &cols); err != nil {
+		t.Fatalf("the pane's size %q is not rows and cols: %v", size, err)
+	}
+	return rows, cols
+}
+
+// A pane moved to another session takes that session's size, though a
+// pane-view viewer of it holds a fit lease.
+//
+// alpha has no client, so the viewer's fit lease decides the pane's size
+// there: 45 rows by 150 columns, checked before the move. beta has a client
+// in an 80 by 24 terminal. After the move the pane must fit inside that
+// client, so a pane still held at the viewer's size fails. The size is read
+// before the viewer renews its lease, so a pane sized only by a renewal
+// fails. It is read again after a renewal (every 10 seconds), so a renewal
+// that says no client shows the pane, from the session it left, fails too.
+// The viewer must still show the pane after the move.
+//
+// NEGATIVE CONTROLS (NEGATIVE_CONTROLS.md, "Move a window to another
+// session"):
+//   - with the setNoClients call cut from Session.adoptWindow, it fails at
+//     "after the move the pane kept the viewer's size".
+//   - with paneStream.setLease reading the clients of the session the stream
+//     opened in, it fails at "after the viewer renewed its lease".
+func TestMoveWindowSessionViewerSize(t *testing.T) {
+	art := &moveArtifact{}
+	defer art.save(t)
+	base, must, win := moveSetup(t, art, "viewed")
+
+	beta := attachIn(t, base, "beta", startOpts{cols: 80, rows: 24})
+	viewerStart := time.Now()
+	ft := startFakeTerm(t, base, 150, 45, fakeTermOpts{bg: "rgb:0000/0000/0000"}, "pane-view", "-s", "alpha", "-w", win)
+	if !pvReady(ft, t, base, "alpha", win) {
+		t.Fatalf("pane-view never showed the pane: %q", ft.output())
+	}
+	waitPaneSize(t, base, "alpha", win, "45 150", "the viewer sizes the pane in a session no client shows")
+
+	// The viewer renews its lease 10 seconds after it opened its stream, and
+	// every 10 seconds after that. A renewal sizes the pane again, so the
+	// move is made just after the first one and the size is read before the
+	// second: the move alone must size the pane.
+	time.Sleep(time.Until(viewerStart.Add(11500 * time.Millisecond)))
+	must("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "beta", "follow": true})
+	movedAt := time.Now()
+
+	fits := func(why string, wait time.Duration) string {
+		t.Helper()
+		got := ""
+		deadline := time.Now().Add(wait)
+		for {
+			got = pvPaneSize(t, base, "beta", win)
+			if rows, cols := paneDims(t, got); rows < 24 && cols < 80 {
+				return got
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("ASSERTION: %s: the pane is %q, want it inside the 80x24 client of beta\n%s", why, got, beta.Snapshot())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	afterMove := fits("after the move the pane kept the viewer's size", 4*time.Second)
+	if since := time.Since(movedAt); since > 7*time.Second {
+		t.Fatalf("the size after the move was read %s after it, past the viewer's next renewal", since)
+	}
+	art.add("pane-size", map[string]any{"when": "after the move"}, map[string]any{"size": afterMove}, "")
+
+	// Past the viewer's next renewal.
+	time.Sleep(time.Until(movedAt.Add(12 * time.Second)))
+	afterRenew := fits("after the viewer renewed its lease", 0)
+	art.add("pane-size", map[string]any{"when": "after a lease renewal"}, map[string]any{"size": afterRenew}, "")
+
+	pvSend(t, base, "beta", win, "echo AFTER-MOVE-$((6*7))")
+	if _, ok := ft.waitFor(regexp.MustCompile(`AFTER-MOVE-42`), shellTimeout); !ok {
+		t.Fatalf("ASSERTION: the viewer stopped showing the pane after the move: %q", ft.output())
+	}
+	waitForAll(t, beta, 20*time.Second, "the beta client to draw the moved pane", "AFTER-MOVE-42")
+	art.frame(t, beta, "beta")
 }

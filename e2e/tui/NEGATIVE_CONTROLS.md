@@ -5676,9 +5676,19 @@ attached to each session. Each control cuts one call site and rebuilds.
 | `joinPane` in the tmux shim as on `origin/main` (a join across sessions refused) | mutant of this branch | `TestTmuxShimJoinPaneAcrossSessions`: join-pane exits 1 with "tuios moves a pane only within its session" | **caught** |
 | The client's move notice cut (`windowMoveNotice` in the `StateSyncMsg` case of `internal/app/update.go` never taken) | mutant of this branch | "the source client's notice: showed \"Window closed\" and never \"Moved mover to the session beta.\"" | **caught** |
 | The move not recorded in the source's state (`recordWindowMove` cut from `Session.releaseWindow`) | mutant of this branch | the same: the source client shows "Window closed (1 remaining)" | **caught** |
+| The move not recorded in the destination's state (`recordWindowMove` cut from `Session.adoptWindow`) | mutant of this branch | "the destination client's notice: showed \"Window created\" and never \"Moved mover here from the session alpha.\"" | **caught** |
+| The pane not sized again on arrival (`pty.setNoClients` cut from `Session.adoptWindow`) | mutant of this branch | `TestMoveWindowSessionViewerSize`: "after the move the pane kept the viewer's size: the pane is \"45 150\"" | **caught** |
+| A lease renewal reads the clients of the session the stream opened in (`ps.sess.tuiClients` in `paneStream.setLease`) | mutant of this branch | `TestMoveWindowSessionViewerSize`: "after the viewer renewed its lease: the pane is \"45 150\"" | **caught** |
 | The positive half | this branch | none: the source client draws the pane before the move and not after, the destination client draws its old output and the answer typed after the move, with the same pid, and the refusals are `same_session` and `session_not_found`. For both moves the source client shows "Moved mover to the session ..." and the destination client "Moved mover here from the session ...", with no "Window closed" or "Window created" before it | **guard** |
 
 The passing run writes `TestMoveWindowToSession.json` (every call and reply)
 and the screens of both clients to `$TUIOS_E2E_FRAMES`, with the screen that
 showed each move notice as `TestMoveWindowToSession-*-notice-*.txt`. Run it with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios TUIOS_E2E_FRAMES=/tmp/frames go test -count=1 -run '^TestMoveWindowToSession$' .`
+
+Run on 2026-10-13, the same table, for one more test.
+`TestMoveWindowSessionViewerSize` holds a pane at a pane-view viewer's 150 by
+45 in alpha, which no client shows, and moves it to beta, shown by an 80 by 24
+client. The pane must fit the client before the viewer's next lease renewal
+and after it. On this branch it passes: the pane is 20 by 38 after the move
+and after the renewal. It writes its calls to `$TUIOS_E2E_FRAMES`.

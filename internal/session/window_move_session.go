@@ -40,6 +40,10 @@ import (
 // names the source. A call that names the source session and the moved
 // window is sent to the window's session (followMovedWindow), so the hooks of
 // an agent in the pane go on reporting to the right place.
+//
+// A stream of the pane (stream-pane, pane-view) stays open through the move.
+// Its lease and viewer report follow the pane to the destination, and the
+// pane is sized again against the destination's clients when it arrives.
 
 // Error codes of move-window with to_session.
 const (
@@ -251,6 +255,10 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	}
 	pty.home.Store(s)
 	s.ptysMu.Unlock()
+	// Whether a client shows the session was the source's. A viewer's fit
+	// lease sizes the pane only while none shows this one, so the pane is
+	// sized again against this session's clients.
+	pty.setNoClients(s.tuiClients.Load() == 0)
 	// The look the event sink installed reads the session it was made in.
 	// The sink here installs a new one on the pane's next output.
 	pty.setScreenLook(nil)

@@ -118,6 +118,11 @@ type paneStream struct {
 	// reported its terminal. See pane_lease.go and pane_viewers.go.
 	fit    bool
 	viewer bool
+	// viewerReport is the report the stream made, and viewerSess the
+	// session it is recorded in. A pane moved to another session takes its
+	// viewer with it (followHome). Guarded by leaseMu once the stream runs.
+	viewerReport ViewerReport
+	viewerSess   *Session
 	// leaseMu guards leased and closed. The client's frames are read on a
 	// goroutine of their own, so a lease frame can arrive while the stream
 	// is closing, and closed keeps it from setting a lease nobody releases.
@@ -227,6 +232,7 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 
 	if p.Viewer != nil {
 		ps.viewer = true
+		ps.viewerReport, ps.viewerSess = *p.Viewer, sess
 		sess.addViewer(ps.subID, *p.Viewer)
 	}
 
@@ -334,8 +340,8 @@ func (ps *paneStream) close() {
 		if ps.leased {
 			_ = ps.pty.SetLease(ps.subID, 0, 0)
 		}
-		if ps.viewer {
-			ps.sess.removeViewer(ps.subID)
+		if ps.viewer && ps.viewerSess != nil {
+			ps.viewerSess.removeViewer(ps.subID)
 		}
 		ps.leased, ps.closed = false, true
 		ps.leaseMu.Unlock()
@@ -513,7 +519,7 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 func (ps *paneStream) recheck() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]string{"session": ps.sess.Name(), "window": ps.window})
+	params, _ := json.Marshal(map[string]string{"session": ps.home().Name(), "window": ps.window})
 	_, _, verr := ps.d.admitVerb(ps.cs, "stream-pane", params)
 	return verr
 }
@@ -665,11 +671,12 @@ func (ps *paneStream) queueInput(data []byte) *verbError {
 func (ps *paneStream) admitInput() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]string{"session": ps.sess.Name(), "window": ps.window})
+	home := ps.home()
+	params, _ := json.Marshal(map[string]string{"session": home.Name(), "window": ps.window})
 	if _, _, verr := ps.d.admitVerb(ps.cs, "send-text", params); verr != nil {
 		return verr
 	}
-	return ps.d.recheckTyping(ps.cs, "send-text", ps.sess, ps.window)
+	return ps.d.recheckTyping(ps.cs, "send-text", home, ps.window)
 }
 
 // writeInput types the queued I frames into the pane, one after another,
@@ -716,7 +723,7 @@ func (ps *paneStream) lease(payload []byte) *verbError {
 func (ps *paneStream) admitLease(cols, rows int) *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
-	params, _ := json.Marshal(map[string]any{"session": ps.sess.Name(), "window": ps.window, "width": cols, "height": rows})
+	params, _ := json.Marshal(map[string]any{"session": ps.home().Name(), "window": ps.window, "width": cols, "height": rows})
 	_, _, verr := ps.d.admitVerb(ps.cs, "resize", params)
 	return verr
 }
@@ -730,10 +737,35 @@ func (ps *paneStream) setLease(cols, rows int) error {
 	}
 	ps.leased = cols > 0
 	ps.leaseAt = time.Now().UnixNano()
+	home := ps.followHomeLocked()
 	if ps.fit {
-		ps.pty.setNoClients(ps.sess.tuiClients.Load() == 0)
+		ps.pty.setNoClients(home.tuiClients.Load() == 0)
 	}
 	return ps.pty.SetViewerLease(ps.subID, cols, rows, ps.fit)
+}
+
+// home is the session the pane belongs to now. A pane moved to another
+// session keeps its streams, and from then on that session's clients and
+// viewers decide its size, not the ones of the session the stream opened in.
+func (ps *paneStream) home() *Session {
+	if s := ps.pty.owner(); s != nil {
+		return s
+	}
+	return ps.sess
+}
+
+// followHomeLocked moves the stream's viewer report to the session the pane
+// belongs to now, and returns that session. leaseMu is held.
+func (ps *paneStream) followHomeLocked() *Session {
+	home := ps.home()
+	if ps.viewer && ps.viewerSess != home {
+		if ps.viewerSess != nil {
+			ps.viewerSess.removeViewer(ps.subID)
+		}
+		home.addViewer(ps.subID, ps.viewerReport)
+		ps.viewerSess = home
+	}
+	return home
 }
 
 // expireLease releases the lease when the client has not renewed it for
