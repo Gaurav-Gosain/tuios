@@ -212,6 +212,11 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.railCustom.gen)
 	}
 	mixI(m.SidebarScrollC)
+	// The space layout decides which sections are stacked and which sessions
+	// the sessions section lists, and the spaces section scrolls like the
+	// others.
+	mixS(m.Settings.SidebarSpaces)
+	mixI(m.SidebarScrollSp)
 
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves

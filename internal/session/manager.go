@@ -618,15 +618,33 @@ func mostRecentSession(sessions []*Session, byUse bool) *Session {
 // above best: the later use, then the later activity, then the newer
 // session, then the lower name.
 func newerPick(used, bestUsed, active, bestActive time.Time, s, best *Session) bool {
+	return ranksAbove(used, bestUsed, active, bestActive, s.Created, best.Created, s.Name(), best.Name())
+}
+
+// ranksAbove is newerPick's order over the bare values, so a client ranking
+// the listing it holds ranks it the way the daemon ranks its sessions.
+func ranksAbove(used, bestUsed, active, bestActive, created, bestCreated time.Time, name, bestName string) bool {
 	switch {
 	case !used.Equal(bestUsed):
 		return used.After(bestUsed)
 	case !active.Equal(bestActive):
 		return active.After(bestActive)
-	case !s.Created.Equal(best.Created):
-		return s.Created.After(best.Created)
+	case !created.Equal(bestCreated):
+		return created.After(bestCreated)
 	}
-	return s.Name() < best.Name()
+	return name < bestName
+}
+
+// RanksAboveByUse reports whether listed session a ranks above b by the rule
+// switch-space and a bare attach pick by: the later use, then the later
+// activity, then the newer session, then the lower name. A listing from a
+// daemon that sends no last_used, or of a session never used, falls through
+// to the activity. The listing is in whole seconds, so two uses within one
+// second fall through too, where the daemon would tell them apart.
+func RanksAboveByUse(a, b SessionInfo) bool {
+	return ranksAbove(time.Unix(a.LastUsed, 0), time.Unix(b.LastUsed, 0),
+		time.Unix(a.LastActive, 0), time.Unix(b.LastActive, 0),
+		time.Unix(a.Created, 0), time.Unix(b.Created, 0), a.Name, b.Name)
 }
 
 // GetDefaultSession returns the session the person used last, creating one if

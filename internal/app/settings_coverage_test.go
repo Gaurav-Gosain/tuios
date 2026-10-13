@@ -19,7 +19,9 @@ import (
 // fails here, so an option cannot be added in future without someone deciding,
 // in this file, how a person reaches it.
 func TestSettingsPanelReachesEveryOption(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40, SidebarAgentsSeen: true}
+	// SessionSpace stands for a session in a space, which is what the Sidebar
+	// tab's Spaces row waits for.
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SidebarAgentsSeen: true, SessionSpace: "work"}
 	// The Alerts tab folds its agent rows under a heading row until an agent
 	// has been seen. Folded is one change on that row away, so it counts as
 	// reachable; the rows are read unfolded.

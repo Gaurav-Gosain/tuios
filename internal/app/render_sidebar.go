@@ -132,6 +132,12 @@ const (
 	// or opens it again. It carries the space name in SessionID. See
 	// sidebar_spaces.go.
 	sidebarRowSpace
+	// sidebarRowSpaceSwitch is a row of the spaces section, which the split
+	// space layout draws above the sessions section. Activating it switches to
+	// the session of that space the person used last. It carries the space
+	// name in SessionID, empty for the row standing for the sessions in no
+	// space. See sidebar_space_layout.go.
+	sidebarRowSpaceSwitch
 	// sidebarRowSubagentToggle is the heading line over a pane's subagent
 	// rows, drawn when appearance.sidebar.subagent_collapse is not off.
 	// Activating it opens or shuts the rows. It carries the pane's session
@@ -254,6 +260,11 @@ const (
 	// the enum sizes every per-section array in this package, and one more
 	// value fits all of them as they are. See sidebar_custom.go.
 	sidebarSectionCustom
+	// sidebarSectionSpaces lists the spaces, one row each, for the split space
+	// layout. It is not a name appearance.sidebar.sections takes: the layout
+	// puts it directly above the sessions section, wherever that is, and only
+	// while appearance.sidebar.spaces is split. See sidebarLayoutFor.
+	sidebarSectionSpaces
 	sidebarSectionCount
 )
 
@@ -1390,6 +1401,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// hides rows here and hides no pane and no waiting agent. See
 	// sidebar_worktrees.go.
 	sessionRows := m.sidebarSessionRows(sessions)
+	// The spaces section's rows, for the split space layout, and the space
+	// whose row wears the focus mark. Nil in every other layout and on a rail
+	// with no session in a space, which drops the section header and all.
+	spaceRows := m.sidebarSpaceSwitchRows(sessions)
+	currentSpace := m.sidebarCurrentSpace(localSessionNodes(sessions))
 
 	// The lists, built before anything is drawn: the budget needs their counts,
 	// and hover has to resolve against the same arithmetic the draw uses.
@@ -1421,7 +1437,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// terminal rows but not with no panes.
 	emptyPeek := peeking && len(terminals) == 0
 	// A peek is a request to see that session's panes, so it lists them all.
-	if !peeking && sidebarCompactAgents(w, height, len(agents), &m.Settings) {
+	compactAgents := sidebarCompactAgents(w, height, len(agents), &m.Settings)
+	if !peeking && compactAgents {
 		terminals = sidebarTerminalsWithoutAgents(terminals, allAgents)
 	}
 
@@ -1433,6 +1450,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 	if emptyPeek {
 		nT = 1
+	}
+	// A peek keeps the height the section has at rest. The pointer that asked
+	// for it is on a session row, and with the terminals section above the
+	// sessions one a peek that resized it moved that row out from under the
+	// pointer, which peeked a different session, which resized it again: the
+	// list jumped for as long as the hand swept it. So the budget is laid out
+	// for the attached session's rows, and the peeked list is fitted into the
+	// lines that buys, padded when it is shorter and cut to a "+N" when it is
+	// longer. peekRows is the peeked list's own count, which the windowing
+	// below uses once the budget is settled. An attached session with no rows
+	// of its own holds nothing: there is no section to hold, and a peek that
+	// could not show anything would not be one.
+	peekRows := nT
+	if peeking {
+		resting := m.sidebarTerminals(sessions, m.sidebarCurrentSessionID())
+		if compactAgents {
+			resting = sidebarTerminalsWithoutAgents(resting, allAgents)
+		}
+		if len(resting) > 0 {
+			nT = len(resting)
+		}
 	}
 	// Membership is the layout's, and only the layout's. A section the user has
 	// taken out of appearance.sidebar.sections has no rows here, so it costs no
@@ -1487,6 +1525,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionFiles:     filesRows,
 		sidebarSectionGit:       len(gitRows),
 		sidebarSectionCustom:    nC,
+		sidebarSectionSpaces:    len(spaceRows),
 	}
 	// The last section in the configured layout is the one pinned to the rail's
 	// bottom: the slack rides above it, and it wears a blank line of its own so
@@ -1509,7 +1548,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	agentRowH := 1
 	// Row heights per section, which is what turns a section's line budget into
 	// the rows it can show and a st.lit() line back into the row under it.
-	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1, 1}
+	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1, 1, 1}
 
 	// The chrome each drawn section costs before a row of it appears: its own
 	// header, plus the floating blank in front of the pinned block.
@@ -1675,6 +1714,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// Keyboard cursor auto-scroll, per section: a cursor past a section's fold
 	// scrolls that section the way a wheel would, and never disturbs the others.
 	scroll := m.sidebarScrollOffsets()
+	// The budget is settled, so a peek's own list takes over the section's rows
+	// from here: the windowing cuts it to the held lines. It windows from the
+	// top on an offset of its own, so a peek neither inherits the attached
+	// session's scroll nor leaves its clamp on it.
+	if peeking && rowsIn[sidebarSectionTerminals] > 0 {
+		rowsIn[sidebarSectionTerminals] = peekRows
+		peekScroll := 0
+		scroll[sidebarSectionTerminals] = &peekScroll
+	}
 	// A section's fold is in rows and its budget is in lines. Everything below
 	// scrolls and windows against this rather than against the line count, which
 	// were the same number until an agent row took two of them.
@@ -1689,7 +1737,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// See sidebar_reveal.go.
 	m.sidebarRevealFocus(sessions, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
 	if m.sidebarRailFocused() && haveCursorTarget {
-		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, terminals, agents, files); ok {
+		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, spaceRows, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
 				if idx < *scroll[sec] {
 					*scroll[sec] = idx
@@ -1918,12 +1966,24 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(termSpan, shown)
 		}
 		lines = append(lines, compose(sidebarHeaderRowRuled("terminals", right, cw, pal, &m.Settings)))
+		// A peek shorter than the section it is held in fills the rest with
+		// blank lines, so whatever is below it stays where it was.
+		end := len(lines) + place[sidebarSectionTerminals].lines
+		if peeking {
+			defer func() {
+				for len(lines) < end {
+					lines = append(lines, blank)
+				}
+			}()
+		}
 		if emptyPeek {
-			hint := "no terminals"
-			lines = append(lines, compose(sidebarFit(
-				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
-					sidebarStyle(nil, nil).Render(" ")+
-					sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+			if count[sidebarSectionTerminals] > 0 {
+				hint := "no terminals"
+				lines = append(lines, compose(sidebarFit(
+					sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
+						sidebarStyle(nil, nil).Render(" ")+
+						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+			}
 			return
 		}
 		for i := range count[sidebarSectionTerminals] {
@@ -2085,6 +2145,20 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 
+	drawSpaces := func() {
+		lines = append(lines, compose(sidebarHeaderRowRuled("spaces", "", cw, pal, &m.Settings)))
+		for i := range count[sidebarSectionSpaces] {
+			idx := start[sidebarSectionSpaces] + i
+			s := spaceRows[idx]
+			st := m.railRowState(idx == hoverRow[sidebarSectionSpaces], isCursor(sidebarRowSpaceSwitch, s.ID, ""))
+			recordHit(sidebarRowSpaceSwitch, s.ID, "", -1, 1)
+			lines = append(lines, compose(st.mark(pal, m.sidebarSpaceSwitchRow(s, s.ID == currentSpace, cw, pal, st))))
+		}
+		if h := hidden[sidebarSectionSpaces]; h > 0 {
+			lines = append(lines, overflowRow(h, 0))
+		}
+	}
+
 	draw := [sidebarSectionCount]func(){
 		sidebarSectionSessions:  drawSessions,
 		sidebarSectionTerminals: drawTerminals,
@@ -2092,6 +2166,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionFiles:     drawFiles,
 		sidebarSectionGit:       drawGit,
 		sidebarSectionCustom:    drawCustom,
+		sidebarSectionSpaces:    drawSpaces,
 	}
 	for i, p := range plans {
 		if p.Spacer {
@@ -2382,10 +2457,16 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 
 // sidebarCursorIndex locates the cursor's target inside its section, so the
 // auto-scroll knows which offset to move and by how much.
-func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Node,
+func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions, spaces []sessiontree.Node,
 	terminals []sidebarTerminalEntry, agents []sidebarAgentEntry, files []fileRowSpec,
 ) (sidebarSection, int, bool) {
 	switch target.Kind {
+	case sidebarRowSpaceSwitch:
+		for i, s := range spaces {
+			if s.ID == target.SessionID {
+				return sidebarSectionSpaces, i, true
+			}
+		}
 	case sidebarRowSession:
 		for i, s := range sessions {
 			if s.Kind == sessiontree.KindSession && s.ID == target.SessionID {

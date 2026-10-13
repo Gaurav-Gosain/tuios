@@ -85,3 +85,52 @@ func spaceNode(space string, members []Node) Node {
 	node.Space = space
 	return node
 }
+
+// SpaceRows is one KindSpace row per space, in the order GroupBySpace puts the
+// spaces, then one row with an empty ID standing for the sessions in no space
+// when there are any. It is nil when no session is in a space, so a surface
+// that draws it draws nothing for a person who never files one.
+//
+// Each row carries its members' roll-up and count as a space's header does,
+// plus whether any member has a client attached.
+func SpaceRows(nodes []Node) []Node {
+	members := map[string][]Node{}
+	var spaces []string
+	var rest []Node
+	for _, n := range nodes {
+		if n.Kind != KindSession || n.Host != "" {
+			continue
+		}
+		space := groupSpace(n)
+		if space == "" {
+			rest = append(rest, n)
+			continue
+		}
+		if _, seen := members[space]; !seen {
+			spaces = append(spaces, space)
+		}
+		members[space] = append(members[space], n)
+	}
+	if len(spaces) == 0 {
+		return nil
+	}
+	out := make([]Node, 0, len(spaces)+1)
+	for _, space := range spaces {
+		out = append(out, spaceSummary(spaceNode(space, members[space]), members[space]))
+	}
+	if len(rest) > 0 {
+		none := spaceSummary(spaceNode("", rest), rest)
+		none.ID, none.Title = "", ""
+		out = append(out, none)
+	}
+	return out
+}
+
+// spaceSummary adds what a row standing for a whole space says beyond its
+// header in the sessions section: whether any member has a client attached.
+func spaceSummary(node Node, members []Node) Node {
+	for _, m := range members {
+		node.Attached = node.Attached || m.Attached
+	}
+	return node
+}

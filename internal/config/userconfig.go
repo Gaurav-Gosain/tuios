@@ -802,6 +802,9 @@ type SidebarConfig struct {
 	// SubagentRows is how an agent row shows its subagents: rows, one row
 	// each under it, or count, the count alone (default: rows).
 	SubagentRows string `toml:"subagent_rows"`
+	// Spaces is how the rail lays out spaces: grouped, split or off
+	// (default: grouped). See SidebarSpacesValues.
+	Spaces string `toml:"spaces"`
 	// SubagentCollapse is whether a heading line over an agent's subagents
 	// folds them: off, expanded or collapsed (default: off). See
 	// sidebar_subagents.go for these and the three keys after it.
@@ -988,6 +991,7 @@ func DefaultConfig() *UserConfig {
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
+				Spaces:        SidebarSpacesGrouped,
 				// The other subagent keys as they ship: no heading line, the
 				// row's four fields, no cap and no early hide.
 				SubagentCollapse:     SidebarSubagentCollapseOff,
@@ -2364,6 +2368,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	// Anything but count draws rows, the default; validation names a typo.
 	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
+	// Assigned whatever the file says, so a value removed from it goes back to
+	// grouped. A typo reads as grouped too, and validation names it.
+	s.SidebarSpaces = SidebarSpacesGrouped
+	if slices.Contains(SidebarSpacesValues, sb.Spaces) {
+		s.SidebarSpaces = sb.Spaces
+	}
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}

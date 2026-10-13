@@ -228,6 +228,9 @@ type Settings struct {
 	// appearance.sidebar.subagent_* keys and the rail's edge table. The rail
 	// on the other edge resolves its own; see renderSecondarySidebar.
 	SidebarSubagents SidebarSubagentView
+	// SidebarSpaces is how the rail lays out spaces: grouped, split or off.
+	// From appearance.sidebar.spaces. See SidebarSpacesValues.
+	SidebarSpaces string
 
 	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
 	SidebarFileDelete string
@@ -791,6 +794,7 @@ func DefaultSettings() Settings {
 		SidebarAgentRow:             DefaultSidebarAgentRow(),
 		SidebarAgentRestFold:        DefaultAgentRestFold,
 		SidebarSubagents:            DefaultSidebarSubagentView(),
+		SidebarSpaces:               SidebarSpacesGrouped,
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,

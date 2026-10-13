@@ -101,15 +101,18 @@ var sidebarSectionFloors = [sidebarSectionCount]int{
 	// Two, so a section the user put on the rail is never shrunk to only its
 	// title while another section grows.
 	sidebarSectionCustom: 2,
+	// Two, so the current space and one other stay on screen.
+	sidebarSectionSpaces: 2,
 }
 
-// The parsed layout, cached against the string it came from. The rail parses it
-// on every frame it rebuilds, and a split plus an Atoi per frame is a cost the
-// render cache exists to avoid paying; the mutex is here because tests render
-// rails in parallel.
+// The parsed layout, cached against the string it came from and whether the
+// spaces section rides on it. The rail parses it on every frame it rebuilds,
+// and a split plus an Atoi per frame is a cost the render cache exists to avoid
+// paying; the mutex is here because tests render rails in parallel.
 var (
 	layoutMu     sync.Mutex
 	layoutSource string
+	layoutSpaces bool
 	layoutParsed []sidebarSectionPlan
 	layoutHas    [sidebarSectionCount]bool
 	layoutValid  bool
@@ -118,14 +121,29 @@ var (
 // sidebarLayoutPlans is the rail's layout, in the order the sections are
 // stacked from the top.
 func sidebarLayoutPlans(s *config.Settings) []sidebarSectionPlan {
-	plans, _ := sidebarLayoutFor(s.SidebarSections)
+	plans, _ := sidebarLayoutFor(s.SidebarSections, sidebarLayoutSpaces(s))
 	return plans
 }
 
 // sidebarLayoutHas reports whether the layout names a section at all.
 func sidebarLayoutHas(section sidebarSection, s *config.Settings) bool {
-	_, has := sidebarLayoutFor(s.SidebarSections)
+	_, has := sidebarLayoutFor(s.SidebarSections, sidebarLayoutSpaces(s))
 	return has[section]
+}
+
+// sidebarLayoutSpaces reports whether the layout carries the spaces section,
+// which the split space layout puts directly above the sessions section.
+//
+// It is added here, to the parsed plan, rather than being a name in
+// appearance.sidebar.sections, so one setting picks the layout and nobody
+// edits their section list to get it or to be rid of it. It follows the
+// sessions section wherever a person put that, and a layout without sessions
+// has no spaces section either, since the section only picks what sessions
+// lists. It carries a share, never a flexible claim: a section with no rows
+// and a share takes no lines and changes nobody else's, so a rail with no
+// session in a space lays out exactly as a rail without the entry.
+func sidebarLayoutSpaces(s *config.Settings) bool {
+	return s.SidebarSpaces == config.SidebarSpacesSplit
 }
 
 // sidebarLayoutPins reports whether the rail pins its last section to the
@@ -140,14 +158,24 @@ func sidebarLayoutHas(section sidebarSection, s *config.Settings) bool {
 // and nothing about the bottom of the rail, and taking the agents block off its
 // bottom edge because a gap was asked for higher up would be a surprise nobody
 // typed.
+//
+// The spaces section does not count towards the two entries pinning needs. It
+// rides on the sessions section rather than being one the person laid out, so
+// a layout of sessions alone stays unpinned with it, as it is without it.
 func sidebarLayoutPins(plans []sidebarSectionPlan) bool {
-	return len(plans) > 1 && !plans[len(plans)-1].Spacer
+	n := 0
+	for _, p := range plans {
+		if p.Spacer || p.Section != sidebarSectionSpaces {
+			n++
+		}
+	}
+	return n > 1 && !plans[len(plans)-1].Spacer
 }
 
-func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount]bool) {
+func sidebarLayoutFor(source string, spaces bool) ([]sidebarSectionPlan, [sidebarSectionCount]bool) {
 	layoutMu.Lock()
 	defer layoutMu.Unlock()
-	if !layoutValid || layoutSource != source {
+	if !layoutValid || layoutSource != source || layoutSpaces != spaces {
 		var has [sidebarSectionCount]bool
 		entries := config.ParseSidebarSections(source)
 		plans := make([]sidebarSectionPlan, 0, len(entries))
@@ -162,10 +190,14 @@ func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount
 			if !ok {
 				continue
 			}
+			if section == sidebarSectionSessions && spaces && !has[sidebarSectionSpaces] {
+				has[sidebarSectionSpaces] = true
+				plans = append(plans, sidebarSectionPlan{Section: sidebarSectionSpaces, Share: sidebarSpacesShare})
+			}
 			has[section] = true
 			plans = append(plans, sidebarSectionPlan{Section: section, Share: e.Share})
 		}
-		layoutSource, layoutParsed, layoutHas, layoutValid = source, plans, has, true
+		layoutSource, layoutSpaces, layoutParsed, layoutHas, layoutValid = source, spaces, plans, has, true
 	}
 	return layoutParsed, layoutHas
 }
@@ -401,5 +433,6 @@ func (m *OS) sidebarScrollOffsets() [sidebarSectionCount]*int {
 		sidebarSectionFiles:     &m.SidebarScrollF,
 		sidebarSectionGit:       &m.SidebarScrollG,
 		sidebarSectionCustom:    &m.SidebarScrollC,
+		sidebarSectionSpaces:    &m.SidebarScrollSp,
 	}
 }

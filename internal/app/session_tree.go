@@ -160,6 +160,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		CurrentWorkspace: client.SessionCurrentWorkspace(name),
 		Worktree:         worktreeRef(client.SessionWorktree(name)),
 		Space:            client.SessionSpace(name),
+		Attached:         client.SessionAttached(name),
 		Windows:          windows,
 	}
 }

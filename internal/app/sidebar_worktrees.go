@@ -57,12 +57,12 @@ func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node 
 	return m.sidebarMachineRows(m.sidebarGroupedRows(local), sessions[len(local):])
 }
 
-// sidebarGroupedRows groups one machine's sessions by space and by repository
-// and leaves the members of a folded group out. A space's header stays when it
-// is folded; a repository's header inside a folded space goes with the rest of
-// the space.
+// sidebarGroupedRows groups one machine's sessions by space and by repository,
+// as the space layout in force says (see sidebarLayoutRows), and leaves the
+// members of a folded group out. A space's header stays when it is folded; a
+// repository's header inside a folded space goes with the rest of the space.
 func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node {
-	rows := sessiontree.GroupBySpace(sessions, sessiontree.GroupByRepo)
+	rows := m.sidebarLayoutRows(sessions)
 	if len(m.SidebarCollapsedRepos) == 0 && len(m.SidebarCollapsedSpaces) == 0 {
 		return rows
 	}

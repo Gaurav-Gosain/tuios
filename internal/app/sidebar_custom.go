@@ -269,7 +269,7 @@ func (m *OS) secondaryRailContextNow() railContext {
 		if cfg != nil && cfg.Sections != "" {
 			sections = cfg.Sections
 		}
-		plans, _ := sidebarLayoutFor(sections)
+		plans, _ := sidebarLayoutFor(sections, sidebarLayoutSpaces(&m.Settings))
 		for _, p := range plans {
 			if !p.Spacer && p.Section == sidebarSectionCustom && p.Share > 0 {
 				lines = lines * p.Share / 100

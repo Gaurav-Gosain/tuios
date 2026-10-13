@@ -2264,6 +2264,12 @@ func listingsAgree(a, b []SessionInfo) bool {
 		if a[i].Restored != b[i].Restored {
 			return false
 		}
+		// Filing a session under a space, and a client attaching to one, move
+		// no window either, and the rail groups by the first and marks a space
+		// by the second.
+		if a[i].Space != b[i].Space || a[i].Attached != b[i].Attached {
+			return false
+		}
 		// A cd moves no window either, and the row's label is the directory.
 		if a[i].Dir != b[i].Dir || a[i].Branch != b[i].Branch {
 			return false

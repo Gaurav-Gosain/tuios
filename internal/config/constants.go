@@ -545,6 +545,20 @@ const (
 // appearance.sidebar.subagent_rows.
 var SidebarSubagentRowsValues = []string{SidebarSubagentRowsRows, SidebarSubagentRowsTree, SidebarSubagentRowsCount}
 
+// How the rail lays out spaces. Grouped draws a heading per space inside the
+// sessions section, over that space's sessions. Split draws a spaces section
+// of its own directly above the sessions section, one row per space, and the
+// sessions section lists only the current space's sessions. Off draws the
+// sessions section as one flat list and no space anywhere on the rail.
+const (
+	SidebarSpacesGrouped = "grouped"
+	SidebarSpacesSplit   = "split"
+	SidebarSpacesOff     = "off"
+)
+
+// SidebarSpacesValues lists the valid values for appearance.sidebar.spaces.
+var SidebarSpacesValues = []string{SidebarSpacesGrouped, SidebarSpacesSplit, SidebarSpacesOff}
+
 // FormatWindowTitle expands WindowTitleFormat for one window. The placeholders
 // are {title} (the custom or terminal-reported title), {index} (the window's
 // 1-based position in its workspace, the same number the leader-digit shortcuts

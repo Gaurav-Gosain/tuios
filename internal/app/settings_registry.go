@@ -126,6 +126,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.subagent_fields":        "Subagent fields",
 	"appearance.sidebar.subagent_max_rows":      "Subagent row limit",
 	"appearance.sidebar.subagent_hide_finished": "Hide finished subagents after",
+	"appearance.sidebar.spaces":                 "Spaces",
 	"appearance.dock_workspace_tab_format":      "Workspace tab format",
 	"appearance.zoom_size":                      "Zoom size",
 	"appearance.zoom_animation":                 "Zoom animates",

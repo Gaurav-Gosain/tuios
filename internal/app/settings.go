@@ -491,6 +491,18 @@ func (m *OS) settingsCategories() []settingsCategory {
 	if m.agentsOn() {
 		sidebar.Items = slices.Insert(sidebar.Items, 4, m.resolveRows([]settingsRow{custom("", m.agentRowItem())})...)
 	}
+	// How the rail lays out spaces means nothing until a session is in one, so
+	// the row waits for a space the way the agent rows wait for an agent. It
+	// sits under the sections, which it adds one to.
+	if m.spacesSeen() {
+		at := len(sidebar.Items)
+		for i, item := range sidebar.Items {
+			if item.Path == "appearance.sidebar.sections" {
+				at = i + 1
+			}
+		}
+		sidebar.Items = slices.Insert(sidebar.Items, at, m.resolveRows([]settingsRow{opt("appearance.sidebar.spaces")})...)
+	}
 	// How long an agent row rests before it folds means nothing until an
 	// agent has run, so the row waits for one like the other agent rows.
 	if m.agentsSeen() {

@@ -4848,6 +4848,39 @@ The one-blank-cell control first ran against `TestSpacesInvisibleWithoutSpaces` 
 
 Not covered: a repository folded inside a space folds the same repository in every other space too, because repository folds are keyed by repository name. That is the existing key, and changing it is not this work.
 
+### Space layouts
+
+Run on 2026-10-13 on macOS. The tests are in `space_layout_test.go`: `TestSpaceSplitLayout`, `TestSpaceOffLayout`, `TestSpaceLayoutLiveSwitch`, `TestSpaceLayoutSettingsRow` and `TestSpaceLayoutsInvisibleWithoutSpaces`. They use the Space UI fixture. Each control cuts one wire from the fixed build, builds it, and runs the test named. The fixed build passes all five, and the existing `space_ui_test.go` tests cover `grouped`.
+
+`TestSpaceSplitLayout` uses `e2e-a1` and then gives `e2e-a2` later activity with no use, by opening a window in it from the CLI. So among alpha's two sessions, the use rule picks `e2e-a1`, while the activity rule and the creation rule both pick `e2e-a2`.
+
+`TestSpaceLayoutsInvisibleWithoutSpaces` compares this build's rail under `grouped`, `split` and `off`, with no session in a space, against a build of the commit before any space UI (`fix(session): name the sessions and both force forms in kill-space's refusal`), named with `TUIOS_E2E_BASELINE_BIN`. It compares styled screens, so a moved mark or ink fails as well as a moved cell.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| `RanksAboveByUse` ignores `last_used` (ranks by activity, then creation) | `TestSpaceSplitLayout` ("no client shows session e2e-a1": the click landed on e2e-a2) | **caught** |
+| `split` lists every session in the sessions section, not the current space's | `TestSpaceSplitLayout` ("from e2e-loose the sessions section lists [e2e-loose e2e-b1 e2e-a1 e2e-a2], want e2e-loose alone") | **caught** |
+| `sidebarSwitchSpace` does not ask for a fresh listing after the switch | `TestSpaceSplitLayout` ("after the switch the attached mark is not on alpha alone": none still read attached at 2.5s) | **caught** |
+| `off` falls through to `grouped` | `TestSpaceOffLayout` ("with spaces off the sessions section lists [beta e2e-b1 alpha e2e-a1 e2e-a2 e2e-loose]") | **caught** |
+| `ApplyAppearanceConfig` never takes the file's `spaces` value | `TestSpaceLayoutLiveSwitch` ("saving spaces = split did not give the attached client the split rail") | **caught** |
+| `spacesSeen` is always true (the Spaces row with no space anywhere) | `TestSpaceLayoutSettingsRow` ("with no session in a space the Sidebar tab carries the Spaces row") | **caught** |
+| `SpaceRows` draws a `none` row with no space anywhere | `TestSpaceLayoutsInvisibleWithoutSpaces` ("with no spaces and spaces = split the rail differs from the baseline's") | **caught** |
+| `listingsAgree` ignores `Space` and `Attached` | `TestSpaceLayoutSettingsRow` ("the grouped rail: the rail never drew [beta alpha]": a session filed under a space while another is attached never reached the rail) | **caught** |
+| `sidebarSignature` leaves out `appearance.sidebar.spaces` | `TestSpaceLayoutLiveSwitch` passes | **not caught** |
+
+The render-cache control is not caught because a config reload re-keys the rail on its own, so the rail redraws either way. The key stays because the layout is drawn state, and it costs one string. What a reload needs, the value reaching the settings, is the apply-path control above it.
+
+The `listingsAgree` row is a Phase 4 bug this work found. A session filed under a space, or a client attaching to a session, moves no window. So the cached listing changed without its generation, and the rail kept drawing the old frame. Phase 4's tests file only the attached session, whose space arrives on its own state, so they could not see it.
+
+### Rail peek holds the terminals height
+
+Run on 2026-10-13 on macOS. The test is `TestRailPeekHoldsTheTerminalsHeight` in `rail_peek_hold_test.go`, with the section order `terminals,spacer:5,agents,spacer:5,sessions,spacer:5,git,files`, under `spaces = off` and `spaces = split`. The attached session `pk-main` has three panes, `pk-few` one and `pk-many` six. The pointer hovers the session rows in the order main, few, many, few, main, many, and after every hover every session row, every header below terminals and every spaces row must be on the row it held at rest. The fixed build passes both subtests. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The hold: the budget counts the peeked session's rows (`if false && len(resting) > 0` in `sidebarPanelLinesForTree`) | `off` and `split` ("hovering pk-few moved pk-main from row 7 to row 5", and from 10 to 8 in split) | **caught** |
+| The padding: the held lines a shorter peek leaves are not filled (`for false && len(lines) < end` in `drawTerminals`) | `off` and `split` (the same two-row jump up on pk-few) | **caught** |
+
 ### hello verb: the caller's terminal reaches a session it creates
 
 Run on 2026-10-13 on macOS. `new --space` goes through the `new-session` verb over the JSON verb connection (`VerbClient`), not the binary protocol `new`/`attach` use. The binary protocol's `MsgHello` sets `cs.hello` from the caller's real terminal, and `verbNewSession` (and `switch-session`'s `create`) read it; the JSON verb connection's own handshake, the `hello` verb, never set `cs.hello` at all, so every session a verb created got the daemon's own default (`xterm-256color`, no `COLORTERM`) regardless of the caller's real terminal. The `hello` verb now takes `term`/`color_term`, and `VerbClient`'s handshake sends them with the same detection `client.go`'s binary-protocol `sendHello` uses.

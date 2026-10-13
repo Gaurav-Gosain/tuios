@@ -3349,11 +3349,17 @@ func (s *Session) Info() SessionInfo {
 		dir, branch = p.place.place()
 	}
 
+	var lastUsed int64
+	if used := s.LastUsed(); !used.IsZero() {
+		lastUsed = used.Unix()
+	}
+
 	return SessionInfo{
 		Name:             s.Name(),
 		ID:               s.ID,
 		Created:          s.Created.Unix(),
 		LastActive:       s.LastActive().Unix(),
+		LastUsed:         lastUsed,
 		WindowCount:      len(windows),
 		Attached:         false, // Will be set by manager
 		Width:            width,

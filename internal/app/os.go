@@ -1360,6 +1360,8 @@ type OS struct {
 	SidebarScrollF int
 	SidebarScrollG int
 	SidebarScrollC int
+	// SidebarScrollSp is the spaces section's, drawn by the split space layout.
+	SidebarScrollSp int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.

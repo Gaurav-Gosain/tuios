@@ -1068,6 +1068,21 @@ hides or shows the opposite edge, while `Ctrl+B b` keeps its existing legacy
 rail toggle. The opposite-edge toggle does not opt in an edge whose
 `enabled = true` was never configured.
 
+## Spaces on the rail
+
+`appearance.sidebar.spaces` picks how the rail shows [spaces](SESSIONS.md) (sessions filed with `tuios new --space` or `set-session-space`):
+
+```toml
+[appearance.sidebar]
+spaces = "grouped"   # grouped, split or off
+```
+
+- `grouped` (the default) draws a bold heading per space inside the sessions section, with that space's sessions stepped in under it and the sessions in no space after them all. A click or Enter on a heading folds it.
+- `split` draws a spaces section directly above the sessions section, wherever `sections` puts that, without a change to `sections`. It has one row per space, in the order of each space's first session, and a `none` row for the sessions in no space. A row shows the space's name, how many sessions it holds, `attached` while a client is attached to one of them, and the worst agent state among them, as a folded heading does. The space this client is in wears the rail's focus mark. The sessions section then lists only that space's sessions, with no headings; worktree sessions are still grouped under their repository. A click or Enter on a space's row switches to the session of that space you used last, as `tuios switch-space` does; on `none`, to the session in no space you used last. The global session counts as in no space. The section takes at most a quarter of the rail, and scrolls past that.
+- `off` lists every session in one flat list and shows no space anywhere on the rail.
+
+The setting is the rail's alone: the session switcher (`Ctrl+B S`) and the dock's `space` component are the same in all three. With no session in any space, all three draw the rail exactly as a rail with no spaces. A config reload applies a new value to an attached client at once. The settings page shows the option as **Spaces** on its Sidebar tab once a session is in a space, and a value chosen there applies at once and is written to config.toml. A value other than the three reads as `grouped`, and the validator says so.
+
 ## The rail's custom section
 
 The rail has one section whose rows are the output of a command you write.

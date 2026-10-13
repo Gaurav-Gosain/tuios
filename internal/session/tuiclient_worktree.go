@@ -37,3 +37,16 @@ func (c *TUIClient) SessionSpace(name string) string {
 	}
 	return ""
 }
+
+// SessionAttached reports whether the cached listing says a client is
+// attached to the named session. False when it is unknown.
+func (c *TUIClient) SessionAttached(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Attached
+		}
+	}
+	return false
+}

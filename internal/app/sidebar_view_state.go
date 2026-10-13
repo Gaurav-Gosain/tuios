@@ -15,6 +15,7 @@ type secondaryRailView struct {
 	scrollS, scrollT int
 	scrollA, scrollF int
 	scrollG, scrollC int
+	scrollSp         int
 	agentAnchor      sidebarScrollAnchor
 	agentsUnfolded   bool
 	subagentFold     map[string]bool
@@ -50,6 +51,7 @@ func (m *OS) swapSecondaryRail() {
 	m.SidebarScrollF, s.scrollF = s.scrollF, m.SidebarScrollF
 	m.SidebarScrollG, s.scrollG = s.scrollG, m.SidebarScrollG
 	m.SidebarScrollC, s.scrollC = s.scrollC, m.SidebarScrollC
+	m.SidebarScrollSp, s.scrollSp = s.scrollSp, m.SidebarScrollSp
 	m.sidebarAgentAnchor, s.agentAnchor = s.agentAnchor, m.sidebarAgentAnchor
 	m.sidebarAgentsUnfolded, s.agentsUnfolded = s.agentsUnfolded, m.sidebarAgentsUnfolded
 	m.sidebarSubagentFold, s.subagentFold = s.subagentFold, m.sidebarSubagentFold

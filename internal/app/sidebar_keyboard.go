@@ -187,6 +187,8 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionAgents
 	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
 		return sidebarSectionFiles
+	case sidebarRowSpaceSwitch:
+		return sidebarSectionSpaces
 	default:
 		return sidebarSectionCount
 	}
@@ -274,6 +276,10 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarToggleRepoCollapsed(row.SessionID)
 	case sidebarRowSpace:
 		m.SidebarToggleSpaceCollapsed(row.SessionID)
+	case sidebarRowSpaceSwitch:
+		// Switching space is navigating sessions, so the keyboard stays in
+		// the rail, as it does on a session row.
+		m.sidebarSwitchSpace(row.SessionID)
 	case sidebarRowHost:
 		m.SidebarToggleHostCollapsed(row.SessionID)
 	case sidebarRowFiles:
