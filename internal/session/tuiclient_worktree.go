@@ -23,3 +23,17 @@ func (c *TUIClient) SessionWorktree(name string) *WorktreeInfo {
 	}
 	return nil
 }
+
+// SessionSpace returns the space the cached listing files the named session
+// under, or "" when it is in none, is unknown, or is served by a daemon too
+// old to send the field.
+func (c *TUIClient) SessionSpace(name string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Space
+		}
+	}
+	return ""
+}

@@ -88,16 +88,109 @@ func (m *OS) sessionSwitcherItems() []sessiontree.Node {
 	return out
 }
 
-// SessionSwitcherTarget returns the session the switcher's selection points at,
-// resolved against the FILTERED list. Every activation path goes through it:
-// resolving an index against the unfiltered items is the off-by-one this exists
-// to prevent, because with a query typed, row n on screen is not item n.
+// SessionSwitcherTarget returns the session at row idx of the switcher as it is
+// drawn: filtered, and grouped under space headers when any session shown is
+// in a space. Every activation path goes through it: resolving an index against
+// the unfiltered items is the off-by-one this exists to prevent, because with a
+// query typed, row n on screen is not item n. A space's header is not a
+// session, so it resolves to nothing.
 func (m *OS) SessionSwitcherTarget(idx int) (sessiontree.Node, bool) {
-	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
-	if idx < 0 || idx >= len(filtered) {
+	rows := m.sessionSwitcherRows()
+	if idx < 0 || idx >= len(rows) || rows[idx].Kind == sessiontree.KindSpace {
 		return sessiontree.Node{}, false
 	}
-	return filtered[idx], true
+	return rows[idx], true
+}
+
+// SessionSwitcherSelectedTarget is the session under the switcher's keyboard
+// selection, once the selection has been moved off a space's header (see
+// sessionSwitcherSettle).
+func (m *OS) SessionSwitcherSelectedTarget() (sessiontree.Node, bool) {
+	m.sessionSwitcherSettle(m.sessionSwitcherRows())
+	return m.SessionSwitcherTarget(m.SessionSwitcherSelected)
+}
+
+// sessionSwitcherRows is the switcher's rows as drawn. With no session shown
+// in a space it is the filtered list itself, so the switcher of a person who
+// never uses spaces is the switcher it always was. Otherwise each space's
+// sessions follow a header for it, and the sessions in no space come last.
+func (m *OS) sessionSwitcherRows() []sessiontree.Node {
+	return sessiontree.GroupBySpace(filterSessionSwitcher(m.SessionSwitcherItems, m.SessionSwitcherQuery), nil)
+}
+
+// sessionSwitcherSettle keeps the selection on a session row. A query change
+// or an open puts it back on row 0, which is a space's header whenever the
+// rows are grouped, and a person cannot have chosen a header on purpose: the
+// keys and the pointer step over it. So with a query typed, row 0 on a header
+// is read as "the best match", which is the first row filtering produced,
+// wherever grouping put it; that keeps typing a session's exact name selecting
+// that session. With no query, and on any other header (a kill shrinking the
+// list under the cursor), the selection moves to the next session row, or the
+// previous one at the end.
+func (m *OS) sessionSwitcherSettle(rows []sessiontree.Node) {
+	sel := m.SessionSwitcherSelected
+	if sel < 0 || sel >= len(rows) || rows[sel].Kind != sessiontree.KindSpace {
+		return
+	}
+	if sel == 0 && m.SessionSwitcherQuery != "" {
+		best := filterSessionSwitcher(m.SessionSwitcherItems, m.SessionSwitcherQuery)[0]
+		for i, r := range rows {
+			if r.Kind == sessiontree.KindSession && r.ID == best.ID && r.Host == best.Host {
+				m.SessionSwitcherSelected = i
+				return
+			}
+		}
+	}
+	for i := sel + 1; i < len(rows); i++ {
+		if rows[i].Kind != sessiontree.KindSpace {
+			m.SessionSwitcherSelected = i
+			return
+		}
+	}
+	for i := sel - 1; i >= 0; i-- {
+		if rows[i].Kind != sessiontree.KindSpace {
+			m.SessionSwitcherSelected = i
+			return
+		}
+	}
+}
+
+// filterSessionSwitcher is the switcher's filter. A query "space/session"
+// narrows to the sessions in the spaces that the part before the slash names,
+// then filters those by the part after it as plain typing would; "space/"
+// lists the whole space. A space whose name is the part exactly is the only
+// one taken when there is one, so "api" does not also open "api-legacy".
+//
+// The part before the slash has to name a space for this reading to apply. A
+// space name cannot contain a slash, but a session's title can (it may be a
+// directory), so a query no space answers to is filtered as plain text.
+func filterSessionSwitcher(items []sessiontree.Node, query string) []sessiontree.Node {
+	spacePart, rest, ok := strings.Cut(query, "/")
+	if !ok || spacePart == "" {
+		return FilterSessionItems(items, query)
+	}
+	want := strings.ToLower(spacePart)
+	var exact, partial []sessiontree.Node
+	for _, item := range items {
+		if item.Space == "" || item.Host != "" {
+			continue
+		}
+		space := strings.ToLower(item.Space)
+		switch {
+		case space == want:
+			exact = append(exact, item)
+		case strings.Contains(space, want):
+			partial = append(partial, item)
+		}
+	}
+	in := exact
+	if len(in) == 0 {
+		in = partial
+	}
+	if len(in) == 0 {
+		return FilterSessionItems(items, query)
+	}
+	return FilterSessionItems(in, rest)
 }
 
 // FilterSessionItems filters session switcher items by a query string, matching

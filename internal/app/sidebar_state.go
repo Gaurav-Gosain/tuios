@@ -86,6 +86,10 @@ type sidebarStateFile struct {
 	// shut. A list rather than a map, sorted on the way out, so the file is
 	// stable between writes and a person can read it.
 	ReposCollapsed []string `json:"repos_collapsed,omitempty"`
+	// SpacesCollapsed names the spaces whose group is folded shut, sorted for
+	// the same reason ReposCollapsed is. Its own list, so a space never folds a
+	// repository of the same name or the other way round.
+	SpacesCollapsed []string `json:"spaces_collapsed,omitempty"`
 	// HostsOrder is the user's drag-defined order of the other machines' groups
 	// in the sessions section, and HostsCollapsed names the machines whose
 	// group is folded shut, sorted for the same reason ReposCollapsed is.
@@ -147,6 +151,12 @@ func (m *OS) loadSidebarState() {
 		m.SidebarCollapsedRepos = make(map[string]bool, len(st.ReposCollapsed))
 		for _, repo := range st.ReposCollapsed {
 			m.SidebarCollapsedRepos[repo] = true
+		}
+	}
+	if len(st.SpacesCollapsed) > 0 {
+		m.SidebarCollapsedSpaces = make(map[string]bool, len(st.SpacesCollapsed))
+		for _, space := range st.SpacesCollapsed {
+			m.SidebarCollapsedSpaces[space] = true
 		}
 	}
 	if len(st.HostsOrder) > 0 {
@@ -226,6 +236,7 @@ func (m *OS) saveSidebarState() {
 		Collapsed:             m.SidebarCollapsed,
 		SectionSplit:          m.SidebarSectionSplit,
 		ReposCollapsed:        collapsedRepoList(m.SidebarCollapsedRepos),
+		SpacesCollapsed:       collapsedRepoList(m.SidebarCollapsedSpaces),
 		HostsOrder:            m.SidebarHostOrder,
 		HostsCollapsed:        collapsedRepoList(m.SidebarCollapsedHosts),
 		HostSessionOrder:      m.SidebarHostSessionOrder,

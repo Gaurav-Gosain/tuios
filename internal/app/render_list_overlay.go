@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -275,8 +276,19 @@ func (m *OS) moveListSelection(selected, scroll *int, count, maxVisible, delta i
 
 // SessionSwitcherMove moves the session switcher's selection by delta.
 func (m *OS) SessionSwitcherMove(delta int) {
-	n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
-	m.moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, listOverlayRows, delta)
+	rows := m.sessionSwitcherRows()
+	if len(rows) == 0 || delta == 0 {
+		return
+	}
+	// Space headers are stepped over, the way the Inbox steps over its own.
+	// With none on the list every row rests, and the step is the plain one.
+	var rest func(int) bool
+	if rows[0].Kind == sessiontree.KindSpace {
+		m.sessionSwitcherSettle(rows)
+		rest = func(i int) bool { return rows[i].Kind != sessiontree.KindSpace }
+	}
+	m.SessionSwitcherSelected = m.listStepSkip(m.SessionSwitcherSelected, delta, len(rows), rest)
+	m.SessionSwitcherScroll = listnav.Scroll(m.SessionSwitcherScroll, m.SessionSwitcherSelected, len(rows), listOverlayRows)
 }
 
 // LayoutPickerMove moves the layout picker's selection by delta.

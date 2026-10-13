@@ -991,7 +991,7 @@ component:
 
 ```toml
 [dock]
-left   = ["mode", "workspaces", "trail", "tape"]
+left   = ["mode", "workspaces", "trail", "space", "tape"]
 center = ["windows"]
 right  = ["transfers", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
@@ -1005,11 +1005,15 @@ on-click = "tuios new-window log -- git log --oneline -20"
 ```
 
 The lists above are the default: omit the whole table and the bar is unchanged.
+
+`space` is the attached session's space and name, `work > api`, for a session filed under a space (see `tuios new --space`). It renders nothing at all for a session in no space, so it costs a bar that never uses spaces nothing. When the label does not fit, the space name is cut first; when the session name and one cell of the space do not fit, the label is left out rather than cut. A config that writes its own `left` list does not get it until it adds `"space"`: a list you wrote is the whole list.
+
 `transfers` shows the copies between machines. It shows nothing while no copy
 exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
 count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 `1 failed` stays until you open the Copies panel. A click opens the panel. Add
 `transfers` to your own `right` list to see it there.
+
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 

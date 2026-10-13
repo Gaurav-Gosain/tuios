@@ -309,6 +309,23 @@ func (m *OS) sidebarSignature() uint64 {
 		repoFold ^= e
 	}
 	mixU(repoFold)
+	// The space groups, the same way: which spaces are folded, and the
+	// attached session's own space, which arrives on the session state rather
+	// than with the listing the cache generation covers.
+	var spaceFold uint64
+	for space, collapsed := range m.SidebarCollapsedSpaces {
+		if !collapsed {
+			continue
+		}
+		e := uint64(1469598103934665603)
+		for i := range len(space) {
+			e ^= uint64(space[i])
+			e *= prime
+		}
+		spaceFold ^= e
+	}
+	mixU(spaceFold)
+	mixS(m.SessionSpace)
 
 	// The machine groups: which machine the rows come from, the user's order
 	// over the others, their session orders, and which are folded. The

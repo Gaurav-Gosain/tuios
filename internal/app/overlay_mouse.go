@@ -196,7 +196,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case "sectioneditor":
 		m.SectionEditorSelected = idx
 	case "session":
-		m.SessionSwitcherSelected = idx
+		// A space's header is not a row the cursor rests on.
+		if _, ok := m.SessionSwitcherTarget(idx); ok {
+			m.SessionSwitcherSelected = idx
+		}
 	case "agentmail":
 		m.AgentMailSelect(idx)
 	case "inbox":
@@ -432,8 +435,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// only, as this used to, made the switcher the one list where a click
 		// did nothing visible, and it is why "clicking a session does not
 		// switch" was reportable at all.
-		m.SessionSwitcherSelected = row.Idx
-		m.sessionSwitcherActivate(row.Idx)
+		// A space's header is a heading, not a session, so a click on it does
+		// nothing.
+		if _, ok := m.SessionSwitcherTarget(row.Idx); ok {
+			m.SessionSwitcherSelected = row.Idx
+			m.sessionSwitcherActivate(row.Idx)
+		}
 	case "agentmail":
 		// A click opens, exactly like enter on the selected row.
 		m.AgentMailSelect(row.Idx)

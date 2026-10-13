@@ -43,28 +43,34 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 }
 
 // sidebarSessionRows is the sessions section's own row list: the attached
-// machine's sessions with the worktree ones gathered under their repository
-// and the members of a folded repository left out, then laid out by machine
-// with the other machines' rows (see sidebarMachineRows).
+// machine's sessions gathered under their space and, inside that, the worktree
+// ones under their repository, with the members of a folded space or
+// repository left out, then laid out by machine with the other machines' rows
+// (see sidebarMachineRows).
 //
 // Only the sessions section reads it. The terminals and agents sections keep
-// reading the ungrouped list, so folding a repository or a machine hides its
-// rows here and never hides its panes or its waiting agents, which is the
-// difference between tidying a list and losing work.
+// reading the ungrouped list, so folding a space, a repository or a machine
+// hides its rows here and never hides its panes or its waiting agents, which
+// is the difference between tidying a list and losing work.
 func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node {
 	local := localSessionNodes(sessions)
-	return m.sidebarMachineRows(m.sidebarRepoRows(local), sessions[len(local):])
+	return m.sidebarMachineRows(m.sidebarGroupedRows(local), sessions[len(local):])
 }
 
-// sidebarRepoRows gathers one machine's worktree sessions under their
-// repository and leaves a folded repository's members out.
-func (m *OS) sidebarRepoRows(sessions []sessiontree.Node) []sessiontree.Node {
-	rows := sessiontree.GroupByRepo(sessions)
-	if len(m.SidebarCollapsedRepos) == 0 {
+// sidebarGroupedRows groups one machine's sessions by space and by repository
+// and leaves the members of a folded group out. A space's header stays when it
+// is folded; a repository's header inside a folded space goes with the rest of
+// the space.
+func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node {
+	rows := sessiontree.GroupBySpace(sessions, sessiontree.GroupByRepo)
+	if len(m.SidebarCollapsedRepos) == 0 && len(m.SidebarCollapsedSpaces) == 0 {
 		return rows
 	}
 	out := make([]sessiontree.Node, 0, len(rows))
 	for _, n := range rows {
+		if n.Kind != sessiontree.KindSpace && n.Space != "" && m.SidebarCollapsedSpaces[n.Space] {
+			continue
+		}
 		if n.Kind == sessiontree.KindSession && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo] {
 			continue
 		}
@@ -135,8 +141,15 @@ func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (string, bool) {
 // its rows are not on screen, so the parent carries the worst of them and the
 // count of what it is hiding.
 func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, st sidebarRowState) string {
+	return m.sidebarGroupHeaderRow(node, m.SidebarRepoCollapsed(node.ID), false, cw, pal, st)
+}
+
+// sidebarGroupHeaderRow renders a group header, a repository's or a space's:
+// see sidebarRepoRow for what it carries. strong sets the title in bold, which
+// is what a space's header takes so that it reads as the outer group without
+// relying on a colour a 16-colour terminal may not have.
+func (m *OS) sidebarGroupHeaderRow(node sessiontree.Node, collapsed, strong bool, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	collapsed := m.SidebarRepoCollapsed(node.ID)
 
 	right, rightW := "", 0
 	if collapsed && node.WindowCount > 0 {
@@ -153,7 +166,17 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		state = node.AgentState
 	}
 	glyph := sidebarQuietDot(rowBg, pal, &m.Settings)
-	if agentStateIndicator(state) != "" {
+	switch {
+	case node.Kind == sessiontree.KindSpace:
+		// A space's header carries the fold mark, as a machine's does, so it
+		// cannot be mistaken for a session in no space at the same indent. Its
+		// members' rolled-up state still shows, in the gutter and the count.
+		mark := m.Settings.GetRailFoldOpenGlyph()
+		if collapsed {
+			mark = m.Settings.GetRailFoldShutGlyph()
+		}
+		glyph = sidebarStyle(rowBg, pal.FgMute).Render(mark)
+	case agentStateIndicator(state) != "":
 		glyph = sidebarGlyph(state, node.DoneSeen, node.Subagents, rowBg, pal, &m.Settings)
 	}
 
@@ -164,9 +187,10 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	// A repository is an item that owns a subtree, not a heading: it wears a
 	// session's glyph, rolls its members' states up, and steps in under its
 	// machine with every other session row. Its own members hang off it on the
-	// tree marks. See sidebarWorktreeLabel.
-	indent := m.sidebarRowIndent()
-	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(state)).
+	// tree marks. See sidebarWorktreeLabel. A space's header is the same row
+	// one level out, with its members stepped in under it.
+	indent := m.sidebarNodeIndent(node)
+	name := sidebarStyle(rowBg, fg).Bold(strong || sidebarAttention(state)).
 		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarGutter(false, state, rowBg, pal, &m.Settings)
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)

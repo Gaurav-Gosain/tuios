@@ -434,6 +434,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
 		m.SidebarToggleRepoCollapsed(hit.SessionID)
+	case sidebarRowSpace:
+		m.SidebarToggleSpaceCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -620,6 +622,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
 		m.SidebarToggleRepoCollapsed(hit.SessionID)
+	case sidebarRowSpace:
+		m.SidebarToggleSpaceCollapsed(hit.SessionID)
 	case sidebarRowHost:
 		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:
@@ -953,8 +957,9 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.Target = CtxTargetMachine
 		cm.SessionID = hit.SessionID
 		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowRepo:
-		// A session on another machine, and a repository's group header.
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowRepo, sidebarRowSpace:
+		// A session on another machine, and a repository's or a space's
+		// group header.
 		// Neither is a local session and neither has a per-row menu in this
 		// release, so the right-click opens the rail's own settings the way a
 		// click on blank rail would, rather than building a session menu for a

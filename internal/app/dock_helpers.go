@@ -32,9 +32,12 @@ type DockLayout struct {
 	// project-tape badge, both styled as passive information. They are separate
 	// because they are separate components now: the badge used to be glued onto
 	// the readout, so neither could be moved or dropped without the other.
-	ModeLabel  string
-	TrailText  string
-	TapeText   string
+	ModeLabel string
+	TrailText string
+	TapeText  string
+	// SpaceText is the space label, "" when the session is in no space or the
+	// label does not fit. See dock_space.go.
+	SpaceText  string
 	LeftWidth  int
 	RightWidth int
 	// CustomLeft, CustomCenter and CustomRight are the room the custom cells on each side asked for, so the
@@ -523,6 +526,9 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// up, so everything else is laid out against what they leave rather than
 	// against the screen.
 	barWidth := max(m.GetRenderWidth()-m.dockSessionStripWidth(), 0)
+
+	layout.SpaceText = m.dockSpaceText(barWidth)
+	layout.LeftWidth += lipgloss.Width(layout.SpaceText)
 
 	// The workspace strip rides in the left region, so the dock items are laid
 	// out against the room it leaves.

@@ -4820,6 +4820,34 @@ A first cut of the attached-path control also removed the `--global` refusal and
 
 Not covered: a crash part way through `rename-space`. The test stands in for it by putting one member back under the old name with `set-session-space`, which is the state such a crash leaves, and checks the same rename moves it.
 
+### Space UI
+
+Run on 2026-10-13 on macOS. The tests are in `space_ui_test.go`: `TestSpaceRailHeadersFoldAndPersist`, `TestSpaceSwitcherGroupsAndNarrows`, `TestSpaceDockLabel`, `TestSpaceDockLabelNarrow` and `TestSpacesInvisibleWithoutSpaces`. Each control cuts one wire from the fixed build, builds it, and runs the tests named; the fixed build passes all five.
+
+The fixture makes `e2e-loose` (no space) first, then `e2e-b1` in beta, then `e2e-a1` and `e2e-a2` in alpha, so a surface that shows the daemon's order puts the ungrouped session first and alpha after beta's member, and only grouping gives beta, alpha, then e2e-loose.
+
+`TestSpacesInvisibleWithoutSpaces` compares this build's rail, switcher and dock, whole screens, with a build from the commit before the space UI (`fix(session): name the sessions and both force forms in kill-space's refusal`), named with `TUIOS_E2E_BASELINE_BIN`; it is skipped when that is not set. The pane's generated ID and the temporary path in the files header are the only parts masked.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `GroupBySpace` returns the list ungrouped | `TestSpaceRailHeadersFoldAndPersist` (the grouped rail never drew the headers), `TestSpaceSwitcherGroupsAndNarrows` ("the switcher never listed the four sessions under their headings") | **caught** |
+| `saveSidebarState` does not write `spaces_collapsed` | `TestSpaceRailHeadersFoldAndPersist` ("sidebar.json spaces_collapsed is <nil>, want [beta]") | **caught** |
+| `loadSidebarState` reads `spaces_collapsed` and drops it | `TestSpaceRailHeadersFoldAndPersist` ("beta came back open after a reattach") | **caught** |
+| `filterSessionSwitcher` treats `space/session` as plain text | `TestSpaceSwitcherGroupsAndNarrows` ("alpha/ did not narrow the switcher to alpha's two sessions") | **caught** |
+| `sessionSwitcherSettle` leaves the selection on a header | `TestSpaceSwitcherGroupsAndNarrows` ("no client shows session e2e-a2": Enter on the header switched nowhere) | **caught** |
+| `dockSpaceText` never draws the label | `TestSpaceDockLabel` ("the dock never said alpha > e2e-a1 ..."), `TestSpaceDockLabelNarrow` ("at 100 columns the dock did not cut the space and keep e2e-a1") | **caught** |
+| `dockSpaceText` returns one blank cell for a session in no space | `TestSpaceDockLabel` ("with the session in no space, listing the space component changed the dock") | **caught** |
+| `dockSpaceLabel` never cuts (the whole label at any width) | `TestSpaceDockLabelNarrow` ("at 100 columns the space was not cut: ... payments-platform > e2e-a1") | **caught** |
+| `dockSpaceLabel` cuts the whole label from the right when the session name does not fit, instead of dropping it | `TestSpaceDockLabelNarrow` ("at 60 columns the dock of a spaced session differs from a session in no space") | **caught** |
+| `sidebarNodeIndent` steps every session row in, space or not | `TestSpacesInvisibleWithoutSpaces` ("with no spaces the rail differs from the baseline's", and the switcher over it) | **caught** |
+| The switcher steps every local session row in, space or not | `TestSpacesInvisibleWithoutSpaces` ("with no spaces the switcher differs from the baseline's") | **caught** |
+| The rail's window-count column counts a space header's member count | `TestSpaceRailHeadersFoldAndPersist` ("the e2e-loose row carries a figure after its name") | **caught** |
+| A space header draws the quiet dot instead of the fold mark (`▾`/`▸`) | `TestSpaceRailHeadersFoldAndPersist` ("the open beta header carries \"·\" before its name, want the open fold mark ▾") | **caught** |
+
+The one-blank-cell control first ran against `TestSpacesInvisibleWithoutSpaces` and the original `TestSpaceDockLabel`, and both passed: in the default list the label is the last thing in the dock's left block before the gap the layout fills, so a stray cell there moves nothing on screen. `TestSpaceDockLabel` now puts a custom probe cell straight after the label and compares the dock with and without the component listed, and the control is caught by that. The row above is that run.
+
+Not covered: a repository folded inside a space folds the same repository in every other space too, because repository folds are keyed by repository name. That is the existing key, and changing it is not this work.
+
 ### hello verb: the caller's terminal reaches a session it creates
 
 Run on 2026-10-13 on macOS. `new --space` goes through the `new-session` verb over the JSON verb connection (`VerbClient`), not the binary protocol `new`/`attach` use. The binary protocol's `MsgHello` sets `cs.hello` from the caller's real terminal, and `verbNewSession` (and `switch-session`'s `create`) read it; the JSON verb connection's own handshake, the `hello` verb, never set `cs.hello` at all, so every session a verb created got the daemon's own default (`xterm-256color`, no `COLORTERM`) regardless of the caller's real terminal. The `hello` verb now takes `term`/`color_term`, and `VerbClient`'s handshake sends them with the same detection `client.go`'s binary-protocol `sendHello` uses.

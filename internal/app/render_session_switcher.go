@@ -3,6 +3,7 @@ package app
 import (
 	"image/color"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -40,10 +41,12 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 	// something else was typed out of sight.
 	m.refreshSessionColorsFor(m.SessionSwitcherItems)
 
-	filtered := FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery)
+	filtered := m.sessionSwitcherRows()
 	if len(filtered) > 0 {
 		m.SessionSwitcherSelected = clampInt(m.SessionSwitcherSelected, 0, len(filtered)-1)
+		m.sessionSwitcherSettle(filtered)
 	}
+	grouped := len(filtered) > 0 && filtered[0].Kind == sessiontree.KindSpace
 
 	// With a query typed, the next thing to do is make the session it names,
 	// so that is the key the empty state offers.
@@ -66,9 +69,47 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		EmptyHint:  emptyHint,
 		Hints:      sessionSwitcherHints(filtered, m.SessionSwitcherSelected),
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
+			if filtered[i].Kind == sessiontree.KindSpace {
+				return sessionSwitcherSpaceRow(filtered[i], rowBg, pal, width)
+			}
 			return m.sessionSwitcherRow(filtered[i], selected, rowBg, pal, width)
 		},
+		Position: m.sessionSwitcherPosition(filtered, grouped),
 	})
+}
+
+// sessionSwitcherSpaceIndent is the step a space's sessions take under its
+// header in the switcher, the rail's group step.
+const sessionSwitcherSpaceIndent = sidebarGroupIndent
+
+// sessionSwitcherPosition counts sessions for the position readout when the
+// list carries space headers, which are not something a person counts. Nil for
+// an ungrouped list, which keeps the readout it always had.
+func (m *OS) sessionSwitcherPosition(rows []sessiontree.Node, grouped bool) func() (int, int) {
+	if !grouped {
+		return nil
+	}
+	return func() (int, int) {
+		n, of := 0, 0
+		for i, r := range rows {
+			if r.Kind == sessiontree.KindSpace {
+				continue
+			}
+			of++
+			if i <= m.SessionSwitcherSelected {
+				n = of
+			}
+		}
+		return n, of
+	}
+}
+
+// sessionSwitcherSpaceRow draws a space's heading: its name and how many of
+// its sessions are listed. Bold rather than coloured, so it reads as a heading
+// at every colour depth, the way the Inbox's group headings do.
+func sessionSwitcherSpaceRow(item sessiontree.Node, bg color.Color, pal overlay.Palette, width int) string {
+	text := printableTitle(item.Title) + " " + strconv.Itoa(item.WindowCount)
+	return overlay.Style(bg).Foreground(pal.FgMute).Bold(true).Render(overlay.Truncate(text, width))
 }
 
 // sessionSwitcherHints is the switcher's footer. Rename and delete go to the
@@ -130,6 +171,13 @@ func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg colo
 	if tint := m.sessionTint(item.ID, rowBg); tint != nil {
 		mark = overlay.Style(rowBg).Foreground(tint).Render(accentMark() + " ")
 		markW = 2
+	}
+	// A space's session steps in under its header, so the sessions in no
+	// space, which come after every space, read as outside it. Only a grouped
+	// list carries a space on its rows (see sessionSwitcherRows).
+	if item.Space != "" {
+		mark = overlay.Style(rowBg).Render(strings.Repeat(" ", sessionSwitcherSpaceIndent)) + mark
+		markW += sessionSwitcherSpaceIndent
 	}
 
 	avail := max(width-lipgloss.Width(right)-len(identity)-markW-4, 1)

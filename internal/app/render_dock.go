@@ -193,9 +193,12 @@ func (m *OS) renderDockString() (string, int) {
 	}
 
 	passive := lipgloss.NewStyle().Foreground(pal.FgMute)
-	styledTrailText, styledTapeText := "", ""
+	styledTrailText, styledTapeText, styledSpaceText := "", "", ""
 	if layout.TrailText != "" {
 		styledTrailText = passive.Render(layout.TrailText)
+	}
+	if layout.SpaceText != "" {
+		styledSpaceText = passive.Render(layout.SpaceText)
 	}
 	if layout.TapeText != "" {
 		styledTapeText = passive.Render(layout.TapeText)
@@ -334,6 +337,8 @@ func (m *OS) renderDockString() (string, int) {
 			chunk = styledTrailText
 		case config.DockComponentTape:
 			chunk = styledTapeText
+		case config.DockComponentSpace:
+			chunk = styledSpaceText
 		default:
 			chunk, custom = m.dockCustomCell(name), dockCellClickable(name)
 		}

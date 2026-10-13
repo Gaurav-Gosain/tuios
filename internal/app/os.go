@@ -685,6 +685,9 @@ type OS struct {
 	// session state, so the rail reads the attached row from live state exactly
 	// as it reads the rest of that row.
 	SessionWorktree *session.WorktreeInfo
+	// SessionSpace is the space the attached session is filed under, empty for
+	// none. Daemon-owned, adopted off the session state like the other labels.
+	SessionSpace string
 	// WorkspaceNames maps a workspace number to its daemon-owned label. The
 	// number stays the workspace's identity and is what an unnamed workspace
 	// shows, so an absent entry is not a missing label but the normal case.
@@ -1467,6 +1470,11 @@ type OS struct {
 	// survives the sessions in it being replaced. Persisted in the sidebar
 	// state file. See sidebar_worktrees.go.
 	SidebarCollapsedRepos map[string]bool
+	// SidebarCollapsedSpaces is the set of spaces whose group is folded shut on
+	// the rail, keyed by space name. A set of its own rather than entries in
+	// SidebarCollapsedRepos, so a space and a repository of the same name fold
+	// independently. Persisted in the sidebar state file. See sidebar_spaces.go.
+	SidebarCollapsedSpaces map[string]bool
 	// SidebarCollapsedHosts is the set of machines whose group is folded shut
 	// on the rail, keyed by host name. Persisted in the sidebar state file.
 	// See sidebar_hosts.go.

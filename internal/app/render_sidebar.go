@@ -127,6 +127,11 @@ const (
 	// one. Activating it shows them until the rail loses the keyboard. See
 	// sidebarFoldAgents.
 	sidebarRowAgentFold
+	// sidebarRowSpace is a space's group header in the sessions section, over
+	// the sessions filed under that space. Activating it folds the group shut
+	// or opens it again. It carries the space name in SessionID. See
+	// sidebar_spaces.go.
+	sidebarRowSpace
 	// sidebarRowSubagentToggle is the heading line over a pane's subagent
 	// rows, drawn when appearance.sidebar.subagent_collapse is not off.
 	// Activating it opens or shuts the rows. It carries the pane's session
@@ -1829,7 +1834,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// either there or gone reads as a decision.
 		showCounts := false
 		for _, s := range sessionRows {
-			if s.WindowCount > 1 {
+			// A space's header counts sessions, not windows, so it has no say.
+			if s.Kind != sessiontree.KindSpace && s.WindowCount > 1 {
 				showCounts = true
 				break
 			}
@@ -1844,6 +1850,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
 				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
 				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
+				continue
+			}
+			if s.Kind == sessiontree.KindSpace {
+				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSpace, s.ID, ""))
+				recordHit(sidebarRowSpace, s.ID, "", -1, 1)
+				lines = append(lines, compose(st.mark(pal, m.sidebarSpaceRow(s, cw, pal, st))))
 				continue
 			}
 			if isRemoteNode(s) {
@@ -2376,13 +2388,19 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	switch target.Kind {
 	case sidebarRowSession:
 		for i, s := range sessions {
-			if s.Kind != sessiontree.KindRepo && s.ID == target.SessionID {
+			if s.Kind == sessiontree.KindSession && s.ID == target.SessionID {
 				return sidebarSectionSessions, i, true
 			}
 		}
 	case sidebarRowRepo:
 		for i, s := range sessions {
 			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID {
+				return sidebarSectionSessions, i, true
+			}
+		}
+	case sidebarRowSpace:
+		for i, s := range sessions {
+			if s.Kind == sessiontree.KindSpace && s.ID == target.SessionID {
 				return sidebarSectionSessions, i, true
 			}
 		}
@@ -2644,7 +2662,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// selection.
 	fg := pal.Fg
 	title := printableTitle(node.Title)
-	indent := m.sidebarRowIndent()
+	indent := m.sidebarNodeIndent(node)
 	// A worktree session is named by its branch under its repository's row,
 	// behind the mark that says whether the group goes on below it. The branch
 	// is the whole label there, so nothing rides after it.

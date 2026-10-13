@@ -127,7 +127,7 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("# reorder it, and omit a name to drop that segment.\n")
 	sb.WriteString("#\n")
 	sb.WriteString("#   [dock]\n")
-	sb.WriteString("#   left   = [\"mode\", \"workspaces\", \"trail\", \"tape\"]\n")
+	sb.WriteString("#   left   = [\"mode\", \"workspaces\", \"trail\", \"space\", \"tape\"]\n")
 	sb.WriteString("#   center = [\"windows\"]\n")
 	sb.WriteString("#   right  = [\"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]\n")
 	sb.WriteString("#\n")
