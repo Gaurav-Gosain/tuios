@@ -3016,6 +3016,33 @@ Every frame and every edit reaches the host on both sides.
 `TestKittyStreamCostsLittle` asserts the CPU and the edit latency under
 `TUIOS_E2E_PERF`.
 
+## 2026-10 the GUI bridge's CPU
+
+`tuios gui-bridge` runs a model of the session that draws nothing, so all of
+its work is overhead the desktop GUI pays for. Three costs were cut. The
+palette key printed the whole user config with `fmt.Sprint` on every message
+(fixed in the bridge PR). The model's own emulator encoded each line that
+scrolled off into a history nothing reads. Each output chunk was copied twice
+before it reached the pipe.
+
+### Numbers
+
+CPU ticks of the bridge process (100 a second), from /proc, GOMAXPROCS=4,
+nice 19 on cores 0-7 of a machine in use. Idle is 10 s on two idle shells.
+Flood is one pane running `seq -f 'flood line %g' 1 1500000` at 127x39, to
+the last line at the renderer.
+
+| Build | idle, ticks per 10 s | flood, ticks |
+|---|---|---|
+| the palette key printed from the config | 78 to 94 | 68 to 102 (review run) |
+| the palette fix only (bridge PR) | 5 to 7 | 138 to 219 |
+| with the history dropped and the chunk not copied | 4 to 6 | 117 to 120 |
+
+The review run measured the flood on another machine, 68 to 102 ticks before
+all three fixes and 37 to 51 after. The rows here are the same flood on this
+machine, three runs each. `TestGUIBridgeIdleCostsLittle` holds the idle row
+to 30 ticks.
+
 ## 2026-10 saving the cursor on the libghostty backend
 
 A reattach now carries the cursor DECSC saved. libghostty keeps it where no
