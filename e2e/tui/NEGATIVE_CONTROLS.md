@@ -4756,3 +4756,19 @@ Unit controls from the review round, outside this suite:
 - `TestURLs` gained cases for full-width and CJK punctuation after a URL, and
   `zh.wikipedia.org/wiki/中文`. With `urlStopRune` cut from `urlEnd`, six of
   them fail and the Wikipedia case still passes: **caught**.
+
+## A popup or scratch entry opens on the session's machine (#643)
+
+Run on 2026-10-13 on branch `feat/popup-on-host`. The tests are
+`TestPopupEntryOpensOnTheSessionsMachine` and
+`TestPopupEntryRefusedByTheHostsAllowList` in `popup_on_host_test.go`. The far
+daemon has a HOME of its own with `bin/prj` in it, so the marker can only come
+from build, through a `~` expanded there.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The old refusal put back in the `popup` case of `RunCommandBinding` | mutant of this branch | `TestPopupEntryOpensOnTheSessionsMachine` (no `FAR-POPUP-42`), `TestPopupEntryRefusedByTheHostsAllowList` (no "did not run" on the dock) | **caught** |
+| `openCommandPopup` dials this machine's daemon (`session.DialVerbClient` in place of `dialSessionDaemon`) | mutant of this branch | both tests, as above | **caught** |
+| `Host` cut from the scratch request in `createScratch` | mutant of this branch | `TestPopupEntryOpensOnTheSessionsMachine` (no `FAR-SCRATCH-56`) | **caught** |
+| The `linkRefusal` branch cut from `handleCommandRan` | mutant of this branch | `TestPopupEntryRefusedByTheHostsAllowList` (no "did not run" on the dock; the generic failure does not name `"open"`) | **caught** |
+| The positive half | this branch | none: the popup shows `FAR-POPUP-42` at 62x13 (40% of 160x40), writes the far pane's OSC 7 folder under build's HOME, leaves build's window list when it exits, the scratch entry opens on build, and with `allow = ["list", "write"]` on build the toast reads `Host build does not allow open from this machine. Add "open" to the allow list in [hosts.<peer>] on build.` | **guard** |

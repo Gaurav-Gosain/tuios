@@ -331,13 +331,7 @@ func (m *OS) sessionDaemonDialer() func() (*session.VerbClient, error) {
 	if m.DaemonClient != nil {
 		build = m.DaemonClient.ClientVersion()
 	}
-	return func() (*session.VerbClient, error) {
-		if host == "" {
-			return session.DialVerbClient()
-		}
-		c, _, err := session.DialVerbClientThroughHost(host, build)
-		return c, err
-	}
+	return func() (*session.VerbClient, error) { return dialSessionDaemon(host, build) }
 }
 
 // newWindowOnHostTimeout covers the far daemon spawning a process over a link

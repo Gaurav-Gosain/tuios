@@ -127,18 +127,33 @@ func TestShellEntryRunsAndReportsAFailure(t *testing.T) {
 	}
 }
 
-// Popup and scratch entries refuse in a session on another machine. A shell
-// entry still runs, on this machine.
+// In a session on another machine popup and scratch entries go to that
+// machine, in the focused pane's folder there.
 func TestCommandEntriesOnAnotherMachine(t *testing.T) {
 	m := commandOS(t, true,
 		config.CommandBinding{Key: "alt+t", Command: "htop", Name: "top"},
 		config.CommandBinding{Key: "alt+y", Type: "scratch", Name: "notes"})
 	m.AttachedHost = "build"
-	if m.RunCommandBinding("command:top") != nil || m.RunCommandBinding("command:notes") != nil {
-		t.Fatal("a popup or scratch entry ran in a session on another machine")
+	m.Windows[0].Cwd = "file://build/srv/app"
+	var popups []commandPopupRequest
+	var scratches []scratchRequest
+	prevPopup, prevScratch := commandPopupOpener, scratchOpener
+	commandPopupOpener = func(r commandPopupRequest) error { popups = append(popups, r); return nil }
+	scratchOpener = func(r scratchRequest) error { scratches = append(scratches, r); return nil }
+	t.Cleanup(func() { commandPopupOpener, scratchOpener = prevPopup, prevScratch })
+
+	for _, action := range []string{"command:top", "command:notes"} {
+		cmd := m.RunCommandBinding(action)
+		if cmd == nil {
+			t.Fatalf("%s did not run in a session on another machine", action)
+		}
+		cmd()
 	}
-	if n := len(m.Notifications); n < 2 {
-		t.Fatalf("notifications = %+v, want two refusals", m.Notifications)
+	if len(popups) != 1 || popups[0].Host != "build" || popups[0].Dir != "/srv/app" {
+		t.Fatalf("popup = %+v", popups)
+	}
+	if len(scratches) != 1 || scratches[0].Host != "build" || scratches[0].Dir != "/srv/app" {
+		t.Fatalf("scratch = %+v", scratches)
 	}
 }
 

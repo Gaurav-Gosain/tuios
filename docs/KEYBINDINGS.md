@@ -556,9 +556,13 @@ an entry that has no `name`, the panes of its scratch terminal close at the
 next reload. The
 dock shows a message.
 
-In a session on a different machine, a `scratch` or `popup` entry does not
-run. The dock shows a message. A `pane` entry runs on the machine of the
-session. A `shell` entry runs on the machine that runs the tuios client.
+In a session on a different machine, a `scratch`, `popup` or `pane` entry runs
+on the machine of the session. The command runs as the user of that machine,
+in the folder of the focused pane on that machine. A `~` in the command is the
+home folder on that machine. A `popup` or `scratch` entry there needs `"open"`
+in the `allow` list of that machine's `[hosts]` table for your machine. Without
+it, the dock shows a message that names the table to change. A `shell` entry
+runs on the machine that runs the tuios client.
 
 Only a key press or the command palette runs a command key. A change to
 `config.toml` does not run a command. A pane that has the respond grant can

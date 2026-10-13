@@ -33,10 +33,11 @@ import (
 //	TUIOS_ACTIVE_PANE_CWD   the folder the command starts in
 //
 // Where it runs:
-//   - scratch and popup ask the daemon on this machine for a popup, so they
-//     refuse in a session on another machine, as the scratch terminal does.
-//   - pane asks the session's own daemon for the window, so in a session on
-//     another machine the command runs on that machine.
+//   - scratch, popup and pane ask the session's own daemon for the pane, so
+//     in a session on another machine the command runs on that machine, as
+//     the user there, in the focused pane's folder there. A popup or scratch
+//     call goes through the host link, where that machine's [hosts] allow
+//     list applies: it needs "open".
 //   - shell runs from this client, on the machine the client runs on. For the
 //     SSH and web servers that is the server.
 //
@@ -84,13 +85,10 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 
 	case config.CommandTypePopup:
 		if m.IsDaemonSession && m.DaemonClient != nil {
-			if m.AttachedHost != "" {
-				m.ShowNotification("A popup command works only in a session on this machine.", "warning", m.Settings.NotificationDuration)
-				return nil
-			}
 			req := commandPopupRequest{
 				Session: m.SessionName, Title: c.Label(), Command: argv, Dir: dir,
 				Width: c.WidthSpec(), Height: c.HeightSpec(), Workspace: m.CurrentWorkspace,
+				Host: m.AttachedHost, Build: m.DaemonClient.ClientVersion(),
 			}
 			label := c.Label()
 			return func() tea.Msg { return CommandRanMsg{Label: label, Err: commandPopupOpener(req)} }
@@ -124,6 +122,10 @@ func (m *OS) RunCommandBinding(action string) tea.Cmd {
 // handleCommandRan shows a failed command on the dock.
 func (m *OS) handleCommandRan(msg CommandRanMsg) {
 	if msg.Err == nil {
+		return
+	}
+	if refusal := linkRefusal(m.AttachedHost, msg.Err); refusal != "" {
+		m.ShowNotification("The command "+msg.Label+" did not run. "+refusal, "error", m.Settings.NotificationDuration*3)
 		return
 	}
 	m.ShowNotification(fmt.Sprintf("The command %s failed: %v", msg.Label, msg.Err), "error", m.Settings.NotificationDuration)
@@ -251,12 +253,15 @@ type commandPopupRequest struct {
 	Dir            string
 	Width, Height  string
 	Workspace      int
+	// Host is the machine the session is on, "" for this one. Build is this
+	// client's version, for the handshake through the link.
+	Host, Build string
 }
 
-// openCommandPopup asks the daemon for a popup that closes when the command
-// exits, as tuios popup does.
+// openCommandPopup asks the session's daemon for a popup that closes when the
+// command exits, as tuios popup does.
 func openCommandPopup(req commandPopupRequest) error {
-	c, err := session.DialVerbClient()
+	c, err := dialSessionDaemon(req.Host, req.Build)
 	if err != nil {
 		return err
 	}
@@ -274,6 +279,47 @@ func openCommandPopup(req commandPopupRequest) error {
 	}
 	_, err = c.Call("popup", params)
 	return err
+}
+
+// dialSessionDaemon opens a verb connection to the daemon that holds a
+// session: this machine's for host "", else host's through the link, where
+// host's allow list for this machine applies. Nothing runs on this machine.
+func dialSessionDaemon(host, build string) (*session.VerbClient, error) {
+	if host == "" {
+		return session.DialVerbClient()
+	}
+	c, _, err := session.DialVerbClientThroughHost(host, build)
+	return c, err
+}
+
+// linkRefusal is the message for a call that the session's machine refused
+// by its link policy, or "" for any other error. That machine names the
+// capabilities it lacks and the config table that grants them. host is the
+// machine, "" when it is not known.
+func linkRefusal(host string, err error) string {
+	callErr, ok := errors.AsType[*session.VerbCallError](err)
+	if !ok || callErr.Code != session.ErrVerbForbidden || callErr.Hint == nil || len(callErr.Hint.Missing) == 0 {
+		return ""
+	}
+	if callErr.Hint.Host != "" {
+		host = callErr.Hint.Host
+	}
+	where := "The other machine"
+	on := "on the other machine"
+	if host != "" {
+		where = "Host " + host
+		on = "on " + host
+	}
+	quoted := make([]string, 0, len(callErr.Hint.Missing))
+	for _, c := range callErr.Hint.Missing {
+		quoted = append(quoted, `"`+c+`"`)
+	}
+	table := callErr.Hint.Table
+	if table == "" {
+		table = "[hosts]"
+	}
+	return where + " does not allow " + strings.Join(callErr.Hint.Missing, " and ") + " from this machine. Add " +
+		strings.Join(quoted, " and ") + " to the allow list in " + table + " " + on + "."
 }
 
 // paletteCategoryCommands is the palette category of the command entries.

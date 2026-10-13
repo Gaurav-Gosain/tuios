@@ -381,31 +381,12 @@ func pastePathText(path string) string {
 // capabilities it lacks and its config table that grants them. The pane's
 // machine is the window's host, or the host this client is attached through.
 func (m *OS) imagePasteRefusal(window string, err error) string {
-	callErr, ok := errors.AsType[*session.VerbCallError](err)
-	if !ok || callErr.Code != session.ErrVerbForbidden || callErr.Hint == nil || len(callErr.Hint.Missing) == 0 {
-		return ""
-	}
 	host := m.AttachedHost
 	if w := m.windowByID(window); w != nil && w.Host != "" {
 		host = w.Host
 	}
-	if callErr.Hint.Host != "" {
-		host = callErr.Hint.Host
+	if refusal := linkRefusal(host, err); refusal != "" {
+		return "Cannot paste the image. " + refusal
 	}
-	where := "The other machine"
-	on := "on the other machine"
-	if host != "" {
-		where = "Host " + host
-		on = "on " + host
-	}
-	quoted := make([]string, 0, len(callErr.Hint.Missing))
-	for _, c := range callErr.Hint.Missing {
-		quoted = append(quoted, `"`+c+`"`)
-	}
-	missing := strings.Join(callErr.Hint.Missing, " and ")
-	table := callErr.Hint.Table
-	if table == "" {
-		table = "[hosts]"
-	}
-	return "Cannot paste the image. " + where + " does not allow " + missing + " from this machine. Add " + strings.Join(quoted, " and ") + " to the allow list in " + table + " " + on + "."
+	return ""
 }

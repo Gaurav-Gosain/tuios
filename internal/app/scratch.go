@@ -208,7 +208,6 @@ const (
 	scratchCreate
 	scratchShow
 	scratchHide
-	scratchRefuse
 )
 
 // scratchPlan is what one press of the toggle does. It is worked out apart
@@ -217,8 +216,6 @@ type scratchPlan struct {
 	action scratchAction
 	// index is a pane of the group, for show and hide.
 	index int
-	// refuse is the warning to show instead of acting.
-	refuse string
 }
 
 // planScratch decides what the toggle does now.
@@ -234,12 +231,6 @@ func (m *OS) planScratch(name string) scratchPlan {
 	}
 	if m.scratchPending == name && time.Since(m.scratchPendingAt) < scratchPendingMax {
 		return scratchPlan{action: scratchNothing, index: -1}
-	}
-	if m.IsDaemonSession && m.DaemonClient != nil && m.AttachedHost != "" {
-		// The create goes to the daemon on this machine, and the session is
-		// on another one.
-		return scratchPlan{action: scratchRefuse, index: -1,
-			refuse: "The scratch terminal works only in a session on this machine."}
 	}
 	return scratchPlan{action: scratchCreate, index: -1}
 }
@@ -258,8 +249,6 @@ func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 	}
 	plan := m.planScratch(spec.Name)
 	switch plan.action {
-	case scratchRefuse:
-		m.ShowNotification(plan.refuse, "warning", m.Settings.NotificationDuration)
 	case scratchHide:
 		m.leaveScratchView()
 	case scratchShow:
@@ -501,6 +490,11 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		m.createLocalScratch(dir, spec)
 		return nil
 	}
+	if m.AttachedHost != "" {
+		// The pane starts on the session's machine, so the folder is the
+		// focused pane's path there. Empty lets that daemon pick its own.
+		dir = m.remotePaneDir()
+	}
 	m.scratchPending = spec.Name
 	m.scratchPendingAt = time.Now()
 	req := scratchRequest{
@@ -512,6 +506,8 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 		Width:     spec.Width,
 		Height:    spec.Height,
 		Workspace: m.CurrentWorkspace,
+		Host:      m.AttachedHost,
+		Build:     m.DaemonClient.ClientVersion(),
 	}
 	label := spec.Title
 	return func() tea.Msg {
@@ -581,12 +577,15 @@ type scratchRequest struct {
 	Dir           string
 	Width, Height string
 	Workspace     int
+	// Host is the machine the session is on, "" for this one. Build is this
+	// client's version, for the handshake through the link.
+	Host, Build string
 }
 
-// openScratchPopup asks the daemon for the scratch terminal. It runs as a
-// command, never from Update, for the reason labelVerbCmd gives.
+// openScratchPopup asks the session's daemon for the scratch terminal. It
+// runs as a command, never from Update, for the reason labelVerbCmd gives.
 func openScratchPopup(req scratchRequest) error {
-	c, err := session.DialVerbClient()
+	c, err := dialSessionDaemon(req.Host, req.Build)
 	if err != nil {
 		return err
 	}
@@ -652,6 +651,10 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 			m.deadScratch[stopped.WindowID] = true
 		}
 		m.ShowNotification(fmt.Sprintf("The command %s stopped with exit code %d.", msg.Label, stopped.Code), "error", m.Settings.NotificationDuration)
+		return
+	}
+	if refusal := linkRefusal(m.AttachedHost, msg.Err); refusal != "" {
+		m.ShowNotification("The scratch terminal did not open. "+refusal, "error", m.Settings.NotificationDuration*3)
 		return
 	}
 	m.ShowNotification("The scratch terminal did not open: "+msg.Err.Error(), "error", m.Settings.NotificationDuration)

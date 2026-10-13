@@ -49,11 +49,7 @@ func (m *OS) legacyScratchToggle(spec scratchSpec) tea.Cmd {
 		return nil
 	}
 	plan := m.planScratch(spec.Name)
-	switch plan.action {
-	case scratchRefuse:
-		m.ShowNotification(plan.refuse, "warning", m.Settings.NotificationDuration)
-		return nil
-	case scratchNothing:
+	if plan.action == scratchNothing {
 		return nil
 	}
 	m.rememberScratchReturn()
