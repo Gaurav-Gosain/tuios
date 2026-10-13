@@ -382,6 +382,13 @@ func Run(opts Options) error {
 		CellWidth:    opts.CellWidth,
 		CellHeight:   opts.CellHeight,
 	}
+	// The renderer draws pictures itself, from the bytes in the stream:
+	// kitty images, frame edits, and sixel, which it turns into kitty
+	// images. The daemon is told so, so it answers a guest's kitty query
+	// and lists sixel in DA1. The model here draws nothing, so caps stays
+	// without graphics and its passthrough stays off.
+	hello := app.ClientCapabilitiesOf(caps)
+	hello.KittyGraphics, hello.SixelGraphics, hello.KittyAnimation = true, true, true
 	client := session.NewTUIClient()
 	// The size is the renderer's window, not this process's terminal, which
 	// it has none of.
@@ -389,10 +396,10 @@ func Run(opts Options) error {
 	// The renderer runs where the person is, so its agent socket is theirs.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
 	if opts.Host == "" {
-		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, app.ClientCapabilitiesOf(caps)); err != nil {
+		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, hello); err != nil {
 			return fmt.Errorf("failed to connect to daemon: %w", err)
 		}
-	} else if _, err := client.ConnectThroughHost(opts.Host, opts.Version, opts.Cols, opts.Rows, app.ClientCapabilitiesOf(caps)); err != nil {
+	} else if _, err := client.ConnectThroughHost(opts.Host, opts.Version, opts.Cols, opts.Rows, hello); err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", opts.Host, err)
 	}
 	cached := client.CachedSessions()
