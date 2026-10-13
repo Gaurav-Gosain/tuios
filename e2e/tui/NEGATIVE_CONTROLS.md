@@ -5099,3 +5099,21 @@ artifact directory.
 | `start_commit` not recorded at `new-worktree` (the merge base fallback for every worktree) | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-ff: merged=false` after the fast-forward) | **caught** |
 | The upstream of the base never checked | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-up: merged=false`, want true into `origin/main`) | **caught** |
 | The positive half | this branch | none: four rows turn true into `main`, one into `origin/main`, and the fresh one stays false | **guard** |
+
+### Review fixes: own work, a revert, and the object store
+
+Run on 2026-10-13 on branch `feat/worktree-merged` with
+`TestWorktreeLsMerged`. Three worktrees join the fixture. `feat/sync` makes no
+commit and fast-forwards to `main` after `main` moved four times. `feat/revert`
+makes a commit and reverts it. The test runs `git count-objects -v` before and
+after the first listing once `main` moved. The `feat/up` row then merges a pair
+git has never merged.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The `mergedInto` of the branch before the review (own commits counted as `start..head`) | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-revert: merged=true merged_into="main"`, want false) | **caught** |
+| The reflog check replaced by the old `start..head` count, for a tip the base holds | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-sync: merged=true merged_into="main"`, want false) | **caught** |
+| The reflog check made to always find work (`return true`) | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-fresh: merged=true merged_into="main"`, want false) | **caught** |
+| The net change check against the merge base cut | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-revert: merged=true merged_into="main"`, want false) | **caught** |
+| `merge-tree` run without the temporary object directory | mutant of this branch | `TestWorktreeLsMerged` ("worktree ls wrote objects into the repository") | **caught** |
+| The positive half | this branch | none: the fast-forward, merge commit, squash and no-base rows turn true into `main`, `feat/up` into `origin/main`, and the fresh, sync and revert rows stay false | **guard** |
