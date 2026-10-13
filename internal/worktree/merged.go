@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 )
@@ -122,11 +123,27 @@ func mergedInto(path, start, head, target string) bool {
 }
 
 // mergeTree is the tree git merge-tree --write-tree gives for merging head
-// into target.
+// into target. merge-tree writes the merged tree's objects, so it runs with a
+// temporary object directory that borrows the repository's objects as an
+// alternate. The repository gains nothing, and the directory is removed.
 func mergeTree(path, target, head string) (string, error) {
+	objects, err := run(path, "rev-parse", "--path-format=absolute", "--git-path", "objects")
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.MkdirTemp("", "tuios-merge-tree-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	alternates := strings.TrimSpace(objects)
+	if prev := os.Getenv("GIT_ALTERNATE_OBJECT_DIRECTORIES"); prev != "" {
+		alternates += string(os.PathListSeparator) + prev
+	}
+	env := []string{"GIT_OBJECT_DIRECTORY=" + tmp, "GIT_ALTERNATE_OBJECT_DIRECTORIES=" + alternates}
 	// merge-tree prints the merged tree on its first line, and exits non-zero
-	// on a conflict, which run reports as an error.
-	out, err := run(path, "merge-tree", "--write-tree", target, head)
+	// on a conflict, which runEnv reports as an error.
+	out, err := runEnv(path, env, "merge-tree", "--write-tree", target, head)
 	if err != nil {
 		return "", err
 	}
