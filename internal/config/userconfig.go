@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -3219,7 +3220,7 @@ func yieldTakenDefaults(section string, target, defaults map[string][]string) []
 			}
 		}
 	}
-	slices.SortFunc(out, func(a, b YieldedDefault) int {
+	sortx.SortFunc(out, func(a, b YieldedDefault) int {
 		return cmp.Compare(a.Action+"\x00"+a.Key, b.Action+"\x00"+b.Key)
 	})
 	return out

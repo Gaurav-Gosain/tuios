@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // A config split over several files.
@@ -563,7 +565,7 @@ func (lc *LayeredConfig) Origins() []KeyOrigin {
 		}
 		out = append(out, ko)
 	}
-	slices.SortFunc(out, func(a, b KeyOrigin) int { return strings.Compare(a.Key, b.Key) })
+	sortx.SortFunc(out, func(a, b KeyOrigin) int { return strings.Compare(a.Key, b.Key) })
 	return out
 }
 

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // show-buffer, save-buffer and list-buffers: the paste buffers read back.
@@ -108,7 +109,7 @@ func (s *Shim) listBuffers(name string, args []string) (string, []string, error)
 	if err != nil {
 		return OutcomeError, nil, err
 	}
-	slices.SortFunc(list, func(a, b buffer) int {
+	sortx.SortFunc(list, func(a, b buffer) int {
 		if c := b.at.Compare(a.at); c != 0 {
 			return c
 		}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Push notifications for the Inbox: the [notify] table.
@@ -289,7 +290,7 @@ func (n *pushNotifier) recheck() {
 	for _, it := range n.held {
 		held = append(held, it)
 	}
-	slices.SortFunc(held, func(a, b pushnotify.Item) int { return compareIDs(a.ID, b.ID) })
+	sortx.SortFunc(held, func(a, b pushnotify.Item) int { return compareIDs(a.ID, b.ID) })
 	for _, it := range held {
 		n.considerLocked(it)
 	}

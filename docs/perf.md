@@ -2541,6 +2541,16 @@ in the CLI and of C1 controls in the daemon's lines) and main's rail options.
 Rebased on e70a72fe the build measured 35,672,226 and 33,564,050 bytes on Go
 1.26.9, which left under 40 KB of room.
 
+The cold-path sorts (internal/sortx) cut 331,776 bytes from linux/amd64 and
+236,864 from darwin/arm64. Each slices.SortFunc or slices.SortStableFunc call
+with a new element type compiles its own copy of the sort. Nineteen calls on
+cold paths (CLI output, verb listings, config and manifest load, writes to
+disk) now go through sort.Slice and sort.SliceStable, which are compiled once.
+The order is the same, ties included, and internal/sortx tests that. Calls on a
+render, keystroke, event-burst or broadcast path keep slices. On origin/main at
+0cbbffbc (Go 1.26.9) the build measured 35,844,258 and 33,699,490 bytes, and
+the branch measured 35,512,482 and 33,462,626.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say

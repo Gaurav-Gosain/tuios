@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/explore"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -264,7 +265,7 @@ func loadConfigOptions(sessionName string) ([]configOption, error) {
 		co.Value, co.Source = readConfigValue(client.Call, sessionName, o.Path)
 		out = append(out, co)
 	}
-	slices.SortStableFunc(out, func(a, b configOption) int {
+	sortx.SortStableFunc(out, func(a, b configOption) int {
 		if c := strings.Compare(a.Section, b.Section); c != 0 {
 			return c
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Tailscale SSH in check mode, for the commands that run ssh on a host.
@@ -138,7 +139,7 @@ func (d *approvalDesk) decide() {
 	reqs := slices.Clone(d.pending)
 	d.mu.Unlock()
 
-	slices.SortFunc(reqs, func(a, b approvalRequest) int { return strings.Compare(a.host, b.host) })
+	sortx.SortFunc(reqs, func(a, b approvalRequest) int { return strings.Compare(a.host, b.host) })
 	width := 0
 	for _, r := range reqs {
 		width = max(width, len(r.host))

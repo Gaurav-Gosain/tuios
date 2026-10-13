@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Checkpoints: the state of a work tree at the end of an agent's turn, kept
@@ -185,7 +186,7 @@ func ListCheckpoints(ctx context.Context, dir, pane string) ([]Checkpoint, error
 			list = append(list, cp)
 		}
 	}
-	slices.SortFunc(list, func(a, b Checkpoint) int {
+	sortx.SortFunc(list, func(a, b Checkpoint) int {
 		if a.Pane != b.Pane {
 			return strings.Compare(a.Pane, b.Pane)
 		}

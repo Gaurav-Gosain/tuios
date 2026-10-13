@@ -15,6 +15,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Web Push to the person's phones: the daemon's half.
@@ -310,7 +311,7 @@ func (w *webPusher) list() []pushDevice {
 	for _, d := range w.devices {
 		out = append(out, *d)
 	}
-	slices.SortFunc(out, func(a, b pushDevice) int { return strings.Compare(a.Device, b.Device) })
+	sortx.SortFunc(out, func(a, b pushDevice) int { return strings.Compare(a.Device, b.Device) })
 	return out
 }
 

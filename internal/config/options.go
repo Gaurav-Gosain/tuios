@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -1386,7 +1387,7 @@ var optionsByPath = func() map[string]Option {
 // Options returns every settable option, sorted by path.
 func Options() []Option {
 	out := slices.Clone(optionSpecs)
-	slices.SortFunc(out, func(a, b Option) int { return strings.Compare(a.Path, b.Path) })
+	sortx.SortFunc(out, func(a, b Option) int { return strings.Compare(a.Path, b.Path) })
 	return out
 }
 

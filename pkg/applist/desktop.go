@@ -43,6 +43,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // DesktopEntry is one activatable entry read from a .desktop file: the
@@ -442,7 +444,7 @@ func walkDesktopFiles(dirs []string, fn func(path, id string)) {
 // sortDesktopEntries orders entries the way a menu reads them, case-folded by
 // Name with the ID breaking ties so the order does not depend on walk order.
 func sortDesktopEntries(entries []DesktopEntry) {
-	slices.SortFunc(entries, func(a, b DesktopEntry) int {
+	sortx.SortFunc(entries, func(a, b DesktopEntry) int {
 		if c := cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)); c != 0 {
 			return c
 		}

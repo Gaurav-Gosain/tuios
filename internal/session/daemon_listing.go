@@ -2,7 +2,8 @@ package session
 
 import (
 	"cmp"
-	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // listClients snapshots daemon connections and their current sessions. The
@@ -21,7 +22,7 @@ func (d *Daemon) listClients() []ClientInfo {
 	for i := range clients {
 		clients[i].Session = d.sessionNameByID(sessionIDs[i])
 	}
-	slices.SortFunc(clients, func(a, b ClientInfo) int { return cmp.Compare(a.ClientID, b.ClientID) })
+	sortx.SortFunc(clients, func(a, b ClientInfo) int { return cmp.Compare(a.ClientID, b.ClientID) })
 	return clients
 }
 

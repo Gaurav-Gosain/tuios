@@ -22,6 +22,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -1096,7 +1097,7 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 	// A section is a display group, not a path prefix, so regroup a clone
 	// rather than reprint a heading each time path order crosses back into one.
 	options = slices.Clone(options)
-	slices.SortFunc(options, func(a, b optionRow) int {
+	sortx.SortFunc(options, func(a, b optionRow) int {
 		if c := strings.Compare(a.Section, b.Section); c != 0 {
 			return c
 		}

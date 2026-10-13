@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // HostVersion is the herdr release whose plugin format this package follows.
@@ -378,7 +380,7 @@ func Parse(data []byte) (*Plugin, *Error) {
 	if id := duplicate(p.Actions, func(a Action) string { return a.ID }); id != "" {
 		return nil, errf("duplicate_plugin_action_id", "duplicate action id '%s'", id)
 	}
-	slices.SortStableFunc(p.Actions, func(a, b Action) int { return strings.Compare(a.ID, b.ID) })
+	sortx.SortStableFunc(p.Actions, func(a, b Action) int { return strings.Compare(a.ID, b.ID) })
 	for _, e := range raw.Events {
 		ev, perr := event(e)
 		if perr != nil {
@@ -386,7 +388,7 @@ func Parse(data []byte) (*Plugin, *Error) {
 		}
 		p.Events = append(p.Events, ev)
 	}
-	slices.SortStableFunc(p.Events, func(a, b EventHook) int {
+	sortx.SortStableFunc(p.Events, func(a, b EventHook) int {
 		if c := strings.Compare(a.On, b.On); c != 0 {
 			return c
 		}
@@ -402,7 +404,7 @@ func Parse(data []byte) (*Plugin, *Error) {
 	if id := duplicate(p.Panes, func(x Pane) string { return x.ID }); id != "" {
 		return nil, errf("duplicate_plugin_pane_id", "duplicate pane id '%s'", id)
 	}
-	slices.SortStableFunc(p.Panes, func(a, b Pane) int { return strings.Compare(a.ID, b.ID) })
+	sortx.SortStableFunc(p.Panes, func(a, b Pane) int { return strings.Compare(a.ID, b.ID) })
 	for _, r := range raw.LinkHandlers {
 		h, perr := linkHandler(r)
 		if perr != nil {

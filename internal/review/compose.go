@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // QuoteMax is how many characters of a quoted line the message carries.
@@ -68,7 +70,7 @@ func AuthorName(by string) string {
 // SortNotes orders notes the way they are listed and sent: by path, then
 // line, then when they were written, then id.
 func SortNotes(notes []Note) {
-	slices.SortStableFunc(notes, func(a, b Note) int {
+	sortx.SortStableFunc(notes, func(a, b Note) int {
 		if c := cmp.Compare(a.Path, b.Path); c != 0 {
 			return c
 		}

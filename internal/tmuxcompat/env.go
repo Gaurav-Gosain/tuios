@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // show-environment and set-environment.
@@ -125,7 +127,7 @@ func (s *Shim) fullEnv(scope string) ([]envVar, error) {
 		}
 	}
 	out = append(out, set...)
-	slices.SortFunc(out, func(a, b envVar) int { return strings.Compare(a.Name, b.Name) })
+	sortx.SortFunc(out, func(a, b envVar) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // The transfer journal, the part folders, and the transfer events.
@@ -461,7 +463,7 @@ func (p *partDirs) saveLocked() {
 		for d, ms := range p.dirs {
 			all = append(all, at{d, ms})
 		}
-		slices.SortFunc(all, func(a, b at) int { return int(a.ms - b.ms) })
+		sortx.SortFunc(all, func(a, b at) int { return int(a.ms - b.ms) })
 		for _, a := range all[:len(all)-transferPartDirsMax] {
 			delete(p.dirs, a.dir)
 		}

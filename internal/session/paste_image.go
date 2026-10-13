@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Pasting an image into a pane.
@@ -246,7 +248,7 @@ func (s *pasteStore) capLocked(dir, keep string) {
 		files = append(files, file{filepath.Join(dir, e.Name()), info.ModTime(), info.Size()})
 		total += info.Size()
 	}
-	slices.SortFunc(files, func(a, b file) int {
+	sortx.SortFunc(files, func(a, b file) int {
 		if c := a.mod.Compare(b.mod); c != 0 {
 			return c
 		}
