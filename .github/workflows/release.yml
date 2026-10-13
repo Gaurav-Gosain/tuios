@@ -57,8 +57,15 @@ jobs:
             go.sum
             .github/workflows/release.yml
 
+      # A tag older than the first library has no go.work and no pins to
+      # check. A re-run of such a release must still reach GoReleaser.
       - name: Check the library pins
-        run: scripts/library-pins.sh check --network
+        run: |
+          if [ ! -f go.work ]; then
+            echo "No go.work at ${TAG}: no library pins to check."
+            exit 0
+          fi
+          scripts/library-pins.sh check --network
 
   goreleaser:
     needs: library-pins
@@ -152,8 +159,9 @@ jobs:
     runs-on: macos-14
     needs: [library-pins, goreleaser]
     # Runs after GoReleaser, or alone when a dispatch skipped it. Never when
-    # the library pins failed: GoReleaser is then skipped too.
-    if: ${{ !cancelled() && needs.library-pins.result == 'success' && (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') }}
+    # the library pins failed: GoReleaser is then skipped too, and its skipped
+    # result must not let this job run.
+    if: ${{ !cancelled() && (needs.library-pins.result == 'success' || needs.library-pins.result == 'skipped') && (needs.goreleaser.result == 'success' || needs.goreleaser.result == 'skipped') }}
     timeout-minutes: 45
     steps:
       - name: Checkout

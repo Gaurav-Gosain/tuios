@@ -136,6 +136,20 @@ sync_pins() {
 
 check() {
 	local network=${1:-} status=0 dir module version commit old folder
+	# go.work repeats the go and toolchain lines of go.mod. A workspace build
+	# uses the go.work lines, and go install uses the go.mod ones.
+	local mod_go work_go
+	# Read from the files: go work edit -json in Go 1.26 leaves the toolchain
+	# line out.
+	local lines='$1 == "go" { g = $2 } $1 == "toolchain" { t = $2 } END { printf "go %s toolchain %s", g ? g : "-", t ? t : "-" }'
+	mod_go=$(awk "$lines" go.mod)
+	work_go=$(awk "$lines" go.work)
+	if [ "$mod_go" != "$work_go" ]; then
+		echo "FAIL go.mod has \"$mod_go\" and go.work has \"$work_go\". Make the go and toolchain lines of go.work match go.mod." >&2
+		status=1
+	else
+		echo "ok   go.work and go.mod agree: $mod_go"
+	fi
 	while read -r dir module; do
 		version=$(pinned "$module")
 		if [ -z "$version" ]; then
