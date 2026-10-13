@@ -4873,3 +4873,16 @@ Sessions `e2e-a` and `e2e-b` are in space `s`, `e2e-d` and `e2e-e` in space `t`,
 | `workspace_closed` not emitted for a closed session (`herdrTranslator` returns nothing on session-closed) | "the stream ended before workspace_closed for e2e-a (...) and e2e-b (...): i/o timeout; saw map[]" | **caught** |
 
 The last control is outside this change: it shows the test's event assertion is live, so `kill-space` reaching each member through `DeleteSession` is what raises the two events, not a stream that reports anything.
+
+### Space keys: next_session_in_space and prev_session_in_space
+
+Run on 2026-10-13 on macOS. The tests are in `space_keys_test.go`. Each control cuts one wire from the fixed build, builds it, restores the source, and runs every `TestSpaceKeys` test against the cut binary; the fixed build passes all four.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `>` and `<` defaults in `prefix_mode` | `TestSpaceKeysCycleInsideTheSpace` ("the attached clients show [e2e-a1], want exactly one on e2e-a2"), `TestSpaceKeysStayPutWithoutSpaces` ("ctrl+b > with no spaces never said so"), `TestSpaceKeysListedInThePalette` ("the palette never listed ..."), `TestSpaceKeysYieldToTheUsersPrefixKeys` ("prev_session_in_space has prefix keys [], want [ctrl+b <]") | **caught** |
+| `CycleSessionInSpace` runs `CycleSession`, ignoring the space | `TestSpaceKeysCycleInsideTheSpace` ("the attached clients show [e2e-loose2], want exactly one on e2e-a1"), `TestSpaceKeysStayPutWithoutSpaces` ("ctrl+b > with no spaces never said so") | **caught** |
+| The no-spaces guard: with no space anywhere, the keys walk the sessions in no space, which is every session | `TestSpaceKeysStayPutWithoutSpaces` ("ctrl+b > with no spaces never said so") | **caught** |
+| The two actions left out of `yieldingDefaults` | `TestSpaceKeysYieldToTheUsersPrefixKeys` ("prefix_help has prefix keys [], want [ctrl+b >] kept", "next_session_in_space has prefix keys [ctrl+b >], want none while the user holds >") | **caught** |
+
+The yield control first ran against a config binding `launcher = [">"]` and passed: a key two actions in one table claim goes to the first by name, and `launcher` sorts before `next_session_in_space`, so the user kept `>` with or without the yield. The test binds `prefix_help`, which sorts after it, and the row above is that run.

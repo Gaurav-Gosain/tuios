@@ -63,6 +63,10 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 	return append(out, within(rest)...)
 }
 
+// SpaceOf is the space GroupBySpace files a node under, or "" for a node it
+// leaves with the sessions in no space.
+func SpaceOf(n Node) string { return groupSpace(n) }
+
 // groupSpace is the space a node is filed under, or "" for a node that is not
 // grouped by space at all.
 func groupSpace(n Node) string {

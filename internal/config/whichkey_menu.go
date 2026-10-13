@@ -186,6 +186,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	}}
 	sessions := menuSection{title: "Sessions", rows: []menuRow{
 		pair("Prev/next session", part("prev_session", "Previous session"), part("next_session", "Next session")),
+		pair("Prev/next in space", part("prev_session_in_space", "Previous in space"), part("next_session_in_space", "Next in space")),
 		row("prefix_session_switcher", "Sessions"),
 		row("prefix_workspace_switcher", "Workspaces"),
 		row("choose_tree", "Find a pane"),

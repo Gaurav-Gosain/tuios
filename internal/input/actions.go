@@ -219,6 +219,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("new_session", handleNewSession)
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
+	d.Register("next_session_in_space", handleNextSessionInSpace)
+	d.Register("prev_session_in_space", handlePrevSessionInSpace)
 
 	// Session switching (1-9), by the rail's own order
 	for i := 1; i <= 9; i++ {
@@ -1119,6 +1121,18 @@ func handleNextSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleSession(-1)
+	return o, nil
+}
+
+// handleNextSessionInSpace and handlePrevSessionInSpace walk the sessions of
+// the current session's space in the rail's order.
+func handleNextSessionInSpace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleSessionInSpace(1)
+	return o, nil
+}
+
+func handlePrevSessionInSpace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.CycleSessionInSpace(-1)
 	return o, nil
 }
 

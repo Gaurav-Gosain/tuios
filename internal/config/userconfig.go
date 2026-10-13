@@ -1152,6 +1152,12 @@ func DefaultConfig() *UserConfig {
 				// out of the glyph table on purpose and nothing matches it.
 				"next_session": {")"},
 				"prev_session": {"("},
+				// The sessions of the current space only, on the angle
+				// brackets: a shift away from the comma and the full stop like
+				// the round brackets are from the digits, and free in this
+				// table. No direct chord, for the dead-key reason above.
+				"next_session_in_space": {">"},
+				"prev_session_in_space": {"<"},
 				// The launcher's direct chord is alt+space, which macOS turns
 				// into a non-breaking space that matches nothing. This is the
 				// way in that does not depend on the terminal.
@@ -3172,6 +3178,9 @@ var yieldingDefaults = map[string]bool{
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,
+	// > and < after the prefix, new in the release after v0.9.2.
+	"next_session_in_space": true,
+	"prev_session_in_space": true,
 }
 
 // windowModeTables is every binding the user's config holds in the tables
