@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
@@ -189,12 +190,11 @@ func (d *Daemon) verbKillSpace(_ *connState, params json.RawMessage) (any, *verb
 	}
 	if !p.Force {
 		return nil, hintedVerbError(ErrVerbInvalidParams,
-			"kill-space would kill "+plural.Count(len(names), "session")+" in space "+echoName(p.Space)+", and needs force to. Nothing was killed",
+			"kill-space would kill "+plural.Count(len(names), "session")+" in space "+echoName(p.Space)+" ("+strings.Join(names, ", ")+"). Nothing was killed",
 			&VerbHint{
-				Param:     "force",
-				Command:   "tuios kill-space --force " + p.Space,
-				Available: names,
-				Detail:    "kill-space ends every process in every session of the space. Pass force to go ahead.",
+				Param:   "force",
+				Command: "tuios kill-space --force " + p.Space,
+				Detail:  "kill-space ends every process in every session of the space, so it asks to be confirmed: --force on the command line, or \"force\": true when calling the verb.",
 			})
 	}
 
