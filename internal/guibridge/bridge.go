@@ -573,7 +573,7 @@ type model struct {
 	// paletteSent is the palette as last sent, and paletteKey what it was
 	// built from. See palette.go.
 	paletteSent string
-	paletteKey  string
+	paletteKey  paletteInputs
 	// launcherWanted is set while a launcher command waits for its scan.
 	launcherWanted bool
 	// host is the machine the session is on, empty for this one, and tap
@@ -591,7 +591,18 @@ func (m *model) sendKeybinds() {
 		m.keysFrom = r.GetConfig()
 	}
 	m.out.JSON(Event{Type: "keybinds", Keybinds: exportKeybinds(m.os)})
-	m.paletteKey = ""
+	m.paletteKey = paletteInputs{}
+}
+
+// paletteInputs is what the palette rows are built from. The config counts by
+// identity: a reload replaces it, and sendKeybinds follows the same pointer.
+// It was a fmt.Sprint of these with the config printed field by field, on
+// every message: over half of this process's work while idle, and while a
+// pane redrew at 60 Hz.
+type paletteInputs struct {
+	keys          *config.UserConfig
+	agents, group bool
+	set           bool
 }
 
 // gitEntry is a cached reading of a folder's checkout.
@@ -664,7 +675,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if r := m.os.KeybindRegistry; r != nil && r.GetConfig() != m.keysFrom {
 		m.sendKeybinds()
 	}
-	if key := fmt.Sprint(m.keysFrom != nil, m.os.AgentsSeen(), len(m.os.MultifocusSet) > 0, m.keysFrom); key != m.paletteKey {
+	if key := (paletteInputs{m.keysFrom, m.os.AgentsSeen(), len(m.os.MultifocusSet) > 0, true}); key != m.paletteKey {
 		m.paletteKey = key
 		m.sendPalette()
 	}
