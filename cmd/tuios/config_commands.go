@@ -9,8 +9,187 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
+// newConfigCommand creates the config command for managing TUIOS configuration.
+func newConfigCommand() *cobra.Command {
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage TUIOS configuration",
+		Long:  `Manage TUIOS configuration file and settings`,
+	}
+
+	// Register the config subcommands.
+	configCmd.AddCommand(
+		newConfigPathCommand(),
+		newConfigEditCommand(),
+		newConfigResetCommand(),
+		newConfigApplyCommand(),
+		newConfigFilesCommand(),
+		newConfigOriginCommand(),
+		newConfigPruneCommand(),
+	)
+
+	return configCmd
+}
+
+// newConfigPathCommand creates the command that prints the path to the
+// TUIOS configuration file.
+func newConfigPathCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "path",
+		Short: "Print configuration file path",
+		Long:  `Print the path to the TUIOS configuration file`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return printConfigPath()
+		},
+	}
+}
+
+// newConfigEditCommand creates the command that opens the TUIOS
+// configuration file in the user's preferred editor.
+func newConfigEditCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "edit",
+		Short: "Edit configuration in $EDITOR",
+		Long: `Open the TUIOS configuration file in your default editor
+
+The editor is determined by checking $EDITOR, $VISUAL, or common editors
+like vim, vi, nano, and emacs in that order.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return editConfigFile()
+		},
+	}
+}
+
+// newConfigResetCommand creates the command that resets the main TUIOS
+// configuration file to its default state while preserving its include list.
+func newConfigResetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset",
+		Short: "Reset configuration to defaults",
+		Long: `Reset the TUIOS configuration file to default settings
+
+This will overwrite your existing configuration after confirmation.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return resetConfigToDefaults()
+		},
+	}
+}
+
+// newConfigApplyCommand creates the command that asks the running TUIOS
+// daemon to apply configuration changes that require explicit activation.
+func newConfigApplyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "apply",
+		Short: "Apply config.toml to the running daemon now",
+		Long: `Apply config.toml to the running daemon now, including changes that give panes or other machines more.
+
+The daemon applies a change to the file at once only where it gives less. A change that gives more waits for this command or a daemon restart. Run it from a terminal outside tuios. It is refused from inside a pane.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			client, err := dialVerb()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = client.Close() }()
+			raw, err := client.Call("apply-config", nil)
+			if err != nil {
+				return explainVerbError("apply-config", err)
+			}
+			fmt.Print(describeConfigApplied(raw))
+			return nil
+		},
+	}
+}
+
+// newConfigFilesCommand creates the command that lists the configuration
+// files loaded by TUIOS in precedence order, with an optional JSON output.
+func newConfigFilesCommand() *cobra.Command {
+	var configFilesJSON bool
+	configFilesCmd := &cobra.Command{
+		Use:   "files",
+		Short: "List the files the config is read from",
+		Long: `List the files the config is read from, from lowest to highest precedence.
+
+config.toml can name more files in a top-level include list. Every *.toml file
+in the config.d directory next to config.toml is read too. A later file wins
+over an earlier one, and config.toml wins over all of them. The list marks a
+file that tuios cannot write as read-only, and shows a warning for an include
+that names a missing file or makes a cycle.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runConfigFiles(cmd.OutOrStdout(), configFilesJSON)
+		},
+	}
+	configFilesCmd.Flags().BoolVar(&configFilesJSON, "json", false, "Print the files as JSON")
+	return configFilesCmd
+}
+
+// newConfigOriginCommand creates the command that reports which
+// configuration files define each effective setting, optionally filtered
+// by key and formatted as JSON.
+func newConfigOriginCommand() *cobra.Command {
+	var configOriginJSON bool
+	configOriginCmd := &cobra.Command{
+		Use:   "origin [key]",
+		Short: "Show which config file sets each key",
+		Long: `Show which config file sets each key.
+
+Each line gives a key, the file whose value is in force, and the other files
+that set the same key. Give a key, such as appearance.theme or hosts, to show
+that key and the keys under it only. A key that no file sets has its default
+value.`,
+		Example: `  tuios config origin
+  tuios config origin appearance.theme
+  tuios config origin hosts`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := ""
+			if len(args) == 1 {
+				key = args[0]
+			}
+			return runConfigOrigin(cmd.OutOrStdout(), key, configOriginJSON)
+		},
+	}
+	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
+	return configOriginCmd
+}
+
+// newConfigPruneCommand creates the command that removes default-valued
+// keys from the main configuration file so that included configuration
+// files can take effect, with optional dry-run and confirmation bypass.
+func newConfigPruneCommand() *cobra.Command {
+	var configPruneDryRun, configPruneYes bool
+	configPruneCmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Remove the keys of config.toml that have their default value",
+		Long: `Remove the keys of config.toml that have their default value.
+
+An older tuios wrote every key into config.toml. config.toml wins over the
+files it includes and the files in config.d, so those keys hide the same keys
+in the other files. This command removes each key that has its default value.
+A key that another file sets then takes the value of that file. The command
+lists those keys and asks first. Use --yes to skip the question. A run with no
+terminal needs --yes. The [startup] keys stay, because a config.toml without
+them means the old floating session. The command keeps comments and the
+include list. Use --dry-run to see the keys first.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runConfigPrune(cmd.OutOrStdout(), pruneOptions{
+				dryRun: configPruneDryRun, yes: configPruneYes,
+				tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin,
+			})
+		},
+	}
+	configPruneCmd.Flags().BoolVar(&configPruneDryRun, "dry-run", false, "Show the keys and change nothing")
+	configPruneCmd.Flags().BoolVar(&configPruneYes, "yes", false, "Do not ask when another file then sets a key")
+	return configPruneCmd
+}
+
+// printConfigPath prints the path to the TUIOS configuration file.
 func printConfigPath() error {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -20,6 +199,8 @@ func printConfigPath() error {
 	return nil
 }
 
+// editConfigFile opens the TUIOS configuration file in the user's preferred
+// editor, creating a default configuration file if one does not exist.
 func editConfigFile() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -61,6 +242,9 @@ func editConfigFile() error {
 	return nil
 }
 
+// resetConfigToDefaults resets the main configuration file to its default
+// state after confirmation, preserving its include list and reporting any
+// other configuration files that continue to apply.
 func resetConfigToDefaults() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -111,6 +295,8 @@ func resetConfigToDefaults() error {
 	return nil
 }
 
+// previewThemeColors initializes the named theme and prints its normal and
+// bright ANSI colors with their RGB values and hexadecimal representations.
 func previewThemeColors(themeName string) error {
 	if !slices.Contains(theme.AvailableThemes(), themeName) {
 		return fmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)

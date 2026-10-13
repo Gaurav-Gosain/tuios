@@ -22,7 +22,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // Version information (set by goreleaser)
@@ -113,134 +112,7 @@ func newRootCommand() *cobra.Command {
 
 	sshCmd := newSSHCommand()
 
-	configCmd := &cobra.Command{
-		Use:   "config",
-		Short: "Manage TUIOS configuration",
-		Long:  `Manage TUIOS configuration file and settings`,
-	}
-
-	configPathCmd := &cobra.Command{
-		Use:   "path",
-		Short: "Print configuration file path",
-		Long:  `Print the path to the TUIOS configuration file`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return printConfigPath()
-		},
-	}
-
-	configEditCmd := &cobra.Command{
-		Use:   "edit",
-		Short: "Edit configuration in $EDITOR",
-		Long: `Open the TUIOS configuration file in your default editor
-
-The editor is determined by checking $EDITOR, $VISUAL, or common editors
-like vim, vi, nano, and emacs in that order.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return editConfigFile()
-		},
-	}
-
-	configResetCmd := &cobra.Command{
-		Use:   "reset",
-		Short: "Reset configuration to defaults",
-		Long: `Reset the TUIOS configuration file to default settings
-
-This will overwrite your existing configuration after confirmation.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return resetConfigToDefaults()
-		},
-	}
-
-	configApplyCmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply config.toml to the running daemon now",
-		Long: `Apply config.toml to the running daemon now, including changes that give panes or other machines more.
-
-The daemon applies a change to the file at once only where it gives less. A change that gives more waits for this command or a daemon restart. Run it from a terminal outside tuios. It is refused from inside a pane.`,
-		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			client, err := dialVerb()
-			if err != nil {
-				return err
-			}
-			defer func() { _ = client.Close() }()
-			raw, err := client.Call("apply-config", nil)
-			if err != nil {
-				return explainVerbError("apply-config", err)
-			}
-			fmt.Print(describeConfigApplied(raw))
-			return nil
-		},
-	}
-
-	var configFilesJSON bool
-	configFilesCmd := &cobra.Command{
-		Use:   "files",
-		Short: "List the files the config is read from",
-		Long: `List the files the config is read from, from lowest to highest precedence.
-
-config.toml can name more files in a top-level include list. Every *.toml file
-in the config.d directory next to config.toml is read too. A later file wins
-over an earlier one, and config.toml wins over all of them. The list marks a
-file that tuios cannot write as read-only, and shows a warning for an include
-that names a missing file or makes a cycle.`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigFiles(cmd.OutOrStdout(), configFilesJSON)
-		},
-	}
-	configFilesCmd.Flags().BoolVar(&configFilesJSON, "json", false, "Print the files as JSON")
-
-	var configOriginJSON bool
-	configOriginCmd := &cobra.Command{
-		Use:   "origin [key]",
-		Short: "Show which config file sets each key",
-		Long: `Show which config file sets each key.
-
-Each line gives a key, the file whose value is in force, and the other files
-that set the same key. Give a key, such as appearance.theme or hosts, to show
-that key and the keys under it only. A key that no file sets has its default
-value.`,
-		Example: `  tuios config origin
-  tuios config origin appearance.theme
-  tuios config origin hosts`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			key := ""
-			if len(args) == 1 {
-				key = args[0]
-			}
-			return runConfigOrigin(cmd.OutOrStdout(), key, configOriginJSON)
-		},
-	}
-	configOriginCmd.Flags().BoolVar(&configOriginJSON, "json", false, "Print the keys as JSON")
-
-	var configPruneDryRun, configPruneYes bool
-	configPruneCmd := &cobra.Command{
-		Use:   "prune",
-		Short: "Remove the keys of config.toml that have their default value",
-		Long: `Remove the keys of config.toml that have their default value.
-
-An older tuios wrote every key into config.toml. config.toml wins over the
-files it includes and the files in config.d, so those keys hide the same keys
-in the other files. This command removes each key that has its default value.
-A key that another file sets then takes the value of that file. The command
-lists those keys and asks first. Use --yes to skip the question. A run with no
-terminal needs --yes. The [startup] keys stay, because a config.toml without
-them means the old floating session. The command keeps comments and the
-include list. Use --dry-run to see the keys first.`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigPrune(cmd.OutOrStdout(), pruneOptions{
-				dryRun: configPruneDryRun, yes: configPruneYes,
-				tty: term.IsTerminal(int(os.Stdin.Fd())), in: os.Stdin,
-			})
-		},
-	}
-	configPruneCmd.Flags().BoolVar(&configPruneDryRun, "dry-run", false, "Show the keys and change nothing")
-	configPruneCmd.Flags().BoolVar(&configPruneYes, "yes", false, "Do not ask when another file then sets a key")
-
-	configCmd.AddCommand(configPathCmd, configEditCmd, configResetCmd, configApplyCmd, configFilesCmd, configOriginCmd, configPruneCmd)
+	configCmd := newConfigCommand()
 
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",
