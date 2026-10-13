@@ -4896,3 +4896,4 @@ Run on 2026-10-13 on macOS. The tests are in `rail_git_overflow_test.go`. The fi
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |
 | The `+N` tail of `drawGit` (`if h := hidden[sidebarSectionGit]; h > 0 { ... overflowRow ... }`) | `TestRailGitOneLineOwnsUpToItsRows` ("the git section on one line does not end in +2") | **caught** |
+| `mixI(m.SidebarScrollG)` in `sidebarSignature` | `TestRailGitWheelRedraws` ("the wheel over the git section did not bring its branch row up") | **caught** |

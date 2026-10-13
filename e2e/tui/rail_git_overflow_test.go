@@ -93,3 +93,34 @@ func TestRailGitOneLineOwnsUpToItsRows(t *testing.T) {
 	}
 	alive(t, term, "after reading the git section")
 }
+
+// TestRailGitWheelRedraws: the wheel over a git section on one line scrolls
+// it to its branch row. The offset it moves is part of the rail's cache key,
+// so the frame after the wheel is drawn rather than served from the entry
+// keyed before it.
+//
+// How it could pass wrongly, and what stops it: a pointer move redrawing the
+// rail for its own reason. The wheel is the only event sent, at a cell no
+// motion has visited.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail git section on one
+// line").
+func TestRailGitWheelRedraws(t *testing.T) {
+	term := railGitOneLine(t, "wheel-branch")
+	dir := artifactDir(t)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.HasSuffix(railRowText(s, railHeaderRow(s, "git")+1), "+2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the git section on one line does not end in +2: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "before-wheel")
+	s := term.Screen()
+	wheelAt(t, term, 5, railHeaderRow(s, "git")+1, tuitest.MouseWheelDown, 1)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(railRowText(s, railHeaderRow(s, "git")+1), "wheel-branch")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the wheel over the git section did not bring its branch row up: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "after-wheel")
+	alive(t, term, "after the wheel over the git section")
+}

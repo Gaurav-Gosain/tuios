@@ -212,6 +212,9 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.railCustom.gen)
 	}
 	mixI(m.SidebarScrollC)
+	// The git section scrolls like the others once it is given fewer lines
+	// than its two rows.
+	mixI(m.SidebarScrollG)
 
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves
