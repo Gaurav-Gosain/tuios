@@ -5679,6 +5679,7 @@ attached to each session. Each control cuts one call site and rebuilds.
 | The move not recorded in the destination's state (`recordWindowMove` cut from `Session.adoptWindow`) | mutant of this branch | "the destination client's notice: showed \"Window created\" and never \"Moved mover here from the session alpha.\"" | **caught** |
 | The pane not sized again on arrival (`pty.setNoClients` cut from `Session.adoptWindow`) | mutant of this branch | `TestMoveWindowSessionViewerSize`: "after the move the pane kept the viewer's size: the pane is \"45 150\"" | **caught** |
 | A lease renewal reads the clients of the session the stream opened in (`ps.sess.tuiClients` in `paneStream.setLease`) | mutant of this branch | `TestMoveWindowSessionViewerSize`: "after the viewer renewed its lease: the pane is \"45 150\"" | **caught** |
+| A moved pane found only through a source that still resolves (`!from.hasName(session)` cut from `followMovedWindow`) | mutant of this branch | `TestMoveWindowSessionHookAfterSourceKilled`: "the hook did not reach the pane after alpha was killed: the pane's agent state is \"none\", want \"working\"" | **caught** |
 | The positive half | this branch | none: the source client draws the pane before the move and not after, the destination client draws its old output and the answer typed after the move, with the same pid, and the refusals are `same_session` and `session_not_found`. For both moves the source client shows "Moved mover to the session ..." and the destination client "Moved mover here from the session ...", with no "Window closed" or "Window created" before it | **guard** |
 
 The passing run writes `TestMoveWindowToSession.json` (every call and reply)
@@ -5686,9 +5687,13 @@ and the screens of both clients to `$TUIOS_E2E_FRAMES`, with the screen that
 showed each move notice as `TestMoveWindowToSession-*-notice-*.txt`. Run it with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios TUIOS_E2E_FRAMES=/tmp/frames go test -count=1 -run '^TestMoveWindowToSession$' .`
 
-Run on 2026-10-13, the same table, for one more test.
+Run on 2026-10-13, the same table, for two more tests.
 `TestMoveWindowSessionViewerSize` holds a pane at a pane-view viewer's 150 by
 45 in alpha, which no client shows, and moves it to beta, shown by an 80 by 24
 client. The pane must fit the client before the viewer's next lease renewal
-and after it. On this branch it passes: the pane is 20 by 38 after the move
-and after the renewal. It writes its calls to `$TUIOS_E2E_FRAMES`.
+and after it. `TestMoveWindowSessionHookAfterSourceKilled` moves a shell from
+alpha to beta, kills alpha, and runs the real `tuios agent-hook claude-code`
+in the pane, then `tuios set-agent-state` after a new session took the name
+alpha. Both reports must land on the pane in beta. On this branch both pass:
+the pane is 20 by 38 after the move and after the renewal, and the states are
+`working` then `needs_input`. Each writes its calls to `$TUIOS_E2E_FRAMES`.

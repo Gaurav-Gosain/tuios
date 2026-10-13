@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 )
@@ -39,7 +40,8 @@ import (
 // The process keeps the environment it started with: TUIOS_SESSION still
 // names the source. A call that names the source session and the moved
 // window is sent to the window's session (followMovedWindow), so the hooks of
-// an agent in the pane go on reporting to the right place.
+// an agent in the pane go on reporting to the right place. The source's name
+// is recorded with the move, so this holds after the source is killed.
 //
 // A stream of the pane (stream-pane, pane-view) stays open through the move.
 // Its lease and viewer report follow the pane to the destination, and the
@@ -431,7 +433,7 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 	d.attention.moveWindow(srcName, dstName, windowID)
 	d.activity.moveWindow(src.ID, dst.ID, windowID)
 	d.moveQueuedWindow(windowID, dstName)
-	d.noteMovedWindow(windowID, src.ID)
+	d.noteMovedWindow(windowID, src.ID, srcName)
 	moveWindowHistory(src, dst, windowID)
 
 	// A process that exited while the pane was between the two sessions was
@@ -479,17 +481,20 @@ func (d *Daemon) sessionHoldingPTY(ptyID string) *Session {
 	return nil
 }
 
-// movedWindows records, by window id, the ids of the sessions a window was
-// moved out of. See followMovedWindow.
+// movedWindows records, by window id, the sessions a window was moved out
+// of. See followMovedWindow.
 var movedWindows sync.Map
 
-// noteMovedWindow records that the window left the session with id from.
-func (d *Daemon) noteMovedWindow(windowID, from string) {
+// noteMovedWindow records that the window left the session with id fromID
+// and name fromName. The name is kept apart from the session, so a call that
+// names the source after the source is gone still finds the window.
+func (d *Daemon) noteMovedWindow(windowID, fromID, fromName string) {
 	v, _ := movedWindows.LoadOrStore(windowID, &movedFrom{})
 	m := v.(*movedFrom)
 	m.mu.Lock()
 	if len(m.ids) < 16 {
-		m.ids = append(m.ids, from)
+		m.ids = append(m.ids, fromID)
+		m.names = append(m.names, fromName)
 	}
 	m.mu.Unlock()
 }
@@ -499,19 +504,23 @@ func (d *Daemon) noteMovedWindow(windowID, from string) {
 func forgetMovedWindow(windowID string) { movedWindows.Delete(windowID) }
 
 type movedFrom struct {
-	mu  sync.Mutex
-	ids []string
+	mu    sync.Mutex
+	ids   []string
+	names []string
 }
 
 func (m *movedFrom) has(id string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, x := range m.ids {
-		if x == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.ids, id)
+}
+
+// hasName reports whether the window left a session that had this name or
+// id when it left.
+func (m *movedFrom) hasName(name string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Contains(m.names, name) || slices.Contains(m.ids, name)
 }
 
 // followMovedWindow sends a call that names a moved window together with a
@@ -543,8 +552,13 @@ func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 	if !ok {
 		return params
 	}
+	// The session named is the one the window left, or a name it had when
+	// the window left. The second holds after that session was killed or
+	// its name taken by another, when the name resolves to nothing or to a
+	// session that never held the window.
 	named, _ := d.manager.ResolveSession(session)
-	if named == nil || !v.(*movedFrom).has(named.ID) {
+	from := v.(*movedFrom)
+	if (named == nil || !from.has(named.ID)) && !from.hasName(session) {
 		return params
 	}
 	holder := d.sessionHoldingWindow(window)

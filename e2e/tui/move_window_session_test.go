@@ -460,3 +460,90 @@ func TestMoveWindowSessionViewerSize(t *testing.T) {
 	waitForAll(t, beta, 20*time.Second, "the beta client to draw the moved pane", "AFTER-MOVE-42")
 	art.frame(t, beta, "beta")
 }
+
+// An agent hook in a moved pane reaches it after the session it left is
+// gone.
+//
+// The pane's TUIOS_SESSION says alpha, read from the pane itself, so the
+// hook names alpha. alpha is killed after the move, and the real
+// `tuios agent-hook claude-code` runs inside the pane: its UserPromptSubmit
+// must set the pane in beta to working. Then a new session takes the name
+// alpha, and `tuios set-agent-state` from inside the pane must still set the
+// pane in beta, not fail in the new alpha. Each state differs from the one
+// before it, so a report that went nowhere leaves the old state and fails.
+//
+// NEGATIVE CONTROL (NEGATIVE_CONTROLS.md, "Move a window to another
+// session"): with the name check cut from followMovedWindow, it fails at
+// "the hook did not reach the pane after alpha was killed".
+func TestMoveWindowSessionHookAfterSourceKilled(t *testing.T) {
+	art := &moveArtifact{}
+	defer art.save(t)
+	base, must, win := moveSetup(t, art, "agent")
+
+	call := func(verb string, params map[string]any) (map[string]any, error) {
+		return must(verb, params), nil
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "alpha", "-w", win, "echo SESS-[$TUIOS_SESSION]\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitMoveCapture(t, call, "alpha", win, "SESS-[alpha]")
+
+	must("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "beta"})
+	if out, err := tuiosCLI(t, base, "kill-session", "alpha"); err != nil {
+		t.Fatalf("kill-session alpha: %v\n%s", err, out)
+	}
+	if out, _ := tuiosCLI(t, base, "ls"); strings.Contains(out, "alpha") {
+		t.Fatalf("alpha is still listed after kill-session:\n%s", out)
+	}
+
+	state := func() string {
+		t.Helper()
+		res := must("list-windows", map[string]any{"session": "beta"})
+		ws, _ := res["windows"].([]any)
+		for _, w := range ws {
+			m, _ := w.(map[string]any)
+			if m["window_id"] == win {
+				s, _ := m["agent_state"].(string)
+				return s
+			}
+		}
+		t.Fatalf("beta does not list the moved window: %v", res)
+		return ""
+	}
+	waitState := func(want, why string) {
+		t.Helper()
+		got := ""
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			if got = state(); got == want {
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		capt, _ := call("capture-pane", map[string]any{"session": "beta", "window": win})
+		t.Fatalf("ASSERTION: %s: the pane's agent state is %q, want %q\n%v", why, got, want, capt["content"])
+	}
+	if s := state(); s == "working" || s == "needs_input" {
+		t.Fatalf("the pane has agent state %q before any report", s)
+	}
+
+	payload := `{"hook_event_name":"UserPromptSubmit","session_id":"mv-hook","prompt":"keep going"}`
+	hook := "printf '%s' '" + payload + "' | " + tuiosBin + " agent-hook claude-code --timeout 10s; echo HOOK-DONE-$((40+2))\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "beta", "-w", win, hook); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitMoveCapture(t, call, "beta", win, "HOOK-DONE-42")
+	waitState("working", "the hook did not reach the pane after alpha was killed")
+
+	// A new session takes the name alpha.
+	if out, err := tuiosCLI(t, base, "new", "alpha", "--detach"); err != nil {
+		t.Fatalf("create the new alpha: %v\n%s", err, out)
+	}
+	set := tuiosBin + " set-agent-state needs_input; echo SET-DONE-$((40+3))\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "beta", "-w", win, set); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	content := waitMoveCapture(t, call, "beta", win, "SET-DONE-43")
+	art.add("capture", map[string]any{"session": "beta", "window": win}, map[string]any{"content": content}, "")
+	waitState("needs_input", "set-agent-state did not reach the pane after a new session took the name alpha")
+}
