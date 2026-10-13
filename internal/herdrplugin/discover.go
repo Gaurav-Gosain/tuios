@@ -9,6 +9,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
 // Where a plugin was found.
@@ -276,13 +278,16 @@ func SamePath(a, b string) bool {
 	return canonical(a) == canonical(b)
 }
 
+// canonical drops a Windows \\?\ prefix before and after the links are
+// resolved, so an entry written with it and the plain path of the same file
+// compare equal (issue #654). EvalSymlinks can add the prefix back.
 func canonical(p string) string {
-	p = expandHome(p)
+	p = winpath.StripExtended(expandHome(p))
 	if abs, err := filepath.Abs(p); err == nil {
 		p = abs
 	}
 	if real, err := filepath.EvalSymlinks(p); err == nil {
 		p = real
 	}
-	return p
+	return winpath.StripExtended(p)
 }

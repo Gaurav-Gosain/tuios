@@ -30,3 +30,22 @@ func TestLoadDropsTheExtendedPrefix(t *testing.T) {
 		}
 	}
 }
+
+// TestSamePathIgnoresTheExtendedPrefix is what tuios plugins unlink relies
+// on: a dirs entry written with \\?\ and the plain path of the same folder
+// are one plugin, so unlink by either form removes the entry.
+func TestSamePathIgnoresTheExtendedPrefix(t *testing.T) {
+	dir := t.TempDir()
+	for _, pair := range [][2]string{
+		{`\\?\` + dir, dir},
+		{dir, `\\?\` + dir},
+		{`\\?\` + filepath.Join(dir, ManifestName), filepath.Join(dir, ManifestName)},
+	} {
+		if !SamePath(pair[0], pair[1]) {
+			t.Errorf("SamePath(%q, %q) = false, want true", pair[0], pair[1])
+		}
+	}
+	if SamePath(`\\?\`+dir, filepath.Join(dir, "other")) {
+		t.Errorf("SamePath matched two different folders")
+	}
+}
