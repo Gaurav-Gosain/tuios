@@ -728,6 +728,46 @@ func (m *OS) windowCountForNotice() int {
 	return n
 }
 
+// windowLabelsForNotice is the label of every window the created and closed
+// notices count, by window id.
+func (m *OS) windowLabelsForNotice() map[string]string {
+	labels := make(map[string]string, len(m.Windows))
+	for _, w := range m.Windows {
+		if !isScratch(w) {
+			labels[w.ID] = windowRowTitle(w)
+		}
+	}
+	return labels
+}
+
+// windowMoveNotice is the notice for a push in which a window moved to or
+// from another session, with before the windows shown before the push. It
+// reports false when no window that left or arrived in the push moved, and
+// the created and closed notices apply.
+func (m *OS) windowMoveNotice(state *session.SessionState, before map[string]string) (string, bool) {
+	if state == nil || len(state.WindowMoves) == 0 {
+		return "", false
+	}
+	after := m.windowLabelsForNotice()
+	for id, label := range before {
+		if _, ok := after[id]; ok {
+			continue
+		}
+		if mv, ok := state.LastWindowMove(id); ok && mv.Away {
+			return fmt.Sprintf("Moved %s to the session %s.", label, mv.Other), true
+		}
+	}
+	for id, label := range after {
+		if _, ok := before[id]; ok {
+			continue
+		}
+		if mv, ok := state.LastWindowMove(id); ok && !mv.Away {
+			return fmt.Sprintf("Moved %s here from the session %s.", label, mv.Other), true
+		}
+	}
+	return "", false
+}
+
 // HideShownScratch hides the scratch group when it is on the screen, and
 // gives the focus back as the key does. It reports whether it hid one.
 func (m *OS) HideShownScratch() bool {

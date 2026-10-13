@@ -86,6 +86,64 @@ type paneTransfer struct {
 
 	// transcript is the join the window had, made again in the destination.
 	transcript *transcriptRejoin
+
+	// from is the label of the session the window left, recorded in the
+	// destination's WindowMoves when it arrives. Empty for a window put
+	// back where it was.
+	from string
+}
+
+// WindowMove is one window that moved between this session and another, as
+// SessionState.WindowMoves records it.
+type WindowMove struct {
+	// Window is the window's id.
+	Window string
+	// Other is the label of the other session: the one the window went to,
+	// or the one it came from.
+	Other string
+	// Away is true for a window that left this session and false for one
+	// that arrived.
+	Away bool
+}
+
+// windowMovesKept bounds SessionState.WindowMoves. A client reads only the
+// entries for windows that left or arrived in the push it applies.
+const windowMovesKept = 8
+
+// recordWindowMove appends m to the session's moves, keeping the newest
+// windowMovesKept. It builds a new slice, so a snapshot that shares the old
+// one is not written through.
+func recordWindowMove(state *SessionState, m WindowMove) {
+	moves := state.WindowMoves
+	if over := len(moves) + 1 - windowMovesKept; over > 0 {
+		moves = moves[over:]
+	}
+	out := make([]WindowMove, 0, len(moves)+1)
+	out = append(out, moves...)
+	state.WindowMoves = append(out, m)
+}
+
+// LastWindowMove is the newest move recorded for the window, false when none
+// is.
+func (state *SessionState) LastWindowMove(windowID string) (WindowMove, bool) {
+	if state == nil {
+		return WindowMove{}, false
+	}
+	for i := len(state.WindowMoves) - 1; i >= 0; i-- {
+		if state.WindowMoves[i].Window == windowID {
+			return state.WindowMoves[i], true
+		}
+	}
+	return WindowMove{}, false
+}
+
+// sessionLabel is the name a person knows the session by: its display name,
+// or its name when it has none.
+func sessionLabel(s *Session) string {
+	if st := s.GetState(); st != nil && st.DisplayName != "" {
+		return st.DisplayName
+	}
+	return s.Name()
 }
 
 // transcriptRejoin is a transcript join to make again.
@@ -97,7 +155,11 @@ type transcriptRejoin struct {
 // releaseWindow takes a window out of the session for a move: its row, its
 // PTY and the daemon memory kept for it. The process goes on running and the
 // PTY is in no session until adoptWindow takes it.
-func (s *Session) releaseWindow(windowID string) (*paneTransfer, error) {
+//
+// to is the label of the session the window goes to. It is recorded in the
+// session's WindowMoves in the same mutation, so a client of this session
+// says where the window went rather than that it closed.
+func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 	t := &paneTransfer{}
 	err := s.mutateState(func(state *SessionState) error {
 		idx, err := findWindowStateIndex(state.Windows, windowID)
@@ -112,6 +174,7 @@ func (s *Session) releaseWindow(windowID string) (*paneTransfer, error) {
 		}
 		t.win = s.removeWindowLocked(state, idx)
 		id := t.win.ID
+		recordWindowMove(state, WindowMove{Window: id, Other: to, Away: true})
 		if c, ok := s.agentClaims[id]; ok {
 			t.claim = &c
 			delete(s.agentClaims, id)
@@ -223,6 +286,9 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 			win.Unplaced = true
 		}
 		state.Windows = append(state.Windows, win)
+		if t.from != "" {
+			recordWindowMove(state, WindowMove{Window: id, Other: t.from})
+		}
 		if t.claim != nil {
 			if s.agentClaims == nil {
 				s.agentClaims = make(map[string]agentClaim)
@@ -307,6 +373,7 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 // after the destination refused it. It is adoptWindow on the source, on the
 // workspace the window had.
 func (s *Session) returnWindow(t *paneTransfer) {
+	t.from = ""
 	ws := t.win.Workspace
 	if !s.GetState().workspaceAccepts(ws) {
 		ws = 1
@@ -336,10 +403,12 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 		return WindowState{}, fmt.Errorf("workspace %d out of range (1-%d)", workspace, st.workspaceBound())
 	}
 
-	t, err := src.releaseWindow(windowID)
+	srcLabel, dstLabel := sessionLabel(src), sessionLabel(dst)
+	t, err := src.releaseWindow(windowID, dstLabel)
 	if err != nil {
 		return WindowState{}, err
 	}
+	t.from = srcLabel
 	d.unsubscribeSessionClients(src.ID, t.pty)
 
 	win, err := dst.adoptWindow(t, workspace, follow)

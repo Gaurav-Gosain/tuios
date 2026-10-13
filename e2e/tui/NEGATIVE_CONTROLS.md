@@ -5674,8 +5674,11 @@ attached to each session. Each control cuts one call site and rebuilds.
 | The `to_session` branch cut from `verbMoveWindow` | mutant of this branch | "a move to the window's own session = invalid_params ... want same_session" | **caught** |
 | The `followMovedWindow` call cut from `admitVerb` | mutant of this branch | "a report naming the old session did not reach the moved pane" | **caught** |
 | `joinPane` in the tmux shim as on `origin/main` (a join across sessions refused) | mutant of this branch | `TestTmuxShimJoinPaneAcrossSessions`: join-pane exits 1 with "tuios moves a pane only within its session" | **caught** |
-| The positive half | this branch | none: the source client draws the pane before the move and not after, the destination client draws its old output and the answer typed after the move, with the same pid, and the refusals are `same_session` and `session_not_found` | **guard** |
+| The client's move notice cut (`windowMoveNotice` in the `StateSyncMsg` case of `internal/app/update.go` never taken) | mutant of this branch | "the source client's notice: showed \"Window closed\" and never \"Moved mover to the session beta.\"" | **caught** |
+| The move not recorded in the source's state (`recordWindowMove` cut from `Session.releaseWindow`) | mutant of this branch | the same: the source client shows "Window closed (1 remaining)" | **caught** |
+| The positive half | this branch | none: the source client draws the pane before the move and not after, the destination client draws its old output and the answer typed after the move, with the same pid, and the refusals are `same_session` and `session_not_found`. For both moves the source client shows "Moved mover to the session ..." and the destination client "Moved mover here from the session ...", with no "Window closed" or "Window created" before it | **guard** |
 
 The passing run writes `TestMoveWindowToSession.json` (every call and reply)
-and the screens of both clients to `$TUIOS_E2E_FRAMES`. Run it with
+and the screens of both clients to `$TUIOS_E2E_FRAMES`, with the screen that
+showed each move notice as `TestMoveWindowToSession-*-notice-*.txt`. Run it with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios TUIOS_E2E_FRAMES=/tmp/frames go test -count=1 -run '^TestMoveWindowToSession$' .`

@@ -365,6 +365,11 @@ type SessionState struct {
 	// Empty means unnamed, and every reader falls back to Name, so a session that
 	// was never renamed reads exactly as it did before this field existed.
 	DisplayName string `json:"display_name,omitempty"`
+	// WindowMoves is the newest windows that moved between this session and
+	// another (see window_move_session.go). A client that sees a window leave
+	// or arrive in a push looks it up here, and says the window moved rather
+	// than that it closed or was made. Daemon-owned and never saved.
+	WindowMoves []WindowMove `json:"-"`
 	// SidebarWidth and SidebarCollapsed are the rail as the user last left it.
 	// They are session state rather than a per-client preference because the
 	// rail is chrome, and chrome that differs between two clients of one session
@@ -2821,6 +2826,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceOrder != nil {
 		stateCopy.WorkspaceOrder = slices.Clone(s.state.WorkspaceOrder)
 	}
+	stateCopy.WindowMoves = slices.Clone(s.state.WindowMoves)
 	if s.state.WorkspaceMasterRatio != nil {
 		stateCopy.WorkspaceMasterRatio = maps.Clone(s.state.WorkspaceMasterRatio)
 	}

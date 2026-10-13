@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,12 @@ import (
 //   - An attached client sees it. A real client attached to each session
 //     shows the marker in the source before the move (the positive half) and
 //     not after, and the destination's client draws it after the move.
+//   - Each client says the window moved. The source's client shows "Moved
+//     mover to the session beta." and the destination's "Moved mover here
+//     from the session alpha.", for both moves. Each is watched from before
+//     the move, and fails when it shows "Window closed" or "Window created"
+//     first, so a client that reads the move as a close or a new window
+//     fails.
 //   - The agent state, its message and its metadata go with it.
 //   - A hook that still names the old session in TUIOS_SESSION reaches the
 //     pane: set-agent-state with the old session and the pane's id lands in
@@ -47,6 +54,9 @@ import (
 // session"):
 //   - with the line that puts the PTY in the destination's PTY map cut from
 //     Session.adoptWindow, it fails at "in session beta never showed".
+//   - with windowMoveNotice never taken in the StateSyncMsg case, or with
+//     recordWindowMove cut from Session.releaseWindow, it fails at "the
+//     source client's notice: showed "Window closed"".
 //   - with the to_session branch cut from verbMoveWindow, it fails at "a move
 //     to the window's own session".
 //   - with the followMovedWindow call cut from admitVerb, it fails at "a
@@ -150,10 +160,19 @@ func TestMoveWindowToSession(t *testing.T) {
 		t.Fatal("ASSERTION: a refused move took the window out of alpha")
 	}
 
-	// The move, by the verb.
+	// The move, by the verb. Both clients are watched from before the call,
+	// because the notice they show lasts two seconds.
+	alphaNote := watchMoveNotice(alpha, "alpha-notice-move", "Moved mover to the session beta.", "Window closed")
+	betaNote := watchMoveNotice(beta, "beta-notice-move", "Moved mover here from the session alpha.", "Window created")
 	moved := must("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "beta", "follow": true})
 	if moved["type"] != "window_moved" || moved["window_id"] != win || moved["session"] != "beta" || moved["from_session"] != "alpha" {
 		t.Fatalf("ASSERTION: move-window result = %v, want window_moved of %s from alpha to beta", moved, win)
+	}
+	if msg := <-alphaNote; msg != "" {
+		t.Fatalf("ASSERTION: the source client's notice: %s", msg)
+	}
+	if msg := <-betaNote; msg != "" {
+		t.Fatalf("ASSERTION: the destination client's notice: %s", msg)
 	}
 	if row("alpha") != nil {
 		t.Fatal("ASSERTION: alpha still lists the moved window")
@@ -197,6 +216,8 @@ func TestMoveWindowToSession(t *testing.T) {
 	}
 
 	// The CLI moves it back.
+	alphaNote = watchMoveNotice(alpha, "alpha-notice-cli-move", "Moved mover here from the session beta.", "Window created")
+	betaNote = watchMoveNotice(beta, "beta-notice-cli-move", "Moved mover to the session alpha.", "Window closed")
 	out, err := tuiosCLI(t, base, "move-window", "-s", "beta", "-w", win, "--to-session", "alpha", "--follow")
 	art.add("cli", map[string]any{"args": "move-window -s beta -w " + win + " --to-session alpha --follow"}, nil, out)
 	if err != nil || !strings.Contains(out, "from session beta to session alpha") {
@@ -205,6 +226,12 @@ func TestMoveWindowToSession(t *testing.T) {
 	if row("beta") != nil || row("alpha") == nil {
 		t.Fatal("ASSERTION: the CLI move did not put the window back in alpha")
 	}
+	if msg := <-alphaNote; msg != "" {
+		t.Fatalf("ASSERTION: after the CLI move, the destination client's notice: %s", msg)
+	}
+	if msg := <-betaNote; msg != "" {
+		t.Fatalf("ASSERTION: after the CLI move, the source client's notice: %s", msg)
+	}
 	if _, err := call("send-text", map[string]any{"session": "alpha", "window": win, "text": "back\n"}); err != nil {
 		t.Fatalf("send-text after the CLI move: %v", err)
 	}
@@ -212,6 +239,45 @@ func TestMoveWindowToSession(t *testing.T) {
 	waitMoveCapture(t, call, "alpha", win, "got-back "+pid)
 	waitForAll(t, alpha, 20*time.Second, "the source client to draw the pane again", "MOVED-PANE-MARK", "got-back")
 	art.frame(t, alpha, "alpha-after-cli-move")
+}
+
+// watchMoveNotice watches term until it shows want, and reports on the
+// channel what went wrong: "" when want showed and no deny text showed
+// before it. It runs in its own goroutine, so a watch on each client starts
+// before the move and neither misses a notice while the other is read. The
+// screen that showed want is saved as TestMoveWindowToSession-<frame>.txt
+// under $TUIOS_E2E_FRAMES.
+func watchMoveNotice(term *tuitest.Terminal, frame, want string, deny ...string) <-chan string {
+	ch := make(chan string, 1)
+	go func() {
+		var bad, shown string
+		err := term.WaitFor(func(s tuitest.Screen) bool {
+			for _, d := range deny {
+				if bad == "" && screenHas(s, d) {
+					bad = d
+				}
+			}
+			if screenHas(s, want) {
+				shown = s.Text()
+				return true
+			}
+			return false
+		}, 20*time.Second)
+		if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" && shown != "" {
+			_ = os.WriteFile(filepath.Join(dir, "TestMoveWindowToSession-"+frame+".txt"), []byte(shown), 0o644)
+		}
+		switch {
+		case err != nil && bad != "":
+			ch <- fmt.Sprintf("showed %q and never %q:\n%s", bad, want, term.Snapshot())
+		case err != nil:
+			ch <- fmt.Sprintf("never showed %q:\n%s", want, term.Snapshot())
+		case bad != "":
+			ch <- fmt.Sprintf("showed %q before %q:\n%s", bad, want, term.Snapshot())
+		default:
+			ch <- ""
+		}
+	}()
+	return ch
 }
 
 // waitMoveCapture waits until the pane's capture holds want, and returns it.

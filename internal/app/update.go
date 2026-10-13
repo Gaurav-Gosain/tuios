@@ -2019,6 +2019,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// Track what changed for notifications
 			oldWindowCount := m.windowCountForNotice()
 			oldWorkspace := m.CurrentWorkspace
+			oldWindows := m.windowLabelsForNotice()
 
 			if err := m.ApplyStateSyncFrom(msg.State, msg.SourceID); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
@@ -2037,8 +2038,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				newWindowCount := m.windowCountForNotice()
 				newWorkspace := m.CurrentWorkspace
 
-				// Window count change notification
-				if newWindowCount > oldWindowCount {
+				// Window count change notification. A window that moved to
+				// or from another session says so: it did not close and was
+				// not made.
+				if note, ok := m.windowMoveNotice(msg.State, oldWindows); ok {
+					m.ShowNotification(note, "info", 2*time.Second)
+				} else if newWindowCount > oldWindowCount {
 					m.ShowNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
 				} else if newWindowCount < oldWindowCount {
 					m.ShowNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)

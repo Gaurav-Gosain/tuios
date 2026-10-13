@@ -58,6 +58,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The worktree record is written by detection and by the worktree verbs,
 	// both daemon-side, so canonical wins the same way Restored does.
 	incoming.Worktree = canonical.Worktree
+	// The window moves are recorded by a move between sessions, daemon-side.
+	incoming.WindowMoves = canonical.WindowMoves
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}
