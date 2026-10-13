@@ -3467,16 +3467,24 @@ Response:
    "merged": false}]}}
 ```
 
-`merged` is true when the branch has commits of its own and merging it into
-`base` changes nothing: `git merge-tree --write-tree` gives the tree of the
-base itself. A merge commit, a fast-forward, a rebase and a squash all count.
+`merged` is true when the branch has changes of its own and its base already
+holds them. A merge commit, a fast-forward, a rebase and a squash all count.
 The daemon checks `base`, then the upstream of `base` when it has one, as git
 last fetched it. It never fetches. `merged_into` names the ref, and is present
-only when `merged` is true. Own commits count from the commit the branch was
-at when `new-worktree` made it. A worktree from before that record counts
-from the merge base, so it can read false after a fast-forward. With no
-`base`, the daemon checks the branch the main checkout has checked out. The
-answer is cached per branch tip and base tip.
+only when `merged` is true. With no `base`, the daemon checks the branch the
+main checkout has checked out.
+
+When the base does not hold the branch tip, the branch must change something
+against its merge base with the base. A commit and its revert change nothing,
+so they are not merged. Then `git merge-tree --write-tree` must give the tree
+of the base itself. It runs with a temporary object directory, so the
+repository gains no objects.
+
+When the base holds the branch tip, the branch's reflog decides. The branch is
+merged when an entry made a commit that the tip holds and `start_commit` does
+not. A branch that only fast-forwarded to commits of its base is not merged. A
+branch with no reflog is not merged. The answer is cached per branch tip and
+base tip.
 
 `gone` is true when the worktree directory no longer exists. The session is
 kept, so what its agent printed can still be read. `state` is the agent state

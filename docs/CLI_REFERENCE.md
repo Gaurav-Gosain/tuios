@@ -692,7 +692,8 @@ merged. A branch is merged when it has commits of its own, and merging it into
 its base changes nothing. tuios checks the base, then the upstream of the base,
 such as `origin/main`. It does not fetch. A merge commit, a fast-forward, a
 rebase and a squash merge all count. A new branch with no commits is not
-merged. `--json` gives `merged` and `merged_into`. tuios does not remove a
+merged. A branch that only fast-forwarded to its base is not merged. A commit
+and its revert are not merged. `--json` gives `merged` and `merged_into`. tuios does not remove a
 merged worktree. Use `worktree rm` to remove it.
 
 **On another machine.** `--host` runs `worktree new` and `worktree ls` on a
