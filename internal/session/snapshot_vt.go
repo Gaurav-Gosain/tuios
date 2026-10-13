@@ -35,11 +35,27 @@ import (
 //   - The sequence the daemon's parser was in the middle of, last, so the
 //     stream that follows the snapshot finishes it.
 //
-// What it does not: left and right margins, origin mode, the cursor DECSC
+// The tuios-gpui renderer primes each pane with the same bytes, through
+// tuios gui-bridge (SnapshotVT), so one encoder serves both.
+//
+// What it does not: left and right margins, the cursor DECSC
 // saved, protected cells, the character REP repeats, the title stack and the
 // colours the guest set with OSC 4, 10, 11 and 12. They decide how later
 // output is painted, and a phone that misses them paints a rare sequence
 // differently until the next snapshot; the input it sends is the same.
+// SnapshotVT is snapshotVT for a state that may come packed, as one read off
+// the wire does. The state is not changed.
+func SnapshotVT(st *TerminalState) []byte {
+	if st == nil {
+		return nil
+	}
+	cp := *st
+	if err := cp.Unpack(); err != nil {
+		return nil
+	}
+	return snapshotVT(&cp)
+}
+
 func snapshotVT(st *TerminalState) []byte {
 	if st == nil {
 		return nil
@@ -71,7 +87,16 @@ func snapshotVT(st *TerminalState) []byte {
 			w.cup(c.X, c.Y)
 		}
 		w.kittyStack(st.KittyKbdMainStack)
-		b.WriteString("\x1b[?1049h")
+		// Entered the way the guest entered it, so leaving it later does
+		// what the guest expects.
+		alt := "1049"
+		switch {
+		case st.Modes[1047]:
+			alt = "1047"
+		case st.Modes[47]:
+			alt = "47"
+		}
+		b.WriteString("\x1b[?" + alt + "h")
 		w.rows(st.Screen, wrapFlags(st.ScreenWraps, len(st.Screen)), true)
 	}
 
@@ -87,15 +112,25 @@ func snapshotVT(st *TerminalState) []byte {
 		}
 	}
 
+	top := 0
 	if m := st.Margins; len(m) == 4 && m[3] > 0 {
 		// DECSTBM homes the cursor, so it goes before the cursor is placed.
+		top = m[1]
 		b.WriteString("\x1b[" + strconv.Itoa(m[1]+1) + ";" + strconv.Itoa(m[1]+m[3]) + "r")
+	}
+
+	// Origin mode homes the cursor too, and from here on a cursor position
+	// counts from the top margin.
+	cy := st.CursorY
+	if st.Modes[6] {
+		b.WriteString("\x1b[?6h")
+		cy -= top
 	}
 
 	// The cursor, with its pending wrap: printing the cell under it again
 	// leaves the cursor where it is with the wrap armed, which no cursor
 	// movement can do.
-	w.cup(st.CursorX, st.CursorY)
+	w.cup(st.CursorX, cy)
 	if st.PendingWrap && st.CursorX == st.Width-1 && st.CursorY < len(st.Screen) {
 		if row := st.Screen[st.CursorY]; st.CursorX < len(row) && row[st.CursorX].Width != 0 {
 			w.cell(row[st.CursorX])
@@ -305,7 +340,15 @@ func sgrColor(b *bytes.Buffer, wire string, base, bright int, ext string) {
 
 // kittyStack pushes the kitty keyboard flags, base entry first.
 func (w *vtWriter) kittyStack(stack []int) {
-	for _, flags := range stack {
+	// The state's stack starts with the base entry, which every emulator
+	// already has. It is set in place, and only the rest are pushed over it:
+	// pushing it too left a fresh emulator with one entry more than the
+	// guest's.
+	for i, flags := range stack {
+		if i == 0 {
+			w.b.WriteString("\x1b[=" + strconv.Itoa(flags) + ";1u")
+			continue
+		}
 		w.b.WriteString("\x1b[>" + strconv.Itoa(flags) + "u")
 	}
 }
@@ -357,16 +400,21 @@ var snapshotModes = []int{
 // decModes writes the snapshot's DEC modes. The keypad mode is mode 66 in the
 // state and is written as DECKPAM or DECKPNM, which every emulator knows.
 func decModes(b *bytes.Buffer, modes map[int]bool) {
-	for _, m := range snapshotModes {
-		on, ok := modes[m]
-		if !ok {
-			continue
-		}
-		b.WriteString("\x1b[?" + strconv.Itoa(m))
-		if on {
-			b.WriteByte('h')
-		} else {
-			b.WriteByte('l')
+	// Resets first, then sets: in ghostty the mouse tracking modes share one
+	// state, so resetting 1002 after setting 1000 would turn mouse reports
+	// off.
+	for _, want := range []bool{false, true} {
+		for _, m := range snapshotModes {
+			on, ok := modes[m]
+			if !ok || on != want {
+				continue
+			}
+			b.WriteString("\x1b[?" + strconv.Itoa(m))
+			if on {
+				b.WriteByte('h')
+			} else {
+				b.WriteByte('l')
+			}
 		}
 	}
 	if on, ok := modes[66]; ok {

@@ -953,7 +953,7 @@ func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
 	var vt []byte
 	if state != nil {
 		cols, rows = state.Width, state.Height
-		vt = SnapshotVT(state)
+		vt = session.SnapshotVT(state)
 	}
 	b := make([]byte, 0, 1+len(ptyID)+4+len(vt))
 	b = appendID(b, ptyID)
