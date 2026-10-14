@@ -65,6 +65,12 @@ func tuiosWebBin(t *testing.T) string {
 // XDG directories, and stops it by its process group when the test ends.
 func startTuiosWeb(t *testing.T, base string, args ...string) (addr string, pid int) {
 	t.Helper()
+	return startTuiosWebEnv(t, base, nil, args...)
+}
+
+// startTuiosWebEnv is startTuiosWeb with env added to its environment.
+func startTuiosWebEnv(t *testing.T, base string, env []string, args ...string) (addr string, pid int) {
+	t.Helper()
 	bin := tuiosWebBin(t)
 	port := freePort(t)
 	addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
@@ -73,6 +79,7 @@ func startTuiosWeb(t *testing.T, base string, args ...string) (addr string, pid 
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
+	cmd.Env = append(cmd.Env, env...)
 	logPath := filepath.Join(t.TempDir(), "tuios-web.log")
 	logFile, err := os.Create(logPath)
 	if err != nil {

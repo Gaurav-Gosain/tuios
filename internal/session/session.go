@@ -31,6 +31,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"tuios.dev/progstatus"
 )
@@ -3546,6 +3547,14 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
 		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
+	}
+	// TUIOS_SERVER names this daemon's server, so a tuios run in the pane
+	// reaches this daemon. It is set here rather than inherited, because the
+	// process that started the daemon need not have applied it (tuios-web runs
+	// its daemon in-process). The default server's panes get none.
+	env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, serverscope.Env+"=") })
+	if name := serverscope.Name(); name != "" {
+		env = append(env, serverscope.Env+"="+name)
 	}
 	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
 	// socket here, when this pane starts one. See herdr_compat.go.

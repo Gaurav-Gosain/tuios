@@ -23,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fang"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/served"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
@@ -180,6 +181,13 @@ func main() {
 	// See cmd/tuios/main.go: a crash report names the build it came from, and
 	// internal/app cannot read these vars itself.
 	app.SetBuildStamp(version, commit)
+
+	// The server TUIOS_SERVER names, as tuios applies it, so tuios-web started
+	// from a pane of a named server serves that server's daemon.
+	if err := serverscope.ApplyEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "tuios-web: %v.\n", err)
+		os.Exit(1)
+	}
 
 	rootCmd := newRootCmd()
 

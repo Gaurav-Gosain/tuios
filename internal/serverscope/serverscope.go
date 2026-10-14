@@ -106,6 +106,17 @@ func Apply(s string) error {
 	return os.Setenv(Env, s)
 }
 
+// ApplyEnv applies the server TUIOS_SERVER names. Its error says what is wrong
+// and what to do about it, since the variable is set somewhere the reader may
+// not be looking: a pane's environment, a shell profile.
+func ApplyEnv() error {
+	v := os.Getenv(Env)
+	if err := Apply(v); err != nil {
+		return fmt.Errorf("%s is %q, which is not a valid server name. A name is 1 to %d letters, digits, '-' and '_'. Unset %s or set it to a valid name", Env, v, MaxNameLen, Env)
+	}
+	return nil
+}
+
 // BaseStateHome is the state home before any server scoped it: the one the
 // default server keeps its files under, and the parent of every named
 // server's.

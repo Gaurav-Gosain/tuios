@@ -18,6 +18,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
 // HostCapabilities holds information about the host terminal's capabilities.
@@ -213,7 +214,8 @@ func DetectHostCapabilities() *HostCapabilities {
 // per-user, and the pid keeps two clients on one machine apart.
 func capabilitiesDebugPath() string {
 	name := fmt.Sprintf("tuios-caps.%d.log", os.Getpid())
-	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
+	// A named server's state home is set on xdg, not in the environment.
+	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" && serverscope.Name() == "" {
 		return filepath.Join(dir, "tuios", name)
 	}
 	return filepath.Join(xdg.StateHome, "tuios", name)

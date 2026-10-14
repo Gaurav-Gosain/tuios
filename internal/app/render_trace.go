@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/adrg/xdg"
 )
 
 // The render trace is a diagnostic for panes that go blank when focus moves to
@@ -64,6 +66,10 @@ func init() {
 // a daemon and its attached clients in separate files.
 func defaultRenderTracePath() string {
 	name := fmt.Sprintf("tuios-render-trace.%d.log", os.Getpid())
+	// A named server's state home is set on xdg, not in the environment.
+	if serverscope.Name() != "" {
+		return filepath.Join(xdg.StateHome, "tuios", name)
+	}
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
 		return filepath.Join(dir, "tuios", name)
 	}

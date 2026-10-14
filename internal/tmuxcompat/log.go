@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+
+	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
 // Environment variables the launcher sets for the shim's log.
@@ -57,9 +59,11 @@ type Logger struct {
 	All bool
 }
 
-// DefaultLogPath is $XDG_STATE_HOME/tuios/tmux-shim.log.
+// DefaultLogPath is $XDG_STATE_HOME/tuios/tmux-shim.log. A named server's
+// state home is set on xdg, not in the environment, so it reads xdg, as
+// session.DefaultDaemonLogPath does.
 func DefaultLogPath() string {
-	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
+	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" && serverscope.Name() == "" {
 		return filepath.Join(dir, "tuios", "tmux-shim.log")
 	}
 	return filepath.Join(xdg.StateHome, "tuios", "tmux-shim.log")

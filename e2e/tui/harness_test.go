@@ -1273,7 +1273,9 @@ var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tue-%d", os.Getpid()))
 
 // sweepShortRuntimeRoots removes the short runtime roots of this user's test
 // processes that no longer exist, which a killed run leaves behind. The root
-// of a process still running is left alone.
+// of a process still running is left alone, and so is a root another user
+// owns: the name carries no uid, since the socket budget has no room for one,
+// so ownership is what keeps the sweep to this user's own roots.
 func sweepShortRuntimeRoots() {
 	const prefix = "tue-"
 	entries, err := os.ReadDir("/tmp")
@@ -1285,11 +1287,21 @@ func sweepShortRuntimeRoots() {
 		if !e.IsDir() || !strings.HasPrefix(e.Name(), prefix) || err != nil || pid == os.Getpid() {
 			continue
 		}
-		if processAlive(pid) {
+		if processAlive(pid) || !ownedByMe(filepath.Join("/tmp", e.Name())) {
 			continue
 		}
 		_ = os.RemoveAll(filepath.Join("/tmp", e.Name()))
 	}
+}
+
+// ownedByMe reports whether path is a folder, not a link, that this user owns.
+func ownedByMe(path string) bool {
+	st, err := os.Lstat(path)
+	if err != nil || !st.IsDir() {
+		return false
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	return ok && int(sys.Uid) == os.Getuid()
 }
 
 // processAlive reports whether a process with this pid exists. EPERM means it

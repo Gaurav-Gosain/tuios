@@ -321,6 +321,8 @@ func TestServerNamesAreChecked(t *testing.T) {
 		}
 		if out, err := envServerCLI(t, base, bad, "ls"); err == nil || !strings.Contains(out, "TUIOS_SERVER") {
 			t.Errorf("ASSERTION: TUIOS_SERVER=%q was not refused (err %v):\n%s", bad, err, out)
+		} else if !strings.Contains(out, "Unset TUIOS_SERVER or set it to a valid name") {
+			t.Errorf("ASSERTION: the refusal of TUIOS_SERVER=%q does not say what to do:\n%s", bad, out)
 		}
 	}
 	if _, err := os.Stat(servers); !os.IsNotExist(err) {
@@ -333,6 +335,50 @@ func TestServerNamesAreChecked(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(servers, "ok_name-1")); err != nil {
 		t.Errorf("ASSERTION: a plain name did not get its socket folder: %v", err)
+	}
+	// With no daemon, the hint names a command that reaches this server, not
+	// the default one.
+	out, _ := serverCLI(t, base, "ok_name-1", "ls")
+	if !strings.Contains(out, "'tuios --server ok_name-1 new'") || strings.Contains(out, "'tuios new'") {
+		t.Errorf("ASSERTION: the no-daemon hint on server ok_name-1 does not carry --server:\n%s", out)
+	}
+}
+
+// TestTuiosWebServesTheNamedServer: tuios-web started with TUIOS_SERVER set,
+// as it is from a pane of a named server, serves that server's daemon and not
+// the default one. tuios-web runs its daemon itself, so nothing else applies
+// the name for it.
+//
+// The ways this can fail, written down first:
+//   - tuios-web ignores TUIOS_SERVER and starts the default daemon, whose
+//     panes would still inherit TUIOS_SERVER and send a tuios run in them to
+//     another daemon;
+//   - it starts both.
+func TestTuiosWebServesTheNamedServer(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	stopServerAtEnd(t, base, "web1")
+	startTuiosWebEnv(t, base, []string{"TUIOS_SERVER=web1"})
+
+	runtimeDir := xdgDir(base, "XDG_RUNTIME_DIR")
+	named := filepath.Join(runtimeDir, "tuios", "servers", "web1", "tuios.sock")
+	if err := waitForPath(named, bootTimeout); err != nil {
+		t.Errorf("ASSERTION: tuios-web with TUIOS_SERVER=web1 started no daemon at %s: %v", named, err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "tuios", "tuios.sock")); err == nil {
+		t.Errorf("ASSERTION: tuios-web with TUIOS_SERVER=web1 started the default daemon")
+	}
+}
+
+// waitForPath waits for path to exist.
+func waitForPath(path string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		_, err := os.Stat(path)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

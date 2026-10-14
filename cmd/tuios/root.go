@@ -91,7 +91,7 @@ comprehensive keyboard/mouse interactions.`,
 		SilenceUsage: true,
 	}
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
-	rootCmd.PersistentFlags().StringVar(&serverName, "server", "", "Use the daemon named NAME: its own socket, saved sessions and daemon log, apart from the default daemon and every other named one. Configuration is shared. TUIOS_SERVER=NAME does the same for a whole shell, and --server \"\" picks the default daemon")
+	rootCmd.PersistentFlags().StringVar(&serverName, "server", "", "Use the daemon named NAME. It has its own socket and saved sessions")
 	// The server is chosen before any subcommand runs, so every one of them
 	// reaches the same daemon. main has already applied TUIOS_SERVER; the
 	// flag, when given, replaces it.

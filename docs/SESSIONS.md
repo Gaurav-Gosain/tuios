@@ -1182,9 +1182,9 @@ tuios --server scratch kill-server         # stops only the scratch daemon
 `TUIOS_SERVER=NAME` does the same for every `tuios` in a shell, and `--server`
 wins over it. A named server's daemon gives its panes `TUIOS_SERVER`, so a
 `tuios` run in one of them reaches that server, the `tmux` and `herdr` links
-included; `--server ""` reaches the default daemon from there. A name is 1 to
+included. `--server ""` reaches the default daemon from there. A name is 1 to
 14 letters, digits, `-` and `_`. `tuios ls --json` gives each row of a named
-server a `server` field; the default server's rows have none.
+server a `server` field. The default server's rows have none.
 
 The scope is held by tuios itself: `XDG_RUNTIME_DIR` and `XDG_STATE_HOME` keep
 their values, in tuios and in every pane, so programs in a pane that use those

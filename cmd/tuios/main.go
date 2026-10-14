@@ -59,8 +59,8 @@ func main() {
 	// The server a pane's daemon was started for reaches every tuios run in
 	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it
 	// is applied before either can take over. --server replaces it later.
-	if err := serverscope.Apply(os.Getenv(serverscope.Env)); err != nil {
-		fmt.Fprintf(os.Stderr, "tuios: %s: %v\n", serverscope.Env, err)
+	if err := serverscope.ApplyEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "tuios: %v.\n", err)
 		os.Exit(1)
 	}
 
