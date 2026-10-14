@@ -664,3 +664,30 @@ func TestAnEdgeDropResizesTheGuestOnce(t *testing.T) {
 	}
 	alive(t, term, "after an edge drop")
 }
+
+// TestARightClickCancelsADrag carries C into A's middle, where a release
+// would swap the two, and clicks the right button there with the left still
+// down. The drag is cancelled: C is back in its slot before the left button
+// comes up, no menu opens, and the release then changes nothing. The right
+// press used to start a resize of the held pane, and its release opened the
+// pane menu and left C floating over A.
+func TestARightClickCancelsADrag(t *testing.T) {
+	term, base, p := dropBoard(t, "drag-cancel-right", chromeDepths[2].env)
+	d := carry(t, term, p, p.a.X+p.a.Width/2, p.a.Y+p.a.Height/2)
+	mouseClick(t, term, d.x, d.y, tuitest.MouseRight, 0)
+	time.Sleep(500 * time.Millisecond)
+	saveArtifact(t, term, d.artifactAt, "3-after-right-click")
+	s := term.Screen()
+	if cornerAt(s, d.held.X, d.held.Y) || !cornerAt(s, p.c.X, p.c.Y) {
+		t.Fatalf("after the right click C is not back in its slot %+v\n%s", p.c, term.Snapshot())
+	}
+	if strings.Contains(s.Text(), "Close pane") {
+		t.Fatalf("the right click mid-drag opened the pane menu\n%s", term.Snapshot())
+	}
+	got := d.drop(t, base)
+	for _, want := range []winRect{p.a, p.b, p.c} {
+		if got[want.ID] != want {
+			t.Errorf("the cancelled drag left pane %s at %+v, want %+v", want.ID, got[want.ID], want)
+		}
+	}
+}

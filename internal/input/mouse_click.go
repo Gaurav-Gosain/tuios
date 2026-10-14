@@ -19,6 +19,14 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// says the user has moved on. See CancelCopyFlash.
 	o.CancelCopyFlash()
 
+	// A press of any button while a pane is held by the pointer cancels the
+	// move: the pane goes back where it came from and the press does nothing
+	// else. The left button is still down, and its release then finds no
+	// gesture to finish. See app.OS.CancelWindowDrag.
+	if o.CancelWindowDrag() {
+		return o, nil
+	}
+
 	// An open context menu is modal to the mouse: it either runs the row that
 	// was clicked or, for a click anywhere else, closes without running
 	// anything. Either way the click stops here, so it cannot also focus a pane
@@ -177,12 +185,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 		return o, nil
-	}
-
-	// A committed ctrl-drag ends on the next mouse event without ctrl held, so a
-	// click arriving mid-drag drops the window where it sits.
-	if o.CtrlDragging && msg.Mod&tea.ModCtrl == 0 {
-		return finalizeCtrlDrag(o, X, Y)
 	}
 
 	// Fast hit testing: find which window was clicked without expensive canvas generation

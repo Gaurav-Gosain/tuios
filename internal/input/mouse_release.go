@@ -434,13 +434,7 @@ func tiledDragDistance(o *app.OS, x, y int) int {
 // snapBack puts a dragged tiled pane back in the slot the drag took it from,
 // at once, so a drop that moves nothing leaves the layout as it was.
 func snapBack(o *app.OS, win *terminal.Window) {
-	win.X = o.TiledX
-	win.Y = o.TiledY
-	win.Width = o.TiledWidth
-	win.Height = o.TiledHeight
-	win.Resize(o.TiledWidth, o.TiledHeight)
-	win.MarkPositionDirty()
-	win.InvalidateCache()
+	o.ReturnToDragSlot(win)
 }
 
 // rightClickDragThreshold and clickToTypeDragThreshold separate a click from a

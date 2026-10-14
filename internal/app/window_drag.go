@@ -64,3 +64,61 @@ func (m *OS) dragSlotOf(win *terminal.Window) (x, y, w, h int) {
 	}
 	return win.X, win.Y, win.Width, win.Height
 }
+
+// ReturnToDragSlot puts a dragged tiled pane back in the slot the drag took it
+// from, at once, so a drop that moves nothing leaves the layout as it was.
+func (m *OS) ReturnToDragSlot(win *terminal.Window) {
+	win.X = m.TiledX
+	win.Y = m.TiledY
+	win.Width = m.TiledWidth
+	win.Height = m.TiledHeight
+	win.Resize(m.TiledWidth, m.TiledHeight)
+	win.MarkPositionDirty()
+	win.InvalidateCache()
+}
+
+// CancelWindowDrag abandons a window-move gesture in flight and reports
+// whether there was one. The held pane goes back to where the press took it
+// from: its tiled slot, or for a floating pane the position it had. Nothing
+// is dropped, swapped or split.
+//
+// A press of any button while a pane is held is what calls it. Each of those
+// presses used to run as a fresh press on the pane under the pointer, which is
+// the held pane: a right press started a resize on top of the drag, and its
+// release opened the pane menu and ended the gesture there, leaving the pane
+// parked at the pointer over the tiles with no slot. A middle press re-aimed
+// the drag's offset, and a second left press started a new drag whose slot was
+// the floating rectangle the first one had left the pane in.
+func (m *OS) CancelWindowDrag() bool {
+	win := m.LiveWindowDrag()
+	if win == nil {
+		return false
+	}
+	if m.AutoTiling && !win.IsFloating {
+		m.ReturnToDragSlot(win)
+	} else {
+		// The press offset is fixed for the whole drag, so the press point
+		// less the offset is where the pane was when the drag began.
+		win.X, win.Y = m.DragStartX-m.DragOffsetX, m.DragStartY-m.DragOffsetY
+		win.MarkPositionDirty()
+		win.InvalidateCache()
+	}
+	m.CtrlDragging = false
+	m.CtrlDragPending = false
+	m.ClickToTypePending = false
+	m.RightClickPending = false
+	if m.CtrlDragWasTerminal {
+		m.CtrlDragWasTerminal = false
+		m.Mode = TerminalMode
+	}
+	m.endLostGesture()
+	m.DragOffsetX, m.DragOffsetY = 0, 0
+	m.DragStartX, m.DragStartY = 0, 0
+	// The drag gave up the pane's shared-border allowance on its first
+	// motion, and the retile is what gives it back, as on a drop.
+	if m.AutoTiling && m.PanesBorderless() {
+		m.TileAllWindows()
+	}
+	m.SyncStateToDaemon()
+	return true
+}

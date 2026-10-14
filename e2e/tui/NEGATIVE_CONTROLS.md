@@ -5117,3 +5117,11 @@ git has never merged.
 | The net change check against the merge base cut | mutant of this branch | `TestWorktreeLsMerged` (`repo-feat-revert: merged=true merged_into="main"`, want false) | **caught** |
 | `merge-tree` run without the temporary object directory | mutant of this branch | `TestWorktreeLsMerged` ("worktree ls wrote objects into the repository") | **caught** |
 | The positive half | this branch | none: the fast-forward, merge commit, squash and no-base rows turn true into `main`, `feat/up` into `origin/main`, and the fresh, sync and revert rows stay false | **guard** |
+
+### A right click while a pane is held cancels the drag
+
+Run on 2026-10-14 on Linux. `TestARightClickCancelsADrag` in `bsp_drop_zone_test.go` carries C into A's middle, clicks the right button with the left still down, then releases the left. The fixed build passes it, and the whole `Drop|Drag|EdgeZones|Mouse|Context|Click|Swap|Title` set.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `o.CancelWindowDrag()` call at the top of `handleMouseClick` in `internal/input/mouse_click.go` | `TestARightClickCancelsADrag` ("after the right click C is not back in its slot"): the right press starts a resize, its release opens the pane menu, and C stays at the pointer over A | **caught** |
