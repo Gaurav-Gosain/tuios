@@ -33,6 +33,7 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		WindowName string   `json:"window_name"`
 		Cwd        string   `json:"cwd"`
 		Command    []string `json:"command"`
+		Space      string   `json:"space"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -41,6 +42,10 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	name := strings.TrimSpace(p.Name)
 	if err := ValidateSessionName(name); err != nil {
 		return nil, invalidParam("name", err.Error())
+	}
+	space, verr := spaceName(p.Space)
+	if verr != nil {
+		return nil, verr
 	}
 	if p.Width < 0 || p.Height < 0 {
 		return nil, invalidParam("width", "width and height are cell counts and cannot be negative")
@@ -87,7 +92,9 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	if _, _, verr := d.childWindowBound(cs, "new-session", p.Cwd); verr != nil {
 		return nil, verr
 	}
-	sess, err := d.manager.CreateSession(name, callerSessionConfig(cs), width, height)
+	cfg := callerSessionConfig(cs)
+	cfg.Space = space
+	sess, err := d.manager.CreateSession(name, cfg, width, height)
 	if err != nil {
 		// The name check above is racy by nature, so the manager's own refusal
 		// is mapped to the same code rather than reported as an internal fault.
@@ -115,6 +122,9 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		"width":      width,
 		"height":     height,
 		"windows":    0,
+	}
+	if space != "" {
+		out["space"] = space
 	}
 	if !makeWindow {
 		return out, nil

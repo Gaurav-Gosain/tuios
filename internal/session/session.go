@@ -423,6 +423,16 @@ type SessionState struct {
 	// so a client sync that omits it must not clear it. False is what every
 	// older client and every state file written before this reads back as.
 	Global bool `json:"global,omitempty"`
+	// Space is the name of the group of related sessions this one is filed
+	// under, or empty for a session in none. It is only a label: a space has no
+	// record of its own and ends when its last session leaves it. A global
+	// session is never in one.
+	//
+	// Daemon-owned: only set-session-space and new-session write it, so a
+	// client sync never moves it, and an empty value from a client is not a
+	// request to leave. Empty is what every older client and every state file
+	// written before it reads back as.
+	Space string `json:"space,omitempty"`
 	// StartDir is the session's start directory (see Session.startDir), as
 	// it was when the state was saved. ResurrectionState stamps it, and a
 	// restore sets it again, so a session made with tuios new --cwd keeps
@@ -1595,6 +1605,10 @@ type SessionConfig struct {
 	history *HistoryPolicy
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
+	// Space creates the session in a space. See SessionState.Space. A restore
+	// sets it from the state file, because the client sync the restore goes
+	// through keeps the new session's own value.
+	Space string
 	// restoreID is the id a restored session had before the daemon
 	// restarted, from its state file. A session made with it keeps that id,
 	// so a client's ids for it stay valid. Empty, or an id already in use,
@@ -1799,6 +1813,9 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		Created:    now,
 		lastActive: now,
 		config:     cfg,
+	}
+	if cfg != nil {
+		session.state.Space = cfg.Space
 	}
 
 	session.setName(name)
@@ -2880,6 +2897,15 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
+// SetSpace files the session under the named space, propagated and persisted
+// exactly as SetDisplayName is. An empty space takes it out of any.
+func (s *Session) SetSpace(space string) error {
+	return s.mutateState(func(st *SessionState) error {
+		st.Space = space
+		return nil
+	})
+}
+
 // MarkRestored records that this session was rebuilt from saved state. It runs
 // through mutateState rather than being written into the state the restore
 // pushes, because a client sync always takes the daemon's value for this field
@@ -3400,7 +3426,7 @@ func (s *Session) Info() SessionInfo {
 	windows := s.windowSummaries()
 
 	s.stateMu.RLock()
-	displayName, accent := s.state.DisplayName, s.state.Accent
+	displayName, accent, space := s.state.DisplayName, s.state.Accent, s.state.Space
 	currentWorkspace := s.state.CurrentWorkspace
 	restored := s.state.Restored
 	focusedPTY := ""
@@ -3431,6 +3457,7 @@ func (s *Session) Info() SessionInfo {
 		CurrentWorkspace: currentWorkspace,
 		Restored:         restored,
 		Global:           s.isGlobal(),
+		Space:            space,
 		Dir:              dir,
 		Branch:           branch,
 		Worktree:         s.worktreeListing(),

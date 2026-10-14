@@ -454,9 +454,19 @@ tuios rename-session work payments        # the name: ls, attach and -s use it
 tuios set-session-name "Payments API"     # the label; the session keeps its name
 tuios set-session-accent cyan
 tuios set-workspace-name 2 review
+tuios set-session-space payments          # file the session under the space payments
+tuios set-session-space                   # take it out of any space
+tuios new --detach pay-api --space payments
 ```
 
 A display name does not change how the session is addressed: `-s work` keeps
 working. A rename does change it. After a rename, the old name still reaches
 the session from panes that already run, but `tuios attach` takes only the new
 name.
+
+A space is a label the person files related sessions under, such as every
+session of one project. It exists while a session is in it, and `tuios ls`
+lists the sessions under one heading per space. Over the control protocol it
+is `set-session-space` and the `space` param of `new-session`. A space name
+follows the session name rules and is at most 64 bytes. A global session
+cannot be in a space.

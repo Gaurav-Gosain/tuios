@@ -468,9 +468,11 @@ func init() {
 				{Name: "window_name", Type: "string", Description: "Name for the first window. Omit to use the shell's title."},
 				{Name: "cwd", Type: "string", Description: "Directory the session's windows start in: the first window, and any later one with no directory to inherit. Omit to use the daemon's."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+				{Name: "space", Type: "string", Description: "Space to file the session under, as set-session-space does: trimmed, then held to the session name rules and 64 bytes. Omit for none."},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session. Use it as the session parameter of every later call."},
+				{Name: "space", Type: "string", Description: "Space the session is filed under. Absent when space was not given."},
 				{Name: "session_id", Type: "string", Description: "Id of the new session."},
 				{Name: "width", Type: "int", Description: "Nominal width the session was created at."},
 				{Name: "height", Type: "int", Description: "Nominal height the session was created at."},
@@ -483,6 +485,7 @@ func init() {
 				`{"id":1,"verb":"new-session"}`,
 				`{"id":1,"verb":"new-session","params":{"name":"work","window_name":"build","cwd":"/src/api"}}`,
 				`{"id":1,"verb":"new-session","params":{"name":"empty","window":false}}`,
+				`{"id":1,"verb":"new-session","params":{"name":"ledger","space":"accounts"}}`,
 			},
 			handler: (*Daemon).verbNewSession,
 		},
@@ -1616,6 +1619,23 @@ func init() {
 			},
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,
+		},
+		"set-session-space": {
+			description: "File a session under a space, a named group of related sessions that tuios ls lists together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "space", Type: "string", Description: "The space's name. Surrounding whitespace is trimmed, and the rest follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. Omit or pass an empty string to take the session out of any space."},
+			},
+			returns: []verbParam{
+				{Name: "type", Type: "string", Description: "Always session_space_set."},
+				{Name: "session", Type: "string", Description: "The session's name."},
+				{Name: "space", Type: "string", Description: "The space the session is in now, empty for none."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":"payments"}}`,
+				`{"id":1,"verb":"set-session-space","params":{"session":"work","space":""}}`,
+			},
+			handler: (*Daemon).verbSetSessionSpace,
 		},
 		"set-workspace-name": {
 			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",

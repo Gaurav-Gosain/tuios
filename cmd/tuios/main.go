@@ -406,6 +406,7 @@ the remote client. See 'tuios hosts --help'.`,
 	var newGlobal bool
 	var newSSH bool
 	var newCwd string
+	var newSpace string
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -428,7 +429,10 @@ a directory from starts there too.
 With --host the session is created on another machine. tuios runs ssh to the
 host named in the [hosts] table and runs 'tuios new' there. The client you
 see is the remote one. With --detach the far side creates the session and
-returns. See 'tuios hosts --help'.`,
+returns. See 'tuios hosts --help'.
+
+With --space the session is filed under a space, a named group of related
+sessions that 'tuios ls' lists together.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
@@ -440,6 +444,9 @@ returns. See 'tuios hosts --help'.`,
 
   # Create a session whose windows start in ~/dev/api
   tuios new api --cwd ~/dev/api
+
+  # Create a session in the space payments
+  tuios new api --space payments --detach
 
   # Create a session on the machine named build and attach to it
   tuios new --host build
@@ -456,6 +463,9 @@ returns. See 'tuios hosts --help'.`,
 				if newCwd != "" {
 					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
 				}
+				if newSpace != "" {
+					return fmt.Errorf("--space files the session on this machine's daemon, so it cannot be used with --host")
+				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
 			dir, err := newSessionStartDir(newCwd)
@@ -463,6 +473,12 @@ returns. See 'tuios hosts --help'.`,
 				return err
 			}
 			newSessionDir = dir
+			if newSpace != "" {
+				if newGlobal {
+					return errors.New(session.GlobalSpaceRefusal)
+				}
+				return runNewSessionInSpace(name, newSpace, newDetach)
+			}
 			if newGlobal {
 				// A global session is created with no windows whether or not
 				// --detach was asked for: its first window names a machine,
@@ -481,6 +497,7 @@ returns. See 'tuios hosts --help'.`,
 	newCmd.Flags().BoolVar(&newGlobal, "global", false, "Create a global session, which holds panes from more than one machine")
 	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
 	newCmd.Flags().StringVar(&newCwd, "cwd", "", "Directory the session's windows start in (default: the current directory)")
+	newCmd.Flags().StringVar(&newSpace, "space", "", "File the session under this space, a named group of related sessions")
 	registerHostNameCompletion(newCmd, "host")
 
 	var lsJSON bool
@@ -2113,6 +2130,36 @@ survives a reattach. Pass no accent to clear it.`,
 	setSessionAccentCmd.Flags().StringVarP(&setSessionAccentSession, "session", "s", "", "Target session (default: most recently active)")
 	_ = setSessionAccentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var setSessionSpaceSession string
+	setSessionSpaceCmd := &cobra.Command{
+		Use:   "set-session-space [space]",
+		Short: "File a session under a space",
+		Long: `File a session under a space, a named group of related sessions that
+'tuios ls' lists together. A space exists while at least one session is in
+it. Pass no space to take the session out of any.
+
+A space name follows the session name rules and is at most 64 bytes. A
+global session cannot be in a space.`,
+		Example: `  # File the current session under the space payments
+  tuios set-session-space payments
+
+  # File a specific session
+  tuios set-session-space -s work payments
+
+  # Take the session out of any space
+  tuios set-session-space`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			space := ""
+			if len(args) > 0 {
+				space = args[0]
+			}
+			return runSetSessionSpace(setSessionSpaceSession, space)
+		},
+	}
+	setSessionSpaceCmd.Flags().StringVarP(&setSessionSpaceSession, "session", "s", "", "Target session (default: most recently active)")
+	_ = setSessionSpaceCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var setWorkspaceNameSession string
 	setWorkspaceNameCmd := &cobra.Command{
 		Use:   "set-workspace-name <workspace> [name]",
@@ -2898,7 +2945,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand(), newQueueCommand(), newReviewCommand(), newCheckpointCommand(), newShipCommand())
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
-	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
+	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)

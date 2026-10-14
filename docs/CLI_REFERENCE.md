@@ -318,12 +318,15 @@ tuios new [session-name] [flags]
 - `--global`: Create a global session, which holds panes from more than one machine
 - `--hold`: After a failure, wait for enter before the command exits
 - `--cwd <dir>`: Directory the session's windows start in. The default is the current directory
+- `--space <name>`: File the session under a space, a named group of related sessions. It follows the session name rules and is at most 64 bytes
 - The appearance flags of the root command (`tuios new --help` lists them)
 
 The session's windows start in the directory where you run `tuios new`.
 `--cwd` names a different directory. The directory applies to the first
 window, and to each later window that has no pane to take a directory from.
 `--cwd` does not work with `--host`.
+
+`--space` files the session under the space as it is made, so `tuios ls` lists it with the space's other sessions. It does not work with `--host`, and with `--global` it is refused: a global session cannot be in a space. See [`tuios set-session-space`](#tuios-set-session-space).
 
 **Examples:**
 ```bash
@@ -332,6 +335,7 @@ tuios new mysession            # Create session named "mysession"
 tuios new api --cwd ~/dev/api  # Create a session whose windows start in ~/dev/api
 tuios new work --theme dracula # Create session with Dracula theme
 tuios new ci --detach          # Create a headless session and return
+tuios new api --space payments # Create a session in the space payments
 tuios new --host build         # Create a session on the host build and attach it
 tuios new deploy --global      # Create a global session
 ```
@@ -499,6 +503,8 @@ Shows a table with:
 │ dev           │ 2       │ attached │ 1 day ago     │ just now        │
 ╰───────────────┴─────────┴──────────┴───────────────┴─────────────────╯
 ```
+
+When any session is in a space, the listing is one table per space, in name order, each under the space's name, and the sessions in no space follow last with no heading. With no session in a space it is the one table above. `tuios ls --json` stays one flat list, with `space` on each row that has one.
 
 `tuios ls --json` prints one object per session. Two fields say where the session's focused pane is:
 
@@ -2697,6 +2703,32 @@ tuios set-session-accent -s work cyan
 
 # Clear the accent
 tuios set-session-accent
+```
+
+### `tuios set-session-space`
+
+File a session under a space, a named group of related sessions that `tuios ls` lists together. A space is only a label on its sessions: it exists while at least one session is in it, and it survives a daemon restart with them. Pass no space to take the session out of any.
+
+Surrounding whitespace is trimmed. A space name then follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. A global session cannot be in a space.
+
+**Usage:**
+```bash
+tuios set-session-space [space] [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+
+**Examples:**
+```bash
+# File the current session under the space payments
+tuios set-session-space payments
+
+# File a specific session
+tuios set-session-space -s work payments
+
+# Take the session out of any space
+tuios set-session-space
 ```
 
 ### `tuios set-workspace-name`

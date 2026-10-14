@@ -55,6 +55,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// for the same reason: a bool cannot say "not sent", and no client should
 	// be able to turn an ordinary session into a global one by syncing.
 	incoming.Global = canonical.Global
+	// The space is written only by set-session-space and new-session, so
+	// canonical wins the same way: no client sync can file a session under a
+	// space or take it out.
+	incoming.Space = canonical.Space
 	// The worktree record is written by detection and by the worktree verbs,
 	// both daemon-side, so canonical wins the same way Restored does.
 	incoming.Worktree = canonical.Worktree

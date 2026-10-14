@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -305,6 +306,49 @@ func clientLogf(format string, args ...any) {
 	if debugMode || os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
 		log.Printf(format, args...)
 	}
+}
+
+// runNewSessionInSpace is tuios new --space. The session is made by the
+// new-session verb, which takes the space and files the session under it as
+// it is created, so there is no moment it exists in no space. A daemon that
+// does not know the space parameter refuses it, rather than making a session
+// in no space.
+//
+// The windows match tuios new without --space: a detached session gets its
+// first window from the daemon, and an attached one is made empty and the
+// client opens its first window as startup.open_default_window says.
+func runNewSessionInSpace(sessionName, space string, detach bool) error {
+	if err := ensureDaemon(); err != nil {
+		return err
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	params := map[string]any{"space": space, "window": detach}
+	if sessionName != "" {
+		params["name"] = sessionName
+	}
+	if newSessionDir != "" {
+		params["cwd"] = newSessionDir
+	}
+	raw, err := client.Call("new-session", params)
+	_ = client.Close()
+	if err != nil {
+		return explainVerbError("new-session", err)
+	}
+	var res struct {
+		Session string `json:"session"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil || res.Session == "" {
+		return fmt.Errorf("failed to parse the new session's name: %v: %s", err, raw)
+	}
+
+	if detach {
+		fmt.Printf("Created detached session '%s' in space '%s'. Attach with 'tuios attach %s'.\n", res.Session, space, res.Session)
+		return nil
+	}
+	return runDaemonSession(res.Session, false)
 }
 
 func runDaemonSession(sessionName string, createNew bool) error {
@@ -707,7 +751,7 @@ func runListSessions(jsonOutput bool) error {
 		return nil
 	}
 
-	rows := make([][]string, 0, len(sessions))
+	rowsBySpace := map[string][][]string{}
 	anyRestored := false
 	for _, s := range sessions {
 		status := "detached"
@@ -727,7 +771,7 @@ func runListSessions(jsonOutput bool) error {
 		if s.DisplayName != "" && s.DisplayName != s.Name {
 			name = fmt.Sprintf("%s (%s)", s.Name, s.DisplayName)
 		}
-		rows = append(rows, []string{
+		rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 			name,
 			fmt.Sprintf("%d", s.WindowCount),
 			status,
@@ -736,7 +780,7 @@ func runListSessions(jsonOutput bool) error {
 		})
 	}
 
-	fmt.Println(renderSessionTable(rows))
+	fmt.Println(renderSpaceGroups(rowsBySpace))
 	fmt.Printf("\n%s\n", plural.Count(len(sessions), "session"))
 	if anyRestored {
 		fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
@@ -813,6 +857,29 @@ func printJSON(v any) error {
 	}
 	fmt.Println(string(data))
 	return nil
+}
+
+// renderSpaceGroups draws the live listing as one table per space, ordered by
+// space name, each under the space's name, and the sessions in no space last
+// with no heading. With no session in any space it is the one table.
+func renderSpaceGroups(rowsBySpace map[string][][]string) string {
+	spaces := make([]string, 0, len(rowsBySpace))
+	for space := range rowsBySpace {
+		if space != "" {
+			spaces = append(spaces, space)
+		}
+	}
+	slices.Sort(spaces)
+
+	heading := lipgloss.NewStyle().Bold(true)
+	groups := make([]string, 0, len(rowsBySpace))
+	for _, space := range spaces {
+		groups = append(groups, heading.Render(space)+"\n"+renderSessionTable(rowsBySpace[space]))
+	}
+	if loose, ok := rowsBySpace[""]; ok {
+		groups = append(groups, renderSessionTable(loose))
+	}
+	return strings.Join(groups, "\n\n")
 }
 
 // renderSessionTable draws the session listing. Both listings use it so a

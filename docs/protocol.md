@@ -1997,6 +1997,8 @@ Response:
 ]}}
 ```
 
+A session filed under a space also carries `space`. See [set-session-space](#set-session-space).
+
 ### list-clients
 
 List every connection to the daemon. No params. Each row carries the daemon's
@@ -3514,6 +3516,26 @@ Response:
 ```json
 {"result": {"type": "ok"}}
 ```
+
+### set-session-space
+
+File a session under a space, a named group of related sessions, or take it out of any. A space is only a label on its sessions: it has no record of its own, exists while at least one session is in it, and is saved and restored with each session. `list-sessions` carries `space` on every session that is in one.
+
+Params: `session` (the most recently active when omitted), `space`. An empty or omitted `space` takes the session out of any space.
+
+Request:
+
+```json
+{"verb": "set-session-space", "params": {"session": "work", "space": "payments"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "session_space_set", "session": "work", "space": "payments"}}
+```
+
+Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes; any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space; its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
 
 ### new-worktree
 

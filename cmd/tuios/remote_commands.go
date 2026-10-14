@@ -1562,6 +1562,21 @@ func runSetSessionAccent(sessionName, accent string) error {
 	})
 }
 
+// runSetSessionSpace files a session under a space, or takes it out of any
+// when space is empty.
+func runSetSessionSpace(sessionName, space string) error {
+	return callAndReport("set-session-space", map[string]any{
+		"session": sessionName,
+		"space":   space,
+	}, func(res map[string]any) {
+		if res["space"] == "" {
+			fmt.Printf("Session %v is in no space.\n", res["session"])
+			return
+		}
+		fmt.Printf("Session %v is in space %v.\n", res["session"], res["space"])
+	})
+}
+
 // runSetWorkspaceName labels a workspace. The number stays its identity.
 func runSetWorkspaceName(sessionName string, workspace int, name string) error {
 	return callAndReport("set-workspace-name", map[string]any{

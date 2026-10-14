@@ -5935,3 +5935,29 @@ The controls were run on 2026-10-15 on branch `feat/omarchy-follow`.
 | --- | --- | --- | --- |
 | The watcher hub is not started | `Init`: the `startOmarchyFollow` command dropped | `TestOmarchyThemeSwitchIsFollowed` (no light report, OSC 11 still `rgb:1a1a/1b1b/2626`, the frame keeps its colour) | **caught** |
 | No mode 2031 report is sent | `Emulator.SetReportColors`: the report write cut | `TestOmarchyThemeSwitchIsFollowed` (the program that turned on mode 2031 was not told light) | **caught** |
+## Spaces as a session label
+
+Run on 2026-10-14 on macOS on branch `feat/spaces-label`, from upstream `main` (`e2ca77df`). The tests are in `space_label_test.go`: `TestNewSpaceFilesTheSession`, `TestSetSessionSpaceSetsAndClears`, `TestAGlobalSessionIsInNoSpace`, `TestSpaceSurvivesTheDaemon`, `TestLsGroupsSessionsBySpace` and `TestLsWithoutSpacesIsUnchanged`. The last compares this build's `tuios ls` with a build of upstream `main` (`TUIOS_E2E_BASELINE_BIN`), each listing its own daemon's sessions made by the same steps, styled bytes and all; it is skipped without that build. The fixed build passes all six. Each control cuts one wire from the fixed build, builds it, and runs the six tests with the baseline build set.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `SessionState.Space` tagged `json:"-"` (the space never reaches the state file) | mutant of this branch | `TestSpaceSurvivesTheDaemon` ("after a restart, the sessions and their spaces are map[e2e-loose: e2e-made: e2e-spaced: e2e-trigger:]") | **caught** |
+| The restore creating the session without `Space: state.Space` | mutant of this branch | `TestSpaceSurvivesTheDaemon` (the same line) | **caught** |
+| `spaceName` without the `strings.TrimSpace` | mutant of this branch | `TestSetSessionSpaceSetsAndClears` ("set-session-space did not trim \"  billing\\t\" to billing") | **caught** |
+| `spaceName` without the `ValidateSessionName` call | mutant of this branch | `TestNewSpaceFilesTheSession` ("tuios new --space bad/name succeeded"), `TestSetSessionSpaceSetsAndClears` ("set-session-space took the space name \"bad/name\"") | **caught** |
+| `spaceName` without the 64-byte cap | mutant of this branch | `TestNewSpaceFilesTheSession` ("took a 65-byte space name"), `TestSetSessionSpaceSetsAndClears` | **caught** |
+| The global-session refusal in `verbSetSessionSpace` | mutant of this branch | `TestAGlobalSessionIsInNoSpace` ("Session e2e-g is in space s.") | **caught** |
+| The `--global` refusal cut from `tuios new --space` | mutant of this branch | `TestNewSpaceFilesTheSession`, `TestAGlobalSessionIsInNoSpace` ("tuios new --global --space was not refused with \"a global session cannot be in a space\"") | **caught** |
+| `set-session-space` passes `""` instead of `-s` | mutant of this branch | `TestSetSessionSpaceSetsAndClears` ("map[e2e-other:payments e2e-work:]"), `TestAGlobalSessionIsInNoSpace`, `TestSpaceSurvivesTheDaemon` | **caught** |
+| `set-session-space` takes exactly one argument (no clearing form) | mutant of this branch | `TestSetSessionSpaceSetsAndClears` ("accepts 1 arg(s), received 0"), `TestAGlobalSessionIsInNoSpace` | **caught** |
+| `verbSetSessionSpace` never calls `SetSpace` | mutant of this branch | `TestSetSessionSpaceSetsAndClears`, `TestAGlobalSessionIsInNoSpace`, `TestSpaceSurvivesTheDaemon` ("before a restart, ... e2e-spaced:") | **caught** |
+| `verbNewSession` creates the session with `&SessionConfig{}` (the space dropped) | mutant of this branch | `TestNewSpaceFilesTheSession`, `TestSetSessionSpaceSetsAndClears`, `TestSpaceSurvivesTheDaemon`, `TestLsGroupsSessionsBySpace` | **caught** |
+| `incoming.Space = canonical.Space` left out of `retainDaemonExclusive` | mutant of this branch | `TestNewSpaceFilesTheSession` ("after an attached tuios new --space, ... e2e-live:"): the attached client's first state sync carries no space and cleared it | **caught** |
+| `Session.Info` lists no `space` | mutant of this branch | all five tests that read the listing | **caught** |
+| `renderSpaceGroups` draws a `No space` heading over the sessions in no space, always | mutant of this branch | `TestLsGroupsSessionsBySpace` ("with no session in a space, ls is not one table with no heading"), `TestLsWithoutSpacesIsUnchanged` | **caught** |
+| `renderSpaceGroups` draws a `No space` heading only when some session is in a space | mutant of this branch | `TestLsGroupsSessionsBySpace` ("the sessions in no space have a heading \"No space\"") | **caught** |
+| `renderSpaceGroups` draws no heading over a space | mutant of this branch | `TestLsGroupsSessionsBySpace` ("block 0 is headed \"╭─...\", want \"alpha\"") | **caught** |
+| `renderSpaceGroups` draws the sessions in no space first | mutant of this branch | `TestLsGroupsSessionsBySpace` (the same line) | **caught** |
+| The positive half | this branch | none: each refusal sits beside a set that succeeds in the same fixture (`e2e-a` filed beside the global `e2e-g`, `e2e-work` filed before and after the refused names), and the grouped `ls` is saved as `ls-grouped.txt` | **guard** |
+
+Each mutant is a text replacement on a `git archive` of the branch, so the checkout under test is never edited. Not covered here: the verb's `scopeDeny` and `LinkAllowWrite` entries. Those are held by `internal/session`: with the `verbScopes` entry cut, `conn_scope_test.go` ("has no entry in verbScopes") and `pane_grants_test.go` fail, and with the `verbCapabilities` entry cut, `link_policy_test.go` ("has no entry in verbCapabilities") fails. A daemon from before spaces given `tuios new --space` refuses the call with "verb new-session has no parameter space", because the verbs refuse a parameter they do not know.

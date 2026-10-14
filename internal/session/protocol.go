@@ -604,6 +604,10 @@ type SessionInfo struct {
 	// SessionState.Global. Omitted when false, which is what an older daemon
 	// sends and what every client reads as an ordinary session.
 	Global bool `json:"global,omitempty"`
+	// Space is the space the session is filed under. See SessionState.Space.
+	// Omitted when the session is in none, which is also what an older daemon
+	// sends.
+	Space string `json:"space,omitempty"`
 	// Worktree is set for a session whose directory is a git worktree: which
 	// repository, which branch, and whether the directory still exists. It is
 	// what the rail groups by. Omitted for every other session, which is also
