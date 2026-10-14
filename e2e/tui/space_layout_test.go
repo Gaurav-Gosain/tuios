@@ -450,8 +450,11 @@ func TestSpaceLayoutsInvisibleWithoutSpaces(t *testing.T) {
 	}
 	prev := tuiosBin
 	tuiosBin = baseline
+	restore := func() { tuiosBin = prev }
+	// A fatal step inside must not leave every later test on the baseline.
+	defer restore()
 	then := spaceLayoutScreen(t, "")
-	tuiosBin = prev
+	restore()
 
 	for _, mode := range []string{"grouped", "split", "off"} {
 		if now := spaceLayoutScreen(t, mode); now != then {

@@ -582,8 +582,11 @@ func TestSpaceSwitchWithAnOlderDaemon(t *testing.T) {
 	// The fixture's CLI starts the daemon, so the daemon is the older build.
 	prev := tuiosBin
 	tuiosBin = baseline
+	restore := func() { tuiosBin = prev }
+	// A fatal step inside must not leave every later test on the baseline.
+	defer restore()
 	spaceUIFixture(t, base, true)
-	tuiosBin = prev
+	restore()
 
 	other := attachSpaceUI(t, base, "e2e-a1", 120, 40)
 	term := attachSpaceUI(t, base, "e2e-a1", 120, 40)

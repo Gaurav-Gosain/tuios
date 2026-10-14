@@ -592,8 +592,11 @@ func TestSpacesInvisibleWithoutSpaces(t *testing.T) {
 
 	prev := tuiosBin
 	tuiosBin = baseline
+	restore := func() { tuiosBin = prev }
+	// A fatal step inside must not leave every later test on the baseline.
+	defer restore()
 	railThen, switcherThen := spaceUIScreens(t, t.TempDir(), "baseline")
-	tuiosBin = prev
+	restore()
 
 	railNow, railThen = maskRunIdentity(railNow), maskRunIdentity(railThen)
 	switcherNow, switcherThen = maskRunIdentity(switcherNow), maskRunIdentity(switcherThen)
