@@ -3656,6 +3656,11 @@ func (c ptyChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 // holds.
 var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
 
+// cancelPrefix is CAN, which ends any sequence a parser is part way through
+// and draws nothing. It goes in front of a rolled catch-up for a client that
+// restored a snapshot: see subscribeLocked.
+var cancelPrefix = []byte{0x18}
+
 // Subscribe adds a subscriber to receive PTY output, resuming it at fromSeq: the
 // stream position a previous subscription for this client reached, as returned
 // by Unsubscribe. Zero means the client has seen nothing of this PTY and gets
@@ -3803,7 +3808,19 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 			}
 		}
 		var prefix []byte
-		if rolled && !fromSnapshot {
+		switch {
+		case rolled && fromSnapshot:
+			// The snapshot ends at fromSeq, and its PendingInput is the start
+			// of the sequence the daemon's parser was in there. That start is
+			// finished by the bytes after fromSeq, and the ring no longer
+			// holds them: the tail begins in some later sequence. Joined to
+			// the old start, the tail's first bytes made a different
+			// sequence, such as "\x1b[" and ";1H" moving the cursor to the
+			// top left, and the next text painted over rows only the
+			// snapshot held. CAN drops the old start, so the tail begins
+			// from a parser at rest, as it would on a fresh client.
+			prefix = cancelPrefix
+		case rolled:
 			// The client still holds the screen it drew up to fromSeq, and the
 			// bytes between there and the buffer's start are gone. Appending the
 			// tail to that screen splices two halves of the stream that never
