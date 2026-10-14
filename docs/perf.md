@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 35,672,226 | 35,560,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 33,564,050 | 33,500,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 35,836,066 | 35,940,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 33,775,234 | 33,880,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2577,6 +2577,16 @@ with its own sessions. Main at 4c2de743 measured 35,451,042 and 33,380,818
 bytes (Go 1.26.9), 8,958 bytes under the linux/amd64 budget. With #680 on top
 the build measured 35,463,330 and 33,397,362, 3,330 bytes over that budget.
 The new budgets leave 96,670 and 102,638 bytes of room above that build.
+
+The budgets went to 35,940,000 (linux/amd64) and 33,880,000 (darwin/arm64)
+for `tuios gui-bridge` (#658), the process the desktop GUI runs to drive a
+session: the bridge itself (internal/guibridge), the layout edits by pane id,
+stacks, the gui keybinding scope and window kinds. Main at cfc254fb measured
+35,557,538 and 33,499,410 bytes (Go 1.26.9). With #658 on top the build
+measured 35,836,066 and 33,775,234, 278,528 and 275,824 bytes more. No
+dependency was added. Of the symbols, internal/guibridge is 87 KB and
+internal/app 36 KB, spread over the bridge's handlers with no large table to
+cut. The new budgets leave 103,934 and 104,766 bytes of room.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
