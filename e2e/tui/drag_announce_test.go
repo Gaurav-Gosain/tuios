@@ -52,8 +52,12 @@ func dragAnnounceBoard(t *testing.T) (*tuitest.Terminal, string) {
 	waitWindowCount(t, term, 3, "drag-announce setup")
 	enableTiling(t, term)
 	enterTerminalMode(t, term)
+	// bash reads the system rc file, which on CI sets a user@host:path prompt
+	// longer than a narrow pane is wide. The marker is printed after the
+	// prompt, so it could wrap across two rows and not be counted. A short
+	// prompt keeps every marker on one row.
 	runInShell(t, term,
-		`trap 'printf "WI%sCH\n" N' WINCH; clear; printf "AR%sED\n" M`,
+		`PS1='$ '; trap 'printf "WI%sCH\n" N' WINCH; clear; printf "AR%sED\n" M`,
 		"ARMED", shellTimeout)
 	// The trap is armed once the marker is on screen, and the clear has left
 	// the command echo behind it, so every WINCH row after this came from a
