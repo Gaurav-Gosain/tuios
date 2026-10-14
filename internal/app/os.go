@@ -794,6 +794,10 @@ type OS struct {
 	// last push named. A session resize newer than the last push is pushed.
 	// See session/layout_gen.go.
 	layoutGenApplied, layoutGenPushed uint64
+	// focusGiven is the focus (focusKey) this client last pushed or was
+	// given by a sync. A push that still shows it is marked FocusUnmoved.
+	focusGiven    string
+	focusGivenSet bool
 
 	// lastConfigMaster is the configured master-stack shape as this OS last
 	// saw it. See adoptConfigMasterLayout.

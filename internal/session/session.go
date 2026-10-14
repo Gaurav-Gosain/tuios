@@ -420,6 +420,15 @@ type SessionState struct {
 	// names the pane currently selected there, it lets a close return to the
 	// pane the user visited immediately before it.
 	FocusHistory map[int][]string `json:"focus_history,omitempty"`
+	// FocusUnmoved marks a push whose focus is the one its client was last
+	// given: nobody at that client moved the focus, the workspace or the
+	// strip since. Such a push says nothing about the focus, so the daemon
+	// keeps the session's. A client pushes for reasons of its own, such as a
+	// new layout generation, and its push could reach the daemon after a
+	// peer's focus move it had not seen yet. Taken as sent, it moved the focus
+	// back for everyone. False from an older client, whose push is taken as
+	// sent. Read and cleared by the daemon, never stored.
+	FocusUnmoved bool `json:"focus_unmoved,omitempty"`
 
 	MasterRatio float64 `json:"master_ratio"`
 	AutoTiling  bool    `json:"auto_tiling"`
@@ -3010,7 +3019,14 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
 
 	accepted = true
+	unmoved := state.FocusUnmoved
+	state.FocusUnmoved = false
 	prev := s.state
+	if prev != nil && unmoved && keepSessionFocus(state, prev) {
+		// The push's focus was stale and the session's stands, so the
+		// client is answered with the state as merged.
+		accepted = false
+	}
 	if prev != nil {
 		behind = state.BaseVersion != 0 && s.missedPeerTreeLocked(origin, state.BaseVersion, prev.Version)
 		if state.BaseVersion != 0 && s.missedMutationLocked(state.BaseVersion, prev.Version) {

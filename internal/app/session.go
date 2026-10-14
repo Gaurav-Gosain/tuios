@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
@@ -257,6 +258,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.LogInfo("[RESTORE] RestoreFromState: state is nil")
 		return nil
 	}
+	// The focus an attach starts from is the one the daemon gave.
+	defer m.noteFocusGiven(state)
 
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
@@ -578,6 +581,9 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			m.sendTreeOps()
 		}
 	}()
+	// Runs before the answer above is pushed, which then says whether this
+	// client moved the focus away from what the daemon gave it.
+	defer m.noteFocusGiven(state)
 
 	// Which window was focused before any of this was applied. It is read here
 	// rather than beside the focus adoption below because the window list is
@@ -2221,6 +2227,10 @@ func (m *OS) SyncStateToDaemon() {
 	if m.syncedFPSet && m.syncedFP == fp {
 		return
 	}
+	// Set after the fingerprint: it says how the push relates to the last
+	// one, not what the state is.
+	key := focusKey(state)
+	state.FocusUnmoved = m.focusGivenSet && key == m.focusGiven
 
 	if err := m.DaemonClient.UpdateState(state); err != nil {
 		m.LogError("Failed to sync state to daemon: %v", err)
@@ -2230,6 +2240,28 @@ func (m *OS) SyncStateToDaemon() {
 	}
 	m.syncedFP, m.syncedFPSet = fp, true
 	m.layoutGenPushed = state.LayoutGen
+	m.focusGiven, m.focusGivenSet = key, true
+}
+
+// focusKey is what a state says of the session's focus: the workspace, the
+// focused window, each workspace's focus and the strip offset.
+func focusKey(state *session.SessionState) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d|%s", state.CurrentWorkspace, state.FocusedWindowID)
+	for _, w := range slices.Sorted(maps.Keys(state.WorkspaceFocus)) {
+		fmt.Fprintf(&b, "|%d=%s", w, state.WorkspaceFocus[w])
+	}
+	if s := state.ScrollStrip; s != nil {
+		fmt.Fprintf(&b, "|x%d", s.ViewportX)
+	}
+	return b.String()
+}
+
+// noteFocusGiven records the focus a state from the daemon gave this client.
+// A push that still shows it says the focus did not move here. See
+// SessionState.FocusUnmoved.
+func (m *OS) noteFocusGiven(state *session.SessionState) {
+	m.focusGiven, m.focusGivenSet = focusKey(state), true
 }
 
 // warnOnBuildMismatch says so when the daemon is running a different build of

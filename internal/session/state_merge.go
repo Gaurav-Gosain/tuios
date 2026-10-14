@@ -557,6 +557,52 @@ func (f focusView) sameFocus(g focusView) bool {
 	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS)
 }
 
+// keepSessionFocus puts the session's focus on a push that did not move it
+// (SessionState.FocusUnmoved), and reports whether that changed the push.
+//
+// The session's focus is kept only when its window is in the push on the
+// workspace the session names. Otherwise the push's focus stands, as it did
+// before the flag existed.
+func keepSessionFocus(incoming, canonical *SessionState) bool {
+	theirs := focusViewOf(canonical)
+	if theirs.window != "" {
+		found := false
+		for i := range incoming.Windows {
+			if w := &incoming.Windows[i]; w.ID == theirs.window {
+				found = w.Workspace == theirs.workspace
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	mine := focusViewOf(incoming)
+	// A session that holds no strip offset has none to keep, and the push's
+	// stands.
+	strip := theirs.strip
+	if strip == nil {
+		strip = mine.strip
+	}
+	if mine.sameFocus(theirs) && sameStrip(mine.strip, strip) {
+		return false
+	}
+	incoming.FocusedWindowID = theirs.window
+	incoming.CurrentWorkspace = theirs.workspace
+	incoming.WorkspaceFocus = theirs.perWS
+	incoming.FocusHistory = theirs.history
+	incoming.ScrollStrip = strip
+	return true
+}
+
+// sameStrip reports whether two strip offsets are the same, nil being none.
+func sameStrip(a, b *ScrollStripState) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 // keepClientFocus puts a stale push's own focus back after reconcileStale took
 // the daemon's. It is for a push whose snapshot predates some daemon mutation
 // but not any that moved the focus: then the focus in it is the person's own
