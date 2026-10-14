@@ -705,6 +705,13 @@ type Settings struct {
 	// on a light theme as on a dark one.
 	DimUnfocused int
 
+	// DimForeground lets DimUnfocused carry a pane's text toward its ground,
+	// the same as its background. True, the default, dims both; false keeps
+	// the text at full strength and dims only the background, for a rice that
+	// wants an unfocused pane to read as quieter without its text going dim
+	// too.
+	DimForeground bool
+
 	// DimMultifocus dims the panes in the multifocus set like every other
 	// unfocused pane. False, the default, leaves them undimmed: they take the
 	// keys the user types, and full-strength content is what says so.
@@ -877,6 +884,7 @@ func DefaultSettings() Settings {
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,
+		DimForeground:               true,
 		Background:                  BackgroundOff,
 		ClockFormat:                 "",
 		ZoomMaxWidth:                0,

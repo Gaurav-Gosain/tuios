@@ -497,6 +497,11 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.dim_foreground", Type: OptionBool, Section: "appearance",
+		Description: "Let dim_unfocused dim a pane's text too, not only its background",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.dim_multifocus", Type: OptionBool, Section: "appearance",
 		Description: "Dim the panes in the multifocus set like other panes you are not in",
 		Default:     "false",

@@ -550,10 +550,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		dimMemo      blendMemo
 		dimFg, dimBg color.Color
 		dimT         float64
+		dimText      bool
 	)
 	if dim > 0 {
 		if dimFg, dimBg = m.paneDimGround(); dimBg != nil {
 			dimT = float64(dim) / 100
+			dimText = m.Settings.DimForeground
 		}
 	}
 
@@ -925,7 +927,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// own entry and the focused pane's entries are untouched.
 				styleCell := cell
 				if dimT > 0 {
-					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT, &dimMemo)
+					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT, dimText, &dimMemo)
 				}
 				if isCursorPos {
 					styleCell = paneGroundCell(&groundScratch, styleCell, ground)

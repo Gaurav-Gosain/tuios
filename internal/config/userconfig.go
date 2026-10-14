@@ -409,6 +409,9 @@ type AppearanceConfig struct {
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 	DimMultifocus     bool   `toml:"dim_multifocus"`      // Dim the panes in the multifocus set too (default: false)
 
+	// DimForeground is a pointer because it defaults to true.
+	DimForeground *bool `toml:"dim_foreground"` // Let dim_unfocused dim the pane's text too, not only its background (default: true)
+
 	// MasterPosition, MasterCount and MasterGrid shape the master-stack layout
 	// for a workspace nobody has changed at run time. The actions that change
 	// them (cycle_master_position, add_master, remove_master and the rest) act
@@ -2572,6 +2575,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
+	// DimForeground defaults to true, so it is a pointer: an unset key has to
+	// read as on, and only an explicit false turns it off.
+	s.DimForeground = cfg.Appearance.DimForeground == nil || *cfg.Appearance.DimForeground
 	s.DimMultifocus = cfg.Appearance.DimMultifocus
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it

@@ -6063,3 +6063,13 @@ between the startup notice and the tiling notice.
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames \
   go test -run '^TestDockCenterStaysPutDuringNotifications$' -count=1 .
 ```
+
+## dim_foreground: dim_unfocused leaves a pane's text alone when asked
+
+Run on 2026-10-15 on macOS on branch `feat/dim-foreground`. The test is `TestDimForeground` in `dim_foreground_test.go`. It boots a tiled `catppuccin_mocha` session with `dim_unfocused = 60` and truecolour, prints a marker with its own foreground and background in two panes, and reads the marker's cell in the unfocused pane against the focused one. A 256-colour host snaps colours to palette entries, so the fixture asks for truecolour. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `renderTerminal`: `dimText = m.Settings.DimForeground` cut (`dimText = true`) | mutant of this branch | `TestDimForeground/off` ("dim_foreground = false: the unfocused text is {Kind:2 Index:0 R:110 G:134 B:160}, want the focused text's {Kind:2 Index:0 R:220 G:220 B:220}") | **caught** |
+| `ApplyAppearanceConfig`: `DimForeground` not read from the config (`s.DimForeground = true`) | mutant of this branch | `TestDimForeground/off` ("dim_foreground = false: the unfocused text is {Kind:2 Index:0 R:110 G:134 B:160}, want the focused text's {Kind:2 Index:0 R:220 G:220 B:220}") | **caught** |
+| The positive half | this branch | none: with the option unset the unfocused text and background both differ from the focused pane's (`TestDimForeground/default`), and with `dim_foreground = false` the background still does | **guard** |

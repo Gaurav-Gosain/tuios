@@ -1710,6 +1710,7 @@ name alone. Some of them:
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `dim_unfocused` | `0` to `90` | Percent the content of a pane you are not in is dimmed (default `0`, off) |
+| `dim_foreground` | `true`, `false` | Let `dim_unfocused` dim the text of a pane you are not in as well as its background (default `true`). `false` keeps the text at full strength and dims only the background |
 | `dim_multifocus` | `true`, `false` | Dim the panes in the multifocus set like other panes you are not in (default `false`) |
 | `modal_dim` | `0` to `90` | Percent the screen behind a modal panel is dimmed (default `30`, `0` is off). On a light ground the screen fades toward its own background instead of darkening |
 | `animations_enabled` | `true`, `false` | Deprecated on/off switch: `false` sets `motion` to `none`, `true` to `full` |

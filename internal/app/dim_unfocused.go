@@ -55,6 +55,10 @@ func paneDim(isFocused bool, s *config.Settings) int {
 // dimCell fills dst with src carried toward the pane's ground and returns it,
 // or returns src unchanged when there is nothing this can honestly dim.
 //
+// dimText says whether the text is carried toward the ground along with the
+// background. False, appearance.dim_foreground off, leaves the guest's text in
+// its own colour and quiets only the ground behind it.
+//
 // The scratch cell is the caller's because this runs once per style run rather
 // than once per cell: the batching loop compares undimmed cells to decide where
 // a run ends, so a run's style is built once and the blend is paid once for it.
@@ -65,7 +69,7 @@ func paneDim(isFocused bool, s *config.Settings) int {
 // they look like, so there is no RGB here to carry anywhere; guessing one would
 // replace the user's own palette with ours on the panes they are not looking
 // at, which is a stranger result than not dimming.
-func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, memo *blendMemo) *uv.Cell {
+func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, dimText bool, memo *blendMemo) *uv.Cell {
 	if src == nil {
 		return src
 	}
@@ -94,7 +98,7 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64, memo *blendMemo) 
 	// The fg goes to the cell's own ground where it has one, so a cell painted
 	// on a block of colour dims into that block rather than into the pane
 	// behind it and keeps the block readable as a block.
-	if !isNilColor(cellFg) {
+	if dimText && !isNilColor(cellFg) {
 		toward := cellBg
 		if isNilColor(toward) {
 			toward = bg
