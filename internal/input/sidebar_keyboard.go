@@ -92,10 +92,10 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// before this section existed, or a rebound exit) would otherwise trap
 		// the keyboard here with no way back to the panes.
 		//
-		// Checked after the lookup, not before it. Before, a user who put esc on
-		// a rail action of their own had it silently overridden, which is the
-		// same bug as hardcoding the key: the config said one thing and the
-		// program did another, with nothing to tell them apart.
+		// Checked after the lookup, not before it, so a user who puts esc on a
+		// rail action of their own is not silently overridden. Checking first
+		// would be the same fault as hardcoding the key: the config would say
+		// one thing and the program do another, with nothing to tell them apart.
 		if key == "esc" {
 			o.ExitSidebarFocus()
 		}

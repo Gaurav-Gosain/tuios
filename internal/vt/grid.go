@@ -39,10 +39,10 @@ type grid struct {
 	// it, and only blanking the whole row lowers it.
 	//
 	// A scroll blanks the rows it brings in and packs the rows it pushes into
-	// the scrollback, and both used to walk the whole row. A shell's output
-	// is short lines on a wide screen, so almost all of that walk was over
-	// blanks: at 207 columns a 10-character line cost 22 KB of cell reads and
-	// writes. With the extent they stop where the text does.
+	// the scrollback, and with the extent both stop where the text does. A
+	// shell's output is short lines on a wide screen, so almost all of a walk
+	// of the whole row is over blanks: at 207 columns a 10-character line
+	// costs 22 KB of cell reads and writes.
 	ext []int
 	// wrap holds, for each row, whether the row's text carries on to the
 	// next row because autowrap moved it there. A line that ended with a

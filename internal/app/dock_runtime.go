@@ -214,8 +214,8 @@ func dockFailureDetail(msg dockComponentMsg) string {
 // These live on the same scheduler as a user's own components on purpose. If
 // the clock and the meters could not be expressed as components then the
 // component model would be a bolt-on rather than the thing the dock is made of.
-// It is also what let NeedsDockTick go: they used to hold the maintenance tick
-// at sixty frames a second for a clock that moves once a second and meters that
+// It also keeps them off the maintenance tick, which would otherwise run at
+// sixty frames a second for a clock that moves once a second and meters that
 // move once every two.
 func (m *OS) refreshBuiltinDockComponent(name string) bool {
 	switch name {

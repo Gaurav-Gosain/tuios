@@ -9,12 +9,11 @@ package terminal
 // when a workspace switch primes the pane from the daemon's copy of the
 // history. Held at a fixed offset, the pane therefore slides forward under a
 // user who has not touched it, one line per line printed and hundreds of lines
-// per workspace round trip. That is the "scrolling breaks randomly" report:
-// nothing about the keys the user pressed decides it, only whether output
-// happened to arrive.
+// per workspace round trip. Nothing about the keys the user pressed decides
+// it, only whether output happened to arrive.
 //
-// The fix is to say the same viewport top the other way round, as an absolute
-// line in the history, and to derive the offset from it whenever the history
+// So the anchor says the same viewport top the other way round, as an absolute
+// line in the history, and the offset is derived from it whenever the history
 // changes length. Two calls do it, both on the UI goroutine and both from
 // OS.Update:
 //

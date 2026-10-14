@@ -303,9 +303,8 @@ const AgentHintEnv = "TUIOS_AGENT"
 //
 // It never guesses. A payload that does not parse, an event it has no mapping
 // for, and a notification type it does not know all report nothing, because a
-// wrong state is worse than a missing one: the old shim's habit of reading
-// every notification as needs_input is what this replaces. In particular a
-// failure never becomes done.
+// wrong state is worse than a missing one. In particular a failure never
+// becomes done.
 //
 // The checks that apply to every harness run first: a TUIOS_AGENT naming a
 // different harness means this event comes from an agent nested inside the one

@@ -8,11 +8,9 @@ import (
 
 // The log viewer's two copy controls.
 //
-// Its hints have advertised "E copy errors" and "A copy all" for as long as the
-// viewer has existed, and the key handler ignored both: every key it does not
-// recognise falls through to a bare return. So the viewer drew two promises and
-// kept neither, which is worse than not offering them, because a person who
-// presses one has no way to tell whether the copy failed or the clipboard did.
+// Its hints advertise "E copy errors" and "A copy all". A hint the key handler
+// ignores is worse than no hint, because a person who presses one has no way
+// to tell whether the copy failed or the clipboard did.
 //
 // Copying out of the viewer matters more than copying out of a pane, because
 // the thing worth copying is usually an error somebody is about to paste into a

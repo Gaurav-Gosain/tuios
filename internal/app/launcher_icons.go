@@ -93,8 +93,8 @@ type launcherIcons struct {
 	// the protocol scopes a placement to: a placement id belongs to an image,
 	// so drawing a different picture at the same row is a second placement and
 	// not a replacement of the first. Keyed by row alone, scrolling the list
-	// left one orphaned image behind per row it moved, since the record of the
-	// picture that had been there was overwritten before anything deleted it.
+	// would leave one orphaned image behind per row it moved, since the record of
+	// the picture there would be overwritten before anything deleted it.
 	//
 	// The value records where the icon was drawn, because the panel is
 	// draggable: the same row can need a new placement without its picture

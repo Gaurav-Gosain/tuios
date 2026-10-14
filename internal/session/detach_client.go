@@ -10,7 +10,7 @@ import (
 // Detaching other clients.
 //
 // tmux has attach -d and detach-client, and people who run one client per
-// session (discussion #549) want the same here. Three paths take a client off
+// session want the same here. Three paths take a client off
 // its session while the session keeps running:
 //
 //   - tuios attach -d: the attach asks for it (AttachPayload.DetachOthers),

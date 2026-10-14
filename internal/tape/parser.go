@@ -371,8 +371,8 @@ func (p *Parser) skipToNextLine() {
 }
 
 // endOfLine reports whether the command just read ends its line. Anything
-// left over is an error: it used to be skipped without a word, so a tape that
-// validated could carry arguments that did nothing.
+// left over is an error: skipped without a word, it would let a tape that
+// validates carry arguments that do nothing.
 func (p *Parser) endOfLine(ct CommandType) bool {
 	if p.curTok.Type == TokenNewline || p.curTok.Type == TokenEOF {
 		return true

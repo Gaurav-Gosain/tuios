@@ -507,9 +507,9 @@ func (m *OS) renderDockString() (string, int) {
 	// The styled hairline is kept until its width, glyph or colour changes.
 	// Keyed on the glyph as well as the width: the separator character follows
 	// the border style, which is switchable from the settings menu, and a
-	// width-only key served the old hairline until the next resize. The colour
-	// follows the theme. Styling with a width wraps the whole row by grapheme,
-	// which was close to half of what the dock cost per frame.
+	// width-only key would serve the old hairline until the next resize. The
+	// colour follows the theme. Styling with a width wraps the whole row by
+	// grapheme, which is close to half of what the dock would cost per frame.
 	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), m.railRule()
 	if m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar || m.cachedSeparatorColor != ruleColor {
 		m.cachedSeparator = lipgloss.NewStyle().
@@ -527,10 +527,10 @@ func (m *OS) renderDockString() (string, int) {
 	// rather than being drawn on top of it, so the row is still exactly one
 	// screen wide.
 	//
-	// It is placed at the block's recorded first column. Pinning it to the right
-	// edge of the screen was the same thing only while the bar ran to that edge:
-	// the session controls hold the last columns now, so the burn was drawn
-	// under them, a rule's width away from the message it belonged to.
+	// It is placed at the block's recorded first column, not pinned to the right
+	// edge of the screen: the session controls hold the last columns, so a burn
+	// pinned there would be drawn under them, a rule's width away from the
+	// message it belongs to.
 	if ruleWidth := lipgloss.Width(notifRule); ruleWidth > 0 && notifX0 < renderWidth {
 		if room := renderWidth - notifX0; ruleWidth > room {
 			notifRule, ruleWidth = truncateToWidth(notifRule, room), room

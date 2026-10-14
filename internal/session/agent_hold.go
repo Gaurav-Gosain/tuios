@@ -81,11 +81,11 @@ func (s *Session) holdQuieterState(windowID string, next, current AgentState, so
 // scheduleHoldSettleLocked arms the one-shot that publishes the earliest hold
 // once its window elapses. Called with agentHoldMu held.
 //
-// The hold has to carry its own backstop. It used to rely on the stall monitor
-// calling settleAgentHolds on its tick, which meant turning the silence timer
-// off also stopped anything from ever publishing a held state: a harness that
-// cleared its progress bar once and then went quiet stayed working forever. A
-// timer belonging to the hold cannot be switched off by an unrelated setting.
+// The hold has to carry its own backstop. Relying on the stall monitor calling
+// settleAgentHolds on its tick would mean turning the silence timer off also
+// stops anything from ever publishing a held state: a harness that clears its
+// progress bar once and then goes quiet would stay working forever. A timer
+// belonging to the hold cannot be switched off by an unrelated setting.
 //
 // A pending timer is left alone rather than re-armed. Holds are recorded with
 // since = now, so the earliest deadline never moves closer, and a timer that

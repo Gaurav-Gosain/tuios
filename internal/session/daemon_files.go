@@ -12,11 +12,9 @@ import (
 
 // The daemon's half of the rail's file section.
 //
-// The section used to read the filesystem in the client. That was the same
-// machine as the pane for as long as a pane could only be on this machine, and
-// federation ended it: a client attached to a session on another host listed its
-// own disk and reported that the pane's directory did not exist. The daemon that
-// owns the pane owns the disk the pane is on, so the listing is asked for here.
+// A client attached to a session on another host that read its own disk would
+// report that the pane's directory did not exist. The daemon that owns the pane
+// owns the disk the pane is on, so the listing is asked for here.
 //
 // The spoof verdict comes back with it for the same reason, and it is the more
 // important half. It is a comparison between what a pane announced and where its
@@ -45,9 +43,8 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	// machine. Listing it here would read this filesystem and answer about a
 	// path that means nothing to the pane: either "that folder is gone", or,
 	// worse, a listing of an unrelated directory that happens to share the
-	// name. Both are wrong in the same way the client's own listing was before
-	// the daemon took this over, and the fix is the same one: the machine that
-	// owns the process owns the filesystem the answer is about.
+	// name. The machine that owns the process owns the filesystem the answer
+	// is about.
 	//
 	// This daemon is not that machine, so it says so rather than guessing.
 	if host := d.windowHost(cs.sessionID, payload.WindowID); host != "" {

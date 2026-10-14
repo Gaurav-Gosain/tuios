@@ -1952,7 +1952,7 @@ func inboxSeen(seenAt int64, now time.Time) string {
 // A kind that stands for an agent state wears that state's mark, in both
 // glyph modes, so an approval here is the same mark as the pane's row on the
 // rail. The ASCII forms of the other kinds are chosen not to collide with any
-// state's: finished used to be "*", which is working's.
+// state's: finished is not "*", because that is working's.
 func inboxKindGlyph(kind string) string {
 	switch kind {
 	case session.AttentionOutbox:

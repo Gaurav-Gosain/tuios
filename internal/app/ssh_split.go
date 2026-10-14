@@ -6,7 +6,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// ssh-aware splits (discussion #468).
+// ssh-aware splits.
 //
 // split_ssh_horizontal, split_ssh_vertical and new_window_ssh open a pane that
 // runs the same ssh as the focused pane, to the same machine with the same

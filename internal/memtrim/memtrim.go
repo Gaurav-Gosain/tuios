@@ -3,9 +3,9 @@
 //
 // The Go runtime returns freed heap pages on its own, but only down to the
 // heap goal the last collection set, and at idle there is no next collection
-// to lower it. A daemon that had fifty panes, or that drew a few hundred
-// megabytes of output, kept that peak resident for as long as it lived: 121 MB
-// of RSS against 13 MB of live heap after 49 of 50 panes closed.
+// to lower it. Without a trim, a daemon that had fifty panes, or that drew a
+// few hundred megabytes of output, keeps that peak resident for as long as it
+// lives: 121 MB of RSS against 13 MB of live heap after 49 of 50 panes closed.
 //
 // Request is cheap and safe to call from any goroutine, but it is meant for
 // the edges of a burst (a pane closing, the client going idle, a periodic

@@ -7,8 +7,8 @@ import (
 // panesBorderless reports whether the panes this client is arranging drop their
 // own border boxes in favour of one divider drawn between them.
 //
-// It is the single answer to a question three parts of the app used to work out
-// for themselves from the shared-borders setting alone: which border a pane
+// It is the single answer to a question three parts of the app need, and that
+// the shared-borders setting alone does not answer: which border a pane
 // draws, whether a separator is painted between two of them, and how many
 // columns the layout keeps free for that separator. The setting is only half of
 // it. Shared borders merge nothing unless tiling is arranging the panes, so a

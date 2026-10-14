@@ -19,8 +19,7 @@ const (
 	// but every row in it harder to read. Eighty also clears the section strip's
 	// natural sixty-three columns with room for another section or a longer name
 	// before a desktop terminal has to scroll it, and leaves all but one of the
-	// descriptions a single line. It used to be 62, which is one column short of
-	// the strip and is why the strip wrapped.
+	// descriptions a single line. Below 63 the strip wraps.
 	settingsMaxInnerWidth = 80
 	settingsVisibleRows   = 7
 
@@ -233,10 +232,9 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 //
 // It wraps rather than truncates. The panel has the room across two lines for
 // every description it carries, and a sentence cut off at the first line is a
-// sentence the user has to go and find in the config file; the mark said only
-// that something was missing. A description longer than the box still has its
-// last line truncated with the usual mark, so nothing ever paints past the
-// panel edge.
+// sentence the user has to go and find in the config file. A description
+// longer than the box still has its last line truncated with the usual mark,
+// so nothing ever paints past the panel edge.
 //
 // The box is padded out to n lines whatever the text needs, so the panel keeps
 // its height as the selection moves and does not re-centre itself under the
@@ -488,10 +486,9 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	if !selected {
 		fg = pal.FgDim
 	}
-	// An unset field says it is unset. It used to print its own placeholder
-	// example in the value's own style, which reads as the value in force: the
-	// panel told the user their focused border was #89b4fa while the border on
-	// screen was the theme's. The example lives on the description line now.
+	// An unset field says it is unset. A placeholder example drawn in the
+	// value's own style would read as the value in force, so the example lives
+	// on the description line.
 	text, italic := val, false
 	if val == "" && !editing {
 		text, italic, fg = item.Unset, true, pal.FgDim
@@ -552,18 +549,16 @@ func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.
 //
 // Its own pair, not the pane scrollbar's.
 //
-// It used to read appearance.scrollbar.thumb and .track, so changing how a
-// pane draws its scrollbar changed every numeric row on the settings page,
-// which is a connection nobody could guess at and nobody asked for. Worse, the
-// track style's track glyph is deliberately the empty string, because that bar
-// paints its groove with a background rather than a character. Repeating an
-// empty string gives no cells, so the gauge stopped being a fixed width and
-// became as wide as its own value: every row's stepper then sat at a different
-// column, which is what the page looked like with that style set.
+// Reading appearance.scrollbar.thumb and .track would tie every numeric row on
+// the settings page to how a pane draws its scrollbar, which is a connection
+// nobody could guess at. Worse, the track style's track glyph is deliberately
+// the empty string, because that bar paints its groove with a background
+// rather than a character. Repeating an empty string gives no cells, so the
+// gauge would be as wide as its own value and every row's stepper would sit
+// at a different column.
 //
 // Horizontal characters, because the gauge is horizontal. The scrollbar's are
-// vertical bars, which is right for a scrollbar and was being laid on its side
-// here.
+// vertical bars, which is right for a scrollbar and wrong laid on its side.
 func settingsMeterGlyphs() (on, off string) {
 	if overlay.UseASCII() {
 		return "=", "-"

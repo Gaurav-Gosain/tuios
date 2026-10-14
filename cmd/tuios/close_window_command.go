@@ -8,9 +8,8 @@ import (
 )
 
 // newCloseWindowCommand builds `tuios close-window`: close one pane by name or
-// id, through the close-window verb. Scripts used to reach it through
-// run-command CloseWindow, which needs the binary protocol and the admin
-// grant for every command it can run.
+// id, through the close-window verb. The other route, run-command CloseWindow,
+// needs the binary protocol and the admin grant for every command it can run.
 func newCloseWindowCommand() *cobra.Command {
 	var sessionName string
 	var jsonOutput bool

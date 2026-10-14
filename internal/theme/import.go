@@ -16,8 +16,8 @@ import (
 // Converting a terminal's colour scheme into a tuios theme is the most common
 // thing anyone means by "rice this to match my setup": the palette already
 // exists on disk, in kitty's conf or ghostty's config or an alacritty or
-// wezterm toml, and what was missing was the twenty lines of parsing between
-// there and a theme file. Doing it by hand meant reading four formats and
+// wezterm toml, and what is needed is the twenty lines of parsing between
+// there and a theme file. Doing it by hand means reading four formats and
 // knowing which of the sixteen slots each key fills, which is exactly the sort
 // of transcription that goes wrong quietly: one colour in the wrong slot looks
 // like a theme that half-applied.

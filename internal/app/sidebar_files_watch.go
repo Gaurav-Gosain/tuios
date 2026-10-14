@@ -11,19 +11,19 @@ import (
 
 // # Keeping the listing true to the disk
 //
-// The section used to read a folder when the focused pane's directory changed
-// and at no other time, so a file deleted in the pane stayed on the rail until
-// the user moved away and back (issue #313). The answer is not a poll: a poll
-// is filesystem work on a client that is doing nothing. The kernel is asked to
-// say when the listed folder's entries change, and the client sleeps until it
-// does. An idle client with the rail open does no work at all, as before.
+// Reading a folder only when the focused pane's directory changes would leave
+// a file deleted in the pane on the rail until the user moves away and back.
+// The answer is not a poll: a poll is filesystem work on a client that is
+// doing nothing. The kernel is asked to say when the listed folder's entries
+// change, and the client sleeps until it does. An idle client with the rail
+// open does no work at all.
 //
 // A folder on this machine is watched here. A folder on another machine, the
 // listing of a pane on another host, is on a disk this process cannot see, so
 // the daemon is asked to watch it and push a change (session/daemon_dirwatch.go).
 // The push lands on the same channel the local watch uses, so the two are read
 // again the same way. A daemon too old to offer the watch leaves such a listing
-// as it was before: read again when the pane changes directory.
+// read again only when the pane changes directory.
 
 // fileWatchSettle is how long a change is left to settle before the folder is
 // read again. A `git checkout` or an `rm -r` is thousands of events, and the
@@ -172,8 +172,8 @@ func (fw *fileWatcher) retarget(target fileWatchSpec, ch chan struct{}) {
 		}
 	})
 	if err != nil {
-		// No watch is no worse than before this existed: the listing is read
-		// again when the pane changes directory.
+		// Without a watch the listing is still read again when the pane
+		// changes directory.
 		return
 	}
 	fw.w, fw.dir = w, dir

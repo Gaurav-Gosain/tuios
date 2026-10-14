@@ -86,13 +86,12 @@ const (
 
 // spotlightDark is the colour every unlit cell is carried toward.
 //
-// Black, and not the theme's own ground. Carrying a cell toward the ground was
-// the first spelling of this and it cannot dim a screen, because a pane's
-// background already is the ground: at the maximum setting a background moved
-// from (40,40,60) to (30,30,46), a quarter darker, so the screen still read as
-// lit however dark the text got. On a light theme it was worse than nothing.
-// The ground is bright there, so "dim" carried every colour up and washed the
-// text out instead of hiding it.
+// Black, and not the theme's own ground. Carrying a cell toward the ground
+// cannot dim a screen, because a pane's background already is the ground: at
+// the maximum setting a background moves from (40,40,60) to (30,30,46), a
+// quarter darker, so the screen still reads as lit however dark the text gets.
+// On a light theme it is worse than nothing. The ground is bright there, so
+// "dim" carries every colour up and washes the text out instead of hiding it.
 //
 // Blending toward black by t is the same arithmetic as scaling every channel by
 // 1-t, so the setting is a brightness control: the unlit part of the screen is
@@ -102,7 +101,7 @@ const (
 // unlit character at a fifth of its brightness.
 //
 // Boxed once at package level. Assigning a color.RGBA into a color.Color per
-// cell is the line that used to cost 8,000 allocations a frame.
+// cell costs 8,000 allocations a frame.
 var spotlightDark = theme.SpotlightShade()
 
 // spotBlendKey names one cached blend: a source colour and which of the 16

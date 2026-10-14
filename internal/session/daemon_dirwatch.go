@@ -17,8 +17,8 @@ import (
 //
 // The rail's files section keeps its listing true by asking the kernel when
 // the listed folder's names change (app/sidebar_files_watch.go). The client
-// can only ask its own kernel, so a folder on another machine stayed as it was
-// first read: a file deleted over there stayed on the list (issue #313).
+// can only ask its own kernel, so on its own a folder on another machine would
+// stay as it was first read: a file deleted over there would stay on the list.
 //
 // So the client asks its daemon, with MsgWatchDir, and the daemon pushes
 // MsgDirChanged when the names change. The daemon that answers is the one the
@@ -36,7 +36,7 @@ import (
 // changes, and a link connection that carries one costs nothing while it waits.
 // A wait that fails (the link is down, or the far daemon is too old to have
 // wait-dir) ends the watch, and the listing is read again when the pane changes
-// folder, as it was before this existed.
+// folder.
 
 // remoteDirWaitMS bounds one wait-dir asked of another machine. The wait is
 // asked again when it ends, so this only bounds how long a far daemon keeps a

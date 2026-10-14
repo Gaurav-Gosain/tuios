@@ -109,10 +109,10 @@ func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.
 		// Deleting a layout is behind a modifier, which is where the session
 		// switcher and the keybind manager put theirs.
 		//
-		// It used to be a bare "d", gated on the query being empty, which is
-		// exactly the state the picker opens in. Typing "docs" to filter
-		// deleted the selected layout and then filtered on "ocs". It was the
-		// one place in the app where a filter keystroke destroyed saved state.
+		// A bare "d", gated on the query being empty, would fire in exactly
+		// the state the picker opens in: typing "docs" to filter would delete
+		// the selected layout and then filter on "ocs". A filter keystroke
+		// must never destroy saved state.
 		{
 			if len(filtered) > 0 && o.LayoutPickerSelected < len(filtered) {
 				selected := filtered[o.LayoutPickerSelected]
@@ -133,9 +133,8 @@ func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.
 
 	default:
 		// A space and anything a person can type, including characters that
-		// are more than one byte. The filter used to take printable ASCII
-		// only, so a layout with a space in its name could not be searched
-		// for past the first word.
+		// are more than one byte. With printable ASCII only, a layout with a
+		// space in its name could not be searched for past the first word.
 		if keyStr == "space" {
 			o.LayoutPickerQuery += " "
 			o.LayoutPickerSelected = 0

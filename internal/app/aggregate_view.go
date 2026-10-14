@@ -75,8 +75,8 @@ func FilterAggregateViewItems(items []AggregateViewItem, query string) []Aggrega
 	var m fuzzy.Matcher
 	hits := m.FilterIndex(query, len(items), func(i int) string {
 		// Everything the row shows is searchable, and nothing it does not: a
-		// query used to be able to match a pane's scrollback, so a window could
-		// be filtered in for a reason invisible on its row.
+		// query that matched a pane's scrollback would filter a window in for a
+		// reason invisible on its row.
 		return fmt.Sprintf("%s %s %d", items[i].Title, items[i].CWD, items[i].Workspace)
 	})
 

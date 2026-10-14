@@ -4,15 +4,14 @@ package app
 // then gives back whatever mode it interrupted.
 //
 // While a button is down on a pane the pointer belongs to the gesture. In
-// terminal mode it did not: a guest that had asked for mouse tracking was handed
-// the motion and the release, so the drag neither moved the pane nor ended.
+// terminal mode a guest that had asked for mouse tracking would be handed the
+// motion and the release, so the drag would neither move the pane nor end.
 // Window management is the mode where the pointer manages windows, so that is
 // the mode a gesture runs in.
 //
 // Giving it back is the other half. Resizing a pane or moving one is not a
-// request to stop typing. This started as the resize gesture's own bargain and
-// is now the one alt-drag moves take too, rather than each gesture keeping a
-// flag of its own.
+// request to stop typing. The resize gesture and alt-drag moves share this
+// rule, rather than each gesture keeping a flag of its own.
 
 // BeginPointerGesture puts a starting gesture into window management,
 // remembering a terminal mode to return to. Guarded, so the flag doubles as

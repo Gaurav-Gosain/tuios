@@ -217,8 +217,8 @@ func translateClaude(in Input, p fields) Decision {
 //
 // A Claude Code old enough to send no notification_type is read from its
 // message, and only for the two messages it is known to send. Anything else
-// reports nothing, which is the fix for the old shim mapping every
-// notification, auth_success included, to needs_input.
+// reports nothing, so a notification such as auth_success never reads as
+// needs_input.
 func claudeNotification(event string, p fields) Decision {
 	msg := strings.TrimSpace(p.str("message"))
 	kind := p.str("notification_type")

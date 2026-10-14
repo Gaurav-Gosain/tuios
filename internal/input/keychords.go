@@ -37,7 +37,7 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //   - The Option-glyph tier (config.OptionGlyphKey): the chord a macOS Option
 //     character stands for (see composedChords). The registry leaves it empty
 //     when keybindings.option_glyphs is "type" or keyboard_layout is "other",
-//     and the character is then text that goes to the pane (issue #566).
+//     and the character is then text that goes to the pane.
 //
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.

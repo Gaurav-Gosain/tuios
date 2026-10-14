@@ -737,7 +737,7 @@ func (m *OS) TransfersOpen() bool { return m.transfers.open }
 // TransfersOwnsKeys reports whether the Copies panel is up and nothing is
 // over it. A panel opened on top of it, Settings by its prefix chord for one,
 // is the one drawn in front, so it takes the keys: the Copies panel answering
-// for it closed the wrong panel on esc.
+// for it would close the wrong panel on esc.
 //
 // The stacking order is reconciled here because a panel opened by the key
 // before this one has not been drawn yet. The overlays outside that order

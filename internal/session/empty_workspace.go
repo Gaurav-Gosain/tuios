@@ -5,12 +5,12 @@ import (
 	"strconv"
 )
 
-// Going back from a workspace that lost its last pane (discussion #273).
+// Going back from a workspace that lost its last pane.
 //
 // A workspace someone opened for a job, such as the panes of tuios xpanes,
-// empties when the job ends. Before this the session stayed on it, and every
-// client showed the splash screen with the work the person came from one
-// workspace away. Now the session shows the workspace they came from.
+// empties when the job ends. Staying on it would leave every client on the
+// splash screen with the work the person came from one workspace away, so the
+// session shows the workspace they came from.
 //
 // It is the daemon's to do because the daemon owns the window set and the
 // workspace on screen: a pane exits, -ss closes one, close-workspace closes

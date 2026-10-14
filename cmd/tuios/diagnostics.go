@@ -236,7 +236,7 @@ func requireDaemon() error {
 //
 // It dials first and diagnoses only on failure. explainDialError runs the same
 // DiagnoseDaemon a probe beforehand would, so the message and exit status are
-// the same, and a command against a running daemon no longer pays for a probe
+// the same, and a command against a running daemon does not pay for a probe
 // connection the daemon has to accept and drop.
 func dialVerb() (*session.VerbClient, error) {
 	client, err := session.DialVerbClientAs(version)

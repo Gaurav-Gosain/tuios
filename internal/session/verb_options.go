@@ -233,11 +233,11 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 	// daemon.log_level names a property of this daemon process, not of one
 	// session, so it is applied here and does not go on to the session record.
 	//
-	// The level used to be read once at startup, which made the only way to look
-	// at a fault in more detail a daemon restart, and a restart is what ends the
-	// run the fault was in. Now a caller raises the level, reproduces, reads
-	// `tuios logs -f`, and lowers it again. It answers with no session because a
-	// daemon serving none can still be the thing that is wrong.
+	// A level read once at startup would make a daemon restart the only way to
+	// look at a fault in more detail, and a restart is what ends the run the
+	// fault was in. So a caller raises the level, reproduces, reads `tuios logs
+	// -f`, and lowers it again. It answers with no session because a daemon
+	// serving none can still be the thing that is wrong.
 	if path == optionDaemonLogLevel {
 		previous := GetDebugLevel()
 		SetDebugLevel(ParseDebugLevel(p.Value))
@@ -302,10 +302,9 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 			reason = "the attached client refused the change"
 		}
 	} else {
-		// applied false used to mean both "nobody was attached" and "that key
-		// means nothing", which a caller could not tell apart and so could not
-		// act on. The key is now validated above, and this says which of the two
-		// remaining cases it is.
+		// A caller has to tell "nobody was attached" from "that key means
+		// nothing" to act on applied false. The key is validated above, and
+		// this says which of the two remaining cases it is.
 		// The file is only ever written by an attached client, because the
 		// client is what holds the config the writer marshals. So say that
 		// here: without the second sentence a caller reads "recorded" as
@@ -333,10 +332,10 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 // verbGetOption reads an option, preferring what this session was told and
 // falling back to what the option does untold.
 //
-// It used to read only the session's own overrides, so the ordinary question
-// (what is the dockbar position) failed on every session that had never set it,
-// which is most of them. A caller cannot act on "not set" when what it wanted
-// was the value in effect.
+// Reading only the session's own overrides would make the ordinary question
+// (what is the dockbar position) fail on every session that never set it,
+// which is most of them. A caller cannot act on "not set" when what it wants
+// is the value in effect.
 func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

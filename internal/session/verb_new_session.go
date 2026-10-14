@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-// new-session is the verb that was missing from the control surface.
+// new-session creates a session from the control surface.
 //
-// Every other verb addresses a session that already exists, so an external
-// program could drive a workspace but never set one up: it had to shell out to
-// `tuios new --detach` or give up. It creates the session the way the detached
-// CLI path does, in the daemon, with no client anywhere, and it creates the
-// first window in the same call because a session with no windows is a session
-// nothing else can be done to.
+// Every other verb addresses a session that already exists, so without this
+// one an external program could drive a workspace but never set one up short
+// of shelling out to `tuios new --detach`. It creates the session the way the
+// detached CLI path does, in the daemon, with no client anywhere, and it
+// creates the first window in the same call because a session with no windows
+// is a session nothing else can be done to.
 
 // defaultVerbSessionWidth and defaultVerbSessionHeight are the nominal size a
 // session gets when the caller names none. They match what `tuios new --detach`

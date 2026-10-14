@@ -496,14 +496,12 @@ func (m *OS) screenshotSettings() capture.Settings {
 // built synchronously by the caller, and it is the whole of what the panel's
 // text tier draws. Only the file, the clipboard and the pixel picture are slow.
 // So the panel opens here, seeded and marked pending, and the artifacts catch
-// up under their own serial. What this used to do instead was render, write,
-// copy and only then send one message, and the copy blocked; the panel arrived
-// seconds later or not at all, which is the whole of "it does not show the
-// preview after".
+// up under their own serial. Waiting for the render, write and copy before
+// opening the panel would delay it by seconds, or lose it if the copy blocks.
 //
 // Everything that touches a disk or a font file is inside the command. The
 // settings resolution stays here because it only reads memory this goroutine
-// owns, but capture.Frame reads a font file, so it moved.
+// owns, but capture.Frame reads a font file, so it is inside the command.
 func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd {
 	settings := m.screenshotSettings()
 	if settings.Title != "" {
@@ -577,10 +575,9 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd
 // be shrunk from when one is wanted.
 //
 // A PNG capture rasterizes once and the same pixels serve both. Any other
-// format used to raster a second time at the file's own scale purely to feed
-// the preview, which on a full-screen capture was a second whole second spent
-// on a picture that was then thrown into a box a few hundred pixels wide. The
-// preview raster is scale 1 now, always.
+// format rasters the preview at scale 1, always: rastering at the file's own
+// scale costs a whole second on a full-screen capture, for a picture that is
+// then shrunk into a box a few hundred pixels wide.
 func renderCaptureBytes(format shot.Format, g *shot.Grid, f *shot.Frame, wantPixels bool) ([]byte, *image.RGBA, error) {
 	if format == shot.FormatPNG {
 		img, err := shot.Raster(g, f)
@@ -670,9 +667,8 @@ func (m *OS) screenshotPreviewWanted() bool {
 // which is the only condition under which it may run a clipboard helper.
 //
 // A tuios ssh client and a browser tab both run this code on the server. The
-// helper there would write the operator's clipboard, not the user's, which is
-// the trap the PR #133 review caught. So the answer is no unless this is a
-// local attach.
+// helper there would write the operator's clipboard, not the user's. So the
+// answer is no unless this is a local attach.
 func (m *OS) screenshotIsLocal() bool {
 	return !m.IsRemoteClient() && capture.ImageRoute().Available
 }

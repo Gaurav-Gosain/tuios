@@ -706,10 +706,9 @@ func kittyModParamFor(mod KeyMod, flags int) int {
 
 // kittyModParam converts modifier flags to the CSI parameter format.
 // The format is 1 + bitwise OR of: 1=shift, 2=alt, 4=ctrl, 8=super, 16=hyper,
-// 32=meta. Super used to be read from ModMeta, which is where the decoder put
-// it for a key sent in the legacy form, but a CSI u key decodes Super as
-// ModSuper and lost it here. The input path now corrects the legacy form (see
-// app.fixKittyLegacyMods), so each bit is read from its own modifier.
+// 32=meta. Each bit is read from its own modifier. A CSI u key decodes Super
+// as ModSuper, and the input path corrects the legacy form, where the decoder
+// puts it in ModMeta (see app.fixKittyLegacyMods).
 func kittyModParam(mod KeyMod) int {
 	param := 1
 	if mod&ModShift != 0 {

@@ -7,9 +7,9 @@ import (
 )
 
 // editFilterQuery applies the type-to-filter edit rule to an overlay's query.
-// Every overlay that filters as you type used to carry its own copy of this
-// rule, and the copies drifted: some took printable ASCII only and some cut
-// the query a byte at a time. See filter_text_test.go.
+// Every overlay that filters as you type shares this one rule, so none of them
+// takes printable ASCII only or cuts the query a byte at a time. See
+// filter_text_test.go.
 //
 // The rule:
 //   - backspace removes the last rune, never a single byte of one.

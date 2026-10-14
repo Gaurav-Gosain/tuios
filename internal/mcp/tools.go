@@ -365,9 +365,7 @@ const (
 
 // EventTypes are the event types tuios_events accepts: every type the
 // daemon's subscribe verb takes (session.EventTypeNames, which this package
-// does not import). A test in cmd/tuios holds the two lists equal. The list
-// used to be twelve of them, so a caller could not ask for command, prompt,
-// workspace or host events at all.
+// does not import). A test in cmd/tuios holds the two lists equal.
 var EventTypes = []string{
 	"window-created", "window-closed", "window-exit", "window-retitled",
 	"window-focused", "window-moved", "window-minimized", "window-restored",

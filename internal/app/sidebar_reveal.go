@@ -5,12 +5,12 @@ import "github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 // The rail is a map of what is open, and a map that scrolls the place you just
 // went to off its own edge is a list you lose your place in. Focusing a pane
 // far down the terminals section, or switching to a session below the fold,
-// used to leave the row that now matters most out of sight: the agents section
-// anchors its viewport to a row, and the cursor auto-scrolls while the rail has
-// the keyboard, but nothing moved either of the other two sections on a focus
-// change that came from a click, the palette, a hook or a key on the panes.
+// must not leave the row that now matters most out of sight. The agents
+// section anchors its viewport to a row, and the cursor auto-scrolls while the
+// rail has the keyboard, but neither moves the other two sections on a focus
+// change that comes from a click, the palette, a hook or a key on the panes.
 //
-// The reveal is that missing move. It fires on a focus change only, never on
+// The reveal is that move. It fires on a focus change only, never on
 // every frame, because a reveal that fires on every frame fights the reader:
 // they wheel the section away to look at something else and the rail wheels
 // it straight back. So it remembers what the last frame was drawn for and acts

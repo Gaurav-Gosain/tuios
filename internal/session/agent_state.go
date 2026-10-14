@@ -223,7 +223,7 @@ func (e errAgentReportRefused) Error() string { return "agent report refused: " 
 // time a nested run can exist, since a nested run is started by a tool call.
 // At rest, a different session is a new conversation in the same pane (a
 // restart, /clear, /resume), and it takes the pane over. A report without a
-// session id never reaches here, so no caller from before this existed changes
+// session id never reaches here, so a caller that sends none keeps its
 // behaviour.
 //
 // Mid-turn, a different session from the same harness process also takes the
@@ -428,9 +428,9 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 // says what the agent is doing, and most reporters have no idea what tuios calls
 // the program they run inside: the shipped hook shim, an OSC 9;4 sequence and a
 // settled hold all name a state and no harness. Writing their empty id over the
-// detector's answer erased the pane's attribution, and the screen tier keys on
-// it to know whose rules to run, so one hook event left the pane unable to see
-// any prompt on it ever again.
+// detector's answer would erase the pane's attribution, and the screen tier keys
+// on it to know whose rules to run, so one hook event would leave the pane
+// unable to see any prompt on it ever again.
 //
 // So a report that names no harness is silent about attribution rather than
 // denying it, and a reporter that does name one is refining what the detector
@@ -601,10 +601,9 @@ func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
 //
 // This is the half that keeps the hole from being a trap. The screen tier
 // asserts needs_input and nothing else, so without a release nothing on the pane
-// could ever move it off again and it would stick on needs_input exactly the way
-// it used to stick on working. The displaced source and state go back as they
-// were, which puts the pane back under whichever tier was already handling it,
-// silence timer included.
+// could ever move it off again and it would stick on needs_input. The displaced
+// source and state go back as they were, which puts the pane back under
+// whichever tier was already handling it, silence timer included.
 func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 	released := false
 	_ = s.mutateState(func(st *SessionState) error {

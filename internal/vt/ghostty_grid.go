@@ -182,8 +182,7 @@ func (t *GhosttyTerminal) syncLocked() {
 	// Style IDs are only stable within one render snapshot: the library
 	// interns styles and recycles an ID as soon as its last cell is gone.
 	// A conversion cached across snapshots comes back as another style's
-	// colors after a clear, which is how filenames ended up on a stale
-	// background. Cleared, not reallocated, so capacity survives.
+	// colors after a clear, which puts text on a stale background. Cleared, not reallocated, so capacity survives.
 	clear(t.styleCache)
 	if err := t.rs.RowIterator(t.ri); err != nil {
 		return

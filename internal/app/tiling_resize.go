@@ -156,11 +156,11 @@ func (m *OS) ResizeFocusedWindowHeightTop(deltaPixels int) {
 
 // SetFocusedWindowWidthPercent resizes the focused window so its width is pct
 // percent of the content region, driving the same edge logic the plain width
-// keys use. It is what issue #29 asks for: a window sized by percentage rather
-// than by a fixed number of columns. pct is accepted in 10..90, matching the
-// resize_width_N actions; anything outside that range is a no-op. Popups are
-// skipped: they already carry their own percentage model (PopupWidth), and
-// applyPopupRects would re-centre them on the next tile anyway.
+// keys use: a window sized by percentage rather than by a fixed number of
+// columns. pct is accepted in 10..90, matching the resize_width_N actions;
+// anything outside that range is a no-op. Popups are skipped: they already
+// carry their own percentage model (PopupWidth), and applyPopupRects would
+// re-centre them on the next tile anyway.
 func (m *OS) SetFocusedWindowWidthPercent(pct int) {
 	if pct < 10 || pct > 90 || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 		return
@@ -237,9 +237,9 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	// A split is named by the far edge of the panes before it, and the panes
 	// after it start gap cells later. The gap is the column or row the layout
 	// keeps between neighbours: the divider's cell under shared borders, plus
-	// appearance.gap. Moving both sides to the same line, as this once did,
-	// closed that gap, so the divider had nowhere to be drawn and vanished
-	// for as long as the panes stayed where the resize left them.
+	// appearance.gap. Moving both sides to the same line would close that gap,
+	// and the divider would have nowhere to be drawn for as long as the panes
+	// stayed where the resize left them.
 	gap := m.separatorGap()
 	if newRight != oldRight {
 		newRight = m.moveVerticalSplit(oldRight, newRight, gap, resized, resize, minWidth, minX, maxX)
@@ -504,8 +504,8 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 // A master-stack resize goes through the geometry scan, which moves the pane
 // rectangles and nothing else. The tiler keeps no tree: it recomputes every
 // rectangle from MasterRatio and the stack ratio, so without this the next
-// retile put the split back where it was. applyBSPResize avoids the same loss
-// by writing into the tree first; this is the master-stack equivalent, run
+// retile would put the split back where it was. applyBSPResize avoids the same
+// loss by writing into the tree first; this is the master-stack equivalent, run
 // after the fact because the layout has only ratios to write into.
 //
 // It reads the ratios back with layout.MasterRatiosFrom, the inverse of the

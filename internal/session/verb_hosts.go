@@ -128,10 +128,10 @@ type hostAgentsEntry struct {
 	Reason string            `json:"reason,omitempty"`
 	Error  string            `json:"error,omitempty"`
 	Code   string            `json:"code,omitempty"`
-	// Session used to name the one session a host answered about, its most
-	// recently active. Every session is listed now and each row names its
-	// own, so this is set only when the host has exactly one session with
-	// rows in the answer, which keeps the field meaning what it meant.
+	// Session names the one session a host answered about. Every session is
+	// listed and each row names its own, so this is set only when the host
+	// has exactly one session with rows in the answer: a reader that takes it
+	// as the host's one session is never told a wrong one.
 	Session string           `json:"session,omitempty"`
 	Agents  []remoteAgentRow `json:"agents,omitempty"`
 	hostFreshness

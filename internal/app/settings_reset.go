@@ -8,11 +8,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A settings row used to give no sign of whether it had been changed, and
-// once it had, no way back but remembering what it was. A row built from the
-// registry now marks itself when it differs from the default, says what the
-// default is under the list, and goes back to it on a key; and every change
-// made on the page can be taken back, newest first.
+// A row built from the registry marks itself when it differs from the
+// default, says what the default is under the list, and goes back to it on a
+// key; and every change made on the page can be taken back, newest first.
 
 // settingsUndoEntry is one change made on the settings page: the path and the
 // value it held before.

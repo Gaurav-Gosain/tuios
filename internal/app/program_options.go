@@ -16,10 +16,10 @@ import (
 // with. Every entry point spreads it into tea.NewProgram: the local client,
 // the attach client, tape playback, the SSH server and tuios-web.
 //
-// It exists because the list used to be typed out at five sites, and an
-// option added to one was silently missing from the others. The motion filter
-// below shipped on the local client only, so a served client composed a full
-// frame for every pointer move, which is where a frame costs most.
+// It exists so an option added to one entry point cannot be missing from the
+// others. A motion filter on the local client only would let a served client
+// compose a full frame for every pointer move, which is where a frame costs
+// most.
 //
 // What is in here is what is true of every client regardless of transport:
 //
@@ -37,7 +37,7 @@ import (
 // transport supplies those itself, and it appends this list AFTER them. The
 // order matters for one option: WithFilter is a single slot, both wish and sip
 // install a filter of their own, and the last one wins. The filter here does
-// what theirs did (see FilterMouseMotion), so it has to be the last one set.
+// what theirs do (see FilterMouseMotion), so it has to be the last one set.
 //
 // TestEveryProgramTakesTheSharedOptions holds every construction site to this.
 func ProgramOptions() []tea.ProgramOption {
@@ -65,7 +65,7 @@ var eventDebugLog = sync.OnceValue(func() bool {
 
 // debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1.
 // Only logs KeyPressMsg, MouseMotionMsg, and unknown events in TerminalMode
-// to diagnose phantom keypresses (issue #78).
+// to diagnose phantom keypresses.
 func debugLogEvent(m *OS, msg tea.Msg) {
 	if !eventDebugLog() {
 		return
@@ -112,12 +112,11 @@ func debugLogEvent(m *OS, msg tea.Msg) {
 //
 // It is a whitelist: a motion event reaches Update only through a clause here
 // that names the feature waiting for it. A hover or a drag added downstream
-// is dead until it has a clause, which is how the context menu's hover, the
-// workspace pill drag and the shake gesture each shipped broken once.
+// is dead until it has a clause.
 //
 // The filter is also the last one set on the program (see ProgramOptions), so
-// it carries the one thing the transports' own filters did: a served client
-// cannot be suspended, and wish and sip both turned SuspendMsg into ResumeMsg.
+// it carries the one thing the transports' own filters do: a served client
+// cannot be suspended, and wish and sip both turn SuspendMsg into ResumeMsg.
 // That is done here for every remote client so replacing their filter loses
 // nothing.
 func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
@@ -158,9 +157,8 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 
 	// A ctrl-click on pane content is a grab waiting for the pointer to move
 	// far enough to become a drag, and the handler that commits it can only
-	// run on motion. Nothing is dragging yet, so the clause above does not
-	// cover it; it used to reach Update only because the link clause below
-	// passed every motion over content, and with links off it was dead.
+	// cover it, and the link clause below passes only motion over a link, so it
+	// needs a clause of its own.
 	if m.CtrlDragPending {
 		return msg
 	}
@@ -170,29 +168,28 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// Zen mode's mouse variant reveals every border while the pointer moves
 	// and hides them when it rests, and the clock it reads is the time of the
 	// last motion that reached Update. It has to see the motion to keep that
-	// time current, one event per cell crossed: the same cost it paid while it
-	// rode the link clause below, and now over the chrome as well.
+	// time current, one event per cell crossed, over the chrome as well as over
+	// pane content.
 	if m.Settings.ZenMode == config.ZenModeMouse && movedCell {
 		return msg
 	}
 
 	// A shake of the pointer toggles the spotlight, and the detector reads it
 	// off bare motion. This filter is a whitelist, so the gesture is dead until
-	// it has a clause here however well the detector works: that is the fault
-	// the context menu's hover shipped with.
+	// it has a clause here however well the detector works.
 	//
 	// Only a motion that reaches a different column is passed. The detector
 	// reads the column and nothing else, so an event that moves the pointer
 	// down a row carries it no news. The clause is false for every client that
-	// has not asked for the gesture, which is how it ships, and the guard is
-	// then exactly what it was.
+	// has not asked for the gesture, which is the default, and the guard is
+	// then unchanged.
 	if m.ShakeGestureOn() && mouse.X != m.LastMouseX {
 		return msg
 	}
 
 	// A beam that follows the pointer reads the pointer off LastMouseX/Y, which
-	// only a motion that reached Update has set. It used to ride the link
-	// clause below, so it stopped following over chrome and with links off.
+	// only a motion that reached Update has set. It has its own clause so it keeps
+	// following over chrome and with links off.
 	// Only a motion that reaches a different cell is passed, for the reason
 	// the link clause gives: the same cell composes the same frame.
 	if m.SpotlightOn() && movedCell && m.spotlightConfig().FollowMode() == config.SpotlightFollowMouse {
@@ -248,16 +245,17 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// the motion that crosses it.
 	//
 	// This is the one clause whose target is not a rectangle the chrome drew.
-	// Any cell a program printed may carry a link, so it used to pass every
-	// motion over any pane's content box, which is most of the screen: a
-	// sweep of the pointer across an idle shell composed one full frame per
-	// cell crossed, for a hover that underlined nothing. It now asks the pane
-	// whether there is a link under the cell (see PointerOverLink), which is
-	// the question the handler was going to ask anyway, and passes the motion
-	// only when the answer is yes. Two things still bound it:
+	// This is the one clause whose target is not a rectangle the chrome drew.
+	// Any cell a program printed may carry a link, but passing every motion over
+	// any pane's content box, which is most of the screen, would compose one full
+	// frame per cell crossed in a sweep across an idle shell, for a hover that
+	// underlines nothing. So it asks the pane whether there is a link under the
+	// cell (see PointerOverLink), which is the question the handler was going to
+	// ask anyway, and passes the motion only when the answer is yes. Two things
+	// still bound it:
 	//
 	//   - appearance.links = off makes both tests below false, and the filter
-	//     then drops exactly what it dropped before any of this existed.
+	//     then drops every motion this clause would pass.
 	//   - Only a motion that reaches a different cell is passed. A pointer
 	//     nudged inside one cell resolves to the same run and would compose an
 	//     identical frame.

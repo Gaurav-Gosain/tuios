@@ -10,9 +10,8 @@ import (
 //
 // It must not clear anything. Bubble Tea has already left the alternate
 // screen when this runs, so the host shows what it showed before tuios
-// started. RIS (ESC c), which this used to start with, erased that screen
-// again, and kitty and ghostty also drop the whole scrollback on it
-// (discussion #588). DECSTR, the soft reset, puts the modes, margins, pen and
+// started. RIS (ESC c) would erase that screen again, and kitty and ghostty
+// also drop the whole scrollback on it. DECSTR, the soft reset, puts the modes, margins, pen and
 // character sets back without touching a cell.
 const ResetSequence = "\033[!p" + // DECSTR: soft reset, which clears nothing
 	"\033[?1000l" + // Disable normal mouse tracking

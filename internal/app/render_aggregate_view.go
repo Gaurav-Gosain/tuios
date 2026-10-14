@@ -14,21 +14,12 @@ import (
 // the same search-and-list panel the command palette, the session switcher and
 // the workspace switcher use, on the same grammar, with the same keys.
 //
-// It used to be a bespoke two-pane layout sized to fixed fractions of the
-// screen, four fifths wide by three quarters tall whatever it held. A session
-// with one window got a modal covering most of the terminal and almost entirely
-// empty, and the right-hand pane showed the selected pane's raw output with no
-// framing, which on a pane full of compiler diagnostics read as a wall of noise
-// beside the list rather than as information about it. It also returned no hit
-// rows, so the one overlay whose whole purpose is picking something could not be
-// clicked.
-//
-// The preview is gone rather than fixed. The question this overlay answers is
-// "which of my windows do I want", and the last few lines of a pane's scrollback
-// answer it far worse than the pane's name, where it is, what it is doing and
-// what directory it is in, all of which fit on the row itself. Dropping it also
-// stops the list rebuilding a preview string for every window, under the pane's
-// IO lock, on every keystroke.
+// It shows no preview. The question this overlay answers is "which of my
+// windows do I want", and the last few lines of a pane's scrollback answer it
+// far worse than the pane's name, where it is, what it is doing and what
+// directory it is in, all of which fit on the row itself. Without a preview the
+// list also builds no preview string for every window, under the pane's IO
+// lock, on every keystroke.
 
 const (
 	// Wide enough for a name, a directory and a workspace tag on one row, and
@@ -87,9 +78,9 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 // workspace tag anchors the right edge, because "where is it" is the thing the
 // jump is about to act on.
 //
-// The pane's pixel dimensions used to sit on every row. They are the same number
-// for every tiled pane in a session, so the column said nothing and cost the
-// name eleven cells.
+// The row carries no pixel dimensions. They are the same number for every
+// tiled pane in a session, so the column would say nothing and cost the name
+// eleven cells.
 func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	// Right cluster first: it is fixed-width, so the name gets the remainder.
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(m.workspaceTag(item.Workspace))
@@ -107,8 +98,8 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 	// selected row they cut a hole in the highlight.
 	pad := overlay.Style(rowBg).Render(" ")
 
-	// The focused pane is marked in the accent rather than with the asterisk it
-	// used to wear jammed against its name, which read as part of the name.
+	// The focused pane is marked in the accent rather than with an asterisk
+	// against its name, which would read as part of the name.
 	mark, markW := pad+pad, 2
 	state, seen := m.railAgentState(item.Window.ID, item.Window.AgentState, item.Window.AgentCompletionSeq)
 	if glyph, glyphColor := agentMark(state, seen, item.Window.AgentSubagents, pal); glyph != "" {

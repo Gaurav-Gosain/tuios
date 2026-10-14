@@ -232,14 +232,13 @@ func (m *OS) renderScrollbackBrowser() string {
 
 	// No fill on the panel, and that is deliberate rather than an omission.
 	//
-	// It had one, and the fill only ever covered the parts of the panel
-	// nothing had been drawn on. Every line of content ends in an ANSI reset,
-	// because the output it shows carries the program's own colours and those
-	// have to be turned off again, and a reset clears the background for the
-	// rest of that line. So the fill survived in the empty column beside the
-	// list and died everywhere a line had been written, leaving a hard
-	// vertical seam down the middle of the panel and a different shade above
-	// and below the text.
+	// A fill would only cover the parts of the panel nothing is drawn on.
+	// Every line of content ends in an ANSI reset, because the output it shows
+	// carries the program's own colours and those have to be turned off again,
+	// and a reset clears the background for the rest of that line. So a fill
+	// would survive in the empty column beside the list and die everywhere a
+	// line is written, leaving a hard vertical seam down the middle of the
+	// panel and a different shade above and below the text.
 	//
 	// The border and the header and footer bands are what make it read as a
 	// panel. They are drawn, so they keep their colour.
@@ -293,10 +292,9 @@ const (
 
 // browserListWidth is how wide the list column should be for what is in it.
 //
-// It used to be thirty percent of the panel, whatever the panel held. On a
-// wide terminal that meant seventy columns of grey for a list of "ll" and
-// "ls", with the selected row's highlight bar drawn across every one of them,
-// and the output squeezed into what was left.
+// A fixed share of the panel would give a wide terminal seventy columns of
+// grey for a list of "ll" and "ls", with the selected row's highlight bar
+// drawn across every one of them, and the output squeezed into what was left.
 func browserListWidth(items []string, innerW int) int {
 	widest := 0
 	for _, it := range items {

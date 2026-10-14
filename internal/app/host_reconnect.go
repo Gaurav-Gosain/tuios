@@ -20,12 +20,11 @@ import (
 // session that ended: the shells are still running, the panes still have their
 // scrollback, and the only thing that went is this client's way of seeing them.
 //
-// What used to happen was that the client gave up on the first end of the
-// connection, closed every pane it was drawing, and put the user back in the
-// session on their own machine. The far session survived, which was the design,
-// and the person lost their place, which was not. This file is the other half:
-// the client keeps the last frame on screen, dials again with a backoff, and
-// puts the person back where they were.
+// A client that gave up on the first end of the connection would close every
+// pane it was drawing and put the user back in the session on their own
+// machine. The far session would survive, and the person would lose their
+// place. So the client keeps the last frame on screen, dials again with a
+// backoff, and puts the person back where they were.
 //
 // Three rules shape it.
 //

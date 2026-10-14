@@ -11,7 +11,7 @@ import "github.com/Gaurav-Gosain/tuios/internal/federation"
 //
 // It changes what tuios suggests and nothing else. No machine is ever added on
 // its own, no tailnet address is dialled by tuios itself, and a machine with no
-// tailscale on it behaves exactly as it did before this table existed. A host
+// tailscale on it is not affected by this table. A host
 // added from this list is reached over ssh like every other host, which already
 // works across a tailnet because a MagicDNS name resolves like any other name.
 //

@@ -434,8 +434,7 @@ func (s *stashStore) list(sessionID string, referenced func() map[string]bool) (
 //
 // The comparison is on cleaned paths and nothing else. A caller that spells a
 // stashed path through a symlinked directory is told the file is not stashed,
-// which is the safe way to be wrong: it reads as a sender-owned path, which is
-// what every attachment was before this existed.
+// which is the safe way to be wrong: it reads as a sender-owned path.
 func (s *stashStore) owns(sessionID, path string) bool {
 	if s == nil || path == "" {
 		return false

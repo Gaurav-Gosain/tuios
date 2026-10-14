@@ -147,8 +147,8 @@ func ParseAgentSoundMode(s string) (AgentSoundMode, bool) {
 //
 // It is audio rather than bell because a BEL on a modern terminal with default
 // settings is usually nothing at all, and a user who asked for sound and got
-// silence has been told the feature works when it does not. "bell" restores the
-// old behaviour in one line.
+// silence has been told the feature works when it does not. "bell" selects the
+// terminal bell in one line.
 const defaultAgentSoundMode = AgentSoundAudio
 
 // defaultAgentSoundCooldown is the gap between two audible cues. Long enough

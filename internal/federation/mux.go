@@ -40,12 +40,12 @@ const defaultStallLimit = 10 * time.Second
 // connectionStallLimit is the same bound for a relayed connection, which is an
 // attached session rather than a listing.
 //
-// Ten seconds is the wrong number there and it cost the maintainer his session.
+// Ten seconds is the wrong number there.
 // The reader at the end of a relayed connection is a person's terminal, and a
 // terminal legitimately stops reading for a while: a large paint, a client
 // swapped out under memory pressure, a laptop lid closed and opened. Ten
-// seconds of that is not a dead consumer, and dropping the stream for it threw
-// away a session the far daemon was still running perfectly.
+// seconds of that is not a dead consumer, and dropping the stream for it throws
+// away a session the far daemon is still running perfectly.
 //
 // Thirty seconds is the trade in the other direction. The read loop is shared,
 // so a stream this side is waiting on freezes every other stream on the link
@@ -129,8 +129,7 @@ type mux struct {
 	// lastRead is when the read loop last took a frame off the pipe, in Unix
 	// nanoseconds, and blocked counts the read loop's own waits inside
 	// deliver. Together they answer one question: is this pipe alive? A
-	// control call that timed out does not answer it, and used to be treated
-	// as if it did.
+	// control call that timed out does not answer it.
 	lastRead atomic.Int64
 	blocked  atomic.Int32
 
@@ -595,8 +594,8 @@ func (s *Stream) Read(p []byte) (int, error) {
 	// The stream or the whole link has ended. Drain anything already
 	// delivered before reporting the end, so a peer that answered and then
 	// hung up does not lose its answer. Both arms drain: select picks among
-	// ready arms at random, so a link that closed with chunks still queued
-	// used to drop them about half the time.
+	// ready arms at random, so with one draining arm a link that closed with
+	// chunks still queued would drop them about half the time.
 	select {
 	case chunk := <-s.incoming:
 		return s.take(p, chunk), nil

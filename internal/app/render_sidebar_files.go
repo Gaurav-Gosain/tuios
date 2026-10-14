@@ -215,9 +215,9 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 //
 // The section has a directory or it does not, and when it does not the listing
 // is empty for exactly one reason: nothing has told tuios where the focused
-// pane is. That is worth a row. The alternative, which is what it used to do,
-// was to disappear, and a feature that disappears when it cannot answer is
-// indistinguishable from one that is broken.
+// pane is. That is worth a row. The alternative is to disappear, and a feature
+// that disappears when it cannot answer is indistinguishable from one that is
+// broken.
 func sidebarFilesEmptyRow(cw int, pal overlay.Palette) string {
 	return sidebarFit(sidebarStyle(nil, pal.FgMute).
 		Render(" "+overlay.Truncate("no directory yet", max(cw-2, 1))), cw, nil)

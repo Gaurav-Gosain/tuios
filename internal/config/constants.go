@@ -751,9 +751,8 @@ func (s *Settings) GetDockPillRightChar() string {
 // pills are flat.
 //
 // The mode chip, the workspace tabs and the minimized run all follow
-// DockPillCaps. The chip and the tabs once capped regardless of it, so
-// dock_pill_caps = false left the caps on the two pills a user sees most
-// (#451) while the settings page reported them off.
+// DockPillCaps, so dock_pill_caps = false takes the caps off every pill the
+// settings page says it does.
 func (s *Settings) GetDockModeCapLeft() string {
 	if !s.DockPillCaps {
 		return ""
@@ -1133,10 +1132,10 @@ func (s *Settings) ScrollbarTintHex() (string, bool) {
 // ScrollbarTintResolved is the keyword the tint is behaving as, with unset
 // resolved to the documented default.
 //
-// Unset used to reach the renderer as the empty string and match none of its
-// cases, so it fell through to the border rule: clearing the tint gave the one
-// tint that is not the default. The registry, the validator and the config
-// header all say empty means quiet, and now so does the bar.
+// Unset has to be resolved before the renderer sees it: the empty string
+// matches none of its cases and falls through to the border rule, the one tint
+// that is not the default. The registry, the validator and the config header
+// all say empty means quiet, and so does the bar.
 func (s *Settings) ScrollbarTintResolved() string {
 	if s.ScrollbarTint == "" {
 		return ScrollbarTintQuiet
@@ -1332,10 +1331,10 @@ const (
 
 	// ZIndexFloating is where the floating band starts: a floating window is
 	// drawn at ZIndexFloating plus its Z, capped at ZIndexFloatingTop. The band
-	// used to start one above the separators at 998, which put a floating
-	// window with Z >= 2 over the dock, the clock, the log viewer, the which-key
-	// overlay and the scrollback browser: every overlay between 1000 and 1003
-	// was reachable with a handful of panes open.
+	// sits well below the overlays: starting it just above the separators at
+	// 998 would put a floating window with Z >= 2 over the dock, the clock, the
+	// log viewer, the which-key overlay and the scrollback browser, every
+	// overlay between 1000 and 1003, with a handful of panes open.
 	ZIndexFloating = 503
 
 	// ZIndexFloatingTop is the highest z-index a floating window can be drawn

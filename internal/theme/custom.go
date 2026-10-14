@@ -74,9 +74,9 @@ func readCustomThemes(themesDir string) (loaded, problems []string, err error) {
 // The registry is built once per process behind a sync.Once, which is right for
 // the built-ins and wrong for these. A custom theme file is written while tuios
 // is running, by a person editing it or by an agent ricing on their behalf, and
-// until this existed the only way to reach a palette you had just authored was
-// to restart: selecting it reported success, logged that it did not exist, and
-// went on drawing the old one.
+// without a reload the only way to reach a palette you have just authored is
+// to restart: selecting it reports success, logs that it does not exist, and
+// goes on drawing the old one.
 //
 // The problems it returns are one line per file it could not read. They are the
 // answer to "why did my theme not turn up", which is otherwise unobtainable

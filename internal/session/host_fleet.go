@@ -17,13 +17,9 @@ import (
 
 // The fleet: this daemon following the agents of every linked host.
 //
-// The rail used to poll every host's session list every five seconds while it
-// was open and every thirty while it was not, the listing named only each
-// host's most recently active session, a transition on another machine raised
-// no alert, and a host whose link went down disappeared from the rail with
-// whatever its agents were waiting on.
-//
-// Now the hub keeps one stream per linked host. For each host whose link is up
+// The hub keeps one stream per linked host, so the rail never polls, a
+// transition on another machine raises an alert, and a host whose link goes
+// down keeps what its agents were waiting on. For each host whose link is up
 // it opens a connection to that host's daemon over the link, lists the host's
 // Inbox, and subscribes to the host's attention, agent and session events from
 // the position the listing was current to. From then on:

@@ -80,8 +80,7 @@ type agentTranscriptState struct {
 }
 
 // SetTranscriptWatcher installs the filesystem notification the transcript
-// source uses. A session with none never joins anything, which is the behaviour
-// every build had before this existed.
+// source uses. A session with none never joins anything.
 func (s *Session) SetTranscriptWatcher(w transcriptWatch) {
 	s.transcripts.mu.Lock()
 	defer s.transcripts.mu.Unlock()
@@ -400,14 +399,13 @@ func (s *Session) joinSearchDue(windowID string) bool {
 //
 // Refusing is the important half. A wrong join attributes one agent's state to
 // another pane, which is a confident lie, where no join is merely no state and
-// the pane behaves exactly as it did before this source existed. So two files
+// the pane behaves as if this source did not exist. So two files
 // that both verify means neither is used, and no amount of tie-breaking on
 // modification time is applied: whichever was written most recently is not
 // evidence of which pane is looking at it.
 //
-// This is the case that fails exactly where the maintainer said it would, two
-// agents in one directory on one version. The hook is the answer to that, and
-// this is what runs until someone installs it.
+// This fails for two agents in one directory on one version. The hook is the
+// answer to that, and this is what runs until someone installs it.
 func searchTranscript(tr *harness.Transcript, cwd, version string) (string, bool) {
 	return searchTranscriptIn(tr.ExpandDir(cwd), tr, cwd, version)
 }

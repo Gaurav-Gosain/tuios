@@ -465,9 +465,9 @@ func StripControls(s string) string {
 // (charmbracelet/x/ansi, tmux, and the terminals that do the same) takes them
 // as C1. 0x9c is ST, so the sequence ends in the middle of the address and the
 // rest of it is printed as text. "术" is E6 9C AF. The row is then wider than
-// the pane, and everything after it on screen is drawn in the wrong place
-// (issue #649). The cell keeps the encoded form, so every renderer that writes
-// the cell back out, and a frame read back in, agree on the address.
+// the pane, and everything after it on screen is drawn in the wrong place. The
+// cell keeps the encoded form, so every renderer that writes the cell back
+// out, and a frame read back in, agree on the address.
 func LinkURI(s string) string { return hostLinkURI(StripControls(s)) }
 
 // LinkParams is a link's parameters made safe the same way. A byte outside

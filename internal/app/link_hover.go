@@ -180,9 +180,9 @@ type linkCellRef struct{ X, Y int }
 // wrap.
 //
 // A guest that prints a URL wider than the pane gets it broken across rows with
-// no character between the halves, and until now each half was scanned on its
-// own: hovering the first half offered to open a truncated address, and the
-// second half was not a link at all.
+// no character between the halves. Scanned on its own, the first half would
+// offer to open a truncated address, and the second half would not be a link
+// at all.
 //
 // The rows are joined when the emulator says the row above wrapped onto this
 // one (see paneRowWraps). A line that fills the pane and then ends is not

@@ -15,20 +15,16 @@ import (
 // The message block that lives in the dock's right-hand end.
 //
 // The placement is the whole point: a message belongs to the bar and never
-// covers a pane. The corner toast this replaces was drawn as a layer on top of
-// the workspace, three rows tall, and landed exactly where a freshly split
-// pane's first output goes.
+// covers a pane, where a freshly split pane's first output goes.
 //
-// The block wears no fill. It used to sit on the chrome's Surface step, and
-// that slab was the largest ink object in the bar while the words inside it
-// were the information: structure drawn at the weight of content, the same
-// shape of problem the rail's edges had. The bar's own ground does the job for
-// free, and it does it better for the marks, which no longer have to be lifted
-// toward the text colour to clear the mark floor on a raised grey: info blue
-// measures 3.16:1 on the bare canvas against 2.20:1 on the old fill, so
-// dropping the slab bought back the hue. What separates the message from the
-// dock items beside it is that they are filled pills and it is not, plus the
-// cap on its left and the lit rule above its span.
+// The block wears no fill. A slab on the chrome's Surface step would be the
+// largest ink object in the bar while the words inside it are the
+// information: structure drawn at the weight of content. The bar's own ground
+// does the job for free, and it does it better for the marks, which then need
+// no lift toward the text colour to clear the mark floor: info blue measures
+// 3.16:1 on the bare canvas against 2.20:1 on a Surface fill. What separates
+// the message from the dock items beside it is that they are filled pills and
+// it is not, plus the cap on its left and the lit rule above its span.
 //
 // The cap is a freestanding partial block in the severity's ink, two eighths
 // for info and success, four for a warning, six for an error. The weight is a
@@ -227,9 +223,8 @@ func notifBudget(renderWidth int) int {
 // later info pushed out of the block still says so from underneath it.
 // Otherwise it is dim, because a queue of routine messages is not news.
 func (s notifStatus) notifMeta(pal overlay.Palette) string {
-	// Dim against the bar's own ground rather than a fixed grey. The grey it
-	// used to be was picked for one background and measured under 4.5:1 on two
-	// thirds of the themes.
+	// Dim against the bar's own ground rather than a fixed grey: a grey picked
+	// for one background measures under 4.5:1 on two thirds of the themes.
 	bg := pal.Canvas
 	dim := theme.Readable(pal.FgDim, bg)
 
@@ -269,9 +264,8 @@ const notifChromeWidth = 7
 //
 // Width is a hard contract, not an aspiration: the returned Width is what the
 // dock reserves, what the rule is drawn to, and what the block actually
-// measures. The old renderer clamped the message with MaxWidth after the fact,
-// which cut whatever happened to be last, and what was last was the block's
-// own trailing columns.
+// measures. Clamping the message with MaxWidth after the fact would cut
+// whatever happens to be last, which is the block's own trailing columns.
 func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) {
 	s, ok := m.notifStatus()
 	if !ok {

@@ -186,12 +186,12 @@ func kittyPlaceholderColour(c color.Color) uint32 {
 // The id is rewritten in both places it lives. The foreground carries the low
 // 24 bits and the third mark carries the high 8. Keeping the guest's third
 // mark under the host's colour names an image that does not exist: kitten
-// icat writes that mark on every cell, so its images drew nothing.
+// icat writes that mark on every cell, so its images would draw nothing.
 //
 // Ids below 256, the foreground and the placement id in the underline colour,
 // are written as 256-colour indices. tuios draws to the host in the host's
 // colour profile, and a 256-colour host rounds a true colour to a nearby index,
-// which is another id (issue 292). An index survives the rounding.
+// which is another id. An index survives the rounding.
 //
 // Whether left belongs to the same image is decided on the ids, after
 // translation, because left is stored translated and this cell is not yet.

@@ -1420,11 +1420,10 @@ func OptionPaths() []string {
 // checkValue rejects a value the option cannot hold, before any of it reaches
 // the config struct.
 //
-// A colour option is why this is no longer just the Accepted membership test.
-// The two border colours take any literal and so carry no Accepted set, which
-// meant nothing checked them at all: set-option appearance.border_focused_color
-// notacolour was accepted, written, and turned up later as a border drawn in
-// nothing. The tint has a keyword set and a literal form at once, which a closed
+// A colour option is why this is more than the Accepted membership test. The
+// two border colours take any literal and so carry no Accepted set: unchecked,
+// set-option appearance.border_focused_color notacolour would be accepted,
+// written, and turn up later as a border drawn in nothing. The tint has a keyword set and a literal form at once, which a closed
 // set on its own cannot say.
 func (o Option) checkValue(value string) error {
 	if o.Color {

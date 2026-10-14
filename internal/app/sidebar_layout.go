@@ -9,29 +9,23 @@ import (
 // The rail's layout: which sections it stacks, in what order, and the share of
 // it each one may claim.
 //
-// It used to be three sections in a fixed order with the split written into
-// the rail's arithmetic. A fourth section made that untenable twice over:
-// the order stopped being obvious (does a listing belong above the panes it is
-// about, or below them?), and the split stopped being one anybody but the
-// author would agree with. Both are now read off one string.
+// With four sections neither the order (does a listing belong above the panes
+// it is about, or below them?) nor the split is one anybody but the author
+// would agree with, so both are read off one string.
 //
-// # Why the rail now has a fourth section, having refused one
+// # Why the fourth section is files
 //
-// The rail's old fixed split carried a written refusal to add a workspaces
-// section, and three of its four reasons still stand. The fourth did not: it argued that
-// three sections already cost ten lines of chrome before a row of content and
-// that a fourth would take it to thirteen. That was arithmetic about floors
-// nobody had made configurable. Shares and membership are now read off
-// appearance.sidebar.sections, so a user who does not want a fourth section
-// removes it, and a rail too short for what is left gives up lines rather than
-// its region.
+// Four sections cost thirteen lines of chrome before a row of content, but
+// shares and membership are read off appearance.sidebar.sections, so a user
+// who does not want a fourth section removes it, and a rail too short for what
+// is left gives up lines rather than its region.
 //
-// The other three reasons are why the section that arrived is files and not
-// workspaces. A workspaces section would restate what the terminals section's
-// tags already say; it would be the second per-session list, competing with
-// terminals for the same lines while saying less; and a workspace already has
-// three surfaces that cost no rail lines at all. A listing restates nothing on
-// screen, is not per-session, and has no other surface.
+// The section is files and not workspaces. A workspaces section would restate
+// what the terminals section's tags already say; it would be the second
+// per-session list, competing with terminals for the same lines while saying
+// less; and a workspace already has three surfaces that cost no rail lines at
+// all. A listing restates nothing on screen, is not per-session, and has no
+// other surface.
 //
 // # Shares are ceilings, not reservations
 //

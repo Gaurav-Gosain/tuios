@@ -20,9 +20,9 @@ import (
 // background with OSC 11, and some ask for the default text colour (OSC 10)
 // and the sixteen ANSI colours (OSC 4) too. Inside tuios the terminal that
 // answers is a pane's emulator, and with no tuios theme and no pane background
-// it used to answer with its own defaults: a black background and a white
-// foreground, whatever the terminal around tuios really was. Codex, Claude
-// Code and helix then drew their dark palettes on a light terminal.
+// it would answer with its own defaults: a black background and a white
+// foreground, whatever the terminal around tuios really is. Codex, Claude
+// Code and helix would then draw their dark palettes on a light terminal.
 //
 // So each client asks its own terminal. The local client's startup probe
 // already does (capabilities.go), and every client asks again through Bubble
@@ -35,8 +35,8 @@ import (
 // gets the light chrome ramp a light theme gets.
 //
 // A terminal that answers nothing (mosh answers no colour queries) leaves all
-// of it unset, and everything behaves as it did before: panes get the
-// emulator's defaults and the chrome its constant dark ramp.
+// of it unset: panes get the emulator's defaults and the chrome its constant
+// dark ramp.
 //
 // The local client also follows the terminal's light and dark switch. It turns
 // on mode 2031, and a terminal that supports it (ghostty, kitty, contour and

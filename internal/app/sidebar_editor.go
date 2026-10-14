@@ -9,7 +9,7 @@ import (
 )
 
 // The rail's layout is an ordered list with a number on each entry, which is
-// the one shape a settings row cannot hold. It was a text field until now:
+// the one shape a settings row cannot hold. As a text field it would be
 // "sessions:25,terminals,files:25,agents:34", typed by hand, with a colon that
 // means one thing and a comma that means another, and no way to see what you
 // had done until you closed the panel.
@@ -21,12 +21,12 @@ import (
 //
 // # Membership lives here and nowhere else
 //
-// There used to be two ways to take a section off the rail: leave it out of the
-// layout, or set the boolean named after it. The layout won, and the spacer is
-// why. A layout may carry two spacers, in two different places, and a boolean
-// per section has nowhere to put the second one and no way to say which gap it
-// means. So the list owns order, share and membership together, the booleans
-// fold into it on load, and this editor is where a section is turned off.
+// The layout, not a boolean per section, says whether a section is on the rail,
+// and the spacer is why. A layout may carry two spacers, in two different
+// places, and a boolean per section has nowhere to put the second one and no
+// way to say which gap it means. So the list owns order, share and membership
+// together, the booleans fold into it on load, and this editor is where a
+// section is turned off.
 
 // railRowKind is what one line of the editor is.
 type railRowKind int

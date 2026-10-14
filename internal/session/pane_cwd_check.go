@@ -13,8 +13,8 @@ import (
 // client judges against its own name, and the pid is a pid on a machine it is
 // not on. So the folder in the window state is the only answer such a client
 // has, and the state is only pushed when the session changes. A cd changes
-// nothing in the session, so before this the client was told where the pane
-// started and never told again (issue #313).
+// nothing in the session, so on its own the client would be told where the
+// pane started and never told again.
 //
 // So a move is pushed here, as a state push with no change in it, which is
 // what PublishLiveFacts already does for a pane on another machine. A move is

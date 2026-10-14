@@ -215,11 +215,11 @@ func (m *OS) railAgentState(windowID, state string, seq uint64) (string, bool) {
 // Inbox, if it has one.
 //
 // Asking moves no agent state: ask-human is often run by a script with no
-// agent in the pane at all. So the question was in the Inbox and the dock,
-// and the pane that asked it had no mark on the rail, no row in the agents
-// section and no match for "@n" in the palette. Every surface that reads a
-// pane's state through railAgentState now reads it as needs_input while the
-// question is open, which is what it is: the pane is waiting for the person.
+// agent in the pane at all. So that the pane that asked gets a mark on the
+// rail, a row in the agents section and a match for "@n" in the palette, every
+// surface that reads a pane's state through railAgentState reads it as
+// needs_input while the question is open, which is what it is: the pane is
+// waiting for the person.
 func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
 	if windowID == "" {
 		return session.AttentionItem{}, false

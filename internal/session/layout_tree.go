@@ -11,19 +11,14 @@ import (
 // The BSP tree as an op.
 //
 // A client that reshapes a workspace's tree (a split, a close, a drag of a
-// divider, a rotate, a swap) used to say so only inside its next whole-state
-// push. The daemon took the tree it found there without being told it had
-// changed, a push never advances Version, and every peer then had to guess
-// whether the tree in a state was news or an echo of its own. Two clients
-// reshaping one tree inside a round trip of each other ended on whichever push
-// landed last, and a client could adopt an echo of its own older tree over the
-// one it had just built.
-//
-// Now the client sends the tree for one workspace as MsgLayoutTree, the daemon
-// applies it under mutateState, Version advances, and every client (the sender
-// included) is sent the result. The client applies its own change to its local
-// tree at once, so a drag never waits for the round trip. The push stops
-// carrying trees.
+// divider, a rotate, a swap) sends the tree for that workspace as
+// MsgLayoutTree, the daemon applies it under mutateState, Version advances, and
+// every client (the sender included) is sent the result. The client applies its
+// own change to its local tree at once, so a drag never waits for the round
+// trip. The whole-state push carries no trees: a push never advances Version,
+// so a tree inside one leaves every peer guessing whether it is news or an
+// echo of its own, and a client could adopt an echo of its own older tree over
+// the one it had just built.
 //
 // The op is the whole tree of one workspace rather than an edit, because every
 // tree mutation in the client already ends in a tree, and there are a dozen of
@@ -31,9 +26,9 @@ import (
 // daemon: the later one stands. Nothing is refused. The daemon sends every
 // applied op to every client, the sender included, and a client drops any
 // state built before its own last op landed (see PushSeen), so every client
-// ends on the tree of whichever op landed last. An earlier design refused an
-// op built on an older tree than another client's; a drag then lost every
-// step after the first conflict, because each step carried the same old base.
+// ends on the tree of whichever op landed last. Refusing an op built on an
+// older tree than another client's would make a drag lose every step after the
+// first conflict, because each step carries the same old base.
 //
 // Leaves are named by window ID on the wire. The integers in a tree are each
 // client's own (GetWindowIntID hands them out locally), so an op carries the

@@ -10,8 +10,8 @@ import (
 //
 // The accelerators address rows by what they do, not by position: d detaches,
 // s opens the switcher, x runs the kill row. A second q runs the first row,
-// which in a daemon session is Detach, so the old "qq" muscle memory that used
-// to kill a session now safely detaches it.
+// which in a daemon session is Detach, so "qq" muscle memory detaches a
+// session rather than killing it.
 func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if listKey(commandKey(msg), true, listPage, o.QuitMenuMove) {
 		return o, nil

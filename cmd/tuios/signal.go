@@ -166,8 +166,8 @@ func forceExit(restoreTerminal func(), code int) {
 	wrote := make(chan struct{})
 	go func() {
 		// Bubble Tea's own exit never ran, so this also leaves the alternate
-		// screen and turns off the keyboard modes it set. ResetSequence no
-		// longer carries RIS, which used to do both by clearing everything.
+		// screen and turns off the keyboard modes it set. ResetSequence
+		// carries no RIS, which would do both by clearing everything.
 		_, _ = os.Stdout.WriteString("\x18" + forcedExitPrefix + terminal.ResetSequence)
 		close(wrote)
 	}()

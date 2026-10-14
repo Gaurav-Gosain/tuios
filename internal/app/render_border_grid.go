@@ -20,8 +20,8 @@ import (
 // panes. The two tilers reserve their gaps differently, so each has to answer
 // for its own: the BSP tree knows its splits, and the master-stack tiler has
 // them read back off the panes it positioned. Asking the tree while master-stack
-// is driving is what used to paint a line down the pane beside it, because the
-// tree survives the mode switch holding the geometry it last laid out.
+// is driving would paint a line down the pane beside it, because the tree
+// survives the mode switch holding the geometry it last laid out.
 func (m *OS) separatorSplits() []layout.SplitLine {
 	// A divider stands in for the borders two panes gave up. Panes still drawing
 	// their own have nothing to share, so nothing is drawn between them whatever

@@ -1,14 +1,13 @@
 package app
 
 // ClientKind names where the person looking at the screen is sitting. It is
-// the one fact the three entry points differ on, and everything below that
-// used to be a boolean each of them set by hand.
+// the one fact the three entry points differ on, and everything below is
+// derived from it.
 //
 // A client is built with a kind and NewOS derives the rest: whether the
 // settings page may write the config file, whether the process shares a desktop
 // with the user, how graphics reach the terminal. A flag derived from the kind
-// cannot be set on one client and forgotten on another, which is how the same
-// server shipped read-only for the browser and writable over SSH once.
+// cannot be set on one client and forgotten on another.
 //
 // The zero value is a client nobody named. The tests and the benchmarks build
 // those, and they get no derivation and no watcher: exactly the struct the

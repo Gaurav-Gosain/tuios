@@ -167,7 +167,7 @@ func (m *OS) CrashNotice() string {
 // whether it consumed it.
 //
 // It consumes every key. The overlay covers the screen, so a key it let through
-// would land in a pane the user cannot see, which is how a stray q ends up
+// would land in a pane the user cannot see, where a stray q could end up
 // closing something. The three it acts on are the three the footer names.
 func (m *OS) handleCrashKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if m == nil || m.crash == nil {

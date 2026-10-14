@@ -8,14 +8,14 @@ import (
 // A wheel click is a viewport gesture, not a cursor motion.
 //
 // These helpers move CopyMode.ScrollOffset directly, the way Shift+Up/Down
-// already did. The wheel used to drive the k/j motions instead, and those keep
-// the cursor near the middle of the pane and only scroll once it gets there:
-// deliberate for keyboard navigation, and wrong for a wheel. With the cursor
-// down at the shell prompt, where it lands after the previous gesture scrolled
-// back to the bottom or after a click, every iteration only decremented CursorY
-// and the view did not move at all. On a 40-row pane that is around twenty dead
+// does, rather than driving the k/j motions. Those keep the cursor near the
+// middle of the pane and only scroll once it gets there: deliberate for
+// keyboard navigation, and wrong for a wheel. With the cursor down at the shell
+// prompt, where it lands after the previous gesture scrolled back to the
+// bottom or after a click, every iteration would only decrement CursorY and
+// the view would not move at all. On a 40-row pane that is around twenty dead
 // iterations, several whole wheel clicks of nothing happening before the first
-// line moved. moveUp/moveDown are untouched, so k and j still behave as before.
+// line moves.
 //
 // The cursor follows the text under it rather than the screen row it sits on:
 // CursorY is viewport-relative and absolute position is
@@ -93,10 +93,9 @@ func scrollStep(s *config.Settings) int {
 // scrollback, so the session that existed only to render it goes away. It goes
 // quietly, because there was nothing to announce on the way in either.
 //
-// An explicit session is left alone. The wheel used to throw the user out of
-// copy mode they had asked for, once the cursor happened to reach the last row,
-// which is a surprise in the other direction; q and Esc still exit, and both
-// already return the pane to the bottom.
+// An explicit session is left alone. Throwing the user out of copy mode they
+// asked for, once the cursor happens to reach the last row, is a surprise in
+// the other direction; q and Esc exit, and both return the pane to the bottom.
 //
 // A selection in progress holds the session open: dragging past the bottom edge
 // auto-scrolls, and exiting at zero would drop the drag mid-gesture.

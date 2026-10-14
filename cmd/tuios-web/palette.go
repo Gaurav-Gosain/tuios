@@ -63,7 +63,7 @@ func (p browserPalette) applyTo(caps *app.HostCapabilities) {
 // is followed here without a copy to keep in step.
 //
 // A file that cannot be read or parsed answers the zero Theme, which leaves
-// every slot unanswered: the behaviour from before this existed.
+// every slot unanswered, so sip keeps its own palette.
 func sipDefaultTheme() sip.Theme {
 	src, err := fs.ReadFile(sip.Assets(), "terminal.js")
 	if err != nil {

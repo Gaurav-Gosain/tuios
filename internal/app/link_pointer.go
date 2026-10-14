@@ -43,13 +43,13 @@ func (m *OS) linkHoverFor(window *terminal.Window) (PaneLink, bool) {
 // PointerOverLink reports whether a link sits under absolute screen (x, y),
 // without recording anything.
 //
-// It is what the motion filter asks. The filter used to pass every motion
-// over a pane's content box, because a link
-// can be anywhere a program printed, and a frame was then composed per cell
-// the pointer crossed over any pane at all: a sweep across an idle shell cost
-// one full compose per cell. Asking the pane whether there is a link under
-// the cell costs one cell read (marked links) or one row scan (bare URLs),
-// which is a hundredth of the frame it decides against.
+// It is what the motion filter asks. A link can be anywhere a program printed,
+// but a filter that passed every motion over a pane's content box would
+// compose a frame per cell the pointer crossed over any pane at all: a sweep
+// across an idle shell would cost one full compose per cell. Asking the pane
+// whether there is a link under the cell costs one cell read (marked links) or
+// one row scan (bare URLs), which is a hundredth of the frame it decides
+// against.
 //
 // The tests are the ones LinkHoverAt applies, so a motion the filter passes
 // on this answer is a motion the handler will underline something for.

@@ -12,13 +12,12 @@ import (
 // A dock component is a shell command, and a shell command is a tree. The two
 // helpers here are what let the timeout act on the tree instead of on its root.
 //
-// The bug they exist for: `sh -c` hands the command to a shell, and the shell
+// The case they exist for: `sh -c` hands the command to a shell, and the shell
 // forks for anything that is not a single simple command. The fork inherits the
 // stdout pipe. Killing the shell alone leaves that child holding the write end,
 // so the read side never sees EOF and the wait never returns, however long ago
-// the deadline passed. dash made this visible on Debian and Ubuntu, but the
-// trigger is the fork, not the shell: bash forks too for `a; b`, for `a & wait`,
-// for a subshell and for a pipeline.
+// the deadline passed. The trigger is the fork, not the shell: dash forks, and
+// bash forks too for `a; b`, for `a & wait`, for a subshell and for a pipeline.
 
 // dockGroupCommand puts the shell and everything it starts into one new process
 // group, so there is a group for dockKillGroup to signal.

@@ -28,16 +28,13 @@ import (
 // The daemon pushes MsgHostsChanged when its table changes, which is what
 // starts the poll again when the first host is added.
 //
-// The second rule is that a row stays where it is. Switching onto a session on
-// build used to make build the main group at the top of the section and push
-// this machine's sessions down into a group of their own, so the row the user
-// had just clicked moved out from under the pointer and every other row moved
-// with it. Now the machine groups keep one order whatever the client is
-// attached to: this machine first, then the other machines in the daemon's
-// sorted order, overlaid with the order the user dragged them into. The
-// attached session is marked current in place, under whichever machine holds
-// it, which is the same promise BuildSessionTree makes for a session switch on
-// one machine.
+// The second rule is that a row stays where it is, so the row the user has just
+// clicked never moves out from under the pointer. The machine groups keep one
+// order whatever the client is attached to: this machine first, then the other
+// machines in the daemon's sorted order, overlaid with the order the user
+// dragged them into. The attached session is marked current in place, under
+// whichever machine holds it, which is the same promise BuildSessionTree makes
+// for a session switch on one machine.
 
 const (
 	// hostRefreshActive is the poll interval while the rail or the switcher is
@@ -174,8 +171,7 @@ func refreshFederationCmd() tea.Cmd {
 		client, err := session.DialVerbClient()
 		if err != nil {
 			// The daemon is the only thing that knows about hosts. If it cannot
-			// be reached the rail simply shows no host groups, which is what it
-			// showed before this existed.
+			// be reached the rail simply shows no host groups.
 			return FederationHostsMsg{}
 		}
 		defer func() { _ = client.Close() }()
@@ -1014,8 +1010,7 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		// It is in this slot rather than in the fold mark's cell because that
 		// cell says which way the group is folded, and that has to keep
 		// working. A folded group is exactly when this figure matters most, so
-		// taking the mark's place would have hidden it in the one state it was
-		// added for.
+		// taking the mark's place would hide it in the one state it is for.
 		fig := strconv.Itoa(blocked) + agentStateIndicator(worst)
 		right = sidebarStyle(rowBg, sidebarSeverityColor(worst, pal)).Render(fig)
 		rightW = lipgloss.Width(fig)
@@ -1031,18 +1026,16 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 	// A machine's name is secondary ink, and a machine that does not answer is
 	// muted with its rows.
 	//
-	// This used to be the full ink and bold, which made the heading the loudest
-	// thing on the rail. It is also the least actionable thing on the rail: you
-	// do not act on a machine, you act on a session under it. Emphasis should
-	// drain downward, so the session names are now the brightest ink and the
-	// heading sits one step under them.
+	// A heading is the least actionable thing on the rail: you do not act on a
+	// machine, you act on a session under it. Emphasis should drain downward,
+	// so the session names are the brightest ink and the heading sits one step
+	// under them.
 	//
-	// The objection to demoting it was real: FgDim on a machine and FgDim on
-	// the session under it are the same ink, and an ink step alone could not
-	// carry the distinction. It is not carried by ink now. The rule that runs
-	// out of the name to the right spine carries it, which is a different kind
-	// of mark rather than a louder one, so a heading still reads as a heading
-	// with colour switched off entirely.
+	// FgDim on a machine and FgDim on the session under it are the same ink,
+	// and an ink step alone cannot carry the distinction, so it is not carried
+	// by ink. The rule that runs out of the name to the right spine carries it,
+	// which is a different kind of mark rather than a louder one, so a heading
+	// still reads as a heading with colour switched off entirely.
 	here := node.Host == m.attachedMachine()
 	ink := pal.FgDim
 	if !up {

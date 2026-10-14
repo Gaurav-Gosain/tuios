@@ -25,17 +25,12 @@ import (
 // The property this file exists to hold is one line long: a dock with no
 // interval component arms no timer. Not a cheap timer, none. The scheduler
 // below parks on a channel receive when nothing is due, so a default session
-// pays for the dock exactly what it paid before there was a dock engine, and
-// BenchmarkIdleTick stays where it is.
+// pays nothing for the dock, and BenchmarkIdleTick stays where it is.
 //
-// What replaced what: the bar used to be redrawn sixty times a second whenever
-// the clock or either meter was on, because NeedsDockTick pinned the maintenance
-// tick to the normal frame rate and marked every one of those frames as needing
-// a render. A clock that shows seconds needs one frame per second and the meters
-// need one per two seconds, so that was between 60x and 120x more drawing than
-// the feature asked for. Here each of them is a component with a deadline, the
-// engine wakes for the earliest one, and a value that has not moved draws
-// nothing at all.
+// A clock that shows seconds needs one frame per second and the meters need
+// one per two seconds, not one per frame. Each of them is a component with a
+// deadline, the engine wakes for the earliest one, and a value that has not
+// moved draws nothing at all.
 //
 // Custom components are subprocesses, which is the whole of the extension
 // contract: environment in, one line of text out. Everything about them that is

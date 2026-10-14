@@ -17,13 +17,12 @@ import (
 // addresses for a gesture that meant "put this one first".
 //
 // So the drag sets a display order and nothing else, which is the same kind of
-// thing naming a workspace already is: the dock has shown a workspace's name
-// rather than its number since names existed, so what the pill says and what the
-// key presses have been separate for as long as there has been anything to say.
-// The order is one more choice of that kind, and it is held to the rule the name
-// is: it is daemon-owned and session-scoped, so every client attached to a
-// session sees the one arrangement, and it is applied at exactly one place, so
-// no two surfaces can disagree about it.
+// thing naming a workspace already is: the dock shows a workspace's name rather
+// than its number, so what the pill says and what the key presses are already
+// separate. The order is one more choice of that kind, and it is held to the
+// rule the name is: it is daemon-owned and session-scoped, so every client
+// attached to a session sees the one arrangement, and it is applied at exactly
+// one place, so no two surfaces can disagree about it.
 //
 // That one place is workspaceDisplayOrder. The dock strip, the workspace
 // switcher and the rail's terminals section all arrange through it, which is
@@ -36,9 +35,9 @@ import (
 // the strip draws live, and the release either commits the draft or performs the
 // plain switch the press deferred.
 //
-// The press cannot switch on its own the way it used to. A switch retiles the
-// panes and moves the pills, so a drag that began with one would be dragging a
-// pill that had already left under the pointer.
+// The press cannot switch on its own. A switch retiles the panes and moves the
+// pills, so a drag that began with one would be dragging a pill that had
+// already left under the pointer.
 type dockWorkspaceDragState struct {
 	PressActive bool
 	Workspace   int

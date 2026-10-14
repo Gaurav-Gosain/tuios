@@ -294,12 +294,12 @@ func newModel(options Options) *Model {
 		}
 	}
 
-	// LoadUserConfig no longer applies the appearance globals itself, so apply
+	// LoadUserConfig does not apply the appearance globals itself, so apply
 	// them here exactly once, and pass the config into NewOS so it does not
 	// re-load and re-apply.
 	//
 	// This runs BEFORE the embed options below, not after: ApplyAppearanceConfig
-	// now covers border style, dock position, the hide toggles, scrollback and
+	// covers border style, dock position, the hide toggles, scrollback and
 	// the theme, so applying the options first would let the user's config file
 	// silently overrule what the embedder asked for. Options are the outer
 	// layer here, exactly as CLI flags are in cmd/tuios.

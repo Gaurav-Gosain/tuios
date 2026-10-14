@@ -50,9 +50,9 @@ import (
 // edges, the session's panes sit at the top left of the pane area between
 // them, and the rest of that area is the leftover, drawn by renderLeftover:
 // a dotted pattern, as tmux fills it, and a line that names the client that
-// sets the size. Before this the whole client was drawn in the session's
-// size, so a right rail sat just past the panes and a blank strip ran from
-// there to the screen's edge, which read as a bug.
+// sets the size. Drawing the whole client in the session's size instead would
+// put a right rail just past the panes and run a blank strip from there to the
+// screen's edge, which reads as a bug.
 
 // windowSizeAware reports whether the daemon may hand this client a session
 // larger than its terminal. Against a daemon that predates the policy the

@@ -24,8 +24,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 	// Delete confirmation takes over the panel body.
 	if m.SessionSwitcherConfirmDelete != "" {
 		// What it would take down, counted off the same state the close dialog
-		// counts: a destructive answer given without the toll is a guess, and this
-		// one used to say only that it could not be undone.
+		// counts: a destructive answer given without the toll is a guess.
 		return m.simpleOverlayPanel("Delete session?",
 			[]string{
 				"'" + m.SessionLabel(m.SessionSwitcherConfirmDelete) + "'",

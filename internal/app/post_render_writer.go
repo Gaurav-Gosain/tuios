@@ -16,12 +16,12 @@ import (
 // renderer, the kitty and sixel passthroughs, and the text-sizing and
 // cursor-shape paths all write to the terminal from different goroutines,
 // and what keeps one from landing inside another's escape sequence is that
-// they now share this *os.File: the runtime takes a per-file write lock, so
+// they share this *os.File: the runtime takes a per-file write lock, so
 // each Write is delivered whole even when the terminal takes it in pieces.
-// Graphics used to go out through a second, private open of /dev/tty, a
-// different file with a different lock and therefore no ordering at all
-// against a frame. Callers must hand a whole sequence to one Write; a
-// sequence emitted in parts can still be split at the seams between them.
+// A second, private open of /dev/tty would be a different file with a
+// different lock and therefore no ordering at all against a frame. Callers
+// must hand a whole sequence to one Write; a sequence emitted in parts can
+// still be split at the seams between them.
 //
 // It fully satisfies the term.File interface (io.ReadWriteCloser + Fd)
 // by embedding *os.File and only overriding Write.

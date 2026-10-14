@@ -95,9 +95,9 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 
 	// Apply the process-wide render globals once, at first server startup and
 	// single-threaded, so every per-connection session shares a consistent view
-	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
-	// connection, so this replaces the old per-connection global writes that
-	// raced other sessions' render loops.
+	// of them. LoadUserConfig is pure and NewOS does not re-apply per
+	// connection: per-connection global writes would race other sessions'
+	// render loops.
 	//
 	// Frames need no global here: composeFrame hands the canvas to the
 	// bubbletea renderer unchanged, and wish configures that renderer per
@@ -398,7 +398,7 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (*app.OS, 
 		Caps: hostCaps,
 	}
 
-	// If ephemeral mode or daemon not available, use old behavior
+	// In ephemeral mode the model runs in-process, with no daemon
 	if cfg.Ephemeral {
 		return served.NewModel(opts, cfg.Overrides), nil
 	}
@@ -487,20 +487,20 @@ const DefaultSSHSessionName = "ssh-session"
 
 // chooseSSHSession picks the session for a connection that named none.
 //
-// The old rule took the first name the daemon listed when there were several,
-// which is an ordering and not a choice. Two operators connecting to one
+// Taking the first name the daemon lists when there are several would be an
+// ordering and not a choice. Two operators connecting to one
 // server could land in different sessions from one another, or in a colleague's
 // session, with nothing on screen saying which or why. The listing's order is
 // not part of any contract, so the same connection could answer differently
 // after a session was created or removed.
 //
-// The three cases are now three answers rather than two answers and a lottery:
+// The three cases are three answers rather than two answers and a lottery:
 //
 //   - No sessions. There is nothing to choose between, so the connection gets
-//     the default name and the daemon creates it. This is unchanged.
-//   - One session. There is no ambiguity, so it gets that one. Also unchanged,
-//     and the case that keeps a single-session server behaving the way someone
-//     would expect.
+//     the default name and the daemon creates it.
+//   - One session. There is no ambiguity, so it gets that one. This is the
+//     case that keeps a single-session server behaving the way someone would
+//     expect.
 //   - Several. The connection did not say, and neither did the person, so
 //     picking one of theirs is a guess wearing a fact's clothes. It gets the
 //     default name instead: deterministic, the same for every connection, and

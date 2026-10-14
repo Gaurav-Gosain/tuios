@@ -87,7 +87,7 @@ func (fx *copyModeEffects) Flash(start, end terminal.Position) {
 // apply runs the queued effects against the real OS and Window. It must be
 // called with the window's I/O lock NOT held.
 //
-// The order mirrors what the handlers used to do inline: leave copy mode
+// The order is fixed: leave copy mode
 // first, then invalidate the cache, then notify, then produce the tea.Cmd.
 func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, tea.Cmd) {
 	if fx.exitCopyMode {

@@ -272,9 +272,9 @@ func (s *ScrollingLayout) ResolveColumnWidth(colIndex, screenWidth int) int {
 
 // MaxColumnWidth is the widest a column may be resolved to, in cells.
 //
-// The cap used to be nine tenths of the screen, written here as a literal. That
-// is where the next column stops peeking in at the edge, which is the only
-// thing that says the strip has one, and it is the right default. It is not
+// The default cap is nine tenths of the screen. That is where the next column
+// stops peeking in at the edge, which is the only thing that says the strip
+// has one, and it is the right default. It is not
 // somebody else's decision to make for a person who wants one column and the
 // whole screen: appearance.scroll_column_max is theirs, and MaxProportion is
 // how it reaches this far.

@@ -37,8 +37,8 @@ func scrollbarThumbHeight(contentH, scrollbackLen int) int {
 //
 // The thumb is a position readout, so it exists only while there is a position
 // to read: a bar pinned to the bottom at the live tail is chrome answering a
-// question nobody asked, and it is the only thing that used to drop a lone
-// scrolled-to-tail pane off the fullscreen fast path.
+// question nobody asked, and it would drop a lone scrolled-to-tail pane off
+// the fullscreen fast path.
 func windowNeedsScrollbar(window *terminal.Window, s *config.Settings) bool {
 	if s.HideScrollbar {
 		return false

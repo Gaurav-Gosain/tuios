@@ -8,8 +8,8 @@ import (
 //
 // Everything in [appearance] renders as cells and reaches xterm.js intact, so
 // the whole of it applies over the web. Two of the [notifications.agent] sinks
-// do not, and both used to fail silently: an agent would finish, the config
-// said to say so, and nothing said anything.
+// do not, and neither may fail silently: an agent would finish, the config
+// says to say so, and nothing would say anything.
 //
 //   - notify writes OSC 9 in-band (see host_notify.go). sip's terminal
 //     registers OSC handlers for 0, 1, 2, 4, 8, 10-12, 52, 104, 110-112 and
@@ -27,8 +27,8 @@ import (
 // browser, where sip flashes the terminal's outline.
 //
 // Only a value the user wrote earns a notice. notify defaults to true, so
-// reading the resolved policy reported the default on every browser attach,
-// to users who had no [notifications] table at all.
+// reading the resolved policy would report the default on every browser
+// attach, to users who have no [notifications] table at all.
 
 // browserAlertNotices names the alert sinks this session's config asks for and
 // a browser cannot deliver. It returns nothing when the config file does not

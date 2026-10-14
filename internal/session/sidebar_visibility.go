@@ -10,9 +10,9 @@ import (
 //
 // The rail is chrome, and the panes' box is settled across every client of a
 // session (see LayoutReserve): the daemon takes the largest reserve any client
-// asks for. So a rail one client hid while another still drew it took nothing
-// back for the panes, and the client that hid it was left with a blank band
-// where the rail had been. Showing or hiding the rail is therefore session
+// asks for. So a rail one client hides while another still draws it takes
+// nothing back for the panes, and the client that hid it is left with a blank
+// band where the rail was. Showing or hiding the rail is therefore session
 // state. Every client of a session shows it or hides it together, and the
 // panes grow or shrink on every screen at once.
 //
@@ -20,7 +20,7 @@ import (
 // client that toggles the rail sends MsgSidebarVisibility, the daemon applies
 // it under mutateState, Version advances, and every client (the sender
 // included) is sent the result. A push never carries the field, so two
-// clients cannot argue over it the way issue #162 describes.
+// clients cannot argue over it by pushing their own copies.
 //
 // Only whether the rail is shown is shared. Its width stays each viewer's
 // own, because it says how much of one screen the rail may have, and the

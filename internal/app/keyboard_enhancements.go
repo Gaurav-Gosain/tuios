@@ -134,7 +134,7 @@ func (m *OS) NoteKeyboardEnhancements(msg tea.KeyboardEnhancementsMsg) {
 // base-layout key behind it. The caller drops such a key rather than type it
 // into the pane. It is only ever true for a host that has granted report-all
 // keys before, so a terminal that never answers, or never grants the flag,
-// keeps the old behaviour.
+// never has a key dropped.
 func (m *OS) AllKeysPending() bool {
 	return m.hostGrantedAllKeys && m.KeyboardFlags&ansi.KittyReportAllKeysAsEscapeCodes == 0
 }

@@ -186,11 +186,10 @@ func buildUI(d overlay.Depth) overlay.Palette {
 
 		Fg:    charmtone.Butter,
 		FgDim: charmtone.Smoke,
-		// One step up the ramp from Oyster, which was the quiet tier's colour
-		// until it was measured: 2.60:1 on the canvas, 1.81:1 on the surface a
-		// settings hint is written on, 1.35:1 on a card. Quiet is a tier of the
-		// hierarchy, not permission to be unreadable, and every surface that
-		// wanted a quiet ink had to work around the old one or lose the label.
+		// One step up the ramp from Oyster, which measures 2.60:1 on the
+		// canvas, 1.81:1 on the surface a settings hint is written on, 1.35:1
+		// on a card. Quiet is a tier of the hierarchy, not permission to be
+		// unreadable.
 		FgMute: charmtone.Squid,
 
 		Accent:       charmtone.Charple,

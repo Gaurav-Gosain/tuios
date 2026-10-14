@@ -11,9 +11,9 @@ import (
 )
 
 // The effect picker is the theme picker's third sibling. screensaver.effect
-// used to accept five values and a cycler stepped through them; it accepts
-// thirty-six now, and a control that costs one keypress per stop is the wrong
-// shape for a set that size. The next largest closed list in the panel is ten.
+// accepts thirty-six values, and a control that costs one keypress per stop is
+// the wrong shape for a set that size. The next largest closed list in the
+// panel is ten.
 //
 // Names alone would not fix it. orbittingvolley, synthgrid, binarypath and
 // errorcorrect say nothing about what lands on the screen, so this picker does

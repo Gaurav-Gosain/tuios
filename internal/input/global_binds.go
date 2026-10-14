@@ -9,16 +9,14 @@ import (
 // sectionAction resolves a key press against one registry section, trying every
 // spelling the terminal might have sent it as.
 //
-// This is what replaced the hand-rolled isCtrlP and isLauncherKey matchers, and
-// it has to keep the property they existed for. One physical chord reaches tuios
-// under several names depending on what the host negotiated: Ctrl+P stringifies
+// One physical chord reaches tuios under several names depending on what the host negotiated: Ctrl+P stringifies
 // to "ctrl+p" under the legacy control byte and CSI-u, to "p" under Kitty
 // associated-text reporting, and to "ctrl+P" under alternate-key reporting.
 // bindingKeys offers String() and Keystroke() in turn, which covers the first
 // three, and lookupKey lowercases compound keys, which covers the fourth. The
 // lock modifiers never appear in either spelling, so Num Lock (on by default on
-// most keyboards) no longer hides the binding the way an exact Mod comparison
-// did. TestGlobalBindsAcrossEncodings pins all of it.
+// most keyboards) does not hide the binding the way an exact Mod comparison
+// would. TestGlobalBindsAcrossEncodings pins all of it.
 func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string {
 	if o.KeybindRegistry == nil {
 		return ""
@@ -31,15 +29,11 @@ func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string 
 // handleGlobalBinds runs the global-scope binds, the ones that act in window
 // mode and terminal mode alike, and reports whether the key was consumed.
 //
-// The palette and the launcher used to be literals in both mode handlers. As
-// literals they were invisible to `tuios keybinds doctor`, unrebindable, and
+// It goes through the dispatcher, so the section holds whatever the dispatcher
+// knows, as its documentation as general promises. The palette and the
+// launcher are registered like every other action: literals in the mode
+// handlers would be invisible to `tuios keybinds doctor`, unrebindable, and
 // silently ahead of anything a user had put on the same key.
-//
-// They then became two cases of a switch here, which fixed that and left a
-// smaller version of the same fault: the section is documented as general, and
-// anything a user put in it other than those two did nothing and said nothing.
-// It goes through the dispatcher now, so the section holds whatever the
-// dispatcher knows, and the two actions are registered like every other.
 func handleGlobalBinds(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	// Each case records the action it ran, the way Dispatch does for every
 	// action that goes through the dispatcher. These two do not, so without the

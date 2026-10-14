@@ -541,7 +541,7 @@ func (d *Daemon) waitWindowIdle(sessionName, window string, idleMs int, deadline
 // waitAgentState resolves when a window's agent state becomes one of the states
 // named in until. With a window it watches that pane; without one it watches the
 // whole session, which is the shape automation actually wants: "tell me when any
-// agent here needs input" was previously only expressible as a poll loop over
+// agent here needs input" would otherwise take a poll loop over
 // get-agent-state.
 //
 // It subscribes before the initial check, so a transition in the race window is

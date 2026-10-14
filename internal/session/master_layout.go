@@ -17,9 +17,9 @@ import (
 // session has to lay a workspace out with the same ones. They are never carried
 // in a client's state push. A client that changes one sends MsgMasterLayout,
 // the daemon applies it under mutateState, Version advances, and every client
-// (the sender included) is sent the result. This is the end state issue #162
-// names for every session-owned field, so these fields start there instead of
-// adding another merge rule.
+// (the sender included) is sent the result. This is the rule every
+// session-owned field heads for, so these fields start there instead of adding
+// another merge rule.
 //
 // The op is recorded with noteTreeOpLocked. Like a tree op it changes one
 // field that no push carries, so a push built before it has missed nothing it

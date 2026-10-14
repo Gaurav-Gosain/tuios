@@ -123,11 +123,10 @@ func (e *Emulator) parseThemedColor(params ansi.Params, i int) (color.Color, int
 
 // handleSgr handles Select Graphic Rendition (SGR) escape sequences.
 //
-// Every SGR goes through readStyleWithTheme, with or without a theme. The
-// unthemed case used to go to uv.ReadStyle, which reads an underline
+// Every SGR goes through readStyleWithTheme, with or without a theme, so a
+// pane draws the same either way. uv.ReadStyle reads an underline
 // subparameter it cannot name, such as "4:7", on as a bare SGR 7 and turns the
-// cell reverse, and which drops SGR 21. The themed path already handled both,
-// so a pane drew differently depending on whether a theme was set. The colours
+// cell reverse, and it drops SGR 21. The colours
 // agree either way: with no palette slot claimed, PaletteColor and
 // IndexedColor give the same plain palette entries uv.ReadStyle does.
 func (e *Emulator) handleSgr(params ansi.Params) {

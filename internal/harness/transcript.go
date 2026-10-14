@@ -10,7 +10,7 @@ import (
 
 // Transcript says where a harness keeps its own record of a session, so the
 // daemon can read what the agent said it did rather than infer it from the
-// screen. A manifest with no [transcript] block gets exactly today's behaviour,
+// screen. A manifest with no [transcript] block gets no transcript reading,
 // which is what almost every harness will have: most keep no such file, and the
 // ones that do keep it somewhere of their own choosing.
 //
@@ -187,7 +187,7 @@ func placeholders(tmpl string) ([]string, error) {
 
 // TranscriptFor returns the transcript block for a harness id, or nil when it
 // has none. nil is the answer for almost every harness and means the daemon
-// behaves exactly as it did before this existed.
+// reads no transcript for it.
 func (r *Registry) TranscriptFor(id string) *Transcript {
 	m := r.Lookup(id)
 	if m == nil || !m.Transcript.Enabled() {

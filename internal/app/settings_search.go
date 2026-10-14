@@ -7,14 +7,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The settings page is fourteen tabs and nearly two hundred rows, and the only
-// way to a row was to know which tab it was filed under. The search line finds
-// a row from anything a person might remember about it: what it is called,
-// its config key, the value it has now, or a word from its description. The
-// results come from every tab at once, each marked with the tab it lives on,
-// and the row found is the real row: enter, the arrows and a click act on it
-// where it stands, so a person who found a setting never has to go and find
-// it again to change it.
+// The settings page is fourteen tabs and nearly two hundred rows, and without
+// search the only way to a row is to know which tab it is filed under. The
+// search line finds a row from anything a person might remember about it: what
+// it is called, its config key, the value it has now, or a word from its
+// description. The results come from every tab at once, each marked with the
+// tab it lives on, and the row found is the real row: enter, the arrows and a
+// click act on it where it stands, so a person who found a setting never has to
+// go and find it again to change it.
 
 // settingsField is the part of a row a search matched.
 type settingsField int

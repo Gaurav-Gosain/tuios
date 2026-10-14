@@ -7,20 +7,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The settings page used to be a hand-written list. It reached 54 rows against
-// a registry of 91 options, and every option added after a row was last written
-// was reachable by an agent through set-config and by a person only by editing
-// the file. Nothing failed when the two drifted, because nothing tied them
-// together.
-//
-// A row is now derived from its registry entry. The registry already carries
-// the type, the accepted set, the range, the description and the default, which
-// is every question the panel was asking of each hand-written row: a bool is a
-// toggle, an option with Accepted is a cycler, an int with a Min and Max is a
-// stepper, and a string is a field. What is left hand-written is the handful of
-// rows that genuinely behave differently (a picker, a value the config does not
-// spell the way the row does), and TestSettingsPanelReachesEveryOption fails the
-// build if an option has neither.
+// A settings row is derived from its registry entry, so an option an agent can
+// reach through set-config is one a person can reach on the page too. The
+// registry already carries the type, the accepted set, the range, the
+// description and the default, which is every question the panel asks of a row:
+// a bool is a toggle, an option with Accepted is a cycler, an int with a Min
+// and Max is a stepper, and a string is a field. What is left hand-written is
+// the handful of rows that genuinely behave differently (a picker, a value the
+// config does not spell the way the row does), and
+// TestSettingsPanelReachesEveryOption fails the build if an option has neither.
 
 // settingsRow declares one row of a category: a registry path to derive from,
 // or a row written by hand. Exactly one is set.
@@ -389,10 +384,9 @@ func (m *OS) registryItem(path string) settingItem {
 		}
 		item.numMin, item.numMax = lo, hi
 		// A gauge only on a proportion, where both ends of the range are places
-		// the value would really sit. It used to be drawn on any option with a
-		// ceiling, which put one beside every count and timeout in the panel,
-		// where it sat empty whatever the value was, because those ceilings are
-		// guards against a silly number and not the top of a scale.
+		// the value would really sit. On a count or a timeout the ceiling is a
+		// guard against a silly number and not the top of a scale, so a gauge
+		// there would sit empty whatever the value is.
 		if o.Percent {
 			item.meter = func(m *OS) float64 {
 				if hi <= lo {

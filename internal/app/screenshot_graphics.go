@@ -212,29 +212,27 @@ func openInOSViewer(path string) error {
 // own proportions.
 //
 // a=p scales the image to whatever box it is given, so handing it the whole
-// panel body stretched a wide capture tall and a tall one wide. The box is
+// panel body would stretch a wide capture tall and a tall one wide. The box is
 // reduced on one axis instead, which letterboxes rather than distorts. A
-// picture whose size is unknown gets the box unchanged, which is the old
-// behaviour and no worse than it was.
+// picture whose size is unknown gets the box unchanged.
 //
-// The cell size is an argument rather than something this reads for itself.
-// That is the whole bug the second time round: it read the launcher's icon box,
-// which is two cells wide, so every sum here was done in units twice the width
-// of a cell and the answer came out half as wide as it should be. A caller now
-// has to say which pixels it means.
+// The cell size is an argument rather than something this reads for itself, so
+// a caller has to say which pixels it means. The launcher's icon box, for one,
+// is two cells wide: sums done in its units come out half as wide as they
+// should be.
 func fitBoxToPicture(cols, rows, pixelW, pixelH, cellW, cellH int) (int, int) {
 	if pixelW <= 0 || pixelH <= 0 || cellW <= 0 || cellH <= 0 || cols <= 0 || rows <= 0 {
 		return cols, rows
 	}
 	boxW, boxH := cols*cellW, rows*cellH
 	// Whichever axis runs out first sets the scale. The reduced axis is rounded
-	// to the nearest cell rather than floored, which was the last of the aspect
-	// faults: that axis is the small one by definition, so half a cell of it is
-	// a large fraction. A wide, short region letterboxed to 2.775 rows floored
-	// to 2, drawing the picture twenty-eight percent squatter than it is;
-	// rounding gives 3, which is eight percent the other way. The axis that is
-	// not reduced loses nothing, and the axis that is cannot do better than half
-	// a cell, because a cell is the smallest thing a placement is measured in.
+	// to the nearest cell rather than floored: that axis is the small one by
+	// definition, so half a cell of it is a large fraction. A wide, short
+	// region letterboxed to 2.775 rows floors to 2, drawing the picture
+	// twenty-eight percent squatter than it is; rounding gives 3, which is
+	// eight percent the other way. The axis that is not reduced loses nothing,
+	// and the axis that is cannot do better than half a cell, because a cell is
+	// the smallest thing a placement is measured in.
 	if pixelW*boxH < pixelH*boxW {
 		return clampInt(roundDiv(pixelW*boxH/pixelH, cellW), 1, cols), rows
 	}

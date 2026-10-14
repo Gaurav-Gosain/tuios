@@ -188,14 +188,14 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
 		// A pane that slides takes its new width along the way, and the snap
 		// tells the guest the size once when it lands, as every tiler's slide
-		// does. The strip used to resize first and slide only the position, so
-		// a column changing width jumped to it at the old position: when a zoom
-		// moved to the next column, the column losing it shrank at once while
-		// the strip was still on its way, and the screen showed empty ground
-		// between it and its neighbour for the whole slide.
+		// does. Resizing first and sliding only the position would make a column
+		// changing width jump to it at the old position: when a zoom moves to the
+		// next column, the column losing it would shrink at once while the strip is
+		// still on its way, and the screen would show empty ground between it and its
+		// neighbour for the whole slide.
 		//
 		// Not while a host resize is deferred. The pane takes the size visually
-		// now and the real one on the release, as before.
+		// now and the real one on the release.
 		slide := animate && alreadyPlaced && !deferring && dur > 0 && (moved || resized)
 		// A changed allowance owes the guest a new box even at the same
 		// rectangle, and owes it now: the pane stops or starts drawing its
@@ -232,10 +232,10 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		// A snap left over from an earlier placement owns this window's geometry
 		// and stamps its own rectangle back on the next tick, without resizing
 		// the emulator with it. The branch above only retires one when it creates
-		// a replacement, so a column that changed width without changing column
-		// (the host resizing while the strip stays put) fell through to here with
-		// the old snap still live, and one tick later the pane was drawing at one
-		// size while its guest wrote at another.
+		// a replacement, so a column that changes width without changing column
+		// (the host resizing while the strip stays put) falls through to here with
+		// the old snap still live, and left alone, one tick later the pane would draw
+		// at one size while its guest writes at another.
 		m.CancelSnapAnimation(win)
 		win.X = rect.X
 		win.Y = rect.Y
@@ -378,13 +378,12 @@ func (m *OS) ScrollingScrollViewport(delta int) {
 // column the user can already see does not need the strip to move under them.
 // ScrollToFocusedColumn is the other rule and it belongs to the eight keyboard
 // paths above, where the user asked to be taken to a column and wants all of
-// it. This called that one, so any of the three events above scrolled the strip
-// to the focused column even when that column had never left the screen.
-//
-// The report was the workspace switch. Switching away and back restores the
-// workspace's saved focus, so a round trip threw away wherever the user had
-// scrolled that workspace's strip to. The offset is per workspace and no client
-// and no sync loses it; this call overwrote it in place.
+// it. Used here, it would scroll the strip to the focused column on any of the
+// three events above even when that column never left the screen. A switch
+// away from a workspace and back restores the workspace's saved focus, so a
+// round trip would throw away wherever the user had scrolled that
+// workspace's strip to. The offset is per workspace and no client and no sync
+// loses it.
 //
 // Still open, and deliberately not decided here: a strip parked so that the
 // focused column is entirely off screen is revealed on the way back, because
@@ -411,18 +410,18 @@ func (m *OS) ScrollingOnFocusChange() {
 //
 // Focus moves for several reasons and they are not the same statement. A
 // workspace switch restoring its saved focus, or a focus the daemon moved, says
-// nothing about where the viewport should be, and revealing on those threw away
-// wherever the user had scrolled that workspace's strip. That is why every focus
-// change went to the least-scroll rule. A click is the other kind: a column half
-// off the edge that you deliberately clicked is one you picked to work in.
+// nothing about where the viewport should be, and revealing on those would
+// throw away wherever the user had scrolled that workspace's strip. That is
+// why every other focus change goes to the least-scroll rule. A click is the
+// other kind: a column half off the edge that you deliberately clicked is one
+// you picked to work in.
 //
 // It waits for the release, and that is the whole trick. Revealing on the press
 // moves the pane out from under the pointer, so a press that turns out to be the
 // start of a drag, a title grab, a resize, a selection, measures every later
-// coordinate against where the pane used to be. A title drop landed a pane
-// twelve cells off that way. By the release the gesture is over and it is safe,
-// and a gesture that moved is not a click so it does not reveal at all.
-//
+// coordinate against where the pane was before it moved, and a title drop
+// would land a pane twelve cells off. By the release the gesture is over and it
+// is safe, and a gesture that moved is not a click so it does not reveal at all.
 // appearance.niri_click_reveals turns it off, for anyone who would rather the
 // strip stayed exactly where they left it.
 func (m *OS) FocusWindowFromClick(i, x, y int) *OS {
@@ -470,9 +469,9 @@ func (m *OS) RevealFocusedColumn() {
 //
 // Hovering a column with that setting on is the same statement clicking one is:
 // it is how you pick the pane to work in, and there is no other gesture to
-// make. Focus went through the least-scroll rule, which by design leaves a
-// column that is already partly visible where it is, so the pane you had just
-// focused was the one you could not see.
+// make. Focus goes through the least-scroll rule, which by design leaves a
+// column that is already partly visible where it is, so without this the pane
+// you had just focused could be the one you cannot see.
 //
 // Unlike the click path there is nothing to wait for. A press might turn out to
 // be a drag, which is why that one reveals on the release; a motion event is
@@ -734,7 +733,7 @@ func (m *OS) scrollingResizeColumn(delta int) {
 		return
 	}
 	col := &sl.Columns[sl.FocusedCol]
-	// Cap at scroll_column_max, not the nine tenths the strip used to write
+	// Cap at scroll_column_max, not at nine tenths of the view: somebody who
 	// here: somebody who set scroll_column_max = 100 wants a full-width column
 	// from the resize keys, not a stuck one at 90%. The other layouts'
 	// resize_width_N actions accept up to 90, which mirrors that ceiling; the

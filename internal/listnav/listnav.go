@@ -1,10 +1,6 @@
 // Package listnav is the one rule every vertical list in the TUI moves by.
 //
-// Each list used to carry its own copy of "add delta and clamp", and the
-// copies had drifted: the context menu and the tape manager wrapped at the
-// ends, the settings page, the palette and the pickers stopped, and home, end
-// and the page keys worked in two lists out of twenty. A list now asks this
-// package where the cursor goes, and the keys that move it are read in one
+// A list asks this package where the cursor goes, and the keys that move it are read in one
 // place (Motion), so the rule is the same wherever a person meets it.
 //
 // The rule:

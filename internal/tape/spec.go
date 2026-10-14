@@ -13,10 +13,7 @@ import (
 
 // argSpec is what one command takes: how many arguments, and a check of their
 // values. The parser holds every command to its spec, so a tape that passes
-// validate runs every argument it was given. Before this, most commands
-// dropped what followed them without a word: Split horizontal parsed and then
-// failed at run time for want of a direction, and NewWindow "editor" opened an
-// unnamed window.
+// validate runs every argument it was given.
 type argSpec struct {
 	min, max int // max < 0 is no limit
 	usage    string

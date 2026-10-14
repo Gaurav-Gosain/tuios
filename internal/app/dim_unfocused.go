@@ -42,9 +42,9 @@ import (
 // built, and FocusWindow deliberately gives the pane being left the lighter
 // invalidation that keeps that string, so without a key the pane you just
 // stepped away from would keep serving the undimmed frame until its guest next
-// wrote something. Keying the cache on the dim is the fix that no focus path
-// can get around, because it is checked where the cache is used rather than
-// where focus moves.
+// wrote something. Keying the cache on the dim holds for every focus path,
+// because it is checked where the cache is used rather than where focus
+// moves.
 func paneDim(isFocused bool, s *config.Settings) int {
 	if isFocused {
 		return 0

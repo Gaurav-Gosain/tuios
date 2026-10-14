@@ -14,14 +14,14 @@ type WinsizeSetter interface {
 //
 // Resize alone is not enough: xpty's UnixPty.Resize writes zero pixels, and
 // kitty graphics and sixel guests read the pixel size to scale their images.
-// Following it with a second TIOCSWINSZ for the pixels changed the struct a
-// second time, so the kernel signalled the guest twice for one resize, and in
-// between the guest could read a size with no pixels in it.
+// Following it with a second TIOCSWINSZ for the pixels changes the struct a
+// second time, so the kernel signals the guest twice for one resize, and in
+// between the guest can read a size with no pixels in it.
 //
 // A pixel size of zero means the host's cell size is not known yet. The
 // pixels are then taken from the fallback cell, the one the emulator answers
 // XTWINOPS with until it is told the host's. A guest that divides by the
-// pixel size must never read a zero (issue #506).
+// pixel size must never read a zero.
 //
 // A pty that is a WinsizeSetter gets the pixels. Anything else is resized in
 // cells only, which is all it can carry.

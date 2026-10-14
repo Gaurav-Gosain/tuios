@@ -94,8 +94,9 @@ func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) 
 // The distinction is the one list-glyphs reports in two columns. A set states
 // only the roles it changes, and a role whose glyph is the wrong width for its
 // slot is dropped back to the default silently, because a window control the
-// pointer no longer lands on is the worse failure. Silently on screen too was
-// the gap: the set looked selected and drew someone else's shapes.
+// pointer no longer lands on is the worse failure. The detail line says so,
+// because a set that looks selected and draws someone else's shapes is a gap
+// too.
 func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) []string {
 	bg := pal.Surface
 	blank := overlay.Style(bg).Render(" ")

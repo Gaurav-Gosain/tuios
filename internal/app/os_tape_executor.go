@@ -353,8 +353,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 	}
 
 	// The same two words the daemon's session-info uses, so a caller can
-	// dispatch on the field without caring which side answered. This copy
-	// used to say "bsp" for every tiling layout, scrolling included.
+	// dispatch on the field without caring which side answered.
 	tilingMode := "floating"
 	if m.AutoTiling {
 		tilingMode = "tiling"
@@ -581,8 +580,8 @@ func (m *OS) FocusWindowByName(name string) error {
 //
 // In a daemon session the name is the daemon's: it is what every read verb
 // answers with and what survives a detach, so renaming locally and hoping a
-// later sync carried it is how a rename could report success while list-windows
-// kept the old name. The client redraws when the daemon pushes the change back.
+// later sync carries it could report success while list-windows kept the old
+// name. The client redraws when the daemon pushes the change back.
 func (m *OS) RenameWindowByID(windowID, name string) error {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		return m.DaemonClient.SendIntent("RenameWindow", windowID, name)
@@ -681,8 +680,8 @@ func (m *OS) SnapByDirection(direction string) error {
 		return errNoFocusedWindow
 	}
 
-	// An unrecognized direction used to fall through to SnapTopLeft, so a typo
-	// snapped the window somewhere the tape never asked for.
+	// An unrecognized direction must not fall through to SnapTopLeft: a typo
+	// would snap the window somewhere the tape never asked for.
 	var quarter SnapQuarter
 	switch direction {
 	case "left":
@@ -736,11 +735,11 @@ func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 	return fmt.Errorf("window not found: %s", windowID)
 }
 
-// errTilingOff is what the BSP commands report when tiling is off. They used to
-// return nil and do nothing, so a tape whose EnableTiling had not taken effect
-// silently skipped every Split and then typed the next command into whatever
-// pane happened to be focused. A tape command that quietly does nothing is the
-// worst kind of failure to debug, so it says so instead.
+// errTilingOff is what the BSP commands report when tiling is off. Returning
+// nil and doing nothing would let a tape whose EnableTiling had not taken
+// effect silently skip every Split and then type the next command into
+// whatever pane happens to be focused. A tape command that quietly does
+// nothing is the worst kind of failure to debug, so it says so instead.
 var errTilingOff = errors.New("tiling is not enabled; run EnableTiling before this command")
 
 // errNoFocusedWindow is what the commands that act on the focused window report
@@ -960,13 +959,11 @@ func (m *OS) SetConfig(path, value string) error {
 
 // setConfigFromRegistry applies any option the config registry knows.
 //
-// The switch above is six paths, hand-written, and it was the whole of what a
-// running tuios could be told to change. Everything else in the file, which is
-// most of the sidebar and all but one of the dock's settings, could be written
-// into a config file and not changed while running. The registry already
-// describes every settable path and can set one on a UserConfig, so the live
-// path is that plus the funnel that pushes a config onto the globals the
-// renderer reads.
+// The switch above is six paths, hand-written. Everything else in the file,
+// which is most of the sidebar and all but one of the dock's settings, reaches
+// a running tuios through here. The registry already describes every settable
+// path and can set one on a UserConfig, so the live path is that plus the
+// funnel that pushes a config onto the globals the renderer reads.
 func (m *OS) setConfigFromRegistry(path, value string) error {
 	if _, ok := config.LookupOption(path); !ok {
 		// The bare spelling of an appearance key is accepted here for the same
@@ -1063,12 +1060,9 @@ func (m *OS) SetDockbarPosition(position string) error {
 
 // SetBorderStyle changes the window border style.
 func (m *OS) SetBorderStyle(style string) error {
-	// Checked against config.BorderStyles rather than a list written here. The
-	// list written here was seven of the styles the app has, and it was the
-	// runtime gate: outer-half-block and inner-half-block worked from the config
-	// file and were refused by set-config, which reported the refusal as a
-	// client that would not take the change rather than as a style that does
-	// not exist.
+	// Checked against config.BorderStyles rather than a list written here, so
+	// set-config takes every style the config file takes, and refuses only a
+	// style that does not exist.
 	if !slices.Contains(config.BorderStyles, style) {
 		return fmt.Errorf("invalid border style: %s (use: %s)",
 			style, strings.Join(config.BorderStyles, ", "))

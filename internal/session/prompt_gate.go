@@ -11,8 +11,9 @@ import (
 // drops keys, a TUI that detects a paste by timing turns an Enter inside the
 // burst into a newline, and a TUI with a different submit key leaves the text in
 // its input box. In every one of those cases the prompt sits there unsent, and
-// until now ask-agent waited out its settle time and returned an empty reply as
-// if the agent had nothing to say, and fan reported the prompt as sent.
+// without a check ask-agent would wait out its settle time and return an empty
+// reply as if the agent had nothing to say, and fan would report the prompt as
+// sent.
 //
 // So after the Enter the pane has a few seconds to show that it took the
 // prompt, which is what herdr calls the agent_prompt_stalled check:

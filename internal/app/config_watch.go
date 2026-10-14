@@ -11,14 +11,13 @@ import (
 
 // The config file watcher, for every client.
 //
-// It used to be installed by one entry point, bare `tuios`, so an edit to the
-// config file reached a standalone client and nothing else: not `tuios
-// attach`, which is what startup.daemon = true turns bare `tuios` into, not a
-// session over SSH and not a browser tab. The watcher is started here, by the
-// model, in Init, so a client cannot be built without it. What it delivers is
-// applied through ApplyReloadedConfig, which writes this session's settings
-// and never the process globals, which is what makes it safe in a server that
-// holds several sessions.
+// The watcher is started here, by the model, in Init, so a client cannot be
+// built without it: bare `tuios`, `tuios attach` (which is what
+// startup.daemon = true turns bare `tuios` into), a session over SSH and a
+// browser tab all get it. What it delivers is applied through
+// ApplyReloadedConfig, which writes this session's settings and never the
+// process globals, which is what makes it safe in a server that holds several
+// sessions.
 //
 // One watcher per process, not per session. A server holds one session per
 // connection, and an inotify instance per connection is a limit waiting to be

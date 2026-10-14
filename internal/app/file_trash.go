@@ -44,7 +44,7 @@ import (
 // per-volume trash for files on other filesystems, and this does not implement
 // it. A file on another disk cannot be renamed into the home trash, so the
 // delete refuses and says to use permanent delete instead, which is on a key of
-// its own. Copying the file into the home trash instead was the other option
+// its own. Copying the file into the home trash instead is the other option
 // and is worse: a delete that silently duplicates a large tree onto the home
 // disk is not what anybody pressed.
 //

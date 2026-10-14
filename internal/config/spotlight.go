@@ -23,10 +23,8 @@ type SpotlightConfig struct {
 // What the beam follows.
 //
 // Mouse is the default because it is what a person means by a spotlight: they
-// point at the thing they are talking about. Cursor was the first default and
-// it was chosen on cost rather than on what anyone asked for, which is the
-// wrong way round for a feature whose whole job is to put the light where the
-// audience should look.
+// point at the thing they are talking about, and the whole job of the feature
+// is to put the light where the audience should look.
 //
 // The cost is real and it is why cursor stays. A cursor-anchored beam moves
 // only on frames that are being composed anyway, because getRealCursor already

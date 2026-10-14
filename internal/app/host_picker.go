@@ -16,9 +16,9 @@ import (
 
 // The machine picker: which machine a new window's process runs on.
 //
-// A session can hold windows whose processes are on different machines, and
-// until now the only way to make one was `tuios new-window --host`. This is
-// the way from inside the UI.
+// A session can hold windows whose processes are on different machines.
+// `tuios new-window --host` makes one from the command line, and this is the
+// way from inside the UI.
 //
 // It is a picker rather than a prompt because the answer is one of a known
 // list, and a typed machine name is a typo waiting to become a twenty second
@@ -302,9 +302,9 @@ func (m *OS) windowHostUp(name string) bool {
 // made. This only reports the failure, which is the half no push can carry.
 //
 // The call goes to the daemon that holds the session: this machine's, or the
-// attached machine's through the link. It used to go to this machine's daemon
-// always, so from a session on another machine the window was made in a
-// session of the same name here, or not at all.
+// attached machine's through the link. Sent to this machine's daemon from a
+// session on another machine, the window would be made in a session of the
+// same name here, or not at all.
 func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 	name := m.SessionName
 	dial := m.sessionDaemonDialer()
@@ -355,8 +355,8 @@ func (m *OS) ApplyNewWindowOnHost(msg NewWindowOnHostMsg) {
 }
 
 // hostPickerActivate runs row idx, for a click. It goes through ChooseHost,
-// as enter does, so a click in the session picker makes a session. It used to
-// make a window whatever the picker was open for.
+// as enter does, so a click in the session picker makes a session, not a
+// window.
 func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	filtered := FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery)
 	if idx < 0 || idx >= len(filtered) {

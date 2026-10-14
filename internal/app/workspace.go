@@ -194,11 +194,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// mid-animation. A pane left at an interpolated rectangle keeps it until
 	// something retiles the workspace, which may be never.
 	//
-	// Land each one where it was already heading. The old code recomputed a
-	// master-stack layout instead (the wrong rectangles under BSP or scrolling)
-	// and stamped Width and Height straight onto the window, so the emulator and
-	// the guest kept the size the pane had before the switch and only heard the
-	// real one on some later, unrelated action.
+	// Land each one where it was already heading, through the resize path, so
+	// the emulator and the guest hear the real size now. A recomputed
+	// master-stack layout would be the wrong rectangles under BSP or scrolling.
 	if len(m.Animations) > 0 {
 		m.landSnapAnimations()
 		// Anything else in flight belongs to a workspace that is leaving the
@@ -526,17 +524,10 @@ func (m *OS) GetWorkspaceWindowCount(workspace int) int {
 
 // TileVisibleWorkspaceWindows lays out the panes of the workspace on screen.
 //
-// It is TileAllWindows, which is the only tiler there is. It used to defer to
-// it for BSP and scrolling and keep a copy of the master-stack path for itself,
-// on the grounds that the other two carry geometry a generic tiler would
-// overwrite. The copy then fell behind everything the real one learned: the
+// It is TileAllWindows, which is the only tiler there is. A copy of any one
+// layout's path here would fall behind everything the real one handles: the
 // zoom camera, the skip for a pane the pointer is dragging, the open animation,
 // and the deferred resize a live drag needs.
-//
-// The camera is what made that visible. Switching workspaces and coming back
-// ran this copy, which laid the panes out at the screen's own size while the
-// zoom flag survived, so the dock still said the workspace was zoomed and the
-// view was not.
 func (m *OS) TileVisibleWorkspaceWindows() {
 	m.TileAllWindows()
 }

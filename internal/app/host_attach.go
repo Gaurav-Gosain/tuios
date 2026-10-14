@@ -144,7 +144,7 @@ func (d hostDial) open() (*session.TUIClient, *session.SessionState, error) {
 // It is the one place a client applies [startup] after a switch or a create.
 // Every path that lands the client on a session, new or not, ends here, so a
 // session made from one surface cannot come up laid out differently from the
-// same session made from another (#488).
+// same session made from another.
 func (m *OS) applyStartupToUnarranged() {
 	if m.sessionUnarranged {
 		m.applyStartupTiling()
@@ -361,8 +361,8 @@ func hostAttachRefusal(host string, err error) string {
 // a rail identity (hostNodeID(host)+":"+name), which is no session's name.
 // Handing that identity to SwitchToSession asks the daemon the client is
 // connected to right now for a session literally called "\x00host/local:home".
-// That was #196: from a remote session the switcher could not get back here,
-// and from here it could not reach a remote session.
+// That breaks both ways: from a remote session the switcher cannot get back
+// here, and from here it cannot reach a remote session.
 //
 // Every switch that starts from a tree row or a rail hit goes through
 // switchSession, which picks the connection first and the session second.

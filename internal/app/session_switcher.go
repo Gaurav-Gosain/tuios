@@ -72,10 +72,10 @@ func (m *OS) OpenSessionSwitcher() {
 }
 
 // sessionSwitcherItems is the tree's session list without the machines'
-// headers. A header is a group in the rail, not a session: listed here it read
-// as a session called "local" whose Enter asked the daemon for a session named
-// "\x00host/local" (#196). The sessions under each machine stay, and switching
-// to one crosses to its machine through OpenSessionNode.
+// headers. A header is a group in the rail, not a session: listed here it
+// would read as a session called "local" whose Enter asks the daemon for a
+// session named "\x00host/local". The sessions under each machine stay, and
+// switching to one crosses to its machine through OpenSessionNode.
 func (m *OS) sessionSwitcherItems() []sessiontree.Node {
 	sessions := m.BuildSessionTree().Sessions
 	out := make([]sessiontree.Node, 0, len(sessions))

@@ -42,11 +42,11 @@ const leaseInterval = 100 * time.Millisecond
 // any lease does.
 //
 // The choice is made here, under streamMu, from noClients, which the daemon
-// sets on every attach, detach and disconnect (see PTY.setNoClients). The
-// viewer used to make it itself: it asked whether a client was attached on
-// one connection and resized on another, so a client attaching between the
-// two was overridden, and the pane kept the viewer's size after the viewer
-// left.
+// sets on every attach, detach and disconnect (see PTY.setNoClients). A viewer
+// that made it itself would ask whether a client was attached on one
+// connection and resize on another, so a client attaching between the two
+// would be overridden, and the pane would keep the viewer's size after the
+// viewer left.
 
 // paneLease is one holder's leased size.
 type paneLease struct {

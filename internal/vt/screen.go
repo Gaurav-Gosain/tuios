@@ -124,9 +124,9 @@ func (s *Screen) Resize(width int, height int) {
 
 	// Both the live cursor and the saved one have to come back inside the new
 	// screen. The emulator clamps the cursor of whichever screen is active, but
-	// the other one is resized here too and nobody was clamping it: a guest on
-	// the alternate screen that was resized smaller came back to a main screen
-	// whose cursor was still addressing the old one. The saved cursor has the
+	// the other one is resized here too and has to be clamped here: a guest
+	// on the alternate screen that is resized smaller would otherwise come
+	// back to a main screen whose cursor still addresses the old one. The saved cursor has the
 	// same problem on either screen, since a resize can land between a DECSC
 	// and its DECRC.
 	s.cur.X = clamp(s.cur.X, 0, max(s.buf.Width()-1, 0))

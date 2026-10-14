@@ -252,8 +252,8 @@ type Settings struct {
 
 	// SessionColors gives every session a colour of its own and marks it on the
 	// surfaces that show more than one session at once: the rail's sessions and
-	// agents sections, and the session switcher. Off leaves each of those exactly
-	// as it was before the colours existed.
+	// agents sections, and the session switcher. Off leaves each of those
+	// without a session colour.
 	// SessionBorder carries the session's colour on every pane border, not only
 	// on the rail. It is off by default because it changes the look of every
 	// window, and it is separate from SessionColors so the rail's marks and the
@@ -276,8 +276,8 @@ type Settings struct {
 	//
 	// A click is different from the other ways focus moves. A workspace switch
 	// or a focus the daemon moved is not a statement about the viewport, and
-	// revealing on those threw away wherever the user had scrolled the strip,
-	// which is the bug that put every focus change on the least-scroll rule.
+	// revealing on those would throw away wherever the user had scrolled the
+	// strip, so they follow the least-scroll rule.
 	// Clicking a column that is half off the edge is a statement: you picked
 	// that pane to work in, so the strip brings all of it to you.
 	NiriClickReveals bool
@@ -541,11 +541,11 @@ type Settings struct {
 	// directory the daemon itself was started in.
 	//
 	// On by default. A window opened from a pane deep in a project is almost
-	// always wanted in that project, and the old behaviour dropped the shell
-	// back in $HOME to be cd'd again by hand. The directory is read from the
-	// focused pane's live shell, so it follows the pane rather than where the
-	// pane started, and anything that cannot be read falls back to the old
-	// behaviour rather than failing to open a window.
+	// always wanted in that project, and a shell started elsewhere has to be
+	// cd'd there again by hand. The directory is read from the focused pane's
+	// live shell, so it follows the pane rather than where the pane started,
+	// and anything that cannot be read falls back to the default directory
+	// rather than failing to open a window.
 	// Set via appearance.new_window_inherit_cwd config.
 	NewWindowInheritCwd bool
 

@@ -12,18 +12,18 @@ import (
 
 // Session-side hooks.
 //
-// Hooks used to be wired entirely into the client, so a session running
-// detached under the daemon fired none at all: a pane could be created, exit,
-// or finish an agent turn with nobody attached and no hook would run. That is
-// the opposite of what a hook is for, because the detached session is exactly
-// the one a program is watching instead of a person.
+// Hooks wired only into the client would fire none for a session running
+// detached under the daemon: a pane could be created, exit, or finish an agent
+// turn with nobody attached and no hook would run. That is the opposite of what
+// a hook is for, because the detached session is exactly the one a program is
+// watching instead of a person.
 //
 // The rule applied here is that a hook fires from the side that owns the fact.
 //
 //   - The window set, the focused window, the current workspace and a pane's
 //     agent state are the daemon's. It owns them whether or not anybody is
 //     attached, so it fires their hooks. A client attached to a daemon session
-//     no longer fires them (see FireHookContext in internal/app), which is also
+//     does not fire them (see FireHookContext in internal/app), which is also
 //     what makes three attached clients produce one firing rather than three.
 //   - A client's viewport size, its attach and its detach belong to that one
 //     client. They stay client-side: three clients attaching is three attaches,

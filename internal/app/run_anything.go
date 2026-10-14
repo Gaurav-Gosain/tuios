@@ -134,9 +134,8 @@ func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
 // ready, because there is nothing to wait for: the bytes land in the terminal's
 // input queue and the shell's line editor reads them when it starts, the same
 // way a keystroke that beat the prompt has always been handled. That is what
-// makes this cost no timer. The earlier version of this path polled on a
-// tea.Tick for a pane to appear and then guessed at a settle delay; both are
-// gone.
+// makes this cost no timer: no poll for the pane to appear and no guessed
+// settle delay.
 //
 // What is typed is the name rather than the listed absolute path, because the
 // name is what the user would have typed and what they will now edit. The two
@@ -220,8 +219,7 @@ func (m *OS) queueSeed(name, line string) {
 }
 
 // seedAdoptedWindows types any queued command line into the pane it was meant
-// for. Called with the panes a state sync just created, which is the event that
-// replaces the old poll.
+// for. Called with the panes a state sync just created, so no poll is needed.
 //
 // Matching is by name and each pane is claimed once, so two launches of the
 // same program in quick succession fill their own panes rather than both

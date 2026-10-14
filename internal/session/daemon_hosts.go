@@ -31,8 +31,8 @@ import (
 // tear down a working link.
 
 // startHostsWatch begins following the config file for changes to the [hosts]
-// table. A watcher that cannot be opened is logged once, and the daemon then
-// behaves as it did before this existed: the table is what it was at start.
+// table. A watcher that cannot be opened is logged once, and the table then
+// stays what it was at start.
 func (d *Daemon) startHostsWatch() {
 	if d.configPath == "" {
 		return

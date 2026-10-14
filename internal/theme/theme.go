@@ -111,8 +111,7 @@ func Current() *tint.Tint {
 // what they are. It returns the indices themselves rather than a guess: painted
 // with one of these, a swatch leaves as SGR 31 or 91 and the host fills it in
 // from the user's own palette, so the row really is the user's sixteen. The
-// xterm defaults that used to stand here made the picker show colours nobody
-// had chosen.
+// xterm defaults here would make the picker show colours nobody had chosen.
 //
 // A caller that needs channel values gets whatever RGBA the index resolves to
 // in this process, which is the xterm default. That is a guess, and only the
@@ -339,8 +338,8 @@ func DockColorCopy() color.Color {
 // NotificationError returns the color for error notifications.
 //
 // The no-theme fallbacks for the four severities are ink colors, not the raw
-// ANSI primaries they used to be: these are drawn as a one-cell mark and a
-// sliver of cap on a dark bar, and #0000ee blue on #1a1a2e was a smudge. A
+// ANSI primaries: these are drawn as a one-cell mark and a sliver of cap on a
+// dark bar, where #0000ee blue on #1a1a2e is a smudge. A
 // theme, when one is active, still wins outright.
 func NotificationError() color.Color {
 	t := Current()

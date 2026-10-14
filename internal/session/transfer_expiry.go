@@ -14,9 +14,9 @@ import (
 // mirrors the list (the Copies panel) drops the row instead of showing it
 // until its next full listing.
 //
-// Before this, the expiry ran only inside a listing or a new copy, so the
-// copy left the daemon's list at some later call and nothing said so. Now
-// every copy that ends arms one timer for the moment it is due.
+// Every copy that ends arms one timer for the moment it is due. An expiry run
+// only inside a listing or a new copy would drop the copy from the daemon's
+// list at some later call with nothing to say so.
 
 // transferRemoved is the action of the transfer event for a copy that left
 // the list, by transfer-clear or by its expiry.

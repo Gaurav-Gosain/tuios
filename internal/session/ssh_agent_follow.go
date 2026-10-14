@@ -26,7 +26,7 @@ import (
 // The panes were started earlier, by another client or by none, and their
 // SSH_AUTH_SOCK names a socket that is gone or belongs to someone else's
 // connection. tmux users fix this with a stable symlink that a hook points at
-// the newest client's socket (discussion #549). With [daemon] ssh_agent =
+// the newest client's socket. With [daemon] ssh_agent =
 // "follow" the daemon keeps that symlink itself:
 //
 //   - Each session has one link, agent-<id>.sock beside the daemon socket.

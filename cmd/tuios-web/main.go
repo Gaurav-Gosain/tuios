@@ -696,7 +696,7 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 		Caps: hostCaps,
 	}
 
-	// If ephemeral mode or daemon not available, use old behavior
+	// In ephemeral mode the model runs in-process, with no daemon
 	if webServerConfig.ephemeral {
 		return served.NewModel(opts, webAppearanceOverrides())
 	}
@@ -709,8 +709,8 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	// Try to connect to daemon. The daemon is told this browser's own cell
 	// size, measured from the canvas it reports beside its grid (see
 	// cellSize), and hands it to every guest as the pixel size of its window.
-	// A hardcoded 10x20 there made a tool that asks how big a cell is before
-	// drawing, kitty icat being the usual one, draw at the wrong scale.
+	// A tool that asks how big a cell is before drawing, kitty icat being the
+	// usual one, draws at the wrong scale with any fixed size.
 	daemonOpts := opts
 	daemonOpts.SessionName = webServerConfig.defaultSession
 	daemonOpts.ViewOnly = webReadOnly

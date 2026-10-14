@@ -10,9 +10,8 @@ import (
 // handleAggregateViewInput handles keyboard input when the aggregate view is open.
 func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The selection moves and the renderer scrolls to keep it in view, which is
-	// how every other list overlay works. This used to carry a hardcoded twelve
-	// rows of its own, so on any screen not showing twelve the list scrolled at
-	// the wrong time or not at all.
+	// how every other list overlay works. A row count of its own would scroll
+	// at the wrong time on any screen not showing exactly that many rows.
 	if listKey(commandKey(msg), false, listPage, o.AggregateViewMove) {
 		return o, nil
 	}

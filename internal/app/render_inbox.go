@@ -234,12 +234,10 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 
 // inboxRowHints is the Inbox footer for the row under the cursor: the key
 // that answers it first, then going to it and dismissing it, then the keys
-// that work on the list whatever is selected.
-//
-// It used to be the same eight hints on every row, over two lines, and said
-// "space peek" where space does nothing (an error, a finished turn, mail) and
-// "r reply" on rows that are not mail. A held approval and an ask-human
-// question draw their own hints (inboxApprovalHints, inboxAskHints).
+// that work on the list whatever is selected. A key shows only on a row it
+// works on: space does nothing on an error, a finished turn or mail, and
+// reply is for mail. A held approval and an ask-human question draw their own
+// hints (inboxApprovalHints, inboxAskHints).
 func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 	var hints []overlay.Hint
 	if ok {

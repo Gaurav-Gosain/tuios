@@ -115,7 +115,7 @@ func (m *OS) WorkspaceSwitcherMove(delta, count int) {
 // filtered list and closes the switcher.
 //
 // The Enter binding and the mouse click both come here rather than each writing
-// the same three lines, which is how the two came to be fixed one at a time.
+// the same three lines, so a fix to one is a fix to both.
 func (m *OS) WorkspaceSwitcherActivate(idx int) {
 	target, ok := m.WorkspaceSwitcherTarget(idx)
 	if !ok {

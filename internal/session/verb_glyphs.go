@@ -140,11 +140,11 @@ func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	maps.Copy(named, glyphSetNamedRoles(set))
 
 	// The settings the glyphs are resolved against are built here and thrown
-	// away, so nothing in the process ever sees them. This used to be a
-	// save/set/restore over the package globals: describeMu made it safe
-	// against a second describe call and against nothing else, and a client
-	// composing a frame on another goroutine could read the borrowed border
-	// style mid-flight. A local value has no such window.
+	// away, so nothing in the process ever sees them. A save/set/restore over
+	// the package globals would be safe under describeMu against a second
+	// describe call and against nothing else: a client composing a frame on
+	// another goroutine could read the borrowed border style mid-flight. A
+	// local value has no such window.
 	//
 	// The glyph set itself is still borrowed, because theme keeps it in a
 	// package global that has no per-call form yet; describeMu still guards

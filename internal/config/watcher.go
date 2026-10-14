@@ -374,8 +374,8 @@ func ReloadConfig(path string) (*UserConfig, error) {
 // validateLayered is the reload path's parse of a loaded config: every
 // section filled from the defaults, then the keys tuios cannot read taken
 // out. It is the same rule as LoadUserConfig: a bad key costs that key.
-// Rejecting the reload kept the old config, so a file that started fine with
-// the keys dropped could then never reload.
+// Rejecting the whole reload instead would keep the old config, so a file that
+// started fine with the keys dropped could then never reload.
 func validateLayered(lc *LayeredConfig) (*UserConfig, error) {
 	data, err := lc.Bytes()
 	if err != nil {

@@ -6,7 +6,7 @@
 // and 16, and an SGR-pixel mouse report (mode 1016) is in the same pixels. All
 // of them come from one cell size. A pane that no client has measured yet, such
 // as one in a detached session, still has to be given one: a program that
-// divides by the pixel size quits on a zero (issue #506). The pty layer and
+// divides by the pixel size quits on a zero. The pty layer and
 // both emulators take the fallback from here, so the sizes agree.
 package cellsize
 

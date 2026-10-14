@@ -23,10 +23,10 @@ type Hint struct {
 // hints. Width is the inner content width; the rendered block is Width+4 cells
 // wide (a two-cell pad on each side).
 type Panel struct {
-	// Title is the chip's whole content. There is no icon in front of it:
-	// panels used to take one each, and they drifted into a mix of Nerd Font
-	// icons on some panels and none on most, which read as inconsistent and
-	// drew as boxes without a Nerd Font.
+	// Title is the chip's whole content. There is no icon in front of it: an
+	// icon per panel drifts into a mix of Nerd Font icons on some panels and
+	// none on most, which reads as inconsistent and draws as boxes without a
+	// Nerd Font.
 	Title     string
 	Width     int
 	Tabs      []string

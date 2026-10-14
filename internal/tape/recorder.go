@@ -191,8 +191,8 @@ func (r *Recorder) RecordModeSwitch(cmdType CommandType) {
 // actionToCommand maps an action to the tape command that does the same
 // thing, for the ones where the two are the same. Every other action is
 // recorded as Action and its name, which replays exactly what the key did.
-// restore_all, snap_fullscreen and select_window_N used to be recorded as
-// RestoreWindow, SnapFullscreen and FocusWindow N, which do something else.
+// restore_all, snap_fullscreen and select_window_N are not in the map:
+// RestoreWindow, SnapFullscreen and FocusWindow N do something else.
 var actionToCommand = map[string]struct {
 	cmdType CommandType
 	raw     string

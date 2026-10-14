@@ -142,12 +142,12 @@ func (b *glyphBuilder) clampY(y float64) float64 {
 // the boundary its neighbour's edge lands on, and the two fills abut with
 // nothing between them and nothing doubled.
 //
-// This replaced a half-pixel bleed past every cell edge a fill touched. The
-// bleed closed the seam between two cells at fractional positions, but where it
-// overlapped the neighbour's fill it drew the stroke's anti-aliased fringe
-// twice, which left a faint brighter nub beside the line at every cell
-// boundary, and past the end of a line it put half a pixel of ink in the next
-// cell.
+// A half-pixel bleed past every cell edge a fill touches is not needed and is
+// wrong. It would close the seam between two cells at fractional positions,
+// but where it overlaps the neighbour's fill it draws the stroke's
+// anti-aliased fringe twice, which leaves a faint brighter nub beside the line
+// at every cell boundary, and past the end of a line it puts half a pixel of
+// ink in the next cell.
 func (b *glyphBuilder) rect(x0, y0, x1, y1 float64) {
 	x0, x1 = math.Round(b.clampX(x0)), math.Round(b.clampX(x1))
 	y0, y1 = math.Round(b.clampY(y0)), math.Round(b.clampY(y1))

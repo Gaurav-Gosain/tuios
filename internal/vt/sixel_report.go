@@ -47,13 +47,13 @@ func sixelGraphicsReply(item, action int, on bool, widthPx, heightPx int) string
 // would be dropped trades their fallback for a blank.
 //
 // Every attribute listed is one a guest may act on, so only what is
-// implemented is listed. The answer used to add 132 columns (1), selective
-// erase (6), national replacement character sets (9), technical characters
-// (15) and user windows (18), none of which exists here: a pane cannot change
+// implemented is listed. 132 columns (1), selective erase (6), national
+// replacement character sets (9), technical characters (15) and user windows
+// (18) are left out, because none of them exists here: a pane cannot change
 // its own width, no cell can be protected, and only the UK and DEC special
-// graphics sets are designated. The class stays 62, which is what kitty,
-// ghostty and foot answer, so a program that reads the class to decide it is
-// on a VT220 or later (vim, neovim, notcurses, tmux) sees no change.
+// graphics sets are designated. The class is 62, which is what kitty, ghostty
+// and foot answer, so a program that reads the class to decide it is on a
+// VT220 or later (vim, neovim, notcurses, tmux) finds one.
 func DeviceAttributes(sixel bool) []int {
 	if sixel {
 		return []int{62, 4, 22}

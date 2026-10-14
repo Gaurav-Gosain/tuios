@@ -23,7 +23,7 @@ func enterVisualLine(cm *terminal.CopyMode, window *terminal.Window) {
 	absY := getAbsoluteY(cm, window)
 
 	// A line selection starts at the first column, so a line's indent is
-	// part of it (#516), and ends at the line's last printed cell.
+	// part of it, and ends at the line's last printed cell.
 	_, endX := getLineContentBounds(cm, window, absY)
 
 	cm.VisualStart = terminal.Position{X: 0, Y: absY}

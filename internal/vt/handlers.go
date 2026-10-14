@@ -563,7 +563,7 @@ func (e *Emulator) registerDefaultEscHandlers() {
 // these operations treats a zero as a one: a program that computes a count and
 // gets zero still means "once" as far as xterm and everything that followed it
 // is concerned. Letting the zero through instead makes the operation do
-// nothing, which is how `CSI 0 C` stopped moving the cursor.
+// nothing: `CSI 0 C` would not move the cursor.
 func csiCount(params ansi.Params, i int) int {
 	n, _, _ := params.Param(i, 1)
 	if n < 1 {
@@ -934,7 +934,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			// Always ready. The reply keeps the query's form: the ANSI query
 			// gets the ANSI answer CSI 0 n, as in xterm and kitty. A private
 			// CSI ? 0 n here stalls strict parsers such as ratatui-image,
-			// which read only up to "[0n" (issue #253).
+			// which read only up to "[0n".
 			// See: https://vt100.net/docs/vt510-rm/DSR-OS.html
 			_, _ = io.WriteString(e.pipe, ansi.DeviceStatusReport(ansi.ANSIStatusReport(0)))
 		case 6: // Cursor Position Report [ansi.CPR]

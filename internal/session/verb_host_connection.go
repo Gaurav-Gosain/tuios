@@ -184,8 +184,8 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 	}()
 	_, cerr := io.Copy(conn, remote)
 	// Which of the two ends gave up decides what a person should do about it,
-	// and both used to end here silently. A stalled stream is this client not
-	// reading; anything else is the link.
+	// so each is logged. A stalled stream is this client not reading; anything
+	// else is the link.
 	if errors.Is(cerr, federation.ErrStreamStalled) {
 		LogBasic("Client %s stopped reading its connection to a host for too long and the stream was dropped. The link is still up.", cs.clientID)
 	} else if cerr != nil {

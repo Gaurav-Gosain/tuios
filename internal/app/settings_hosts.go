@@ -221,13 +221,13 @@ func (m *OS) tailnetAddrCandidates() []string {
 	// The [tailscale] table is read here, on the caller's goroutine, and only
 	// the tailnet call is handed off.
 	//
-	// It used to be read inside the goroutine, which meant that goroutine
-	// resolving an XDG path: reading the environment, and creating the config
-	// directory if it was not there. Both of those raced with anything else
-	// changing the environment, which in a test binary is every test that
-	// points XDG at a directory of its own. Reading a small file on the
-	// goroutine that is already building a settings row costs nothing
-	// measurable, and the round trip that actually takes time is still off it.
+	// Reading it inside the goroutine would mean that goroutine resolving an
+	// XDG path: reading the environment, and creating the config directory if
+	// it is not there. Both of those race with anything else changing the
+	// environment, which in a test binary is every test that points XDG at a
+	// directory of its own. Reading a small file on the goroutine that is
+	// already building a settings row costs nothing measurable, and the round
+	// trip that actually takes time is still off it.
 	opt, enabled := tailnetOptionsFromFile()
 	if !enabled {
 		return nil

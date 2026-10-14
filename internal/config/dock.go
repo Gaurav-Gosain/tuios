@@ -305,7 +305,7 @@ func (c DockConfig) DockClockFormat(s *Settings) string {
 
 // DockClockInterval is how often a clock in this format has to be redrawn. A
 // layout without seconds moves once a minute, and asking it to move sixty times
-// a second was the whole of the old clock's cost.
+// a second would be the whole of the clock's cost.
 func DockClockInterval(format string) time.Duration {
 	if clockFormatHasSeconds(format) {
 		return time.Second

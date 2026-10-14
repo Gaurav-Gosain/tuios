@@ -56,7 +56,7 @@ func (m *OS) EnterSidebarFocus() {
 	m.beginSidebarReturn()
 	// The rail comes back to the row it was left on, which is most of the point
 	// of leaving by activating one: enter on a terminal row goes to that pane,
-	// and returning used to start over at the attached session's row.
+	// and returning does not start over at the attached session's row.
 	if m.restoreSidebarRow() {
 		return
 	}
@@ -145,8 +145,7 @@ func (m *OS) SidebarCursorLast() {
 // SidebarCursorExpand and SidebarCursorCollapse step the cursor one section
 // down and up. With the tree gone there is nothing left to expand, and the keys
 // that walked its depth are the natural pair for walking the sections. The
-// config action names stay, so a config file written before this still resolves
-// both keys.
+// config action names stay, so an older config file still resolves both keys.
 func (m *OS) SidebarCursorExpand()   { m.sidebarStepSection(1) }
 func (m *OS) SidebarCursorCollapse() { m.sidebarStepSection(-1) }
 
@@ -338,8 +337,8 @@ func (m *OS) sidebarReorderHost(host string, delta int) {
 	from := slices.Index(order, host)
 	if from < 0 {
 		// This machine. It is not in the order at all, so the swap below would
-		// have done nothing and said nothing, which is how a person decides a
-		// feature is missing.
+		// do nothing and say nothing, which is how a person decides a feature
+		// is missing.
 		m.sidebarSayMachinePinned()
 		return
 	}
@@ -402,11 +401,8 @@ func (m *OS) SidebarJumpToSession(n int) {
 // mouse path so a key and a right-click on the same row open the same menu.
 //
 // It targets the row the cursor is on and nothing else, which is the rule every
-// other cursor key in the rail already follows. The kill key used to force the
-// kind to session before handing it over, so pressing it on a terminal opened
-// the session's menu instead of the pane's, and pressing it on a footer control
-// opened the attached session's menu; a key that acts on something other than
-// the row under the cursor is a key the user cannot aim.
+// other cursor key in the rail already follows: a key that acts on something
+// other than the row under the cursor is a key the user cannot aim.
 //
 // destructive is what is left of that key's intent, now that the row decides
 // the menu: it lands the selection on the row's own destructive action, so the
@@ -580,11 +576,11 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 		return
 	}
 	m.SidebarCollapsed = collapsed
-	// Folding no longer closes the files section. Three columns cannot draw a
+	// Folding does not close the files section. Three columns cannot draw a
 	// listing, so the strip does not draw one, and unfolding brings the section
-	// back exactly as it brings the other three back. That is only safe now the
-	// section is a section: as a mode it took the whole rail, so a folded rail
-	// left in it had nothing on screen mentioning the mode and no way out.
+	// back exactly as it brings the other three back. That is only safe because
+	// the section is a section: a mode that took the whole rail would leave a
+	// folded rail with nothing on screen mentioning the mode and no way out.
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {
@@ -707,8 +703,7 @@ func (m *OS) nextSessionName() string {
 
 // SidebarAccentCursor opens the colour picker on the cursor row: the pane's own
 // accent on a window row, and the session's on a session row, which is the
-// colour every pane in it inherits. The key used to refuse on a session row
-// because a session had no colour to set.
+// colour every pane in it inherits.
 func (m *OS) SidebarAccentCursor() {
 	if w := m.sidebarCursorWindow(); w != nil {
 		m.OpenAccentPicker(w.ID)

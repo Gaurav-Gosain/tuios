@@ -10,10 +10,8 @@ import (
 )
 
 // The split between the sections above and the block the rail pins to its
-// bottom edge used to be fixed arithmetic: the pinned section's share in
-// appearance.sidebar.sections, and nothing on the rail to move it with. It is
-// now a divider row, the line the pinned block already wore to float free of
-// whatever ended up over it, drawn as a rule so it can be seen and grabbed.
+// bottom edge is a divider row, the line the pinned block wears to float free
+// of whatever ends up over it, drawn as a rule so it can be seen and grabbed.
 //
 // Dragging the divider sets the pinned section's share of the rail. The share
 // is a ceiling, as every share is (see sidebar_layout.go), so the divider can
@@ -22,8 +20,8 @@ import (
 // records is how much of the rail the block may take when it has more.
 //
 // The ratio persists in sidebar.json as section_split. Absent means the layout
-// string's own share, which is what every rail did before the divider existed.
-// A double-click on the divider, or enter with the cursor on it, puts it back.
+// string's own share. A double-click on the divider, or enter with the cursor
+// on it, puts it back.
 
 // sidebarSplitState is the drag in progress on the divider, and the press that
 // may turn out to be the first half of a double-click.
@@ -151,13 +149,13 @@ func sidebarDividerGlyph(s *config.Settings) string {
 }
 
 // sidebarDividerRow draws the divider. At rest it is a short grip in the edge
-// rule's own ink, centred on the line the pinned block already floated on: a
-// full-width rule there was tried and taken out, because it was the third
-// hairline on one screen beside the rail edge and the dock separator, and the
-// gap separates as well while saying nothing. Three faint cells say "this can
-// be held" without saying it loudly. Under the pointer, the cursor or a drag
-// the grip opens out into the rule across the content columns in dim ink, so
-// the thing being steered reads as the thing being steered.
+// rule's own ink, centred on the line the pinned block floats on. A full-width
+// rule there would be the third hairline on one screen beside the rail edge and
+// the dock separator, and the gap separates as well while saying nothing. Three
+// faint cells say "this can be held" without saying it loudly. Under the
+// pointer, the cursor or a drag the grip opens out into the rule across the
+// content columns in dim ink, so the thing being steered reads as the thing
+// being steered.
 func (m *OS) sidebarDividerRow(cw int, pal overlay.Palette, active bool) string {
 	glyph := sidebarDividerGlyph(&m.Settings)
 	if active {

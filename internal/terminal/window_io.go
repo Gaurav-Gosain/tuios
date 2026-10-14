@@ -323,10 +323,10 @@ func (w *Window) outputWriter() {
 // this pane: one frame at the frame rate of the client that owns it. A value
 // of zero or less restores the default, minCoalesceInterval.
 //
-// It used to be the constant 8 ms, about 120 frames a second, whatever
-// max_fps said. A pane could then never be drawn more than 125 times a
-// second, so max_fps 240 drew 125 frames of an animating pane, and a guest
-// that drew at exactly 120 raced a floor 0.33 ms shorter than its own period.
+// A constant would ignore max_fps. At 8 ms a pane can never be drawn more
+// than 125 times a second, so max_fps 240 would draw 125 frames of an
+// animating pane, and a guest that draws at exactly 120 would race a floor
+// 0.33 ms shorter than its own period.
 // It is kept per pane because a server holds one client per connection, each
 // with its own panes and its own max_fps.
 func (w *Window) SetFrameInterval(d time.Duration) {
@@ -437,16 +437,16 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 // It emits on the leading edge and rate-limits after it, rather than polling a
 // flag on a free-running ticker. The distinction is the difference between
 // "at most one render per 8 ms" and "every render waits for the next tick
-// edge", and only the first of those is what the cap is for. The ticker
-// charged a pane that had been silent for a minute the same 0 to 8 ms as one
+// edge", and only the first of those is what the cap is for. A ticker charges
+// a pane that has been silent for a minute the same 0 to 8 ms as one
 // mid-flood, and a pane that has been silent is exactly the state a pane is in
 // when a user types at it: measured at p50 4.03 ms and p99 8.04 ms on every
 // echoed keystroke, for a burst that was never going to flicker.
 //
 // A pane that is genuinely bursting still emits no faster than once per
-// interval, so the anti-flicker guarantee is unchanged. Sleeping between
-// bursts instead of ticking also means an idle pane costs no wakeups at all,
-// where before every open pane woke 125 times a second forever.
+// interval, so the anti-flicker guarantee holds. Sleeping between bursts
+// instead of ticking also means an idle pane costs no wakeups at all, where a
+// ticker wakes every open pane 125 times a second forever.
 func (w *Window) renderCoalescer() {
 	timer := time.NewTimer(w.minFrameInterval())
 	if !timer.Stop() {
@@ -1107,7 +1107,7 @@ func (w *Window) Close() {
 
 	// Kill the process. w.Cmd is deliberately left set: the process-monitor
 	// goroutine reads it unlocked for as long as it lives, and nilling it here
-	// raced that read. Nothing treats a nil Cmd as "closed", and the exec.Cmd
+	// would race that read. Nothing treats a nil Cmd as "closed", and the exec.Cmd
 	// dies with the Window anyway, so leaving it costs nothing.
 	if w.Cmd != nil && w.Cmd.Process != nil {
 		_ = w.Cmd.Process.Kill()

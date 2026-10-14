@@ -105,10 +105,10 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	key := msg.String()
 
 	// Handle help menu interactions before general keybind dispatch. Help is
-	// modal, exactly as in terminal mode: an unhandled key used to fall through
-	// to the window-manager dispatch below, where the overlay hid what it did.
-	// n created and focused a window behind the help panel, x closed one, t
-	// toggled tiling, and every other single-letter binding fired unseen.
+	// modal, exactly as in terminal mode: an unhandled key that fell through
+	// to the window-manager dispatch below would act where the overlay hides
+	// it. n would create a window behind the help panel, x close one, t toggle
+	// tiling, and every other single-letter binding fire unseen.
 	if o.ShowHelp {
 		return handleHelpOverlayKey(msg, o)
 	}

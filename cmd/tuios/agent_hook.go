@@ -153,7 +153,7 @@ given.`,
 				dial: func() (verbCaller, error) {
 					// A failed dial returns a nil *VerbClient. Returning it as
 					// it is would put a typed nil in the interface, which a
-					// later io.Closer check takes for a live client (#374).
+					// later io.Closer check takes for a live client.
 					c, err := session.DialVerbClientAs(version)
 					if err != nil {
 						return nil, err

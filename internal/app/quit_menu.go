@@ -73,10 +73,10 @@ func (m *OS) NextSessionName() string {
 // otherSessionNames lists the daemon sessions this client is not attached to,
 // by identity, from the listing this client already caches.
 //
-// It used to collect the display title of a freshly fetched listing, and both
-// halves of that were wrong. The title is the display name once a session has
-// one, so the kill-and-go-next row switched to a name that addresses nothing,
-// and switching to a name no session answers to makes one. The fetch was a
+// It collects identities, not display titles. The title is the display name
+// once a session has one, so the kill-and-go-next row would switch to a name
+// that addresses nothing, and switching to a name no session answers to makes
+// one. It reads the cache rather than fetching a listing, because a fetch is a
 // blocking daemon round trip on the Update goroutine, taken to open a menu; the
 // cache is what the rail's own rows are drawn from and is refreshed off that
 // goroutine, so reading it is both cheaper and in agreement with the screen.

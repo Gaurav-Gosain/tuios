@@ -46,11 +46,10 @@ import (
 //
 // The glyphs and the colours both come from go-devicons, which is the generated
 // Go form of nvim-web-devicons and the same table yeetui draws from, so the two
-// programs name a file type the same way. It replaced a hand-written table of
-// seventy extensions and eleven whole names. The trade is a dependency (MIT,
+// programs name a file type the same way. The trade is a dependency (MIT,
 // 59 KB, no dependencies of its own) and a table nobody here can edit, against
-// six hundred and fifty entries instead of eighty-one and a glyph that can
-// never disagree with its colour.
+// six hundred and fifty entries and a glyph that can never disagree with its
+// colour.
 
 // fileIcon is one file type's mark: the codepoint and the "#RRGGBB" the icon
 // table gives it. A zero fileIcon means the type layer has nothing to say and

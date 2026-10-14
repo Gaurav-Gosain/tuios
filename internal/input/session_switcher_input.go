@@ -51,7 +51,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				// The switch is made by the node, which knows the machine
 				// and the name: Title is a label and may be a display name
 				// that addresses nothing, and the ID of a row under another
-				// machine is a rail identity that no daemon holds (#196).
+				// machine is a rail identity that no daemon holds.
 				o.OpenSessionNode(selected)
 			}
 		} else if o.SessionSwitcherQuery != "" {

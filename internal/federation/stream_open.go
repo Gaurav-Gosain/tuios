@@ -3,9 +3,9 @@ package federation
 import "encoding/json"
 
 // StreamOpen is what the hub says about a connection when it opens the stream
-// for it, carried in the open frame's payload. The payload used to be empty,
-// and an empty payload still decodes to the zero value, so a hub that sends
-// nothing and a proxy that reads nothing keep linking exactly as before.
+// for it, carried in the open frame's payload. An empty payload decodes to the
+// zero value, so a hub that sends nothing and a proxy that reads nothing still
+// link.
 //
 // The payload is written by the hub's mux and never by the client whose bytes
 // the stream then carries: those go in data frames. So a field here is the

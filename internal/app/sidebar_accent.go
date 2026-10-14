@@ -591,8 +591,8 @@ const (
 	// by every client attached to it.
 	AccentTargetSession
 	// AccentTargetSetting is a colour-valued config option, identified by its
-	// registry path. The settings panel used to edit these as text fields, which
-	// asked the user to know a hex and to know that empty meant the theme's.
+	// registry path. The picker spares the user from knowing a hex, and from
+	// knowing that empty means the theme's.
 	AccentTargetSetting
 )
 
@@ -732,9 +732,9 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 		return m.setSessionAccentCmd(id, "")
 	case AccentTargetSetting:
 		// Unset, which for a border colour is back to the theme's and for the
-		// tint back to its default. This is the state a text field could only
-		// express by being empty, and the reason a picker that could set a
-		// colour and never take it back would be a regression on one.
+		// tint back to its default. A text field expresses this state by being
+		// empty, so the picker has to be able to take a colour back as well as
+		// set one.
 		return m.applySettingColor(id, "")
 	}
 	m.ClearWindowAccent(id)

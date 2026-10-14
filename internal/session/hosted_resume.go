@@ -7,12 +7,12 @@ import (
 
 // A hosted pane that outlives a dropped link.
 //
-// A pane this machine runs for another machine used to end the moment its
-// connection did, and a connection over ssh drops whenever the network under
-// it does: a laptop lid, a Wi-Fi hand-off, a VPN reconnecting. An agent in the
-// pane died mid-turn each time.
+// A connection over ssh drops whenever the network under it does: a laptop
+// lid, a Wi-Fi hand-off, a VPN reconnecting. A pane this machine runs for
+// another machine that ended with its connection would kill an agent in the
+// pane mid-turn each time.
 //
-// Now the owner asks for a resumable pane (open-pane's resumable), and this
+// So the owner asks for a resumable pane (open-pane's resumable), and this
 // machine grants the grace its link policy names for the owner (hosted_grace,
 // ten minutes by default, "0" for none). The process's output goes through a
 // pump that outlives any one connection: it keeps the last 64 KB in a ring

@@ -4,10 +4,7 @@ import "sync"
 
 // KittyState is the clear-notification relay between the emulator and the
 // passthrough layer: a guest screen clear (ED, mode reset) must also clear
-// the images the passthrough painted on the host terminal. The local image
-// and placement store it used to carry was reachable only with no
-// passthrough func installed, and every production entry point installs one
-// before a guest runs.
+// the images the passthrough painted on the host terminal.
 type KittyState struct {
 	mu            sync.RWMutex
 	clearCallback func()
