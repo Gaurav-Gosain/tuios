@@ -5125,3 +5125,22 @@ Run on 2026-10-14 on Linux. `TestARightClickCancelsADrag` in `bsp_drop_zone_test
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |
 | The `o.CancelWindowDrag()` call at the top of `handleMouseClick` in `internal/input/mouse_click.go` | `TestARightClickCancelsADrag` ("after the right click C is not back in its slot"): the right press starts a resize, its release opens the pane menu, and C stays at the pointer over A | **caught** |
+
+## Actions for a tmux-style keymap
+
+Run on 2026-10-14 on macOS on branch `feat/tmux-style-actions`. The e2e tests are `TestTmuxStyleActionsRunWhenBound`, `TestMarkAndJoinPane` and `TestMoveWorkspaceAndSendPane` (`tmux_style_actions_test.go`, `tmux_style_panes_test.go`). Two unit tests stay in `internal/app/prefix_tree_test.go` for what the e2e cannot see: a join from another workspace's tree, and the per-workspace names and tree that a workspace move swaps. Each control cuts one wire, builds, and runs the named test.
+
+| Control | Tests that fail | Verdict |
+| --- | --- | --- |
+| `d.Register("new_workspace", handleNewWorkspace)` cut | `TestTmuxStyleActionsRunWhenBound` ("tmuxish is on workspace 1, want 2") | **caught** |
+| `d.Register("cycle_layout", ...)` cut | `TestTmuxStyleActionsRunWhenBound` ("tmuxish has layout mode \"bsp\", want \"master-stack\"") | **caught** |
+| `d.Register("mark_pane", ...)` cut | `TestMarkAndJoinPane` ("mark_pane showed no notification: ... waiting for text \"Pane marked\"") | **caught** |
+| `m.MarkedPaneID = w.ID` cut from `MarkPane` | `TestMarkAndJoinPane` ("ASSERTION: c should end up left of a, beside it: pane ... is {... X:60 Y:19 Width:60 Height:19}") | **caught** |
+| the `join_marked_*` `Register` in the loop cut | `TestMarkAndJoinPane` (same "c should end up left of a" assertion) | **caught** |
+| The no-mark gate in `JoinMarkedPane` set to `if false` | `TestMarkAndJoinPane`: the join pressed with no mark indexes a missing window and the client dies, so the "Pane marked" wait times out | **caught** |
+| `d.Register("move_workspace_right", ...)` cut | `TestMoveWorkspaceAndSendPane` ("workspace 1 swapped with 2 takes its pane along: pane ... is {... Workspace:1 ...}") | **caught** |
+| `MoveWindowToWorkspace` cut from the `send_to_workspace_N` handler | `TestMoveWorkspaceAndSendPane` ("send_to_workspace_3 moves the pane to 3: pane ... is {... Workspace:2 ...}") | **caught** |
+| `InsertWindowWithPreselection` cut from `JoinMarkedPane` | `TestJoinMarkedPaneBringsAPaneFromAnotherWorkspace` ("d (y=19) is not below a (y=0 h=38)") | **caught** |
+| `swapWorkspaceKeys(m.WorkspaceNames, ...)` cut | `TestMoveWorkspaceBySwapsAndFollows` ("names are map[1:code 2:logs], want the two swapped") | **caught** |
+| `swapWorkspaceKeys(m.WorkspaceTrees, ...)` cut | `TestMoveWorkspaceBySwapsAndFollows` ("workspace 1's tree did not move with its panes") | **caught** |
+| The positive half | none: `TestMarkAndJoinPane` checks c starts right of a and that a join with no mark moves nothing before the mark is made; `TestTmuxStyleActionsRunWhenBound` reads workspace 1 in bsp before any key; `TestMoveWorkspaceAndSendPane` reads workspace 1 first | **guard** |

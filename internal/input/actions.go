@@ -616,6 +616,19 @@ func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handleSyncPanes toggles every visible pane in the current workspace in or
+// out of the multifocus set, tmux's synchronize-panes: once on, a keystroke
+// typed at the focused pane goes to all of them (see MultifocusSet).
+func handleSyncPanes(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ToggleMultifocusAll()
+	if len(o.MultifocusSet) > 0 {
+		o.ShowNotification("Pane sync on", "success", o.Settings.NotificationDuration)
+	} else {
+		o.ShowNotification("Pane sync off", "info", o.Settings.NotificationDuration)
+	}
+	return o, nil
+}
+
 func handleSwapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.FocusedWindow >= 0 {
 		if o.UseScrollingLayout {
