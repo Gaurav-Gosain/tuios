@@ -516,6 +516,27 @@ func (m *Manager) DeleteSession(name string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("session '%s' not found", name)
 	}
+	return m.deleteLocked(session, name)
+}
+
+// DeleteSessionByID is DeleteSession for the session with id, under whatever
+// name it has when the delete runs. A caller that looked a session up earlier
+// deletes that one, and not another that took its name since. It returns the
+// name the session had.
+func (m *Manager) DeleteSessionByID(id string) (string, error) {
+	m.mu.Lock()
+	session, exists := m.byID[id]
+	if !exists {
+		m.mu.Unlock()
+		return "", fmt.Errorf("session %s not found", id)
+	}
+	name := session.Name()
+	return name, m.deleteLocked(session, name)
+}
+
+// deleteLocked is DeleteSession past its lookup. It is called with m.mu held
+// and releases it.
+func (m *Manager) deleteLocked(session *Session, name string) error {
 	delete(m.sessions, name)
 	delete(m.byID, session.ID)
 	m.dropAliasesLocked(session.ID)

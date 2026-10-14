@@ -756,7 +756,12 @@ func runListSessions(jsonOutput bool) error {
 		if s.DisplayName != "" && s.DisplayName != s.Name {
 			name = fmt.Sprintf("%s (%s)", s.Name, s.DisplayName)
 		}
-		rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
+		// A global session is in no space, whatever an older daemon sends.
+		space := s.Space
+		if s.Global {
+			space = ""
+		}
+		rowsBySpace[space] = append(rowsBySpace[space], []string{
 			name,
 			fmt.Sprintf("%d", s.WindowCount),
 			status,

@@ -4940,3 +4940,17 @@ Run on 2026-10-13 on macOS. The tests are in `space_switch_test.go`: `TestSpaceK
 `TestSpaceKeysWithOneSpace` passes under every control: it checks the one-space notice, which comes before any pick.
 
 `TestSpaceKeyChordInTerminalMode` binds `next_space` to `alt+y` in `[keybindings.window_management]` and presses it twice from terminal mode; each press must land, alpha to none to beta. Control G is the bug it was written for: the terminal-mode router threw away the command of every action it dispatched, and the space pick is that command, so a direct chord for `next_space` moved nothing. Before the router passed the command on, no action it reached returned one: the default `terminal_mode` binds and the terminal-safe workspace and session actions all return nil.
+
+### A global session is in no space
+
+Run on 2026-10-14 on macOS. The test is `TestAGlobalSessionIsInNoSpace` in `space_global_test.go`: `set-session-space` on the global session `e2e-g` is refused, a 65-byte space name is refused by the verb and by `tuios new --space`, `kill-space --force s` kills only `e2e-a`, and herdr's `workspace.close` with `close_group` kills only the session it names, on a spaced session and on the global one. `TestSwitchSpaceNone` in `space_switch_test.go` filed its global session under a space with `set-session-space`; it now checks that the call is refused, and goes on to check the global session counts among the sessions in no space. The fixed build passes both.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The build before these fixes (`c9af6aea`) | `TestAGlobalSessionIsInNoSpace` ("set-session-space filed a global session under a space"), `TestSwitchSpaceNone` ("set-session-space filed the global session under alpha") | **caught** |
+| The global refusal in `verbSetSessionSpace` | `TestAGlobalSessionIsInNoSpace` ("set-session-space filed a global session under a space") | **caught** |
+| The 64-byte cap in `checkSpaceName` | `TestAGlobalSessionIsInNoSpace` ("set-session-space took a 65-byte space name") | **caught** |
+
+What the refusal prevents was checked on the build before these fixes, with the test's refusal and cap steps taken out: `kill-space --force s` killed the global session filed under `s` along with `e2e-a` ("after kill-space s the sessions are [], want [e2e-g]").
+
+Not covered: the read side, where `Session.Space` and the rail read a global session that holds a space as in none. With the refusal in place no live global session holds one: a global session is made with no space, and a restore makes it an ordinary session (it does not keep `global`), so the state cannot be reached from outside to test. It stays for state an older daemon wrote, and for `tuios ls` and the rail reading another daemon's listing. Also not covered: `kill-space` deleting by session ID, which matters only when a member is renamed between the lookup and the delete.

@@ -384,21 +384,20 @@ func switchSpaceCLI(t *testing.T, base string, args ...string) string {
 }
 
 // TestSwitchSpaceNone: switch-space --none, and none: true, switch among the
-// sessions in no space, counting a global session as in none whatever space
-// it is filed under, as the rail draws it. A named space never counts a
-// global session. Both forms of the verb are refused together, and the
+// sessions in no space, counting a global session as in none, as the rail
+// draws it. A named space never counts a global session. Both forms of the verb are refused together, and the
 // command line refuses a name with --none. pick-space names the same sessions
 // first, takes the same refusals, and moves nobody.
 //
-// Uses, oldest first: e2e-loose, e2e-loose2, e2e-g (global, filed under
-// alpha), e2e-a1 (alpha).
+// Uses, oldest first: e2e-loose, e2e-loose2, e2e-g (global, which
+// set-session-space refuses to file under alpha), e2e-a1 (alpha).
 //
 // How it could pass wrongly, and what stops it:
 //   - none not filtering at all: it would pick e2e-a1, used last of all.
 //   - none ignoring that a global session is drawn in no space: it would pick
 //     e2e-loose2.
-//   - a named space counting the global session filed under it: after e2e-g
-//     is used again, alpha would pick e2e-g rather than e2e-a1.
+//   - the global session filed under alpha after all: after e2e-g is used
+//     again, alpha would pick e2e-g rather than e2e-a1.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Space switching").
 func TestSwitchSpaceNone(t *testing.T) {
@@ -419,7 +418,12 @@ func TestSwitchSpaceNone(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-g"); err != nil {
 		t.Fatalf("open a window in the global session: %v: %s", err, out)
 	}
-	setSpace(t, base, "e2e-g", "alpha")
+	// A global session is in no space, so filing it under one is refused
+	// (TestAGlobalSessionIsInNoSpace). The ranking below still has to count
+	// it among the sessions in no space and never in alpha.
+	if out, err := tuiosCLI(t, base, "call", "set-session-space", `{"session":"e2e-g","space":"alpha"}`); err == nil {
+		t.Fatalf("ASSERTION: set-session-space filed the global session under alpha: %s", out)
+	}
 
 	for i, name := range []string{"e2e-loose", "e2e-loose2", "e2e-g", "e2e-a1"} {
 		typeInSession(t, base, name, i)
@@ -462,7 +466,7 @@ func TestSwitchSpaceNone(t *testing.T) {
 		t.Fatalf("ASSERTION: the command line took neither a space nor --none: %s", out)
 	}
 
-	// e2e-g is now the session used last of all, and it is filed under alpha.
+	// e2e-g is now the session used last of all, and in no space.
 	typeInSession(t, base, "e2e-g", 9)
 	clientShows(t, base, "e2e-g")
 	out = switchSpaceCLI(t, base, "-s", "e2e-g", "alpha")

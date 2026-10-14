@@ -23,7 +23,8 @@ package sessiontree
 //
 // Like GroupByRepo the result is a flat run. Every row inside a space carries
 // the space's name in Space, the header included, which is what lets a
-// surface step those rows in under the header without walking the list.
+// surface step those rows in under the header without walking the list. Every
+// other row carries none.
 //
 // Rows on another machine and the global session are never filed under a
 // space here: the first is drawn in its machine's group and the second above
@@ -39,6 +40,10 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 	for _, n := range nodes {
 		space := groupSpace(n)
 		if space == "" {
+			// A global or remote session keeps no space either, so a surface
+			// that steps a row in by its Space does not step it in under a
+			// header it is not drawn under.
+			n.Space = ""
 			rest = append(rest, n)
 			continue
 		}
@@ -48,7 +53,7 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 		members[space] = append(members[space], n)
 	}
 	if len(spaces) == 0 {
-		return within(nodes)
+		return within(rest)
 	}
 
 	out := make([]Node, 0, len(nodes)+2*len(spaces))

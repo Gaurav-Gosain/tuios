@@ -17,7 +17,7 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionAccent = state.Accent
 	m.SessionRestored = state.Restored
 	m.SessionGlobal = state.Global
-	m.SessionSpace = state.Space
+	m.SessionSpace = state.EffectiveSpace()
 	// The worktree record travels with the state, so the attached row is drawn
 	// from the same push every other label on it comes from. A copy, because
 	// the state snapshot is the daemon's and this outlives the call.

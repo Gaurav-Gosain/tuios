@@ -2814,11 +2814,25 @@ func (s *Session) SetAccent(accent string) error {
 	})
 }
 
-// Space is the space the session is filed under, "" for none.
+// Space is the space the session is filed under, "" for none. A global
+// session is in none: it is drawn above the machines and never inside a space
+// (sessiontree.GroupBySpace), so it counts with the sessions in no space
+// everywhere a space is listed, picked or killed. set-session-space refuses to
+// file one, and a state that holds both anyway, such as one an older daemon
+// wrote, is read as in none.
 func (s *Session) Space() string {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
-	return s.state.Space
+	return s.state.EffectiveSpace()
+}
+
+// EffectiveSpace is the space a session with this state is in: its Space,
+// except that a global session is in none. See Session.Space.
+func (st *SessionState) EffectiveSpace() string {
+	if st.Global {
+		return ""
+	}
+	return st.Space
 }
 
 // SetSpace files the session under the named space, propagated and persisted
@@ -3333,7 +3347,7 @@ func (s *Session) Info() SessionInfo {
 
 	s.stateMu.RLock()
 	displayName, accent := s.state.DisplayName, s.state.Accent
-	space := s.state.Space
+	space := s.state.EffectiveSpace()
 	currentWorkspace := s.state.CurrentWorkspace
 	restored := s.state.Restored
 	focusedPTY := ""

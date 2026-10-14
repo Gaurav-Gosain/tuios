@@ -467,7 +467,7 @@ func init() {
 				{Name: "window_name", Type: "string", Description: "Name for the first window. Omit to use the shell's title."},
 				{Name: "cwd", Type: "string", Description: "Directory the session's windows start in: the first window, and any later one with no directory to inherit. Omit to use the daemon's."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
-				{Name: "space", Type: "string", Description: "Space to file the session under, as set-session-space does. It follows the session name rules. Omit for none."},
+				{Name: "space", Type: "string", Description: "Space to file the session under, as set-session-space does. It follows the session name rules and is at most 64 bytes. Omit for none."},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session. Use it as the session parameter of every later call."},
@@ -1607,10 +1607,10 @@ func init() {
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
 		"set-session-space": {
-			description: "File a session under a space, a named group of related sessions. A space exists while at least one session is in it. It survives a daemon restart with the session.",
+			description: "File a session under a space, a named group of related sessions. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "space", Type: "string", Description: "The space's name. It must not hold a slash, a backslash, a control character or leading or trailing whitespace. Omit or pass an empty string to take the session out of any space."},
+				{Name: "space", Type: "string", Description: "The space's name, at most 64 bytes. It must not hold a slash, a backslash, a control character or leading or trailing whitespace. Omit or pass an empty string to take the session out of any space."},
 			},
 			returns: []verbParam{
 				{Name: "type", Type: "string", Description: "Always session_space_set."},
@@ -1636,7 +1636,7 @@ func init() {
 			description: "Rename a space: file every session in it under the new name. If the new name is a space already, the two become one. It is one change per session, not one transaction, so a failure part way leaves some sessions under each name, and calling it again with the same names moves the rest.",
 			params: []verbParam{
 				{Name: "space", Type: "string", Required: true, Description: "The space to rename."},
-				{Name: "name", Type: "string", Required: true, Description: "The new name. It follows the session name rules."},
+				{Name: "name", Type: "string", Required: true, Description: "The new name. It follows the session name rules and is at most 64 bytes."},
 			},
 			returns: []verbParam{
 				{Name: "type", Type: "string", Description: "Always space_renamed."},

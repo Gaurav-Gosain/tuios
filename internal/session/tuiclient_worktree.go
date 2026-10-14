@@ -32,6 +32,11 @@ func (c *TUIClient) SessionSpace(name string) string {
 	defer c.mu.Unlock()
 	for _, s := range c.availableSessions {
 		if s.Name == name {
+			if s.Global {
+				// A daemon that sends a global session's space anyway: it is
+				// in none (Session.Space).
+				return ""
+			}
 			return s.Space
 		}
 	}

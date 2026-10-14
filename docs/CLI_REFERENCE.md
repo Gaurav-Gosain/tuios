@@ -317,7 +317,7 @@ tuios new [session-name] [flags]
 - `--global`: Create a global session, which holds panes from more than one machine
 - `--hold`: After a failure, wait for enter before the command exits
 - `--cwd <dir>`: Directory the session's windows start in. The default is the current directory
-- `--space <name>`: File the session under a space, a named group of related sessions. It follows the session name rules
+- `--space <name>`: File the session under a space, a named group of related sessions. It follows the session name rules and is at most 64 bytes
 - The appearance flags of the root command (`tuios new --help` lists them)
 
 The session's windows start in the directory where you run `tuios new`.
@@ -325,7 +325,7 @@ The session's windows start in the directory where you run `tuios new`.
 window, and to each later window that has no pane to take a directory from.
 `--cwd` does not work with `--host`.
 
-`--space` files the session under the space as it is made, so `tuios ls` lists it with the space's other sessions. It does not work with `--host` or `--global`.
+`--space` files the session under the space as it is made, so `tuios ls` lists it with the space's other sessions. It does not work with `--host` or `--global`: a global session is in no space, and `set-session-space` refuses to file one.
 
 **Examples:**
 ```bash

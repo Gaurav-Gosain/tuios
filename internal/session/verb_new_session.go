@@ -43,8 +43,8 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	if err := ValidateSessionName(name); err != nil {
 		return nil, invalidParam("name", err.Error())
 	}
-	if err := ValidateSessionName(p.Space); err != nil {
-		return nil, invalidParam("space", "a space name follows the session name rules: "+err.Error())
+	if verr := checkSpaceName("space", p.Space); verr != nil {
+		return nil, verr
 	}
 	if p.Width < 0 || p.Height < 0 {
 		return nil, invalidParam("width", "width and height are cell counts and cannot be negative")

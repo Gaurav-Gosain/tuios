@@ -9,6 +9,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
+// spaceNameMax caps a space name in bytes. A space is a row of the rail and a
+// heading of tuios ls, and every session filed under it carries the name.
+const spaceNameMax = 64
+
+// checkSpaceName refuses a space name param may not carry. A space name
+// follows the session-name rules so a surface can show and address it as
+// space/session without a separator inside either half. Empty passes: it is
+// no space.
+func checkSpaceName(param, name string) *verbError {
+	if err := ValidateSessionName(name); err != nil {
+		return invalidParam(param, "a space name follows the session name rules: "+err.Error())
+	}
+	if len(name) > spaceNameMax {
+		return invalidParam(param, "a space name is at most "+strconv.Itoa(spaceNameMax)+" bytes, and this one is "+strconv.Itoa(len(name)))
+	}
+	return nil
+}
+
 func (d *Daemon) verbSetSessionSpace(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -17,14 +35,18 @@ func (d *Daemon) verbSetSessionSpace(_ *connState, params json.RawMessage) (any,
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	// A space name follows the session-name rules so a later surface can show
-	// and address it as space/session without a separator inside either half.
-	if err := ValidateSessionName(p.Space); err != nil {
-		return nil, invalidParam("space", "a space name follows the session name rules: "+err.Error())
+	if verr := checkSpaceName("space", p.Space); verr != nil {
+		return nil, verr
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+	if p.Space != "" && sess.isGlobal() {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+echoName(sess.Name())+" is global, and a global session is in no space. Nothing was changed", &VerbHint{
+			Param:  "space",
+			Detail: "A global session is drawn above the machines, never inside a space, so tuios new refuses --space with --global and this verb refuses to file one.",
+		})
 	}
 	if err := sess.SetSpace(p.Space); err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not set session space: "+err.Error())
@@ -134,8 +156,8 @@ func (d *Daemon) verbRenameSpace(_ *connState, params json.RawMessage) (any, *ve
 	if p.Name == "" {
 		return nil, invalidParam("name", "name is the space's new name and cannot be empty. To take sessions out of a space, use set-session-space")
 	}
-	if err := ValidateSessionName(p.Name); err != nil {
-		return nil, invalidParam("name", "a space name follows the session name rules: "+err.Error())
+	if verr := checkSpaceName("name", p.Name); verr != nil {
+		return nil, verr
 	}
 
 	members := d.sessionsInSpace(p.Space)
@@ -198,12 +220,13 @@ func (d *Daemon) verbKillSpace(_ *connState, params json.RawMessage) (any, *verb
 			})
 	}
 
-	killed := make([]string, 0, len(names))
-	for _, name := range names {
-		// A member someone else killed since the lookup is already gone, which
-		// is what was asked for, so it is not an error. It is not listed as
-		// killed by this call either.
-		if err := d.manager.DeleteSession(name); err == nil {
+	killed := make([]string, 0, len(members))
+	for _, sess := range members {
+		// By id, so a member renamed since the lookup still goes and a session
+		// that took a member's old name stays. A member someone else killed
+		// since is already gone, which is what was asked for, so it is not an
+		// error. It is not listed as killed by this call either.
+		if name, err := d.manager.DeleteSessionByID(sess.ID); err == nil {
 			killed = append(killed, name)
 		}
 	}
@@ -300,24 +323,12 @@ func (d *Daemon) spacePick(space string, none bool) (*Session, *verbError) {
 	return nil, d.noSpacePickMembers(space)
 }
 
-// railSpace is the space a client's rail files a session under: its own,
-// except that a global session is drawn above the machines and never inside a
-// space (sessiontree.GroupBySpace), so it counts with the sessions in no space.
-// switch-space and pick-space choose by this, so a space row, or the none
-// row, lands among exactly the sessions the row stands for.
-func railSpace(sess *Session) string {
-	if sess.isGlobal() {
-		return ""
-	}
-	return sess.Space()
-}
-
 // spacePickMembers is the sessions spacePick chooses among for space, ""
 // for the sessions in no space.
 func (d *Daemon) spacePickMembers(space string) []*Session {
 	var members []*Session
 	for _, sess := range d.manager.AllSessions() {
-		if railSpace(sess) == space {
+		if sess.Space() == space {
 			members = append(members, sess)
 		}
 	}
@@ -325,18 +336,9 @@ func (d *Daemon) spacePickMembers(space string) []*Session {
 }
 
 // noSpacePickMembers is spacePick's refusal when spacePickMembers is
-// empty. The spaces it offers are counted the same way, so a space held only
-// by global sessions is not offered and then refused.
+// empty.
 func (d *Daemon) noSpacePickMembers(space string) *verbError {
-	seen := map[string]bool{}
-	var available []string
-	for _, sess := range d.manager.AllSessions() {
-		if sp := railSpace(sess); sp != "" && !seen[sp] {
-			seen[sp] = true
-			available = append(available, sp)
-		}
-	}
-	sort.Strings(available)
+	available := d.spaceNames()
 	if space == "" {
 		return hintedVerbError(ErrVerbInvalidParams, "every session is in a space, so none has no session", &VerbHint{
 			Param:     "none",

@@ -593,7 +593,7 @@ sessions that 'tuios ls' lists together.`,
 			newSessionDir = dir
 			if newSpace != "" {
 				if newGlobal {
-					return fmt.Errorf("--space cannot be used with --global. Create the global session, then file it with 'tuios call set-session-space'")
+					return fmt.Errorf("--space cannot be used with --global: a global session is drawn above the machines and is in no space")
 				}
 				return runNewSessionInSpace(name, newSpace, newDetach)
 			}

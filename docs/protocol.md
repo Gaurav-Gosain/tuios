@@ -2045,8 +2045,9 @@ Params: `space`, `none`, `session`, `client`.
 - The pick is the latest use (the `last_used` `list-spaces` reports, compared
   at full precision), then the latest activity, then the newer session, then
   the lower name: the ranking a bare `tuios attach` uses.
-- A global session counts as in no space, whatever space it is filed under,
-  because the sidebar draws it above the machines and never inside a space.
+- A global session counts as in no space, here and in every other space
+  verb, because the sidebar draws it above the machines and never inside a
+  space. `set-session-space` refuses to file one.
 - `session` and `client` choose the client as `switch-session` does.
 
 Request:
