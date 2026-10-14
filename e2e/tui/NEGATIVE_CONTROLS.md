@@ -5008,3 +5008,17 @@ The scrolling row of `TestEdgeZonesAreBSPOnly` first passed under the gate contr
 `TestAnEdgeDropResizesTheGuestOnce` first counted the WINCH rows only and passed under the edge-branch control: a swap into the full-height slot is one size change too. It now checks the split, and the row above is the run after that change.
 
 The `ClearDropZone` calls (press, release, lost release) have no control. Without them a stale highlight shows on a press until the first motion recomputes it, and the last drop's target pane is kept alive until the next drag; no test here makes two drags in one session or inspects memory.
+
+### BSP drop preview options
+
+Run on 2026-10-14 on macOS. The tests are in `bsp_drop_preview_test.go`: `appearance.drop_preview` (`fill`, `outline`, `off`) and `appearance.drop_preview_delay`. Each control cuts one wire from the fixed build, builds it, and runs the four tests against the cut binary; the fixed build passes all four, twice in a row, and the whole `Drop|EdgeZones|DragAnnounce` set, whose existing highlight checks run at the default delay of 120ms.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `DropPreviewOff` early return in `UpdateDropZone` | `TestDropPreviewOffDrawsNothing` ("cell (0,0), outside the landing rectangle, changed mid-drag": the left-edge zone is drawn); the other three pass, which is their positive half | **caught** |
+| The `DropPreviewOutline` term in `applyDropZone`, so outline fills like fill | `TestDropPreviewOutlineDrawsOnlyTheFrame` ("cell (1,1) inside the landing rectangle {... X:0 Y:0 Width:30 Height:38} is painted mid-drag with the outline-only preview") | **caught** |
+| The delay in `UpdateDropZone` (`delay` forced to 0, so every zone shows at once) | `TestDropPreviewWaitsForItsDelay` and `TestADropZoneLeftBeforeItsDelayNeverShows` ("cell (0,0), outside the landing rectangle, changed mid-drag": the zone is up in the frame read right after the move) | **caught** |
+| The generation check in `showDropZone`, so a delay armed for a zone the pointer left shows the zone it is on now | `TestADropZoneLeftBeforeItsDelayNeverShows` ("cell (0,0), outside the landing rectangle, changed mid-drag": the left edge's delay running out drew A's middle half the delay early); `TestDropPreviewWaitsForItsDelay` passes, as it should, since it never leaves its zone | **caught** |
+| `m.renderSkipped = false` in `showDropZone` | none | **not caught** |
+
+The `renderSkipped` line is not caught because nothing during a drag sets `renderSkipped`: the maintenance tick only skips the frame when `tickNeedsWork` finds nothing to do, and a pane under manipulation is work. The line stays, as in the `loadingShownMsg` case, so the due message draws by itself rather than relying on that.

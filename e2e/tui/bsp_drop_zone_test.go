@@ -44,8 +44,19 @@ type dropPanes struct {
 // returns them. env picks the colour depth.
 func dropBoard(t *testing.T, session string, env []string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
+	return dropBoardWith(t, session, env, "")
+}
+
+// dropBoardWith is dropBoard with appearance holding the lines of an
+// [appearance] table, for the drop preview's options.
+func dropBoardWith(t *testing.T, session string, env []string, appearance string) (*tuitest.Terminal, string, dropPanes) {
+	t.Helper()
 	base := t.TempDir()
-	writeConfig(t, base, "[startup]\ndaemon = true\ntiled = true\nlayout = 'bsp'\n")
+	config := "[startup]\ndaemon = true\ntiled = true\nlayout = 'bsp'\n"
+	if appearance != "" {
+		config += "\n[appearance]\n" + appearance + "\n"
+	}
+	writeConfig(t, base, config)
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", session}, env: env})
 	killDaemon(t, base)
 	waitBoot(t, term)
@@ -120,16 +131,24 @@ func carry(t *testing.T, term *tuitest.Terminal, p dropPanes, x, y int) *drag {
 	d.mid = readCells(term.Screen())
 	saveArtifact(t, term, d.artifactAt, "2-mid-drag")
 
-	// The pane follows the pointer with the offset of the press, held inside
-	// the content region the way the motion path clamps it.
-	h := winRect{X: x - (d.col - p.c.X), Y: y, Width: p.c.Width, Height: p.c.Height}
+	d.checkHeld(t)
+	return d
+}
+
+// checkHeld works out where the held pane is drawn with the pointer at (d.x,
+// d.y), and checks the pane's corner is there. The pane follows the pointer
+// with the offset of the press, held inside the content region the way the
+// motion path clamps it.
+func (d *drag) checkHeld(t *testing.T) {
+	t.Helper()
+	p := d.board
+	h := winRect{X: d.x - (d.col - p.c.X), Y: d.y, Width: p.c.Width, Height: p.c.Height}
 	h.X = min(max(h.X, p.box.X-(h.Width-20)), p.box.X+p.box.Width-20)
 	h.Y = min(max(h.Y, p.box.Y-(h.Height-3)), p.box.Y+p.box.Height-3)
 	d.held = h
-	if h.X >= 0 && h.Y >= 0 && !cornerAt(term.Screen(), h.X, h.Y) {
-		t.Fatalf("the held pane is not drawn at (%d,%d), where the press and the pointer put it\n%s", h.X, h.Y, term.Snapshot())
+	if h.X >= 0 && h.Y >= 0 && !cornerAt(d.term.Screen(), h.X, h.Y) {
+		t.Fatalf("the held pane is not drawn at (%d,%d), where the press and the pointer put it\n%s", h.X, h.Y, d.term.Snapshot())
 	}
-	return d
 }
 
 // drop releases the button where the pointer is and returns the settled
@@ -172,6 +191,14 @@ func (d *drag) visible(x, y int) bool {
 // colours the outline is reverse video.
 func (d *drag) checkHighlight(t *testing.T, want *winRect, depth16 bool) {
 	t.Helper()
+	d.checkPreview(t, want, depth16, true)
+}
+
+// checkPreview is checkHighlight for either preview style: with fill false
+// (appearance.drop_preview = "outline") the outline is the same and the inside
+// has to keep the ground it had before the drag.
+func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
+	t.Helper()
 	ring := func(x, y int) bool {
 		return want != nil && covers(*want, x, y) &&
 			(x == want.X || x == want.X+want.Width-1 || y == want.Y || y == want.Y+want.Height-1)
@@ -208,6 +235,12 @@ func (d *drag) checkHighlight(t *testing.T, want *winRect, depth16 bool) {
 				if mid.Bg != ringBg || mid.Bg == pre.Bg {
 					t.Fatalf("outline cell (%d,%d) of the landing rectangle %+v has ground %+v (before the drag %+v, the outline's %+v)\n%s",
 						x, y, *want, mid.Bg, pre.Bg, ringBg, d.term.SnapshotStyled())
+				}
+			case inside && !fill:
+				insideSeen = true
+				if mid.Bg != pre.Bg || mid.Reverse != pre.Reverse {
+					t.Fatalf("cell (%d,%d) inside the landing rectangle %+v is painted mid-drag with the outline-only preview: %+v, was %+v\n%s",
+						x, y, *want, mid, pre, d.term.SnapshotStyled())
 				}
 			case inside && !depth16:
 				insideSeen = true
