@@ -238,7 +238,7 @@ func checkDisplay(c ClientDisplay) (shownDisplay, bool) {
 
 // stillShown reports whether a display that passed the checks still does.
 func stillShown(s shownDisplay) bool {
-	return (s.wayland != "" && ownedSocket(s.wayland)) || (s.x11 != "" && x11SocketOK(s.x11))
+	return (s.wayland != "" && stillOwnedSocket(s.wayland)) || (s.x11 != "" && x11SocketOK(s.x11))
 }
 
 // DisplayLinkPath is the stable Wayland link of the session with the given

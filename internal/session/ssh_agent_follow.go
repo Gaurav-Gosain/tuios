@@ -96,10 +96,10 @@ func resolveAgentSocket(sock string) (string, bool) {
 		return "", false
 	}
 	resolved, err := filepath.EvalSymlinks(sock)
-	if err != nil || !ownedSocket(resolved) {
+	if err != nil {
 		return "", false
 	}
-	return resolved, true
+	return ownedSocket(resolved)
 }
 
 // SSHAgentLinkPath is the stable agent link of the session with the given id,
@@ -498,7 +498,7 @@ func (d *Daemon) relinkAgentLocked(sessionID string) {
 		return
 	}
 	list := f.bySession[sessionID]
-	for len(list) > 0 && !ownedSocket(list[0].sock) {
+	for len(list) > 0 && !stillOwnedSocket(list[0].sock) {
 		list = list[1:]
 	}
 	if len(list) == 0 {
@@ -510,7 +510,7 @@ func (d *Daemon) relinkAgentLocked(sessionID string) {
 	want, from := "", "the daemon's own socket"
 	if len(list) > 0 {
 		want, from = list[0].sock, "the socket of client "+list[0].clientID
-	} else if f.fallback != "" && ownedSocket(f.fallback) {
+	} else if f.fallback != "" && stillOwnedSocket(f.fallback) {
 		want = f.fallback
 	}
 	if want == "" {

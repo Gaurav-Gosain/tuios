@@ -95,46 +95,59 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 	if reportHost != "" && login.reportMatches(reportHost) {
 		dir = reportDir
 	}
-	if sock, ok := readEnvVarOf(login.pid, "SSH_AUTH_SOCK"); ok && ownedSocket(sock) {
-		env = []string{"SSH_AUTH_SOCK=" + sock}
+	if sock, ok := readEnvVarOf(login.pid, "SSH_AUTH_SOCK"); ok {
+		if resolved, owned := ownedSocket(sock); owned {
+			env = []string{"SSH_AUTH_SOCK=" + resolved}
+		}
 	}
 	return login.argv(dir), env, true
 }
 
 // ownedSocket reports whether path is an absolute path to a Unix socket, not
 // a link, owned by the user the daemon runs as, where no other user can put a
-// socket of their own in its place. The socket's folder is resolved once with
-// filepath.EvalSymlinks: macOS's /var, a symlink to /private/var, sits in
-// every standard temp path there, and without resolving it first the walk
-// below would reject every socket under it, not just a suspicious one. Every
-// folder from there up to the root is then checked, as OpenSSH's safe_path
-// does: each must be owned by this user or by root, and no other user may
-// write to it, unless it is sticky (/tmp), where nobody can remove or rename
-// what another user made.
-func ownedSocket(path string) bool {
+// socket of their own in its place. It returns the path it checked: the
+// socket's folder resolved once with filepath.EvalSymlinks, joined with the
+// socket's name. A caller hands on that path and never the one it was given,
+// so nothing after the check goes back through a link someone else could
+// repoint. macOS's /var, a symlink to /private/var, sits in every standard
+// temp path there, and without resolving it first the walk below would reject
+// every socket under it, not just a suspicious one. Every folder from there up
+// to the root is then checked, as OpenSSH's safe_path does: each must be owned
+// by this user or by root, and no other user may write to it, unless it is
+// sticky (/tmp), where nobody can remove or rename what another user made.
+func ownedSocket(path string) (string, bool) {
 	if !filepath.IsAbs(path) || hasControl(path) {
-		return false
+		return "", false
 	}
+	path = filepath.Clean(path)
+	folder, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return "", false
+	}
+	resolved := filepath.Join(folder, filepath.Base(path))
 	me := os.Geteuid()
-	fi, err := os.Lstat(path)
+	fi, err := os.Lstat(resolved)
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
-		return false
+		return "", false
 	}
 	if uid, ok := fileOwner(fi); !ok || uid != me {
-		return false
-	}
-	folder, err := filepath.EvalSymlinks(filepath.Dir(filepath.Clean(path)))
-	if err != nil {
-		return false
+		return "", false
 	}
 	for dir := folder; ; dir = filepath.Dir(dir) {
 		if !safeFolder(dir, me) {
-			return false
+			return "", false
 		}
 		if dir == filepath.Dir(dir) {
-			return true
+			return resolved, true
 		}
 	}
+}
+
+// stillOwnedSocket reports whether a socket path that already passed
+// ownedSocket, and so is already resolved, still does.
+func stillOwnedSocket(path string) bool {
+	_, ok := ownedSocket(path)
+	return ok
 }
 
 // safeFolder reports whether dir is a real folder, owned by me or by root,

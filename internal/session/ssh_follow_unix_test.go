@@ -16,6 +16,10 @@ import (
 // can be swapped. Only a socket of this user, in a folder only this user can
 // write, is passed.
 func TestOwnedSocket(t *testing.T) {
+	owned := func(path string) bool {
+		_, ok := ownedSocket(path)
+		return ok
+	}
 	listen := func(dir string) string {
 		path := filepath.Join(dir, "s")
 		l, err := net.Listen("unix", path)
@@ -30,14 +34,14 @@ func TestOwnedSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	sock := listen(private)
-	if !ownedSocket(sock) {
+	if !owned(sock) {
 		t.Fatalf("a socket in a private folder was refused")
 	}
 	link := filepath.Join(private, "link")
 	if err := os.Symlink(sock, link); err != nil {
 		t.Fatal(err)
 	}
-	if ownedSocket(link) {
+	if owned(link) {
 		t.Fatalf("a link to the socket was passed")
 	}
 	open := filepath.Join(t.TempDir(), "o")
@@ -48,14 +52,14 @@ func TestOwnedSocket(t *testing.T) {
 	if err := os.Chmod(open, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	if ownedSocket(openSock) {
+	if owned(openSock) {
 		t.Fatalf("a socket in a folder others can write to was passed")
 	}
 	file := filepath.Join(private, "f")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if ownedSocket(file) || ownedSocket("relative/s") {
+	if owned(file) || owned("relative/s") {
 		t.Fatalf("a plain file or a relative path was passed")
 	}
 }
@@ -94,8 +98,19 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 	if err := os.Symlink(safeTarget, safeLink); err != nil {
 		t.Fatal(err)
 	}
-	if sock := listen(safeTarget); !ownedSocket(filepath.Join(safeLink, "s")) {
+	sock := listen(safeTarget)
+	got, ok := ownedSocket(filepath.Join(safeLink, "s"))
+	if !ok {
 		t.Fatalf("a socket reached through a symlink to a safe folder was refused: %s", sock)
+	}
+	// The path handed on is the one that was checked, so nothing after the
+	// check goes back through the link.
+	realTarget, err := filepath.EvalSymlinks(safeTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(realTarget, "s"); got != want {
+		t.Fatalf("ownedSocket returned %q for a socket reached through a link, want the resolved %q", got, want)
 	}
 
 	unsafeTarget := filepath.Join(root, "unsafe")
@@ -111,7 +126,8 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 	if err := os.Symlink(unsafeTarget, unsafeLink); err != nil {
 		t.Fatal(err)
 	}
-	if sock := listen(unsafeTarget); ownedSocket(filepath.Join(unsafeLink, "s")) {
+	sock = listen(unsafeTarget)
+	if _, ok := ownedSocket(filepath.Join(unsafeLink, "s")); ok {
 		t.Fatalf("a socket reached through a symlink to a world-writable folder was passed: %s", sock)
 	}
 }
