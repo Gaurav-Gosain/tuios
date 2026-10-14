@@ -138,6 +138,23 @@ func sidebarLayoutPins(plans []sidebarSectionPlan) bool {
 	return len(plans) > 1 && !plans[len(plans)-1].Spacer
 }
 
+// sidebarLayoutStacksAbove reports whether the layout stacks section above
+// higher on the rail than section below. A section the layout leaves out is
+// stacked nowhere, so the answer is false.
+func sidebarLayoutStacksAbove(plans []sidebarSectionPlan, above, below sidebarSection) bool {
+	seenAbove := false
+	for _, p := range plans {
+		switch {
+		case p.Spacer:
+		case p.Section == above:
+			seenAbove = true
+		case p.Section == below:
+			return seenAbove
+		}
+	}
+	return false
+}
+
 func sidebarLayoutFor(source string) ([]sidebarSectionPlan, [sidebarSectionCount]bool) {
 	layoutMu.Lock()
 	defer layoutMu.Unlock()

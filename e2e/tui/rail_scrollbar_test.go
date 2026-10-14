@@ -192,8 +192,11 @@ func TestRailScrollbarFollowsTheWheel(t *testing.T) {
 }
 
 // TestRailScrollbarOnAPeek: hovering another session's row shows its panes in
-// the terminals section, held at the section's resting height and windowed
-// from the top of the peeked list on an offset of its own. With the attached
+// the terminals section, windowed from the top of the peeked list on an
+// offset of its own. The layout puts the sessions section above the terminals
+// one, as the default order does, so the peek is not held at the resting
+// height: it is budgeted for its own fourteen rows, which overflow the
+// section's 20% share just as the attached fourteen do. With the attached
 // list wheeled to its bottom first, a peek that inherited that offset would
 // show the peeked list's last rows. The peek must show its first rows, end in
 // "+N" for exactly the rows it cannot show, and put the thumb at the top of
@@ -211,7 +214,7 @@ func TestRailScrollbarFollowsTheWheel(t *testing.T) {
 //   - one good frame among flipping ones: the window is re-read on several
 //     frames after it first appears.
 //
-// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail scrollbar on a held
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail scrollbar on a
 // peek").
 func TestRailScrollbarOnAPeek(t *testing.T) {
 	term, base := railClient(t, "bar", "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\nsections = \"sessions,terminals:20\"\n",

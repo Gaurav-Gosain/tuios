@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -192,4 +193,99 @@ func peekHeaderRow(s tuitest.Screen, label string) int {
 func peekRowText(s tuitest.Screen, row int) string {
 	line := strings.TrimSuffix(strings.TrimRight(railLine(s, row), " "), "│")
 	return strings.TrimSpace(strings.TrimPrefix(line, "▎"))
+}
+
+// TestRailPeekOnTheDefaultOrderListsEveryPane: with the default section order
+// the terminals section is below the sessions section, so its height cannot
+// move the row under the pointer and a peek is not held. Attached to a
+// session of one pane, hovering a session of six lists all six panes in the
+// terminals section, in order, with no "+N" row.
+//
+// Held at the attached session's one line, the peek would show only "… +6".
+//
+// How it could pass wrongly, and what stops it:
+//   - no peek at all, so the attached session's pane is all there is: the
+//     terminals header must name the hovered session.
+//   - the peek cut to a "+N" row that happens to sit beside the pane names:
+//     each of the six lines under the header must carry its pane's name, and
+//     none may end in a "+N".
+//   - one good frame among changing ones: the screen must settle before the
+//     rows are read.
+//
+// The rail at rest and while peeking is saved under artifactDir.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail peek holds the
+// terminals height").
+func TestRailPeekOnTheDefaultOrderListsEveryPane(t *testing.T) {
+	base := t.TempDir()
+	dir := artifactDir(t)
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nwidth = 28\nposition = 'left'\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "pk-one", "--detach"); err != nil {
+		t.Fatalf("create pk-one: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "new", "pk-six", "--detach"); err != nil {
+		t.Fatalf("create pk-six: %v: %s", err, out)
+	}
+	panes := []string{"six0", "six1", "six2", "six3", "six4", "six5"}
+	if out, err := tuiosCLI(t, base, "set-window", "-s", "pk-six", "--name", panes[0]); err != nil {
+		t.Fatalf("name pk-six's first pane: %v: %s", err, out)
+	}
+	for _, name := range panes[1:] {
+		if out, err := tuiosCLI(t, base, "new-window", "-s", "pk-six", name, "--no-focus"); err != nil {
+			t.Fatalf("open %s in pk-six: %v: %s", name, err, out)
+		}
+	}
+
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "pk-one"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached to pk-one with its one pane: %v\n%s", err, term.Snapshot())
+	}
+	clientShows(t, base, "pk-one")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		for _, n := range []string{"terminals", "sessions", "pk-one", "pk-six"} {
+			if railRowOf(s, n) < 0 {
+				return false
+			}
+		}
+		return true
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rail never drew its sections and sessions: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(2 * time.Second)
+	rest := term.Screen()
+	saveArtifact(t, term, dir, "rest")
+	if peekHeaderRow(rest, "sessions") > peekHeaderRow(rest, "terminals") {
+		t.Fatalf("the fixture does not have sessions above terminals\n%s", term.Snapshot())
+	}
+
+	row := railRowAfter(rest, "pk-six", peekHeaderRow(rest, "sessions"))
+	mouseHover(t, term, strings.Index(railLine(rest, row), "pk-six")+1, row)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(railLine(s, peekHeaderRow(s, "terminals")), "pk-six")
+	}, uiTimeout); err != nil {
+		t.Fatalf("hovering pk-six never named it on the terminals header: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(500 * time.Millisecond)
+	s := term.Screen()
+	saveArtifact(t, term, dir, "peek")
+	hdr := peekHeaderRow(s, "terminals")
+	for i, name := range panes {
+		text := peekRowText(s, hdr+1+i)
+		if !slices.Contains(strings.Fields(text), name) {
+			t.Fatalf("ASSERTION: the peek's line %d is %q, want %s: a peek of pk-six lists all six panes\n%s", i, text, name, term.Snapshot())
+		}
+		if f := strings.Fields(text); strings.HasPrefix(f[len(f)-1], "+") {
+			t.Fatalf("ASSERTION: the peek's line %d is %q, which ends in a +N row\n%s", i, text, term.Snapshot())
+		}
+	}
+
+	mouseHover(t, term, 80, 20)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(railLine(s, peekHeaderRow(s, "terminals")), "pk-")
+	}, uiTimeout); err != nil {
+		t.Fatalf("leaving the rail did not end the peek: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "after")
+	alive(t, term, "after peeking pk-six")
 }

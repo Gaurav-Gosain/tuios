@@ -1441,19 +1441,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if emptyPeek {
 		nT = 1
 	}
-	// A peek keeps the height the section has at rest. The pointer that asked
-	// for it is on a session row, and with the terminals section above the
-	// sessions one a peek that resized it moved that row out from under the
+	// The layout: which sections are stacked, in what order, and the share each
+	// may claim. A section with no rows is dropped whole, header included, so an
+	// empty section costs the rail nothing rather than costing it a label over a
+	// gap.
+	plans := sidebarLayoutPlans(&m.Settings)
+	// With the terminals section above the sessions one, a peek keeps the height
+	// the section has at rest. The pointer that asked for it is on a session
+	// row, and a peek that resized the section moved that row out from under the
 	// pointer, which peeked a different session, which resized it again: the
 	// list jumped for as long as the hand swept it. So the budget is laid out
 	// for the attached session's rows, and the peeked list is fitted into the
 	// lines that buys, padded when it is shorter and cut to a "+N" when it is
-	// longer. peekRows is the peeked list's own count, which the windowing
-	// below uses once the budget is settled. An attached session with no rows
-	// of its own holds nothing: there is no section to hold, and a peek that
-	// could not show anything would not be one.
+	// longer. With the terminals section below the sessions one, its height
+	// cannot move the row under the pointer, so a peek is budgeted for its own
+	// rows and shows as many of them as the rail has room for. peekRows is the
+	// peeked list's own count, which the windowing below uses once the budget
+	// is settled. An attached session with no rows of its own holds nothing:
+	// there is no section to hold, and a peek that could not show anything
+	// would not be one.
 	peekRows := nT
-	if peeking {
+	if peeking && sidebarLayoutStacksAbove(plans, sidebarSectionTerminals, sidebarSectionSessions) {
 		resting := m.sidebarTerminals(sessions, m.sidebarCurrentSessionID())
 		if compactAgents {
 			resting = sidebarTerminalsWithoutAgents(resting, allAgents)
@@ -1485,11 +1493,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		footerLines, footerZones, footerH = nil, nil, 0
 	}
 
-	// The layout: which sections are stacked, in what order, and the share each
-	// may claim. A section with no rows is dropped whole, header included, so an
-	// empty section costs the rail nothing rather than costing it a label over a
-	// gap.
-	plans := sidebarLayoutPlans(&m.Settings)
 	gitRows := m.gitRows()
 	// A section with no rows is dropped, header and all, which is right for a
 	// section that has nothing to say and wrong for this one. A person who put
