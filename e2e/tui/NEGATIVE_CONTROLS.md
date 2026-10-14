@@ -4845,3 +4845,17 @@ settles the mode.
 | --- | --- |
 | `origin/main`, test before the fix | 3 failures in 20 runs idle, 4 in 20 under load |
 | This branch | 0 failures in 50 runs idle, 0 in 50 under load |
+## A zoom inside the scratch
+
+Run on 2026-10-14 on branch `fix/scratch-zoom-overflow`. The test is
+`TestScratchZoomStaysInTheBox` in `scratch_zoom_test.go`, with
+`zoom_size = 90`, in a standalone run and a daemon run with a second client.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The scratch clip cut from the render loop (origin/main at `c4ddd0ff9`) | before the fix | both runs: 268 cells of pane `@` outside the scratch box, the first at (0,0), and the frame drawn over at its top-left corner. In the daemon run the second client finds no scratch frame, because the overflowing pane covers its title. | **caught** |
+| The positive half | this branch | none: the zoomed pane fills 97 of 110 columns of the box, the other two panes peek inside the box only, the frame is whole on both clients, and the zoom out gives three tiles inside the box | **guard** |
+
+Not covered here: the divider clip in `clipScratchSplits`. The suite pins
+the looks from before v0.8.0, so the panes keep their own borders and no
+divider is drawn.

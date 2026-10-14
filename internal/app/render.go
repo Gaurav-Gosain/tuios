@@ -126,6 +126,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// While a scratch group is on the screen, the workspace it is shown over
 	// is drawn under it, below every layer of the group. See scratch.go.
 	inScratch := m.InScratchView()
+	// The group's own panes are cut to the inside of the scratch box, not to
+	// the content region. A zoom under 100 percent is a camera over a layout
+	// larger than the box, and the panes it runs off the edges were drawn over
+	// the frame and the backdrop outside it.
+	_, scratchInner, _ := m.scratchRegion()
 	for i := range m.Windows {
 		window := m.Windows[i]
 
@@ -165,10 +170,24 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			margin = 20
 		}
 
+		// The box this pane is drawn inside: the content region, or the inside
+		// of the scratch box for a pane of the group on the screen.
+		clipL, clipT, clipR, clipB := leftMargin, topMargin, rightClip, viewportHeight+topMargin
+		inBox := inScratch && !backdrop
+		if inBox {
+			clipL, clipT = scratchInner.X, scratchInner.Y
+			clipR, clipB = scratchInner.X+scratchInner.W, scratchInner.Y+scratchInner.H
+		}
+
 		isVisible := window.X+window.Width >= cullLeft-margin &&
 			window.X <= cullRight+margin &&
 			window.Y+window.Height >= cullTop-margin &&
 			window.Y <= cullBottom+margin
+		if inBox {
+			// A pane the camera has moved wholly out of the box draws nothing.
+			isVisible = isVisible && window.X+window.Width > clipL && window.X < clipR &&
+				window.Y+window.Height > clipT && window.Y < clipB
+		}
 
 		if !isVisible {
 			continue
@@ -181,9 +200,15 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			m.paneContentRects[window.ID] = paneContentRect(window)
 		}
 
-		isFullyVisible := window.X >= leftMargin && window.Y >= topMargin &&
-			window.X+window.Width <= rightClip &&
-			window.Y+window.Height <= viewportHeight+topMargin
+		isFullyVisible := window.X >= clipL && window.Y >= clipT &&
+			window.X+window.Width <= clipR &&
+			window.Y+window.Height <= clipB
+		// A scratch pane the box cuts has its bar in a column the box may not
+		// show, so it gets none.
+		barClip := rightClip
+		if inBox && !isFullyVisible {
+			barClip = -1
+		}
 
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
 		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
@@ -238,7 +263,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
 			if windowNeedsScrollbar(window, &m.Settings) {
-				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
+				if sbLayer := m.renderScrollbarLayer(window, barClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -261,7 +286,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			}
 			layers = append(layers, window.CachedLayer)
 			if windowNeedsScrollbar(window, &m.Settings) {
-				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
+				if sbLayer := m.renderScrollbarLayer(window, barClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
 			}
@@ -294,16 +319,29 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		// was. TestFullyVisibleWindowBoxFitsItsRectangle holds the box to that.
 		clippedContent, finalX, finalY := boxContent, window.X, window.Y
 		if !isFullyVisible {
-			clippedContent, finalX, finalY = clipWindowContent(
-				boxContent,
-				window.X, window.Y,
-				rightClip, viewportHeight+topMargin,
-			)
+			if inBox {
+				// clipWindowContent cuts at column and row 0 on the near
+				// sides, so the pane is moved into the box's own frame of
+				// reference for the cut and back after it.
+				clippedContent, finalX, finalY = clipWindowContent(
+					boxContent,
+					window.X-clipL, window.Y-clipT,
+					clipR-clipL, clipB-clipT,
+				)
+				finalX += clipL
+				finalY += clipT
+			} else {
+				clippedContent, finalX, finalY = clipWindowContent(
+					boxContent,
+					window.X, window.Y,
+					rightClip, viewportHeight+topMargin,
+				)
+			}
 		}
 
 		if renderTraceEnabled {
 			traceLayerBuild(window, isFocused, boxContent, clippedContent,
-				window.X, window.Y, finalX, finalY, zIndex, rightClip, viewportHeight+topMargin)
+				window.X, window.Y, finalX, finalY, zIndex, clipR, clipB)
 		}
 
 		window.CachedLayer = lipgloss.NewLayer(clippedContent).X(finalX).Y(finalY).Z(zIndex).ID(window.ID)
@@ -312,7 +350,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
 		if windowNeedsScrollbar(window, &m.Settings) {
-			if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
+			if sbLayer := m.renderScrollbarLayer(window, barClip, zIndex+1, isFocused); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
 		}

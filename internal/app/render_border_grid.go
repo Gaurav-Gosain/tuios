@@ -51,7 +51,7 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 		return splits
 	}
 	if !m.UseBSPLayout {
-		return layout.SplitsBetween(m.tiledPaneRects(), m.separatorGap())
+		return m.clipScratchSplits(layout.SplitsBetween(m.tiledPaneRects(), m.separatorGap()))
 	}
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {
@@ -70,7 +70,27 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 	for i := range splits {
 		splits[i] = c.applySplit(splits[i])
 	}
-	return splits
+	return m.clipScratchSplits(splits)
+}
+
+// clipScratchSplits cuts the dividers to the inside of the scratch box while a
+// zoom's camera is up in a scratch group. The camera lays the group out in a
+// box larger than the scratch box, and the dividers of the panes it runs off
+// the edges were drawn over the frame and the workspace behind it. Outside the
+// scratch the content region's edge is chrome, which covers them, so those are
+// left as they are.
+func (m *OS) clipScratchSplits(splits []layout.SplitLine) []layout.SplitLine {
+	if !m.zoomCanvasNow.on || !m.InScratchView() {
+		return splits
+	}
+	bounds := m.GetBSPBounds()
+	out := splits[:0]
+	for _, s := range splits {
+		if clipped, ok := clipSplit(s, bounds); ok {
+			out = append(out, clipped)
+		}
+	}
+	return out
 }
 
 // paneLayer is a tiled pane as the divider grid sees it: the rectangle it holds
