@@ -959,22 +959,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Name:     "Reload config",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				configPath, err := config.GetConfigPath()
-				if err != nil {
-					m.ShowNotification("Config path error: "+err.Error(), "error", 0)
-					return m, nil
-				}
-				newCfg, err := config.ReloadConfig(configPath)
-				if err != nil {
-					// The running config stands. Saying so is the point: a
-					// reload that quietly did nothing reads as a reload that
-					// worked.
-					m.ShowNotification("Config not reloaded: "+err.Error(), "error", 0)
-					return m, nil
-				}
-				cmd := m.ApplyReloadedConfig(newCfg)
-				m.ShowNotification("Config reloaded", "success", 0)
-				return m, cmd
+				return m, m.ReloadConfigFromDisk()
 			},
 		},
 		{

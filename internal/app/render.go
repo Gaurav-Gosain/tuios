@@ -1120,6 +1120,9 @@ func (m *OS) View() tea.View {
 	// app that asked for less than 1003 still sees only what it asked for (#78);
 	// see guestWantsMotion.
 	view.MouseMode = tea.MouseModeAllMotion
+	if m.MouseOff {
+		view.MouseMode = tea.MouseModeNone
+	}
 
 	view.ReportFocus = true
 	m.notePaneFocus()

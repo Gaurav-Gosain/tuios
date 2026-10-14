@@ -6073,3 +6073,31 @@ Run on 2026-10-15 on macOS on branch `feat/dim-foreground`. The test is `TestDim
 | `renderTerminal`: `dimText = m.Settings.DimForeground` cut (`dimText = true`) | mutant of this branch | `TestDimForeground/off` ("dim_foreground = false: the unfocused text is {Kind:2 Index:0 R:110 G:134 B:160}, want the focused text's {Kind:2 Index:0 R:220 G:220 B:220}") | **caught** |
 | `ApplyAppearanceConfig`: `DimForeground` not read from the config (`s.DimForeground = true`) | mutant of this branch | `TestDimForeground/off` ("dim_foreground = false: the unfocused text is {Kind:2 Index:0 R:110 G:134 B:160}, want the focused text's {Kind:2 Index:0 R:220 G:220 B:220}") | **caught** |
 | The positive half | this branch | none: with the option unset the unfocused text and background both differ from the focused pane's (`TestDimForeground/default`), and with `dim_foreground = false` the background still does | **guard** |
+
+## Actions for a tmux-style keymap
+
+Run on 2026-10-15 on macOS on branch `feat/tmux-style-actions`. The e2e tests are `TestTmuxStyleActionsRunWhenBound`, `TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen` (`tmux_style_actions_test.go`), `TestMarkAndJoinPane`, `TestJoinMarkedPaneFromAnotherWorkspace`, `TestMarkedPaneShowsABadge`, `TestMoveWorkspaceAndSendPane` (`tmux_style_panes_test.go`) and `TestToggleMouseTurnsHostReportingOffAndOn` (`tmux_style_mouse_test.go`). Two unit tests stay in `internal/app/prefix_tree_test.go` for what the e2e cannot see: which tree holds a pane after a join from another workspace, and the per-workspace names and tree that a workspace move swaps. Each control cuts one wire, builds, and runs the named test.
+
+| Control | Tests that fail | Verdict |
+| --- | --- | --- |
+| `d.Register("new_workspace", handleNewWorkspace)` cut | `TestTmuxStyleActionsRunWhenBound` ("tmuxish is on workspace 1, want 2") | **caught** |
+| `d.Register("cycle_layout", ...)` cut | `TestTmuxStyleActionsRunWhenBound` ("tmuxish has layout mode \"bsp\", want \"master-stack\"") | **caught** |
+| `i != m.dockWorkspace() &&` cut from `nextFreeWorkspace` | `TestNewWorkspaceSkipsTheEmptyWorkspaceOnScreen` ("skipper is on workspace 2, want 3") | **caught** |
+| `d.Register("mark_pane", ...)` cut | `TestMarkAndJoinPane` ("mark_pane showed no notification: ... waiting for text \"Pane marked\"") | **caught** |
+| `m.setMarkedPane(w.ID)` cut from `MarkPane` | `TestMarkAndJoinPane` ("ASSERTION: c should end up left of a, beside it: pane ... is {... X:60 Y:19 ...}"), `TestMarkedPaneShowsABadge` ("ASSERTION: b marked: want 1 \"[marked]\" on the screen, have 0") | **caught** |
+| `d.Register("join_marked_"+name, ...)` registered under another name | `TestMarkAndJoinPane` (same "c should end up left of a" assertion) | **caught** |
+| `m.setMarkedPane("")` cut from the join | `TestMarkAndJoinPane` ("ASSERTION: the join takes the mark off c: want 0 \"[marked]\" on the screen, have 1") | **caught** |
+| the `markedPaneBadge` append cut from `windowBorderRows` | `TestMarkedPaneShowsABadge` ("ASSERTION: b marked: want 1 \"[marked]\" on the screen, have 0") | **caught** |
+| the `InvalidateCache` loop cut from `setMarkedPane` | `TestMarkedPaneShowsABadge` (same: the cached layer keeps the old title bar) | **caught** |
+| `m.MoveWindowToWorkspace(markedIdx, ...)` cut from `JoinMarkedPane` | `TestJoinMarkedPaneFromAnotherWorkspace` ("ASSERTION: b joins right of a on workspace 1: pane ... is {... Workspace:2 ...}") | **caught** |
+| `old.RemoveWindow(markedInt)` cut from `JoinMarkedPane` | e2e: not caught, since the stale entry in the old workspace's tree changes nothing on screen. Unit: `TestJoinMarkedPaneBringsAPaneFromAnotherWorkspace` ("d is still in workspace 2's tree") | **caught by the unit test only** |
+| `InsertWindowWithPreselection` cut from `JoinMarkedPane` | `TestJoinMarkedPaneBringsAPaneFromAnotherWorkspace` ("d (y=19) is not below a (y=0 h=38)") | **caught** |
+| `m.MoveWindowToWorkspace(markedIdx, ...)` replaced by setting `marked.Workspace` by hand | none: the retile and the layout save it adds change nothing the tests read, because `JoinMarkedPane` retiles again itself | **not caught** |
+| `d.Register("move_workspace_right", ...)` cut | `TestMoveWorkspaceAndSendPane` ("workspace 1 swapped with 2 takes its pane along: pane ... is {... Workspace:1 ...}") | **caught** |
+| `MoveWindowToWorkspace` cut from the `send_to_workspace_N` handler | `TestMoveWorkspaceAndSendPane` ("send_to_workspace_3 moves the pane to 3: pane ... is {... Workspace:2 ...}") | **caught** |
+| `swapWorkspaceKeys(m.WorkspaceNames, ...)` cut from `swapPerWorkspaceState` | `TestMoveWorkspaceBySwapsAndFollows` ("names are map[1:code 2:logs], want the two swapped") | **caught** |
+| `swapWorkspaceKeys(m.WorkspaceTrees, ...)` cut from `swapPerWorkspaceState` | `TestMoveWorkspaceBySwapsAndFollows` ("workspace 1's tree did not move with its panes") | **caught** |
+| the `if m.MouseOff {` block cut from `View()` | `TestToggleMouseTurnsHostReportingOffAndOn` ("toggle_mouse never turned mouse reports off: \"\\x1b[?1003l\" not written within 10s") | **caught** |
+| `d.Register("toggle_mouse", ...)` cut | `TestToggleMouseTurnsHostReportingOffAndOn` (same) | **caught** |
+| `m.MouseOff = !m.MouseOff` cut from `ToggleMouse` | `TestToggleMouseTurnsHostReportingOffAndOn` (same) | **caught** |
+| The positive halves | none: the bsp and workspace 1 reads before any key; c starting right of a and a join with no mark moving nothing; no badge before any mark, and exact badge counts; b really on workspace 2 before the cross-workspace join; `\x1b[?1003h` seen at start and again after the second toggle | **guard** |

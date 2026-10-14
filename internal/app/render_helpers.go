@@ -356,7 +356,18 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	markState := m.windowMarkState(window)
 	windowName := ""
 	if titlePos != "hidden" {
+		// The pane mark_pane marked carries a badge after its name. Its room
+		// is taken before the name is cut, so a long name gives up its tail
+		// and never the badge. It goes last so the agent glyph stays first,
+		// where titleBadgeText looks for it.
+		marked := m.MarkedPaneID != "" && window.ID == m.MarkedPaneID
+		if marked {
+			titleMaxWidth -= len(markedPaneBadge) + 1
+		}
 		windowName = windowTitleText(window, markState, position, titleMaxWidth, &m.Settings)
+		if marked {
+			windowName = strings.TrimSpace(windowName + " " + markedPaneBadge)
+		}
 	}
 
 	borderStyle := style.Foreground(color)

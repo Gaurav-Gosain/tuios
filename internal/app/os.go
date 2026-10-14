@@ -1032,6 +1032,12 @@ type OS struct {
 	TapeRecordingName  string            // Name of current recording
 	TapePrefixActive   bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
 	LayoutPrefixActive bool              // True when Ctrl+B, L was pressed (layout sub-prefix)
+	// MouseOff is set by toggle_mouse: the client stops asking the host for
+	// mouse reports, so the host terminal selects text itself, as tmux's
+	// mouse off does.
+	MouseOff bool
+	// MarkedPaneID is the pane mark_pane marked, for join_marked_*.
+	MarkedPaneID string
 	// Remote command processing
 	ProcessingRemoteKeys bool // True when processing remote send-keys (disables animations)
 	// ScriptWait is the WaitFor playback is holding for, nil when none is.

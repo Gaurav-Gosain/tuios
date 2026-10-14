@@ -761,6 +761,33 @@ next_workspace = ["alt+y"]
 prev_workspace = ["alt+u"]
 ```
 
+## Actions for a tmux-style keymap
+
+These actions have no default key. Bind them in any
+section where you want them.
+
+| Action | What it does |
+| --- | --- |
+| `mark_pane` | Marks the focused pane, or clears the mark when it is the marked one. The marked pane shows `[marked]` in its title bar. |
+| `join_marked_left`, `join_marked_right`, `join_marked_up`, `join_marked_down` | Moves the marked pane next to the focused one, on that side, from this workspace or another. Needs BSP tiling. |
+| `resize_pane_left_5`, `resize_pane_right_5`, `resize_pane_up_5`, `resize_pane_down_5` | Moves the focused pane's edge by 5 cells. The `_20` actions move it by 20. |
+| `new_workspace` | Goes to the first workspace with no pane, the one the dock's `+` button opens, and opens a pane there. |
+| `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
+| `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
+| `cycle_layout` | Cycles BSP, master-stack and scrolling. |
+| `reload_config` | Reads `config.toml` again, as the "Reload config" palette row does. |
+| `toggle_mouse` | Stops asking the terminal for mouse reports, so the terminal selects text itself. Run it again to turn the mouse back on. The setting lasts until you quit. |
+
+For tmux's synchronize-panes, bind `toggle_multifocus_all`. It puts every pane
+on the workspace in the multifocus set, so typing goes to all of them. See
+[LAYOUT_MODES.md](LAYOUT_MODES.md#multifocus).
+
+```toml
+[keybindings.window_prefix]
+mark_pane = ["m"]
+join_marked_right = ["J"]
+```
+
 ## Split into the same ssh
 
 These actions open a pane on the machine that the focused pane is connected to
