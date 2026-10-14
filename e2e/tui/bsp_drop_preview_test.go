@@ -1,6 +1,9 @@
 package tuie2e
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -113,4 +116,142 @@ func TestADropZoneLeftBeforeItsDelayNeverShows(t *testing.T) {
 		t.Errorf("dropped in A's middle, C is %+v, want A's slot %+v", got[p.c.ID], p.a)
 	}
 	d.checkHighlight(t, &whole, false)
+}
+
+// paintShell writes a shell into base that fills its pane with text in many
+// colours before it hands over to /bin/sh: plain colours, bold, a cell on a
+// ground of its own, faint text, reverse video and a truecolour ink. It
+// returns the [appearance] line that makes it the panes' shell.
+func paintShell(t *testing.T, base string) string {
+	t.Helper()
+	line := `printf '\033[7mrev\033[0m \033[31mred\033[0m \033[1;34mbold\033[0m \033[42;30m green \033[0m \033[2mfaint\033[0m \033[38;2;250;180;40mamber\033[0m plain\n'`
+	script := "#!/bin/sh\ni=0\nwhile [ $i -lt 40 ]; do\n" + line + "\ni=$((i+1))\ndone\nexec /bin/sh\n"
+	path := filepath.Join(base, "paint.sh")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write the paint shell: %v", err)
+	}
+	return "preferred_shell = '" + path + "'"
+}
+
+// TestDropPreviewFillWashesTheZone is the left-edge drop on a pane full of
+// coloured text, with the default fill preview. The outline is the border's
+// own glyphs in one ink. Inside it every cell is on the tint, and no cell with
+// text keeps its colour, whatever ground, weight or reverse video it had.
+//
+// How it could pass wrongly: a pane of default-coloured blanks changes colour
+// under any tint at all, so the fixture is held to having the colours the
+// wash has to reach before the drag: four inks, a cell with its own ground and
+// a reverse one, all inside the zone.
+func TestDropPreviewFillWashesTheZone(t *testing.T) {
+	term, base, p := dropBoardPrep(t, "drop-preview-fill", chromeDepths[2].env, func(base string) string {
+		return paintShell(t, base)
+	})
+	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
+	got := d.drop(t, base)
+	edgeCases[0].check(t, p, got[p.a.ID], got[p.b.ID], got[p.c.ID])
+	c := got[p.c.ID]
+
+	inks := map[tuitest.Color]bool{}
+	grounds, reversed := 0, 0
+	for y := c.Y + 1; y < c.Y+c.Height-1; y++ {
+		for x := c.X + 1; x < c.X+c.Width-1; x++ {
+			if !d.visible(x, y) {
+				continue
+			}
+			cell := d.pre[y][x]
+			inks[cell.Fg] = true
+			if cell.Bg.Kind != tuitest.ColorDefault {
+				grounds++
+			}
+			if cell.Reverse {
+				reversed++
+			}
+		}
+	}
+	if len(inks) < 4 || grounds == 0 || reversed == 0 {
+		t.Fatalf("before the drag the zone %+v holds %d inks, %d cells on a ground and %d reverse ones; the fixture cannot test the wash\n%s",
+			c, len(inks), grounds, reversed, d.term.Snapshot())
+	}
+	d.checkHighlight(t, &c, false)
+}
+
+// TestDropPreviewLooks drags a pane over a fish prompt and a coloured ls
+// listing, in both looks and both preview styles, and at 16 colours, and keeps
+// a picture of each frame mid-drag (TUIOS_E2E_FRAMES). Each frame is held to
+// the same checks as the other preview cases.
+func TestDropPreviewLooks(t *testing.T) {
+	fish, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("fish is not installed")
+	}
+	cases := []struct {
+		name, theme, mode string
+		depth             int
+	}{
+		{"dark-fill", "", "fill", 2},
+		{"dark-outline", "", "outline", 2},
+		{"light-fill", "catppuccin_latte", "fill", 2},
+		{"light-outline", "catppuccin_latte", "outline", 2},
+		{"dark-16", "", "fill", 0},
+		{"light-16", "catppuccin_latte", "fill", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			term, base, p := dropBoardPrep(t, "drop-look-"+tc.name, chromeDepths[tc.depth].env, func(base string) string {
+				fishLooks(t, base)
+				lines := "preferred_shell = '" + fish + "'\ndrop_preview = '" + tc.mode + "'\n"
+				if tc.theme != "" {
+					lines += "theme = '" + tc.theme + "'\n"
+				}
+				return lines
+			})
+			d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
+			savePNG(t, term.Screen(), hostPalette(t, tc.theme), d.artifactAt, "drop-preview-"+tc.name)
+			got := d.drop(t, base)
+			c := got[p.c.ID]
+			d.checkPreview(t, &c, tc.depth == 0, tc.mode == "fill")
+		})
+	}
+}
+
+// fishLooks gives fish a busy prompt (segments on grounds of their own, a
+// faint clock) and starts it in a folder whose ls listing is in colour.
+func fishLooks(t *testing.T, base string) {
+	t.Helper()
+	dir := filepath.Join(base, "project")
+	for _, sub := range []string{"cmd", "docs", "internal", "scripts"} {
+		mustMkdir(filepath.Join(dir, sub))
+	}
+	for name, mode := range map[string]os.FileMode{
+		"build.sh": 0o755, "install.sh": 0o755, "go.mod": 0o644, "README.md": 0o644,
+		"logo.png": 0o644, "release.tar.gz": 0o644, "LICENSE": 0o644,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, mode); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	if err := os.Symlink("README.md", filepath.Join(dir, "AGENTS.md")); err != nil {
+		t.Fatalf("link AGENTS.md: %v", err)
+	}
+	config := `set -g fish_greeting
+function fish_prompt
+    set_color -b 7aa2f7 1a1b26; printf ' ~/d/tuios '
+    set_color -b 414868 c0caf5; printf ' feat/drop-zones '
+    set_color -b f7768e 1a1b26; printf ' Go '
+    set_color normal; set_color -d; printf ' v1.27.2 12:37 '
+    set_color normal; set_color -b e0af68 1a1b26; printf ' gaurav '
+    set_color normal; set_color green; printf '\n> '
+    set_color normal
+end
+cd ` + dir + `
+echo (set_color -d)'-- tuios: restored from Oct 14 12:36, fresh shell in '$PWD(set_color normal)
+echo 'Type '(set_color cyan)'help'(set_color normal)' for instructions on how to use fish'
+ls --color=always
+ls -l --color=always
+`
+	path := filepath.Join(base, "XDG_CONFIG_HOME", "fish", "config.fish")
+	mustMkdir(filepath.Dir(path))
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatalf("write the fish config: %v", err)
+	}
 }

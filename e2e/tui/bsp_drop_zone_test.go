@@ -51,9 +51,16 @@ func dropBoard(t *testing.T, session string, env []string) (*tuitest.Terminal, s
 // [appearance] table, for the drop preview's options.
 func dropBoardWith(t *testing.T, session string, env []string, appearance string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
+	return dropBoardPrep(t, session, env, func(string) string { return appearance })
+}
+
+// dropBoardPrep is dropBoardWith with the [appearance] lines worked out from
+// the isolation root, for a board whose panes run a shell set up in it.
+func dropBoardPrep(t *testing.T, session string, env []string, prep func(base string) string) (*tuitest.Terminal, string, dropPanes) {
+	t.Helper()
 	base := t.TempDir()
 	config := "[startup]\ndaemon = true\ntiled = true\nlayout = 'bsp'\n"
-	if appearance != "" {
+	if appearance := prep(base); appearance != "" {
 		config += "\n[appearance]\n" + appearance + "\n"
 	}
 	writeConfig(t, base, config)
@@ -187,35 +194,74 @@ func (d *drag) visible(x, y int) bool {
 // else, reading only cells the held pane does not cover. With want nil there
 // must be no highlight at all.
 //
-// In colour the outline is a ground of its own and the inside a tint; at 16
+// In colour the outline is the pane border's glyphs in one ink, and the inside
+// is washed: one tinted ground, and no cell with text keeps its colour. At 16
 // colours the outline is reverse video.
 func (d *drag) checkHighlight(t *testing.T, want *winRect, depth16 bool) {
 	t.Helper()
 	d.checkPreview(t, want, depth16, true)
 }
 
+// ringGlyph is the rounded border's glyph the outline of want draws at (x,
+// y), or "" for a cell inside it. The board keeps the shipped rounded border.
+func ringGlyph(want winRect, x, y int) string {
+	left, right := x == want.X, x == want.X+want.Width-1
+	top, bottom := y == want.Y, y == want.Y+want.Height-1
+	switch {
+	case !left && !right && !top && !bottom:
+		return ""
+	case want.Width == 1:
+		return "│"
+	case want.Height == 1:
+		return "─"
+	case top && left:
+		return "╭"
+	case top && right:
+		return "╮"
+	case bottom && left:
+		return "╰"
+	case bottom && right:
+		return "╯"
+	case top, bottom:
+		return "─"
+	}
+	return "│"
+}
+
 // checkPreview is checkHighlight for either preview style: with fill false
 // (appearance.drop_preview = "outline") the outline is the same and the inside
-// has to keep the ground it had before the drag.
+// has to keep the ground and the text colour it had before the drag.
 func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 	t.Helper()
 	ring := func(x, y int) bool {
-		return want != nil && covers(*want, x, y) &&
-			(x == want.X || x == want.X+want.Width-1 || y == want.Y || y == want.Y+want.Height-1)
+		return want != nil && covers(*want, x, y) && ringGlyph(*want, x, y) != ""
 	}
-	var ringBg tuitest.Color
+	inside := func(x, y int) bool {
+		return want != nil && covers(*want, x, y) && !ring(x, y)
+	}
+	// The outline's ink and the tint, from the first visible cell of each.
+	var ringFg, tint tuitest.Color
 	ringSeen, insideSeen := false, false
 	if want != nil && !depth16 {
-		for y := want.Y; y < want.Y+want.Height && !ringSeen; y++ {
+		for y := want.Y; y < want.Y+want.Height; y++ {
 			for x := want.X; x < want.X+want.Width; x++ {
-				if ring(x, y) && d.visible(x, y) {
-					ringBg, ringSeen = d.mid[y][x].Bg, true
-					break
+				switch {
+				case !d.visible(x, y):
+				case ring(x, y) && !ringSeen:
+					ringFg, ringSeen = d.mid[y][x].Fg, true
+				case inside(x, y) && !insideSeen:
+					tint, insideSeen = d.mid[y][x].Bg, true
 				}
 			}
 		}
 		if !ringSeen {
 			t.Fatalf("no cell of the landing rectangle's outline %+v is visible past the held pane %+v; the fixture cannot see the highlight", *want, d.held)
+		}
+		if !insideSeen {
+			t.Fatalf("no cell inside the landing rectangle %+v is visible past the held pane %+v", *want, d.held)
+		}
+		if fill && tint.Kind == tuitest.ColorDefault {
+			t.Fatalf("the inside of the landing rectangle %+v is on the terminal's own ground mid-drag: no tint\n%s", *want, d.term.SnapshotStyled())
 		}
 	}
 	box := d.board.box
@@ -225,30 +271,39 @@ func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 				continue
 			}
 			pre, mid := d.pre[y][x], d.mid[y][x]
-			inside := want != nil && covers(*want, x, y) && !ring(x, y)
 			switch {
 			case ring(x, y) && depth16:
 				if !mid.Reverse {
 					t.Fatalf("outline cell (%d,%d) of the landing rectangle %+v is not reverse video mid-drag\n%s", x, y, *want, d.term.SnapshotStyled())
 				}
 			case ring(x, y):
-				if mid.Bg != ringBg || mid.Bg == pre.Bg {
-					t.Fatalf("outline cell (%d,%d) of the landing rectangle %+v has ground %+v (before the drag %+v, the outline's %+v)\n%s",
-						x, y, *want, mid.Bg, pre.Bg, ringBg, d.term.SnapshotStyled())
+				g := ringGlyph(*want, x, y)
+				if mid.Content != g || mid.Fg != ringFg || mid.Reverse {
+					t.Fatalf("outline cell (%d,%d) of the landing rectangle %+v is %q in %+v, want the border glyph %q in the outline's ink %+v\n%s",
+						x, y, *want, mid.Content, mid.Fg, g, ringFg, d.term.SnapshotStyled())
 				}
-			case inside && !fill:
-				insideSeen = true
-				if mid.Bg != pre.Bg || mid.Reverse != pre.Reverse {
+				if fill && mid.Bg != tint {
+					t.Fatalf("outline cell (%d,%d) of the landing rectangle %+v has ground %+v, want the tint %+v\n%s",
+						x, y, *want, mid.Bg, tint, d.term.SnapshotStyled())
+				}
+			case inside(x, y) && depth16:
+			case inside(x, y) && !fill:
+				if mid.Bg != pre.Bg || mid.Fg != pre.Fg || mid.Reverse != pre.Reverse {
 					t.Fatalf("cell (%d,%d) inside the landing rectangle %+v is painted mid-drag with the outline-only preview: %+v, was %+v\n%s",
 						x, y, *want, mid, pre, d.term.SnapshotStyled())
 				}
-			case inside && !depth16:
-				insideSeen = true
-				if mid.Bg == pre.Bg || mid.Bg == ringBg {
-					t.Fatalf("cell (%d,%d) inside the landing rectangle %+v kept ground %+v mid-drag: no tint\n%s",
-						x, y, *want, mid.Bg, d.term.SnapshotStyled())
+			case inside(x, y):
+				if mid.Bg != tint || mid.Reverse {
+					t.Fatalf("cell (%d,%d) inside the landing rectangle %+v has ground %+v (reverse %v) mid-drag, want the tint %+v\n%s",
+						x, y, *want, mid.Bg, mid.Reverse, tint, d.term.SnapshotStyled())
 				}
-			case inside:
+				// A blank shows no text colour, and the frame writer erases a
+				// run of them rather than naming one, so only a cell with
+				// something in it is held to the wash.
+				if blank := mid.Content == "" || mid.Content == " "; !blank && mid.Fg == pre.Fg {
+					t.Fatalf("cell (%d,%d) %q inside the landing rectangle %+v kept its text colour %+v mid-drag: the wash missed it\n%s",
+						x, y, mid.Content, *want, mid.Fg, d.term.SnapshotStyled())
+				}
 			case covers(d.pane, x, y):
 				// The slot C left is drawn empty while C is away, so it is
 				// held to the bare ground rather than to the frame before.
@@ -261,9 +316,6 @@ func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 					x, y, mid, pre, d.term.SnapshotStyled())
 			}
 		}
-	}
-	if want != nil && !depth16 && !insideSeen {
-		t.Fatalf("no cell inside the landing rectangle %+v is visible past the held pane %+v", *want, d.held)
 	}
 }
 
