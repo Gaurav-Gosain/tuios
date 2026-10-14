@@ -98,7 +98,7 @@ In BSP, where the pane is dropped decides what happens:
 | Drop on another pane | Result |
 |---|---|
 | Its middle | The two panes swap places. |
-| Its left, right, top or bottom edge (the outer quarter of that side) | That pane is split in two, and the dragged pane takes the half toward the edge. The pane that shared a split with the dragged pane fills the space it left. The new split is even. |
+| Its left, right, top or bottom edge (the outer quarter of that side) | That pane is split in two, and the dragged pane takes the half toward the edge. The pane that shared a split with the dragged pane fills the space it left. The new split takes the layout's default ratio. |
 
 While the button is down, the rectangle the pane will land in is highlighted: outlined in the accent colour with a tint inside, or outlined in reverse video on a 16-colour terminal. A pane too small to hold two panes of the minimum size across one axis offers no edges on that axis. An edge drop that would leave the layout as it is (dropping a pane on the edge it already sits beside) highlights the pane's own slot and changes nothing, so a divider you have moved stays where it is.
 

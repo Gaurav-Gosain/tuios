@@ -677,6 +677,9 @@ type OS struct {
 	// pointer last was, or nil outside a drag: the press, the release and a
 	// lost release each clear it. See tiling_drop.go.
 	dropZone *Drop
+	// dropLayout is the map the landing rectangle of an edge drop is laid out
+	// into, kept so that working one out does not allocate a map each time.
+	dropLayout map[int]layout.Rect
 
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See

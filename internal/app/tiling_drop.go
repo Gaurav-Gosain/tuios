@@ -49,6 +49,14 @@ func (m *OS) DropTargetAt(x, y int) int {
 // own, and the scratch group in its own tree, so a landing rectangle worked
 // out against the screen would be the wrong one.
 func (m *OS) TiledDropAt(x, y int) (Drop, bool) {
+	return m.tiledDropAt(x, y, nil)
+}
+
+// tiledDropAt is TiledDropAt, taking the landing rectangle from last when it
+// was worked out for the same target and edge. The rectangle only changes
+// when one of those does, and working it out copies and lays out the whole
+// tree, which a drag would otherwise pay on every motion event.
+func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 	held := m.LiveWindowDrag()
 	if held == nil || !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
 		return Drop{}, false
@@ -73,6 +81,10 @@ func (m *OS) TiledDropAt(x, y int) (Drop, bool) {
 	if drop.Dir == layout.PreselectionNone {
 		return drop, true
 	}
+	if last != nil && last.Target == target && last.Dir == drop.Dir {
+		drop.Land = last.Land
+		return drop, true
+	}
 	// Worked out on a copy, because removing the held pane first can grow the
 	// target: a drop on its own neighbour splits the space both of them had.
 	moved := tree.Serialize().Deserialize()
@@ -80,7 +92,10 @@ func (m *OS) TiledDropAt(x, y int) (Drop, bool) {
 		drop.Land = layout.Rect{X: m.TiledX, Y: m.TiledY, W: m.TiledWidth, H: m.TiledHeight}
 		return drop, true
 	}
-	drop.Land = moved.ApplyLayout(m.GetBSPBounds(), m.separatorGap())[heldID]
+	if m.dropLayout == nil {
+		m.dropLayout = make(map[int]layout.Rect)
+	}
+	drop.Land = moved.ApplyLayoutInto(m.GetBSPBounds(), m.dropLayout, m.separatorGap())[heldID]
 	return drop, true
 }
 
@@ -111,10 +126,14 @@ func dropEdge(r layout.Rect, x, y, gap int) layout.PreselectionDir {
 }
 
 // UpdateDropZone records the drop under the pointer for the highlight. The
-// motion path calls it on every step of a drag.
+// motion path calls it on every step of a drag, so a pointer that stays over
+// one edge reuses the landing rectangle it already has.
 func (m *OS) UpdateDropZone(x, y int) {
-	if drop, ok := m.TiledDropAt(x, y); ok {
-		m.dropZone = &drop
+	if drop, ok := m.tiledDropAt(x, y, m.dropZone); ok {
+		if m.dropZone == nil {
+			m.dropZone = new(Drop)
+		}
+		*m.dropZone = drop
 		return
 	}
 	m.dropZone = nil
