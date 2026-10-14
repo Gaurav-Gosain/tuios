@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -42,9 +43,9 @@ func procReads(t *testing.T, pid int) int64 {
 
 // TestGUIBridgeIdleCostsLittle: a bridge on a session of idle shells, with no
 // hosts configured, does almost nothing. Its own CPU over 10 s stays under a
-// budget, and it asks the daemon nothing, so the daemon's read calls barely
-// move (about 18 read calls in 10 s with the fix, 35 to 40 with a poll a
-// second). Then a host added from the command line reaches the renderer by the
+// budget, and it asks the daemon nothing: the daemon reads no more with the
+// bridge running than with it stopped (a poll a second added about 20 reads
+// in 10 s). Then a host added from the command line reaches the renderer by the
 // daemon's push, without a poll.
 //
 // What fails it: the palette key printed from the whole config on every
@@ -65,16 +66,32 @@ func TestGUIBridgeIdleCostsLittle(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	const window = 10 * time.Second
+	// The daemon's own reads over the same time, with the bridge stopped,
+	// are the baseline: a timer or a file watch reads too, and a CI
+	// machine reads more than this one. The bridge is judged by what it
+	// adds on top.
+	if err := syscall.Kill(b.pid, syscall.SIGSTOP); err != nil {
+		t.Fatalf("stop the bridge: %v", err)
+	}
+	base0 := procReads(t, daemon)
+	time.Sleep(window)
+	baseline := procReads(t, daemon) - base0
+	if err := syscall.Kill(b.pid, syscall.SIGCONT); err != nil {
+		t.Fatalf("resume the bridge: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+
 	ticks0, reads0 := procTicks(t, b.pid), procReads(t, daemon)
 	time.Sleep(window)
 	ticks, reads := procTicks(t, b.pid)-ticks0, procReads(t, daemon)-reads0
-	t.Logf("over %v idle: bridge %d CPU ticks, daemon %d read calls", window, ticks, reads)
-	saveTransferArtifact(t, "gui-bridge-idle", map[string]any{"bridge_ticks": ticks, "daemon_reads": reads, "seconds": window.Seconds()})
+	added := reads - baseline
+	t.Logf("over %v idle: bridge %d CPU ticks, daemon %d read calls (%d with the bridge stopped)", window, ticks, reads, baseline)
+	saveTransferArtifact(t, "gui-bridge-idle", map[string]any{"bridge_ticks": ticks, "daemon_reads": reads, "daemon_reads_bridge_stopped": baseline, "seconds": window.Seconds()})
 	if ticks > 30 {
 		t.Errorf("ASSERTION: the idle bridge took %d CPU ticks in %v, budget 30", ticks, window)
 	}
-	if reads > 26 {
-		t.Errorf("ASSERTION: the daemon made %d read calls in %v for an idle bridge with no hosts, budget 26: the bridge is polling it", reads, window)
+	if added > 8 {
+		t.Errorf("ASSERTION: an idle bridge with no hosts made the daemon read %d more times in %v than with it stopped, budget 8: the bridge is polling it", added, window)
 	}
 
 	// A host added now comes to the renderer by the daemon's push.
