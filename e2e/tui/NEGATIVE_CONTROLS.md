@@ -4853,8 +4853,15 @@ Run on 2026-10-14 on branch `fix/scratch-zoom-overflow`. The test is
 
 | Control | Build | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| The scratch clip cut from the render loop (origin/main at `c4ddd0ff9`) | before the fix | both runs: 268 cells of pane `@` outside the scratch box, the first at (0,0), and the frame drawn over at its top-left corner. In the daemon run the second client finds no scratch frame, because the overflowing pane covers its title. | **caught** |
+| The scratch clip cut from the render loop (origin/main at `c4ddd0ff9`) | before the fix | both runs: 410 cells outside the scratch box change with the zoom, 268 of them cells of pane `@`, the first at (0,0), and the frame is drawn over at its top-left corner. In the daemon run the second client finds no scratch frame, because the overflowing pane covers its title. | **caught** |
+| The spotlight on (`[spotlight] enabled = true`, `follow = "cursor"`) and the test's spotlight guard cut | test mutant on this branch | standalone: 58 cells outside the box change, the frame's bottom edge and the zoomed pane's bottom and left borders each change colour part way. This is the pattern of a border drawn in pieces, and the border checks see it. | **caught** |
 | The positive half | this branch | none: the zoomed pane fills 97 of 110 columns of the box, the other two panes peek inside the box only, the frame is whole on both clients, and the zoom out gives three tiles inside the box | **guard** |
+
+The first frames of this test were taken with the spotlight on by accident:
+`echo BASE` was typed while the new pane was in window management mode, and
+`B` there toggles the spotlight. Its shading made the borders look broken in
+the PNGs. The test now enters terminal mode first, waits for each split
+before it types, and fails when the dock names the spotlight.
 
 Not covered here: the divider clip in `clipScratchSplits`. The suite pins
 the looks from before v0.8.0, so the panes keep their own borders and no
