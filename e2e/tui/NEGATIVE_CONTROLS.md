@@ -5500,3 +5500,17 @@ The control was run on 2026-10-13 on branch `feat/gui-bridge`. The log is
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The hello carries the model's own capabilities | `Run`: the line that sets kitty, sixel and animation on the hello cut | `TestGUIBridgeAnswersGraphicsQueries` (no kitty answer, no sixel in DA1) | **caught** |
+
+## The renderer resyncs one pane on request
+
+`TestGUIBridgeResyncsOnePaneOnRequest` floods one of two panes and sends
+`{"cmd":"resync","id":PTY}` for it. That pane must get a fresh snapshot and
+then the line after the flood. The other pane must get no snapshot. A
+renderer that never sends the command sees no change.
+
+The control was run on 2026-10-14 on branch `feat/gui-bridge`. The log is
+`~/.cache/agent-tmp/gui-port/proof/nc-resync-one.txt`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The resync command does nothing | `model.handle`: the `ResyncPaneStream` call cut | `TestGUIBridgeResyncsOnePaneOnRequest` (no fresh snapshot of the flooding pane) | **caught** |
