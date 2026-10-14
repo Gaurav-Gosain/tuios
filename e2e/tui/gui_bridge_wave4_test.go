@@ -812,3 +812,35 @@ func TestGUIBridgeResyncsARendererThatFellBehind(t *testing.T) {
 	}
 	b.saveLog("resync")
 }
+
+// The renderer asks for one pane's screen again with the resync command, as
+// tuios-gpui does when it drops a pane's backlog under a flood. That pane gets
+// a fresh snapshot and streams on from it; the other pane gets none.
+func TestGUIBridgeResyncsOnePaneOnRequest(t *testing.T) {
+	base := t.TempDir()
+	b := startBridge(t, base, "one", 120, 40)
+	ids := b.tiledPanes(2)
+	st := b.waitState(func(s *wireState) bool {
+		return s.window(ids[0]) != nil && s.window(ids[1]) != nil && s.window(ids[0]).PTY != "" && s.window(ids[1]).PTY != ""
+	}, "two panes")
+	flood, quiet := st.window(ids[0]).PTY, st.window(ids[1]).PTY
+	b.input(flood, "yes FLOODING | head -c 20000000; echo AFTER-$((6*7))\r")
+	b.waitFor(func() bool { return bytes.Contains(b.outputs[flood], []byte("FLOODING")) }, shellTimeout, "the flood")
+	b.mu.Lock()
+	snapsFlood, snapsQuiet := b.snaps[flood], b.snaps[quiet]
+	b.mu.Unlock()
+
+	b.send(map[string]any{"cmd": "resync", "id": flood})
+	b.waitFor(func() bool { return b.snaps[flood] > snapsFlood }, uiTimeout, "a fresh snapshot of the flooding pane")
+	// It streams on from the snapshot: the line after the flood arrives.
+	b.waitFor(func() bool {
+		return bytes.Contains(b.outputs[flood], []byte("AFTER-42")) || bytes.Contains(b.snapBytes[flood], []byte("AFTER-42"))
+	}, 60*time.Second, "the line after the flood")
+	b.mu.Lock()
+	quietAfter := b.snaps[quiet]
+	b.mu.Unlock()
+	if quietAfter != snapsQuiet {
+		t.Errorf("ASSERTION: the quiet pane got %d snapshots from a resync of the other pane", quietAfter-snapsQuiet)
+	}
+	b.saveLog("resync-one-pane")
+}
