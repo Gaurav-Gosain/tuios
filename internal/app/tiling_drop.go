@@ -81,7 +81,7 @@ func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 	}
 
 	rect := layout.Rect{X: target.X, Y: target.Y, W: target.Width, H: target.Height}
-	drop := Drop{Target: target, Dir: dropEdge(rect, x, y, m.separatorGap()), Land: rect}
+	drop := Drop{Target: target, Dir: dropEdge(rect, x, y, m.separatorGap(), tree.NewSplitRatio()), Land: rect}
 	if drop.Dir == layout.PreselectionNone {
 		return drop, true
 	}
@@ -105,28 +105,39 @@ func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 
 // dropEdge is the edge of r a drop at (x, y) splits toward, or
 // PreselectionNone for the middle of r. An edge's zone is the outer quarter of
-// r on that side. It is there only when r can hold two panes of the minimum
-// size across that axis, so a drop never makes a pane smaller than the layout
+// r on that side. It is there only when splitting r at ratio, the ratio the
+// tree gives a new split, leaves both parts at least the minimum pane size
+// across that axis, so a drop never makes a pane smaller than the layout
 // allows. In a corner the edge the pointer is deeper into wins, and a tie goes
 // to the side.
-func dropEdge(r layout.Rect, x, y, gap int) layout.PreselectionDir {
+func dropEdge(r layout.Rect, x, y, gap int, ratio float64) layout.PreselectionDir {
 	edge, depth := layout.PreselectionNone, 1.0
 	consider := func(dir layout.PreselectionDir, from, zone int) {
 		if d := float64(from) / float64(zone); d < depth {
 			edge, depth = dir, d
 		}
 	}
-	if r.W >= 2*config.DefaultWindowWidth+gap {
+	if splitHolds(r.W, gap, ratio, config.DefaultWindowWidth) {
 		zone := max(1, r.W/4)
 		consider(layout.PreselectionLeft, x-r.X, zone)
 		consider(layout.PreselectionRight, r.X+r.W-1-x, zone)
 	}
-	if r.H >= 2*config.DefaultWindowHeight+gap {
+	if splitHolds(r.H, gap, ratio, config.DefaultWindowHeight) {
 		zone := max(1, r.H/4)
 		consider(layout.PreselectionUp, y-r.Y, zone)
 		consider(layout.PreselectionDown, r.Y+r.H-1-y, zone)
 	}
 	return edge
+}
+
+// splitHolds reports whether a length split at ratio, the way the layout
+// splits it (see layout.childBounds), leaves both parts at least least long.
+// An even split is not assumed: a tree whose new splits start at 0.3 gives
+// the near part less than half, and a check at 0.5 would let it fall below the
+// minimum.
+func splitHolds(length, gap int, ratio float64, least int) bool {
+	near := int(float64(length) * ratio)
+	return near >= least && length-near-gap >= least
 }
 
 // UpdateDropZone records the drop under the pointer for the highlight. The

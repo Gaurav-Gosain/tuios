@@ -316,6 +316,10 @@ func (d PreselectionDir) split() (direction SplitType, first bool) {
 	return SplitNone, false
 }
 
+// NewSplitRatio is the ratio a new split in the tree starts at. See
+// splitRatio.
+func (t *BSPTree) NewSplitRatio() float64 { return t.splitRatio() }
+
 // splitRatio is the ratio a new split starts at: the tree's default, or an
 // even split when the tree has none. A tree read back from state written
 // without a default carries 0 there, and a split at 0 lays its near child out
