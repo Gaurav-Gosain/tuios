@@ -49,6 +49,10 @@ type Terminal interface {
 	IsCursorHidden() bool
 	CursorPen() (uv.Style, uv.Link)
 	CursorStyle() (style CursorStyle, steady bool)
+	// GuestCursorColor is the cursor colour the guest set with OSC 12 and
+	// has not reset with OSC 112, or nil when it set none. Unlike
+	// GuestColors it copies no palette, so a renderer can read it per frame.
+	GuestCursorColor() color.Color
 	RestoreCursorPosition(x, y int)
 	// CursorPendingWrap reports whether the cursor stands on the last column
 	// with a wrap pending: the next printed character goes to the start of

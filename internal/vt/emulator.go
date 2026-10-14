@@ -1602,6 +1602,15 @@ func (e *Emulator) CursorColor() color.Color {
 	return e.curColor
 }
 
+// GuestCursorColor is the cursor colour the guest set with OSC 12, or nil
+// when it set none or reset it with OSC 112.
+func (e *Emulator) GuestCursorColor() color.Color {
+	if !e.guestCur {
+		return nil
+	}
+	return e.curColor
+}
+
 // SetCursorColor sets the terminal's cursor color.
 func (e *Emulator) SetCursorColor(c color.Color) {
 	if c == nil {

@@ -4977,3 +4977,14 @@ Ctrl+V is webterm#5, vendored in sip as `Config.CtrlVToProgram`. Run on
 | Ctrl+V is a key again | tuios-web built with sip v0.9.2 | `Control+v pastes into the focused pane` (the pane gets the key and no paste). The tests after it fail too, because the shell then quotes the next key. | **caught** |
 | The old note | `ClipboardReadUnsupportedReason` returns the old text | `the paste key names the keys that paste`, `on a Mac the note names cmd+v` | **caught** |
 | The fix in place | this branch | none. All 4 pass | **positive half** |
+## Cursor colour on the host
+
+On 2026-10-14, `TestCursorColourFollowsFocusedPane` was run against a client
+built with the wiring line in `getRealCursor` (`cursor.Color = col`) cut. It
+failed at the first check, `after the focused pane set its cursor colour: the
+host cursor colour is "", want "#ff00ff"`, with no OSC 12 or OSC 112 in the host
+stream. With the line back it passed three runs in a row, beside the two
+cursor shape tests. The test has its positive half (the colour is set) and its
+negative half (a pane that set no colour, and OSC 112, reset it) in one
+fixture. Run it with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/tmp/tuios go test -count=1 -run '^TestCursorColour' .`

@@ -190,6 +190,9 @@ type Window struct {
 	CachedCursorHidden bool
 	CachedCursorStyle  vt.CursorStyle
 	CachedCursorSteady bool
+	// CachedCursorColor is the cursor colour the guest set with OSC 12, nil
+	// when it set none, so the host keeps its own.
+	CachedCursorColor color.Color
 	// SyncHoldContent is the last frame this window rendered from a guest that
 	// was not mid-update, kept solely so the synchronized-output hold (DEC 2026)
 	// has something complete to present. Every other cache here is invalidated
@@ -945,8 +948,8 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 }
 
 // GuestCursor reads the guest's cursor: its position and whether it is
-// hidden. It also refreshes the Cached* cursor fields, the style included, so
-// a caller that needs the shape reads it there after this call.
+// hidden. It also refreshes the Cached* cursor fields, the style and colour
+// included, so a caller that needs them reads them there after this call.
 //
 // The I/O lock is taken only if it is free. A pane in an output burst holds
 // the exclusive side almost continuously, and the frame that would wait for
@@ -966,6 +969,7 @@ func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 		w.CachedCursor = w.Terminal.CursorPosition()
 		w.CachedCursorHidden = w.Terminal.IsCursorHidden()
 		w.CachedCursorStyle, w.CachedCursorSteady = w.Terminal.CursorStyle()
+		w.CachedCursorColor = w.Terminal.GuestCursorColor()
 		w.RUnlockIO()
 	}
 	return w.CachedCursor, w.CachedCursorHidden, true

@@ -8,7 +8,7 @@ import (
 )
 
 // getRealCursor returns a real terminal cursor for the focused window,
-// or nil to hide the cursor. This enables native cursor shape support
+// or nil to hide the cursor. This enables native cursor shape and colour support
 // (block/bar/underline) from vi-mode and other applications.
 //
 // Everything here is read from the focused window's emulator on the frame it is
@@ -72,7 +72,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	if !ok {
 		return nil
 	}
-	style, steady := window.CachedCursorStyle, window.CachedCursorSteady
+	style, steady, col := window.CachedCursorStyle, window.CachedCursorSteady, window.CachedCursorColor
 
 	if hidden {
 		return nil
@@ -104,6 +104,10 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	cursor := tea.NewCursor(screenX, screenY)
 	cursor.Shape = mapCursorStyle(style)
 	cursor.Blink = !steady
+	// nil unless the guest set one with OSC 12, and Bubble Tea sends OSC 112
+	// when it goes back to nil, so the host's own cursor colour returns when
+	// the guest resets or the focus moves to a pane that set none.
+	cursor.Color = col
 	return cursor
 }
 

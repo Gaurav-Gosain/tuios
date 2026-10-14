@@ -190,6 +190,14 @@ func (t *GhosttyTerminal) CursorStyle() (CursorStyle, bool) {
 	return t.cursorStyle, t.cursorSteady
 }
 
+// GuestCursorColor is the cursor colour the guest set with OSC 12, or nil
+// when it set none or reset it with OSC 112.
+func (t *GhosttyTerminal) GuestCursorColor() color.Color {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.guestCur
+}
+
 // RestoreCursorStyle puts back the shape a snapshot was taken under. It writes
 // straight through rather than joining the pending restore, because nothing in
 // libghostty holds this and there is no sequence to synthesize.

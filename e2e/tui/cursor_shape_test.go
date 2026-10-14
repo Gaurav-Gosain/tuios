@@ -258,3 +258,80 @@ func TestCursorShapeSurvivesReattach(t *testing.T) {
 	waitCursorShape(t, secondStream, shapeBar, "after the reattach")
 	alive(t, second, "after reattach")
 }
+
+// cursorColourRE is the cursor colour the host is told: OSC 12 with a colour,
+// or OSC 112, which hands the cursor back to the host's own colour.
+var cursorColourRE = regexp.MustCompile(`\x1b\](?:12;([^\x07\x1b]*)|(112))(?:\x07|\x1b\\)`)
+
+// hostCursorColour is the colour the host cursor has now: the last OSC 12 or
+// OSC 112 in the stream. "reset" is OSC 112, and "" is that the host was never
+// told anything, which leaves its own colour as well.
+func hostCursorColour(stream []byte) string {
+	m := cursorColourRE.FindAllSubmatch(stream, -1)
+	if len(m) == 0 {
+		return ""
+	}
+	last := m[len(m)-1]
+	if len(last[2]) > 0 {
+		return "reset"
+	}
+	return strings.ToLower(string(last[1]))
+}
+
+// waitCursorColour blocks until the host cursor has the colour want.
+func waitCursorColour(t *testing.T, stream *hostStream, want, what string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	got := ""
+	for time.Now().Before(deadline) {
+		if got = hostCursorColour(stream.bytes()); got == want {
+			return
+		}
+		time.Sleep(80 * time.Millisecond)
+	}
+	var trail strings.Builder
+	for _, m := range cursorColourRE.FindAll(stream.bytes(), -1) {
+		fmt.Fprintf(&trail, "  %q\n", m)
+	}
+	t.Fatalf("%s: the host cursor colour is %q, want %q\ncursor colours the host was sent:\n%s",
+		what, got, want, trail.String())
+}
+
+// TestCursorColourFollowsFocusedPane: a pane that sets its cursor colour with
+// OSC 12 gets that colour on the host cursor, the same as its shape. A pane
+// that set none leaves the host its own colour, so moving the focus there
+// resets it, and moving back sets it again. OSC 112 in the pane resets it too.
+//
+// tuios used to read OSC 12 into the pane's emulator and stop there, so the
+// host cursor kept its own colour whatever the guest asked for.
+func TestCursorColourFollowsFocusedPane(t *testing.T) {
+	stream := &hostStream{}
+	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "colour"}, out: stream})
+	waitBoot(t, term)
+
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	stream.mark("colour-set")
+	runInShell(t, term, `printf '\033]12;#ff00ff\007'; echo `+splitMarker("COLOURSET"), "COLOURSET", shellTimeout)
+	waitCursorColour(t, stream, "#ff00ff", "after the focused pane set its cursor colour")
+
+	// A second pane that set no colour. The focus moves to it.
+	leaveTerminalMode(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	stream.mark("plain-pane")
+	runInShell(t, term, `echo `+splitMarker("PLAINPANE"), "PLAINPANE", shellTimeout)
+	waitCursorColour(t, stream, "reset", "with the focus on a pane that set no colour")
+
+	stream.mark("focus-back")
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "colour", "0"); err != nil {
+		t.Fatalf("focus-window: %v\n%s", err, out)
+	}
+	waitCursorColour(t, stream, "#ff00ff", "with the focus back on the pane that set a colour")
+
+	stream.mark("colour-reset")
+	runInShell(t, term, `printf '\033]112\007'; echo `+splitMarker("COLOURRESET"), "COLOURRESET", shellTimeout)
+	waitCursorColour(t, stream, "reset", "after the pane reset its cursor colour")
+
+	alive(t, term, "after the cursor colour checks")
+}
