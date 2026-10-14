@@ -615,6 +615,11 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTilingPrefixCommand(msg, o)
 	}
 
+	// Handle the nested prefix menus (Ctrl+B, t, s, ...)
+	if o.SubPrefix != "" {
+		return HandleSubPrefixCommand(msg, o)
+	}
+
 	// Handle debug prefix commands (Ctrl+B, D, ...)
 	if o.DebugPrefixActive {
 		return HandleDebugPrefixCommand(msg, o)
@@ -754,7 +759,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
 	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && !o.WorkspacePrefixActive &&
 		!o.MinimizePrefixActive && !o.TilingPrefixActive && !o.DebugPrefixActive &&
-		!o.TapePrefixActive && !o.LayoutPrefixActive
+		!o.TapePrefixActive && !o.LayoutPrefixActive && o.SubPrefix == ""
 }
 
 // handleMessageViewKey handles a key while the message view is open. Every key

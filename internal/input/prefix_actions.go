@@ -94,6 +94,14 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("window_prefix_tiling", handleToggleTiling)
 	d.Register("window_prefix_sync_panes", handleSyncPanes)
 	d.Register("window_prefix_cancel", handlePrefixCancel)
+
+	// The nested prefix menus (leader, t, s, ...): each one's gate, bound in
+	// its parent's section, and its cancel. Their other keys are ordinary
+	// actions, most of them registered elsewhere.
+	for _, sp := range config.SubPrefixes {
+		d.Register(sp.Gate, makeSubPrefixHandler(func(o *app.OS) { o.SubPrefix = sp.Section }))
+		d.Register(sp.CancelAction(), handlePrefixCancel)
+	}
 	d.registerPrefixTreeHandlers()
 
 	// Minimize prefix (leader, m, ...)

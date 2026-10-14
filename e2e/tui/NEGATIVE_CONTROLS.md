@@ -5144,3 +5144,32 @@ Run on 2026-10-14 on macOS on branch `feat/tmux-style-actions`. The e2e tests ar
 | `swapWorkspaceKeys(m.WorkspaceNames, ...)` cut | `TestMoveWorkspaceBySwapsAndFollows` ("names are map[1:code 2:logs], want the two swapped") | **caught** |
 | `swapWorkspaceKeys(m.WorkspaceTrees, ...)` cut | `TestMoveWorkspaceBySwapsAndFollows` ("workspace 1's tree did not move with its panes") | **caught** |
 | The positive half | none: `TestMarkAndJoinPane` checks c starts right of a and that a join with no mark moves nothing before the mark is made; `TestTmuxStyleActionsRunWhenBound` reads workspace 1 in bsp before any key; `TestMoveWorkspaceAndSendPane` reads workspace 1 first | **guard** |
+| The positive half | none: the e2e test reads workspace 1 in bsp before any key; the join and move tests assert the moved result beside the no-mark and first-workspace no-ops | **guard** |
+
+## Nested prefix menus
+
+Run on 2026-10-14 on macOS on branch `feat/nested-prefix-menus`. The e2e tests are `TestSplitPrefixNestedChord`, `TestSplitPrefixHorizontal`, `TestSplitPrefixFromTerminalMode`, `TestResizeMenuStaysOpenUntilAnUnboundKey` and `TestMoveMenuClosesAfterOneKey` in `split_prefix_test.go`. The unit tests that stay are the reachability tests in `internal/input/reachability_test.go` (every default chord, the nested ones included, reaches its action in both modes), `TestSubPrefixPanelShowsTheConfig` and `TestMenuDefaultsYieldToAUserBinding` in `internal/config/sub_prefix_test.go` (a rebind, a key bound twice and ordering; a user's own key surviving a new default, neither of which the e2e sees), and `internal/learn/learn_test.go` (the tour model has no e2e). Each control cuts one wire, builds, and runs the named tests.
+
+| Control | Tests that fail | Verdict |
+| --- | --- | --- |
+| `d.Register(sp.Gate, ...)` cut from `registerPrefixHandlers` | e2e: `TestSplitPrefixNestedChord` ("window count never reached 2 (last 1)"), `TestMoveMenuClosesAfterOneKey` ("a swaps to the right of b: pane ... is {... X:0 ...}"), `TestResizeMenuStaysOpenUntilAnUnboundKey` ("the resize menu's panel never showed"); unit: `TestEveryDefaultBindingReachesItsAction` ("pressing ctrl+b G did not reach \"prefix_session\" (actions run: [])") | **caught** |
+| `d.Register(sp.CancelAction(), ...)` cut | `TestEveryDefaultBindingReachesItsAction` ("pressing ctrl+b t s esc did not reach \"split_prefix_cancel\"") | **caught** |
+| `if o.SubPrefix != ""` routing cut from `routeKey` (handler.go) | e2e: `TestSplitPrefixNestedChord`, `TestResizeMenuStaysOpenUntilAnUnboundKey` ("the first h: pane b is still 60 wide, want less than 60"), `TestMoveMenuClosesAfterOneKey` | **caught** |
+| the same routing cut from `HandleTerminalModeKey` (keyboard_terminal.go) | `TestSplitPrefixFromTerminalMode` ("window count never reached 2 (last 1)"). The window-mode e2e tests pass, which is why the third exists | **caught** |
+| the sticky re-open (`m.SubPrefix = section`) cut from `HandleSubPrefixCommand` | `TestResizeMenuStaysOpenUntilAnUnboundKey` ("ASSERTION: the second h, on the same chord: pane b is still 55 wide, want less than 55") | **caught** |
+| `window_prefix_split` default key `s` cut | `TestSplitPrefixNestedChord`, `TestSplitPrefixHorizontal` (window count never reaches 2); `TestEveryDefaultBindingReachesItsAction` | **caught** |
+| `window_prefix_move` default key `m` cut | `TestMoveMenuClosesAfterOneKey` ("a swaps to the right of b") | **caught** |
+| `window_prefix_resize` default key `R` cut | `TestEveryDefaultBindingReachesItsAction` ("no prefix section binds \"window_prefix_resize\", so the resize_prefix menu is unreachable"), and the e2e resize test | **caught** |
+| `prefix_session` default key `G` cut | `TestEveryDefaultBindingReachesItsAction` ("no prefix section binds \"prefix_session\", so the session_prefix menu is unreachable") | **caught** |
+| `move_workspace_left` default key `h` cut | `TestEveryRegisteredActionIsBoundOrListed` ("\"move_workspace_left\" is registered, has no default key, and is not listed in actionsWithNoDefaultBinding") | **caught** |
+| `split_prefix_vertical` registration cut | `TestSplitPrefixNestedChord` ("window count never reached 2 (last 1)") | **caught** |
+| `case m.SubPrefix != ""` cut from `whichKeyMenu` | `TestResizeMenuStaysOpenUntilAnUnboundKey` ("the resize menu's panel never showed") | **caught** |
+| `row.Submenu = true` cut from `SubPrefixKeybindingGroups` | `TestSubPrefixPanelShowsTheConfig` ("g opens the move menu, and its row is {Key:g Description:Move Submenu:false ...}") | **caught** |
+| `fillMapDefaultsYielding` for `window_prefix` back to `fillMapDefaults` | `TestMenuDefaultsYieldToAUserBinding` ("window_prefix_split took s from window_prefix_rename") | **caught** |
+| the same for `workspace_prefix` | `TestMenuDefaultsYieldToAUserBinding` ("next_workspace took n from workspace_prefix_rename") | **caught** |
+| `prefix_session` cut from `yieldingDefaults` | `TestMenuDefaultsYieldToAUserBinding` ("prefix_session took G from prefix_help: [\"G\"]") | **caught** |
+| the `case o.SubPrefix != ""` cut from `take` (learn/snapshot.go) | `TestEventContract` and `TestResetClosesAnOpenMenu` ("no prefix event; saw [... ]") | **caught** |
+| `o.SubPrefix = ""` cut from the learn `reset` | `TestResetClosesAnOpenMenu` ("reset left the \"resize_prefix\" menu open") | **caught** |
+| The positive half | none: `TestResizeMenuStaysOpenUntilAnUnboundKey` shrinks the pane twice before the unbound key closes the menu, and `TestMoveMenuClosesAfterOneKey` checks the swap happened before the second `l`; the yield test also asserts the defaults of the keys the user left free | **guard** |
+
+Not covered: the `KeysGoToBindings` (internal/app/keyboard_enhancements.go) and `viewerTakesKey` (internal/input/handler.go) clauses for an open nested menu have no test of their own, so no control was run on them.

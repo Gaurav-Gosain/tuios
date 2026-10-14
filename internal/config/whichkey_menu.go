@@ -58,6 +58,12 @@ func subRow(action, desc string) menuRow {
 
 func pair(desc string, parts ...menuPart) menuRow { return menuRow{parts: parts, desc: desc} }
 
+func subPair(desc string, parts ...menuPart) menuRow {
+	r := pair(desc, parts...)
+	r.submenu = true
+	return r
+}
+
 func part(action, desc string) menuPart { return menuPart{action, desc} }
 
 // numbered is a row of actions that differ only in a number, such as the nine
@@ -97,6 +103,11 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 			numbered("Switch to workspace", actionRun("workspace_prefix_switch_", 1, 9, 1)...),
 			numbered("Move window to workspace", actionRun("workspace_prefix_move_", 1, 9, 1)...),
 			row("workspace_prefix_rename", "Rename workspace"),
+			subRow("workspace_prefix_send", "Send pane"),
+			row("new_workspace", "New (first empty) workspace"),
+			pair("Next/prev workspace", part("next_workspace", "Next workspace"), part("prev_workspace", "Previous workspace")),
+			pair("Move workspace left/right", part("move_workspace_left", "Move workspace left"), part("move_workspace_right", "Move workspace right")),
+			row("close_workspace", "Close workspace"),
 			cancel("workspace_prefix_cancel"),
 		)
 	case "minimize":
@@ -118,6 +129,11 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 			row("window_prefix_next", "Next window"),
 			row("window_prefix_prev", "Previous window"),
 			row("window_prefix_tiling", "Toggle tiling mode"),
+			subRow("window_prefix_split", "Split"),
+			subRow("window_prefix_resize", "Resize"),
+			subRow("window_prefix_move", "Move"),
+			subRow("window_prefix_view", "View"),
+			row("window_prefix_sync_panes", "Sync panes"),
 			cancel("window_prefix_cancel"),
 		)
 	case "debug":
@@ -235,6 +251,8 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		subRow("prefix_layout", "Layout"),
 		subRow("prefix_tape", "Tape"),
 		subRow("prefix_debug", "Debug"),
+		// One row for two menus: the leader's menu fills an 80x24 screen.
+		subPair("Session/tools", part("prefix_session", "Session"), part("prefix_tools", "Tools")),
 	}}
 	tools := menuSection{title: "Tools", rows: []menuRow{
 		row("prefix_command_palette", "Command palette"),

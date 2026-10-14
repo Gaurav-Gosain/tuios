@@ -121,6 +121,28 @@ func HandleTilingPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetWindowPrefixAction)
 }
 
+// HandleSubPrefixCommand handles the key in a nested prefix menu (see
+// config.SubPrefixes), such as leader+t+s. A sticky menu stays open after a
+// bound key runs, so h h h resizes three steps; esc or a key the menu does
+// not bind closes it.
+func HandleSubPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	section := o.SubPrefix
+	o.SubPrefix = ""
+	o.PrefixActive = false
+	if o.KeybindRegistry == nil {
+		return o, nil
+	}
+	action := lookupAction(o, msg, func(key string) string { return o.KeybindRegistry.GetSubPrefixAction(section, key) })
+	m, cmd, ran := dispatchAction(action, msg, o)
+	// The action may have opened another menu itself; that one wins.
+	if sp, _ := config.SubPrefixFor(section); sp.Sticky && ran && action != sp.CancelAction() &&
+		m.SubPrefix == "" && !m.PrefixActive {
+		m.SubPrefix = section
+		m.PrefixActive = true
+	}
+	return m, cmd
+}
+
 // HandleDebugPrefixCommand handles the key after leader+D.
 func HandleDebugPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.DebugPrefixActive = false

@@ -12,6 +12,10 @@ import (
 // for a tmux-shaped keymap. None has a default key; each is an ordinary action
 // a user can bind in any section.
 func (d *ActionDispatcher) registerPrefixTreeHandlers() {
+	// Split menu: split_prefix_vertical/horizontal are the split keys under
+	// another name, so a split menu can be laid out without moving them.
+	d.Register("split_prefix_vertical", handleSplitVertical)
+	d.Register("split_prefix_horizontal", handleSplitHorizontal)
 	d.Register("mark_pane", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.MarkPane()
 		return o, nil

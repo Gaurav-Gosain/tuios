@@ -50,9 +50,11 @@ type KeybindRegistry struct {
 type sectionMaps struct {
 	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
-	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
-	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
-	transfers                                             map[string]string
+	// sub holds each nested prefix menu (see SubPrefixes), by section name.
+	sub                                                 map[string]map[string]string
+	terminalMode, global, script, sidebar, sidebarFiles map[string]string
+	sidebarAgents, inbox, inboxPeek, mail, copyMode     map[string]string
+	transfers                                           map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -111,6 +113,10 @@ func (r *KeybindRegistry) buildMappings() {
 		mail:            r.sectionKeyMap(kb.Mail),
 		transfers:       r.sectionKeyMap(kb.Transfers),
 		copyMode:        r.sectionKeyMap(kb.CopyMode),
+		sub:             make(map[string]map[string]string, len(SubPrefixes)),
+	}
+	for _, sp := range SubPrefixes {
+		r.sections.sub[sp.Section] = r.sectionKeyMap(kb.section(sp.Section))
 	}
 }
 
@@ -217,6 +223,12 @@ func (r *KeybindRegistry) GetPrefixAction(key string) string {
 // GetWindowPrefixAction returns the action name for a given key in window prefix mode (Ctrl+B, t)
 func (r *KeybindRegistry) GetWindowPrefixAction(key string) string {
 	return r.lookupKey(key, r.sections.windowPrefix)
+}
+
+// GetSubPrefixAction returns the action name for a given key in the nested
+// prefix menu with the given section name (see SubPrefixes).
+func (r *KeybindRegistry) GetSubPrefixAction(section, key string) string {
+	return r.lookupKey(key, r.sections.sub[section])
 }
 
 // GetMinimizePrefixAction returns the action name for a given key in minimize prefix mode (Ctrl+B, m)
@@ -406,6 +418,9 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.TerminalMode,
 		r.config.Keybindings.Global,
 		r.config.Keybindings.Script,
+	}
+	for _, sp := range SubPrefixes {
+		sections = append(sections, r.config.Keybindings.section(sp.Section))
 	}
 
 	for _, section := range sections {
@@ -802,7 +817,23 @@ var ActionDescriptions = map[string]string{
 	"prefix_fullscreen":         "Fullscreen current window",
 	"prefix_split_horizontal":   "Split window horizontally",
 	"prefix_split_vertical":     "Split window vertically",
+	"window_prefix_split":       "Enter split prefix",
+	"window_prefix_resize":      "Enter resize prefix",
+	"window_prefix_move":        "Enter move prefix",
+	"window_prefix_view":        "Enter view prefix",
+	"workspace_prefix_send":     "Enter send-pane prefix",
+	"prefix_session":            "Enter session prefix",
+	"prefix_tools":              "Enter tools prefix",
 	"window_prefix_sync_panes":  "Toggle pane sync (type into every pane)",
+	"split_prefix_vertical":     "Split window vertically",
+	"split_prefix_horizontal":   "Split window horizontally",
+	"split_prefix_cancel":       "Cancel",
+	"resize_prefix_cancel":      "Cancel",
+	"move_prefix_cancel":        "Cancel",
+	"view_prefix_cancel":        "Cancel",
+	"send_prefix_cancel":        "Cancel",
+	"session_prefix_cancel":     "Cancel",
+	"tools_prefix_cancel":       "Cancel",
 	"mark_pane":                 "Mark the focused pane, or clear the mark",
 	"join_marked_left":          "Join the marked pane left of this one",
 	"join_marked_right":         "Join the marked pane right of this one",

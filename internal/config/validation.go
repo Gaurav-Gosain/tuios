@@ -653,7 +653,7 @@ type keySection struct {
 
 // keySections are the keybinding tables ValidateConfig checks key by key.
 func keySections(kb *KeybindingsConfig) []keySection {
-	return []keySection{
+	sections := []keySection{
 		{"window_management", kb.WindowManagement},
 		{"workspaces", kb.Workspaces},
 		{"layout", kb.Layout},
@@ -680,6 +680,10 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"global", kb.Global},
 		{"script", kb.Script},
 	}
+	for _, sp := range SubPrefixes {
+		sections = append(sections, keySection{sp.Section, kb.section(sp.Section)})
+	}
+	return sections
 }
 
 // DroppedKey is one key DropUnreadableKeys took out of a config.

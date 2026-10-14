@@ -44,9 +44,10 @@ type bindingSection struct {
 	name string
 	// binds is the section's table, read from the default config.
 	binds map[string][]string
-	// gate is the prefix_mode action whose key opens this section. "" when the
-	// section answers without a chord.
-	gate string
+	// gate is the keys pressed after the leader to open this section: the
+	// prefix_mode key of a sub-prefix, then the key of each nested sub-prefix
+	// inside it. Empty when the section answers without a chord.
+	gate []string
 	// leader says whether the leader key comes first.
 	leader bool
 	// modes are the modes the app makes this section live in.
@@ -110,10 +111,18 @@ func reachSections(t *testing.T) []bindingSection {
 	// written twice, once in HandleKeyPress and once in HandleTerminalModeKey,
 	// and a cut in either one is a dead chord for half the app.
 	sub := func(name, gate string, binds map[string][]string) bindingSection {
-		return bindingSection{name: name, binds: binds, gate: gate, leader: true, modes: bothModes, newOS: reachOS}
+		return bindingSection{name: name, binds: binds, gate: []string{gateKey(t, k.PrefixMode, gate)}, leader: true, modes: bothModes, newOS: reachOS}
+	}
+	// A nested sub-prefix is reached through its parent: the parent's chord,
+	// then the key the parent's own section binds to the action opening it.
+	nested := func(name string, parent bindingSection, gate string, binds map[string][]string) bindingSection {
+		sec := parent
+		sec.name, sec.binds = name, binds
+		sec.gate = append(append([]string(nil), parent.gate...), gateKey(t, parent.binds, gate))
+		return sec
 	}
 
-	return []bindingSection{
+	rows := []bindingSection{
 		main("window_management", k.WindowManagement),
 		main("workspaces", k.Workspaces),
 		main("layout", k.Layout),
@@ -161,6 +170,22 @@ func reachSections(t *testing.T) []bindingSection {
 		// Copy mode owns the keyboard in either mode while a pane is in it.
 		{name: "copy_mode", binds: k.CopyMode, modes: bothModes, newOS: reachCopyModeOS},
 	}
+	// Each nested prefix menu is reached through the section that binds its
+	// gate, which may itself be a nested menu.
+	for _, sp := range config.SubPrefixes {
+		found := false
+		for _, parent := range rows {
+			if _, ok := parent.binds[sp.Gate]; ok && parent.leader {
+				rows = append(rows, nested(sp.Section, parent, sp.Gate, k.SectionFor(sp.Section)))
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no prefix section binds %q, so the %s menu is unreachable", sp.Gate, sp.Section)
+		}
+	}
+	return rows
 }
 
 // reachCopyModeOS is a client whose focused pane is in copy mode, which is the
@@ -245,8 +270,8 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 						if sec.leader {
 							o = pressKey(t, o, k.LeaderKey)
 						}
-						if sec.gate != "" {
-							o = pressKey(t, o, gateKey(t, k, sec.gate))
+						for _, g := range sec.gate {
+							o = pressKey(t, o, g)
 						}
 						o = pressKey(t, o, key)
 						got := o.RecentActions()
@@ -306,11 +331,11 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 					if sec.leader {
 						o = pressKey(t, o, k.LeaderKey)
 					}
-					if sec.gate != "" {
-						o = pressKey(t, o, gateKey(t, k, sec.gate))
+					for _, g := range sec.gate {
+						o = pressKey(t, o, g)
 					}
 					o = pressKey(t, o, key)
-					if sec.leader && sec.gate == "" {
+					if sec.leader && len(sec.gate) == 0 {
 						if string(typed) != key {
 							t.Errorf("%s in terminal mode typed %q into the pane, want %q as before it was bound", describeChord(k, sec, key), typed, key)
 						}
@@ -431,7 +456,6 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"paste_clipboard":       "context menu row",
 	"repo_new_worktree":     "rail repo header menu row",
 	"session_new_worktree":  "rail session row menu row",
-	"rename_session":        "context menu row",
 	"screenshot_window":     "context menu row",
 	"set_accent":            "context menu row",
 	"set_session_accent":    "context menu row",
@@ -456,50 +480,15 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// small half is there for a user who wants it.
 	"resize_width_10":  "user binding",
 	"resize_width_20":  "user binding",
-	"resize_width_30":  "user binding",
 	"resize_width_40":  "user binding",
 	"resize_height_10": "user binding",
 	"resize_height_20": "user binding",
-	"resize_height_30": "user binding",
 	"resize_height_40": "user binding",
-
-	// tmux-style actions: marking and joining panes, resizing by a step,
-	// workspace moves, the mouse and the config reload. None ships a key.
-	"mark_pane":                "user binding",
-	"join_marked_left":         "user binding",
-	"join_marked_right":        "user binding",
-	"join_marked_up":           "user binding",
-	"join_marked_down":         "user binding",
-	"resize_pane_left_5":       "user binding",
-	"resize_pane_right_5":      "user binding",
-	"resize_pane_up_5":         "user binding",
-	"resize_pane_down_5":       "user binding",
-	"resize_pane_left_20":      "user binding",
-	"resize_pane_right_20":     "user binding",
-	"resize_pane_up_20":        "user binding",
-	"resize_pane_down_20":      "user binding",
-	"new_workspace":            "user binding",
-	"move_workspace_left":      "user binding",
-	"move_workspace_right":     "user binding",
-	"send_to_workspace_1":      "user binding",
-	"send_to_workspace_2":      "user binding",
-	"send_to_workspace_3":      "user binding",
-	"send_to_workspace_4":      "user binding",
-	"send_to_workspace_5":      "user binding",
-	"send_to_workspace_6":      "user binding",
-	"send_to_workspace_7":      "user binding",
-	"send_to_workspace_8":      "user binding",
-	"send_to_workspace_9":      "user binding",
-	"reload_config":            "user binding",
-	"toggle_mouse":             "user binding",
-	"cycle_layout":             "user binding",
-	"window_prefix_sync_panes": "user binding",
 
 	// Multifocus toggles. The palette has a row for each, and a user binds
 	// them where they want them (issue #232).
 	"toggle_multifocus_active": "palette row, user binding",
 	"toggle_multifocus_all":    "palette row, user binding",
-	"close_workspace":          "palette row, user binding",
 	// tmux's "copy-mode \; send-keys ?" as one action. The palette reaches
 	// them too.
 	"copy_mode_search_forward":  "user binding and palette row",
@@ -517,8 +506,6 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_move_right":  "user binding",
 	// Workspace cycling. The numbered keys and the switcher cover the default
 	// surface; a user who wants h/l cycle binds these.
-	"next_workspace": "palette row, user binding",
-	"prev_workspace": "palette row, user binding",
 	// Session jumping ships unbound for the same reason; the switcher and the
 	// rail cover it by default, and opt+N is a user binding.
 	"switch_session_1":   "user binding",
@@ -695,13 +682,14 @@ var namedBindingKeys = map[string]rune{
 	"f12":       tea.KeyF12,
 }
 
-// gateKey is the key that opens a sub-prefix, read from the prefix_mode table
-// so a rebind of the chord moves the whole section with it.
-func gateKey(t *testing.T, k config.KeybindingsConfig, gate string) string {
+// gateKey is the key that opens a sub-prefix, read from the parent section
+// (prefix_mode, or the sub-prefix a nested one lives in) so a rebind of the
+// chord moves the whole section with it.
+func gateKey(t *testing.T, parent map[string][]string, gate string) string {
 	t.Helper()
-	keys := k.PrefixMode[gate]
+	keys := parent[gate]
 	if len(keys) == 0 {
-		t.Fatalf("the prefix_mode section binds no key to %q, so its whole sub-section is unreachable", gate)
+		t.Fatalf("the parent section binds no key to %q, so its whole sub-section is unreachable", gate)
 	}
 	return keys[0]
 }
@@ -711,9 +699,7 @@ func describeChord(k config.KeybindingsConfig, sec bindingSection, key string) s
 	if sec.leader {
 		parts = append(parts, k.LeaderKey)
 	}
-	if sec.gate != "" {
-		parts = append(parts, k.PrefixMode[sec.gate][0])
-	}
+	parts = append(parts, sec.gate...)
 	return strings.Join(append(parts, key), " ")
 }
 

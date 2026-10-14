@@ -995,6 +995,9 @@ type OS struct {
 	TapeRecordingName  string            // Name of current recording
 	TapePrefixActive   bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
 	LayoutPrefixActive bool              // True when Ctrl+B, L was pressed (layout sub-prefix)
+	// SubPrefix is the section of the nested prefix menu open now (see
+	// config.SubPrefixes), "" when none is.
+	SubPrefix string
 	// MouseOff is set by toggle_mouse: the client stops asking the host for
 	// mouse reports, so the host terminal selects text itself, as tmux's
 	// mouse off does.

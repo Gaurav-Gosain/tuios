@@ -2,6 +2,7 @@ package learn
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -108,6 +109,8 @@ func take(o *app.OS) Snapshot {
 		s.Mode = "terminal"
 	}
 	switch {
+	case o.SubPrefix != "":
+		s.Prefix = strings.TrimSuffix(o.SubPrefix, "_prefix")
 	case o.WorkspacePrefixActive:
 		s.Prefix = "workspace"
 	case o.TilingPrefixActive:

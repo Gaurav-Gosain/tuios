@@ -60,6 +60,13 @@ const (
 	SectionRestoreMinimized = "restore_minimized"
 	SectionPrefixMode       = "prefix_mode"
 	SectionWindowPrefix     = "window_prefix"
+	SectionSplitPrefix      = "split_prefix"
+	SectionResizePrefix     = "resize_prefix"
+	SectionMovePrefix       = "move_prefix"
+	SectionViewPrefix       = "view_prefix"
+	SectionSendPrefix       = "send_prefix"
+	SectionSessionPrefix    = "session_prefix"
+	SectionToolsPrefix      = "tools_prefix"
 	SectionMinimizePrefix   = "minimize_prefix"
 	SectionWorkspacePrefix  = "workspace_prefix"
 	SectionDebugPrefix      = "debug_prefix"
@@ -112,7 +119,7 @@ func Scopes(leader string) []Scope {
 	if leader == "" {
 		leader = DefaultLeaderKey
 	}
-	return []Scope{
+	scopes := []Scope{
 		{
 			// Global is listed first because it is consulted in both of the
 			// modes below and wins nothing from them: a key bound here acts
@@ -237,10 +244,91 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachModal,
 		},
 	}
+	for _, sp := range SubPrefixes {
+		scopes = append(scopes, Scope{
+			ID: sp.ScopeID, Name: sp.Title + " prefix", Chord: leader + " " + sp.Chord,
+			Sections: []string{sp.Section},
+			Reaches:  ReachChorded,
+		})
+	}
+	return scopes
+}
+
+// SubPrefix is a prefix menu opened by a key in another prefix menu (the
+// root one, or a sub-prefix such as the window prefix), so menus can nest as
+// deep as a tmux which-key tree. Every one shares one routing path: the
+// client holds the open one's section name in OS.SubPrefix, and the key after
+// it is looked up in that section alone. Any action may be bound in the
+// section, not only the ones named after it.
+type SubPrefix struct {
+	// Section is the config table, [keybindings.<Section>].
+	Section string
+	// Title heads the which-key panel.
+	Title string
+	// Gate is the action that opens the menu. It is bound in the parent's
+	// section.
+	Gate string
+	// Chord is the default keys after the leader that reach the menu, for the
+	// scope listing.
+	Chord string
+	// ScopeID names the scope in the JSON an agent reads.
+	ScopeID string
+	// Sticky keeps the menu open after a bound key runs, until esc or an
+	// unbound key: tmux's -r, for keys pressed several times in a row.
+	Sticky bool
+}
+
+// CancelAction is the action that closes the menu doing nothing.
+func (sp SubPrefix) CancelAction() string { return sp.Section + "_cancel" }
+
+// SubPrefixes is every nested prefix menu.
+var SubPrefixes = []SubPrefix{
+	{Section: SectionSplitPrefix, Title: "Split", Gate: "window_prefix_split", Chord: "t s", ScopeID: "prefix.window.split"},
+	{Section: SectionResizePrefix, Title: "Resize", Gate: "window_prefix_resize", Chord: "t R", ScopeID: "prefix.window.resize", Sticky: true},
+	{Section: SectionMovePrefix, Title: "Move", Gate: "window_prefix_move", Chord: "t m", ScopeID: "prefix.window.move"},
+	{Section: SectionViewPrefix, Title: "View", Gate: "window_prefix_view", Chord: "t v", ScopeID: "prefix.window.view"},
+	{Section: SectionSendPrefix, Title: "Send pane", Gate: "workspace_prefix_send", Chord: "w s", ScopeID: "prefix.workspace.send"},
+	{Section: SectionSessionPrefix, Title: "Session", Gate: "prefix_session", Chord: "G", ScopeID: "prefix.session"},
+	{Section: SectionToolsPrefix, Title: "Tools", Gate: "prefix_tools", Chord: "U", ScopeID: "prefix.tools"},
+}
+
+// SubPrefixFor returns the nested prefix menu with the given section name.
+func SubPrefixFor(section string) (SubPrefix, bool) {
+	for _, sp := range SubPrefixes {
+		if sp.Section == section {
+			return sp, true
+		}
+	}
+	return SubPrefix{}, false
+}
+
+// subPrefixTable is the field holding a nested prefix menu's table, or nil
+// for a name that is not one.
+func (k *KeybindingsConfig) subPrefixTable(name string) *map[string][]string {
+	switch name {
+	case SectionSplitPrefix:
+		return &k.SplitPrefix
+	case SectionResizePrefix:
+		return &k.ResizePrefix
+	case SectionMovePrefix:
+		return &k.MovePrefix
+	case SectionViewPrefix:
+		return &k.ViewPrefix
+	case SectionSendPrefix:
+		return &k.SendPrefix
+	case SectionSessionPrefix:
+		return &k.SessionPrefix
+	case SectionToolsPrefix:
+		return &k.ToolsPrefix
+	}
+	return nil
 }
 
 // section returns the config table with the given name, or nil.
 func (k *KeybindingsConfig) section(name string) map[string][]string {
+	if t := k.subPrefixTable(name); t != nil {
+		return *t
+	}
 	switch name {
 	case SectionWindowManagement:
 		return k.WindowManagement

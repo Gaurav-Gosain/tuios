@@ -258,6 +258,13 @@ func TestEventContract(t *testing.T) {
 	tr.update(nil)
 	tr.waitFor(EventWindowRename, func(e Event) bool { return data(e, "to") == "logs" })
 
+	// A nested prefix menu, which the snapshot names without its _prefix
+	// suffix. Esc leaves it with nothing run.
+	tr.press(key("ctrl+b"), key("t"), key("R"))
+	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "resize" })
+	tr.press(key("esc"))
+	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "" })
+
 	// A workspace, through its prefix.
 	tr.press(key("ctrl+b"), key("w"))
 	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "workspace" })
@@ -315,5 +322,23 @@ func TestCommandsListMatchesRunCommand(t *testing.T) {
 		if !strings.Contains(string(readme), "`"+typ+"`") {
 			t.Errorf("README does not document the %q event", typ)
 		}
+	}
+}
+
+// TestResetClosesAnOpenMenu: the page's reset can land while a nested prefix
+// menu is open, and the tour must not start with that menu still waiting for a
+// key. The first half proves the menu opens, so the closed state is not just
+// the starting one.
+func TestResetClosesAnOpenMenu(t *testing.T) {
+	tr := newTour(t)
+	tr.update(nil)
+	tr.press(key("ctrl+b"), key("t"), key("R"))
+	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "resize" })
+	if tr.m.OS.SubPrefix == "" {
+		t.Fatal("leader t R did not open the resize menu")
+	}
+	tr.m.RunCommand("reset")
+	if tr.m.OS.SubPrefix != "" {
+		t.Fatalf("reset left the %q menu open", tr.m.OS.SubPrefix)
 	}
 }

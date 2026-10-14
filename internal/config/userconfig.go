@@ -867,12 +867,22 @@ type KeybindingsConfig struct {
 	RestoreMinimized map[string][]string `toml:"restore_minimized"`
 	PrefixMode       map[string][]string `toml:"prefix_mode"`
 	WindowPrefix     map[string][]string `toml:"window_prefix"`
-	MinimizePrefix   map[string][]string `toml:"minimize_prefix"`
-	WorkspacePrefix  map[string][]string `toml:"workspace_prefix"`
-	DebugPrefix      map[string][]string `toml:"debug_prefix"`
-	TapePrefix       map[string][]string `toml:"tape_prefix"`
-	LayoutPrefix     map[string][]string `toml:"layout_prefix"`
-	TerminalMode     map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
+	// The nested prefix menus (see SubPrefixes): each is opened by a gate
+	// action bound in another prefix's section, so leader, t, s reaches the
+	// split menu and leader, t, R the resize one.
+	SplitPrefix     map[string][]string `toml:"split_prefix"`
+	ResizePrefix    map[string][]string `toml:"resize_prefix"`
+	MovePrefix      map[string][]string `toml:"move_prefix"`
+	ViewPrefix      map[string][]string `toml:"view_prefix"`
+	SendPrefix      map[string][]string `toml:"send_prefix"`
+	SessionPrefix   map[string][]string `toml:"session_prefix"`
+	ToolsPrefix     map[string][]string `toml:"tools_prefix"`
+	MinimizePrefix  map[string][]string `toml:"minimize_prefix"`
+	WorkspacePrefix map[string][]string `toml:"workspace_prefix"`
+	DebugPrefix     map[string][]string `toml:"debug_prefix"`
+	TapePrefix      map[string][]string `toml:"tape_prefix"`
+	LayoutPrefix    map[string][]string `toml:"layout_prefix"`
+	TerminalMode    map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 	// Global binds are consulted in window mode and in terminal mode alike, so
 	// the palette and the launcher answer to one key wherever the user is. They
 	// are a section of their own rather than entries in terminal_mode because
@@ -1256,15 +1266,88 @@ func DefaultConfig() *UserConfig {
 				// makes a window and t is the window prefix. y is the key the
 				// multifocus docs tell people to bind, so it stays free.
 				"prefix_transfers": {"u"},
+				// G opens the session menu. tmux's s is the scrollback
+				// browser here and u is the copies panel, so G, one shift
+				// from the g that shows the scratch terminal, is free.
+				"prefix_session": {"G"},
+				"prefix_tools":   {"U"},
 			},
 			WindowPrefix: map[string][]string{
-				"window_prefix_new":    {"n"},
-				"window_prefix_close":  {"x"},
-				"window_prefix_rename": {"r"},
-				"window_prefix_next":   {"tab"},
-				"window_prefix_prev":   {"shift+tab"},
-				"window_prefix_tiling": {"t"},
-				"window_prefix_cancel": {"esc"},
+				"window_prefix_new":        {"n"},
+				"window_prefix_close":      {"x"},
+				"window_prefix_rename":     {"r"},
+				"window_prefix_next":       {"tab"},
+				"window_prefix_prev":       {"shift+tab"},
+				"window_prefix_tiling":     {"t"},
+				"window_prefix_split":      {"s"},
+				"window_prefix_sync_panes": {"S"},
+				"window_prefix_resize":     {"R"},
+				"window_prefix_move":       {"m"},
+				"window_prefix_view":       {"v"},
+				"window_prefix_cancel":     {"esc"},
+			},
+			SplitPrefix: map[string][]string{
+				"split_prefix_vertical":   {"y"},
+				"split_prefix_horizontal": {"x"},
+				"equalize_splits":         {"b"},
+				"mark_pane":               {"m"},
+				"join_marked_left":        {"h"},
+				"join_marked_down":        {"j"},
+				"join_marked_up":          {"k"},
+				"join_marked_right":       {"l"},
+				"split_prefix_cancel":     {"esc"},
+			},
+			ResizePrefix: map[string][]string{
+				"resize_pane_left_5":   {"h"},
+				"resize_pane_down_5":   {"j"},
+				"resize_pane_up_5":     {"k"},
+				"resize_pane_right_5":  {"l"},
+				"resize_pane_left_20":  {"H"},
+				"resize_pane_down_20":  {"J"},
+				"resize_pane_up_20":    {"K"},
+				"resize_pane_right_20": {"L"},
+				"equalize_splits":      {"b"},
+				"resize_prefix_cancel": {"esc"},
+			},
+			MovePrefix: map[string][]string{
+				"swap_left":          {"h"},
+				"swap_down":          {"j"},
+				"swap_up":            {"k"},
+				"swap_right":         {"l"},
+				"move_prefix_cancel": {"esc"},
+			},
+			ViewPrefix: map[string][]string{
+				"resize_width_70":    {"1"},
+				"resize_width_50":    {"2"},
+				"resize_width_30":    {"3"},
+				"resize_height_70":   {"q"},
+				"resize_height_50":   {"w"},
+				"resize_height_30":   {"e"},
+				"cycle_layout":       {"c"},
+				"view_prefix_cancel": {"esc"},
+			},
+			SendPrefix: map[string][]string{
+				"send_to_workspace_1": {"1"},
+				"send_to_workspace_2": {"2"},
+				"send_to_workspace_3": {"3"},
+				"send_to_workspace_4": {"4"},
+				"send_to_workspace_5": {"5"},
+				"send_to_workspace_6": {"6"},
+				"send_to_workspace_7": {"7"},
+				"send_to_workspace_8": {"8"},
+				"send_to_workspace_9": {"9"},
+				"send_prefix_cancel":  {"esc"},
+			},
+			SessionPrefix: map[string][]string{
+				"prefix_session_switcher": {"f"},
+				"rename_session":          {"r"},
+				"prefix_close_session":    {"q"},
+				"session_prefix_cancel":   {"esc"},
+			},
+			ToolsPrefix: map[string][]string{
+				"reload_config":       {"r"},
+				"toggle_mouse":        {"m"},
+				"tools_prefix_cancel": {"esc"},
 			},
 			MinimizePrefix: map[string][]string{
 				"minimize_prefix_focused":     {"m"},
@@ -1300,6 +1383,13 @@ func DefaultConfig() *UserConfig {
 				"workspace_prefix_move_8":   {"*"},
 				"workspace_prefix_move_9":   {"("},
 				"workspace_prefix_rename":   {"r"},
+				"workspace_prefix_send":     {"s"},
+				"new_workspace":             {"a"},
+				"next_workspace":            {"n"},
+				"prev_workspace":            {"p"},
+				"move_workspace_left":       {"h"},
+				"move_workspace_right":      {"l"},
+				"close_workspace":           {"q"},
 				"workspace_prefix_cancel":   {"esc"},
 			},
 			DebugPrefix: map[string][]string{
@@ -3120,12 +3210,24 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, layoutYield...)
-	fillMapDefaults(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
+	// The window and workspace prefixes gained keys that open the nested
+	// menus (s, R, m, v, S and s, a, n, p, h, l, q), so a key the user's own
+	// table already binds keeps its binding.
+	fillMapDefaultsYielding(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
-	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
+	fillMapDefaultsYielding(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 	fillMapDefaultsYielding(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
+	// A nested prefix menu a config leaves out gets the defaults, and a
+	// default whose key the user's own table of it already binds is left out.
+	for _, sp := range SubPrefixes {
+		t := cfg.Keybindings.subPrefixTable(sp.Section)
+		if *t == nil {
+			*t = make(map[string][]string)
+		}
+		fillMapDefaultsYielding(*t, *defaultCfg.Keybindings.subPrefixTable(sp.Section))
+	}
 	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
 	// A config written before the global and script sections existed has neither,
 	// so without this the palette and the launcher would come back unbound for
@@ -3183,6 +3285,9 @@ var yieldingDefaults = map[string]bool{
 	// between machines.
 	"prefix_transfers": true,
 	"file_send":        true,
+	// G and U after the prefix, the session and tools menus.
+	"prefix_session": true,
+	"prefix_tools":   true,
 	// j and k in window mode, new in the release after v0.8.0.
 	"focus_down": true,
 	"focus_up":   true,
@@ -3319,6 +3424,13 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.RestoreMinimized, d.RestoreMinimized},
 		{c.PrefixMode, d.PrefixMode},
 		{c.WindowPrefix, d.WindowPrefix},
+		{c.SplitPrefix, d.SplitPrefix},
+		{c.ResizePrefix, d.ResizePrefix},
+		{c.MovePrefix, d.MovePrefix},
+		{c.ViewPrefix, d.ViewPrefix},
+		{c.SendPrefix, d.SendPrefix},
+		{c.SessionPrefix, d.SessionPrefix},
+		{c.ToolsPrefix, d.ToolsPrefix},
 		{c.MinimizePrefix, d.MinimizePrefix},
 		{c.WorkspacePrefix, d.WorkspacePrefix},
 		{c.DebugPrefix, d.DebugPrefix},

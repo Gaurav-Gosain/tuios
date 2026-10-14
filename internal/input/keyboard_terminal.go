@@ -200,6 +200,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTilingPrefixCommand(msg, o)
 	}
 
+	// Handle the nested prefix menus (Ctrl+B, t, s, ...)
+	if o.SubPrefix != "" {
+		return HandleSubPrefixCommand(msg, o)
+	}
+
 	// Handle debug prefix commands (Ctrl+B, D, ...)
 	if o.DebugPrefixActive {
 		return HandleDebugPrefixCommand(msg, o)

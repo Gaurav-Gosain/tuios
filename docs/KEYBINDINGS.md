@@ -2,7 +2,7 @@
 
 The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindings
 
-Every binding lives in one of the 24 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
+Every binding lives in one of the 31 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
 To send the leader to the program in the pane, press it two times in terminal
 mode. The pane gets the leader that `leader_key` names, such as `ctrl+a`,
@@ -689,8 +689,8 @@ See [LAYOUT_MODES.md](LAYOUT_MODES.md#master-stack-layout).
 
 The `close_workspace` action closes every pane on the current workspace. It is
 the same as tmux `kill-window`. Use it to close the panes that `tuios xpanes`
-opened. The action has no default key. The command palette has the entry
-"Close workspace". To bind it, add it to a section. This example uses
+opened. `Ctrl+B w q` runs it, and the command palette has the entry "Close
+workspace". To bind it somewhere else, add it to a section. This example uses
 `Ctrl+B Alt+X`, because `Ctrl+B X` closes the session:
 
 ```toml
@@ -709,7 +709,7 @@ The `next_workspace` and `prev_workspace` actions go to the next or the
 previous workspace that has panes, and wrap at the end. They skip a workspace
 with no panes, so with `workspaces.new_window_when_empty` on they do not open
 a pane on each empty workspace. When no other workspace has panes, they do
-nothing. The actions have no default key. The command palette has the entries
+nothing. `Ctrl+B w n` and `Ctrl+B w p` run them. The command palette has the entries
 "Next workspace" and "Previous workspace". To bind them:
 
 ```toml
@@ -720,8 +720,8 @@ prev_workspace = ["alt+u"]
 
 ## Actions for a tmux-style keymap
 
-These actions have no default key. Bind them in any
-section where you want them.
+These actions are the keys of the nested prefix menus below, and you can bind
+any of them in any section.
 
 | Action | What it does |
 | --- | --- |
@@ -731,16 +731,49 @@ section where you want them.
 | `new_workspace` | Goes to the first workspace with no pane and opens one there. |
 | `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
 | `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
-| `window_prefix_sync_panes` | Adds every visible pane on the workspace to multifocus, or clears it. Typing goes to all of them. |
+| `window_prefix_sync_panes` | (`Ctrl+B t S`) Adds every visible pane on the workspace to multifocus, or clears it. Typing goes to all of them. |
 | `cycle_layout` | Cycles BSP, master-stack and scrolling. |
 | `reload_config` | Reads `config.toml` again, as the "Reload config" palette row does. |
 | `toggle_mouse` | Stops asking the terminal for mouse reports, so the terminal selects text itself. Run it again to turn the mouse back on. The setting lasts until you quit. |
 
 ```toml
 [keybindings.window_prefix]
-mark_pane = ["m"]
+mark_pane = ["M"]
 join_marked_right = ["J"]
 ```
+
+## Nested prefix menus
+
+A key in a prefix menu can open another menu, the way a tmux which-key tree
+does. The which-key panel shows the open menu, and a key the menu does not bind
+closes it. Each menu is a section under `[keybindings]`, and the key that opens
+it is a binding in its parent's section, so you can move a menu by rebinding its
+opening action. Any action can go in any menu.
+
+| Menu and section | Opens with | Opening action | Keys |
+| --- | --- | --- | --- |
+| Split, `split_prefix` | `Ctrl+B t s` | `window_prefix_split` | `y` vertical, `x` horizontal, `b` equalize, `m` mark, `h` `j` `k` `l` join the marked pane |
+| Resize, `resize_prefix` | `Ctrl+B t R` | `window_prefix_resize` | `h` `j` `k` `l` by 5, `H` `J` `K` `L` by 20, `b` equalize |
+| Move, `move_prefix` | `Ctrl+B t m` | `window_prefix_move` | `h` `j` `k` `l` swap the pane |
+| View, `view_prefix` | `Ctrl+B t v` | `window_prefix_view` | `1` `2` `3` width 70, 50, 30 percent, `q` `w` `e` height 70, 50, 30 percent, `c` cycle the layout |
+| Send pane, `send_prefix` | `Ctrl+B w s` | `workspace_prefix_send` | `1` to `9` send the pane to that workspace |
+| Session, `session_prefix` | `Ctrl+B G` | `prefix_session` | `f` switcher, `r` rename, `q` close the session |
+| Tools, `tools_prefix` | `Ctrl+B U` | `prefix_tools` | `r` reload config, `m` toggle the mouse |
+
+The resize menu stays open after a key, so `Ctrl+B t R h h h` narrows the pane
+three times. `esc` closes it. Every other menu closes after one key.
+`split_prefix_vertical` and `split_prefix_horizontal` are the split actions
+under another name, so the split menu can have keys of its own.
+
+The menus add these keys to the window prefix (`Ctrl+B t`): `s`, `R`, `m` and
+`v` open the menus above, and `S` toggles pane sync. They add these to the
+workspace prefix (`Ctrl+B w`): `s` opens the send menu, `a` goes to the first
+empty workspace, `n` and `p` go to the next and previous workspace that has
+panes, `h` and `l` move the workspace left and right, and `q` closes the
+workspace after a confirmation. None of these keys was bound before.
+The menus' keys never take a key from a binding in your own config. If your
+`window_prefix`, `workspace_prefix` or `prefix_mode` table already binds one of
+these keys, the new action is left without a key until you free it.
 
 ## Split into the same ssh
 
