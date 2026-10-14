@@ -3535,7 +3535,7 @@ Response:
 {"result": {"type": "session_space_set", "session": "work", "space": "payments"}}
 ```
 
-Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes; any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space; its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
+Surrounding whitespace is trimmed first. A space name then follows the session name rules and is at most 64 bytes. Any other is refused with `invalid_params` on `space`. A global session cannot be in a space, so filing one is refused with `invalid_params` (`a global session cannot be in a space`) and nothing changes. `new-session` takes the same `space` param, refused the same way, and files the session as it is made, so it never exists in no space. Its result echoes `space`. Only these two verbs write a session's space: a client's state sync never moves it. A pane needs the `admin` grant, and over a link the verb needs `write`.
 
 ### new-worktree
 

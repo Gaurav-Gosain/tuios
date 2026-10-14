@@ -464,7 +464,7 @@ sessions that 'tuios ls' lists together.`,
 					return fmt.Errorf("--cwd is a directory on this machine, so it cannot be used with --host")
 				}
 				if newSpace != "" {
-					return fmt.Errorf("--space files the session on this machine's daemon, so it cannot be used with --host")
+					return fmt.Errorf("--space cannot be used with --host. Run 'tuios set-session-space' on the host after you create the session")
 				}
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}

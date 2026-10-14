@@ -495,7 +495,7 @@ layout mode, and each window's working directory. It does not hold anything
 about the processes that were running. Each pane's history is saved in a
 separate file. See [Pane history](#pane-history).
 
-A session filed under a space (`tuios new --space`, or [`tuios set-session-space`](CLI_REFERENCE.md#tuios-set-session-space)) has the space's name in its state file, and a restore puts the session back in that space. A space's name is at most 64 bytes. A global session cannot be in a space: `set-session-space` refuses to file one. A session in no space writes no `space` key, and a daemon from before spaces reads a file that has one and ignores the key, so the field needed no new state file version.
+A session filed under a space (`tuios new --space`, or [`tuios set-session-space`](CLI_REFERENCE.md#tuios-set-session-space)) has the space's name in its state file, and a restore puts the session back in that space. A space's name is at most 64 bytes. A global session cannot be in a space: `set-session-space` refuses to file one. A daemon from before spaces ignores the `space` key.
 
 When the daemon starts, it restores every session it finds saved state for. For
 each window it spawns a **fresh shell** in that window's saved working directory

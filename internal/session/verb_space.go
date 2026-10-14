@@ -48,7 +48,7 @@ func (d *Daemon) verbSetSessionSpace(_ *connState, params json.RawMessage) (any,
 	if space != "" && sess.isGlobal() {
 		return nil, hintedVerbError(ErrVerbInvalidParams, GlobalSpaceRefusal, &VerbHint{
 			Param:  "space",
-			Detail: "Session " + echoName(sess.Name()) + " is global. A global session holds panes from more than one machine and is listed in its own group. Nothing was changed.",
+			Detail: "Session " + echoName(sess.Name()) + " is global. A global session holds panes from more than one machine and is listed in its own group. Nothing changed.",
 		})
 	}
 	if err := sess.SetSpace(space); err != nil {
