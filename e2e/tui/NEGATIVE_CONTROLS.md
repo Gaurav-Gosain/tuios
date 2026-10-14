@@ -5048,3 +5048,21 @@ Run on 2026-10-14 on Linux. The preview's frame is the panes' border glyphs, and
 | The tint on the frame's cells when the zone is filled | `TestDropPreviewFillWashesTheZone`, `TestADropOnAPaneEdgeSplitsIt/left` and `/sibling-left` ("outline cell (0,0) ... has ground {Kind:0 ...}, want the tint"); the outline case passes | **caught** |
 
 The 16-colour reverse frame is unchanged by this work and keeps its row in the table above (`TestTheDropZoneShowsAt16Colours`). The edge-zone guard now splits at the tree's own ratio; no test here makes a tree whose new splits start away from 0.5, so that change has no control.
+## The new-session verb gives its session the caller's terminal
+
+Run on 2026-10-14 on macOS on branch `pr/verb-session-term`, from upstream `main` (`2b6578f8`). The test is `TestVerbNewSessionGivesItsPaneTheCallersTerm` in `verb_hello_term_test.go`, run with `TERM=xterm-ghostty COLORTERM=truecolor`. A build of upstream `main` itself fails it with the same message as the controls: the verb connection's hello carried no terminal, and `new-session` built its session from an empty config. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| None: upstream `main` | `2b6578f8` | `TestVerbNewSessionGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=xterm-ghostty COLORTERM=truecolor\"") | **caught** |
+| `verbHello` does not record `cs.hello` | mutant of this branch | the same, with the same message | **caught** |
+| `VerbClient.handshake` sends an empty `term` | mutant of this branch | the same, with the same message | **caught** |
+| `verbNewSession` does not copy `cs.hello.Term` into the session's config | mutant of this branch | the same, with the same message | **caught** |
+| The positive half | this branch | none: the pane reads `TERM=xterm-ghostty COLORTERM=truecolor`, and `TestSessionMadeWithoutATerminalGivesItsPanesARealTerm` still reads the fallback for a caller with `TERM=dumb` and no terminal | **guard** |
+
+`TestVerbCommandsReachAnOlderDaemon` in the same file starts the daemon from a build of upstream `main` (`TUIOS_E2E_BASELINE_BIN`), and a client of this branch then runs `tuios ls`, `tuios call new-session` and reads the session's pane. That daemon refuses a parameter it does not know, so the client's handshake asks again without `term` and `color_term`. The test is skipped without that build.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The retry in `VerbClient.handshake` cut (`false &&` in its condition) | mutant of this branch | `TestVerbCommandsReachAnOlderDaemon` ("tuios ls against an older daemon failed: ... Could not open a control connection to the TUIOS daemon: verb hello has no parameter term (invalid_params).") | **caught** |
+| The positive half | this branch | none: `ls` and `call new-session` reach the older daemon, the session is listed, and its pane reads that daemon's fallback `TERM=xterm-256color` | **guard** |

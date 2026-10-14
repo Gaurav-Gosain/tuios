@@ -87,7 +87,18 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	if _, _, verr := d.childWindowBound(cs, "new-session", p.Cwd); verr != nil {
 		return nil, verr
 	}
-	sess, err := d.manager.CreateSession(name, &SessionConfig{}, width, height)
+	// The caller's terminal from its hello, as an attach or tuios new gets
+	// it. With none, the session gets the daemon's fallback.
+	cfg := &SessionConfig{}
+	if cs != nil {
+		cs.mu.Lock()
+		if cs.hello != nil {
+			cfg.Term = cs.hello.Term
+			cfg.ColorTerm = cs.hello.ColorTerm
+		}
+		cs.mu.Unlock()
+	}
+	sess, err := d.manager.CreateSession(name, cfg, width, height)
 	if err != nil {
 		// The name check above is racy by nature, so the manager's own refusal
 		// is mapped to the same code rather than reported as an internal fault.

@@ -131,11 +131,27 @@ func (e *ProtocolMismatchError) Unwrap() error { return e.Cause }
 // and no error: refusing to talk to it would break the compatibility the verb
 // protocol promises.
 func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
-	raw, err := c.Call("hello", map[string]any{
-		"client":   "tuios",
-		"version":  clientVersion,
-		"protocol": VerbProtocolVersion,
-	})
+	// The caller's terminal, as the binary protocol's hello sends it, so a
+	// session this connection creates (new-session, switch-session's create)
+	// gets it rather than the daemon's fallback.
+	termType, colorTerm := helloTerm()
+	params := map[string]any{
+		"client":     "tuios",
+		"version":    clientVersion,
+		"protocol":   VerbProtocolVersion,
+		"term":       termType,
+		"color_term": colorTerm,
+	}
+	raw, err := c.Call("hello", params)
+	// A daemon from before term and color_term refuses a parameter it does
+	// not know. Asked again without them it answers, and its sessions get its
+	// fallback terminal, as they always did. Any other refusal stands.
+	if callErr, ok := errors.AsType[*VerbCallError](err); ok && callErr.Code == ErrVerbInvalidParams &&
+		callErr.Hint != nil && (callErr.Hint.Param == "term" || callErr.Hint.Param == "color_term") {
+		delete(params, "term")
+		delete(params, "color_term")
+		raw, err = c.Call("hello", params)
+	}
 	if err == nil {
 		var hs DaemonHandshake
 		if uerr := json.Unmarshal(raw, &hs); uerr != nil {

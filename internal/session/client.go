@@ -203,6 +203,22 @@ func (c *Client) ResurrectSession(name string) error {
 	}
 }
 
+// helloTerm is the TERM and COLORTERM a hello names for this process: what
+// guestenv.DetectTerm finds, except for a command with no terminal on stdout
+// (a script, a service, CI, an agent). That detects NoTTY and answers dumb,
+// and a session it creates would keep TERM=dumb in every pane for its life,
+// although the panes are drawn by tuios and not by this stdout. It names no
+// TERM instead, so the daemon gives its xterm-256color and truecolor. A real
+// terminal that answers dumb keeps its answer, as it does for a standalone
+// window. Both hellos use it: the binary protocol's and the verb client's.
+func helloTerm() (termType, colorTerm string) {
+	termType, colorTerm = guestenv.DetectTerm()
+	if termType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
+		return "", ""
+	}
+	return termType, colorTerm
+}
+
 func (c *Client) sendHello() error {
 	// The same TERM detection the standalone window path uses. The hello names
 	// no shell: the daemon resolves it from its appearance.preferred_shell,
@@ -210,17 +226,7 @@ func (c *Client) sendHello() error {
 	// default. This client runs behind every control command and shell
 	// completion, so it must not load the config, write a default one, or print
 	// config warnings.
-	termType, colorTerm := guestenv.DetectTerm()
-	// A command with no terminal on stdout (a script, a service, CI, an agent)
-	// detects NoTTY and answers dumb, and a session it creates would keep
-	// TERM=dumb in every pane for its life, although the panes are drawn by
-	// tuios and not by this stdout. It names no TERM instead, so the daemon
-	// gives the xterm-256color and truecolor an attached client's session and
-	// the new-session verb already get. A real terminal that answers dumb
-	// keeps its answer, as it does for a standalone window.
-	if termType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
-		termType, colorTerm = "", ""
-	}
+	termType, colorTerm := helloTerm()
 
 	msg, err := NewMessage(MsgHello, &HelloPayload{
 		Version:        c.version,

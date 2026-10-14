@@ -262,11 +262,13 @@ var verbRegistry map[string]verbEntry
 func init() {
 	verbRegistry = map[string]verbEntry{
 		"hello": {
-			description: "Handshake: report the protocol version this daemon speaks and the version range it accepts.",
+			description: "Handshake: report the protocol version this daemon speaks and the version range it accepts. Also tells the daemon the caller's terminal, so a session this connection later creates (new-session, switch-session's create) gets it rather than the daemon's fallback.",
 			params: []verbParam{
 				{Name: "client", Type: "string", Description: "Name of the calling program, for the daemon log."},
 				{Name: "version", Type: "string", Description: "Version string of the calling program."},
 				{Name: "protocol", Type: "int", Description: "Protocol version the caller speaks. The daemon reports a mismatch rather than failing later."},
+				{Name: "term", Type: "string", Description: "The caller's TERM. Omit, or pass empty, for a caller with no terminal of its own (a script, CI, an agent): its sessions get the daemon's fallback."},
+				{Name: "color_term", Type: "string", Description: "The caller's COLORTERM."},
 			},
 			examples: []string{`{"id":1,"verb":"hello","params":{"client":"tuios","version":"1.2.3","protocol":1}}`},
 			handler:  (*Daemon).verbHello,
@@ -2728,13 +2730,22 @@ func describeVerb(name string, entry verbEntry) verbDoc {
 // protocol closes the connection, which the client reports as a mismatch too.
 func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Client   string `json:"client"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
+		Client    string `json:"client"`
+		Version   string `json:"version"`
+		Protocol  int    `json:"protocol"`
+		Term      string `json:"term"`
+		ColorTerm string `json:"color_term"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+
+	// Recorded as the binary protocol's hello records it, so new-session
+	// gives a session this connection creates the caller's terminal. The
+	// shell is left to the daemon, as every hello leaves it.
+	cs.mu.Lock()
+	cs.hello = &HelloPayload{Term: p.Term, ColorTerm: p.ColorTerm}
+	cs.mu.Unlock()
 
 	if p.Protocol > VerbProtocolVersion {
 		return nil, hintedVerbError(ErrVerbProtocolMismatch,
