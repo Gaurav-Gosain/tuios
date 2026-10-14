@@ -14,7 +14,9 @@ func TestLeftoverTempFilesAreCleaned(t *testing.T) {
 	defer useResurrectionDir(tmpDir)()
 
 	// The residue of two interrupted writes, beside one good state file.
-	leftovers := []string{"work.json.tmp", "notes.json.tmp"}
+	// The first two are the fixed names older builds used, the third the
+	// fresh name atomicfile gives a temporary file.
+	leftovers := []string{"work.json.tmp", "notes.json.tmp", ".work.json.2840193.tmp"}
 	for _, name := range leftovers {
 		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("{partial"), 0600); err != nil {
 			t.Fatalf("seeding %s: %v", name, err)
@@ -31,6 +33,30 @@ func TestLeftoverTempFilesAreCleaned(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(tmpDir, name)); !os.IsNotExist(err) {
 			t.Errorf("leftover temp file %s survived the sweep (stat err: %v)", name, err)
 		}
+	}
+	// In the other state folders only an old temporary file goes: a young one
+	// may be a write still in flight.
+	attention := filepath.Dir(attentionPath())
+	if err := os.MkdirAll(attention, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(attention, ".items.json.1187.tmp")
+	young := filepath.Join(attention, ".items.json.5520.tmp")
+	for _, p := range []string{stale, young} {
+		if err := os.WriteFile(p, []byte("{partial"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	CleanResurrectionDir()
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("an hour-old temp file in the attention folder survived the sweep (stat err: %v)", err)
+	}
+	if _, err := os.Stat(young); err != nil {
+		t.Errorf("the sweep removed a temp file a write may still own: %v", err)
 	}
 	// The sweep must not touch real state.
 	if _, err := LoadResurrectionState("work"); err != nil {

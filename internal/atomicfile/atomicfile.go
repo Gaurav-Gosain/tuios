@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // Write replaces path with data. It writes a temporary file with a fresh name
@@ -63,4 +65,36 @@ func WritePrivate(path string, data []byte, sync bool) error {
 		return err
 	}
 	return Write(path, data, 0o600, sync)
+}
+
+// SweepStale removes, from dir, the temporary files Write leaves behind when it
+// dies between creating one and renaming it: regular files named ".<base>.*.tmp"
+// that were last written more than olderThan ago. The age keeps it off a write
+// another process has in flight. It is best effort and reports nothing.
+func SweepStale(dir string, olderThan time.Duration) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-olderThan)
+	for _, e := range entries {
+		name := e.Name()
+		if !e.Type().IsRegular() || !isTempName(name) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
+// isTempName reports whether name has the shape Write gives a temporary file:
+// a dot, the base name, a dot, the random part, and ".tmp".
+func isTempName(name string) bool {
+	rest, ok := strings.CutPrefix(name, ".")
+	if !ok {
+		return false
+	}
+	rest, ok = strings.CutSuffix(rest, ".tmp")
+	return ok && strings.Contains(rest, ".")
 }

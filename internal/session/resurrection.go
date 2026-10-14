@@ -146,6 +146,10 @@ func archivedNote(dest string) string {
 // directory's growth.
 const archiveRetention = 14 * 24 * time.Hour
 
+// staleTempAge is how old a leftover temporary file must be before a sweep
+// removes it from a folder where a write may still be in flight.
+const staleTempAge = 10 * time.Minute
+
 // CleanResurrectionDir removes what the save and archive paths leave behind:
 // temp files from writes that died before their rename, and archived state past
 // archiveRetention. Neither had anything cleaning it, so both grew forever.
@@ -171,6 +175,16 @@ func CleanResurrectionDir() {
 	}
 
 	cleanOrphanHistory()
+
+	// The other state folders are written through atomicfile too. A file
+	// there is only swept once it is old, since nothing here says no write is
+	// in flight in them.
+	for _, d := range []string{
+		filepath.Dir(outboxPath()), filepath.Dir(attentionPath()),
+		filepath.Dir(reviewNotesPath()), filepath.Dir(appliedGrantsPath()), pushDir(),
+	} {
+		atomicfile.SweepStale(d, staleTempAge)
+	}
 
 	archiveDir := ResurrectionArchiveDir()
 	archived, err := os.ReadDir(archiveDir)

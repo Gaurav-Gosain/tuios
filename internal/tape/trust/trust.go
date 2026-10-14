@@ -155,6 +155,9 @@ func Load() (*Store, error) {
 // user, its contents are ignored and Warning is set, so tampering downgrades
 // trust to nothing rather than being honored.
 func LoadFromPath(path string) (*Store, error) {
+	// A save that died before its rename leaves a temporary file beside the
+	// store. Old ones are removed here; a young one may be another save.
+	atomicfile.SweepStale(filepath.Dir(path), 10*time.Minute)
 	s := &Store{
 		path:    path,
 		trusted: make(map[string]trustEntry),

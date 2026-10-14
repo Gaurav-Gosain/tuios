@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
@@ -155,6 +156,25 @@ func newWebPusher(n *pushNotifier) *webPusher {
 // pushDir is where the phones and the VAPID key are kept.
 func pushDir() string { return filepath.Join(getResurrectionDir(), "push") }
 
+// pushChmodWarn makes the warning about a push folder that cannot be narrowed
+// appear once per daemon, not once per save.
+var pushChmodWarn sync.Once
+
+// writePushFile writes data to path, 0600, in a folder made 0700. A folder
+// that already exists and cannot be narrowed to 0700 (one on a file system
+// with no Unix modes, or owned by someone else) is warned about once and the
+// write goes on: the file itself is still 0600.
+func writePushFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory needs x, and 0700 opens it to its owner only
+		pushChmodWarn.Do(func() { LogError("Warning: could not make %s private: %v", dir, err) })
+	}
+	return atomicfile.Write(path, data, 0o600, false)
+}
+
 func pushDevicesPath() string { return filepath.Join(pushDir(), "subscriptions.json") }
 func pushKeyPath() string     { return filepath.Join(pushDir(), "vapid.pem") }
 
@@ -198,7 +218,7 @@ func (w *webPusher) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	return writePrivateFile(pushDevicesPath(), data)
+	return writePushFile(pushDevicesPath(), data)
 }
 
 // keyLocked is the VAPID key, made and saved on first use. The caller holds
@@ -225,7 +245,7 @@ func (w *webPusher) keyLocked() (*pushnotify.VAPIDKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := writePrivateFile(pushKeyPath(), data); err != nil {
+	if err := writePushFile(pushKeyPath(), data); err != nil {
 		return nil, err
 	}
 	w.key = k
