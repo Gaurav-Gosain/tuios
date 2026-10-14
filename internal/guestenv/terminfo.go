@@ -63,7 +63,7 @@ func PaneTerm(term string) string {
 // only that answers false, and the pane gets FallbackTerm, which those systems
 // carry. That errs toward a TERM that works.
 func hasTerminfo(term string, getenv func(string) string, home func() (string, error)) bool {
-	if !validTermName(term) {
+	if !ValidTermName(term) {
 		return false
 	}
 	for _, dir := range terminfoDirs(getenv, home) {
@@ -120,11 +120,11 @@ func terminfoEntryIn(dir, term string) bool {
 	return false
 }
 
-// validTermName reports whether term can name a terminfo entry. A name with a
+// ValidTermName reports whether term can name a terminfo entry. A name with a
 // path separator, a leading dot or a control character is refused, so the
 // value a client sent can never make the lookup stat a path outside the
 // terminfo directories.
-func validTermName(term string) bool {
+func ValidTermName(term string) bool {
 	if term == "" || len(term) > 255 || term[0] == '.' {
 		return false
 	}

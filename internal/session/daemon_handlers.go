@@ -14,6 +14,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid hello payload: %w", err)
 	}
 
+	payload.Term, payload.ColorTerm = helloTermValue(payload.Term), helloTermValue(payload.ColorTerm)
 	cs.hello = &payload
 	cs.mu.Lock()
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces

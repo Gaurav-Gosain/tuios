@@ -15,6 +15,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -2744,7 +2745,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 	// gives a session this connection creates the caller's terminal. The
 	// shell is left to the daemon, as every hello leaves it.
 	cs.mu.Lock()
-	cs.hello = &HelloPayload{Term: p.Term, ColorTerm: p.ColorTerm}
+	cs.hello = &HelloPayload{Term: helloTermValue(p.Term), ColorTerm: helloTermValue(p.ColorTerm)}
 	cs.mu.Unlock()
 
 	if p.Protocol > VerbProtocolVersion {
@@ -2788,4 +2789,27 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
 	}, nil
+}
+
+// maxHelloTermLen bounds a TERM or COLORTERM a hello names. Real names are a
+// few dozen bytes at most.
+const maxHelloTermLen = 64
+
+// helloTermValue is v, a TERM or COLORTERM a hello named, when it is short
+// printable ASCII with no spaces, and empty otherwise. It goes into the
+// environment of every pane of a session the connection creates, and only
+// PaneTerm on Unix checks TERM after this, so a link peer could otherwise put
+// control characters or a long string there. An empty value gives the
+// daemon's fallback. It is dropped rather than refused, because a refused
+// hello would fail every command of that user.
+func helloTermValue(v string) string {
+	if len(v) > maxHelloTermLen || !guestenv.ValidTermName(v) {
+		return ""
+	}
+	for i := range len(v) {
+		if v[i] > '~' {
+			return ""
+		}
+	}
+	return v
 }

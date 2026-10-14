@@ -5066,3 +5066,18 @@ Run on 2026-10-14 on macOS on branch `pr/verb-session-term`, from upstream `main
 | --- | --- | --- | --- |
 | The retry in `VerbClient.handshake` cut (`false &&` in its condition) | mutant of this branch | `TestVerbCommandsReachAnOlderDaemon` ("tuios ls against an older daemon failed: ... Could not open a control connection to the TUIOS daemon: verb hello has no parameter term (invalid_params).") | **caught** |
 | The positive half | this branch | none: `ls` and `call new-session` reach the older daemon, the session is listed, and its pane reads that daemon's fallback `TERM=xterm-256color` | **guard** |
+
+## A hello's TERM and COLORTERM are checked before a pane gets them
+
+Run on 2026-10-14 on macOS on branch `pr700-review`, the review round of `pr/verb-session-term`. The test is `TestHelloDropsAnUnsafeTerm` in `verb_hello_term_check_test.go`. The daemon has a terminfo folder of its own with `screen-256color`'s entry under a 64 byte name and a 65 byte one, so `PaneTerm` keeps either and only the bound tells them apart. Five verb hellos are sent raw over the socket, each followed by `new-session` on the same connection, and two binary hellos are sent by `tuios new -d` with the value in `TERM`. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| None: upstream `main` | `e2ca77df` | `TestHelloDropsAnUnsafeTerm` ("at-the-bound: ASSERTION: the hello was refused with invalid_params"): that daemon has no `term` in its hello | **caught** |
+| `verbHello` stores the hello's `term` and `color_term` unchecked (`helloTermValue` cut from its call site) | mutant of this branch | `TestHelloDropsAnUnsafeTerm`: too-long (the pane keeps the 65 byte TERM and COLORTERM), control ("gave its pane \"TERM=screen-256color COLORTERM=24bitx\", want \"TERM=screen-256color COLORTERM=truecolor\""), space (`COLORTERM=24 bit`), not-ascii (`COLORTERM=24bït`) | **caught** |
+| `handleHello` stores the binary hello's `Term` and `ColorTerm` unchecked (its `helloTermValue` line cut) | mutant of this branch | `TestHelloDropsAnUnsafeTerm` ("too-long: a session made by tuios new -d with TERM \"screen-256color-x...x\" gave its pane \"TERM=screen-256color-x...x COLORTERM=truecolor\", want \"TERM=xterm-256color COLORTERM=truecolor\"") | **caught** |
+| The 64 byte bound cut from `helloTermValue` | mutant of this branch | `TestHelloDropsAnUnsafeTerm`: too-long, by both hellos | **caught** |
+| The printable ASCII loop cut from `helloTermValue` (`false &&` in its condition) | mutant of this branch | `TestHelloDropsAnUnsafeTerm` ("not-ascii: ... gave its pane \"TERM=screen-256color COLORTERM=24bït\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
+| The positive half | this branch | none: at the bound both hellos keep the 64 byte TERM (and the verb hello `COLORTERM=24bit`), each bad case keeps the good value beside the dropped one, the hello is answered rather than refused, and the pane reads the fallback `xterm-256color` or `truecolor` for the dropped value | **guard** |
+
+Not covered here: a control character or a space in `TERM`. On Unix `PaneTerm` refuses those too, so the pane reads the fallback with or without the check; only Windows, which this suite cannot run, passes `TERM` through unchecked. The cases put them in `COLORTERM`, which nothing else checks.
