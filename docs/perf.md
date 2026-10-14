@@ -2556,6 +2556,16 @@ The budgets went down to 35,570,000 (linux/amd64) and 33,565,000
 spent unnoticed. Each budget keeps the room it had before the cut, 57,518 and
 102,374 bytes.
 
+Packing the skill files cut 110,592 bytes from linux/amd64 and 115,520 from
+darwin/arm64. skills/tuios/*.md (184,379 bytes) go into the binary as one
+gzipped tar of 65,676 bytes, unpacked the first time a skill is read. Every
+`tuios --skill` output is byte-identical, and TestArchiveMatchesFiles holds
+the archive to the files. On origin/main at 1a34acbe, after the cold-path
+sorts (Go 1.26.9), the build measured 35,516,578 and 33,462,786 bytes, and the
+branch measured 35,405,986 and 33,347,266. `tuios --skill all` takes 1.4 ms
+longer to unpack: on an idle machine the median of 30 runs went from 3.81 ms
+to 5.23 ms.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
