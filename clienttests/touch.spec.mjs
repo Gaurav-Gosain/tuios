@@ -190,12 +190,25 @@ async function resetToOneFloatingPane(page, cdp) {
  * Read off the buffer rather than asked of tuios, because a pane that has moved
  * has only moved if it is drawn somewhere else. The corner glyphs are the
  * border style's, so they are read from the line rather than assumed.
+ *
+ * A pane is a frame whose top edge is a title bar: it carries the window
+ * buttons or a title. The preview a tiled drag draws where the pane would land
+ * is a frame in the same border glyphs, with a bare top edge, so it is not
+ * read as a pane.
  */
 const paneFrame = (page) => page.evaluate(() => {
   const t = window.sipTerm.term;
   const b = t.buffer.active;
   const lines = Array.from({ length: t.rows }, (_, i) => b.getLine(b.viewportY + i)?.translateToString(true) ?? '');
-  const top = lines.findIndex((l) => /[╭┌╔┏]/.test(l));
+  const titled = (line, col) => {
+    const end = line.slice(col + 1).search(/[╮┐╗┓]/);
+    const edge = end === -1 ? line.slice(col + 1) : line.slice(col + 1, col + 1 + end);
+    return /[^─━═\s]/.test(edge);
+  };
+  const top = lines.findIndex((l) => {
+    const col = l.search(/[╭┌╔┏]/);
+    return col !== -1 && titled(l, col);
+  });
   if (top === -1) return null;
   const bottom = lines.findLastIndex((l) => /[╰└╚┗]/.test(l));
   const left = lines[top].search(/[╭┌╔┏]/);
@@ -468,15 +481,24 @@ test.describe('a finger on tuios itself', () => {
     await boot(page);
     const cdp = await page.context().newCDPSession(page);
 
-    // Every pane corner on screen, in cells.
+    // Every pane corner on screen, in cells. A pane's top edge is its title
+    // bar, with the window buttons on it. The drop preview draws a frame in
+    // the same glyphs where the pane would land, over its own slot when the
+    // drop would change nothing, and its top edge is bare: that frame is not
+    // the pane. See paneFrame.
     const corners = () => page.evaluate(() => {
       const t = window.sipTerm.term;
       const b = t.buffer.active;
+      const titled = (line, col) => {
+        const end = line.slice(col + 1).search(/[╮┐╗┓]/);
+        const edge = end === -1 ? line.slice(col + 1) : line.slice(col + 1, col + 1 + end);
+        return /[^─━═\s]/.test(edge);
+      };
       const out = [];
       for (let row = 0; row < t.rows; row++) {
         const line = b.getLine(b.viewportY + row)?.translateToString(true) ?? '';
         for (let col = 0; col < line.length; col++) {
-          if (/[╭┌╔┏]/.test(line[col])) out.push({ col, row });
+          if (/[╭┌╔┏]/.test(line[col]) && titled(line, col)) out.push({ col, row });
         }
       }
       return out;
