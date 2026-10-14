@@ -23,8 +23,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

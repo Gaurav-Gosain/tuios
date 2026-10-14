@@ -1,6 +1,6 @@
 package fuzz
 
-import "github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+import "github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 
 // Shrinking is what decides whether this fuzzer's output is usable. A raw
 // failing run is 2000 actions of noise around the three that matter, and nobody

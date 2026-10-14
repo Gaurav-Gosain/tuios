@@ -11,7 +11,7 @@ package vt
 // anyone having predicted it. That is worth more than the invariants, and this
 // is the only build where both implementations exist in one process.
 //
-// The generator is internal/fuzz/vtgen, the same grammar the single-emulator
+// The generator is internal/vt/vtgen, the same grammar the single-emulator
 // targets use, because random bytes never leave the parser's ground state.
 // Comparison happens after every step, not once at the end: an emulator that
 // diverges and then converges again is still an emulator that drew the wrong
@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

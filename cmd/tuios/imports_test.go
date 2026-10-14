@@ -20,7 +20,7 @@ var forbidden = []string{
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz",
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vis",
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/apptarget",
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen",
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen",
 }
 
 func TestShippedBinaryDoesNotLinkTheFuzzer(t *testing.T) {

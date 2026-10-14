@@ -3,7 +3,7 @@ package fuzz
 import (
 	"math/rand/v2"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 )
 
 // source is where a generator's randomness comes from. Two implementations feed

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 )
 
 // Pinned generator findings, replayed on every ordinary test run.

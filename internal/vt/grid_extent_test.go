@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 )
 
 // extentHolds reports the first cell that breaks the grid's extent invariant:

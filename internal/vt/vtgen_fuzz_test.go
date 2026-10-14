@@ -5,12 +5,12 @@ package vt_test
 // The existing FuzzEmulatorWrite targets feed the parser raw bytes, which is
 // worth having but spends nearly its whole budget in the parser's ground state:
 // almost no random byte string is a sequence, so almost nothing downstream of
-// the parser is ever reached. These targets draw from internal/fuzz/vtgen,
+// the parser is ever reached. These targets draw from internal/vt/vtgen,
 // which builds real sequences carrying hostile parameters, and check invariants
 // after every step rather than only watching for a panic.
 //
-// The generator lives in internal/fuzz/vtgen because the shipped binary must
-// not link it, which cmd/tuios/imports_test.go asserts. A test file may import
+// The generator is a package of its own, internal/vt/vtgen, because the
+// shipped binary must not link it, which cmd/tuios/imports_test.go asserts. A test file may import
 // it freely: `go list -deps` on the binary does not follow test imports.
 
 import (
@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 )
 
 // replay runs a script into a fresh emulator and returns the first invariant it

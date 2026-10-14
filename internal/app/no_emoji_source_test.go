@@ -28,8 +28,8 @@ var emojiSourceAllowed = map[string]string{
 	"internal/harness/answers.go": "matches option cursors agent CLIs draw",
 	"internal/harness/prompt.go":  "matches prompt cursors agent CLIs draw",
 	// The fuzzers feed the emulator emoji on purpose, to test widths.
-	"internal/fuzz/vtgen/vtgen.go": "emulator width input",
-	"internal/fuzz/pools.go":       "emulator width input",
+	"internal/vt/vtgen/vtgen.go": "emulator width input",
+	"internal/fuzz/pools.go":     "emulator width input",
 	// The prompt parser skips the icons eza and tree print before a name.
 	"internal/scrollback/parser.go": "matches icons other programs print",
 	// The browser tour's fake Claude Code draws Claude Code's own spinner.

@@ -389,7 +389,7 @@ Three things in it are worth knowing about before adding a case:
 
 ### Terminal Emulator Fuzzing
 
-`internal/fuzz/vtgen` generates terminal input by grammar rather than by byte,
+`internal/vt/vtgen` generates terminal input by grammar rather than by byte,
 so the parser reaches the code past its ground state. A failing run reduces by
 delta debugging to a script of named sequences a person can read.
 

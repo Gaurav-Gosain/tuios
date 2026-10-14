@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vtgen"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/vtgen"
 )
 
 // brokenTerm stands in for the emulator as it was before the scroll region was
