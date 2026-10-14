@@ -133,6 +133,10 @@ type OSOptions struct {
 	// know this, and only from the browser that connected.
 	TouchClient bool
 
+	// BrowserPaste says which keys make the browser paste, so the note that
+	// the browser keeps the clipboard can name them. Only tuios-web sets it.
+	BrowserPaste BrowserPasteKeys
+
 	// Caps describes the terminal this session draws to. The servers detect it
 	// per connection, because one process holds several connections and the
 	// terminal that has to render a forwarded image is the one at the far end
@@ -232,6 +236,7 @@ func NewOS(opts OSOptions) *OS {
 		SSHSession:      opts.SSHSession,
 		SSHIsLoopback:   opts.SSHIsLoopback,
 		TouchClient:     opts.TouchClient,
+		BrowserPaste:    opts.BrowserPaste,
 		RemoteClient:    opts.RemoteClient,
 		Caps:            caps,
 

@@ -23,6 +23,28 @@ type PasteTimeoutMsg struct {
 	Seq uint64
 }
 
+// BrowserPasteKeys is what the browser in front of a tuios-web session does
+// with the paste keys. The page decides it, and tuios-web tells the session.
+type BrowserPasteKeys struct {
+	// Apple is a Mac or an iOS device, where Cmd+V pastes.
+	Apple bool
+	// CtrlVToProgram is set when tuios-web runs with --ctrl-v-to-program,
+	// so plain Ctrl+V reaches the pane and does not paste.
+	CtrlVToProgram bool
+}
+
+// keys names the keys that paste, in the form the dock shows keys.
+func (k BrowserPasteKeys) keys() string {
+	switch {
+	case k.Apple:
+		return "cmd+v"
+	case k.CtrlVToProgram:
+		return "ctrl+shift+v or shift+insert"
+	default:
+		return "ctrl+v, ctrl+shift+v or shift+insert"
+	}
+}
+
 // ClipboardReadUnsupportedReason explains why tuios cannot read the clipboard
 // here, or "" when it can. It says what to do instead.
 //
@@ -31,11 +53,15 @@ type PasteTimeoutMsg struct {
 // the clipboard is a permission the browser grants to a user gesture and not to
 // a program on the far end of a socket. The browser's own paste is a real user
 // gesture, so it works, and it arrives here as a bracketed paste.
+//
+// The page keeps the paste keys for the browser, so they do not reach tuios
+// in a browser. This note is for the pane menu's Paste row and a paste key
+// the user bound to some other chord.
 func (m *OS) ClipboardReadUnsupportedReason() string {
 	if !m.BrowserClient {
 		return ""
 	}
-	return "The browser does not give the clipboard to tuios. Press ctrl+v to paste, or cmd+v on a Mac."
+	return "The browser does not give the clipboard to tuios. Press " + m.BrowserPaste.keys() + " to paste."
 }
 
 // RequestHostPaste asks the terminal for its clipboard, or says why it cannot.

@@ -4959,3 +4959,21 @@ The controls were run on 2026-10-14.
 
 The smoke test then stops on a 404 from the page. The same 404 happens on
 `main` with the system Chromium, so it is not part of this change.
+
+### Ctrl+V pastes, and the note names the paste keys
+
+`clienttests/paste.spec.mjs` also pastes with plain Ctrl+V, and reads the
+note that tuios's own paste key shows in a browser. The seeded config binds
+that key to alt+v, because the page keeps the default paste keys for the
+browser. The note must name ctrl+v, ctrl+shift+v and shift+insert, and cmd+v
+for a browser that says it runs on a Mac. The smoke test pastes with Ctrl+V
+too.
+
+Ctrl+V is webterm#5, vendored in sip as `Config.CtrlVToProgram`. Run on
+2026-10-14.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| Ctrl+V is a key again | tuios-web built with sip v0.9.2 | `Control+v pastes into the focused pane` (the pane gets the key and no paste). The tests after it fail too, because the shell then quotes the next key. | **caught** |
+| The old note | `ClipboardReadUnsupportedReason` returns the old text | `the paste key names the keys that paste`, `on a Mac the note names cmd+v` | **caught** |
+| The fix in place | this branch | none. All 4 pass | **positive half** |

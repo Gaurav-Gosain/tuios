@@ -103,6 +103,12 @@ open_default_window = true
 [keybindings]
 leader_key = "ctrl+a"
 
+# The page keeps the paste keys for the browser, so tuios's own paste key
+# never arrives from them. paste.spec.mjs presses this one to read the note
+# tuios shows instead.
+[keybindings.terminal_mode]
+terminal_paste_host = ["alt+v"]
+
 [notifications.agent]
 notify = true
 `;

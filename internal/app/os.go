@@ -245,6 +245,9 @@ type OS struct {
 	// rather than a config global because one server holds several at once and
 	// a phone attaching must not change what the desktop beside it can hit.
 	TouchClient bool
+	// BrowserPaste says which keys make this session's browser paste. See
+	// OSOptions.BrowserPaste.
+	BrowserPaste BrowserPasteKeys
 
 	// RemoteClient marks a client process that is not on the user's machine.
 	// See OSOptions.RemoteClient.

@@ -48,6 +48,7 @@ var (
 	webAutoTLS        bool
 	webInsecure       bool
 	webTouch          string
+	webCtrlVToProgram bool
 	// Who may open a session. See access.go.
 	webUser           string
 	webPasswordFile   string
@@ -164,6 +165,7 @@ Client features:
 	rootCmd.Flags().StringSliceVar(&webAllowHosts, "allow-host", nil, "On a loopback --host, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or --no-auth (repeatable)")
 	registerCertFlags(rootCmd)
 	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")
+	rootCmd.Flags().BoolVar(&webCtrlVToProgram, "ctrl-v-to-program", false, "Send Ctrl+V to the program in the pane. By default Ctrl+V pastes")
 
 	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
@@ -393,7 +395,10 @@ func runWebServer() error {
 	if !ok {
 		return fmt.Errorf("--touch is %q: it takes auto, on or off", webTouch)
 	}
-	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch))
+	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch), appleMiddleware())
+	// Ctrl+V pastes in the page unless the operator gives it to the pane.
+	// See paste_keys.go.
+	sipConfig.CtrlVToProgram = webCtrlVToProgram
 
 	// A notification's link opens the Inbox on its item. See inboxlink.go.
 	installInboxLink(&sipConfig)
@@ -684,7 +689,11 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 		Height:         pty.Height,
 		GraphicsOutput: graphicsOut,
 		TouchClient:    touch,
-		Caps:           hostCaps,
+		BrowserPaste: app.BrowserPasteKeys{
+			Apple:          sessionIsApple(sess.Context()),
+			CtrlVToProgram: webCtrlVToProgram,
+		},
+		Caps: hostCaps,
 	}
 
 	// If ephemeral mode or daemon not available, use old behavior

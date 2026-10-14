@@ -121,6 +121,19 @@ try {
   const pasted = await waitEvent('shell.command', "(e) => e.data.line === 'echo pasted-5821'", 10000);
   if (pasted.data.exitCode !== 0) fail('the pasted echo exited ' + pasted.data.exitCode);
 
+  // And with plain Ctrl+V, which the page keeps for the browser by default.
+  await page.evaluate(() => navigator.clipboard.writeText('echo ctrl-v-5821'));
+  await page.keyboard.press('Control+v');
+  await page.waitForFunction(() => {
+    const b = window.webterm.xterm.buffer.active;
+    for (let i = 0; i < b.length; i++) {
+      if (b.getLine(i)?.translateToString(true).includes('ctrl-v-5821')) return true;
+    }
+    return false;
+  }, null, { timeout: 10000 }).catch(() => fail('Ctrl+V did not paste into the shell'));
+  await page.keyboard.press('Enter');
+  await waitEvent('shell.command', "(e) => e.data.line === 'echo ctrl-v-5821'", 10000);
+
   // Back to window mode with the leader and Esc; q there is a quit, which
   // Learn mode turns into a note.
   await page.keyboard.press('Control+b');
