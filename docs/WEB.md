@@ -60,6 +60,18 @@ tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-pass
   no password, so tuios-web refuses it and the browser falls back to
   WebSocket.
 
+## Paste
+
+The browser pastes the text. The page needs no clipboard permission.
+
+- Press Ctrl+Shift+V or Shift+Insert. On macOS, press Cmd+V.
+- Hold Shift, right-click, and select Paste. A right-click without Shift goes
+  to the program in the pane.
+- On Linux, click the middle mouse button to paste the primary selection.
+
+Ctrl+V goes to the program in the pane. In a shell it inserts the next key as
+text. In vim it starts a block selection.
+
 ## Window size limit
 
 A browser window can be 1200 columns wide and 500 rows high at most. It can

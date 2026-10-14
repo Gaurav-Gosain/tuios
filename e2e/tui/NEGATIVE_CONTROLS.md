@@ -4937,3 +4937,25 @@ runs `TestNamedServersAreIsolated`, `TestKillServerStopsOnlyTheNamedDaemon` and
 `buildEnvFor` setting `TUIOS_SERVER` itself has no control of its own: every process that starts a daemon now applies the variable, so a pane would inherit the same value and no test can tell the explicit setting from the inherited one. It holds the pane contract for a starter that does not apply it.
 
 `TestApplyReadsTheCurrentStateHome` stays: with `Apply` keeping the first base it ever saw, it fails, while `TestLinkDenyCoversEveryServersState` and `TestLinkDenyCoversEveryServersSockets` still pass, since `internal/session`'s tests never move the state home between two named servers.
+## Paste in tuios-web and on the Learn page
+
+`clienttests/paste.spec.mjs` pastes two lines with Ctrl+Shift+V into the pane
+of a tuios-web session. The wire must carry one bracketed paste and no key
+sequence for the chord, and the pane's shell must show both lines.
+`cmd/tuios-wasm/smoke.mjs` pastes `echo pasted-5821` into the fake shell of
+the Learn build and waits for the shell to run it.
+
+The fault was in webterm, under sip. tuios asks for the kitty keyboard
+protocol, and webterm then sent Ctrl+Shift+V to tuios as `CSI 118;6 u` and
+prevented the browser's paste. The fix is webterm#4, vendored in sip#13.
+
+The controls were run on 2026-10-14.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The whole fix removed | tuios-web built with sip v0.9.1 | `paste.spec.mjs` (the wire holds `CSI 118:86;6 u` and no paste) | **caught** |
+| The whole fix removed | Learn build with sip v0.9.1 | `smoke.mjs` ("Ctrl+Shift+V did not paste into the shell") | **caught** |
+| The fix in place | tuios-web and the Learn build with the sip of this change | none. `paste.spec.mjs` passes, and the smoke test passes the paste step | **positive half** |
+
+The smoke test then stops on a 404 from the page. The same 404 happens on
+`main` with the system Chromium, so it is not part of this change.

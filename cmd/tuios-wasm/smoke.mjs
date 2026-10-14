@@ -1,7 +1,7 @@
 // A headless Chromium smoke test of the browser build. It serves a build.sh
 // output directory, loads the demo page, opens a window, runs a command in
-// the fake shell, checks the events that came back, and checks that q does
-// not quit. Then it loads the page with ?renderer=vtgl and checks that vtgl
+// the fake shell, pastes a second one, checks the events that came back, and
+// checks that q does not quit. Then it loads the page with ?renderer=vtgl and checks that vtgl
 // draws it. For both renderers it checks that the bottom row is on screen
 // when the host centres the grid, as tuios.dev/learn does.
 //
@@ -63,7 +63,13 @@ try {
     // tuios plays sounds. A test run has no business making any.
     args: ['--mute-audio'],
   });
-  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  // The clipboard grant lets the test write the text it pastes. The paste
+  // itself needs none: the browser hands it to the page as a paste event.
+  const context = await browser.newContext({
+    viewport: { width: 1400, height: 900 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+  });
+  const page = await context.newPage();
   const logs = [];
   page.on('pageerror', (err) => logs.push('pageerror: ' + err.message));
   page.on('console', (m) => { if (m.type() === 'error') logs.push('console: ' + m.text()); });
@@ -96,6 +102,24 @@ try {
   await page.keyboard.press('Enter');
   const ran = await waitEvent('shell.command', "(e) => e.data.command === 'ls'");
   if (ran.data.exitCode !== 0) fail('ls exited ' + ran.data.exitCode);
+
+  // Paste with Ctrl+Shift+V. tuios asks for the kitty keyboard protocol, and
+  // under it webterm once sent this chord to tuios as a key and stopped the
+  // browser's paste, so nothing reached the shell.
+  await page.evaluate(() => navigator.clipboard.writeText('echo pasted-5821'));
+  await page.keyboard.press('Control+Shift+V');
+  // The browser reads the clipboard after the key, so wait for the text to
+  // reach the screen before Enter, or Enter runs the empty line first.
+  await page.waitForFunction(() => {
+    const b = window.webterm.xterm.buffer.active;
+    for (let i = 0; i < b.length; i++) {
+      if (b.getLine(i)?.translateToString(true).includes('pasted-5821')) return true;
+    }
+    return false;
+  }, null, { timeout: 10000 }).catch(() => fail('Ctrl+Shift+V did not paste into the shell'));
+  await page.keyboard.press('Enter');
+  const pasted = await waitEvent('shell.command', "(e) => e.data.line === 'echo pasted-5821'", 10000);
+  if (pasted.data.exitCode !== 0) fail('the pasted echo exited ' + pasted.data.exitCode);
 
   // Back to window mode with the leader and Esc; q there is a quit, which
   // Learn mode turns into a note.
