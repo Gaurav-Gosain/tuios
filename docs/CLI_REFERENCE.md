@@ -1615,7 +1615,7 @@ exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
 | `WindowManagementMode` | | Switch to window management mode |
 | `ToggleTiling`, `EnableTiling`, `DisableTiling` | | Turn tiling mode on or off |
 | `SnapLeft`, `SnapRight`, `SnapFullscreen` | | Snap the focused window |
-| `Split` | `horizontal` or `vertical` | Split the focused window |
+| `Split` | `horizontal`, `vertical`, `left`, `right`, `up` or `down` | Split the focused window. A side names where the new window goes |
 | `RotateSplit` | | Rotate the split direction |
 | `EqualizeSplits` | | Equalize all split ratios |
 | `SetMasterPosition` | `left`, `right`, `top`, `bottom` or `center` | Put the master panes of the current workspace on that side. With `center`, the stack is on both sides |

@@ -20,7 +20,8 @@ import (
 //	Type "text" [Enter]       type text into the focused pane, optional submit
 //	Run "cmd"                 shorthand for Type "cmd" Enter
 //	Enter                     submit a line in the focused pane
-//	Split vertical|horizontal split the focused pane into a new tiled pane (v/h ok)
+//	Split <dir>               split the focused pane: vertical, horizontal (v/h ok),
+//	                          or the side the new pane takes: left, right, up, down
 //	NewWindow ["name"]        create a new tiled pane
 //	RenameWindow "name"       name the focused pane (Rename is an alias)
 //	Focus "name"              focus a pane by name
@@ -105,12 +106,14 @@ func compileProjectBody(body string) []tape.Command {
 	return cmds
 }
 
-// normalizeSplitDir folds the accepted split-direction spellings to the two the
-// executor understands.
+// normalizeSplitDir folds the accepted split-direction spellings to the ones
+// the executor understands: the two axes, or the side the new pane takes.
 func normalizeSplitDir(s string) string {
-	switch strings.ToLower(strings.Trim(s, `"`)) {
+	switch d := strings.ToLower(strings.Trim(s, `"`)); d {
 	case "h", "horizontal":
 		return "horizontal"
+	case "left", "right", "up", "down":
+		return d
 	default:
 		return "vertical"
 	}

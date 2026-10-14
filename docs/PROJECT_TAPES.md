@@ -156,7 +156,7 @@ line, keyword case-insensitive:
 | `Type "text" [Enter]` | Type text into the focused pane; optional `Enter` submits it |
 | `Run "cmd"` | Shorthand for `Type "cmd" Enter` |
 | `Enter` | Submit a line in the focused pane |
-| `Split vertical\|horizontal` | Split the focused pane into a new tiled pane (`v`/`h` accepted) |
+| `Split vertical\|horizontal\|left\|right\|up\|down` | Split the focused pane into a new tiled pane (`v`/`h` accepted). A side names where the new pane goes |
 | `NewWindow ["name"]` | Create a new tiled pane |
 | `RenameWindow "name"` | Name the focused pane (`Rename` is an alias) |
 | `Focus "name"` | Focus a pane by name |
