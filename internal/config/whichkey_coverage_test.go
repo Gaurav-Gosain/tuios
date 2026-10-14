@@ -26,7 +26,9 @@ var prefixTables = []struct {
 // row falls to the menu's untitled end with the registry's generic text;
 // ctrl+b b and ctrl+b o once shipped unlisted for exactly that reason. Every
 // action a prefix binds by default must have a row, and every row must name
-// an action that prefix binds, in both the local and the daemon layout.
+// an action that prefix binds, in both the local and the daemon layout. The
+// space keys' rows are only in the layout while a session is in a space, so
+// the leader is checked with one, and without one it may leave out only them.
 func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 	cfg := DefaultConfig()
 	for _, table := range prefixTables {
@@ -37,10 +39,16 @@ func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 		for _, daemon := range []bool{false, true} {
 			t.Run(name, func(t *testing.T) {
 				section := table.section(cfg)
-				rows := PrefixMenuActions(table.name, MenuState{Daemon: daemon})
+				rows := PrefixMenuActions(table.name, MenuState{Daemon: daemon, Spaces: true})
 				for action := range section {
 					if !slices.Contains(rows, action) {
 						t.Errorf("%s prefix (daemon %v) binds %q, and the which-key layout has no row for it", name, daemon, action)
+					}
+				}
+				unspaced := PrefixMenuActions(table.name, MenuState{Daemon: daemon})
+				for _, action := range rows {
+					if !slices.Contains(unspaced, action) && !slices.Contains(spaceMenuActions, action) {
+						t.Errorf("the %s which-key layout (daemon %v) leaves %q out with no session in a space", name, daemon, action)
 					}
 				}
 				for _, action := range rows {

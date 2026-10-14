@@ -303,7 +303,7 @@ func heldApprovals(t *testing.T, base, session string) int {
 // groundClient is a client on the shipped looks, with the theme and the
 // background given, attached to a session of two panes, and an Inbox holding
 // a risky approval, a plan, an error and a finished job.
-func groundClient(t *testing.T, cols, rows int, theme, background string, out *syncBuffer) *tuitest.Terminal {
+func groundClient(t *testing.T, cols, rows int, theme, background, space string, out *syncBuffer) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -336,6 +336,11 @@ func groundClient(t *testing.T, cols, rows int, theme, background string, out *s
 		if o, err := tuiosCLI(t, base, args...); err != nil {
 			t.Fatalf("%v: %v\n%s", args, err, o)
 		}
+	}
+	if space != "" {
+		// The attached session in a space puts the leader's space rows in
+		// the which-key menu.
+		setSpace(t, base, "e2e-home", space)
 	}
 	startHookIn(t, base, "e2e-agent", "0", `{"hook_event_name":"PermissionRequest","session_id":"e2e-risk","tool_name":"Bash","tool_input":{"command":"rm -rf build/ && git push --force origin main"}}`)
 	startHookIn(t, base, "e2e-agent", "1", `{"hook_event_name":"PermissionRequest","session_id":"e2e-plan","permission_mode":"plan","tool_name":"ExitPlanMode","tool_input":{"plan":"# Make the retry limit configurable\n1. Add a MaxAttempts field.\n2. Thread it through Do.\n3. Add table tests.","planFilePath":"/tmp/plan.md"}}`)
@@ -397,81 +402,92 @@ func groundSteps() []groundStep {
 // TestEveryOverlayOwnsItsGround opens each overlay under each look and reads
 // its cells.
 func TestEveryOverlayOwnsItsGround(t *testing.T) {
+	type groundRun struct{ theme, bg, space string }
+	var looks []groundRun
+	for _, theme := range []string{"catppuccin_mocha", "catppuccin_latte"} {
+		for _, bg := range []string{"", "theme"} {
+			looks = append(looks, groundRun{theme: theme, bg: bg})
+		}
+	}
+	// With a session in a space the leader's menu draws its space rows.
+	looks = append(looks, groundRun{theme: "catppuccin_mocha", space: "work"})
 	for _, size := range [][2]int{{80, 24}, {120, 40}} {
-		for _, theme := range []string{"catppuccin_mocha", "catppuccin_latte"} {
-			for _, bg := range []string{"", "theme"} {
-				name := fmt.Sprintf("%dx%d-%s-bg_%s", size[0], size[1], theme, map[string]string{"": "off", "theme": "theme"}[bg])
-				t.Run(name, func(t *testing.T) {
-					out := &syncBuffer{}
-					term := groundClient(t, size[0], size[1], theme, bg, out)
-					dir := artifactDir(t)
-					var closed groundCells
-					inboxTop := -1
-					for _, st := range groundSteps() {
-						if st.fresh {
-							if err := term.WaitStable(uiTimeout); err != nil {
-								t.Fatalf("%s: the screen never settled before opening: %v", st.name, err)
-							}
-							closed = readCells(term.Screen())
-							saveArtifact(t, term, dir, "closed-before-"+st.name)
-						}
-						sendKeys(t, term, st.keys...)
-						if st.do != nil {
-							st.do(t, term)
-						}
-						waitScreen(t, term, st.name+" never drew", st.want...)
-						if err := term.WaitStable(uiTimeout); err != nil {
-							t.Fatalf("%s: the screen never settled: %v", st.name, err)
-						}
-						s := term.Screen()
-						saveArtifact(t, term, dir, st.name)
-						after := readCells(s)
-						ground := modeBg(closed)
-						r := findOverlay(closed, after, ground)
-						cols, rows := s.Size()
-						if r.cells < 20 || r.x1-r.x0 < 12 {
-							t.Errorf("%s: found no overlay in the cells that changed (%d cells)\n%s", st.name, r.cells, term.Snapshot())
-						} else {
-							title := -1
-							if st.titled {
-								title = r.y0 + 1
-								if r.y0 == 0 && after[0][r.x0].Bg != r.panel {
-									title = r.y0
-								}
-							}
-							if h := holes(after, r, ground, title); len(h) > 0 {
-								t.Errorf("%s at %dx%d: %d cells of the ground inside the overlay at (%d,%d)-(%d,%d), first %v\n%s",
-									st.name, cols, rows, len(h), r.x0, r.y0, r.x1, r.y1, h[:min(len(h), 6)], term.Snapshot())
-							}
-						}
-						// The Inbox keeps its top row while its height follows
-						// the item under the cursor, and it fits beside the rail
-						// at 120 columns, so it is drawn there.
-						if strings.HasPrefix(st.name, "inbox-") && r.cells >= 20 {
-							if inboxTop < 0 {
-								inboxTop = r.y0
-							} else if r.y0 != inboxTop {
-								t.Errorf("%s: the Inbox moved from row %d to row %d", st.name, inboxTop, r.y0)
-							}
-							if rail := railHeaderColumn(s); cols >= 120 && rail > 0 && r.x1 >= rail-1 {
-								t.Errorf("%s: the Inbox runs to column %d, over the rail at %d\n%s", st.name, r.x1, rail, term.Snapshot())
-							}
-						}
-						if st.check != nil {
-							st.check(t, s)
-						}
-						if len(st.close) > 0 {
-							sendKeys(t, term, st.close...)
-							waitGone(t, term, st.name, st.want[0])
-						}
-					}
-					if i := bytes.IndexByte([]byte(out.String()), '\t'); i >= 0 {
-						t.Errorf("the client moved the cursor with a hard tab at byte %d of its output; "+
-							"tmux writes a tab cell without the background the blanks had", i)
-					}
-					t.Logf("frames in %s", dir)
-				})
+		for _, look := range looks {
+			theme, bg := look.theme, look.bg
+			name := fmt.Sprintf("%dx%d-%s-bg_%s", size[0], size[1], theme, map[string]string{"": "off", "theme": "theme"}[bg])
+			if look.space != "" {
+				name += "-spaced"
 			}
+			t.Run(name, func(t *testing.T) {
+				out := &syncBuffer{}
+				term := groundClient(t, size[0], size[1], theme, bg, look.space, out)
+				dir := artifactDir(t)
+				var closed groundCells
+				inboxTop := -1
+				for _, st := range groundSteps() {
+					if st.fresh {
+						if err := term.WaitStable(uiTimeout); err != nil {
+							t.Fatalf("%s: the screen never settled before opening: %v", st.name, err)
+						}
+						closed = readCells(term.Screen())
+						saveArtifact(t, term, dir, "closed-before-"+st.name)
+					}
+					sendKeys(t, term, st.keys...)
+					if st.do != nil {
+						st.do(t, term)
+					}
+					waitScreen(t, term, st.name+" never drew", st.want...)
+					if err := term.WaitStable(uiTimeout); err != nil {
+						t.Fatalf("%s: the screen never settled: %v", st.name, err)
+					}
+					s := term.Screen()
+					saveArtifact(t, term, dir, st.name)
+					after := readCells(s)
+					ground := modeBg(closed)
+					r := findOverlay(closed, after, ground)
+					cols, rows := s.Size()
+					if r.cells < 20 || r.x1-r.x0 < 12 {
+						t.Errorf("%s: found no overlay in the cells that changed (%d cells)\n%s", st.name, r.cells, term.Snapshot())
+					} else {
+						title := -1
+						if st.titled {
+							title = r.y0 + 1
+							if r.y0 == 0 && after[0][r.x0].Bg != r.panel {
+								title = r.y0
+							}
+						}
+						if h := holes(after, r, ground, title); len(h) > 0 {
+							t.Errorf("%s at %dx%d: %d cells of the ground inside the overlay at (%d,%d)-(%d,%d), first %v\n%s",
+								st.name, cols, rows, len(h), r.x0, r.y0, r.x1, r.y1, h[:min(len(h), 6)], term.Snapshot())
+						}
+					}
+					// The Inbox keeps its top row while its height follows
+					// the item under the cursor, and it fits beside the rail
+					// at 120 columns, so it is drawn there.
+					if strings.HasPrefix(st.name, "inbox-") && r.cells >= 20 {
+						if inboxTop < 0 {
+							inboxTop = r.y0
+						} else if r.y0 != inboxTop {
+							t.Errorf("%s: the Inbox moved from row %d to row %d", st.name, inboxTop, r.y0)
+						}
+						if rail := railHeaderColumn(s); cols >= 120 && rail > 0 && r.x1 >= rail-1 {
+							t.Errorf("%s: the Inbox runs to column %d, over the rail at %d\n%s", st.name, r.x1, rail, term.Snapshot())
+						}
+					}
+					if st.check != nil {
+						st.check(t, s)
+					}
+					if len(st.close) > 0 {
+						sendKeys(t, term, st.close...)
+						waitGone(t, term, st.name, st.want[0])
+					}
+				}
+				if i := bytes.IndexByte([]byte(out.String()), '\t'); i >= 0 {
+					t.Errorf("the client moved the cursor with a hard tab at byte %d of its output; "+
+						"tmux writes a tab cell without the background the blanks had", i)
+				}
+				t.Logf("frames in %s", dir)
+			})
 		}
 	}
 }

@@ -29,6 +29,11 @@ type MenuState struct {
 	// Minimized is the number of minimized windows the restore row counts,
 	// or -1 to leave the count out.
 	Minimized int
+	// Spaces is set while a session the client knows of is in a space. The
+	// leader menu's space rows wait for it, as its agent rows wait for an
+	// agent, and the keys work either way. Without it the menu is the one a
+	// person who never files a session has always seen.
+	Spaces bool
 }
 
 // menuPart is one action of a row, with what the row says about it when it
@@ -186,23 +191,36 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	}}
 	sessions := menuSection{title: "Sessions", rows: []menuRow{
 		pair("Prev/next session", part("prev_session", "Previous session"), part("next_session", "Next session")),
-		pair("Prev/next in space", part("prev_session_in_space", "Previous in space"), part("next_session_in_space", "Next in space")),
-		pair("Prev/next space", part("prev_space", "Previous space"), part("next_space", "Next space")),
-		// The two switchers share a row, and so do detach and quit below,
-		// which pays for the two space rows: the leader's menu fills an
-		// 80x24 screen, and a row more pushes it off the bottom. A key label
-		// wider than five cells widens its column and drops the menu to
-		// three columns at 80, so the space keys keep a row each.
-		pair("Sessions/workspaces", part("prefix_session_switcher", "Sessions"), part("prefix_workspace_switcher", "Workspaces")),
+	}}
+	if st.Spaces {
+		sessions.rows = append(sessions.rows,
+			pair("Prev/next in space", part("prev_session_in_space", "Previous in space"), part("next_session_in_space", "Next in space")),
+			pair("Prev/next space", part("prev_space", "Previous space"), part("next_space", "Next space")),
+			// The two switchers share a row, and so do detach and quit
+			// below, which pays for the two space rows: the leader's menu
+			// fills an 80x24 screen, and a row more pushes it off the
+			// bottom. A key label wider than five cells widens its column
+			// and drops the menu to three columns at 80, so the space keys
+			// keep a row each.
+			pair("Sessions/workspaces", part("prefix_session_switcher", "Sessions"), part("prefix_workspace_switcher", "Workspaces")))
+	} else {
+		sessions.rows = append(sessions.rows,
+			row("prefix_session_switcher", "Sessions"),
+			row("prefix_workspace_switcher", "Workspaces"))
+	}
+	sessions.rows = append(sessions.rows,
 		row("choose_tree", "Find a pane"),
 		row("prefix_close_session", "Close session"),
-		row("toggle_scratch", "Scratch session"),
-	}}
+		row("toggle_scratch", "Scratch session"))
 	modes := menuSection{title: "Modes"}
 	// In daemon mode d detaches and Esc leaves for window mode; in local mode
 	// both leave for window mode.
 	if st.Daemon {
-		sessions.rows = append(sessions.rows, pair("Detach/quit menu", part("prefix_detach", "Detach session"), part("prefix_quit", "Quit menu")))
+		if st.Spaces {
+			sessions.rows = append(sessions.rows, pair("Detach/quit menu", part("prefix_detach", "Detach session"), part("prefix_quit", "Quit menu")))
+		} else {
+			sessions.rows = append(sessions.rows, row("prefix_detach", "Detach session"), row("prefix_quit", "Quit menu"))
+		}
 		modes.rows = append(modes.rows, row("prefix_exit_mode", "Window mode"))
 	} else {
 		sessions.rows = append(sessions.rows, row("prefix_quit", "Quit application"))
@@ -311,6 +329,10 @@ var prefixMenuScopes = map[string]string{
 	"layout":    ScopePrefixLayout,
 }
 
+// spaceMenuActions are the leader's space keys, whose rows wait for a session
+// in a space (MenuState.Spaces).
+var spaceMenuActions = []string{"prev_session_in_space", "next_session_in_space", "prev_space", "next_space"}
+
 // PrefixMenuGroups returns a which-key menu's lines, in the sections the panel
 // draws them under, with the keys the registry has bound. prefixType is ""
 // for the leader's menu, or the name of a sub-prefix: workspace, minimize,
@@ -329,6 +351,12 @@ func PrefixMenuGroups(r *KeybindRegistry, prefixType string, st MenuState) []Key
 	live := r.liveScope(prefixMenuScopes[prefixType])
 
 	listed := map[string]bool{}
+	if prefixType == "" && !st.Spaces {
+		// Held back with their rows, not listed under Other.
+		for _, a := range spaceMenuActions {
+			listed[a] = true
+		}
+	}
 	var groups []KeybindingGroup
 	for _, sec := range menuSections(prefixType, st) {
 		g := KeybindingGroup{Title: sec.title}

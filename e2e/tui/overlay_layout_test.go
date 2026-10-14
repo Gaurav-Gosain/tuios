@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -22,6 +23,10 @@ type overlayLayoutRun struct {
 	cols, rows int
 	theme      string
 	env        []string
+	// space files the session under a space, which puts the leader's space
+	// rows in the which-key menu. Empty for none, the menu every run without
+	// a space must keep.
+	space string
 }
 
 func overlayLayoutRuns() []overlayLayoutRun {
@@ -42,6 +47,15 @@ func overlayLayoutRuns() []overlayLayoutRun {
 				cols: 120, rows: 40, theme: look.theme, env: d.env,
 			})
 		}
+	}
+	for _, size := range [][2]int{{120, 40}, {80, 24}} {
+		look := chromeLooks[0]
+		runs = append(runs, overlayLayoutRun{
+			name: look.name + "-" + itoa(size[0]) + "x" + itoa(size[1]) + "-truecolor-spaced",
+			cols: size[0], rows: size[1], theme: look.theme,
+			env:   []string{"TERM=xterm-256color", "COLORTERM=truecolor"},
+			space: "work",
+		})
 	}
 	return runs
 }
@@ -110,7 +124,11 @@ func TestOverlayLayouts(t *testing.T) {
 			if run.theme != "" {
 				writeConfig(t, base, "[appearance]\ntheme = \""+run.theme+"\"\n")
 			}
-			if out, err := tuiosCLI(t, base, "new", "e2e-layout", "--detach"); err != nil {
+			args := []string{"new", "e2e-layout", "--detach"}
+			if run.space != "" {
+				args = append(args, "--space", run.space)
+			}
+			if out, err := tuiosCLI(t, base, args...); err != nil {
 				t.Fatalf("create session: %v\n%s", err, out)
 			}
 			term := startIn(t, base, startOpts{cols: run.cols, rows: run.rows,
@@ -118,7 +136,15 @@ func TestOverlayLayouts(t *testing.T) {
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 				t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 			}
-			windowManagementMode(t, term)
+			if run.space == "" {
+				windowManagementMode(t, term)
+			} else {
+				// The dock carries the space's label, and at 80 columns
+				// that cuts the mode's toast to "Window manage…".
+				sendKeys(t, term, tuitest.Alt(tuitest.Esc))
+				waitScreen(t, term, "never settled in window management mode", "Window manage")
+				time.Sleep(insertGuard)
+			}
 			dir := artifactDir(t)
 			host := hostPalette(t, run.theme)
 			shot := func(name string) {
@@ -154,6 +180,7 @@ func TestOverlayLayouts(t *testing.T) {
 			waitScreen(t, term, "which-key never drew", "prefix", "+Workspace", "Help")
 			shot("which-key")
 			checkWhichKey(t, term, run.cols >= 120)
+			checkWhichKeySpaceRows(t, term, run.space != "")
 			if strings.HasSuffix(run.name, "-16") {
 				checkWhichKeyFramed(t, term)
 				checkSlotInk(t, term)
@@ -297,6 +324,26 @@ func checkCentredEmpty(t *testing.T, term *tuitest.Terminal, message, hint strin
 	hstart := runeCol(hline, hint)
 	if d := hstart + len(hint)/2 - (left + width/2); d < -1 || d > 1 {
 		t.Errorf("the hint %q is centred on column %d, the body's middle is %d\n%s", hint, hstart+len(hint)/2, left+width/2, term.Snapshot())
+	}
+}
+
+// checkWhichKeySpaceRows holds the leader's space rows to whether a session
+// is in a space: drawn with one, and left out without, where the menu is the
+// one a person who never files a session has always seen. The shipped keymap
+// gives every leader key a row, so there is no Other section either way.
+func checkWhichKeySpaceRows(t *testing.T, term *tuitest.Terminal, spaced bool) {
+	t.Helper()
+	text := term.Screen().Text()
+	// By their keys: at 80 columns the descriptions are cut short.
+	for _, keys := range []string{"</>", "{/}"} {
+		if got := strings.Contains(text, keys+" "); got != spaced {
+			t.Errorf("with a session in a space %v, the which-key menu draws the %s row: %v\n%s", spaced, keys, got, term.Snapshot())
+		}
+	}
+	// Held back with their rows, the space keys must not turn up on rows of
+	// their own under Other, where a key with no row goes.
+	if strings.Contains(text, "Other ") {
+		t.Errorf("the which-key menu has an Other section\n%s", term.Snapshot())
 	}
 }
 

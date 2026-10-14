@@ -4962,3 +4962,16 @@ Run on 2026-10-14 on macOS. The test is `TestSpaceRailCursorPassesASplitReposito
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |
 | The build before these fixes (`c9af6aea`: the repository header's nav row carries no space, so both headers are one row to the cursor) | `TestSpaceRailCursorPassesASplitRepository` ("no client shows session repo-feat-two": the cursor fell back to the first header, the next `j` went to `feat/one`, and enter switched there) | **caught** |
+
+### The leader's space rows wait for a space
+
+Run on 2026-10-14 on macOS. `TestOverlayLayouts` in `overlay_layout_test.go` has two runs with the session filed under a space (`dark-120x40-truecolor-spaced`, `dark-80x24-truecolor-spaced`) beside the runs without one, and `checkWhichKeySpaceRows` holds the which-key menu to the space rows (found by their keys `</>` and `{/}`, since 80 columns cuts the descriptions) being drawn exactly when a session is in a space, with no Other section either way. `TestEveryOverlayOwnsItsGround` in `overlay_ground_test.go` has a `-spaced` run at both sizes. The fixed build passes every run of both. With no session in a space the leader's menu was also compared with upstream/main's (`1a34acbe`) as data, `PrefixMenuGroups` for the local and the daemon layout: identical.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The build before these fixes (`c9af6aea`: the space rows always drawn, the switchers and detach/quit always paired) | `TestOverlayLayouts/dark-120x40-truecolor` ("with a session in a space false, the which-key menu draws the </> row: true") | **caught** |
+| `Spaces` always true in `prefixMenuGroups` | `TestOverlayLayouts/dark-80x24-truecolor` (the `</>` and `{/}` rows drawn with no space) | **caught** |
+| `Spaces` always false in `prefixMenuGroups` | `TestOverlayLayouts/dark-80x24-truecolor-spaced` (no `</>` or `{/}` row with a space) | **caught** |
+| The space keys not held back in `PrefixMenuGroups` with no space (they fall to the Other section) | `TestOverlayLayouts/dark-120x40-truecolor` ("the which-key menu has an Other section", and 25 rows at 120 columns) | **caught** |
+
+The last control passes at 80x24: there the menu leaves out a section that does not fit, and the Other section is the one left out. The 120x40 run catches it.

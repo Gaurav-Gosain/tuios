@@ -64,9 +64,9 @@ func (m *OS) noteAgentsSeen() {
 }
 
 // prefixMenuGroups is the which-key menu after the prefix key, in its
-// sections. The Copies line waits until a copy exists. The Inbox's lines wait
-// until an agent has been seen, and a section
-// they leave empty goes with them; the keys work either way. The review line
+// sections. The Copies line waits until a copy exists, and the space lines
+// until a session is in a space. The Inbox's lines wait until an agent has
+// been seen, and a section they leave empty goes with them; the keys work either way. The review line
 // is left out on a daemon that cannot review, where the key does what an
 // unbound key does.
 func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
@@ -79,6 +79,7 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 		MultiCopy: multi,
 		Spotlight: m.spotlight.on,
 		Minimized: -1,
+		Spaces:    m.spacesSeen(),
 	})
 	seen, review, agentsTab := m.agentsSeen(), m.reviewSupported(), m.agentsPageAvailable()
 	out := groups[:0]
