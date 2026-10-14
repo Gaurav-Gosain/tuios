@@ -5731,3 +5731,12 @@ Run on 2026-10-14 on macOS on branch `pr/rail-peek-hold-on-scrollbar`: the rail 
 | The thumb skipped while the terminals section shows a peek | mutant of this branch | `TestRailScrollbarOnAPeek` ("the thumb is \"no thumb\" beside the list's first rows, want \"top\"") | **caught** |
 | No peek hold: the scrollbar change alone | `f1262902` | `TestRailScrollbarOnAPeek` ("line 0 is \"peek7\", want peek-first") and `TestRailPeekHoldsTheTerminalsHeight` ("hovering pk-few moved pk-main from row 7 to row 5") | **caught** |
 | The positive half | this branch | none | **guard** |
+
+### The drop preview under a tree that changes mid-drag
+
+Run on 2026-10-15 on macOS on branch `fix/drop-zone-stale-land-2`, from upstream `main` (cfc254fb), so with the drop preview drawn as a pane frame (#705). The test is `TestTheDropZoneFollowsTheTreeUnderAHeldDrag`: C is held on A's left edge while A shares its slot with a fourth pane D, D is closed from the CLI, and the preview is checked once with the pointer held still and once after a one-cell motion that stays on the same edge. The fixed build passes both. Each control is a build of the branch with one thing cut, run against the branch's test.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The whole fix (upstream `main`: the landing rectangle cached on the target and the edge only) | `TestTheDropZoneFollowsTheTreeUnderAHeldDrag/held-still` and `/after-a-motion`, both with "outline cell (0,28) of the landing rectangle {... X:0 Y:0 Width:30 Height:38} is "│" in {Kind:2 ... R:250 G:170 B:170}, want the border glyph "│" in the outline's ink {Kind:2 ... R:145 G:141 B:255}": the frame stayed on the half-height rectangle from before D closed, so row 28 kept the pane border's own ink, and kept it after the motion too | **caught** |
+| The `refreshDropZone` call in `ApplyBSPLayout` | The same two rows, with the same message | **caught** |

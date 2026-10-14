@@ -57,9 +57,10 @@ func (m *OS) TiledDropAt(x, y int) (Drop, bool) {
 }
 
 // tiledDropAt is TiledDropAt, taking the landing rectangle from last when it
-// was worked out for the same target and edge. The rectangle only changes
-// when one of those does, and working it out copies and lays out the whole
-// tree, which a drag would otherwise pay on every motion event.
+// was worked out for the same target and edge. Between retiles the rectangle
+// only changes when one of those does, and a retile refreshes it without last
+// (see refreshDropZone). Working it out copies and lays out the whole tree,
+// which a drag would otherwise pay on every motion event.
 func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 	held := m.LiveWindowDrag()
 	if held == nil || !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
@@ -158,13 +159,13 @@ func (m *OS) UpdateDropZone(x, y int) tea.Cmd {
 		m.ClearDropZone()
 		return nil
 	}
+	m.dropZoneX, m.dropZoneY = x, y
 	drop, ok := m.tiledDropAt(x, y, m.dropZone)
 	if !ok {
 		m.ClearDropZone()
 		return nil
 	}
-	if last := m.dropZone; last != nil && last.Target == drop.Target && last.Dir == drop.Dir {
-		*last = drop
+	if m.sameDropZone(drop) {
 		return nil
 	}
 	if m.dropZone == nil {
@@ -180,6 +181,39 @@ func (m *OS) UpdateDropZone(x, y int) tea.Cmd {
 	}
 	gen := m.dropZoneGen
 	return tea.Tick(delay, func(time.Time) tea.Msg { return dropZoneDueMsg{gen: gen} })
+}
+
+// sameDropZone takes drop's landing rectangle when drop is the zone already
+// recorded, the same target and edge, and reports whether it was. The zone's
+// delay and whether it shows carry over untouched.
+func (m *OS) sameDropZone(drop Drop) bool {
+	last := m.dropZone
+	if last == nil || last.Target != drop.Target || last.Dir != drop.Dir {
+		return false
+	}
+	*last = drop
+	return true
+}
+
+// refreshDropZone works the highlight out again where the pointer last was,
+// without the cached landing rectangle. ApplyBSPLayout calls it: a retile
+// under a held drag (a pane exiting, a peer's change, a new box) moves where
+// an edge drop lands while the target and the edge stay the same, and a
+// pointer held still would otherwise keep showing the old rectangle. The
+// motion path does not retile, so the cache still serves every motion event.
+//
+// The same zone keeps its delay and whether it shows. A retile that puts the
+// pointer over another zone, or over none, clears it: a retile has no command
+// to arm a delay with, and showing the new zone at once would skip the delay.
+// The next motion finds no zone and arms the one under it as any entry does.
+func (m *OS) refreshDropZone() {
+	if m.dropZone == nil {
+		return
+	}
+	if drop, ok := m.tiledDropAt(m.dropZoneX, m.dropZoneY, nil); ok && m.sameDropZone(drop) {
+		return
+	}
+	m.ClearDropZone()
 }
 
 // dropZoneDueMsg is the delay of the zone armed as gen running out.

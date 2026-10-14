@@ -154,6 +154,9 @@ func openStartRect(rect layout.Rect) (x, y, w, h int) {
 
 // ApplyBSPLayout applies the BSP tree layout to all windows in the current workspace
 func (m *OS) ApplyBSPLayout() {
+	// Deferred so every way out refreshes it, and after noteDragSlot has
+	// recorded the held pane's slot, which a drop that changes nothing lands in.
+	defer m.refreshDropZone()
 	tree := m.GetOrCreateBSPTree()
 	if tree == nil || tree.IsEmpty() {
 		return

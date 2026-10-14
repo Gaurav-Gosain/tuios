@@ -691,3 +691,92 @@ func TestARightClickCancelsADrag(t *testing.T) {
 		}
 	}
 }
+
+// TestTheDropZoneFollowsTheTreeUnderAHeldDrag holds C on an edge of A while
+// A shares its slot with a fourth pane D, then closes D from the CLI. A takes
+// the whole slot back, so the same edge of the same pane now lands C in a
+// larger rectangle. The highlight has to move to it twice over: at once, with
+// the pointer held still, and after a motion that stays on that edge.
+//
+// How this could pass wrongly, written down first:
+//   - D could split A so that the pointer is on another pane or another edge
+//     once A grows, and the drop would be worked out afresh for that reason
+//     alone. The point is picked so the edge is the same zone of A before and
+//     after: the left edge when D is below A, the top edge when D is beside it.
+//   - The highlight could be checked against the board with D on it. It is
+//     checked against the three-pane board read before D was opened, which is
+//     the board the close leaves behind, and against the rectangle C settles in
+//     when the button comes up, which no cache is consulted for.
+func TestTheDropZoneFollowsTheTreeUnderAHeldDrag(t *testing.T) {
+	const session = "drop-tree-change"
+	term, base, p := dropBoard(t, session, chromeDepths[2].env)
+	time.Sleep(500 * time.Millisecond)
+	board := readCells(term.Screen())
+
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", session, p.a.ID); err != nil {
+		t.Fatalf("focus-window A: %v\n%s", err, out)
+	}
+	time.Sleep(500 * time.Millisecond)
+	newWindow(t, term)
+	var shared, d4 winRect
+	for _, r := range waitForSettledGeometry(t, base, 4) {
+		switch r.ID {
+		case p.a.ID:
+			shared = r
+		case p.b.ID, p.c.ID:
+			if r != p.b && r != p.c {
+				t.Fatalf("opening D with A focused moved B or C: %+v\n%s", r, term.Snapshot())
+			}
+		default:
+			d4 = r
+		}
+	}
+	if !covers(p.a, d4.X, d4.Y) || shared.X != p.a.X || shared.Y != p.a.Y {
+		t.Fatalf("D %+v did not split A's slot %+v with A first (A is %+v)\n%s", d4, p.a, shared, term.Snapshot())
+	}
+
+	var x, y int
+	var edge edgeCase
+	if shared.Width == p.a.Width {
+		x, y, edge = shared.X+1, shared.Y+shared.Height/2, edgeCases[0]
+	} else {
+		x, y, edge = shared.X+shared.Width/2, shared.Y+1, edgeCases[2]
+	}
+	withD := p
+	withD.a = shared
+	d := carry(t, term, withD, x, y)
+
+	if out, err := tuiosCLI(t, base, "close-window", "-s", session, d4.ID); err != nil {
+		t.Fatalf("close-window D: %v\n%s", err, out)
+	}
+	if got := waitForSettledGeometry(t, base, 3); len(got) != 3 {
+		t.Fatalf("D did not close: %+v", got)
+	}
+	time.Sleep(time.Second)
+	held := readCells(term.Screen())
+	saveArtifact(t, term, d.artifactAt, "2b-after-close")
+	d.board = p
+	d.checkHeld(t)
+	stillHeld := d.held
+
+	d.x++
+	mouseMotion(t, term, d.x, d.y, tuitest.MouseLeft, 0)
+	time.Sleep(500 * time.Millisecond)
+	moved := readCells(term.Screen())
+	saveArtifact(t, term, d.artifactAt, "2c-after-motion")
+	d.checkHeld(t)
+	movedHeld := d.held
+
+	got := d.drop(t, base)
+	a, b, c := got[p.a.ID], got[p.b.ID], got[p.c.ID]
+	edge.check(t, p, a, b, c)
+	if c.Width*c.Height <= shared.Width*shared.Height/2+shared.Width+shared.Height {
+		t.Fatalf("C landed in %+v, no larger than half of A's share %+v; the fixture cannot tell the old rectangle from the new", c, shared)
+	}
+
+	d.pre = board
+	d.mid, d.held = held, stillHeld
+	t.Run("held-still", func(t *testing.T) { d.checkHighlight(t, &c, false) })
+	d.mid, d.held = moved, movedHeld
+	t.Run("after-a-motion", func(t *testing.T) { d.checkHighlight(t, &c, false) })
+}
