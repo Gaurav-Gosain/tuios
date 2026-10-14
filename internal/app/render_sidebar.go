@@ -1427,7 +1427,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// terminal rows but not with no panes.
 	emptyPeek := peeking && len(terminals) == 0
 	// A peek is a request to see that session's panes, so it lists them all.
-	if !peeking && sidebarCompactAgents(w, height, len(agents), &m.Settings) {
+	compactAgents := sidebarCompactAgents(w, height, len(agents), &m.Settings)
+	if !peeking && compactAgents {
 		terminals = sidebarTerminalsWithoutAgents(terminals, allAgents)
 	}
 
@@ -1439,6 +1440,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 	if emptyPeek {
 		nT = 1
+	}
+	// A peek keeps the height the section has at rest. The pointer that asked
+	// for it is on a session row, and with the terminals section above the
+	// sessions one a peek that resized it moved that row out from under the
+	// pointer, which peeked a different session, which resized it again: the
+	// list jumped for as long as the hand swept it. So the budget is laid out
+	// for the attached session's rows, and the peeked list is fitted into the
+	// lines that buys, padded when it is shorter and cut to a "+N" when it is
+	// longer. peekRows is the peeked list's own count, which the windowing
+	// below uses once the budget is settled. An attached session with no rows
+	// of its own holds nothing: there is no section to hold, and a peek that
+	// could not show anything would not be one.
+	peekRows := nT
+	if peeking {
+		resting := m.sidebarTerminals(sessions, m.sidebarCurrentSessionID())
+		if compactAgents {
+			resting = sidebarTerminalsWithoutAgents(resting, allAgents)
+		}
+		if len(resting) > 0 {
+			nT = len(resting)
+		}
 	}
 	// Membership is the layout's, and only the layout's. A section the user has
 	// taken out of appearance.sidebar.sections has no rows here, so it costs no
@@ -1681,6 +1703,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// Keyboard cursor auto-scroll, per section: a cursor past a section's fold
 	// scrolls that section the way a wheel would, and never disturbs the others.
 	scroll := m.sidebarScrollOffsets()
+	// The budget is settled, so a peek's own list takes over the section's rows
+	// from here: the windowing cuts it to the held lines. It windows from the
+	// top on an offset of its own, so a peek neither inherits the attached
+	// session's scroll nor leaves its clamp on it.
+	if peeking && rowsIn[sidebarSectionTerminals] > 0 {
+		rowsIn[sidebarSectionTerminals] = peekRows
+		peekScroll := 0
+		scroll[sidebarSectionTerminals] = &peekScroll
+	}
 	// A section's fold is in rows and its budget is in lines. Everything below
 	// scrolls and windows against this rather than against the line count, which
 	// were the same number until an agent row took two of them.
@@ -1939,12 +1970,24 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(termSpan, shown)
 		}
 		lines = append(lines, compose(sidebarHeaderRowRuled("terminals", right, cw, pal, &m.Settings)))
+		// A peek shorter than the section it is held in fills the rest with
+		// blank lines, so whatever is below it stays where it was.
+		end := len(lines) + place[sidebarSectionTerminals].lines
+		if peeking {
+			defer func() {
+				for len(lines) < end {
+					lines = append(lines, blank)
+				}
+			}()
+		}
 		if emptyPeek {
-			hint := "no terminals"
-			lines = append(lines, compose(sidebarFit(
-				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
-					sidebarStyle(nil, nil).Render(" ")+
-					sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+			if count[sidebarSectionTerminals] > 0 {
+				hint := "no terminals"
+				lines = append(lines, compose(sidebarFit(
+					sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
+						sidebarStyle(nil, nil).Render(" ")+
+						sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
+			}
 			return
 		}
 		for i := range count[sidebarSectionTerminals] {
