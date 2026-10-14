@@ -2178,7 +2178,7 @@ func resolveAgentDetectInterval(enabled *bool, cfg time.Duration) time.Duration 
 // agentMonitor periodically resolves the foreground process of every pane and
 // marks or clears a running agent, so the status glyph appears without the user
 // running set-agent-state. It is strictly subordinate to explicit reports and to
-// the stall heuristic (see Session.applyAgentDetection). It exits when the daemon
+// the stall heuristic (see Session.scanAgentDetection). It exits when the daemon
 // context is cancelled, and does nothing at all when auto-detection is disabled.
 func (d *Daemon) agentMonitor() {
 	if d.agentDetectInterval <= 0 {

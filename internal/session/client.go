@@ -109,9 +109,11 @@ func (c *Client) ListSessions() ([]SessionInfo, error) {
 	return payload.Sessions, nil
 }
 
-// CreateDetachedSessionIn is CreateDetachedSession with a start directory:
-// the session's first window starts in cwd, and so does any later window with
-// no directory to inherit. See NewPayload.Cwd.
+// CreateDetachedSessionIn asks the daemon to create a headless session (with
+// an initial window) and no attached client. name may be empty to let the
+// daemon generate one. It returns an error if the name is already taken. The
+// session's first window starts in cwd, and so does any later window with no
+// directory to inherit. See NewPayload.Cwd.
 func (c *Client) CreateDetachedSessionIn(name string, width, height int, cwd string) error {
 	return c.createSession(name, width, height, false, cwd)
 }

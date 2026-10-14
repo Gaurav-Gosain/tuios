@@ -1036,7 +1036,7 @@ word boundary by chance and passes.
 | Fix | Cut | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | Hints mode shows its keys in the dock | the `m.hints != nil` branch in `modeLegend` (`internal/app/mode_legend.go`) | `TestHintsModeLegend` 60x20, 80x24 and 200x50 ("no hints legend on the dock") | **caught** (3 of 3) |
-| The legend is fitted by whole keys, and esc stays | `renderModeLegend` draws `overlay.HintStrip` unfitted, so the dock's generic cut ends it | `TestHintsModeLegend/80x24` ("the dock shows "ope", which is not a whole key or label", "the dock does not show esc"), `/60x20` ("the dock lost the key "esc""); `TestCopyModeLegend/60x20` and `/80x24` (no legend with its exit key); both 200x50 runs pass | **caught** |
+| The legend is fitted by whole keys, and esc stays | `renderModeLegend` draws the strip unfitted (`overlay.FitHintStrip` with `overlay.HintStripWidth(legend)` as the width; `overlay.HintStrip` is gone), so the dock's generic cut ends it | `TestHintsModeLegend/80x24` ("the dock shows "ope", which is not a whole key or label", "the dock does not show esc"), `/60x20` ("the dock lost the key "esc""); `TestCopyModeLegend/60x20` and `/80x24` (no legend with its exit key); both 200x50 runs pass | **caught** |
 | A cut message ends on a whole word | `notifFit` back to `strings.TrimRight(truncateToWidth(...), " ")` without `notifWordCut` (`internal/app/render_dock_notification.go`) | `TestCutMessageEndsOnAWholeWord/82x24` ("word 6 of the cut message is "1", want 106"), `/83x24` ("is "10""); 80 and 81 pass | **caught** (2 of 4 widths, as designed) |
 | `?` in hints mode shows all of its keys | the `r == '?'` branch in `handleHintsKey` (`internal/input/hints_input.go`) | `TestHintsHelpKeyListsAllKeys` ("? did not open the help on hints mode's keys") | **caught** |
 
@@ -1768,7 +1768,7 @@ kind, for what a daemon that is not tuios could send.
 | The other session's preview is plain text | `navigatorScreen`: `p.Text` drawn in place of `p.Styled` | `TestNavigatorPreviewKeepsColour` ("does not show RED-4417 in slot [1 9]") | **caught** |
 | The attached session's preview is plain text | `navigatorScreen`: the live read through `pipCells` made unreachable | `TestNavigatorPreviewKeepsColour` ("does not show GRN-5523 in slot [2 10]") | **caught** |
 | A link in the capture reaches the host | `navCellRow`: the `cell.Link` reset cut | `TestNavigatorPreviewIsInert` ("wrote "evil.example" to the host terminal"), `TestNavParseStyledPassesOnlySGR` ("let "evil" through") | **caught** |
-| The capture is written as it came | `navParseStyled`: the raw line kept in place of the redrawn cells | `TestNavigatorPreviewIsInert` ("wrote "evil.example" to the host terminal") | **caught** |
+| The capture is written as it came | `navParser.parse` (it was `navParseStyled`, now a test seam that calls it): the raw line kept in place of the redrawn cells | `TestNavigatorPreviewIsInert` ("wrote "evil.example" to the host terminal") | **caught** |
 | No tree guides | `navTreeGlyphs`: the branch and the closing guide made blank | `TestNavigatorDrawsTheTree` ("the logs pane has no guide") | **caught** |
 | No bar on the cursor row | `navigatorItem`: the focus mark drawn as a blank | `TestNavigatorDrawsTheTree` ("0 rows carry the bar, want one, on work") | **caught** |
 | No ground on the cursor row | `navigatorItem` and `renderNavigator`: the rows drawn on the surface and not through `pal.Row` | `TestNavigatorDrawsTheTree` ("the cursor row's ground ... is the ground of the other rows") | **caught** |
@@ -4122,8 +4122,8 @@ the rest as committed. The driver and each log are in
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | No write roots | `linkWriteRoots`: the home folder added to the roots | `TestALinkWritesOnlyInItsRoots` (the copy to `~` ended done) | **caught** |
-| An ancestor of a denied folder passes | `denyContains`: only `denyUnder(p, c)` | `TestALinkCannotWriteThroughARenamedAncestor` (the rename and the remove went through, the fish config was gone) | **caught** |
-| The deny list read by name only | `denyContains`: the entry's real path not compared | `TestALinkCannotWriteAStowedDotfile` (both copies done, `authorized_keys` holds the attacker's key) | **caught** |
+| An ancestor of a denied folder passes | `denyKeys.holds` (it was `denyContains`): only `fp.under(c)` | `TestALinkCannotWriteThroughARenamedAncestor` (the rename and the remove went through, the fish config was gone) | **caught** |
+| The deny list read by name only | `makeDenyKeys` (it was `denyContains`): the `newDenyKey(realPath(d))` entry left out | `TestALinkCannotWriteAStowedDotfile` (both copies done, `authorized_keys` holds the attacker's key) | **caught** |
 | No read check | `checkLinkRead` returns at once | `TestALinkCannotReadKeys` (the key was read and hashed) | **caught** |
 | /proc readable | `linkReadDenyAbsolute` empty | `TestALinkCannotReadProcOrTheDaemonFolder` (`/proc/self/environ` was read) | **caught** |
 | The socket folder not denied | `linkPrivate.with` returns the list as given | `TestALinkCannotReadProcOrTheDaemonFolder` (the pid file was read and moved, the stash got a folder, the socket folder was removed) | **caught** |

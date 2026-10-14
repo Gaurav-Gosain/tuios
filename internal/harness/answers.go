@@ -423,8 +423,11 @@ var optionLine = lazyre.New(`^(?:[❯›>▶→*]\s*)?([0-9]{1,2})[.)]\s+(\S.*)$
 // options of one menu: a label that wraps, or a description under it.
 const maxOptionGap = 3
 
-// parseOptions is ParseOptions with the index of option 1's line, -1 when
-// there is no menu.
+// parseOptions reads the numbered menu nearest the bottom of lines: options
+// numbered 1 to N with at most maxOptionGap other lines between two of them.
+// A run that does not count down to 1 is not a menu and gives nothing, which
+// is what keeps a numbered list in the transcript above from posing as one.
+// It also returns the index of option 1's line, -1 when there is no menu.
 func parseOptions(lines []string) ([]Option, int) {
 	var out []Option
 	want, gap, first := 0, 0, -1

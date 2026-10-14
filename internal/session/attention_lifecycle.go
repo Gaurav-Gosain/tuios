@@ -317,7 +317,8 @@ func (a *attentionStore) wakeFired(gen uint64) {
 	a.wakeDueLocked()
 }
 
-// wakeDueLocked is wakeDue for a caller holding mu.
+// wakeDueLocked wakes every timed snooze whose time has come and sets the
+// timer for the next. The caller holds mu.
 func (a *attentionStore) wakeDueLocked() {
 	if a.wakeTimer != nil {
 		a.wakeTimer.Stop()
