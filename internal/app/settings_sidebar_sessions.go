@@ -83,7 +83,7 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 				adjust:  func(m *OS, _ int) { m.sidebarSetEdgeEnabled(edge, !m.sidebarEdgeEnabled(edge)) },
 			},
 			settingItem{
-				Label: name + " width", Desc: "Preferred width of this edge in columns; narrow screens reduce it automatically.",
+				Label: name + " width", Desc: "Width of this edge in columns. A narrow screen makes it smaller.",
 				Control: controlInt, numMin: 10, numMax: 80,
 				value: func(m *OS) string { return strconv.Itoa(m.sidebarEdgePreferredWidth(edge)) },
 				adjust: func(m *OS, dir int) {
@@ -92,7 +92,7 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 				setNum: func(m *OS, width int) { m.sidebarSetEdgeWidth(edge, width) },
 			},
 			settingItem{
-				Label: name + " session", Desc: "Stack panes from an existing daemon session. Empty uses the ordinary rail sections instead.",
+				Label: name + " session", Desc: "Show the panes of a daemon session. Leave it empty to show the usual rail sections.",
 				Control: controlString, Unset: "ordinary rail", Placeholder: "session name",
 				value: func(m *OS) string {
 					if cfg := m.sidebarSessionConfig(edge); cfg != nil {
