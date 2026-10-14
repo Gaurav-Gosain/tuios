@@ -1,8 +1,9 @@
 # Panes: opening, running, waiting and arranging
 
 The part of the skill about panes as places to run work: making a session,
-opening panes, getting an exit code back, waiting without being fooled, and
-moving panes around with verbs rather than keybindings.
+grouping sessions into spaces, opening panes, getting an exit code back,
+waiting without being fooled, and moving panes around with verbs rather than
+keybindings.
 
 ## A session of your own
 
@@ -37,6 +38,29 @@ it over.
 the tiling mode, any workspace names and, when the workspaces were rearranged,
 their display `order`. They keep their numbers, so `select-workspace 2` still
 means workspace 2.
+
+## Spaces: grouping sessions
+
+A space is a name the person files related sessions under, such as every
+session of one project. It is only a label: it exists while a session is in
+it. `tuios ls` lists the sessions under one heading per space, the sessions in
+no space last, and the rail and the session switcher group them the same way.
+
+```sh
+tuios new --detach pay-api --space payments          # make a session in a space
+tuios call set-session-space '{"session":"notes","space":"payments"}'
+tuios call set-session-space '{"session":"notes","space":""}'   # out of any space
+tuios call list-spaces
+tuios rename-space payments billing
+tuios switch-space billing        # the person's client goes to the space's last used session
+tuios switch-space --none         # the same among the sessions in no space
+tuios kill-space --force billing  # ends every process in every session of the space
+```
+
+A space name follows the session name rules and is at most 64 bytes. A global
+session is in no space: `--space` with `--global`, and `set-session-space` on
+one, are refused. `kill-space` without `--force` refuses and names the sessions
+it would kill, so read that list before forcing it.
 
 ## Opening a pane and running work in it
 

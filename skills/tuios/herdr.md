@@ -85,6 +85,11 @@ does:
   focus`, `workspace report-metadata` and `terminal title`, need `admin`.
 - `agent start` needs `fan`, and `write` for the typing.
 
+`workspace close` with `close_group` closes the session's whole space: it kills
+every session filed under that session's space, as `tuios kill-space --force`
+does, not only the one named. On a session in no space, or a global one, it
+closes that session alone.
+
 A refused call fails with code `forbidden` and changes nothing.
 
 ## Use tuios's own commands
