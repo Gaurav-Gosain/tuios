@@ -48,6 +48,36 @@ func fakeClipboardEnv(t *testing.T, img []byte) []string {
 	}
 }
 
+// unwrapped is the screen with its lines joined, and the panes' side borders
+// and the padding taken out, so a path the pane wrapped reads whole. Where a
+// path breaks depends on the length of the runtime folder, which the suite
+// shortens when the isolation root is too long to hold a socket.
+func unwrapped(screen string) string {
+	return strings.NewReplacer("\n", "", "│", "", " ", "").Replace(screen)
+}
+
+// showsPastedPath reports whether a pasted image's path is on the screen.
+func showsPastedPath(screen string) bool {
+	return contains(unwrapped(screen), "tuios-paste-")
+}
+
+// showsPastedFile reports whether the path of the one image pasted on base's
+// machine is on the screen. A shell that redraws its line where it wraps can
+// lose cells in the middle of the path, as sh does when the line was typed
+// before its prompt; the end of the path, the file's own name, still shows
+// that this file's path arrived.
+func showsPastedFile(t *testing.T, screen, base string) bool {
+	t.Helper()
+	if showsPastedPath(screen) {
+		return true
+	}
+	files := pastedFiles(t, base)
+	if len(files) != 1 {
+		return false
+	}
+	return contains(unwrapped(screen), strings.TrimPrefix(filepath.Base(files[0]), "tuios-paste-"))
+}
+
 // pastedFiles lists the pasted images under a machine's runtime directory.
 func pastedFiles(t *testing.T, base string) []string {
 	t.Helper()
@@ -65,7 +95,7 @@ func checkPasted(t *testing.T, term *tuitest.Terminal, img []byte, want, other s
 	t.Helper()
 	size := strconv.Itoa(len(img)) + " "
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return contains(s.Text(), "tuios-paste-")
+		return showsPastedFile(t, s.Text(), want)
 	}, uiTimeout); err != nil {
 		t.Fatalf("no path was pasted into the pane: %v\n%s", err, term.Snapshot())
 	}
@@ -301,7 +331,7 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: something was typed into the pane: %v\n%s", err, term.Snapshot())
 	}
-	if contains(term.Snapshot(), "tuios-paste-") {
+	if showsPastedPath(term.Snapshot()) {
 		t.Fatalf("ASSERTION: a pasted path reached the pane:\n%s", term.Snapshot())
 	}
 
@@ -507,7 +537,7 @@ func checkDropped(t *testing.T, term *tuitest.Terminal, img []byte, remote, base
 	t.Helper()
 	size := strconv.Itoa(len(img)) + " "
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return contains(s.Text(), "tuios-paste-")
+		return showsPastedPath(s.Text())
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: no path was pasted into the pane: %v\n%s", err, term.Snapshot())
 	}
