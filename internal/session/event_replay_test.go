@@ -237,3 +237,24 @@ func TestEventHubResumeNoDuplicatesUnderLoad(t *testing.T) {
 		t.Fatalf("delivered up to seq %d, want %d", want-1, 50+more)
 	}
 }
+
+// TestEventHubLayoutChangedNotRetained: layout-changed is not kept for replay,
+// so a resume that names it after missing one is told with a gap. Without the
+// gap the subscriber takes the resume as exact and keeps a stale layout.
+func TestEventHubLayoutChangedNotRetained(t *testing.T) {
+	h := newEventHubSize(4)
+	h.publish(streamEvent{Type: EventLayoutChanged, Workspace: 1}) // 1
+	h.publish(streamEvent{Type: EventBell})                        // 2
+
+	layout, _, _ := h.subscribeFrom(eventFilter{types: map[string]bool{EventLayoutChanged: true}}, 16, &resumePoint{afterSeq: 0, bootID: h.bootID})
+	defer h.unsubscribe(layout)
+	if seqs, gap := prefaceSeqs(t, layout); gap != GapNotRetained || len(seqs) != 0 {
+		t.Fatalf("layout resume = %v gap %q, want no events and gap not_retained", seqs, gap)
+	}
+
+	past, _, _ := h.subscribeFrom(eventFilter{types: map[string]bool{EventLayoutChanged: true}}, 16, &resumePoint{afterSeq: 1, bootID: h.bootID})
+	defer h.unsubscribe(past)
+	if seqs, gap := prefaceSeqs(t, past); gap != "" || len(seqs) != 0 {
+		t.Fatalf("resume past the layout event = %v gap %q, want nothing", seqs, gap)
+	}
+}

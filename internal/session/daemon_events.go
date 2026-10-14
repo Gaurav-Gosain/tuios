@@ -410,6 +410,8 @@ type eventHub struct {
 	lastProgressSeq uint64
 	// lastFileSeq is the same for transfer-file events.
 	lastFileSeq uint64
+	// lastLayoutSeq is the same for layout-changed events.
+	lastLayoutSeq uint64
 }
 
 func newEventHub() *eventHub {
@@ -511,7 +513,8 @@ func (h *eventHub) replayLocked(filter eventFilter, from resumePoint) []streamEv
 		filter.types[EventAgentActivity] && h.lastActivitySeq > from.afterSeq,
 		filter.types[EventTranscript] && h.lastTranscriptSeq > from.afterSeq,
 		filter.types[EventTransferProgress] && h.lastProgressSeq > from.afterSeq,
-		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq:
+		filter.types[EventTransferFile] && h.lastFileSeq > from.afterSeq,
+		filter.types[EventLayoutChanged] && h.lastLayoutSeq > from.afterSeq:
 		out = append(out, gap(GapNotRetained))
 	}
 	for i := range h.ringLen {
@@ -550,6 +553,8 @@ func (h *eventHub) retain(ev streamEvent) {
 	case EventLayoutChanged:
 		// One fires on every step of a dragged split. A subscriber that
 		// missed some reads list-windows, which is the layout they described.
+		// Counted, so a resume over one is marked with a gap.
+		h.lastLayoutSeq = ev.Seq
 		return
 	}
 	if h.ringLen == len(h.ring) {

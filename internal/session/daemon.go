@@ -1131,6 +1131,12 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			ev.hookRoot = s.windowApprovalRoot(ev.hookWorktree, ev.Window, ev.hookAgentSession)
 			ev.hookRunDir = resolvedRunDir(s.paneRunDir(ev.PTYID))
 		}
+		// A new layout is news for the stream only: no hook, Inbox, queue or
+		// activity ring reads it, and it fires on every step of a drag.
+		if ev.Type == EventLayoutChanged {
+			d.events.publish(streamEvent{Type: EventLayoutChanged, Session: name, Workspace: ev.Workspace})
+			return
+		}
 		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail || ev.Type == eventPaneFocused {
 			d.attention.noteSessionEvent(name, ev)
 			return

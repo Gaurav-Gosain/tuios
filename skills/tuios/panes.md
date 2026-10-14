@@ -344,6 +344,7 @@ Geometry belongs to the attached client, so these need one and say
 
 ```sh
 tuios split-window -s work vertical -w build --name logs
+tuios split-window -s work left -w build      # the new pane takes the left side
 tuios set-layout -s work --tiling true --equalize
 tuios set-layout -s work --rotate
 tuios set-layout -s work --master-position center --masters 1

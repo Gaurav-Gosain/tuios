@@ -298,9 +298,14 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 // so a split that reshapes five panes is one event and not five. Ascending by
 // workspace, so the order is stable.
 func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
-	changed := map[int]bool{}
+	// Allocated on the first change, so a push that moves nothing, which is
+	// most of them, costs no allocation.
+	var changed map[int]bool
 	mark := func(ws int) {
 		if ws > 0 && !IsScratchWorkspace(ws) {
+			if changed == nil {
+				changed = map[int]bool{}
+			}
 			changed[ws] = true
 		}
 	}

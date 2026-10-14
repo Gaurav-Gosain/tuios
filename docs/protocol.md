@@ -2249,7 +2249,8 @@ change.
 
 A window whose process runs on this machine also has `pid`, the process the
 pane started, and `tty`, the path of its terminal device. A zoomed window has
-`zoomed: true`.
+`zoomed: true`. A floating window has `floating: true`. It sits over the tiled
+windows at its own rectangle.
 
 ### get-window
 

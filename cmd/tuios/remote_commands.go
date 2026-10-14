@@ -302,16 +302,30 @@ func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutpu
 		"window":  windowTarget,
 		"name":    name,
 	}
-	// A side is sent as side, so an older daemon that knows only the two
-	// axes refuses it by name instead of splitting the wrong way.
+	// A side is sent as side. An older daemon that knows only the two axes
+	// ignores the unknown param and refuses the call for want of a direction,
+	// so it never splits the wrong way. That refusal is reported below as
+	// the daemon being too old.
+	side := false
 	switch direction {
 	case "left", "right", "up", "down":
 		params["side"] = direction
+		side = true
 	default:
 		params["direction"] = direction
 	}
 	raw, err := client.Call("split-window", params)
 	if err != nil {
+		var callErr *session.VerbCallError
+		if side && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
+			strings.Contains(callErr.Message, "direction is required") {
+			return reportVerbError(&diagnosticError{
+				What:  fmt.Sprintf("The running daemon cannot split toward %s.", direction),
+				Cause: "the daemon is older than this tuios. It knows only horizontal and vertical.",
+				Fix:   "run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells.",
+				Err:   err,
+			}, jsonOutput)
+		}
 		return reportVerbError(explainVerbError("split-window", err), jsonOutput)
 	}
 	if jsonOutput {
