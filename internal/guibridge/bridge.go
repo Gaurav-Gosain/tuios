@@ -836,6 +836,12 @@ func (m *model) handle(c Command) tea.Cmd {
 			m.os.NoteInboxReplied(id)
 		}
 		go runVerb(m.out, m.version, nonce, c)
+	case "resync":
+		// The renderer dropped what it held of one pane's stream (its
+		// backlog passed its cap, or a key went to a pane far behind). The
+		// pane gets a "seq" event and a fresh snapshot, and streams on from
+		// there. ID is the pane's PTY id.
+		m.os.ResyncPaneStream(c.ID)
 	case "probe-host":
 		// The renderer typed into a pane on the host: probe it now.
 		pokeHost(c.Name)

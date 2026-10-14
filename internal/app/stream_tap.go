@@ -67,11 +67,27 @@ func (m *OS) snapshotHave(w *terminal.Window) int {
 // which makes tapSnapshot report the new snapshot, and subscribed again from
 // the snapshot's end.
 func (m *OS) ResyncPaneStreams() {
+	m.resyncPaneStreams("")
+}
+
+// ResyncPaneStream primes one streamed pane again from a fresh snapshot, for
+// a tap whose renderer fell behind on that pane and dropped what it held of
+// it (tuios-gpui caps each pane's backlog). Other panes stream on.
+func (m *OS) ResyncPaneStream(ptyID string) {
+	if ptyID != "" {
+		m.resyncPaneStreams(ptyID)
+	}
+}
+
+func (m *OS) resyncPaneStreams(only string) {
 	if m.DaemonClient == nil {
 		return
 	}
 	for _, w := range m.Windows {
 		if w == nil || !w.DaemonMode || w.PTYID == "" || !m.SubscribedPTYs[w.PTYID] {
+			continue
+		}
+		if only != "" && w.PTYID != only {
 			continue
 		}
 		m.DaemonClient.UnsubscribePTY(w.PTYID)
