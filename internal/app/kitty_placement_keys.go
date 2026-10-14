@@ -126,6 +126,7 @@ func (kp *KittyPassthrough) putPlacement(windowID string, key placementKey, p *P
 		ix.placed++
 	}
 	kp.enforcePlacementCaps(windowID, key)
+	kp.pruneOrder(windowID, ix)
 }
 
 // dropPlacement forgets one placement. It sends the host nothing.
@@ -155,16 +156,24 @@ func (kp *KittyPassthrough) dropPlacement(windowID string, key placementKey) {
 	if key.slot != 0 {
 		ix.placed--
 	}
-	// The order list is pruned lazily; keep it from outgrowing the records.
-	if len(ix.order) > 2*ix.placed+64 {
-		live := ix.order[:0]
-		for _, o := range ix.order {
-			if q := kp.placements[windowID][o.key]; q != nil && q.seq == o.seq {
-				live = append(live, o)
-			}
-		}
-		ix.order = slices.Clip(live)
+	kp.pruneOrder(windowID, ix)
+}
+
+// pruneOrder drops the stale keys from the order list once they outnumber
+// the live ones. A replaced record leaves a stale key behind, so a guest
+// that moves one placement by its p= every frame, and never deletes, grew
+// the list by one key a frame without this.
+func (kp *KittyPassthrough) pruneOrder(windowID string, ix *placementIndex) {
+	if len(ix.order) <= 2*ix.placed+64 {
+		return
 	}
+	live := ix.order[:0]
+	for _, o := range ix.order {
+		if q := kp.placements[windowID][o.key]; q != nil && q.seq == o.seq {
+			live = append(live, o)
+		}
+	}
+	ix.order = slices.Clip(live)
 }
 
 // dropWindowPlacements forgets every placement of a window. It sends the
