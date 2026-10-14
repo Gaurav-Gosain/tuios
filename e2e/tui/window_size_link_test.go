@@ -384,10 +384,28 @@ func TestWindowSizeOldClientChromeCounts(t *testing.T) {
 	waitSizeScreen(t, old, "the old client never drew its rail", func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "sessions")
 	})
-	cur := attachIn(t, base, wsSession, startOpts{cols: 160, rows: 45})
+	// The current client takes the session before it is settled in window
+	// management mode, and the order matters. Under latest the first key a
+	// client sends makes it the size, so attachIn's Alt+Esc would be that key:
+	// the "Session size" notice the resize brings lands just after the mode
+	// notice, the dock shows the newer one, and the mode notice was on screen
+	// only when a frame happened to fall between the two.
+	cur := startIn(t, base, startOpts{cols: 160, rows: 45, args: []string{"attach", wsSession}})
+	if err := cur.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) >= 0
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never rehydrated session %q: %v\n%s", wsSession, err, cur.Snapshot())
+	}
 	time.Sleep(wsHoldGap)
 	activity(t, cur)
 	waitWSSize(t, base, 160, 45, "after input on the current client")
+	// The daemon answering 160x45 does not mean this client has drawn it yet.
+	// Its notice is the resize reaching the client, after which the mode
+	// notice is the newer one.
+	if err := cur.WaitForText("Session size: 160x45", uiTimeout); err != nil {
+		t.Fatalf("the current client never took the session's new size: %v\n%s", err, cur.Snapshot())
+	}
+	windowManagementMode(t, cur)
 	enableTiling(t, cur)
 	newWindow(t, cur)
 	waitWindowCount(t, cur, 2, "two windows on the current client")

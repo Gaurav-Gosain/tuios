@@ -4786,3 +4786,62 @@ Not covered here: the far OS (`os` in `hello`) picks `cmd /C` only for a
 Windows host, which this suite cannot run. The longer pending time and the
 answer to "already has a scratch terminal" need a create whose answer is lost
 on the link, which this suite cannot make on demand.
+
+## Three flaky tests: two product races and a test race
+
+Run on 2026-10-14 on branch `fix/e2e-flakes-2`. Each test ran alone in a
+loop at `nice -n 19 taskset -c 0-7 GOMAXPROCS=4`. "Under load" means eight
+`while :; do :; done` shells at nice 19 on the same eight cores.
+
+### TestReattachKeepsSnapshotRowsWhenRingRolled
+
+A snapshot carries `PendingInput`, the start of the sequence the daemon's
+parser was in at `Seq`. A rolled catch-up does not resume at `Seq`, so the
+client joined that start to the ring's first bytes. `"\x1b["` and `";1H"`
+made a cursor move to the top left, and the flood painted over the header.
+`"\x1b[4"` and `"5;1H"` moved the cursor to the last row, and the reflow at
+the new width pushed the header into the scrollback. The daemon now puts CAN
+in front of a rolled catch-up for a client that restored a snapshot.
+
+| Control | Build | Result | Verdict |
+| --- | --- | --- | --- |
+| `origin/main` | before the fix | 2 failures in 100 runs under load, the CI shape (header row overwritten from column 0) | **caught, rarely** |
+| This branch | the fix | 0 failures in 150 runs under load | **guard** |
+| `prefix = cancelPrefix` cut from `subscribeLocked` | mutant | `TestRolledSnapshotCatchUpDropsThePendingSequence` fails every run: the top row is `xxxxxxxxxx`, want `HEADER-ROW` | **caught** |
+
+The e2e test catches the bug about one run in fifty. The unit test in
+`internal/session/rolled_snapshot_pending_test.go` places the ring's start
+on the join and catches it every run.
+
+### TestScrollingPeerFollowsFocusIntoView
+
+Client a stepped the focus left. At the same moment client b pushed its full
+state for a new layout generation: a's key had made a the `latest` client,
+which settled a new generation and made every client push. b had not seen
+a's move, so its push named the old focus and strip offset, and the daemon
+took it. a then took that state back, and its second step left it one column
+short. A push now says `FocusUnmoved` when its client's focus is the one the
+daemon last gave it, and the daemon keeps the session's focus for such a push
+and answers the client.
+
+| Control | Build | Result | Verdict |
+| --- | --- | --- | --- |
+| `origin/main` | before the fix | 10 failures in 50 runs under load, all with the strip at the one-step offset | **caught** |
+| This branch | the fix | 0 failures in 50 runs under load | **guard** |
+| `state.FocusUnmoved` forced false in `SyncStateToDaemon` | mutant | 6 failures in 50 runs under load, same screen | **caught** |
+| `keepSessionFocus` call cut from `updateStateFrom` | mutant | `TestAPushThatDidNotMoveTheFocusKeepsThePeersMove` fails every run: the session has `w-charlie` at 65, want `w-bravo` at 51 | **caught** |
+| The positive half | the fix | the same unit test: a push from b that moves the focus is taken as sent | **guard** |
+
+### TestWindowSizeOldClientChromeCounts
+
+A test race, not a product bug. Under `latest`, the first key a client sends
+makes it the size, and `attachIn`'s Alt+Esc was that key. The resize's
+"Session size" notice landed just after the "Window management mode" notice,
+and the dock shows the newer one. The test now takes the session with Esc,
+waits for the client to draw the "Session size: 160x45" notice, and then
+settles the mode.
+
+| Build | Result |
+| --- | --- |
+| `origin/main`, test before the fix | 3 failures in 20 runs idle, 4 in 20 under load |
+| This branch | 0 failures in 50 runs idle, 0 in 50 under load |
