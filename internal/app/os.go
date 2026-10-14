@@ -677,6 +677,11 @@ type OS struct {
 	// pointer last was, or nil outside a drag: the press, the release and a
 	// lost release each clear it. See tiling_drop.go.
 	dropZone *Drop
+	// dropZoneShown is whether the highlight is drawn: the zone's delay has
+	// run out, or there is none. dropZoneGen moves on whenever the zone
+	// changes or is cleared, which cancels the delay armed for the last one.
+	dropZoneShown bool
+	dropZoneGen   uint64
 	// dropLayout is the map the landing rectangle of an edge drop is laid out
 	// into, kept so that working one out does not allocate a map each time.
 	dropLayout map[int]layout.Rect

@@ -762,6 +762,23 @@ With `center`, the grid is off, so `master_grid` has no effect. The first pane
 of the workspace is the master. To make another pane the master, focus it and
 press `Ctrl+B L Enter`.
 
+## Drop preview
+
+While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). Two options shape that preview:
+
+| Option | What it does | Values | Default |
+|---|---|---|---|
+| `appearance.drop_preview` | What the preview draws. `fill` tints the landing rectangle and outlines it, `outline` draws only the outline, and `off` draws nothing | `fill`, `outline`, `off` | `fill` |
+| `appearance.drop_preview_delay` | How long the pointer stays on one drop zone before its preview shows. A zone you leave before the delay is never drawn, so carrying a pane across the screen does not flash a zone over every pane on the way | a duration such as `120ms`, or `0` to show it at once | `120ms` |
+
+```toml
+[appearance]
+drop_preview = "outline"
+drop_preview_delay = "250ms"
+```
+
+Neither option changes the drop: with `off`, releasing on an edge still splits that pane, and releasing in the middle still swaps. Both are on the settings page, in the Appearance section, and `tuios set-config appearance.drop_preview off` applies at once. A value that is not one of the above reads as the default, with a warning when the config loads, and `tuios set-config` refuses it.
+
 ## Rounded dock pills
 
 `appearance.dock_pill_caps` puts rounded caps on every pill in the dock: the

@@ -1632,6 +1632,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, nil
 
+	case dropZoneDueMsg:
+		m.showDropZone(msg)
+		return m, nil
+
 	case loadingShownMsg:
 		// A load may have run past the loading delay, so its state is drawn
 		// now rather than whenever something else next asks for a frame.

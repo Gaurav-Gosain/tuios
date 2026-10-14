@@ -1,6 +1,10 @@
 package app
 
 import (
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -127,24 +131,71 @@ func dropEdge(r layout.Rect, x, y, gap int) layout.PreselectionDir {
 
 // UpdateDropZone records the drop under the pointer for the highlight. The
 // motion path calls it on every step of a drag, so a pointer that stays over
-// one edge reuses the landing rectangle it already has.
-func (m *OS) UpdateDropZone(x, y int) {
-	if drop, ok := m.tiledDropAt(x, y, m.dropZone); ok {
-		if m.dropZone == nil {
-			m.dropZone = new(Drop)
-		}
-		*m.dropZone = drop
-		return
+// one edge reuses the landing rectangle it already has and arms nothing.
+//
+// The highlight waits appearance.drop_preview_delay on a zone before it shows,
+// so a pane carried across the screen does not flash a zone over every pane it
+// passes. Entering a zone arms one timer for it; leaving the zone, for another
+// or for none, cancels it by moving the generation on, so a zone left before
+// its delay never shows. Nothing ticks while the pointer rests. The returned
+// command is that timer, or nil.
+//
+// With the preview off nothing is recorded. The release asks TiledDropAt on
+// its own, so the drop is the same either way.
+func (m *OS) UpdateDropZone(x, y int) tea.Cmd {
+	if m.Settings.DropPreview == config.DropPreviewOff {
+		m.ClearDropZone()
+		return nil
 	}
-	m.dropZone = nil
+	drop, ok := m.tiledDropAt(x, y, m.dropZone)
+	if !ok {
+		m.ClearDropZone()
+		return nil
+	}
+	if last := m.dropZone; last != nil && last.Target == drop.Target && last.Dir == drop.Dir {
+		*last = drop
+		return nil
+	}
+	if m.dropZone == nil {
+		m.dropZone = new(Drop)
+	}
+	*m.dropZone = drop
+	m.dropZoneGen++
+	m.dropZoneShown = false
+	delay := m.Settings.DropPreviewDelay
+	if delay <= 0 {
+		m.dropZoneShown = true
+		return nil
+	}
+	gen := m.dropZoneGen
+	return tea.Tick(delay, func(time.Time) tea.Msg { return dropZoneDueMsg{gen: gen} })
 }
 
-// ClearDropZone forgets the last drag's drop. A drag's press, its release and
-// a lost release each call it, so a highlight never outlives the gesture it was
-// worked out for and a closed pane is not kept alive as a drop's target. The
-// render pass draws nothing without a drag besides.
+// dropZoneDueMsg is the delay of the zone armed as gen running out.
+type dropZoneDueMsg struct{ gen uint64 }
+
+// showDropZone draws the zone the pointer is on, when the delay that ran out
+// was armed for it. A delay armed for a zone the pointer has since left, or
+// for a drag that has ended, finds the generation moved on and does nothing.
+func (m *OS) showDropZone(msg dropZoneDueMsg) {
+	if msg.gen != m.dropZoneGen || m.dropZone == nil {
+		return
+	}
+	m.dropZoneShown = true
+	m.renderSkipped = false
+}
+
+// ClearDropZone forgets the last drag's drop and cancels its pending delay. A
+// drag's press, its release and a lost release each call it, so a highlight
+// never outlives the gesture it was worked out for and a closed pane is not
+// kept alive as a drop's target. The render pass draws nothing without a drag
+// besides.
 func (m *OS) ClearDropZone() {
+	if m.dropZone != nil {
+		m.dropZoneGen++
+	}
 	m.dropZone = nil
+	m.dropZoneShown = false
 }
 
 // MoveWindowIntoSplit makes an edge drop: dragged leaves its slot and splits

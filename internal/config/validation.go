@@ -368,6 +368,14 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("motion", cfg.Appearance.Motion, MotionLevels)
 	checkEnum("links", cfg.Appearance.Links, LinkModes)
 	checkEnum("link_click", cfg.Appearance.LinkClick, LinkClickModes)
+	checkEnum("drop_preview", cfg.Appearance.DropPreview, DropPreviewModes)
+	if _, ok := ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay); !ok {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "drop_preview_delay",
+			Message: fmt.Sprintf("'%s' is not a duration such as 120ms, or 0; read as %s", cfg.Appearance.DropPreviewDelay, DefaultDropPreviewDelay),
+		})
+	}
 	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
 	checkEnum("tiling_scheme", cfg.Appearance.TilingScheme, TilingSchemes)
 	checkEnum("master_position", cfg.Appearance.MasterPosition, MasterPositions)

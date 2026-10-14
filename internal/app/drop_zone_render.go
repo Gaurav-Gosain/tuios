@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -13,12 +14,13 @@ import (
 // pass over the canvas right after the held pane's own layer, so it reads over
 // that pane and the target alike and under any chrome drawn above them.
 //
-// The cells keep their text. The rectangle is outlined in the accent and
-// filled with its tint; at 16 colours, where the tint is no colour at all, the
-// outline is reverse video and the inside is left alone.
+// The cells keep their text. The rectangle is outlined in the accent and,
+// with appearance.drop_preview = "fill", filled with its tint; at 16 colours,
+// where the tint is no colour at all, the outline is reverse video and the
+// inside is left alone.
 func (m *OS) applyDropZone(canvas *frameCanvas, id string) {
 	held := m.LiveWindowDrag()
-	if m.dropZone == nil || held == nil || held.ID != id {
+	if !m.dropZoneShown || m.dropZone == nil || held == nil || held.ID != id {
 		return
 	}
 	land := m.dropZone.Land
@@ -36,6 +38,7 @@ func (m *OS) applyDropZone(canvas *frameCanvas, id string) {
 	}
 	pal := theme.UI()
 	reverse := theme.Depth() == overlay.Depth16
+	fill := !reverse && m.Settings.DropPreview != config.DropPreviewOutline
 	for y := clip.Min.Y; y < clip.Max.Y && y < len(canvas.Lines); y++ {
 		row := canvas.Lines[y]
 		for x := clip.Min.X; x < clip.Max.X && x < len(row); x++ {
@@ -47,7 +50,7 @@ func (m *OS) applyDropZone(canvas *frameCanvas, id string) {
 				st.Attrs |= uv.AttrReverse
 			case ring:
 				st.Fg, st.Bg = pal.PillFg, pal.Accent
-			case !reverse:
+			case fill:
 				st.Bg = pal.AccentTint
 			}
 		}

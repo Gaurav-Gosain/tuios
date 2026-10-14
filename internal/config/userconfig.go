@@ -387,6 +387,8 @@ type AppearanceConfig struct {
 	SidebarGitDirty        *bool    `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string   `toml:"glyphs"`                    // Chrome glyph set: default, unicode, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int      `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
+	DropPreview            string   `toml:"drop_preview"`              // What a BSP drag shows where the pane would land: fill, outline, off (default: fill)
+	DropPreviewDelay       string   `toml:"drop_preview_delay"`        // How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 (default: 120ms)
 	// TilingScheme is the BSP insertion scheme a workspace starts with the
 	// first time it is tiled: spiral, longest_side, alternate or smart_split.
 	// See TilingSchemes. A workspace that already has a tree keeps its own
@@ -937,6 +939,8 @@ func DefaultConfig() *UserConfig {
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,
 			LinkHover:                LinkHoverSafe,
+			DropPreview:              DropPreviewFill,
+			DropPreviewDelay:         DefaultDropPreviewDelay.String(),
 			HideWindowButtons:        false,
 			WindowButtonStyle:        WindowButtonStyleDots,
 			WindowButtonPosition:     WindowButtonPositionLeft,
@@ -2080,6 +2084,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.LinkHover == "" {
 		cfg.Appearance.LinkHover = defaultCfg.Appearance.LinkHover
 	}
+	if cfg.Appearance.DropPreview == "" {
+		cfg.Appearance.DropPreview = defaultCfg.Appearance.DropPreview
+	}
 
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
@@ -2238,6 +2245,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.LinkHover = LinkHoverSafe
 	}
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
+	// A typo lands on the default, which is what the validator says.
+	if slices.Contains(DropPreviewModes, cfg.Appearance.DropPreview) {
+		s.DropPreview = cfg.Appearance.DropPreview
+	} else {
+		s.DropPreview = DropPreviewFill
+	}
+	s.DropPreviewDelay, _ = ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay)
 
 	// DockbarPosition defaults to top. A typo lands on that default, which is
 	// what the validator says it falls back to; left as written, the renderer

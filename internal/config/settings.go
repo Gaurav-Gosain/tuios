@@ -148,6 +148,15 @@ type Settings struct {
 	// constants. Set via appearance.link_hover.
 	LinkHover string
 
+	// DropPreview is what a BSP drag draws where the pane would land: one of
+	// the DropPreview* constants. Set via appearance.drop_preview.
+	DropPreview string
+
+	// DropPreviewDelay is how long the pointer rests on one drop zone before
+	// the preview shows. Zero shows it at once. Set via
+	// appearance.drop_preview_delay.
+	DropPreviewDelay time.Duration
+
 	// LinkOpener is the command that opens a web link. Empty uses $BROWSER,
 	// then the system opener. Set via appearance.link_opener.
 	LinkOpener string
@@ -774,6 +783,8 @@ func DefaultSettings() Settings {
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
 		LinkClick:                   LinkClickBoth,
+		DropPreview:                 DropPreviewFill,
+		DropPreviewDelay:            DefaultDropPreviewDelay,
 		DockbarPosition:             DefaultDockbarPosition,
 		SidebarEnabled:              true,
 		SidebarPosition:             DefaultSidebarPosition,

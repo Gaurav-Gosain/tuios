@@ -167,6 +167,16 @@ var optionSpecs = []Option{
 		Accepted:    LinkHoverModes, Default: LinkHoverSafe,
 	},
 	{
+		Path: "appearance.drop_preview", Type: OptionString, Section: "appearance",
+		Description: "What a BSP drag shows where the pane would land: a tinted zone with its outline, the outline only, or nothing",
+		Accepted:    DropPreviewModes, Default: DropPreviewFill,
+	},
+	{
+		Path: "appearance.drop_preview_delay", Type: OptionString, Section: "appearance",
+		Description: "How long the pointer rests on a drop zone before it shows: a duration such as 120ms, or 0 for at once",
+		Default:     DefaultDropPreviewDelay.String(), Check: checkDropPreviewDelay,
+	},
+	{
 		Path: "appearance.link_opener", Type: OptionString, Section: "appearance",
 		Description: "The command that opens a web link. If this is empty, tuios uses $BROWSER, then the system opener.",
 		Default:     "",

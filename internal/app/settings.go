@@ -411,6 +411,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.border_unfocused_color"),
 			custom("appearance.gap", m.paneGapItem()),
 			opt("appearance.tiling_scheme"),
+			opt("appearance.drop_preview"),
+			opt("appearance.drop_preview_delay"),
 			// Hand-written for the reason sharedBordersItem is: both are session
 			// state and a row reading the config would show a value the layout
 			// is not using.
