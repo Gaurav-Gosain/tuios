@@ -566,11 +566,12 @@ func maskRunIdentity(screen string) string {
 }
 
 // TestSpacesInvisibleWithoutSpaces: with no session in any space, the rail,
-// the switcher and the dock this build draws are the ones the build before
-// spaces had a UI drew, screen for screen.
+// the switcher and the dock this build draws are the ones a build without
+// spaces draws, screen for screen.
 //
-// It needs that older build, which this suite does not make: name it with
-// TUIOS_E2E_BASELINE_BIN (a tuios built from the commit before the space UI).
+// It needs that build, which this suite does not make: name it with
+// TUIOS_E2E_BASELINE_BIN (a tuios built from upstream/main, which has no space
+// UI).
 // Without it the test is skipped and says so.
 //
 // How it could pass wrongly, and what stops it:
@@ -585,7 +586,7 @@ func maskRunIdentity(screen string) string {
 func TestSpacesInvisibleWithoutSpaces(t *testing.T) {
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
-		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from the commit before the space UI and name it there")
+		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream/main, which has no space UI, and name it there")
 	}
 	railNow, switcherNow := spaceUIScreens(t, t.TempDir(), "this-build")
 

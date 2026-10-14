@@ -4826,7 +4826,7 @@ Run on 2026-10-13 on macOS. The tests are in `space_ui_test.go`: `TestSpaceRailH
 
 The fixture makes `e2e-loose` (no space) first, then `e2e-b1` in beta, then `e2e-a1` and `e2e-a2` in alpha, so a surface that shows the daemon's order puts the ungrouped session first and alpha after beta's member, and only grouping gives beta, alpha, then e2e-loose.
 
-`TestSpacesInvisibleWithoutSpaces` compares this build's rail, switcher and dock, whole screens, with a build from the commit before the space UI (`fix(session): name the sessions and both force forms in kill-space's refusal`), named with `TUIOS_E2E_BASELINE_BIN`; it is skipped when that is not set. The pane's generated ID and the temporary path in the files header are the only parts masked.
+`TestSpacesInvisibleWithoutSpaces` compares this build's rail, switcher and dock, whole screens, with a build without spaces, named with `TUIOS_E2E_BASELINE_BIN`; it is skipped when that is not set. The runs below used a build of the branch's commit before the space UI, which draws what upstream/main draws; on 2026-10-14 it was rerun against a build of upstream/main itself (`1a34acbe`) and passes. The pane's generated ID and the temporary path in the files header are the only parts masked.
 
 | Control: what was cut | Tests that fail | Verdict |
 | --- | --- | --- |
@@ -4854,7 +4854,7 @@ Run on 2026-10-13 on macOS. The tests are in `space_layout_test.go`: `TestSpaceS
 
 `TestSpaceSplitLayout` uses `e2e-a1` and then gives `e2e-a2` later activity with no use, by opening a window in it from the CLI. So among alpha's two sessions, the use rule picks `e2e-a1`, while the activity rule and the creation rule both pick `e2e-a2`.
 
-`TestSpaceLayoutsInvisibleWithoutSpaces` compares this build's rail under `grouped`, `split` and `off`, with no session in a space, against a build of the commit before any space UI (`fix(session): name the sessions and both force forms in kill-space's refusal`), named with `TUIOS_E2E_BASELINE_BIN`. It compares styled screens, so a moved mark or ink fails as well as a moved cell.
+`TestSpaceLayoutsInvisibleWithoutSpaces` compares this build's rail under `grouped`, `split` and `off`, with no session in a space, against a build without spaces, named with `TUIOS_E2E_BASELINE_BIN`. The runs below used a build of the branch's commit before any space UI; on 2026-10-14 it was rerun against a build of upstream/main itself (`1a34acbe`) and passes. It compares styled screens, so a moved mark or ink fails as well as a moved cell.
 
 | Control: what was cut | Test that fails | Verdict |
 | --- | --- | --- |

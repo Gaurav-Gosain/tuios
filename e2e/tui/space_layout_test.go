@@ -428,10 +428,11 @@ func spaceLayoutScreen(t *testing.T, mode string) string {
 }
 
 // TestSpaceLayoutsInvisibleWithoutSpaces: with no session in any space, the
-// rail every space layout draws is the rail of a build from before the space
-// UI, screen for screen.
+// rail every space layout draws is the rail of a build without spaces, screen
+// for screen.
 //
-// It needs that build: name it with TUIOS_E2E_BASELINE_BIN. Without it the
+// It needs that build, one of upstream/main, which has no space UI: name it
+// with TUIOS_E2E_BASELINE_BIN. Without it the
 // test is skipped and says so. The baseline gets the config with no spaces
 // key, which it does not know; each layout gets its own.
 //
@@ -445,7 +446,7 @@ func spaceLayoutScreen(t *testing.T, mode string) string {
 func TestSpaceLayoutsInvisibleWithoutSpaces(t *testing.T) {
 	baseline := os.Getenv("TUIOS_E2E_BASELINE_BIN")
 	if baseline == "" {
-		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from the commit before the space UI and name it there")
+		t.Skip("TUIOS_E2E_BASELINE_BIN is not set: build tuios from upstream/main, which has no space UI, and name it there")
 	}
 	prev := tuiosBin
 	tuiosBin = baseline

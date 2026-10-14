@@ -802,9 +802,6 @@ type SidebarConfig struct {
 	// SubagentRows is how an agent row shows its subagents: rows, one row
 	// each under it, or count, the count alone (default: rows).
 	SubagentRows string `toml:"subagent_rows"`
-	// Spaces is how the rail lays out spaces: grouped, split or off
-	// (default: grouped). See SidebarSpacesValues.
-	Spaces string `toml:"spaces"`
 	// SubagentCollapse is whether a heading line over an agent's subagents
 	// folds them: off, expanded or collapsed (default: off). See
 	// sidebar_subagents.go for these and the three keys after it.
@@ -818,6 +815,9 @@ type SidebarConfig struct {
 	// SubagentHideFinished hides a finished subagent's row this long after it
 	// ended: a duration, or off (default: off).
 	SubagentHideFinished string `toml:"subagent_hide_finished"`
+	// Spaces is how the rail lays out spaces: grouped, split or off
+	// (default: grouped). See SidebarSpacesValues.
+	Spaces string `toml:"spaces"`
 	// Custom is the [appearance.sidebar.custom] table: the command whose
 	// output the custom section draws, its heading, and when it runs. Read
 	// from the file only; see SidebarCustomConfig for why.
@@ -991,12 +991,12 @@ func DefaultConfig() *UserConfig {
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
-				Spaces:        SidebarSpacesGrouped,
 				// The other subagent keys as they ship: no heading line, the
 				// row's four fields, no cap and no early hide.
 				SubagentCollapse:     SidebarSubagentCollapseOff,
 				SubagentFields:       DefaultSubagentFields,
 				SubagentHideFinished: SubagentHideOff,
+				Spaces:               SidebarSpacesGrouped,
 			},
 		},
 		Daemon: DaemonConfig{

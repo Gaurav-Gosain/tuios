@@ -855,11 +855,6 @@ var optionSpecs = []Option{
 		Accepted:    SidebarSubagentRowsValues, Default: SidebarSubagentRowsRows,
 	},
 	{
-		Path: "appearance.sidebar.spaces", Type: OptionString, Section: "sidebar",
-		Description: "How the rail shows spaces: grouped draws a heading per space in the sessions section, split draws a spaces section above it and lists only the current space's sessions, off ignores spaces",
-		Accepted:    SidebarSpacesValues, Default: SidebarSpacesGrouped,
-	},
-	{
 		Path: "appearance.sidebar.subagent_collapse", Type: OptionString, Section: "sidebar",
 		Description: "A heading line over each agent's subagents that opens and shuts their rows: off, or on and expanded or collapsed at the start",
 		Accepted:    SidebarSubagentCollapseValues, Default: SidebarSubagentCollapseOff,
@@ -878,6 +873,11 @@ var optionSpecs = []Option{
 		Path: "appearance.sidebar.subagent_hide_finished", Type: OptionString, Section: "sidebar",
 		Description: "How long a finished subagent's row stays after it ends: a duration such as 30s, or off to keep it until the daemon drops it",
 		Default:     SubagentHideOff, Check: CheckSubagentHide,
+	},
+	{
+		Path: "appearance.sidebar.spaces", Type: OptionString, Section: "sidebar",
+		Description: "How the rail shows spaces: grouped draws a heading per space in the sessions section, split draws a spaces section above it and lists only the current space's sessions, off ignores spaces",
+		Accepted:    SidebarSpacesValues, Default: SidebarSpacesGrouped,
 	},
 	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
