@@ -58,7 +58,7 @@ var argSpecs = map[CommandType]argSpec{
 	CommandTypeFocus:          {1, 1, "a window name or id", nil},
 	CommandTypeRenameWindow:   {1, 2, `a new name, or the old name and the new one`, nil},
 
-	CommandTypeSplit:          {1, 1, "horizontal or vertical", checkEach(checkOneOf("horizontal", "vertical", "h", "v"))},
+	CommandTypeSplit:          {1, 1, "horizontal, vertical, left, right, up or down", checkEach(checkOneOf("horizontal", "vertical", "h", "v", "left", "right", "up", "down"))},
 	CommandTypePreselect:      {1, 1, "left, right, up or down", checkEach(checkOneOf("left", "right", "up", "down"))},
 	CommandTypeFocusDirection: {1, 1, "left, right, up or down", checkEach(checkOneOf("left", "right", "up", "down"))},
 	CommandTypeArrangePanes: {1, unlimited, "tiled, even-horizontal or even-vertical, then optional window names", func(args []string) (int, error) {

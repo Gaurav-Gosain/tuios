@@ -777,6 +777,35 @@ func (m *OS) SplitVertical() error {
 	return nil
 }
 
+// SplitToward splits the focused window and puts the new one on side of it:
+// left, right, up or down. horizontal and vertical are down and right.
+func (m *OS) SplitToward(side string) error {
+	if !m.AutoTiling {
+		return errTilingOff
+	}
+	if m.GetFocusedWindow() == nil {
+		return errNoFocusedWindow
+	}
+	var dir layout.PreselectionDir
+	switch side {
+	case "left":
+		dir = layout.PreselectionLeft
+	case "right":
+		dir = layout.PreselectionRight
+	case "up":
+		dir = layout.PreselectionUp
+	case "down":
+		dir = layout.PreselectionDown
+	default:
+		return fmt.Errorf("unknown split side %q (use left, right, up or down)", side)
+	}
+	before := len(m.Windows)
+	m.splitFocused(dir, false)
+	m.awaitNewWindow(before)
+	m.MarkAllDirty()
+	return nil
+}
+
 // RotateSplit rotates the split direction at the focused window.
 func (m *OS) RotateSplit() error {
 	if !m.AutoTiling {

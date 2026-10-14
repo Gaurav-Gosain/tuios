@@ -1518,9 +1518,12 @@ selects a window everywhere else, and -h is help.`,
 	var splitWindowName string
 	var splitWindowJSON bool
 	splitWindowCmd := &cobra.Command{
-		Use:   "split-window <horizontal|vertical>",
+		Use:   "split-window <horizontal|vertical|left|right|up|down>",
 		Short: "Divide a pane and open a new one beside it",
 		Long: `Split a pane along an axis and print the id of the new pane.
+
+horizontal and vertical put the new pane below or to the right. left, right,
+up and down name the side of the pane the new pane takes.
 
 Needs an attached client and tiling on. The split goes through the renderer's
 own path, so the new pane lands in the layout exactly as one opened from the
@@ -1528,13 +1531,16 @@ keyboard does.`,
 		Example: `  # Split the focused pane left/right
   tuios split-window vertical
 
+  # Put the new pane to the left of the focused one
+  tuios split-window left
+
   # Split a named pane and name what comes out of it
   tuios split-window horizontal -w build --name logs
 
   # Capture the new pane's id for scripting
   tuios split-window vertical --json | jq -r .window_id`,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"horizontal", "vertical"},
+		ValidArgs: []string{"horizontal", "vertical", "left", "right", "up", "down"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runSplitWindow(splitWindowSession, splitWindowWindow, args[0],
 				splitWindowName, splitWindowJSON)

@@ -39,7 +39,13 @@ const (
 	// EventWorkspaceRenamed: a workspace's name was set, changed or cleared.
 	// Workspace is the workspace, and Title its new name, absent when cleared.
 	EventWorkspaceRenamed = "workspace-renamed"
-	EventAgentState       = "agent-state" // a window's agent state changed
+	// EventLayoutChanged: the panes on a workspace now sit differently. A
+	// pane opened, closed, moved, was minimized, zoomed or resized, or the
+	// session changed size. Workspace names it. It carries no rectangles: a
+	// client that mirrors the layout reads list-windows again. It is opt-in
+	// and not kept for replay, since a dragged split raises one per step.
+	EventLayoutChanged = "layout-changed"
+	EventAgentState    = "agent-state" // a window's agent state changed
 	// EventAgentMessage is one agent leaving a message for another. Window is
 	// the recipient's window id, or empty for a session-wide notice. It carries
 	// nothing else on purpose: a subscriber reads the message back from the ring
@@ -345,7 +351,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.
@@ -540,6 +546,10 @@ func (h *eventHub) retain(ev streamEvent) {
 		return
 	case EventTransferFile:
 		h.lastFileSeq = ev.Seq
+		return
+	case EventLayoutChanged:
+		// One fires on every step of a dragged split. A subscriber that
+		// missed some reads list-windows, which is the layout they described.
 		return
 	}
 	if h.ringLen == len(h.ring) {

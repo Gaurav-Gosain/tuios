@@ -12,6 +12,7 @@ func (nopExecutor) GetFocusedWindowID() string                      { return "w1
 func (nopExecutor) SendToWindow(_ string, _ []byte) error           { return nil }
 func (nopExecutor) SplitHorizontal() error                          { return nil }
 func (nopExecutor) SplitVertical() error                            { return nil }
+func (nopExecutor) SplitToward(string) error                        { return nil }
 func (nopExecutor) SwitchWorkspace(_ int) error                     { return nil }
 func (nopExecutor) FocusWindowByName(_ string) error                { return nil }
 func (nopExecutor) FocusWindowByID(_ string) error                  { return nil }

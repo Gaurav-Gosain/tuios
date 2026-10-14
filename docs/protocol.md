@@ -6176,6 +6176,7 @@ Event types:
 | `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
 | `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
 | `workspace-renamed` | A workspace's name was set, changed or cleared. `title` is the new name, absent when the name was cleared. | `session`, `workspace`, `title` |
+| `layout-changed` | The panes on a workspace sit differently: a pane opened, closed, moved, was minimized, zoomed or resized, or the session changed size. Call `list-windows` to read the new rectangles. Sent only to a subscription that names it in `types`, and not kept for replay. | `session`, `workspace` |
 | `agent-state` | A window's agent state changed, whichever tier changed it. A pane ceasing to be an agent reports `none`. | `session`, `window`, `pty_id`, `state` |
 | `agent-message` | A message was left in the session's ring. `window` is the recipient, or empty for a session-wide notice. Read the message itself with `read-agent-messages`. | `session`, `window` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |

@@ -40,6 +40,11 @@ var focusDirections = []string{"left", "right", "up", "down"}
 // question, not this one.
 var splitDirections = []string{"horizontal", "vertical"}
 
+// splitSides are the sides of the split pane the new pane can take. A side
+// is a direction and a placement in one: left and right cut the vertical
+// axis, up and down the horizontal one.
+var splitSides = []string{"left", "right", "up", "down"}
+
 // verbFocusWindow moves the focus, by target, by position, or by direction.
 //
 // One verb rather than three because the caller's question is always "focus
@@ -467,15 +472,22 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 		Session   string `json:"session"`
 		Window    string `json:"window"`
 		Direction string `json:"direction"`
+		Side      string `json:"side"`
 		Name      string `json:"name"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.Direction == "" {
-		return nil, invalidParam("direction", "direction is required and is the axis to cut on", splitDirections...)
-	}
-	if !slices.Contains(splitDirections, p.Direction) {
+	switch {
+	case p.Direction != "" && p.Side != "":
+		return nil, invalidParam("side", "pass direction or side, not both")
+	case p.Side != "":
+		if !slices.Contains(splitSides, p.Side) {
+			return nil, invalidParam("side", "unknown split side "+echoName(p.Side), splitSides...)
+		}
+	case p.Direction == "":
+		return nil, invalidParam("direction", "direction or side is required. direction is the axis to cut on", splitDirections...)
+	case !slices.Contains(splitDirections, p.Direction):
 		return nil, invalidParam("direction", "unknown split direction "+echoName(p.Direction), splitDirections...)
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
@@ -506,7 +518,11 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 	pre := sess.GetState()
 	before := windowIDSet(pre)
 	target := pre.FocusedWindowID
-	if verr := d.routeTape(sess, "tape_command", "Split", []string{p.Direction}); verr != nil {
+	cut := p.Direction
+	if p.Side != "" {
+		cut = p.Side
+	}
+	if verr := d.routeTape(sess, "tape_command", "Split", []string{cut}); verr != nil {
 		return nil, verr
 	}
 
@@ -524,7 +540,10 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 	})
 	out := map[string]any{
 		"type":      "window_split",
-		"direction": p.Direction,
+		"direction": splitAxis(cut),
+	}
+	if p.Side != "" {
+		out["side"] = p.Side
 	}
 	if created == "" {
 		// The split reported success but no window appeared. Saying so is better
@@ -542,6 +561,17 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 		out["name"] = p.Name
 	}
 	return out, nil
+}
+
+// splitAxis is the axis a split cut: a side names its axis too.
+func splitAxis(cut string) string {
+	switch cut {
+	case "left", "right":
+		return "vertical"
+	case "up", "down":
+		return "horizontal"
+	}
+	return cut
 }
 
 // windowIDSet snapshots the window ids in a session.

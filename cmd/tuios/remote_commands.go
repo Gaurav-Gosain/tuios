@@ -297,12 +297,20 @@ func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutpu
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("split-window", map[string]any{
-		"session":   sessionName,
-		"window":    windowTarget,
-		"direction": direction,
-		"name":      name,
-	})
+	params := map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"name":    name,
+	}
+	// A side is sent as side, so an older daemon that knows only the two
+	// axes refuses it by name instead of splitting the wrong way.
+	switch direction {
+	case "left", "right", "up", "down":
+		params["side"] = direction
+	default:
+		params["direction"] = direction
+	}
+	raw, err := client.Call("split-window", params)
 	if err != nil {
 		return reportVerbError(explainVerbError("split-window", err), jsonOutput)
 	}

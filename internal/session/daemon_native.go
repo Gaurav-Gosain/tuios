@@ -343,6 +343,11 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.Zoomed {
 		info["zoomed"] = true
 	}
+	// A floating window sits over the tiled ones at its own rectangle.
+	// Omitted when it is tiled.
+	if w.IsFloating {
+		info["floating"] = true
+	}
 	// The scratch terminal is listed, marked, so a script can tell it from
 	// the panes the user placed. minimized true on it means hidden.
 	if w.Scratch {

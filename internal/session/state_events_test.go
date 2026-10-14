@@ -390,6 +390,8 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 		EventWindowRetitled,
 		EventWindowMoved,
 		EventWindowMinimized,
+		EventLayoutChanged, // workspace 1: "gone" closed and "stays" left
+		EventLayoutChanged, // workspace 2: "stays" and "fresh" arrived
 		EventWorkspaceSwitched,
 		EventWindowFocused,
 	}
@@ -400,16 +402,23 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 
 // TestDiffLifecycleIgnoresNoise verifies changes that are not window lifecycle
 // changes raise nothing, so a TUI syncing on every render does not flood the
-// event stream.
+// event stream. A new rectangle raises layout-changed and nothing else: one
+// event for the workspace, with no lifecycle event beside it.
 func TestDiffLifecycleIgnoresNoise(t *testing.T) {
 	base := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 0, Y: 0, Width: 80, Height: 24}}
 	before := snapshotLifecycle(&SessionState{Windows: base, FocusedWindowID: "w", CurrentWorkspace: 1})
 
-	moved := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 10, Y: 5, Width: 40, Height: 12, Z: 3, IsAltScreen: true}}
-	after := snapshotLifecycle(&SessionState{Windows: moved, FocusedWindowID: "w", CurrentWorkspace: 1})
-
+	restacked := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 0, Y: 0, Width: 80, Height: 24, Z: 3, IsAltScreen: true}}
+	after := snapshotLifecycle(&SessionState{Windows: restacked, FocusedWindowID: "w", CurrentWorkspace: 1})
 	if events := diffLifecycle(before, after); len(events) != 0 {
-		t.Fatalf("geometry/z/alt-screen changes raised events: %+v", events)
+		t.Fatalf("z/alt-screen changes raised events: %+v", events)
+	}
+
+	moved := []WindowState{{ID: "w", PTYID: "p", Workspace: 1, Title: "sh", X: 10, Y: 5, Width: 40, Height: 12}}
+	after = snapshotLifecycle(&SessionState{Windows: moved, FocusedWindowID: "w", CurrentWorkspace: 1})
+	events := diffLifecycle(before, after)
+	if len(events) != 1 || events[0].Type != EventLayoutChanged || events[0].Workspace != 1 {
+		t.Fatalf("a new rectangle raised %+v, want one layout-changed for workspace 1", events)
 	}
 }
 

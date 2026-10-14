@@ -1071,16 +1071,21 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to split. Omit to split the focused one."},
-				{Name: "direction", Type: "string", Required: true, Description: "Axis to cut on.", Accepted: splitDirections},
+				{Name: "direction", Type: "string", Description: "Axis to cut on. The new pane goes right or below. Pass this or side.", Accepted: splitDirections},
+				{Name: "side", Type: "string", Description: "Side of the pane the new pane takes. Pass this or direction.", Accepted: splitSides},
 				{Name: "name", Type: "string", Description: "Name for the new window."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the pane the split created."},
 				{Name: "direction", Type: "string", Description: "The axis that was cut."},
+				{Name: "side", Type: "string", Description: "The side the new pane took, when side was given."},
 				{Name: "name", Type: "string", Description: "The new pane's name, when one was given."},
 			},
-			examples: []string{`{"id":1,"verb":"split-window","params":{"session":"work","window":"build","direction":"vertical","name":"logs"}}`},
-			handler:  (*Daemon).verbSplitWindow,
+			examples: []string{
+				`{"id":1,"verb":"split-window","params":{"session":"work","window":"build","direction":"vertical","name":"logs"}}`,
+				`{"id":2,"verb":"split-window","params":{"session":"work","window":"build","side":"left"}}`,
+			},
+			handler: (*Daemon).verbSplitWindow,
 		},
 		"focus-window": {
 			description: "Move the focus to a pane. Pass exactly one of window, relative or direction.",

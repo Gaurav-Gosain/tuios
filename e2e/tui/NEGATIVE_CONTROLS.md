@@ -5022,3 +5022,15 @@ Run on 2026-10-14 on macOS. The tests are in `bsp_drop_preview_test.go`: `appear
 | `m.renderSkipped = false` in `showDropZone` | none | **not caught** |
 
 The `renderSkipped` line is not caught because nothing during a drag sets `renderSkipped`: the maintenance tick only skips the frame when `tickNeedsWork` finds nothing to do, and a pane under manipulation is work. The line stays, as in the `loadingShownMsg` case, so the due message draws by itself rather than relying on that.
+
+### TestSplitWindowTakesTheNamedSide and TestLayoutChangedFollowsASplit
+
+`split-window` takes a `side` (left, right, up, down), and the daemon raises
+`layout-changed` when the panes on a workspace sit differently. A client that
+mirrors a session's layout uses both.
+
+| Control | Build | Result | Verdict |
+| --- | --- | --- | --- |
+| This branch | the change | both pass: left puts the new pane at x=0 and the old one at x=60; up puts it at y=0 over y=19; one `layout-changed` for workspace 1 | **guard** |
+| `SplitToward` maps left and up to right and down | mutant | `TestSplitWindowTakesTheNamedSide` fails: the new pane is at x=60 and at y=19 | **caught** |
+| `layoutChanges` call cut from `diffLifecycle` | mutant | `TestLayoutChangedFollowsASplit` fails: no `layout-changed` within 10s on a live subscription | **caught** |

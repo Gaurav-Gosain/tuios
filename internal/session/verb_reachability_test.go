@@ -92,6 +92,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"set-layout#0":    {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"set-layout#1":    {errCode: ErrVerbNeedsClient, why: "the master-stack shape is laid out by a client"},
 	"split-window#0":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
+	"split-window#1":  {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
 	// The fixture has no agent panes, so no hook ever recorded a conversation
 	// to resume. Typing and dry runs are proved in agent_resume_test.go.

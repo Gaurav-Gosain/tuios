@@ -48,6 +48,9 @@ type Executor interface {
 	// BSP Tiling
 	SplitHorizontal() error
 	SplitVertical() error
+	// SplitToward splits the focused pane and puts the new one on the given
+	// side of it: left, right, up or down.
+	SplitToward(side string) error
 	RotateSplit() error
 	EqualizeSplitsExec() error
 	Preselect(direction string) error                       // "left", "right", "up", "down"
@@ -254,8 +257,10 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return ce.executor.SplitHorizontal()
 		case "vertical", "v":
 			return ce.executor.SplitVertical()
+		case "left", "right", "up", "down":
+			return ce.executor.SplitToward(strings.ToLower(cmd.Args[0]))
 		default:
-			return fmt.Errorf("unknown Split direction %q (use horizontal or vertical)", cmd.Args[0])
+			return fmt.Errorf("unknown Split direction %q (use horizontal, vertical, left, right, up or down)", cmd.Args[0])
 		}
 
 	case CommandTypeRotateSplit:

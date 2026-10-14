@@ -72,7 +72,9 @@ resumed stream does not replay it, so read `tuios agent-log` after a gap.
 `agent-transcript`) is opt-in in the same way. It is for a client that shows
 the conversation to the person. `transfer-progress` (a copy's row while its bytes
 move, at most four a second) and `transfer-file` (one file of a copy ended) are
-opt-in in the same way.
+opt-in in the same way. `layout-changed` (the panes on `workspace` opened,
+closed, moved or changed size) is opt-in and not replayed. Read `tuios
+list-windows` after it to get the new rectangles.
 
 Every type, and what it reports:
 
@@ -83,6 +85,7 @@ Every type, and what it reports:
 | `window-retitled`, `window-moved`, `window-focused` | A pane's title, workspace or focus changes |
 | `window-minimized`, `window-restored` | A pane is minimized or restored |
 | `workspace-switched`, `workspace-renamed` | The workspace on screen, or a workspace name, changes |
+| `layout-changed` | The panes on a workspace sit differently. Opt-in |
 | `mode-changed` | A client switches between window and terminal mode |
 | `session-created`, `session-closed` | A session is made or ends |
 | `client-session-changed` | A client enters or leaves a session |

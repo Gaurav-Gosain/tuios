@@ -371,7 +371,7 @@ const (
 var EventTypes = []string{
 	"window-created", "window-closed", "window-exit", "window-retitled",
 	"window-focused", "window-moved", "window-minimized", "window-restored",
-	"workspace-switched", "workspace-renamed", "agent-state", "agent-message",
+	"workspace-switched", "workspace-renamed", "layout-changed", "agent-state", "agent-message",
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
