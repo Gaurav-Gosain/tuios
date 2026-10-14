@@ -26,8 +26,9 @@ import (
 //
 // How this could pass wrongly, written down first:
 //   - The caller's TERM could equal the daemon's fallback by coincidence. The
-//     test's TERM, xterm-ghostty, is not a fallback this daemon has, so a match
-//     is the caller's value.
+//     test's TERM, screen-256color, is not a fallback this daemon has, so a
+//     match is the caller's value. Every ncurses ships its entry, so PaneTerm
+//     keeps it on any runner.
 //   - A daemon started earlier with another environment could answer. The
 //     test has its own base, and starts its own daemon with start-server.
 //   - The daemon could take TERM from its own environment, which start-server
@@ -46,7 +47,7 @@ func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
 	const session = "e2e-verb-term"
 	base := t.TempDir()
 	killDaemon(t, base)
-	callerEnv := []string{"TERM=xterm-ghostty", "COLORTERM=truecolor"}
+	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
 
 	if out, err := tuiosCLIEnv(t, base, callerEnv, "start-server"); err != nil {
 		t.Fatalf("start the daemon: %v\n%s", err, out)
@@ -80,7 +81,7 @@ func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := "TERM=xterm-ghostty COLORTERM=truecolor"; got != want {
+	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
 		t.Errorf("a session made by the new-session verb, from a caller with a real terminal, gave its pane %q, want %q\n%s", got, want, pane)
 	}
 }
@@ -115,7 +116,7 @@ func TestVerbCommandsReachAnOlderDaemon(t *testing.T) {
 	const session = "e2e-old-daemon"
 	base := t.TempDir()
 	killDaemon(t, base)
-	callerEnv := []string{"TERM=xterm-ghostty", "COLORTERM=truecolor"}
+	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
 
 	old := exec.Command(baseline, "start-server")
 	old.Dir = workDirIn(t, base)

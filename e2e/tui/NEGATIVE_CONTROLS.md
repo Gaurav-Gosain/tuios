@@ -5050,15 +5050,15 @@ Run on 2026-10-14 on Linux. The preview's frame is the panes' border glyphs, and
 The 16-colour reverse frame is unchanged by this work and keeps its row in the table above (`TestTheDropZoneShowsAt16Colours`). The edge-zone guard now splits at the tree's own ratio; no test here makes a tree whose new splits start away from 0.5, so that change has no control.
 ## The new-session verb gives its session the caller's terminal
 
-Run on 2026-10-14 on macOS on branch `pr/verb-session-term`, from upstream `main` (`2b6578f8`). The test is `TestVerbNewSessionGivesItsPaneTheCallersTerm` in `verb_hello_term_test.go`, run with `TERM=xterm-ghostty COLORTERM=truecolor`. A build of upstream `main` itself fails it with the same message as the controls: the verb connection's hello carried no terminal, and `new-session` built its session from an empty config. Each control cuts one wire from the fixed build, builds it, and runs the test.
+Run on 2026-10-14 on macOS on branch `pr/verb-session-term`, from upstream `main` (`2b6578f8`), and run again in the review round from upstream `main` (`e2ca77df`) once the test's TERM was `screen-256color`, an entry every ncurses ships, in place of `xterm-ghostty`, which only a ghostty install provides. Every row below held in both runs. The test is `TestVerbNewSessionGivesItsPaneTheCallersTerm` in `verb_hello_term_test.go`, run with `TERM=screen-256color COLORTERM=truecolor`. A build of upstream `main` itself fails it with the same message as the controls: the verb connection's hello carried no terminal, and `new-session` built its session from an empty config. Each control cuts one wire from the fixed build, builds it, and runs the test.
 
 | Control | Build | Tests that fail | Verdict |
 | --- | --- | --- | --- |
-| None: upstream `main` | `2b6578f8` | `TestVerbNewSessionGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=xterm-ghostty COLORTERM=truecolor\"") | **caught** |
+| None: upstream `main` | `2b6578f8` | `TestVerbNewSessionGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
 | `verbHello` does not record `cs.hello` | mutant of this branch | the same, with the same message | **caught** |
 | `VerbClient.handshake` sends an empty `term` | mutant of this branch | the same, with the same message | **caught** |
 | `verbNewSession` does not copy `cs.hello.Term` into the session's config | mutant of this branch | the same, with the same message | **caught** |
-| The positive half | this branch | none: the pane reads `TERM=xterm-ghostty COLORTERM=truecolor`, and `TestSessionMadeWithoutATerminalGivesItsPanesARealTerm` still reads the fallback for a caller with `TERM=dumb` and no terminal | **guard** |
+| The positive half | this branch | none: the pane reads `TERM=screen-256color COLORTERM=truecolor`, and `TestSessionMadeWithoutATerminalGivesItsPanesARealTerm` still reads the fallback for a caller with `TERM=dumb` and no terminal | **guard** |
 
 `TestVerbCommandsReachAnOlderDaemon` in the same file starts the daemon from a build of upstream `main` (`TUIOS_E2E_BASELINE_BIN`), and a client of this branch then runs `tuios ls`, `tuios call new-session` and reads the session's pane. That daemon refuses a parameter it does not know, so the client's handshake asks again without `term` and `color_term`. The test is skipped without that build.
 
