@@ -81,5 +81,5 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0
-	tuios.dev/progstatus v0.0.0-20261014011037-07db3a7470f2
+	tuios.dev/progstatus v0.1.0
 )

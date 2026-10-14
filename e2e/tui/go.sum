@@ -78,5 +78,5 @@ golang.org/x/text v0.42.0 h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=
 golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-tuios.dev/progstatus v0.0.0-20261014011037-07db3a7470f2 h1:wCUDy8swFUMD86zvEo2Hpmx454FFh0DPl6Crrp0VbS4=
-tuios.dev/progstatus v0.0.0-20261014011037-07db3a7470f2/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
+tuios.dev/progstatus v0.1.0 h1:6d/rQpXJvZzDK9uxNKhchb6lKVep/8eng0jyNVCaVTI=
+tuios.dev/progstatus v0.1.0/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=

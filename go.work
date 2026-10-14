@@ -8,4 +8,4 @@ use (
 	./progstatus
 )
 
-replace tuios.dev/progstatus v0.0.0-20261014011037-07db3a7470f2 => ./progstatus
+replace tuios.dev/progstatus v0.1.0 => ./progstatus
