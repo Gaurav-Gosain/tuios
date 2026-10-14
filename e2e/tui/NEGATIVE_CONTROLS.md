@@ -5464,8 +5464,8 @@ pass on the branch.
 
 - `TestGUIBridgeIdleCostsLittle` (`gui_bridge_idle_test.go`) leaves a
   bridge on two idle shells with no hosts for 10 s. The bridge must take at
-  most 30 CPU ticks and the daemon at most 26 read calls (about 17 with the
-  fixes). A host added from the command line must then reach the renderer.
+  most 30 CPU ticks, and the daemon must read at most 8 times more than in
+  10 s with the bridge stopped (no more with the fixes). A host added from the command line must then reach the renderer.
 - `TestSnapshotVTRebuildsThePane` (`internal/session`) is the conformance
   corpus of the one snapshot encoder, now used by stream-pane and the bridge.
   `TestGUIBridgeSnapshotCarriesTabsAndTitle` checks that a pane's snapshot
@@ -5481,7 +5481,7 @@ log is `~/.cache/agent-tmp/gui-port/proof/nc-bridge-review.txt`.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The palette key printed from the config | `model.Update`: `fmt.Sprint(m.keysFrom)` back in the key | `TestGUIBridgeIdleCostsLittle` (89 ticks in 10 s) | **caught** |
-| list-hosts read every second with no hosts | `watchHosts`: the timer armed always | `TestGUIBridgeIdleCostsLittle` (35 and 40 daemon reads in 10 s) | **caught** |
+| list-hosts read every second with no hosts | `watchHosts`: the timer armed always | `TestGUIBridgeIdleCostsLittle` (20 reads more than with the bridge stopped, rerun 2026-10-14) | **caught** |
 | No tab stops and no title in the encoder | `snapshotVT`: both blocks skipped | `TestSnapshotVTRebuildsThePane/tabs` and `/title`, `TestGUIBridgeSnapshotCarriesTabsAndTitle` | **caught** |
 | The kitty base entry pushed | `kittyStack`: every entry pushed | `TestSnapshotVTRebuildsThePane` (every case: stack `[0 0]`, want `[0]`) | **caught** |
 | An unbounded queue | `frameWriter.push`: the bound made false | `TestGUIBridgeResyncsARendererThatFellBehind` (no fresh snapshot) | **caught** |
