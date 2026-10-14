@@ -55,13 +55,15 @@ func drainReply(emu *vt.Emulator) string {
 
 func TestConform_XTVERSION(t *testing.T) {
 	for _, in := range []string{"\x1b[>q", "\x1b[>0q"} {
-		if got, want := replyChecked(t, in), "\x1bP>|tuios\x1b\\"; got != want {
+		if got, want := replyChecked(t, in), "\x1bP>|vt\x1b\\"; got != want {
 			t.Errorf("%q replied %q, want %q", in, got, want)
 		}
 	}
 
-	// A release build names its version after the program name, as tmux and
-	// WezTerm do.
+	// The host names the program, and a release build names its version
+	// after it, as tmux and WezTerm do.
+	vt.SetTerminalName("tuios")
+	t.Cleanup(func() { vt.SetTerminalName("") })
 	vt.SetBuildVersion("1.2.3")
 	t.Cleanup(func() { vt.SetBuildVersion("") })
 	if got, want := replyChecked(t, "\x1b[>q"), "\x1bP>|tuios 1.2.3\x1b\\"; got != want {

@@ -12,27 +12,47 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// buildVersion is the version XTVERSION reports. cmd/tuios sets it from the
-// release ldflags at startup, because this package cannot read main's
-// variables. It stays empty in tests and in programs that embed the emulator.
-var buildVersion atomic.Pointer[string]
+// DefaultTerminalName is the program name XTVERSION reports until
+// SetTerminalName sets another.
+const DefaultTerminalName = "vt"
 
-// SetBuildVersion records the version XTVERSION reports. Call it once, before
-// the first pane starts.
+// terminalName and buildVersion are what XTVERSION reports. A host sets them
+// once at startup: tuios sets "tuios" and the release version. They are
+// process-wide because a guest asks every pane the same question, and both
+// backends must give the same answer.
+var (
+	terminalName atomic.Pointer[string]
+	buildVersion atomic.Pointer[string]
+)
+
+// SetTerminalName sets the program name XTVERSION reports. An empty name
+// restores DefaultTerminalName. Call it once, before the first pane starts.
+func SetTerminalName(name string) {
+	name = strings.TrimSpace(name)
+	terminalName.Store(&name)
+}
+
+// SetBuildVersion records the version XTVERSION reports after the program
+// name. Call it once, before the first pane starts.
 func SetBuildVersion(v string) {
 	v = strings.TrimSpace(v)
 	buildVersion.Store(&v)
 }
 
-// XTVersionName is the text an XTVERSION reply carries: "tuios", followed by
-// the build version when one was set. Both backends answer with it, so a guest
-// that picks its features by terminal name sees the same name on either.
+// XTVersionName is the text an XTVERSION reply carries: the program name,
+// followed by the build version when one was set. Both backends answer with
+// it, so a guest that picks its features by terminal name sees the same name
+// on either.
 func XTVersionName() string {
+	name := DefaultTerminalName
+	if n := terminalName.Load(); n != nil && *n != "" {
+		name = *n
+	}
 	v := buildVersion.Load()
 	if v == nil || *v == "" {
-		return "tuios"
+		return name
 	}
-	return "tuios " + *v
+	return name + " " + *v
 }
 
 // unitID is the DA3 terminal unit identifier: eight hex digits a guest can use

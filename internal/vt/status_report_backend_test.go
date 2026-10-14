@@ -66,7 +66,7 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		// The same on both backends: the pure emulator answers with the
 		// text libghostty sends, and libghostty is handed vt.XTVersionName.
 		{"DA3", "\x1b[=c", "\x1bP!|00000000\x1b\\"},
-		{"XTVERSION", "\x1b[>0q", "\x1bP>|tuios\x1b\\"},
+		{"XTVERSION", "\x1b[>0q", "\x1bP>|vt\x1b\\"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := backendReply(t, tc.in); got != tc.want {

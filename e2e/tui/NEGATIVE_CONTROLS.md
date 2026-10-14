@@ -5204,3 +5204,13 @@ named, standalone and daemon where the test runs both.
 | The `enforcePlacementCaps` call in `putPlacement` | `TestKittyPlacementFlood` ("20000 placements of one image are up on the host, want at most 256") | **caught** |
 | The `sentAsIs` check in the refresh pass (forwardPlace and the refresh both send) | `TestKittyMultiplePlacements` ("the guest placed the image 9 times and the host was told 18 times") | **caught** |
 | The guest's p= used as the slot again, in place of the per-image table | `TestKittyMultiplePlacements` ("host image 1 has 6 placements up, want 5") | **caught** |
+## A pane names tuios in its XTVERSION answer (tuios.dev/vt preparation)
+
+Run on 2026-10-14 on branch `refactor/vt-terminal-name`. The test is
+`TestPaneXTVERSIONNamesTuios` in `xtversion_name_test.go`. The emulator's own
+name is now `vt`, and `internal/terminal` sets `tuios` at startup.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `internal/terminal/vt_name.go` removed, so nothing sets the name | mutant of this branch | both subtests: `XTVERSION answered "vt dev", want tuios and the version` | **caught** |
+| The positive half | this branch | none: standalone and daemon panes answer `tuios dev` | **guard** |
