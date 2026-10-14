@@ -149,8 +149,10 @@ strip.
 still win over the set, because they are the narrower statement.
 
 `scrollbar_thumb` also draws the scroll thumb of a rail section that
-overflows, which has no track. `appearance.scrollbar.thumb` does not reach
-it: it is the pane bar's. With no set, the rail's thumb is `┃`.
+overflows, in the rail's edge rule, with no track. `appearance.scrollbar.thumb`
+does not reach it: it is the pane bar's. With no set, the rail's thumb is `┃`,
+and `#` under `--ascii-only`. A thumb that is the same glyph as the rule is
+drawn as `█` instead (`#` under `--ascii-only`), so it still shows.
 
 ## Cell Widths
 

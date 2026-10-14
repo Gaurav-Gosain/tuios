@@ -159,7 +159,18 @@ func (s *Settings) GetRailExpandGlyph() string {
 // from the set's scrollbar_thumb role. The pane bar's own getter is not used:
 // its default style draws a full block, which is too heavy beside a list.
 func (s *Settings) GetRailScrollThumb() string {
-	return s.glyphOr(func(g *theme.GlyphSet) string { return g.ScrollbarThumb }, "┃", "|")
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.ScrollbarThumb }, "┃", "#")
+}
+
+// GetRailScrollThumbBeside is GetRailScrollThumb for a thumb drawn in place of
+// the rail's edge rule, whose glyph is rule. A thumb that is the same glyph as
+// the rule (a heavy border style draws its rule as ┃) would not show, so a full
+// block takes its place.
+func (s *Settings) GetRailScrollThumbBeside(rule string) string {
+	if thumb := s.GetRailScrollThumb(); thumb != rule {
+		return thumb
+	}
+	return s.glyphOr(func(*theme.GlyphSet) string { return "" }, "█", "#")
 }
 
 // ResolvedGlyphs reports what is actually drawn for every role: the active

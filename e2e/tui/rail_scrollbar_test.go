@@ -10,9 +10,9 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A rail section with more rows than lines draws a scroll thumb in its last
-// content column, saying where in its rows the section is. The rest of the
-// column is blank. The tests read the column off a real client's screen,
+// A rail section with more rows than lines draws a scroll thumb in the edge
+// rule's own cell, saying where in its rows the section is. The rest of the
+// section's lines keep the rule. The tests read the column off a real client's screen,
 // wheel the section from its top to its bottom and back, and save every
 // screen they read.
 //
@@ -26,14 +26,14 @@ import (
 //     scroll: the custom fixture's numbers (70 rows on 8 lines, a 3-row
 //     notch) round to the top, so the middle state fails without the clamp.
 //   - the thumb sitting on the "+N" line while rows are still hidden: the
-//     "+N" line must be blank in the column, and the thumb reaches the last
-//     line only in the state with no "+N".
-//   - anything but the thumb in the column, such as a track: every other
-//     line of the section must be blank there.
-//   - the thumb drawn over the last content column instead of reserving it:
-//     a cut row's ellipsis must sit in the column before the thumb's.
+//     "+N" line must keep the rule, and the thumb reaches the last line only
+//     in the state with no "+N".
+//   - anything but the thumb or the rule in the column, such as a track:
+//     every other line of the section must keep the rule there.
+//   - the thumb taking a column from the rows: a cut row's ellipsis must sit
+//     in the rail's last content column, where it sits with no thumb.
 //   - a thumb told apart only by colour: the 16-colour run asserts the glyph,
-//     and the ASCII run asserts the ASCII one.
+//     and the ASCII run asserts the ASCII one, which is not the ASCII rule.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail scrollbar on
 // overflowing sections").
@@ -50,25 +50,27 @@ func railScrollFeed(position string) string {
 		"command = \"i=1; while [ $i -le 70 ]; do printf 'FEED-%02d-abcdefghijklmnopqrstuvwxyz\\\\n' $i; i=$((i+1)); done\"\n"
 }
 
-// railBar is how a test reads one rail: the thumb's column, and the columns
-// of the rail's content.
+// railBar is how a test reads one rail: the edge rule's column, where the
+// thumb is drawn, and the columns of the rail's content.
 type railBar struct {
-	col    int // the thumb's column
-	cut    int // the content column before it
+	col    int // the edge rule's column, the thumb's
+	cut    int // the last content column, where a cut row's ellipsis sits
 	x0, x1 int // the rail's columns, the edge rule included
 	thumb  string
+	rule   string // the edge rule's glyph, on the lines with no thumb
 }
 
 // leftRailBar reads a 28-column rail on the left: the content is columns 0
-// to 26, the edge rule 27, so the thumb's column is 26.
+// to 26 and the edge rule 27.
 func leftRailBar(thumb string) railBar {
-	return railBar{col: railWidth - 2, cut: railWidth - 3, x0: 0, x1: railWidth, thumb: thumb}
+	return railBar{col: railWidth - 1, cut: railWidth - 2, x0: 0, x1: railWidth, thumb: thumb, rule: "│"}
 }
 
 // rightRailBar reads a 28-column rail on the right of a cols-wide screen:
-// the edge rule faces the panes, so the thumb's column is the screen's last.
+// the edge rule faces the panes, so it is the rail's first column and the
+// content ends at the screen's last.
 func rightRailBar(cols int, thumb string) railBar {
-	return railBar{col: cols - 1, cut: cols - 2, x0: cols - railWidth, x1: cols, thumb: thumb}
+	return railBar{col: cols - railWidth, cut: cols - 1, x0: cols - railWidth, x1: cols, thumb: thumb, rule: "│"}
 }
 
 func (b railBar) line(s tuitest.Screen, row int) string {
@@ -111,8 +113,8 @@ func (b railBar) state(s tuitest.Screen, header, rowMark string) string {
 		return fmt.Sprintf("no section (%d lines)", len(cells))
 	}
 	for i, c := range cells {
-		if c != b.thumb && c != " " {
-			return fmt.Sprintf("%q on line %d of the column", c, i)
+		if c != b.thumb && c != b.rule {
+			return fmt.Sprintf("%q on line %d of the edge", c, i)
 		}
 	}
 	first := slices.Index(cells, b.thumb)
@@ -148,10 +150,10 @@ func waitBarState(t *testing.T, term *tuitest.Terminal, b railBar, header, rowMa
 	return term.Screen()
 }
 
-// reserved checks that the thumb's column is taken from the rows rather than
-// drawn over them: a cut row's ellipsis sits in the column before it, and the
-// "+N" line has a blank there.
-func reserved(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, b railBar, header, rowMark string) {
+// rowsKeepTheirWidth checks that the thumb takes no column from the rows: a cut row's
+// ellipsis sits in the rail's last content column, and the "+N" line has a
+// blank there.
+func rowsKeepTheirWidth(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, b railBar, header, rowMark string) {
 	t.Helper()
 	top, cells := b.cells(s, header, rowMark)
 	for i := range cells {
@@ -247,25 +249,25 @@ func openPanes(t *testing.T, base, session string, n int) {
 
 // railBarWalk wheels one section from its top to its bottom and back,
 // asserting the thumb at each stop. cut says whether the section's rows are
-// long enough to be cut, which is what the reservation is checked on.
+// long enough to be cut, which is what the full width is checked on.
 func railBarWalk(t *testing.T, term *tuitest.Terminal, b railBar, header, rowMark string, cut bool) {
 	t.Helper()
 	dir := artifactDir(t)
 	s := waitBarState(t, term, b, header, rowMark, "top", dir, "top")
 	if cut {
-		reserved(t, term, s, b, header, rowMark)
+		rowsKeepTheirWidth(t, term, s, b, header, rowMark)
 	}
 	row := b.header(s, header) + 1
 	col := b.x0 + 5
 	wheelAt(t, term, col, row, tuitest.MouseWheelDown, 1)
 	s = waitBarState(t, term, b, header, rowMark, "middle", dir, "middle")
 	if cut {
-		reserved(t, term, s, b, header, rowMark)
+		rowsKeepTheirWidth(t, term, s, b, header, rowMark)
 	}
 	wheelAt(t, term, col, row, tuitest.MouseWheelDown, 40)
 	s = waitBarState(t, term, b, header, rowMark, "bottom", dir, "bottom")
 	if cut {
-		reserved(t, term, s, b, header, rowMark)
+		rowsKeepTheirWidth(t, term, s, b, header, rowMark)
 	}
 	wheelAt(t, term, col, row, tuitest.MouseWheelUp, 40)
 	waitBarState(t, term, b, header, rowMark, "top", dir, "top-again")
@@ -325,7 +327,8 @@ func TestRailScrollbarAbsentWhenTheSectionFits(t *testing.T) {
 }
 
 // TestRailScrollbarDepthsAndASCII: at 16 colours the thumb is still its
-// glyph, and under --ascii-only it is the ascii glyph set's "|".
+// glyph, under --ascii-only it is "#", beside an ASCII rule of "|", and beside
+// a thick border's "┃" rule it is a full block.
 func TestRailScrollbarDepthsAndASCII(t *testing.T) {
 	t.Run("16", func(t *testing.T) {
 		term, _ := railClient(t, "bar", railScrollFeed("left"), startOpts{cols: 120, rows: 40, env: chromeDepths[0].env})
@@ -333,7 +336,17 @@ func TestRailScrollbarDepthsAndASCII(t *testing.T) {
 	})
 	t.Run("ascii", func(t *testing.T) {
 		term, _ := railClient(t, "bar", railScrollFeed("left"), startOpts{cols: 120, rows: 40, args: []string{"--ascii-only"}})
-		railBarEnds(t, term, leftRailBar("|"))
+		b := leftRailBar("#")
+		b.rule = "|"
+		railBarEnds(t, term, b)
+	})
+	// A thick border draws its rule as the thumb's own glyph, so the thumb
+	// is a full block there, or it would not show at all.
+	t.Run("thick-border", func(t *testing.T) {
+		term, _ := railClient(t, "bar", "[appearance]\nborder_style = \"thick\"\n"+railScrollFeed("left"), startOpts{cols: 120, rows: 40})
+		b := leftRailBar("█")
+		b.rule = "┃"
+		railBarEnds(t, term, b)
 	})
 }
 

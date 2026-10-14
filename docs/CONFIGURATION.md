@@ -1066,9 +1066,13 @@ rail toggle. The opposite-edge toggle does not opt in an edge whose
 
 ## A rail section that overflows
 
-A section with more rows than the lines it is given shows as many as fit and ends in `… +N` for the rest. The wheel over a section scrolls it, and the keyboard cursor scrolls it to keep itself in view. While rows are out of view the section also draws a scroll thumb in its last column, beside its rows and not its heading, sized to the share of the rows on screen. The rest of the column is blank. The thumb is on the first line only at the top of the section and on the last line only at the bottom, where there is no `+N` row. The rows give up that column to the thumb, so they are cut one cell shorter while rows are out of view, and do not move as the thumb does; they get the column back when the section fits again. A section that fits draws no thumb.
+A section with more rows than the lines it is given shows as many as fit. It ends in `… +N` for the rest. The wheel over a section scrolls it. The keyboard cursor scrolls it to keep itself in view.
 
-A hover peek of another session's panes is windowed like the terminals section it is drawn in, and has a thumb on the same terms. There is no thumb on the collapsed strip or on a section of one line. The glyph is the active glyph set's `scrollbar_thumb` role, `┃` by default and `|` under `--ascii-only`; the `heavy` set gives `█`. `appearance.scrollbar.*` and `appearance.hide_scrollbar` style the pane scroll bar only, not the rail's thumb.
+While rows are out of view, the section draws a scroll thumb in the rail's edge rule, beside its rows and not its heading. The thumb takes the rule's own cell, so the rows keep their full width. Its size is the share of the rows on screen. It reaches the first line only at the top of the section, and the last line only at the bottom, where there is no `+N` row. A section that fits draws the plain rule.
+
+A hover peek of another session's panes is windowed like the terminals section it is drawn in. It gets a thumb on the same terms. There is no thumb on the collapsed strip or on a section of one line.
+
+The glyph is the active glyph set's `scrollbar_thumb` role. It is `┃` by default, `#` under `--ascii-only`, and `█` in the `heavy` set. Where the thumb would be the same glyph as the rule, as with a heavy border style, it is drawn as `█` (`#` under `--ascii-only`). `appearance.scrollbar.*` and `appearance.hide_scrollbar` style the pane scroll bar only, not the rail's thumb.
 
 ## The rail's custom section
 
@@ -1101,8 +1105,7 @@ until the config reloads or `tuios refresh-dock rail/custom`; and
 `tuios list-dock-components` lists it as `rail/custom` with why it drew
 nothing. Rows are cut to the rail's width and to the lines the section's
 share gives it, with `… +N` for the ones below the fold. While some are below
-the fold the section draws a scroll thumb in its last column, and rows are cut
-one cell shorter than `TUIOS_RAIL_WIDTH` (see
+the fold the section draws a scroll thumb in the rail's edge rule (see
 [A rail section that overflows](#a-rail-section-that-overflows)).
 
 Each run gets the client's environment plus `TUIOS_SESSION`, `TUIOS_SOCKET`,
