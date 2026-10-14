@@ -5709,3 +5709,15 @@ Run on 2026-10-14 on macOS on branch `pr/rail-peek-hold`, from upstream `main` (
 | The padding: the held lines a shorter peek leaves are not filled (`for false && len(lines) < end` in `drawTerminals`) | mutant of this branch | the same, with the same message | **caught** |
 | The peek's own list never takes over the section's rows (`if false && peeking && rowsIn[...] > 0`) | mutant of this branch | the same test ("hovering pk-few: the terminals header naming it is false, want true": the peek never draws) | **caught** |
 | The positive half | this branch | none: every hover names the session on the terminals header, `pk-few` draws one pane and two blank lines, `pk-many` ends the section in `+4`, and leaving the rail ends the peek | **guard** |
+
+## Rail scrollbar on a held peek
+
+Run on 2026-10-14 on macOS on branch `pr/rail-peek-hold-on-scrollbar`: the rail scrollbar change (`f1262902`) with the peek hold (`42f4c587`) on top. The peek hold windows a peek from the top of the peeked list on an offset of its own, and the scrollbar change's `TestRailScrollbarOnAPeek` expected the peek windowed at the attached session's offset, so on the combined tree it failed with "the terminals section's thumb is \"top\", want \"bottom\"" while the renderer drew one consistent window: the list's first five rows, `… +9`, and the thumb on lines 0 to 2. The renderer needs no change: the thumb reads the same `start` the windowing computed from the peek's own offset. The test now asserts that window: the attached list is wheeled to its bottom, the pointer peeks `other` (14 panes on 6 lines), and the peek must draw `peek-first`, `peek0` to `peek3`, end in `+9`, and carry the thumb at the top, on ten more frames after it first does; leaving the rail must bring the attached list back at its bottom. Each control cuts one wire from the combined build, builds it, restores the source, and runs `TestRailScrollbarOnAPeek` and `TestRailPeekHoldsTheTerminalsHeight`.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The peek inherits the attached offset (`scroll[sidebarSectionTerminals] = &peekScroll` dropped in `sidebarPanelLinesForTree`) | mutant of this branch | `TestRailScrollbarOnAPeek` ("line 0 is \"peek7\", want peek-first") | **caught** |
+| The thumb computed from the attached offset while the rows keep the peek's (`sidebarScrollThumb` fed `sidebarWindowSection(m.SidebarScrollT, ...)` for a peeked terminals section) | mutant of this branch | `TestRailScrollbarOnAPeek` ("the thumb is \"thumb on lines 3 to 5 of 6, +N on the last line true\" beside the list's first rows, want \"top\"") | **caught** |
+| The thumb skipped while the terminals section shows a peek | mutant of this branch | `TestRailScrollbarOnAPeek` ("the thumb is \"no thumb\" beside the list's first rows, want \"top\"") | **caught** |
+| No peek hold: the scrollbar change alone | `f1262902` | `TestRailScrollbarOnAPeek` ("line 0 is \"peek7\", want peek-first") and `TestRailPeekHoldsTheTerminalsHeight` ("hovering pk-few moved pk-main from row 7 to row 5") | **caught** |
+| The positive half | this branch | none | **guard** |

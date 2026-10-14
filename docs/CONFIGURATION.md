@@ -1087,7 +1087,7 @@ A section with more rows than the lines it is given shows as many as fit. It end
 
 While rows are out of view, the section draws a scroll thumb in the rail's edge rule, beside its rows and not its heading. The thumb takes the rule's own cell, so the rows keep their full width. Its size is the share of the rows on screen. It reaches the first line only at the top of the section, and the last line only at the bottom, where there is no `+N` row. A section that fits draws the plain rule.
 
-A hover peek of another session's panes is windowed like the terminals section it is drawn in. It gets a thumb on the same terms. There is no thumb on the collapsed strip or on a section of one line.
+A hover peek of another session's panes keeps the terminals section's resting height and shows the peeked list from its top, ending in `+N` when the list is longer. It gets a thumb on the same terms, at the top of the column, and leaves the attached session's scroll where it was. There is no thumb on the collapsed strip or on a section of one line.
 
 The glyph is the active glyph set's `scrollbar_thumb` role. It is `┃` by default, `#` under `--ascii-only`, and `█` in the `heavy` set. Where the thumb would be the same glyph as the rule, as with a heavy border style, it is drawn as `█` (`#` under `--ascii-only`). `appearance.scrollbar.*` and `appearance.hide_scrollbar` style the pane scroll bar only, not the rail's thumb.
 

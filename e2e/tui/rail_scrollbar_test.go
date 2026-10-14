@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -191,10 +192,27 @@ func TestRailScrollbarFollowsTheWheel(t *testing.T) {
 }
 
 // TestRailScrollbarOnAPeek: hovering another session's row shows its panes in
-// the terminals section, windowed at the offset the attached session's list
-// is scrolled to. With the attached list at its bottom and the peeked one as
-// long, the peek's first rows are out of view above, and only the thumb says
-// so: there is no "+N" below. The thumb is at the bottom of the column.
+// the terminals section, held at the section's resting height and windowed
+// from the top of the peeked list on an offset of its own. With the attached
+// list wheeled to its bottom first, a peek that inherited that offset would
+// show the peeked list's last rows. The peek must show its first rows, end in
+// "+N" for exactly the rows it cannot show, and put the thumb at the top of
+// the column: rows, "+N" and thumb all describe one window, frame after
+// frame. Leaving the rail brings the attached list back at the bottom where
+// it was left, so the peek neither inherited nor clamped that offset.
+//
+// How it could pass wrongly, and what stops it:
+//   - rows and thumb from different offsets (the rows from the peek's own,
+//     the thumb from the attached one): the thumb must be at the top while
+//     the rows are the list's first.
+//   - a peek windowed at the attached offset with a thumb to match: the rows
+//     must be peek-first, peek0, ... in order, and the "+N" must count the
+//     rest of the fourteen.
+//   - one good frame among flipping ones: the window is re-read on several
+//     frames after it first appears.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail scrollbar on a held
+// peek").
 func TestRailScrollbarOnAPeek(t *testing.T) {
 	term, base := railClient(t, "bar", "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\nsections = \"sessions,terminals:20\"\n",
 		startOpts{cols: 120, rows: 40})
@@ -205,10 +223,13 @@ func TestRailScrollbarOnAPeek(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "other", "--name", "peek-first"); err != nil {
 		t.Fatalf("name the other session's first pane: %v: %s", err, out)
 	}
+	peeked := []string{"peek-first"}
 	for i := range 13 {
-		if out, err := tuiosCLI(t, base, "new-window", "-s", "other", "peek"+strconv.Itoa(i), "--no-focus"); err != nil {
+		name := "peek" + strconv.Itoa(i)
+		if out, err := tuiosCLI(t, base, "new-window", "-s", "other", name, "--no-focus"); err != nil {
 			t.Fatalf("open the other session's pane %d: %v: %s", i, err, out)
 		}
+		peeked = append(peeked, name)
 	}
 	b, dir := leftRailBar("┃"), artifactDir(t)
 	s := waitBarState(t, term, b, "terminals", "pane", "top", dir, "top")
@@ -229,7 +250,41 @@ func TestRailScrollbarOnAPeek(t *testing.T) {
 		t.Fatalf("the sessions section never listed the other session:\n%s", term.Snapshot())
 	}
 	moveMouse(t, term, b.x0+5, row)
-	waitBarState(t, term, b, "terminals", "peek", "bottom", dir, "peek")
+	// window says what is wrong with the peek's window, or "" when its rows
+	// are the peeked list's first, its last line owns up to exactly the rest,
+	// and its thumb is at the top.
+	window := func(s tuitest.Screen) string {
+		top, cells := b.cells(s, "terminals", "peek")
+		if len(cells) < 2 {
+			return fmt.Sprintf("no peek window (%d lines)", len(cells))
+		}
+		shown := len(cells) - 1
+		for i := range shown {
+			if !slices.Contains(strings.Fields(b.line(s, top+i)), peeked[i]) {
+				return fmt.Sprintf("line %d is %q, want %s", i, b.line(s, top+i), peeked[i])
+			}
+		}
+		if last, want := b.line(s, top+shown), "+"+strconv.Itoa(len(peeked)-shown); !slices.Contains(strings.Fields(last), want) {
+			return fmt.Sprintf("the last line is %q, want %s", last, want)
+		}
+		if st := b.state(s, "terminals", "peek"); st != "top" {
+			return fmt.Sprintf("the thumb is %q beside the list's first rows, want \"top\"", st)
+		}
+		return ""
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return window(s) == "" }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the peek's window: %s: %v\n%s", window(term.Screen()), err, term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "peek")
+	for range 10 {
+		time.Sleep(100 * time.Millisecond)
+		if why := window(term.Screen()); why != "" {
+			t.Fatalf("ASSERTION: the peek's window changed on a later frame: %s\n%s", why, term.Snapshot())
+		}
+	}
+
+	moveMouse(t, term, 80, 20)
+	waitBarState(t, term, b, "terminals", "pane", "bottom", dir, "after-peek")
 	alive(t, term, "after peeking a scrolled terminals section")
 }
 

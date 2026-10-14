@@ -1747,8 +1747,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// The scroll thumb of every section with rows out of view, drawn in the
 	// edge rule's own cell beside the section's rows. It takes no column from
 	// the rows, and it cannot read as a second border, since it is the border.
-	// A section that fits draws the plain rule. A peek is windowed like the
-	// section it is drawn in, so it gets a thumb too. A section with rows to
+	// A section that fits draws the plain rule. A peek gets a thumb too, from
+	// the start its own offset windowed above, the one its rows and its "+N"
+	// were cut by, never the attached session's. A section with rows to
 	// hide has one-line rows (see the tall test above), so capRows is its
 	// lines.
 	var thumb string
