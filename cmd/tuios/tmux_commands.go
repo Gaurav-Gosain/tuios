@@ -251,6 +251,10 @@ fails and is recorded in the shim log.`,
   tuios tmux -C attach-session -t work`,
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args, err := applyLeadingServerFlag(args)
+			if err != nil {
+				return err
+			}
 			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 				return cmd.Help()
 			}

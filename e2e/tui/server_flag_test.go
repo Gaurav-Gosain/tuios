@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +154,15 @@ func TestNamedServersAreIsolated(t *testing.T) {
 	_ = json.Unmarshal([]byte(out), &envRows)
 	if !slices.Equal(rowNames(envRows), []string{"s-foo"}) {
 		t.Errorf("ASSERTION: TUIOS_SERVER=foo ls listed %v, want s-foo:\n%s", rowNames(envRows), out)
+	}
+
+	// The tmux front takes no flags of its own, so cobra hands it the root's:
+	// --server, in either form, must still choose the daemon.
+	for _, args := range [][]string{{"--server", "foo"}, {"--server=foo"}} {
+		out, err = tuiosCLIInDir(t, base, workDirIn(t, base), nil, append(args, "tmux", "list-sessions")...)
+		if err != nil || !strings.Contains(out, "s-foo") || strings.Contains(out, "s-def") {
+			t.Errorf("ASSERTION: tuios %s tmux list-sessions did not list only foo's session (err %v):\n%s", strings.Join(args, " "), err, out)
+		}
 	}
 
 	// The plain listing names a named server and says nothing for the default.
@@ -323,5 +333,62 @@ func TestServerNamesAreChecked(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(servers, "ok_name-1")); err != nil {
 		t.Errorf("ASSERTION: a plain name did not get its socket folder: %v", err)
+	}
+}
+
+// TestANamedServerOverSSHReachesTheSameDaemon is the /run/user step for a
+// named server. A command over ssh, with no XDG_RUNTIME_DIR, reaches the
+// named server the desktop started, in /run/user/<uid>/tuios/servers/<name>.
+// It never takes a daemon in /tmp/tuios-<uid> for it: no older tuios started
+// a named server, so the /tmp fallback is the default server's alone.
+//
+// The ways this can fail, written down first:
+//   - the named folder is built on the /tmp folder rather than on the one
+//     the /run/user step found, so ssh starts a second foo;
+//   - the /tmp fallback looks at the default server's folder for a named
+//     server, so ssh foo lands on a /tmp daemon of another server;
+//   - the fallback takes a named server's daemon in /tmp, so ssh bar joins
+//     a bar no current tuios would start there.
+func TestANamedServerOverSSHReachesTheSameDaemon(t *testing.T) {
+	m := newOneMachine(t)
+	t.Cleanup(func() {
+		for _, env := range [][]string{m.desktopEnv(), m.oldLinkEnv()} {
+			for _, name := range []string{"foo", "bar"} {
+				_, _ = m.cli(t, env, "--server", name, "kill-server")
+			}
+		}
+	})
+	uid := strconv.Itoa(os.Getuid())
+
+	m.mustCLI(t, m.desktopEnv(), "--server", "foo", "new", "fdesk", "--detach")
+	if out, _ := m.cli(t, m.sshEnv(), "--server", "foo", "ls"); !strings.Contains(out, "fdesk") {
+		t.Errorf("ASSERTION: without XDG_RUNTIME_DIR, ls --server foo does not list the desktop's foo session:\n%s", out)
+	}
+	m.mustCLI(t, m.sshEnv(), "--server", "foo", "new", "fssh", "--detach")
+	if out, _ := m.cli(t, m.desktopEnv(), "--server", "foo", "ls"); !strings.Contains(out, "fssh") {
+		t.Errorf("ASSERTION: the foo session made over ssh is not on the desktop's foo daemon:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(m.sys, "tuios", "servers", "foo", "tuios.sock")); err != nil {
+		t.Errorf("ASSERTION: foo's socket is not in the runtime folder: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(m.tmp, "tuios-"+uid, "servers", "foo", "tuios.sock")); err == nil {
+		t.Errorf("ASSERTION: a second foo daemon started in /tmp")
+	}
+
+	// A default daemon in /tmp, as an older tuios left one, is not foo's.
+	m.mustCLI(t, m.oldLinkEnv(), "new", "old", "--detach")
+	if out, _ := m.cli(t, m.sshEnv(), "--server", "foo", "ls"); strings.Contains(out, "old") {
+		t.Errorf("ASSERTION: ls --server foo over ssh listed the default /tmp daemon's session:\n%s", out)
+	}
+
+	// A named daemon in /tmp is not joined either: ssh starts bar in the
+	// runtime folder.
+	m.mustCLI(t, m.oldLinkEnv(), "--server", "bar", "new", "oldbar", "--detach")
+	m.mustCLI(t, m.sshEnv(), "--server", "bar", "new", "sshbar", "--detach")
+	if out, _ := m.cli(t, m.sshEnv(), "--server", "bar", "ls"); strings.Contains(out, "oldbar") || !strings.Contains(out, "sshbar") {
+		t.Errorf("ASSERTION: ls --server bar over ssh should list only sshbar:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(m.sys, "tuios", "servers", "bar", "tuios.sock")); err != nil {
+		t.Errorf("ASSERTION: bar's ssh daemon is not in the runtime folder: %v", err)
 	}
 }

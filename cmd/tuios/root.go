@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -120,4 +121,26 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.Flags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 
 	return rootCmd
+}
+
+// applyLeadingServerFlag applies a --server NAME or --server=NAME that leads
+// args, and returns the args after it. A command with DisableFlagParsing (the
+// tmux and herdr fronts) is handed the root's flags in its args, so cobra
+// never applies them, and the front would read --server as its own option.
+func applyLeadingServerFlag(args []string) ([]string, error) {
+	for len(args) > 0 {
+		var name string
+		switch {
+		case args[0] == "--server" && len(args) > 1:
+			name, args = args[1], args[2:]
+		case strings.HasPrefix(args[0], "--server="):
+			name, args = strings.TrimPrefix(args[0], "--server="), args[1:]
+		default:
+			return args, nil
+		}
+		if err := serverscope.Apply(name); err != nil {
+			return nil, err
+		}
+	}
+	return args, nil
 }

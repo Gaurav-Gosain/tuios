@@ -540,11 +540,15 @@ func (d *Daemon) linkPrivateDirs() linkPrivate {
 	if d == nil || d.manager == nil {
 		return linkPrivate{}
 	}
-	sp := d.manager.SocketPath()
-	if sp == "" {
+	return linkPrivateFor(d.manager.SocketPath())
+}
+
+// linkPrivateFor is the linkPrivate of a daemon listening on socketPath.
+func linkPrivateFor(socketPath string) linkPrivate {
+	if socketPath == "" {
 		return linkPrivate{}
 	}
-	sock := realPath(filepath.Clean(filepath.Dir(sp)))
+	sock := realPath(filepath.Clean(filepath.Dir(socketPath)))
 	lp := linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
 	// A named server's socket folder is <default's>/servers/<name>. The
 	// default's folder holds every server's, so it is the one denied, and a
