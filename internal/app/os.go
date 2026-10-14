@@ -682,6 +682,9 @@ type OS struct {
 	// changes or is cleared, which cancels the delay armed for the last one.
 	dropZoneShown bool
 	dropZoneGen   uint64
+	// dropLook is the preview's colours and its memo of washed text colours,
+	// kept across a drag's frames. See drop_zone_render.go.
+	dropLook dropLook
 	// dropLayout is the map the landing rectangle of an edge drop is laid out
 	// into, kept so that working one out does not allocate a map each time.
 	dropLayout map[int]layout.Rect

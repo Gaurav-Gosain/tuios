@@ -168,7 +168,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.drop_preview", Type: OptionString, Section: "appearance",
-		Description: "What a BSP drag shows where the pane would land: a tinted zone with its outline, the outline only, or nothing",
+		Description: "What a BSP drag shows where the pane would land: a frame with a tint inside, the frame only, or nothing",
 		Accepted:    DropPreviewModes, Default: DropPreviewFill,
 	},
 	{

@@ -764,11 +764,11 @@ press `Ctrl+B L Enter`.
 
 ## Drop preview
 
-While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). Two options shape that preview:
+While you drag a tiled pane in BSP, tuios shows where the pane would land if you let go. See [LAYOUT_MODES.md](LAYOUT_MODES.md). The preview is a frame in the accent colour, drawn with the same border characters as the panes. With `fill`, the area inside the frame gets one tint, and the text under it fades into that tint. On a 16-colour terminal the frame is reverse video and the area inside stays as it is. Two options shape that preview:
 
 | Option | What it does | Values | Default |
 |---|---|---|---|
-| `appearance.drop_preview` | What the preview draws. `fill` tints the landing rectangle and outlines it, `outline` draws only the outline, and `off` draws nothing | `fill`, `outline`, `off` | `fill` |
+| `appearance.drop_preview` | What the preview draws. `fill` draws the frame and tints the area inside it, `outline` draws only the frame, and `off` draws nothing | `fill`, `outline`, `off` | `fill` |
 | `appearance.drop_preview_delay` | How long the pointer stays on one drop zone before its preview shows. A zone you leave before the delay is never drawn, so carrying a pane across the screen does not flash a zone over every pane on the way | a duration such as `120ms`, or `0` to show it at once | `120ms` |
 
 ```toml
