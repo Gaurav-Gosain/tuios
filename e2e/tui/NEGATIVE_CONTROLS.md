@@ -5034,3 +5034,17 @@ mirrors a session's layout uses both.
 | This branch | the change | both pass: left puts the new pane at x=0 and the old one at x=60; up puts it at y=0 over y=19; one `layout-changed` for workspace 1 | **guard** |
 | `SplitToward` maps left and up to right and down | mutant | `TestSplitWindowTakesTheNamedSide` fails: the new pane is at x=60 and at y=19 | **caught** |
 | `layoutChanges` call cut from `diffLifecycle` | mutant | `TestLayoutChangedFollowsASplit` fails: no `layout-changed` within 10s on a live subscription | **caught** |
+### BSP drop preview look
+
+Run on 2026-10-14 on Linux. The preview's frame is the panes' border glyphs, and the fill washes the text under it into one tint. Each control cuts one line of `applyDropZone` or `washDropCell` in `internal/app/drop_zone_render.go`, and runs `TestDropPreviewFillWashesTheZone`, `TestDropPreviewOutlineDrawsOnlyTheFrame` and the `left` and `sibling-left` rows of `TestADropOnAPaneEdgeSplitsIt` against the cut binary. The fixed build passes the whole `Drop|EdgeZones` set.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The `washDropCell` call, so a filled zone draws only its frame | `TestDropPreviewFillWashesTheZone`, `TestADropOnAPaneEdgeSplitsIt/left` and `/sibling-left` ("the inside of the landing rectangle ... is on the terminal's own ground mid-drag: no tint"); the outline case passes, which is its positive half | **caught** |
+| The `st.Fg` line in `washDropCell`, so the zone is tinted and every cell keeps its text colour (the look this change replaces) | The same three ("cell (1,1) "r" inside the landing rectangle ... kept its text colour ... the wash missed it") | **caught** |
+| `row.Set(x, &ring)`, replaced by the old solid ground in the accent | All four ("outline cell (0,0) ... has ground {R:145 G:141 B:255}, want the tint"; the outline case: "is " " ..., want the border glyph "─"") | **caught** |
+| The top-left corner glyph, drawn as the top edge | All four ("outline cell (0,0) ... is "─" ..., want the border glyph "╭"") | **caught** |
+| `AttrReverse` in the attributes the wash drops | `TestDropPreviewFillWashesTheZone` ("has ground ... (reverse true) mid-drag"); the plain-shell rows pass, since their panes hold no reverse cell | **caught** |
+| The tint on the frame's cells when the zone is filled | `TestDropPreviewFillWashesTheZone`, `TestADropOnAPaneEdgeSplitsIt/left` and `/sibling-left` ("outline cell (0,0) ... has ground {Kind:0 ...}, want the tint"); the outline case passes | **caught** |
+
+The 16-colour reverse frame is unchanged by this work and keeps its row in the table above (`TestTheDropZoneShowsAt16Colours`). The edge-zone guard now splits at the tree's own ratio; no test here makes a tree whose new splits start away from 0.5, so that change has no control.
