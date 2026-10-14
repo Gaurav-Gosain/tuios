@@ -65,6 +65,14 @@ PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
     ./internal/app/ ./internal/input/ ./cmd/tuios/
 ```
 
+### The justfile
+
+The `justfile` at the root wraps these commands for local work. `just` lists
+the recipes. They build into `.dev/`, run tests under `nice` and `taskset`,
+and run throwaway daemons under a scratch directory. Only `install`,
+`install-ghostty`, `deploy`, `deploy-hosts` and `restart` touch the live
+daemon. `just deploy` runs `tuios hosts sync --dev --local --restart --yes`.
+
 ### Browser build (Learn tuios)
 
 `cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at

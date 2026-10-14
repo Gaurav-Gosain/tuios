@@ -39,3 +39,6 @@ zz_*_test.go
 .wasm-build/
 /learn-web/
 .zig-cache/
+
+# Build outputs and benchmark files of the justfile recipes.
+/.dev/
