@@ -2578,6 +2578,15 @@ bytes (Go 1.26.9), 8,958 bytes under the linux/amd64 budget. With #680 on top
 the build measured 35,463,330 and 33,397,362, 3,330 bytes over that budget.
 The new budgets leave 96,670 and 102,638 bytes of room above that build.
 
+The session-backed rail viewer in PR #626 raises linux/amd64 to 35,580,000
+and keeps darwin/arm64 at 33,500,000, the budgets requested in review. The
+darwin/arm64 raise from 33,450,000 already landed with `--server NAME`.
+Rebased on main at 504dfca2, release-style Go 1.26.9 builds measured
+35,545,250 and 33,481,314 bytes, leaving 34,750 and 18,686 bytes of room.
+The viewer subscribes to another daemon session, crops its existing PTY grid,
+and routes input and lifecycle events without taking ownership of the shared
+session's size. It adds no dependency.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
