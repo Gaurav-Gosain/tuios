@@ -109,8 +109,10 @@ const (
 	// sidebarRowRepo is a repository's group header in the sessions section,
 	// over the worktree sessions of that repository. Activating it folds the
 	// group shut or opens it again. It carries the repository name in
-	// SessionID, which is what the folded set is keyed by. See
-	// sidebar_worktrees.go.
+	// SessionID, which is what the folded set is keyed by, and the space it
+	// is drawn in in WindowID: a repository whose sessions are in several
+	// spaces has a header in each, and the cursor tells them apart by that.
+	// See sidebar_worktrees.go.
 	sidebarRowRepo
 	// sidebarRowHost is a machine's group header in the sessions section, over
 	// that machine's sessions. Activating it folds the group shut or opens it
@@ -1895,8 +1897,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if s.Kind == sessiontree.KindRepo {
 				// A repository's group header. It is a nav row like any other,
 				// and activating it folds the group.
-				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
-				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
+				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, s.Space))
+				recordHit(sidebarRowRepo, s.ID, s.Space, -1, 1)
 				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
@@ -2475,7 +2477,7 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions, spaces []session
 		}
 	case sidebarRowRepo:
 		for i, s := range sessions {
-			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID {
+			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID && s.Space == target.WindowID {
 				return sidebarSectionSessions, i, true
 			}
 		}

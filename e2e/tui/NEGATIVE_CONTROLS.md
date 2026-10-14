@@ -4954,3 +4954,11 @@ Run on 2026-10-14 on macOS. The test is `TestAGlobalSessionIsInNoSpace` in `spac
 What the refusal prevents was checked on the build before these fixes, with the test's refusal and cap steps taken out: `kill-space --force s` killed the global session filed under `s` along with `e2e-a` ("after kill-space s the sessions are [], want [e2e-g]").
 
 Not covered: the read side, where `Session.Space` and the rail read a global session that holds a space as in none. With the refusal in place no live global session holds one: a global session is made with no space, and a restore makes it an ordinary session (it does not keep `global`), so the state cannot be reached from outside to test. It stays for state an older daemon wrote, and for `tuios ls` and the rail reading another daemon's listing. Also not covered: `kill-space` deleting by session ID, which matters only when a member is renamed between the lookup and the delete.
+
+### A repository split across spaces
+
+Run on 2026-10-14 on macOS. The test is `TestSpaceRailCursorPassesASplitRepository` in `space_rail_cursor_test.go`. Two worktree sessions of one repository are made, one filed in space `s` and one left in none, so the rail draws the repository's header twice (the test checks it does). Entering the rail puts the cursor on `plain`; two `j`, with the rail left to settle after each, must reach the second header and then `feat/two`, and enter there must switch to it. The fixed build passes.
+
+| Control: what was cut | Test that fails | Verdict |
+| --- | --- | --- |
+| The build before these fixes (`c9af6aea`: the repository header's nav row carries no space, so both headers are one row to the cursor) | `TestSpaceRailCursorPassesASplitRepository` ("no client shows session repo-feat-two": the cursor fell back to the first header, the next `j` went to `feat/one`, and enter switched there) | **caught** |
