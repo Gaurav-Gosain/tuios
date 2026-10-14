@@ -651,7 +651,10 @@ func loadPairHostKey(path string) (pairHostKey, error) {
 			fingerprint: ssh.FingerprintSHA256(pub),
 		}, nil
 	}
-	return pairHostKey{}, errors.New("tuios found no ssh host key in /etc/ssh. Use --host-key")
+	return pairHostKey{}, errors.New("sshd has no host keys in /etc/ssh. sshd is probably not set up, or it never started. " +
+		"To make the host keys, run: sudo ssh-keygen -A. Then start sshd. " +
+		"--host-key must name a host key of sshd, such as /etc/ssh/ssh_host_ed25519_key.pub. " +
+		"Do not give it a user key such as ~/.ssh/id_ed25519.pub")
 }
 
 // pairTuiosPath is the tuios path for the forced command, written so the
