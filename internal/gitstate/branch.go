@@ -7,10 +7,26 @@ import (
 	"strings"
 )
 
-// headLimit bounds how much of HEAD Branch reads. It is one line, and a
-// directory that puts something else under that name is not a checkout worth
-// stalling on.
+// headLimit bounds how much of a ".git" file or HEAD is read. Each is one
+// line, and a directory that puts something else under those names is not a
+// checkout worth stalling on.
 const headLimit = 4096
+
+// readFirstLine is the first line of a small file, trimmed. It reads at most
+// headLimit bytes.
+func readFirstLine(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	data, err := io.ReadAll(io.LimitReader(f, headLimit))
+	if err != nil {
+		return "", err
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	return strings.TrimSpace(line), nil
+}
 
 // Branch is the branch checked out in the working tree that holds dir, empty
 // when dir is in none. A detached HEAD reads as its short hash, which is what
@@ -24,17 +40,10 @@ func Branch(dir string) string {
 	if !ok {
 		return ""
 	}
-	f, err := os.Open(filepath.Join(gitdir, "HEAD"))
+	line, err := readFirstLine(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
 		return ""
 	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
-	data, err := io.ReadAll(io.LimitReader(f, headLimit))
-	if err != nil {
-		return ""
-	}
-	line, _, _ := strings.Cut(string(data), "\n")
-	line = strings.TrimSpace(line)
 	if ref, ok := strings.CutPrefix(line, "ref:"); ok {
 		return strings.TrimPrefix(strings.TrimSpace(ref), "refs/heads/")
 	}

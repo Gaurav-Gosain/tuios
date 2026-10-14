@@ -184,3 +184,54 @@ func TestTheCountsAreNotRecomputedWhileNothingMoves(t *testing.T) {
 		t.Errorf("counting ran %d times after HEAD moved, want 2", got)
 	}
 }
+
+// TestASymlinkedDotGitIsTheTreeItSitsIn. A checkout inside another repository
+// whose ".git" is a symlink to a git directory kept elsewhere is its own tree.
+// Branch and Read once took the symlink for "no .git here", walked up, and
+// showed the outer repository's branch. A broken symlink is no tree at all,
+// and is not the outer repository either.
+func TestASymlinkedDotGitIsTheTreeItSitsIn(t *testing.T) {
+	Forget()
+	t.Cleanup(Forget)
+	root := t.TempDir()
+	writeHead := func(gitdir, branch string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(gitdir, "refs", "heads"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(gitdir, "HEAD"), []byte("ref: refs/heads/"+branch+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outer := filepath.Join(root, "outer")
+	writeHead(filepath.Join(outer, ".git"), "outer-branch")
+	inner := filepath.Join(outer, "inner")
+	elsewhere := filepath.Join(root, "store", "inner.git")
+	writeHead(elsewhere, "inner-branch")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(inner, ".git")); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if got := Branch(inner); got != "inner-branch" {
+		t.Errorf("Branch through a symlinked .git = %q, want inner-branch", got)
+	}
+	if st, ok := Read(inner); !ok || st.Branch != "inner-branch" {
+		t.Errorf("Read through a symlinked .git = %+v, %v, want inner-branch", st, ok)
+	}
+
+	broken := filepath.Join(outer, "broken")
+	if err := os.MkdirAll(broken, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing.git"), filepath.Join(broken, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if got := Branch(broken); got != "" {
+		t.Errorf("Branch through a broken .git symlink = %q, want none", got)
+	}
+	if st, ok := Read(broken); ok {
+		t.Errorf("Read through a broken .git symlink = %+v, want no tree", st)
+	}
+}
