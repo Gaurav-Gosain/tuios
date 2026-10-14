@@ -21,8 +21,10 @@ import (
 // The preview is drawn as the pane it becomes: a frame in the panes' own
 // border glyphs, in the accent. With appearance.drop_preview = "fill" the
 // inside is washed as well: one tinted ground, and every cell's text carried
-// toward it, so what is under the zone reads as behind it rather than poking
-// through it in its own colours. At 16 colours, where the tint is no colour at
+// most of the way to one muted ink, so what is under the zone reads as behind
+// it rather than poking through it in its own colours. Glyphs that are drawn as
+// solid shapes (powerline caps and arrows, block elements) are drawn in the
+// tint itself, since a shape in any ink reads as a coloured blob on the wash. At 16 colours, where the tint is no colour at
 // all, the frame is reverse video and the inside is left alone.
 func (m *OS) applyDropZone(canvas *frameCanvas, id string) {
 	held := m.LiveWindowDrag()
@@ -139,11 +141,12 @@ func dropRingGlyph(b *lipgloss.Border, rect image.Rectangle, x, y int) string {
 // kept on the OS and worked out again only when what they are made from
 // changes, so a drag's frames measure nothing and box no colour.
 type dropLook struct {
-	key [5]uint32
-	// tint is the ground of the filled zone. ring is the frame's ink, ringBg
+	key [6]uint32
+	// tint is the ground of the filled zone. ink is the muted text colour
+	// the wash carries every cell's text toward. ring is the frame's ink, ringBg
 	// its ground when the zone is not filled: the pane's painted ground, or
 	// nil for the terminal's own.
-	tint, ring, ringBg color.Color
+	tint, ink, ring, ringBg color.Color
 	// fg and bg stand in for a cell that names no colour of its own.
 	fg, bg color.Color
 	wash   [dropWashSize]dropWashEntry
@@ -161,10 +164,10 @@ const (
 	dropWashProbes = 4
 )
 
-// dropWashMix is how far a cell's text is carried toward the tint. Enough that
-// a prompt's segments and an ls listing's colours fall back to one family,
-// while the words keep enough of their own colour to be told apart.
-const dropWashMix = 0.6
+// dropWashMix is how far a cell's text is carried toward the muted ink. Far
+// enough that a prompt's segments, an icon and an ls listing's colours all read
+// as the one ink, with a trace of their hue left so the words stay apart.
+const dropWashMix = 0.85
 
 // dropZoneLook returns the preview's colours for this frame.
 func (m *OS) dropZoneLook() *dropLook {
@@ -182,12 +185,15 @@ func (m *OS) dropZoneLook() *dropLook {
 			fg = g.fg
 		}
 	}
-	key := [5]uint32{
+	key := [6]uint32{
 		1<<31 | packColor8(pal.AccentTint), packColor8(pal.Accent),
-		packColor8(fg), packColor8(bg), packColor8(ground),
+		packColor8(fg), packColor8(bg), packColor8(ground), packColor8(pal.FgMute),
 	}
 	if l := &m.dropLook; l.key != key || isNilColor(l.tint) {
 		*l = dropLook{key: key, tint: pal.AccentTint, fg: fg, bg: bg, ringBg: ground}
+		// The text under the wash is held to the mark floor, not the text
+		// floor: it is there to be recognised, not read.
+		l.ink = theme.ReadableAt(pal.FgMute, pal.AccentTint, theme.MarkFloor)
 		// The frame is a mark, held to the mark floor on the ground it is
 		// drawn on: the tint when the zone is filled, the pane's ground when
 		// it is not. One ink serves both, so it is measured on the harder.
@@ -199,7 +205,8 @@ func (m *OS) dropZoneLook() *dropLook {
 
 // washDropCell puts one cell inside the zone behind the preview: its ground
 // becomes the tint, whatever ground it had, and its text is carried toward the
-// tint and then held to the mark floor on it. The attributes that would bring
+// muted ink and held to the mark floor on the tint. A solid-shape glyph takes
+// the tint as its ink and vanishes into the wash. The attributes that would bring
 // the text forward again or hide it are dropped with the colours.
 func (m *OS) washDropCell(c *uv.Cell, look *dropLook) {
 	st := &c.Style
@@ -207,6 +214,12 @@ func (m *OS) washDropCell(c *uv.Cell, look *dropLook) {
 	// dimCell.
 	if vt.IsKittyPlaceholder(c.Content) {
 		st.Bg = look.tint
+		return
+	}
+	if solidGlyph(c.Content) {
+		st.Fg, st.Bg = look.tint, look.tint
+		st.UnderlineColor = nil
+		st.Attrs &^= uv.AttrReverse | uv.AttrFaint | uv.AttrBlink | uv.AttrRapidBlink | uv.AttrConceal
 		return
 	}
 	src := st.Fg
@@ -243,7 +256,25 @@ func (m *OS) dropWash(c color.Color, look *dropLook) color.Color {
 			break
 		}
 	}
-	out := theme.ReadableAt(overlay.MixColors(c, look.tint, dropWashMix), look.tint, theme.MarkFloor)
+	out := theme.ReadableAt(overlay.MixColors(c, look.ink, dropWashMix), look.tint, theme.MarkFloor)
 	look.wash[slot] = dropWashEntry{key: key, out: out}
 	return out
+}
+
+// solidGlyph reports whether a cell's glyph is drawn as a filled shape rather
+// than as a letter: the powerline separators and caps a prompt draws its
+// segments with (U+E0B0 to U+E0D7), and the block elements (U+2580 to
+// U+259F). Both are three bytes in UTF-8, and a check on the lead bytes keeps
+// the common case, a one-byte letter, to one comparison.
+func solidGlyph(s string) bool {
+	if len(s) < 3 || s[0] < 0xe2 {
+		return false
+	}
+	switch s[0] {
+	case 0xe2: // U+2580..U+259F is E2 96 80..E2 96 9F
+		return s[1] == 0x96 && s[2] >= 0x80 && s[2] <= 0x9f
+	case 0xee: // U+E0B0..U+E0D7 is EE 82 B0..EE 83 97
+		return (s[1] == 0x82 && s[2] >= 0xb0) || (s[1] == 0x83 && s[2] <= 0x97)
+	}
+	return false
 }
