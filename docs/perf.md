@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 35,672,226 | 35,570,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 33,564,050 | 33,565,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 35,672,226 | 35,460,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 33,564,050 | 33,450,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2565,6 +2565,11 @@ sorts (Go 1.26.9), the build measured 35,516,578 and 33,462,786 bytes, and the
 branch measured 35,405,986 and 33,347,266. `tuios --skill all` takes 1.4 ms
 longer to unpack: on an idle machine the median of 30 runs went from 3.81 ms
 to 5.23 ms.
+
+The budgets went down again to 35,460,000 (linux/amd64) and 33,450,000
+(darwin/arm64) after the skill archive. Each keeps the room it had before the
+cut, 54,014 and 102,734 bytes. The two cuts together took 440,000 and 350,000
+bytes off the budgets.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
