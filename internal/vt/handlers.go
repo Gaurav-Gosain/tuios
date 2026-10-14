@@ -3,9 +3,7 @@ package vt
 import (
 	"fmt"
 	"io"
-	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/progstatus"
 )
@@ -994,11 +992,8 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 		// Debug logging
 		debugLog := func(msg string) {
-			if debugInternal() {
-				if f, err := debuglog.Open(debuglog.Path); err == nil {
-					_, _ = fmt.Fprintf(f, "[%s] VT-XTWINOPS: %s\n", time.Now().Format("15:04:05.000"), msg)
-					_ = f.Close()
-				}
+			if l := debugLogger(); l != nil {
+				l.Printf("VT-XTWINOPS: %s", msg)
 			}
 			if e.logger != nil {
 				e.logger.Printf("XTWINOPS: %s", msg)
