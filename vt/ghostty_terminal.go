@@ -561,30 +561,35 @@ func (t *GhosttyTerminal) SetCellSize(width, height int) {
 	_ = t.term.Resize(clampU16(t.width), clampU16(t.height), uint32(width), uint32(height))
 }
 
+// Width implements [Terminal.Width].
 func (t *GhosttyTerminal) Width() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.width
 }
 
+// Height implements [Terminal.Height].
 func (t *GhosttyTerminal) Height() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.height
 }
 
+// SetCallbacks implements [Terminal.SetCallbacks].
 func (t *GhosttyTerminal) SetCallbacks(cb Callbacks) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cb = cb
 }
 
+// GetCallbacks implements [Terminal.GetCallbacks].
 func (t *GhosttyTerminal) GetCallbacks() Callbacks {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.cb
 }
 
+// SetScreenClearFunc implements [Terminal.SetScreenClearFunc].
 func (t *GhosttyTerminal) SetScreenClearFunc(f func()) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -731,18 +736,21 @@ func (t *GhosttyTerminal) RestoreModifyOtherKeys(level int) {
 	r.hasModifyOtherKeys = true
 }
 
+// KittyKeyboardStack implements [Terminal.KittyKeyboardStack].
 func (t *GhosttyTerminal) KittyKeyboardStack() []int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return append([]int(nil), t.kittyKbd.Stack()...)
 }
 
+// KittyKeyboardMainStack implements [Terminal.KittyKeyboardMainStack].
 func (t *GhosttyTerminal) KittyKeyboardMainStack() []int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return append([]int(nil), t.kittyKbd.MainStack()...)
 }
 
+// ApplicationCursorKeys implements [Terminal.ApplicationCursorKeys].
 func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -753,6 +761,7 @@ func (t *GhosttyTerminal) ApplicationCursorKeys() bool {
 	return v
 }
 
+// BracketedPasteEnabled implements [Terminal.BracketedPasteEnabled].
 func (t *GhosttyTerminal) BracketedPasteEnabled() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

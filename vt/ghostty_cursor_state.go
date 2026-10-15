@@ -106,6 +106,7 @@ func parsePenExtras(out []byte) (uv.Link, bool) {
 	return link, bytes.Contains(out, []byte("\x1b[1\"q"))
 }
 
+// CursorProtected implements [Terminal.CursorProtected].
 func (t *GhosttyTerminal) CursorProtected() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -114,6 +115,7 @@ func (t *GhosttyTerminal) CursorProtected() bool {
 	return protected
 }
 
+// RestoreCursorProtected implements [Terminal.RestoreCursorProtected].
 func (t *GhosttyTerminal) RestoreCursorProtected(on bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -133,6 +135,7 @@ func (t *GhosttyTerminal) ProtectedCells(main bool) []CellRun {
 	return t.bufs[t.active].protectedRuns()
 }
 
+// RestoreProtectedCells implements [Terminal.RestoreProtectedCells].
 func (t *GhosttyTerminal) RestoreProtectedCells(main bool, runs []CellRun) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -149,6 +152,7 @@ func (t *GhosttyTerminal) RestoreProtectedCells(main bool, runs []CellRun) {
 	r.prot[idx] = runs
 }
 
+// LastPrinted implements [Terminal.LastPrinted].
 func (t *GhosttyTerminal) LastPrinted() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -159,6 +163,7 @@ func (t *GhosttyTerminal) LastPrinted() string {
 	return string(t.scanner.lastPrint)
 }
 
+// RestoreLastPrinted implements [Terminal.RestoreLastPrinted].
 func (t *GhosttyTerminal) RestoreLastPrinted(cluster string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -166,6 +171,7 @@ func (t *GhosttyTerminal) RestoreLastPrinted(cluster string) {
 	r.lastPrinted, r.hasLastPrinted = cluster, true
 }
 
+// SavedCursor implements [Terminal.SavedCursor].
 func (t *GhosttyTerminal) SavedCursor(main bool) SavedCursor {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -176,6 +182,7 @@ func (t *GhosttyTerminal) SavedCursor(main bool) SavedCursor {
 	return t.savedCur[t.liveScreenLocked()]
 }
 
+// RestoreSavedCursor implements [Terminal.RestoreSavedCursor].
 func (t *GhosttyTerminal) RestoreSavedCursor(main bool, c SavedCursor) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

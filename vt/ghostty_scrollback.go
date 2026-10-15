@@ -67,6 +67,7 @@ func (t *GhosttyTerminal) ScrollbackLen() int {
 // ghosttyScrollCacheCap bounds the decoded history line cache.
 const ghosttyScrollCacheCap = 256
 
+// ScrollbackLine implements [Terminal.ScrollbackLine].
 func (t *GhosttyTerminal) ScrollbackLine(index int) uv.Line {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -255,6 +256,7 @@ func (t *GhosttyTerminal) SetScrollbackMaxLines(maxLines int) {
 	t.scrollbackMax = maxLines
 }
 
+// PushScrollbackLine implements [Terminal.PushScrollbackLine].
 func (t *GhosttyTerminal) PushScrollbackLine(line uv.Line) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

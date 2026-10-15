@@ -395,6 +395,9 @@ func parseKittyControlParams(control string, cmd *KittyCommand) {
 	}
 }
 
+// BuildKittyResponse returns a kitty graphics reply for imageID: OK when ok
+// is true, otherwise message, or ENOENT when message is empty. An imageID of
+// 0 leaves the i key out.
 func BuildKittyResponse(ok bool, imageID uint32, message string) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")

@@ -75,6 +75,7 @@ func (t *GhosttyTerminal) GetModes() map[int]bool {
 	return modes
 }
 
+// RestoreModes implements [Terminal.RestoreModes].
 func (t *GhosttyTerminal) RestoreModes(modes map[int]bool) {
 	if modes == nil {
 		return
@@ -90,6 +91,7 @@ func (t *GhosttyTerminal) RestoreModes(modes map[int]bool) {
 	}
 }
 
+// ScrollRegion implements [Terminal.ScrollRegion].
 func (t *GhosttyTerminal) ScrollRegion() uv.Rectangle {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -97,6 +99,7 @@ func (t *GhosttyTerminal) ScrollRegion() uv.Rectangle {
 	return t.scrollRegion.Intersect(uv.Rect(0, 0, t.width, t.height))
 }
 
+// RestoreScrollRegion implements [Terminal.RestoreScrollRegion].
 func (t *GhosttyTerminal) RestoreScrollRegion(r uv.Rectangle) {
 	if r.Empty() {
 		return
@@ -108,6 +111,7 @@ func (t *GhosttyTerminal) RestoreScrollRegion(r uv.Rectangle) {
 	rr.hasScrollRegion = true
 }
 
+// ResetScrollRegion implements [Terminal.ResetScrollRegion].
 func (t *GhosttyTerminal) ResetScrollRegion() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -116,6 +120,7 @@ func (t *GhosttyTerminal) ResetScrollRegion() {
 	rr.hasScrollRegion = true
 }
 
+// Charsets implements [Terminal.Charsets].
 func (t *GhosttyTerminal) Charsets() (ids [4]byte, gl, gr int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -123,6 +128,7 @@ func (t *GhosttyTerminal) Charsets() (ids [4]byte, gl, gr int) {
 	return t.charsetIDs, t.gl, t.gr
 }
 
+// RestoreCharsets implements [Terminal.RestoreCharsets].
 func (t *GhosttyTerminal) RestoreCharsets(ids [4]byte, gl, gr int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -132,12 +138,15 @@ func (t *GhosttyTerminal) RestoreCharsets(ids [4]byte, gl, gr int) {
 	r.hasCharsets = true
 }
 
+// ActiveScreenIsAlt implements [Terminal.ActiveScreenIsAlt].
+// On this backend it is the same as IsAltScreen.
 func (t *GhosttyTerminal) ActiveScreenIsAlt() bool {
 	// The library has no separate screen pointer to diverge from the mode
 	// bits; RestoreAltScreenMode synthesizes the mode change itself.
 	return t.IsAltScreen()
 }
 
+// RestoreAltScreenMode implements [Terminal.RestoreAltScreenMode].
 func (t *GhosttyTerminal) RestoreAltScreenMode(enabled bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -146,6 +155,7 @@ func (t *GhosttyTerminal) RestoreAltScreenMode(enabled bool) {
 	r.hasAltScreen = true
 }
 
+// RestoreCursorPosition implements [Terminal.RestoreCursorPosition].
 func (t *GhosttyTerminal) RestoreCursorPosition(x, y int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -166,6 +176,7 @@ func (t *GhosttyTerminal) CursorPendingWrap() bool {
 	return err == nil && pending
 }
 
+// RestoreCursorPendingWrap implements [Terminal.RestoreCursorPendingWrap].
 func (t *GhosttyTerminal) RestoreCursorPendingWrap(pending bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -173,6 +184,7 @@ func (t *GhosttyTerminal) RestoreCursorPendingWrap(pending bool) {
 	r.pendingWrap = pending
 }
 
+// RestoreCursorPen implements [Terminal.RestoreCursorPen].
 func (t *GhosttyTerminal) RestoreCursorPen(pen uv.Style, link uv.Link) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -207,6 +219,7 @@ func (t *GhosttyTerminal) RestoreCursorStyle(style CursorStyle, steady bool) {
 	t.cursorStyle, t.cursorSteady = style, steady
 }
 
+// RestoreKittyKeyboardState implements [Terminal.RestoreKittyKeyboardState].
 func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
 	if len(stack) == 0 {
 		return
@@ -217,6 +230,7 @@ func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
 	r.kittyKbdStack = append([]int(nil), stack...)
 }
 
+// RestoreKittyKeyboardMainStack implements [Terminal.RestoreKittyKeyboardMainStack].
 func (t *GhosttyTerminal) RestoreKittyKeyboardMainStack(stack []int) {
 	if len(stack) == 0 {
 		return
@@ -285,6 +299,7 @@ func (t *GhosttyTerminal) markAllDirtyLocked() {
 	_ = t.rs.SetDirty(gh.RenderStateDirtyFull)
 }
 
+// PaletteColor implements [Terminal.PaletteColor].
 func (t *GhosttyTerminal) PaletteColor(i int) color.Color {
 	if i < 0 || i > 15 {
 		return nil
@@ -297,6 +312,7 @@ func (t *GhosttyTerminal) PaletteColor(i int) color.Color {
 	return ansi.BasicColor(uint8(i)) //nolint:gosec // bounded above
 }
 
+// IndexedColor implements [Terminal.IndexedColor].
 func (t *GhosttyTerminal) IndexedColor(i int) color.Color {
 	if i < 0 || i > 255 {
 		return nil
@@ -497,6 +513,7 @@ func (t *GhosttyTerminal) EncodeMouseEventAt(m Mouse, at MousePixel) string {
 	return r.encode()
 }
 
+// SetKittyPassthroughFunc implements [Terminal.SetKittyPassthroughFunc].
 func (t *GhosttyTerminal) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -555,6 +572,7 @@ func (t *GhosttyTerminal) SetKittyImageIDTranslator(fn KittyImageIDTranslator) {
 	t.kittyImageIDTranslator = fn
 }
 
+// SetSixelPassthroughFunc implements [Terminal.SetSixelPassthroughFunc].
 func (t *GhosttyTerminal) SetSixelPassthroughFunc(fn SixelPassthroughFunc) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -574,15 +592,20 @@ func (t *GhosttyTerminal) SetSixelAdvertised(fn func() bool) {
 // not report where rows went.
 func (t *GhosttyTerminal) SetReflowFunc(func(remap func(absLine int) int)) {}
 
+// SetTextSizingFunc implements [Terminal.SetTextSizingFunc].
 func (t *GhosttyTerminal) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.textSizingFunc = fn
 }
 
+// KittyMainState implements [Terminal.KittyMainState].
 func (t *GhosttyTerminal) KittyMainState() *KittyState { return t.kittyMain }
-func (t *GhosttyTerminal) KittyAltState() *KittyState  { return t.kittyAlt }
 
+// KittyAltState implements [Terminal.KittyAltState].
+func (t *GhosttyTerminal) KittyAltState() *KittyState { return t.kittyAlt }
+
+// SemanticMarkers implements [Terminal.SemanticMarkers].
 func (t *GhosttyTerminal) SemanticMarkers() *SemanticMarkerList {
 	t.mu.Lock()
 	defer t.mu.Unlock()

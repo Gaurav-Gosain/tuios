@@ -4,8 +4,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// Screen represents a virtual terminal screen.
-type Screen struct {
+// screen represents a virtual terminal screen.
+type screen struct {
 	// cb is the callbacks struct to use.
 	cb *Callbacks
 	// The buffer of the screen.
@@ -23,7 +23,7 @@ type Screen struct {
 	// column cur.X only because the row is narrower than where it was:
 	// wideColX is the column it was at in the line. It holds while the
 	// cursor stays at wideColAt and nothing is written, so the next reflow
-	// puts the cursor back where it was. See Screen.cursorCol.
+	// puts the cursor back where it was. See screen.cursorCol.
 	wideCol   bool
 	wideColX  int
 	wideColAt uv.Position
@@ -31,16 +31,16 @@ type Screen struct {
 
 // cursorCol is the cursor's column in its line: cur.X, or the column past
 // the width a reflow could not show, while the cursor has not moved.
-func (s *Screen) cursorCol() int {
+func (s *screen) cursorCol() int {
 	if s.wideCol && s.cur.Position == s.wideColAt {
 		return s.wideColX
 	}
 	return s.cur.X
 }
 
-// NewScreen creates a new screen.
-func NewScreen(w, h int) *Screen {
-	s := Screen{}
+// newScreen creates a new screen.
+func newScreen(w, h int) *screen {
+	s := screen{}
 	s.scrollback = NewScrollback(0) // Use default size
 	s.buf = newGrid(w, h)
 	s.scroll = s.buf.Bounds()
@@ -49,8 +49,8 @@ func NewScreen(w, h int) *Screen {
 
 // newAltScreen creates the alternate screen: a 1x1 grid with no scrollback
 // ring. Emulator.altScreen grows it to the main screen's size on first use.
-func newAltScreen() *Screen {
-	s := Screen{}
+func newAltScreen() *screen {
+	s := screen{}
 	s.buf = newGrid(1, 1)
 	s.scroll = s.buf.Bounds()
 	return &s
@@ -59,7 +59,7 @@ func newAltScreen() *Screen {
 // Reset resets the screen.
 // It clears the screen, sets the cursor to the top left corner, reset the
 // cursor styles, and resets the scroll region.
-func (s *Screen) Reset() {
+func (s *screen) Reset() {
 	s.buf.Clear()
 	s.cur = Cursor{}
 	s.saved = Cursor{}
@@ -68,17 +68,17 @@ func (s *Screen) Reset() {
 }
 
 // Bounds returns the bounds of the screen.
-func (s *Screen) Bounds() uv.Rectangle {
+func (s *screen) Bounds() uv.Rectangle {
 	return s.buf.Bounds()
 }
 
 // CellAt returns the cell at the given x, y position.
-func (s *Screen) CellAt(x int, y int) *uv.Cell {
+func (s *screen) CellAt(x int, y int) *uv.Cell {
 	return s.buf.CellAt(x, y)
 }
 
 // SetCell sets the cell at the given x, y position.
-func (s *Screen) SetCell(x, y int, c *uv.Cell) {
+func (s *screen) SetCell(x, y int, c *uv.Cell) {
 	s.wideCol = false
 	pre := s.buf.CellAt(x, y)
 	wasPaired := pre != nil && (pre.Width > 1 || (pre.Width == 0 && pre.Content == ""))
@@ -111,12 +111,12 @@ func (s *Screen) SetCell(x, y int, c *uv.Cell) {
 }
 
 // Height returns the height of the screen.
-func (s *Screen) Height() int {
+func (s *screen) Height() int {
 	return s.buf.Height()
 }
 
 // Resize resizes the screen.
-func (s *Screen) Resize(width int, height int) {
+func (s *screen) Resize(width int, height int) {
 	s.shrinkRows(height)
 	s.buf.Resize(width, height)
 	s.blankWideRunesCutByTheEdge()
@@ -159,7 +159,7 @@ func (s *Screen) Resize(width int, height int) {
 // at the top lost the status line to a pane that got shorter, and the main
 // screen under an alternate screen lost the shell prompt, since only the
 // active screen's cursor was ever kept in view.
-func (s *Screen) shrinkRows(height int) {
+func (s *screen) shrinkRows(height int) {
 	excess := s.buf.Height() - height
 	if excess <= 0 {
 		return
@@ -194,7 +194,7 @@ func (s *Screen) shrinkRows(height int) {
 
 // rowHoldsText reports whether row y has any cell that is not a plain blank.
 // A cell blanked in a colour counts as text: the guest painted it.
-func (s *Screen) rowHoldsText(y int) bool {
+func (s *screen) rowHoldsText(y int) bool {
 	if len(s.buf.rowTail(y)) > 0 {
 		return true
 	}
@@ -207,7 +207,7 @@ func (s *Screen) rowHoldsText(y int) bool {
 	return false
 }
 
-func (s *Screen) blankWideRunesCutByTheEdge() {
+func (s *screen) blankWideRunesCutByTheEdge() {
 	x := s.buf.Width() - 1
 	if x < 0 {
 		return
@@ -220,51 +220,51 @@ func (s *Screen) blankWideRunesCutByTheEdge() {
 }
 
 // Width returns the width of the screen.
-func (s *Screen) Width() int {
+func (s *screen) Width() int {
 	return s.buf.Width()
 }
 
 // Clear clears the screen with blank cells.
-func (s *Screen) Clear() {
+func (s *screen) Clear() {
 	s.ClearArea(s.Bounds())
 }
 
 // ClearArea clears the given area.
-func (s *Screen) ClearArea(area uv.Rectangle) {
+func (s *screen) ClearArea(area uv.Rectangle) {
 	s.buf.ClearArea(area)
 }
 
 // Fill fills the screen or part of it.
-func (s *Screen) Fill(c *uv.Cell) {
+func (s *screen) Fill(c *uv.Cell) {
 	s.FillArea(c, s.Bounds())
 }
 
 // FillArea fills the given area with the given cell.
-func (s *Screen) FillArea(c *uv.Cell, area uv.Rectangle) {
+func (s *screen) FillArea(c *uv.Cell, area uv.Rectangle) {
 	s.buf.FillArea(c, area)
 }
 
 // setHorizontalMargins sets the horizontal margins.
-func (s *Screen) setHorizontalMargins(left, right int) {
+func (s *screen) setHorizontalMargins(left, right int) {
 	s.scroll.Min.X = left
 	s.scroll.Max.X = right
 }
 
 // setVerticalMargins sets the vertical margins.
-func (s *Screen) setVerticalMargins(top, bottom int) {
+func (s *screen) setVerticalMargins(top, bottom int) {
 	s.scroll.Min.Y = top
 	s.scroll.Max.Y = bottom
 }
 
 // setCursorX sets the cursor X position. If margins is true, the cursor is
 // only set if it is within the scroll margins.
-func (s *Screen) setCursorX(x int, margins bool) {
+func (s *screen) setCursorX(x int, margins bool) {
 	s.setCursor(x, s.cur.Y, margins)
 }
 
 // setCursor sets the cursor position. If margins is true, the cursor is only
 // set if it is within the scroll margins. This follows how [ansi.CUP] works.
-func (s *Screen) setCursor(x, y int, margins bool) {
+func (s *screen) setCursor(x, y int, margins bool) {
 	old := s.cur.Position
 	w := max(1, s.buf.Width())
 	h := max(1, s.buf.Height())
@@ -292,7 +292,7 @@ func (s *Screen) setCursor(x, y int, margins bool) {
 // Otherwise, it is bounded by the screen bounds.
 // This follows how [ansi.CUU], [ansi.CUD], [ansi.CUF], [ansi.CUB], [ansi.CNL],
 // [ansi.CPL].
-func (s *Screen) moveCursor(dx, dy int) {
+func (s *screen) moveCursor(dx, dy int) {
 	scroll := s.scroll
 	old := s.cur.Position
 	if old.X < scroll.Min.X {
@@ -321,22 +321,22 @@ func (s *Screen) moveCursor(dx, dy int) {
 }
 
 // Cursor returns the cursor.
-func (s *Screen) Cursor() Cursor {
+func (s *screen) Cursor() Cursor {
 	return s.cur
 }
 
 // CursorPosition returns the cursor position.
-func (s *Screen) CursorPosition() (x, y int) {
+func (s *screen) CursorPosition() (x, y int) {
 	return s.cur.X, s.cur.Y
 }
 
 // ScrollRegion returns the scroll region.
-func (s *Screen) ScrollRegion() uv.Rectangle {
+func (s *screen) ScrollRegion() uv.Rectangle {
 	return s.scroll
 }
 
 // SaveCursor saves the cursor.
-func (s *Screen) SaveCursor() {
+func (s *screen) SaveCursor() {
 	s.saved = s.cur
 }
 
@@ -364,7 +364,7 @@ type savedExtras struct {
 // and the guest restores: that is what every full-screen program does across a
 // window resize, and without the clamp it comes back to a column the screen no
 // longer has. Everything downstream then reads a cursor that is off the grid.
-func (s *Screen) RestoreCursor() {
+func (s *screen) RestoreCursor() {
 	old := s.cur.Position
 	s.cur = s.saved
 	s.cur.X = clamp(s.cur.X, 0, max(s.buf.Width()-1, 0))
@@ -376,7 +376,7 @@ func (s *Screen) RestoreCursor() {
 }
 
 // setCursorHidden sets the cursor hidden.
-func (s *Screen) setCursorHidden(hidden bool) {
+func (s *screen) setCursorHidden(hidden bool) {
 	changed := s.cur.Hidden != hidden
 	s.cur.Hidden = hidden
 	if changed && s.cb.CursorVisibility != nil {
@@ -385,28 +385,28 @@ func (s *Screen) setCursorHidden(hidden bool) {
 }
 
 // cursorPen returns the cursor pen.
-func (s *Screen) cursorPen() uv.Style {
+func (s *screen) cursorPen() uv.Style {
 	return s.cur.Pen
 }
 
 // cursorLink returns the cursor link.
-func (s *Screen) cursorLink() uv.Link {
+func (s *screen) cursorLink() uv.Link {
 	return s.cur.Link
 }
 
 // ShowCursor shows the cursor.
-func (s *Screen) ShowCursor() {
+func (s *screen) ShowCursor() {
 	s.setCursorHidden(false)
 }
 
 // HideCursor hides the cursor.
-func (s *Screen) HideCursor() {
+func (s *screen) HideCursor() {
 	s.setCursorHidden(true)
 }
 
 // InsertCell inserts n blank characters at the cursor position pushing out
 // cells to the right and out of the screen.
-func (s *Screen) InsertCell(n int) {
+func (s *screen) InsertCell(n int) {
 	s.insertCellAt(s.cur.X, s.cur.Y, n)
 }
 
@@ -414,7 +414,7 @@ func (s *Screen) InsertCell(n int) {
 // needs it: a wrap can have moved the cell it is about to write away from where
 // the cursor still sits, and moving the cursor first would fire the position
 // callback for a step that is not a cursor movement.
-func (s *Screen) insertCellAt(x, y, n int) {
+func (s *screen) insertCellAt(x, y, n int) {
 	if n <= 0 {
 		return
 	}
@@ -444,7 +444,7 @@ func (s *Screen) insertCellAt(x, y, n int) {
 
 // DeleteCell deletes n cells at the cursor position moving cells to the left.
 // This has no effect if the cursor is outside the scroll region.
-func (s *Screen) DeleteCell(n int) {
+func (s *screen) DeleteCell(n int) {
 	if n <= 0 {
 		return
 	}
@@ -477,7 +477,7 @@ func (s *Screen) DeleteCell(n int) {
 // screen, which is the case every caller treats as a no-op, and also when the
 // row has never been written and the shift would only move blanks into
 // blanks.
-func (s *Screen) shiftBounds(x, y, n int) (uv.Line, int, bool) {
+func (s *screen) shiftBounds(x, y, n int) (uv.Line, int, bool) {
 	area := s.scroll
 	if n <= 0 || y < area.Min.Y || y >= area.Max.Y || y >= s.buf.Height() ||
 		x < area.Min.X || x >= area.Max.X || x >= s.buf.Width() {
@@ -543,7 +543,7 @@ func repairWide(line uv.Line) {
 // scroll region encompasses the full screen width and starts at the top.
 // This is equivalent to [ansi.SU] which moves the cursor to the top margin
 // and performs a [ansi.DL] operation.
-func (s *Screen) ScrollUp(n int) {
+func (s *screen) ScrollUp(n int) {
 	if n <= 0 {
 		return
 	}
@@ -598,7 +598,7 @@ func (s *Screen) ScrollUp(n int) {
 // A row that has never been written is nil in the grid. It is retained as a
 // blank line of the screen's width, and it stays nil at the bottom unless the
 // blank it has to be filled with carries a background colour.
-func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
+func (s *screen) rotateWholeScreenUp(n int, save bool) bool {
 	lines := s.buf.rows
 	height := len(lines)
 	area := s.scroll
@@ -640,7 +640,7 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 // ScrollDown scrolls the content down n lines within the given region. Lines
 // scrolled past the bottom margin are lost. This is equivalent to [ansi.SD]
 // which moves the cursor to top margin and performs a [ansi.IL] operation.
-func (s *Screen) ScrollDown(n int) {
+func (s *screen) ScrollDown(n int) {
 	x, y := s.CursorPosition()
 	s.setCursor(s.cur.X, 0, true)
 	s.InsertLine(n)
@@ -651,7 +651,7 @@ func (s *Screen) ScrollDown(n int) {
 // Only operates if cursor is within scroll region. Lines below cursor Y
 // are moved down, with those past bottom margin being discarded.
 // It returns true if the operation was successful.
-func (s *Screen) InsertLine(n int) bool {
+func (s *screen) InsertLine(n int) bool {
 	if n <= 0 {
 		return false
 	}
@@ -674,7 +674,7 @@ func (s *Screen) InsertLine(n int) bool {
 // Only operates if cursor is within scroll region. Lines below cursor Y
 // are moved up, with blank lines inserted at the bottom of scroll region.
 // It returns true if the operation was successful.
-func (s *Screen) DeleteLine(n int) bool {
+func (s *screen) DeleteLine(n int) bool {
 	if n <= 0 {
 		return false
 	}
@@ -704,7 +704,7 @@ func (s *Screen) DeleteLine(n int) bool {
 // continuation is a cell no renderer emits, which shifts the rest of the row
 // left. Blanking both halves is what the resize path already does to a rune
 // it cuts, and what ghostty does.
-func (s *Screen) blankWideRunesCutByMargins() {
+func (s *screen) blankWideRunesCutByMargins() {
 	w := s.buf.Width()
 	for _, x := range [2]int{s.scroll.Min.X, s.scroll.Max.X} {
 		if x <= 0 || x >= w {
@@ -735,7 +735,7 @@ func (s *Screen) blankWideRunesCutByMargins() {
 // withBlankPen runs fn with the pen background cleared, so any erase or scroll
 // it performs leaves default-background cells behind instead of inheriting the
 // guest's colour. For screen edits tuios synthesises rather than replays.
-func (s *Screen) withBlankPen(fn func()) {
+func (s *screen) withBlankPen(fn func()) {
 	bg := s.cur.Pen.Bg
 	s.cur.Pen.Bg = nil
 	defer func() { s.cur.Pen.Bg = bg }()
@@ -745,7 +745,7 @@ func (s *Screen) withBlankPen(fn func()) {
 // blankCell returns the cursor blank cell with the background color set to the
 // current pen background color. If the pen background color is nil, the return
 // value is nil.
-func (s *Screen) blankCell() *uv.Cell {
+func (s *screen) blankCell() *uv.Cell {
 	if s.cur.Pen.Bg == nil {
 		return nil
 	}
@@ -756,26 +756,26 @@ func (s *Screen) blankCell() *uv.Cell {
 }
 
 // Scrollback returns the scrollback buffer for this screen.
-func (s *Screen) Scrollback() *Scrollback {
+func (s *screen) Scrollback() *Scrollback {
 	return s.scrollback
 }
 
 // DisableScrollback drops this screen's scrollback ring, so lines scrolled off
 // the top are discarded instead of retained. Every other scrollback method here
 // already tolerates the nil, and ScrollUp checks it before pushing.
-func (s *Screen) DisableScrollback() {
+func (s *screen) DisableScrollback() {
 	s.scrollback = nil
 }
 
 // ClearScrollback clears all lines from the scrollback buffer.
-func (s *Screen) ClearScrollback() {
+func (s *screen) ClearScrollback() {
 	if s.scrollback != nil {
 		s.scrollback.Clear()
 	}
 }
 
 // ScrollbackLen returns the number of lines currently in the scrollback buffer.
-func (s *Screen) ScrollbackLen() int {
+func (s *screen) ScrollbackLen() int {
 	if s.scrollback == nil {
 		return 0
 	}
@@ -784,7 +784,7 @@ func (s *Screen) ScrollbackLen() int {
 
 // ScrollbackLine returns the line at the specified index in the scrollback buffer.
 // Index 0 is the oldest line. Returns nil if the index is out of bounds.
-func (s *Screen) ScrollbackLine(index int) uv.Line {
+func (s *screen) ScrollbackLine(index int) uv.Line {
 	if s.scrollback == nil {
 		return nil
 	}
@@ -792,7 +792,7 @@ func (s *Screen) ScrollbackLine(index int) uv.Line {
 }
 
 // SetScrollbackMaxLines sets the maximum number of lines for the scrollback buffer.
-func (s *Screen) SetScrollbackMaxLines(maxLines int) {
+func (s *screen) SetScrollbackMaxLines(maxLines int) {
 	if s.scrollback != nil {
 		s.scrollback.SetMaxLines(maxLines)
 	}

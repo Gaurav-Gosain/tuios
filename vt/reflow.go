@@ -413,7 +413,7 @@ func freezePrompt(rows []reflowRow, start, end int) {
 // new width, the cursor and the saved cursor do too, and the screen takes
 // nothing back from the history. A shell that prints short lines is that
 // case, and a window drag then costs what it did before reflow.
-func (s *Screen) fitsWithoutReflow(width, height int) bool {
+func (s *screen) fitsWithoutReflow(width, height int) bool {
 	h0 := s.buf.Height()
 	if s.cur.X >= width || s.saved.X >= width || s.buf.hasTail() || s.cursorCol() != s.cur.X {
 		return false
@@ -438,7 +438,7 @@ func (s *Screen) fitsWithoutReflow(width, height int) bool {
 }
 
 // rowExtent is the column after row y's last cell that is not a plain blank.
-func (s *Screen) rowExtent(y int) int {
+func (s *screen) rowExtent(y int) int {
 	row := s.buf.rows[y]
 	n := min(s.buf.ext[y], len(row))
 	for n > 0 && isBlankCell(&row[n-1]) {
@@ -491,7 +491,7 @@ const reflowHistoryCap = 4
 // their text. They are rewritten in place. The returned remap does the same
 // for a row's first column, before any line the pushes evicted from a full
 // ring is taken off.
-func (s *Screen) reflow(width, height int, bottom bool, phantom *bool, prompt int, marks []*reflowPoint, wantRemap bool) (remap func(abs int) int) {
+func (s *screen) reflow(width, height int, bottom bool, phantom *bool, prompt int, marks []*reflowPoint, wantRemap bool) (remap func(abs int) int) {
 	sb := s.scrollback
 	n0 := sb.Len()
 	h0 := s.buf.Height()

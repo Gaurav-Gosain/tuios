@@ -62,8 +62,8 @@ type MouseMotion = uv.MouseMotionEvent
 // (DEC 1016) is told this position. OK is false when the host reported the
 // pointer in cells only; the report then falls back to the cell centre.
 type MousePixel struct {
-	X, Y int
-	OK   bool
+	X, Y int  // pixel position
+	OK   bool // whether X and Y are known
 }
 
 // SendMouse sends a mouse event to the terminal. This can be any kind of mouse

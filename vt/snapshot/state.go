@@ -34,17 +34,19 @@ type State struct {
 	// restoring this state subscribes from Seq, so it receives what came after
 	// the snapshot and not what the snapshot already shows.
 	Seq     int64 `json:"seq,omitempty"`
-	Width   int   `json:"width"`
-	Height  int   `json:"height"`
-	CursorX int   `json:"cursor_x"`
-	CursorY int   `json:"cursor_y"`
+	Width   int   `json:"width"`    // screen width in cells
+	Height  int   `json:"height"`   // screen height in cells
+	CursorX int   `json:"cursor_x"` // cursor column, zero-based
+	CursorY int   `json:"cursor_y"` // cursor row, zero-based
 	// PendingWrap says the guest has just printed into the last column and
 	// the cursor waits there with a wrap pending, so the next character it
 	// prints starts the next row. Without it a snapshot taken at that moment
 	// restored a cursor that printed over the last cell, and everything the
 	// stream delivered after the snapshot landed one column out. Absent from
 	// an older daemon, which reads as no wrap pending, as before.
-	PendingWrap   bool        `json:"pending_wrap,omitempty"`
+	PendingWrap bool `json:"pending_wrap,omitempty"`
+	// ScrollbackLen is the true length of the history, which can be more than
+	// the Scrollback rows carried.
 	ScrollbackLen int         `json:"scrollback_len"`
 	IsAltScreen   bool        `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
 	Pen           *StyleState `json:"pen,omitempty"`           // Graphic rendition in force: what the guest's next output is painted with
@@ -66,11 +68,6 @@ type State struct {
 	CursorShape   int          `json:"cursor_shape,omitempty"`
 	Modes         map[int]bool `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
 	KittyKbdStack []int        `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
-	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
-	// XTMODKEYS, 0 to 2. ModifyOtherKeysKnown says the daemon reported it:
-	// a level of 0 is then the guest turning it off, which a client emulator
-	// that kept an older level has to take, and not an older daemon that
-	// says nothing.
 	// KittyKbdMainStack is the main screen's kitty keyboard flag stack,
 	// carried only while the alternate screen is active, when KittyKbdStack
 	// is the alternate screen's.
@@ -79,11 +76,18 @@ type State struct {
 	// (I=), and which ids hold an image. A client restoring this gives the
 	// same ids from here on, so an image the guest places by the id it was
 	// told is the same image on every client. Nil from an older daemon.
-	KittyImages          *vt.KittyGuestImagesState `json:"kitty_images,omitempty"`
-	ModifyOtherKeys      int                       `json:"modify_other_keys,omitempty"`
-	ModifyOtherKeysKnown bool                      `json:"modify_other_keys_known,omitempty"`
-	Screen               [][]CellState             `json:"screen"`
-	Scrollback           [][]CellState             `json:"scrollback,omitempty"`
+	KittyImages *vt.KittyGuestImagesState `json:"kitty_images,omitempty"`
+	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
+	// XTMODKEYS, 0 to 2. ModifyOtherKeysKnown says the daemon reported it:
+	// a level of 0 is then the guest turning it off, which a client emulator
+	// that kept an older level has to take, and not an older daemon that
+	// says nothing.
+	ModifyOtherKeys      int  `json:"modify_other_keys,omitempty"`
+	ModifyOtherKeysKnown bool `json:"modify_other_keys_known,omitempty"` // see ModifyOtherKeys
+	// Screen is the active screen, row by row.
+	Screen [][]CellState `json:"screen"`
+	// Scrollback is the newest history rows the snapshot carries, oldest first.
+	Scrollback [][]CellState `json:"scrollback,omitempty"`
 	// MainScreen is the normal screen, carried only while the alternate one is
 	// active. It is the shell's screen underneath a full-screen program, which
 	// quitting that program puts back on display. The alternate screen needs no
@@ -96,9 +100,9 @@ type State struct {
 	// packed cells index, and is never empty when the cells are packed. See
 	// snapshot_pack.go for the layout and why it exists.
 	Styles           []StyleState `json:"styles,omitempty"`
-	PackedScreen     []byte       `json:"packed_screen,omitempty"`
-	PackedScrollback []byte       `json:"packed_scrollback,omitempty"`
-	PackedMain       []byte       `json:"packed_main,omitempty"`
+	PackedScreen     []byte       `json:"packed_screen,omitempty"`     // Screen, packed
+	PackedScrollback []byte       `json:"packed_scrollback,omitempty"` // Scrollback, packed
+	PackedMain       []byte       `json:"packed_main,omitempty"`       // MainScreen, packed
 
 	// ScreenWraps and ScrollbackWraps are the soft-wrap flags, one bit per
 	// row (bit i of byte i/8, low bit first): the active screen's rows, and
@@ -109,7 +113,7 @@ type State struct {
 	// no row wrapped: the safe answer, since a wrongly joined row glues two
 	// lines into one link. See vt.Terminal.RestoreSoftWraps.
 	ScreenWraps     []byte `json:"screen_wraps,omitempty"`
-	ScrollbackWraps []byte `json:"scrollback_wraps,omitempty"`
+	ScrollbackWraps []byte `json:"scrollback_wraps,omitempty"` // soft-wrap flags of the Scrollback rows
 
 	// ScreenPads and ScrollbackPads are, in the same layout, the rows that
 	// wrapped a column early because a double-width character did not fit
@@ -119,7 +123,7 @@ type State struct {
 	// apart. A peer from before these fields sends neither, which reads as
 	// no padding: the line keeps a blank, and no text is lost.
 	ScreenPads     []byte `json:"screen_pads,omitempty"`
-	ScrollbackPads []byte `json:"scrollback_pads,omitempty"`
+	ScrollbackPads []byte `json:"scrollback_pads,omitempty"` // padding flags of the Scrollback rows
 
 	// PenProtected says DECSCA protects what the guest prints next from a
 	// selective erase (DECSED, DECSEL). Protected lists the cells of the
@@ -129,15 +133,15 @@ type State struct {
 	// time the guest sent a selective erase. A peer from before these fields
 	// sends none of them, which reads as nothing protected.
 	PenProtected  bool  `json:"pen_protected,omitempty"`
-	Protected     []int `json:"protected,omitempty"`
-	MainProtected []int `json:"main_protected,omitempty"`
+	Protected     []int `json:"protected,omitempty"`      // protected runs of the active screen
+	MainProtected []int `json:"main_protected,omitempty"` // protected runs of the main screen under the alternate one
 
 	// LastPrinted is the character REP (CSI b) repeats, as the guest sent
 	// it. LastPrintedKnown says the daemon reported it, so an empty one
 	// means nothing has been printed since a reset, and not an older daemon
 	// that says nothing.
 	LastPrinted      string `json:"last_printed,omitempty"`
-	LastPrintedKnown bool   `json:"last_printed_known,omitempty"`
+	LastPrintedKnown bool   `json:"last_printed_known,omitempty"` // see LastPrinted
 
 	// SavedCursor is what DECSC saved on the active screen, which DECRC puts
 	// back. MainSavedCursor is the main screen's, carried while the
@@ -145,7 +149,7 @@ type State struct {
 	// cursor there, and leaving puts it back. A peer from before these
 	// fields sends neither, and the client keeps the saved cursor it has.
 	SavedCursor     *SavedCursorState `json:"saved_cursor,omitempty"`
-	MainSavedCursor *SavedCursorState `json:"main_saved_cursor,omitempty"`
+	MainSavedCursor *SavedCursorState `json:"main_saved_cursor,omitempty"` // see SavedCursor
 
 	// TabStops is the tab stop table, one bit per column in the layout of
 	// ScreenWraps. It is never empty from a daemon that reports it, even
@@ -160,9 +164,9 @@ type State struct {
 	// gone. TitlesKnown says the daemon reported them, so an empty title is
 	// one the guest set and not an older daemon that says nothing.
 	Title       string            `json:"title,omitempty"`
-	IconName    string            `json:"icon_name,omitempty"`
-	TitleStack  []TitleEntryState `json:"title_stack,omitempty"`
-	TitlesKnown bool              `json:"titles_known,omitempty"`
+	IconName    string            `json:"icon_name,omitempty"`    // see Title
+	TitleStack  []TitleEntryState `json:"title_stack,omitempty"`  // see Title
+	TitlesKnown bool              `json:"titles_known,omitempty"` // see Title
 
 	// GuestColors is what the guest set with OSC 4, 10, 11 and 12. A palette
 	// entry decides how the guest's next SGR in that slot is painted, and
@@ -186,25 +190,25 @@ type State struct {
 // TitleEntryState is one entry of the title stack on the wire
 // (vt.TitleEntry).
 type TitleEntryState struct {
-	Title    string `json:"title,omitempty"`
-	Icon     string `json:"icon,omitempty"`
-	HasTitle bool   `json:"has_title,omitempty"`
-	HasIcon  bool   `json:"has_icon,omitempty"`
+	Title    string `json:"title,omitempty"`     // saved window title
+	Icon     string `json:"icon,omitempty"`      // saved icon name
+	HasTitle bool   `json:"has_title,omitempty"` // whether the entry holds a title
+	HasIcon  bool   `json:"has_icon,omitempty"`  // whether the entry holds an icon name
 }
 
 // GuestColorState is vt.GuestColors on the wire, each colour encoded by
 // colorToWire. Palette lists only the slots the guest set.
 type GuestColorState struct {
-	Palette []PaletteColorState `json:"palette,omitempty"`
-	Fg      string              `json:"fg,omitempty"`
-	Bg      string              `json:"bg,omitempty"`
-	Cursor  string              `json:"cursor,omitempty"`
+	Palette []PaletteColorState `json:"palette,omitempty"` // OSC 4 slots the guest set
+	Fg      string              `json:"fg,omitempty"`      // OSC 10 default foreground
+	Bg      string              `json:"bg,omitempty"`      // OSC 11 default background
+	Cursor  string              `json:"cursor,omitempty"`  // OSC 12 cursor colour
 }
 
 // PaletteColorState is one palette slot the guest set.
 type PaletteColorState struct {
-	Index int    `json:"i"`
-	Color string `json:"c"`
+	Index int    `json:"i"` // palette slot, 0 to 255
+	Color string `json:"c"` // colour, encoded by colorToWire
 }
 
 func titlesToWire(state *State, ti vt.Titles) {
@@ -277,12 +281,12 @@ func tabStopCols(bits []byte) []int {
 
 // SavedCursorState is a saved cursor on the wire (vt.SavedCursor).
 type SavedCursorState struct {
-	X           int         `json:"x,omitempty"`
-	Y           int         `json:"y,omitempty"`
-	Pen         *StyleState `json:"pen,omitempty"`
-	PendingWrap bool        `json:"pending_wrap,omitempty"`
-	Origin      bool        `json:"origin,omitempty"`
-	Protected   bool        `json:"protected,omitempty"`
+	X           int         `json:"x,omitempty"`            // cursor column, zero-based
+	Y           int         `json:"y,omitempty"`            // cursor row, zero-based
+	Pen         *StyleState `json:"pen,omitempty"`          // rendition and hyperlink
+	PendingWrap bool        `json:"pending_wrap,omitempty"` // wrap pending at the last column
+	Origin      bool        `json:"origin,omitempty"`       // origin mode (DECOM)
+	Protected   bool        `json:"protected,omitempty"`    // DECSCA protection
 	// Charsets is the character set selection DECSC saved, in the layout of
 	// State.Charsets.
 	Charsets []int `json:"charsets,omitempty"`

@@ -16,6 +16,7 @@ import (
 
 // Logger represents a logger interface.
 type Logger interface {
+	// Printf logs a message formatted as fmt.Printf does.
 	Printf(format string, v ...any)
 }
 
@@ -40,8 +41,8 @@ type Emulator struct {
 	paletteClaimed bool
 
 	// Both main and alt screens and a pointer to the currently active screen.
-	scrs [2]Screen
-	scr  *Screen
+	scrs [2]screen
+	scr  *screen
 	// altSized records that scrs[1] has been given the main screen's size.
 	// The alternate screen starts as a 1x1 grid and grows on the first switch
 	// to it, so a pane that never runs a full-screen program never pays for
@@ -249,7 +250,7 @@ const maxSequenceData = 4 << 20
 // NewEmulator creates a new virtual terminal emulator.
 func NewEmulator(w, h int) *Emulator {
 	t := new(Emulator)
-	t.scrs[0] = *NewScreen(w, h)
+	t.scrs[0] = *newScreen(w, h)
 	// The alternate screen keeps no scrollback, which every accessor on this
 	// type already assumes: Scrollback, ScrollbackLen, ScrollbackLine,
 	// ClearScrollback and SetScrollbackMaxLines all read scrs[0]. Its ring was
@@ -850,7 +851,7 @@ func (e *Emulator) ActiveScreenIsAlt() bool {
 // first time it is asked for. Every switch onto it goes through here, so the
 // grid exists whenever scr can point at it; a resize while the main screen is
 // active leaves a never-used alternate screen at 1x1.
-func (e *Emulator) altScreen() *Screen {
+func (e *Emulator) altScreen() *screen {
 	if !e.altSized {
 		e.scrs[1].Resize(e.scrs[0].buf.Width(), e.scrs[0].buf.Height())
 		e.altSized = true
@@ -1858,6 +1859,7 @@ func kittyRawAPC(data []byte) []byte {
 	return rawData
 }
 
+// KittyState returns the kitty image state of the active screen.
 func (e *Emulator) KittyState() *KittyState {
 	if e.IsAltScreen() {
 		return e.kittyAlt
@@ -1865,10 +1867,12 @@ func (e *Emulator) KittyState() *KittyState {
 	return e.kittyMain
 }
 
+// KittyMainState returns the kitty image state of the main screen.
 func (e *Emulator) KittyMainState() *KittyState {
 	return e.kittyMain
 }
 
+// KittyAltState returns the kitty image state of the alternate screen.
 func (e *Emulator) KittyAltState() *KittyState {
 	return e.kittyAlt
 }
@@ -2000,6 +2004,9 @@ func (e *Emulator) SetReflowFunc(fn func(remap func(absLine int) int)) {
 	e.onReflow = fn
 }
 
+// SetTextSizingFunc installs the function that takes each OSC 66 text
+// sizing sequence, rebuilt for the host terminal, with the cursor position,
+// the scale and the length of the text in characters.
 func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	e.textSizingFunc = fn
 }

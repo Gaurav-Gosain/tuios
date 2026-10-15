@@ -10,6 +10,7 @@ type KittyState struct {
 	clearCallback func()
 }
 
+// NewKittyState returns a KittyState with no clear callback.
 func NewKittyState() *KittyState {
 	return &KittyState{}
 }

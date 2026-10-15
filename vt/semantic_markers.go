@@ -21,11 +21,11 @@ const (
 
 // SemanticMarker represents a single OSC 133 marker captured from the terminal.
 type SemanticMarker struct {
-	Type         SemanticMarkerType
-	AbsLine      int    // scrollbackLen + cursorY at time of emission
-	Col          int    // cursor X (column) at time of emission
-	ExitCode     int    // only meaningful for 'D', -1 = unknown
-	CapturedText string // command text captured at C-marker time (before output)
+	Type         SemanticMarkerType // which OSC 133 marker this is
+	AbsLine      int                // scrollbackLen + cursorY at time of emission
+	Col          int                // cursor X (column) at time of emission
+	ExitCode     int                // only meaningful for 'D', -1 = unknown
+	CapturedText string             // command text captured at C-marker time (before output)
 }
 
 // SemanticMarkerList is a thread-safe, bounded list of semantic markers.

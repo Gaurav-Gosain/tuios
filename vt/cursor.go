@@ -23,12 +23,12 @@ const (
 
 // Cursor represents a cursor in a terminal.
 type Cursor struct {
-	Pen  uv.Style
-	Link uv.Link
+	Pen  uv.Style // style of the next printed character
+	Link uv.Link  // hyperlink of the next printed character
 
 	uv.Position
 
-	Hidden bool
+	Hidden bool // whether the guest hid the cursor (DECTCEM)
 	// Protected says DECSCA protects what is printed next from a selective
 	// erase. DECSC saves it with the rest of the cursor.
 	Protected bool

@@ -479,6 +479,7 @@ func (t *GhosttyTerminal) cursorLocked() (int, int) {
 	return t.curX, t.curY
 }
 
+// CursorPosition implements [Terminal.CursorPosition].
 func (t *GhosttyTerminal) CursorPosition() uv.Position {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -486,6 +487,7 @@ func (t *GhosttyTerminal) CursorPosition() uv.Position {
 	return uv.Pos(x, y)
 }
 
+// IsCursorHidden implements [Terminal.IsCursorHidden].
 func (t *GhosttyTerminal) IsCursorHidden() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -511,12 +513,14 @@ func (t *GhosttyTerminal) CursorPen() (uv.Style, uv.Link) {
 	return t.convertStyle(gs), link
 }
 
+// Bounds implements [Terminal.Bounds].
 func (t *GhosttyTerminal) Bounds() uv.Rectangle {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return uv.Rect(0, 0, t.width, t.height)
 }
 
+// CellAt implements [Terminal.CellAt].
 func (t *GhosttyTerminal) CellAt(x, y int) *uv.Cell {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -524,6 +528,7 @@ func (t *GhosttyTerminal) CellAt(x, y int) *uv.Cell {
 	return t.bufs[t.active].CellAt(x, y)
 }
 
+// MainCellAt implements [Terminal.MainCellAt].
 func (t *GhosttyTerminal) MainCellAt(x, y int) *uv.Cell {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -531,18 +536,21 @@ func (t *GhosttyTerminal) MainCellAt(x, y int) *uv.Cell {
 	return t.bufs[0].CellAt(x, y)
 }
 
+// SetCell implements [Terminal.SetCell].
 func (t *GhosttyTerminal) SetCell(x, y int, c *uv.Cell) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.pendingRestore().setActiveCell(t.active, x, y, c)
 }
 
+// SetMainCell implements [Terminal.SetMainCell].
 func (t *GhosttyTerminal) SetMainCell(x, y int, c *uv.Cell) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.pendingRestore().setGridCell(0, x, y, c)
 }
 
+// Render implements [Terminal.Render].
 func (t *GhosttyTerminal) Render() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -550,6 +558,7 @@ func (t *GhosttyTerminal) Render() string {
 	return t.bufs[t.active].Render()
 }
 
+// String implements [Terminal.String].
 func (t *GhosttyTerminal) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()

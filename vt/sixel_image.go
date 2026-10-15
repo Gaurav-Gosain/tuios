@@ -14,7 +14,7 @@ import (
 // half the memory of RGBA at two bytes a pixel, which matters because a pane
 // can hold a screenful of pictures in its scrollback.
 type SixelImage struct {
-	Width, Height int
+	Width, Height int // size in pixels
 	// Pix holds one entry per pixel, row by row. Zero is a pixel no sixel
 	// painted, which is drawn transparent; n is palette register n-1.
 	Pix []uint16

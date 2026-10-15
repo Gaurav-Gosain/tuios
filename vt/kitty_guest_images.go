@@ -74,10 +74,10 @@ type KittyGuestImages struct {
 // KittyGuestImagesState is the part of KittyGuestImages a client takes from
 // the daemon when it attaches, so both give an image number the same id.
 type KittyGuestImagesState struct {
-	Numbers   map[uint32]uint32 `json:"numbers,omitempty"`
-	Known     []uint32          `json:"known,omitempty"`
-	Next      uint32            `json:"next,omitempty"`
-	GuestHigh []uint32          `json:"guest_high,omitempty"`
+	Numbers   map[uint32]uint32 `json:"numbers,omitempty"`    // image number to the id it stands for
+	Known     []uint32          `json:"known,omitempty"`      // ids that hold an image
+	Next      uint32            `json:"next,omitempty"`       // next id to give an image sent by number
+	GuestHigh []uint32          `json:"guest_high,omitempty"` // ids at or above KittyImageNumberIDBase the guest chose itself
 }
 
 // State returns a copy of what a late client needs.

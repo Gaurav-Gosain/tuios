@@ -24,8 +24,8 @@ import (
 // own storage, so it is valid only until the callback it was passed to
 // returns.
 type TextCell struct {
-	Content []byte
-	Width   int
+	Content []byte // text of the cell
+	Width   int    // columns the cell takes
 }
 
 // eachRow calls fn with the lines from index from to end-1, oldest first, each
