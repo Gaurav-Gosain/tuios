@@ -2608,6 +2608,14 @@ more. That is after the three new sorts went through internal/sortx, which
 took 36,864 and 33,552 bytes off. No dependency was added. The new budgets
 leave 103,062 and 103,950 bytes of room.
 
+The budgets went to 36,395,000 (linux/amd64) and 34,265,000 (darwin/arm64)
+for the session rails (#626), which dock a daemon session's panes in a
+sidebar rail. Main at 6287dadc measured 36,212,898 and 34,096,418 bytes (Go
+1.26.9), and with #626 36,294,818 and 34,164,034, 81,920 and 67,616 bytes
+more. The rail viewer is a second daemon client with its own wiring, state
+queue and retry backoff, plus the rail settings. No dependency was added. The
+new budgets leave 100,182 and 100,966 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
