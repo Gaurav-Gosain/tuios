@@ -37,11 +37,14 @@ jobs:
     # daemon and a real pseudo-terminal, so running them together inside one
     # process would multiply the memory rather than the throughput. Splitting
     # across machines gives each shard the whole runner.
+    #
+    # Seven shards since shard 2 of six ran 1003 seconds against its 1080
+    # second test timeout, and one more 40 second test took it over.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
-    name: e2e-tui (shard ${{ matrix.shard }} of 6)
+        shard: [1, 2, 3, 4, 5, 6, 7]
+    name: e2e-tui (shard ${{ matrix.shard }} of 7)
     timeout-minutes: 20
 
     steps:
@@ -73,7 +76,7 @@ jobs:
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
           SHARD: ${{ matrix.shard }}
-          SHARDS: "6"
+          SHARDS: "7"
         # The split is by a hash of the test name, not by the order the list
         # comes back in, so adding or renaming a test moves only that test
         # between shards instead of resegmenting every one of them.
