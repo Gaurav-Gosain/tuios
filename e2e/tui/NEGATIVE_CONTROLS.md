@@ -5986,3 +5986,15 @@ Run on 2026-10-14 on macOS on branch `feat/spaces-label`, from upstream `main` (
 | The positive half | this branch | none: each refusal sits beside a set that succeeds in the same fixture (`e2e-a` filed beside the global `e2e-g`, `e2e-work` filed before and after the refused names), and the grouped `ls` is saved as `ls-grouped.txt` | **guard** |
 
 Each mutant is a text replacement on a `git archive` of the branch, so the checkout under test is never edited. Not covered here: the verb's `scopeDeny` and `LinkAllowWrite` entries. Those are held by `internal/session`: with the `verbScopes` entry cut, `conn_scope_test.go` ("has no entry in verbScopes") and `pane_grants_test.go` fail, and with the `verbCapabilities` entry cut, `link_policy_test.go` ("has no entry in verbCapabilities") fails. A daemon from before spaces given `tuios new --space` refuses the call with "verb new-session has no parameter space", because the verbs refuse a parameter they do not know.
+## A silent link is found, and the rail still opens its sessions
+
+Run on 2026-10-15 on Linux on branch `fix-host-wake-reconnect`, from upstream `main` (`f1257b28d`). The test is `TestASilentLinkIsFoundAndTheRailStillOpensItsSessions` in `host_reconnect_test.go`. It stops the far `tuios stdio-proxy` with SIGSTOP, so the pipe stays open and carries nothing. The first half clicks a rail session on that link and gives it 18 seconds. The second half leaves an attached session idle on a frozen link with the rail closed and gives the heartbeat 40 seconds. On the fixed build the click opens the session after 7.3 seconds, the idle link is found after 26 seconds, and it is back after 29. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `attempt` does not start `heartbeat` | mutant of this branch | the click half ("the session on a frozen host never opened after a click") | **caught** |
+| `openRemoteSession` does not send `retry-host` | mutant of this branch | the same, with the same message | **caught** |
+| `retry` on a link that is up wakes the dial wait instead of the heartbeat | mutant of this branch | the same, with the same message | **caught** |
+| `heartbeatMisses` raised to 1000, so only a sleep or a retry ends a link | mutant of this branch | the idle half ("nothing found an idle frozen link in 40 seconds"); the click half passes | **caught** |
+| The positive half | this branch | none | **guard** |
+

@@ -88,11 +88,10 @@ const (
 	// index in the WindowIndex field, which is the only integer a row hit has;
 	// nothing in this section points at a window, so the field is free.
 	sidebarRowFileEntry
-	// sidebarRowHostSession is one session on another machine, under an up
-	// host. Activating it opens that session in a local pane over ssh. It
-	// carries the host name in SessionID and the remote session name in
-	// WindowID. A session under a host that is not up is drawn but is not a
-	// target, so it never gets this kind.
+	// sidebarRowHostSession is one session on another machine. Activating it
+	// opens that session in this client over the link, and on a host that is
+	// not up it asks for the link first (host_open.go). It carries the host
+	// name in SessionID and the remote session name in WindowID.
 	sidebarRowHostSession
 	// sidebarRowHostNew is the "+" on an up host's header. Activating it
 	// creates a session on that machine and opens it. It carries the host name

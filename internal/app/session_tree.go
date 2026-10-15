@@ -354,7 +354,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					m.openRemoteSession(host, name)
-					return m, nil
+					return m, m.TakeSidebarCmd()
 				},
 			})
 			continue

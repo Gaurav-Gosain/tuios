@@ -1227,6 +1227,10 @@ type OS struct {
 	// hostSignInPending holds the machines whose sign-in page the person
 	// asked for before the daemon had one, with when the request lapses.
 	hostSignInPending map[string]time.Time
+	// hostOpen is the session on another machine a rail click waits for, and
+	// hostOpenGen counts the clicks. See host_open.go.
+	hostOpen    *hostOpenPending
+	hostOpenGen uint64
 	// federationTickGen is the generation of the host poll timer now armed. A
 	// tick from an older generation is dropped, so the snapshot's re-arm and
 	// the tick's own re-arm cannot leave two loops running.

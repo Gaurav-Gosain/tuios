@@ -417,7 +417,7 @@ func hostReconnectReason(host string, err error) string {
 func (m *OS) hostLinkNote() string {
 	r := m.hostReconnect
 	if r == nil {
-		return ""
+		return m.hostOpenNote()
 	}
 	name := r.host
 	const room = 12

@@ -298,11 +298,13 @@ func cachedDownHostOS(t *testing.T) *OS {
 	return m
 }
 
-// TestRemoteSessionIsATargetOnlyWhenTheHostIsUp is the reachability rule for
-// #171, both halves in one fixture. A session under an up host is a keyboard
-// and mouse target of kind sidebarRowHostSession. A session under a host that
-// is not up is drawn and is not a target, because its listing is cached.
-func TestRemoteSessionIsATargetOnlyWhenTheHostIsUp(t *testing.T) {
+// TestRemoteSessionIsATargetInEveryLinkState is the reachability rule for
+// #171 as #720 changed it. A session under a host that is up, and one under a
+// host that is not, are both keyboard and mouse targets of kind
+// sidebarRowHostSession. A click on the second asks for the link and waits
+// (TestOpenRemoteSessionOnADownHostWaitsForTheLink). Before #720 it was
+// dropped without a word.
+func TestRemoteSessionIsATargetInEveryLinkState(t *testing.T) {
 	m := cachedDownHostOS(t)
 	if _, w := m.sidebarPanelLines(); w <= 0 {
 		t.Fatal("the rail drew nothing")
@@ -323,12 +325,10 @@ func TestRemoteSessionIsATargetOnlyWhenTheHostIsUp(t *testing.T) {
 	if !upTarget {
 		t.Error("ASSERTION: a session under an up host is not a keyboard target")
 	}
-	if downTarget {
-		t.Error("ASSERTION: a session under a host that is not up is a keyboard target")
+	if !downTarget {
+		t.Error("ASSERTION: a session under a host that is not up is not a keyboard target")
 	}
 
-	// The same rule on the mouse hit list: the up host's session records a
-	// rectangle, the stale one does not.
 	upHit, downHit := false, false
 	for _, h := range m.SidebarHits {
 		if h.Kind != sidebarRowHostSession {
@@ -344,8 +344,8 @@ func TestRemoteSessionIsATargetOnlyWhenTheHostIsUp(t *testing.T) {
 	if !upHit {
 		t.Error("ASSERTION: a session under an up host records no click rectangle")
 	}
-	if downHit {
-		t.Error("ASSERTION: a session under a host that is not up is clickable")
+	if !downHit {
+		t.Error("ASSERTION: a session under a host that is not up records no click rectangle")
 	}
 }
 
