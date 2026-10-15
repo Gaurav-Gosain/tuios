@@ -1,0 +1,56 @@
+accent	#ff8800
+background	#202020
+bg	#202020
+blue	
+bright_blue	#333333
+bright_cyan	#333333
+bright_fg	#d0d0d0
+bright_foreground	#d0d0d0
+bright_green	#333333
+bright_magenta	#333333
+bright_purple	#333333
+bright_red	#ff0000
+bright_yellow	#333333
+brown	#000000
+color0	#202020
+color1	#aa0000
+color10	#333333
+color11	#333333
+color12	#333333
+color13	#333333
+color14	#333333
+color15	#d0d0d0
+color2	
+color3	
+color4	
+color5	
+color6	
+color7	#d0d0d0
+color8	#d0d0d0
+color9	#ff0000
+cursor	#d0d0d0
+cyan	
+dark_background	#101010
+dark_bg	#101010
+dark_fg	#d0d0d0
+dark_foreground	#d0d0d0
+darker_background	#101010
+darker_bg	#101010
+fg	#d0d0d0
+foreground	#d0d0d0
+green	
+light_fg	#d0d0d0
+light_foreground	#d0d0d0
+lighter_background	#202020
+lighter_bg	#202020
+magenta	
+mode	dark
+muted	#d0d0d0
+orange	
+purple	
+red	#aa0000
+selection	#202020
+selection_background	#202020
+selection_foreground	#d0d0d0
+theme_type	dark
+yellow	

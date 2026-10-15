@@ -56,6 +56,14 @@ pinned() {
 	go mod edit -json | jq -r --arg m "$1" '.Require[]? | select(.Path == $m) | .Version'
 }
 
+# imported reports whether a package of tuios imports module. A library that
+# tuios does not import yet has nothing to pin: go mod tidy would drop the
+# requirement. It joins go.work so CI tests it, and gets its pin with the
+# first change that imports it.
+imported() {
+	go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... | grep -qxF "$1"
+}
+
 # replaced prints the version go.work replaces module at, and the folder.
 replaced() {
 	go work edit -json | jq -r --arg m "$1" '.Replace[]? | select(.Old.Path == $m) | "\(.Old.Version) \(.New.Path)"'
@@ -79,6 +87,9 @@ build_proxy() {
 	out=$(cd "$out" && pwd)
 	while read -r dir module; do
 		version=$(pinned "$module")
+		if [ -z "$version" ] && ! imported "$module"; then
+			continue
+		fi
 		if ! commit=$(commit_of "$dir" "$version"); then
 			echo "$module@${version:-<no pin>}: no commit for this version in this clone" >&2
 			return 1
@@ -117,6 +128,10 @@ sync_pins() {
 	local dir module version old folder
 	while read -r dir module; do
 		version=$(pinned "$module")
+		if [ -z "$version" ] && ! imported "$module"; then
+			echo "go.work: $module is not imported by tuios yet, so it has no pin"
+			continue
+		fi
 		if [ -z "$version" ]; then
 			echo "$module: go.mod does not require it. Run: GOWORK=off go get $module@<commit>" >&2
 			return 1
@@ -152,6 +167,10 @@ check() {
 	fi
 	while read -r dir module; do
 		version=$(pinned "$module")
+		if [ -z "$version" ] && ! imported "$module"; then
+			echo "ok   $module is not imported by tuios yet, so it has no pin"
+			continue
+		fi
 		if [ -z "$version" ]; then
 			echo "FAIL $module: go.mod does not require it. Run: GOWORK=off go get $module@<commit>" >&2
 			status=1

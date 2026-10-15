@@ -88,6 +88,8 @@ jobs:
             targets: FuzzParse
           - pkg: progstatus
             targets: FuzzParse
+          - pkg: swatch/omarchy
+            targets: FuzzResolve
 
     steps:
       - uses: actions/checkout@v7

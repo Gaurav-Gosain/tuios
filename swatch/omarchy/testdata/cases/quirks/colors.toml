@@ -1,0 +1,21 @@
+# a comment = "#ffffff"
+[section]
+  background = "#FAFAFA" # trailing
+foreground=#333333
+red = #cc0000 # unquoted comment
+green = "#00aa00
+blue = "#0000aa"=
+"yellow" = '#aaaa00'
+magenta = #aa00aa=
+cyan = rgba(0,170,170,1)
+bad key = "#123456"
+bad	key2 = "#123456"
+evil = "#fff;rm"
+evil2 = $(true)
+novalue
+=orphan
+accent = "  #123456 "
+bright_red = "zz"
+mode_extra = light
+color8 = "#888888"
+last = "#010203"

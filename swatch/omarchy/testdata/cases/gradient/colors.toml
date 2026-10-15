@@ -1,0 +1,5 @@
+background = "#111111"
+foreground = "#eeeeee"
+accent = "#ff0000"
+hyprland_active_border = "rgba(26a269ee) rgba(2ec27eee) 45deg"
+hyprland_inactive_border = "rgb(1e1e1e)"

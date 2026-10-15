@@ -112,7 +112,8 @@ docker run -it --rm tuios
 Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
 that points the go command at the folder in this repository. They are
-`progstatus/` (`tuios.dev/progstatus`) and `vt/` (`tuios.dev/vt`).
+`progstatus/` (`tuios.dev/progstatus`), `vt/` (`tuios.dev/vt`) and `swatch/`
+(`tuios.dev/swatch`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -128,6 +129,9 @@ that points the go command at the folder in this repository. They are
   scripts/library-pins.sh check   # what CI and the release check
   ```
 
+- A new library joins `go.work` first. It gets its pin with the first change
+  that imports it, because `go mod tidy` drops a requirement nothing imports.
+  Until then `scripts/library-pins.sh` skips it.
 - `./...` from the root stops at a nested module. Name a library to test it:
   `go test ./progstatus/... ./vt/...`.
 - A library imports no `github.com/Gaurav-Gosain/tuios/...` package.
@@ -208,6 +212,7 @@ tuios/
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
+├── swatch/                 # tuios.dev/swatch, a Go module of its own: desktop theme palettes (Omarchy), followed live
 ├── vt/                     # tuios.dev/vt, a Go module of its own: the terminal emulator, pure Go, plus libghostty-vt behind -tags ghostty
 │   ├── emulator.go         # The pure Go Emulator and its write path
 │   ├── parser.go           # Parser state machine

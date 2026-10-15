@@ -17,6 +17,7 @@ on:
       - "go.work.sum"
       - "progstatus/**"
       - "vt/**"
+      - "swatch/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"
