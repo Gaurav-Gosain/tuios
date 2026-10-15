@@ -92,6 +92,8 @@ jobs:
             targets: FuzzResolve
           - pkg: swatch/teaswatch
             targets: FuzzParsePaletteReply
+          - pkg: swatch/termconfig
+            targets: FuzzParse
 
     steps:
       - uses: actions/checkout@v7

@@ -6,6 +6,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/pelletier/go-toml/v2 v2.4.3
 )
 
 require (

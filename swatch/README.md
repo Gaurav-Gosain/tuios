@@ -15,9 +15,10 @@ script's output for every theme Omarchy ships.
 `swatch.Watch` follows the theme while your program runs, and the
 `teaswatch` package turns each change into a Bubble Tea message.
 
-`swatch` and `omarchy` use the standard library and fsnotify. Theme files
+`swatch` and `omarchy` use the standard library and fsnotify, and
+`termconfig` adds a TOML parser. Theme files
 come from strangers, so swatch parses colours only. Nothing in a theme file is executed or
-expanded, and a file over 64 KiB is not read.
+expanded. An Omarchy file over 64 KiB, or a terminal config over 1 MiB, is not read.
 
 tuios uses swatch to follow the Omarchy theme.
 
@@ -98,6 +99,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 `teaswatch.Terminal` follows the palette of the terminal itself. It asks
 for OSC 10, 11 and the sixteen OSC 4 colours, turns on the light and dark
 reports (mode 2031), and asks again after each report.
+
+## Read a terminal's colour scheme
+
+The `termconfig` package reads the colour scheme of a kitty, ghostty,
+alacritty or wezterm config file. It tells the format from the content.
+
+```go
+p, format, err := termconfig.Load(os.ExpandEnv("$HOME/.config/kitty/current-theme.conf"))
+```
+
+`termconfig.Source(path)` follows the file with `swatch.Watch`. `Raw` holds
+only the colours the file names, under `foreground`, `background`, `cursor`
+and `color0` to `color15`.
 
 ## List the installed themes
 
