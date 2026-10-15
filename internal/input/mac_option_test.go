@@ -143,6 +143,22 @@ func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 					tc.macUS, tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, runs)
 			}
 		}
+		// The leader follows the same rule: leader_key = "opt+1" on
+		// Terminal.app sends a bare ¡, and on a US Mac under "auto" that is
+		// the leader again.
+		s := &config.Settings{LeaderKey: "opt+1", KeyboardLayout: tc.layout, OptionGlyphs: tc.glyphs}
+		for _, l := range []struct {
+			msg  tea.KeyPressMsg
+			want bool
+		}{
+			{tea.KeyPressMsg{Code: '¡', Text: "¡"}, tc.bare},
+			{tea.KeyPressMsg{Code: '¡', Mod: tea.ModAlt}, tc.alt},
+		} {
+			if got := isLeaderKey(l.msg, s, 0); got != l.want {
+				t.Errorf("US Mac %v, layout %q, option_glyphs %q: %q (mod %v) is the opt+1 leader: %v, want %v",
+					tc.macUS, tc.layout, tc.glyphs, l.msg.String(), l.msg.Mod, got, l.want)
+			}
+		}
 		restore()
 	}
 }

@@ -1418,16 +1418,17 @@ work like this until you change their settings.
 
 The same character can come from two keys. On a US keyboard, Option+3 types
 `£`. On a UK keyboard, Shift+3 types `£`. tuios reads the keyboard layout of
-the Mac when the first such character arrives:
+the Mac when it starts:
 
 - On a US or ABC layout, tuios runs the `opt+` binding for the character.
   Option+3 types `£` and switches to workspace 3.
 - On any other layout, the character goes to the pane. tuios also does this
   when it cannot read the layout.
 
-tuios reads the layout one time. If you change the layout while tuios runs,
-restart tuios. A tuios that serves SSH or web clients from a Mac uses the
-layout of that Mac.
+If you change the layout while tuios runs, tuios reads it again when such a
+character arrives and the last read is more than 30 seconds old. The new
+layout applies from the next key. A tuios that serves SSH or web clients from
+a Mac uses the layout of that Mac.
 
 `keyboard_layout` overrides the layout that tuios reads. With
 `keyboard_layout = "us"`, tuios runs the binding. With

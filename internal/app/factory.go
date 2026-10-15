@@ -163,6 +163,10 @@ type OSOptions struct {
 // fields are properly initialized.
 func NewOS(opts OSOptions) *OS {
 	opts.applyClientKind()
+	// option_glyphs = "auto" needs the Mac's keyboard layout. Read it in the
+	// background now, so the answer is in before the first key and no key
+	// waits for it. Nothing happens off macOS.
+	config.StartMacLayoutDetection()
 
 	numWorkspaces := opts.NumWorkspaces
 	if numWorkspaces <= 0 {

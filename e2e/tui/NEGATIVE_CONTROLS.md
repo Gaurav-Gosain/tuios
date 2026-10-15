@@ -3297,6 +3297,7 @@ ran the named test against it, on 2026-10-08 on branch
 | `bindingKeys` never asks for the US-layout tier | `TestEscPlusOptionChordsOnAUSLayout` | ESC # leaves the session on workspace 1, want 3 |
 | `expandInto` skips the `BareOptionGlyphKey` claim (2026-10-15, #746) | `TestBareOptionCharacterFollowsTheMacLayout/US` | `e2e-opt-normal-us is on workspace 1, want 3` |
 | `lookupKey` answers from the bare tier whatever the Mac layout is (2026-10-15, #746) | `TestBareOptionCharacterFollowsTheMacLayout/British` | the typed `£` never reaches the shell as `x2£y` |
+| `NewOS` does not start the layout detection (2026-10-15, #746) | `TestBareOptionCharacterFollowsTheMacLayout/US` | `e2e-opt-normal-us is on workspace 1, want 3`: the first `£` arrives before any answer and goes to the pane |
 | `expandInto` ignores `keyboard_layout = "other"` | `TestAzertyEscPlusWithLayoutOther` | ESC & moves the pane to workspace 7 |
 | `expandInto` claims a US alias as a plain key | `TestOwnBindingBeatsTheUSAlias` | ESC & moves the pane to workspace 7, want workspace 2 |
 | `bindingKeys` asks for the US-layout tier without `KeyFitsUSLayout` | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |

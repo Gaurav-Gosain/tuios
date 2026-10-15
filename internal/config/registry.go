@@ -385,9 +385,9 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 	}
 
 	// A bare composed character under option_glyphs = "auto" runs its chord
-	// only on a US Mac layout. Asked here, not when the tier is filled, so the
-	// layout is read the first time such a character arrives and never at
-	// startup.
+	// only on a US Mac layout. Asked here, not when the tier is filled, so a
+	// layout switched while tuios runs is seen. The answer comes from a cache
+	// the client fills in the background (see StartMacLayoutDetection).
 	if strings.HasPrefix(key, bareGlyphTier) {
 		kb := &r.config.Keybindings
 		if !OptionGlyphRuns(kb.KeyboardLayout, kb.OptionGlyphs, false) {

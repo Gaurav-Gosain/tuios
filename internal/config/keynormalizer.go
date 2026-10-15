@@ -467,8 +467,9 @@ var OptionGlyphModes = []string{OptionGlyphsAuto, OptionGlyphsAlt, OptionGlyphsT
 // terminal reported the Alt modifier with the character. The registry fills
 // the glyph tiers by the same rule.
 //
-// Under "auto" a bare character asks for the Mac's layout, once per process
-// (see macLayoutIsUS). Call it only for a composed character.
+// Under "auto" a bare character asks for the Mac's layout, which answers from
+// a cache and never waits (see macLayoutIsUS). Call it only for a composed
+// character: a stale cache starts a detection in the background.
 func OptionGlyphRuns(layout, glyphs string, alt bool) bool {
 	if layout == KeyboardLayoutOther || glyphs == OptionGlyphsType {
 		return false

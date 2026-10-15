@@ -5,27 +5,87 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
-// macInputSourceTimeout bounds the one call to defaults. A slow answer is a
-// failed detection, which is the safe reading.
-const macInputSourceTimeout = time.Second
+// macInputSourceTimeout bounds one detection, both defaults calls together.
+// It runs in the background, so a slow answer only delays the answer.
+const macInputSourceTimeout = 500 * time.Millisecond
 
-// macLayoutIsUS reports whether the Mac's keyboard input source is US or ABC,
-// the layouts the Option glyph tables describe. It is asked the first time a
-// bare composed character meets option_glyphs = "auto", and never again: a
-// layout switched while tuios runs is not seen. Off macOS it is false at no
-// cost.
+// macLayoutRefresh is how old an answer may get before a bare composed
+// character asks for a new one. A user who switches input source sees the
+// new layout at most this long after the first such character.
+const macLayoutRefresh = 30 * time.Second
+
+// The Mac's keyboard layout, as macLayoutIsUS reads it. The answer is filled
+// in the background and never read through a subprocess on the input path.
+var (
+	// macLayoutUS is the last answer: 0 while none has arrived, 1 for a US
+	// or ABC layout, 2 for any other layout or a failed read.
+	macLayoutUS atomic.Int32
+	// macLayoutCheckedAt is when the last detection started, in Unix
+	// nanoseconds, zero before the first.
+	macLayoutCheckedAt atomic.Int64
+	// macLayoutRunning is set while a detection runs, so only one runs.
+	macLayoutRunning atomic.Bool
+	// macLayoutForced is set by ForceMacLayoutUS: 0 for none, 1 US, 2 not.
+	macLayoutForced atomic.Int32
+)
+
+// StartMacLayoutDetection reads the Mac's keyboard layout in the background,
+// unless an answer younger than macLayoutRefresh is there or a read is
+// running. It never waits. Off macOS it does nothing. A client calls it at
+// startup, so the answer is usually in before the first key.
 //
 // A tuios serving SSH or web clients from a Mac reads the Mac's layout, not
 // the client's.
-var macLayoutIsUS = sync.OnceValue(func() bool {
-	return inputSourceIsUS(readMacInputSource())
-})
+func StartMacLayoutDetection() {
+	if macLayoutForced.Load() != 0 || !macLayoutReadable() {
+		return
+	}
+	now := time.Now().UnixNano()
+	if last := macLayoutCheckedAt.Load(); last != 0 && now-last < int64(macLayoutRefresh) {
+		return
+	}
+	if !macLayoutRunning.CompareAndSwap(false, true) {
+		return
+	}
+	macLayoutCheckedAt.Store(now)
+	go func() {
+		defer macLayoutRunning.Store(false)
+		if inputSourceIsUS(readMacInputSource()) {
+			macLayoutUS.Store(1)
+		} else {
+			macLayoutUS.Store(2)
+		}
+	}()
+}
+
+// macLayoutReadable reports whether there is a layout to read: on macOS, or
+// in the end-to-end suite on its macOS paths.
+func macLayoutReadable() bool {
+	return runtime.GOOS == "darwin" || E2EPlatformDarwin()
+}
+
+// macLayoutIsUS reports whether the Mac's keyboard input source is US or ABC,
+// the layouts the Option glyph tables describe. It is asked only for a bare
+// composed character under option_glyphs = "auto". It answers from the last
+// detection and never waits: before the first answer it is false, which sends
+// the character to the pane. A stale answer starts a new detection in the
+// background, for the next key.
+func macLayoutIsUS() bool {
+	switch macLayoutForced.Load() {
+	case 1:
+		return true
+	case 2:
+		return false
+	}
+	StartMacLayoutDetection()
+	return macLayoutUS.Load() == 1
+}
 
 // readMacInputSource returns what macOS says about the selected keyboard
 // layout, or "" when it cannot be read. The end-to-end suite fakes it with
@@ -87,9 +147,14 @@ func usLayoutName(name string) bool {
 }
 
 // ForceMacLayoutUS makes option_glyphs = "auto" read the Mac layout as US or
-// not, and returns the function that puts detection back. It is for tests.
+// not, with no detection, and returns the function that puts detection back.
+// It is for tests.
 func ForceMacLayoutUS(us bool) func() {
-	prev := macLayoutIsUS
-	macLayoutIsUS = func() bool { return us }
-	return func() { macLayoutIsUS = prev }
+	prev := macLayoutForced.Load()
+	if us {
+		macLayoutForced.Store(1)
+	} else {
+		macLayoutForced.Store(2)
+	}
+	return func() { macLayoutForced.Store(prev) }
 }
