@@ -13,7 +13,7 @@ import (
 // which in a daemon session is Detach, so "qq" muscle memory detaches a
 // session rather than killing it.
 func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(commandKey(msg), true, listPage, o.QuitMenuMove) {
+	if listKey(o, commandKey(msg), true, listPage, o.QuitMenuMove) {
 		return o, nil
 	}
 	switch commandKey(msg) {

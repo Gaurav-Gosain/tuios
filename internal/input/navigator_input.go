@@ -31,7 +31,7 @@ func handleChooseTree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.NavigatorSearching() {
-		if listKey(key, false, listPage, o.NavigatorMove) {
+		if listKey(o, key, false, listPage, o.NavigatorMove) {
 			return o, nil
 		}
 		switch key {
@@ -58,7 +58,7 @@ func handleNavigatorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	if listKey(key, true, listPage, o.NavigatorMove) {
+	if listKey(o, key, true, listPage, o.NavigatorMove) {
 		return o, nil
 	}
 	switch key {

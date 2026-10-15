@@ -13,7 +13,7 @@ import (
 // expressible under the legacy keyboard encoding, and because Tab already means
 // "give me the rest of this to finish".
 func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(msg.String(), false, o.LauncherPageRows(), o.LauncherMove) {
+	if listKey(o, msg.String(), false, o.LauncherPageRows(), o.LauncherMove) {
 		return o, o.LauncherIconWork()
 	}
 	switch msg.String() {

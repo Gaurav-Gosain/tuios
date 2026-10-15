@@ -31,7 +31,7 @@ table of their own.
 
 After the scopes, the list shows the fixed keys. tuios reads these keys itself,
 and you cannot rebind them: copy mode, hints mode, the message view, the ways
-out of the spotlight, the list keys and the fixed mouse gestures. The middle
+out of the spotlight, the list filter keys and the fixed mouse gestures. The middle
 button is an exception: terminal mode binds it like a key. The help overlay
 (`Ctrl+B ?`) shows the same rows. The last table shows the actions that have no
 default key. Bind one in `config.toml`, or run it from the command palette.
@@ -274,8 +274,34 @@ the tape manager.
 | `home`, `end` | The first or last row |
 | `pgup`, `pgdown` | A page up or down, stopping at the ends |
 | `k`, `j`, `g`, `G` | Up, down, first and last, in a list with no filter to type into |
-| `ctrl+u` | Clear a typed filter |
-| wheel | Scroll the list under the pointer, stopping at the ends |
+| `ctrl+u` | Clear a typed filter (fixed) |
+| wheel | Scroll the list under the pointer, stopping at the ends (fixed) |
+
+The movement keys are the `[keybindings.lists]` section. Each action takes the
+keys that do it:
+
+| Action | Default keys |
+|---|---|
+| `list_up` | `up`, `ctrl+p`, `k` |
+| `list_down` | `down`, `ctrl+n`, `j` |
+| `list_page_up` | `pgup` |
+| `list_page_down` | `pgdown` |
+| `list_first` | `home`, `g` |
+| `list_last` | `end`, `G` |
+
+A key that is a single printable character is a letter key. Only a list with no
+filter to type into reads it, because a list with a filter keeps its letters
+for the filter. To move on `ctrl+j` and `ctrl+k` as well as the arrows:
+
+```toml
+[keybindings.lists]
+list_down = ["down", "ctrl+j"]
+list_up   = ["up", "ctrl+k"]
+```
+
+An action you name replaces its default keys, so the example above gives
+`ctrl+n`, `ctrl+p`, `j` and `k` back to the pane or the filter. An action you
+leave out keeps its defaults, and `list_page_down = []` unbinds it.
 
 Set `appearance.wrap_lists = false` to stop at the ends instead of wrapping.
 The close-session and file confirmations never wrap, so up from Cancel cannot

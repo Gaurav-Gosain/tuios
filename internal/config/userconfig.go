@@ -890,6 +890,12 @@ type KeybindingsConfig struct {
 	// default is not a conflict, since only one of the two contexts is ever
 	// active.
 	Script map[string][]string `toml:"script"`
+	// Lists binds the keys that move the cursor in every list: the palette,
+	// the pickers, the launcher and the settings page. An action named here
+	// replaces its default keys, and one set to [] has none. A single printable
+	// character is a letter key, read only by a list with no filter to type
+	// into. See getDefaultListsKeybinds.
+	Lists map[string][]string `toml:"lists"`
 	// Sidebar binds are looked up only while the rail owns the keyboard
 	// (SidebarFocused), through GetSidebarAction. They are deliberately kept out
 	// of buildMappings: that flattens sections into the global keymap, which would
@@ -1377,9 +1383,35 @@ func DefaultConfig() *UserConfig {
 			Script: map[string][]string{
 				"script_pause": {"ctrl+p"},
 			},
+			Lists: getDefaultListsKeybinds(),
 		},
 	}
 	return cfg
+}
+
+// The actions that move the cursor in a list, named once so the input path
+// and the defaults cannot drift apart.
+const (
+	ActionListUp       = "list_up"
+	ActionListDown     = "list_down"
+	ActionListPageUp   = "list_page_up"
+	ActionListPageDown = "list_page_down"
+	ActionListFirst    = "list_first"
+	ActionListLast     = "list_last"
+)
+
+// getDefaultListsKeybinds returns the keys that move every list. A single
+// printable character is a letter key: a list with a filter keeps its letters
+// for the filter, so it reads only the other keys.
+func getDefaultListsKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionListUp:       {"up", "ctrl+p", "k"},
+		ActionListDown:     {"down", "ctrl+n", "j"},
+		ActionListPageUp:   {"pgup"},
+		ActionListPageDown: {"pgdown"},
+		ActionListFirst:    {"home", "g"},
+		ActionListLast:     {"end", "G"},
+	}
 }
 
 // getDefaultSidebarKeybinds returns the rail's scope-local keybindings, active
@@ -3080,6 +3112,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Script == nil {
 		cfg.Keybindings.Script = make(map[string][]string)
 	}
+	if cfg.Keybindings.Lists == nil {
+		cfg.Keybindings.Lists = make(map[string][]string)
+	}
 	if cfg.Keybindings.Sidebar == nil {
 		cfg.Keybindings.Sidebar = make(map[string][]string)
 	}
@@ -3151,6 +3186,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// every existing user rather than keeping the keys they already had.
 	fillMapDefaults(cfg.Keybindings.Global, defaultCfg.Keybindings.Global)
 	fillMapDefaults(cfg.Keybindings.Script, defaultCfg.Keybindings.Script)
+	fillMapDefaults(cfg.Keybindings.Lists, defaultCfg.Keybindings.Lists)
 	// A config written before the rail scope existed has no sidebar section. Left
 	// unfilled it resolves every rail key to nothing, and since the scope swallows
 	// unbound keys that traps the keyboard in the rail with no way out.
@@ -3357,6 +3393,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.GUI, d.GUI},
 		{c.Global, d.Global},
 		{c.Script, d.Script},
+		{c.Lists, d.Lists},
 	}
 }
 

@@ -76,6 +76,7 @@ const (
 	SectionCopyMode         = "copy_mode"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
+	SectionLists            = "lists"
 	SectionGUI              = "gui"
 )
 
@@ -101,6 +102,7 @@ const (
 	ScopePrefixLayout   = "prefix.layout"
 	ScopeGlobal         = "global"
 	ScopeScript         = "script"
+	ScopeLists          = "lists"
 	ScopeGUI            = "gui"
 )
 
@@ -232,6 +234,13 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachChorded,
 		},
 		{
+			// Read by every list overlay while it is open, so a key here moves
+			// the cursor in the palette, the pickers and the settings page.
+			ID: ScopeLists, Name: "Lists",
+			Sections: []string{SectionLists},
+			Reaches:  ReachModal,
+		},
+		{
 			// Only live while a .tape is playing back, so sharing ctrl+p with the
 			// palette is not a conflict: the two contexts are never both active.
 			ID: ScopeScript, Name: "Script playback",
@@ -285,6 +294,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.Global
 	case SectionScript:
 		return k.Script
+	case SectionLists:
+		return k.Lists
 	case SectionTerminalMode:
 		return k.TerminalMode
 	case SectionSidebar:

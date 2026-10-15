@@ -9,7 +9,7 @@ import (
 // The arrows select, shifted arrows move the selected component (and carry it
 // into the next region off the end of its own), Enter adds or removes.
 func handleDockEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(msg.String(), true, listPage, o.DockEditorMove) {
+	if listKey(o, msg.String(), true, listPage, o.DockEditorMove) {
 		return o, nil
 	}
 	switch keyStr := msg.String(); keyStr {

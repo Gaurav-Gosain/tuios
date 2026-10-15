@@ -17,6 +17,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -961,6 +962,9 @@ type OS struct {
 	// ConfigReadOnly stops the settings page writing the config file. Set by
 	// entrypoints that serve someone else's session; see OSOptions.
 	ConfigReadOnly bool
+	// ListKeys is the keys that move every list, from [keybindings.lists]. Nil
+	// reads the defaults.
+	ListKeys *listnav.Keymap
 	// BrowserClient says the far end is a browser tab. See browser_client.go
 	// for what that costs and what tuios says about it.
 	BrowserClient bool

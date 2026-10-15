@@ -21,7 +21,7 @@ func handleChooseBuffer(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // list keys move, enter pastes, d deletes, and esc or q closes.
 func handleBufferChooserInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	keyStr := msg.String()
-	if listKey(keyStr, true, listPage, o.BufferChooserMove) {
+	if listKey(o, keyStr, true, listPage, o.BufferChooserMove) {
 		return o, nil
 	}
 	switch keyStr {

@@ -12,7 +12,7 @@ import (
 // Enter puts a section on the rail or takes it off. The left and right arrows
 // are the one addition, and they walk the share.
 func handleSectionEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(msg.String(), true, listPage, o.SectionEditorMove) {
+	if listKey(o, msg.String(), true, listPage, o.SectionEditorMove) {
 		return o, nil
 	}
 	switch keyStr := msg.String(); keyStr {

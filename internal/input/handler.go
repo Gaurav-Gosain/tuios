@@ -783,7 +783,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "E":
 		return o, o.CopyLogErrors()
 	}
-	listKey(key, true, o.LogViewerPage(), o.LogViewerMove)
+	listKey(o, key, true, o.LogViewerPage(), o.LogViewerMove)
 
 	// Ignore other keys when log viewer is active
 	return o, nil
@@ -818,7 +818,7 @@ func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.MessageViewPage(1)
 		return o, nil
 	}
-	switch listnav.Keys(key, true) {
+	switch o.ListKeys.Keys(key, true) {
 	case listnav.Up:
 		o.MessageViewScroll(-1)
 	case listnav.Down:

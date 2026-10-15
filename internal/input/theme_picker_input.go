@@ -8,7 +8,7 @@ import (
 // handleThemePickerInput handles keyboard input for the theme picker. Selection
 // live-previews the theme; Enter commits, Esc restores the original.
 func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(msg.String(), false, listPage, o.ThemePickerMove) {
+	if listKey(o, msg.String(), false, listPage, o.ThemePickerMove) {
 		return o, nil
 	}
 	switch msg.String() {

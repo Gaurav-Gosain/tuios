@@ -322,6 +322,7 @@ func NewOS(opts OSOptions) *OS {
 		// Hold the loaded config so the in-app settings page can persist live
 		// changes back to disk.
 		os.UserConfig = cfg
+		os.ListKeys = listKeymap(cfg)
 		// Collected here and reported from Init, once there is a TUI to report
 		// them in.
 		os.ConfigWarnings = config.ConfigWarnings(cfg)

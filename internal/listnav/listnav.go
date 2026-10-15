@@ -13,6 +13,11 @@
 //     steps over them, and wrapping steps over them too.
 package listnav
 
+import (
+	"unicode"
+	"unicode/utf8"
+)
+
 // Motion is a movement a key asks a list for.
 type Motion int
 
@@ -132,41 +137,82 @@ func Scroll(scroll, selected, n, visible int) int {
 	return min(max(scroll, 0), n-visible)
 }
 
-// Keys reads the list movement keys. With letters set it also reads k, j, g
-// and G, for a list that does not type into a filter; a list with a filter
-// needs its letters for the filter.
+// Keymap is the keys a list moves on: keys for every list, letters for a list
+// with no filter to type into. A nil *Keymap reads the defaults. Build one
+// with NewKeymap.
+type Keymap struct {
+	keys    map[string]Motion
+	letters map[string]Motion
+}
+
+// defaults are the keys a list moves on when nothing has been configured:
+// the same ones [keybindings.lists] starts with.
+var defaults = map[Motion][]string{
+	Up:       {"up", "ctrl+p", "k"},
+	Down:     {"down", "ctrl+n", "j"},
+	PageUp:   {"pgup"},
+	PageDown: {"pgdown"},
+	Home:     {"home", "g"},
+	End:      {"end", "G"},
+}
+
+var defaultKeymap = NewKeymap(nil)
+
+// NewKeymap builds the keys each motion answers to. A motion with no keys has
+// none: it is how a key is handed back. A motion left out of bindings keeps its
+// default keys.
 //
-// The spelling is Bubble Tea's key string. ctrl+p and ctrl+n are read here
-// because the palette and the pickers already answered to them, and a list
-// that moved on them in one place and not another was the drift this package
-// exists to end.
-func Keys(key string, letters bool) Motion {
-	switch key {
-	case "up", "ctrl+p":
-		return Up
-	case "down", "ctrl+n":
-		return Down
-	case "pgup":
-		return PageUp
-	case "pgdown":
-		return PageDown
-	case "home":
-		return Home
-	case "end":
-		return End
+// A key that is one printable character is a letter key, read only by a list
+// with no filter to type into; any other key is read by every list.
+func NewKeymap(bindings map[Motion][]string) *Keymap {
+	k := &Keymap{keys: map[string]Motion{}, letters: map[string]Motion{}}
+	for m, def := range defaults {
+		keys, ok := bindings[m]
+		if !ok {
+			keys = def
+		}
+		for _, key := range keys {
+			if !isLetter(key) {
+				k.keys[key] = m
+				continue
+			}
+			k.letters[key] = m
+			if key == "G" {
+				k.letters["shift+g"] = m
+			}
+		}
 	}
-	if !letters {
-		return None
+	return k
+}
+
+// isLetter reports whether key is a single printable character.
+func isLetter(key string) bool {
+	r, n := utf8.DecodeRuneInString(key)
+	return n == len(key) && r != utf8.RuneError && unicode.IsPrint(r) && r != ' '
+}
+
+// Keys reads the list movement keys. With letters set it also reads the
+// letter keys (k, j, g and G by default), for a list that does not type into a
+// filter; a list with a filter needs its letters for the filter.
+//
+// The spelling is Bubble Tea's key string. The keys are those of
+// [keybindings.lists]; ctrl+p and ctrl+n are among the defaults because the
+// palette and the pickers already answered to them, and a list that moved on
+// them in one place and not another was the drift this package exists to end.
+func (k *Keymap) Keys(key string, letters bool) Motion {
+	if k == nil {
+		k = defaultKeymap
 	}
-	switch key {
-	case "k":
-		return Up
-	case "j":
-		return Down
-	case "g":
-		return Home
-	case "G", "shift+g":
-		return End
+	if m, ok := k.keys[key]; ok {
+		return m
+	}
+	if letters {
+		return k.letters[key]
 	}
 	return None
+}
+
+// Keys reads the list movement keys under the default keymap.
+func Keys(key string, letters bool) Motion {
+	return defaultKeymap.Keys(key, letters)
 }

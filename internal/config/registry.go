@@ -52,7 +52,7 @@ type sectionMaps struct {
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
-	transfers                                             map[string]string
+	transfers, lists                                      map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -103,6 +103,7 @@ func (r *KeybindRegistry) buildMappings() {
 		terminalMode:    r.sectionKeyMap(kb.TerminalMode),
 		global:          r.withCommands(r.sectionKeyMap(kb.Global), SectionGlobal),
 		script:          r.sectionKeyMap(kb.Script),
+		lists:           r.sectionKeyMap(kb.Lists),
 		sidebar:         r.sectionKeyMap(kb.Sidebar),
 		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
 		sidebarAgents:   r.sectionKeyMap(kb.SidebarAgents),
@@ -406,6 +407,7 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.TerminalMode,
 		r.config.Keybindings.Global,
 		r.config.Keybindings.Script,
+		r.config.Keybindings.Lists,
 	}
 
 	for _, section := range sections {
@@ -480,7 +482,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
@@ -532,6 +534,13 @@ var ActionDescriptions = map[string]string{
 	"transfers_clear":  "Copies: remove the copies that ended",
 	"transfers_answer": "Copies: answer a copy that waits for an answer",
 	"transfers_close":  "Copies: close the panel",
+
+	"list_up":        "Lists: up one row",
+	"list_down":      "Lists: down one row",
+	"list_page_up":   "Lists: up a page",
+	"list_page_down": "Lists: down a page",
+	"list_first":     "Lists: first row",
+	"list_last":      "Lists: last row",
 
 	// The Inbox, the prompt open over it, and the mailbox. Each acts only
 	// while its overlay is up.

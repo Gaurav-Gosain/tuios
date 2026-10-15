@@ -31,7 +31,7 @@ func handleKeybindManagerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 
 	// Keys that mean the same thing on every tab. The tabs without a filter
 	// can spend letters on movement too.
-	if listKey(msg.String(), o.KeybindTab != app.KeybindTabBindings, listPage, o.KeybindMove) {
+	if listKey(o, msg.String(), o.KeybindTab != app.KeybindTabBindings, listPage, o.KeybindMove) {
 		return o, nil
 	}
 	switch msg.String() {

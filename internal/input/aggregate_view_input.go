@@ -12,7 +12,7 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	// The selection moves and the renderer scrolls to keep it in view, which is
 	// how every other list overlay works. A row count of its own would scroll
 	// at the wrong time on any screen not showing exactly that many rows.
-	if listKey(commandKey(msg), false, listPage, o.AggregateViewMove) {
+	if listKey(o, commandKey(msg), false, listPage, o.AggregateViewMove) {
 		return o, nil
 	}
 	switch commandKey(msg) {

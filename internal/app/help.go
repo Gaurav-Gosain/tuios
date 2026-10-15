@@ -551,17 +551,15 @@ func sidebarGestures() []HelpBinding {
 	}
 }
 
-// generateListBindings is the keys every list and panel shares (see
-// internal/listnav) and the settings page's own. They are fixed keys of the
-// panels rather than registry actions, so they are written out here. They are
-// listed in the Modes section; see GetHelpCategories.
+// generateListBindings is the keys of the lists and panels that cannot be
+// rebound, and the settings page's own. The keys that move the cursor are the
+// [keybindings.lists] section (see internal/listnav), so they are listed with
+// the other scopes and not here. They are fixed keys of the panels rather than
+// registry actions, so they are written out here. They are listed in the Modes
+// section; see GetHelpCategories.
 func generateListBindings() []HelpBinding {
 	const cat = "Modes"
 	return []HelpBinding{
-		{Keys: []string{"up", "down", "ctrl+p", "ctrl+n"}, Description: "Lists: move; at either end, wrap round", Category: cat},
-		{Keys: []string{"home", "end"}, Description: "Lists: first / last row", Category: cat},
-		{Keys: []string{"pgup", "pgdown"}, Description: "Lists: a page, stopping at the ends", Category: cat},
-		{Keys: []string{"k", "j", "g", "G"}, Description: "Lists: up, down, first, last, with no filter", Category: cat},
 		{Keys: []string{"ctrl+u"}, Description: "Lists: clear a typed filter", Category: cat},
 		{Keys: []string{"wheel"}, Description: "Lists: scroll the list under the pointer", Category: cat},
 		{Keys: []string{"/"}, Description: "Settings: search every tab", Category: cat},

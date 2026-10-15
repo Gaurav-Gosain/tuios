@@ -391,6 +391,10 @@ func reachAgentsOS(t *testing.T) *app.OS {
 // with the program that does. No key in them can reach this package.
 var notTerminalSections = map[string]string{
 	"gui": "the native GUI, through the GUI bridge's keybinds event",
+	// The list keys move a cursor in whichever overlay is up; they run no
+	// action NoteAction could record. TestListKeysFromConfigMoveTheCommandPalette
+	// presses them through the real entry point.
+	"lists": "every list overlay, through listKey",
 }
 
 // TestReachabilityTableCoversEveryBindingSection stops the table from going
@@ -760,7 +764,7 @@ func modeName(m app.Mode) string {
 func TestEveryDescribedActionIsHandled(t *testing.T) {
 	handled := map[string]bool{app.HoldModeAction: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists} {
 		for action := range section {
 			handled[action] = true
 		}

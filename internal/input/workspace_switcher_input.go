@@ -14,7 +14,7 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 	keyStr := msg.String()
 	filtered := app.FilterWorkspaceItems(o.WorkspaceSwitcherItems, o.WorkspaceSwitcherQuery)
 
-	if listKey(keyStr, false, listPage, func(d int) { o.WorkspaceSwitcherMove(d, len(filtered)) }) {
+	if listKey(o, keyStr, false, listPage, func(d int) { o.WorkspaceSwitcherMove(d, len(filtered)) }) {
 		return o, nil
 	}
 

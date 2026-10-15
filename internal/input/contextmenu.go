@@ -45,7 +45,7 @@ func runContextMenuAction(action string, o *app.OS) (*app.OS, tea.Cmd) {
 // keystroke meant for it can never fall through to a window-manager binding or
 // to the shell.
 func handleContextMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(commandKey(msg), true, listPage, o.ContextMenuMove) {
+	if listKey(o, commandKey(msg), true, listPage, o.ContextMenuMove) {
 		return o, nil
 	}
 	switch commandKey(msg) {

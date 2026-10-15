@@ -585,7 +585,7 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 		}
 
 	case TapeManagerList:
-		if motion := listnav.Keys(key, true); motion != listnav.None {
+		if motion := m.ListKeys.Keys(key, true); motion != listnav.None {
 			m.TapeManagerMove(listnav.Delta(motion, 10))
 			return true
 		}

@@ -66,7 +66,7 @@ func handleLayoutSaveInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 	filtered := app.FilterLayoutTemplates(o.LayoutPickerItems, o.LayoutPickerQuery)
 
-	if listKey(keyStr, false, listPage, o.LayoutPickerMove) {
+	if listKey(o, keyStr, false, listPage, o.LayoutPickerMove) {
 		return o, nil
 	}
 

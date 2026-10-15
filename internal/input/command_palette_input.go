@@ -9,7 +9,7 @@ import (
 func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	keyStr := msg.String()
 
-	if listKey(keyStr, false, o.PalettePageRows(), o.PaletteMove) {
+	if listKey(o, keyStr, false, o.PalettePageRows(), o.PaletteMove) {
 		return o, nil
 	}
 

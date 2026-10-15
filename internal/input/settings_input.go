@@ -14,7 +14,7 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SettingsSearchOpen() {
 		return handleSettingsSearchInput(msg, o)
 	}
-	if listKey(msg.String(), true, o.SettingsPageRows(), o.SettingsMove) {
+	if listKey(o, msg.String(), true, o.SettingsPageRows(), o.SettingsMove) {
 		return o, nil
 	}
 	switch msg.String() {
@@ -78,7 +78,7 @@ func startsSettingsSearch(msg tea.KeyPressMsg) bool {
 // where it was; the next esc closes the panel.
 func handleSettingsSearchInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
-	if listKey(key, false, o.SettingsPageRows(), o.SettingsMove) {
+	if listKey(o, key, false, o.SettingsPageRows(), o.SettingsMove) {
 		return o, nil
 	}
 	switch key {

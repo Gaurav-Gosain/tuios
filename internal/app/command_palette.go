@@ -56,6 +56,7 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	}
 	themeBefore := theme.Generation()
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	m.ListKeys = listKeymap(cfg)
 	// ApplyAppearanceConfig switches the theme package, which recolours the
 	// chrome, but each pane's emulator holds its own copy of the palette. The
 	// theme picker pushes the new one into every pane (applyTheme); this path

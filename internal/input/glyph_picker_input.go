@@ -8,7 +8,7 @@ import (
 // handleGlyphPickerInput handles keyboard input for the glyph-set picker.
 // Selection live-previews the set; Enter commits, Esc restores the original.
 func handleGlyphPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if listKey(msg.String(), false, listPage, o.GlyphPickerMove) {
+	if listKey(o, msg.String(), false, listPage, o.GlyphPickerMove) {
 		return o, nil
 	}
 	switch msg.String() {

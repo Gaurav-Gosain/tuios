@@ -31,7 +31,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	}
 
-	if listKey(keyStr, false, listPage, o.SessionSwitcherMove) {
+	if listKey(o, keyStr, false, listPage, o.SessionSwitcherMove) {
 		return o, nil
 	}
 
