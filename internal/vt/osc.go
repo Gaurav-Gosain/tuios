@@ -20,7 +20,7 @@ func (e *Emulator) handleOsc(cmd int, data []byte) {
 	if e.handlers.handleOsc(cmd, data) {
 		return
 	}
-	if e.cb.PrivateOSC != nil {
+	if e.cb.PrivateOSC != nil && privateOSCNumber(cmd, data) {
 		e.cb.PrivateOSC(cmd, data)
 		return
 	}

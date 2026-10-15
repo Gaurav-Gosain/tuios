@@ -94,11 +94,11 @@ type Callbacks struct {
 	// have one, so it must only record and never call back into the terminal.
 	SemanticMark func(mark SemanticMarker)
 
-	// PrivateOSC callback. Called for an OSC sequence the emulator does not
-	// interpret itself, so a host can give meaning to a private number of its
-	// own. cmd is the OSC number and data the whole body, number included, as
-	// an [OscHandler] receives it. data is only valid for the call. On the
-	// ghostty backend it is also called for the numbers libghostty-vt
-	// interprets, so a host must check cmd.
+	// PrivateOSC callback. Called for an OSC sequence whose number the
+	// emulator does not interpret, so a host can give meaning to a private
+	// number of its own. cmd is the OSC number and data the whole body,
+	// number included, as an [OscHandler] receives it. data is only valid for
+	// the call. A sequence with no valid number, such as ESC ] foo BEL, is
+	// not passed on. Both backends call it for the same numbers.
 	PrivateOSC func(cmd int, data []byte)
 }

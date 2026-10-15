@@ -67,10 +67,14 @@ func TestNvimNavigationOSCNeedsForwardedKey(t *testing.T) {
 	// The key it read is kept, because tuios moving focus on the key itself
 	// would also pass the focus check below.
 	keyFile := filepath.Join(base, "nav-key")
-	if err := term.SendKeys(`stty raw -echo; dd bs=64 count=1 of=`+keyFile+` 2>/dev/null; printf '\033]7777;tuios-nvim-navigator;focus;left\007'; stty sane`, tuitest.Enter); err != nil {
+	// The marker is printed once the terminal is raw, so the key cannot
+	// arrive while the line discipline would still hold it.
+	if err := term.SendKeys(`stty raw -echo; printf 'NAV-%s-READY\r\n' $((3*7)); dd bs=64 count=1 of=`+keyFile+` 2>/dev/null; printf '\033]7777;tuios-nvim-navigator;focus;left\007'; stty sane`, tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Second)
+	if err := term.WaitForText("NAV-21-READY", shellTimeout); err != nil {
+		t.Fatalf("the pane never got ready for the key: %v\n%s", err, term.Snapshot())
+	}
 	if err := term.SendKeys("\x1b[1;3D"); err != nil {
 		t.Fatal(err)
 	}

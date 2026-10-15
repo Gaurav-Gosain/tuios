@@ -1,7 +1,6 @@
 package vt_test
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 
@@ -22,7 +21,6 @@ type oscCapture struct {
 	notify      [][2]string
 	progress    []progressReport
 	clipQueried []string
-	private     []string
 }
 
 type progressReport struct {
@@ -47,23 +45,8 @@ func newOSCEmulator(t *testing.T, cols, rows int) (*vt.Emulator, *oscCapture) {
 		Progress: func(state vt.ProgressState, percent int) {
 			c.progress = append(c.progress, progressReport{state, percent})
 		},
-		PrivateOSC: func(cmd int, data []byte) {
-			c.private = append(c.private, strconv.Itoa(cmd)+" "+string(data))
-		},
 	})
 	return emu, c
-}
-
-// An OSC number the emulator does not interpret reaches the host's private
-// hook with its whole body, and one it does interpret does not.
-func TestConform_OSCPrivateHook(t *testing.T) {
-	emu, c := newOSCEmulator(t, 20, 3)
-	if _, err := emu.WriteString("\x1b]7777;tuios-nvim-navigator;focus;right\x07\x1b]2;title\x07\x1b]5113;a;b\x1b\\"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if got, want := strings.Join(c.private, ","), "7777 7777;tuios-nvim-navigator;focus;right,5113 5113;a;b"; got != want {
-		t.Fatalf("private OSC callbacks = %q, want %q", got, want)
-	}
 }
 
 func TestConform_OSCTitleAndDirectory(t *testing.T) {

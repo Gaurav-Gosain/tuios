@@ -518,10 +518,13 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 		t.handleColorOSC(number, payload)
 		return false
 	default:
-		// libghostty-vt ignores a number it does not know, and this side
-		// cannot tell which those are, so every other number reaches the
-		// host's private hook as well.
-		t.privateOSC(number, payload)
+		// The rest of the numbers the emulator interprets (2, 7, 8, 9 and
+		// 777) are libghostty-vt's, and they never reach the hook. Every
+		// other number does, as on the pure emulator. It still goes to
+		// libghostty-vt, which ignores a number it does not know.
+		if t.cb.PrivateOSC != nil && privateOSCNumber(number, payload) {
+			t.privateOSC(number, payload)
+		}
 		return true
 	}
 }
@@ -530,9 +533,6 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 // released, like every other callback. The body is copied, because the
 // scanner reuses its buffer.
 func (t *GhosttyTerminal) privateOSC(number int, payload []byte) {
-	if t.cb.PrivateOSC == nil {
-		return
-	}
 	data := bytes.Clone(payload)
 	t.queue(func(cb Callbacks) {
 		if cb.PrivateOSC != nil {
