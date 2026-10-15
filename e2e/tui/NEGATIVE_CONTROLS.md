@@ -5756,3 +5756,5 @@ The controls were run on 2026-10-15 on branch `refactor/vt-private-osc`.
 | --- | --- | --- | --- |
 | The hook is not wired | `internal/terminal/window.go`: the `PrivateOSC` callback matches OSC 7778, not 7777 | `TestNvimNavigationOSCNeedsForwardedKey` (the focus key never reached the active pane) | **caught** |
 | The focus request is dropped | `handleNvimNavigatorOSC`: the `nav(direction)` call cut | `TestNvimNavigationOSCNeedsForwardedKey` (focus stayed after a forwarded key and the pane's focus request) | **caught** |
+| A body without its number reaches the hook | `privateOSCNumber`: the prefix check cut | `TestPrivateOSC` and `TestGhosttyPrivateOSC` in `internal/vt` (no number, empty body) | **caught in `internal/vt`** |
+| ghostty passes the numbers it interprets to the hook | `GhosttyTerminal.handleOSC`: the `privateOSCNumber` check cut | `TestGhosttyPrivateOSC` (OSC 2, 7, 8, 9, 777 and a wrapped number) | **caught in `internal/vt`** |
