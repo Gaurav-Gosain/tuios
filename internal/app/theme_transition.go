@@ -39,7 +39,7 @@ import (
 // outside the circle from the kept frame, a row segment at a time. Blends for
 // the soft edge and the fade are kept in a small table keyed on the two
 // colours, so a frame allocates nothing once the palette has been seen. The
-// kept frame is dropped when the transition ends.
+// kept frame and the table are dropped when the transition ends.
 //
 // Every client runs its own: an SSH or web client has its own OS, its own
 // canvas and its own motion clock, so each animates its own screen at its own
@@ -91,12 +91,13 @@ const (
 // running reports whether a transition is pending or drawing.
 func (t *themeTransition) running() bool { return t.style != "" }
 
-// end stops the transition and lets the kept frame go.
+// end stops the transition and lets the kept frame and the blend table go.
+// A table filled to its bound is some hundred kilobytes, and an idle client
+// has no use for it until the next change of theme.
 func (t *themeTransition) end() {
 	t.style, t.pending = "", false
 	t.start, t.asked = time.Time{}, time.Time{}
-	t.old = nil
-	clear(t.mix)
+	t.old, t.mix = nil, nil
 }
 
 // noticeThemeChange starts a transition when the theme changed since this
