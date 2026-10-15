@@ -687,6 +687,16 @@ type Settings struct {
 	// shipped, 200 twice as fast, 50 half as fast.
 	AnimationSpeed int
 
+	// ThemeTransition is how a change of theme is shown: ThemeTransitionNone
+	// swaps the colours in one frame, ThemeTransitionFade crosses the whole
+	// screen over, and ThemeTransitionCircle grows the new theme from the
+	// middle of the screen. Read it through ThemeTransitionStyle, which also
+	// honours appearance.motion.
+	ThemeTransition string
+	// ThemeTransitionMs is how long the transition takes at animation speed
+	// 100. Read it through ThemeTransitionDuration.
+	ThemeTransitionMs int
+
 	// ZoomBorderless makes a zoom the whole pane region with no chrome: the
 	// zoomed pane drops its border and title bar, and its guest is told the
 	// full size of the region. zoom_size and zoom_max_width do not apply while
@@ -881,6 +891,8 @@ func DefaultSettings() Settings {
 		ZoomSize:                    ZoomSizeDefault,
 		ZoomAnimation:               true,
 		AnimationSpeed:              AnimationSpeedDefault,
+		ThemeTransition:             ThemeTransitionNone,
+		ThemeTransitionMs:           ThemeTransitionMsDefault,
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,

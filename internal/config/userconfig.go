@@ -382,6 +382,8 @@ type AppearanceConfig struct {
 	NiriHoverReveals       *bool    `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
 	ZoomAnimation          *bool    `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
 	AnimationSpeed         int      `toml:"animation_speed"`           // Percent window animations run at: 100 as shipped, 200 twice as fast (default: 100)
+	ThemeTransition        string   `toml:"theme_transition"`          // How a theme change is shown: none, circle or fade (default: none)
+	ThemeTransitionMs      int      `toml:"theme_transition_duration"` // Milliseconds a theme transition takes, 100 to 2000 (default: 450)
 	ZoomBorderless         bool     `toml:"zoom_borderless"`           // A zoomed pane fills the whole pane region with no border (default: false)
 	ZoomFollowsFocus       *bool    `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
 	WindowButtonZoom       *bool    `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
@@ -984,6 +986,8 @@ func DefaultConfig() *UserConfig {
 			ScrollColumnMax:          ScrollColumnWidthMax,
 			ZoomSize:                 ZoomSizeDefault,
 			AnimationSpeed:           AnimationSpeedDefault,
+			ThemeTransition:          ThemeTransitionNone,
+			ThemeTransitionMs:        ThemeTransitionMsDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
@@ -2112,6 +2116,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if !slices.Contains(MotionLevels, cfg.Appearance.Motion) {
 		cfg.Appearance.Motion = defaultCfg.Appearance.Motion
 	}
+	if !slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
+		cfg.Appearance.ThemeTransition = defaultCfg.Appearance.ThemeTransition
+	}
 	if cfg.Appearance.ModalDim == nil {
 		cfg.Appearance.ModalDim = new(*defaultCfg.Appearance.ModalDim)
 	} else if d := *cfg.Appearance.ModalDim; d < 0 || d > ModalDimMax {
@@ -2576,6 +2583,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.MasterNoGrid = cfg.Appearance.MasterGrid != nil && !*cfg.Appearance.MasterGrid
 	s.ZoomSize = clampPercent(cfg.Appearance.ZoomSize, ZoomSizeMin, ZoomSizeMax, ZoomSizeDefault)
 	s.AnimationSpeed = clampPercent(cfg.Appearance.AnimationSpeed, AnimationSpeedMin, AnimationSpeedMax, AnimationSpeedDefault)
+	s.ThemeTransition = ThemeTransitionNone
+	if slices.Contains(ThemeTransitions, cfg.Appearance.ThemeTransition) {
+		s.ThemeTransition = cfg.Appearance.ThemeTransition
+	}
+	s.ThemeTransitionMs = clampPercent(cfg.Appearance.ThemeTransitionMs, ThemeTransitionMsMin, ThemeTransitionMsMax, ThemeTransitionMsDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)

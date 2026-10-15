@@ -127,6 +127,8 @@ var settingLabels = map[string]string{
 	"appearance.zoom_size":                      "Zoom size",
 	"appearance.zoom_animation":                 "Zoom animates",
 	"appearance.animation_speed":                "Animation speed",
+	"appearance.theme_transition":               "Theme change effect",
+	"appearance.theme_transition_duration":      "Theme change time (ms)",
 	"appearance.zoom_borderless":                "Borderless zoom",
 	"appearance.zoom_follows_focus":             "Zoom follows focus",
 	"appearance.window_button_zoom":             "Tiled zoom button",
@@ -203,13 +205,14 @@ var settingUnset = map[string]string{
 // settingSteps is the stride an int row moves by, for the ranges where one is
 // too fine to arrow through. Anything absent steps by one.
 var settingSteps = map[string]int{
-	"appearance.scrollback_lines": 1000,
-	"appearance.zoom_max_width":   10,
-	"appearance.dim_unfocused":    5,
-	"appearance.modal_dim":        5,
-	"appearance.animation_speed":  25,
-	"hints.dim":                   5,
-	"appearance.sidebar.width":    2,
+	"appearance.scrollback_lines":          1000,
+	"appearance.zoom_max_width":            10,
+	"appearance.dim_unfocused":             5,
+	"appearance.modal_dim":                 5,
+	"appearance.animation_speed":           25,
+	"appearance.theme_transition_duration": 50,
+	"hints.dim":                            5,
+	"appearance.sidebar.width":             2,
 }
 
 // settingLabel is the row's name: an override where there is one, otherwise the

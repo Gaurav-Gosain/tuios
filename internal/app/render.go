@@ -728,6 +728,13 @@ func (m *OS) safeComposeFrame() (frame string, ok bool) {
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
 func (m *OS) composeFrame() string {
+	frame := m.composeFrameOnce()
+	// The frame a theme transition starts from. See theme_transition.go.
+	m.themeFx.lastFrame = frame
+	return frame
+}
+
+func (m *OS) composeFrameOnce() string {
 	// The ground a pane's program is told it is on, kept in step with the one
 	// it is drawn on. First, because every path below draws the panes. See
 	// background.go.
@@ -747,6 +754,12 @@ func (m *OS) composeFrame() string {
 	// The panes are still there and still running; what is skipped is drawing
 	// them. The saver's own capture was taken when it started, so it has the
 	// screen it is animating and needs nothing further from the compositor.
+	if m.themeFx.pending {
+		// Before anything below draws: the canvas still holds the frame in
+		// the old theme. See theme_transition.go.
+		m.keepThemeFrame()
+	}
+	m.canvasIsFrame = false
 	if m.screensaver.active && m.screensaver.frame != "" {
 		m.OverlayHits = m.OverlayHits[:0]
 		m.SixelPassthrough.SetFrame(nil, 0, 0, 0, 0)
@@ -789,6 +802,11 @@ func (m *OS) composeFrame() string {
 	if m.celebration.active() {
 		m.celebration.draw(canvas)
 	}
+	// The old theme outside the circle, over everything drawn in the new
+	// one.
+	if m.themeFx.running() {
+		m.applyThemeTransition(canvas, time.Now())
+	}
 	// Last, so the images are cut by everything drawn over the panes.
 	m.scanSixelFrame(canvas)
 	// The frame goes out as the canvas wrote it. The bubbletea renderer
@@ -797,6 +815,7 @@ func (m *OS) composeFrame() string {
 	// wish or sip sets per connection. Passing it through lipgloss.Sprint as
 	// well copied the whole frame twice on a truecolor terminal and stripped
 	// every colour when this process's stdout was not a TTY.
+	m.canvasIsFrame = true
 	return canvas.Render()
 }
 
@@ -853,6 +872,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// The celebration is a pass over the canvas too, for the second or so it
 	// is on screen.
 	if m.celebration.active() {
+		return nil, false
+	}
+	// And the theme transition, which keeps the old frame's cells outside
+	// its circle.
+	if m.themeFx.running() {
 		return nil, false
 	}
 	// A hover label is a layer the fast path does not compose. The dock's

@@ -468,6 +468,17 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.theme_transition", Type: OptionString, Section: "appearance",
+		Description: "How tuios shows a theme change: none, circle (the new theme grows from the middle of the screen) or fade",
+		Accepted:    ThemeTransitions, Default: ThemeTransitionNone,
+	},
+	{
+		Path: "appearance.theme_transition_duration", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds a theme transition takes at animation speed 100",
+		Default:     strconv.Itoa(ThemeTransitionMsDefault),
+		Min:         ThemeTransitionMsMin, Max: ThemeTransitionMsMax,
+	},
+	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",
 		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
 		Default:     strconv.Itoa(ScrollColumnWidthMax),

@@ -73,6 +73,7 @@ type motionFrameMsg struct{ gen uint64 }
 // which is the case on every message of an idle session.
 func (m *OS) motionCmd() tea.Cmd {
 	m.trackModalOverlays()
+	m.noticeThemeChange()
 	want := m.motionInterval()
 	if want == 0 {
 		return nil
@@ -93,6 +94,9 @@ func (m *OS) motionCmd() tea.Cmd {
 func (m *OS) motionInterval() time.Duration {
 	if m.motion.fading > 0 {
 		return config.OverlayFadeFrame
+	}
+	if m.themeFx.running() {
+		return m.themeTransitionFrame()
 	}
 	// A copy sweep, at the fade's rate: it crosses the block in under half a
 	// second, and at the maintenance tick's idle rate that was four frames.
@@ -122,6 +126,9 @@ func (m *OS) handleMotionFrame(msg motionFrameMsg) {
 	// does not stay on the screen.
 	flash := m.markCopyFlashPane()
 	need := m.motion.fading > 0 || m.shimmerActive() || flash
+	// A transition still asks for a frame on the tick it ends, so the last
+	// one drawn is the new theme on the whole screen.
+	need = m.expireThemeTransition(time.Now()) || need
 	if m.motion.fading > 0 {
 		m.retireFades(time.Now())
 	}

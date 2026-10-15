@@ -477,6 +477,9 @@ type OS struct {
 	// celebration is a short confetti burst drawn over the composed frame. It
 	// schedules frames only while particles are alive. See celebrate.go.
 	celebration celebrationState
+	// themeFx is the running theme transition, if any. See
+	// theme_transition.go.
+	themeFx themeTransition
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
@@ -534,6 +537,7 @@ type OS struct {
 	// reused so a mouse drag does not allocate a map per motion event.
 	bspResizeScratch map[int]layout.Rect
 	renderCanvas     *frameCanvas // Reused across frames; resized on change, cleared per frame
+	canvasIsFrame    bool         // renderCanvas holds the last frame drawn, which the fast path and the saver do not leave
 	// separatorMemo is the last divider overlay and the inputs it was drawn
 	// from. See renderSeparatorOverlay.
 	separatorMemo separatorMemo

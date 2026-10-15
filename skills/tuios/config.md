@@ -269,6 +269,10 @@ panel such as the command palette; 0 turns it off. `appearance.motion` is
 fade-in and the shimmer on a working agent's rail row). The old
 `animations_enabled` still works and maps `false` to `none`.
 
+`appearance.theme_transition` is `none` (the default), `circle` (the new theme
+grows from the middle of the screen) or `fade`. `theme_transition_duration` is
+in milliseconds, 100 to 2000, default 450. Motion `none` turns it off.
+
 **Record the old values first.** There is no preview and no undo:
 
 ```sh

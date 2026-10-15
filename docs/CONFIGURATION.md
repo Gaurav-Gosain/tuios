@@ -393,6 +393,28 @@ A value outside 25 to 400 moves to the nearest end. `appearance.motion = "none"`
 still turns the animations off, whatever the speed. Overlay fades and the copy
 sweep keep their own timing. The copy sweep uses `appearance.selection.flash_ms`.
 
+## Theme transition
+
+`appearance.theme_transition` sets how tuios shows a change of theme. The
+change can come from the theme picker, `tuios set-config`, a config reload or
+the Omarchy theme.
+
+- `none` changes the colors in one frame. This is the default.
+- `circle` grows the new theme from the middle of the screen, over the old one.
+- `fade` changes every cell from the old colors to the new colors.
+
+```toml
+[appearance]
+theme_transition = "circle"
+theme_transition_duration = 450   # milliseconds, from 100 to 2000
+```
+
+`appearance.animation_speed` also applies to the duration. A value outside 100
+to 2000 moves to the nearest end. `appearance.motion = "none"` turns the
+transition off. The `fade` transition needs a truecolor terminal. On a terminal
+with fewer colors, tuios changes the colors in one frame. While the transition
+runs, the screen outside the circle does not change.
+
 ## Frame rate
 
 `appearance.max_fps` is the highest frame rate tuios draws at. Your terminal
