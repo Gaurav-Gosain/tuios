@@ -206,8 +206,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 			t.penProtected = false
 		}
 	case final == 'u' && prefix == '>':
-		if t.kkpUnavailable {
-			break // ConPTY pane: the protocol was never offered
+		if t.kkpUnavailable.Load() {
+			break // see Emulator.DisableKittyKeyboardProtocol
 		}
 		flags := 0
 		if v, ok := csiFirstParam(params); ok {
@@ -215,8 +215,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		}
 		t.kittyKbd.Push(flags)
 	case final == 'u' && prefix == '<':
-		if t.kkpUnavailable {
-			break // ConPTY pane: the protocol was never offered
+		if t.kkpUnavailable.Load() {
+			break // see Emulator.DisableKittyKeyboardProtocol
 		}
 		n := 1
 		if v, ok := csiFirstParam(params); ok && v > 0 {
@@ -224,8 +224,8 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		}
 		t.kittyKbd.Pop(n)
 	case final == 'u' && prefix == '=':
-		if t.kkpUnavailable {
-			break // ConPTY pane: the protocol was never offered
+		if t.kkpUnavailable.Load() {
+			break // see Emulator.DisableKittyKeyboardProtocol
 		}
 		flags, mode := csiTwoParams(params, 0, 1)
 		t.kittyKbd.Set(flags, mode)

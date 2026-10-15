@@ -51,8 +51,9 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
 		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
 		// The main screen's stack, under a program on the alternate one.
-		KittyKbdMainStack: t.KittyKeyboardMainStack(),
-		KittyImages:       t.KittyGuestImagesState(),
+		KittyKbdMainStack:   t.KittyKeyboardMainStack(),
+		KittyKbdUnavailable: t.KittyKeyboardUnavailable(),
+		KittyImages:         t.KittyGuestImagesState(),
 		// Set once by an editor at start, like the kitty flags, so it
 		// cannot be recovered from the output buffer either.
 		ModifyOtherKeys:      t.ModifyOtherKeys(),

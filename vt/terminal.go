@@ -323,6 +323,13 @@ type Terminal interface {
 	// RestoreKittyKeyboardMainStack puts back the stack KittyKeyboardMainStack
 	// returned. An empty stack changes nothing.
 	RestoreKittyKeyboardMainStack(stack []int)
+	// DisableKittyKeyboardProtocol stops the emulator offering the kitty
+	// keyboard protocol, for a pane whose PTY cannot carry it. See
+	// Emulator.DisableKittyKeyboardProtocol.
+	DisableKittyKeyboardProtocol()
+	// KittyKeyboardUnavailable reports whether DisableKittyKeyboardProtocol
+	// was called.
+	KittyKeyboardUnavailable() bool
 	// ModifyOtherKeys is the xterm modifyOtherKeys level the guest set with
 	// XTMODKEYS (CSI > 4 ; n m): 0 off, 1 or 2. See EncodeModifyOtherKeys.
 	ModifyOtherKeys() int

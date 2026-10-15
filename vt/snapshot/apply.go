@@ -93,6 +93,10 @@ func Apply(t vt.Terminal, state *State) error {
 	// recovered from the bounded output buffer. Without this a reattached
 	// client encodes keys in legacy form for a pane that negotiated the
 	// protocol.
+	// Before the stacks, which a pane without the protocol does not take.
+	if state.KittyKbdUnavailable {
+		t.DisableKittyKeyboardProtocol()
+	}
 	t.RestoreKittyKeyboardState(state.KittyKbdStack)
 	// Each screen has its own stack, and the one above is the alternate
 	// screen's while a program runs there. Without the main one a client

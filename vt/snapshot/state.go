@@ -72,6 +72,12 @@ type State struct {
 	// carried only while the alternate screen is active, when KittyKbdStack
 	// is the alternate screen's.
 	KittyKbdMainStack []int `json:"kitty_kbd_main_stack,omitempty"`
+	// KittyKbdUnavailable says the pane does not offer the kitty keyboard
+	// protocol, because its PTY is a Windows ConPTY. A client applies it to
+	// its own emulator, so a guest that pushes flags without a query does not
+	// switch the client to CSI u keys. False from an older daemon. See
+	// vt.Emulator.DisableKittyKeyboardProtocol.
+	KittyKbdUnavailable bool `json:"kitty_kbd_unavailable,omitempty"`
 	// KittyImages is the ids the daemon gave the guest's kitty image numbers
 	// (I=), and which ids hold an image. A client restoring this gives the
 	// same ids from here on, so an image the guest places by the id it was

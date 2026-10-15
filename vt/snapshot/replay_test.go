@@ -87,3 +87,25 @@ func TestSnapshotVTRebuildsThePane(t *testing.T) {
 		})
 	}
 }
+
+// TestApplyCarriesKittyKeyboardOff checks that a pane without the kitty
+// keyboard protocol stays without it on a client. The client encodes keys
+// from its own emulator, so without the flag a guest that pushes flags with
+// no query first switches the client to CSI u keys the pane cannot carry.
+func TestApplyCarriesKittyKeyboardOff(t *testing.T) {
+	a := vt.New(40, 10)
+	a.DisableKittyKeyboardProtocol()
+	state := Capture(a, 40, 10, 0, 0)
+	if !state.KittyKbdUnavailable {
+		t.Fatal("the state does not say the pane is without the protocol")
+	}
+
+	b := vt.New(40, 10)
+	if err := Apply(b, state); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = b.Write([]byte("\x1b[>1u"))
+	if got := b.KittyKeyboardFlags(); got != 0 {
+		t.Errorf("the client took the push: flags = %d, want 0", got)
+	}
+}

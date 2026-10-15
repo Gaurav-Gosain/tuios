@@ -190,29 +190,39 @@ func (k *kittyKeyboardState) HasReportAllKeys() bool {
 }
 
 // DisableKittyKeyboardProtocol makes the emulator stop offering the kitty
-// keyboard protocol: pushes, pops and sets change nothing, and a CSI ? u
-// query goes unanswered. Used for panes whose PTY is a Windows ConPTY:
-// conhost drops input CSIs it does not recognise (before conhost 1.22) and
-// never answers the query, so advertising flags would let a guest rely on
-// distinctions — Ctrl+Backspace, modified Enter — whose bytes never reach
-// it. Per the kitty spec an unanswered query means "not supported", so the
-// guest falls back to legacy keys on its own. Call before the pane's reader
-// goroutine starts: guests cannot have negotiated anything before that, so
-// a plain bool needs no synchronisation here.
+// keyboard protocol. Pushes, pops and sets change nothing, a CSI ? u query
+// goes unanswered, and a saved stack is not restored.
+//
+// It is for a pane whose PTY is a Windows ConPTY. conhost before 1.22 drops
+// the input CSIs it does not recognise, so the CSI u bytes for Escape,
+// Ctrl+letters and modified Enter or Backspace never reach the guest. Per
+// the kitty spec an unanswered query means the protocol is not supported,
+// so a guest that queries first (pi, neovim) falls back to legacy keys on
+// its own. Every encoder reads the flags, which stay at 0, so client key
+// encoding, send-keys and key releases all agree.
+//
+// The daemon calls it before the pane's output starts. A client calls it
+// from a snapshot that says the pane is a ConPTY one (see
+// snapshot.State.KittyKbdUnavailable), under the lock that guards the
+// emulator's writes. There is no way back: a pane keeps its PTY.
 func (e *Emulator) DisableKittyKeyboardProtocol() {
-	e.kkpUnavailable = true
+	e.kkpUnavailable.Store(true)
 	if e.kittyKbd != nil {
 		e.kittyKbd.Reset()
 	}
 	e.cachedKittyFlags.Store(0)
 }
 
+// KittyKeyboardUnavailable reports whether DisableKittyKeyboardProtocol was
+// called.
+func (e *Emulator) KittyKeyboardUnavailable() bool { return e.kkpUnavailable.Load() }
+
 // registerKittyKeyboardHandlers registers CSI handlers for kitty keyboard protocol.
 func (e *Emulator) registerKittyKeyboardHandlers() {
 	// CSI > flags u: Push keyboard mode
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'u'), func(params ansi.Params) bool {
-		if e.kkpUnavailable {
-			return true // ConPTY pane: consume silently, the protocol was never offered
+		if e.kkpUnavailable.Load() {
+			return true // see DisableKittyKeyboardProtocol
 		}
 		flags := 0
 		if len(params) > 0 {
@@ -225,8 +235,8 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 
 	// CSI < count u: Pop keyboard mode
 	e.RegisterCsiHandler(ansi.Command('<', 0, 'u'), func(params ansi.Params) bool {
-		if e.kkpUnavailable {
-			return true // ConPTY pane: consume silently, the protocol was never offered
+		if e.kkpUnavailable.Load() {
+			return true // see DisableKittyKeyboardProtocol
 		}
 		count := 1
 		if len(params) > 0 {
@@ -237,11 +247,10 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI ? u: Query keyboard mode. A ConPTY pane stays silent: per spec no
-	// reply tells the guest the protocol is unsupported, so it falls back on
-	// its own instead of counting on distinctions conhost will drop.
+	// CSI ? u: Query keyboard mode. No reply when the protocol is off, see
+	// DisableKittyKeyboardProtocol.
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'u'), func(_ ansi.Params) bool {
-		if e.kkpUnavailable {
+		if e.kkpUnavailable.Load() {
 			return true
 		}
 		flags := e.kittyKbd.CurrentFlags()
@@ -253,8 +262,8 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 
 	// CSI = flags ; mode u: Set keyboard mode
 	e.RegisterCsiHandler(ansi.Command('=', 0, 'u'), func(params ansi.Params) bool {
-		if e.kkpUnavailable {
-			return true // ConPTY pane: consume silently, the protocol was never offered
+		if e.kkpUnavailable.Load() {
+			return true // see DisableKittyKeyboardProtocol
 		}
 		flags := 0
 		mode := 1
@@ -304,7 +313,7 @@ func (e *Emulator) KittyKeyboardMainStack() []int {
 // RestoreKittyKeyboardMainStack replaces the main screen's flag stack from a
 // saved state. A nil or empty stack is a no-op.
 func (e *Emulator) RestoreKittyKeyboardMainStack(stack []int) {
-	if e.kittyKbd == nil || len(stack) == 0 {
+	if e.kkpUnavailable.Load() || e.kittyKbd == nil || len(stack) == 0 {
 		return
 	}
 	e.kittyKbd.SetMainStack(stack)
@@ -317,10 +326,8 @@ func (e *Emulator) RestoreKittyKeyboardMainStack(stack []int) {
 // from an older daemon leaves the default (empty) state untouched. The stack
 // goes to the screen in use, so restore the alternate screen first.
 func (e *Emulator) RestoreKittyKeyboardState(stack []int) {
-	// A ConPTY pane never offered the protocol, so a saved stack would be a
-	// state the guest could not have set; restoring one would lie to the
-	// client-side encoder.
-	if e.kkpUnavailable || e.kittyKbd == nil || len(stack) == 0 {
+	// See DisableKittyKeyboardProtocol.
+	if e.kkpUnavailable.Load() || e.kittyKbd == nil || len(stack) == 0 {
 		return
 	}
 	e.kittyKbd.SetStack(stack)

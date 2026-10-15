@@ -221,7 +221,7 @@ func (t *GhosttyTerminal) RestoreCursorStyle(style CursorStyle, steady bool) {
 
 // RestoreKittyKeyboardState implements [Terminal.RestoreKittyKeyboardState].
 func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
-	if len(stack) == 0 {
+	if len(stack) == 0 || t.kkpUnavailable.Load() {
 		return
 	}
 	t.mu.Lock()
@@ -232,7 +232,7 @@ func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
 
 // RestoreKittyKeyboardMainStack implements [Terminal.RestoreKittyKeyboardMainStack].
 func (t *GhosttyTerminal) RestoreKittyKeyboardMainStack(stack []int) {
-	if len(stack) == 0 {
+	if len(stack) == 0 || t.kkpUnavailable.Load() {
 		return
 	}
 	t.mu.Lock()

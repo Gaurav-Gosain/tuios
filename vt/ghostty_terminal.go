@@ -114,6 +114,9 @@ type GhosttyTerminal struct {
 	// restore and cannot ask it for the result.
 	savedLRMM bool
 	kittyKbd  *kittyKeyboardState
+	// kkpUnavailable is set by DisableKittyKeyboardProtocol. See
+	// Emulator.DisableKittyKeyboardProtocol for why.
+	kkpUnavailable atomic.Bool
 	// tabstops follows the library's tab stops, which it keeps where no
 	// query reaches (observeTabControl).
 	tabstops *uv.TabStops
@@ -244,7 +247,15 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		// strings, so what the library keeps here is short.
 		gh.WithContinuationMaxBytes(uint(MaxPendingInput)),
 		gh.WithWritePty(func(_ *gh.Terminal, data []byte) {
-			// Query responses; the pipe write never blocks.
+			// Query responses; the pipe write never blocks. libghostty
+			// answers CSI ? u itself, so the reply is dropped here when the
+			// protocol is off (see Emulator.DisableKittyKeyboardProtocol).
+			if t.kkpUnavailable.Load() {
+				data = dropKittyKeyboardReplies(data)
+				if len(data) == 0 {
+					return
+				}
+			}
 			_, _ = t.pipe.Write(data)
 		}),
 		gh.WithBell(func(_ *gh.Terminal) {
@@ -743,6 +754,50 @@ func (t *GhosttyTerminal) RestoreModifyOtherKeys(level int) {
 	r := t.pendingRestore()
 	r.modifyOtherKeys = level
 	r.hasModifyOtherKeys = true
+}
+
+// DisableKittyKeyboardProtocol implements
+// [Terminal.DisableKittyKeyboardProtocol].
+func (t *GhosttyTerminal) DisableKittyKeyboardProtocol() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kkpUnavailable.Store(true)
+	t.kittyKbd.Reset()
+	t.cachedKittyFlags.Store(0)
+}
+
+// KittyKeyboardUnavailable implements [Terminal.KittyKeyboardUnavailable].
+func (t *GhosttyTerminal) KittyKeyboardUnavailable() bool { return t.kkpUnavailable.Load() }
+
+// dropKittyKeyboardReplies removes every CSI ? <digits> u, the reply to a
+// kitty keyboard query, from a run of query responses.
+func dropKittyKeyboardReplies(data []byte) []byte {
+	out := data[:0:0]
+	for i := 0; i < len(data); {
+		if j := kittyKeyboardReplyEnd(data, i); j > 0 {
+			i = j
+			continue
+		}
+		out = append(out, data[i])
+		i++
+	}
+	return out
+}
+
+// kittyKeyboardReplyEnd returns the end of a CSI ? <digits> u that starts
+// at i, or 0 if none does.
+func kittyKeyboardReplyEnd(data []byte, i int) int {
+	if i+3 >= len(data) || data[i] != 0x1b || data[i+1] != '[' || data[i+2] != '?' {
+		return 0
+	}
+	j := i + 3
+	for j < len(data) && data[j] >= '0' && data[j] <= '9' {
+		j++
+	}
+	if j == i+3 || j >= len(data) || data[j] != 'u' {
+		return 0
+	}
+	return j + 1
 }
 
 // KittyKeyboardStack implements [Terminal.KittyKeyboardStack].

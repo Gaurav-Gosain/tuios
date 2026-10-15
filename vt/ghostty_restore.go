@@ -504,9 +504,8 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 	} else if !extend {
 		t.modifyOtherKeys.Store(0)
 	}
-	// A ConPTY pane never offered the protocol, so a saved stack describes a
-	// negotiation that could not have happened; leave the (empty) state alone.
-	if !t.kkpUnavailable {
+	// See Emulator.DisableKittyKeyboardProtocol.
+	if !t.kkpUnavailable.Load() {
 		if len(r.kittyKbdStack) > 0 {
 			t.kittyKbd.Reset()
 			t.kittyKbd.SelectScreen(altActive)

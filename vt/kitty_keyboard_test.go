@@ -3,6 +3,7 @@ package vt
 import (
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -343,52 +344,57 @@ func TestKittyTextUnderDisambiguate(t *testing.T) {
 	}
 }
 
-// TestConPTYPaneIgnoresKittyKeyboard pins the behaviour of a pane whose PTY
-// is a Windows ConPTY: the emulator never offers the kitty keyboard protocol,
-// so pushes, pops and sets leave the flags at 0 and a CSI ? u query goes
-// unanswered — per spec, silence means "not supported" and the guest falls
-// back to legacy keys on its own. conhost drops input CSIs it does not
-// recognise (before conhost 1.22), so any CSI u bytes a guest sent anyway
-// would never reach it.
+// TestConPTYPaneIgnoresKittyKeyboard checks a pane that does not offer the
+// kitty keyboard protocol (see DisableKittyKeyboardProtocol), on the backend
+// the build uses. Each push, set and pop is checked on its own, because push,
+// set and pop end at 0 with or without the guard. The query gets no reply:
+// the DA1 query written after it is answered, so the read does not wait on a
+// timeout. Saved stacks for either screen are not restored.
 func TestConPTYPaneIgnoresKittyKeyboard(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-	e.DisableKittyKeyboardProtocol()
-
-	_, _ = e.Write([]byte("\x1b[>1u\x1b[=7;1u\x1b[<1u"))
-	if got := e.KittyKeyboardFlags(); got != 0 {
-		t.Errorf("flags = %d, want 0 after push/set/pop on a ConPTY pane", got)
+	term := New(80, 24)
+	defer term.Close()
+	term.DisableKittyKeyboardProtocol()
+	if !term.KittyKeyboardUnavailable() {
+		t.Fatal("KittyKeyboardUnavailable is false after DisableKittyKeyboardProtocol")
 	}
 
-	responseChan := make(chan string, 1)
-	go func() {
-		buf := make([]byte, 256)
-		n, err := e.Read(buf)
-		if err != nil && err != io.EOF {
-			responseChan <- "read error: " + err.Error()
-			return
+	for _, seq := range []string{"\x1b[>1u", "\x1b[=7;1u", "\x1b[>5u\x1b[<1u"} {
+		_, _ = term.Write([]byte(seq))
+		if got := term.KittyKeyboardFlags(); got != 0 {
+			t.Errorf("flags = %d after %q, want 0", got, seq)
 		}
-		responseChan <- string(buf[:n])
-	}()
-	_, _ = e.Write([]byte("\x1b[?u"))
-
-	select {
-	case response := <-responseChan:
-		t.Errorf("a ConPTY pane answered the query with %q, want silence", response)
-	case <-time.After(500 * time.Millisecond):
-		// Silence is the expected outcome: no reply means "not supported".
 	}
-}
 
-// TestConPTYPaneRestoreKeepsStackEmpty pins that a saved kitty stack is not
-// restored onto a ConPTY pane: the guest could never have negotiated it.
-func TestConPTYPaneRestoreKeepsStackEmpty(t *testing.T) {
-	e := NewEmulator(80, 24)
-	defer e.Close()
-	e.DisableKittyKeyboardProtocol()
+	replies := make(chan string, 1)
+	go func() {
+		var got []byte
+		buf := make([]byte, 256)
+		for !strings.HasSuffix(string(got), "c") {
+			n, err := term.Read(buf)
+			got = append(got, buf[:n]...)
+			if err != nil {
+				break
+			}
+		}
+		replies <- string(got)
+	}()
+	_, _ = term.Write([]byte("\x1b[?u\x1b[c"))
+	select {
+	case got := <-replies:
+		if strings.Contains(got, "u") {
+			t.Errorf("the pane answered the kitty keyboard query: %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no reply to DA1")
+	}
 
-	e.RestoreKittyKeyboardState([]int{1, 7})
-	if got := e.KittyKeyboardFlags(); got != 0 {
-		t.Errorf("flags = %d, want 0 after restoring a stack onto a ConPTY pane", got)
+	term.RestoreKittyKeyboardState([]int{1, 7})
+	if got := term.KittyKeyboardFlags(); got != 0 {
+		t.Errorf("flags = %d after restoring a stack, want 0", got)
+	}
+	_, _ = term.Write([]byte("\x1b[?1049h"))
+	term.RestoreKittyKeyboardMainStack([]int{1, 7})
+	if got := term.KittyKeyboardMainStack(); len(got) > 1 || (len(got) == 1 && got[0] != 0) {
+		t.Errorf("main stack = %v after restoring one, want it empty", got)
 	}
 }
