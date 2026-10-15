@@ -61,7 +61,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 			// Validate each key
 			for _, key := range keys {
-				valid, errMsg := normalizer.ValidateKey(key)
+				valid, errMsg := normalizer.ValidateSectionKey(sectionName, key)
 				if !valid {
 					result.Errors = append(result.Errors, ValidationError{
 						Field:   sectionName,
@@ -808,7 +808,7 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 			kept := keys[:0:0]
 			first := len(dropped)
 			for _, key := range keys {
-				if ok, msg := normalizer.ValidateKey(key); !ok {
+				if ok, msg := normalizer.ValidateSectionKey(section.name, key); !ok {
 					dropped = append(dropped, DroppedKey{
 						File: fileOf("keybindings", section.name, action), Section: section.name,
 						Action: action, Key: key, Problem: msg,

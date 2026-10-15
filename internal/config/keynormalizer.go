@@ -617,6 +617,39 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	return true, ""
 }
 
+// ValidateSectionKey is ValidateKey for a key in the binding table section.
+// It also accepts the middle mouse button, which Bubble Tea spells "middle",
+// in terminal_mode only, and with ctrl, alt and shift only: no other table
+// looks a mouse press up, and Bubble Tea's mouse events carry no other
+// modifier. The left and right buttons are not accepted, because "left" and
+// "right" are the arrow keys.
+func (kn *KeyNormalizer) ValidateSectionKey(section, key string) (bool, string) {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(key)), "+")
+	if parts[len(parts)-1] != middleButton {
+		return kn.ValidateKey(key)
+	}
+	if section != SectionTerminalMode {
+		return false, "the middle mouse button is a key only in [keybindings.terminal_mode]"
+	}
+	seen := make(map[string]bool)
+	for _, mod := range parts[:len(parts)-1] {
+		name := modifierAliases[mod]
+		switch name {
+		case "ctrl", "alt", "shift":
+		default:
+			return false, "the middle mouse button takes only ctrl, alt and shift, not " + mod
+		}
+		if seen[name] {
+			return false, "duplicate modifier: " + mod
+		}
+		seen[name] = true
+	}
+	return true, ""
+}
+
+// middleButton is how Bubble Tea spells a middle mouse button press.
+const middleButton = "middle"
+
 // validSpecialKeys are the key names ValidateKey accepts beyond single runes
 // and function keys. It is only read. The left/right modifier names are keys in
 // their own right only under the Kitty keyboard protocol; they are accepted so
@@ -630,10 +663,6 @@ var validSpecialKeys = map[string]bool{
 	"up": true, "down": true, "left": true, "right": true,
 	"home": true, "end": true, "pgup": true, "pageup": true,
 	"pgdown": true, "pagedown": true, "insert": true,
-	// Bubble Tea spells a middle-button press "middle". It is accepted in the
-	// terminal_mode table, where that event has an unambiguous name (unlike the
-	// left and right buttons, which collide with the arrow-key names).
-	"middle": true,
 	// Keys Bubble Tea names that most keyboards have but that a terminal
 	// reports only under the Kitty keyboard protocol. They suit a held-key
 	// binding, which needs that protocol anyway.

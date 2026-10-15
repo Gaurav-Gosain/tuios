@@ -535,7 +535,7 @@ func (r *KeybindRegistry) KeyProblems() []KeyProblem {
 		if strings.TrimSpace(key) == "" {
 			return
 		}
-		if ok, msg := normalizer.ValidateKey(key); !ok {
+		if ok, msg := normalizer.ValidateSectionKey(section, key); !ok {
 			out = append(out, KeyProblem{
 				Section: section, Action: action, Key: key,
 				Problem: msg, File: "config.toml",

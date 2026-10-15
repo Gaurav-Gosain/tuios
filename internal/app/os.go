@@ -1801,6 +1801,9 @@ type OS struct {
 	// PiPPressed says the button that is down was pressed on the
 	// picture-in-picture view, so its release is the view's as well.
 	PiPPressed bool
+	// MiddleBindingPressed says a terminal-mode binding took the middle
+	// button press, so its release is the binding's as well.
+	MiddleBindingPressed bool
 	// scratchPending says the scratch terminal was asked for and has not
 	// arrived yet, and scratchPendingAt is when. See scratch.go.
 	scratchPending   string

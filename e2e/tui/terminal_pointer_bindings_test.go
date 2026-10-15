@@ -3,8 +3,12 @@ package tuie2e
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -124,4 +128,59 @@ terminal_paste_host = ["ctrl+middle"]
 		t.Logf("rebound middle-paste frame:\n%s", term.Snapshot())
 		alive(t, term, "after the rebound middle-paste binding")
 	})
+}
+
+// sgrMiddleClick matches a middle press and its release as a pane receives
+// them in SGR encoding, at the same cell.
+var sgrMiddleClick = regexp.MustCompile(`^\x1b\[<1;(\d+);(\d+)M\x1b\[<1;(\d+);(\d+)m$`)
+
+// TestMousePaneKeepsPageKeysAndMiddleButton checks a pane whose program turned
+// a mouse mode on, as vim with mouse=a, lazygit and tmux do. Shift+PageUp and
+// a plain middle click reach the program, as they did before the bindings.
+// A ctrl+middle binding still runs over the program, and its release stays
+// with tuios, so the program never sees a release without its press.
+func TestMousePaneKeepsPageKeysAndMiddleButton(t *testing.T) {
+	bin := buildKeyEcho(t)
+	base := t.TempDir()
+	writeConfig(t, base, `[keybindings.terminal_mode]
+terminal_paste_host = ["middle", "ctrl+middle"]
+`)
+	log := filepath.Join(base, "pane-bytes")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, `printf '\033[?1000h\033[?1006h'; stty raw -echo; `+bin+" 0 "+log, "KEYECHO-READY", shellTimeout)
+
+	const shiftPageUp = "\x1b[5;2~"
+	sendRaw(t, term, shiftPageUp)
+	waitPaneBytes(t, term, log, shiftPageUp)
+
+	// The binding takes the press, so the release is tuios's too.
+	col, row := paneCell(t, term)
+	mouseClick(t, term, col, row, tuitest.MouseMiddle, tuitest.ModCtrl)
+
+	mouseClick(t, term, col, row, tuitest.MouseMiddle, 0)
+	deadline := time.Now().Add(uiTimeout)
+	var got string
+	for time.Now().Before(deadline) {
+		b, _ := os.ReadFile(log)
+		got = strings.TrimPrefix(string(b), shiftPageUp)
+		if sgrMiddleClick.MatchString(got) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// Anything that was still on its way.
+	time.Sleep(300 * time.Millisecond)
+	b, _ := os.ReadFile(log)
+	got = strings.TrimPrefix(string(b), shiftPageUp)
+	m := sgrMiddleClick.FindStringSubmatch(got)
+	if m == nil {
+		t.Fatalf("after Shift+PageUp the pane received %q, want one middle press and its release\n%s", got, term.Snapshot())
+	}
+	if m[1] != m[3] || m[2] != m[4] {
+		t.Fatalf("the middle press and release are at different cells: %q", got)
+	}
+	t.Logf("pane bytes: %q\n%s", string(b), term.Snapshot())
 }

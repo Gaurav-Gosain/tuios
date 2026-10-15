@@ -103,7 +103,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// wheel and as in kitty. A full-screen program (nvim, less, htop, a
 	// compositor) gets the key itself: it has no scrollback to show, and
 	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
-	if focusedWindow != nil {
+	if focusedWindow != nil && keyScrollsPane(focusedWindow) {
 		action := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
 		if handleTerminalScrollBinding(action, o, focusedWindow) {
 			return o, nil

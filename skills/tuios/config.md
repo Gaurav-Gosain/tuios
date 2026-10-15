@@ -392,7 +392,8 @@ as one key. `explain` and `doctor` show the spelling tuios matches, for example
 
 In `[keybindings.terminal_mode]`, `middle` is the middle mouse button and can
 take a modifier, such as `ctrl+middle`. By default, `shift+pgup` and
-`shift+pgdown` scroll a pane page and `middle` pastes the host clipboard.
+`shift+pgdown` scroll a pane page and `middle` pastes the host clipboard. A
+program that uses the mouse gets a plain middle press.
 
 On a layout for a non-Latin script, bindings match the physical key. A key that
 types `ш` on a Ukrainian layout runs the binding on `i`, the US key at the same

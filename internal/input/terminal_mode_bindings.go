@@ -67,7 +67,17 @@ func scrollTerminalPane(win *terminal.Window, action string) {
 // deliberately the only mouse button admitted here: "left" and "right" are
 // already keyboard key names, so looking every button up in the keyboard table
 // would make an arrow binding also capture a click.
+//
+// A bare middle press over a program that tracks the mouse (vim with
+// mouse=a, lazygit, a nested tmux) goes to that program, as it did before
+// the binding existed. A binding with a modifier, such as ctrl+middle, runs
+// over such a program too.
 func handleTerminalMouseBinding(msg tea.MouseClickMsg, o *app.OS, clicked int) (*app.OS, tea.Cmd, bool) {
+	if msg.Button == tea.MouseMiddle {
+		// A new press starts over. A release that never came must not make
+		// this press's release disappear.
+		o.MiddleBindingPressed = false
+	}
 	if o.Mode != app.TerminalMode || msg.Button != tea.MouseMiddle ||
 		o.KeybindRegistry == nil || clicked < 0 || clicked >= len(o.Windows) {
 		return o, nil, false
@@ -76,11 +86,15 @@ func handleTerminalMouseBinding(msg tea.MouseClickMsg, o *app.OS, clicked int) (
 	if _, _, inContent := win.ScreenToTerminal(msg.X, msg.Y); !inContent {
 		return o, nil, false
 	}
+	if msg.Mod == 0 && win.Terminal != nil && win.Terminal.HasMouseMode() {
+		return o, nil, false
+	}
 	action := o.KeybindRegistry.GetTerminalModeAction(msg.String())
 	if !terminalMouseActionCanRun(action, win) {
 		return o, nil, false
 	}
 
+	o.MiddleBindingPressed = true
 	o.FocusWindowFromClick(clicked, msg.X, msg.Y)
 	if terminalScrollAction(action) {
 		handleTerminalScrollBinding(action, o, win)
@@ -94,24 +108,17 @@ func handleTerminalMouseBinding(msg tea.MouseClickMsg, o *app.OS, clicked int) (
 	return next, cmd, handled
 }
 
-// terminalMouseBindingConsumesRelease reports whether a middle-button press at
-// the same cell was a binding. A captured press must capture its release too;
-// otherwise a mouse-tracking program receives an unmatched button-up after
-// tuios pasted or ran another action.
+// terminalMouseBindingConsumesRelease reports whether a binding took the
+// middle press this release ends, and clears the mark. It is decided at the
+// press, not by where the release lands: a release outside the pane's content
+// still belongs to the binding, and a release over the content after a press
+// the binding did not take still goes to the program.
 func terminalMouseBindingConsumesRelease(msg tea.MouseReleaseMsg, o *app.OS) bool {
-	if o.Mode != app.TerminalMode || msg.Button != tea.MouseMiddle || o.KeybindRegistry == nil {
+	if msg.Button != tea.MouseMiddle || !o.MiddleBindingPressed {
 		return false
 	}
-	clicked := findClickedWindow(msg.X, msg.Y, o)
-	if clicked < 0 || clicked >= len(o.Windows) {
-		return false
-	}
-	win := o.Windows[clicked]
-	if _, _, inContent := win.ScreenToTerminal(msg.X, msg.Y); !inContent {
-		return false
-	}
-	action := o.KeybindRegistry.GetTerminalModeAction(msg.String())
-	return terminalMouseActionCanRun(action, win)
+	o.MiddleBindingPressed = false
+	return true
 }
 
 func terminalMouseActionCanRun(action string, win *terminal.Window) bool {

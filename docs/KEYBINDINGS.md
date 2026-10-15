@@ -120,8 +120,10 @@ A key in `config.toml` can spell a modifier in more than one way. tuios reads ea
 The order of the modifiers does not matter, so `shift+ctrl+x` is `ctrl+shift+x`. This applies to `leader_key`, to every binding table, and to `tuios keybinds explain`, `free` and `unbind`. `tuios keybinds explain opt+f12` shows `opt+f12 (tuios reads it as alt+f12)`. `tuios keybinds doctor` lists each key that tuios cannot read.
 
 In `[keybindings.terminal_mode]`, `middle` names a press of the middle mouse
-button. It accepts modifiers, such as `ctrl+middle`. Other mouse gestures are
-fixed.
+button. It accepts `ctrl`, `alt` and `shift`, such as `ctrl+middle`. Other
+tables do not accept it. A program that uses the mouse, such as vim with
+`mouse=a`, lazygit or tmux, gets a plain middle press. A binding with a
+modifier runs over such a program too. Other mouse gestures are fixed.
 
 You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
 
@@ -428,7 +430,9 @@ prompt. The action is `paste_image`, and the command palette has it too.
 
 The paste binding also pastes an image. `terminal_paste_host` in
 `[keybindings.terminal_mode]` is bound to `Ctrl+Shift+V`, `Super+V`,
-`Shift+Super+V` and the middle mouse button by default. `paste_clipboard` runs
+`Shift+Super+V` and the middle mouse button by default. The middle button
+pastes from the clipboard, not from the primary selection. A program that uses
+the mouse gets the middle button instead. `paste_clipboard` runs
 the same operation outside terminal mode. When the clipboard holds an image
 and no text, the paste binding pastes the image. When the clipboard holds text,
 it pastes the text. Some terminals send an empty paste when the clipboard holds

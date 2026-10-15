@@ -5879,6 +5879,7 @@ The controls were run on 2026-10-15 on branch `refactor/vt-snapshot-package`.
 | The client does not apply the snapshot | `ApplyTerminalState`: the `snapshot.Apply` call cut, on the second client | `TestMixedVersionsReshapeOneTree` (the second client does not show the pane's snapshot) | **caught** |
 | The new build cannot read an older history file | `historyVersion` bumped by one in the reading build, v0.9.3 writing | `TestRestoredPaneShowsItsHistoryAboveTheDivider` (the restored pane does not show its history) | **caught** |
 | gob registers the moved type under its new name | `gob.Register(TerminalState{})` in place of `gob.RegisterName("github.com/Gaurav-Gosain/tuios/internal/session.TerminalState", ...)` | `TestTerminalStateKeepsItsGobName` in `internal/session` (the value is not sent under the old name). The e2e tests do not catch it: no path sends a `TerminalState` inside an interface today, so the name never crosses the wire there | **caught in `internal/session`** |
+
 ### Configurable terminal page scroll and middle paste
 
 Run on 2026-10-11 on branch `keybindings`. The control ran the new E2E tests
@@ -5890,3 +5891,15 @@ subtest, so an early page-scroll failure cannot hide a paste failure.
 | --- | --- | --- |
 | The main binary, with no terminal page-scroll actions | `TestDefaultPageAndMiddleBindings/page-scroll` and `TestPageAndMiddleBindingsCanBeChanged/page-scroll` (the viewport moved 0 lines and the shell received the raw PageUp sequence) | **caught** |
 | The main binary, with no configurable middle-button route | `TestDefaultPageAndMiddleBindings/middle-paste` and `TestPageAndMiddleBindingsCanBeChanged/middle-paste` (both timed out; the remapped config also reported `middle` as a config problem) | **caught** |
+
+Run again on 2026-10-15 after the review changes. Each control cuts one call
+site in the branch and runs the three tests above. A pane with a mouse mode
+gets a plain middle press, and a press the binding takes keeps its release.
+
+| Control | Tests that fail | Verdict |
+| --- | --- | --- |
+| The press call cut: `handleTerminalMouseBinding` in `handleMouseClick` (`internal/input/mouse_click.go`) | both `middle-paste` subtests (they time out), and `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives the ctrl+middle press) | **caught** |
+| The release call cut: `terminalMouseBindingConsumesRelease` in `handleMouseRelease` (`internal/input/mouse_release.go`) | `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives the ctrl+middle release without its press) | **caught** |
+| The release decided by where it lands, as before the review, with the mouse-mode check kept at the press | `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives a plain middle press and no release) | **caught** |
+| The mouse-mode check cut from `handleTerminalMouseBinding` | `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives no middle press) | **caught** |
+| The `shift+pgup` default removed from `terminal_scroll_page_up` | `TestDefaultPageAndMiddleBindings/page-scroll` | **caught** |
