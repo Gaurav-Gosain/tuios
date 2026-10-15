@@ -8,3 +8,6 @@ func SharedMasterDir() string { return "" }
 
 // reuseOptions is nil on Windows. See SharedMasterDir.
 func reuseOptions(Host) []string { return nil }
+
+// freshOptions is nil on Windows. See SharedMasterDir.
+func freshOptions() []string { return nil }

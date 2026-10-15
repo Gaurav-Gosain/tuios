@@ -66,6 +66,25 @@ func reuseOptions(h Host) []string {
 	return reuseArgs(dir)
 }
 
+// freshOptions make ssh open a connection of its own, past any master the
+// person's ssh config or SharedMasterDir names. The link uses them for one
+// dial after its heartbeat found the connection dead.
+//
+// A master outlives the path under it. After a laptop sleeps, the master
+// process still runs and still answers on its socket, so a new ssh that rides
+// it waits on a TCP connection that is gone. The link's ServerAlive options
+// do not reach the master, so nothing ends that wait until the master's own
+// keepalives do, which can take many minutes or never happen.
+//
+// ControlPath=none is not used on every dial. A host that needs a password
+// or a second factor is reached through a master the person opened, because
+// the link runs ssh with BatchMode and cannot prompt. For that host the fresh
+// dial fails at once with ssh's exit code, and the next dial rides the master
+// again.
+func freshOptions() []string {
+	return []string{"-o", "ControlPath=none"}
+}
+
 // privateDir reports whether path is a directory, not a symbolic link,
 // owned by this user and closed to everyone else.
 func privateDir(path string) bool {

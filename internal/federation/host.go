@@ -58,6 +58,11 @@ type Host struct {
 	// sets it for its own run, so one Tailscale SSH approval covers them all.
 	// The caller owns the path and stops the master with StopSharingArgs.
 	ControlPath string
+
+	// fresh makes the next dial open a connection of its own instead of
+	// riding a shared ssh master. The link sets it for the one dial after it
+	// found a connection dead. See freshOptions.
+	fresh bool
 }
 
 func (h Host) connectTimeout() time.Duration {

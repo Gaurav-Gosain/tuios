@@ -128,6 +128,21 @@ type link struct {
 
 	// wake cuts the wait between two dials short. Retry sends on it.
 	wake chan struct{}
+	// probe asks the heartbeat of a link that is up to ping now. Retry sends
+	// on it, so a person who asks for a host that looks up but is not finds
+	// out in heartbeatTimeout instead of KeepaliveWindow.
+	probe chan struct{}
+	// lastProbe is when Retry last sent on probe.
+	lastProbe time.Time
+	// asked says Retry ran since the last dial started. The wait after a
+	// failed dial then starts again from InitialBackoff.
+	asked bool
+	// lossNote is the sentence the heartbeat left when it ended the link.
+	// The next drop report uses it in place of lossCause, which would blame
+	// the ssh the teardown killed.
+	lossNote string
+	// fresh makes the next dial skip a shared ssh master. See Host.fresh.
+	fresh bool
 	// eagerUntil is when the quick redial that Retry asked for ends. Until
 	// then a link that waits for a Tailscale sign-in dials again after
 	// approvalRetry at most, so the new sign-in page shows up in seconds and
@@ -143,6 +158,7 @@ func newLink(h Host, opts Options) *link {
 		reason:  "The link is starting.",
 		settled: make(chan struct{}),
 		wake:    make(chan struct{}, 1),
+		probe:   make(chan struct{}, 1),
 	}
 }
 
@@ -224,7 +240,11 @@ func (l *link) supervise(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if ok {
+		l.mu.Lock()
+		asked := l.asked
+		l.asked = false
+		l.mu.Unlock()
+		if ok || asked {
 			backoff = l.opts.InitialBackoff
 		} else if backoff < l.opts.MaxBackoff {
 			backoff = min(backoff*2, l.opts.MaxBackoff)
@@ -236,12 +256,44 @@ func (l *link) supervise(ctx context.Context) {
 			// after they signed in.
 			wait = min(wait, approvalRetry)
 		}
+		if !l.waitToDial(ctx, wait) {
+			return
+		}
+	}
+}
+
+// waitToDial waits wait before the next dial. Retry ends the wait, and so
+// does a wake from sleep: the monotonic clock the wait runs on stops while
+// the machine sleeps, so without the check a link that was waiting a minute
+// before the sleep still waits out the rest of it after the wake. The wait
+// is cut into heartbeatInterval pieces to check the clocks, which costs a
+// link that is down four wakeups a minute and a link that is up none. It
+// reports false when ctx ends.
+func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
+	clock := newSleepWatch()
+	deadline := time.Now().Add(wait)
+	t := time.NewTimer(min(wait, heartbeatInterval))
+	defer t.Stop()
+	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-time.After(wait):
+			return false
 		case <-l.wake:
+			return true
+		case <-t.C:
 		}
+		if clock.slept() {
+			l.logf("host %s: the computer woke from sleep, so the link is dialed now.", l.host.Name)
+			l.mu.Lock()
+			l.asked = true
+			l.mu.Unlock()
+			return true
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return true
+		}
+		t.Reset(min(left, heartbeatInterval))
 	}
 }
 
@@ -256,24 +308,40 @@ const retryWindow = 2 * time.Minute
 // Retry wakes.
 const retryMinGap = 2 * time.Second
 
-// retry ends the wait before the next dial, and keeps the redial quick for
-// retryWindow while the link waits for a sign-in. A dial in progress is left
-// alone: a dial that holds a Tailscale check open is the one that goes on when
-// the person signs in.
+// retry ends the wait before the next dial, starts the backoff again from
+// InitialBackoff, and keeps the redial quick for retryWindow while the link
+// waits for a sign-in. A dial in progress is left alone: a dial that holds a
+// Tailscale check open is the one that goes on when the person signs in.
 //
-// A wake within retryMinGap of the last dial's start is dropped, so a caller
-// that calls in a loop cannot make the link spawn ssh in a loop.
+// A link that is up is pinged at once instead. After a sleep a link can look
+// up and carry nothing, and the ping is what finds that out in seconds.
+//
+// A wake within retryMinGap of the last dial's start, or a ping within
+// retryMinGap of the last one, is dropped, so a caller that calls in a loop
+// cannot make the link spawn ssh in a loop.
 func (l *link) retry() {
 	l.mu.Lock()
 	now := l.opts.now()
 	l.eagerUntil = now.Add(retryWindow)
+	l.asked = true
+	up := l.status == StatusUp
 	recent := !l.lastTry.IsZero() && now.Sub(l.lastTry) < retryMinGap
+	if up {
+		recent = !l.lastProbe.IsZero() && now.Sub(l.lastProbe) < retryMinGap
+		if !recent {
+			l.lastProbe = now
+		}
+	}
 	l.mu.Unlock()
 	if recent {
 		return
 	}
+	ch := l.wake
+	if up {
+		ch = l.probe
+	}
 	select {
-	case l.wake <- struct{}{}:
+	case ch <- struct{}{}:
 	default:
 	}
 }
@@ -295,6 +363,8 @@ func (l *link) attempt(ctx context.Context) bool {
 	h := l.host
 	l.mu.Lock()
 	l.lastTry = l.opts.now()
+	h.fresh, l.fresh = l.fresh, false
+	l.lossNote = ""
 	fromCache := h.Command == "" && l.resolved != ""
 	if fromCache {
 		h.Command = l.resolved
@@ -452,9 +522,16 @@ preamble:
 	l.tearDown = closeAll
 	l.mu.Unlock()
 	l.set(StatusUp, "The host is answering.", "")
+	// A ping left over from a Retry before this dial is not a request for
+	// this link.
+	select {
+	case <-l.probe:
+	default:
+	}
+	go l.heartbeat(ctx, m, closed, closeAll)
 
-	// Hold the link until it dies, the manager stops, or a call declared it
-	// hung and tore it down.
+	// Hold the link until it dies, the manager stops, or a call or the
+	// heartbeat declared it hung and tore it down.
 	select {
 	case <-muxDone:
 	case <-ctx.Done():
@@ -478,6 +555,9 @@ preamble:
 	// the reason is worked out here rather than left as "the link closed".
 	reason, detail := lossCause(tr, m.Err())
 	l.mu.Lock()
+	if l.lossNote != "" {
+		reason, detail = l.lossNote, ""
+	}
 	l.drops++
 	l.dropReason = reason
 	drops := l.drops

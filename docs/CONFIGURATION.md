@@ -1977,6 +1977,14 @@ A link connects as usual and does not use the folder in these cases:
   Linux and 103 on macOS. Set `XDG_RUNTIME_DIR` to a shorter folder.
 - tuios runs on Windows. Win32-OpenSSH has no `ControlMaster`.
 
+A master connection can outlive the network under it, for example when a
+laptop sleeps. The link's ssh then waits on it, and the link's keepalives do
+not reach it. The link pings its host when it carried nothing for 15 seconds.
+When the host does not answer, the link ends, and the next dial runs ssh with
+`-o ControlPath=none` and opens a connection of its own. A machine that needs
+a password or a second factor fails that one dial, and the dial after it uses
+the master again.
+
 `%C` names a master by the local host, the remote host, the port and the
 user. It does not include a `ProxyCommand`, so a host reached through two
 different proxy commands shares one master. It includes the jump host only

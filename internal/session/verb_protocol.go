@@ -760,7 +760,7 @@ func init() {
 			handler:  (*Daemon).verbListHosts,
 		},
 		"retry-host": {
-			description: "Ask the link to one host to dial again now instead of after its backoff. While the host waits for a Tailscale SSH sign-in, the link also dials again every few seconds for two minutes, so a new sign-in page shows up soon and the link comes up soon after the person signs in. A dial in progress is not stopped.",
+			description: "Ask the link to one host to dial again now instead of after its backoff, and start the backoff again from one second. A link that is up is pinged instead, and it is dialed again when the host does not answer in 5 seconds. While the host waits for a Tailscale SSH sign-in, the link also dials again every few seconds for two minutes, so a new sign-in page shows up soon and the link comes up soon after the person signs in. A dial in progress is not stopped.",
 			params: []verbParam{
 				{Name: "host", Type: "string", Required: true, Description: "A host by name from the [hosts] config table."},
 			},

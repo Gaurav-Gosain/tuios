@@ -176,6 +176,18 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**A link checks that its host still answers.** A link that carried no frame
+for 15 seconds sends `hello`, with no params, on a stream of its own. A reply
+of any kind, an error included, counts as an answer. Two pings in a row with
+no answer in 5 seconds end the link, and it is dialed again. After this
+machine wakes from sleep, or after `retry-host`, one ping with no answer is
+enough. `retry-host` on a host that is up now sends that ping at once, and on
+a host that is not up it starts the backoff again from 1 second. The next
+dial after a ping ends a link runs ssh with `-o ControlPath=none`, so a master
+connection that did not survive the sleep is not used. The drop reason is
+"The host stopped answering." An older far daemon answers the ping as it
+answers any `hello`.
+
 **list-worktrees reports a merged branch.** With `changes`, each row gains
 `merged`, and `merged_into` when `merged` is true. See
 [list-worktrees](#list-worktrees). A worktree record gains `start_commit`, the

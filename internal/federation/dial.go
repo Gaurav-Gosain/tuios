@@ -119,6 +119,9 @@ const sharingPersist = "10m"
 // h.ControlPath. A host with no path rides a master the person opened, when
 // there is one (see reuseOptions).
 func sharingOptions(h Host) []string {
+	if h.ControlPath == "" && h.fresh {
+		return freshOptions()
+	}
 	if h.ControlPath == "" {
 		return reuseOptions(h)
 	}
