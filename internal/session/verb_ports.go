@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // list-ports: the TCP ports the processes in each pane listen on, so the GUI
@@ -124,7 +126,7 @@ func (d *Daemon) readPorts() []portRow {
 			})
 		}
 	}
-	slices.SortFunc(rows, func(a, b portRow) int {
+	sortx.SortFunc(rows, func(a, b portRow) int {
 		return cmp.Or(
 			cmp.Compare(a.Session, b.Session),
 			cmp.Compare(a.Window, b.Window),

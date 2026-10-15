@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -99,7 +100,7 @@ func (d *Daemon) localPanes(names []string) ([]searchPane, *verbError) {
 	for _, p := range panes {
 		last[p.pty] = p.pty.LastOutput()
 	}
-	slices.SortStableFunc(panes, func(a, b searchPane) int {
+	sortx.SortStableFunc(panes, func(a, b searchPane) int {
 		return cmp.Compare(last[b.pty], last[a.pty])
 	})
 	return panes, nil
@@ -416,7 +417,7 @@ func (d *Daemon) verbCommandHistory(_ *connState, params json.RawMessage) (any, 
 			})
 		}
 	}
-	slices.SortStableFunc(rows, func(a, b row) int {
+	sortx.SortStableFunc(rows, func(a, b row) int {
 		if c := b.finished.Compare(a.finished); c != 0 {
 			return c
 		}
