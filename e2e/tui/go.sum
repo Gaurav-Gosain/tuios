@@ -80,5 +80,5 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 tuios.dev/progstatus v0.1.0 h1:6d/rQpXJvZzDK9uxNKhchb6lKVep/8eng0jyNVCaVTI=
 tuios.dev/progstatus v0.1.0/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
-tuios.dev/vt v0.0.0-20261015052022-4e41ff60e168 h1:sn9Fm3P4h2YF7OwqM3bN+ep6ZeME3XZdE5X+N1Jexec=
-tuios.dev/vt v0.0.0-20261015052022-4e41ff60e168/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
+tuios.dev/vt v0.1.0 h1:LoW0CG8QHg55QxnCpFTREn5FABsQQTGhpYFMlqr5uS0=
+tuios.dev/vt v0.1.0/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
