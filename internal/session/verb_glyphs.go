@@ -54,9 +54,12 @@ func (d *Daemon) verbListGlyphs(_ *connState, params json.RawMessage) (any, *ver
 		out["problems"] = problems
 	}
 
-	if sess := d.findTargetSession(p.Session); sess != nil {
+	// One read of config.toml serves the whole request.
+	sess := d.findTargetSession(p.Session)
+	opts := d.optionsFor(sess)
+	if sess != nil {
 		out["session"] = sess.Name()
-		if v, source, ok := d.optionsFor(sess).lookup("appearance.glyphs"); ok {
+		if v, source, ok := opts.lookup("appearance.glyphs"); ok {
 			out["active"] = v
 			out["active_source"] = source
 		}
@@ -81,7 +84,6 @@ func (d *Daemon) verbListGlyphs(_ *connState, params json.RawMessage) (any, *ver
 	// What the session would draw, not the daemon's own config globals: the
 	// daemon does not draw, so it never applies an appearance config, and
 	// reading its BorderStyle reported the empty string for every session.
-	opts := d.optionsFor(d.findTargetSession(p.Session))
 	out["set"] = describeGlyphSet(p.Glyphs, glyphRenderSettings{
 		borderStyle:    opts.get("appearance.border_style"),
 		scrollbarStyle: opts.get("appearance.scrollbar.style"),

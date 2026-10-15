@@ -94,7 +94,7 @@ func TestSetOptionValidatesBothHalves(t *testing.T) {
 // the client painted the theme.
 func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[appearance]\nbackground = \"theme\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[appearance]\nbackground = \"theme\"\nanimations_enabled = false\n"), 0o600); err != nil {
 		t.Fatalf("write the config: %v", err)
 	}
 	d, sp := startTestDaemonWith(t, &DaemonConfig{ConfigPath: path})
@@ -116,6 +116,13 @@ func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 	res = get("appearance.background")
 	if res["value"] != "theme" || res["source"] != "config" {
 		t.Errorf("value, source = %v, %v, want theme, config from config.toml", res["value"], res["source"])
+	}
+
+	// A legacy key the parse folds into a new path is config.toml's too: the
+	// client draws by it although no file names the new path.
+	res = get("appearance.motion")
+	if res["value"] != "none" || res["source"] != "config" {
+		t.Errorf("value, source = %v, %v, want none, config from animations_enabled = false", res["value"], res["source"])
 	}
 
 	result(t, c.call(t, `{"verb":"set-option","params":{"session":"read","key":"appearance.background","value":"off"}}`))

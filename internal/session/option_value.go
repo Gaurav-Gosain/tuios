@@ -3,6 +3,7 @@ package session
 import (
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -73,17 +74,38 @@ func (o sessionOptions) lookup(path string) (value, source string, ok bool) {
 }
 
 // fromFile is the value the config files give path, when one of them sets it.
-// A key the files leave out is not read from the parsed config: there it holds
-// whatever the fill left, which for some keys is not the default.
+// A key the files leave out holds whatever the fill left, which for some keys
+// is not the default, so it counts only when it differs from what an empty
+// file parses to. That difference is a legacy key the parse folded in, such as
+// appearance.sidebar_position into appearance.sidebar.position, which the
+// client draws by although no file names the new path.
 func (o sessionOptions) fromFile(path string) (string, bool) {
 	if o.file == nil {
 		return "", false
 	}
-	if _, set := o.lc.Origin(strings.Split(path, ".")); !set {
+	v, ok := config.GetOptionValue(o.file, path)
+	if !ok {
 		return "", false
 	}
-	return config.GetOptionValue(o.file, path)
+	if _, set := o.lc.Origin(strings.Split(path, ".")); set {
+		return v, true
+	}
+	if empty := emptyUserConfig(); empty != nil {
+		if ev, eok := config.GetOptionValue(empty, path); eok && ev != v {
+			return v, true
+		}
+	}
+	return "", false
 }
+
+// emptyUserConfig is what a config file with nothing in it parses to.
+var emptyUserConfig = sync.OnceValue(func() *config.UserConfig {
+	cfg, err := config.ParseUserConfig(nil)
+	if err != nil {
+		return nil
+	}
+	return cfg
+})
 
 // get is the value in effect for path, or empty for an unknown path.
 func (o sessionOptions) get(path string) string {
