@@ -362,9 +362,16 @@ func (m *OS) renderDockString() (string, int) {
 
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
+	// Anchor the center to the screen; transient right-hand content must fit
+	// beside it rather than move it. Clamp only when the bar itself is crowded.
+	centerX := actualLeftWidth
+	if centerWidth > 0 {
+		centerX = max(actualLeftWidth, min((renderWidth-centerWidth)/2, barWidth-centerWidth-layout.CenterRightReserve))
+	}
+	rightRoom := max(barWidth-centerX-centerWidth, 0)
 	// The right block never takes more room than the left block and the dock
 	// items leave, so the bar as a whole stays inside the screen.
-	rightWidth := max(min(layout.RightWidth, barWidth-actualLeftWidth-centerWidth), 0)
+	rightWidth := min(layout.RightWidth, rightRoom)
 
 	var rightInfo string
 	// notifRule is the run of hairline the message burns down over, drawn into
@@ -377,7 +384,11 @@ func (m *OS) renderDockString() (string, int) {
 	// truncation below would do, and the first thing that would cut is the
 	// block's trailing columns: the gap that keeps the message off the bar's
 	// right-hand end.
-	notif, hasNotif := m.dockNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
+	var notif notifBlock
+	var hasNotif bool
+	if rightRoom > 0 {
+		notif, hasNotif = m.dockNotificationBlock(barWidth, rightRoom)
+	}
 
 	// Where the right block's custom cells landed inside it. Converted to screen
 	// columns below, once the block's own first column is known.
@@ -405,17 +416,8 @@ func (m *OS) renderDockString() (string, int) {
 		rightInfo = truncateToWidth(rightInfo, rightWidth)
 	}
 
-	availableSpace := barWidth - actualLeftWidth - rightWidth - centerWidth
-	leftSpacer := availableSpace / 2
-	rightSpacer := availableSpace - leftSpacer
-
-	if leftSpacer < 0 {
-		leftSpacer = 0
-		rightSpacer = 0
-	}
-	if rightSpacer < 0 {
-		rightSpacer = 0
-	}
+	leftSpacer := max(centerX-actualLeftWidth, 0)
+	rightSpacer := max(barWidth-centerX-centerWidth-rightWidth, 0)
 
 	// The message block's own columns, taken from the spacers this pass drew
 	// rather than from the bar's right-hand end. The block is the last thing in

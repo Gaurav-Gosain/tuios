@@ -1092,6 +1092,11 @@ on-click = "tuios new-window log -- git log --oneline -20"
 ```
 
 The lists above are the default: omit the whole table and the bar is unchanged.
+The `center` region is centered on the terminal when there is room, clamped
+between the left region and the session controls on a crowded bar. With a clock
+or custom cell in the center, notifications fit beside it without moving it or
+shortening its minimized pane labels, and keep room for their severity mark.
+Click a truncated notification to read the full message.
 `transfers` shows the copies between machines. It shows nothing while no copy
 exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
 count and a percent, `3 copies 42%`. `waiting` means a link is down, and

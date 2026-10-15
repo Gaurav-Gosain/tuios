@@ -37,6 +37,9 @@ type DockLayout struct {
 	TapeText   string
 	LeftWidth  int
 	RightWidth int
+	// CenterRightReserve keeps a notification's mark and opening gap usable
+	// without resizing the center when a message arrives.
+	CenterRightReserve int
 	// CustomLeft, CustomCenter and CustomRight are the room the custom cells on each side asked for, so the
 	// layout pass and the draw pass reserve against the same number.
 	CustomLeft     int
@@ -549,6 +552,20 @@ func (m *OS) CalculateDockLayout() DockLayout {
 	// entries themselves.
 	room := max(barWidth-layout.LeftWidth, 0)
 	want, yields := m.dockRightWidth()
+	if layout.CustomCenter > 0 {
+		// A popup must not resize the centered group by shortening its panes.
+		// Reserve custom cells first; the renderer fits the right block beside it.
+		if m.dockPlan.Has(config.DockComponentNotifications) {
+			layout.CenterRightReserve = notifChromeWidth + 1
+		}
+		items := layout
+		items.LeftWidth += layout.CustomCenter
+		items.RightWidth = layout.CenterRightReserve
+		items.calculateItemPositions(barWidth, allItems)
+		layout.VisibleItems, layout.TruncatedCount = items.VisibleItems, items.TruncatedCount
+		layout.RightWidth = min(want, room)
+		return layout
+	}
 	if yields {
 		if dockItemsWidth(allItems) > max(room-want, 0) &&
 			!shortenDockItemNames(max(room-want, 0), allItems) {

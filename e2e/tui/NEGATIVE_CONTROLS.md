@@ -6008,3 +6008,33 @@ Run on 2026-10-15 on Linux on branch `fix-host-wake-reconnect`, from upstream `m
 | The same handler does not arm the exit listener again | mutant of this branch | none. The second drop is not heard, and the click lands anyway, so this test cannot see it. It is why the first version of the drop-under-click half passed on a build that still quit: the drop it waited for never reached the client | **not caught** |
 | The positive half | this branch | none | **guard** |
 
+## Centered dock components during notifications
+
+`TestDockCenterStaysPutDuringNotifications` drives real clients at 80, 120 and
+180 columns with a custom clock on top and the built-in clock at the bottom.
+It toggles tiling to show and dismiss popups, then raises long notifications
+beside one and two named minimized panes. It clicks each cut message to read
+its end and restores a minimized pane by clicking its entry. Frames before,
+during and after the popups are saved through `TUIOS_E2E_FRAMES`; set
+`TUIOS_E2E_SHOTS` too for PNGs.
+
+Run on macOS arm64 against upstream `main` at `998c70af`, with real PTYs.
+The mutants cut the indicated layout wiring from the fixed build; they do not
+change the test or replace the renderer with a test double.
+
+| Control | Failure at 80 columns | Fixed build |
+| --- | --- | --- |
+| Unmodified main | custom clock moves from column 38 to 29 for `Tiling off`, and to 28 for `Tiling on` (physical center is 34); built-in clock moves from 41 to 32 and 31 (physical center is 37) | all six width/clock cases pass |
+| Cut the `layout.CustomCenter > 0` item-budget branch in `CalculateDockLayout`, keeping screen centering | `popup resized the center contents and moved the clock from 20 to 32` | named entries keep their width across the popup |
+| Cut the `layout.CenterRightReserve = notifChromeWidth + 1` assignment | `the popup has no gap before its cap`: the second minimized pill touches `▊`, and the block loses trailing columns at the session strip | the mark, opening gap and click-to-read remain usable |
+
+The positive halves are in the same fixtures: both tiling notices must draw,
+the long messages must open in full, dismissing them must keep the clock in
+place, and the minimized entry must restore its pane. The original v0.9.2
+report also fails: 80/120/180-column clocks move from 24/44/74 to 27/47/77
+between the startup notice and the tiling notice.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_FRAMES=/path/to/frames \
+  go test -run '^TestDockCenterStaysPutDuringNotifications$' -count=1 .
+```
