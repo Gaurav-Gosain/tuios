@@ -61,14 +61,32 @@ func borderOverrides() (focused, unfocused color.Color) {
 	return borderFocusedOverride, borderUnfocusedOverride
 }
 
-// Initialize sets up the theme registry with the specified theme name.
-// Call this once at application startup.
-// If themeName is empty, theming will be disabled and standard terminal colors will be used.
+// Initialize makes the named theme the active one.
+//
+// "none" disables theming, so the terminal's own colours are used. An empty
+// name follows the applied Omarchy theme on a machine with Omarchy, and
+// disables theming elsewhere. "omarchy" follows Omarchy too, and returns
+// ErrOmarchyNotFound, with theming disabled, on a machine without it.
 func Initialize(themeName string) error {
-	// If no theme specified, disable theming
-	if themeName == "" {
+	// Generation moves only when the theme in force changes, so a config
+	// reload that names the same theme keeps every memo keyed on it.
+	wasEnabled, was := enabled, activeTint()
+	defer func() {
+		if enabled != wasEnabled || activeTint() != was {
+			generation.Add(1)
+		}
+	}()
+	switch themeName {
+	case NoneID:
 		enabled = false
 		return nil
+	case "", OmarchyID:
+		err := initOmarchy()
+		enabled = err == nil
+		if themeName == "" {
+			return nil
+		}
+		return err
 	}
 
 	enabled = true
@@ -89,6 +107,15 @@ func Initialize(themeName string) error {
 	}
 
 	return nil
+}
+
+// activeTint is the tint in force, or nil with theming off. It does not
+// build the registry.
+func activeTint() *tint.Tint {
+	if !enabled {
+		return nil
+	}
+	return tint.Current()
 }
 
 // IsEnabled returns true if theming is enabled

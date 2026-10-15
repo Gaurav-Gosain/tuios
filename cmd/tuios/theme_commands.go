@@ -115,6 +115,12 @@ func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error
 		ThemesDir string       `json:"themes_dir"`
 		Problems  []string     `json:"problems"`
 		Palette   themePalette `json:"palette"`
+		Omarchy   *struct {
+			Installed bool   `json:"installed"`
+			Dir       string `json:"dir"`
+			Theme     string `json:"theme"`
+			Followed  bool   `json:"followed"`
+		} `json:"omarchy"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
@@ -130,11 +136,27 @@ func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error
 	if themeName == "" || filter != "" {
 		printThemeList(w, res.Themes, res.Matched, res.Total, res.Truncated)
 	}
-	fmt.Fprintf(w, "\nactive: %s", orNone(res.Active))
+	active := orNone(res.Active)
+	if res.Active == "" && res.Omarchy != nil && res.Omarchy.Followed {
+		active = "omarchy"
+	}
+	fmt.Fprintf(w, "\nactive: %s", active)
 	if res.Source != "" {
 		fmt.Fprintf(w, " (%s)", res.Source)
 	}
 	fmt.Fprintf(w, "\nthemes dir: %s\n", res.ThemesDir)
+	if o := res.Omarchy; o != nil {
+		switch {
+		case !o.Installed:
+			fmt.Fprintln(w, "omarchy: not installed on this machine. tuios uses the colours of your terminal.")
+		case o.Followed:
+			fmt.Fprintf(w, "omarchy: %s, from %s. tuios follows it.\n", o.Theme, o.Dir)
+		case res.Active == "none":
+			fmt.Fprintf(w, "omarchy: %s, from %s. tuios does not follow it, because the theme is none.\n", o.Theme, o.Dir)
+		default:
+			fmt.Fprintf(w, "omarchy: %s, from %s. tuios does not follow it, because a theme is set.\n", o.Theme, o.Dir)
+		}
+	}
 	for _, p := range res.Problems {
 		fmt.Fprintf(w, "problem: %s\n", p)
 	}

@@ -67,6 +67,9 @@ func Describe(id string) (Palette, bool) {
 	if id == "" || !Exists(id) {
 		return Palette{}, false
 	}
+	if id == OmarchyID {
+		_, _ = refreshOmarchy()
+	}
 	t, ok := tint.GetTint(id)
 	if !ok || t == nil {
 		return Palette{}, false
@@ -124,6 +127,11 @@ func Describe(id string) (Palette, bool) {
 func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok bool) {
 	if id == "" || !Exists(id) {
 		return palette, nil, nil, nil, false
+	}
+	if id == OmarchyID {
+		// The daemon follows nothing, so it reads the applied theme when
+		// asked. An unchanged one costs a file read and registers nothing.
+		_, _ = refreshOmarchy()
 	}
 	t, found := tint.GetTint(id)
 	if !found || t == nil {

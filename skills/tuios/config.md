@@ -223,6 +223,11 @@ tuios import-theme ~/.config/kitty/current-theme.conf --name mine
 tuios set-config appearance.theme mine
 ```
 
+On Omarchy an empty `appearance.theme` uses the Omarchy theme, and
+`list-themes` reports it on an `omarchy:` line. `omarchy` asks for it
+explicitly, `none` keeps the terminal's colours, and `omarchy/NAME` is one
+installed Omarchy theme, fixed.
+
 ### Shape: glyph sets
 
 ```sh

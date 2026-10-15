@@ -385,6 +385,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
 	validateGlyphSet(cfg, result)
+	validateOmarchyTheme(cfg, result)
 	validateDimUnfocused(cfg, result)
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
@@ -409,7 +410,7 @@ func validateBackgrounds(cfg *UserConfig, result *ValidationResult) {
 		{"dock_background", a.DockBackground, "the dock stays transparent"},
 		{"sidebar.background", a.Sidebar.Background, "the rail stays transparent"},
 	} {
-		validateBackground(bg.key, bg.value, bg.surface, a.Theme != "", result)
+		validateBackground(bg.key, bg.value, bg.surface, theme.Themed(a.Theme), result)
 	}
 }
 
@@ -436,6 +437,20 @@ func validateBackground(key, v, surface string, themed bool, result *ValidationR
 				v, strings.Join(Backgrounds, ", "), surface),
 		})
 	}
+}
+
+// validateOmarchyTheme warns when the theme is omarchy on a machine without
+// Omarchy. A config file goes from machine to machine, so this is not an
+// error: tuios uses the terminal's colours there.
+func validateOmarchyTheme(cfg *UserConfig, result *ValidationResult) {
+	if cfg.Appearance.Theme != theme.OmarchyID || theme.OmarchyInstalled() {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field:   "appearance",
+		Key:     "theme",
+		Message: "Omarchy is not installed on this machine. tuios uses the colours of your terminal.",
+	})
 }
 
 // validateGlyphSet warns about a set that does not resolve, and repeats the
@@ -470,7 +485,7 @@ func validateGlyphSet(cfg *UserConfig, result *ValidationResult) {
 // which on a plain shell prompt is most of them, so the setting looks broken
 // unless somebody says this out loud.
 func validateDimUnfocused(cfg *UserConfig, result *ValidationResult) {
-	if cfg.Appearance.DimUnfocused <= 0 || cfg.Appearance.Theme != "" {
+	if cfg.Appearance.DimUnfocused <= 0 || theme.Themed(cfg.Appearance.Theme) {
 		return
 	}
 	result.Warnings = append(result.Warnings, ValidationError{

@@ -493,6 +493,50 @@ tuios does not draw kitty graphics images as block characters yet. On a
 terminal without graphics, a program that only uses kitty graphics uses its
 own text output.
 
+## Omarchy themes
+
+On [Omarchy](https://omarchy.org), tuios uses the Omarchy theme when you set
+no theme. The panes, the chrome, the rail and the dock take the colours of the
+applied theme. The answers to OSC 10, 11 and 4 in a pane are the theme's
+colours too.
+
+| `appearance.theme` | On a machine with Omarchy | On a machine without Omarchy |
+|---|---|---|
+| empty (the default) | The Omarchy theme | The colours of your terminal |
+| `omarchy` | The Omarchy theme | The colours of your terminal, and a warning |
+| `none` | The colours of your terminal | The colours of your terminal |
+| a theme id | That theme | That theme |
+
+```toml
+[appearance]
+theme = "omarchy"   # use the Omarchy theme, and warn where Omarchy is missing
+```
+
+tuios reads `~/.local/state/omarchy/current/theme/colors.toml` (Omarchy 4),
+then `~/.config/omarchy/current/theme/colors.toml` (Omarchy 3). The pane
+colours are the ones Omarchy gives kitty, ghostty and foot. The chrome takes:
+
+| Chrome | Omarchy key |
+|---|---|
+| Accent | `accent` |
+| Focused border in window mode | the first colour of `hyprland_active_border`, else `accent` |
+| Terminal mode, copy mode, errors, notices | `green`, `yellow`, `red`, `blue` |
+| Dialogs | `lighter_background`, with `dark_background` and `darker_background` below it |
+
+Each installed Omarchy theme is also in the theme list as `omarchy/NAME`, such
+as `omarchy/gruvbox`. Such an id is fixed. It does not change with the Omarchy
+theme.
+
+`tuios list-themes` shows the Omarchy theme it found, and whether tuios uses
+it:
+
+```
+active: omarchy (default)
+omarchy: Tokyo Night, from /home/you/.local/state/omarchy/current. tuios follows it.
+```
+
+`SWATCH_OMARCHY_DIR` names another `current` directory to read.
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's

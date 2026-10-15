@@ -131,9 +131,13 @@ func (m *OS) persistThemeSelection(sel string) tea.Cmd {
 // writing it out, for the callers whose own save step follows.
 func (m *OS) setThemeSelection(sel string) {
 	m.setAppearance(func(a *config.AppearanceConfig) {
-		if sel == themeNone {
+		switch {
+		case sel == themeNone && theme.OmarchyInstalled():
+			// An empty theme would follow Omarchy again on the next start.
+			a.Theme = theme.NoneID
+		case sel == themeNone:
 			a.Theme = ""
-		} else {
+		default:
 			a.Theme = sel
 		}
 	})

@@ -101,8 +101,11 @@ func ReloadCustomThemes() (loaded, problems []string) {
 // rather than two and a restart. It costs a directory scan only on the path
 // that is about to fail anyway.
 func Exists(id string) bool {
-	if id == "" {
-		// Empty is the no-theme state, not a name that has to resolve.
+	if id == "" || id == NoneID || id == OmarchyID {
+		// Empty and none are the no-theme state, not names that have to
+		// resolve. omarchy is valid on a machine without Omarchy too: a
+		// config file goes from machine to machine, and Initialize says
+		// what is missing.
 		return true
 	}
 	EnsureRegistry()

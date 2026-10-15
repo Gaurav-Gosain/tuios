@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/diffview"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -39,7 +40,7 @@ type reviewLook struct {
 // reviewLook is the overlay's colours for this frame.
 func (m *OS) reviewLook() *reviewLook {
 	g := m.paneGround()
-	key := theme.CurrentThemeID() + "\x00" + g.key + "\x00" + theme.Depth().String()
+	key := strconv.FormatUint(theme.Generation(), 10) + "\x00" + g.key + "\x00" + theme.Depth().String()
 	if l := m.review.look; l != nil && l.key == key {
 		return l
 	}

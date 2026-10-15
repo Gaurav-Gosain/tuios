@@ -167,5 +167,7 @@ rsc.io/qr v0.2.0 h1:6vBLea5/NRMVTz8V66gipeLycZMl/+UlFmk8DvqQ6WY=
 rsc.io/qr v0.2.0/go.mod h1:IF+uZjkb9fqyeF/4tlBoynqmQxUoPfWEKh921coOuXs=
 tuios.dev/progstatus v0.1.0 h1:6d/rQpXJvZzDK9uxNKhchb6lKVep/8eng0jyNVCaVTI=
 tuios.dev/progstatus v0.1.0/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
+tuios.dev/swatch v0.0.0-20261015114840-be9f02c89d6f h1:lyTqsapTWKTd+qeewwFjiqy/mONUQwC4+WoAIP5oguo=
+tuios.dev/swatch v0.0.0-20261015114840-be9f02c89d6f/go.mod h1:Cboeq3fD5TkfJHa0mBNscZRaLv1Nc8bf5t0hWeefyTw=
 tuios.dev/vt v0.0.0-20261015052022-4e41ff60e168 h1:sn9Fm3P4h2YF7OwqM3bN+ep6ZeME3XZdE5X+N1Jexec=
 tuios.dev/vt v0.0.0-20261015052022-4e41ff60e168/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=

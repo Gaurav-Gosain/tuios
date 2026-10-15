@@ -168,6 +168,12 @@ func runE2E(m *testing.M) int {
 	// A pane of a named server exports TUIOS_SERVER, which would put every
 	// tuios the suite spawns on that server. Tests that want one name it.
 	_ = os.Unsetenv("TUIOS_SERVER")
+	// tuios follows the Omarchy theme it finds. HOME is redirected per test,
+	// which hides the applied theme, but these two name directories outright:
+	// a developer on Omarchy has OMARCHY_PATH set, and its themes would join
+	// the theme list. Tests that want Omarchy write one under the test's HOME.
+	_ = os.Unsetenv("OMARCHY_PATH")
+	_ = os.Unsetenv("SWATCH_OMARCHY_DIR")
 	// The harnesses' own directory overrides. HOME is redirected per test, but
 	// each of these names a directory outright, so one set in the developer's
 	// shell would point an integration install or uninstall at their real

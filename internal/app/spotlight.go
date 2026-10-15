@@ -172,7 +172,7 @@ type cellShade struct {
 	// color.RGBA into a color.Color per cell was the single line that cost
 	// 8,000 allocations a frame.
 	groundFg, groundBg color.Color
-	groundTheme        string
+	groundTheme        uint64
 	groundValid        bool
 
 	// levels is the blend fraction for each of the 16 rim steps, rebuilt when
@@ -533,11 +533,11 @@ func packColor8(c color.Color) uint32 {
 // syncGround re-reads the pair a cell that names no colour is dimmed from, when
 // the theme has changed or nothing has been read yet.
 func (s *cellShade) syncGround() {
-	id := theme.CurrentThemeID()
-	if s.groundValid && s.groundTheme == id {
+	gen := theme.Generation()
+	if s.groundValid && s.groundTheme == gen {
 		return
 	}
-	s.groundTheme, s.groundValid = id, true
+	s.groundTheme, s.groundValid = gen, true
 	s.groundFg, s.groundBg = dimGround()
 	// The old ground was the source of every blend a colourless cell got, so
 	// none of those survives it. Clearing the whole cache is cheaper than

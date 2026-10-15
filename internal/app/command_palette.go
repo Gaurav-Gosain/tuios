@@ -54,14 +54,14 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	if m.ReloadFilter != nil {
 		cfg = m.ReloadFilter(cfg)
 	}
-	themeBefore := theme.CurrentThemeID()
+	themeBefore := theme.Generation()
 	config.ApplyAppearanceConfig(cfg, &m.Settings)
 	// ApplyAppearanceConfig switches the theme package, which recolours the
 	// chrome, but each pane's emulator holds its own copy of the palette. The
 	// theme picker pushes the new one into every pane (applyTheme); this path
 	// did not, so a theme saved in any config file recoloured the borders and
 	// left every pane, and all output after the save, in the old colours.
-	if theme.CurrentThemeID() != themeBefore {
+	if theme.Generation() != themeBefore {
 		m.UpdateAllWindowThemes()
 	}
 	// A reload is the one time the display's rate is looked for again, after

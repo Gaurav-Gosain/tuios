@@ -199,7 +199,7 @@ func (m *OS) ApplyAppearanceLive(retile bool) { m.applyAppearanceLive(retile) }
 // sentinel "none" disables theming and restores standard terminal colors.
 func (m *OS) applyTheme(name string) {
 	if name == themeNone {
-		_ = theme.Initialize("")
+		_ = theme.Initialize(theme.NoneID)
 	} else {
 		_ = theme.Initialize(name)
 	}
@@ -782,7 +782,14 @@ func (m *OS) themeItem() settingItem {
 			m.setThemeSelection(v)
 		})
 	item.activate = func(m *OS) tea.Cmd { m.OpenThemePicker(); return nil }
-	item.differs = differsFromDefault("appearance.theme", func(*OS) string { return theme.CurrentThemeID() })
+	// The configured name, not the active id: with no theme set, tuios
+	// follows Omarchy, and that is the default rather than a change.
+	item.differs = differsFromDefault("appearance.theme", func(m *OS) string {
+		if m.UserConfig != nil {
+			return m.UserConfig.Appearance.Theme
+		}
+		return theme.CurrentThemeID()
+	})
 	return item
 }
 

@@ -320,7 +320,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
-		Description: "Colour theme name. Empty keeps your terminal's own colours.",
+		Description: "Colour theme name. Empty follows Omarchy when it is installed, else keeps your terminal's colours. none always keeps them.",
 		Default:     "", Theme: true,
 	},
 	{

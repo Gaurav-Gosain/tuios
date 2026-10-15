@@ -76,6 +76,18 @@ func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *ver
 		return nil, mustResolve(d, p.Session)
 	}
 
+	// Omarchy, when it is installed or asked for. With no theme set, tuios
+	// follows it, and the person needs to be able to see that.
+	active, _ := out["active"].(string)
+	if st := theme.ReadOmarchyStatus(); st.Installed || active == theme.OmarchyID {
+		out["omarchy"] = map[string]any{
+			"installed": st.Installed,
+			"dir":       st.Dir,
+			"theme":     st.Theme,
+			"followed":  st.Installed && (active == "" || active == theme.OmarchyID),
+		}
+	}
+
 	// A caller that named a theme asked about that theme. Answering with a
 	// hundred other ids buries the palette it wanted under the list it did not,
 	// so the roster is sent only when it is the question: no theme named, or a

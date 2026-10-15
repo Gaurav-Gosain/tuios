@@ -176,8 +176,14 @@ func (d *Daemon) screenshotSettings(sess *Session, themeOverride string) (captur
 	if themeID == "" {
 		themeID = sessOption(sess, "appearance.theme")
 	}
-	if themeID == "none" {
+	switch themeID {
+	case theme.NoneID:
 		themeID = ""
+	case "":
+		// No theme follows Omarchy where it is installed, as the client does.
+		if theme.OmarchyInstalled() {
+			themeID = theme.OmarchyID
+		}
 	}
 	glyphs := sessOption(sess, "appearance.glyphs")
 	s := capture.SettingsFrom(cfg, themeID, glyphs)

@@ -2715,13 +2715,19 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
 
-	// Theme. An empty name means "no theme, use the terminal's own colors",
-	// which is also the startup state, so there is nothing to undo and the
-	// initialize is skipped. This matches ApplyOverrides, which then re-applies
-	// with the --theme flag's name when one was given.
-	if cfg.Appearance.Theme != "" {
-		if err := theme.Initialize(cfg.Appearance.Theme); err != nil {
-			log.Printf("Warning: Failed to load theme '%s': %v", cfg.Appearance.Theme, err)
+	// Theme. An empty name follows Omarchy on a machine with Omarchy, so it
+	// is applied there too: a reload that removed the theme puts that
+	// default back. Elsewhere an empty name is the startup state and the
+	// initialize is skipped. A live reload does not run ApplyOverrides, so
+	// the --theme flag's name stands in for an empty one here, or a save of
+	// any setting would drop the flag's theme.
+	name := cfg.Appearance.Theme
+	if name == "" {
+		name = flagTheme()
+	}
+	if name != "" || theme.OmarchyInstalled() {
+		if err := theme.Initialize(name); err != nil {
+			log.Printf("Warning: Failed to load theme '%s': %v", name, err)
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -121,6 +122,7 @@ func (g ground) on() bool { return g.bg != nil }
 // groundMemo is one surface's resolved ground and what it was resolved from.
 type groundMemo struct {
 	setting, themeID string
+	themeGen         uint64
 	valid            bool
 	ground           ground
 }
@@ -134,12 +136,15 @@ func (m *OS) surfaceGround(which surface) ground {
 	if setting == config.BackgroundOff {
 		return ground{}
 	}
-	themeID := theme.CurrentThemeID()
+	// The generation, not the id alone: the omarchy theme keeps its id while
+	// its colours change.
+	gen := theme.Generation()
 	memo := &m.groundCache[which]
-	if memo.valid && memo.setting == setting && memo.themeID == themeID {
+	if memo.valid && memo.setting == setting && memo.themeGen == gen {
 		return memo.ground
 	}
-	memo.setting, memo.themeID, memo.valid = setting, themeID, true
+	themeID := theme.CurrentThemeID()
+	memo.setting, memo.themeID, memo.themeGen, memo.valid = setting, themeID, gen, true
 	memo.ground = resolveGround(setting, themeID)
 	return memo.ground
 }
@@ -207,7 +212,7 @@ func resolveGround(setting, themeID string) ground {
 			}
 		}
 	}
-	g.key = setting + "\x00" + themeID
+	g.key = setting + "\x00" + themeID + "\x00" + strconv.FormatUint(theme.Generation(), 10)
 	g.bgSGR = sgrColor(48, g.bg)
 	if g.fg != nil {
 		g.fgSGR = sgrColor(38, g.fg)

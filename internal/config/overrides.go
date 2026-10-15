@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -64,6 +65,17 @@ type Overrides struct {
 	ZoomMaxWidth int
 }
 
+// themeFlag is the last --theme name ApplyOverrides applied, or "".
+// ApplyAppearanceConfig uses it for a config file that sets no theme.
+var themeFlag atomic.Pointer[string]
+
+func flagTheme() string {
+	if p := themeFlag.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
 // ApplyOverrides layers explicit CLI flag values over the globals that
 // ApplyAppearanceConfig set. Every entrypoint applies the config funnel
 // first; a zero value here means the flag was not given and the config's
@@ -121,6 +133,7 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 		s.AlwaysConfirmQuit = true
 	}
 	if overrides.ThemeName != "" {
+		themeFlag.Store(&overrides.ThemeName)
 		if err := theme.Initialize(overrides.ThemeName); err != nil {
 			log.Printf("Warning: Failed to load theme '%s': %v", overrides.ThemeName, err)
 		}
