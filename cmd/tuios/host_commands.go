@@ -221,13 +221,16 @@ type hostSessionsEntry struct {
 		WindowCount int    `json:"window_count"`
 		Attached    bool   `json:"attached"`
 		Restored    bool   `json:"restored"`
+		Space       string `json:"space"`
 		LastActive  int64  `json:"last_active"`
 		Created     int64  `json:"created"`
 	} `json:"sessions"`
 }
 
 // runListSessionsAllHosts is `tuios ls --all-hosts`. One dead host costs its own
-// row and nothing else.
+// row and nothing else. Each host's sessions are grouped by space under the
+// host's line, as ls on that host groups them. A space is a label on one
+// machine, so two hosts' spaces of the same name are two groups.
 func runListSessionsAllHosts(host string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
@@ -273,7 +276,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 			fmt.Println()
 			continue
 		}
-		rows := make([][]string, 0, len(h.Sessions))
+		rowsBySpace := map[string][][]string{}
 		for _, s := range h.Sessions {
 			if !h.Stale {
 				total++
@@ -289,7 +292,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 			if s.DisplayName != "" {
 				name = s.DisplayName
 			}
-			rows = append(rows, []string{
+			rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 				name,
 				strconv.Itoa(s.WindowCount),
 				status,
@@ -297,7 +300,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 				formatTimeAgo(s.LastActive),
 			})
 		}
-		fmt.Println(renderSessionTable(rows))
+		fmt.Println(renderSpaceGroups(rowsBySpace))
 		fmt.Println()
 	}
 	fmt.Printf("%s on %s.\n", plural.Count(total, "session"), plural.Count(reachable, "host"))

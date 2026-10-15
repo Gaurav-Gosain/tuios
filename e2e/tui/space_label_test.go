@@ -3,7 +3,6 @@ package tuie2e
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -462,13 +461,5 @@ func lsBlocks(out string) []string {
 // tuiosCLIWith is tuiosCLI with another tuios binary.
 func tuiosCLIWith(t *testing.T, bin, base string, args ...string) (string, error) {
 	t.Helper()
-	pinPreV080Looks(t, base)
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = workDirIn(t, base)
-	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
-	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
-	}
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return tuiosCLIBinEnv(t, bin, base, nil, args...)
 }

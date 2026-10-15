@@ -817,6 +817,7 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 					Name:        info.Name,
 					WindowCount: info.WindowCount,
 					LastActive:  savedUnix(info.SavedAt),
+					Space:       info.Space,
 				},
 				Saved:  true,
 				Server: serverscope.Name(),
@@ -829,9 +830,9 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 	}
 
 	if len(infos) > 0 {
-		rows := make([][]string, 0, len(infos))
+		rowsBySpace := map[string][][]string{}
 		for _, info := range infos {
-			rows = append(rows, []string{
+			rowsBySpace[info.Space] = append(rowsBySpace[info.Space], []string{
 				info.Name,
 				fmt.Sprintf("%d", info.WindowCount),
 				session.SavedTag,
@@ -839,7 +840,7 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 				formatTimeAgo(savedUnix(info.SavedAt)),
 			})
 		}
-		fmt.Println(renderSessionTable(rows))
+		fmt.Println(renderSpaceGroups(rowsBySpace))
 		fmt.Printf("\n%s\n", plural.Count(len(infos), "session"))
 		fmt.Printf("%s: %s.\n\n", session.SavedTag, session.SavedNote)
 	}
@@ -867,9 +868,10 @@ func printJSON(v any) error {
 	return nil
 }
 
-// renderSpaceGroups draws the live listing as one table per space, ordered by
+// renderSpaceGroups draws a session listing as one table per space, ordered by
 // space name, each under the space's name, and the sessions in no space last
-// with no heading. With no session in any space it is the one table.
+// with no heading. With no session in any space it is the one table. The live
+// listing, the saved one and each host of ls --all-hosts all draw through it.
 func renderSpaceGroups(rowsBySpace map[string][][]string) string {
 	spaces := make([]string, 0, len(rowsBySpace))
 	for space := range rowsBySpace {

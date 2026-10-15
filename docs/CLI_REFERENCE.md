@@ -506,7 +506,7 @@ Shows a table with:
 ╰───────────────┴─────────┴──────────┴───────────────┴─────────────────╯
 ```
 
-When any session is in a space, the listing is one table per space, in name order, each under the space's name, and the sessions in no space follow last with no heading. With no session in a space it is the one table above. `tuios ls --json` stays one flat list, with `space` on each row that has one.
+When any session is in a space, the listing is one table per space, in name order, each under the space's name, and the sessions in no space follow last with no heading. With no session in a space it is the one table above. The saved listing groups the same way, by the space each saved session was in. `tuios ls --all-hosts` groups each host's sessions under that host's line, by the spaces on that host, so a space of the same name on two hosts is two groups. A host whose daemon predates spaces sends no space, and its sessions list as in none. `tuios ls --json` stays one flat list, with `space` on each row that has one, saved rows included, and `tuios ls --all-hosts --json` carries `space` on each session row the same way.
 
 `tuios ls --json` prints one object per session. Two fields say where the session's focused pane is:
 

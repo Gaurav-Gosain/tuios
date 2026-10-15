@@ -80,9 +80,13 @@ type remoteSessionRow struct {
 	// same way: a global session is in the rail's global group whichever
 	// machine you are looking from, rather than being a global session here
 	// and an ordinary session on the machine next to it.
-	Global     bool  `json:"global,omitempty"`
-	LastActive int64 `json:"last_active,omitempty"`
-	Created    int64 `json:"created,omitempty"`
+	Global bool `json:"global,omitempty"`
+	// Space is the space the session is filed under on its own machine, so
+	// ls --all-hosts can group a host's sessions the way ls does there. A
+	// daemon from before spaces sends none, and its sessions list ungrouped.
+	Space      string `json:"space,omitempty"`
+	LastActive int64  `json:"last_active,omitempty"`
+	Created    int64  `json:"created,omitempty"`
 	// AgentState is the most urgent agent state among the session's panes, by
 	// the rail's own ranking, empty when nothing in it is running an agent.
 	//
@@ -635,6 +639,7 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 			Attached:    s.Attached,
 			Restored:    s.Restored,
 			Global:      s.Global,
+			Space:       s.Space,
 			LastActive:  s.LastActive,
 			Created:     s.Created,
 			AgentState:  rollUpAgentState(s.Windows),

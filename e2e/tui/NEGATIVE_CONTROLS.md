@@ -6174,3 +6174,23 @@ Run on 2026-10-16 on macOS on branch `feat/spaces-sidebar`, from upstream `main`
 | The positive half | this branch | none: the rail with no space is checked flat before the first space is set, and every screen is saved under the test's artifact directory | **guard** |
 
 Each mutant is a text replacement in the branch's checkout, built to a separate binary and put back before the next. Not covered here: a global session and the other machines' rows, which `GroupBySpace` leaves out of every space. A global session cannot be in a space (#708 refuses it), and the federation snapshot carries no space, so no fixture can put either under a heading.
+## Spaces in the saved and --all-hosts listings
+
+Run on 2026-10-16 on macOS on branch `feat/ls-space-groups`, from upstream `main` (`ce82a422`). The tests are in `space_listings_test.go`: `TestSavedLsGroupsSessionsBySpace`, `TestAllHostsLsGroupsEachHostBySpace` and `TestSpacelessListingsAreUnchanged`. The last compares this build's saved listing and `tuios ls --all-hosts` with a build of upstream `main` (`TUIOS_E2E_BASELINE_BIN`), each build listing its own daemons' sessions made by the same steps, styled bytes and all once the isolation root is named alike; it is skipped without that build. `TestAllHostsLsGroupsEachHostBySpace` has a second daemon reached through the ssh stand-in of `host_attach_test.go`. The fixed build passes all three, and the two `tuios ls` tests of "Spaces as a session label" with them. Each control cuts one wire from the fixed build, builds it, and runs the five tests with the baseline build set.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The fix removed | upstream `main` as `TUIOS_E2E_BIN` | `TestSavedLsGroupsSessionsBySpace` ("in the saved listing block 0 is headed \"╭─...\", want \"alpha\""), `TestAllHostsLsGroupsEachHostBySpace` ("the local host's listing has 1 blocks, want at least the 2 tables") | **caught** |
+| `ListResurrectableInfos` does not read `state.Space` | mutant of this branch | `TestSavedLsGroupsSessionsBySpace` (the same line) | **caught** |
+| `listSavedSessions` files every saved row under no space | mutant of this branch | `TestSavedLsGroupsSessionsBySpace` (the same line) | **caught** |
+| The saved `ls --json` row without `Space: info.Space` | mutant of this branch | `TestSavedLsGroupsSessionsBySpace` ("the saved ls --json has the sessions and spaces map[e2e-alpha-1: e2e-alpha-2: e2e-loose: e2e-zulu:], want ...") | **caught** |
+| `localSessionRows` without `Space: s.Space` | mutant of this branch | `TestAllHostsLsGroupsEachHostBySpace` ("the local host's listing has 1 blocks, want at least the 2 tables") | **caught** |
+| `remoteSessionRow.Space` tagged `json:"-"` | mutant of this branch | `TestAllHostsLsGroupsEachHostBySpace` (the same line) | **caught** |
+| `decodeHostSessions` clears the far host's spaces, local rows untouched | mutant of this branch | `TestAllHostsLsGroupsEachHostBySpace` ("the build host's listing has 2 blocks, want at least the 3 tables") | **caught** |
+| `runListSessionsAllHosts` files every row under no space | mutant of this branch | `TestAllHostsLsGroupsEachHostBySpace` ("the local host's listing has 1 blocks") | **caught** |
+| The CLI's `hostSessionsEntry` row decodes no `space` | mutant of this branch | `TestAllHostsLsGroupsEachHostBySpace` (the same line) | **caught** |
+| `renderSpaceGroups` draws a `No space` heading over the sessions in no space | mutant of this branch | all five: `TestSavedLsGroupsSessionsBySpace` and `TestAllHostsLsGroupsEachHostBySpace` ("the sessions in no space have a heading \"No space\""), `TestSpacelessListingsAreUnchanged` ("ls --all-hosts differs from the baseline build's"), and both `tuios ls` tests | **caught** |
+| `runListSessionsAllHosts` prints a blank line after each host's line | mutant of this branch | `TestSpacelessListingsAreUnchanged` ("with no session in a space, ls --all-hosts differs from the baseline build's") | **caught** |
+| The positive half | this branch | none: the grouped listings are saved as `ls-saved-grouped.txt` and `ls-all-hosts-grouped.txt`, and the four spaceless listings beside them | **guard** |
+
+Each mutant is a text replacement on a `git archive` of the branch, so the checkout under test is never edited. The far host's rows carry a space only when its daemon sends one in its `list-sessions` answer; a daemon from before spaces sends none, and this suite has no such build on the far side, so that case is held by the field being `omitempty` and not by a test.

@@ -265,6 +265,7 @@ type ResurrectableInfo struct {
 	Name        string    // Session name
 	WindowCount int       // Number of windows saved
 	SavedAt     time.Time // Modification time of the state file
+	Space       string    // The space the session was filed under, or empty
 }
 
 // ListResurrectableInfos returns metadata for every resurrectable session,
@@ -281,7 +282,7 @@ func ListResurrectableInfos() ([]ResurrectableInfo, error) {
 		if err != nil {
 			continue
 		}
-		info := ResurrectableInfo{Name: name, WindowCount: len(state.Windows)}
+		info := ResurrectableInfo{Name: name, WindowCount: len(state.Windows), Space: state.Space}
 		if fi, statErr := os.Stat(getResurrectionPath(name)); statErr == nil {
 			info.SavedAt = fi.ModTime()
 		}
