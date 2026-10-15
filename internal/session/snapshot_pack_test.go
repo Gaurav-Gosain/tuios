@@ -285,8 +285,12 @@ func TestTerminalStateKeepsItsGobName(t *testing.T) {
 	if err := gob.NewEncoder(&b).Encode(struct{ V any }{TerminalState{Width: 1}}); err != nil {
 		t.Fatal(err)
 	}
+	// gob writes the name as a length and the bytes, so the length byte
+	// makes the match exact: a longer name, such as one with a suffix, has
+	// another length.
 	const old = "github.com/Gaurav-Gosain/tuios/internal/session.TerminalState"
-	if !bytes.Contains(b.Bytes(), []byte(old)) {
+	want := append([]byte{byte(len(old))}, old...)
+	if !bytes.Contains(b.Bytes(), want) {
 		t.Fatalf("a TerminalState in an interface is not sent as %q", old)
 	}
 }
