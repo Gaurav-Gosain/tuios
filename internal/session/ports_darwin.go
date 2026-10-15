@@ -5,10 +5,11 @@ package session
 import (
 	"context"
 	"net"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // portsSupported says list-ports can read listening sockets here.
@@ -22,7 +23,7 @@ const portsCommandTimeout = time.Second
 func paneTrees(roots map[int]paneProc) map[int]paneProc {
 	ctx, cancel := context.WithTimeout(context.Background(), portsCommandTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=").Output()
+	out, err := childproc.CommandContext(ctx, "ps", "-axo", "pid=,ppid=").Output()
 	if err != nil {
 		return roots
 	}
@@ -54,7 +55,7 @@ func listeningSockets(owner map[int]paneProc) []listenHit {
 	ctx, cancel := context.WithTimeout(context.Background(), portsCommandTimeout)
 	defer cancel()
 	// lsof exits 1 when it finds nothing, so its output is read either way.
-	out, _ := exec.CommandContext(ctx, "lsof", "-nP", "-a", "-iTCP", "-sTCP:LISTEN", "-Fpcn", "-p", strings.Join(pids, ",")).Output()
+	out, _ := childproc.CommandContext(ctx, "lsof", "-nP", "-a", "-iTCP", "-sTCP:LISTEN", "-Fpcn", "-p", strings.Join(pids, ",")).Output()
 	return parseLsofListen(string(out))
 }
 
