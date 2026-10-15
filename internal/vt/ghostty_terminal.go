@@ -11,8 +11,6 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	gh "go.mitchellh.com/libghostty"
-
-	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 )
 
 // GhosttyTerminal implements Terminal on top of libghostty-vt. libghostty
@@ -332,7 +330,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		// cell (issue #506). The library calls this from inside a write or a
 		// resize, which hold t.mu, so the fields are read without it.
 		gh.WithSizeReport(func(_ *gh.Terminal) (gh.SizeReportSize, bool) {
-			cw, ch := cellsize.Or(t.cellW, t.cellH)
+			cw, ch := cellSizeOr(t.cellW, t.cellH)
 			return gh.SizeReportSize{
 				Rows:       clampU16(t.height),
 				Columns:    clampU16(t.width),
@@ -392,8 +390,8 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 const (
 	// defaultCellWidth/Height match the pure emulator's assumptions until
 	// the host reports real pixel metrics via SetCellSize.
-	defaultCellWidth  = cellsize.FallbackWidth
-	defaultCellHeight = cellsize.FallbackHeight
+	defaultCellWidth  = FallbackCellWidth
+	defaultCellHeight = FallbackCellHeight
 	// maxSemanticMarkers matches the pure emulator's marker list bound.
 	maxSemanticMarkers = 1000
 )

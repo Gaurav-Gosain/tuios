@@ -12,8 +12,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/parser"
-
-	"github.com/Gaurav-Gosain/tuios/internal/cellsize"
 )
 
 // Logger represents a logger interface.
@@ -765,7 +763,7 @@ func (e *Emulator) SetCellSize(width, height int) {
 // CellSize returns the pixel dimensions of a single character cell, or the
 // fallback cell when none was set. It is never zero.
 func (e *Emulator) CellSize() (width, height int) {
-	return cellsize.Or(e.cellWidth, e.cellHeight)
+	return cellSizeOr(e.cellWidth, e.cellHeight)
 }
 
 // sendInBandResize sends the guest a mode 2048 report: the size in cells and
