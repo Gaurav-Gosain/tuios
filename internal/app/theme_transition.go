@@ -108,11 +108,12 @@ func (m *OS) noticeThemeChange() {
 	if g == t.gen {
 		return
 	}
-	first := t.gen == 0
 	t.gen = g
-	// The first generation is the theme set at startup, which replaces
-	// nothing on screen.
-	if first || t.lastFrame == "" {
+	// Before the first frame there is nothing on screen to replace: the
+	// theme set at startup lands here. Generation itself is no guide, since
+	// it is still zero after a start with no theme, and the first theme
+	// picked after that must animate like any other.
+	if t.lastFrame == "" {
 		return
 	}
 	style := m.Settings.ThemeTransitionStyle()
