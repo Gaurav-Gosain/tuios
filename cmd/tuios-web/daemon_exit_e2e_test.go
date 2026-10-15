@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -51,7 +52,11 @@ func startWebExitRun(t *testing.T, name string) *webExitRun {
 func startWebDaemon(t *testing.T) *session.Daemon {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
-	t.Setenv("SHELL", "/bin/sh")
+	if runtime.GOOS == "windows" {
+		t.Setenv("SHELL", "cmd.exe")
+	} else {
+		t.Setenv("SHELL", "/bin/sh")
+	}
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})
 	if err := d.Start(); err != nil {
