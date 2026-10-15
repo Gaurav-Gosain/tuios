@@ -362,10 +362,13 @@ func (m *OS) renderDockString() (string, int) {
 
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
-	// Anchor the center to the screen; transient right-hand content must fit
-	// beside it rather than move it. Clamp only when the bar itself is crowded.
+	// A center with a custom cell (a clock, say) is anchored to the screen, so
+	// a message fits beside it rather than moving it. It clamps only when the
+	// bar itself is crowded. A center of minimized entries alone keeps sitting
+	// in the room the right block leaves, so a message keeps its full width.
+	anchored := centerWidth > 0 && layout.CustomCenter > 0
 	centerX := actualLeftWidth
-	if centerWidth > 0 {
+	if anchored {
 		centerX = max(actualLeftWidth, min((renderWidth-centerWidth)/2, barWidth-centerWidth-layout.CenterRightReserve))
 	}
 	rightRoom := max(barWidth-centerX-centerWidth, 0)
@@ -416,6 +419,9 @@ func (m *OS) renderDockString() (string, int) {
 		rightInfo = truncateToWidth(rightInfo, rightWidth)
 	}
 
+	if !anchored {
+		centerX = actualLeftWidth + max(barWidth-actualLeftWidth-centerWidth-rightWidth, 0)/2
+	}
 	leftSpacer := max(centerX-actualLeftWidth, 0)
 	rightSpacer := max(barWidth-centerX-centerWidth-rightWidth, 0)
 
