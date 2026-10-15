@@ -86,6 +86,92 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	return caps.Render(lc) + pill + caps.Render(rc)
 }
 
+// tabColor is a configured [dock.tabs] colour, or nil when it is unset or not
+// #rrggbb. lipgloss turns a value it cannot parse into no colour at all, which
+// would paint the terminal's default in the middle of the bar, so a bad value
+// is dropped here, where validateDock has already said it is ignored.
+func tabColor(s string) color.Color {
+	if !config.IsHexColor(s) {
+		return nil
+	}
+	return lipgloss.Color(s)
+}
+
+// flatWorkspaceTab renders one [dock.tabs] style = "flat" tab: the label with a
+// column of padding either side. A colour the table does not set comes from the
+// palette the way the pills' do, so the strip still says where you are with no
+// colours configured: the current tab sits on the accent, as the mode chip
+// does, and the others are FgDim on the bar's own ground. At 16 colours the
+// accent ground is the slot drawn in reverse video, the same thing overlay.Chip
+// does there. A picked-up tab comes up onto Surface, the same lift a dragged
+// pill gets.
+func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette) string {
+	fg, bg, bold := tabColor(t.InactiveFg), tabColor(t.InactiveBg), t.InactiveBold
+	if active {
+		fg, bg, bold = tabColor(t.ActiveFg), tabColor(t.ActiveBg), t.ActiveBold
+	}
+	st := lipgloss.NewStyle()
+	onAccent := false
+	switch {
+	case dragged:
+		bg = pal.Surface
+	case active && bg == nil:
+		onAccent = true
+		// The accent ground is what marks the current tab when nothing else
+		// does, so it is bold with it.
+		bold = true
+		if fg == nil && theme.Depth() == overlay.Depth16 {
+			return st.Bold(true).Foreground(pal.Accent).Reverse(true).Render(" " + label + " ")
+		}
+		bg = pal.Accent
+	}
+	if fg == nil {
+		switch {
+		case !active:
+			fg = theme.Readable(pal.FgDim, groundOr(bg, pal.Canvas))
+		case dragged:
+			fg = theme.Readable(pal.Accent, bg)
+		case onAccent:
+			fg = theme.Readable(pal.PillFg, bg)
+		default:
+			fg = theme.Readable(pal.Fg, bg)
+		}
+	}
+	st = st.Bold(bold).Foreground(fg)
+	if bg != nil {
+		st = st.Background(bg)
+	}
+	return st.Render(" " + label + " ")
+}
+
+// groundOr is c, or fallback when c is unset.
+func groundOr(c, fallback color.Color) color.Color {
+	if c == nil {
+		return fallback
+	}
+	return c
+}
+
+// dockTabGapText is what is drawn between two tabs: the flat style's styled
+// separator, or bare columns.
+func dockTabGapText(t *config.DockTabsConfig) string {
+	if !t.Flat() || t.Separator == "" {
+		return strings.Repeat(" ", dockWorkspacePillGap)
+	}
+	if fg := tabColor(t.SeparatorFg); fg != nil {
+		return lipgloss.NewStyle().Foreground(fg).Render(t.Separator)
+	}
+	return t.Separator
+}
+
+// dockTab renders one tab in whichever style [dock.tabs] asks for.
+func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged bool, pal overlay.Palette) string {
+	if t.Flat() {
+		return flatWorkspaceTab(label, active, dragged, t, pal)
+	}
+	return workspacePill(label, active, dragged, pal, &m.Settings)
+}
+
 // renderDockWorkspaceStrip draws the strip starting at column startX and records
 // every pill and arrow it draws into m.dockWorkspaceHits and
 // m.dockWorkspaceArrowHits.
@@ -102,6 +188,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	}
 
 	pal := m.groundUI()
+	style := m.dockTabs()
 	y := m.GetDockbarContentYPosition()
 	arrow := lipgloss.NewStyle().Foreground(dockStripArrowFg(pal))
 
@@ -127,12 +214,13 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	gutter(m.Settings.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
 
 	drawn := 0
+	gapText := dockTabGapText(&style)
 	for i, t := range s.Pills {
 		if i > 0 {
-			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
-			x, drawn = x+dockWorkspacePillGap, drawn+dockWorkspacePillGap
+			b.WriteString(gapText)
+			x, drawn = x+t.Gap, drawn+t.Gap
 		}
-		b.WriteString(workspacePill(t.Label, t.Active, t.Dragged, pal, &m.Settings))
+		b.WriteString(m.dockTab(&style, t.Label, t.Active, t.Dragged, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
@@ -149,10 +237,10 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 
 	if s.Add != nil {
 		if len(s.Pills) > 0 {
-			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
-			x += dockWorkspacePillGap
+			b.WriteString(gapText)
+			x += s.Add.Gap
 		}
-		b.WriteString(workspacePill(s.Add.Label, false, false, pal, &m.Settings))
+		b.WriteString(m.dockTab(&style, s.Add.Label, false, false, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
 		})

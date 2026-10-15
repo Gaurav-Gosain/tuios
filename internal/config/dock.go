@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -129,6 +130,58 @@ type DockConfig struct {
 	// Custom is the set of [dock.custom.NAME] tables. A list entry of
 	// "custom/NAME" draws the cell this table describes.
 	Custom map[string]DockCustomConfig `toml:"custom,omitempty"`
+
+	// Tabs is [dock.tabs]: how the workspace strip draws its tabs.
+	Tabs DockTabsConfig `toml:"tabs,omitempty"`
+}
+
+// Workspace tab styles accepted by [dock.tabs] style.
+const (
+	DockTabStylePill = "pill"
+	DockTabStyleFlat = "flat"
+)
+
+// DockTabsConfig is [dock.tabs]. With style left empty (or "pill") the strip
+// draws its rounded pills as it always has and the other fields are ignored;
+// "flat" draws each tab as a coloured run of text, the tabs joined by
+// Separator, the way a tmux status line draws its window list.
+type DockTabsConfig struct {
+	Style string `toml:"style,omitempty"`
+
+	// Separator is drawn between two flat tabs. Empty is one bare column.
+	Separator   string `toml:"separator,omitempty"`
+	SeparatorFg string `toml:"separator_fg,omitempty"`
+
+	ActiveFg     string `toml:"active_fg,omitempty"`
+	ActiveBg     string `toml:"active_bg,omitempty"`
+	ActiveBold   bool   `toml:"active_bold,omitempty"`
+	InactiveFg   string `toml:"inactive_fg,omitempty"`
+	InactiveBg   string `toml:"inactive_bg,omitempty"`
+	InactiveBold bool   `toml:"inactive_bold,omitempty"`
+
+	// NumberGlyphs is what {icon} in appearance.dock_workspace_tab_format
+	// prints for each workspace: the first entry stands for workspace 1, and
+	// a workspace past the end prints its number.
+	NumberGlyphs []string `toml:"number_glyphs,omitempty"`
+
+	// ZoomMarker is what {zoom} prints on the current workspace's tab while a
+	// pane in it is zoomed.
+	ZoomMarker string `toml:"zoom_marker,omitempty"`
+
+	// ShowAdd keeps the trailing "+" tab in the flat style, which drops it by
+	// default. The pill style always draws it.
+	ShowAdd bool `toml:"show_add,omitempty"`
+}
+
+// Flat reports whether the strip draws flat tabs.
+func (t DockTabsConfig) Flat() bool { return strings.TrimSpace(t.Style) == DockTabStyleFlat }
+
+// Icon is what {icon} prints for workspace n.
+func (t DockTabsConfig) Icon(n int) string {
+	if n >= 1 && n <= len(t.NumberGlyphs) && t.NumberGlyphs[n-1] != "" {
+		return t.NumberGlyphs[n-1]
+	}
+	return strconv.Itoa(n)
 }
 
 // DockClockConfig is [dock.clock].
@@ -406,6 +459,18 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 			}
 		}
 	}
+
+	if st := strings.TrimSpace(cfg.Dock.Tabs.Style); st != "" && st != DockTabStylePill && st != DockTabStyleFlat {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "dock.tabs", Key: "style",
+			Message: fmt.Sprintf("style %q is not %s or %s; drawing pills", st, DockTabStylePill, DockTabStyleFlat),
+		})
+	}
+	t := cfg.Dock.Tabs
+	validateDockColors(result, "dock.tabs", map[string]string{
+		"separator_fg": t.SeparatorFg, "active_fg": t.ActiveFg, "active_bg": t.ActiveBg,
+		"inactive_fg": t.InactiveFg, "inactive_bg": t.InactiveBg,
+	})
 
 	for name, spec := range cfg.Dock.Custom {
 		refresh, err := ParseDockRefresh(spec.Refresh)

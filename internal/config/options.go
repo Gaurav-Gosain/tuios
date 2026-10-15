@@ -588,7 +588,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dock_workspace_tab_format", Type: OptionString, Section: "dock",
-		Description: "Workspace tab template accepting {index} and {name} (empty: {name})",
+		Description: "Workspace tab template accepting {index}, {name}, {icon} and {zoom} (empty: {name})",
 		Default:     "",
 	},
 	{

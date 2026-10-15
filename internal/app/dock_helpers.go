@@ -70,6 +70,10 @@ type dockWorkspaceTab struct {
 	// no way to tell which one they are holding.
 	Dragged bool
 	Width   int
+	// Gap is the width of what is drawn in front of this tab when another tab
+	// precedes it: the bare column between pills, or the [dock.tabs] separator
+	// between flat tabs.
+	Gap int
 	// Add marks the trailing "+" tab, which opens the next free workspace rather
 	// than switching to an existing one.
 	Add bool
@@ -135,6 +139,45 @@ func workspacePillWidth(label string, s *config.Settings) int {
 	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label) + 2
 }
 
+// dockTabs is the [dock.tabs] table, or its zero value when there is no config.
+// It copies the table, so a pass over the strip reads it once and hands the
+// result down rather than asking again per tab.
+func (m *OS) dockTabs() config.DockTabsConfig {
+	if m.UserConfig == nil {
+		return config.DockTabsConfig{}
+	}
+	return m.UserConfig.Dock.Tabs
+}
+
+// dockTabWidth is the column span of a tab carrying label: a pill's (see
+// workspacePillWidth), or a flat tab's label and its column of padding either
+// side.
+func (m *OS) dockTabWidth(t *config.DockTabsConfig, label string) int {
+	if t.Flat() {
+		return lipgloss.Width(label) + 2
+	}
+	return workspacePillWidth(label, &m.Settings)
+}
+
+// dockTabGap is the width drawn between two tabs.
+func dockTabGap(t *config.DockTabsConfig) int {
+	if t.Flat() && t.Separator != "" {
+		return lipgloss.Width(t.Separator)
+	}
+	return dockWorkspacePillGap
+}
+
+// workspaceTabText is workspace n's label through the tab format, before the
+// label cap. {zoom} is only ever filled on the current workspace, the one whose
+// zoom state the session tracks.
+func (m *OS) workspaceTabText(tabs *config.DockTabsConfig, n int) string {
+	zoom := ""
+	if n == m.dockWorkspace() && tabs.ZoomMarker != "" && m.zoomedWindow() != nil {
+		zoom = tabs.ZoomMarker
+	}
+	return m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n, tabs.Icon(n), zoom)
+}
+
 // workspacePillName is the whole name a pill stands for: the workspace's name
 // when it has one, else its number, laundered as chrome and uncapped. This is
 // what the hover label says, so the words come from state at draw time and a
@@ -152,7 +195,14 @@ func (m *OS) workspacePillName(n int) string {
 // the whole name; the strip's scroll arithmetic is what handles a bar that no
 // longer fits it.
 func (m *OS) workspacePillLabel(n int) string {
-	label := m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)
+	tabs := m.dockTabs()
+	return m.workspacePillLabelWith(&tabs, n)
+}
+
+// workspacePillLabelWith is workspacePillLabel for a caller that has already
+// read [dock.tabs].
+func (m *OS) workspacePillLabelWith(tabs *config.DockTabsConfig, n int) string {
+	label := m.workspaceTabText(tabs, n)
 	if limit := m.Settings.DockWorkspaceLabelMax; limit > 0 {
 		label = overlay.Truncate(label, limit)
 	}
@@ -168,7 +218,8 @@ func (m *OS) workspacePillClipped(n int) bool {
 	if limit <= 0 {
 		return false
 	}
-	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > limit
+	tabs := m.dockTabs()
+	return lipgloss.Width(m.workspaceTabText(&tabs, n)) > limit
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
@@ -199,24 +250,30 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 	if !m.Settings.DockWorkspaceTabs {
 		return nil
 	}
+	style := m.dockTabs()
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
+	gap := dockTabGap(&style)
 	for _, n := range m.occupiedWorkspaces() {
-		label := m.workspacePillLabel(n)
+		label := m.workspacePillLabelWith(&style, n)
 		tabs = append(tabs, dockWorkspaceTab{
 			Workspace: n,
 			Label:     label,
 			Active:    n == m.dockWorkspace(),
 			Dragged:   m.dockWorkspaceDrag.Dragging && n == m.dockWorkspaceDrag.Workspace,
-			Width:     workspacePillWidth(label, &m.Settings),
+			Width:     m.dockTabWidth(&style, label),
+			Gap:       gap,
 		})
 	}
 	// A trailing "+" opens the next empty workspace, so making one is a click
 	// rather than a remembered keybind. With it appended even a single-workspace
 	// session has two tabs, which is what makes the strip worth showing at all.
-	if next := m.nextFreeWorkspace(); next > 0 {
-		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspacePillWidth("+", &m.Settings)})
+	// Flat tabs are a status line rather than a control strip: they drop the
+	// "+" unless asked for it, and show even a lone workspace.
+	flat := style.Flat()
+	if next := m.nextFreeWorkspace(); next > 0 && (!flat || style.ShowAdd) {
+		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: m.dockTabWidth(&style, "+"), Gap: gap})
 	}
-	if len(tabs) < 2 {
+	if len(tabs) < 2 && (!flat || len(tabs) == 0) {
 		return nil
 	}
 	return tabs
@@ -244,7 +301,7 @@ func dockWorkspaceTabsWidth(tabs []dockWorkspaceTab) int {
 	w := 1
 	for i, t := range tabs {
 		if i > 0 {
-			w += dockWorkspacePillGap
+			w += t.Gap
 		}
 		w += t.Width
 	}
@@ -276,7 +333,7 @@ func pillsSpan(tabs []dockWorkspaceTab, from, to int) int {
 	w := 0
 	for i := from; i < to; i++ {
 		if i > from {
-			w += dockWorkspacePillGap
+			w += tabs[i].Gap
 		}
 		w += tabs[i].Width
 	}
@@ -336,7 +393,7 @@ func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
 	// one.
 	addSpan := 0
 	if strip.Add != nil {
-		addSpan = dockWorkspacePillGap + strip.Add.Width
+		addSpan = strip.Add.Gap + strip.Add.Width
 	}
 	avail := budget - 1 - addSpan
 	if avail <= 0 || len(strip.Pills) == 0 {
@@ -407,14 +464,15 @@ func (m *OS) addOnlyStrip(strip dockWorkspaceStrip, budget int) dockWorkspaceStr
 // the gutters hold their columns and the "\+" stays pinned at the end, so a
 // dock that narrows further degrades the same way it already does.
 func (m *OS) pinCurrentPill(strip dockWorkspaceStrip, inner, addSpan, budget int) dockWorkspaceStrip {
-	labelBudget := inner - (workspacePillWidth("", &m.Settings))
+	style := m.dockTabs()
+	labelBudget := inner - m.dockTabWidth(&style, "")
 	if labelBudget < 1 || len(strip.Pills) == 0 {
 		return m.addOnlyStrip(strip, budget)
 	}
 	active := m.activePillIndex(strip.Pills)
 	pill := strip.Pills[active]
 	pill.Label = overlay.Truncate(pill.Label, labelBudget)
-	pill.Width = workspacePillWidth(pill.Label, &m.Settings)
+	pill.Width = m.dockTabWidth(&style, pill.Label)
 	strip.Pills = []dockWorkspaceTab{pill}
 	strip.MoreLeft, strip.MoreRight = false, false
 	strip.Width = 1 + 2*dockWorkspaceArrowWidth + inner + addSpan

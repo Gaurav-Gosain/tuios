@@ -58,6 +58,24 @@ The format is a Go time layout. It also sets the cadence: a layout showing
 seconds refreshes once a second, one without refreshes on the minute. The same
 format drives the status badge that `show_clock` turns on.
 
+## Workspace tabs
+
+```toml
+[dock.tabs]
+style         = "flat"   # pill (default) | flat
+separator     = " • "
+active_bg     = "#a7c080"
+active_bold   = true
+number_glyphs = ["I", "II", "III"]   # the first entry is workspace 1
+zoom_marker   = " [ ]"
+```
+
+`style = "flat"` draws the `workspaces` component as a tmux-like window list
+instead of pills. `number_glyphs` and `zoom_marker` feed the `{icon}` and
+`{zoom}` placeholders of `appearance.dock_workspace_tab_format`. With no
+colours set, the current tab sits on the theme's accent. The full key list is
+in `docs/CONFIGURATION.md`.
+
 ## Writing a component
 
 ```toml

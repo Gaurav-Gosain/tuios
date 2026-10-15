@@ -2120,6 +2120,31 @@ and the custom-format case shows the name inside its brackets.
 | A narrow dock with the cap off draws no pill at all | `planDockWorkspaceStrip`: the `count == 0` fallback replaced by `addOnlyStrip` | `TestDockWorkspaceLabelCapAndFormats/uncapped_narrow` ("the narrow dock draws no pill at all for the long workspace") | **caught** |
 | Minimized names take a live message's room | `shortenDockItemNames`: the budget search replaced by the earlier even split, which subtracts each entry's padding and never counts the label's own " 1: " around the name | `TestDockWorkspaceLabelCapAndFormats/live_message_keeps_its_columns` ("the live message never drew in full on the dock row"): at 140 columns the drawn entries run wider than the room the pass was given, and the message is cut to `Window…  more` | **caught** |
 
+## Flat workspace tabs (`[dock.tabs]`)
+
+`dock_tabs_style_test.go` runs the real binary with `[dock.tabs] style = "flat"`.
+`TestDockTabsFlatStyle` has the positive half in its `pill` and `show_add`
+cases, where the `+` tab and the caps are on the row. `TestDockTabsFlatStripTwoWorkspaces`
+has it in the unzoomed, inactive-tab and lone-workspace assertions.
+`TestDockTabsFlatColourFallbacks` has it in its `unset` case, which shows the
+fill the bad values fall back to. `TestDockTabsConfigWarnings` has it in
+`valid`. There are no unit tests for the slice: the config parse, the
+`number_glyphs` index and the warnings are all read off the running dock.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The flat strip keeps the `+` tab | `buildDockWorkspaceTabs`: ` && (!flat \|\| style.ShowAdd)` removed | `TestDockTabsFlatStyle/flat` ("flat: \"+\" tab on the dock row = true, want false"), `TestDockTabsFlatStripTwoWorkspaces` ("a lone flat tab drew a separator or a \"+\"") | **caught** |
+| A lone workspace draws no flat tab | `buildDockWorkspaceTabs`: ` && (!flat \|\| len(tabs) == 0)` removed | `TestDockTabsFlatStyle` (all three cases: "the dock never drew the {icon} tab") | **caught** |
+| Flat tabs draw as pills | `dockTab`: the `t.Flat()` branch disabled | `TestDockTabsFlatStyle/flat`, `/show_add` ("flat tab drawn with caps"), `TestDockTabsFlatStripTwoWorkspaces` ("the strip never joined the tabs with the separator") | **caught** |
+| Hit rects ignore the separator's width | `dockTabGap` returns `dockWorkspacePillGap` | `TestDockTabsFlatStripTwoWorkspaces` ("a click on the second flat tab did not switch to workspace 2"); the click is on the tab's last column, because a click mid-label still lands inside the shifted rect | **caught** |
+| The zoom marker lands on every tab | `workspaceTabText`: `n == m.dockWorkspace() &&` removed | `TestDockTabsFlatStripTwoWorkspaces` ("the zoom marker is on a tab that is not current: ... 1ZM~A  \|  2ZM~2") | **caught** |
+| The zoom marker never prints | `workspaceTabText`: `zoom = tabs.ZoomMarker` blanked | `TestDockTabsFlatStripTwoWorkspaces` ("the zoomed workspace's tab never took the zoom marker") | **caught** |
+| `number_glyphs` entry 0 is workspace 0 | `DockTabsConfig.Icon`: indexes `n`, not `n-1` | `TestDockTabsFlatStyle` ("the dock never drew the {icon} tab", all three cases), `TestDockTabsFlatStripTwoWorkspaces` ("the strip never joined the tabs with the separator") | **caught** |
+| An unset active colour leaves the current tab unmarked | `flatWorkspaceTab`: the accent ground (`bg = pal.Accent`) removed | `TestDockTabsFlatColourFallbacks`, every case ("the current tab is not marked: fg {Kind:1 Index:231 ...} bg {Kind:0 ...}") | **caught** |
+| A bad colour is handed to lipgloss | `tabColor`: `config.IsHexColor(s)` replaced by `s == ""` | `TestDockTabsFlatColourFallbacks` bad cases ("the current tab is not marked: fg {Kind:0 ...} bg {Kind:1 Index:63 ...}" and the same with fg set) | **caught** |
+| A bad colour raises no warning | `validateDock`: the `validateDockColors(result, "dock.tabs", ...)` call removed | `TestDockTabsConfigWarnings/bad` ("a bad style and a bad colour were not both reported: ... waiting for text \"2 config problems\"") | **caught** |
+| A bad style raises no warning | `validateDock`: the style check disabled | `TestDockTabsConfigWarnings/bad` (same line) | **caught** |
+
 ## A new window ignores the OSC 7 folder on Windows (#491)
 
 `TestNewWindowInheritsTheOSC7Folder` in `inherit_cwd_osc7_test.go` starts the

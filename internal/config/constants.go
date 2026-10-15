@@ -584,16 +584,20 @@ func (s *Settings) FormatWindowTitle(title string, index int, cwd string) string
 }
 
 // FormatWorkspaceTab renders a dock workspace tab label from the configured
-// DockWorkspaceTabFormat. Placeholders are {index} (the workspace number) and
-// {name} (the workspace's name, or its number when unnamed). An empty format
-// returns the name unchanged, which is the historic rendering.
-func (s *Settings) FormatWorkspaceTab(name string, index int) string {
+// DockWorkspaceTabFormat. Placeholders are {index} (the workspace number),
+// {name} (the workspace's name, or its number when unnamed), {icon} (the
+// [dock.tabs] number_glyphs entry for the number) and {zoom} (the [dock.tabs]
+// zoom_marker while the workspace has a zoomed pane). An empty format returns
+// the name unchanged, which is the historic rendering.
+func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string) string {
 	if s.DockWorkspaceTabFormat == "" {
 		return name
 	}
 	return strings.NewReplacer(
 		"{name}", name,
 		"{index}", strconv.Itoa(index),
+		"{icon}", icon,
+		"{zoom}", zoom,
 	).Replace(s.DockWorkspaceTabFormat)
 }
 

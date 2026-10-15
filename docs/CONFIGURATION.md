@@ -1105,6 +1105,36 @@ count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 
+### Workspace tab style
+
+By default the workspace strip draws rounded pills. `[dock.tabs]` can draw
+flat tabs instead, the way a tmux status line draws its window list:
+
+```toml
+[appearance]
+dock_workspace_tab_format = "{name}{zoom} {icon}"
+
+[dock.tabs]
+style         = "flat"        # pill (default) | flat
+separator     = " • "         # drawn between flat tabs
+separator_fg  = "#4c3743"
+active_fg     = "#272e33"
+active_bg     = "#a7c080"
+active_bold   = true
+inactive_fg   = "#4f5b58"
+number_glyphs = ["I", "II", "III"]  # {icon}: the first entry is workspace 1; past the end prints the number
+zoom_marker   = " [ ]"        # {zoom} on the current workspace while a pane is zoomed
+show_add      = false         # keep the trailing "+" tab in the flat style
+```
+
+Colours are `#rrggbb`. The colours are overrides: a flat strip with none set
+puts the current tab on the theme's accent, in bold, and draws the others in
+dim text on the bar's own ground, so it still shows where you are. A colour
+that is not `#rrggbb` is ignored, with a warning, as if it were unset.
+Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+The flat style shows even a lone workspace and drops the `+` tab unless
+`show_add` is on. With no `[dock.tabs]` table the strip is unchanged.
+
 `examples/dock/README.md` is the full contract and five working recipes.
 
 ## Two sidebar edges

@@ -24,6 +24,7 @@ var optionWalkSkips = map[string]string{
 	"dock.center":                  "an ordered list of component names, not a scalar path",
 	"dock.right":                   "an ordered list of component names, not a scalar path",
 	"dock.custom":                  "a free-form map of component name to its command and refresh",
+	"dock.tabs":                    "the workspace strip's look, a table edited in the file beside [dock.custom]; number_glyphs is a list a value arriving as one string cannot spell",
 	"hosts":                        "a map of host name to its address, which no single settable path can spell",
 	"notify":                       "where the Inbox's text goes and with which credentials, which a pane must not change over the control protocol",
 	"plugins":                      "which plugins run outside every pane with the person's rights, which set-option, a verb any pane can call, must not be able to change",
