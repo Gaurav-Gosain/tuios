@@ -3,11 +3,12 @@ package config
 import (
 	"context"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
 // macInputSourceTimeout bounds the one call to defaults. A slow answer is a
@@ -41,7 +42,7 @@ func readMacInputSource() string {
 	// The current layout's ID, such as com.apple.keylayout.British. Some
 	// systems do not write it; the list of selected sources is the fallback.
 	for _, key := range []string{"AppleCurrentKeyboardLayoutInputSourceID", "AppleSelectedInputSources"} {
-		out, err := exec.CommandContext(ctx, "/usr/bin/defaults", "read", "com.apple.HIToolbox", key).Output()
+		out, err := childproc.CommandContext(ctx, "/usr/bin/defaults", "read", "com.apple.HIToolbox", key).Output()
 		if err == nil && len(out) > 0 {
 			return string(out)
 		}
