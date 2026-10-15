@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -65,5 +67,32 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	m.motionCmd()
 	if m.themeFx.running() {
 		t.Error("motion none started a theme transition")
+	}
+}
+
+// TestASoftThemeCircleFinishesEveryStep. The soft edge is drawn only at
+// truecolor, which the suite's other tests never run at, and its loop skips
+// the inner circle by jumping over it. A row the inner circle does not reach
+// once made that jump land on itself, so the first frame of a truecolor circle
+// looped for good and froze the client.
+//
+// Negative control: making the skip test "x == ilo" with ilo = ihi set to the
+// middle of the row, as it was, hangs at the third step.
+func TestASoftThemeCircleFinishesEveryStep(t *testing.T) {
+	m := sidebarTestOS(t, 80, 24, "left")
+	m.themeFx.style, m.themeFx.soft = config.ThemeTransitionCircle, true
+	m.themeFx.old = &frameCanvas{Buffer: *uv.NewBuffer(80, 24)}
+	canvas := &frameCanvas{Buffer: *uv.NewBuffer(80, 24)}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 101 {
+			m.themeCircle(canvas, float64(i)/100)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a soft theme circle did not finish its frame")
 	}
 }

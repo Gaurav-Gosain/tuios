@@ -269,12 +269,12 @@ func (m *OS) themeCircle(canvas *frameCanvas, e float64) {
 			fixWideEdges(line, lo, hi)
 			continue
 		}
+		// The inner span is the new theme already, so the blend skips it. A
+		// row the inner circle does not reach has an empty one, and the
+		// whole of lo to hi is soft edge.
 		ilo, ihi := circleSpan(inner, dy, ax, cx, w)
-		if ilo >= ihi {
-			ilo, ihi = (lo+hi)/2, (lo+hi)/2
-		}
 		for x := lo; x < hi && x < len(old); x++ {
-			if x == ilo {
+			if x >= ilo && x < ihi {
 				x = ihi - 1
 				continue
 			}
