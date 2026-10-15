@@ -72,16 +72,9 @@ type themeTransition struct {
 	lastFrame string
 	// old is the frame in the old theme.
 	old *frameCanvas
-	// mix holds the blends made so far, keyed on the two colours and the
-	// level.
-	mix map[themeMixKey]color.Color
-}
-
-// themeMixKey names one blend: from a toward b at level out of
-// themeMixLevels.
-type themeMixKey struct {
-	a, b  uint32
-	level uint8
+	// mix holds the blends made so far, keyed on the two colours (24 bits
+	// each) and the level.
+	mix map[uint64]color.Color
 }
 
 const (
@@ -229,7 +222,10 @@ func (m *OS) applyThemeTransition(canvas *frameCanvas, now time.Time) {
 	if t.style == config.ThemeTransitionFade {
 		level := uint8(math.Round(e * themeMixLevels))
 		for y := range h {
-			m.themeBlendRow(canvas.Lines[y], t.old.Lines[y], 0, w, func(int) uint8 { return level })
+			line, old := canvas.Lines[y], t.old.Lines[y]
+			for x := range min(len(line), len(old)) {
+				m.themeBlendCell(&line[x], &old[x], level)
+			}
 		}
 		return
 	}
@@ -276,14 +272,14 @@ func (m *OS) themeCircle(canvas *frameCanvas, e float64) {
 		if ilo >= ihi {
 			ilo, ihi = (lo+hi)/2, (lo+hi)/2
 		}
-		level := func(x int) uint8 {
-			dx := (float64(x) + 0.5 - cx) * ax
-			d := math.Hypot(dx, dy)
-			f := (r - d) / edge
-			return uint8(math.Round(min(max(f, 0), 1) * themeMixLevels))
+		for x := lo; x < hi && x < len(old); x++ {
+			if x == ilo {
+				x = ihi - 1
+				continue
+			}
+			f := (r - math.Hypot((float64(x)+0.5-cx)*ax, dy)) / edge
+			m.themeBlendCell(&line[x], &old[x], uint8(math.Round(min(max(f, 0), 1)*themeMixLevels)))
 		}
-		m.themeBlendRow(line, old, lo, ilo, level)
-		m.themeBlendRow(line, old, ihi, hi, level)
 		fixWideEdges(line, lo, hi)
 	}
 }
@@ -300,35 +296,30 @@ func circleSpan(r, dy, ax, cx float64, w int) (lo, hi int) {
 	return min(max(lo, 0), w), min(max(hi, 0), w)
 }
 
-// themeBlendRow blends the cells of line in [lo, hi) from the old frame's
-// toward their own, by level(x) out of themeMixLevels. The glyph is the new
-// one from half way, and a colour either side leaves to the terminal (nil)
-// switches at half way too, since there is nothing to blend it with.
+// themeBlendCell blends one cell from the old frame's toward its own, by
+// l out of themeMixLevels. The glyph is the new one from half way, and a
+// colour either side leaves to the terminal (nil) switches at half way too,
+// since there is nothing to blend it with.
 //
 // The ink crosses over in the middle fifth of the blend rather than over the
 // whole of it. Between a light theme and a dark one the ink and the ground
 // move in opposite directions, and blended at the same rate they meet half
 // way: every glyph on the screen went to the ground's grey and vanished. A
 // short crossing keeps the ink near one end while the ground is in the middle.
-func (m *OS) themeBlendRow(line, old uv.Line, lo, hi int, level func(int) uint8) {
-	const half = themeMixLevels / 2
-	for x := lo; x < hi && x < len(line) && x < len(old); x++ {
-		l := level(x)
-		if l >= themeMixLevels {
-			continue
-		}
-		n, o := &line[x], &old[x]
-		if l == 0 {
-			*n = *o
-			continue
-		}
-		ink := uint8(min(max((int(l)*5-themeMixLevels*2), 0), themeMixLevels))
-		fg, bg := m.themeMix(o.Style.Fg, n.Style.Fg, ink), m.themeMix(o.Style.Bg, n.Style.Bg, l)
-		if l < half {
-			*n = *o
-		}
-		n.Style.Fg, n.Style.Bg = fg, bg
+func (m *OS) themeBlendCell(n, o *uv.Cell, l uint8) {
+	switch {
+	case l >= themeMixLevels:
+		return
+	case l == 0:
+		*n = *o
+		return
 	}
+	ink := uint8(min(max(int(l)*5-themeMixLevels*2, 0), themeMixLevels))
+	fg, bg := m.themeMix(o.Style.Fg, n.Style.Fg, ink), m.themeMix(o.Style.Bg, n.Style.Bg, l)
+	if l < themeMixLevels/2 {
+		*n = *o
+	}
+	n.Style.Fg, n.Style.Bg = fg, bg
 }
 
 // themeMix is a toward b at level, from the table when it has been made
@@ -340,16 +331,17 @@ func (m *OS) themeMix(a, b color.Color, level uint8) color.Color {
 		}
 		return b
 	}
-	k := themeMixKey{a: packColor8(a), b: packColor8(b), level: level}
-	if k.a == k.b {
+	pa, pb := packColor8(a), packColor8(b)
+	if pa == pb {
 		return b
 	}
+	k := uint64(pa)<<32 | uint64(pb)<<8 | uint64(level)
 	t := &m.themeFx
 	if c, ok := t.mix[k]; ok {
 		return c
 	}
 	if t.mix == nil {
-		t.mix = make(map[themeMixKey]color.Color, 256)
+		t.mix = make(map[uint64]color.Color, 256)
 	} else if len(t.mix) >= themeMixMax {
 		clear(t.mix)
 	}
