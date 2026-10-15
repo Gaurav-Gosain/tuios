@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -434,7 +434,7 @@ func SetIndexEntries(ctx context.Context, dir string, entries []IndexEntry) erro
 
 // gitInput is git with stdin.
 func gitInput(ctx context.Context, dir, stdin string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := childproc.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = gitEnv(nil)
 	cmd.Stdin = strings.NewReader(stdin)
