@@ -123,7 +123,8 @@ func FuzzNormalizeKey(f *testing.F) {
 			}
 		}
 		for _, k := range got {
-			if strings.HasPrefix(k, usLayoutTier) || strings.HasPrefix(k, optionGlyphTier) {
+			if strings.HasPrefix(k, usLayoutTier) || strings.HasPrefix(k, optionGlyphTier) ||
+				strings.HasPrefix(k, bareGlyphTier) {
 				t.Fatalf("NormalizeKey(%q) returned the tier key %q", key, k)
 			}
 		}

@@ -422,9 +422,10 @@ A shifted digit has US aliases: `opt+shift+7` also matches `opt+&`. A binding
 written for the key itself wins over an alias, and `explain` lists an alias
 match as `on a US layout`. Set `keybindings.keyboard_layout = "other"` to turn
 the aliases off on AZERTY and other layouts. On macOS a character that Option
-composed runs the Option binding it stands for on a US
-layout. Set `keybindings.option_glyphs = "type"` to send it to the pane
-instead.
+composed runs the Option binding it stands for on a US layout only when the
+terminal also reports Alt. A character with no modifier goes to the pane. Set
+`keybindings.option_glyphs = "bind"` to run the binding for it too, or
+`"type"` to always send it to the pane.
 
 ```sh
 tuios keybinds unbind close_window w   # one key off one action

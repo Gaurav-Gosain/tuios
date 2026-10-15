@@ -34,10 +34,12 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //
 //   - The US-layout tier (config.USLayoutKey): the US spellings of a shifted
 //     digit. Asked only when the event does not contradict a US layout.
-//   - The Option-glyph tier (config.OptionGlyphKey): the chord a macOS Option
-//     character stands for (see composedChords). The registry leaves it empty
-//     when keybindings.option_glyphs is "type" or keyboard_layout is "other",
-//     and the character is then text that goes to the pane.
+//   - The Option-glyph tiers: the chord a macOS Option character stands for
+//     (see composedChords). config.OptionGlyphKey when the terminal reported
+//     the Alt bit, config.BareOptionGlyphKey when it reported no modifier.
+//     The registry fills the bare tier only when keybindings.option_glyphs is
+//     "bind", and neither when it is "type" or keyboard_layout is "other".
+//     The character is then text that goes to the pane.
 //
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.
@@ -71,9 +73,13 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 			keys = append(keys, config.USLayoutKey(k))
 		}
 	}
+	tier := config.BareOptionGlyphKey
+	if mods&tea.ModAlt != 0 {
+		tier = config.OptionGlyphKey
+	}
 	for _, chord := range composedChords(msg, base) {
 		if chord != key {
-			keys = append(keys, config.OptionGlyphKey(chord))
+			keys = append(keys, tier(chord))
 		}
 	}
 	return keys
@@ -111,12 +117,12 @@ func composedChords(msg tea.KeyPressMsg, base rune) []string {
 	return []string{chord}
 }
 
-// optionGlyphsApply reports whether the config lets a composed Option
-// character stand for its chord: keyboard_layout is not "other" (the chords
-// come from the US table) and option_glyphs is not "type". The registry
-// applies the same rule when it fills the Option-glyph tier.
-func optionGlyphsApply(layout, glyphs string) bool {
-	return layout != config.KeyboardLayoutOther && glyphs != config.OptionGlyphsType
+// optionGlyphsApply reports whether the config lets the composed Option
+// character in msg stand for its chord (see config.OptionGlyphRuns). A
+// character with no Alt bit only does under option_glyphs = "bind". The
+// registry applies the same rule when it fills the Option-glyph tiers.
+func optionGlyphsApply(msg tea.KeyPressMsg, layout, glyphs string) bool {
+	return config.OptionGlyphRuns(layout, glyphs, msg.Mod&tea.ModAlt != 0)
 }
 
 // shiftedKey spells msg with the character Shift gave in place of the key and
@@ -166,8 +172,8 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 // recognised here; anything carrying Ctrl or Super is not a chord macOS
 // composes for and is left alone. Recognising one is not running it:
 // bindingKeys asks for the chord only in the tiers that hold under an
-// assumption, and a bare character is text when keybindings.option_glyphs
-// is "type".
+// assumption, and a bare character is text unless keybindings.option_glyphs
+// is "bind".
 //
 // Darwin only. Every one of these glyphs is an ordinary typed character on some
 // other layout (£ is Shift+3 on a UK keyboard), so doing this anywhere else

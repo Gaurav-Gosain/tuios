@@ -369,13 +369,15 @@ func modifiedShiftAliases(keyLower string) []string {
 	return nil
 }
 
-// usLayoutTier and optionGlyphTier mark the registry keys that only match
-// under an assumption about the keyboard. A key event never spells either, so
-// a key in a tier can only be reached by asking for it with USLayoutKey or
-// OptionGlyphKey, and a binding written for the key itself always wins.
+// usLayoutTier, optionGlyphTier and bareGlyphTier mark the registry keys that
+// only match under an assumption about the keyboard. A key event never spells
+// any of them, so a key in a tier can only be reached by asking for it with
+// USLayoutKey, OptionGlyphKey or BareOptionGlyphKey, and a binding written for
+// the key itself always wins.
 const (
 	usLayoutTier    = "\x00us:"
 	optionGlyphTier = "\x00glyph:"
+	bareGlyphTier   = "\x00bare:"
 )
 
 // USLayoutKey is the registry key that matches key only on a US layout: a
@@ -385,10 +387,18 @@ const (
 func USLayoutKey(key string) string { return usLayoutTier + key }
 
 // OptionGlyphKey is the registry key that matches chord when it arrives as the
-// character macOS composed for it, with or without the Alt bit. The registry
-// fills that tier unless keybindings.option_glyphs is "type" or
-// keybindings.keyboard_layout is "other".
+// character macOS composed for it, with the Alt bit set: the terminal said
+// Option was held. The registry fills that tier unless
+// keybindings.option_glyphs is "type" or keybindings.keyboard_layout is
+// "other".
 func OptionGlyphKey(chord string) string { return optionGlyphTier + chord }
+
+// BareOptionGlyphKey is the registry key that matches chord when it arrives as
+// the character macOS composed for it with no modifier at all. Nothing in such
+// an event says Option was held: £ is Option and 3 on a US layout and Shift
+// and 3 on a UK one (issue #746). The registry fills this tier only when
+// keybindings.option_glyphs is "bind", so by default the character is text.
+func BareOptionGlyphKey(chord string) string { return bareGlyphTier + chord }
 
 // KeyFitsUSLayout reports whether a key event is consistent with a US layout,
 // from what the terminal reported about it. code is the key's code, shifted
@@ -431,15 +441,32 @@ var KeyboardLayouts = []string{KeyboardLayoutUS, KeyboardLayoutOther}
 
 // Option glyph values for keybindings.option_glyphs.
 const (
+	// OptionGlyphsAlt reads a character composed with Option as the Option
+	// binding it stands for on a US layout only when the terminal reports the
+	// Alt modifier with it. A bare character is text. The default.
+	OptionGlyphsAlt = "alt"
 	// OptionGlyphsType sends a character composed with Option to the pane.
 	OptionGlyphsType = "type"
 	// OptionGlyphsBind reads a character composed with Option as the Option
-	// binding it stands for on a US layout. The default.
+	// binding it stands for on a US layout, with or without the Alt modifier.
+	// A bare character is a guess: on a UK layout £ is Shift and 3, not
+	// Option and 3 (issue #746).
 	OptionGlyphsBind = "bind"
 )
 
 // OptionGlyphModes is every value keybindings.option_glyphs accepts.
-var OptionGlyphModes = []string{OptionGlyphsType, OptionGlyphsBind}
+var OptionGlyphModes = []string{OptionGlyphsAlt, OptionGlyphsType, OptionGlyphsBind}
+
+// OptionGlyphRuns reports whether a character macOS composes for an Option
+// chord runs that chord's binding under the config. alt is whether the
+// terminal reported the Alt modifier with the character. The registry fills
+// the glyph tiers by the same rule.
+func OptionGlyphRuns(layout, glyphs string, alt bool) bool {
+	if layout == KeyboardLayoutOther || glyphs == OptionGlyphsType {
+		return false
+	}
+	return alt || glyphs == OptionGlyphsBind
+}
 
 // NormalizeKey converts a key string to its canonical form for the current platform
 // For example, on macOS: "opt+1" → "¡" or "alt+1" depending on context
@@ -475,7 +502,8 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 	// The character macOS composes for an Option chord is not a spelling of
 	// the binding: a user who composes on purpose (issue #566) types it. The
 	// input path reads it through MacOSOptionChord instead, into the tiers
-	// USLayoutKey and OptionGlyphKey name, which the config can turn off.
+	// USLayoutKey, OptionGlyphKey and BareOptionGlyphKey name, which the
+	// config can turn off.
 	if kn.isMacOS {
 		// Option reaches a terminal as the Alt modifier whatever key it is
 		// held with, so the alt+ spelling is always one of the ways an opt+

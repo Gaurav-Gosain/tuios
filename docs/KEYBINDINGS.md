@@ -1412,19 +1412,33 @@ To change the keys, set `terminal_scroll_up`, `terminal_scroll_down`,
 
 ## macOS
 
-Option is a compose key on macOS unless the terminal is told otherwise, so an
-Option chord usually arrives as a character rather than as Alt. tuios reads
-the characters that a US layout composes back into the chord that types them.
-When Option+8 types `•`, tuios runs the `opt+8` binding and switches to
-workspace 8.
+Option is a compose key on macOS unless the terminal is told otherwise. An
+Option chord then arrives as a character, not as Alt. Terminal.app and iTerm2
+work like this until you change their settings. Option+3 then types `£` and
+does not switch to workspace 3.
 
-If you use Option to type characters such as `#`, `•` or `{`, set this. tuios
-then sends the character to the pane:
+A typed character always goes to the pane. On a UK keyboard, Shift+3 types
+`£`, the same character that Option+3 types on a US keyboard. tuios cannot
+tell the two keys apart, so it does not guess.
+
+To use the `opt+` bindings, set your terminal to send Option as Alt. See
+[The fix](#the-fix).
+
+Some terminals, such as Ghostty and kitty, send the character and also report
+Alt. tuios then runs the `opt+` binding for the character that a US layout
+composes. For example, Option+8 types `•` and switches to workspace 8.
+
+You can also tell tuios to read every Option character as its chord on a US
+layout. Do this only on a US keyboard:
 
 ```toml
 [keybindings]
-option_glyphs = "type"   # the default is "bind"
+option_glyphs = "bind"   # the default is "alt"
 ```
+
+If you use Option to type characters such as `#`, `•` or `{`, set
+`option_glyphs = "type"`. tuios then sends the character to the pane, also
+when the terminal reports Alt.
 
 With `keyboard_layout = "other"`, tuios does not use the US characters, and
 the characters go to the pane.
@@ -1465,8 +1479,9 @@ keybind = alt+left=unbind
 keybind = alt+right=unbind
 ```
 
-tuios says all of this on screen the first time it sees a chord that did not
-arrive as it was meant to.
+tuios shows this on screen the first time a chord does not arrive as Alt.
+It cannot show it for a character with no modifier, because that character
+can be text.
 
 ### One Option key for typing
 

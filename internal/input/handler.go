@@ -380,10 +380,11 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// A chord that only resolved because tuios recognised the character macOS
 	// composed out of it is proof the Option key is not being sent as Alt. With
-	// option_glyphs = "type" the user composes on purpose (issue #566), and with
-	// keyboard_layout = "other" the US table is off: the character went to the
-	// pane, and there is nothing to say.
-	if optionGlyphsApply(o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
+	// option_glyphs = "type" the user composes on purpose (issue #566), with
+	// keyboard_layout = "other" the US table is off, and by default a bare
+	// character is text (issue #746): the character went to the pane, and
+	// there is nothing to say.
+	if optionGlyphsApply(msg, o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
 		chords := composedChords(msg, o.HostBaseCode(msg))
 		if len(chords) > 0 && chords[len(chords)-1] != msg.Keystroke() {
 			o.NoteComposedOptionChord(chords[len(chords)-1])
@@ -730,7 +731,7 @@ func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 	if pos, ok := baseLayoutKey(msg); ok && config.IsLeaderPress(pos, s.LeaderKey) {
 		return true
 	}
-	if !optionGlyphsApply(s.KeyboardLayout, s.OptionGlyphs) {
+	if !optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs) {
 		return false
 	}
 	if base == 0 {

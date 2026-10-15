@@ -174,18 +174,20 @@ func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	waitWorkspace(t, base, session, 8)
 }
 
-// TestNormalOptionCharacterSwitchesWorkspaceByDefault is the shipped default.
-// Terminal.app and iTerm2 ship with Option on "Normal", so Option and 3 sends
-// the composed "£" and nothing else. With no config, that is opt+3 and
-// switches to workspace 3, as it did before #566. The character must not
-// reach the shell.
+// TestNormalOptionCharacterSwitchesWorkspaceWithBind is the opt-in for
+// Terminal.app and iTerm2 as they ship, with Option on "Normal": Option and 3
+// sends the composed "£" and nothing else. With option_glyphs = "bind", that
+// is opt+3 and switches to workspace 3. The character must not reach the
+// shell. The default sends a bare "£" to the pane, because Shift and 3 types
+// it on a UK layout (issue #746); TestBareOptionGlyphsFollowTheConfig in
+// internal/input holds that.
 //
-// Negative control: in expandInto, skip the OptionGlyphKey claim. The "£" is
-// then typed into the shell, and this fails at the workspace wait.
-func TestNormalOptionCharacterSwitchesWorkspaceByDefault(t *testing.T) {
+// Negative control: in expandInto, skip the BareOptionGlyphKey claim. The "£"
+// is then typed into the shell, and this fails at the workspace wait.
+func TestNormalOptionCharacterSwitchesWorkspaceWithBind(t *testing.T) {
 	base := t.TempDir()
 	const session = "e2e-opt-normal"
-	term := macSession(t, base, session, "")
+	term := macSession(t, base, session, "[keybindings]\noption_glyphs = \"bind\"\n")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ready-$((2+3))", "ready-5", shellTimeout)
 
@@ -331,8 +333,9 @@ func TestAzertyKittyReportsPickTheRightWorkspace(t *testing.T) {
 	waitPaneOn(t, term, base, session, 7, "alt+& with no layout report")
 }
 
-// TestOptionLeaderFiresOnTheComposedCharacter is the leader half of the
-// default. With leader_key = "opt+1" on a terminal where Option composes,
+// TestOptionLeaderFiresOnTheComposedCharacter is the leader half of
+// option_glyphs = "bind". With leader_key = "opt+1" on a terminal where Option
+// composes,
 // Option and 1 arrives as "¡", and that has to start the leader the way it
 // runs an opt+ binding. The opt-out is in
 // TestComposedOptionCharacterReachesThePane, where the same "¡" reaches the
@@ -343,7 +346,7 @@ func TestAzertyKittyReportsPickTheRightWorkspace(t *testing.T) {
 func TestOptionLeaderFiresOnTheComposedCharacter(t *testing.T) {
 	base := t.TempDir()
 	const session = "e2e-opt-leader"
-	term := macSession(t, base, session, "[keybindings]\nleader_key = \"opt+1\"\n")
+	term := macSession(t, base, session, "[keybindings]\nleader_key = \"opt+1\"\noption_glyphs = \"bind\"\n")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ready-$((1+5))", "ready-6", shellTimeout)
 
@@ -399,8 +402,9 @@ func TestKittyComposedCharacterFollowsOptionGlyphs(t *testing.T) {
 // no modifier. ç is also what Option and c composes on a US layout, so the
 // US table read the key as opt+c. Under the Kitty protocol the report carries
 // the base-layout key 9, which says the key was typed without Option, and
-// the character must not run opt+c. The positive half: the same ç with no
-// layout report, as Terminal.app sends it for Option and c, runs opt+c.
+// the character must not run opt+c, even with option_glyphs = "bind". The
+// positive half: the same ç with no layout report, as Terminal.app sends it
+// for Option and c, runs opt+c under "bind".
 //
 // Negative control: in composedChords, ignore the base-layout key. The first
 // ç then moves the pane to workspace 4, and this fails at the first
@@ -408,7 +412,8 @@ func TestKittyComposedCharacterFollowsOptionGlyphs(t *testing.T) {
 func TestAzertyCedillaIsNotOptionC(t *testing.T) {
 	base := t.TempDir()
 	const session = "e2e-opt-cedilla"
-	term := macSession(t, base, session, "[keybindings.workspaces]\nmove_and_follow_4 = [\"opt+c\"]\n")
+	term := macSession(t, base, session,
+		"[keybindings]\noption_glyphs = \"bind\"\n\n[keybindings.workspaces]\nmove_and_follow_4 = [\"opt+c\"]\n")
 
 	// CSI 231 :: 57 u: ç, base-layout key 9, no modifier.
 	press(t, term, "the AZERTY 9 key (kitty, ç, base 9)", "\x1b[231::57u")

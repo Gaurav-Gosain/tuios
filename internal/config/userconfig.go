@@ -855,12 +855,14 @@ type KeybindingsConfig struct {
 	// where those keys sit elsewhere (issue #575). A terminal that reports the
 	// layout under the Kitty protocol is read from that report either way.
 	KeyboardLayout string `toml:"keyboard_layout,omitempty"`
-	// OptionGlyphs is what a character composed with macOS Option does, with
-	// or without the Alt bit: "bind" runs the Option binding it stands
-	// for on a US layout (the default when empty), "type" sends it to the pane.
-	// Terminal.app and iTerm2 ship with Option composing, so opt+N reaches
-	// tuios only as the character. "type" is for a user who composes with
-	// Option on purpose, such as the right Option key in WezTerm (issue #566).
+	// OptionGlyphs is what a character composed with macOS Option does.
+	// "alt" (the default when empty) runs the Option binding it stands for on
+	// a US layout only when the terminal reports the Alt bit with it, and
+	// sends a bare character to the pane: £ is Shift and 3 on a UK keyboard
+	// (issue #746). "bind" also runs it for a bare character, which
+	// Terminal.app and iTerm2 send as they ship. "type" always sends it to the
+	// pane, for a user who composes with Option on purpose, such as the right
+	// Option key in WezTerm (issue #566).
 	OptionGlyphs     string              `toml:"option_glyphs,omitempty"`
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`
@@ -1736,7 +1738,8 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 // getDefaultWorkspaceKeybinds returns platform-specific workspace keybindings
 func getDefaultWorkspaceKeybinds() map[string][]string {
 	// On macOS, use opt+N, which the normalizer reads as alt+N. The character
-	// Option composes for it is read by the input path (see OptionGlyphKey).
+	// Option composes for it is read by the input path (see OptionGlyphKey and
+	// BareOptionGlyphKey).
 	// On Linux/other, use alt+N
 	var base map[string][]string
 
