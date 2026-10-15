@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -164,13 +165,31 @@ func TestKittyShmNameWithSlashIsNotForwarded(t *testing.T) {
 	}
 }
 
-// useKittyTempDirs makes dirs the only temporary directories for a test, and
-// clears TMPDIR.
+// useKittyTempDirs makes dirs the only fixed temporary directories for a
+// test, and clears TMPDIR. A TMPDIR the test sets later still counts when vt
+// accepts it.
 func useKittyTempDirs(t *testing.T, dirs ...string) {
 	t.Helper()
-	prev := vt.KittyFixedTempDirs
-	vt.KittyFixedTempDirs = dirs
-	t.Cleanup(func() { vt.KittyFixedTempDirs = prev })
+	fixed := map[string]bool{"/tmp": true, "/dev/shm": true, "/var/tmp": true}
+	prev := kittyInTempDir
+	kittyInTempDir = func(path string) bool {
+		all := slices.Clone(dirs)
+		for _, d := range vt.KittyTempDirs() {
+			if !fixed[d] {
+				all = append(all, d)
+			}
+		}
+		for _, dir := range all {
+			if r, err := filepath.EvalSymlinks(dir); err == nil {
+				dir = r
+			}
+			if strings.HasPrefix(path, strings.TrimSuffix(dir, "/")+"/") {
+				return true
+			}
+		}
+		return false
+	}
+	t.Cleanup(func() { kittyInTempDir = prev })
 	t.Setenv("TMPDIR", "")
 }
 

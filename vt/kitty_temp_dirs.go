@@ -27,19 +27,20 @@ func KittySensitivePath(path string) bool {
 	return false
 }
 
-// KittyTempMarker is the text the kitty spec asks for in a t=t file name.
+// KittyTempMarker is the text the kitty spec asks for in a t=t file name. It
+// is for a host that reads such files itself.
 const KittyTempMarker = "tty-graphics-protocol"
 
-// KittyFixedTempDirs are the temporary directories on every unix. A variable
+// kittyFixedTempDirs are the temporary directories on every unix. A variable
 // so a test, whose own home is under /tmp, can take them away.
-var KittyFixedTempDirs = []string{"/tmp", "/dev/shm", "/var/tmp"}
+var kittyFixedTempDirs = []string{"/tmp", "/dev/shm", "/var/tmp"}
 
 // KittyTempDirs lists the temporary directories: the fixed ones and TMPDIR.
 // TMPDIR is ignored when it is /, the home directory or a parent of it, since
 // that would make every file of the user a temporary one. Inside the home
 // directory it counts only under ~/tmp or ~/.tmp.
 func KittyTempDirs() []string {
-	dirs := append([]string(nil), KittyFixedTempDirs...)
+	dirs := append([]string(nil), kittyFixedTempDirs...)
 	tmp := os.Getenv("TMPDIR")
 	if tmp == "" || !filepath.IsAbs(tmp) {
 		return dirs

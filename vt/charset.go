@@ -6,13 +6,13 @@ type CharSet map[byte]string
 
 // Character sets.
 var (
-	// UK is the British national replacement set. It differs from ASCII in
+	// charsetUK is the British national replacement set. It differs from ASCII in
 	// one position, 0x23, where "#" becomes the pound sign (VT220 programmer
 	// reference, table 2-4; xterm and ghostty agree).
-	UK = CharSet{
+	charsetUK = CharSet{
 		'#': "£", // U+00A3
 	}
-	SpecialDrawing = CharSet{
+	charsetSpecialDrawing = CharSet{
 		'`': "◆", // U+25C6
 		'a': "▒", // U+2592
 		'b': "␉", // U+2409

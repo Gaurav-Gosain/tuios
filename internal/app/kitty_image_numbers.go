@@ -27,7 +27,7 @@ func (kp *KittyPassthrough) resolveImageNumber(cmd *vt.KittyCommand, rawData []b
 	}
 	if cmd.ImageID == 0 {
 		if cmd.Action == vt.KittyActionDelete &&
-			cmd.Delete != vt.KittyDeleteByNumber && cmd.Delete != vt.KittyDeleteByNumberPlacement {
+			cmd.Delete != vt.KittyDeleteByNumber && cmd.Delete != vt.KittyDeleteByNumberFree {
 			return rawData, true
 		}
 		return rawData, false

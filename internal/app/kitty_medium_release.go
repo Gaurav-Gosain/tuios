@@ -50,7 +50,7 @@ func releaseKittyMedium(cmd *vt.KittyCommand, path string) {
 			return
 		}
 	case vt.KittyMediumTempFile:
-		if !strings.Contains(path, vt.KittyTempMarker) || !vt.KittyInTempDir(path) {
+		if !strings.Contains(path, vt.KittyTempMarker) || !kittyInTempDir(path) {
 			return
 		}
 	default:

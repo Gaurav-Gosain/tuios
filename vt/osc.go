@@ -490,7 +490,7 @@ const MaxHostLinkURI = 2083
 // the host, with LinkURI and LinkParams applied, or "" for an address longer
 // than MaxHostLinkURI. A cell the vt emulator filled is already encoded. A
 // bare URL tuios finds in the text, and a cell from another backend, may not
-// be.
+// be. It is for a host that writes the cells to its own terminal.
 func SetHostHyperlink(url, params string) string {
 	uri := LinkURI(url)
 	if len(uri) > MaxHostLinkURI {

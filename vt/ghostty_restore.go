@@ -734,9 +734,9 @@ func mapThroughCharset(ch string, ids [4]byte, gl int) string {
 	var set CharSet
 	switch ids[gl] {
 	case '0':
-		set = SpecialDrawing
+		set = charsetSpecialDrawing
 	case 'A':
-		set = UK
+		set = charsetUK
 	}
 	if m, ok := set[ch[0]]; ok {
 		return m

@@ -59,7 +59,9 @@ func IsSixelMarker(content string) bool {
 	return len(content) >= len(SixelMarkerLead) && content[:len(SixelMarkerLead)] == SixelMarkerLead
 }
 
-// SixelMarker is the cell content for row and column of image id.
+// SixelMarker is the cell content for row and column of image id. The sixel
+// marker functions are the cell format of a sixel image, for a host that
+// draws the cells.
 func SixelMarker(id uint32, row, col int) string {
 	var b strings.Builder
 	b.Grow(4 + 4*3)
@@ -148,7 +150,8 @@ func CellText(content string) string {
 }
 
 // BlankSixelCell turns an image cell into a blank that keeps its background.
-// It reports whether the cell was one.
+// It reports whether the cell was one. It is for a host that keeps or copies
+// cells without the image, such as a saved history.
 func BlankSixelCell(c *uv.Cell) bool {
 	if c == nil || !IsSixelMarker(c.Content) {
 		return false

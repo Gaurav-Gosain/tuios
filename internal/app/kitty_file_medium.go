@@ -97,7 +97,7 @@ func (kp *KittyPassthrough) kittyMediumPath(cmd *vt.KittyCommand) (string, bool)
 		}
 	}
 
-	if !kp.hostReadsFiles() && cmd.Medium != vt.KittyMediumSharedMemory && !vt.KittyInTempDir(resolved) {
+	if !kp.hostReadsFiles() && cmd.Medium != vt.KittyMediumSharedMemory && !kittyInTempDir(resolved) {
 		return "", false
 	}
 	return resolved, true
@@ -109,3 +109,7 @@ func kittyShmHasPath() bool {
 	info, err := os.Stat("/dev/shm")
 	return err == nil && info.IsDir()
 }
+
+// kittyInTempDir is vt.KittyInTempDir. It is a variable so a test, whose own
+// home is under /tmp, can narrow the temporary directories.
+var kittyInTempDir = vt.KittyInTempDir

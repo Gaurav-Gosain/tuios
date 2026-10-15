@@ -16,6 +16,11 @@ import (
 // extraction: every method here has at least one caller outside this package.
 // Grow it only when a caller needs more, and implement additions on both
 // backends in the same change.
+//
+// Only package vt implements Terminal, and it may gain methods in any
+// release. Use it, and do not implement it: a type outside this package that
+// implements it can stop compiling on an update. A program that needs its own
+// implementation should depend on Screen, which stays small.
 type Terminal interface {
 	// Byte I/O and lifecycle. Write feeds raw PTY bytes; Read drains query
 	// responses (DA, CPR, ...) the emulator wants sent back to the guest;

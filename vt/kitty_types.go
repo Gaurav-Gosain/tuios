@@ -67,22 +67,28 @@ func (m KittyGraphicsMedium) IsFile() bool {
 type KittyDeleteTarget byte
 
 const (
-	KittyDeleteAll               KittyDeleteTarget = 'a' // d=a, every placement on the screen
-	KittyDeleteByID              KittyDeleteTarget = 'i' // d=i, the placements of image i, or placement p of it
-	KittyDeleteByIDAndPlacement  KittyDeleteTarget = 'I' // d=I, as d=i and also frees the image data
-	KittyDeleteByNumber          KittyDeleteTarget = 'n' // d=n, as d=i for the newest image with number I
-	KittyDeleteByNumberPlacement KittyDeleteTarget = 'N' // d=N, as d=n and also frees the image data
-	KittyDeleteAtCursor          KittyDeleteTarget = 'c' // d=c, placements over the cursor cell
-	KittyDeleteAtCursorCell      KittyDeleteTarget = 'C' // d=C, as d=c and also frees the image data
-	KittyDeleteAtColumn          KittyDeleteTarget = 'x' // d=x, placements over column x
-	KittyDeleteAtRow             KittyDeleteTarget = 'y' // d=y, placements over row y
-	KittyDeleteAtZIndex          KittyDeleteTarget = 'z' // d=z, placements at z-index z
-	KittyDeleteOnScreen          KittyDeleteTarget = 'p' // d=p, placements over the cell at x, y
-	KittyDeleteByPlacementID     KittyDeleteTarget = 'P' // d=P, as d=p and also frees the image data
-	KittyDeleteIntersectCursor   KittyDeleteTarget = 'q' // d=q, placements over the cell at x, y with z-index z
-	KittyDeleteIntersectColumn   KittyDeleteTarget = 'X' // d=X, as d=x and also frees the image data
-	KittyDeleteIntersectRow      KittyDeleteTarget = 'Y' // d=Y, as d=y and also frees the image data
-	KittyDeleteIntersectCell     KittyDeleteTarget = 'Q' // d=Q, as d=q and also frees the image data
+	KittyDeleteAll          KittyDeleteTarget = 'a' // d=a, every placement on the screen
+	KittyDeleteAllFree      KittyDeleteTarget = 'A' // d=A, as d=a and also frees the image data
+	KittyDeleteByID         KittyDeleteTarget = 'i' // d=i, the placements of image i, or placement p of it
+	KittyDeleteByIDFree     KittyDeleteTarget = 'I' // d=I, as d=i and also frees the image data
+	KittyDeleteByNumber     KittyDeleteTarget = 'n' // d=n, as d=i for the newest image with number I
+	KittyDeleteByNumberFree KittyDeleteTarget = 'N' // d=N, as d=n and also frees the image data
+	KittyDeleteAtCursor     KittyDeleteTarget = 'c' // d=c, placements over the cursor cell
+	KittyDeleteAtCursorFree KittyDeleteTarget = 'C' // d=C, as d=c and also frees the image data
+	KittyDeleteAtCell       KittyDeleteTarget = 'p' // d=p, placements over the cell at x, y
+	KittyDeleteAtCellFree   KittyDeleteTarget = 'P' // d=P, as d=p and also frees the image data
+	KittyDeleteAtCellZ      KittyDeleteTarget = 'q' // d=q, placements over the cell at x, y with z-index z
+	KittyDeleteAtCellZFree  KittyDeleteTarget = 'Q' // d=Q, as d=q and also frees the image data
+	KittyDeleteAtColumn     KittyDeleteTarget = 'x' // d=x, placements over column x
+	KittyDeleteAtColumnFree KittyDeleteTarget = 'X' // d=X, as d=x and also frees the image data
+	KittyDeleteAtRow        KittyDeleteTarget = 'y' // d=y, placements over row y
+	KittyDeleteAtRowFree    KittyDeleteTarget = 'Y' // d=Y, as d=y and also frees the image data
+	KittyDeleteAtZIndex     KittyDeleteTarget = 'z' // d=z, placements at z-index z
+	KittyDeleteAtZIndexFree KittyDeleteTarget = 'Z' // d=Z, as d=z and also frees the image data
+	KittyDeleteIDRange      KittyDeleteTarget = 'r' // d=r, the placements of images with ids from x to y
+	KittyDeleteIDRangeFree  KittyDeleteTarget = 'R' // d=R, as d=r and also frees the image data
+	KittyDeleteFrames       KittyDeleteTarget = 'f' // d=f, the animation frames of image i
+	KittyDeleteFramesFree   KittyDeleteTarget = 'F' // d=F, as d=f and also frees the image data
 )
 
 // KittyCommand is one parsed kitty graphics command (APC G). Each field

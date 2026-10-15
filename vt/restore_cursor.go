@@ -93,9 +93,9 @@ func (e *Emulator) RestoreSavedCursor(main bool, c SavedCursor) {
 	for i, id := range c.Charsets {
 		switch id {
 		case 'A':
-			x.charsets[i] = UK
+			x.charsets[i] = charsetUK
 		case '0':
-			x.charsets[i] = SpecialDrawing
+			x.charsets[i] = charsetSpecialDrawing
 		default:
 			id = 'B'
 		}

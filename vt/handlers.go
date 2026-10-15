@@ -435,11 +435,11 @@ func (e *Emulator) registerDefaultEscHandlers() {
 			set := c.Intermediate() - '('
 			switch c.Final() {
 			case 'A': // UK Character Set
-				e.charsets[set] = UK
+				e.charsets[set] = charsetUK
 			case 'B': // USASCII Character Set
 				e.charsets[set] = nil // USASCII is the default
 			case '0': // Special Drawing Character Set
-				e.charsets[set] = SpecialDrawing
+				e.charsets[set] = charsetSpecialDrawing
 			default:
 				return false
 			}

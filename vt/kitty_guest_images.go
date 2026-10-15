@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-// KittyImageNumberIDBase is where the ids given to images sent by number
+// kittyImageNumberIDBase is where the ids given to images sent by number
 // start. Kitty assigns the id itself when a guest transmits with I= and no i=,
 // and the guest may name the image by that id later. Starting high keeps the
 // ids clear of the small ones guests choose for themselves.
-const KittyImageNumberIDBase uint32 = 1 << 31
+const kittyImageNumberIDBase uint32 = 1 << 31
 
 // maxKittyKnownImages bounds how many image ids one pane is remembered to
 // hold. A guest that uploads more than this under fresh ids loses the oldest
@@ -55,7 +55,7 @@ type KittyGuestImages struct {
 	numbers map[uint32]uint32
 	known   map[uint32]struct{}
 	next    uint32
-	// guestHigh holds the ids at or above KittyImageNumberIDBase that the
+	// guestHigh holds the ids at or above kittyImageNumberIDBase that the
 	// guest chose itself with i=, so a number is never given one of them.
 	guestHigh map[uint32]struct{}
 	pending   *kittyUploadReply
@@ -77,7 +77,7 @@ type KittyGuestImagesState struct {
 	Numbers   map[uint32]uint32 `json:"numbers,omitempty"`    // image number to the id it stands for
 	Known     []uint32          `json:"known,omitempty"`      // ids that hold an image
 	Next      uint32            `json:"next,omitempty"`       // next id to give an image sent by number
-	GuestHigh []uint32          `json:"guest_high,omitempty"` // ids at or above KittyImageNumberIDBase the guest chose itself
+	GuestHigh []uint32          `json:"guest_high,omitempty"` // ids at or above kittyImageNumberIDBase the guest chose itself
 }
 
 // State returns a copy of what a late client needs.
@@ -193,7 +193,7 @@ func (g *KittyGuestImages) SetFilesElsewhere(on bool) { g.filesElsewhere = on }
 // images stay until the guest deletes them.
 func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 	if cmd.ImageID != 0 {
-		if cmd.ImageID >= KittyImageNumberIDBase && isKittyUpload(cmd) {
+		if cmd.ImageID >= kittyImageNumberIDBase && isKittyUpload(cmd) {
 			if g.guestHigh == nil {
 				g.guestHigh = make(map[uint32]struct{})
 			}
@@ -218,7 +218,7 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 	case KittyActionDelete:
 		// Only d=n and d=N name an image by number. Every other target
 		// ignores I=.
-		if cmd.Delete != KittyDeleteByNumber && cmd.Delete != KittyDeleteByNumberPlacement {
+		if cmd.Delete != KittyDeleteByNumber && cmd.Delete != KittyDeleteByNumberFree {
 			return true
 		}
 		id, ok := g.numbers[number]
@@ -229,7 +229,7 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 		if cmd.Delete == KittyDeleteByNumber {
 			cmd.Delete = KittyDeleteByID
 		} else {
-			cmd.Delete = KittyDeleteByIDAndPlacement
+			cmd.Delete = KittyDeleteByIDFree
 			// d=N frees the image's data, after which the number names
 			// nothing. With p= it deletes that one placement, and the
 			// image stays while its other placements remain.
@@ -254,10 +254,10 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 // forget drops what a delete frees from the record.
 func (g *KittyGuestImages) forget(cmd *KittyCommand) {
 	switch cmd.Delete {
-	case 'A':
+	case KittyDeleteAllFree:
 		g.numbers = nil
 		g.known = nil
-	case KittyDeleteByIDAndPlacement:
+	case KittyDeleteByIDFree:
 		if cmd.PlacementID == 0 {
 			delete(g.known, cmd.ImageID)
 		}
@@ -267,8 +267,8 @@ func (g *KittyGuestImages) forget(cmd *KittyCommand) {
 // allocate picks the next id for an image sent by number.
 func (g *KittyGuestImages) allocate() uint32 {
 	for {
-		if g.next < KittyImageNumberIDBase {
-			g.next = KittyImageNumberIDBase
+		if g.next < kittyImageNumberIDBase {
+			g.next = kittyImageNumberIDBase
 		}
 		id := g.next
 		g.next++

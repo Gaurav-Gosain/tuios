@@ -961,9 +961,9 @@ func (e *Emulator) RestoreCharsets(ids [4]byte, gl, gr int) {
 	for i, id := range ids {
 		switch id {
 		case 'A':
-			e.charsets[i] = UK
+			e.charsets[i] = charsetUK
 		case '0':
-			e.charsets[i] = SpecialDrawing
+			e.charsets[i] = charsetSpecialDrawing
 		default:
 			e.charsets[i] = nil
 			id = 'B'
@@ -1140,8 +1140,9 @@ func (e *Emulator) HasAllMotionMode() bool {
 // there for the guest.
 const syncMaxHold = time.Second
 
-// SyncMaxHold is how long a synchronized update is honored. The kitty
-// passthrough holds a guest's graphics no longer than this.
+// SyncMaxHold is how long a synchronized update is honored. It is for a host
+// that holds a program's output during an update, as the tuios kitty
+// passthrough holds a guest's graphics, so it waits no longer than this.
 const SyncMaxHold = syncMaxHold
 
 // IsSyncActive reports whether the guest has an open synchronized update

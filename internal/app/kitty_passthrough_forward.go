@@ -1729,7 +1729,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d)", cmd.ImageID, hostID)
 		}
 
-	case vt.KittyDeleteByIDAndPlacement:
+	case vt.KittyDeleteByIDFree:
 		// d=I frees the data as well. The id mapping stays, as above.
 		// With p= it takes down that one placement, and frees the data
 		// once no placement of the image is left.
@@ -1769,9 +1769,9 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 		// down, which covers those, and keeps the images and their ids, so
 		// the guest can place them again and the window's close still
 		// frees them.
-		if cmd.Delete != vt.KittyDeleteOnScreen &&
+		if cmd.Delete != vt.KittyDeleteAtCell &&
 			cmd.Delete != vt.KittyDeleteAtCursor &&
-			cmd.Delete != vt.KittyDeleteAtCursorCell {
+			cmd.Delete != vt.KittyDeleteAtCursorFree {
 			kittyPassthroughLog("forwardDelete: delete type=%c (%d) takes every placement down", cmd.Delete, cmd.Delete)
 		}
 		kp.deleteAllWindowPlacements(windowID)
