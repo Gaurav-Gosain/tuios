@@ -178,9 +178,10 @@ The dock's workspace tabs take two composition knobs of their own:
 `appearance.dock_workspace_label_max` caps the label in cells, so one long
 name cannot push the other pills off the bar. The cap is 12; `0` draws the
 whole name and lets the strip scroll.
-`{index}`, `{name}`, `{icon}` and `{zoom}` are the format's placeholders; the
-last two read `number_glyphs` (the first entry is workspace 1) and `zoom_marker` from the `[dock.tabs]` table,
-which also switches the strip from pills to flat tabs (`style = "flat"`).
+`{index}`, `{name}`, `{icon}` and `{zoom}` are the format's placeholders. The
+last two read `number_glyphs` (the first entry is workspace 1) and
+`zoom_marker` from the `[dock.tabs]` table. That table also switches the strip
+from pills to flat tabs (`style = "flat"`).
 
 The options `list-options` prints are scalars, and spacing and composition are
 set with them like any other. Colour and shape are names from an open set, each standing for a
