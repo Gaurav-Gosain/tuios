@@ -449,3 +449,22 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 		}
 	}
 }
+
+// validateDockColors warns about every set colour that is not "#rrggbb". The
+// value is dropped where it is drawn, so the cell still draws, without that
+// colour.
+func validateDockColors(result *ValidationResult, field string, colors map[string]string) {
+	keys := make([]string, 0, len(colors))
+	for k := range colors {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if v := colors[k]; v != "" && !IsHexColor(v) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: field, Key: k,
+				Message: fmt.Sprintf("colour %q is not #rrggbb; it is ignored", v),
+			})
+		}
+	}
+}
