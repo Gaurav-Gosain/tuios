@@ -784,7 +784,7 @@ func oscNumber(payload []byte) int {
 			n = 0
 		}
 		n = n*10 + int(b-'0')
-		if n > 1<<20 {
+		if n > maxOSCNumber {
 			return -1
 		}
 	}

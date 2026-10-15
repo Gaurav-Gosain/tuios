@@ -26,6 +26,11 @@ var interpretedOSC = [...]int{
 	progstatus.Command, // Program Status Protocol
 }
 
+// maxOSCNumber is the largest OSC number either backend reads. The ghostty
+// backend's scanner (oscNumber) stops at it, and the pure emulator passes no
+// larger number to Callbacks.PrivateOSC.
+const maxOSCNumber = 1 << 20
+
 // interpretsOSC reports whether the emulator interprets OSC number n.
 func interpretsOSC(n int) bool {
 	for _, m := range interpretedOSC {
@@ -40,9 +45,11 @@ func interpretsOSC(n int) bool {
 // goes to Callbacks.PrivateOSC: its number is valid and the body starts with
 // that number. A body with no number, such as "foo;bar", or a number too
 // long for an int, reaches the parser as a number the body does not hold,
-// and such a sequence names nothing a host could own.
+// and such a sequence names nothing a host could own. A number above
+// maxOSCNumber is dropped too, as the ghostty backend's scanner drops it, so
+// both backends pass on the same numbers.
 func privateOSCNumber(cmd int, data []byte) bool {
-	if cmd < 0 || interpretsOSC(cmd) {
+	if cmd < 0 || cmd > maxOSCNumber || interpretsOSC(cmd) {
 		return false
 	}
 	var buf [20]byte
