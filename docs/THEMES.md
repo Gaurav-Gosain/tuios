@@ -45,6 +45,10 @@ and the settings page (`Ctrl+B` `,`) has a Theme row that opens the same picker.
 The picker is searchable and shows a color swatch for each theme; cancelling
 restores the theme that was active when you opened it.
 
+`charmtone` and `charmtone-light` use the colours of Charm's CharmTone. Their
+chrome uses the Charple accent. See
+[CharmTone themes](CONFIGURATION.md#charmtone-themes).
+
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.

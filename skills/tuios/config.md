@@ -196,7 +196,7 @@ tuios list-themes --filter catppuccin
 ```
   catppuccin_frappe     catppuccin_latte      catppuccin_macchiato  catppuccin_mocha
 
-4 of 343 registered themes.
+4 of 345 registered themes.
 
 active: gruvbox_dark (session)
 themes dir: /home/you/.config/tuios/themes

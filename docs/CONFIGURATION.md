@@ -509,6 +509,28 @@ tuios does not draw kitty graphics images as block characters yet. On a
 terminal without graphics, a program that only uses kitty graphics uses its
 own text output.
 
+## CharmTone themes
+
+tuios has two built-in themes made from
+[CharmTone](https://github.com/charmbracelet/tone), the colour system of Charm.
+
+| Theme | Ground | Text | Accent |
+|-------|--------|------|--------|
+| `charmtone` | Pepper `#201F26` | Sash `#ECEBF0` | Charple `#6B50FF` |
+| `charmtone-light` | Salt `#F7F6FB` | Char `#3A3943` | Charple `#6B50FF` |
+
+```toml
+[appearance]
+theme = "charmtone"
+background = "theme"   # paint the Pepper ground behind the panes
+```
+
+The dark theme uses the ANSI colours of Crush, the coding agent from Charm.
+Bright black is Squid, so that shell suggestions and comments are easy to read.
+The light theme uses a darker shade of each colour.
+CharmTone has no dark yellow, so yellow is Cumin, a light brown.
+Run `tuios list-themes charmtone-light` to see the contrast of each colour.
+
 ## Omarchy themes
 
 On [Omarchy](https://omarchy.org), tuios uses the Omarchy theme when you set

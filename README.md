@@ -350,5 +350,6 @@ MIT License. See [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - The [Charm](https://charm.sh) team for Bubble Tea, Lipgloss, and the Go terminal ecosystem
+- [CharmTone](https://github.com/charmbracelet/tone) by Charmbracelet, Inc. (Apache License 2.0) for the colours of the `charmtone` themes
 - The vim, tmux, and i3 communities for interface design inspiration
 - [Ghostty](https://ghostty.org), [Kitty](https://sw.kovidgoyal.net/kitty/), and [WezTerm](https://wezfurlong.org/wezterm/) for excellent terminal emulators with graphics support

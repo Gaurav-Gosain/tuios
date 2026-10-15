@@ -43,6 +43,7 @@ var ensureRegistryOnce sync.Once
 func EnsureRegistry() {
 	ensureRegistryOnce.Do(func() {
 		newBuiltinRegistry()
+		registerCharmToneThemes()
 		registerOmarchyThemes()
 		if themesDir, err := GetThemesDir(); err == nil {
 			if _, err := LoadCustomThemes(themesDir); err != nil {
