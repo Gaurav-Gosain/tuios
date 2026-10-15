@@ -6,7 +6,7 @@
 # pure one. The renderer tests in internal/app failed here for weeks while
 # this job ran only the emulator's own packages.
 #
-# The paths below are every package that imports internal/vt, directly or
+# The paths below are every package that imports vt, directly or
 # through another one. A change to one of them can break it on this backend,
 # and the job body already tests them all; the trigger has to see them too.
 name: ghostty-vt
@@ -15,7 +15,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "internal/vt/**"
+      - "vt/**"
       - "internal/session/**"
       - "internal/terminal/**"
       - "internal/app/**"
@@ -26,9 +26,14 @@ on:
       - "internal/server/**"
       - "internal/ui/**"
       - "internal/learn/**"
+      - "internal/cellsize/**"
+      - "internal/ptyspawn/**"
+      - "internal/fuzz/**"
+      - "internal/guibridge/**"
       - "pkg/tuios/**"
       - "cmd/tuios/**"
       - "cmd/tuios-web/**"
+      - "cmd/tuios-fuzz/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
@@ -38,7 +43,7 @@ on:
       - "progstatus/**"
   pull_request:
     paths:
-      - "internal/vt/**"
+      - "vt/**"
       - "internal/session/**"
       - "internal/terminal/**"
       - "internal/app/**"
@@ -49,9 +54,14 @@ on:
       - "internal/server/**"
       - "internal/ui/**"
       - "internal/learn/**"
+      - "internal/cellsize/**"
+      - "internal/ptyspawn/**"
+      - "internal/fuzz/**"
+      - "internal/guibridge/**"
       - "pkg/tuios/**"
       - "cmd/tuios/**"
       - "cmd/tuios-web/**"
+      - "cmd/tuios-fuzz/**"
       - "scripts/ghostty-lib.sh"
       - ".github/workflows/ghostty-vt.yml"
       - "go.mod"
@@ -109,17 +119,17 @@ jobs:
       # the job at the end of the group.
       - parallel:
           - name: Tagged build compiles everywhere
-            run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
+            run: PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./... ./vt/...
 
           # Every package whose tests link the emulator, found from the import
           # graph so a new one is covered without editing this list: the
-          # differential and wire fidelity tests in internal/vt and
+          # differential and wire fidelity tests in vt and
           # internal/session, and the renderer, input and CLI tests above them.
           - name: Tests on the ghostty backend
             run: |
-              pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... |
-                awk '$1 ~ /^github.com\/Gaurav-Gosain\/tuios\// &&
-                     / github.com\/Gaurav-Gosain\/tuios\/internal\/vt( |$)/ {print $1}' |
+              pkgs=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' ./... ./vt/... |
+                awk '$1 ~ /^(github.com\/Gaurav-Gosain\/tuios\/|tuios.dev\/vt)/ &&
+                     / tuios.dev\/vt( |$)/ {print $1}' |
                 sort -u)
               echo "$pkgs"
               # $pkgs is split on purpose: one argument per package.
@@ -128,4 +138,4 @@ jobs:
                 go test -tags ghostty -count=1 -short $pkgs
 
           - name: Pure build unaffected
-            run: CGO_ENABLED=0 go build ./...
+            run: CGO_ENABLED=0 go build ./... ./vt/...

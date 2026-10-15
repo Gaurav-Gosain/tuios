@@ -26,6 +26,7 @@ on:
       - go.work
       - go.work.sum
       - progstatus/**
+      - vt/**
       - cmd/**
       - .github/workflows/docker-build.yml
   pull_request:
@@ -37,6 +38,7 @@ on:
       - go.work
       - go.work.sum
       - progstatus/**
+      - vt/**
       - cmd/**
       - .github/workflows/docker-build.yml
   workflow_dispatch:

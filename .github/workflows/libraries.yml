@@ -1,7 +1,7 @@
 name: Go libraries
 
 # The Go libraries in this repository, each a module of its own under a
-# tuios.dev import path (progstatus/ is the first). CI and local builds use the
+# tuios.dev import path (progstatus/ and vt/). CI and local builds use the
 # folders through go.work. `go install .../cmd/tuios@vX` and the release use
 # the versions go.mod pins. This workflow keeps the two in step, and tests each
 # library alone, as an importer gets it.
@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [progstatus]
+        dir: [progstatus, vt]
     defaults:
       run:
         working-directory: ${{ matrix.dir }}
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.dir }}/go.mod
-          cache-dependency-path: ${{ matrix.dir }}/go.mod
+          cache-dependency-path: ${{ matrix.dir }}/go.*
 
       - name: Tidy
         run: go mod tidy -diff

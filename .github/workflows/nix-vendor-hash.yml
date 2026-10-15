@@ -13,6 +13,8 @@ on:
       - go.work
       - go.work.sum
       - progstatus/go.mod
+      - vt/go.mod
+      - vt/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock
@@ -24,6 +26,8 @@ on:
       - go.work
       - go.work.sum
       - progstatus/go.mod
+      - vt/go.mod
+      - vt/go.sum
       - tuios.nix
       - flake.nix
       - flake.lock

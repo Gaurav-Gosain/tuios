@@ -16,6 +16,7 @@ on:
       - "go.work"
       - "go.work.sum"
       - "progstatus/**"
+      - "vt/**"
       - "cmd/tuios-web/**"
       - "internal/app/**"
       - "internal/input/**"

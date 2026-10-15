@@ -38,14 +38,14 @@ go run ./cmd/tuios --debug
 go run ./cmd/tuios-web --debug
 
 # Run tests
-go test ./...
+go test ./... ./progstatus/... ./vt/...
 
 # Leave the machine usable. The maintainer works on this box while the suite
 # runs, and an uncapped build or test run takes every core. taskset confines the
 # whole process tree to half the cores, and the affinity is inherited, so it
 # also holds for the daemons and shells the e2e suite spawns. GOMAXPROCS and
 # `go test -p` do not, because they only bind the Go runtime.
-nice -n 10 taskset -c 0-7 go test ./... -timeout 20m
+nice -n 10 taskset -c 0-7 go test ./... ./progstatus/... ./vt/... -timeout 20m
 
 # Run specific package tests
 go test ./internal/config/...
@@ -111,8 +111,8 @@ docker run -it --rm tuios
 
 Some parts of tuios are Go modules of their own, published under
 `tuios.dev/<name>` import paths. tuios.dev serves the `go-import` meta tag
-that points the go command at the folder in this repository. The first is
-`progstatus/` (`tuios.dev/progstatus`).
+that points the go command at the folder in this repository. They are
+`progstatus/` (`tuios.dev/progstatus`) and `vt/` (`tuios.dev/vt`).
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a
   change to a library and to the app lands in one pull request. Never add a
@@ -129,7 +129,10 @@ that points the go command at the folder in this repository. The first is
   ```
 
 - `./...` from the root stops at a nested module. Name a library to test it:
-  `go test ./progstatus/...`.
+  `go test ./progstatus/... ./vt/...`.
+- A library imports no `github.com/Gaurav-Gosain/tuios/...` package.
+- A branch made before `internal/vt` became `vt/` crosses the move with
+  `scripts/vt-rename.sh` after a rebase.
 - A library tag has the folder as a prefix, such as `progstatus/v0.1.0`.
   Tagging is the maintainer's call.
 
@@ -163,11 +166,6 @@ tuios/
 │   │   ├── window.go       # Window struct, PTY lifecycle
 │   │   └── window_unix.go / window_windows.go  # Platform-specific window and PTY glue
 │   ├── ptyspawn/           # The one path every PTY-backed process is spawned through (spawn_unix.go, spawn_windows.go)
-│   ├── vt/                 # Terminal emulation: pure Go, plus libghostty-vt behind -tags ghostty
-│   │   ├── emulator.go     # The pure Go Emulator and its write path
-│   │   ├── parser.go       # Parser state machine
-│   │   ├── screen.go       # Screen buffer management
-│   │   └── scrollback.go   # History ring (10,000 lines unless configured)
 │   ├── session/            # The daemon: sessions, PTYs (session.go), wire protocol, JSON verbs
 │   ├── transcriptview/     # Decodes an agent's transcript into a conversation, for agent-transcript only
 │   ├── federation/         # The link layer between this daemon and the daemons on other machines
@@ -210,6 +208,13 @@ tuios/
 │                           # (plus cliflags, debuglog, fang, listnav, sound,
 │                           #  transcript, guestenv, perf, fuzz, testutil)
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
+├── vt/                     # tuios.dev/vt, a Go module of its own: the terminal emulator, pure Go, plus libghostty-vt behind -tags ghostty
+│   ├── emulator.go         # The pure Go Emulator and its write path
+│   ├── parser.go           # Parser state machine
+│   ├── screen.go           # Screen buffer management
+│   ├── scrollback.go       # History ring (10,000 lines unless configured)
+│   ├── snapshot/           # Capture, pack, apply and replay a pane's state (the daemon's wire snapshot)
+│   └── vtgen/              # Grammar-based terminal input generator for the fuzzers
 ├── pkg/                    # Embeddable facade (tuios), applist, fuzzy
 ├── docs/                   # Documentation
 │   ├── ARCHITECTURE.md     # Technical architecture diagrams

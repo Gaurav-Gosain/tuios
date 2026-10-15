@@ -4,7 +4,10 @@ go 1.26.6
 
 toolchain go1.26.9
 
-require github.com/Gaurav-Gosain/tuitest v0.1.0
+require (
+	github.com/Gaurav-Gosain/tuitest v0.1.0
+	tuios.dev/vt v0.0.0-20261015052022-4e41ff60e168
+)
 
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect

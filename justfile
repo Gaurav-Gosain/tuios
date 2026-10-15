@@ -229,7 +229,7 @@ gui *args:
 # Run the unit tests of every module
 [group('test')]
 test *args:
-    {{ NICE }} {{ TASKSET }} go test ./... ./progstatus/... -timeout 20m "$@"
+    {{ NICE }} {{ TASKSET }} go test ./... ./progstatus/... ./vt/... -timeout 20m "$@"
 
 # Example: just test-pkg ./vt/ -run TestX
 # Run the unit tests of one package
@@ -285,7 +285,7 @@ e2e-flake test n="20":
 # Run the unit tests with the race detector
 [group('test')]
 race *args:
-    {{ NICE }} {{ TASKSET }} go test -race ./... ./progstatus/... -timeout 80m "$@"
+    {{ NICE }} {{ TASKSET }} go test -race ./... ./progstatus/... ./vt/... -timeout 80m "$@"
 
 # Builds libghostty-vt on first use. Needs zig.
 # Run the tests of the ghostty backend
@@ -353,10 +353,10 @@ lint:
     set -euo pipefail
     cd {{ quote(root) }}
     {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 20m
-    (cd progstatus && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m)
+    for dir in progstatus vt; do (cd "$dir" && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m); done
     for goos in linux darwin windows freebsd openbsd; do
         echo "go vet ($goos)"
-        GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/...
+        GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/... ./vt/...
     done
     {{ NICE }} {{ TASKSET }} go test -count=1 ./internal/lint/
 
@@ -391,12 +391,12 @@ _tidy mode:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{ quote(root) }}
-    # The same GOPROXY CI uses: progstatus at its pinned commit, from this clone.
+    # The same GOPROXY CI uses: each library at its pinned commit, from this clone.
     proxy={{ quote(out / "libproxy") }}
     rm -rf "$proxy"
     scripts/library-pins.sh proxy "$proxy" >/dev/null
     export GOPROXY="file://$proxy,$(go env GOPROXY)" GONOSUMDB=tuios.dev
-    for dir in . e2e/tui progstatus; do
+    for dir in . e2e/tui progstatus vt; do
         echo "go mod tidy $1 ($dir)"
         (cd "$dir" && GOWORK=off go mod tidy $1)
     done

@@ -16,6 +16,7 @@ on:
       - "go.work"
       - "go.work.sum"
       - "progstatus/**"
+      - "vt/**"
       - "internal/**"
       - "pkg/**"
       - "cmd/tuios-wasm/**"

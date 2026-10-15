@@ -51,6 +51,13 @@ jobs:
           working-directory: progstatus
           args: --timeout 10m
 
+      - name: golangci-lint (vt)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: vt
+          args: --timeout 10m
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
@@ -92,4 +99,4 @@ jobs:
       - name: Vet
         env:
           GOOS: ${{ matrix.goos }}
-        run: go vet ./... ./progstatus/...
+        run: go vet ./... ./progstatus/... ./vt/...

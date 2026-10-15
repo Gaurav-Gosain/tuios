@@ -50,7 +50,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - pkg: internal/vt
+          # The emulator was internal/vt before it became the module in vt/.
+          # Its corpus names stay, so the cache entries carry over.
+          - pkg: vt
+            corpus: internal/vt
             targets: >-
               FuzzEmulatorScript FuzzEmulatorSplitWrites FuzzEmulatorSplitEquivalence
               FuzzEmulatorRenderRoundTrip FuzzEmulatorWrite FuzzEmulatorWriteChunked
@@ -58,7 +61,7 @@ jobs:
           # corpus names the job and its cache entry. It must not start with
           # another job's corpus followed by "-", or that job's restore-keys
           # prefix would match it.
-          - pkg: internal/vt
+          - pkg: vt
             corpus: internal/vt.2
             targets: >-
               FuzzResizeConservesText FuzzResizeConservesTextHeights
@@ -94,6 +97,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             go.sum
+            vt/go.sum
             .github/workflows/fuzz.yml
 
       - name: Locate the fuzz cache
@@ -108,6 +112,22 @@ jobs:
           path: ${{ steps.gocache.outputs.dir }}
           key: fuzz-corpus-${{ matrix.corpus || matrix.pkg }}-${{ github.run_id }}
           restore-keys: fuzz-corpus-${{ matrix.corpus || matrix.pkg }}-
+
+      # go test keeps a corpus under the package's import path, which was
+      # github.com/Gaurav-Gosain/tuios/internal/vt until the emulator became
+      # tuios.dev/vt. A corpus restored under the old path is moved to the new
+      # one. Once no cache entry holds the old path, this does nothing.
+      - name: Carry the emulator's corpus across its rename
+        if: matrix.pkg == 'vt'
+        env:
+          FUZZDIR: ${{ steps.gocache.outputs.dir }}
+        run: |
+          old="$FUZZDIR/github.com/Gaurav-Gosain/tuios/internal/vt"
+          if [ -d "$old" ]; then
+            mkdir -p "$FUZZDIR/tuios.dev/vt"
+            cp -rn "$old/." "$FUZZDIR/tuios.dev/vt/"
+            rm -rf "$old"
+          fi
 
       - name: Fuzz
         env:
@@ -141,7 +161,7 @@ jobs:
   # ghostty_differential_fuzz_test.go on almost every input, which would make
   # this job red every night for known reasons.
   ghostty:
-    name: fuzz internal/vt (ghostty cgo boundary)
+    name: fuzz vt (ghostty cgo boundary)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -152,6 +172,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             go.sum
+            vt/go.sum
             .github/workflows/ghostty-vt.yml
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -178,13 +199,24 @@ jobs:
           key: fuzz-corpus-ghostty-${{ github.run_id }}
           restore-keys: fuzz-corpus-ghostty-
 
+      - name: Carry the emulator's corpus across its rename
+        env:
+          FUZZDIR: ${{ steps.gocache.outputs.dir }}
+        run: |
+          old="$FUZZDIR/github.com/Gaurav-Gosain/tuios/internal/vt"
+          if [ -d "$old" ]; then
+            mkdir -p "$FUZZDIR/tuios.dev/vt"
+            cp -rn "$old/." "$FUZZDIR/tuios.dev/vt/"
+            rm -rf "$old"
+          fi
+
       - name: Fuzz
         run: |
           failed=""
           for target in FuzzGhosttyTerminalWrite; do
             echo "::group::$target"
             if ! PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
-              go test -tags ghostty ./internal/vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
+              go test -tags ghostty ./vt/ -run '^$' -fuzz "^${target}\$" -fuzztime "$FUZZTIME" -parallel 2; then
               failed="$failed $target"
             fi
             echo "::endgroup::"
@@ -199,5 +231,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: fuzz-findings-ghostty
-          path: internal/vt/testdata/fuzz/
+          path: vt/testdata/fuzz/
           if-no-files-found: ignore
