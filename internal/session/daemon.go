@@ -2076,8 +2076,19 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	}
 }
 
+// cleanupEvery is how often cleanupLoop runs: TUIOS_CLEANUP_SECONDS when
+// set, for tests, else 30 seconds.
+func cleanupEvery() time.Duration {
+	if s := os.Getenv("TUIOS_CLEANUP_SECONDS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Second
+}
+
 func (d *Daemon) cleanupLoop() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(cleanupEvery())
 	defer ticker.Stop()
 
 	const pendingRequestTTL = 2 * time.Minute
@@ -2101,6 +2112,7 @@ func (d *Daemon) cleanupLoop() {
 				}
 			}
 			d.pendingRequestsMu.Unlock()
+			d.releaseReflowScratch()
 			// A flood of output that has ended leaves its garbage and its
 			// peak heap goal behind, and an idle daemon runs no collection to
 			// lower either. memtrim trims only when the daemon is quiet.

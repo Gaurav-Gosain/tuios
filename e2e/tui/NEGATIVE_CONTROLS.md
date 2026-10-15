@@ -3128,6 +3128,18 @@ least one of them:
 - No short limit.
 - No cap in `admitConnection`.
 
+## Reflow scratch released by the cleanup sweep
+
+`TestReflowScratchReleasedBySweep` starts two daemons with `--pprof`, one with `TUIOS_CLEANUP_SECONDS=1` and one with 3600. Each gets four panes at 200x60 holding one 108 KB line, and each pane is resized 190, 200, 190 columns wide. After three seconds the daemon that sweeps must hold less heap than the other by at least half a 190x60 screen of cells per pane (2493 KiB in all). It released 46200 KiB, 11550 KiB a pane: the spare block and the decoded history rows of a line that wraps through 240 rows of history. A resize to 150 columns must then lay every pane out byte for byte as the daemon that kept its buffers does, the rows of the line 150 columns wide and reading back as the end of the line.
+
+The controls were run on 2026-10-15 on the branch perf/release-reflow-scratch.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No release in the sweep | `cleanupLoop`: the `d.releaseReflowScratch()` call cut | `TestReflowScratchReleasedBySweep`: "the sweep released 56 KiB of heap across 4 panes, want at least 2493 KiB" (80864 KiB without a sweep, 80808 KiB with one) | **caught** |
+| A release that drops the screen too | `ReleaseReflowScratch`: also sets the main screen's grid to a new empty one | `TestReflowScratchReleasedBySweep`: "after the sweep, a resize to 150 columns laid pane 0 out differently from a daemon that kept its buffers": the swept pane shows numbers from 18167, the kept one from 18567 | **caught** |
+| A release outside the terminal lock | `releaseReflowScratch`: the `terminalMu` lock and unlock cut, binary built with `-race`, `GORACE=log_path=...` | the test passes, and the race detector reports a data race between the sweep and `Screen.reflow` (`reflow.go:468`). With the lock it reports none in the same run | **caught** (by the race detector, not by the test) |
+
 ## A Mac config.toml on Linux, and keys tuios cannot read (issue #556)
 
 `TestMacConfigWorksOnLinux` loads the 25 `opt+` keys and the leader of the

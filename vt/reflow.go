@@ -54,6 +54,18 @@ type reflowScratch struct {
 	cnt *reflowScratch
 }
 
+// ReleaseReflowScratch drops the buffers the main screen keeps from one
+// reflow to the next. They make a drag cheap and are worth nothing to a pane
+// that is not being resized, yet after two reflows they hold a spare block
+// the size of the last layout and the history rows that layout decoded:
+// 1.7 MB at 171x83. The next reflow allocates them again. The rows on screen
+// keep the block they are in alive on their own, and a remap handed out by
+// the last reflow keeps the tables it reads, so only what nothing reads is
+// freed.
+func (e *Emulator) ReleaseReflowScratch() {
+	e.scrs[0].rf = reflowScratch{}
+}
+
 // reflowRow is a row a reflow reads: its cells and how it ends.
 type reflowRow struct {
 	cells uv.Line
