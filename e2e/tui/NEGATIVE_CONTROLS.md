@@ -5996,5 +5996,6 @@ Run on 2026-10-15 on Linux on branch `fix-host-wake-reconnect`, from upstream `m
 | `openRemoteSession` does not send `retry-host` | mutant of this branch | the same, with the same message | **caught** |
 | `retry` on a link that is up wakes the dial wait instead of the heartbeat | mutant of this branch | the same, with the same message | **caught** |
 | `heartbeatMisses` raised to 1000, so only a sleep or a retry ends a link | mutant of this branch | the idle half ("nothing found an idle frozen link in 40 seconds"); the click half passes | **caught** |
+| `SwitchToSession` does not cancel the waiting click (review round) | mutant of this branch | the replaced click ("the click the person replaced pulled them off the session they chose after it") | **caught** |
 | The positive half | this branch | none | **guard** |
 
