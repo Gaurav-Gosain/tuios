@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 36,008,098 | 36,110,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 33,894,034 | 34,000,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 36,171,938 | 36,275,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 34,046,050 | 34,150,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2597,6 +2597,16 @@ and 33,775,234 bytes (Go 1.26.9), and with #659 36,008,098 and 33,894,034,
 specialised loop for each pair of image types. A small scaler of our own over
 image.RGBA would take most of that back. The new budgets leave 101,902 and
 105,966 bytes of room.
+
+The budgets went to 36,275,000 (linux/amd64) and 34,150,000 (darwin/arm64)
+for search-panes, command-history, list-ports and started_by (#666). The two
+pull requests under it fit the budgets #659 set: the bridge's output path
+(#661) added 8,192 and 16,544 bytes, and review-stage (#662) 69,632 and
+67,264. With #662 the build measured 36,085,922 and 33,977,842 bytes (Go
+1.26.9), and with #666 36,171,938 and 34,046,050, 86,016 and 68,208 bytes
+more. That is after the three new sorts went through internal/sortx, which
+took 36,864 and 33,552 bytes off. No dependency was added. The new budgets
+leave 103,062 and 103,950 bytes of room.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
