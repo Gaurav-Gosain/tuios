@@ -24,8 +24,8 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	m.SessionCloseSelected = clampInt(m.SessionCloseSelected, 0, sessionCloseRowCount-1)
 
 	toll := m.SessionTollFor(m.SessionCloseTarget)
-	if m.SessionCloseWindow >= 0 {
-		toll = m.windowToll(m.SessionCloseWindow)
+	if m.SessionCloseWindow != "" {
+		toll = m.windowToll(m.windowIndexByID(m.SessionCloseWindow))
 	} else if m.SessionCloseWorkspace != 0 {
 		toll = m.workspaceToll(m.SessionCloseWorkspace)
 	}

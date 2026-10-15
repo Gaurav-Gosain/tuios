@@ -201,8 +201,8 @@ func TestTuiosWindowCloseConfirms(t *testing.T) {
 	m.Windows = []*terminal.Window{w}
 
 	m.OpenLink("tuios://window/a878cd43/close")
-	if !m.ShowSessionClose || m.SessionCloseWindow != 0 {
-		t.Fatalf("a close link skipped the confirmation: shown=%v window=%d", m.ShowSessionClose, m.SessionCloseWindow)
+	if !m.ShowSessionClose || m.SessionCloseWindow != w.ID {
+		t.Fatalf("a close link skipped the confirmation: shown=%v window=%q", m.ShowSessionClose, m.SessionCloseWindow)
 	}
 	if q := m.sessionCloseQuestion(); q != "Close pane 'build watcher'?" {
 		t.Errorf("confirmation question was %q", q)
@@ -216,10 +216,14 @@ func TestTuiosWindowCloseConfirms(t *testing.T) {
 		t.Fatal("cancel closed the pane")
 	}
 
+	// A pane that appears ahead of the target while the dialog is open moves
+	// it in m.Windows. The confirmation still closes the pane it named.
 	m.OpenLink("tuios://window/a878cd43/close")
+	other := &terminal.Window{ID: "ffffffff-0000-0000-0000-000000000001"}
+	m.Windows = append([]*terminal.Window{other}, m.Windows...)
 	m.SessionCloseActivate(SessionCloseRowClose)
-	if len(m.Windows) != 0 {
-		t.Error("confirming the dialog left the pane alive")
+	if len(m.Windows) != 1 || m.Windows[0] != other {
+		t.Error("confirming the dialog did not close the pane it named")
 	}
 }
 

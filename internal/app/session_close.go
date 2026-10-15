@@ -127,8 +127,8 @@ func countOf(n int, noun string) string {
 // because the question is being asked of a person: a session renamed to
 // "Payments API" is not recognisable by the name it is addressed by.
 func (m *OS) sessionCloseQuestion() string {
-	if win := m.SessionCloseWindow; win >= 0 {
-		return "Close " + m.windowCloseLabel(win) + "?"
+	if id := m.SessionCloseWindow; id != "" {
+		return "Close " + m.windowCloseLabel(m.windowIndexByID(id)) + "?"
 	}
 	if ws := m.SessionCloseWorkspace; ws != 0 {
 		return "Close every pane on " + m.workspaceLabel(ws) + "?"
@@ -184,7 +184,12 @@ func (m *OS) OpenSessionClose() { m.OpenSessionCloseFor("") }
 // pane can print such a link, its visible text names whatever it likes, and
 // the answer has to name the pane back before the click does anything.
 func (m *OS) OpenSessionCloseForWindow(i int) {
-	m.SessionCloseWindow = i
+	if i < 0 || i >= len(m.Windows) || m.Windows[i] == nil {
+		return
+	}
+	m.SessionCloseTarget = ""
+	m.SessionCloseWorkspace = 0
+	m.SessionCloseWindow = m.Windows[i].ID
 	m.SessionCloseSelected = SessionCloseRowCancel
 	m.ShowSessionClose = true
 }
@@ -201,7 +206,7 @@ func (m *OS) OpenSessionCloseFor(sessionID string) {
 	if sessionID == m.sidebarCurrentSessionID() {
 		sessionID = ""
 	}
-	m.SessionCloseWindow = -1
+	m.SessionCloseWindow = ""
 	m.SessionCloseTarget = sessionID
 	m.SessionCloseSelected = SessionCloseRowCancel
 	m.ShowSessionClose = true
@@ -212,7 +217,7 @@ func (m *OS) CloseSessionClose() {
 	m.ShowSessionClose = false
 	m.SessionCloseTarget = ""
 	m.SessionCloseWorkspace = 0
-	m.SessionCloseWindow = -1
+	m.SessionCloseWindow = ""
 	m.SessionCloseSelected = SessionCloseRowCancel
 }
 
@@ -241,8 +246,12 @@ func (m *OS) SessionCloseActivate(idx int) tea.Cmd {
 	if idx != SessionCloseRowClose {
 		return nil
 	}
-	if win >= 0 {
-		m.CloseWindowByHand(win)
+	if win != "" {
+		// The pane is found again by its ID: it may have moved in
+		// m.Windows, or closed on its own, while the dialog was open.
+		if i := m.windowIndexByID(win); i >= 0 {
+			m.CloseWindowByHand(i)
+		}
 		return nil
 	}
 	if ws != 0 {
