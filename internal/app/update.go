@@ -1600,10 +1600,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyFederationSnapshot(msg)
 		m.sidebarCache.invalidate()
 		// A rail click that waits for this machine dials when the link is up.
-		m.advanceHostOpen()
+		open := m.advanceHostOpen()
 		// A sign-in page the person asked for before the daemon had one
 		// opens on the snapshot that brings it.
-		signIn := m.takePendingSignIns()
+		signIn := tea.Batch(open, m.takePendingSignIns())
 		if after, refresh := m.federationRefreshPlan(); refresh {
 			return m, tea.Batch(signIn, m.federationRefreshTick(after))
 		}

@@ -409,10 +409,23 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// It runs before the overlay routing below so it works while help, the
 	// palette or the quit dialog is up, since those are exactly the moments a
 	// message is in the way.
+	var escCmd tea.Cmd
 	if msg.String() == "esc" {
 		o.DismissNotifications()
+		// esc also stops a rail click that waits for another machine, and
+		// says so. The key still goes on.
+		escCmd = o.CancelHostOpen()
 	}
+	if escCmd != nil {
+		m, cmd := routeAfterEsc(msg, o)
+		return m, tea.Batch(escCmd, cmd)
+	}
+	return routeAfterEsc(msg, o)
+}
 
+// routeAfterEsc is the rest of HandleKeyPress, after esc dismissed the
+// dock's message.
+func routeAfterEsc(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Capture mode is a gesture over the whole screen and owns every key while
 	// it is up, in either mode: a keystroke meant for the selection must not
 	// reach a shell underneath. The preview panel that follows it owns the

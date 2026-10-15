@@ -809,6 +809,7 @@ func (m *OS) drawHostRow(
 // createRemoteSession creates a session on another machine and attaches it in
 // this client. The host's daemon creates it under the first free name.
 func (m *OS) createRemoteSession(host string) {
+	m.cancelHostOpen()
 	if !m.hostIsUp(host) {
 		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
 		return

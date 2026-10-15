@@ -286,6 +286,8 @@ func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 			l.logf("host %s: the computer woke from sleep, so the link is dialed now.", l.host.Name)
 			l.mu.Lock()
 			l.asked = true
+			// A master connection from before the sleep is likely dead.
+			l.fresh = true
 			l.mu.Unlock()
 			return true
 		}
@@ -461,6 +463,14 @@ preamble:
 				return false
 			}
 			l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
+			// A dial that rides a dead master waits here, because the
+			// master still answers on its socket. The next dial opens a
+			// connection of its own. Without a master it is the same dial.
+			if !h.fresh {
+				l.mu.Lock()
+				l.fresh = true
+				l.mu.Unlock()
+			}
 			return false
 		}
 	}

@@ -434,6 +434,8 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// switch" was reportable at all.
 		m.SessionSwitcherSelected = row.Idx
 		m.sessionSwitcherActivate(row.Idx)
+		// A session on another machine opens off the Update goroutine.
+		return m.TakeSidebarCmd()
 	case "agentmail":
 		// A click opens, exactly like enter on the selected row.
 		m.AgentMailSelect(row.Idx)

@@ -23,10 +23,10 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 	if m.hostOpen == nil || m.hostOpen.host != "stale" || m.hostOpen.dialing {
 		t.Fatalf("ASSERTION: the click does not wait for the link: %+v", m.hostOpen)
 	}
-	if len(m.Notifications) == 0 || !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "Reconnecting to stale") {
-		t.Errorf("ASSERTION: the click did not say it is reconnecting: %+v", m.Notifications)
+	if len(m.Notifications) == 0 || !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "Connecting to stale") {
+		t.Errorf("ASSERTION: the click on a host that was never up did not say it is connecting: %+v", m.Notifications)
 	}
-	if note := m.hostLinkNote(); !strings.Contains(note, "Reconnecting to stale") {
+	if note := m.hostLinkNote(); !strings.Contains(note, "Connecting to stale") {
 		t.Errorf("ASSERTION: the dock says %q while the click waits", note)
 	}
 	if after, refresh := m.federationRefreshPlan(); !refresh || after != hostOpenPoll {
@@ -39,7 +39,7 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 	// The link reaches a state that waiting cannot change.
 	m.FederationHosts[1].Status = string(federation.StatusNoBinary)
 	m.FederationHosts[1].Reason = "The link cannot find tuios on the host."
-	m.advanceHostOpen()
+	_ = m.advanceHostOpen()
 	if m.hostOpen != nil {
 		t.Error("ASSERTION: the click still waits for a host that has no tuios")
 	}
@@ -48,15 +48,33 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 	}
 
 	// The wait runs out.
-	m.FederationHosts[1].Status = string(federation.StatusReconnecting)
+	m.FederationHosts[1].Status = string(federation.StatusUnreachable)
+	m.FederationHosts[1].Reason = "The host did not answer."
 	m.openRemoteSession("stale", "old")
 	m.hostOpen.until = m.hostOpen.until.Add(-2 * hostOpenWait)
-	m.advanceHostOpen()
+	_ = m.advanceHostOpen()
 	if m.hostOpen != nil {
 		t.Error("ASSERTION: the click still waits after its time ran out")
 	}
-	if last := m.Notifications[len(m.Notifications)-1].Message; !strings.Contains(last, "did not come back") {
-		t.Errorf("ASSERTION: the time out does not say the link did not come back: %q", last)
+	if last := m.Notifications[len(m.Notifications)-1].Message; !strings.Contains(last, "could not connect to stale") || !strings.Contains(last, "tuios hosts") {
+		t.Errorf("ASSERTION: the time out does not say what happened and what to do: %q", last)
+	}
+
+	// A host that leaves the table ends the wait at once.
+	m.openRemoteSession("stale", "old")
+	m.FederationHosts = m.FederationHosts[:1]
+	_ = m.advanceHostOpen()
+	if m.hostOpen != nil {
+		t.Error("ASSERTION: the click still waits for a host that left the table")
+	}
+
+	// A local switch ends the wait, so a late dial cannot pull the person away.
+	m.FederationHosts = append(m.FederationHosts, FederationHost{Name: "stale", Status: string(federation.StatusReconnecting)})
+	m.openRemoteSession("stale", "old")
+	gen := m.hostOpen.gen
+	m.cancelHostOpen() // what SwitchToSession, a create, detach and esc call
+	if cmd := m.finishHostOpen(SessionCreatedMsg{OpenGen: gen, Host: "stale", Switched: true}); cmd != nil || m.hostOpen != nil {
+		t.Error("ASSERTION: a dial for a click that was replaced still acted")
 	}
 
 	// Creating a session still needs a host that is up.

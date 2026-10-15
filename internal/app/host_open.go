@@ -42,6 +42,14 @@ type hostOpenPending struct {
 	dialing bool
 	// notBefore holds the next dial back after one that failed.
 	notBefore time.Time
+	// wasUp says the host's link was up at some time, so the dock says
+	// "Reconnecting" and not "Connecting".
+	wasUp bool
+	// signIn says the click already opened the host's Tailscale sign-in.
+	signIn bool
+	// resume says the click ended a reconnect to the attached host. When the
+	// click fails, the reconnect starts again.
+	resume bool
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -56,17 +64,58 @@ func (m *OS) openRemoteSession(host, sessionName string) {
 		}
 		return
 	}
-	m.hostOpenGen++
+	m.cancelHostOpen()
 	p := &hostOpenPending{host: host, name: sessionName, gen: m.hostOpenGen, until: time.Now().Add(hostOpenWait)}
+	p.wasUp = m.hostWasUp(host)
+	// The newest request wins. A reconnect to the attached host would pull
+	// the person back when it lands, so it stops here, and starts again if
+	// this click fails.
+	if m.hostReconnect != nil {
+		m.hostReconnect = nil
+		m.hostReconnectGen++
+		p.resume = true
+	}
 	m.hostOpen = p
 	cmds := []tea.Cmd{retryHostCmd(host)}
 	if m.hostIsUp(host) {
 		m.dialHostOpen(p)
 	} else {
-		m.ShowNotification("Reconnecting to "+printableTitle(host)+".", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(hostOpenWaitNote(p)+".", "info", m.Settings.NotificationDuration)
 		cmds = append(cmds, m.federationRefreshTick(hostOpenPoll))
 	}
 	m.queueSidebarCmd(tea.Batch(cmds...))
+}
+
+// cancelHostOpen drops the click that waits for a machine, if any. A dial it
+// started may still answer, and the new gen makes finishHostOpen close it.
+// Every switch, create and detach calls it, so an old click never pulls the
+// person away from what they chose after it.
+func (m *OS) cancelHostOpen() {
+	m.hostOpenGen++
+	m.hostOpen = nil
+}
+
+// CancelHostOpen is cancelHostOpen for esc. It says so when it stopped a
+// click.
+func (m *OS) CancelHostOpen() tea.Cmd {
+	p := m.hostOpen
+	if p == nil {
+		return nil
+	}
+	m.cancelHostOpen()
+	m.ShowNotification("Stopped connecting to "+printableTitle(p.host)+".", "info", m.Settings.NotificationDuration)
+	return m.resumeAfterHostOpen(p)
+}
+
+// hostWasUp reports whether the last snapshot says the host's link was up
+// at some time.
+func (m *OS) hostWasUp(name string) bool {
+	for _, h := range m.FederationHosts {
+		if h.Name == name {
+			return h.LastOK != 0 || h.Status == string(federation.StatusUp) || h.Status == string(federation.StatusReconnecting)
+		}
+	}
+	return false
 }
 
 // dialHostOpen dials the session p names, off the Update goroutine. The
@@ -88,31 +137,82 @@ func (m *OS) dialHostOpen(p *hostOpenPending) {
 }
 
 // advanceHostOpen runs on each host snapshot while a click waits for its
-// machine. It dials when the link is up, and gives up when the wait is over
-// or the machine is in a state that waiting cannot change.
-func (m *OS) advanceHostOpen() {
+// machine. It dials when the link is up, opens the sign-in page when the host
+// waits for one, and gives up when the wait is over, the host left the
+// table, or the host is in a state that waiting cannot change.
+func (m *OS) advanceHostOpen() tea.Cmd {
 	p := m.hostOpen
 	if p == nil || p.dialing {
-		return
+		return nil
 	}
 	now := time.Now()
-	status := m.hostStatusByName(p.host)
+	status, known := "", false
+	for _, h := range m.FederationHosts {
+		if h.Name == p.host {
+			status, known = h.Status, true
+			break
+		}
+	}
+	if !known {
+		return m.endHostOpen(p, printableTitle(p.host)+" is not in the hosts list now. Add it with 'tuios hosts add' to open its sessions.")
+	}
 	switch federation.Status(status) {
 	case federation.StatusUp:
 		if now.Before(p.notBefore) {
-			return
+			return nil
 		}
 		m.dialHostOpen(p)
-		return
-	case federation.StatusNoDaemon, federation.StatusNoBinary, federation.StatusIncompatible, federation.StatusApproval:
-		m.hostOpen = nil
-		m.ShowNotification(printableTitle(p.host)+": "+m.hostReason(p.host), "warning", m.Settings.NotificationWarningDuration*2)
-		return
+		return nil
+	case federation.StatusApproval:
+		// The host waits for a Tailscale sign-in. The click opens it, as the
+		// sign-in control on the rail does, and keeps waiting for the link.
+		if p.signIn {
+			if now.After(p.until) {
+				return m.endHostOpen(p, printableTitle(p.host)+" still waits for a Tailscale sign-in. Sign in, then select the session again.")
+			}
+			return nil
+		}
+		p.signIn = true
+		if until := now.Add(hostSignInWatch); until.After(p.until) {
+			p.until = until
+		}
+		return m.openHostSignIn(p.host)
+	case federation.StatusNoDaemon, federation.StatusNoBinary, federation.StatusIncompatible:
+		return m.endHostOpen(p, printableTitle(p.host)+": "+m.hostReason(p.host))
 	}
 	if now.After(p.until) {
-		m.hostOpen = nil
-		m.ShowNotification(hostReconnectReason(p.host, nil), "warning", m.Settings.NotificationWarningDuration*2)
+		return m.endHostOpen(p, hostOpenExpiredNote(p, m.hostReason(p.host)))
 	}
+	return nil
+}
+
+// endHostOpen stops the click p with a warning that says why.
+func (m *OS) endHostOpen(p *hostOpenPending, note string) tea.Cmd {
+	m.cancelHostOpen()
+	m.ShowNotification(note, "warning", m.Settings.NotificationWarningDuration*2)
+	return m.resumeAfterHostOpen(p)
+}
+
+// resumeAfterHostOpen starts again the reconnect a click ended, when the
+// click did not land.
+func (m *OS) resumeAfterHostOpen(p *hostOpenPending) tea.Cmd {
+	if !p.resume || m.hostReconnect != nil {
+		return nil
+	}
+	return m.beginHostReconnect(nil)
+}
+
+// hostOpenExpiredNote says that the wait for a host ran out, why when the
+// daemon said, and what to do.
+func hostOpenExpiredNote(p *hostOpenPending, reason string) string {
+	what := "tuios could not connect to " + printableTitle(p.host) + " in one minute."
+	if p.wasUp {
+		what = "The link to " + printableTitle(p.host) + " did not come back in one minute."
+	}
+	if reason != "" {
+		what += " " + reason
+	}
+	return what + " Run 'tuios hosts' to see the host, then select the session again."
 }
 
 // hostReason is the sentence the last snapshot carries for a machine.
@@ -142,14 +242,23 @@ func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 			p.notBefore = time.Now().Add(hostOpenRetryGap)
 			return tea.Batch(retryHostCmd(p.host), m.federationRefreshTick(hostOpenPoll))
 		}
-		m.hostOpen = nil
+		m.cancelHostOpen()
 		m.reportSwitchFailure(&hostSwitchError{msg: hostAttachRefusal(p.host, msg.Err)})
-		return nil
+		return m.resumeAfterHostOpen(p)
 	}
 	m.hostOpen = nil
 	m.adoptHostClient(msg.Client, msg.State, msg.Host)
 	m.applyStartupToUnarranged()
 	return nil
+}
+
+// hostOpenWaitNote is what the dock and the notice say while a click waits
+// for a host that is not up.
+func hostOpenWaitNote(p *hostOpenPending) string {
+	if p.wasUp {
+		return "Reconnecting to " + printableTitle(p.host)
+	}
+	return "Connecting to " + printableTitle(p.host)
 }
 
 // hostOpenNote is the dock's line while a click waits for its machine.
@@ -163,7 +272,7 @@ func (m *OS) hostOpenNote() string {
 	if len(name) > room {
 		name = name[:room-1] + "…"
 	}
-	if p.dialing {
+	if p.dialing || !p.wasUp {
 		return " Connecting to " + name + " "
 	}
 	return " Reconnecting to " + name + " "

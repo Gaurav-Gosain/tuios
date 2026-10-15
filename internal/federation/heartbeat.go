@@ -137,6 +137,18 @@ func (l *link) heartbeat(ctx context.Context, m *mux, closed <-chan struct{}, te
 			t.Reset(heartbeatRetry)
 			continue
 		}
+		// The link can end for another reason while the ping waits: the
+		// manager stopped, ssh exited, or a call tore it down. That drop is
+		// not the heartbeat's, so it leaves no note and no fresh dial.
+		select {
+		case <-ctx.Done():
+			return
+		case <-closed:
+			return
+		case <-m.Done():
+			return
+		default:
+		}
 		reason := "The host stopped answering. tuios is connecting again."
 		if woke {
 			reason = "The computer woke from sleep and the host did not answer. tuios is connecting again."

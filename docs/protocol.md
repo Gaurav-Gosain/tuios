@@ -183,8 +183,9 @@ no answer in 5 seconds end the link, and it is dialed again. After this
 machine wakes from sleep, or after `retry-host`, one ping with no answer is
 enough. `retry-host` on a host that is up now sends that ping at once, and on
 a host that is not up it starts the backoff again from 1 second. The next
-dial after a ping ends a link runs ssh with `-o ControlPath=none`, so a master
-connection that did not survive the sleep is not used. The drop reason is
+dial after a ping ends a link, after a wake from sleep, or after a dial that
+timed out runs ssh with `-o ControlPath=none`, so a master connection that did
+not survive the sleep is not used. The drop reason is
 "The host stopped answering." An older far daemon answers the ping as it
 answers any `hello`.
 

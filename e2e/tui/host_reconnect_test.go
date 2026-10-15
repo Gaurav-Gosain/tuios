@@ -372,7 +372,9 @@ func TestTheDaemonSaysWhyALinkDropped(t *testing.T) {
 // dead pipe, and then fail. A host that was not up dropped the click without a
 // word.
 //
-// The first half clicks a session on a link that is frozen and looks up. The
+// First a click on the frozen link is replaced by a click on a session here,
+// and the late dial of the first must not pull the person away. Then a
+// click on a session on a link that is frozen and looks up. The
 // click asks the daemon to retry the host, which pings the link, finds it
 // silent, ends it and dials it again. The session opens on the new link. The
 // second half leaves an attached session idle on a frozen link and nobody
@@ -397,6 +399,10 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	if out, err := tuiosCLI(t, remote, "new", "far-quiet", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
+	// A second session here, for the click that replaces one on the host.
+	if out, err := tuiosCLIEnv(t, base, env, "new", "elsewhere", "--detach", "--cwd", t.TempDir()); err != nil {
+		t.Fatalf("create the second local session: %v\n%s", err, out)
+	}
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
@@ -408,6 +414,26 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	// A click the person replaces is dropped. They click a session of the
+	// frozen host, then a session here. The dial for the first click lands
+	// when the link is back, and it must not pull them off the second.
+	railShows(t, term, "elsewhere")
+	time.Sleep(insertGuard)
+	freezeTheLink(t)
+	clickRailSession(t, term, "far-quiet")
+	if err := term.WaitForText("Connecting to build", uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: a click on a session of a frozen host shows nothing: %v\n%s", err, term.Snapshot())
+	}
+	clickRailSession(t, term, "elsewhere")
+	waitRailCurrent(t, term, "elsewhere")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railCurrentIs(s, "far-quiet") }, 15*time.Second); err == nil {
+		t.Fatalf("ASSERTION: the click the person replaced pulled them off the session they chose after it\n%s", term.Snapshot())
+	}
+	if !railCurrentIs(term.Screen(), "elsewhere") {
+		t.Fatalf("ASSERTION: the client left the session the person chose\n%s", term.Snapshot())
+	}
+	save("replaced-click.txt")
 
 	freezeTheLink(t)
 	start := time.Now()

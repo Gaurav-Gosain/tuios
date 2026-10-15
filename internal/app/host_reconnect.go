@@ -126,6 +126,12 @@ func (m *OS) beginHostReconnect(cause error) tea.Cmd {
 		// died must not restart the clock or double the dials.
 		return nil
 	}
+	if m.hostOpen != nil {
+		// A click waits for another session, and the newest request wins.
+		// When the click fails, the reconnect starts then.
+		m.hostOpen.resume = true
+		return nil
+	}
 	m.hostReconnectGen++
 	m.hostReconnect = &hostReconnect{
 		gen:         m.hostReconnectGen,
@@ -262,6 +268,8 @@ func (m *OS) resumeOnHost(client *session.TUIClient, state *session.SessionState
 	host := r.host
 	took := time.Since(r.since).Round(time.Second)
 	m.hostReconnect = nil
+	// The reconnect landed, so no click may pull the person away after it.
+	m.cancelHostOpen()
 
 	old := m.DaemonClient
 	if old != nil {

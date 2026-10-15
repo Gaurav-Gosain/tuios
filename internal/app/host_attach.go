@@ -37,6 +37,7 @@ func (m *OS) SwitchToHostSession(host, name string, create bool) error {
 	if m.DaemonClient == nil {
 		return fmt.Errorf("not in daemon mode")
 	}
+	m.cancelHostOpen()
 	if host == "" || host == federation.LocalHostName {
 		host = federation.LocalHostName
 	}
@@ -166,6 +167,7 @@ func (m *OS) switchToHostAsync(host, name string, create bool, cwd, requestID st
 	if !m.hostIsUp(host) {
 		return &hostUnavailableError{host: host}
 	}
+	m.cancelHostOpen()
 	d := m.hostDialFor(host, name, create, false)
 	d.cwd = cwd
 	ch := m.sessionCreateChan()
@@ -257,6 +259,7 @@ func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState,
 	// pull the user off the session they just chose.
 	m.hostReconnect = nil
 	m.hostReconnectGen++
+	m.cancelHostOpen()
 
 	old := m.DaemonClient
 	if old != nil {
@@ -451,6 +454,12 @@ func (m *OS) OpenSessionNode(n sessiontree.Node) bool {
 	host, name, ok := sessionNodeTarget(n)
 	if !ok {
 		return false
+	}
+	if host != "" && host != m.attachedMachine() {
+		// Off the Update goroutine and in every link state, as the rail
+		// opens it. See host_open.go.
+		m.openRemoteSession(host, name)
+		return true
 	}
 	return m.openSession(host, name)
 }

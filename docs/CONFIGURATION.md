@@ -1981,7 +1981,8 @@ A master connection can outlive the network under it, for example when a
 laptop sleeps. The link's ssh then waits on it, and the link's keepalives do
 not reach it. The link pings its host when it carried nothing for 15 seconds.
 When the host does not answer, the link ends, and the next dial runs ssh with
-`-o ControlPath=none` and opens a connection of its own. A machine that needs
+`-o ControlPath=none` and opens a connection of its own. The link does the
+same after this machine wakes from sleep, and after a dial that timed out. A machine that needs
 a password or a second factor fails that one dial, and the dial after it uses
 the master again.
 

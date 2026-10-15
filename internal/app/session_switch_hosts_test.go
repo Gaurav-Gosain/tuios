@@ -139,20 +139,20 @@ func TestSwitcherLocalSessionStaysOnTheConnection(t *testing.T) {
 	wantOneSwitch(t, *calls, switchCall{"", "notes"})
 }
 
-// TestSwitcherToADownHostSaysUnavailable: a machine whose link is not up is
-// not dialed, and the user is told.
-func TestSwitcherToADownHostSaysUnavailable(t *testing.T) {
+// TestSwitcherToADownHostWaitsForTheLink: the switcher opens a session on a
+// machine whose link is not up the way the rail does (#720). Nothing is
+// dialed yet, the click waits for the link, and the dock says so.
+func TestSwitcherToADownHostWaitsForTheLink(t *testing.T) {
 	m := hostsOS(t, false)
 	m.FederationHosts[1].Status = string(federation.StatusReconnecting)
-	calls := recordSwitches(m)
 	m.SessionSwitcherItems = m.sessionSwitcherItems()
 
 	m.sessionSwitcherActivate(switcherIndex(t, m, "api"))
-	if len(*calls) != 0 {
-		t.Fatalf("ASSERTION: a switch to a down host was attempted: %+v", *calls)
+	if p := m.hostOpen; p == nil || p.host != "build" || p.name != "api" || p.dialing {
+		t.Fatalf("ASSERTION: the switcher did not wait for build's link: %+v", m.hostOpen)
 	}
-	if len(m.Notifications) == 0 || m.Notifications[len(m.Notifications)-1].Message != "build is unavailable" {
-		t.Fatalf("ASSERTION: the switch did not say build is unavailable: %+v", m.Notifications)
+	if note := m.hostLinkNote(); !strings.Contains(note, "Reconnecting to build") {
+		t.Fatalf("ASSERTION: the dock says %q while the switch waits", note)
 	}
 }
 

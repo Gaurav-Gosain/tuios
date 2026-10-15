@@ -1963,6 +1963,9 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	if targetSession == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
+	// A switch the person made ends a rail click that waits for another
+	// machine. See host_open.go.
+	m.cancelHostOpen()
 
 	m.LogInfo("[SWITCH] Starting: %s → %s", m.SessionName, targetSession)
 
