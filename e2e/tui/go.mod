@@ -6,7 +6,7 @@ toolchain go1.26.9
 
 require (
 	github.com/Gaurav-Gosain/tuitest v0.1.0
-	tuios.dev/vt v0.0.0-20261015124716-ec8d9420f8f0
+	tuios.dev/vt v0.2.0
 )
 
 require (
@@ -20,7 +20,7 @@ require (
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	tuios.dev/progstatus v0.1.0 // indirect
-	tuios.dev/swatch v0.0.0-20261015114926-822f23f1e56f // indirect
+	tuios.dev/swatch v0.1.0 // indirect
 )
 
 require (

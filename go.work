@@ -12,6 +12,6 @@ use (
 
 replace tuios.dev/progstatus v0.1.0 => ./progstatus
 
-replace tuios.dev/swatch v0.0.0-20261015114926-822f23f1e56f => ./swatch
+replace tuios.dev/swatch v0.1.0 => ./swatch
 
-replace tuios.dev/vt v0.0.0-20261015124716-ec8d9420f8f0 => ./vt
+replace tuios.dev/vt v0.2.0 => ./vt
