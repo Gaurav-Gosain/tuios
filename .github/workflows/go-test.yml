@@ -138,7 +138,8 @@ jobs:
     # object for plugin processes, the stop event kill-server sets, the
     # herdr command line the link runs, the opencode socket owner check, the
     # owner and DACL checks of service.json and of the tuios-web password
-    # file, and the job object of the opencode export.
+    # file, the job object of the opencode export, and the web daemon E2E
+    # tests.
     # The whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
@@ -151,7 +152,7 @@ jobs:
           cache-id: tests
 
       - name: Test
-        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
+        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/
 
       - name: Test the opencode and password file checks
         # The rest of internal/transcriptview runs shell scripts, so only the
