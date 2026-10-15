@@ -32,6 +32,10 @@ import (
 //     after the restore prints a marker only a live shell can compute.
 //
 // Frames, plain and styled, are saved under artifactDir.
+//
+// TUIOS_E2E_HISTORY_WRITER names another build to run the first daemon, the
+// one that saves the history. A history saved by an older build has to read
+// in this one, and the other way round.
 func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	const session = "e2e-history"
 	const last = 120
@@ -39,24 +43,26 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 
-	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
-		t.Fatalf("create the session: %v\n%s", err, out)
-	}
-	first := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", session}})
-	if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
-		t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
-	}
-	time.Sleep(insertGuard + 150*time.Millisecond)
-	runInShell(t, first,
-		fmt.Sprintf(`i=1; while [ $i -le %d ]; do echo "HIST-$i-END"; i=$((i+1)); done`, last),
-		fmt.Sprintf("HIST-%d-END", last), bulkTimeout)
-	saveArtifact(t, first, artifacts, "before-restart")
+	withBinary("TUIOS_E2E_HISTORY_WRITER", func() {
+		if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
+			t.Fatalf("create the session: %v\n%s", err, out)
+		}
+		first := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", session}})
+		if err := first.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+			t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
+		}
+		time.Sleep(insertGuard + 150*time.Millisecond)
+		runInShell(t, first,
+			fmt.Sprintf(`i=1; while [ $i -le %d ]; do echo "HIST-$i-END"; i=$((i+1)); done`, last),
+			fmt.Sprintf("HIST-%d-END", last), bulkTimeout)
+		saveArtifact(t, first, artifacts, "before-restart")
 
-	// kill-server saves every session, and every pane's history, on the way out.
-	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
-		t.Fatalf("kill-server: %v\n%s", err, out)
-	}
-	waitExit(t, first, "after kill-server")
+		// kill-server saves every session, and every pane's history, on the way out.
+		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
+			t.Fatalf("kill-server: %v\n%s", err, out)
+		}
+		waitExit(t, first, "after kill-server")
+	})
 
 	// The history file is private: it holds whatever the pane printed.
 	files, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", "scrollback", session, "*.hist.gz"))

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
 )
 
 // padLine wraps at 9 columns before the wide rune, leaving column 9 as
@@ -81,7 +82,7 @@ func TestSnapshotCarriesPadding(t *testing.T) {
 func TestSavedHistoryCarriesPadding(t *testing.T) {
 	src := vt.NewWithScrollback(9, 4, 1000)
 	_, _ = src.Write([]byte(padLine + "\r\n1\r\n2\r\n3\r\n4\r\n$ "))
-	h := &savedHistory{Version: historyVersion, SavedAt: time.Now(), State: captureHistoryRows(src, 1000).state(1000)}
+	h := &savedHistory{Version: historyVersion, SavedAt: time.Now(), State: snapshot.CaptureHistory(src, 1000).State(1000)}
 	h.State.Pack()
 	data, err := encodeHistory(h)
 	if err != nil {
@@ -159,7 +160,7 @@ func TestSavedHistoryKeepsAFrozenPromptsTail(t *testing.T) {
 	if strings.Contains(textOf(src), "-END") {
 		t.Fatal("the narrow pane shows the whole command, so no tail is held and this tests nothing")
 	}
-	h := &savedHistory{Version: historyVersion, SavedAt: time.Now(), State: captureHistoryRows(src, 1000).state(1000)}
+	h := &savedHistory{Version: historyVersion, SavedAt: time.Now(), State: snapshot.CaptureHistory(src, 1000).State(1000)}
 	h.State.Pack()
 	data, err := encodeHistory(h)
 	if err != nil {

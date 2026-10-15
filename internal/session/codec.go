@@ -85,7 +85,11 @@ func init() {
 	// Session state types
 	gob.Register(SessionState{})
 	gob.Register(WindowState{})
-	gob.Register(TerminalState{})
+	// Under the name gob.Register gave it while it was declared in this
+	// package: the package path and the type name. gob sends the name of a
+	// value held in an interface, so a peer of an older build and this one
+	// have to agree on it.
+	gob.RegisterName("github.com/Gaurav-Gosain/tuios/internal/session.TerminalState", TerminalState{})
 	gob.Register(SerializedBSPTree{})
 	gob.Register(SerializedBSPNode{})
 

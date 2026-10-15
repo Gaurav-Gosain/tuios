@@ -10,7 +10,7 @@ records where the implementations differ.
 
 ## The two sources a client can be filled from
 
-**The snapshot.** `TerminalStateOf` (`internal/session/session.go`) serializes the
+**The snapshot.** `snapshot.Capture` (`internal/vt/snapshot/capture.go`) serializes the
 daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
@@ -182,7 +182,7 @@ only in how much history got painted twice.
 `stream-pane` (`internal/session/verb_stream_pane.go`, docs/protocol.md) is an
 eighth route, for a client that cannot read a `TerminalState`. It keeps the
 same pairing on the daemon side. The snapshot is `GetTerminalState`, turned
-into bytes by `snapshotVT`, and its `Seq` is the position the subscription
+into bytes by `snapshot.Replay`, and its `Seq` is the position the subscription
 starts at. A subscription that cannot start exactly there, because the ring
 rolled past it, is dropped and the snapshot is taken again
 (`PTY.subscribeAt`). Every output frame carries the position after its last
@@ -191,7 +191,7 @@ the snapshot paints nothing twice. A client that reconnects with the position
 it reached resumes from the ring, without a snapshot, when the ring still
 holds that position.
 
-`snapshotVT` reproduces invariants 1 to 4 and 7 on any xterm-compatible
+`snapshot.Replay` reproduces invariants 1 to 4 and 7 on any xterm-compatible
 emulator. Of invariant 6 it carries the pen, the scroll region's top and
 bottom, the character sets, the tab stops, insert mode (IRM) and newline mode
 (LNM), and not the protected cells, the saved cursor, the character REP
@@ -407,7 +407,7 @@ Two things had to be true for that rule to hold, and neither was:
   207x55 screen was 147 KB and a thousand rows of history 2.9 MB, per pane, and
   the client decoded every struct by reflection on its UI goroutine during a
   workspace switch. `GetTerminalStatePayload.Packed` asks for the same cells in
-  the form `snapshot_pack.go` describes: a style table once, cells in one style
+  the form `internal/vt/snapshot/pack.go` describes: a style table once, cells in one style
   run together, two bytes for a plain letter, blank row tails left off. The
   request field is what keeps it compatible in both directions. A daemon that
   predates it does not see the request and answers with cells, which the client

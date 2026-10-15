@@ -13,6 +13,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // These run on whichever emulator the build links: the pure one by default and
@@ -145,10 +146,10 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	if styled < 0 {
 		t.Fatalf("styled row missing; rows:\n%s", strings.Join(rows, "\n"))
 	}
-	if c := cellAt(styled, 0); c == nil || c.Style.Attrs&uv.AttrBold == 0 || colorToWire(c.Style.Fg) != "a1" {
+	if c := cellAt(styled, 0); c == nil || c.Style.Attrs&uv.AttrBold == 0 || c.Style.Fg != ansi.BasicColor(1) {
 		t.Errorf("B lost bold red: %+v", c)
 	}
-	if c := cellAt(styled, 8); c == nil || colorToWire(c.Style.Bg) == "" {
+	if c := cellAt(styled, 8); c == nil || c.Style.Bg == nil {
 		t.Errorf("T lost its truecolor background: %+v", c)
 	}
 	if c := cellAt(styled, 7); c == nil || c.Style.Bg != nil {
@@ -245,7 +246,7 @@ func TestHistoryLinesBound(t *testing.T) {
 	}
 	_, _ = src.Write([]byte(in.String()))
 	h := throughDisk(t, src, 50)
-	if got := packedRowCount(h.State.PackedScrollback); got != 50 {
+	if got := packedScrollbackRows(t, h.State); got != 50 {
 		t.Fatalf("saved %d history rows, want 50", got)
 	}
 	rows := allRows(newRestoredEmulator(40, 5, 1000, "", h))
@@ -506,7 +507,7 @@ func TestHistoryPackingReadsOnlyTheCapturedRows(t *testing.T) {
 	writePane(p, "BEFORE\r\n")
 	rows, _ := p.captureHistory(100)
 	writePane(p, "AFTER\r\n")
-	st := rows.state(rows.history.Len())
+	st := rows.State(rows.Len())
 	if err := st.Unpack(); err != nil {
 		t.Fatal(err)
 	}
@@ -742,4 +743,14 @@ func TestHistoryOtherVersionIsSkippedNotDeleted(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("a file of another version was deleted: %v", err)
 	}
+}
+
+// packedScrollbackRows is how many history rows a packed state holds.
+func packedScrollbackRows(t *testing.T, st *TerminalState) int {
+	t.Helper()
+	cp := *st
+	if err := cp.Unpack(); err != nil {
+		t.Fatal(err)
+	}
+	return len(cp.Scrollback)
 }

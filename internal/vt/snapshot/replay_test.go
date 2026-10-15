@@ -1,4 +1,4 @@
-package session
+package snapshot
 
 import (
 	"fmt"
@@ -9,10 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// SnapshotVT is the one encoder for the SNAP frames of stream-pane and of
+// Replay is the one encoder for the SNAP frames of stream-pane and of
 // tuios gui-bridge: the bytes that rebuild a pane in a fresh emulator of the
 // pane's size. A conformance corpus: each case is input to an emulator, its
-// state, the bytes SnapshotVT makes of that state written to a second fresh
+// state, the bytes Replay makes of that state written to a second fresh
 // emulator, and that one's state, which must match the first.
 //
 // Ways it can go wrong, each covered by a case:
@@ -53,11 +53,11 @@ func TestSnapshotVTRebuildsThePane(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			a := vt.New(40, 10)
 			_, _ = a.Write([]byte(input))
-			want := TerminalStateOf(a, 40, 10, 0, 0)
+			want := Capture(a, 40, 10, 0, 0)
 
 			b := vt.New(40, 10)
-			_, _ = b.Write(SnapshotVT(want))
-			got := TerminalStateOf(b, 40, 10, 0, 0)
+			_, _ = b.Write(Replay(want))
+			got := Capture(b, 40, 10, 0, 0)
 
 			check := func(what string, w, g any) {
 				t.Helper()
@@ -78,7 +78,7 @@ func TestSnapshotVTRebuildsThePane(t *testing.T) {
 			check("title", want.Title, got.Title)
 			check("pending wrap", want.PendingWrap, got.PendingWrap)
 			check("pending input", want.PendingInput, got.PendingInput)
-			// The modes SnapshotVT writes, and the screen switch.
+			// The modes Replay writes, and the screen switch.
 			for _, m := range append([]int{6, 47, 1047, 1049}, snapshotModes...) {
 				if want.Modes[m] != got.Modes[m] {
 					t.Errorf("mode %d: want %v got %v (want %v)", m, want.Modes[m], got.Modes[m], maps.Clone(want.Modes))

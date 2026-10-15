@@ -5758,3 +5758,25 @@ The controls were run on 2026-10-15 on branch `refactor/vt-private-osc`.
 | The focus request is dropped | `handleNvimNavigatorOSC`: the `nav(direction)` call cut | `TestNvimNavigationOSCNeedsForwardedKey` (focus stayed after a forwarded key and the pane's focus request) | **caught** |
 | A body without its number reaches the hook | `privateOSCNumber`: the prefix check cut | `TestPrivateOSC` and `TestGhosttyPrivateOSC` in `internal/vt` (no number, empty body) | **caught in `internal/vt`** |
 | ghostty passes the numbers it interprets to the hook | `GhosttyTerminal.handleOSC`: the `privateOSCNumber` check cut | `TestGhosttyPrivateOSC` (OSC 2, 7, 8, 9, 777 and a wrapped number) | **caught in `internal/vt`** |
+## The snapshot reads across builds after it moved to internal/vt/snapshot
+
+`TerminalState` and its capture, apply, pack, replay and history code moved
+from `internal/session` to `internal/vt/snapshot`. `internal/session` keeps
+aliases. Two e2e tests now take a second build:
+
+- `TestMixedVersionsReshapeOneTree`: the second client attaches after the
+  first printed a bold italic line, so it reads that line from the daemon's
+  snapshot. Run with v0.9.3 as the second client of a new daemon, as the
+  daemon and first client of a new second client, and as both clients of a
+  new daemon. All pass.
+- `TestRestoredPaneShowsItsHistoryAboveTheDivider`: `TUIOS_E2E_HISTORY_WRITER`
+  names the build that saves the history. v0.9.3 writing and the new build
+  reading passes, and the other way round passes.
+
+The controls were run on 2026-10-15 on branch `refactor/vt-snapshot-package`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The client does not apply the snapshot | `ApplyTerminalState`: the `snapshot.Apply` call cut, on the second client | `TestMixedVersionsReshapeOneTree` (the second client does not show the pane's snapshot) | **caught** |
+| The new build cannot read an older history file | `historyVersion` bumped by one in the reading build, v0.9.3 writing | `TestRestoredPaneShowsItsHistoryAboveTheDivider` (the restored pane does not show its history) | **caught** |
+| gob registers the moved type under its new name | `gob.Register(TerminalState{})` in place of `gob.RegisterName("github.com/Gaurav-Gosain/tuios/internal/session.TerminalState", ...)` | `TestTerminalStateKeepsItsGobName` in `internal/session` (the value is not sent under the old name). The e2e tests do not catch it: no path sends a `TerminalState` inside an interface today, so the name never crosses the wire there | **caught in `internal/session`** |

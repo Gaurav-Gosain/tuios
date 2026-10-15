@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
 )
 
 // What a client actually costs the wire.
@@ -94,7 +95,7 @@ func BenchmarkWireTerminalStatePacked(b *testing.B) {
 			for b.Loop() {
 				t0 := time.Now()
 				pty.terminalMu.RLock()
-				state, finish := beginTerminalState(pty.terminal, pty.terminal.Width(), pty.terminal.Height(), depth, 0, true)
+				state, finish := snapshot.CapturePacked(pty.terminal, pty.terminal.Width(), pty.terminal.Height(), depth, 0)
 				pty.terminalMu.RUnlock()
 				locked += time.Since(t0)
 				finish()

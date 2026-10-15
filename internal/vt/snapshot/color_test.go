@@ -1,4 +1,4 @@
-package session
+package snapshot
 
 import (
 	"image/color"

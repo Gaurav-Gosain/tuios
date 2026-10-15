@@ -112,7 +112,7 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 				}
 				// The check TUIClient.GetTerminalState runs on receipt, so
 				// this is the client's whole cost.
-				if err := payload.State.checkPacked(); err != nil {
+				if err := payload.State.CheckPacked(); err != nil {
 					b.Fatal(err)
 				}
 				em := vt.NewEmulator(benchWireCols, benchWireRows)
@@ -147,7 +147,8 @@ func BenchmarkSnapshotPack(b *testing.B) {
 		b.Run(tc.name+"/unpack", func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := unpackRows(packed.PackedScreen, packed.Styles); err != nil {
+				screen := TerminalState{Styles: packed.Styles, PackedScreen: packed.PackedScreen}
+				if err := screen.Unpack(); err != nil {
 					b.Fatal(err)
 				}
 			}

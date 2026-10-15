@@ -1,4 +1,4 @@
-package session
+package snapshot
 
 import (
 	"encoding/binary"
@@ -7,7 +7,7 @@ import (
 
 // The packed form of a snapshot's cells.
 //
-// A TerminalState carries its screen and history as [][]CellState, and gob
+// A State carries its screen and history as [][]CellState, and gob
 // writes every cell as a struct: a field tag, a length and the bytes for the
 // content, a tag and a value for the width, and the same again for each colour
 // set, then a terminator. That is about thirteen bytes for a plain letter, so
@@ -19,7 +19,7 @@ import (
 // a table once and each cell names its index, cells in one style are run
 // together, a plain letter is two bytes, and the blank tail of a row is left
 // off. The cells are the same on both sides: Pack and Unpack round trip
-// through the [][]CellState form, and ApplyTerminalState packs a snapshot that
+// through the [][]CellState form, and Apply packs a snapshot that
 // arrived as cells before it reads it, so every fidelity test that covers the
 // cell form covers this one too.
 //
@@ -29,17 +29,17 @@ import (
 // and a client that predates it never asks, so a newer daemon answers it with
 // cells too.
 //
-// The client keeps the reply packed. ApplyTerminalState, the only reader of
+// The client keeps the reply packed. Apply, the only reader of
 // the cells in production, walks the packed rows straight into the emulator:
 // unpacking first built every cell as a CellState and then turned each one
 // back into an emulator cell, which was most of what a restore allocated. A
 // reader that wants the cells, such as a test oracle, calls Unpack.
 
-// packedFormatVersion names the packed layout below. Bump it with any change
+// PackedFormatVersion names the packed layout below. Bump it with any change
 // to what pack writes or walkPacked reads: saved pane history
 // (scrollback_persist.go) stores packed rows on disk and takes its version
 // from this one.
-const packedFormatVersion = 1
+const PackedFormatVersion = 1
 
 // isBlank reports whether a cell is what a never-written cell looks like,
 // which is what a row's tail is trimmed down to. A wide rune's continuation is
@@ -52,8 +52,8 @@ func (c *CellState) isBlank() bool {
 // Pack moves the snapshot's cells into their packed form, if they are not
 // there already. Only the cell grids move; every scalar field stays where the
 // older reader expects it.
-func (st *TerminalState) Pack() {
-	if st == nil || st.isPacked() {
+func (st *State) Pack() {
+	if st == nil || st.Packed() {
 		return
 	}
 	p := newRowPacker()
@@ -64,17 +64,17 @@ func (st *TerminalState) Pack() {
 	st.Screen, st.Scrollback, st.MainScreen = nil, nil, nil
 }
 
-// isPacked reports whether the cells travelled packed. The style table is
+// Packed reports whether the cells are in the packed form. The style table is
 // never empty on a packed snapshot, since index zero is always the default.
-func (st *TerminalState) isPacked() bool {
+func (st *State) Packed() bool {
 	return len(st.Styles) > 0
 }
 
 // Unpack restores the cell grids from the packed form, for a reader that wants
-// Screen, Scrollback and MainScreen as cells. ApplyTerminalState does not need
+// Screen, Scrollback and MainScreen as cells. Apply does not need
 // it. A malformed blob is an error.
-func (st *TerminalState) Unpack() error {
-	if st == nil || !st.isPacked() {
+func (st *State) Unpack() error {
+	if st == nil || !st.Packed() {
 		return nil
 	}
 	var err error
@@ -91,12 +91,12 @@ func (st *TerminalState) Unpack() error {
 	return nil
 }
 
-// checkPacked reports whether every packed grid decodes, without keeping the
-// cells. The client runs it on receipt, so a malformed snapshot fails the
-// request as it did when the client unpacked there, instead of being applied
-// up to its first bad byte.
-func (st *TerminalState) checkPacked() error {
-	if st == nil || !st.isPacked() {
+// CheckPacked reports whether every packed grid decodes, without keeping the
+// cells. A client runs it on receipt, so a malformed snapshot fails the
+// request instead of being applied up to its first bad byte. A state that is
+// not packed passes.
+func (st *State) CheckPacked() error {
+	if st == nil || !st.Packed() {
 		return nil
 	}
 	nop := func(int, []packedCell) error { return nil }
@@ -231,7 +231,7 @@ var packedBlank = packedCell{content: " ", width: 1}
 // allocation of its own.
 //
 // A malformed blob stops at the first bad byte with an error. Rows already
-// handed out stay handed out, which is why the client runs checkPacked on
+// handed out stay handed out, which is why the client runs CheckPacked on
 // receipt: a request whose reply does not decode fails whole, before any row
 // of it reaches an emulator.
 func walkPacked(blob []byte, nStyles int, fn func(y int, cells []packedCell) error) error {

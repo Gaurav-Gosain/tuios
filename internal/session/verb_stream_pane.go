@@ -24,7 +24,7 @@ import (
 // From the daemon:
 //
 //	'S' snapshot: u64 seq, u16 cols, u16 rows, then bytes that paint the pane
-//	    on a fresh emulator of cols by rows (snapshotVT).
+//	    on a fresh emulator of cols by rows (snapshot.Replay).
 //	'O' output:   u64 seq, then the bytes the pane wrote. seq is the stream
 //	    position after the frame's last byte.
 //	'R' resize:   u64 seq, u16 cols, u16 rows: the pane changed size at seq.
@@ -546,7 +546,7 @@ func (ps *paneStream) recoverGap() error {
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
 	defer ps.dropSnap()
-	body := snapshotVT(st)
+	body := SnapshotVT(st)
 	payload := make([]byte, 12, 12+len(body))
 	binary.BigEndian.PutUint64(payload[0:8], uint64(st.Seq))
 	binary.BigEndian.PutUint16(payload[8:10], uint16(st.Width))

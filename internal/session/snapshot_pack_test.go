@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"encoding/gob"
 	"strings"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func TestPackedRowsRoundTrip(t *testing.T) {
 	want := packedGrid()
 	st := &TerminalState{Width: 4, Height: len(want), Screen: packedGrid(), Scrollback: packedGrid()}
 	got := throughWire(t, st, true)
-	if got.isPacked() {
+	if got.Packed() {
 		// The client keeps the wire form packed; a reader that wants the
 		// cells unpacks.
 		if err := got.Unpack(); err != nil {
@@ -99,41 +100,6 @@ func TestPackedRowsAreSmaller(t *testing.T) {
 	}
 }
 
-// TestPackedRowsRejectCorruption keeps a bad blob from becoming a bad screen.
-// Every truncation of a valid blob, and a blob pointing past its style table,
-// must unpack to an error and no rows, and fail the check the client runs on
-// receipt, so the request fails before any row of it is applied.
-func TestPackedRowsRejectCorruption(t *testing.T) {
-	st := &TerminalState{Screen: packedGrid()}
-	st.Pack()
-	good := st.PackedScreen
-	if err := st.checkPacked(); err != nil {
-		t.Fatalf("a valid snapshot failed the receipt check: %v", err)
-	}
-	for n := range len(good) {
-		rows, err := unpackRows(good[:n], st.Styles)
-		if err == nil && n > 0 {
-			t.Errorf("blob cut to %d of %d bytes unpacked without error", n, len(good))
-		}
-		if rows != nil {
-			t.Errorf("blob cut to %d bytes produced %d rows", n, len(rows))
-		}
-		cut := &TerminalState{Styles: st.Styles, PackedScreen: good[:n]}
-		if err := cut.checkPacked(); err == nil && n > 0 {
-			t.Errorf("blob cut to %d of %d bytes passed the receipt check", n, len(good))
-		}
-	}
-	if err := (&TerminalState{Styles: st.Styles[:1], PackedScreen: good}).checkPacked(); err == nil {
-		t.Error("a style index past the table passed the receipt check")
-	}
-	if _, err := unpackRows(good, st.Styles[:1]); err == nil {
-		t.Error("a style index past the table unpacked without error")
-	}
-	if _, err := unpackRows([]byte{0xff, 0xff, 0xff}, nil); err == nil {
-		t.Error("a row count with no rows unpacked without error")
-	}
-}
-
 // TestSnapshotIsPackedOnlyOnRequest is the compatibility contract over a real
 // daemon: a request that asks for the packed form gets it and nothing else,
 // and a request that does not, which is what every older client sends, gets
@@ -152,7 +118,7 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTerminalState: %v", err)
 	}
-	if !st.isPacked() || st.Screen != nil {
+	if !st.Packed() || st.Screen != nil {
 		t.Fatalf("the client returned styles=%d screen rows=%d; the reply should stay packed", len(st.Styles), len(st.Screen))
 	}
 	em := vt.NewEmulator(st.Width, st.Height)
@@ -186,7 +152,7 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 		if err := resp.ParsePayload(&payload); err != nil {
 			t.Fatal(err)
 		}
-		if got := payload.State.isPacked(); got != tc.packed {
+		if got := payload.State.Packed(); got != tc.packed {
 			t.Fatalf("%s: the reply is packed=%v (styles=%d, screen rows=%d), want packed=%v", tc.name, got, len(payload.State.Styles), len(payload.State.Screen), tc.packed)
 		}
 		if err := payload.State.Unpack(); err != nil {
@@ -277,12 +243,12 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 	if err := decodePayload(sent, &got); err != nil {
 		t.Fatalf("a client with the Packed fields could not read the older answer: %v", err)
 	}
-	if got.State.isPacked() {
+	if got.State.Packed() {
 		t.Fatalf("an answer carrying cells was read as packed (styles=%d)", len(got.State.Styles))
 	}
 	// The client applies such an answer by packing it first. The receipt
 	// check has nothing to check on it.
-	if err := got.State.checkPacked(); err != nil {
+	if err := got.State.CheckPacked(); err != nil {
 		t.Fatalf("the receipt check failed an answer that carried cells: %v", err)
 	}
 	var applied TerminalStatePayload
@@ -307,5 +273,20 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 				t.Errorf("row %d col %d: %+v, want %+v", y, x, got.State.Screen[y][x], rows[y][x])
 			}
 		}
+	}
+}
+
+// TestTerminalStateKeepsItsGobName pins the name gob sends for a
+// TerminalState held in an interface. It is the name gob.Register gave the
+// type while it was declared in this package. A build that sends another
+// name cannot exchange such a value with an older peer.
+func TestTerminalStateKeepsItsGobName(t *testing.T) {
+	var b bytes.Buffer
+	if err := gob.NewEncoder(&b).Encode(struct{ V any }{TerminalState{Width: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	const old = "github.com/Gaurav-Gosain/tuios/internal/session.TerminalState"
+	if !bytes.Contains(b.Bytes(), []byte(old)) {
+		t.Fatalf("a TerminalState in an interface is not sent as %q", old)
 	}
 }

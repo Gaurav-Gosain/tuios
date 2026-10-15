@@ -1,16 +1,18 @@
-package session
+package snapshot
 
 import (
 	"bytes"
 	"strconv"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// snapshotVT turns a TerminalState into the bytes that paint it on a fresh
-// xterm-compatible emulator of the same size. It is the SNAP frame of
-// stream-pane (verb_stream_pane.go): a client that is not written in Go
-// cannot read a TerminalState, and every terminal emulator can read bytes.
+// Replay turns a State into the bytes that paint it on a fresh
+// xterm-compatible emulator of the same size. A client that is not written in
+// Go cannot read a State, and every terminal emulator can read bytes. In tuios
+// it is the SNAP frame of stream-pane.
 //
 // What it reproduces:
 //
@@ -36,16 +38,16 @@ import (
 //     stream that follows the snapshot finishes it.
 //
 // The tuios-gpui renderer primes each pane with the same bytes, through
-// tuios gui-bridge (SnapshotVT), so one encoder serves both.
+// tuios gui-bridge (Replay), so one encoder serves both.
 //
 // What it does not: left and right margins, the cursor DECSC
 // saved, protected cells, the character REP repeats, the title stack and the
 // colours the guest set with OSC 4, 10, 11 and 12. They decide how later
 // output is painted, and a phone that misses them paints a rare sequence
 // differently until the next snapshot; the input it sends is the same.
-// SnapshotVT is snapshotVT for a state that may come packed, as one read off
-// the wire does. The state is not changed.
-func SnapshotVT(st *TerminalState) []byte {
+//
+// The state may be packed, as one read off the wire is. It is not changed.
+func Replay(st *State) []byte {
 	if st == nil {
 		return nil
 	}
@@ -53,10 +55,11 @@ func SnapshotVT(st *TerminalState) []byte {
 	if err := cp.Unpack(); err != nil {
 		return nil
 	}
-	return snapshotVT(&cp)
+	return replay(&cp)
 }
 
-func snapshotVT(st *TerminalState) []byte {
+// replay is Replay for a state that is not packed.
+func replay(st *State) []byte {
 	if st == nil {
 		return nil
 	}
@@ -167,7 +170,7 @@ func snapshotVT(st *TerminalState) []byte {
 			}
 		}
 	}
-	if len(st.PendingInput) <= maxPendingInput {
+	if len(st.PendingInput) <= vt.MaxPendingInput {
 		b.Write(st.PendingInput)
 	}
 	return b.Bytes()
@@ -354,7 +357,7 @@ func (w *vtWriter) kittyStack(stack []int) {
 }
 
 // charsets designates G0 to G3 and shifts GL, in the layout of
-// TerminalState.Charsets. US ASCII in G0 shifted into GL is the default and
+// State.Charsets. US ASCII in G0 shifted into GL is the default and
 // writes nothing.
 func charsets(b *bytes.Buffer, cs []int) {
 	if len(cs) != 6 {

@@ -24,7 +24,7 @@ func TestHistoryCaptureBudget(t *testing.T) {
 	before := allocated()
 	rows, _ := p.captureHistory(DefaultHistoryLines)
 	used := allocated() - before
-	if rows == nil || rows.history.Len() != DefaultHistoryLines {
+	if rows == nil || rows.Len() != DefaultHistoryLines {
 		t.Fatalf("the capture holds no history, want %d rows", DefaultHistoryLines)
 	}
 	const budget = 4 << 20

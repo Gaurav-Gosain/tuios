@@ -339,8 +339,8 @@ func runOversizedCut(t *testing.T, newDaemon, newClient func() vt.Terminal) {
 
 	mustFeed(t, daemon, "\x1b]2;"+strings.Repeat("a", 5<<20))
 	state := TerminalStateOf(daemon, daemon.Width(), daemon.Height(), 100, 0)
-	if n := len(state.PendingInput); n == 0 || n > maxPendingInput {
-		t.Fatalf("the snapshot carries %d bytes of the open sequence, want between 1 and %d", n, maxPendingInput)
+	if n := len(state.PendingInput); n == 0 || n > vt.MaxPendingInput {
+		t.Fatalf("the snapshot carries %d bytes of the open sequence, want between 1 and %d", n, vt.MaxPendingInput)
 	}
 	ApplyTerminalState(client, throughWire(t, state, true))
 	rest := strings.Repeat("b", 1024) + "\x07after"
@@ -451,7 +451,7 @@ func TestSnapshotVTCarriesTheTabsModesAndACut(t *testing.T) {
 
 		mustFeed(t, daemon, before)
 		st := TerminalStateOf(daemon, daemon.Width(), daemon.Height(), 100, 0)
-		mustFeed(t, client, string(snapshotVT(st)))
+		mustFeed(t, client, string(SnapshotVT(st)))
 		mustFeed(t, daemon, after)
 		mustFeed(t, client, after)
 		for y := range daemon.Height() {

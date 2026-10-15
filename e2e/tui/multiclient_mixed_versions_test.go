@@ -2,8 +2,10 @@ package tuie2e
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -20,6 +22,12 @@ import (
 //	TUIOS_E2E_MIX_DAEMON  the daemon, which also creates the session
 //	TUIOS_E2E_MIX_A       the first client
 //	TUIOS_E2E_MIX_B       the second client
+//
+// The second client attaches after the first has printed a styled line, so it
+// reads that line from the daemon's snapshot of the pane. The snapshot crosses
+// the wire as gob, and its type moved from internal/session to
+// internal/vt/snapshot. A client and a daemon on each side of the move must
+// still read each other's snapshots, styles included.
 //
 // A mixed pair is last-writer-wins for the older client's pushes, as it was
 // before the op, so a round where the screens differ for a moment is logged
@@ -59,7 +67,26 @@ func TestMixedVersionsReshapeOneTree(t *testing.T) {
 	newWindow(t, a)
 	waitWindowCount(t, a, 2, "the split on the first client")
 	enableTiling(t, a)
+	enterTerminalMode(t, a)
+	runInShell(t, a, `printf '\033[1;3mSNAP-%s-MARK\033[0m\n' $((6*7))`, "SNAP-42-MARK", shellTimeout)
+	windowManagementMode(t, a)
 	b := attachWith(t, base, name, "TUIOS_E2E_MIX_B")
+	if err := b.WaitForText("SNAP-42-MARK", bootTimeout); err != nil {
+		t.Fatalf("the second client does not show the pane's snapshot: %v\n%s", err, b.Snapshot())
+	}
+	scr := b.Screen()
+	_, rows := scr.Size()
+	for y := range rows {
+		line := scr.Line(y)
+		if i := strings.Index(line, "SNAP-42-MARK"); i >= 0 {
+			// The frame around the pane is drawn in runes of more than one
+			// byte, so the column is counted in runes.
+			if c := scr.Cell(utf8.RuneCountInString(line[:i]), y); !c.Bold || !c.Italic {
+				t.Errorf("the snapshot lost the line's style: %+v", c)
+			}
+			break
+		}
+	}
 	withBinary("TUIOS_E2E_MIX_DAEMON", func() { waitForSettledGeometryIn(t, base, name, 2) })
 
 	keys := [][2]string{{">", "R"}, {"R", "<"}, {">", "<"}, {"R", "R"}, {">R", "R<"}}

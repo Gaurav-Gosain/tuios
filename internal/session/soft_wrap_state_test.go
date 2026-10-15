@@ -117,14 +117,3 @@ func TestApplyTerminalStateCarriesWraps(t *testing.T) {
 		}
 	}
 }
-
-// The bitset survives a trip through its own encoding.
-func TestWrapBitsRoundTrip(t *testing.T) {
-	flags := []bool{true, false, false, true, false, false, false, false, true, true}
-	if got := wrapFlags(wrapBits(flags), len(flags)); !sameFlags(got, flags) {
-		t.Errorf("round trip %v, want %v", got, flags)
-	}
-	if wrapBits(make([]bool, 20)) != nil {
-		t.Error("no flag set should put nothing on the wire")
-	}
-}

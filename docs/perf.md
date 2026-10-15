@@ -671,7 +671,7 @@ with a thousand rows of history behind it cost 123 ms.
 
 ### What moved
 
-**The snapshot's cells travel packed** (`snapshot_pack.go`). A style table
+**The snapshot's cells travel packed** (`internal/vt/snapshot/pack.go`). A style table
 once, cells in one style run together, two bytes per plain letter, blank row
 tails left off. Negotiated per request with `GetTerminalStatePayload.Packed`,
 so no protocol bump: a daemon that predates the field answers with cells and a
@@ -717,7 +717,7 @@ gets this part too, because it does not depend on the packed form.
 `*uv.Cell` for every cell, and both emulators copy what they are handed. One
 cell now serves a whole snapshot.
 
-Those two, with the pooled rows in `TerminalStateOf`, are what the daemon side
+Those two, with the pooled rows in `snapshot.Capture`, are what the daemon side
 gained. Building and encoding one snapshot in the cell form is what an older
 client is still answered with, and its allocations are:
 
@@ -1417,7 +1417,7 @@ Keystroke to render signal on a quiet local pane running `cat` (60 keys a run,
 significant (p=0.23, p=0.57). The coalescer adds at most one goroutine handoff.
 
 **A snapshot is applied straight from its packed form** (`session.go`,
-`snapshot_pack.go`, `tuiclient.go`). The client asked for packed cells, unpacked
+`internal/vt/snapshot/pack.go`, `tuiclient.go`). The client asked for packed cells, unpacked
 them into `[][]CellState`, and `ApplyTerminalState` then turned each `CellState`
 back into an emulator cell and resolved its style once per cell. The client now
 keeps the reply packed and only checks on receipt that every row decodes, so a
