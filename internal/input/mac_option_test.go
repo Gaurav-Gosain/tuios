@@ -78,12 +78,13 @@ func TestMacOptionChordsReachTheirBinding(t *testing.T) {
 	}
 }
 
-// A composed character with no modifier reported is text by default. Nothing
-// in the event says Option was held: £ is Option and 3 on a US layout and
-// Shift and 3 on a UK one, where the guess switched to workspace 3 instead of
-// typing £ (issue #746). keybindings.option_glyphs = "bind" opts back into the
-// guess, "type" turns the Alt-bit form off as well (issue #566), and
-// keyboard_layout = "other" turns off the US table behind both.
+// A composed character with no modifier reported says nothing about Option:
+// £ is Option and 3 on a US layout and Shift and 3 on a UK one, where the
+// guess switched to workspace 3 instead of typing £ (issue #746). The default,
+// option_glyphs = "auto", guesses only on a US or ABC Mac layout, or when
+// keyboard_layout = "us" says so. "bind" always guesses, "alt" never does,
+// "type" turns the Alt-bit form off as well (issue #566), and
+// keyboard_layout = "other" turns off the US table behind all of them.
 func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 	onDarwin(t)
 	keys := []struct {
@@ -98,17 +99,24 @@ func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 		{tea.KeyPressMsg{Code: '£', Mod: tea.ModAlt}, true, "switch_workspace_3", false},
 		{tea.KeyPressMsg{Code: 'π', Mod: tea.ModAlt}, false, "terminal_prev_window", false},
 	}
+	const us, uk = true, false
 	for _, tc := range []struct {
+		macUS          bool
 		layout, glyphs string
 		bare, alt      bool
 	}{
-		{"", "", false, true},
-		{"", config.OptionGlyphsAlt, false, true},
-		{"", config.OptionGlyphsBind, true, true},
-		{"", config.OptionGlyphsType, false, false},
-		{config.KeyboardLayoutOther, config.OptionGlyphsBind, false, false},
-		{config.KeyboardLayoutOther, "", false, false},
+		{uk, "", "", false, true},
+		{us, "", "", true, true},
+		{uk, "", config.OptionGlyphsAuto, false, true},
+		{us, "", config.OptionGlyphsAuto, true, true},
+		{uk, config.KeyboardLayoutUS, config.OptionGlyphsAuto, true, true},
+		{us, config.KeyboardLayoutOther, config.OptionGlyphsAuto, false, false},
+		{us, "", config.OptionGlyphsAlt, false, true},
+		{uk, "", config.OptionGlyphsBind, true, true},
+		{us, "", config.OptionGlyphsType, false, false},
+		{us, config.KeyboardLayoutOther, config.OptionGlyphsBind, false, false},
 	} {
+		restore := config.ForceMacLayoutUS(tc.macUS)
 		cfg := config.DefaultConfig()
 		cfg.Keybindings.KeyboardLayout = tc.layout
 		cfg.Keybindings.OptionGlyphs = tc.glyphs
@@ -127,14 +135,15 @@ func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 				lookup = registry.GetAction
 			}
 			if got := lookupAction(nil, k.msg, lookup); got != want {
-				t.Errorf("layout %q, option_glyphs %q: %q (mod %v) resolved to %q, want %q",
-					tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, want)
+				t.Errorf("US Mac %v, layout %q, option_glyphs %q: %q (mod %v) resolved to %q, want %q",
+					tc.macUS, tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, want)
 			}
 			if got := optionGlyphsApply(k.msg, tc.layout, tc.glyphs); got != runs {
-				t.Errorf("layout %q, option_glyphs %q: optionGlyphsApply(%q, mod %v) = %v, want %v",
-					tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, runs)
+				t.Errorf("US Mac %v, layout %q, option_glyphs %q: optionGlyphsApply(%q, mod %v) = %v, want %v",
+					tc.macUS, tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, runs)
 			}
 		}
+		restore()
 	}
 }
 

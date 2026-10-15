@@ -3281,8 +3281,10 @@ Terminal.app with Option on "Normal", iTerm2 with Esc+ on US and on French
 AZERTY, and Kitty protocol reports for AZERTY and for a composing Option key.
 `TUIOS_E2E_PLATFORM=darwin` puts tuios on its macOS defaults and its macOS key
 paths. The default was `option_glyphs = "bind"` when these controls ran. Since
-#746 the default is `"alt"`, and the tests that send a bare composed character
-set `"bind"` themselves. `"type"` is the opt-in for #566. Every test
+#746 the default is `"auto"`, which reads the Mac's keyboard layout.
+`TUIOS_E2E_MAC_INPUT_SOURCE` fakes that layout. The other tests that send a
+bare composed character set `"bind"` themselves. `"type"` is the opt-in for
+#566. Every test
 that says a key does nothing also presses a key that does something, in the
 same session. Each control below cut one piece of wiring, built a binary, and
 ran the named test against it, on 2026-10-08 on branch
@@ -3291,8 +3293,10 @@ ran the named test against it, on 2026-10-08 on branch
 | Control: what was cut | Test | Where it failed |
 | --- | --- | --- |
 | `bindingKeys` asks for a composed character's chord as a plain key, not in the Option-glyph tier | `TestComposedOptionCharacterReachesThePane` | the shell never prints `x2•¡y` |
-| `expandInto` skips the `OptionGlyphKey` claim | `TestNormalOptionCharacterSwitchesWorkspaceByDefault` (now `...WithBind`, and the claim is `BareOptionGlyphKey`) | the default config of the time leaves the session on workspace 1 for `£`, want 3 |
+| `expandInto` skips the `OptionGlyphKey` claim | `TestNormalOptionCharacterSwitchesWorkspaceByDefault` (now `TestBareOptionCharacterFollowsTheMacLayout`) | the default config of the time leaves the session on workspace 1 for `£`, want 3 |
 | `bindingKeys` never asks for the US-layout tier | `TestEscPlusOptionChordsOnAUSLayout` | ESC # leaves the session on workspace 1, want 3 |
+| `expandInto` skips the `BareOptionGlyphKey` claim (2026-10-15, #746) | `TestBareOptionCharacterFollowsTheMacLayout/US` | `e2e-opt-normal-us is on workspace 1, want 3` |
+| `lookupKey` answers from the bare tier whatever the Mac layout is (2026-10-15, #746) | `TestBareOptionCharacterFollowsTheMacLayout/British` | the typed `£` never reaches the shell as `x2£y` |
 | `expandInto` ignores `keyboard_layout = "other"` | `TestAzertyEscPlusWithLayoutOther` | ESC & moves the pane to workspace 7 |
 | `expandInto` claims a US alias as a plain key | `TestOwnBindingBeatsTheUSAlias` | ESC & moves the pane to workspace 7, want workspace 2 |
 | `bindingKeys` asks for the US-layout tier without `KeyFitsUSLayout` | `TestAzertyKittyReportsPickTheRightWorkspace` | AZERTY Option and the 1 key moves the pane to workspace 7 |

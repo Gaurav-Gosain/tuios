@@ -856,13 +856,14 @@ type KeybindingsConfig struct {
 	// layout under the Kitty protocol is read from that report either way.
 	KeyboardLayout string `toml:"keyboard_layout,omitempty"`
 	// OptionGlyphs is what a character composed with macOS Option does.
-	// "alt" (the default when empty) runs the Option binding it stands for on
-	// a US layout only when the terminal reports the Alt bit with it, and
-	// sends a bare character to the pane: £ is Shift and 3 on a UK keyboard
-	// (issue #746). "bind" also runs it for a bare character, which
-	// Terminal.app and iTerm2 send as they ship. "type" always sends it to the
-	// pane, for a user who composes with Option on purpose, such as the right
-	// Option key in WezTerm (issue #566).
+	// "alt" runs the Option binding it stands for on a US layout only when the
+	// terminal reports the Alt bit with it, and sends a bare character to the
+	// pane: £ is Shift and 3 on a UK keyboard (issue #746). "bind" also runs
+	// it for a bare character, which Terminal.app and iTerm2 send as they
+	// ship. "type" always sends it to the pane, for a user who composes with
+	// Option on purpose (issue #566). "auto" (the default when empty) is
+	// "bind" when keyboard_layout is "us" or, with keyboard_layout unset, the
+	// Mac's input source is US or ABC, and "alt" otherwise.
 	OptionGlyphs     string              `toml:"option_glyphs,omitempty"`
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`

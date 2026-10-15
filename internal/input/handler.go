@@ -381,14 +381,14 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A chord that only resolved because tuios recognised the character macOS
 	// composed out of it is proof the Option key is not being sent as Alt. With
 	// option_glyphs = "type" the user composes on purpose (issue #566), with
-	// keyboard_layout = "other" the US table is off, and by default a bare
-	// character is text (issue #746): the character went to the pane, and
-	// there is nothing to say.
-	if optionGlyphsApply(msg, o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
-		chords := composedChords(msg, o.HostBaseCode(msg))
-		if len(chords) > 0 && chords[len(chords)-1] != msg.Keystroke() {
-			o.NoteComposedOptionChord(chords[len(chords)-1])
-		}
+	// keyboard_layout = "other" the US table is off, and a bare character is
+	// text unless the config or the Mac's layout says US (issue #746): the
+	// character went to the pane, and there is nothing to say. The chords come
+	// first, so the config is asked only for a composed character.
+	if chords := composedChords(msg, o.HostBaseCode(msg)); len(chords) > 0 &&
+		chords[len(chords)-1] != msg.Keystroke() &&
+		optionGlyphsApply(msg, o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
+		o.NoteComposedOptionChord(chords[len(chords)-1])
 	}
 	// The other way a macOS terminal loses an Option chord, and the one that
 	// used to pass in silence: Option+Left and Option+Right arriving as the
@@ -731,15 +731,12 @@ func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 	if pos, ok := baseLayoutKey(msg); ok && config.IsLeaderPress(pos, s.LeaderKey) {
 		return true
 	}
-	if !optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs) {
-		return false
-	}
 	if base == 0 {
 		base = msg.BaseCode
 	}
 	for _, chord := range composedChords(msg, base) {
 		if config.IsLeaderPress(chord, s.LeaderKey) {
-			return true
+			return optionGlyphsApply(msg, s.KeyboardLayout, s.OptionGlyphs)
 		}
 	}
 	return false

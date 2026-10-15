@@ -177,9 +177,10 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 	}
 	// An Option chord the terminal sent as the character a US layout composes
 	// for it is looked up by the chord. With the Alt bit it is in one tier,
-	// and with no modifier in another, which only "bind" fills: a bare
-	// character can be text on another layout (issue #746). "type" leaves
-	// both empty, so the character goes to the pane.
+	// and with no modifier in another, which "bind" and "auto" fill: a bare
+	// character can be text on another layout (issue #746), so under "auto"
+	// lookupKey answers from it only on a US Mac layout. "type" leaves both
+	// empty, so the character goes to the pane.
 	for _, key := range plain {
 		if !strings.HasPrefix(key, "alt+") {
 			continue
@@ -187,7 +188,7 @@ func (r *KeybindRegistry) expandInto(keyMap map[string]string, action string, ke
 		if OptionGlyphRuns(kb.KeyboardLayout, kb.OptionGlyphs, true) {
 			claim(OptionGlyphKey(key))
 		}
-		if OptionGlyphRuns(kb.KeyboardLayout, kb.OptionGlyphs, false) {
+		if bareGlyphTierFilled(kb.KeyboardLayout, kb.OptionGlyphs) {
 			claim(BareOptionGlyphKey(key))
 		}
 	}
@@ -383,9 +384,34 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 		return keyMap[strings.ToLower(key)]
 	}
 
+	// A bare composed character under option_glyphs = "auto" runs its chord
+	// only on a US Mac layout. Asked here, not when the tier is filled, so the
+	// layout is read the first time such a character arrives and never at
+	// startup.
+	if strings.HasPrefix(key, bareGlyphTier) {
+		kb := &r.config.Keybindings
+		if !OptionGlyphRuns(kb.KeyboardLayout, kb.OptionGlyphs, false) {
+			return ""
+		}
+	}
+
 	// For everything else (compound keys), normalize to lowercase
 	normalizedKey := strings.ToLower(key)
 	return keyMap[normalizedKey]
+}
+
+// bareGlyphTierFilled reports whether the registry fills the bare
+// Option-glyph tier: for "bind", and for "auto" unless keyboard_layout is
+// "other". Whether "auto" answers from it is up to lookupKey.
+func bareGlyphTierFilled(layout, glyphs string) bool {
+	if layout == KeyboardLayoutOther {
+		return false
+	}
+	switch glyphs {
+	case OptionGlyphsBind, OptionGlyphsAuto, "":
+		return true
+	}
+	return false
 }
 
 // GetKeys returns the keys bound to an action in the first section below that

@@ -125,7 +125,7 @@ func MacOptionAdvice(host HostTerminal, chord string) string {
 	default:
 		fix = "turn on your terminal's \"Option as Meta/Alt\" setting"
 	}
-	advice := "Option is composing a character, so " + chord + " never reaches tuios: " + fix
+	advice := "Your Option key types characters, so " + chord + " may not reach tuios. To send Option as Alt: " + fix
 	if InsideMultiplexer() {
 		advice += " (and let the outer multiplexer pass the chord through)"
 	}

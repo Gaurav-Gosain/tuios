@@ -188,13 +188,13 @@ tuios ignores a key that it cannot read and loads the rest of the file. The acti
 ```toml
 [keybindings]
 keyboard_layout = "us"   # us, other
-option_glyphs = "alt"    # alt, bind, type
+option_glyphs = "auto"   # auto, alt, bind, type
 ```
 
 | Key | Default | What it does |
 |---|---|---|
 | `keyboard_layout` | `us` | `us` lets a binding on `opt+shift+7` also match `opt+&`, as on a US keyboard. Set `other` for AZERTY, QWERTZ and other layouts. A key that the terminal reports through the Kitty keyboard protocol uses that report. |
-| `option_glyphs` | `alt` | What a character that macOS Option typed does. `alt` runs the Option binding that the character stands for on a US layout only when the terminal also reports Alt. A character with no modifier goes to the pane. `bind` also runs the binding for a character with no modifier. `type` always sends the character to the pane. |
+| `option_glyphs` | `auto` | What a character that macOS Option typed does. `auto` reads the keyboard layout of the Mac one time. On a US or ABC layout it runs the Option binding for the character. On other layouts the character goes to the pane. A `keyboard_layout` that you set overrides the layout of the Mac. `alt` runs the binding only when the terminal also reports Alt. `bind` always runs it. `type` always sends the character to the pane. A tuios that serves SSH or web clients uses the layout of the Mac it runs on. |
 
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).

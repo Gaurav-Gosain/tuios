@@ -1414,34 +1414,44 @@ To change the keys, set `terminal_scroll_up`, `terminal_scroll_down`,
 
 Option is a compose key on macOS unless the terminal is told otherwise. An
 Option chord then arrives as a character, not as Alt. Terminal.app and iTerm2
-work like this until you change their settings. Option+3 then types `£` and
-does not switch to workspace 3.
+work like this until you change their settings.
 
-A typed character always goes to the pane. On a UK keyboard, Shift+3 types
-`£`, the same character that Option+3 types on a US keyboard. tuios cannot
-tell the two keys apart, so it does not guess.
+The same character can come from two keys. On a US keyboard, Option+3 types
+`£`. On a UK keyboard, Shift+3 types `£`. tuios reads the keyboard layout of
+the Mac when the first such character arrives:
 
-To use the `opt+` bindings, set your terminal to send Option as Alt. See
-[The fix](#the-fix).
+- On a US or ABC layout, tuios runs the `opt+` binding for the character.
+  Option+3 types `£` and switches to workspace 3.
+- On any other layout, the character goes to the pane. tuios also does this
+  when it cannot read the layout.
+
+tuios reads the layout one time. If you change the layout while tuios runs,
+restart tuios. A tuios that serves SSH or web clients from a Mac uses the
+layout of that Mac.
+
+`keyboard_layout` overrides the layout that tuios reads. With
+`keyboard_layout = "us"`, tuios runs the binding. With
+`keyboard_layout = "other"`, the character goes to the pane.
+
+To use the `opt+` bindings on every layout, set your terminal to send Option
+as Alt. See [The fix](#the-fix).
 
 Some terminals, such as Ghostty and kitty, send the character and also report
-Alt. tuios then runs the `opt+` binding for the character that a US layout
-composes. For example, Option+8 types `•` and switches to workspace 8.
+Alt. tuios then runs the `opt+` binding on every layout. For example,
+Option+8 types `•` and switches to workspace 8.
 
-You can also tell tuios to read every Option character as its chord on a US
-layout. Do this only on a US keyboard:
+To set the behaviour yourself, use `option_glyphs`:
 
 ```toml
 [keybindings]
-option_glyphs = "bind"   # the default is "alt"
+option_glyphs = "auto"   # auto, alt, bind, type
 ```
 
-If you use Option to type characters such as `#`, `•` or `{`, set
-`option_glyphs = "type"`. tuios then sends the character to the pane, also
-when the terminal reports Alt.
-
-With `keyboard_layout = "other"`, tuios does not use the US characters, and
-the characters go to the pane.
+- `auto` uses the layout of the Mac, as above. This is the default.
+- `alt` runs the binding only when the terminal reports Alt.
+- `bind` always runs the binding. Use it only on a US keyboard.
+- `type` always sends the character to the pane. Use it if you type
+  characters such as `#`, `•` or `{` with Option.
 
 Two kinds of chord cannot be read:
 
@@ -1479,9 +1489,9 @@ keybind = alt+left=unbind
 keybind = alt+right=unbind
 ```
 
-tuios shows this on screen the first time a chord does not arrive as Alt.
-It cannot show it for a character with no modifier, because that character
-can be text.
+tuios shows this on screen one time, when an Option chord arrives as a
+character and not as Alt. On a layout other than US or ABC it does not show
+it, because the character can be text.
 
 ### One Option key for typing
 
@@ -1523,8 +1533,8 @@ The prefix stays armed for half a second after a command worth repeating, so
 tmux's `repeat-time`, and `appearance.prefix_repeat_time` changes it. Zero
 turns it off.
 
-Workspace switching on `opt+1` to `opt+9` works with no configuration in a
-terminal that reports Alt with the character, such as Ghostty and kitty. In
-Terminal.app and iTerm2 as they ship, Option+1 types `¡` and does not switch.
-Set the terminal to send Option as Alt. On a US keyboard, you can also set
-`option_glyphs = "bind"`.
+Workspace switching on `opt+1` to `opt+9` works with no configuration on a
+US or ABC keyboard layout. It also works in a terminal that reports Alt with
+the character, such as Ghostty and kitty. On other layouts in Terminal.app
+and iTerm2, Option+1 types its character and does not switch. Set the
+terminal to send Option as Alt.

@@ -396,8 +396,8 @@ func OptionGlyphKey(chord string) string { return optionGlyphTier + chord }
 // BareOptionGlyphKey is the registry key that matches chord when it arrives as
 // the character macOS composed for it with no modifier at all. Nothing in such
 // an event says Option was held: £ is Option and 3 on a US layout and Shift
-// and 3 on a UK one (issue #746). The registry fills this tier only when
-// keybindings.option_glyphs is "bind", so by default the character is text.
+// and 3 on a UK one (issue #746). The registry fills this tier for "bind",
+// and for "auto" answers from it only on a US or ABC Mac layout.
 func BareOptionGlyphKey(chord string) string { return bareGlyphTier + chord }
 
 // KeyFitsUSLayout reports whether a key event is consistent with a US layout,
@@ -441,9 +441,14 @@ var KeyboardLayouts = []string{KeyboardLayoutUS, KeyboardLayoutOther}
 
 // Option glyph values for keybindings.option_glyphs.
 const (
+	// OptionGlyphsAuto is "bind" on a Mac whose keyboard layout is US or
+	// ABC, and "alt" on any other layout or when the layout cannot be read.
+	// keybindings.keyboard_layout, when set, decides instead: "us" is "bind"
+	// and "other" turns the tables off. The default.
+	OptionGlyphsAuto = "auto"
 	// OptionGlyphsAlt reads a character composed with Option as the Option
 	// binding it stands for on a US layout only when the terminal reports the
-	// Alt modifier with it. A bare character is text. The default.
+	// Alt modifier with it. A bare character is text.
 	OptionGlyphsAlt = "alt"
 	// OptionGlyphsType sends a character composed with Option to the pane.
 	OptionGlyphsType = "type"
@@ -455,17 +460,38 @@ const (
 )
 
 // OptionGlyphModes is every value keybindings.option_glyphs accepts.
-var OptionGlyphModes = []string{OptionGlyphsAlt, OptionGlyphsType, OptionGlyphsBind}
+var OptionGlyphModes = []string{OptionGlyphsAuto, OptionGlyphsAlt, OptionGlyphsType, OptionGlyphsBind}
 
 // OptionGlyphRuns reports whether a character macOS composes for an Option
 // chord runs that chord's binding under the config. alt is whether the
 // terminal reported the Alt modifier with the character. The registry fills
 // the glyph tiers by the same rule.
+//
+// Under "auto" a bare character asks for the Mac's layout, once per process
+// (see macLayoutIsUS). Call it only for a composed character.
 func OptionGlyphRuns(layout, glyphs string, alt bool) bool {
 	if layout == KeyboardLayoutOther || glyphs == OptionGlyphsType {
 		return false
 	}
-	return alt || glyphs == OptionGlyphsBind
+	if alt {
+		return true
+	}
+	switch glyphs {
+	case OptionGlyphsBind:
+		return true
+	case OptionGlyphsAlt:
+		return false
+	}
+	return bareGlyphsAuto(layout)
+}
+
+// bareGlyphsAuto is "auto" for a bare composed character: a keyboard_layout
+// the user set decides, and otherwise the Mac's layout.
+func bareGlyphsAuto(layout string) bool {
+	if layout == KeyboardLayoutUS {
+		return true
+	}
+	return macLayoutIsUS()
 }
 
 // NormalizeKey converts a key string to its canonical form for the current platform

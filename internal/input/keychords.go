@@ -37,9 +37,9 @@ const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 //   - The Option-glyph tiers: the chord a macOS Option character stands for
 //     (see composedChords). config.OptionGlyphKey when the terminal reported
 //     the Alt bit, config.BareOptionGlyphKey when it reported no modifier.
-//     The registry fills the bare tier only when keybindings.option_glyphs is
-//     "bind", and neither when it is "type" or keyboard_layout is "other".
-//     The character is then text that goes to the pane.
+//     The bare tier answers under keybindings.option_glyphs = "bind", and
+//     under "auto" on a US Mac layout. Neither answers under "type" or
+//     keyboard_layout = "other". The character is then text for the pane.
 //
 // base is the base-layout key the host sent with msg. The input path reads a
 // key without it (see readKey), so the caller hands it back here.
@@ -119,8 +119,9 @@ func composedChords(msg tea.KeyPressMsg, base rune) []string {
 
 // optionGlyphsApply reports whether the config lets the composed Option
 // character in msg stand for its chord (see config.OptionGlyphRuns). A
-// character with no Alt bit only does under option_glyphs = "bind". The
-// registry applies the same rule when it fills the Option-glyph tiers.
+// character with no Alt bit does under option_glyphs = "bind", and under
+// "auto" on a US Mac layout. The registry applies the same rule. Call it only
+// for a composed character: under "auto" the first call reads the layout.
 func optionGlyphsApply(msg tea.KeyPressMsg, layout, glyphs string) bool {
 	return config.OptionGlyphRuns(layout, glyphs, msg.Mod&tea.ModAlt != 0)
 }
@@ -173,7 +174,7 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 // composes for and is left alone. Recognising one is not running it:
 // bindingKeys asks for the chord only in the tiers that hold under an
 // assumption, and a bare character is text unless keybindings.option_glyphs
-// is "bind".
+// is "bind", or "auto" on a US Mac layout.
 //
 // Darwin only. Every one of these glyphs is an ordinary typed character on some
 // other layout (£ is Shift+3 on a UK keyboard), so doing this anywhere else
