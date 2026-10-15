@@ -34,7 +34,7 @@ const (
 )
 
 // verbScreenshot renders one window and writes the file.
-func (d *Daemon) verbScreenshot(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
 		Window     string `json:"window"`
@@ -68,7 +68,7 @@ func (d *Daemon) verbScreenshot(_ *connState, params json.RawMessage) (any, *ver
 		return nil, mapResolveErr(err, sess)
 	}
 
-	settings, warnings := d.screenshotSettings(sess, p.Theme)
+	settings, warnings := d.screenshotSettings(cs, sess, p.Theme)
 	if p.Format != "" {
 		settings.Format, _ = shot.ParseFormat(p.Format)
 	}
@@ -141,8 +141,8 @@ func warningsOrEmpty(w []string) []string {
 // screenshotSettings resolves the [screenshot] section for a session. The
 // session's overrides win, then config.toml, then the defaults: the order the
 // client draws by. See sessionOptions.
-func (d *Daemon) screenshotSettings(sess *Session, themeOverride string) (capture.Settings, []string) {
-	opts := d.optionsFor(sess)
+func (d *Daemon) screenshotSettings(cs *connState, sess *Session, themeOverride string) (capture.Settings, []string) {
+	opts := d.optionsFor(cs, sess)
 	cfg := config.ScreenshotConfig{
 		Format:      opts.get("screenshot.format"),
 		Directory:   opts.get("screenshot.directory"),
@@ -171,16 +171,12 @@ func (d *Daemon) screenshotSettings(sess *Session, themeOverride string) (captur
 
 	themeID := themeOverride
 	if themeID == "" {
-		themeID = opts.get("appearance.theme")
+		themeID = opts.get(optionTheme)
 	}
-	switch themeID {
-	case theme.NoneID:
+	// No theme follows Omarchy where it is installed, as the client does.
+	themeID = followOmarchy(themeID)
+	if themeID == theme.NoneID {
 		themeID = ""
-	case "":
-		// No theme follows Omarchy where it is installed, as the client does.
-		if theme.OmarchyInstalled() {
-			themeID = theme.OmarchyID
-		}
 	}
 	glyphs := opts.get("appearance.glyphs")
 	s := capture.SettingsFrom(cfg, themeID, glyphs)

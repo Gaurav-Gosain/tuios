@@ -26,7 +26,7 @@ import (
 const maxThemeList = 100
 
 // verbListThemes reports the registered themes, and describes one when asked.
-func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Theme   string `json:"theme"`
@@ -64,7 +64,7 @@ func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *ver
 	// its own tint is not the attached client's.
 	if sess := d.findTargetSession(p.Session); sess != nil {
 		out["session"] = sess.Name()
-		if v, source, ok := d.optionsFor(sess).lookup("appearance.theme"); ok {
+		if v, source, ok := d.optionsFor(cs, sess).lookup("appearance.theme"); ok {
 			out["active"] = v
 			out["active_source"] = source
 		}

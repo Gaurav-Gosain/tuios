@@ -24,7 +24,7 @@ import (
 // rather than what the set asked for.
 
 // verbListGlyphs reports the glyph sets, and describes one when asked.
-func (d *Daemon) verbListGlyphs(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Glyphs  string `json:"glyphs"`
@@ -56,7 +56,7 @@ func (d *Daemon) verbListGlyphs(_ *connState, params json.RawMessage) (any, *ver
 
 	// One read of config.toml serves the whole request.
 	sess := d.findTargetSession(p.Session)
-	opts := d.optionsFor(sess)
+	opts := d.optionsFor(cs, sess)
 	if sess != nil {
 		out["session"] = sess.Name()
 		if v, source, ok := opts.lookup("appearance.glyphs"); ok {

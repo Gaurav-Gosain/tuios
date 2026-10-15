@@ -1512,7 +1512,7 @@ func init() {
 				{Name: "themes", Type: "[]string", Description: "Matching theme ids, capped at 100. truncated reports when the cap applied."},
 				{Name: "total", Type: "int", Description: "How many themes are registered in all."},
 				{Name: "matched", Type: "int", Description: "How many the filter matched, before the cap."},
-				{Name: "active", Type: "string", Description: "The theme this session is set to. Empty means no theme, which is the terminal's own colours."},
+				{Name: "active", Type: "string", Description: "The theme this session is set to. With no theme set, it is omarchy where Omarchy is installed, because the client follows Omarchy there. Elsewhere it is empty, which means the terminal's own colours."},
 				{Name: "active_source", Type: "string", Description: `"session" for a theme set on this session, "config" for one config.toml sets, "default" for the built-in.`, Accepted: []string{"session", "config", "default"}},
 				{Name: "themes_dir", Type: "string", Description: "Where a custom theme file goes. Writing <id>.json here registers it. No restart is needed."},
 				{Name: "problems", Type: "[]string", Description: "One line per theme file that could not be read, with the reason. Present only when a file is malformed."},

@@ -37,7 +37,7 @@ func TestDaemonScreenshotUsesThePaneBackground(t *testing.T) {
 			if tc.all != "" {
 				sess.SetOption("appearance.background", tc.all)
 			}
-			settings, _ := (&Daemon{}).screenshotSettings(sess, "")
+			settings, _ := (&Daemon{}).screenshotSettings(nil, sess, "")
 			palette, _ := capture.Palette(settings.ThemeID)
 			palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
 

@@ -94,7 +94,7 @@ func TestSetOptionValidatesBothHalves(t *testing.T) {
 // the client painted the theme.
 func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[appearance]\nbackground = \"theme\"\nanimations_enabled = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[appearance]\nbackground = \"theme\"\nanimations_enabled = false\n\n[notifications.agent]\ncommand = \"curl -H 'Authorization: Bearer s3cret' https://example.invalid\"\n"), 0o600); err != nil {
 		t.Fatalf("write the config: %v", err)
 	}
 	d, sp := startTestDaemonWith(t, &DaemonConfig{ConfigPath: path})
@@ -123,6 +123,21 @@ func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 	res = get("appearance.motion")
 	if res["value"] != "none" || res["source"] != "config" {
 		t.Errorf("value, source = %v, %v, want none, config from animations_enabled = false", res["value"], res["source"])
+	}
+
+	// A machine linked to this one reads no config file: config.toml holds
+	// command strings that can carry tokens, and get-option needs only the
+	// list capability on a link. It gets the session's override, then the
+	// default, as it did before the file was read.
+	link := dialLink(t, sp)
+	for _, key := range []string{"appearance.background", "notifications.agent.command"} {
+		res = result(t, link.call(t, `{"verb":"get-option","params":{"session":"read","key":"`+key+`"}}`))
+		if res["source"] != "default" {
+			t.Errorf("over a link, %s: value, source = %v, %v, want the default and nothing from config.toml", key, res["value"], res["source"])
+		}
+		if v, _ := res["value"].(string); strings.Contains(v, "s3cret") {
+			t.Errorf("over a link, %s leaked a config.toml value: %q", key, v)
+		}
 	}
 
 	result(t, c.call(t, `{"verb":"set-option","params":{"session":"read","key":"appearance.background","value":"off"}}`))

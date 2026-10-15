@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Option sources, as get-option reports them.
@@ -33,10 +34,18 @@ type sessionOptions struct {
 	lc   *config.LayeredConfig
 }
 
-// optionsFor makes the reader for sess, which may be nil.
-func (d *Daemon) optionsFor(sess *Session) sessionOptions {
+// optionsFor makes the reader for sess, which may be nil, on behalf of the
+// caller on cs, which may be nil for the daemon itself.
+//
+// A caller that came over a link reads no config file. get-option needs only
+// the list capability on a link, and config.toml holds command strings that
+// can carry tokens (notifications.agent.command,
+// appearance.selection.copy_command, launcher.gui_command). Such a caller gets
+// what it got before the file was read at all: the session's override, then
+// the default.
+func (d *Daemon) optionsFor(cs *connState, sess *Session) sessionOptions {
 	o := sessionOptions{sess: sess}
-	if d.configPath == "" {
+	if d.configPath == "" || (cs != nil && cs.viaLink) {
 		return o
 	}
 	lc, err := config.LoadLayered(d.configPath)
@@ -58,6 +67,14 @@ func (d *Daemon) optionsFor(sess *Session) sessionOptions {
 // lookup returns the value in effect for path and where it came from. A path
 // the registry does not carry and the session never set returns ok false.
 func (o sessionOptions) lookup(path string) (value, source string, ok bool) {
+	value, source, ok = o.lookupRaw(path)
+	if path == optionTheme {
+		value = followOmarchy(value)
+	}
+	return value, source, ok
+}
+
+func (o sessionOptions) lookupRaw(path string) (value, source string, ok bool) {
 	if o.sess != nil {
 		if v, set := o.sess.GetOption(path); set {
 			return v, optionSourceSession, true
@@ -71,6 +88,19 @@ func (o sessionOptions) lookup(path string) (value, source string, ok bool) {
 		return v, optionSourceConfig, true
 	}
 	return config.EffectiveDefault(opt), optionSourceDefault, true
+}
+
+// optionTheme is the theme option, whose empty value means something.
+const optionTheme = "appearance.theme"
+
+// followOmarchy is the theme an empty appearance.theme puts on screen: the
+// client follows Omarchy where it is installed, so no theme reads as omarchy
+// there. Anywhere else, and for any other name, the name stands.
+func followOmarchy(name string) string {
+	if name == "" && theme.OmarchyInstalled() {
+		return theme.OmarchyID
+	}
+	return name
 }
 
 // fromFile is the value the config files give path, when one of them sets it.

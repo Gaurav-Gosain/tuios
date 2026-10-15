@@ -336,7 +336,7 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 // (what is the dockbar position) fail on every session that never set it,
 // which is most of them. A caller cannot act on "not set" when what it wants
 // is the value in effect.
-func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbGetOption(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Key     string `json:"key"`
@@ -382,7 +382,7 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 			"source": source, "default": config.EffectiveDefault(opt), "option_type": opt.Type,
 		}, nil
 	}
-	if value, source, ok := d.optionsFor(sess).lookup(path); ok {
+	if value, source, ok := d.optionsFor(cs, sess).lookup(path); ok {
 		out := map[string]any{"type": "option", "key": path, "value": value, "source": source}
 		if known {
 			out["default"] = config.EffectiveDefault(opt)
