@@ -14,4 +14,4 @@ replace tuios.dev/progstatus v0.1.0 => ./progstatus
 
 replace tuios.dev/swatch v0.0.0-20261015114926-822f23f1e56f => ./swatch
 
-replace tuios.dev/vt v0.0.0-20261015124604-675c99cfce18 => ./vt
+replace tuios.dev/vt v0.0.0-20261015124654-40a0dd38b668 => ./vt

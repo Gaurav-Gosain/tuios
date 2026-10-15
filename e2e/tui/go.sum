@@ -84,5 +84,5 @@ tuios.dev/progstatus v0.1.0 h1:6d/rQpXJvZzDK9uxNKhchb6lKVep/8eng0jyNVCaVTI=
 tuios.dev/progstatus v0.1.0/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
 tuios.dev/swatch v0.0.0-20261015114926-822f23f1e56f h1:b80UOh6/z3So+6JCK6DVcTRC01SyBRjg/xXsORdydS8=
 tuios.dev/swatch v0.0.0-20261015114926-822f23f1e56f/go.mod h1:+YERlhpL1niy5V1gEFcr7KKkxpGUvmug1kiGJDiS4j4=
-tuios.dev/vt v0.0.0-20261015124604-675c99cfce18 h1:69d2cnl7QmjpiRfKgp9V9B9KNzU1xCpxnnnIvMnzQdQ=
-tuios.dev/vt v0.0.0-20261015124604-675c99cfce18/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
+tuios.dev/vt v0.0.0-20261015124654-40a0dd38b668 h1:KGftsrI06olsxqSr3Dc6HaWcvIJH7da6/T6WPJgoZjM=
+tuios.dev/vt v0.0.0-20261015124654-40a0dd38b668/go.mod h1:fKipZ0jUN3HNyKNIvijTji4y2caLJwqKPJm3R8ywWXU=
