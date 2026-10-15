@@ -5740,3 +5740,19 @@ Run on 2026-10-15 on macOS on branch `fix/drop-zone-stale-land-2`, from upstream
 | --- | --- | --- |
 | The whole fix (upstream `main`: the landing rectangle cached on the target and the edge only) | `TestTheDropZoneFollowsTheTreeUnderAHeldDrag/held-still` and `/after-a-motion`, both with "outline cell (0,28) of the landing rectangle {... X:0 Y:0 Width:30 Height:38} is "│" in {Kind:2 ... R:250 G:170 B:170}, want the border glyph "│" in the outline's ink {Kind:2 ... R:145 G:141 B:255}": the frame stayed on the half-height rectangle from before D closed, so row 28 kept the pane border's own ink, and kept it after the motion too | **caught** |
 | The `refreshDropZone` call in `ApplyBSPLayout` | The same two rows, with the same message | **caught** |
+## The navigator OSC reaches tuios through the emulator's private hook
+
+The emulator no longer knows OSC 7777. It hands any OSC number it does not
+interpret to `vt.Callbacks.PrivateOSC`, and `internal/terminal` reads the
+navigator's focus and state requests from there.
+`TestNvimNavigationOSCNeedsForwardedKey` now has its positive half: after the
+pane says it is active, a forwarded focus key reaches the pane, and the pane's
+focus request moves focus. Before this change no test failed when the hook was
+cut, because the two navigator tests only asserted that focus stays.
+
+The controls were run on 2026-10-15 on branch `refactor/vt-private-osc`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The hook is not wired | `internal/terminal/window.go`: the `PrivateOSC` callback matches OSC 7778, not 7777 | `TestNvimNavigationOSCNeedsForwardedKey` (the focus key never reached the active pane) | **caught** |
+| The focus request is dropped | `handleNvimNavigatorOSC`: the `nav(direction)` call cut | `TestNvimNavigationOSCNeedsForwardedKey` (focus stayed after a forwarded key and the pane's focus request) | **caught** |

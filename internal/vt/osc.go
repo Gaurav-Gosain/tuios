@@ -17,9 +17,14 @@ import (
 func (e *Emulator) handleOsc(cmd int, data []byte) {
 	// No grapheme flush: an OSC neither prints nor moves the cursor, so the
 	// cluster in flight stays open across it, as ghostty keeps it.
-	if !e.handlers.handleOsc(cmd, data) {
-		e.logf("unhandled sequence: OSC %q", data)
+	if e.handlers.handleOsc(cmd, data) {
+		return
 	}
+	if e.cb.PrivateOSC != nil {
+		e.cb.PrivateOSC(cmd, data)
+		return
+	}
+	e.logf("unhandled sequence: OSC %q", data)
 }
 
 // sanitiseTitle drops anything from a title that is not valid UTF-8.

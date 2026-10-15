@@ -489,22 +489,6 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 	case 133:
 		t.handleSemanticZoneOSC(payload)
 		return true
-	case 7777:
-		if direction, ok := parseTuiosNavigation(payload); ok {
-			t.queue(func(cb Callbacks) {
-				if cb.TuiosNavigation != nil {
-					cb.TuiosNavigation(direction)
-				}
-			})
-		}
-		if active, ok := parseTuiosNavigatorState(payload); ok {
-			t.queue(func(cb Callbacks) {
-				if cb.NvimNavigatorState != nil {
-					cb.NvimNavigatorState(active)
-				}
-			})
-		}
-		return false
 	case progstatus.Command:
 		// libghostty-vt has no OSC 7501, so the Program Status Protocol is
 		// read here the way the pure emulator reads it, and never forwarded.
@@ -534,8 +518,27 @@ func (t *GhosttyTerminal) handleOSC(number int, payload []byte) bool {
 		t.handleColorOSC(number, payload)
 		return false
 	default:
+		// libghostty-vt ignores a number it does not know, and this side
+		// cannot tell which those are, so every other number reaches the
+		// host's private hook as well.
+		t.privateOSC(number, payload)
 		return true
 	}
+}
+
+// privateOSC hands an OSC body to Callbacks.PrivateOSC after the lock is
+// released, like every other callback. The body is copied, because the
+// scanner reuses its buffer.
+func (t *GhosttyTerminal) privateOSC(number int, payload []byte) {
+	if t.cb.PrivateOSC == nil {
+		return
+	}
+	data := bytes.Clone(payload)
+	t.queue(func(cb Callbacks) {
+		if cb.PrivateOSC != nil {
+			cb.PrivateOSC(number, data)
+		}
+	})
 }
 
 // handleClipboardOSC mirrors the pure emulator's OSC 52: set fires the

@@ -769,15 +769,19 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 				window.CwdFunc(cwd)
 			}
 		},
-		TuiosNavigation: func(direction string) {
-			if window.NvimNavFunc != nil {
-				window.NvimNavFunc(direction)
+		PrivateOSC: func(cmd int, data []byte) {
+			if cmd != nvimNavigatorOSC {
+				return
 			}
-		},
-		NvimNavigatorState: func(active bool) {
-			if window.NvimNavStateFunc != nil {
-				window.NvimNavStateFunc(active)
-			}
+			handleNvimNavigatorOSC(data, func(direction string) {
+				if window.NvimNavFunc != nil {
+					window.NvimNavFunc(direction)
+				}
+			}, func(active bool) {
+				if window.NvimNavStateFunc != nil {
+					window.NvimNavStateFunc(active)
+				}
+			})
 		},
 	})
 

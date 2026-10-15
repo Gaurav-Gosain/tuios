@@ -94,9 +94,11 @@ type Callbacks struct {
 	// have one, so it must only record and never call back into the terminal.
 	SemanticMark func(mark SemanticMarker)
 
-	// TuiosNavigation requests focus of the neighbouring TUIOS pane.
-	TuiosNavigation func(direction string)
-
-	// NvimNavigatorState reports whether a pane handles TUIOS navigation keys.
-	NvimNavigatorState func(active bool)
+	// PrivateOSC callback. Called for an OSC sequence the emulator does not
+	// interpret itself, so a host can give meaning to a private number of its
+	// own. cmd is the OSC number and data the whole body, number included, as
+	// an [OscHandler] receives it. data is only valid for the call. On the
+	// ghostty backend it is also called for the numbers libghostty-vt
+	// interprets, so a host must check cmd.
+	PrivateOSC func(cmd int, data []byte)
 }

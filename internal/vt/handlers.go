@@ -374,10 +374,6 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		return e.handleNotify777(data)
 	})
 
-	e.RegisterOscHandler(7777, func(data []byte) bool {
-		return e.handleTuiosNavigation(data)
-	})
-
 	// OSC 7501: Program Status Protocol
 	e.RegisterOscHandler(progstatus.Command, func(data []byte) bool {
 		e.handleProgramStatus(data)
