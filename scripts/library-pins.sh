@@ -72,7 +72,7 @@ replaced() {
 # commit_of prints the commit that version of the library in dir names.
 commit_of() {
 	local dir=$1 version=$2 ref
-	if [[ $version =~ -[0-9]{14}-([0-9a-f]{12})$ ]]; then
+	if [[ $version =~ [-.][0-9]{14}-([0-9a-f]{12})$ ]]; then
 		ref=${BASH_REMATCH[1]}
 	else
 		ref="refs/tags/$dir/$version"
