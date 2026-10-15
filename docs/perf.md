@@ -2162,8 +2162,8 @@ a binary is over its budget.
 
 | target | size at 62ec9c0c (Go 1.26.6) | before the size cuts (e632e021) | size at the last raise (Go 1.26.9) | budget |
 |---|---|---|---|---|
-| linux/amd64 | 25,182,370 | 26,681,504 | 35,836,066 | 35,940,000 |
-| darwin/arm64 | 23,834,594 | 25,265,154 | 33,775,234 | 33,880,000 |
+| linux/amd64 | 25,182,370 | 26,681,504 | 36,008,098 | 36,110,000 |
+| darwin/arm64 | 23,834,594 | 25,265,154 | 33,894,034 | 34,000,000 |
 
 The first budgets were about 3% above the size they were set at and below the
 size before the size cuts, so undoing those cuts failed the job. Each raise
@@ -2587,6 +2587,16 @@ measured 35,836,066 and 33,775,234, 278,528 and 275,824 bytes more. No
 dependency was added. Of the symbols, internal/guibridge is 87 KB and
 internal/app 36 KB, spread over the bridge's handlers with no large table to
 cut. The new budgets leave 103,934 and 104,766 bytes of room.
+
+The budgets went to 36,110,000 (linux/amd64) and 34,000,000 (darwin/arm64)
+for `file-preview` (#659), the verb behind the GUI's Quick Look, and the
+bridge's verbs on a host. With #658 under it the build measured 35,836,066
+and 33,775,234 bytes (Go 1.26.9), and with #659 36,008,098 and 33,894,034,
+172,032 and 118,800 bytes more. The image scaler from golang.org/x/image/draw
+(already in go.mod) is 94,208 and 66,640 of it: ApproxBiLinear links a
+specialised loop for each pair of image types. A small scaler of our own over
+image.RGBA would take most of that back. The new budgets leave 101,902 and
+105,966 bytes of room.
 
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
