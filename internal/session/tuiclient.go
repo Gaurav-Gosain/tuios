@@ -73,6 +73,12 @@ type TUIClient struct {
 	// and tuios new set it, from their own environment, and a hello through
 	// a host never carries it. See display_follow.go.
 	Display ClientDisplay
+	// Term and ColorTerm are sent in the hello as HelloPayload.Term and
+	// HelloPayload.ColorTerm, and a session this client makes gives them to
+	// its panes. Only a client that runs where the person is sets them, with
+	// UseCallerTerm: tuios attach and tuios new. A server that serves a remote
+	// viewer leaves them empty, and its sessions get the daemon's fallback.
+	Term, ColorTerm string
 
 	// nestProbe is the nonce of the probe WriteNestProbe wrote. Set once,
 	// before the first attach.
@@ -346,6 +352,12 @@ type ClientCapabilities struct {
 	SymbolImages bool
 }
 
+// UseCallerTerm sets Term and ColorTerm to this process's terminal, detected
+// as the verb client's hello detects it.
+func (c *TUIClient) UseCallerTerm() {
+	c.Term, c.ColorTerm = helloTerm()
+}
+
 // Connect connects to the daemon and performs handshake.
 func (c *TUIClient) Connect(version string, width, height int) error {
 	return c.ConnectWithCapabilities(version, width, height, nil)
@@ -386,6 +398,11 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		Protocol:       ProtocolVersion,
 		Machine:        localHostLabel(),
 		ClientKind:     c.Kind,
+		// Every daemon reads these two fields, so an older one gives a
+		// session this client makes the caller's terminal too. A daemon
+		// drops a value that is not a short printable name.
+		Term:      c.Term,
+		ColorTerm: c.ColorTerm,
 	}
 
 	// Add graphics capabilities if provided

@@ -55,15 +55,71 @@ func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
 	if out, err := tuiosCLIEnv(t, base, callerEnv, "call", "new-session", `{"name":"`+session+`"}`); err != nil {
 		t.Fatalf("create the session with the new-session verb: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLIEnv(t, base, callerEnv, "send-keys", "-s", session, "-l",
+	pane, got := askPaneTerm(t, base, callerEnv, session)
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "pane.txt"), []byte(pane), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
+		t.Errorf("a session made by the new-session verb, from a caller with a real terminal, gave its pane %q, want %q\n%s", got, want, pane)
+	}
+}
+
+// TestAttachedNewGivesItsPaneTheCallersTerm is the same check for an
+// attached tuios new. The TUI client's hello carried no terminal, so the
+// session it made got the daemon's fallback (xterm-256color), while tuios new
+// -d and the new-session verb gave their sessions the caller's terminal.
+//
+// How this could pass wrongly: the caller's TERM is screen-256color, which is
+// not a fallback, for the reasons TestVerbNewSessionGivesItsPaneTheCallersTerm
+// gives. The daemon is started by start-server with no TERM of its own, so
+// only the attached client's hello can give the pane screen-256color.
+//
+// The pane's text is saved under artifactDir.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "An attached tuios new
+// gives its session the caller's terminal").
+func TestAttachedNewGivesItsPaneTheCallersTerm(t *testing.T) {
+	const session = "e2e-attach-term"
+	base := t.TempDir()
+	killDaemon(t, base)
+	if out, err := tuiosCLIEnv(t, base, []string{"TERM=", "COLORTERM="}, "start-server"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
+	term := startIn(t, base, startOpts{args: []string{"new", session}, env: callerEnv})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "first window")
+
+	pane, got := askPaneTerm(t, base, callerEnv, session)
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "attached-pane.txt"), []byte(pane), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
+		t.Errorf("a session made by an attached tuios new gave its pane %q, want %q\n%s", got, want, pane)
+	}
+}
+
+// askPaneTerm has the shell of session's pane print its TERM and COLORTERM,
+// and returns the pane's text and the printed line.
+func askPaneTerm(t *testing.T, base string, env []string, session string) (pane, got string) {
+	t.Helper()
+	if out, err := tuiosCLIEnv(t, base, env, "send-keys", "-s", session, "-l",
 		`printf 'TERM=%s COLORTERM=%s END\n' "$TERM" "$COLORTERM"`+"\r"); err != nil {
 		t.Fatalf("ask the shell for its TERM: %v\n%s", err, out)
 	}
+	return readPaneTerm(t, base, env, session)
+}
 
-	var pane, got string
+// readPaneTerm waits for the line a shell printed with TERM= and END, and
+// returns the pane's text and the line without END. The shell's echo of the
+// command holds %s, so it is skipped.
+func readPaneTerm(t *testing.T, base string, env []string, session string) (pane, got string) {
+	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
 	for got == "" {
-		pane, _ = tuiosCLIEnv(t, base, callerEnv, "capture-pane", "-s", session)
+		pane, _ = tuiosCLIEnv(t, base, env, "capture-pane", "-s", session)
 		for _, line := range strings.Split(pane, "\n") {
 			if line = strings.TrimSpace(line); strings.HasPrefix(line, "TERM=") && strings.HasSuffix(line, " END") &&
 				!strings.Contains(line, "%s") {
@@ -77,13 +133,7 @@ func TestVerbNewSessionGivesItsPaneTheCallersTerm(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(artifactDir(t), "pane.txt"), []byte(pane), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
-		t.Errorf("a session made by the new-session verb, from a caller with a real terminal, gave its pane %q, want %q\n%s", got, want, pane)
-	}
+	return pane, got
 }
 
 // TestVerbCommandsReachAnOlderDaemon: a client from this build, talking to a
@@ -144,23 +194,7 @@ func TestVerbCommandsReachAnOlderDaemon(t *testing.T) {
 		`printf 'TERM=%s END\n' "$TERM"`+"\r"); err != nil {
 		t.Fatalf("ask the shell for its TERM: %v\n%s", err, out)
 	}
-	var pane, got string
-	deadline := time.Now().Add(shellTimeout)
-	for got == "" {
-		pane, _ = tuiosCLIEnv(t, base, callerEnv, "capture-pane", "-s", session)
-		for _, line := range strings.Split(pane, "\n") {
-			if line = strings.TrimSpace(line); strings.HasPrefix(line, "TERM=") && strings.HasSuffix(line, " END") &&
-				!strings.Contains(line, "%s") {
-				got = strings.TrimSuffix(line, " END")
-			}
-		}
-		if got == "" {
-			if time.Now().After(deadline) {
-				t.Fatalf("the shell never printed its TERM:\n%s", pane)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+	pane, got := readPaneTerm(t, base, callerEnv, session)
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "older-daemon-pane.txt"), []byte(pane), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -5067,6 +5067,16 @@ Run on 2026-10-14 on macOS on branch `pr/verb-session-term`, from upstream `main
 | The retry in `VerbClient.handshake` cut (`false &&` in its condition) | mutant of this branch | `TestVerbCommandsReachAnOlderDaemon` ("tuios ls against an older daemon failed: ... Could not open a control connection to the TUIOS daemon: verb hello has no parameter term (invalid_params).") | **caught** |
 | The positive half | this branch | none: `ls` and `call new-session` reach the older daemon, the session is listed, and its pane reads that daemon's fallback `TERM=xterm-256color` | **guard** |
 
+## An attached tuios new gives its session the caller's terminal
+
+Run on 2026-10-15 on Linux on branch `fix-attach-term`, from upstream `main` (`f1257b28d`). The test is `TestAttachedNewGivesItsPaneTheCallersTerm` in `verb_hello_term_test.go`. The daemon is started by `start-server` with no TERM, and the TUI runs `tuios new` with `TERM=screen-256color COLORTERM=truecolor`. Each control cuts one wire from the fixed build, builds it, and runs the test.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `runDaemonSessionOn` does not call `client.UseCallerTerm()` | mutant of this branch | `TestAttachedNewGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
+| `TUIClient.handshake` sends an empty `Term` | mutant of this branch | the same, with the same message | **caught** |
+| The positive half | this branch | none: the pane reads `TERM=screen-256color COLORTERM=truecolor`, and `TestVerbNewSessionGivesItsPaneTheCallersTerm` still passes | **guard** |
+
 ## A hello's TERM and COLORTERM are checked before a pane gets them
 
 Run on 2026-10-14 on macOS on branch `pr700-review`, the review round of `pr/verb-session-term`. The test is `TestHelloDropsAnUnsafeTerm` in `verb_hello_term_check_test.go`. The daemon has a terminfo folder of its own with `screen-256color`'s entry under a 64 byte name and a 65 byte one, so `PaneTerm` keeps either and only the bound tells them apart. Five verb hellos are sent raw over the socket, each followed by `new-session` on the same connection, and two binary hellos are sent by `tuios new -d` with the value in `TERM`. Each control cuts one wire from the fixed build, builds it, and runs the test.

@@ -363,6 +363,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The display this process runs in, for a daemon started without one.
 	// See internal/session/display_follow.go.
 	client.Display = session.ClientDisplayFromEnv()
+	// The person's terminal, for the panes of a session this attach makes.
+	// The detached and verb paths send it too.
+	client.UseCallerTerm()
 	if host == "" && createNew {
 		// Only tuios new sets it. A session the attach finds is not moved.
 		client.StartDir = newSessionDir
