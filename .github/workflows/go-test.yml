@@ -124,8 +124,8 @@ jobs:
     # The packages whose Windows code runs only on Windows: the herdr link
     # (hardlink, copy and a running link), the PATHEXT lookup and the job
     # object for plugin processes, the stop event kill-server sets, and the
-    # herdr command line the link runs. The whole suite has never run on
-    # Windows and does not run here.
+    # herdr command line the link runs, and the web daemon E2E tests. The
+    # whole suite has never run on Windows and does not run here.
     timeout-minutes: 15
 
     steps:
@@ -139,7 +139,7 @@ jobs:
             .github/workflows/go-test.yml
 
       - name: Test
-        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/
+        run: go test -count=1 -timeout 10m ./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/
 
   race:
     name: go test -race ./...
