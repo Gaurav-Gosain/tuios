@@ -260,6 +260,7 @@ func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState,
 	m.hostReconnect = nil
 	m.hostReconnectGen++
 	m.cancelHostOpen()
+	m.hostReconnectDeferred = false
 
 	old := m.DaemonClient
 	if old != nil {

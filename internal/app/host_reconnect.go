@@ -128,8 +128,9 @@ func (m *OS) beginHostReconnect(cause error) tea.Cmd {
 	}
 	if m.hostOpen != nil {
 		// A click waits for another session, and the newest request wins.
-		// When the click fails, the reconnect starts then.
-		m.hostOpen.resume = true
+		// When the click fails, the reconnect starts then. The caller keeps
+		// the panes meanwhile: see HostReconnectDeferred.
+		m.hostReconnectDeferred = true
 		return nil
 	}
 	m.hostReconnectGen++
@@ -434,6 +435,11 @@ func (m *OS) hostLinkNote() string {
 	}
 	return " Reconnecting to " + name + " "
 }
+
+// HostReconnectDeferred reports whether a lost link to the attached host
+// waits for a rail click to land or fail before it is dialed again. The
+// panes stay on screen meanwhile.
+func (m *OS) HostReconnectDeferred() bool { return m.hostReconnectDeferred }
 
 // ReconnectingToHost reports whether the client is trying to get a lost link
 // back. It is what a test reads, and what tells a caller that the frame on

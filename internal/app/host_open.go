@@ -47,9 +47,6 @@ type hostOpenPending struct {
 	wasUp bool
 	// signIn says the click already opened the host's Tailscale sign-in.
 	signIn bool
-	// resume says the click ended a reconnect to the attached host. When the
-	// click fails, the reconnect starts again.
-	resume bool
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -73,7 +70,7 @@ func (m *OS) openRemoteSession(host, sessionName string) {
 	if m.hostReconnect != nil {
 		m.hostReconnect = nil
 		m.hostReconnectGen++
-		p.resume = true
+		m.hostReconnectDeferred = true
 	}
 	m.hostOpen = p
 	cmds := []tea.Cmd{retryHostCmd(host)}
@@ -104,7 +101,7 @@ func (m *OS) CancelHostOpen() tea.Cmd {
 	}
 	m.cancelHostOpen()
 	m.ShowNotification("Stopped connecting to "+printableTitle(p.host)+".", "info", m.Settings.NotificationDuration)
-	return m.resumeAfterHostOpen(p)
+	return m.resumeAfterHostOpen()
 }
 
 // hostWasUp reports whether the last snapshot says the host's link was up
@@ -190,15 +187,20 @@ func (m *OS) advanceHostOpen() tea.Cmd {
 func (m *OS) endHostOpen(p *hostOpenPending, note string) tea.Cmd {
 	m.cancelHostOpen()
 	m.ShowNotification(note, "warning", m.Settings.NotificationWarningDuration*2)
-	return m.resumeAfterHostOpen(p)
+	return m.resumeAfterHostOpen()
 }
 
-// resumeAfterHostOpen starts again the reconnect a click ended, when the
-// click did not land.
-func (m *OS) resumeAfterHostOpen(p *hostOpenPending) tea.Cmd {
-	if !p.resume || m.hostReconnect != nil {
+// resumeAfterHostOpen starts the reconnect to the attached host that a click
+// put off, once no click waits. A click that lands adopts a new client and
+// clears the debt, so this runs only when the click failed, ran out or was
+// replaced by a switch that left the client on the dead connection. The host
+// snapshot calls it too, which covers a click cancelled by a path that has
+// no command to return.
+func (m *OS) resumeAfterHostOpen() tea.Cmd {
+	if !m.hostReconnectDeferred || m.hostOpen != nil || m.hostReconnect != nil {
 		return nil
 	}
+	m.hostReconnectDeferred = false
 	return m.beginHostReconnect(nil)
 }
 
@@ -244,7 +246,7 @@ func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 		}
 		m.cancelHostOpen()
 		m.reportSwitchFailure(&hostSwitchError{msg: hostAttachRefusal(p.host, msg.Err)})
-		return m.resumeAfterHostOpen(p)
+		return m.resumeAfterHostOpen()
 	}
 	m.hostOpen = nil
 	m.adoptHostClient(msg.Client, msg.State, msg.Host)

@@ -5997,5 +5997,7 @@ Run on 2026-10-15 on Linux on branch `fix-host-wake-reconnect`, from upstream `m
 | `retry` on a link that is up wakes the dial wait instead of the heartbeat | mutant of this branch | the same, with the same message | **caught** |
 | `heartbeatMisses` raised to 1000, so only a sleep or a retry ends a link | mutant of this branch | the idle half ("nothing found an idle frozen link in 40 seconds"); the click half passes | **caught** |
 | `SwitchToSession` does not cancel the waiting click (review round) | mutant of this branch | the replaced click ("the click the person replaced pulled them off the session they chose after it") | **caught** |
+| The `DaemonDisconnectedMsg` handler does not keep the panes for a reconnect a waiting click put off (second review round) | mutant of this branch | the drop under a click ("tuios exited with code 1 after the attached link dropped while a click waited") | **caught** |
+| The same handler does not arm the exit listener again | mutant of this branch | none. The second drop is not heard, and the click lands anyway, so this test cannot see it. It is why the first version of the drop-under-click half passed on a build that still quit: the drop it waited for never reached the client | **not caught** |
 | The positive half | this branch | none | **guard** |
 

@@ -1600,7 +1600,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyFederationSnapshot(msg)
 		m.sidebarCache.invalidate()
 		// A rail click that waits for this machine dials when the link is up.
-		open := m.advanceHostOpen()
+		open := tea.Batch(m.advanceHostOpen(), m.resumeAfterHostOpen())
 		// A sign-in page the person asked for before the daemon had one
 		// opens on the snapshot that brings it.
 		signIn := tea.Batch(open, m.takePendingSignIns())
@@ -2389,14 +2389,26 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// running, so the panes on screen stay where they are while this
 			// client dials again. Only when that has genuinely failed does it
 			// come back to the session it left here.
+			//
+			// The client lives on in each case below, so the listener is
+			// armed again for the next connection's end. Without it the
+			// first drop was the last one heard, and a link that dropped a
+			// second time left a frozen session with no reconnect.
+			listen := ListenForDaemonExit(m.daemonExitChan())
 			if cmd := m.beginHostReconnect(msg.Err); cmd != nil {
-				return m, cmd
+				return m, tea.Batch(cmd, listen)
 			}
 			if m.ReconnectingToHost() {
 				// A connection that is already being replaced reporting its
 				// own end a second time must not start a second attempt, and
 				// must not throw the panes away.
-				return m, nil
+				return m, listen
+			}
+			if m.HostReconnectDeferred() {
+				// A rail click waits for another session. Its outcome
+				// decides: it lands and replaces this connection, or it
+				// fails and the reconnect starts then.
+				return m, listen
 			}
 			m.ExitReason = ExitHostLost
 			return m, tea.Quit

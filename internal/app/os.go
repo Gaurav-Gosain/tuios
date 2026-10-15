@@ -1231,6 +1231,10 @@ type OS struct {
 	// hostOpenGen counts the clicks. See host_open.go.
 	hostOpen    *hostOpenPending
 	hostOpenGen uint64
+	// hostReconnectDeferred says the link to the attached host was lost, or
+	// its reconnect stopped, while a rail click waited. The reconnect starts
+	// when no click waits any more. See resumeAfterHostOpen.
+	hostReconnectDeferred bool
 	// federationTickGen is the generation of the host poll timer now armed. A
 	// tick from an older generation is dropped, so the snapshot's re-arm and
 	// the tick's own re-arm cannot leave two loops running.
