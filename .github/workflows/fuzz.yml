@@ -90,6 +90,8 @@ jobs:
             targets: FuzzParse
           - pkg: swatch/omarchy
             targets: FuzzResolve
+          - pkg: swatch/teaswatch
+            targets: FuzzParsePaletteReply
 
     steps:
       - uses: actions/checkout@v7

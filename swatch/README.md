@@ -12,8 +12,11 @@ parser is a port of Omarchy's own `omarchy-theme-color`, so a theme resolves
 to the colours Omarchy gives every other app. A test holds the port to the
 script's output for every theme Omarchy ships.
 
-The packages use only the standard library. Theme files come from strangers,
-so swatch parses colours only. Nothing in a theme file is executed or
+`swatch.Watch` follows the theme while your program runs, and the
+`teaswatch` package turns each change into a Bubble Tea message.
+
+`swatch` and `omarchy` use the standard library and fsnotify. Theme files
+come from strangers, so swatch parses colours only. Nothing in a theme file is executed or
 expanded, and a file over 64 KiB is not read.
 
 tuios uses swatch to follow the Omarchy theme.
@@ -55,6 +58,46 @@ func main() {
 ```
 
 The fields are `color.Color` values, which Lipgloss v2 takes as they are.
+
+## Follow the theme
+
+```go
+w, err := swatch.Watch(omarchy.Current())
+if err != nil {
+	panic(err) // the platform's file watcher could not be opened
+}
+defer w.Close()
+for p := range w.Changes() {
+	fmt.Println("now", p.Name)
+}
+```
+
+The watcher holds one inotify handle and two goroutines. It runs no timer and
+polls nothing while the theme stays the same. It reads the theme 50 ms after
+the last change, so one Omarchy switch is one read. A switch to the theme
+already in force sends nothing. A directory that does not exist yet is
+watched from its nearest parent, so Omarchy installed later is still seen.
+
+## Bubble Tea
+
+```go
+import "tuios.dev/swatch/teaswatch"
+
+func (m model) Init() tea.Cmd { return teaswatch.Listen(m.watcher) }
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case teaswatch.ChangedMsg:
+		m.styles = newStyles(msg.Palette)
+		return m, teaswatch.Listen(m.watcher)
+	}
+	return m, nil
+}
+```
+
+`teaswatch.Terminal` follows the palette of the terminal itself. It asks
+for OSC 10, 11 and the sixteen OSC 4 colours, turns on the light and dark
+reports (mode 2031), and asks again after each report.
 
 ## List the installed themes
 

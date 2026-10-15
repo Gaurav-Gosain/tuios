@@ -3,6 +3,9 @@ package omarchy_test
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"tuios.dev/swatch"
 	"tuios.dev/swatch/omarchy"
@@ -54,4 +57,45 @@ func ExampleThemesIn() {
 	// Catppuccin: #89b4fa, light false
 	// Catppuccin Latte: #1e66f5, light true
 	// Ethereal: #7d82d9, light false
+}
+
+// Follow the applied theme. Here a theme switch is made the way
+// omarchy-theme-set makes it: the new theme is staged beside the old one,
+// the old one is removed, the new one renamed into its place, and the name
+// written last.
+func ExampleAt_watch() {
+	current, err := os.MkdirTemp("", "omarchy-current")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(current)
+	apply := func(id string) {
+		next := filepath.Join(current, "next-theme")
+		_ = os.MkdirAll(next, 0o755)
+		data, _ := os.ReadFile(filepath.Join("testdata", "themes", id, "colors.toml"))
+		_ = os.WriteFile(filepath.Join(next, "colors.toml"), data, 0o644)
+		_ = os.RemoveAll(filepath.Join(current, "theme"))
+		_ = os.Rename(next, filepath.Join(current, "theme"))
+		_ = os.WriteFile(filepath.Join(current, "theme.name"), []byte(id+"\n"), 0o644)
+	}
+	apply("tokyo-night")
+
+	w, err := swatch.Watch(omarchy.At(current))
+	if err != nil {
+		panic(err)
+	}
+	defer w.Close()
+	p, _ := w.Current()
+	fmt.Println(p.Name, p.Light)
+
+	apply("catppuccin-latte")
+	select {
+	case p = <-w.Changes():
+		fmt.Println(p.Name, p.Light, swatch.Hex(p.Accent))
+	case <-time.After(5 * time.Second):
+		fmt.Println("no change seen")
+	}
+	// Output:
+	// Tokyo Night false
+	// Catppuccin Latte true #1e66f5
 }

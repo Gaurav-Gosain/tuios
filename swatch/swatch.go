@@ -6,9 +6,13 @@
 // Omarchy applies. A Source also names the paths whose change means a new
 // palette, so an application can follow the theme while it runs.
 //
-// The package uses only the standard library. It reads theme files from
-// strangers, so it parses colours only: nothing in a theme file is executed
-// or expanded.
+// Watch follows a Source: it reads the theme again when one of its paths
+// changes, and delivers each new palette. The teaswatch sub-package turns that
+// into Bubble Tea messages.
+//
+// swatch and its omarchy package use the standard library and fsnotify. They
+// read theme files from strangers, so they parse colours only: nothing in a
+// theme file is executed or expanded.
 //
 // The API is at v0 and can change between minor versions.
 package swatch
