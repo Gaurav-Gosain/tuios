@@ -1523,6 +1523,8 @@ The prefix stays armed for half a second after a command worth repeating, so
 tmux's `repeat-time`, and `appearance.prefix_repeat_time` changes it. Zero
 turns it off.
 
-Workspace switching on `opt+1` to `opt+9` works with no configuration, because
-those Option chords compose to characters tuios can read back. That table is
-built for a US layout.
+Workspace switching on `opt+1` to `opt+9` works with no configuration in a
+terminal that reports Alt with the character, such as Ghostty and kitty. In
+Terminal.app and iTerm2 as they ship, Option+1 types `¡` and does not switch.
+Set the terminal to send Option as Alt. On a US keyboard, you can also set
+`option_glyphs = "bind"`.
