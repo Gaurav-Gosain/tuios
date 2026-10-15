@@ -242,3 +242,84 @@ func TestSplitWritesIsReproducible(t *testing.T) {
 		}
 	}
 }
+
+// TestScriptRendersReadably guards the other half of the point of generating by
+// grammar: every step says what it is, and the bytes are printed escaped rather
+// than raw, so a failure can be pasted into a bug report.
+func TestScriptRendersReadably(t *testing.T) {
+	s := vtgen.New(7).Script(40)
+	text := s.String()
+	if strings.ContainsRune(text, 0x1b) {
+		t.Error("the rendered script contains a raw escape byte, which will not survive a paste")
+	}
+	for i, seq := range s {
+		if seq.Desc == "" {
+			t.Errorf("step %d has no description", i+1)
+		}
+		if seq.Kind == "" {
+			t.Errorf("step %d has no kind", i+1)
+		}
+	}
+	if lines := strings.Count(text, "\n"); lines != len(s) {
+		t.Errorf("the rendered script has %d lines for %d steps", lines, len(s))
+	}
+}
+
+// An oversized payload that the failure does not need has to come out small.
+// simpler offers a halved copy and a sixteen-byte one, and the shrinker used to
+// try the halved copy first and move on to the next step as soon as it was
+// accepted, then stop the whole reduction because the step count had not
+// changed. A 4096-byte payload came back as 1024 bytes of noise around the four
+// that mattered, which is the unreadable report shrinking exists to prevent.
+func TestShrinkReducesAnOversizedPayloadFully(t *testing.T) {
+	payload := "\x1b]0;" + strings.Repeat("A", 4092)
+	script := vtgen.Script{{Kind: "osc", Bytes: payload, Desc: "OSC 0 with an oversized payload"}}
+	fails := func(s vtgen.Script) bool {
+		for _, seq := range s {
+			if strings.HasPrefix(seq.Bytes, "\x1b]0;") {
+				return true
+			}
+		}
+		return false
+	}
+
+	got := vtgen.Shrink(script, fails)
+	if len(got) != 1 {
+		t.Fatalf("shrunk to %d steps, want the one that fails:\n%s", len(got), got)
+	}
+	if n := len(got[0].Bytes); n > 16 {
+		t.Fatalf("the payload is still %d bytes after shrinking, want at most 16:\n%s", n, got)
+	}
+	if !fails(got) {
+		t.Fatalf("the shrunk script no longer fails:\n%s", got)
+	}
+}
+
+// A parameter the failure does not need has to be dropped, every one of them.
+// The shrinker dropped one parameter per step per round and stopped after the
+// first round in which no step was removed, so "\e[1;2;3r" came back as
+// "\e[1r" even though the bare sequence fails the same way.
+func TestShrinkDropsEveryParameterItCan(t *testing.T) {
+	long := "\x1b]0;" + strings.Repeat("A", 200)
+	script := vtgen.Script{
+		{Kind: "osc", Bytes: long, Desc: "long title"},
+		{Kind: "csi", Bytes: "\x1b[1;2;3r", Desc: "DECSTBM"},
+	}
+	fails := func(s vtgen.Script) bool {
+		for _, seq := range s {
+			if strings.HasPrefix(seq.Bytes, "\x1b[") && strings.HasSuffix(seq.Bytes, "r") {
+				return true
+			}
+		}
+		return false
+	}
+	got := vtgen.Shrink(script, fails)
+	if len(got) != 1 || got[0].Bytes != "\x1b[r" {
+		t.Fatalf("want only the margin sequence with its parameters dropped, got:\n%s", got)
+	}
+	// The description was written for "\e[1;2;3r", so beside "\e[r" it has to
+	// say that is what it describes, once.
+	if d := got[0].Desc; !strings.Contains(d, `reduced from \e[1;2;3r`) || strings.Count(d, "reduced from") != 1 {
+		t.Errorf("the description should name the original bytes once, got %q", d)
+	}
+}

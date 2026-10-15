@@ -2,6 +2,7 @@ package vtgen
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -22,8 +23,28 @@ import (
 // small one, and a sequence carrying four parameters loses the ones the failure
 // does not need. What this buys is a report that says which parameter mattered
 // instead of leaving the reader to work it out.
+//
+// Every simpler form of a step is strictly shorter than the step, so Shrink
+// runs Reduce until a whole run changes neither the number of steps nor the
+// number of bytes. One run of Reduce accepts one simpler form per step per
+// round and stops on a round that removed no step, which left a 4096-byte
+// payload at 1024 bytes and "\x1b[1;2;3r" at "\x1b[1r".
 func Shrink(s Script, still func(Script) bool) Script {
-	return Reduce(s, still, simpler, nil)
+	for {
+		steps, n := len(s), totalBytes(s)
+		s = Reduce(s, still, simpler, nil)
+		if len(s) == steps && totalBytes(s) == n {
+			return s
+		}
+	}
+}
+
+func totalBytes(s Script) int {
+	n := 0
+	for _, seq := range s {
+		n += len(seq.Bytes)
+	}
+	return n
 }
 
 // Reduce is the shrinking driver shared by every fuzzer in the tree. It runs
@@ -110,37 +131,57 @@ func simplify[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note 
 	return s
 }
 
-// simpler offers plainer versions of one step, most aggressive first.
+// simpler offers plainer versions of one step, most aggressive first, so the
+// first one that still fails is also the smallest the step can become in one
+// move. Every candidate is strictly shorter than the step, which is what makes
+// Shrink terminate.
 func simpler(seq Seq) []Seq {
+	// The description was written for the bytes the generator drew, and a
+	// simplified step no longer carries them: "SU scroll up (params 63;24;3)"
+	// beside the bytes of a bare SU contradicts itself. So a simplified step
+	// keeps the original description, marked as describing what it was
+	// reduced from, once, however many times it is simplified after that.
+	desc := seq.Desc
+	if !strings.Contains(desc, reducedMarker) {
+		from := quote(seq.Bytes)
+		if len(from) > 32 {
+			from = strconv.Itoa(len(seq.Bytes)) + " bytes"
+		}
+		desc += reducedMarker + from + ")"
+	}
+
 	var out []Seq
-	add := func(bytes, desc string) {
-		if bytes != seq.Bytes {
+	add := func(bytes string) {
+		if len(bytes) < len(seq.Bytes) {
 			out = append(out, Seq{Kind: seq.Kind, Bytes: bytes, Desc: desc, Cols: seq.Cols, Rows: seq.Rows})
 		}
 	}
 
 	// A long run of the same payload almost never needs to be long.
 	if n := len(seq.Bytes); n > 64 {
-		add(seq.Bytes[:n/2], seq.Desc+" (halved)")
-		add(seq.Bytes[:16], seq.Desc+" (shortened)")
+		add(seq.Bytes[:16])
+		add(seq.Bytes[:n/2])
 	}
 
-	// A CSI with several parameters usually turns on one of them.
-	if strings.HasPrefix(seq.Bytes, "\x1b[") && strings.Contains(seq.Bytes, ";") {
+	// A CSI with parameters usually turns on one of them, or on none.
+	if strings.HasPrefix(seq.Bytes, "\x1b[") && len(seq.Bytes) > 3 {
 		body := seq.Bytes[2:]
-		if last := len(body) - 1; last > 0 {
-			final := body[last:]
-			params := body[:last]
+		last := len(body) - 1
+		final := body[last:]
+		add("\x1b[" + final)
+		if params := body[:last]; strings.Contains(params, ";") {
 			parts := strings.Split(params, ";")
 			for drop := range slices.Backward(parts) {
 				kept := append(append([]string{}, parts[:drop]...), parts[drop+1:]...)
-				add("\x1b["+strings.Join(kept, ";")+final, seq.Desc+" (a parameter dropped)")
+				add("\x1b[" + strings.Join(kept, ";") + final)
 			}
-			add("\x1b["+final, seq.Desc+" (no parameters)")
 		}
 	}
 	return out
 }
+
+// reducedMarker introduces the note a simplified step's description carries.
+const reducedMarker = " (reduced from "
 
 func without[S ~[]E, E any](s S, i, j int) S {
 	out := make(S, 0, len(s)-(j-i))
