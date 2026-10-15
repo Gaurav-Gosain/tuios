@@ -1566,7 +1566,11 @@ func (e *Emulator) SetDefaultBackgroundColor(c color.Color) {
 // SetReportColors sets the colours an OSC 10 and OSC 11 query is answered with
 // while the guest has not set its own. A nil colour keeps the default answer.
 func (e *Emulator) SetReportColors(fg, bg color.Color) {
+	before := e.reportedBackground()
 	e.reportFg, e.reportBg = fg, bg
+	if report := colorSchemeChange(before, e.reportedBackground()); report != "" && e.isModeSet(ansi.ModeLightDark) {
+		_, _ = io.WriteString(e.pipe, report)
+	}
 }
 
 // SetReportPalette sets the colours an OSC 4 query for one of the sixteen

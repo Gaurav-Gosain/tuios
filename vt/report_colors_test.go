@@ -212,3 +212,61 @@ func TestReportPaletteAnswersOSC4(t *testing.T) {
 }
 
 var osc4RGB = regexp.MustCompile(`\x1b\]4;\d+;(rgb:[0-9a-fA-F/]+)`)
+
+// A program that turned on mode 2031 is told when the background it is drawn
+// on goes from dark to light or back: the Omarchy theme switching from Tokyo
+// Night to Catppuccin Latte, or the host terminal switching its scheme. A
+// change that stays dark sends nothing, and neither does any change to a
+// program that never asked.
+func TestReportColorsSendColorSchemeReport(t *testing.T) {
+	dark := color.RGBA{R: 0x1a, G: 0x1b, B: 0x26, A: 0xff}
+	otherDark := color.RGBA{R: 0x28, G: 0x28, B: 0x28, A: 0xff}
+	light := color.RGBA{R: 0xef, G: 0xf1, B: 0xf5, A: 0xff}
+
+	// replies collects what the emulator writes back within a moment.
+	replies := func(term vt.Terminal) <-chan string {
+		out := make(chan string, 1)
+		go func() {
+			var all []byte
+			buf := make([]byte, 256)
+			for {
+				n, err := term.Read(buf)
+				all = append(all, buf[:n]...)
+				if err != nil {
+					break
+				}
+			}
+			out <- string(all)
+		}()
+		return out
+	}
+
+	for _, tc := range []struct {
+		name     string
+		mode     bool
+		from, to color.Color
+		want     string
+	}{
+		{"dark to light", true, dark, light, "\x1b[?997;2n"},
+		{"light to dark", true, light, dark, "\x1b[?997;1n"},
+		{"dark to dark", true, dark, otherDark, ""},
+		{"no mode 2031", false, dark, light, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term := vt.New(20, 4)
+			term.SetReportColors(nil, tc.from)
+			if tc.mode {
+				if _, err := term.Write([]byte("\x1b[?2031h")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := replies(term)
+			term.SetReportColors(nil, tc.to)
+			time.Sleep(100 * time.Millisecond)
+			_ = term.Close()
+			if s := <-got; s != tc.want {
+				t.Errorf("the emulator wrote %q, want %q", s, tc.want)
+			}
+		})
+	}
+}

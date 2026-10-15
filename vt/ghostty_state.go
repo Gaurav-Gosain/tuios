@@ -268,7 +268,14 @@ func (t *GhosttyTerminal) SetThemeColors(fg, bg, cur color.Color, ansiPalette [1
 func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	before := firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
 	t.reportFg, t.reportBg = fg, bg
+	after := firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
+	if report := colorSchemeChange(before, after); report != "" {
+		if on, _ := t.term.Mode(gh.ModeColorSchemeReport); on {
+			_, _ = io.WriteString(t.pipe, report)
+		}
+	}
 }
 
 // SetReportPalette mirrors the pure emulator: what an OSC 4 query for one of
