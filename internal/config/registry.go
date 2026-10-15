@@ -402,16 +402,14 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 
 // bareGlyphTierFilled reports whether the registry fills the bare
 // Option-glyph tier: for "bind", and for "auto" unless keyboard_layout is
-// "other". Whether "auto" answers from it is up to lookupKey.
+// "other". Whether "auto" answers from it is up to lookupKey. A value outside
+// OptionGlyphModes is "auto" here, as in OptionGlyphRuns and as the
+// validation warning says, so the bindings and the leader agree on it.
 func bareGlyphTierFilled(layout, glyphs string) bool {
 	if layout == KeyboardLayoutOther {
 		return false
 	}
-	switch glyphs {
-	case OptionGlyphsBind, OptionGlyphsAuto, "":
-		return true
-	}
-	return false
+	return glyphs != OptionGlyphsAlt && glyphs != OptionGlyphsType
 }
 
 // GetKeys returns the keys bound to an action in the first section below that

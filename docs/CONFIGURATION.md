@@ -194,7 +194,7 @@ option_glyphs = "auto"   # auto, alt, bind, type
 | Key | Default | What it does |
 |---|---|---|
 | `keyboard_layout` | `us` | `us` lets a binding on `opt+shift+7` also match `opt+&`, as on a US keyboard. Set `other` for AZERTY, QWERTZ and other layouts. A key that the terminal reports through the Kitty keyboard protocol uses that report. |
-| `option_glyphs` | `auto` | What a character that macOS Option typed does. `auto` reads the keyboard layout of the Mac when tuios starts, and again after a layout change. On a US or ABC layout it runs the Option binding for the character. On other layouts the character goes to the pane. A `keyboard_layout` that you set overrides the layout of the Mac. `alt` runs the binding only when the terminal also reports Alt. `bind` always runs it. `type` always sends the character to the pane. A tuios that serves SSH or web clients uses the layout of the Mac it runs on. |
+| `option_glyphs` | `auto` | What a character that macOS Option typed does. `auto` reads the keyboard layout of the Mac when tuios starts. It reads it again when such a character arrives and the last read is more than 30 seconds old. On a US or ABC layout it runs the Option binding for the character. On other layouts the character goes to the pane. A `keyboard_layout` that you set overrides the layout of the Mac. `alt` runs the binding only when the terminal also reports Alt. `bind` always runs it. `type` always sends the character to the pane. A tuios that serves SSH or web clients uses the layout of the Mac it runs on. |
 
 See [Shifted digits and AZERTY](KEYBINDINGS.md#shifted-digits-and-azerty) and
 [One Option key for typing](KEYBINDINGS.md#one-option-key-for-typing).

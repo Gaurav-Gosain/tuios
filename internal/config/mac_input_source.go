@@ -12,8 +12,11 @@ import (
 )
 
 // macInputSourceTimeout bounds one detection, both defaults calls together.
-// It runs in the background, so a slow answer only delays the answer.
-const macInputSourceTimeout = 500 * time.Millisecond
+// It runs in the background, so a slow answer only delays the answer. A read
+// that times out counts as not US until the next refresh, so the bound is
+// generous: a first defaults call on a busy Mac can take a few hundred
+// milliseconds.
+const macInputSourceTimeout = 2 * time.Second
 
 // macLayoutRefresh is how old an answer may get before a bare composed
 // character asks for a new one. A user who switches input source sees the
