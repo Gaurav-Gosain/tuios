@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -552,4 +553,59 @@ func TestHostColorsSilentTerminal(t *testing.T) {
 	if !strings.Contains(string(logged), "unanswered 11;?") {
 		t.Errorf("tuios never asked the silent host for its background:\n%s", logged)
 	}
+}
+
+// TestThemedDaemonPaneReportsTheTheme attaches to a daemon session with a
+// theme set and the pane background off, behind the light stand-in host. A
+// pane program asking OSC 11, OSC 10 and OSC 4 for slot 1 is told the
+// theme's colours: the panes are drawn in the theme, so that is what they are
+// on. The daemon's emulators answer these questions, and the daemon never
+// loads a theme, so the client has to push the theme's colours.
+//
+// How this could pass wrongly: the answer could be the host's colours, or the
+// emulator's own black and white. The host here is light and the theme is
+// dark, so all three differ.
+//
+// Negative control: on a build where a themed client pushes nothing, every
+// answer is the emulator's own (rgb:0000/0000/0000 for OSC 11), and the test
+// fails.
+func TestThemedDaemonPaneReportsTheTheme(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	host := buildHostTerm(t)
+	artifacts := artifactDir(t)
+
+	const themeID = "dracula"
+	pal, fg, bg, _, ok := theme.Colors(themeID)
+	if !ok {
+		t.Fatalf("theme %s is not built in", themeID)
+	}
+	xrgb := func(c color.Color) string {
+		r, g, b, _ := c.RGBA()
+		return fmt.Sprintf("rgb:%04x/%04x/%04x", (r>>8)*0x101, (g>>8)*0x101, (b>>8)*0x101)
+	}
+
+	useShippedLooks(base)
+	writeConfig(t, base, "[appearance]\ntheme = \""+themeID+"\"\n")
+	if out, err := tuiosCLI(t, base, "new", "e2e-themed", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{
+		args:         []string{"attach", "e2e-themed"},
+		shippedLooks: true,
+		env:          []string{"COLORTERM=truecolor"},
+		wrap:         []string{host, "run", "-bg", "#fdf6e3", "-fg", "#2a2a2a", "-ansi", hostANSISpec(), "--"},
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+
+	want := map[string]string{"11": xrgb(bg), "10": xrgb(fg), "4;1": xrgb(pal[1])}
+	got := askPane(t, base, "e2e-themed", host, want)
+	for spec, w := range want {
+		if got[spec] != w {
+			t.Errorf("themed daemon session: a pane's OSC %s query was answered %q, want the theme's %q", spec, got[spec], w)
+		}
+	}
+	saveArtifact(t, term, artifacts, "themed-daemon-pane")
 }

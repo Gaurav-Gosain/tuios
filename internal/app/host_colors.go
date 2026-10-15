@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -355,9 +356,29 @@ type paneReport struct {
 type paneReportMemo struct {
 	groundKey string
 	themed    bool
-	gen       uint64
-	valid     bool
-	r         paneReport
+	// tint is the theme the answer was worked out from. A theme switch
+	// gives a new pointer, and so does a theme registered again under the
+	// same id with new colours.
+	tint  *tint.Tint
+	gen   uint64
+	valid bool
+	r     paneReport
+}
+
+// themeReportPalette is a theme's sixteen as a pane is told them, and as the
+// comma list the daemon is sent. A slot the theme does not set stays nil and
+// empty, which keeps the emulator's own answer for it.
+func themeReportPalette(t *tint.Tint) (*[16]color.Color, string) {
+	var pal [16]color.Color
+	var b strings.Builder
+	for i, c := range theme.ANSIOrder(t) {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		pal[i] = theme.AsColor(c)
+		b.WriteString(colorHex(pal[i]))
+	}
+	return &pal, b.String()
 }
 
 // paneReportNow is what panes are told they are drawn on.
@@ -366,16 +387,19 @@ type paneReportMemo struct {
 // With no theme the host's own colours fill in whatever the paint does not
 // say: the background when nothing is painted, the text colour when a colour
 // of the user's is painted with no theme to take ink from, and the sixteen.
-// With a theme and nothing painted the emulator answers with the theme's
-// colours, which is what it is given as its defaults.
+// With a theme the theme's colours fill in the rest. A pane this process runs
+// is given them as its defaults anyway, but the daemon's emulators are not:
+// the daemon never loads a theme, so without this a pane in a daemon session
+// answered black and white under any theme.
 func (m *OS) paneReportNow() *paneReport {
 	g := m.paneGround()
 	themed := theme.IsEnabled()
+	cur := theme.Current()
 	memo := &m.paneReport
-	if memo.valid && memo.groundKey == g.key && memo.themed == themed && memo.gen == m.host.gen {
+	if memo.valid && memo.groundKey == g.key && memo.themed == themed && memo.tint == cur && memo.gen == m.host.gen {
 		return &memo.r
 	}
-	memo.groundKey, memo.themed, memo.gen, memo.valid = g.key, themed, m.host.gen, true
+	memo.groundKey, memo.themed, memo.tint, memo.gen, memo.valid = g.key, themed, cur, m.host.gen, true
 
 	var r paneReport
 	if g.on() {
@@ -393,6 +417,14 @@ func (m *OS) paneReportNow() *paneReport {
 			r.pal = &pal
 			r.palHex = m.host.palHex
 		}
+	} else if cur != nil {
+		if r.bg == nil {
+			r.bg = theme.AsColor(cur.Bg)
+		}
+		if r.fg == nil {
+			r.fg = theme.AsColor(cur.Fg)
+		}
+		r.pal, r.palHex = themeReportPalette(cur)
 	}
 	r.bgHex, r.fgHex = colorHex(r.bg), colorHex(r.fg)
 	if r.bgHex != "" || r.fgHex != "" || r.palHex != "" {

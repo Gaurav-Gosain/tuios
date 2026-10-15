@@ -5903,3 +5903,14 @@ gets a plain middle press, and a press the binding takes keeps its release.
 | The release decided by where it lands, as before the review, with the mouse-mode check kept at the press | `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives a plain middle press and no release) | **caught** |
 | The mouse-mode check cut from `handleTerminalMouseBinding` | `TestMousePaneKeepsPageKeysAndMiddleButton` (the pane receives no middle press) | **caught** |
 | The `shift+pgup` default removed from `terminal_scroll_page_up` | `TestDefaultPageAndMiddleBindings/page-scroll` | **caught** |
+## A pane in a themed daemon session reports the theme's colours
+
+`TestThemedDaemonPaneReportsTheTheme` attaches to a daemon session with
+`theme = "dracula"`, behind the light stand-in host, and asks a pane for
+OSC 11, OSC 10 and OSC 4 slot 1.
+
+The controls were run on 2026-10-15 on branch `fix/daemon-theme-osc-report`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A themed client pushes no colours | `paneReportNow`: the themed branch cut, which is `main` before the fix | `TestThemedDaemonPaneReportsTheTheme` (OSC 11 answered `rgb:0000/0000/0000`, OSC 10 `rgb:ffff/ffff/ffff`, OSC 4;1 `rgb:8080/0000/0000`) | **caught** |
