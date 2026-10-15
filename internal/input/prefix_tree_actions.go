@@ -86,8 +86,9 @@ func makeResizeStepHandler(dx, dy int) ActionHandler {
 }
 
 // handleNewWorkspace goes to the first workspace with no pane, the one the
-// dock's + button goes to, and opens one there: tmux's new-window. With workspaces.new_window_when_empty on, the
-// switch has asked for that pane already.
+// dock's + button goes to, and opens one there: tmux's new-window. With
+// workspaces.new_window_when_empty on, the switch has asked for that pane
+// already.
 func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	ws := o.NewWorkspaceTarget()
 	if ws == 0 {

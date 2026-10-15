@@ -74,13 +74,13 @@ func (m *OS) JoinMarkedPane(dir layout.PreselectionDir) {
 		m.ShowNotification("The marked pane is this pane", "info", m.Settings.NotificationDuration)
 		return
 	case !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout:
-		m.ShowNotification("Joining a pane needs BSP tiling", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("Turn on BSP tiling to join a pane", "info", m.Settings.NotificationDuration)
 		return
 	case isScratch(marked) || isScratch(focused) || session.IsScratchWorkspace(m.CurrentWorkspace):
 		m.ShowNotification("A scratch pane stays in its scratch group", "info", m.Settings.NotificationDuration)
 		return
 	case marked.IsFloating || focused.IsFloating || marked.Minimized:
-		m.ShowNotification("Only a tiled pane can be joined", "info", m.Settings.NotificationDuration)
+		m.ShowNotification("You can join only a tiled pane", "info", m.Settings.NotificationDuration)
 		return
 	}
 
