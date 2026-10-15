@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -271,5 +272,209 @@ refresh = "once"
 	}
 	if !strings.Contains(sent, "\U0001F600") {
 		t.Errorf("the emoji in the component's output never reached the host terminal")
+	}
+}
+
+// dockCellFind returns the dock row and the column where text starts, scanning
+// the grid's cells rather than Line so a cap glyph beside it is its own cell.
+func dockCellFind(s tuitest.Screen, text string) (x, y int, ok bool) {
+	cols, rows := s.Size()
+	runes := []rune(text)
+	for y = rows - 1; y >= 0; y-- {
+		for x = 0; x+len(runes) <= cols; x++ {
+			match := true
+			for i, r := range runes {
+				if s.Cell(x+i, y).Rune != r {
+					match = false
+					break
+				}
+			}
+			if match {
+				return x, y, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func dockRGB(r, g, b uint8) tuitest.Color {
+	return tuitest.Color{Kind: tuitest.ColorRGB, R: r, G: g, B: b}
+}
+
+// TestDockCellStyleAndSessionComponent is the contract for the session cell and
+// for cell styles on the real binary. Listing "session" puts the formatted
+// workspace and pane on the bar; [dock.session] and [dock.custom.NAME] colour
+// the cell and draw their caps in its background colour; a cell with a custom
+// background and no foreground gets ink that reads on that background. The
+// unstyled custom cell is the positive half: it shows the colours come from the
+// style and are not on every cell.
+// The session cell sits on the right and the custom ones on the left because
+// the two sides gate a cell in different places.
+func TestDockCellStyleAndSessionComponent(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `
+[dock]
+left  = ["mode", "workspaces", "trail", "custom/plain", "custom/light"]
+right = ["session", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
+
+[dock.session]
+format    = "S[{workspace}:{pane}]"
+bg        = "#7fbbb3"
+fg        = "#272e33"
+bold      = true
+cap_left  = "<"
+cap_right = ">"
+
+[dock.custom.plain]
+command = "echo PLAINCELL"
+refresh = "once"
+
+[dock.custom.light]
+command   = "echo LIGHTCELL"
+refresh   = "once"
+bg        = "#f5f5f5"
+cap_right = ")"
+`)
+	term := startIn(t, base, startOpts{env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	// The workspace number is the current workspace and the pane number is the
+	// focused pane's place in it, so an empty second workspace tells them apart.
+	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
+		t.Fatalf("send alt+2: %v", err)
+	}
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, a := dockCellFind(s, "S[2:0]")
+		_, _, b := dockCellFind(s, "PLAINCELL")
+		_, _, c := dockCellFind(s, "LIGHTCELL")
+		return a && b && c
+	}, uiTimeout); err != nil {
+		t.Fatalf("the session and custom cells never all drew: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+
+	teal, ink, light := dockRGB(0x7f, 0xbb, 0xb3), dockRGB(0x27, 0x2e, 0x33), dockRGB(0xf5, 0xf5, 0xf5)
+
+	x, y, _ := dockCellFind(s, "S[2:0]")
+	body := s.Cell(x, y)
+	if body.Bg != teal || body.Fg != ink || !body.Bold {
+		t.Errorf("session cell is fg %+v bg %+v bold %v, want fg %+v bg %+v bold", body.Fg, body.Bg, body.Bold, ink, teal)
+	}
+	left, right := s.Cell(x-2, y), s.Cell(x+len("S[2:0]")+1, y)
+	if left.Content != "<" || right.Content != ">" {
+		t.Errorf("session caps are %q and %q, want \"<\" and \">\"\n%s", left.Content, right.Content, term.Snapshot())
+	}
+	if left.Fg != teal || right.Fg != teal {
+		t.Errorf("session caps are drawn in %+v and %+v, want the cell's background %+v", left.Fg, right.Fg, teal)
+	}
+
+	qx, qy, _ := dockCellFind(s, "PLAINCELL")
+	plain := s.Cell(qx, qy)
+	if plain.Bg.Kind != tuitest.ColorRGB || plain.Bg == teal || plain.Bg == light || plain.Bold {
+		t.Errorf("unstyled custom cell is bg %+v bold %v, want the dock's own ground", plain.Bg, plain.Bold)
+	}
+
+	lx, ly, _ := dockCellFind(s, "LIGHTCELL")
+	lc := s.Cell(lx, ly)
+	if lc.Bg != light {
+		t.Errorf("styled custom cell has bg %+v, want %+v", lc.Bg, light)
+	}
+	if ratio := overlay.ContrastRatio(tuiColor(lc.Fg), tuiColor(lc.Bg)); ratio < overlay.ContrastFloor {
+		t.Errorf("a cell with a custom bg and no fg has ink %+v on %+v, %.2f:1, under the %.1f:1 floor", lc.Fg, lc.Bg, ratio, overlay.ContrastFloor)
+	}
+	if c := s.Cell(lx+len("LIGHTCELL")+1, ly); c.Content != ")" || c.Fg != light {
+		t.Errorf("styled custom cell's cap is %q in %+v, want \")\" in %+v", c.Content, c.Fg, light)
+	}
+}
+
+// TestDockCellBadColoursKeepTheDocksGround is what a colour that is not #rrggbb
+// does: it is dropped where the cell is drawn, as the config warning says, so
+// the cell keeps the dock's own ground. Passed on as it is, lipgloss would make
+// it no colour at all and the cell would draw on the terminal's background.
+// The bad cell is compared with an unstyled one beside it, which is the
+// positive half: that ground is the dock's own and not the terminal's.
+func TestDockCellBadColoursKeepTheDocksGround(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, `
+[dock]
+left = ["mode", "workspaces", "trail", "custom/plain", "custom/bad"]
+
+[dock.custom.plain]
+command = "echo PLAINCELL"
+refresh = "once"
+
+[dock.custom.bad]
+command   = "echo BADCELL"
+refresh   = "once"
+bg        = "pink"
+fg        = "red"
+cap_right = "}"
+`)
+	term := startIn(t, base, startOpts{env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, a := dockCellFind(s, "PLAINCELL")
+		_, _, b := dockCellFind(s, "BADCELL")
+		return a && b
+	}, uiTimeout); err != nil {
+		t.Fatalf("the custom cells never drew: %v\n%s", err, term.Snapshot())
+	}
+	s := term.Screen()
+
+	qx, qy, _ := dockCellFind(s, "PLAINCELL")
+	plain := s.Cell(qx, qy)
+	if plain.Bg.Kind != tuitest.ColorRGB {
+		t.Fatalf("the unstyled cell is on %+v, want the dock's own ground", plain.Bg)
+	}
+	bx, by, _ := dockCellFind(s, "BADCELL")
+	bad := s.Cell(bx, by)
+	if bad.Bg != plain.Bg || bad.Fg != plain.Fg {
+		t.Errorf("a cell with bad colours is fg %+v bg %+v, want the dock's own fg %+v bg %+v", bad.Fg, bad.Bg, plain.Fg, plain.Bg)
+	}
+	if c := s.Cell(bx+len("BADCELL")+1, by); c.Content != "}" || c.Fg != plain.Bg {
+		t.Errorf("a cell with bad colours has cap %q in %+v, want \"}\" in the dock's ground %+v", c.Content, c.Fg, plain.Bg)
+	}
+}
+
+// TestDockSessionDefaultFormat is the default text: the session name, the
+// workspace and the pane. The test session has no name, so the cell is the two
+// numbers, with the space the empty name would leave trimmed away: a cell drawn
+// "< 1:1 >" and not "<  1:1 >". It is also the check that "session" is in no
+// default list: the bar's own workspace readout is the one "1:1" on a bare dock,
+// and listing the component is what makes a second.
+func TestDockSessionDefaultFormat(t *testing.T) {
+	bare, _ := start(t, startOpts{})
+	waitBoot(t, bare)
+	newWindow(t, bare)
+	waitWindowCount(t, bare, 1, "opening a shell for the bare dock")
+	if err := bare.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("bare screen never settled: %v\n%s", err, bare.Snapshot())
+	}
+	if row := dockRowText(t, bare); strings.Count(row, "1:1") != 1 {
+		t.Fatalf("a bare dock should carry the workspace readout once and no session cell: %q", row)
+	}
+
+	base := t.TempDir()
+	writeConfig(t, base, `
+[dock]
+right = ["session", "session-controls"]
+
+[dock.session]
+cap_left  = "<"
+cap_right = ">"
+`)
+	term := startIn(t, base, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, ok := dockCellFind(s, "< 1:1 >")
+		return ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("the session cell never drew \"< 1:1 >\": %v\n%s", err, term.Snapshot())
 	}
 }

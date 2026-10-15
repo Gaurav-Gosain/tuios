@@ -6101,3 +6101,53 @@ Run on 2026-10-15 on macOS on branch `feat/tmux-style-actions`. The e2e tests ar
 | `d.Register("toggle_mouse", ...)` cut | `TestToggleMouseTurnsHostReportingOffAndOn` (same) | **caught** |
 | `m.MouseOff = !m.MouseOff` cut from `ToggleMouse` | `TestToggleMouseTurnsHostReportingOffAndOn` (same) | **caught** |
 | The positive halves | none: the bsp and workspace 1 reads before any key; c starting right of a and a join with no mark moving nothing; no badge before any mark, and exact badge counts; b really on workspace 2 before the cross-workspace join; `\x1b[?1003h` seen at start and again after the second toggle | **guard** |
+
+## The session dock component and dock cell styles
+
+Three tests drive the real binary and read the colours, the bold flag and the
+cap glyphs off the screen's cells.
+
+- `TestDockCellStyleAndSessionComponent`: a `session` cell on the right, styled
+  by `[dock.session]`, and two custom cells on the left, one with a light
+  background and no foreground, one unstyled. The unstyled cell is the positive
+  half of the style checks: the colour comes from the style and is not on every
+  cell.
+- `TestDockCellBadColoursKeepTheDocksGround`: a custom cell whose `bg` and `fg`
+  are not `#rrggbb`, against an unstyled one. Its positive half is that the
+  unstyled cell is on a real, non-default ground. It is a separate test because
+  the two config warnings it causes take the right-hand end of the bar for about
+  eight seconds, and the session cell would wait for them.
+- `TestDockSessionDefaultFormat`: the default text, with the session's empty
+  name trimmed, and the bare dock's `1:1` readout counted once, which is also
+  the check that `session` is in no default list.
+
+Each control cuts a call site in `internal/app/dock_components.go` or
+`internal/config/dock.go`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The session cell never drew | n/a, injected, cuts the call site | drop `text = m.dockSessionText()` from `dockCustomCell` | `TestDockCellStyleAndSessionComponent` ("the session and custom cells never all drew"), `TestDockSessionDefaultFormat` ("the session cell never drew \"< 1:1 >\"") | **caught** |
+| The session cell was left out of the right-hand cells | n/a, injected, cuts the gate | drop `|| name == config.DockComponentSession` from `dockCellComponent` | both tests above, same messages. The left side draws any cell through `dockCustomCell`, so it is the right-hand cell that catches this | **caught** |
+| `[dock.session]`'s style was never read | n/a, injected, cuts the call site | `dockCellStyle` returns the empty style for the session | `TestDockCellStyleAndSessionComponent` ("session cell is fg … bg … bold false, want …", "session caps are \" \" and \" \", want \"<\" and \">\""), `TestDockSessionDefaultFormat` | **caught** |
+| A bad background drew on no background | n/a, injected | `renderDockCell` tests `st.Bg != ""` instead of `config.IsHexColor(st.Bg)` | `TestDockCellBadColoursKeepTheDocksGround` ("a cell with bad colours is fg … bg {Kind:0 …}, want the dock's own fg … bg {Kind:2 … R:45 G:44 B:54}", "has cap \"}\" in {Kind:0 …}") | **caught** |
+| A bad foreground drew in no colour | n/a, injected | the same for `st.Fg` | `TestDockCellBadColoursKeepTheDocksGround` ("a cell with bad colours is fg {Kind:0 …} bg …, want the dock's own fg {Kind:2 … R:191 G:188 B:200} …") | **caught** |
+| With a custom background and no foreground the ink was measured against the Panel, not the cell | n/a, injected | `theme.Readable(pal.FgDim, pal.Panel)` in `renderDockCell` | `TestDockCellStyleAndSessionComponent` ("a cell with a custom bg and no fg has ink … on {… R:245 G:245 B:245}, 1.71:1, under the 4.5:1 floor") | **caught** |
+| The format's workspace placeholder was not filled | n/a, injected | `FormatDockSession` replaces `{window}` instead of `{workspace}` | `TestDockCellStyleAndSessionComponent` ("the session and custom cells never all drew"), `TestDockSessionDefaultFormat` | **caught** |
+| The empty session name left a space at the start | n/a, injected | `FormatDockSession` without `strings.TrimSpace` | `TestDockSessionDefaultFormat` ("the session cell never drew \"< 1:1 >\"") | **caught** |
+| The default format lost the workspace | n/a, injected | `DefaultDockSessionFormat` is `"{session} {pane}"` | `TestDockSessionDefaultFormat` ("the session cell never drew \"< 1:1 >\"") | **caught** |
+| `session` was in a default list | n/a, injected | add `DockComponentSession` to `defaultDockRight` | `TestDockSessionDefaultFormat` ("a bare dock should carry the workspace readout once and no session cell"), `TestDockDefaultListsDrawTheSameBar` ("the default lists draw a different bar") | **caught** |
+
+| Bold was ignored | n/a, injected | drop `.Bold(st.Bold)` from the styled body | `TestDockCellStyleAndSessionComponent` ("session cell is fg … bg … bold false, want … bold") | **caught** |
+| The foreground was ignored | n/a, injected | drop the `lipgloss.Color(st.Fg)` assignment | `TestDockCellStyleAndSessionComponent` ("session cell is fg {… R:67 G:66 B:74} … want fg {… R:39 G:46 B:51} …") | **caught** |
+| The left cap was not drawn | n/a, injected | drop `body = caps.Render(st.CapLeft) + body` | `TestDockCellStyleAndSessionComponent` ("session caps are \" \" and \">\", want \"<\" and \">\"") | **caught** |
+| The right cap was not drawn | n/a, injected | drop `body += caps.Render(st.CapRight)` | `TestDockCellStyleAndSessionComponent` ("session caps are \"<\" and \" \", want …", "styled custom cell's cap is \" \" in … want \")\" …") | **caught** |
+| `[dock.custom.NAME]`'s style was never read | n/a, injected, cuts the call site | `dockCellStyle` drops the `custom/` branch | `TestDockCellStyleAndSessionComponent` ("styled custom cell has bg {… R:45 G:44 B:54}, want {… R:245 G:245 B:245}") | **caught** |
+
+Parsing, the embedded style round trip and the colour warnings are not on the
+screen, so they stay unit tests in `internal/config/dock_style_test.go`:
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A custom cell's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.custom."+name, …)` line | `TestValidateDockCellColors` ("warnings … do not name dock.custom.x.bg"); the valid `custom.y` is the positive half | **caught** |
+| The session's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.session", …)` call | `TestValidateDockCellColors` ("warnings … do not name dock.session.fg") | **caught** |
+| The embedded style was read from a nested table | n/a, injected | rename the `cap_right` tag | `TestDockCellStyleTablesRoundTrip` ("[dock.session] read as {… CapRight:} …", "round trip lost the style:") | **caught** |

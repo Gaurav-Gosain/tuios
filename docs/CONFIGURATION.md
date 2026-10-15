@@ -1124,6 +1124,10 @@ exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
 count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 `1 failed` stays until you open the Copies panel. A click opens the panel. Add
 `transfers` to your own `right` list to see it there.
+`session` shows the session name, workspace and pane, `main 2:1`, and is in no
+default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
+`{pane}`) and the cell style keys `fg`, `bg`, `bold`, `cap_left` and
+`cap_right`, which `[dock.custom.NAME]` takes too. Colours are `#rrggbb`.
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 

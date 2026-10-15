@@ -27,6 +27,10 @@ const (
 	// DockComponentTransfers is the copies between machines: a bar and a
 	// percent while a copy runs. It draws nothing while no copy exists.
 	DockComponentTransfers = "transfers"
+	// DockComponentSession is the session name with the current workspace and
+	// the focused pane's place in it, "main 2:1" by default. It is a cell, so
+	// it goes wherever it is listed, and it is in no default list.
+	DockComponentSession = "session"
 )
 
 // DockCustomPrefix marks a name in one of the dock lists as referring to a
@@ -49,6 +53,7 @@ var dockBuiltins = []string{
 	DockComponentClock,
 	DockComponentSessionControls,
 	DockComponentTransfers,
+	DockComponentSession,
 }
 
 // DockBuiltinComponents returns the built-in component names, sorted. Used by
@@ -133,6 +138,9 @@ type DockConfig struct {
 
 	// Tabs is [dock.tabs]: how the workspace strip draws its tabs.
 	Tabs DockTabsConfig `toml:"tabs,omitempty"`
+
+	// Session is [dock.session]: the "session" component's text and style.
+	Session DockSessionConfig `toml:"session,omitempty"`
 }
 
 // Workspace tab styles accepted by [dock.tabs] style.
@@ -184,6 +192,50 @@ func (t DockTabsConfig) Icon(n int) string {
 	return strconv.Itoa(n)
 }
 
+// DockCellStyle colours one dock cell. Every field is optional; a cell with
+// none set draws on the dock's quiet Panel ground as it always has. Colours are
+// "#rrggbb". The caps are drawn in the cell's background colour either side of
+// it, which is how a half-circle glyph reads as the cell's rounded end.
+type DockCellStyle struct {
+	Fg       string `toml:"fg,omitempty"`
+	Bg       string `toml:"bg,omitempty"`
+	Bold     bool   `toml:"bold,omitempty"`
+	CapLeft  string `toml:"cap_left,omitempty"`
+	CapRight string `toml:"cap_right,omitempty"`
+}
+
+// IsZero reports whether the style asks for nothing, which keeps the default
+// rendering.
+func (s DockCellStyle) IsZero() bool { return s == DockCellStyle{} }
+
+// DockSessionConfig is [dock.session].
+type DockSessionConfig struct {
+	DockCellStyle
+
+	// Format is the cell's text. Placeholders are {session} (the session name),
+	// {workspace} (the current workspace number) and {pane} (the focused pane's
+	// 1-based place in that workspace). Empty takes DefaultDockSessionFormat.
+	Format string `toml:"format,omitempty"`
+}
+
+// DefaultDockSessionFormat is the session component's text when [dock.session]
+// gives no format.
+const DefaultDockSessionFormat = "{session} {workspace}:{pane}"
+
+// FormatDockSession renders the session component's text. A format that
+// starts or ends with an empty placeholder is trimmed, so a session with no
+// name does not leave a dangling space.
+func FormatDockSession(format, session string, workspace, pane int) string {
+	if format == "" {
+		format = DefaultDockSessionFormat
+	}
+	return strings.TrimSpace(strings.NewReplacer(
+		"{session}", session,
+		"{workspace}", strconv.Itoa(workspace),
+		"{pane}", strconv.Itoa(pane),
+	).Replace(format))
+}
+
 // DockClockConfig is [dock.clock].
 type DockClockConfig struct {
 	// Format is a Go reference-time layout, e.g. "15:04" or "Mon 15:04:05".
@@ -212,6 +264,9 @@ type DockCustomConfig struct {
 
 	// MaxWidth caps the cell in cells; 0 takes DockCustomDefaultMaxWidth.
 	MaxWidth int `toml:"max-width,omitempty"`
+
+	// The cell's colours and caps; see DockCellStyle.
+	DockCellStyle
 }
 
 // Limits on what one custom component may cost. They exist because a dock cell
@@ -471,8 +526,12 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 		"separator_fg": t.SeparatorFg, "active_fg": t.ActiveFg, "active_bg": t.ActiveBg,
 		"inactive_fg": t.InactiveFg, "inactive_bg": t.InactiveBg,
 	})
+	validateDockColors(result, "dock.session", map[string]string{
+		"fg": cfg.Dock.Session.Fg, "bg": cfg.Dock.Session.Bg,
+	})
 
 	for name, spec := range cfg.Dock.Custom {
+		validateDockColors(result, "dock.custom."+name, map[string]string{"fg": spec.Fg, "bg": spec.Bg})
 		refresh, err := ParseDockRefresh(spec.Refresh)
 		switch {
 		case err != nil:

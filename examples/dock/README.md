@@ -35,7 +35,8 @@ reorders. A list you write as `[]` draws nothing on that side, which is
 different from leaving the key out.
 
 The built-ins are `mode`, `workspaces`, `trail`, `tape`, `windows`,
-`notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls`. Each
+`notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls`,
+`transfers`, `session`. Each
 keeps its own condition: naming `cpu` makes it eligible to draw, `show_cpu`
 still says whether it is on.
 
@@ -43,6 +44,29 @@ Two of them are not really cells. `notifications` and `copy-help` take the
 right-hand end for as long as they have something to say, wherever they sit in
 the list, because they are transient claims rather than segments.
 `session-controls` always holds the bar's right-hand end and is never truncated.
+
+## The session cell and cell colours
+
+`session` shows the session name, the current workspace and the focused pane's
+place in it, `main 2:1`. It is in no default list; add it where you want it.
+`[dock.session]` sets its text and look:
+
+```toml
+[dock]
+left = ["mode", "workspaces", "session"]
+
+[dock.session]
+format    = "{session} {workspace}:{pane}"  # the default
+fg        = "#272e33"
+bg        = "#7fbbb3"
+bold      = true
+cap_left  = "\ue0b6"                     # drawn in bg, round the cell's ends
+cap_right = "\ue0b4"
+```
+
+`fg`, `bg`, `bold`, `cap_left` and `cap_right` work the same way in a
+`[dock.custom.NAME]` table. Colours are `#rrggbb`; anything else is warned
+about and ignored. With none of them set a cell draws as it always has.
 
 ## The clock
 

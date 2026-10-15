@@ -340,6 +340,10 @@ refresh  = "event:after-agent-state"
 on-click = "tuios list-windows"
 ```
 
+The built-in `session` component shows `session workspace:pane`. `[dock.session]`
+sets `format` (`{session}`, `{workspace}`, `{pane}`); it and `[dock.custom.NAME]`
+take `fg`, `bg` (`#rrggbb`), `bold`, `cap_left` and `cap_right`.
+
 ```sh
 tuios refresh-dock agents
 tuios list-dock-components --json | jq '.components[] | select(.name=="custom/agents")'
