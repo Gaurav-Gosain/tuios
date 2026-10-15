@@ -317,7 +317,15 @@ func clientLogf(format string, args ...any) {
 // The windows match tuios new without --space: a detached session gets its
 // first window from the daemon, and an attached one is made empty and the
 // client opens its first window as startup.open_default_window says.
+//
+// An attached one checks the terminal before the verb call, as plain tuios new
+// does, so a caller that cannot host the client leaves no session behind.
 func runNewSessionInSpace(sessionName, space string, detach bool) error {
+	if !detach {
+		if err := checkTerminal(); err != nil {
+			return err
+		}
+	}
 	if err := ensureDaemon(); err != nil {
 		return err
 	}

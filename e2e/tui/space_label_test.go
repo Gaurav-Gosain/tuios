@@ -86,6 +86,10 @@ func newInSpace(t *testing.T, base, name, space string) {
 //     hold the session afterwards.
 //   - every session filed under the space: a session made without --space
 //     must stay in none.
+//   - an attached create with no terminal leaving its session behind: the
+//     listing must not hold it after the refusal.
+//   - the attached pane given the daemon's fallback terminal: the caller's
+//     TERM is one the daemon never falls back to.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Spaces as a session
 // label").
@@ -110,28 +114,32 @@ func TestNewSpaceFilesTheSession(t *testing.T) {
 	}
 	wantSessionSpaces(t, base, "after the refused creates", map[string]string{"e2e-api": "payments", "e2e-loose": ""})
 
+	// An attached tuios new from a caller with no terminal fails before it
+	// makes anything, as plain tuios new does. tuiosCLI runs without a tty.
+	if out, err := tuiosCLI(t, base, "new", "e2e-notty", "--space", "payments"); err == nil {
+		t.Fatalf("ASSERTION: an attached tuios new --space with no terminal succeeded: %s", out)
+	}
+	wantSessionSpaces(t, base, "after an attached tuios new --space with no terminal", map[string]string{"e2e-api": "payments", "e2e-loose": ""})
+
+	// An attached tuios new makes the session empty and the client opens its
+	// first window, as the option says. --space keeps that.
+	//
 	// --space makes the session over the verb connection, not the path plain
 	// tuios new takes, so its pane must still get the caller's terminal. The
 	// caller's TERM is not a fallback the daemon has, so a match is the
 	// caller's value.
-	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
-	if out, err := tuiosCLIEnv(t, base, callerEnv, "new", "e2e-term", "--detach", "--space", "payments"); err != nil {
-		t.Fatalf("create e2e-term: %v: %s", err, out)
-	}
-	if got, pane := paneTerms(t, base, "e2e-term"); got != "TERM=screen-256color COLORTERM=truecolor" {
-		t.Fatalf("ASSERTION: a session made by tuios new --space gave its pane %q, want the caller's \"TERM=screen-256color COLORTERM=truecolor\"\n%s", got, pane)
-	}
-	wantSessionSpaces(t, base, "after tuios new --space from a caller with a terminal",
-		map[string]string{"e2e-api": "payments", "e2e-loose": "", "e2e-term": "payments"})
-
-	// An attached tuios new makes the session empty and the client opens its
-	// first window, as the option says. --space keeps that.
 	writeConfig(t, base, "[startup]\nopen_default_window = true\n")
-	term := startIn(t, base, startOpts{args: []string{"new", "e2e-live", "--space", "payments"}})
+	term := startIn(t, base, startOpts{
+		args: []string{"new", "e2e-live", "--space", "payments"},
+		env:  []string{"TERM=screen-256color", "COLORTERM=truecolor"},
+	})
 	waitWindowCount(t, term, 1, "the attached space session's first window")
 	clientShows(t, base, "e2e-live")
 	wantSessionSpaces(t, base, "after an attached tuios new --space",
-		map[string]string{"e2e-api": "payments", "e2e-loose": "", "e2e-term": "payments", "e2e-live": "payments"})
+		map[string]string{"e2e-api": "payments", "e2e-loose": "", "e2e-live": "payments"})
+	if got, pane := paneTerms(t, base, "e2e-live"); got != "TERM=screen-256color COLORTERM=truecolor" {
+		t.Fatalf("ASSERTION: an attached tuios new --space gave its pane %q, want the caller's \"TERM=screen-256color COLORTERM=truecolor\"\n%s", got, pane)
+	}
 	saveFrame(t, term, "new-space-attached")
 }
 
