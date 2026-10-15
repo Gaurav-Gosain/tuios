@@ -130,12 +130,7 @@ func TestKittyTempFileOutsideTempDirIsRefused(t *testing.T) {
 // reaches a remote viewer.
 func TestKittyTempFileAsIcatWritesItIsSent(t *testing.T) {
 	kp, host := remoteKitty(t)
-	dir, err := os.MkdirTemp("", "tuios-kitty-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	path := secretFile(t, dir, "tty-graphics-protocol-frame.rgba")
+	path := secretFile(t, kittyTestTempDir(t), "tty-graphics-protocol-frame.rgba")
 
 	sendKitty(kp, kittyFileCmd(vt.KittyMediumTempFile, path))
 
@@ -191,6 +186,18 @@ func useKittyTempDirs(t *testing.T, dirs ...string) {
 	}
 	t.Cleanup(func() { kittyInTempDir = prev })
 	t.Setenv("TMPDIR", "")
+}
+
+// kittyTestTempDir returns a fresh directory that the kitty file checks
+// treat as the only temporary one. The checks refuse a file outside a
+// temporary directory, and they ignore a TMPDIR inside the home directory
+// (say ~/.cache/tmp), so a test that took its file from os.TempDir would
+// fail whenever TMPDIR points there.
+func kittyTestTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	useKittyTempDirs(t, dir)
+	return dir
 }
 
 // A TMPDIR that is the home directory, or a parent of it, would make every

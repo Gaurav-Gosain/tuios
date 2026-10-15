@@ -54,13 +54,12 @@ func TestKittyClearOnED2(t *testing.T) {
 		)
 	})
 
-	tmpFile, err := os.CreateTemp("", "youterm-thumb-test-")
+	tmpFile, err := os.CreateTemp(kittyTestTempDir(t), "youterm-thumb-test-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, _ = tmpFile.Write(bytes.Repeat([]byte{0x00}, 100))
 	tmpFile.Close()
-	defer os.Remove(tmpFile.Name())
 	encodedPath := base64.StdEncoding.EncodeToString([]byte(tmpFile.Name()))
 
 	frame := func() []byte {
@@ -140,13 +139,12 @@ func TestKittyNoStaleAccumulation(t *testing.T) {
 
 	_, _ = emu.Write([]byte("\x1b[?1049h"))
 
-	tmpFile, err := os.CreateTemp("", "youterm-thumb-accum-test-")
+	tmpFile, err := os.CreateTemp(kittyTestTempDir(t), "youterm-thumb-accum-test-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, _ = tmpFile.Write(bytes.Repeat([]byte{0x00}, 100))
 	tmpFile.Close()
-	defer os.Remove(tmpFile.Name())
 	encodedPath := base64.StdEncoding.EncodeToString([]byte(tmpFile.Name()))
 
 	frame := func() []byte {
