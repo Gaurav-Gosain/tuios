@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 	"golang.org/x/image/draw"
 )
 
@@ -190,7 +191,7 @@ func previewTool(ctx context.Context, f *os.File, tool string, args ...string) (
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := childproc.CommandContext(ctx, bin, args...)
 	cmd.ExtraFiles = []*os.File{f}
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
