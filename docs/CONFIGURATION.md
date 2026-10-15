@@ -377,6 +377,22 @@ display = "follow"
 
 `[[keybindings.command]]` binds a key to a command that you write: a scratch terminal, a popup, a pane or a command with no window. A mistake in an entry is a warning, and tuios ignores that entry. See [KEYBINDINGS.md](KEYBINDINGS.md#command-keys).
 
+## Animation speed
+
+`appearance.animation_speed` is the percent window animations run at: minimize
+and restore, snap, swap and zoom. 100 is the speed tuios ships with. 200 runs
+them in half the time, and 50 in twice the time.
+
+```toml
+[appearance]
+animation_speed = 200   # a number from 25 to 400
+# animation_speed = 0   # 100, the default
+```
+
+A value outside 25 to 400 moves to the nearest end. `appearance.motion = "none"`
+still turns the animations off, whatever the speed. Overlay fades and the copy
+sweep keep their own timing; the sweep has `appearance.selection.flash_ms`.
+
 ## Frame rate
 
 `appearance.max_fps` is the highest frame rate tuios draws at. Your terminal

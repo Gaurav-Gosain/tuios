@@ -683,6 +683,10 @@ type Settings struct {
 	// another, where two panes change at once and neither says so.
 	ZoomAnimation bool
 
+	// AnimationSpeed is the percent window animations run at: 100 is as
+	// shipped, 200 twice as fast, 50 half as fast.
+	AnimationSpeed int
+
 	// ZoomBorderless makes a zoom the whole pane region with no chrome: the
 	// zoomed pane drops its border and title bar, and its guest is told the
 	// full size of the region. zoom_size and zoom_max_width do not apply while
@@ -869,6 +873,7 @@ func DefaultSettings() Settings {
 		ScrollColumnMax:             ScrollColumnWidthMax,
 		ZoomSize:                    ZoomSizeDefault,
 		ZoomAnimation:               true,
+		AnimationSpeed:              AnimationSpeedDefault,
 		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,

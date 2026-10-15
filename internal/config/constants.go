@@ -41,6 +41,13 @@ const (
 
 	// FastAnimationDuration is the duration for snapping and window swapping animations
 	FastAnimationDuration = 200 * time.Millisecond
+
+	// AnimationSpeedDefault, Min and Max bound appearance.animation_speed, a
+	// percent the durations above are divided by: 200 runs them in half the
+	// time, 50 in twice the time.
+	AnimationSpeedDefault = 100
+	AnimationSpeedMin     = 25
+	AnimationSpeedMax     = 400
 )
 
 // =============================================================================
@@ -422,7 +429,7 @@ func (s *Settings) GetAnimationDuration() time.Duration {
 	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
-	return DefaultAnimationDuration
+	return s.scaleAnimation(DefaultAnimationDuration)
 }
 
 // GetFastAnimationDuration returns the animation duration for fast operations.
@@ -432,7 +439,18 @@ func (s *Settings) GetFastAnimationDuration() time.Duration {
 	if !s.MotionAllows(MotionBasic) {
 		return 0
 	}
-	return FastAnimationDuration
+	return s.scaleAnimation(FastAnimationDuration)
+}
+
+// scaleAnimation divides d by the animation_speed percent. A value outside
+// the allowed range, including the zero a Settings built by hand carries,
+// reads as the default speed.
+func (s *Settings) scaleAnimation(d time.Duration) time.Duration {
+	speed := s.AnimationSpeed
+	if speed < AnimationSpeedMin || speed > AnimationSpeedMax {
+		speed = AnimationSpeedDefault
+	}
+	return d * AnimationSpeedDefault / time.Duration(speed)
 }
 
 // SidebarDefaultSections is the rail's layout as it ships.

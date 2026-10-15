@@ -461,6 +461,12 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.animation_speed", Type: OptionInt, Section: "appearance",
+		Description: "Percent window animations run at: 100 as shipped, 200 twice as fast, 50 half as fast",
+		Default:     strconv.Itoa(AnimationSpeedDefault),
+		Min:         AnimationSpeedMin, Max: AnimationSpeedMax,
+	},
+	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",
 		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
 		Default:     strconv.Itoa(ScrollColumnWidthMax),

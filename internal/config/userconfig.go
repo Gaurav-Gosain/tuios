@@ -381,6 +381,7 @@ type AppearanceConfig struct {
 	NiriClickReveals       *bool    `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
 	NiriHoverReveals       *bool    `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
 	ZoomAnimation          *bool    `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
+	AnimationSpeed         int      `toml:"animation_speed,omitempty"` // Percent window animations run at: 100 as shipped, 200 twice as fast (default: 100)
 	ZoomBorderless         bool     `toml:"zoom_borderless"`           // A zoomed pane fills the whole pane region with no border (default: false)
 	ZoomFollowsFocus       *bool    `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
 	WindowButtonZoom       *bool    `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
@@ -976,6 +977,7 @@ func DefaultConfig() *UserConfig {
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			ScrollColumnMax:          ScrollColumnWidthMax,
 			ZoomSize:                 ZoomSizeDefault,
+			AnimationSpeed:           AnimationSpeedDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
@@ -2566,6 +2568,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.MasterCount = ClampMasterCount(cfg.Appearance.MasterCount)
 	s.MasterNoGrid = cfg.Appearance.MasterGrid != nil && !*cfg.Appearance.MasterGrid
 	s.ZoomSize = clampPercent(cfg.Appearance.ZoomSize, ZoomSizeMin, ZoomSizeMax, ZoomSizeDefault)
+	s.AnimationSpeed = clampPercent(cfg.Appearance.AnimationSpeed, AnimationSpeedMin, AnimationSpeedMax, AnimationSpeedDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)

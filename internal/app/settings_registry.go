@@ -126,6 +126,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_workspace_tab_format":      "Workspace tab format",
 	"appearance.zoom_size":                      "Zoom size",
 	"appearance.zoom_animation":                 "Zoom animates",
+	"appearance.animation_speed":                "Animation speed",
 	"appearance.zoom_borderless":                "Borderless zoom",
 	"appearance.zoom_follows_focus":             "Zoom follows focus",
 	"appearance.window_button_zoom":             "Tiled zoom button",
