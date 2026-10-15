@@ -2627,6 +2627,25 @@ bytes more. No third-party dependency was added: fsnotify and go-toml were
 already in the build, and tuios.dev/swatch is a module in this repository.
 The new budgets leave 101,398 and 102,902 bytes of room.
 
+The budgets went to 36,585,000 (linux/amd64) and 34,415,000 (darwin/arm64)
+for the v0.10.0 batch. Main at ce82a422 measured 36,491,426 and 34,350,018
+bytes (Go 1.26.9), 23,574 and 34,982 bytes under the budgets. The batch
+brings it to 36,552,866 and 34,384,546, 61,440 and 34,528 bytes more. By pull
+request, linux/amd64 then darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #749 new-worktree and fan pass the caller's terminal | 0 | 0 |
+| #752 stable centered dock components | 0 | 0 |
+| #715 `[dock.tabs]` workspace tab styles | 20,480 | 240 |
+| #717 `dim_foreground` | 0 | 16,560 |
+| #718 tmux-style actions with no default key | 36,864 | 17,040 |
+| #754 goreleaser-action 7.3.0 | 0 | 0 |
+| #755 charmtone and charmtone-light themes | 4,096 | 688 |
+
+No dependency was added. The new budgets leave 32,134 and 30,454 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
