@@ -391,7 +391,7 @@ animation_speed = 200   # a number from 25 to 400
 
 A value outside 25 to 400 moves to the nearest end. `appearance.motion = "none"`
 still turns the animations off, whatever the speed. Overlay fades and the copy
-sweep keep their own timing; the sweep has `appearance.selection.flash_ms`.
+sweep keep their own timing. The copy sweep uses `appearance.selection.flash_ms`.
 
 ## Frame rate
 

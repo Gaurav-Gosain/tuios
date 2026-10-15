@@ -465,6 +465,7 @@ var optionSpecs = []Option{
 		Description: "Percent window animations run at: 100 as shipped, 200 twice as fast, 50 half as fast",
 		Default:     strconv.Itoa(AnimationSpeedDefault),
 		Min:         AnimationSpeedMin, Max: AnimationSpeedMax,
+		Percent: true,
 	},
 	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",

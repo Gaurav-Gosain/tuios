@@ -442,14 +442,15 @@ func (s *Settings) GetFastAnimationDuration() time.Duration {
 	return s.scaleAnimation(FastAnimationDuration)
 }
 
-// scaleAnimation divides d by the animation_speed percent. A value outside
-// the allowed range, including the zero a Settings built by hand carries,
-// reads as the default speed.
+// scaleAnimation divides d by the animation_speed percent. Zero, which a
+// Settings built by hand carries, reads as the default speed. Any other value
+// outside the range moves to the nearest end, as the config loader does.
 func (s *Settings) scaleAnimation(d time.Duration) time.Duration {
 	speed := s.AnimationSpeed
-	if speed < AnimationSpeedMin || speed > AnimationSpeedMax {
+	if speed == 0 {
 		speed = AnimationSpeedDefault
 	}
+	speed = min(max(speed, AnimationSpeedMin), AnimationSpeedMax)
 	return d * AnimationSpeedDefault / time.Duration(speed)
 }
 

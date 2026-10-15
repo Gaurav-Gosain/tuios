@@ -207,6 +207,7 @@ var settingSteps = map[string]int{
 	"appearance.zoom_max_width":   10,
 	"appearance.dim_unfocused":    5,
 	"appearance.modal_dim":        5,
+	"appearance.animation_speed":  25,
 	"hints.dim":                   5,
 	"appearance.sidebar.width":    2,
 }

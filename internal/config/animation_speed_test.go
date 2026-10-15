@@ -7,7 +7,7 @@ func TestAnimationSpeedScalesDurations(t *testing.T) {
 		speed int
 		want  int64 // ms for DefaultAnimationDuration
 	}{
-		{0, 300}, {100, 300}, {200, 150}, {50, 600}, {1000, 300},
+		{0, 300}, {100, 300}, {200, 150}, {50, 600}, {1000, 75}, {10, 1200},
 	}
 	for _, c := range cases {
 		s := DefaultSettings()
