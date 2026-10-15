@@ -401,6 +401,10 @@ func (m *OS) Init() tea.Cmd {
 	if cmd := m.startConfigWatch(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	// And the Omarchy theme, on a machine with Omarchy.
+	if cmd := m.startOmarchyFollow(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
@@ -2424,6 +2428,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ExitReason = ExitDetached
 		}
 		return m, tea.Quit
+
+	case omarchyFollowMsg:
+		m.applyOmarchyPalette(msg.palette)
+		return m, listenForOmarchy(m.omarchyChanges)
 
 	case configWatchMsg:
 		// A delivery from the file watcher: re-arm the listener, then apply it

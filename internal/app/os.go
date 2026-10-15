@@ -26,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/google/uuid"
+	"tuios.dev/swatch"
 )
 
 // Mode represents the current interaction mode of the application.
@@ -595,6 +596,10 @@ type OS struct {
 	// stopConfigWatch ends it. See config_watch.go.
 	configReloads   <-chan tea.Msg
 	stopConfigWatch func()
+	// omarchyChanges is this session's subscription to the Omarchy theme,
+	// and stopOmarchyFollow ends it. See omarchy_follow.go.
+	omarchyChanges    <-chan swatch.Palette
+	stopOmarchyFollow func()
 	// Client is where the person looking at this screen is sitting. The
 	// booleans around it are what it implies, kept because they are what the
 	// code reads and what the tests set. See ClientKind.
@@ -2119,6 +2124,7 @@ func (m *OS) Cleanup() {
 	m.stopSidebarSessions()
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
+	m.endOmarchyFollow()
 	m.endInboxWatch()
 	m.endTransfersWatch()
 	m.stopFileWatch()

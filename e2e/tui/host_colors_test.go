@@ -609,3 +609,149 @@ func TestThemedDaemonPaneReportsTheTheme(t *testing.T) {
 	}
 	saveArtifact(t, term, artifacts, "themed-daemon-pane")
 }
+
+// omarchySwitch applies an Omarchy theme under the test's HOME the way
+// omarchy-theme-set does: the new theme is staged in next-theme, the old
+// theme directory is removed, the staged one renamed into its place, and
+// theme.generation and theme.name are written last. The palette is the
+// shipped theme's colors.toml from swatch's fixtures.
+//
+// With TUIOS_E2E_OMARCHY_SRC naming an Omarchy checkout, the real
+// omarchy-theme-set does the switch instead, headless.
+func omarchySwitch(t *testing.T, base, id string) {
+	t.Helper()
+	home := xdgDir(base, "HOME")
+	if src := os.Getenv("TUIOS_E2E_OMARCHY_SRC"); src != "" {
+		run := filepath.Join(base, "omarchy-run")
+		mustMkdir(run)
+		cmd := exec.Command(filepath.Join(src, "bin", "omarchy-theme-set"), id)
+		cmd.Env = append(os.Environ(), "HOME="+home, "OMARCHY_PATH="+src,
+			"PATH="+filepath.Join(src, "bin")+":"+os.Getenv("PATH"),
+			"OMARCHY_THEME_HEADLESS=1", "OMARCHY_THEME_SKIP_BACKGROUND=1", "XDG_RUNTIME_DIR="+run)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("omarchy-theme-set %s: %v\n%s", id, err, out)
+		}
+		return
+	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "swatch", "omarchy", "testdata", "themes", id, "colors.toml"))
+	if err != nil {
+		t.Fatalf("read the %s fixture: %v", id, err)
+	}
+	current := filepath.Join(home, ".local", "state", "omarchy", "current")
+	next := filepath.Join(current, "next-theme")
+	mustMkdir(next)
+	if err := os.WriteFile(filepath.Join(next, "colors.toml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(current, "theme")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(next, filepath.Join(current, "theme")); err != nil {
+		t.Fatal(err)
+	}
+	gen := fmt.Sprintf("%d-%d\n", os.Getpid(), time.Now().UnixNano())
+	for name, body := range map[string]string{"theme.generation": gen, "theme.name": id + "\n"} {
+		if err := os.WriteFile(filepath.Join(current, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestOmarchyThemeSwitchIsFollowed runs a daemon session on a machine with
+// Omarchy and no tuios theme set, so tuios follows the Omarchy theme. It
+// starts on Tokyo Night, then Omarchy switches to Catppuccin Latte while the
+// client runs.
+//
+// After the switch, with no restart and no key pressed:
+//   - a pane's OSC 11 is answered with Latte's background, through the
+//     daemon's emulator, so the colours went from the client to the daemon;
+//   - a program that turned on mode 2031 gets the light report;
+//   - the pane frame is drawn in a new colour.
+//
+// Each state is kept as a frame drawn on the theme's ground, which is what
+// the Omarchy terminal around tuios shows.
+//
+// How this could pass wrongly: the answer could be the first theme read
+// again, but Tokyo Night and Latte differ in every colour checked; the
+// report could come from somewhere else, but the program asks nothing and
+// tuios sends a report only when the background changes kind.
+//
+// Negative control: with the watcher hub not started (startOmarchyFollow
+// returning nil), the pane keeps answering Tokyo Night's background, no
+// report arrives, and the test fails on all three.
+func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	host := buildHostTerm(t)
+	artifacts := artifactDir(t)
+
+	omarchySwitch(t, base, "tokyo-night")
+	if out, err := tuiosCLI(t, base, "new", "e2e-omarchy", "--detach"); err != nil {
+		t.Fatalf("create the session: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{
+		args: []string{"attach", "e2e-omarchy"},
+		env:  []string{"COLORTERM=truecolor"},
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+
+	const tokyoBg, latteBg = "rgb:1a1a/1b1b/2626", "rgb:efef/f1f1/f5f5"
+	if got := askPane(t, base, "e2e-omarchy", host, map[string]string{"11": tokyoBg}); got["11"] != tokyoBg {
+		t.Fatalf("on Tokyo Night a pane's OSC 11 was answered %q, want %q", got["11"], tokyoBg)
+	}
+	// frameInk is the colour of the pane frame's corner, and false when no
+	// frame is on screen.
+	frameInk := func(s tuitest.Screen) (tuitest.Color, bool) {
+		row, col, ok := textAt(s, "╭", 0)
+		if !ok {
+			return tuitest.Color{}, false
+		}
+		return s.Cell(col, row).Fg, true
+	}
+	before, ok := frameInk(term.Screen())
+	if !ok {
+		t.Fatalf("no pane frame on screen\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, artifacts, "tokyo-night")
+	renderScreenPNG(t, term.Screen(), hostGroundPalette("#a9b1d6", "#1a1b26"), filepath.Join(artifacts, "tokyo-night.png"))
+
+	// A program that asks to be told about light and dark, waiting.
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "e2e-omarchy", "-l", "clear; "+host+" scheme\r"); err != nil {
+		t.Fatalf("start the scheme listener: %v\n%s", err, out)
+	}
+	waitPane := func(want string) string {
+		t.Helper()
+		var pane string
+		deadline := time.Now().Add(shellTimeout)
+		for time.Now().Before(deadline) {
+			pane, _ = tuiosCLI(t, base, "capture-pane", "-s", "e2e-omarchy")
+			if strings.Contains(pane, want) {
+				return pane
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		return pane
+	}
+	if pane := waitPane("HOSTTERM-SCHEME-WAITING"); !strings.Contains(pane, "HOSTTERM-SCHEME-WAITING") {
+		t.Fatalf("the scheme listener never started:\n%s", pane)
+	}
+
+	omarchySwitch(t, base, "catppuccin-latte")
+
+	if pane := waitPane("HOSTTERM-SCHEME="); !strings.Contains(pane, "HOSTTERM-SCHEME=light") {
+		t.Errorf("after the switch to Catppuccin Latte the program that turned on mode 2031 was not told light:\n%s", pane)
+	}
+	if got := askPane(t, base, "e2e-omarchy", host, map[string]string{"11": latteBg}); got["11"] != latteBg {
+		t.Errorf("after the switch a pane's OSC 11 was answered %q, want Latte's %q", got["11"], latteBg)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		ink, ok := frameInk(s)
+		return ok && ink != before
+	}, configWatchTimeout); err != nil {
+		t.Errorf("the pane frame kept its Tokyo Night colour %+v after the switch\n%s", before, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifacts, "catppuccin-latte")
+	renderScreenPNG(t, term.Screen(), hostGroundPalette("#4c4f69", "#eff1f5"), filepath.Join(artifacts, "catppuccin-latte.png"))
+}

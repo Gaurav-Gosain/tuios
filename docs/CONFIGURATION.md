@@ -500,6 +500,12 @@ no theme. The panes, the chrome, the rail and the dock take the colours of the
 applied theme. The answers to OSC 10, 11 and 4 in a pane are the theme's
 colours too.
 
+When you switch the Omarchy theme, tuios changes its colours at the same
+moment as your terminal. You do not restart tuios and you do not press a key.
+A program in a pane that turned on mode 2031 gets a light or dark report when
+the theme changes between light and dark. tuios sends no SIGWINCH.
+On a machine without Omarchy, tuios watches nothing.
+
 | `appearance.theme` | On a machine with Omarchy | On a machine without Omarchy |
 |---|---|---|
 | empty (the default) | The Omarchy theme | The colours of your terminal |

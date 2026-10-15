@@ -59,6 +59,8 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		os.Exit(run(os.Args[2:]))
+	case "scheme":
+		os.Exit(schemeReports())
 	case "query":
 		if len(os.Args) != 3 {
 			fmt.Fprintln(os.Stderr, "usage: hostterm query SPEC")
@@ -514,5 +516,52 @@ func query(spec string) int {
 		reply = colour
 	}
 	fmt.Printf("HOSTTERM-%s=%s\n", spec, reply)
+	return 0
+}
+
+// schemeReports turns on mode 2031 in the terminal it runs in, waits for the
+// first light or dark report, prints it as HOSTTERM-SCHEME=light or =dark,
+// and exits. It gives up after 30 seconds with HOSTTERM-SCHEME=none.
+func schemeReports() int {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hostterm scheme: %v\n", err)
+		return 1
+	}
+	defer tty.Close()
+	old, err := term.MakeRaw(tty.Fd())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hostterm scheme: %v\n", err)
+		return 1
+	}
+	_, _ = tty.WriteString("\x1b[?2031h")
+	fmt.Fprint(tty, "HOSTTERM-SCHEME-WAITING\r\n")
+	got := make(chan string, 1)
+	go func() {
+		var seen []byte
+		buf := make([]byte, 256)
+		for {
+			n, err := tty.Read(buf)
+			seen = append(seen, buf[:n]...)
+			switch {
+			case bytes.Contains(seen, []byte("\x1b[?997;1n")):
+				got <- "dark"
+				return
+			case bytes.Contains(seen, []byte("\x1b[?997;2n")):
+				got <- "light"
+				return
+			case err != nil:
+				return
+			}
+		}
+	}()
+	answer := "none"
+	select {
+	case answer = <-got:
+	case <-time.After(30 * time.Second):
+	}
+	_, _ = tty.WriteString("\x1b[?2031l")
+	_ = term.Restore(tty.Fd(), old)
+	fmt.Printf("HOSTTERM-SCHEME=%s\n", answer)
 	return 0
 }

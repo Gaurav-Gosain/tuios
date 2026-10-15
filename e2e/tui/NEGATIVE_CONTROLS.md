@@ -5914,3 +5914,18 @@ The controls were run on 2026-10-15 on branch `fix/daemon-theme-osc-report`.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A themed client pushes no colours | `paneReportNow`: the themed branch cut, which is `main` before the fix | `TestThemedDaemonPaneReportsTheTheme` (OSC 11 answered `rgb:0000/0000/0000`, OSC 10 `rgb:ffff/ffff/ffff`, OSC 4;1 `rgb:8080/0000/0000`) | **caught** |
+
+## The Omarchy theme is followed while tuios runs
+
+`TestOmarchyThemeSwitchIsFollowed` attaches to a daemon session with no theme
+set and Tokyo Night applied under the test's HOME, then switches Omarchy to
+Catppuccin Latte the way `omarchy-theme-set` does. It passes with the swap
+helper and with the real script (`TUIOS_E2E_OMARCHY_SRC` at
+basecamp/omarchy 246f33a).
+
+The controls were run on 2026-10-15 on branch `feat/omarchy-follow`.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The watcher hub is not started | `Init`: the `startOmarchyFollow` command dropped | `TestOmarchyThemeSwitchIsFollowed` (no light report, OSC 11 still `rgb:1a1a/1b1b/2626`, the frame keeps its colour) | **caught** |
+| No mode 2031 report is sent | `Emulator.SetReportColors`: the report write cut | `TestOmarchyThemeSwitchIsFollowed` (the program that turned on mode 2031 was not told light) | **caught** |
