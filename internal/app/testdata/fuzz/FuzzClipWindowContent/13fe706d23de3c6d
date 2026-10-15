@@ -1,0 +1,6 @@
+go test fuzz v1
+string("│😀😀\x1b")
+int(-3)
+int(0)
+int(-13)
+int(24)

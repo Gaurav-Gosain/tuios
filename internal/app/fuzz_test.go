@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -27,7 +28,7 @@ var clipSeeds = []string{
 	"\x1b[38;2;1;2;3m\x1b[48;5;9m\x1b[1m\x1b[4m",
 	"\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\",
 	"\x1b]0;title\x07text",
-	// Truncated escape sequences, which the manual scanner has to walk safely.
+	// Truncated escape sequences, which the left cut has to walk safely.
 	"\x1b",
 	"\x1b[",
 	"\x1b[31",
@@ -77,6 +78,18 @@ func FuzzClipWindowContent(f *testing.F) {
 	f.Add("x", -1000000, -1000000, 80, 24)
 	f.Add("x", 1000000, 1000000, 80, 24)
 	f.Add("wide\ncontent", 0, 0, 1, 1)
+	// Issue #743: a pane whose wide text runs off the left edge. The cut
+	// counted one position per rune, so every wide grapheme it dropped took
+	// an extra cell, and the right border moved left on those rows. Each
+	// offset cuts the rows at a different place: inside the first emoji,
+	// between graphemes, inside a CJK character, and past them all.
+	pane743 := "╭──────────╮\n│😀😀ab      │\n│你好世界xy  │\n│plain-line│\n╰──────────╯"
+	for _, x := range []int{-1, -2, -3, -4, -5, -6, -9} {
+		f.Add(pane743, x, 0, 80, 24)
+	}
+	// The same pane cut by the right edge, inside a wide grapheme.
+	f.Add(pane743, 74, 0, 80, 24)
+	f.Add(pane743, 75, 0, 80, 24)
 
 	f.Fuzz(func(t *testing.T, content string, x, y, vw, vh int) {
 		// The caller is the compositor, which always has a real viewport and
@@ -136,7 +149,24 @@ func FuzzClipWindowContent(f *testing.F) {
 			}
 		}
 
-		// The clip rewrites lines by walking escape sequences by hand. It must
+		// Every row keeps its width, less what the edges cut off. A row
+		// that comes out short or long moves the pane's border, the last
+		// cell of the row, out of its column. Content that is not valid
+		// UTF-8 is left out: the width of a stray byte depends on its
+		// neighbours, so a cut can change it.
+		if utf8.ValidString(content) {
+			srcLines := strings.Split(content, "\n")
+			for i, line := range gotLines {
+				src := srcLines[finalY-y+i]
+				want := min(max(ansi.StringWidth(src)-(finalX-x), 0), maxCols)
+				if w := ansi.StringWidth(line); w != want {
+					t.Fatalf("clip row %d is %d cells wide, want %d: %q from %q",
+						i, w, want, line, src)
+				}
+			}
+		}
+
+		// The clip rewrites lines by walking their escape sequences. It must
 		// never invent rows.
 		if srcRows := strings.Count(content, "\n") + 1; len(gotLines) > srcRows {
 			t.Fatalf("clip returned %d rows from %d rows of content",
@@ -178,10 +208,10 @@ func clampFuzzCoord(v int) int {
 	return v
 }
 
-// FuzzClipWindowContentNoPanicOnEscapes drives the hand-written escape scanner
-// in the horizontal clip path, which is only reached when the content has to be
-// clipped from the left. It walks bytes looking for sequence terminators and is
-// the part most likely to run off the end of a truncated sequence.
+// FuzzClipWindowContentNoPanicOnEscapes drives the left cut (skipCells), which
+// is only reached when the content has to be clipped from the left. It walks
+// the bytes of every sequence before the cut and is the part most likely to
+// run off the end of a truncated sequence.
 func FuzzClipWindowContentNoPanicOnEscapes(f *testing.F) {
 	for _, s := range clipSeeds {
 		f.Add(s, 10)
