@@ -2077,6 +2077,21 @@ func (c *TUIClient) SessionGlobal(name string) bool {
 	return false
 }
 
+// SessionSpace is the space the named session is filed under, from the cached
+// listing. Empty for a session in none, for one this client has not been told
+// about, and from a daemon too old to send the field, which all read as a
+// session in no space.
+func (c *TUIClient) SessionSpace(name string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Space
+		}
+	}
+	return ""
+}
+
 // SessionCurrentWorkspace is the workspace the named session is showing, from
 // the cached listing, or 0 when it is unknown: an older daemon does not send
 // the field, and a surface reading zero simply says nothing about where that
@@ -2288,6 +2303,11 @@ func listingsAgree(a, b []SessionInfo) bool {
 		}
 		// A cd moves no window either, and the row's label is the directory.
 		if a[i].Dir != b[i].Dir || a[i].Branch != b[i].Branch {
+			return false
+		}
+		// Filing a session under a space moves no window, and the rail draws
+		// the row under the space's heading.
+		if a[i].Space != b[i].Space {
 			return false
 		}
 		if !slices.EqualFunc(a[i].Windows, b[i].Windows, windowSummariesAgree) {

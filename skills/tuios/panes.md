@@ -466,7 +466,7 @@ name.
 
 A space is a label the person files related sessions under, such as every
 session of one project. It exists while a session is in it, and `tuios ls`
-lists the sessions under one heading per space. Over the control protocol it
-is `set-session-space` and the `space` param of `new-session`. A space name
-follows the session name rules and is at most 64 bytes. A global session
-cannot be in a space.
+and the sidebar list the sessions under one heading per space, the sessions
+in no space last. Over the control protocol it is `set-session-space` and the
+`space` param of `new-session`. A space name follows the session name rules
+and is at most 64 bytes. A global session cannot be in a space.

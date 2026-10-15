@@ -355,6 +355,10 @@ func (m *OS) sidebarSignature() uint64 {
 	} else {
 		mixI(-1)
 	}
+	// The attached session's space decides which heading its row is drawn
+	// under, and like its worktree record it arrives on the session state, so
+	// the client's cache generation below does not speak for it.
+	mixS(m.SessionSpace)
 
 	// Foreign-session data, folded by generation instead of by locking the client.
 	if m.DaemonClient != nil {

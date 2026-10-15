@@ -6157,3 +6157,19 @@ screen, so they stay unit tests in `internal/config/dock_style_test.go`:
 | A custom cell's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.custom."+name, …)` line | `TestValidateDockCellColors` ("warnings … do not name dock.custom.x.bg"); the valid `custom.y` is the positive half | **caught** |
 | The session's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.session", …)` call | `TestValidateDockCellColors` ("warnings … do not name dock.session.fg") | **caught** |
 | The embedded style was read from a nested table | n/a, injected | rename the `cap_right` tag | `TestDockCellStyleTablesRoundTrip` ("[dock.session] read as {… CapRight:} …", "round trip lost the style:") | **caught** |
+## Space headings in the rail
+
+Run on 2026-10-16 on macOS on branch `feat/spaces-sidebar`, from upstream `main` (`ce82a422`). The tests are in `space_rail_test.go`: `TestSpaceRailHeadings`, `TestSpaceRailHeadingsFollowTheLabel`, `TestSpaceRailHeadingsSurviveTheDaemon` and `TestSpaceRailCursorPassesASplitRepository`. The fixed build passes all four. Each control cuts one wire from the fixed build, builds it, and runs the tests named in its row.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `sidebarGroupedRows` calls `GroupByRepo` alone (no space grouping) | mutant of this branch | all four, the first with "the rail never showed the alpha and beta headings with every session" | **caught** |
+| `adoptSessionLabels` does not copy `state.Space` (the attached session's space never reaches its row) | mutant of this branch | `TestSpaceRailHeadingsFollowTheLabel` ("the rail never showed e2e-here, the attached session, under a work heading"), `TestSpaceRailHeadingsSurviveTheDaemon` ("the rail never showed e2e-spaced under an ops heading after the restart") | **caught** |
+| `listingsAgree` does not compare `Space` (a refresh that moves only a space leaves the cache generation, so the rail keeps its old rows) | mutant of this branch | `TestSpaceRailHeadingsFollowTheLabel` ("the rail never showed e2e-here and e2e-there under the work heading"). This was a real miss in the first version of the branch | **caught** |
+| A repository header's nav row without the space it is drawn in (`isCursor` and `recordHit` given `""`) | mutant of this branch | `TestSpaceRailCursorPassesASplitRepository` ("no client shows session repo-feat-two"): the cursor snaps back to the first header | **caught** |
+| A space's heading drawn as a session row (the `KindSpace` case skipped) | mutant of this branch | `TestSpaceRailHeadings` ("the alpha heading has no rule after its name, so it reads as one more session") | **caught** |
+| A space's heading recorded as a nav row | mutant of this branch | `TestSpaceRailHeadings` ("no client shows session e2e-b1"): one j stops on the beta heading | **caught** |
+| `sidebarSignature` without `m.SessionSpace` | mutant of this branch | none. The attached session's row still moves, at the next listing refresh (at most 3 seconds with the rail open), because the listing carries the attached session's space too. The fold makes the move land on the state push rather than on that refresh, which a test cannot tell from a slow refresh without timing it | **not caught** |
+| The positive half | this branch | none: the rail with no space is checked flat before the first space is set, and every screen is saved under the test's artifact directory | **guard** |
+
+Each mutant is a text replacement in the branch's checkout, built to a separate binary and put back before the next. Not covered here: a global session and the other machines' rows, which `GroupBySpace` leaves out of every space. A global session cannot be in a space (#708 refuses it), and the federation snapshot carries no space, so no fixture can put either under a heading.

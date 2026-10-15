@@ -673,6 +673,10 @@ type OS struct {
 	// session's arrives with the cached listing; this one comes down with the
 	// session state, the same way SessionRestored does.
 	SessionGlobal bool
+	// SessionSpace is the space the attached session is filed under, empty for
+	// none. It is daemon-owned and comes down with the session state, like
+	// SessionGlobal; every other session's arrives with the cached listing.
+	SessionSpace string
 	// The machines on this user's tailnet, offered as addresses on the Hosts
 	// settings page. Filled once by a goroutine, because the call behind it is
 	// a round trip and the row that shows them is drawn in the render path.

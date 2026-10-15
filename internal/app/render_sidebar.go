@@ -108,7 +108,9 @@ const (
 	// sidebarRowRepo is a repository's group header in the sessions section,
 	// over the worktree sessions of that repository. Activating it folds the
 	// group shut or opens it again. It carries the repository name in
-	// SessionID, which is what the folded set is keyed by. See
+	// SessionID, which is what the folded set is keyed by, and the space it is
+	// drawn in in WindowID: a repository whose sessions are in several spaces
+	// has a header in each, and the cursor tells them apart by that. See
 	// sidebar_worktrees.go.
 	sidebarRowRepo
 	// sidebarRowHost is a machine's group header in the sessions section, over
@@ -1913,11 +1915,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
+			if s.Kind == sessiontree.KindSpace {
+				// A space's heading. It names the rows under it and is not a
+				// row to act on, so it records no hit and no nav row: the
+				// pointer and the cursor pass over it.
+				lines = append(lines, compose(m.sidebarSpaceRow(s, cw, pal)))
+				continue
+			}
 			if s.Kind == sessiontree.KindRepo {
 				// A repository's group header. It is a nav row like any other,
-				// and activating it folds the group.
-				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
-				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
+				// and activating it folds the group. The space it is drawn in
+				// rides in the window slot, because a repository whose
+				// sessions are in two spaces has a header in each, and the
+				// cursor has to tell them apart.
+				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, s.Space))
+				recordHit(sidebarRowRepo, s.ID, s.Space, -1, 1)
 				lines = append(lines, compose(st.mark(pal, m.sidebarRepoRow(s, cw, pal, st))))
 				continue
 			}
@@ -2469,13 +2481,13 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	switch target.Kind {
 	case sidebarRowSession:
 		for i, s := range sessions {
-			if s.Kind != sessiontree.KindRepo && s.ID == target.SessionID {
+			if s.Kind == sessiontree.KindSession && s.ID == target.SessionID {
 				return sidebarSectionSessions, i, true
 			}
 		}
 	case sidebarRowRepo:
 		for i, s := range sessions {
-			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID {
+			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID && s.Space == target.WindowID {
 				return sidebarSectionSessions, i, true
 			}
 		}
@@ -2737,7 +2749,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	// selection.
 	fg := pal.Fg
 	title := printableTitle(node.Title)
-	indent := m.sidebarRowIndent()
+	indent := m.sidebarNodeIndent(node)
 	// A worktree session is named by its branch under its repository's row,
 	// behind the mark that says whether the group goes on below it. The branch
 	// is the whole label there, so nothing rides after it.

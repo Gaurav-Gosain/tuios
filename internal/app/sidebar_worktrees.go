@@ -43,9 +43,10 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 }
 
 // sidebarSessionRows is the sessions section's own row list: the attached
-// machine's sessions with the worktree ones gathered under their repository
-// and the members of a folded repository left out, then laid out by machine
-// with the other machines' rows (see sidebarMachineRows).
+// machine's sessions under their space's heading and, inside that, the worktree
+// ones under their repository, with the members of a folded repository left
+// out, then laid out by machine with the other machines' rows (see
+// sidebarMachineRows).
 //
 // Only the sessions section reads it. The terminals and agents sections keep
 // reading the ungrouped list, so folding a repository or a machine hides its
@@ -53,13 +54,15 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 // difference between tidying a list and losing work.
 func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node {
 	local := localSessionNodes(sessions)
-	return m.sidebarMachineRows(m.sidebarRepoRows(local), sessions[len(local):])
+	return m.sidebarMachineRows(m.sidebarGroupedRows(local), sessions[len(local):])
 }
 
-// sidebarRepoRows gathers one machine's worktree sessions under their
-// repository and leaves a folded repository's members out.
-func (m *OS) sidebarRepoRows(sessions []sessiontree.Node) []sessiontree.Node {
-	rows := sessiontree.GroupByRepo(sessions)
+// sidebarGroupedRows groups one machine's sessions by space and, inside each
+// space and inside the sessions in no space, gathers the worktree ones under
+// their repository. A folded repository's members are left out, in every
+// space they are in.
+func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node {
+	rows := sessiontree.GroupBySpace(sessions, sessiontree.GroupByRepo)
 	if len(m.SidebarCollapsedRepos) == 0 {
 		return rows
 	}
@@ -165,7 +168,7 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	// session's glyph, rolls its members' states up, and steps in under its
 	// machine with every other session row. Its own members hang off it on the
 	// tree marks. See sidebarWorktreeLabel.
-	indent := m.sidebarRowIndent()
+	indent := m.sidebarNodeIndent(node)
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(state)).
 		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarGutter(false, state, rowBg, pal, &m.Settings)

@@ -432,7 +432,7 @@ see is the remote one. With --detach the far side creates the session and
 returns. See 'tuios hosts --help'.
 
 With --space the session is filed under a space, a named group of related
-sessions that 'tuios ls' lists together.`,
+sessions that 'tuios ls' and the sidebar list together.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
@@ -2136,8 +2136,9 @@ survives a reattach. Pass no accent to clear it.`,
 		Use:   "set-session-space [space]",
 		Short: "File a session under a space",
 		Long: `File a session under a space, a named group of related sessions that
-'tuios ls' lists together. A space exists while at least one session is in
-it. Pass no space to take the session out of any.
+'tuios ls' and the sidebar list together, under the space's name. A space
+exists while at least one session is in it. Pass no space to take the session
+out of any.
 
 A space name follows the session name rules and is at most 64 bytes. A
 global session cannot be in a space.`,

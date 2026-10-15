@@ -328,7 +328,7 @@ The session's windows start in the directory where you run `tuios new`.
 window, and to each later window that has no pane to take a directory from.
 `--cwd` does not work with `--host`.
 
-`--space` files the session under the space as it is made, so `tuios ls` lists it with the space's other sessions. It does not work with `--host`, and with `--global` it is refused: a global session cannot be in a space. See [`tuios set-session-space`](#tuios-set-session-space).
+`--space` files the session under the space as it is made, so `tuios ls` and the sidebar list it with the space's other sessions. It does not work with `--host`, and with `--global` it is refused: a global session cannot be in a space. See [`tuios set-session-space`](#tuios-set-session-space).
 
 **Examples:**
 ```bash
@@ -2712,7 +2712,7 @@ tuios set-session-accent
 
 ### `tuios set-session-space`
 
-File a session under a space, a named group of related sessions that `tuios ls` lists together. A space is only a label on its sessions: it exists while at least one session is in it, and it survives a daemon restart with them. Pass no space to take the session out of any.
+File a session under a space, a named group of related sessions that `tuios ls` and the sidebar list together, under the space's name. A space is only a label on its sessions: it exists while at least one session is in it, and it survives a daemon restart with them. Pass no space to take the session out of any.
 
 Surrounding whitespace is trimmed. A space name then follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. A global session cannot be in a space.
 

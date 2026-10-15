@@ -1621,7 +1621,7 @@ func init() {
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
 		"set-session-space": {
-			description: "File a session under a space, a named group of related sessions that tuios ls lists together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
+			description: "File a session under a space, a named group of related sessions that tuios ls and the sidebar list together. A space exists while at least one session is in it. It survives a daemon restart with the session. A global session is in no space, and filing one is refused.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "space", Type: "string", Description: "The space's name. Surrounding whitespace is trimmed, and the rest follows the session name rules (no slash, backslash or control character) and is at most 64 bytes. Omit or pass an empty string to take the session out of any space."},

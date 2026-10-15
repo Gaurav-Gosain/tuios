@@ -49,6 +49,10 @@ const (
 	// sessions of that repository, which follow it in the same list. See
 	// GroupByRepo in worktree.go.
 	KindRepo
+	// KindSpace is a space's heading. Its rows are the sessions filed under
+	// that space, which follow it in the same list. See GroupBySpace in
+	// space.go.
+	KindSpace
 )
 
 // Node is one row in the tree: a session or a window under it.
@@ -150,6 +154,11 @@ type Node struct {
 	// draw the tree glyph that closes the group. Set by GroupByRepo and
 	// meaningless anywhere else.
 	GroupLast bool
+	// Space is the space a session is filed under, empty for one in none. After
+	// GroupBySpace it is set on exactly the rows drawn under a space's heading,
+	// the heading and a repository's row inside the space included, and on no
+	// other row.
+	Space string
 	// Children are the window nodes of a session. Nil for a window node, and nil
 	// for a session whose windows are not known yet (a non-attached session over
 	// the coarse control protocol), which still carries a rolled-up glyph and a
@@ -262,7 +271,9 @@ type SessionInput struct {
 	// Worktree is the git worktree this session sits in, nil for a session
 	// that is not one.
 	Worktree *WorktreeRef
-	Windows  []WindowInput
+	// Space is the space the session is filed under, empty for none.
+	Space   string
+	Windows []WindowInput
 }
 
 // AgentRank ranks agent states for both the session roll-up and the sidebar's
@@ -347,6 +358,7 @@ func BuildSession(s SessionInput) Node {
 		Restored:    s.Restored,
 		Global:      s.Global,
 		Worktree:    s.Worktree,
+		Space:       s.Space,
 	}
 	if len(s.Windows) == 0 {
 		return node
