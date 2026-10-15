@@ -3073,6 +3073,17 @@ The chrome flake did not show on this machine. A hook that always misses its
 deadline (`--timeout 1ns`) gives the CI failure exactly:
 `chrome_looks_test.go:211: inbox never drew`.
 
+## Alternate screen released by the cleanup sweep
+
+`TestAltScreenReleasedBySweep` starts two daemons with `--pprof`, one with `TUIOS_CLEANUP_SECONDS=1` and one with 3600. Each gets six panes at 200x60 that enter the alternate screen, fill it with `seq` and leave it. After three seconds the daemon that sweeps must hold less heap than the other by at least half a 200x60 screen of cells per pane (3937 KiB in all). It released 8560 KiB, 1426 KiB a pane. Both daemons then resize every pane to 180 columns and run a program that draws CORNER in the bottom right corner of the alternate screen and waits. After a sweep has run while the program is on the alternate screen, each pane must capture byte for byte as on the daemon that kept the grid and hold nothing but CORNER at the end of row 60. Once the program exits, the shell's screen must match too.
+
+The controls were run on 2026-10-15 on the branch perf/release-alt-screen.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No release in the sweep | `cleanupLoop`: the `d.releaseAltScreens()` call cut | `TestAltScreenReleasedBySweep`: "the sweep released 0 KiB of heap across 6 panes, want at least 3937 KiB" (17296 KiB with and without a sweep) | **caught** |
+| A release while the alternate screen is shown | `ReleaseAltScreen`: the return when `e.scr` is the alternate screen cut | `TestAltScreenReleasedBySweep`: "after the sweep, a full-screen program drew pane 0 differently from a daemon that kept the grid": the swept pane is blank where the kept one shows CORNER | **caught** |
+
 ## Frame memory and the connection cap
 
 `TestDaemonBoundsStalledFrames` opens 32 connections. Each one announces a

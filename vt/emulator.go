@@ -859,6 +859,25 @@ func (e *Emulator) altScreen() *screen {
 	return &e.scrs[1]
 }
 
+// ReleaseAltScreen drops the alternate screen's cells while the main screen
+// is shown. A pane that has run one full-screen program keeps that grid
+// otherwise, 1.7 MB at 171x83, and nothing reads it: every switch onto the
+// alternate screen clears it first. The screen keeps its size, and a row
+// nothing has written reads as blank, so the next switch finds what the clear
+// would leave. Dropping the cells at the switch back to the main screen
+// instead would make a pager launched over and over allocate its grid each
+// time.
+func (e *Emulator) ReleaseAltScreen() {
+	if e.scr == &e.scrs[1] {
+		return
+	}
+	g := e.scrs[1].buf
+	clear(g.rows)
+	clear(g.ext)
+	clear(g.wrap)
+	g.tail = nil
+}
+
 // RestoreAltScreenMode restores the alternate screen mode state.
 // This is used when reconnecting to a daemon session to restore the emulator state
 // without re-sending the escape sequences that would trigger the mode change.

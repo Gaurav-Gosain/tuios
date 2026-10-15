@@ -2098,6 +2098,7 @@ func (d *Daemon) cleanupLoop() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			d.releaseAltScreens()
 			// Expire stale pending requests whose TUI result never arrived so
 			// they do not pin the requester's connState forever.
 			now := time.Now()
