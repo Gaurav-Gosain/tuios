@@ -8,7 +8,7 @@ package session
 // pane's emulator above a dim divider, with the new shell's prompt under it.
 //
 // What is saved is the emulator's own picture, not the bytes the program
-// wrote: a TerminalState in its packed form (internal/vt/snapshot/pack.go), the same
+// wrote: a TerminalState in its packed form (vt/snapshot/pack.go), the same
 // structure a client rehydrates from. It carries every cell with its style,
 // wide runes and the soft-wrap flags, it is written and read by both emulator
 // backends through the code the wire already tests (terminalStateOf and
@@ -44,8 +44,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 const (
@@ -64,7 +64,7 @@ const (
 	// historyVersion names the file's layout: the savedHistory record and
 	// the packed cell format inside it. It is snapshot.PackedFormatVersion times a
 	// hundred plus the record's own number, so a change to the packed format
-	// (internal/vt/snapshot/pack.go) changes it without anyone remembering to. A file at
+	// (vt/snapshot/pack.go) changes it without anyone remembering to. A file at
 	// another version is skipped and left alone, since a build that writes
 	// that version may run here again.
 	historyVersion = snapshot.PackedFormatVersion*100 + 1

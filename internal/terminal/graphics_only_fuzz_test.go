@@ -3,7 +3,7 @@ package terminal
 import (
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // FuzzGraphicsOnlyChangesNoCell holds graphicsOnly to its promise: a write it

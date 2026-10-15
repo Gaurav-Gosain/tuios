@@ -1,6 +1,6 @@
 package terminal
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import "tuios.dev/vt"
 
 // Bracketed paste delimiters, DECSET 2004.
 const (

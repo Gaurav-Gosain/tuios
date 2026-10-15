@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // progressHarness is a manifest whose harness uses OSC 9;4 its own way:

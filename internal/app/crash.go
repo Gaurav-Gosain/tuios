@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/release"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/adrg/xdg"
+	"tuios.dev/vt"
 )
 
 // What tuios does when it reaches a state it should not have reached.

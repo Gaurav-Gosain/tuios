@@ -3,8 +3,8 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/vt"
 )
 
 // forwardKeyReleaseToFocused passes a key release on to the focused pane when

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // countingWriter stands in for the ssh session output. It accepts every write

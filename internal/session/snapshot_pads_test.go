@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 // padLine wraps at 9 columns before the wide rune, leaving column 9 as

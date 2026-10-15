@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/vt"
 )
 
 // The phone's path into a daemon, end to end: a real daemon, the real

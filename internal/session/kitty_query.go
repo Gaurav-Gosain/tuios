@@ -1,6 +1,6 @@
 package session
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import "tuios.dev/vt"
 
 // kittyFileMediumRefusal is the answer to a guest asking whether it may send a
 // kitty image as a path (t=f, t=t or t=s) when that path would be read on a

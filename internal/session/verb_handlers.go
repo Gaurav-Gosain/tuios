@@ -16,8 +16,8 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/google/uuid"
+	"tuios.dev/vt"
 )
 
 // routedVerbTimeout bounds how long a verb routed to an attached TUI waits for

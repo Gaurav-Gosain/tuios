@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi/kitty"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // superfileSequence is what superfile (v1.6.0, src/pkg/file_preview/kitty.go)

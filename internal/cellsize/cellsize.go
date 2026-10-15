@@ -9,7 +9,7 @@
 // from here, so the sizes agree.
 package cellsize
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import "tuios.dev/vt"
 
 const (
 	// FallbackWidth is the assumed cell width in pixels.

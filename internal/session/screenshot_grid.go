@@ -2,7 +2,7 @@ package session
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // Cell-grid capture for the screenshot verb.

@@ -231,7 +231,7 @@ gui *args:
 test *args:
     {{ NICE }} {{ TASKSET }} go test ./... ./progstatus/... -timeout 20m "$@"
 
-# Example: just test-pkg ./internal/vt/ -run TestX
+# Example: just test-pkg ./vt/ -run TestX
 # Run the unit tests of one package
 [group('test')]
 test-pkg pkg *args:
@@ -298,13 +298,13 @@ ghostty-test *args:
     scripts/ghostty-lib.sh native
     PKG_CONFIG_PATH="$cache/native/pkgconfig" \
         {{ NICE }} {{ TASKSET }} go test -tags ghostty -count=1 -short \
-        ./internal/vt/ ./internal/session/ ./internal/terminal/ \
+        ./vt/ ./internal/session/ ./internal/terminal/ \
         ./internal/app/ ./internal/input/ ./cmd/tuios/ "$@"
 
 # Compare the emulator with tmux (needs tmux)
 [group('test')]
 differential:
-    {{ NICE }} {{ TASKSET }} go test -tags differential ./internal/vt/ -run TestDifferential -v
+    {{ NICE }} {{ TASKSET }} go test -tags differential ./vt/ -run TestDifferential -v
 
 # Example: just fuzz FuzzEmulatorScript 10m
 # Run one fuzz target

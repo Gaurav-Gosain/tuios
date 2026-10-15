@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // Paste buffers: load-buffer, set-buffer, paste-buffer and delete-buffer.

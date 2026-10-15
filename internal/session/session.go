@@ -29,9 +29,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
 	"tuios.dev/progstatus"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 // debugEnabled returns true if debug logging is enabled via TUIOS_DEBUG_INTERNAL env var

@@ -3,7 +3,7 @@
 tuios has two terminal emulator implementations behind one interface
 (`vt.Terminal`), selected at build time:
 
-- **Pure Go** (default): `internal/vt`'s own emulator. `go install` works
+- **Pure Go** (default): `vt`'s own emulator. `go install` works
   with no toolchain, `CGO_ENABLED=0` cross-compilation works, nothing
   changes.
 - **libghostty-vt** (`-tags ghostty`): parsing and grid state run inside
@@ -14,7 +14,7 @@ tuios has two terminal emulator implementations behind one interface
 
 Exactly one implementation is compiled into a binary. The two never run
 together in one process; comparing them is the differential harness's job
-(`internal/vt/ghostty_differential_test.go`,
+(`vt/ghostty_differential_test.go`,
 `internal/session/ghostty_wire_test.go`), which feeds identical bytes to
 both and asserts screens, cursor, scrollback, modes and wire snapshots
 agree.
@@ -100,7 +100,7 @@ does not cross-compile cleanly.
 
 ## Architecture
 
-`GhosttyTerminal` (`internal/vt/ghostty_*.go`) owns what tuios needs on
+`GhosttyTerminal` (`vt/ghostty_*.go`) owns what tuios needs on
 top of the library:
 
 - **Stream scanner** (`ghostty_scan.go`, pure Go, unit-tested without
@@ -176,7 +176,7 @@ is a SIGSEGV that cannot be recovered and takes every session with it.
 Three things bound that risk:
 
 - The library is the same code Ghostty ships to production terminals,
-  fuzzed and exercised far beyond what `internal/vt` sees.
+  fuzzed and exercised far beyond what `vt` sees.
 - `FuzzGhosttyTerminalWrite` fuzzes tuios's own cgo boundary: arbitrary
   bytes in adversarial chunkings through the full adapter path,
   interleaved with reads and resizes.

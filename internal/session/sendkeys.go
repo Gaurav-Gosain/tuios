@@ -8,8 +8,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/vt"
 )
 
 // This file turns a send-keys argument into keys. One parser serves both

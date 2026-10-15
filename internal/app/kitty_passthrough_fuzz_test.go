@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // Fuzzing the kitty graphics passthrough: what several panes' guests send, and

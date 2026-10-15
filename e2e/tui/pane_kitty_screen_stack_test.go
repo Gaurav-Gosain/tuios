@@ -26,7 +26,7 @@ import (
 //     pushes on the main screen first, exactly as the main step does.
 //
 // Negative control: with the SetAltScreen call cut from setAltScreenMode in
-// internal/vt/csi_mode.go, the alt step fails in the standalone subtest. The
+// vt/csi_mode.go, the alt step fails in the standalone subtest. The
 // daemon client feeds the same emulator, so it fails there too.
 func TestPaneKittyFlagsPerScreen(t *testing.T) {
 	const ctrlA = "\x1b[97;5u"

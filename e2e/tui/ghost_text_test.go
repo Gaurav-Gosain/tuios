@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/vt"
 )
 
 // ghostTarget is the row the fixture settles on, and ghostStale differs from it

@@ -288,7 +288,7 @@ TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [
 
 **Core Components:**
 - **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)): Central state, workspaces, overlays
-- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)): ANSI parser with scrollback, kitty/sixel graphics, kitty keyboard protocol, OSC 133
+- **Terminal Emulation** ([`vt/`](./vt/)): ANSI parser with scrollback, kitty/sixel graphics, kitty keyboard protocol, OSC 133
 - **Rendering** ([`internal/app/render.go`](./internal/app/render.go)): Layer composition, viewport culling, graphics batching
 - **Input** ([`internal/input/`](./internal/input/)): Modal routing, 100+ configurable keybindings, mouse handling
 - **Kitty Passthrough** ([`internal/app/kitty_passthrough.go`](./internal/app/kitty_passthrough.go)): Flicker-free image forwarding with ID reuse and sync output

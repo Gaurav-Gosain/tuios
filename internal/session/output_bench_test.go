@@ -14,7 +14,7 @@ import (
 // bytes are: recording the chunk in the catch-up ring, and handing it to every
 // subscriber. The PTY read and the VT parse are deliberately outside: the read
 // is a syscall the benchmark cannot honestly reproduce, and the parse is
-// already covered by the emulator benchmarks in internal/vt.
+// already covered by the emulator benchmarks in vt.
 func benchPTY(subs int, chanCap int) *PTY {
 	p := &PTY{
 		ID:           "bench-pty-0000000000000000000000000",

@@ -3,7 +3,7 @@ package terminal
 import (
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // TestResizeDoesNotReannounceSeededSize pins N9 at the window level: after the

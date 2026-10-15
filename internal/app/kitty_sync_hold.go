@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // A guest that animates an image replaces it every frame, and says so with

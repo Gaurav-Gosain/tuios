@@ -650,7 +650,7 @@ Counts, allocations and wire bytes do not move with load and are exact.
 ### Where the time went
 
 **The flood is the emulator's.** A pane printing 16 MiB as fast as it can into
-one client spends 84% of the process in `internal/vt` parsing those bytes on
+one client spends 84% of the process in `vt` parsing those bytes on
 the daemon side, 3.3% in `readOutput` (ring append, broadcast, event publish)
 and 1.6% in `streamPTYOutput` (batch and socket write). The wire is not where a
 flood is slow, and nothing in this package was changed for it.
@@ -671,7 +671,7 @@ with a thousand rows of history behind it cost 123 ms.
 
 ### What moved
 
-**The snapshot's cells travel packed** (`internal/vt/snapshot/pack.go`). A style table
+**The snapshot's cells travel packed** (`vt/snapshot/pack.go`). A style table
 once, cells in one style run together, two bytes per plain letter, blank row
 tails left off. Negotiated per request with `GetTerminalStatePayload.Packed`,
 so no protocol bump: a daemon that predates the field answers with cells and a
@@ -886,7 +886,7 @@ BenchmarkIdleTick-8   0 render/tick   0 work/tick   296 B/op   5 allocs/op
 
 ## 2026-09 vt parse and scroll pass
 
-Profiled `internal/vt` over the SGR-heavy repaint (`BenchmarkBackendDoomFire*`),
+Profiled `vt` over the SGR-heavy repaint (`BenchmarkBackendDoomFire*`),
 the short-line and long-line scroll floods (`BenchmarkEmulatorShortLineScroll`,
 `BenchmarkEmulatorScrollThroughput`) and the log replays
 (`BenchmarkEmulatorWriteHeavyOutput`), then took each hotspot as its own commit
@@ -1417,7 +1417,7 @@ Keystroke to render signal on a quiet local pane running `cat` (60 keys a run,
 significant (p=0.23, p=0.57). The coalescer adds at most one goroutine handoff.
 
 **A snapshot is applied straight from its packed form** (`session.go`,
-`internal/vt/snapshot/pack.go`, `tuiclient.go`). The client asked for packed cells, unpacked
+`vt/snapshot/pack.go`, `tuiclient.go`). The client asked for packed cells, unpacked
 them into `[][]CellState`, and `ApplyTerminalState` then turned each `CellState`
 back into an emulator cell and resolved its style once per cell. The client now
 keeps the reply packed and only checks on receipt that every row decodes, so a
@@ -1482,7 +1482,7 @@ are the check that no change here holds a keystroke.
 
 ## 2026-09 second profiling pass: vt
 
-A second profile of `internal/vt`, this time over replays of real PTY captures
+A second profile of `vt`, this time over replays of real PTY captures
 rather than synthetic floods, plus the scrollback's memory and the SGR diff in
 the pure Go renderer. Each change below is its own commit.
 
@@ -1711,7 +1711,7 @@ so timings carry the spread benchstat prints; allocation counts are exact.
 
 ### What changed
 
-**Plain capture reads the scrollback ring as text** (`internal/vt/scrollback_text.go`,
+**Plain capture reads the scrollback ring as text** (`vt/scrollback_text.go`,
 `session.go`). `capture-pane` with scrollback, `wait-for window-output` and
 `ask-agent` all took the plain text of a pane through
 `ScrollbackLine(i).String()` for every line of history. That decodes each
@@ -3066,7 +3066,7 @@ line. `BenchmarkBackendApt` is that stream: a scroll region above the last row,
 
 ### Numbers
 
-`go test -tags ghostty ./internal/vt/ -bench 'BackendApt$' -benchtime 3s
+`go test -tags ghostty ./vt/ -bench 'BackendApt$' -benchtime 3s
 -count 2`, run twice, GOMAXPROCS=4, nice 19 on cores 0-7 of a machine in use:
 
 | Build | ms per 2000 lines |

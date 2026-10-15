@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // icatHarness is a pane emulator wired to a passthrough whose host reads

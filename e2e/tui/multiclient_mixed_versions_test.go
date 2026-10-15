@@ -26,7 +26,7 @@ import (
 // The second client attaches after the first has printed a styled line, so it
 // reads that line from the daemon's snapshot of the pane. The snapshot crosses
 // the wire as gob, and its type moved from internal/session to
-// internal/vt/snapshot. A client and a daemon on each side of the move must
+// vt/snapshot. A client and a daemon on each side of the move must
 // still read each other's snapshots, styles included.
 //
 // A mixed pair is last-writer-wins for the older client's pushes, as it was

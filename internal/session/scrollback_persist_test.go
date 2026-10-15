@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/vt"
 )
 
 // These run on whichever emulator the build links: the pure one by default and

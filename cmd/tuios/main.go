@@ -20,8 +20,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/spf13/cobra"
+	"tuios.dev/vt"
 )
 
 // Version information (set by goreleaser)

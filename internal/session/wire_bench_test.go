@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 // What a client actually costs the wire.

@@ -16,8 +16,8 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/mosaic"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/vt"
 )
 
 // These tests cover a pane's image on a host terminal that draws no graphics,

@@ -1,12 +1,12 @@
 package session
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
 	uv "github.com/charmbracelet/ultraviolet"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
-// The snapshot of a pane's terminal lives in internal/vt/snapshot. These
+// The snapshot of a pane's terminal lives in vt/snapshot. These
 // names keep the session API and the wire as they were: gob registers
 // TerminalState under its old name (codec.go), so an older peer and saved
 // history read it as before.

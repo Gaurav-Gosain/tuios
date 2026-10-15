@@ -13,7 +13,7 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 	"github.com/charmbracelet/x/ansi/kitty"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // Kitty Unicode placeholders, checked on the stream tuios writes to the host.

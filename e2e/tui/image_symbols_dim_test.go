@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/vt"
 )
 
 // TestImageSymbolsDimEvenly draws a white disc as glyphs in a pane with a

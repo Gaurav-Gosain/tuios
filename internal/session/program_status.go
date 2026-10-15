@@ -10,15 +10,15 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"tuios.dev/progstatus"
+	"tuios.dev/vt"
 )
 
 // The Program Status Protocol (OSC 7501) in the daemon.
 //
 // Any program in any pane can say what it is doing: cargo, terraform, brew, a
 // deploy script or a coding agent. The pane's emulator parses each report
-// (internal/vt, tuios.dev/progstatus) and the PTY keeps the records, with the
+// (vt, tuios.dev/progstatus) and the PTY keeps the records, with the
 // specification's limits, its id hierarchy and its lifetime: a shell prompt
 // and the exit of the pane's process end working, blocked and idle records,
 // a full reset ends all of them, and done and error stay until the person

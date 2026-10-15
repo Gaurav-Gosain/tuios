@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // zlibCompress returns the zlib-compressed form of data, or nil on error. Used
@@ -1458,7 +1458,7 @@ func buildVideoReplace(hostID uint32, st *remoteVideoState) []byte {
 // Nothing is drawn by this. The host draws the image where the guest's
 // U+10EEEE cells land, and those cells reach it through the ordinary text path
 // with their foreground rewritten to name the same id (see
-// internal/vt/kitty_placeholder.go). Because the position is carried by text,
+// vt/kitty_placeholder.go). Because the position is carried by text,
 // tuios does not track, reposition or clip this image at all: scrolling the
 // pane scrolls the cells, and the host redraws whatever is still on screen.
 //

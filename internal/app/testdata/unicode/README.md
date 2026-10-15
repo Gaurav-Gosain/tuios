@@ -22,6 +22,6 @@ in the file's header comment and has not been altered.
 
 ## Why it is checked in
 
-The same reason as `internal/vt/testdata/unicode`: a test that downloads its
+The same reason as `vt/testdata/unicode`: a test that downloads its
 input fails when the network does, and a new Unicode version would silently
 change what it asserts. An upgrade is a visible commit.

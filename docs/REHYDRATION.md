@@ -10,7 +10,7 @@ records where the implementations differ.
 
 ## The two sources a client can be filled from
 
-**The snapshot.** `snapshot.Capture` (`internal/vt/snapshot/capture.go`) serializes the
+**The snapshot.** `snapshot.Capture` (`vt/snapshot/capture.go`) serializes the
 daemon emulator's visible grid, the normal screen underneath it when the
 alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
 the scroll region, the character set selection, the kitty keyboard stack, the
@@ -407,7 +407,7 @@ Two things had to be true for that rule to hold, and neither was:
   207x55 screen was 147 KB and a thousand rows of history 2.9 MB, per pane, and
   the client decoded every struct by reflection on its UI goroutine during a
   workspace switch. `GetTerminalStatePayload.Packed` asks for the same cells in
-  the form `internal/vt/snapshot/pack.go` describes: a style table once, cells in one style
+  the form `vt/snapshot/pack.go` describes: a style table once, cells in one style
   run together, two bytes for a plain letter, blank row tails left off. The
   request field is what keeps it compatible in both directions. A daemon that
   predates it does not see the request and answers with cells, which the client

@@ -10,8 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/adrg/xdg"
+	"tuios.dev/vt"
 )
 
 // legacyConfig loads src as the user's config.toml. The XDG search paths are

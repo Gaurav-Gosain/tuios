@@ -6,6 +6,7 @@ use (
 	.
 	./e2e/tui
 	./progstatus
+	./vt
 )
 
 replace tuios.dev/progstatus v0.1.0 => ./progstatus

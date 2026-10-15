@@ -1,6 +1,6 @@
 package terminal
 
-import "github.com/Gaurav-Gosain/tuios/internal/vt"
+import "tuios.dev/vt"
 
 // A guest that asks for the terminal's name (XTVERSION) learns it runs in
 // tuios. Both binaries link this package, the daemon included, which is where

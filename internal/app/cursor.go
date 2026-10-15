@@ -4,7 +4,7 @@ import (
 	"image"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // getRealCursor returns a real terminal cursor for the focused window,

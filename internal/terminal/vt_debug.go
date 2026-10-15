@@ -2,7 +2,7 @@ package terminal
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // The emulator writes its process-wide diagnostics (XTWINOPS requests) to the

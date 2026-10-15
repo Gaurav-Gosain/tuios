@@ -4,7 +4,7 @@ import (
 	"image/color"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // applyTheme sets the active theme's colors on an emulator, or clears them to

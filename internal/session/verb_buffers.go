@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // Paste buffers: list-buffers, show-buffer, set-buffer, delete-buffer and

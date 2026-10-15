@@ -299,7 +299,7 @@ graph LR
 
 ### SGR Sequence Processing
 
-The pure Go emulator's SGR handler (`internal/vt/csi_sgr.go`) reads every SGR
+The pure Go emulator's SGR handler (`vt/csi_sgr.go`) reads every SGR
 through one function, `readStyleWithTheme`, with or without a theme. It used to
 hand the unthemed case to `uv.ReadStyle`, which read an underline
 subparameter such as `4:7` as a bare SGR 7 and dropped SGR 21, so a pane drew
@@ -387,7 +387,7 @@ TUIOS supports live theme switching without restarting windows:
 
 | Component         | File                          | Responsibility                             |
 | ----------------- | ----------------------------- | ------------------------------------------ |
-| **SGR Handler**   | `internal/vt/csi_sgr.go`      | Parse SGR sequences, resolving the sixteen palette slots through the theme when one claims them |
+| **SGR Handler**   | `vt/csi_sgr.go`      | Parse SGR sequences, resolving the sixteen palette slots through the theme when one claims them |
 | **Theme Colors**  | `internal/terminal/window_theme.go` | Initialize and update window theme colors; cells keep a nil default background |
 | **Theme Manager** | `internal/app/os_window.go`   | Propagate theme changes to all windows     |
 | **Theme Config**  | `internal/theme/theme.go`     | Define color palettes and theme variants   |
@@ -572,7 +572,7 @@ This ensures:
 | **Terminal Windows**  | `internal/terminal/window.go`   | Terminal session container | PTY lifecycle, VT emulator integration, content caching         |
 | **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
-| **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
+| **VT Emulator**       | `vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
 | **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync. Video playback via mpv --vo=kitty (shm and base64) and youterm. Unicode placeholders forwarded as declarations, see below. |
 | **Sixel Passthrough** | `internal/app/sixel_passthrough.go` | Sixel images           | Decodes each pane's sixel, crops it to what is visible on the frame, and sends it as sixel, as kitty graphics, or as a placeholder box. See [Sixel images](#sixel-images). |
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
@@ -640,7 +640,7 @@ images: scrolling the pane scrolls the cells, and the host redraws whatever is
 still on screen. The one thing it must do is rewrite the image id the cells
 name, because the host knows the image by whichever id it actually arrived
 under and a cell naming an unknown id draws nothing. That rewrite happens in
-the emulator as the cells are built (`internal/vt/kitty_placeholder.go`).
+the emulator as the cells are built (`vt/kitty_placeholder.go`).
 
 Two consequences follow from the id living in a color:
 
@@ -839,7 +839,7 @@ also mean protocols tuios does not pass (WezTerm makes yazi use iTerm2 images).
 The pixel size replies (`CSI 14 t`, `16 t`, `18 t`) use the host's cell size.
 
 **Cells.** The emulator does to a sixel image what a sixel terminal does: every
-cell the image covers is written with a marker (`internal/vt/sixel_marker.go`).
+cell the image covers is written with a marker (`vt/sixel_marker.go`).
 A marker is U+10EEED with four combining marks from kitty's placeholder table:
 the cell's row and column in the image, and the image id. From then on the
 picture is wherever its cells are. It scrolls into the scrollback with them,

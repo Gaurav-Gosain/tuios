@@ -7,9 +7,9 @@ import (
 	"unicode"
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"tuios.dev/vt"
 )
 
 // CommandBlock represents a single command and its output extracted from scrollback.

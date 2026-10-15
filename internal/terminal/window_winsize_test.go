@@ -5,7 +5,7 @@ import (
 
 	xpty "github.com/charmbracelet/x/xpty"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"tuios.dev/vt"
 )
 
 // countingPty records every window-size write a window makes to its PTY. The

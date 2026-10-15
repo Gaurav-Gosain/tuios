@@ -11,14 +11,14 @@ import (
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	uv "github.com/charmbracelet/ultraviolet"
+	"tuios.dev/vt"
 )
 
 // How a pane's sixel image reaches the host, frame by frame.
 //
 // The compositor builds the frame as cells. A pane's image is in it as marker
-// cells (internal/vt/sixel_marker.go), wherever the pane's text put them: moved
+// cells (vt/sixel_marker.go), wherever the pane's text put them: moved
 // by the pane's position and scroll offset, clipped by the pane's edges, cut
 // by whatever popup or window was drawn over them, absent when the pane is on
 // another workspace. So the frame already holds the answer to "which part of

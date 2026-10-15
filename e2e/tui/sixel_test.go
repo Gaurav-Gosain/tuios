@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/Gaurav-Gosain/tuitest"
+	"tuios.dev/vt"
 )
 
 // These tests put tuios in front of a stand-in sixel terminal and check what

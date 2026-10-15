@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
-	"github.com/Gaurav-Gosain/tuios/internal/vt"
-	"github.com/Gaurav-Gosain/tuios/internal/vt/snapshot"
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
 )
 
 // Seams the tests reach for. Production code calls the functions these wrap.
