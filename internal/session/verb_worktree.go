@@ -115,8 +115,9 @@ func repoRootParam(dir string) (string, *verbError) {
 // the session in it, then the record that ties them. The worktree is never
 // removed on a later failure. It exists on disk and git lists it, and taking
 // it away because a session failed to start would be removing something the
-// caller asked for and can still use.
-func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
+// caller asked for and can still use. The session gets the caller's terminal
+// from its hello, as one made by new-session does.
+func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
 	path := worktree.PathFor(worktree.DefaultDir(), root, branch)
 	if _, err := os.Lstat(path); err == nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
@@ -147,7 +148,7 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 		})
 	}
 
-	sess, err := d.manager.CreateSession(sessionName, &SessionConfig{}, defaultVerbSessionWidth, defaultVerbSessionHeight)
+	sess, err := d.manager.CreateSession(sessionName, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbInternal, "the worktree was created at "+path+" but its session could not: "+err.Error(), &VerbHint{
 			Detail: "The worktree is kept. Start a session in it with: tuios new-window --cwd " + path,
@@ -225,7 +226,7 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
-	out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil, nil)
+	out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil, nil)
 	if verr != nil {
 		return nil, verr
 	}
@@ -594,7 +595,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	sessions := make([]map[string]any, 0, p.Count)
 	for i, branch := range branches {
 		launch, prompt := launches[i%len(launches)], promptFor(i)
-		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
+		out, verr := d.createWorktreeSession(cs, root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.LaunchedFrom = launchedFrom
 			info.Prompt = prompt

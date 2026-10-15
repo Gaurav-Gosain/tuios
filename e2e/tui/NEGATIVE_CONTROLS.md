@@ -5190,6 +5190,13 @@ Run on 2026-10-15 on Linux on branch `fix-attach-term`, from upstream `main` (`f
 | `verbStartAgent` creates its session with `&SessionConfig{}` (upstream `main`'s line) | mutant of this branch | `TestStartAgentGivesItsSessionTheCallersTerm` ("an agent start-agent started in a session it made, from a caller with a real terminal, got \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
 | The positive half | this branch | none: the agent reads `TERM=screen-256color COLORTERM=truecolor`, and `TestVerbNewSessionGivesItsPaneTheCallersTerm` still passes through the shared `callerSessionConfig` | **guard** |
 
+`TestWorktreeNewGivesItsSessionTheCallersTerm` in the same file covers `new-worktree`, and through the same `createWorktreeSession` also `fan`. Run on 2026-10-15 on macOS on branch `fix/worktree-term`. The caller runs `tuios worktree new` with `TERM=screen-256color COLORTERM=truecolor`.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `createWorktreeSession` creates its session with `&SessionConfig{}` (upstream `main`'s line) | mutant of this branch | `TestWorktreeNewGivesItsSessionTheCallersTerm` ("the session tuios worktree new made, from a caller with a real terminal, gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
+| The positive half | this branch | none: the worktree session's shell reads `TERM=screen-256color COLORTERM=truecolor`, and the fan tests still pass | **guard** |
+
 ## A hello's TERM and COLORTERM are checked before a pane gets them
 
 Run on 2026-10-14 on macOS on branch `pr700-review`, the review round of `pr/verb-session-term`. The test is `TestHelloDropsAnUnsafeTerm` in `verb_hello_term_check_test.go`. The daemon has a terminfo folder of its own with `screen-256color`'s entry under a 64 byte name and a 65 byte one, so `PaneTerm` keeps either and only the bound tells them apart. Five verb hellos are sent raw over the socket, each followed by `new-session` on the same connection, and two binary hellos are sent by `tuios new -d` with the value in `TERM`. Each control cuts one wire from the fixed build, builds it, and runs the test.

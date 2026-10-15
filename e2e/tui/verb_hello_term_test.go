@@ -1,12 +1,15 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // TestVerbNewSessionGivesItsPaneTheCallersTerm creates a session with the
@@ -204,6 +207,53 @@ func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
 
 	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
 		t.Errorf("ASSERTION: an agent start-agent started in a session it made, from a caller with a real terminal, got %q, want %q\n%s", got, want, pane)
+	}
+}
+
+// TestWorktreeNewGivesItsSessionTheCallersTerm makes a worktree and its
+// session with tuios worktree new, from a caller with a real terminal, and
+// reads the TERM and COLORTERM the session's shell was given.
+//
+// new-worktree and fan make their session through createWorktreeSession,
+// which built it from an empty config, so the shell got the daemon's fallback
+// (xterm-256color) whatever terminal the caller had.
+//
+// How this could pass wrongly: the caller's TERM is screen-256color, which is
+// not a fallback this daemon has, and paneTerms reads only the shell's own
+// output of the value, not the echo of the command.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
+// its session the caller's terminal").
+func TestWorktreeNewGivesItsSessionTheCallersTerm(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	repo := testutil.GitRepo(t)
+	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
+
+	if out, err := tuiosCLIEnv(t, base, callerEnv, "start-server"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLIEnv(t, base, callerEnv, "worktree", "new", "feat/term", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("tuios worktree new: %v\n%s", err, out)
+	}
+	out, err := tuiosCLI(t, base, "worktree", "ls", "--json")
+	if err != nil {
+		t.Fatalf("worktree ls: %v\n%s", err, out)
+	}
+	var rows []struct {
+		Session string `json:"session"`
+	}
+	if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0].Session == "" {
+		t.Fatalf("worktree ls did not list one worktree with a session: %v\n%s", err, out)
+	}
+
+	got, pane := paneTerms(t, base, rows[0].Session)
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "worktree-pane.txt"), []byte(pane), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
+		t.Errorf("ASSERTION: the session tuios worktree new made, from a caller with a real terminal, gave its pane %q, want %q\n%s", got, want, pane)
 	}
 }
 
