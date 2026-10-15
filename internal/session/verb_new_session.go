@@ -87,18 +87,7 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	if _, _, verr := d.childWindowBound(cs, "new-session", p.Cwd); verr != nil {
 		return nil, verr
 	}
-	// The caller's terminal from its hello, as an attach or tuios new gets
-	// it. With none, the session gets the daemon's fallback.
-	cfg := &SessionConfig{}
-	if cs != nil {
-		cs.mu.Lock()
-		if cs.hello != nil {
-			cfg.Term = cs.hello.Term
-			cfg.ColorTerm = cs.hello.ColorTerm
-		}
-		cs.mu.Unlock()
-	}
-	sess, err := d.manager.CreateSession(name, cfg, width, height)
+	sess, err := d.manager.CreateSession(name, callerSessionConfig(cs), width, height)
 	if err != nil {
 		// The name check above is racy by nature, so the manager's own refusal
 		// is mapped to the same code rather than reported as an internal fault.
@@ -178,4 +167,20 @@ func checkWindowCwd(cwd string) *verbError {
 		return invalidParam("cwd", echoName(cwd)+" is not a directory")
 	}
 	return nil
+}
+
+// callerSessionConfig is the config for a session a verb makes: the caller's
+// terminal from its hello, as an attach or tuios new gets it. With none, the
+// session gets the daemon's fallback.
+func callerSessionConfig(cs *connState) *SessionConfig {
+	cfg := &SessionConfig{}
+	if cs != nil {
+		cs.mu.Lock()
+		if cs.hello != nil {
+			cfg.Term = cs.hello.Term
+			cfg.ColorTerm = cs.hello.ColorTerm
+		}
+		cs.mu.Unlock()
+	}
+	return cfg
 }

@@ -136,6 +136,77 @@ func readPaneTerm(t *testing.T, base string, env []string, session string) (pane
 	return pane, got
 }
 
+// TestStartAgentGivesItsSessionTheCallersTerm starts an agent with
+// start-agent into a session that does not exist yet, from a caller with a
+// real terminal, and reads the TERM and COLORTERM the agent was given.
+//
+// start-agent makes the session it names when there is none, as new-session
+// does. It made it from an empty config, so the agent got the daemon's
+// fallback (xterm-256color) whatever terminal the caller had, while a session
+// made by new-session got the caller's.
+//
+// How this could pass wrongly, written down first:
+//   - The caller's TERM could equal the daemon's fallback. screen-256color is
+//     not a fallback this daemon has, and every ncurses ships its entry.
+//   - The value read could be the daemon's own environment. The daemon is
+//     started by start-server with the same environment, but a pane's TERM
+//     comes only from its session's config, so an ignored hello shows the
+//     fallback.
+//   - The agent could inherit a TERM from a shell. start-agent execs the agent
+//     with no shell, and the agent prints its own environment.
+//   - The line read could be another program's. Only the agent prints a line
+//     ending in the marker.
+//
+// The pane's text is saved under artifactDir.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "The new-session verb gives
+// its session the caller's terminal").
+func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
+	const session = "e2e-agent-term"
+	base := t.TempDir()
+	killDaemon(t, base)
+	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
+
+	// A program no harness manifest knows is ready once it reports a state,
+	// so the agent prints its terminal and then says it is idle.
+	agent := filepath.Join(t.TempDir(), "termagent")
+	script := "#!/bin/sh\nprintf 'TERM=%s COLORTERM=%s END\\n' \"$TERM\" \"$COLORTERM\"\n'" + tuiosBin + "' set-agent-state idle >/dev/null 2>&1\nexec sleep 600\n"
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := tuiosCLIEnv(t, base, callerEnv, "start-server"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLIEnv(t, base, callerEnv, "start-agent", agent, "-s", session); err != nil {
+		t.Fatalf("start the agent: %v\n%s", err, out)
+	}
+
+	var pane, got string
+	deadline := time.Now().Add(shellTimeout)
+	for got == "" {
+		pane, _ = tuiosCLIEnv(t, base, callerEnv, "capture-pane", "-s", session)
+		for _, line := range strings.Split(pane, "\n") {
+			if line = strings.TrimSpace(line); strings.HasPrefix(line, "TERM=") && strings.HasSuffix(line, " END") {
+				got = strings.TrimSuffix(line, " END")
+			}
+		}
+		if got == "" {
+			if time.Now().After(deadline) {
+				t.Fatalf("the agent never printed its TERM:\n%s", pane)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir(t), "agent-pane.txt"), []byte(pane), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "TERM=screen-256color COLORTERM=truecolor"; got != want {
+		t.Errorf("ASSERTION: an agent start-agent started in a session it made, from a caller with a real terminal, got %q, want %q\n%s", got, want, pane)
+	}
+}
+
 // TestVerbCommandsReachAnOlderDaemon: a client from this build, talking to a
 // daemon built before the hello verb took term and color_term, still
 // completes its handshake. That daemon refuses a parameter it does not know,

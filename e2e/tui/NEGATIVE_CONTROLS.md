@@ -5160,6 +5160,12 @@ Run on 2026-10-15 on Linux on branch `fix-attach-term`, from upstream `main` (`f
 | `runDaemonSessionOn` does not call `client.UseCallerTerm()` | mutant of this branch | `TestAttachedNewGivesItsPaneTheCallersTerm` ("gave its pane \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
 | `TUIClient.handshake` sends an empty `Term` | mutant of this branch | the same, with the same message | **caught** |
 | The positive half | this branch | none: the pane reads `TERM=screen-256color COLORTERM=truecolor`, and `TestVerbNewSessionGivesItsPaneTheCallersTerm` still passes | **guard** |
+`TestStartAgentGivesItsSessionTheCallersTerm` in the same file covers `start-agent`, which makes the session it names when there is none. Run on 2026-10-15 on macOS on branch `fix/start-agent-term`, from upstream `main` (`5eeb9464`). The agent is a script that prints its `TERM` and `COLORTERM`, then reports itself idle with `tuios set-agent-state` so `start-agent` sees it ready. The caller runs with `TERM=screen-256color COLORTERM=truecolor`.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `verbStartAgent` creates its session with `&SessionConfig{}` (upstream `main`'s line) | mutant of this branch | `TestStartAgentGivesItsSessionTheCallersTerm` ("an agent start-agent started in a session it made, from a caller with a real terminal, got \"TERM=xterm-256color COLORTERM=truecolor\", want \"TERM=screen-256color COLORTERM=truecolor\"") | **caught** |
+| The positive half | this branch | none: the agent reads `TERM=screen-256color COLORTERM=truecolor`, and `TestVerbNewSessionGivesItsPaneTheCallersTerm` still passes through the shared `callerSessionConfig` | **guard** |
 
 ## A hello's TERM and COLORTERM are checked before a pane gets them
 

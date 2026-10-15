@@ -153,7 +153,7 @@ connection it opens from a pane. It is absent from an older daemon.
 `darwin`, `windows`. A client attached from another machine reads it to start
 a command entry with `sh -c` or `cmd /C`. It is absent from an older daemon.
 
-A client may also send `term` and `color_term`, its `TERM` and `COLORTERM`. A session the connection later creates, with `new-session` or `switch-session`'s `create`, gives its panes that terminal, as a session made by attaching or by `tuios new` gets the client's. A caller with no terminal of its own (a script, CI, an agent) sends them empty or leaves them out, and its sessions get the daemon's fallback, `xterm-256color` and `truecolor`. The `tuios` CLI sends both.
+A client may also send `term` and `color_term`, its `TERM` and `COLORTERM`. A session the connection later creates, with `new-session`, `switch-session`'s `create` or `start-agent`, gives its panes that terminal, as a session made by attaching or by `tuios new` gets the client's. A caller with no terminal of its own (a script, CI, an agent) sends them empty or leaves them out, and its sessions get the daemon's fallback, `xterm-256color` and `truecolor`. The `tuios` CLI sends both.
 
 The handshake is optional, not a gate: a daemon serves every other verb whether
 or not `hello` was called, and a daemon older than the handshake answers

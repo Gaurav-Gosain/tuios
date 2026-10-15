@@ -140,7 +140,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			name = startAgentSessionName(launch)
 		}
 		var err error
-		sess, err = d.manager.CreateSession(name, &SessionConfig{}, defaultVerbSessionWidth, defaultVerbSessionHeight)
+		sess, err = d.manager.CreateSession(name, callerSessionConfig(cs), defaultVerbSessionWidth, defaultVerbSessionHeight)
 		if err != nil {
 			return nil, hintedVerbError(ErrVerbSessionExists, err.Error(), &VerbHint{
 				Param:     "session",
