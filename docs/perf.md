@@ -2616,6 +2616,17 @@ more. The rail viewer is a second daemon client with its own wiring, state
 queue and retry backoff, plus the rail settings. No dependency was added. The
 new budgets leave 100,182 and 100,966 bytes of room.
 
+The budgets went to 36,515,000 (linux/amd64) and 34,385,000 (darwin/arm64)
+for the Omarchy theme (#734 and the pull requests on it). Main at 4ea588d8
+measured 36,303,010 and 34,164,114 bytes (Go 1.26.9), 91,990 and 100,886
+bytes under the budgets. The omarchy theme id, the swatch library (the
+colors.toml resolver, the Omarchy source and the watcher), the list-themes
+report, the live follow and the move of the terminal scheme parsers into
+swatch/termconfig bring it to 36,413,602 and 34,282,098, 110,592 and 117,984
+bytes more. No third-party dependency was added: fsnotify and go-toml were
+already in the build, and tuios.dev/swatch is a module in this repository.
+The new budgets leave 101,398 and 102,902 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
