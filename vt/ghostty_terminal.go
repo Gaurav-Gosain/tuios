@@ -468,6 +468,15 @@ func (t *GhosttyTerminal) Read(p []byte) (int, error) {
 	return t.pipe.Read(p) //nolint:wrapcheck
 }
 
+// TakeResponses removes and returns the queued query responses without
+// blocking, or nil when there are none or the terminal is closed.
+func (t *GhosttyTerminal) TakeResponses() []byte {
+	if t.closed.Load() {
+		return nil
+	}
+	return t.pipe.take()
+}
+
 // WriteResponse injects a response produced outside the emulator.
 func (t *GhosttyTerminal) WriteResponse(data []byte) {
 	_, _ = t.pipe.Write(data)

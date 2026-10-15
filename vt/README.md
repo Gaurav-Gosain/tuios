@@ -74,6 +74,10 @@ With a pseudo-terminal, copy them in a goroutine:
 go io.Copy(ptmx, term)
 ```
 
+A host that reads the program's output on one goroutine can call
+`TakeResponses` after each `Write` instead. It returns the queued replies and
+never blocks.
+
 ## The API
 
 - `Screen` is the small interface most users need: `Write`, `Read`,

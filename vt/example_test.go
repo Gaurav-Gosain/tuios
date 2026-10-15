@@ -41,3 +41,14 @@ func ExampleEmulator_Read() {
 	n, _ := term.Read(reply)
 	fmt.Printf("%q\n", reply[:n]) // "\x1b[3;5R"
 }
+
+// A host that reads the program's output on one goroutine can drain the
+// answers right after each Write instead. TakeResponses never blocks.
+func ExampleEmulator_TakeResponses() {
+	term := vt.NewEmulator(80, 24)
+	defer term.Close()
+
+	_, _ = term.Write([]byte("\x1b[3;5H\x1b[6n"))
+	fmt.Printf("%q\n", term.TakeResponses()) // "\x1b[3;5R"
+	fmt.Printf("%q\n", term.TakeResponses()) // "" (nothing is left)
+}

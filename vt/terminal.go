@@ -29,6 +29,10 @@ type Terminal interface {
 	// Read drains the responses the emulator wants sent back to the guest.
 	// It returns io.EOF after Close.
 	Read(p []byte) (n int, err error)
+	// TakeResponses removes and returns the queued responses without
+	// blocking, or nil when there are none. A host that drains after each
+	// Write uses it instead of a goroutine blocked in Read.
+	TakeResponses() []byte
 	// WriteResponse queues data to come out of Read, for a response made outside
 	// the emulator.
 	WriteResponse(data []byte)
