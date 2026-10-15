@@ -1513,7 +1513,7 @@ func init() {
 				{Name: "total", Type: "int", Description: "How many themes are registered in all."},
 				{Name: "matched", Type: "int", Description: "How many the filter matched, before the cap."},
 				{Name: "active", Type: "string", Description: "The theme this session is set to. Empty means no theme, which is the terminal's own colours."},
-				{Name: "active_source", Type: "string", Description: `"session" for a theme set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
+				{Name: "active_source", Type: "string", Description: `"session" for a theme set on this session, "config" for one config.toml sets, "default" for the built-in.`, Accepted: []string{"session", "config", "default"}},
 				{Name: "themes_dir", Type: "string", Description: "Where a custom theme file goes. Writing <id>.json here registers it. No restart is needed."},
 				{Name: "problems", Type: "[]string", Description: "One line per theme file that could not be read, with the reason. Present only when a file is malformed."},
 				{Name: "palette", Type: "object", Description: "Present when theme was given: id, display_name, dark, bg, fg, cursor, swatches (each with hex, ratio, floor, passes) and illegible, the names of the swatches that did not clear their floor."},
@@ -1535,7 +1535,7 @@ func init() {
 				{Name: "roles", Type: "[]string", Description: "Every role a set can name, which is what to write in a set file."},
 				{Name: "total", Type: "int", Description: "How many sets there are."},
 				{Name: "glyphs_dir", Type: "string", Description: "Directory user sets are read from; write <id>.json there."},
-				{Name: "active", Type: "string", Description: "The set in effect, with active_source saying whether it came from the session or the default."},
+				{Name: "active", Type: "string", Description: "The set in effect, with active_source saying whether it came from the session, config.toml or the default."},
 				{Name: "problems", Type: "[]string", Description: "One line per set file that could not be read and per role dropped for being the wrong width. Present only when there are any."},
 				{Name: "set", Type: "object", Description: "Present when glyphs was given: id, display_name, inherits, ascii, names (the roles the set states) and drawn (the character each role would actually render as, defaults folded in)."},
 			},
@@ -1546,7 +1546,7 @@ func init() {
 			handler: (*Daemon).verbListGlyphs,
 		},
 		"get-option": {
-			description: "Read an option. Reports the session's override when one is set, otherwise the default.",
+			description: "Read an option. Reports the session's override when one is set, then the value config.toml sets, otherwise the default.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "key", Type: "string", Required: true, Description: "Option path to read."},
@@ -1554,7 +1554,7 @@ func init() {
 			returns: []verbParam{
 				{Name: "key", Type: "string", Description: "The option that was read."},
 				{Name: "value", Type: "string", Description: "The value in effect."},
-				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "config" for the daemon's config file (daemon.window_size only), "default" for the built-in.`, Accepted: []string{"session", "config", "default"}},
+				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "config" for a value config.toml or a file it brings in sets, "default" for the built-in.`, Accepted: []string{"session", "config", "default"}},
 				{Name: "default", Type: "string", Description: "The built-in default, so a caller can tell an override from a default that happens to match."},
 				{Name: "option_type", Type: "string", Description: "bool, int or string."},
 			},

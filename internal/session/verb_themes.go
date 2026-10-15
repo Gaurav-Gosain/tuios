@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -65,12 +64,9 @@ func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *ver
 	// its own tint is not the attached client's.
 	if sess := d.findTargetSession(p.Session); sess != nil {
 		out["session"] = sess.Name()
-		if v, ok := sess.GetOption("appearance.theme"); ok {
+		if v, source, ok := d.optionsFor(sess).lookup("appearance.theme"); ok {
 			out["active"] = v
-			out["active_source"] = "session"
-		} else if opt, ok := config.LookupOption("appearance.theme"); ok {
-			out["active"] = opt.Default
-			out["active_source"] = "default"
+			out["active_source"] = source
 		}
 	} else if p.Session != "" {
 		return nil, mustResolve(d, p.Session)

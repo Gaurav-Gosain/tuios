@@ -1,6 +1,8 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,19 +86,41 @@ func TestSetOptionValidatesBothHalves(t *testing.T) {
 	})
 }
 
-// TestGetOptionAnswersWithTheValueInEffect pins the read. It used to read only
-// this session's own overrides, so the ordinary question failed on every session
-// that had never set one, which is most of them.
+// TestGetOptionAnswersWithTheValueInEffect pins the read: the session's
+// override, then config.toml, then the default, the order the client draws by.
+// It used to read only this session's own overrides, so the ordinary question
+// failed on every session that had never set one. Later it skipped
+// config.toml, so appearance.background = "theme" there read back as off while
+// the client painted the theme.
 func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
-	d, sp := startTestDaemon(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[appearance]\nbackground = \"theme\"\n"), 0o600); err != nil {
+		t.Fatalf("write the config: %v", err)
+	}
+	d, sp := startTestDaemonWith(t, &DaemonConfig{ConfigPath: path})
 	makeSessionWithWindow(t, d, "read")
 	c := dialVerb(t, sp)
+	get := func(key string) map[string]any {
+		t.Helper()
+		return result(t, c.call(t, `{"verb":"get-option","params":{"session":"read","key":"`+key+`"}}`))
+	}
 
-	res := result(t, c.call(t, `{"verb":"get-option","params":{"session":"read","key":"appearance.sidebar.position"}}`))
+	res := get("appearance.sidebar.position")
 	if res["source"] != "default" {
 		t.Errorf("source = %v, want default for an option nothing has set", res["source"])
 	}
 	if res["value"] == nil || res["value"] == "" {
 		t.Error("an untouched option read back empty")
+	}
+
+	res = get("appearance.background")
+	if res["value"] != "theme" || res["source"] != "config" {
+		t.Errorf("value, source = %v, %v, want theme, config from config.toml", res["value"], res["source"])
+	}
+
+	result(t, c.call(t, `{"verb":"set-option","params":{"session":"read","key":"appearance.background","value":"off"}}`))
+	res = get("appearance.background")
+	if res["value"] != "off" || res["source"] != "session" {
+		t.Errorf("value, source = %v, %v, want the session's off over config.toml", res["value"], res["source"])
 	}
 }

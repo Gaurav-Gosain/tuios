@@ -973,7 +973,8 @@ agents.enabled is the person's switch. A process in a pane cannot set it.
 recorded in daemon-owned state, so this works whether or not a TUI client is
 attached.
 
-An option with no session override reads as its default, so a path that exists
+An option with no session override reads as the value in config.toml. An
+option that config.toml does not set reads as its default. A path that exists
 always reads. --json also reports where the value came from: "session" for an
 override set here, "config" for a value the daemon read from config.toml, and
 "default" for the built-in. agents.enabled is the daemon's switch, so it reads

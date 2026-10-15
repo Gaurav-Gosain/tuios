@@ -329,8 +329,8 @@ func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *ver
 	return out, nil
 }
 
-// verbGetOption reads an option, preferring what this session was told and
-// falling back to what the option does untold.
+// verbGetOption reads an option: what this session was told, then what
+// config.toml says, then what the option does untold. See sessionOptions.
 //
 // Reading only the session's own overrides would make the ordinary question
 // (what is the dockbar position) fail on every session that never set it,
@@ -382,23 +382,13 @@ func (d *Daemon) verbGetOption(_ *connState, params json.RawMessage) (any, *verb
 			"source": source, "default": config.EffectiveDefault(opt), "option_type": opt.Type,
 		}, nil
 	}
-	if value, ok := sess.GetOption(path); ok {
-		out := map[string]any{"type": "option", "key": path, "value": value, "source": "session"}
+	if value, source, ok := d.optionsFor(sess).lookup(path); ok {
+		out := map[string]any{"type": "option", "key": path, "value": value, "source": source}
 		if known {
 			out["default"] = config.EffectiveDefault(opt)
 			out["option_type"] = opt.Type
 		}
 		return out, nil
-	}
-	if known {
-		return map[string]any{
-			"type":        "option",
-			"key":         path,
-			"value":       config.EffectiveDefault(opt),
-			"source":      "default",
-			"default":     config.EffectiveDefault(opt),
-			"option_type": opt.Type,
-		}, nil
 	}
 
 	// Unknown to the registry and never set here. Both halves of that are worth
