@@ -57,6 +57,17 @@ func TestConfiguredKeysReplaceTheDefaultsOfTheirMotionOnly(t *testing.T) {
 	}
 }
 
+// A configured key that is another motion's default goes to the configured
+// motion, every time: map order must not decide it.
+func TestAConfiguredKeyWinsOverAnotherMotionsDefault(t *testing.T) {
+	for range 50 {
+		k := NewKeymap(map[Motion][]string{Up: {"ctrl+n"}})
+		if got := k.Keys("ctrl+n", false); got != Up {
+			t.Fatalf(`Keys("ctrl+n") = %v, want Up`, got)
+		}
+	}
+}
+
 func TestAnActionSetToNoKeysHasNone(t *testing.T) {
 	k := NewKeymap(map[Motion][]string{PageDown: {}})
 	if got := k.Keys("pgdown", false); got != None {

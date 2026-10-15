@@ -164,25 +164,40 @@ var defaultKeymap = NewKeymap(nil)
 //
 // A key that is one printable character is a letter key, read only by a list
 // with no filter to type into; any other key is read by every list.
+//
+// A key two motions both claim goes to the configured one over a default, and
+// otherwise to the later motion. Both passes walk the motions in order, so the
+// answer never depends on map iteration.
 func NewKeymap(bindings map[Motion][]string) *Keymap {
 	k := &Keymap{keys: map[string]Motion{}, letters: map[string]Motion{}}
-	for m, def := range defaults {
-		keys, ok := bindings[m]
-		if !ok {
-			keys = def
-		}
-		for _, key := range keys {
-			if !isLetter(key) {
-				k.keys[key] = m
+	for _, configured := range [...]bool{false, true} {
+		for m := Up; m <= End; m++ {
+			keys, ok := bindings[m]
+			if ok != configured {
 				continue
 			}
-			k.letters[key] = m
-			if key == "G" {
-				k.letters["shift+g"] = m
+			if !ok {
+				keys = defaults[m]
+			}
+			for _, key := range keys {
+				k.add(key, m)
 			}
 		}
 	}
 	return k
+}
+
+// add binds one key to m. An upper-case letter is also read as shift and the
+// lower-case letter, the spelling some terminals send it as.
+func (k *Keymap) add(key string, m Motion) {
+	if !isLetter(key) {
+		k.keys[key] = m
+		return
+	}
+	k.letters[key] = m
+	if r, _ := utf8.DecodeRuneInString(key); unicode.IsUpper(r) {
+		k.letters["shift+"+string(unicode.ToLower(r))] = m
+	}
 }
 
 // isLetter reports whether key is a single printable character.
