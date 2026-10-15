@@ -1,7 +1,6 @@
 package app
 
 import (
-	"image/color"
 	"strings"
 	"time"
 
@@ -247,7 +246,7 @@ func (m *OS) dockCustomCell(name string) string {
 // An unset foreground is the dim ink made readable on the background the cell
 // really has. The caps are drawn in that background colour.
 func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) string {
-	var bg color.Color = pal.Panel
+	bg := pal.Panel
 	if config.IsHexColor(st.Bg) {
 		bg = lipgloss.Color(st.Bg)
 	}
@@ -256,6 +255,15 @@ func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) s
 		fg = lipgloss.Color(st.Fg)
 	}
 	body := lipgloss.NewStyle().Background(bg).Foreground(fg).Bold(st.Bold).Render(" " + text + " ")
+	if st.CapLeft == "" && st.CapRight == "" {
+		return body
+	}
+	// At 16 colours an unset ground is the terminal's own, so a cap has no
+	// colour to take and would read as a glyph beside the cell. Blanks of the
+	// same width keep the geometry, as workspacePill does.
+	if overlay.IsNoColor(bg) {
+		return strings.Repeat(" ", lipgloss.Width(st.CapLeft)) + body + strings.Repeat(" ", lipgloss.Width(st.CapRight))
+	}
 	caps := lipgloss.NewStyle().Foreground(bg)
 	if st.CapLeft != "" {
 		body = caps.Render(st.CapLeft) + body

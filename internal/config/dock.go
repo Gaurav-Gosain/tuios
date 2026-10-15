@@ -204,10 +204,6 @@ type DockCellStyle struct {
 	CapRight string `toml:"cap_right,omitempty"`
 }
 
-// IsZero reports whether the style asks for nothing, which keeps the default
-// rendering.
-func (s DockCellStyle) IsZero() bool { return s == DockCellStyle{} }
-
 // DockSessionConfig is [dock.session].
 type DockSessionConfig struct {
 	DockCellStyle
