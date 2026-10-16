@@ -3247,6 +3247,10 @@ goroutine was blocked in.
   no pane working it arms no timer. A change to a session's state raises the
   stall latch, and the monitor works out its deadline again. A pane the
   screen tier keeps working is looked at again every interval, as before.
+- The cleanup loop sleeps until something is left to clean. What it releases
+  is left by output, input and resizes, and what it expires is a routed
+  request. Each raises the cleanup latch. It runs at most twice after the
+  last activity.
 
 ### Numbers
 
@@ -3258,6 +3262,20 @@ Client attached, 5 s after the panes opened, 30 s window:
 | saver sleeps | 20.7, 19.3, 21.5 |
 | agent monitor sleeps | 15.3, 14.5, 13.3 |
 | stall monitor sleeps | 10.7, 17.5, 12.4 |
+| cleanup loop sleeps | 14.4, 13.3, 12.9 |
+
+The cleanup loop woke once in 30 s, so its row is inside the noise.
+
+40 s after the panes opened, past the quiet bound and the first stale save,
+30 s window:
+
+| Build | no client | client attached |
+|---|---|---|
+| main | 8.1, 9.0, 7.6 | 26.9, 24.8, 21.8 |
+| all four loops sleep | 1.0, 2.0, 1.0 | 11.0, 7.7, 15.5 |
+
+With a client attached, what is left is the client's listing poll: one
+request every 3 s while the rail is open. The trace shows no other timer.
 
 These runs start 5 s after the panes open, so the agent monitor is still in
 its 10 s quiet bound for the first seconds of the window.
@@ -3266,7 +3284,8 @@ its 10 s quiet bound for the first seconds of the window.
 daemon with one shell pane, waits for its loops to settle, and counts each
 loop's timer fires over an idle window: the budget is 0. Then it types into
 the pane and checks that the agent monitor wakes. It also sets the pane
-working and checks that the stall monitor demotes it with one or two fires. With the monitor's sleep
+working and checks that the stall monitor demotes it with one or two fires,
+and that input wakes the cleanup loop. With the monitor's sleep
 removed the loops never settle and the test fails.
 
 `TestAnIdleSessionDoesNotWakeTheSaver` holds the saver's budget: no write and at most
