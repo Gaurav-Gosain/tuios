@@ -85,6 +85,10 @@ type inboxAgentsState struct {
 	// from.
 	list   []sidebarAgentEntry
 	listAt agentsListKey
+	// inFrame is set while a frame is drawn. The list cannot change
+	// during one, so a frame reads it from list instead of hashing the
+	// rail's signature again for every caller.
+	inFrame bool
 	// counts are the header's counts over every agent, filter or not.
 	counts agentsCounts
 	// mail is each agent's unread mail, by window, from the mailbox mirror.
@@ -190,6 +194,9 @@ func agentKey(e sidebarAgentEntry) string {
 // signature, the filter, the sort, the search or the selector changed.
 func (m *OS) inboxAgentsList() []sidebarAgentEntry {
 	a := &m.Inbox.agents
+	if a.inFrame && a.listAt.built {
+		return a.list
+	}
 	key := agentsListKey{
 		sig: m.sidebarSignature(), filter: a.filter, sort: a.sort,
 		query: a.query, select_: m.Inbox.Select, built: true,
@@ -276,11 +283,11 @@ func (m *OS) agentsKeep(e sidebarAgentEntry) bool {
 // them about cost more than everything else a rebuild does.
 func (m *OS) agentsSort(rows []sidebarAgentEntry) []sidebarAgentEntry {
 	by := m.Inbox.agents.sort
-	idx := make([]int32, len(rows))
+	idx := make([]int, len(rows))
 	for i := range idx {
-		idx[i] = int32(i)
+		idx[i] = i
 	}
-	slices.SortStableFunc(idx, func(i, j int32) int {
+	slices.SortStableFunc(idx, func(i, j int) int {
 		x, y := &rows[i], &rows[j]
 		switch by {
 		case agentsSortName:
@@ -438,6 +445,8 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.Inbox
 	a := &st.agents
 	list := m.inboxAgentsList()
+	a.inFrame = true
+	defer func() { a.inFrame = false }()
 	title := m.agentsTitle()
 	hints := m.inboxAgentsHints()
 	if len(list) == 0 {
