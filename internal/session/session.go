@@ -4282,6 +4282,13 @@ func (p *PTY) Resize(width, height int) error {
 		p.askedW, p.askedH = width, height
 	}
 	width, height = p.leasedSizeLocked(width, height)
+	// A reflow leaves scratch behind that cleanupLoop releases, and a pane
+	// whose program does not repaint prints nothing to wake it.
+	if s := p.owner(); s != nil {
+		if w := s.wakes.Load(); w != nil {
+			w.cleanup.Set()
+		}
+	}
 	return p.resizeStreamLocked(width, height)
 }
 
