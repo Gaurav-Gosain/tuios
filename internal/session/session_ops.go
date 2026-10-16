@@ -245,6 +245,11 @@ type NewWindowOptions struct {
 	// up. It is unexported: only verify-fan's status pipe sets it, and only
 	// for a local process on a platform that passes them (not Windows).
 	extraFiles []*os.File
+	// keepOpen keeps the window after its process exits and writes a line
+	// with the exit status under the last output. See keep_open.go. It is
+	// unexported: only new-window sets it, and the caller's onExit must not
+	// close the window for it to mean anything.
+	keepOpen bool
 	// Env is KEY=VALUE pairs the process gets on top of the daemon's own
 	// environment, from a caller that passed its own (fan, start-agent). The
 	// TUIOS_ variables are set after it, so it cannot change them. It is not
@@ -398,7 +403,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 
 	pty, err := s.createPTY(ptyWidth, ptyHeight, ptySpawn{
 		windowID: windowID, cwd: cwd, command: opts.Command, env: opts.Env, host: opts.Host,
-		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants,
+		onExit: onExit, stdout: opts.stdout, extraFiles: opts.extraFiles, grants: opts.Grants, keepOpen: opts.keepOpen,
 		workspace: opts.Workspace, noStartDir: noStartDir,
 	})
 	if err != nil {

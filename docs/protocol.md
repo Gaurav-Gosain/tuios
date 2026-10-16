@@ -2338,7 +2338,16 @@ shell, not parsed by any shell; with a client attached, the window closes when
 it exits), `host` (run the window's process on a machine from the `[hosts]`
 table; omit or pass `local` for this machine), and `close_on_exit` (default
 false; close the window when its process exits, also with no client attached.
-Without it, a detached session keeps the window until something closes it).
+Without it, a detached session keeps the window until something closes it),
+`keep_open` (default false; keep the window after its process exits, with a
+line that shows the exit status under the last output; not with
+`close_on_exit`), `wait` (default false; answer when the process exits, with
+`exit_code` and, when a signal stopped it, `signal`; not for a window on
+another machine), and `timeout` (with `wait`, milliseconds before the
+`timeout` error; 0 waits with no limit).
+
+A daemon that does not know `keep_open` and `wait` ignores them: the result
+has no `keep_open` and no `exit_code`. A caller checks for those fields.
 
 Request:
 
@@ -6627,7 +6636,11 @@ Conditions:
 - `window-output` matches `pattern` against the target window's captured
   content. Checked once immediately, then re-checked as the window produces
   output.
-- `window-exit` resolves when the target window's shell process exits.
+- `window-exit` resolves when the target window's shell process exits. The
+  result carries `exit_code` (-1 when a signal stopped the process) and
+  `signal` when a signal stopped it. Both are omitted when the status is not
+  known, such as for a window on another machine. An older client ignores
+  them.
 - `window-idle` resolves after the target window produces no output for `idle`
   milliseconds.
 - `session-exists` resolves when a session named `session` exists.

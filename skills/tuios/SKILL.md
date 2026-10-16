@@ -167,6 +167,13 @@ exits with its status:
 tuios run -s work -w tests --timeout 600000 -- go test ./...
 ```
 
+Without shell integration, run the command as the program of a new pane.
+`--wait` exits with its status, and `--keep-open` keeps the output to read:
+
+```sh
+tuios new-window -s work tests --no-focus --keep-open --wait -- go test ./...
+```
+
 Do not capture in a loop with a sleep. The daemon blocks for you:
 
 ```sh

@@ -48,7 +48,8 @@ tuios send-text -s work -w build 'go test ./... 2>&1 | tee /tmp/test.log
 
 To make the pane's process the program itself rather than a shell, put the argv
 after the name. Nothing re-parses it, and the pane closes when the program
-exits. Put `--` before a command that has flags of its own:
+exits. `--keep-open` keeps the pane, with a line that shows the exit status.
+Put `--` before a command that has flags of its own:
 
 ```sh
 tuios new-window -s work htop /usr/bin/htop
@@ -252,7 +253,8 @@ tuios wait-for command-finished -s work -w build --timeout 600000
   prints, including scrollback.
 - `window-idle` returns once the pane has printed nothing for `--idle`
   milliseconds. Use it when a command has no marker.
-- `window-exit` returns when the pane's process exits.
+- `window-exit` returns when the pane's process exits, and shows its exit
+  status (`exit_code` with `--json`). It still exits 0.
 - `agent-state` returns when an agent pane reaches one of the `--until` states.
   Without `-w`, any agent in the session matches; `--any-session` watches every
   session; `--select` watches a set of panes (`tuios --skill fleet`).
@@ -283,7 +285,22 @@ match; the output shows `tests_done_1786700000`, which it does.
 
 ### Running a command and getting its exit code
 
-When the pane's shell marks its commands with OSC 133 (fish 4 on its own, zsh
+The simplest way needs no shell integration. Run the command as the program of
+a new pane. `--wait` waits for it and exits with its status. `--keep-open`
+keeps the pane, so you can read the output after the exit:
+
+```sh
+tuios new-window -s work tests --no-focus --keep-open --wait -- go test ./...
+echo "tests exited $?"
+tuios capture-pane -s work -w tests --scrollback --lines 60
+tuios close-window -s work tests
+```
+
+A program that a signal stopped exits 128 plus the signal number. `--json`
+gives `exit_code`, and `signal` when a signal stopped it. `--timeout` limits
+the wait in milliseconds. Close the pane when you are done with it.
+
+To run the command in a shell pane that exists, use `run`. When the pane's shell marks its commands with OSC 133 (fish 4 on its own, zsh
 and bash 4.4 or newer with the lines `tuios doctor shell` prints), `run` types
 the line at the prompt, waits for the shell to say it finished, prints exactly
 what that command printed, and exits with its status:
@@ -303,7 +320,7 @@ the `wait-for command-finished --command-seq N` that picks it up.
 `capture-pane --last-command` prints only what the last finished command
 printed.
 
-Without shell integration, put the status in the marker:
+Into a shell pane without shell integration, put the status in the marker:
 
 ```sh
 n=$(date +%s)
@@ -313,7 +330,8 @@ tuios wait-for window-output -s work -w build --pattern "done_${n}_rc=" --timeou
 tuios capture-pane -s work -w build --scrollback --lines 60 | grep -o "done_${n}_rc=[0-9]*"
 ```
 
-Or run the work in a window that exits, and wait for the exit:
+A daemon older than `--keep-open` warns and opens an ordinary pane. There, run
+the work in a window that exits, and wait for the exit:
 
 ```sh
 tuios new-window -s work job

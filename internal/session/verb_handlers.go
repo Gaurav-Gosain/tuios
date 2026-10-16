@@ -266,6 +266,13 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// exit already. A detached session keeps it until something closes
 		// it, which is right for a shell and wrong for tuios xpanes -ss.
 		CloseOnExit bool `json:"close_on_exit"`
+		// KeepOpen keeps the window after its process exits, with a line
+		// that shows the exit status. See keep_open.go.
+		KeepOpen bool `json:"keep_open"`
+		// Wait holds the call until the process exits and answers with its
+		// exit status. Timeout bounds the wait in milliseconds, 0 for none.
+		Wait    bool `json:"wait"`
+		Timeout int  `json:"timeout"`
 		// Kind and URI make a window a renderer draws natively.
 		Kind string `json:"kind"`
 		URI  string `json:"uri"`
@@ -278,6 +285,15 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if p.Kind != "" && p.Kind != "terminal" && p.URI == "" {
 		return nil, invalidParam("uri", "a "+p.Kind+" window needs uri, what it shows")
+	}
+	if p.KeepOpen && p.CloseOnExit {
+		return nil, invalidParam("keep_open", "keep_open and close_on_exit cannot be used together")
+	}
+	if p.Timeout < 0 {
+		return nil, invalidParam("timeout", "timeout is milliseconds, 0 for no limit")
+	}
+	if p.Wait && p.Host != "" && p.Host != "local" {
+		return nil, invalidParam("wait", "wait reads the exit status, and a window on another machine does not report one")
 	}
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
@@ -321,13 +337,26 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 	// PTY and the window set are the daemon's. An attached renderer learns of the
 	// window from the state push and places it, so there is no round trip to the
 	// client that can time out and no second creation path to keep in step.
+	//
+	// A kept-open window is not reported closed: that report is what makes an
+	// attached client close the window. The exit status is kept before
+	// anything can close the window and drop the PTY that holds it, for a
+	// caller that waits (see popupExit).
+	exitStatus := newPopupExit()
 	onExit := func(ptyID string) {
+		if pty := sess.GetPTY(ptyID); pty != nil {
+			exitStatus.recordPTY(pty)
+		}
+		if p.KeepOpen {
+			return
+		}
 		d.notifyPTYClosed(sess.ID, ptyID)
 		if p.CloseOnExit {
 			d.closeWindowOfPTY(sess, ptyID, false)
 		}
 	}
 	win, bverr, err := d.addWindowFor(cs, "new-window", sess, NewWindowOptions{
+		keepOpen:  p.KeepOpen,
 		Title:     p.Name,
 		Cwd:       p.Cwd,
 		Workspace: p.Workspace,
@@ -366,10 +395,59 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		win.Unplaced = !d.awaitPlacement(sess, win.ID, win.PTYID, newWindowPlaceWait)
 	}
 
+	if p.Wait {
+		// Held from here, so the signal can be read after a client closed
+		// the window. Nil when the window is gone already.
+		pty := sess.GetPTY(win.PTYID)
+		code, exited := d.waitPopupExit(sess, win, time.Duration(p.Timeout)*time.Millisecond, exitStatus)
+		if !exited {
+			return nil, hintedVerbError(ErrVerbTimeout, "the window's program still runs after the wait ended", &VerbHint{
+				Command: "tuios wait-for window-exit -w " + win.ID,
+				Detail:  "The program still runs in the window. Wait for it with the command shown, or raise timeout.",
+			})
+		}
+		pty.awaitExitNote()
+		res := map[string]any{
+			"type":      "window_exited",
+			"window_id": win.ID,
+			"name":      displayName,
+			"workspace": win.Workspace,
+			"pty_id":    win.PTYID,
+			"exit_code": code,
+		}
+		sig := exitStatus.signal
+		if pty != nil {
+			sig = pty.ExitSignal()
+		}
+		if sig > 0 {
+			res["signal"] = sig
+		}
+		if p.KeepOpen {
+			res["keep_open"] = true
+		}
+		return res, nil
+	}
+
 	// The result says where the window went, not just that one was made. A
 	// caller that asked for a workspace has to be able to confirm it without a
 	// second call, and unplaced is the honest answer to "what size is it": the
 	// box is a placeholder until a client with a viewport places it.
+	//
+	// keep_open is echoed only when set: a caller that asked for it and does
+	// not see it back is talking to a daemon that does not know it.
+	if p.KeepOpen {
+		return map[string]any{
+			"type":      "window_created",
+			"window_id": win.ID,
+			"name":      displayName,
+			"workspace": win.Workspace,
+			"pty_id":    win.PTYID,
+			"focused":   focus,
+			"unplaced":  win.Unplaced,
+			"host":      win.Host,
+			"keep_open": true,
+		}, nil
+	}
 	return map[string]any{
 		"type":      "window_created",
 		"window_id": win.ID,

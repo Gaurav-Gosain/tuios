@@ -87,10 +87,16 @@ func (c *popupCapture) finish() (string, bool) {
 // popup when its command exits (see verbPopup), and the close removes the PTY
 // that holds the status. A caller that waits can come to the PTY after that,
 // so the exit callback keeps the status here first.
+//
+// new-window with wait keeps its status here for the same reason: an attached
+// client closes a command window when its command exits.
 type popupExit struct {
 	once sync.Once
 	done chan struct{}
 	code int
+	// signal is the signal that ended the process, 0 for none. Read only
+	// after done is closed.
+	signal int
 }
 
 func newPopupExit() *popupExit {
@@ -101,6 +107,19 @@ func newPopupExit() *popupExit {
 func (e *popupExit) record(code int) {
 	e.once.Do(func() {
 		e.code = code
+		close(e.done)
+	})
+}
+
+// recordPTY keeps the status of a PTY whose process has exited.
+func (e *popupExit) recordPTY(pty *PTY) {
+	code, ok := pty.ExitStatus()
+	if !ok {
+		return
+	}
+	e.once.Do(func() {
+		e.code = code
+		e.signal = pty.ExitSignal()
 		close(e.done)
 	})
 }

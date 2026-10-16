@@ -411,7 +411,6 @@ var verbsWithNoDocumentedResult = map[string]bool{
 	"session-info": true, "set-session-accent": true,
 	"set-session-name": true, "set-workspace-name": true,
 	"set-workspace-order": true, "unsubscribe": true,
-	"wait-for": true,
 }
 
 // TestVerbResultSchemasAreDeclaredOrListed keeps the gap above from widening.

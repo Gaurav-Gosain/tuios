@@ -1243,6 +1243,8 @@ as typed. End the text with a newline to run it as a command.`,
 	var newWindowJSON bool
 	var newWindowPrintID bool
 	var newWindowKind, newWindowURI string
+	var newWindowKeepOpen, newWindowWait bool
+	var newWindowTimeout int
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
@@ -1254,11 +1256,19 @@ on to the id.
 
 Arguments after the name are an argv the window runs as its own process instead
 of a shell. Nothing re-parses them, so nothing needs quoting. The window closes
-when the program exits. Put -- before a command that has flags of its own, or
+when the program exits, unless you add --keep-open. Put -- before a command that has flags of its own, or
 tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
 --no-focus leaves the focus where it is.
+
+--keep-open keeps the window after its program exits. The window shows a line
+with the exit status under the last output. Close the window to remove it.
+
+--wait waits for the program to exit, prints nothing, and exits with the
+program's status. A program that a signal stopped gives 128 plus the signal
+number. --timeout sets a limit in milliseconds. Use --wait with --keep-open to
+read the output after the exit with capture-pane.
 
 The output is the short id and the name, "d6b97fe4  build". Either one is a
 window target for -w. --print-id prints the full id alone, for a script:
@@ -1298,6 +1308,10 @@ window as one line with its uri.`,
   id=$(tuios new-window docs --cwd ~/src/docs --no-focus --print-id)
   tuios new-window --json | jq -r .window_id
 
+  # Run the tests beside you, wait, and read the output if they fail
+  tuios new-window tests --no-focus --keep-open --wait -- go test ./... ||
+    tuios capture-pane -w tests --scrollback
+
   # Open a window whose shell runs on another machine
   tuios new-window deploy --host build`,
 		Args: cobra.ArbitraryArgs,
@@ -1308,8 +1322,12 @@ window as one line with its uri.`,
 				name = args[0]
 				command = args[1:]
 			}
-			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowKind, newWindowURI, newWindowJSON, newWindowPrintID)
+			return runNewWindow(newWindowOptions{
+				session: newWindowSession, name: name, workspace: newWindowWorkspace, cwd: newWindowCwd,
+				focus: !newWindowNoFocus, command: command, host: newWindowHost, grants: newWindowGrants,
+				kind: newWindowKind, uri: newWindowURI, jsonOut: newWindowJSON, printID: newWindowPrintID,
+				keepOpen: newWindowKeepOpen, wait: newWindowWait, timeout: newWindowTimeout,
+			})
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1322,7 +1340,11 @@ window as one line with its uri.`,
 	newWindowCmd.Flags().BoolVar(&newWindowPrintID, "print-id", false, "Print only the new window's full id, for id=$(...)")
 	newWindowCmd.Flags().StringVar(&newWindowKind, "kind", "", "What draws the window: terminal, or view, web or app for a native renderer (default: terminal)")
 	newWindowCmd.Flags().StringVar(&newWindowURI, "uri", "", "What a view, web or app window shows, such as tuios://review/<pane>")
+	newWindowCmd.Flags().BoolVar(&newWindowKeepOpen, "keep-open", false, "Keep the window after its program exits, with a line that shows the exit status")
+	newWindowCmd.Flags().BoolVar(&newWindowWait, "wait", false, "Wait for the program to exit, and exit with its status")
+	newWindowCmd.Flags().IntVar(&newWindowTimeout, "timeout", 0, "With --wait: milliseconds to wait before failing (default: no limit)")
 	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")
+	newWindowCmd.MarkFlagsMutuallyExclusive("wait", "print-id")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
@@ -1978,7 +2000,9 @@ straight away without a restart.`,
 Conditions:
   session-exists  the named session is present
   window-output   the window printed something matching --pattern
-  window-exit     the window's shell exited
+  window-exit     the window's program exited. The output shows its exit
+                  status, and --json gives it in exit_code. The command
+                  still exits 0. Use new-window --wait to exit with it
   window-idle     the window printed nothing for --idle milliseconds
   agent-state     an agent reached one of the --until states. Without --window,
                   any agent pane in the session matches, with --any-session,

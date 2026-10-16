@@ -469,8 +469,16 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
+	// The result carries the exit status, so a caller learns how the program
+	// ended in the same call. An older client reads only the fields it knows.
+	matched := func() map[string]any {
+		pty.awaitExitNote()
+		res := waitMatched("window-exit", map[string]any{"window": window})
+		exitResult(pty, res)
+		return res
+	}
 	if pty.IsExited() {
-		return waitMatched("window-exit", map[string]any{"window": window}), nil
+		return matched(), nil
 	}
 	for {
 		select {
@@ -482,7 +490,7 @@ func (d *Daemon) waitWindowExit(sessionName, window string, deadline <-chan time
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
-			return waitMatched("window-exit", map[string]any{"window": window}), nil
+			return matched(), nil
 		}
 	}
 }

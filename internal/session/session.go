@@ -938,6 +938,10 @@ type PTY struct {
 	// exitSignal is the signal that ended the process, 0 when it exited on
 	// its own. See ExitSignal.
 	exitSignal atomic.Int32
+	// keepOpen is set for a pane that stays after its process exits, and
+	// writes the exit status into it. Nil for every other pane. See
+	// keep_open.go.
+	keepOpen *exitNote
 
 	// Single-goroutine VT writer channel. Closed by readOutput on exit so
 	// vtWriter's range terminates.
@@ -2147,6 +2151,9 @@ type ptySpawn struct {
 	// admin and with no folder of its own asked for it. See
 	// NewWindowOptions.Bounded.
 	noStartDir bool
+	// keepOpen writes the exit status into the pane when its process exits.
+	// See keep_open.go.
+	keepOpen bool
 }
 
 // createPTY starts a pane's process. sp.command, when non-empty, is an argv
@@ -2327,6 +2334,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
 		spawnedAt:    time.Now(),
+	}
+	if sp.keepOpen {
+		pty.keepOpen = newExitNote()
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -4612,6 +4622,9 @@ func (p *PTY) readOutput() {
 	// exits. Resize sends on it too, so the close is taken under the lock it
 	// sends under and leaves the flag that stops it trying.
 	defer func() {
+		// A pane kept open shows its exit status under the last output, so
+		// it is written before the emulator's channel closes.
+		p.noteReadEnd()
 		p.streamMu.Lock()
 		p.vtClosed = true
 		close(p.vtWriteChan)
@@ -4892,6 +4905,9 @@ func (p *PTY) noteExit(code int) {
 	p.exited = true
 	p.exitCode = code
 	p.exitedMu.Unlock()
+	if p.keepOpen != nil {
+		p.keepOpen.exited(p)
+	}
 
 	debugLog("[DEBUG] PTY %s: process exited with code %d", p.ID[:8], p.exitCode)
 

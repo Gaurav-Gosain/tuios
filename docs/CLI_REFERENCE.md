@@ -1282,6 +1282,9 @@ command that has flags of its own, or tuios reads them as its own flags:
 - `--grants <grant>[,<grant>...]`: What the window's process may do through tuios: `read`, `write`, `fan`, `respond`, `admin`, or `none` (default: `[agents.permissions]`). See [`tuios pane-grants`](#tuios-pane-grants)
 - `--json`: Output result as JSON
 - `--print-id`: Print only the new window's full id
+- `--keep-open`: Keep the window after its program exits. The window shows a line with the exit status under the last output
+- `--wait`: Wait for the program to exit, print nothing, and exit with its status. A program that a signal stopped gives 128 plus the signal number
+- `--timeout <ms>`: With `--wait`: milliseconds to wait before failing (default: no limit)
 
 **Output:**
 The 8-character window id and the window's name, separated by two spaces:
@@ -1302,6 +1305,10 @@ tuios new-window
 tuios new-window build
 tuios send-text -w build 'go build ./...
 '
+
+# Run the tests beside you, and read the output if they fail
+tuios new-window tests --no-focus --keep-open --wait -- go test ./... ||
+  tuios capture-pane -w tests --scrollback
 
 # Capture the new window's id for scripting
 id=$(tuios new-window build --print-id)

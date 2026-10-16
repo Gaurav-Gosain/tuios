@@ -229,13 +229,34 @@ func sendKeysSummary(sentTo, windowID, window string, keys int) string {
 	return fmt.Sprintf("sent %d %s to window %s (%s)", keys, noun, window, shortWindowID(windowID))
 }
 
+// newWindowOptions is the `tuios new-window` command line. workspace 0 means
+// the current one, an empty cwd means the daemon's own directory, and a
+// non-empty command is an argv the window execs as its process instead of a
+// shell. A non-empty host puts the window's process on another machine; the
+// window is still this session's. Non-empty grants are what the window's
+// process may do through tuios.
+type newWindowOptions struct {
+	session, name string
+	workspace     int
+	cwd           string
+	focus         bool
+	command       []string
+	host          string
+	grants        []string
+	kind, uri     string
+	jsonOut       bool
+	printID       bool
+	// keepOpen keeps the window after its program exits. wait waits for the
+	// exit and exits with the program's status; timeout bounds that wait in
+	// milliseconds, 0 for none.
+	keepOpen bool
+	wait     bool
+	timeout  int
+}
+
 // runNewWindow opens a window in a session and reports its id, which is the
-// handle every later call needs. workspace 0 means the current one, an empty
-// cwd means the daemon's own directory, and a non-empty command is an argv the
-// window execs as its process instead of a shell. A non-empty host puts the
-// window's process on another machine; the window is still this session's.
-// Non-empty grants are what the window's process may do through tuios.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, kind, uri string, jsonOutput, printID bool) error {
+// handle every later call needs.
+func runNewWindow(o newWindowOptions) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -243,44 +264,82 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	defer func() { _ = client.Close() }()
 
 	params := map[string]any{
-		"session":   sessionName,
-		"name":      name,
-		"workspace": workspace,
-		"cwd":       cwd,
-		"focus":     focus,
+		"session":   o.session,
+		"name":      o.name,
+		"workspace": o.workspace,
+		"cwd":       o.cwd,
+		"focus":     o.focus,
 	}
-	if len(command) > 0 {
-		params["command"] = command
+	if len(o.command) > 0 {
+		params["command"] = o.command
 	}
-	if host != "" {
-		params["host"] = host
+	if o.host != "" {
+		params["host"] = o.host
 	}
-	if len(grants) > 0 {
-		params["grants"] = grants
+	if len(o.grants) > 0 {
+		params["grants"] = o.grants
 	}
-	if kind != "" {
-		params["kind"] = kind
+	if o.kind != "" {
+		params["kind"] = o.kind
 	}
-	if uri != "" {
-		params["uri"] = uri
+	if o.uri != "" {
+		params["uri"] = o.uri
 	}
-	raw, err := client.Call("new-window", params)
+	if o.keepOpen {
+		params["keep_open"] = true
+	}
+	call := client.Call
+	if o.wait {
+		params["wait"] = true
+		if o.timeout > 0 {
+			params["timeout"] = o.timeout
+		}
+		// The daemon answers when the program exits. With no timeout there
+		// is no bound worth guessing, so the call waits a day.
+		callTimeout := 24 * time.Hour
+		if o.timeout > 0 {
+			callTimeout = time.Duration(o.timeout)*time.Millisecond + 10*time.Second
+		}
+		call = func(verb string, params any) (json.RawMessage, error) {
+			return client.CallWithTimeout(verb, params, callTimeout)
+		}
+	}
+	raw, err := call("new-window", params)
 	if err != nil {
-		return reportVerbError(explainVerbError("new-window", err), jsonOutput)
-	}
-	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return reportVerbError(explainVerbError("new-window", err), o.jsonOut)
 	}
 	var res struct {
+		Type     string `json:"type"`
 		WindowID string `json:"window_id"`
 		Name     string `json:"name"`
 		Host     string `json:"host"`
+		KeepOpen bool   `json:"keep_open"`
+		ExitCode *int   `json:"exit_code"`
+		Signal   int    `json:"signal"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
+	// A daemon older than keep_open and wait ignores both and opens an
+	// ordinary window. Say so, because the window closes on exit and the
+	// call did not wait.
+	if (o.keepOpen && !res.KeepOpen) || (o.wait && res.ExitCode == nil) {
+		fmt.Fprintln(os.Stderr, "warning: the daemon does not support --keep-open or --wait. Run 'tuios kill-server' and start tuios again to update it.")
+		if o.wait {
+			return &statusError{code: 1}
+		}
+	}
+	if o.jsonOut {
+		if err := printVerbResult(raw, true); err != nil {
+			return err
+		}
+		return newWindowExitStatus(o.wait, res.ExitCode, res.Signal)
+	}
+	if o.wait {
+		return newWindowExitStatus(true, res.ExitCode, res.Signal)
+	}
 	// The full id and nothing else, for id=$(tuios new-window --print-id).
-	if printID {
+	if o.printID {
 		fmt.Println(res.WindowID)
 		return nil
 	}
@@ -291,6 +350,23 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 		return nil
 	}
 	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
+	return nil
+}
+
+// newWindowExitStatus is how new-window --wait exits: with the program's own
+// status, or 128 plus the signal that ended it, as a shell reports it.
+func newWindowExitStatus(wait bool, code *int, signal int) error {
+	if !wait || code == nil {
+		return nil
+	}
+	switch {
+	case signal > 0:
+		return &statusError{code: 128 + signal}
+	case *code < 0:
+		return &statusError{code: 1}
+	case *code > 0:
+		return &statusError{code: *code}
+	}
 	return nil
 }
 
@@ -1677,6 +1753,7 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		Window    string `json:"window"`
 		Session   string `json:"session"`
 		ExitCode  *int   `json:"exit_code"`
+		Signal    int    `json:"signal"`
 		Cmdline   string `json:"cmdline"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
@@ -1688,6 +1765,14 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 			status = fmt.Sprintf("exit %d", *res.ExitCode)
 		}
 		fmt.Printf("%s matched on %s%s: %s, %s\n", res.Condition, plainLine(res.Window), t.on(), status, plainLine(res.Cmdline))
+		return nil
+	}
+	if res.Condition == "window-exit" && res.ExitCode != nil {
+		status := fmt.Sprintf("exit %d", *res.ExitCode)
+		if res.Signal > 0 {
+			status = fmt.Sprintf("signal %d", res.Signal)
+		}
+		fmt.Printf("%s matched on %s%s: %s\n", res.Condition, plainLine(res.Window), t.on(), status)
 		return nil
 	}
 	if res.Window != "" && anySession && res.Session != "" {
