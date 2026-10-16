@@ -7516,3 +7516,17 @@ A plain leave recalculates nothing once no client is left (`notifyClientLeft` on
 `/direct-natural` and `/direct-resend` pass on every build: an inline PNG's size was already read from its first chunk, and an inline a=t passes through without touching the placement.
 
 Real kitty icat (0.49.2) through a pane of this build and of main sends `s=`, `v=`, `c=` and `r=` itself: a 2000x400 PNG comes as a 1180x236 bitmap in 118x12 cells, and a 600x200 one as a file in 60x10 cells, the same commands on both builds. So icat at the left of a pane wide enough is not clipped; the `-natural` cases cover a guest that names no box.
+## Agent row after exit
+
+Run on 2026-10-16 on macOS. The test is `TestAgentRowGoesWhenTheAgentExits` in `agent_exit_rail_test.go`. A program named `claude` (`testdata/fakeclaude`) runs the stand-in script, which replays a Claude Code session with tool calls through the real `tuios agent-hook claude-code`, ends the turn with `Stop`, and then leaves the pane at its shell. The fixed build passes all five cases.
+
+Before the fix, the build passed `session-end`, `session-end-typed` and `session-end-other-session`: a `SessionEnd` that lands clears the pane and the row goes at once. `crash` failed: with no `SessionEnd` the daemon kept the pane `done` with harness `claude-code` and source `report`, and the row (`○ pilot`, second line `claude`) stayed with the shell running until the pane closed.
+
+Rerun on 2026-10-18 on macOS against upstream main at ccde47cf, which has no fix: `crash` fails the same way ("the agents section still lists the pane after its agent left it, with the shell running"), and the other four cases pass.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| The lapse not wired: the detector's `harnessExited` check on a report claim at the shell disabled | `crash` ("the agents section still lists the pane after its agent left it, with the shell running"; the daemon listing says `done`, `claude-code`, `report`) | **caught** |
+| The harness pid kept past `none`: `applyAgentReport` no longer forgets it on a `none` report | `note-after-exit` ("a person's note on the pane was cleared as if the harness had said it") | **caught** |
+
+Not covered: a pid reused by another process before the detector looks (the row stays, as it did before the fix), and Windows and other platforms where the hook sends no `harness_pid`, where a report claim stays until it is cleared, as before.
