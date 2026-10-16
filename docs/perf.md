@@ -3237,6 +3237,12 @@ goroutine was blocked in.
   a pane, or a use of the session, raises `saveStale` and reaches disk within
   30 s of the last save. That keeps a shell's directory and a pane's history
   current. A session that prints nothing writes nothing and arms no timer.
+- The agent monitor sleeps while no pane does anything. A program can only
+  start or stop in a pane that takes input, prints, or was just made, and
+  each raises the detect latch. After `agentDetectQuietBound` (10 s) with the
+  latch down, in which every quiet pane is read once more, the monitor stops
+  its timer. It keeps looking while an agent it owns is out of the
+  foreground, because the misses that clear it take consecutive looks.
 
 ### Numbers
 
@@ -3246,8 +3252,18 @@ Client attached, 5 s after the panes opened, 30 s window:
 |---|---|
 | main | 25.3, 26.4, 26.4 |
 | saver sleeps | 20.7, 19.3, 21.5 |
+| agent monitor sleeps | 15.3, 14.5, 13.3 |
 
-`TestAnIdleSessionDoesNotWakeTheSaver` holds the budget: no write and at most
+These runs start 5 s after the panes open, so the agent monitor is still in
+its 10 s quiet bound for the first seconds of the window.
+
+`TestDaemonIdleArmsNoTimers` is the daemon's idle budget. It starts a real
+daemon with one shell pane, waits for its loops to settle, and counts each
+loop's timer fires over an idle window: the budget is 0. Then it types into
+the pane and checks that the agent monitor wakes. With the monitor's sleep
+removed the loops never settle and the test fails.
+
+`TestAnIdleSessionDoesNotWakeTheSaver` holds the saver's budget: no write and at most
 the first look over four intervals of an idle session, then a structural
 change still reaches disk. With the 2 s poll back the saver wakes 4 times
 and the test fails.
