@@ -6549,3 +6549,49 @@ runtime folder, and the file must hold the paste. It passes on the branch.
 |---|---|---|---|---|
 | A reply with host was not passed on | the forward in `verbQueuePrompt` | `if false && p.Host != ""` | `TestReplyToAnAgentOnAHost` ("queue-prompt with host: exit status 1 … session_not_found") | **caught** |
 | A small paste to a host whose link has no files was refused | the retry as text in `queuePromptToHost` | `if false && ok && far.Code == ErrVerbForbidden` | `TestReplyToAnAgentOnAHost` ("queue-prompt with host to a link without files: exit status 1") | **caught** |
+
+## Panels over a lone fullscreen pane
+
+`e2e/tui/fast_path_overlays_test.go` opens panels over one pane that fills the
+screen, which the fullscreen fast path draws without the compositor. That path
+skipped every overlay its gate did not list, and six panels the mouse routing
+knows (`eachOverlayGate` in `internal/app/overlay_hit.go`) were not on it: the
+Copies panel, the glyph picker, the dock and section editors, the copy dialog
+and the worktree prompt. Each opened, took every key and drew nothing. The gate
+now asks `AnyOverlayOpen`, which reads that list.
+
+- `TestPanelsDrawOverALoneFullscreenPane`, one subtest per panel: the Copies
+  panel from `Ctrl+B u`, and the glyph picker, dock editor and section editor
+  from their Settings rows. Settings turns the fast path off on its own, so the
+  test clicks it to the front and clicks the pane beside it, which dismisses the
+  front panel and leaves the picker alone. Each subtest checks the pane's border
+  spans the screen first, waits for text only the panel draws, closes it with
+  Esc and has the shell compute `BACK-42`.
+- `TestDropDialogDrawsOverALoneFullscreenPane`: the copy dialog. A file's path
+  is pasted into the only pane, which runs on `build` and is tiled to fill the
+  screen. The question whether to send it has to be drawn, and after Esc the
+  far shell computes `FARBACK-42`.
+
+The worktree prompt has no test: it opens from the rail's menu, and the rail
+takes the fast path away while it is shown.
+
+The first control is upstream at `72c1c367` with this test file, which is the
+gate before the fix. The other five keep the fix and drop one kind from what
+the gate asks: `m.AnyOverlayOpen()` becomes a copy of it that skips that kind,
+so mouse routing still knows the panel and only the gate does not. Run on
+2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| Six panels were not drawn over a lone fullscreen pane | yes, the whole fix | build upstream `72c1c367` | `TestPanelsDrawOverALoneFullscreenPane/copies` ("the copies is not drawn … \"No copies.\""), `/glyph_picker` ("\"↑↓ preview\""), `/dock_editor` ("\"Dock layout\""), `/section_editor` ("\"Rail sections\""), `TestDropDialogDrawsOverALoneFullscreenPane` ("the drop question is not drawn …") | **caught** |
+| The Copies panel was not drawn | yes, cuts the gate | the gate skips `transfers` | `TestPanelsDrawOverALoneFullscreenPane/copies` only | **caught** |
+| The glyph picker was not drawn | yes, cuts the gate | the gate skips `glyphpicker` | `TestPanelsDrawOverALoneFullscreenPane/glyph_picker` only | **caught** |
+| The dock editor was not drawn | yes, cuts the gate | the gate skips `dockeditor` | `TestPanelsDrawOverALoneFullscreenPane/dock_editor` only | **caught** |
+| The section editor was not drawn | yes, cuts the gate | the gate skips `sectioneditor` | `TestPanelsDrawOverALoneFullscreenPane/section_editor` only | **caught** |
+| The copy dialog was not drawn | yes, cuts the gate | the gate skips `copydialog` | `TestDropDialogDrawsOverALoneFullscreenPane` only | **caught** |
+
+A first try at the per-panel controls cut the whole gate while the panel was
+open (`m.AnyOverlayOpen() && !m.ShowGlyphPicker`). That also hid Settings under
+the glyph picker and the editors, and those subtests failed early on "\"Settings\"
+is not on screen" rather than on the assertion. The controls above skip only the
+one kind.
