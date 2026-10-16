@@ -834,7 +834,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowAgentMail || m.ShowInbox || m.ShowWorkspaceSwitcher || m.buffers.open || m.navigator.open || m.ShowLayoutPicker || m.ShowHostPicker ||
-		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.msgView.open || m.ShowCacheStats ||
+		m.ShowQuitMenu || m.ShowSessionClose || m.ShowScrollbackBrowser || m.ShowLogs || m.msgView.open || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker || m.ShowEffectPicker || m.presetPicker.open ||
 		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil ||
 		m.Capture.Active || m.ShotPreview.Open || m.review.open {
