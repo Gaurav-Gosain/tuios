@@ -68,6 +68,16 @@ type Daemon struct {
 	// adopting is set while a new daemon image rebuilds the sessions its
 	// predecessor handed over. See handoff_adopt.go.
 	adopting atomic.Bool
+	// pipes are the pipes the daemon reads that a handoff would close. See
+	// handoff_refuse.go.
+	pipes pipeHolds
+	// prev is the running binary, kept for a handoff to fall back to. See
+	// handoff_prev.go.
+	prevMu sync.Mutex
+	prev   *prevBinary
+	// lastHandoff is what the handoff that made this image measured, nil
+	// for an image that started fresh.
+	lastHandoff atomic.Pointer[HandoffStats]
 	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
 	herdrSeqs herdrSeqs
 	// herdrWorkspaceMeta holds the tokens tools report on a session with
@@ -1463,6 +1473,13 @@ func (d *Daemon) Start() error {
 	}
 
 	log.Printf("TUIOS daemon started on %s (PID %d)", socketPath, os.Getpid())
+
+	// The binary this image runs, kept for a live upgrade to fall back to,
+	// before an installer can put another in its place. A daemon inside
+	// another program never hands off.
+	if d.handoffArgs != nil {
+		d.keepPrevBinary()
+	}
 
 	// Sweep the previous daemon's leftovers before reading the directory. Runs
 	// whether or not auto-restore is on, since the residue is there either way.

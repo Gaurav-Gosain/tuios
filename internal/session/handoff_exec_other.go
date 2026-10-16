@@ -20,3 +20,5 @@ func adoptedFile(int, string) *os.File { return nil }
 func newHandoffFile(string) (*os.File, error) { return nil, ErrHandoffUnsupported }
 
 func adoptMaster(int, string) (paneIO, error) { return nil, ErrHandoffUnsupported }
+
+func rewindDescriptor(int) error { return ErrHandoffUnsupported }

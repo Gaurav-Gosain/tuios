@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/spf13/cobra"
 )
 
 // adoptFDFlag is the daemon command's flag naming the descriptor a live
@@ -33,4 +36,25 @@ func handoffArgs(manifestFD int) []string {
 // start makes would find this very process.
 func runAdoptingDaemon(manifestFD int) error {
 	return session.NewDaemon(foregroundDaemonConfig()).RunAdopted(manifestFD)
+}
+
+// handoffAcceptsCommand is the preflight a live upgrade runs on the binary it
+// is about to exec: it prints, as JSON, which handoff manifests this binary
+// reads and which protocols its daemon serves, and exits. Running it is also
+// the proof that the binary starts at all.
+func handoffAcceptsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:    "handoff-accepts",
+		Short:  "Print the live upgrade versions this binary accepts",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			data, err := json.Marshal(session.LocalHandoffAccepts(version))
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			return err
+		},
+	}
 }

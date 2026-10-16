@@ -37,10 +37,15 @@ func addHandoffTestVerbs() {
 	reg["test-handoff"] = verbEntry{
 		description: "Test only: hand every pane to a new image of this binary, in place.",
 		params: []verbParam{
+			{Name: "binary", Type: "string", Description: "The binary to exec. Omit for this one."},
 			{Name: "hold_ms", Type: "int", Description: "Wait this long after the manifest is written, before the clients are closed."},
 			{Name: "fork_in_window", Type: "bool", Description: "Start a long-lived child while the descriptors are exposed."},
 		},
 		handler: (*Daemon).verbTestHandoff,
+	}
+	reg["test-handoff-stats"] = verbEntry{
+		description: "Test only: what the handoff that made this image measured.",
+		handler:     (*Daemon).verbTestHandoffStats,
 	}
 	reg["test-quiesce"] = verbEntry{
 		description: "Test only: quiesce one pane and resume it, cycles times.",
@@ -55,17 +60,21 @@ func addHandoffTestVerbs() {
 
 func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		HoldMS       int  `json:"hold_ms"`
-		ForkInWindow bool `json:"fork_in_window"`
+		Binary       string `json:"binary"`
+		HoldMS       int    `json:"hold_ms"`
+		ForkInWindow bool   `json:"fork_in_window"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return nil, newVerbError(ErrVerbInternal, err.Error())
+	if p.Binary == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, newVerbError(ErrVerbInternal, err.Error())
+		}
+		p.Binary = exe
 	}
-	req := handoffRequest{binary: exe, holdAfterWrite: time.Duration(p.HoldMS) * time.Millisecond}
+	req := handoffRequest{binary: p.Binary, holdAfterWrite: time.Duration(p.HoldMS) * time.Millisecond}
 	if p.ForkInWindow {
 		req.inWindow = func() {
 			//tuios:allow-exec a test-only child that must not inherit the exposed descriptors
@@ -79,6 +88,14 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 	}
 	cs.takeover = func(*bufio.Reader) { _ = run.commit() }
 	return map[string]any{"pid": os.Getpid(), "panes": run.panes, "manifest_bytes": run.manifestBytes}, nil
+}
+
+func (d *Daemon) verbTestHandoffStats(_ *connState, _ json.RawMessage) (any, *verbError) {
+	st := d.lastHandoff.Load()
+	if st == nil {
+		return map[string]any{"handoff": false}, nil
+	}
+	return map[string]any{"handoff": true, "stats": st}, nil
 }
 
 func (d *Daemon) verbTestQuiesce(cs *connState, params json.RawMessage) (any, *verbError) {

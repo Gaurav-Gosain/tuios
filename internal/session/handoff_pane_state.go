@@ -34,6 +34,10 @@ type handoffLive struct {
 	ResizeMarks []handoffResizeMark
 	VTResizes   int64
 	LastOutput  int64
+
+	// vtSeq is the stream position the applied snapshot was taken at. It
+	// is the snapshot's own Seq, kept here once the snapshot is dropped.
+	vtSeq int64
 }
 
 // handoffPlace is a placeRecord.
@@ -129,7 +133,7 @@ func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 
 // restoreLive puts a pane's live section back on a pane adopted around an
 // emulator the carried snapshot was applied to. The pane has not started.
-func (p *PTY) restoreLive(state *TerminalState, live handoffLive) {
+func (p *PTY) restoreLive(live handoffLive) {
 	if live.Title != "" {
 		title := live.Title
 		p.title.Store(&title)
@@ -155,9 +159,7 @@ func (p *PTY) restoreLive(state *TerminalState, live handoffLive) {
 	for _, m := range live.ResizeMarks {
 		p.resizeMarks = append(p.resizeMarks, resizeMark{seq: m.Seq, width: m.Width, height: m.Height})
 	}
-	if state != nil {
-		p.vtSeq = state.Seq
-	}
+	p.vtSeq = live.vtSeq
 	p.vtResizes = live.VTResizes
 	p.lastOutput.Store(live.LastOutput)
 }

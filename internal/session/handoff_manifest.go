@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 )
 
 // The handoff manifest: what one daemon image writes down for the image it
@@ -95,6 +96,10 @@ type handoffDaemon struct {
 	PaneTokenKey []byte        `json:"pane_token_key,omitempty"`
 	Events       handoffEvents `json:"events"`
 	Mail         handoffMail   `json:"mail"`
+	// Fallback is the binary the writing image runs, kept for the new image
+	// to re-exec when it cannot adopt the panes. See handoff_prev.go.
+	Fallback string       `json:"fallback"`
+	Stats    HandoffStats `json:"stats"`
 }
 
 // handoffManifest is a manifest as read.
@@ -103,13 +108,14 @@ type handoffManifest struct {
 	Sessions []handoffSession
 	Panes    []handoffPane
 	Daemon   handoffDaemon
+	// Size is how many bytes the manifest took.
+	Size int64
 }
 
 // manifestWriter writes records to w.
 type manifestWriter struct {
-	w   *bufio.Writer
-	buf bytes.Buffer
-	n   int64
+	w *bufio.Writer
+	n int64
 }
 
 func newManifestWriter(w io.Writer) (*manifestWriter, error) {
@@ -146,12 +152,13 @@ func (mw *manifestWriter) json(kind byte, v any) error {
 	return mw.record(kind, data)
 }
 
-func (mw *manifestWriter) gob(kind byte, v any) error {
-	mw.buf.Reset()
-	if err := gob.NewEncoder(&mw.buf).Encode(v); err != nil {
-		return err
+// encodeGob is v as one gob record.
+func encodeGob(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(v); err != nil {
+		return nil, err
 	}
-	return mw.record(kind, mw.buf.Bytes())
+	return buf.Bytes(), nil
 }
 
 // finish writes the end record and flushes. It returns the manifest's size.
@@ -164,7 +171,8 @@ func (mw *manifestWriter) finish() (int64, error) {
 
 // readHandoffManifest reads a whole manifest from r.
 func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
-	br := bufio.NewReaderSize(r, 256<<10)
+	var read atomic.Int64
+	br := bufio.NewReaderSize(&countingReader{r: r, n: &read}, 256<<10)
 	magic := make([]byte, len(handoffMagic))
 	if _, err := io.ReadFull(br, magic); err != nil || string(magic) != handoffMagic {
 		return nil, errors.New("not a handoff manifest")
@@ -212,6 +220,7 @@ func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
 		case handoffRecDaemon:
 			err = json.Unmarshal(payload, &m.Daemon)
 		case handoffRecEnd:
+			m.Size = read.Load() - int64(br.Buffered())
 			return m, nil
 		default:
 			err = fmt.Errorf("unknown handoff record %q", kind)

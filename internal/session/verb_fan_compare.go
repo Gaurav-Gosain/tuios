@@ -560,7 +560,11 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 
 	status := make(chan *int, 1)
 	if r != nil {
-		go func() { status <- readVerifyStatus(r, sess, win.PTYID) }()
+		release := d.pipes.hold("a fan check is running in session " + sess.Name())
+		go func() {
+			defer release()
+			status <- readVerifyStatus(r, sess, win.PTYID)
+		}()
 	} else {
 		go func() {
 			code, exited := d.waitPopupExit(sess, win, 0, nil)

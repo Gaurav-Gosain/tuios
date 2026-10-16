@@ -73,3 +73,10 @@ func adoptedFile(fd int, name string) *os.File {
 func adoptMaster(fd int, tty string) (paneIO, error) {
 	return ptyspawn.Adopt(fd, tty)
 }
+
+// rewindDescriptor seeks fd to its start. The manifest's offset is shared
+// across the exec, and the image that reads it next starts at the top.
+func rewindDescriptor(fd int) error {
+	_, err := unix.Seek(fd, 0, 0)
+	return err
+}

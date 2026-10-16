@@ -690,6 +690,11 @@ func (d *Daemon) verbPopup(cs *connState, params json.RawMessage) (any, *verbErr
 		}
 		opts.stdout = w
 		capture = newPopupCapture(r)
+		release := d.pipes.hold("a popup in session " + sess.Name() + " is capturing its command's output")
+		go func() {
+			<-capture.done
+			release()
+		}()
 	}
 	win, bverr, err := d.addWindowFor(cs, "popup", sess, opts, onExit)
 	if bverr != nil {
