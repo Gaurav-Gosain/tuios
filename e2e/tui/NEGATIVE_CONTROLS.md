@@ -6241,3 +6241,21 @@ positive half: focus moves.
 | The held key never paused hover focus | n/a, injected, cuts the gate | drop `!focusFollowsMousePaused(...)` from the hover focus condition | `pause: ctrl held keeps focus, release resumes`, `pause: ctrl held in terminal mode keeps focus`, `pause: alt held keeps focus, release resumes` ("step 0 (mod 4): focus = 1, want 0") | **caught** |
 | The config key never reached the settings | n/a, injected | `ApplyAppearanceConfig` sets `FocusFollowsMousePause = ""` for ctrl and alt | the same three rows, same message | **caught** |
 | `alt` read the Ctrl bit | n/a, injected | `focusFollowsMousePaused` tests `tea.ModCtrl` for `alt` | `pause: alt held keeps focus, release resumes` ("step 0 (mod 2): focus = 1, want 0"), `pause: alt key ignores ctrl` ("step 0 (mod 4): focus = 0, want 1") | **caught** |
+## The idle window: ticks, frame ticker wakes and context switches
+
+`TestIdleCostStaysLow` opens three idle shells and reads the client's counters
+with SIGUSR1 at both ends of a 10 s idle window: the maintenance ticks, the
+ticks that ran the full scans, the frame ticker wakes, and on Linux the
+client's voluntary context switches from `/proc/<pid>/task/*/status`. It runs
+twice, with the clock off and with the clock on. The clock-on window must
+write at least 100 bytes, which is the positive half: the clock's frames go
+out.
+
+The controls were run on 2026-10-16 on Linux on the branch
+perf/quiet-dock-frames. Each control is a text replacement, built to its own
+binary, with the file restored after the build.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A clock frame wakes the frame ticker | `handleMsg`, `case dockComponentMsg`: `m.quietFrame = changed` cut | `TestIdleCostStaysLow/clock_on`: "woke the frame ticker 10 times (budget 1)". It also made 2706 context switches against 1441 with the line | **caught** |
+| The positive half | this branch | none: clock off 0 B, 100 ticks, 0 wakes. Clock on 435 B, 100 ticks, 0 wakes | **guard** |

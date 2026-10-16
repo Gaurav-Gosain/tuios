@@ -3427,3 +3427,44 @@ cut OSC allocates nothing. On the tree before it allocates 5 times.
 `TestNestProbeSplitAcrossReads` now cuts a probe at every byte.
 `TestFrameBodyGrowsWithWhatArrives` checks the bound through a buffered
 reader.
+
+## 2026-10 quiet frames for dock components
+
+With `show_clock = true` the dock draws one frame a second. Each of those
+frames woke Bubble Tea's frame ticker from `IdleFPS` to the frame rate for
+`idleTickerAfter` (500 ms), so one frame of the clock cost about 30 frame
+ticks that wrote nothing.
+
+### What changed
+
+- A frame composed for a `dockComponentMsg` alone (the clock, a meter, a
+  custom component) sets `quietFrame`, the rule #763 added for the message
+  burn. It goes out through `kickFlush` and does not call `noteFrame`, so the
+  frame ticker stays at `IdleFPS`.
+- `TUIOS_STATS_FILE` now also counts `tickerWakes` and `tickerSleeps`, and
+  SIGUSR1 writes the counters on Unix, so a test can read them at both ends
+  of an idle window.
+
+### Numbers
+
+Throwaway daemon, client in a detached tmux at 120x36, one idle shell, an
+empty folder, 50 s per run (`~/.cache/agent-tmp/idlewake/idle.sh`). Wakeups
+are counted over 40 s of each run by a scratch build that counts every
+message and every fire of Bubble Tea's frame ticker. The wire bytes are the
+same before and after.
+
+| Setup | | client CPU | client ctxsw/s | frame ticker fires/s | other wakeups/s |
+|---|---|---|---|---|---|
+| clock on, 3 runs | before | 0.40 to 0.56% | 270 to 277 | 40.4 to 41.4 | 10 tick, 1 clock, 1 flush, 0.33 listing |
+| | after | 0.38 to 0.50% | 142 to 145 | 11.0 | same |
+| clock off, 2 runs and 1 run | before | 0.20 to 0.22% | 124 to 130 | 10.0 | 10 tick, 0.33 listing |
+| | after | 0.20% | 135 | 10.0 | same |
+
+The CPU is read in clock ticks of 10 ms, so a 50 s run resolves 0.02%. The
+CPU change with the clock on is inside the run-to-run noise. The context
+switches halve.
+
+`TestIdleCostStaysLow` now has a clock-on window. It holds the frame ticker
+wakes to 1 in 10 s, the maintenance ticks to 110, the full scans to 1 and the
+client's voluntary context switches to 2500. With `quietFrame` not set for
+the dock, the clock-on window woke the ticker 10 times and failed.

@@ -19,6 +19,11 @@ type tickStats struct {
 	// Rail is every rebuild of the rail's rows, a frame the render cache
 	// could not serve. A quiet folder refresh that changed nothing adds none.
 	Rail uint64
+	// TickerWakes is every time a frame woke Bubble Tea's frame ticker from
+	// idle to the frame rate, and TickerSleeps every time the ticker went
+	// idle. See noteFrame and idleFrameTicker.
+	TickerWakes  uint64
+	TickerSleeps uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -29,12 +34,19 @@ func (m *OS) TickStats() (ticks, work, render uint64) {
 
 // DumpTickStats writes the tick counters to the file named by TUIOS_STATS_FILE,
 // if set. Called once on clean exit so the idle e2e can read cumulative work
-// and render counts from a real run without an internal probe.
+// and render counts from a real run without an internal probe. With the same
+// variable set, SIGUSR1 writes them too (see dumpTickStatsOnSignal), which is
+// how a test reads the counts at both ends of an idle window.
 func (m *OS) DumpTickStats() {
 	path := os.Getenv("TUIOS_STATS_FILE")
 	if path == "" {
 		return
 	}
-	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d\n",
-		m.tickStats.Ticks, m.tickStats.Work, m.tickStats.Render, m.tickStats.Rail, m.tickStats.Motion)), 0o600)
+	st := m.tickStats
+	_ = os.WriteFile(path, []byte(fmt.Sprintf("ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d\n",
+		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps)), 0o600)
 }
+
+// tickStatsDumpMsg asks Update to write the tick counters now. See
+// dumpTickStatsOnSignal.
+type tickStatsDumpMsg struct{}

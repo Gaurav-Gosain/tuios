@@ -364,7 +364,7 @@ func TestFullMotionWithoutAgentsStaysIdle(t *testing.T) {
 	if !strings.Contains(stats, " motion=") {
 		t.Fatalf("the stats file has no motion count: %q", stats)
 	}
-	if !strings.HasSuffix(stats, " motion=0") {
+	if parseTickStats(stats)["motion"] != 0 {
 		t.Fatalf("the motion clock ran with nothing moving: %q", stats)
 	}
 }

@@ -836,6 +836,12 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderSkipped = true
 		return m, nil
 	}
+	// A test's request for the counters changes nothing either.
+	if _, ok := msg.(tickStatsDumpMsg); ok {
+		m.DumpTickStats()
+		m.renderSkipped = true
+		return m, nil
+	}
 	model, cmd := m.update(msg)
 	// Input may switch the center workspace, edit an edge's session assignment,
 	// or finish a rail resize. Reconcile after it has changed the model.
@@ -1443,6 +1449,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		changed := m.handleDockComponent(msg)
 		m.renderSkipped = !changed
+		// The frame for a component alone (the clock's next second, a
+		// meter's new reading) goes out through kickFlush like any other. It
+		// must not wake the frame ticker to the frame rate for the next
+		// idleTickerAfter: the next such frame is a second or more away, and
+		// a clock with seconds woke the ticker about 35 times for each one.
+		m.quietFrame = changed
 		return m, ListenForDockComponents(m.dockEngine)
 
 	case AttachedHostsMsg:

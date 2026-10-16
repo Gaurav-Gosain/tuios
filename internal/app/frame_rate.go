@@ -105,6 +105,7 @@ func (m *OS) BindProgram(p *tea.Program) {
 	m.frameRate.program = p
 	m.applyFrameRate()
 	m.detectDisplayRate(false)
+	dumpTickStatsOnSignal(p)
 }
 
 // applyFrameRate sets the program's ticker to NormalFPS when it moved, and the
@@ -148,6 +149,7 @@ func (m *OS) idleFrameTicker(now time.Time) {
 	// next frame like this one.
 	if setProgramFPS(fr.program, config.IdleFPS) {
 		fr.idle = true
+		m.tickStats.TickerSleeps++
 	}
 	// The end of a burst of frames is also when a flood of pane output has
 	// ended. memtrim gives the heap it left behind back, at most twice a
@@ -177,6 +179,7 @@ func (m *OS) noteFrame() {
 	if !setProgramFPS(fr.program, fps) {
 		return
 	}
+	m.tickStats.TickerWakes++
 	ticker := programTicker(fr.program)
 	if ticker == nil {
 		return
