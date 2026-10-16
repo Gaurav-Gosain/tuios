@@ -481,6 +481,17 @@ action set to `[]` stays empty, while an action left out is filled from the
 defaults. `free` cannot take the leader key or the keys the input path reads
 directly.
 
+### Repeat after the leader
+
+tmux `bind -r` is built in. After the resize, focus, scroll and workspace-step
+actions, the leader stays armed for `appearance.prefix_repeat_time` (500 ms).
+Press the same key again to repeat the action. There is no per-binding flag:
+
+```toml
+[keybindings.prefix_mode]
+resize_pane_up_5 = ["alt+up"]   # ctrl+b alt+up alt+up alt+up
+```
+
 ### Copy mode for a tmux user
 
 Copy mode starts with its cursor on the terminal cursor, usually the prompt

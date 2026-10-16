@@ -141,3 +141,18 @@ func keyByName(name string) tea.KeyPressMsg {
 	}
 	return tea.KeyPressMsg{}
 }
+
+// TestEveryRepeatableActionExists. The set is keyed by action name, and a name
+// nothing registers is never looked up, so a typo or a rename leaves that
+// command one-shot with no error anywhere. resize_left and its siblings sat
+// in the set for months while the resize actions were named resize_pane_*.
+//
+// Negative control: putting "resize_left" back in the set fails this.
+func TestEveryRepeatableActionExists(t *testing.T) {
+	d := GetDispatcher()
+	for action := range repeatablePrefixActions {
+		if !d.HasAction(action) && !app.PrefixWorkActions[action] {
+			t.Errorf("%q is repeatable but no action of that name is registered", action)
+		}
+	}
+}
