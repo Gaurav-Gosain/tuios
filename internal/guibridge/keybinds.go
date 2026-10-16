@@ -113,7 +113,7 @@ func exportKeybinds(o *app.OS) *Keybinds {
 		Rows:       app.KeybindRows(cfg),
 		GUIActions: config.GUIActionDescriptions,
 	}
-	for _, s := range config.Scopes(leader) {
+	for _, s := range config.ScopesFor(&cfg.Keybindings) {
 		kb.Scopes = append(kb.Scopes, Scope{ID: s.ID, Name: s.Name, Chord: s.Chord})
 	}
 	for _, b := range reg.Bindings() {

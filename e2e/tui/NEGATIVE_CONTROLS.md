@@ -6404,3 +6404,4 @@ and opens the tuios menu with `ctrl+b ctrl+t m`.
 | ctrl+a ctrl+a sent ^A under screen | the screen preset's `leader_twice` | set `leader_twice = "send"` in the test config | `TestScreenPresetLeaderTwiceAndSend` ("screenkeys is on workspace 2, want 1") | **caught** |
 | The zellij mode keys did nothing | the preset mechanism | a build of the parent commit (#800 without screen and zellij) | `TestZellijPresetOpensModes` ("ctrl+g t did not open the menu") | **caught** |
 | zellij p r renamed the window instead of splitting right | the preset's `[window_prefix]` | removed it from `presets/zellij.toml` | `TestZellijPresetOpensModes` ("daemon never reported 2 windows with settled geometry") | **caught** |
+| keybinds list said ctrl+g t r for the zellij split, which opens the workspace menu | `ScopesFor` | a build of 18f5625c0, before it | `TestZellijPresetOpensModes` ("keybinds list does not show split_vertical on ctrl+g p r") | **caught** |

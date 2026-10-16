@@ -119,7 +119,7 @@ type CollisionLoser struct {
 // Collisions returns every key claimed more than once inside a single scope.
 func (r *KeybindRegistry) Collisions() []Collision {
 	scopeNames := map[string]Scope{}
-	for _, s := range Scopes(r.config.Keybindings.LeaderKey) {
+	for _, s := range ScopesFor(&r.config.Keybindings) {
 		scopeNames[s.ID] = s
 	}
 

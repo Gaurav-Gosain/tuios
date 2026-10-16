@@ -57,7 +57,7 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 		leader = config.DefaultLeaderKey
 	}
 	scopes := map[string]config.Scope{}
-	for _, s := range config.Scopes(leader) {
+	for _, s := range config.ScopesFor(&cfg.Keybindings) {
 		scopes[s.ID] = s
 	}
 

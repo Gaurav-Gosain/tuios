@@ -266,6 +266,44 @@ func Scopes(leader string) []Scope {
 	}
 }
 
+// subPrefixGates maps each sub-prefix scope to the prefix_mode action that
+// opens it.
+var subPrefixGates = map[string]string{
+	ScopePrefixWindow:   "prefix_window",
+	ScopePrefixMinimize: "prefix_minimize",
+	ScopePrefixWorkspce: "prefix_workspace",
+	ScopePrefixDebug:    "prefix_debug",
+	ScopePrefixTape:     "prefix_tape",
+	ScopePrefixLayout:   "prefix_layout",
+	ScopePrefixTuios:    "prefix_tuios",
+}
+
+// ScopesFor is Scopes for one keymap: each sub-prefix chord is spelled with
+// the key that opens it there. A preset or a user can move that key: under
+// zellij the window menu is ctrl+g p, and Scopes alone would say ctrl+g t,
+// which opens the workspace menu. A sub-prefix with no key keeps the default
+// chord.
+func ScopesFor(kb *KeybindingsConfig) []Scope {
+	leader := kb.LeaderKey
+	if leader == "" {
+		leader = DefaultLeaderKey
+	}
+	scopes := Scopes(leader)
+	for i, s := range scopes {
+		gate, ok := subPrefixGates[s.ID]
+		if !ok {
+			continue
+		}
+		for _, key := range kb.PrefixMode[gate] {
+			if key = strings.TrimSpace(key); key != "" {
+				scopes[i].Chord = leader + " " + key
+				break
+			}
+		}
+	}
+	return scopes
+}
+
 // section returns the config table with the given name, or nil.
 func (k *KeybindingsConfig) section(name string) map[string][]string {
 	switch name {
@@ -403,7 +441,7 @@ func press(chord, key string) string {
 func (r *KeybindRegistry) Bindings() []Binding {
 	kb := &r.config.Keybindings
 	var out []Binding
-	for _, scope := range Scopes(kb.LeaderKey) {
+	for _, scope := range ScopesFor(kb) {
 		// The window-mode scope flattens seven sections into a single lookup, so
 		// a key is contested across all of them at once. winner holds the index
 		// into out of the binding that actually runs, per key.

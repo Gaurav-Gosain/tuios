@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -112,10 +113,13 @@ func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 // TestZellijPresetOpensModes: under the zellij preset ctrl+g t opens the
 // workspace menu (a zellij tab is a workspace) and ctrl+g p the window menu
 // (a zellij pane is a window), and the zellij keys in them work: p r splits
-// right, t n opens a workspace, t h goes to the one before.
+// right, t n opens a workspace, t h goes to the one before. keybinds list
+// names those keys as they are pressed.
 //
 // Negative control: without the preset's [window_prefix], p r renames the
-// window (the tuios key) and the wait for two windows fails.
+// window (the tuios key) and the wait for two windows fails. With
+// Bindings() spelling chords from Scopes(leader), the list says ctrl+g t r
+// for the split and the list check fails.
 func TestZellijPresetOpensModes(t *testing.T) {
 	term, base := panesSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
 	waitForSettledGeometryIn(t, base, "zellijkeys", 1)
@@ -155,4 +159,25 @@ func TestZellijPresetOpensModes(t *testing.T) {
 		t.Fatalf("press ctrl+g t h: %v", err)
 	}
 	waitWorkspace(t, base, "zellijkeys", 1)
+
+	// keybinds list spells each menu key with the key that opens the menu.
+	out, err := tuiosCLI(t, base, "keybinds", "list", "--json")
+	if err != nil {
+		t.Fatalf("keybinds list --json: %v\n%s", err, out)
+	}
+	type listRow struct {
+		Action string   `json:"action"`
+		Keys   []string `json:"keys"`
+	}
+	var rows []listRow
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("keybinds list --json is not JSON: %v\n%s", err, out)
+	}
+	for action, want := range map[string]string{"split_vertical": "ctrl+g p r", "new_workspace": "ctrl+g t n"} {
+		if !slices.ContainsFunc(rows, func(r listRow) bool {
+			return r.Action == action && slices.Contains(r.Keys, want)
+		}) {
+			t.Errorf("ASSERTION: keybinds list does not show %s on %s", action, want)
+		}
+	}
 }
