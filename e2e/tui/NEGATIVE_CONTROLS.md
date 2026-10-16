@@ -6500,3 +6500,15 @@ on 2026-10-16.
 the fast-path control the dialog still drew after `Ctrl+B Alt+X`, so this test
 does not cover the fast path. It guards the key path, which none of the controls
 touches.
+## The reply composer keeps a paste whole
+
+`TestRichRowReplyAndRecap` pastes 42 lines into the Inbox reply. The paste
+must show as one block, `[Pasted text #1 · 42 lines]`. The pane is a recorder
+that keeps every byte it reads. It must read the typed words and all 42 lines
+in one bracketed paste, then one Enter. The same test passes on the branch,
+which is the positive half of both rows.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A paste into the reply was flattened onto one line | the composer's paste path | `pasteTakenByOverlay` calls `InboxReplyType(strings.Join(strings.Fields(content), " "))` again | `TestRichRowReplyAndRecap` ("waiting for the paste as one block: … timed out") | **caught** |
+| The block's label was sent in place of its text | n/a, injected | `Model.Text` writes `c.block.label` | `TestRichRowReplyAndRecap` ("the pane read \"\x1b[200~echo r9c1e [Pasted text #1 · 42 lines]\x1b[201~\r\"") | **caught** |

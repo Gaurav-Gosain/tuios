@@ -223,9 +223,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 // (tea.ClipboardMsg), so neither path can reach a pane the other protects.
 func pasteTakenByOverlay(o *app.OS, content string) bool {
 	// While the Inbox's reply editor is open the paste is the reply's text,
-	// one line of it.
+	// line breaks and all. A long paste is held as one block.
 	if o.InboxReplyOpen() {
-		o.InboxReplyType(strings.Join(strings.Fields(content), " "))
+		o.InboxReplyPaste(content)
 		return true
 	}
 	// Hints mode takes labels one key at a time. A paste, or an input

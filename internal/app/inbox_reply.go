@@ -7,16 +7,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Replying to an agent: a one-line editor under the Inbox list that queues a
-// message with queue-prompt, typed the moment the agent comes to rest, and
-// the queue's length at the right edge of the agent's rail row.
+// Replying to an agent: the composer under the Inbox list (internal/composer)
+// that queues a message with queue-prompt, typed the moment the agent comes
+// to rest, and the queue's length at the right edge of the agent's rail row.
+//
+// The composer keeps line breaks and holds a long paste as one block. The
+// blocks are put back in their place before the message is queued, so the
+// daemon gets plain text, as it always has, within its 16 KiB bound. esc
+// keeps the draft for the pane, and r on the same pane brings it back.
 //
 // r opens it on a Finished or Errored item in the Inbox, and on a rail agent
 // row whose pane is not waiting on a prompt; from the rail the Inbox opens
@@ -65,7 +75,25 @@ type inboxReplyState struct {
 	// unknown_verb: it is older than the queue, and the reply keys then do
 	// what they did before they were bound.
 	noQueue bool
+	// drafts are the drafts esc closed, by pane, so r on the same pane
+	// opens them again. draftOrder is their keys, oldest first, for the
+	// bound.
+	drafts     map[string]*composer.Model
+	draftOrder []string
+	// sending are the drafts of replies out to the daemon, by pane, so a
+	// reply the daemon refuses keeps its draft.
+	sending map[string]*composer.Model
 }
+
+// inboxReplyDraftsMax is how many closed drafts the client keeps. They live
+// in memory only and end with the client.
+const inboxReplyDraftsMax = 16
+
+// inboxReplyRows is how many rows the editor grows to before it scrolls.
+const inboxReplyRows = 8
+
+// inboxDraftKey is the key of a pane's draft.
+func inboxDraftKey(sessionID, windowID string) string { return sessionID + "/" + windowID }
 
 // inboxReplyEditor is one reply being typed.
 type inboxReplyEditor struct {
@@ -75,10 +103,9 @@ type inboxReplyEditor struct {
 	// context says where the agent is, as the editor's label shows it:
 	// "done 4m", "working".
 	context string
-	draft   string
-	// automated is set when a key that did not come from the keyboard
-	// touched the draft. Such a draft is never sent.
-	automated bool
+	// comp is the draft. It records a key that did not come from the
+	// keyboard, and such a draft is never sent.
+	comp *composer.Model
 	// closeAfter closes the Inbox when the editor closes, for an editor the
 	// rail opened.
 	closeAfter bool
@@ -162,15 +189,54 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 		sessionID = m.sidebarCurrentSessionID()
 	}
 	m.Inbox.approvals.armed = inboxArmed{}
+	comp := m.takeInboxDraft(sessionID, windowID)
+	if comp == nil {
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply."})
+	}
+	if m.ProcessingRemoteKeys {
+		comp.MarkAutomated()
+	}
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		session:    sessionID,
 		window:     windowID,
 		who:        who,
 		context:    context,
-		automated:  m.ProcessingRemoteKeys,
+		comp:       comp,
 		closeAfter: closeAfter,
 	}
 	return true
+}
+
+// takeInboxDraft takes the kept draft of a pane out of the store, nil when
+// there is none.
+func (m *OS) takeInboxDraft(sessionID, windowID string) *composer.Model {
+	st := &m.Inbox.reply
+	k := inboxDraftKey(sessionID, windowID)
+	comp, ok := st.drafts[k]
+	if !ok {
+		return nil
+	}
+	delete(st.drafts, k)
+	st.draftOrder = slices.DeleteFunc(st.draftOrder, func(o string) bool { return o == k })
+	return comp
+}
+
+// keepInboxDraft stores a pane's draft for the next r on it. The oldest
+// draft goes past the bound.
+func (m *OS) keepInboxDraft(sessionID, windowID string, comp *composer.Model) {
+	st := &m.Inbox.reply
+	k := inboxDraftKey(sessionID, windowID)
+	if st.drafts == nil {
+		st.drafts = make(map[string]*composer.Model)
+	}
+	if _, ok := st.drafts[k]; !ok {
+		st.draftOrder = append(st.draftOrder, k)
+	}
+	st.drafts[k] = comp
+	for len(st.draftOrder) > inboxReplyDraftsMax {
+		delete(st.drafts, st.draftOrder[0])
+		st.draftOrder = st.draftOrder[1:]
+	}
 }
 
 // SidebarAgentReply opens the reply editor for a rail agent row's pane. The
@@ -216,59 +282,84 @@ func (m *OS) InboxReplyOpen() bool {
 	return m.ShowInbox && m.Inbox.reply.editor != nil
 }
 
-// InboxReplyType appends typed text to the reply.
+// InboxReplyType types text into the reply at the cursor.
 func (m *OS) InboxReplyType(text string) {
-	ed := m.Inbox.reply.editor
-	if ed == nil || text == "" {
-		return
-	}
-	if m.ProcessingRemoteKeys {
-		ed.automated = true
-	}
-	for _, ch := range text {
-		if len(ed.draft)+len(string(ch)) > inboxReplyMax || !printableRune(ch, false) {
-			continue
-		}
-		ed.draft += string(ch)
+	if ed := m.Inbox.reply.editor; ed != nil {
+		ed.comp.Insert(text, m.ProcessingRemoteKeys)
 	}
 }
 
-// InboxReplyBackspace removes the last rune of the reply.
-func (m *OS) InboxReplyBackspace() {
-	ed := m.Inbox.reply.editor
-	if ed == nil || ed.draft == "" {
-		return
+// InboxReplyPaste puts a paste into the reply: as text when it is short, as
+// one block when it is long. Line breaks are kept.
+func (m *OS) InboxReplyPaste(text string) {
+	if ed := m.Inbox.reply.editor; ed != nil {
+		ed.comp.Paste(text, m.ProcessingRemoteKeys)
 	}
-	if m.ProcessingRemoteKeys {
-		ed.automated = true
-	}
-	rs := []rune(ed.draft)
-	ed.draft = string(rs[:len(rs)-1])
 }
 
-// InboxReplyCancel closes the editor and drops what was typed.
+// InboxReplyKey gives a key to the reply editor and does what it asks.
+func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
+	ed := m.Inbox.reply.editor
+	if ed == nil {
+		return nil
+	}
+	switch ed.comp.Update(msg, m.ProcessingRemoteKeys) {
+	case composer.EventSend:
+		return m.InboxReplySend()
+	case composer.EventClose:
+		m.InboxReplyCancel()
+	case composer.EventPaste:
+		return m.RequestHostPaste()
+	}
+	return nil
+}
+
+// InboxReplyCancel closes the editor. A draft with text in it is kept for
+// the pane. A draft a key from send-keys touched is not: it can never be
+// sent.
 func (m *OS) InboxReplyCancel() {
 	ed := m.Inbox.reply.editor
 	m.Inbox.reply.editor = nil
-	if ed != nil && ed.closeAfter {
+	if ed == nil {
+		return
+	}
+	if !ed.comp.Empty() && !ed.comp.Automated() {
+		ed.comp.SetNotice("")
+		m.keepInboxDraft(ed.session, ed.window, ed.comp)
+	}
+	if ed.closeAfter {
 		m.CloseInbox()
 	}
 }
 
 // InboxReplySend queues the reply. An empty reply sends nothing and keeps
-// the editor open.
+// the editor open. A reply with invisible characters, or larger than the
+// daemon takes, stays open with a line that says why.
 func (m *OS) InboxReplySend() tea.Cmd {
 	ed := m.Inbox.reply.editor
 	if ed == nil {
 		return nil
 	}
-	text := strings.TrimSpace(ed.draft)
-	if text == "" {
+	if ed.comp.Empty() {
 		return nil
 	}
-	if ed.automated || m.ProcessingRemoteKeys {
-		m.InboxReplyCancel()
+	if ed.comp.Automated() || m.ProcessingRemoteKeys {
+		m.Inbox.reply.editor = nil
+		if ed.closeAfter {
+			m.CloseInbox()
+		}
 		m.ShowNotification("A reply that send-keys typed is not sent: only keys from your keyboard queue a message as you", "error", m.Settings.NotificationDuration)
+		return nil
+	}
+	text, ok := ed.comp.Submit()
+	if !ok {
+		return nil
+	}
+	// Leading blank lines and trailing space are dropped. The first line's
+	// indent stays: it can be the indent of pasted code.
+	text = strings.TrimRightFunc(strings.TrimLeft(text, "\n"), unicode.IsSpace)
+	if len(text) > inboxReplyMax {
+		ed.comp.SetNotice("The message is larger than 16 KB. Remove a paste to send.")
 		return nil
 	}
 	nonce := m.inboxNonce()
@@ -276,7 +367,15 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
 		return nil
 	}
-	m.InboxReplyCancel()
+	m.Inbox.reply.editor = nil
+	if ed.closeAfter {
+		m.CloseInbox()
+	}
+	st := &m.Inbox.reply
+	if st.sending == nil {
+		st.sending = make(map[string]*composer.Model)
+	}
+	st.sending[inboxDraftKey(ed.session, ed.window)] = ed.comp
 	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false)
 }
 
@@ -309,6 +408,15 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 // applyInboxReplied says what happened to a reply, and keeps its text so a
 // drop of it can be undone.
 func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
+	// The draft of a reply the daemon took is done with. The draft of one
+	// it refused is kept, so r on the pane opens it again.
+	k := inboxDraftKey(msg.Session, msg.Window)
+	if comp, ok := m.Inbox.reply.sending[k]; ok && !msg.Requeue {
+		delete(m.Inbox.reply.sending, k)
+		if msg.Err != nil {
+			m.keepInboxDraft(msg.Session, msg.Window, comp)
+		}
+	}
 	if msg.Err != nil {
 		if callErr, ok := errors.AsType[*session.VerbCallError](msg.Err); ok {
 			switch callErr.Code {
@@ -321,7 +429,7 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 				return
 			}
 		}
-		m.ShowNotification("The reply to "+msg.Who+" was not queued: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification("The reply to "+msg.Who+" was not queued: "+msg.Err.Error()+". Your draft is kept", "error", m.Settings.NotificationDuration*2)
 		return
 	}
 	m.rememberInboxReply(msg.ID, msg.Text)
@@ -517,37 +625,47 @@ func (m *OS) sidebarAgentKeyOr(action, fallback string) string {
 }
 
 // inboxReplyDetail is the editor under the list and its hints, when it is
-// open.
+// open. The lines carry their own colours.
 func (m *OS) inboxReplyDetail() (detail func(width int) []string, hints []overlay.Hint, ok bool) {
 	ed := m.Inbox.reply.editor
 	if ed == nil {
 		return nil, nil, false
 	}
-	detail = func(width int) []string { return inboxReplyLines(ed, width) }
-	hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send when ready"}, {Key: "esc", Label: "cancel"}}
-	return detail, hints, true
+	// The list draws the detail twice a frame, once to measure it. The
+	// lines are kept for the width.
+	var lines []string
+	linesW := -1
+	detail = func(width int) []string {
+		if width != linesW {
+			lines, linesW = inboxReplyLines(ed, width), width
+		}
+		return lines
+	}
+	return detail, ed.comp.Hints(), true
 }
 
-// inboxReplyEditorLines bounds how many lines the draft takes under the list.
-const inboxReplyEditorLines = 4
-
 // inboxReplyLines draws the editor: who it is for and where that agent is,
-// then the draft with the cursor, its last lines when it is long.
+// then the draft.
 func inboxReplyLines(ed *inboxReplyEditor, width int) []string {
-	width = max(width-2, 8)
-	label := "Reply to " + ed.who
+	pal := theme.UI()
+	bg := pal.Surface
+	inner := max(width-2, 8)
+	label := overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render("Reply to " + ed.who)
 	if ed.context != "" {
-		label += " (" + ed.context + ")"
+		label += overlay.Style(bg).Foreground(pal.FgDim).Render(" (" + ed.context + ")")
 	}
-	text := label + ": " + printableRunes(ed.draft) + "_"
-	lines := wrapPlain(text, width)
-	if len(lines) > inboxReplyEditorLines {
-		lines = lines[len(lines)-inboxReplyEditorLines:]
+	pad := overlay.Style(bg).Render("  ")
+	out := []string{overlay.Fill(pad+ansi.Truncate(label, inner, "…"), width, bg)}
+	// A reply to an agent at work waits. The line says so before it is
+	// sent, not only after.
+	if strings.HasPrefix(ed.context, "working") {
+		wait := overlay.Style(bg).Foreground(pal.FgDim).Render("It is typed when " + ed.who + " is at rest.")
+		out = append(out, overlay.Fill(pad+ansi.Truncate(wait, inner, "…"), width, bg))
 	}
-	for i := range lines {
-		lines[i] = "  " + lines[i]
+	for _, l := range ed.comp.Render(inner, pal, bg) {
+		out = append(out, pad+l)
 	}
-	return lines
+	return out
 }
 
 // sidebarAgentQueuedFigure is what a rail agent row shows at its right edge

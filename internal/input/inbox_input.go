@@ -139,22 +139,11 @@ func handleInboxReasonInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // handleInboxReplyInput handles keyboard input while the reply editor is
-// open: every printable key is text, enter queues the reply, backspace
-// deletes, and esc closes the editor and sends nothing.
+// open. The composer takes every key: enter queues the reply, ctrl+j makes a
+// new line, and esc closes the editor and keeps the draft. See
+// internal/composer for the rest.
 func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch key := msg.String(); key {
-	case "esc":
-		o.InboxReplyCancel()
-	case "enter":
-		return o, o.InboxReplySend()
-	case "backspace":
-		o.InboxReplyBackspace()
-	case "space":
-		o.InboxReplyType(" ")
-	default:
-		o.InboxReplyType(msg.Text)
-	}
-	return o, nil
+	return o, o.InboxReplyKey(msg)
 }
 
 // handleInboxSelectInput handles keyboard input while the selector line is

@@ -1303,9 +1303,11 @@ on an agent row and keep renaming and opening the menu on every other row.
 row. It works on the agent row and on the subagent heading, and only when
 `appearance.sidebar.subagent_collapse` is `expanded` or `collapsed`.
 
-In the reply line every printable key is typed, and a paste is typed as one
-line; `enter` queues it, `backspace` deletes, `esc` closes it and sends
-nothing. Attached to a daemon without `queue-prompt` (an older one), the
+The reply editor takes every key: `enter` queues the reply, `ctrl+j`,
+`shift+enter` or `\` then `enter` adds a new line, and `esc` closes it and
+keeps the draft. A paste keeps its line breaks, and a long one shows as one
+block. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
+They are not bindings yet. Attached to a daemon without `queue-prompt` (an older one), the
 first reply says to restart it, and after that `r` does what it did before:
 it says `r` replies to mail in the Inbox, and renames on the rail.
 

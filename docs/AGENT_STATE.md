@@ -3915,17 +3915,42 @@ whose calls arrive through its report channel, may neither queue nor drop.
 ### Replying to an agent
 
 `r` on a Finished or Errored item in the Inbox, or on a rail agent row, opens
-a line under the Inbox list:
+the reply editor under the Inbox list:
 
 ```
-  Reply to api (done 4m): make the backoff jitter configurable_
-  ↵ send when ready  esc cancel
+  Reply to api (done 4m)
+  › make the backoff jitter configurable. The failing run:
+    [Pasted text #1 · 42 lines]
+  ↵ send  ctrl+j new line  ctrl+z undo  esc close
 ```
+
+The editor keeps line breaks and grows to 8 rows, then scrolls. `ctrl+j`,
+`shift+enter`, `alt+enter`, or `\` then `enter` adds a new line. The arrows,
+`alt+left`/`alt+right` (or `ctrl+left`/`ctrl+right`) by word, `home`/`end`
+(or `ctrl+a`/`ctrl+e`), `ctrl+w` and `alt+backspace` to delete a word,
+`ctrl+u` and `ctrl+k` to delete to the line start or end, `ctrl+z` to undo
+and `alt+z` to redo all work as in a shell. `ctrl+c` clears the draft, and
+`ctrl+v` pastes from the clipboard.
+
+A paste of more than 800 characters or 3 lines shows as one block, such as
+`[Pasted text #1 · 42 lines]`. The cursor steps over a block in one move, and
+`backspace` deletes all of it. The block's text is sent in its place. The
+whole message, blocks included, must fit in 16 KB: a larger one stays open
+and says `The message is larger than 16 KB. Remove a paste to send.`
+
+Before it sends, the editor removes invisible characters (Unicode tags, bidi
+controls, zero-width spaces). When it removed any, it does not send and says
+`Removed 3 invisible characters. Read the message and press enter to send.`
+Text pasted from a web page can hide instructions in them.
+
+`esc` closes the editor and keeps the draft: `r` on the same pane opens it
+again. A reply the daemon refuses keeps its draft too. Drafts stay in the
+client's memory and end with it.
 
 `enter` queues it with `queue-prompt` as you: if the agent is at rest it is
 typed within a second or so, and otherwise the row says `1 queued` and it is
 typed the moment the agent comes to rest. From the rail the Inbox opens with
-the line and closes again when you send or cancel. On a pane waiting on a
+the editor and closes again when you send or close it. On a pane waiting on a
 prompt, or with an `ask-human` question open (the rail draws both as waiting
 on you), `r` says so and opens nothing: `api is waiting on a prompt. Answer it
 first (space to peek).` A pane on another machine is replied to from a client

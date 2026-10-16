@@ -116,7 +116,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		}
 		if replying {
 			// A reply from the rail to a pane with nothing in the Inbox.
-			return m.simpleOverlayPanel(title, replyDetail(m.panelWidth(inboxWidth)), replyHints)
+			width := m.panelWidth(inboxWidth)
+			content, geo := overlay.Panel{Title: title, Width: width, Body: strings.Join(replyDetail(width), "\n"), Hints: replyHints}.Render(theme.UI())
+			return content, geo, nil
 		}
 		// The one key offered in the middle is the mailbox, the place to
 		// look when nothing is waiting; without a daemon there is nothing
@@ -139,6 +141,8 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
+		// The reply editor draws its own colours.
+		DetailStyled: replying,
 		// Typing a reply takes the keyboard, so the row it answers goes quiet.
 		Unfocused: replying,
 		Position: func() (int, int) {
