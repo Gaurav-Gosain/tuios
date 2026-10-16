@@ -884,7 +884,13 @@ type KeybindingsConfig struct {
 	// Option on purpose (issue #566). "auto" (the default when empty) is
 	// "bind" when keyboard_layout is "us" or, with keyboard_layout unset, the
 	// Mac's input source is US or ABC, and "alt" otherwise.
-	OptionGlyphs     string              `toml:"option_glyphs,omitempty"`
+	OptionGlyphs string `toml:"option_glyphs,omitempty"`
+	// Repeat lists the actions that stay armed after the leader, as tmux's
+	// bind -r does: the same key pressed again inside
+	// appearance.prefix_repeat_time runs the action again without the leader.
+	// Unset is DefaultPrefixRepeat. An empty list turns repeat off for every
+	// action. A name that is no action does nothing.
+	Repeat           []string            `toml:"repeat,omitempty"`
 	WindowManagement map[string][]string `toml:"window_management"`
 	Workspaces       map[string][]string `toml:"workspaces"`
 	Layout           map[string][]string `toml:"layout"`

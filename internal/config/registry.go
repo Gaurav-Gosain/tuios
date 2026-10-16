@@ -11,8 +11,11 @@ import (
 // KeybindRegistry manages the mapping between keys and actions
 type KeybindRegistry struct {
 	keyToAction map[string]string // Maps key string to action name
-	config      *UserConfig
-	normalizer  *KeyNormalizer
+	// repeat is the set of actions that stay armed after the leader: the
+	// config's keybindings.repeat, or DefaultPrefixRepeat when it is unset.
+	repeat     map[string]bool
+	config     *UserConfig
+	normalizer *KeyNormalizer
 
 	// sections holds one resolved key->action map per config section that is
 	// looked up on its own rather than through keyToAction: every prefix, the
@@ -69,6 +72,14 @@ func NewKeybindRegistry(cfg *UserConfig) *KeybindRegistry {
 // buildMappings builds the reverse mapping from keys to actions
 func (r *KeybindRegistry) buildMappings() {
 	r.keyToAction = make(map[string]string)
+	list := r.config.Keybindings.Repeat
+	if list == nil {
+		list = DefaultPrefixRepeat
+	}
+	r.repeat = make(map[string]bool, len(list))
+	for _, a := range list {
+		r.repeat[a] = true
+	}
 	r.pressesMu.Lock()
 	r.presses = nil
 	r.live = nil
@@ -214,6 +225,12 @@ func (r *KeybindRegistry) withCommands(keyMap map[string]string, section string)
 // GetAction returns the action name for a given key in normal mode
 func (r *KeybindRegistry) GetAction(key string) string {
 	return r.lookupKey(key, r.keyToAction)
+}
+
+// PrefixRepeats reports whether action stays armed after the leader. See
+// KeybindingsConfig.Repeat.
+func (r *KeybindRegistry) PrefixRepeats(action string) bool {
+	return r.repeat[action]
 }
 
 // GetPrefixAction returns the action name for a given key in the main prefix mode (Ctrl+B)
