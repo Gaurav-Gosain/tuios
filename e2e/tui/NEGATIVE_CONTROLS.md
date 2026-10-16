@@ -6548,3 +6548,4 @@ runtime folder, and the file must hold the paste. It passes on the branch.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A reply with host was not passed on | the forward in `verbQueuePrompt` | `if false && p.Host != ""` | `TestReplyToAnAgentOnAHost` ("queue-prompt with host: exit status 1 … session_not_found") | **caught** |
+| A small paste to a host whose link has no files was refused | the retry as text in `queuePromptToHost` | `if false && ok && far.Code == ErrVerbForbidden` | `TestReplyToAnAgentOnAHost` ("queue-prompt with host to a link without files: exit status 1") | **caught** |

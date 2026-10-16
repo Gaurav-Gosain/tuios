@@ -512,6 +512,38 @@ func TestReplyToAnAgentOnAHost(t *testing.T) {
 	if data, err := os.ReadFile(path); err != nil || string(data) != big {
 		t.Fatalf("the far file holds %d bytes (%v), want the %d of the paste", len(data), err, len(big))
 	}
+
+	// alpha takes files away from the link. A reply with a small paste goes
+	// as text, the paste typed in its place, since no file can be written
+	// there. Negative control: without the retry as text in
+	// queuePromptToHost, the call fails as forbidden.
+	writeRemoteConfig(t, f.alpha, relayNoFilesPolicy)
+	if out, err := cliWithin(t, f.alpha, f.env, "config", "apply"); err != nil {
+		t.Fatalf("apply alpha's config: %v\n%s", err, out)
+	}
+	if out, err := cliWithin(t, f.alpha, f.env, "set-agent-state", "working", "-s", "far", "--harness", "claude-code"); err != nil {
+		t.Fatalf("mark the far agent working: %v\n%s", err, out)
+	}
+	small := "small paste line 1\nsmall paste line 2\nsmall paste line 3\nsmall paste line 4\n"
+	params, _ = json.Marshal(map[string]any{
+		"host": "alpha", "session": "far", "window": window,
+		"text": "echo n0f " + small,
+		"parts": []map[string]any{
+			{"kind": "text", "text": "echo n0f "},
+			{"kind": "paste", "text": small, "n": 1},
+		},
+	})
+	out, err = cliWithin(t, f.here, f.env, "call", "queue-prompt", string(params))
+	if err != nil || !strings.Contains(out, `"host":"alpha"`) {
+		t.Fatalf("queue-prompt with host to a link without files: %v\n%s", err, out)
+	}
+	if out, err := cliWithin(t, f.alpha, f.env, "set-agent-state", "idle", "-s", "far", "--harness", "claude-code"); err != nil {
+		t.Fatalf("rest the far agent: %v\n%s", err, out)
+	}
+	got = waitRecorded(t, recorded, "line 4\x1b[201~\r")
+	if !strings.Contains(got, "\x1b[200~echo n0f "+strings.TrimSuffix(small, "\n")+"\x1b[201~\r") {
+		t.Fatalf("the far pane read %q, want the words and the paste in one paste", got[strings.LastIndex(got, "\x1b[200~"):])
+	}
 }
 
 // startRecorderWithin is startRecorder for the daemon at base with env.

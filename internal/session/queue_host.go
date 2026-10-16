@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
@@ -75,7 +76,17 @@ func (d *Daemon) queuePromptToHost(cs *connState, p queuePromptParams) (any, *ve
 	ctx, cancel := context.WithTimeout(d.ctx, queueHostBudget)
 	defer cancel()
 	var out map[string]any
-	if err := (fileEnd{d: d, host: p.Host}).callTimeout(ctx, "queue-prompt", params, &out, queueHostBudget); err != nil {
+	err := (fileEnd{d: d, host: p.Host}).callTimeout(ctx, "queue-prompt", params, &out, queueHostBudget)
+	if far, ok := errors.AsType[*VerbCallError](err); ok && far.Code == ErrVerbForbidden && p.Parts != nil && p.Text != "" &&
+		!hasImageParts(p.Parts) && strings.Contains(far.Message, "does not allow files") {
+		// The far machine's policy for this link has no files, so a block
+		// cannot go as a file there. The message as one text fits the limit,
+		// so it goes that way, each block typed in its place.
+		delete(params, "parts")
+		out = nil
+		err = (fileEnd{d: d, host: p.Host}).callTimeout(ctx, "queue-prompt", params, &out, queueHostBudget)
+	}
+	if err != nil {
 		if far, ok := errors.AsType[*VerbCallError](err); ok {
 			return nil, hintedVerbError(far.Code, "queue-prompt on "+p.Host+": "+far.Message, refusedOn(far.Hint, p.Host))
 		}
