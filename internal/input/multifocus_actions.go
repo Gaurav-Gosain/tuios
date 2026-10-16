@@ -19,9 +19,10 @@ func (d *ActionDispatcher) registerMultifocusHandlers() {
 	d.Register(actionCloseWorkspace, handleCloseWorkspace)
 }
 
-// actionCloseWorkspace closes every pane on the current workspace, like tmux
-// kill-window, after the confirmation dialog. It has no default key. It sits
-// here because it is how a multifocus set from tuios xpanes goes away.
+// actionCloseWorkspace closes every pane on a workspace, like tmux
+// kill-window, after the confirmation dialog: the workspace whose dock tab menu
+// ran it, or the current one. It has no default key. It sits here because it
+// is how a multifocus set from tuios xpanes goes away.
 const actionCloseWorkspace = "close_workspace"
 
 func handleCloseWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

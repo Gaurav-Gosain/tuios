@@ -798,8 +798,17 @@ opened. The action has no default key. The command palette has the entry
 close_workspace = ["alt+x"]
 ```
 
-The action asks first. The dialog shows how many panes close and how many
-agents are in them. `Cancel` is the default row. Scratch panes stay open.
+The action asks first. The dialog names the workspace and shows how many panes
+close and how many agents are in them. `Cancel` is the default row. Scratch
+panes stay open.
+
+Right-click a workspace tab in the dock to close that workspace, whether or not
+it is the one on screen. The tab's menu has the rows `Switch to`, `Rename` and
+`Close`. `Close` is the same `close_workspace` action as the key and the palette
+entry, with the same dialog, but it acts on the tab's workspace instead of the
+current one. It is dimmed when the workspace has no pane to close. Closing a
+workspace that is not on screen leaves the view where it is.
+
 `tuios close-workspace` does the same from a shell. See
 [CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-close-workspace).
 

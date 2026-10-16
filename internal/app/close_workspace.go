@@ -9,8 +9,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// close_workspace closes every pane on the current workspace, like tmux
-// kill-window. It asks first, in the session-close dialog, every time: the
+// close_workspace closes every pane on a workspace, like tmux kill-window: the
+// workspace whose dock tab menu ran it, or the current one when a key or the
+// palette did. It asks first, in the session-close dialog, every time: the
 // dialog counts the panes and the agents it would take down, which is the
 // reason to read it. tuios close-workspace is the same for a script.
 //
@@ -71,10 +72,16 @@ func (m *OS) sessionCloseLabel() string {
 	return "Close session"
 }
 
-// OpenWorkspaceClose raises the confirmation for the current workspace. A
-// workspace with no pane to close says so and asks nothing.
+// OpenWorkspaceClose raises the confirmation for the workspace the user meant:
+// the one whose tab menu the action came from, or the one they are on when it
+// came from a key or the palette. The dialog counts, and its answer closes, that
+// workspace's panes. A workspace with no pane to close says so and asks
+// nothing.
 func (m *OS) OpenWorkspaceClose() {
-	ws := m.CurrentWorkspace
+	ws := m.TakeMenuWorkspace()
+	if ws <= 0 {
+		ws = m.CurrentWorkspace
+	}
 	if len(m.workspacePanes(ws)) == 0 {
 		m.ShowNotification(fmt.Sprintf("Workspace %d has no panes to close.", ws), "info", m.Settings.NotificationDuration)
 		return

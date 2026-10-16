@@ -317,11 +317,17 @@ func (m *OS) dockItemMenu(windowIndex int) (string, []ContextMenuItem) {
 // them.
 //
 // The title is what the tab says, so the menu names the workspace it will act
-// on even when that workspace is not the one being shown.
+// on even when that workspace is not the one being shown. Every row acts on the
+// tab's workspace, Close included: it raises close_workspace's confirmation for
+// this workspace, and is dimmed when the workspace has no pane to close.
 func (m *OS) workspacePillMenu(ws int) (string, []ContextMenuItem) {
+	closeItem := m.item(glyphClose, "Close", "close_workspace", len(m.workspacePanes(ws)) == 0)
+	closeItem.Warn = true
 	return printableTitle(m.WorkspaceLabel(ws)), []ContextMenuItem{
 		m.item(glyphSwitch, "Switch to", "workspace_pill_switch", ws == m.CurrentWorkspace),
 		m.item(glyphRename, "Rename", "workspace_prefix_rename", false),
+		separator(),
+		closeItem,
 	}
 }
 

@@ -403,7 +403,7 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"right-click desktop"}, Description: "Desktop menu", Category: cat},
 		{Keys: []string{"click dock entry"}, Description: "Restore that minimized window", Category: cat},
 		{Keys: []string{"right-click dock"}, Description: "Dock menu, or the entry's own menu", Category: cat},
-		{Keys: []string{"right-click workspace tab"}, Description: "Switch or rename that workspace", Category: cat},
+		{Keys: []string{"right-click workspace tab"}, Description: "Switch to, rename or close that workspace", Category: cat},
 		{Keys: []string{"drag a panel"}, Description: "Move the panel. Click outside to close", Category: cat},
 	}
 }

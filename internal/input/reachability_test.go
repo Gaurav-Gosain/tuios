@@ -518,7 +518,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// them where they want them (issue #232).
 	"toggle_multifocus_active": "palette row, user binding",
 	"toggle_multifocus_all":    "palette row, user binding",
-	"close_workspace":          "palette row, user binding",
+	"close_workspace":          "palette row, workspace tab menu, user binding",
 	// tmux's "copy-mode \; send-keys ?" as one action. The palette reaches
 	// them too.
 	"copy_mode_search_forward":  "user binding and palette row",

@@ -795,7 +795,7 @@ becomes shell code. Any installed package can write a desktop entry.
 When the last pane on the workspace on screen closes, tuios shows the
 workspace you came from. This happens when the pane's program stops, when you
 close the pane, when `tuios xpanes -ss` closes it, and with
-`tuios close-workspace`.
+`tuios close-workspace` or the `close_workspace` action.
 
 tuios goes back in this order:
 

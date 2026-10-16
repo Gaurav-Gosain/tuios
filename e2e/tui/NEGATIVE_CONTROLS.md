@@ -6457,3 +6457,46 @@ be skipped as a nested session; it is, in every control and in the fixed build.
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -run '^TestPanesDoNotInheritTheAgentThatStartedTheDaemon$' -count=1 .
 ```
+## Close a workspace from its dock tab
+
+`e2e/tui/workspace_tab_close_test.go` drives the `Close` row of a workspace
+tab's right-click menu, and `close_workspace` reached without a menu, against
+real daemons. Workspace 1 (`homews`) holds one pane and workspace 2 (`farws`)
+holds two (one in the last three tests), and the client stays on workspace 1, so
+the question, the toll line and the daemon's `list-windows` each tell the two
+apart.
+
+- `TestWorkspaceTabCloseClosesThatTabsWorkspace`: the `farws` tab's `Close`
+  names workspace 2 and counts its two panes. `Cancel`, the default row, closes
+  nothing. Confirming closes workspace 2's panes, keeps workspace 1's, and the
+  session still shows workspace 1.
+- `TestWorkspaceTabCloseOnTheCurrentTab`: the `homews` tab's `Close` closes
+  workspace 1 and keeps workspace 2. It is the positive half for the current
+  workspace.
+- `TestCloseWorkspaceFromThePaletteClosesTheCurrentOne`: a tab menu opened on
+  `farws` and dismissed leaves no target behind, and the palette row closes
+  workspace 1.
+- `TestCloseWorkspaceFromAKeyClosesTheCurrentOne`: `close_workspace = ["alt+x"]`
+  in `[keybindings.prefix_mode]`, and `Ctrl+B Alt+X` closes workspace 1 through
+  the same dialog.
+
+Every test runs on one pane that fills the screen, which the fullscreen fast
+path draws without the compositor. That path skipped every overlay it did not
+list, and the close confirmation was not on the list: the dialog opened, took
+the keyboard and drew nothing. The fifth control is that fix.
+
+Each control is a separate build that cuts one line, run against the four tests
+on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The row acted on the workspace in view, not the tab's | n/a, injected, cuts the call site | `OpenWorkspaceClose` uses `m.CurrentWorkspace` and drops `TakeMenuWorkspace()` | `TestWorkspaceTabCloseClosesThatTabsWorkspace` ("the confirmation did not ask \"Close every pane on workspace 2 (farws)?\"") | **caught** |
+| The row was not added | n/a, injected, cuts the call site | drop `separator(), closeItem` from `workspacePillMenu` | `TestWorkspaceTabCloseClosesThatTabsWorkspace` ("the farws tab: context menu never showed [Switch to Rename Close]"), `TestWorkspaceTabCloseOnTheCurrentTab` ("the homews tab: …"), `TestCloseWorkspaceFromThePaletteClosesTheCurrentOne` ("the farws tab: context menu never showed [Switch to Close]") | **caught** |
+| The dialog counted the workspace in view | n/a, injected | `renderSessionClose` counts `m.workspaceToll(m.CurrentWorkspace)` | `TestWorkspaceTabCloseClosesThatTabsWorkspace` ("the dialog does not count workspace 2's two panes") | **caught** |
+| The confirm closed the workspace in view | n/a, injected | `SessionCloseActivate` calls `CloseWorkspacePanes(m.CurrentWorkspace)` | `TestWorkspaceTabCloseClosesThatTabsWorkspace` ("closing workspace 2 from its tab: workspace 2 has 2 panes, want 0") | **caught** |
+| The close confirmation was not drawn over a lone fullscreen pane | yes, cuts the gate | drop `m.ShowSessionClose ||` from `fullscreenFastWindow` | `TestWorkspaceTabCloseClosesThatTabsWorkspace`, `TestWorkspaceTabCloseOnTheCurrentTab` ("the confirmation did not ask …"), `TestCloseWorkspaceFromThePaletteClosesTheCurrentOne` ("\"Close workspace\" never produced \"Close every pane on workspace 1 (homews)?\"") | **caught** |
+
+`TestCloseWorkspaceFromAKeyClosesTheCurrentOne` passes under every control. Under
+the fast-path control the dialog still drew after `Ctrl+B Alt+X`, so this test
+does not cover the fast path. It guards the key path, which none of the controls
+touches.

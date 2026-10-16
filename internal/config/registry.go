@@ -693,7 +693,7 @@ var ActionDescriptions = map[string]string{
 	// Multifocus. Neither action has a default key.
 	"toggle_multifocus_active": "Add or remove the focused pane from multifocus",
 	"toggle_multifocus_all":    "Add all panes on the workspace to multifocus, or clear it",
-	"close_workspace":          "Close every pane on the current workspace, after a confirmation",
+	"close_workspace":          "Close every pane on a workspace, after a confirmation",
 
 	// Workspaces
 	"next_workspace":     "Switch to the next workspace that has panes",

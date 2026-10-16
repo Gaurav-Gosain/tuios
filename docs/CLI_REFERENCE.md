@@ -1543,8 +1543,9 @@ tuios close-workspace [flags] [workspace]
 
 Scratch panes stay open. To close a scratch group, name its scratch workspace.
 A pane that runs this command needs the `admin` grant. The
-`close_workspace` action does the same from the keyboard. See
-[KEYBINDINGS.md](KEYBINDINGS.md#close-every-pane-on-a-workspace).
+`close_workspace` action does the same from the keyboard, and the `Close` row of
+a workspace tab's right-click menu in the dock does it for that tab's workspace.
+See [KEYBINDINGS.md](KEYBINDINGS.md#close-every-pane-on-a-workspace).
 
 **Examples:**
 ```bash
