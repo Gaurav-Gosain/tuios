@@ -24,7 +24,8 @@ import (
 // Negative controls: dropping the expireThemeTransition term from
 // handleMotionFrame fails the "still runs" check, and dropping t.old = nil
 // from end fails the "kept frame" check. Arming the motion timer for want
-// again, in motionCmd or in nextMotionWait, fails the grid checks.
+// again, in motionCmd or in nextMotionWait, fails the grid checks. Dropping
+// the wait > -want/4 bound fails the stall check.
 func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	prev := theme.CurrentThemeID()
 	t.Cleanup(func() { _ = theme.Initialize(prev) })
@@ -78,6 +79,15 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	}
 	if rate := int(time.Second / frame); n < rate-1 {
 		t.Errorf("frames handled 4 ms late came %d times a second, want %d", n, rate)
+	}
+	// A stall does not make the clock catch up: the frames it missed are
+	// gone, and the next waits a whole interval from a new grid.
+	stalled := at.Add(time.Second)
+	for i := range 3 {
+		if wait := mo.nextMotionWait(stalled, frame); wait != frame {
+			t.Fatalf("frame %d after a one second stall waits %v, want %v", i, wait, frame)
+		}
+		stalled = stalled.Add(frame)
 	}
 	m.themeFx.start = time.Now().Add(-time.Hour)
 	m.renderSkipped = true
