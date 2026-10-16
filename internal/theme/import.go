@@ -1,7 +1,6 @@
 package theme
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,12 +65,10 @@ func WriteTheme(t *tint.Tint) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	body, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("encode theme: %w", err)
-	}
+	// Hex strings and every colour, in the order a person reads a theme.
+	body := fullDoc(t, chromeRaw{}).encode(true)
 	path := filepath.Join(dir, t.ID+".json")
-	if err := os.WriteFile(path, append(body, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(path, body, 0o600); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
 	// Register it here as well as on disk so the process that imported it can

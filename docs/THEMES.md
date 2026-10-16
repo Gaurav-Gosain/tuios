@@ -11,6 +11,7 @@ overlays, the dockbar) from them.
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
 - [Start from Another Theme](#start-from-another-theme)
+- [Export and Share a Theme](#export-and-share-a-theme)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
 - [Colour Depth](#colour-depth)
@@ -176,6 +177,35 @@ base:
   This edits the built-in theme for you only.
 - Files that name each other as base load as none of them. `tuios list-themes`
   shows the loop.
+
+## Export and Share a Theme
+
+`tuios theme export <theme>` prints a theme as a theme file:
+
+```sh
+tuios theme export dracula-ember > dracula-ember.json
+```
+
+- A theme from your themes directory is written against the built-in theme it
+  starts from. The file has the `base` and only the colours that are
+  different. A base that is another file of yours is followed to the built-in
+  theme, so the file loads on a machine that does not have your other file.
+- A built-in theme is written with all its colours and no `base`.
+- `--full` writes all the colours of any theme, with no `base`.
+- `--format base16` writes a base16 scheme in YAML for other programs.
+  `base00` is the background. `base01` and `base02` are the theme's `surface`
+  and `card` when it sets a `surface`. `base08`, `base0A`, `base0B`, `base0C`
+  and `base0D` are `error`, `warning`, `success`, `accent_bright` and
+  `accent`.
+
+`tuios theme share <theme>` prints the same file as one line, for a chat
+message or a comment:
+
+```
+tuios-theme:v1:eyJpZCI6ImRyYWN1bGEtZW1iZXIiLCJiYXNlIjoiZHJhY3VsYSIs...
+```
+
+The part after `tuios-theme:v1:` is the file in base64url with no padding.
 
 ## Defaults for Omitted Colors
 

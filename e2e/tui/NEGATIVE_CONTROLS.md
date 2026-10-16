@@ -6611,3 +6611,18 @@ Run on 2026-10-16.
 |---|---|---|---|---|
 | The pill did not show the armed leader | yes | `case false && m.prefixOnPill():` in `buildDockLeftText` | `TestDockModeIconsFollowTheConfig/prefix` ("pill: the armed leader never showed where asked") | **caught** |
 | The pill took light ink on slot 3 at 16 colours | yes | `ModeInfo.Color` back to a hex string, read with `lipgloss.Color` | `TestOverlayLayouts/dark-120x40-16`, `TestOverlayLayouts/light-120x40-16` ("\"\\uf11c\" at (2,0) is slot 15 on slot 3: light ink on a light ground") | **caught** |
+
+## Theme export and share
+
+`TestThemeExportWritesOnlyTheChanges` writes `ember` (base `dracula`) and
+`ember2` (base `ember`), then requires `tuios theme export ember2` to hold the
+base `dracula` and only the changed colours and chrome. The file loads as the
+same theme under another id, `tuios theme share` holds the same file, and the
+base16 scheme maps the background and the chrome.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The export wrote every colour | yes | `if full || true` in `exportDoc` | `TestThemeExportWritesOnlyTheChanges` ("the export of ember2 is ...") | **caught** |
+| The export did not follow a base that is a file | yes | the loop in `builtinAnchor` skips the files | `TestThemeExportWritesOnlyTheChanges` ("the export of ember2 is ...") | **caught** |

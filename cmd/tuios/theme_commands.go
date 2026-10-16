@@ -260,3 +260,25 @@ func runThemeReload(jsonOutput bool) error {
 	}
 	return nil
 }
+
+// runThemeExport prints a theme as a theme file or a base16 scheme.
+func runThemeExport(id, format string, full bool) error {
+	var out []byte
+	var err error
+	switch format {
+	case "", "tuios":
+		out, err = theme.ExportTheme(id, full)
+	case "base16":
+		if full {
+			return fmt.Errorf("--full is for the tuios format. A base16 scheme always has all its colours")
+		}
+		out, err = theme.ExportBase16(id)
+	default:
+		return fmt.Errorf("unknown format %q. Use tuios or base16", format)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
+}

@@ -236,6 +236,11 @@ theme, name it as `base` and write only the changes:
 The running clients read a theme file again when it is saved. `tuios theme
 reload` asks every client on the machine to read the files now.
 
+`tuios theme export ID` prints a theme as a file with only what differs from
+its built-in base (`--full` for every colour, `--format base16` for a base16
+scheme). `tuios theme share ID` prints the same file as one
+`tuios-theme:v1:` line.
+
 To convert a kitty, ghostty, alacritty or wezterm scheme rather than
 transcribe it:
 

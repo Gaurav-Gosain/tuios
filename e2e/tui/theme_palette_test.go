@@ -1,7 +1,12 @@
 package tuie2e
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -203,5 +208,79 @@ func TestAnEditedThemeFileRepaints(t *testing.T) {
 				got, term.Snapshot())
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// TestThemeExportWritesOnlyTheChanges: tuios theme export writes a theme file
+// against the built-in it starts from, through a base that is another file,
+// with only the colours that differ. The file loads as the same theme under a
+// new id, and tuios theme share carries the same file.
+//
+// How this could pass wrongly: an export of every colour also loads as the
+// same theme, so the test first requires the sparse shape. Negative controls
+// are in NEGATIVE_CONTROLS.md.
+func TestThemeExportWritesOnlyTheChanges(t *testing.T) {
+	base := t.TempDir()
+	writeConfigPart(t, base, "themes/ember.json",
+		`{"id": "ember", "base": "dracula", "red": "#ff5500", "chrome": {"accent": "bright_red", "surface": "#1e1e2e"}}`)
+	writeConfigPart(t, base, "themes/ember2.json", `{"id": "ember2", "base": "ember", "green": "#00ff00"}`)
+	dir := artifactDir(t)
+	run := func(name string, args ...string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, args...)
+		if err != nil {
+			t.Fatalf("tuios %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(out), 0o644); err != nil {
+			t.Fatalf("save %s: %v", name, err)
+		}
+		return out
+	}
+	decode := func(what, body string) map[string]any {
+		t.Helper()
+		var m map[string]any
+		if err := json.Unmarshal([]byte(body), &m); err != nil {
+			t.Fatalf("%s is not JSON: %v\n%s", what, err, body)
+		}
+		return m
+	}
+
+	sparse := run("ember2.json", "theme", "export", "ember2")
+	got := decode("the export", sparse)
+	want := map[string]any{
+		"id": "ember2", "base": "dracula", "red": "#ff5500", "green": "#00ff00",
+		"chrome": map[string]any{"accent": "bright_red", "surface": "#1e1e2e"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("the export of ember2 is\n%s\nwant only the base and the changes: %v", sparse, want)
+	}
+
+	// The same file under another id is the same theme.
+	writeConfigPart(t, base, "themes/copy.json", strings.Replace(sparse, `"ember2"`, `"copy"`, 1))
+	full := decode("the full export", run("ember2-full.json", "theme", "export", "ember2", "--full"))
+	copied := decode("the full export of the copy", run("copy-full.json", "theme", "export", "copy", "--full"))
+	copied["id"] = "ember2"
+	if !reflect.DeepEqual(full, copied) {
+		t.Fatalf("the exported file loads as another theme:\n%v\nwant\n%v", copied, full)
+	}
+
+	line := strings.TrimSpace(run("ember2.share", "theme", "share", "ember2"))
+	body, ok := strings.CutPrefix(line, "tuios-theme:v1:")
+	if !ok {
+		t.Fatalf("the share string %q does not start with tuios-theme:v1:", line)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(body)
+	if err != nil {
+		t.Fatalf("the share string is not base64url: %v", err)
+	}
+	if shared := decode("the share string", string(raw)); !reflect.DeepEqual(shared, want) {
+		t.Fatalf("the share string holds\n%s\nwant the export", raw)
+	}
+
+	scheme := run("ember.base16.yaml", "theme", "export", "ember", "--format", "base16")
+	for _, row := range []string{`base00: "#1e1f28"`, `base01: "#1e1e2e"`, `base08: "#ff5500"`, `base0F: "#`} {
+		if !strings.Contains(scheme, row) {
+			t.Fatalf("the base16 scheme has no %s\n%s", row, scheme)
+		}
 	}
 }

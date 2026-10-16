@@ -2072,6 +2072,61 @@ matugen with a post_hook.`,
 	themeReloadCmd.Flags().BoolVar(&themeReloadJSON, "json", false, "Output as JSON")
 	themeCmd.AddCommand(themeReloadCmd)
 
+	completeThemeID := func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		theme.ReloadCustomThemes()
+		return theme.AvailableThemes(), cobra.ShellCompDirectiveNoFileComp
+	}
+	var themeExportFormat string
+	var themeExportFull bool
+	themeExportCmd := &cobra.Command{
+		Use:   "export <theme>",
+		Short: "Print a theme as a theme file",
+		Long: `Print a theme as a theme file on standard output.
+
+A theme from your themes directory is written against the built-in theme it
+starts from, with only the colours that are different. A built-in theme is
+written with all its colours. --full writes all the colours of any theme, with
+no base.
+
+--format base16 writes a base16 scheme in YAML for other programs.`,
+		Example: `  tuios theme export mine > mine.json
+  tuios theme export dracula --format base16`,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeThemeID,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runThemeExport(args[0], themeExportFormat, themeExportFull)
+		},
+	}
+	themeExportCmd.Flags().StringVar(&themeExportFormat, "format", "tuios", "Output format: tuios or base16")
+	themeExportCmd.Flags().BoolVar(&themeExportFull, "full", false, "Write every colour, with no base")
+	_ = themeExportCmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"tuios", "base16"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	themeCmd.AddCommand(themeExportCmd)
+
+	themeShareCmd := &cobra.Command{
+		Use:   "share <theme>",
+		Short: "Print a theme as one line to paste in a message",
+		Long: `Print a theme as one line that starts with tuios-theme:v1:. The line holds
+the same file that tuios theme export writes, so a theme from your themes
+directory holds only the colours that are different from its base.`,
+		Example:           `  tuios theme share mine`,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeThemeID,
+		RunE: func(_ *cobra.Command, args []string) error {
+			line, err := theme.ShareString(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Println(line)
+			return nil
+		},
+	}
+	themeCmd.AddCommand(themeShareCmd)
+
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
