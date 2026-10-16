@@ -52,6 +52,17 @@ type placeRecord struct {
 	// a reader never pairs one report's machine with another's folder. An ssh
 	// split starts the new pane there; see ssh_follow.go.
 	elsewhere atomic.Pointer[elsewhereReport]
+
+	// onChange, when set, is called after the folder, the branch or the
+	// machine moves. It is set once, before the pane's first output.
+	onChange func()
+}
+
+// changed calls onChange.
+func (r *placeRecord) changed() {
+	if r.onChange != nil {
+		r.onChange()
+	}
 }
 
 // elsewhereReport is an OSC 7 report that named another machine.
@@ -82,6 +93,7 @@ func (r *placeRecord) announce(raw string) bool {
 	if host != "" {
 		changed := r.Elsewhere() != host
 		r.elsewhere.Store(&elsewhereReport{host: host, dir: path})
+		r.changed()
 		return changed
 	}
 	moved := r.setElsewhere("")
@@ -121,6 +133,7 @@ func (r *placeRecord) setElsewhere(host string) bool {
 	} else {
 		r.elsewhere.Store(&elsewhereReport{host: host})
 	}
+	r.changed()
 	return true
 }
 
@@ -150,8 +163,10 @@ func (r *placeRecord) setCwdPath(path string) bool {
 		b := gitstate.Branch(path)
 		if r.gen.Load() == gen {
 			r.branch.Store(&b)
+			r.changed()
 		}
 	}()
+	r.changed()
 	return true
 }
 

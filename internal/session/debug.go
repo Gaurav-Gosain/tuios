@@ -363,6 +363,7 @@ var messageTypeNames = [...]string{
 	MsgClientActivity:    "ClientActivity",
 	MsgWatchDir:          "WatchDir",
 	MsgDirChanged:        "DirChanged",
+	MsgSessionsChanged:   "SessionsChanged",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

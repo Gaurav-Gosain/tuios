@@ -529,6 +529,8 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 		return AgentMailLoadMsg{}
 	case "hosts-changed":
 		return HostsChangedMsg{}
+	case "sessions-changed":
+		return SessionsChangedMsg{}
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
@@ -739,9 +741,17 @@ type ForeignSessionRefreshTickMsg struct {
 	Gen uint64
 }
 
+// SessionsChangedMsg is the daemon's push that the session listing changed.
+// A daemon that pushes it is not polled. See session/daemon_listing_push.go.
+type SessionsChangedMsg struct{}
+
 // foreignSessionRefreshTick arms the next listing poll under a new generation.
+// A daemon that pushes listing changes is not polled, so nothing is armed.
 func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 	m.foreignTickGen++
+	if m.DaemonClient != nil && m.DaemonClient.ListingPush() {
+		return nil
+	}
 	gen := m.foreignTickGen
 	return tea.Tick(after, func(time.Time) tea.Msg {
 		return ForeignSessionRefreshTickMsg{Gen: gen}
@@ -1629,6 +1639,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, m.foreignSessionRefreshTick(after)
 		}
 		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
+
+	case SessionsChangedMsg:
+		// The push stands in for the poll tick: prune against the listing
+		// the last refresh left behind, then refresh if a consumer wants it.
+		// A consumer that appears later refreshes when it opens.
+		// It came off the client event channel, which is read one event at
+		// a time, so the listener is armed again here.
+		m.pruneWindowKeyedState()
+		m.renderSkipped = true
+		listen := ListenForClientEvents(m.ClientEventChan)
+		if _, refresh := m.foreignSessionRefreshPlan(); refresh {
+			return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), listen)
+		}
+		return m, listen
 
 	case foreignSessionsChangedMsg:
 		// The rail's render cache keys on the listing's generation, so this

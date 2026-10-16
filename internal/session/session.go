@@ -1889,9 +1889,12 @@ func (s *Session) SetEventSink(fn func(SessionEvent)) {
 
 // emit forwards a control-plane event to the installed sink, if any.
 func (s *Session) emit(ev SessionEvent) {
-	if ev.Type == EventOutput {
+	switch ev.Type {
+	case EventOutput:
 		s.saveStale.Set()
 		s.noteActivity()
+	case EventWindowRetitled:
+		s.noteListingChange()
 	}
 	s.eventSinkMu.RLock()
 	fn := s.eventSink
@@ -2366,6 +2369,13 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		ev.PTYID = id
 		pty.owner().emit(ev)
 	}
+	// The pane's folder and branch label its session in the listing. The
+	// branch is read on its own goroutine after a move.
+	pty.place.onChange = func() {
+		if s := pty.owner(); s != nil {
+			s.noteListingChange()
+		}
+	}
 
 	// Raise control-plane events from the daemon-side VT emulator: bell, an
 	// app-driven title change, and alt-screen mode toggles. These fire from the
@@ -2514,6 +2524,7 @@ func (s *Session) TouchActive() {
 	s.activeMu.Lock()
 	s.lastActive = time.Now()
 	s.activeMu.Unlock()
+	s.noteListingChange()
 }
 
 // LastActive is when the session was last used.
@@ -2541,6 +2552,7 @@ func (s *Session) TouchUsed() {
 		s.usedMarked = now
 	}
 	s.activeMu.Unlock()
+	s.noteListingChange()
 	if save {
 		s.stateDirty.Set()
 	} else {

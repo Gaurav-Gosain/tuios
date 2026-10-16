@@ -2453,6 +2453,8 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 // verb that waits (a send-text into a pane that does not read, a routed verb)
 // does not hold the budget while it waits. See verb_lines.go.
 func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) error {
+	// A verb can change what the session listing shows.
+	d.wakes.listing.Set()
 	var req verbRequest
 	err := json.Unmarshal(line, &req)
 	if release != nil {

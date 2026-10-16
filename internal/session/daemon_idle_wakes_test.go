@@ -78,6 +78,7 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		{"agent monitor", &d.wakes.detectTicks},
 		{"stall monitor", &d.wakes.stallTicks},
 		{"cleanup loop", &d.wakes.cleanupTicks},
+		{"listing notifier", &d.wakes.listingTicks},
 		{"session saver", &sess.saverWakes},
 	}
 

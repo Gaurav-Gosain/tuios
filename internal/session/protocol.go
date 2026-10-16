@@ -163,6 +163,12 @@ const (
 	// sends it only to a daemon whose welcome set SessionUsed. See
 	// session_used.go.
 	MsgSessionUsed
+	// MsgSessionsChanged tells a client that the session listing changed: a
+	// session, a window, a title, a folder or an agent state it shows. It has
+	// no payload. The client asks for the listing again. The daemon sends it
+	// only to a client whose hello set ListingPush. See
+	// daemon_listing_push.go.
+	MsgSessionsChanged
 )
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
@@ -283,6 +289,9 @@ type HelloPayload struct {
 	// without it lays the panes out around its own chrome whatever the
 	// session says, so its chrome always counts. See calculateSessionReserve.
 	ViewChrome bool `json:"view_chrome,omitzero"`
+	// ListingPush says the client reads MsgSessionsChanged. The daemon sends
+	// it to no other client. See daemon_listing_push.go.
+	ListingPush bool `json:"listing_push,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.
@@ -342,6 +351,10 @@ type WelcomePayload struct {
 	// asked for tuios attach -d warns when it does not see it: an older
 	// daemon attaches and detaches nobody.
 	DetachOthers bool `json:"detach_others,omitzero"`
+	// ListingPush says the daemon sends MsgSessionsChanged to a client whose
+	// hello set ListingPush. Such a client stops polling the listing. A
+	// client that does not see it (a daemon that predates it) keeps polling.
+	ListingPush bool `json:"listing_push,omitzero"`
 }
 
 // AttachPayload requests attachment to a session.

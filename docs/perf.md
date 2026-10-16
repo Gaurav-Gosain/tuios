@@ -3293,6 +3293,38 @@ The cleanup loop woke once in 30 s, so its row is inside the noise.
 With a client attached, what is left is the client's listing poll: one
 request every 3 s while the rail is open. The trace shows no other timer.
 
+### The session listing push
+
+The client drew other sessions on its rail from a listing it asked for every
+3 s with the rail open, and every 30 s with it hidden. Now the daemon tells a
+client when the listing changed (`MsgSessionsChanged`, offered as
+`ListingPush` in the welcome and asked for in the hello), and the client asks
+then. Everything the listing shows changes through an event the daemon sees:
+output, input, a state change, a title, a pane's folder or branch, a client
+arriving or leaving, a session made or ended, a request or a verb. Each
+raises the listing latch. The notifier builds the listing, hashes it, and
+pushes only when the hash moved. It looks at most once every 3 s, the
+cadence of the old poll, and arms no timer while nothing happens. A daemon
+that does not offer the push is polled as before.
+
+40 s after the panes opened, client attached, 30 s window, three interleaved
+runs:
+
+| Build | daemon ctxsw/s | client ctxsw/s |
+|---|---|---|
+| four loops sleep | 16.0, 7.4, 10.0 | 131.2, 126.2, 130.8 |
+| and the listing push | 1.4, 1.0, 1.8 | 127.0, 110.3, 109.2 |
+
+The client's own count is its maintenance tick and Bubble Tea's frame
+ticker, 10 a second each. They are the subject of the client idle plan.
+
+`TestListingPushReplacesThePoll` attaches a client that reads the push,
+checks that an idle daemon looks at the listing 0 times and pushes nothing,
+then renames a window in another session and checks the push arrives and the
+listing shows the name. With the latch unable to wake the notifier, the
+push never arrives and the test fails. `TestDaemonIdleArmsNoTimers` counts the
+notifier too.
+
 These runs start 5 s after the panes open, so the agent monitor is still in
 its 10 s quiet bound for the first seconds of the window.
 

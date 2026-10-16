@@ -512,6 +512,9 @@ type connState struct {
 	pendingStream *eventSub
 	streaming     bool
 
+	// listingPush says the client's hello set ListingPush: it reads
+	// MsgSessionsChanged. Guarded by mu. See daemon_listing_push.go.
+	listingPush bool
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
@@ -987,6 +990,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// point somewhere from the start. See ssh_agent_follow.go.
 	d.agentEnsureSession(s.ID)
 	s.setIdleWakes(&d.wakes)
+	d.wakes.listing.Set()
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
 	// change the daemon made itself shows up in a live TUI without the verb that
@@ -1244,6 +1248,7 @@ func (d *Daemon) onSessionRenamed(s *Session, old string) {
 // PTYs are closed and their windows are gone, but the socket stays open, so the
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
+	d.wakes.listing.Set()
 	// The session's ssh agent link goes with it.
 	d.agentForgetSession(s.ID)
 	d.displayForgetSession(s.ID)
@@ -1439,6 +1444,7 @@ func (d *Daemon) Start() error {
 	go d.cleanupLoop()
 	go d.stallMonitor()
 	go d.agentMonitor()
+	go d.listingNotifier()
 
 	return nil
 }
@@ -1869,6 +1875,8 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		d.clientsMu.Lock()
 		delete(d.clients, clientID)
 		d.clientsMu.Unlock()
+		// The listing says which sessions have a client.
+		d.wakes.listing.Set()
 		// A connection to a host carries the person's agent for that
 		// host's link, with no session here, so it is forgotten on close.
 		d.agentForgetHosts(clientID)
@@ -2023,6 +2031,11 @@ func (d *Daemon) serveMessage(cs *connState, msg *Message, release func()) {
 }
 
 func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
+	// A request can change what the listing shows: an attach, a rename, a
+	// new session. Asking for the listing changes nothing.
+	if msg.Type != MsgList {
+		d.wakes.listing.Set()
+	}
 	switch msg.Type {
 	case MsgHello:
 		return d.handleHello(cs, msg)

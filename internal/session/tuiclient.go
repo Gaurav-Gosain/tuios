@@ -210,6 +210,10 @@ type TUIClient struct {
 	// sidebarOps says the daemon's welcome offered MsgSidebarVisibility. See
 	// sidebar_visibility.go.
 	sidebarOps atomic.Bool
+	// listingPush says the daemon's welcome offered ListingPush: it sends
+	// MsgSessionsChanged, and the listing needs no poll. See
+	// daemon_listing_push.go.
+	listingPush atomic.Bool
 	// sessionUsed says the daemon's welcome offered MsgSessionUsed, and
 	// usedMu, usedAt and usedSession throttle it. See session_used.go.
 	sessionUsed atomic.Bool
@@ -265,6 +269,9 @@ type TUIClient struct {
 	// hostsChangedHandler takes the daemon's MsgHostsChanged push. See
 	// OnHostsChanged.
 	hostsChangedHandler HostsChangedHandler
+	// sessionsChangedHandler takes the daemon's MsgSessionsChanged push. See
+	// OnSessionsChanged.
+	sessionsChangedHandler func()
 	// pasteRefusedHandler takes a paste the daemon refused. See
 	// paste_retry.go. pastes holds the large inputs sent and not answered,
 	// and pasteBarriers the pings behind them, by request id, under
@@ -406,6 +413,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		// drops a value that is not a short printable name.
 		Term:      c.Term,
 		ColorTerm: c.ColorTerm,
+		// See daemon_listing_push.go.
+		ListingPush: true,
 	}
 
 	// Add graphics capabilities if provided
@@ -496,6 +505,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	c.masterOps.Store(welcome.MasterLayoutOps)
 	c.sidebarOps.Store(welcome.SidebarOps && !legacySidebar())
 	c.sessionUsed.Store(welcome.SessionUsed)
+	c.listingPush.Store(welcome.ListingPush)
 	c.typeAtPromptSupported = welcome.TypeAtPrompt
 	c.graphicsSupported = welcome.ClientGraphics
 	c.windowSize = welcome.WindowSize && hello.WindowSize
@@ -1112,6 +1122,19 @@ func (c *TUIClient) OnHostsChanged(handler HostsChangedHandler) {
 	c.hostsChangedHandler = handler
 	c.multiClientMu.Unlock()
 }
+
+// OnSessionsChanged registers the handler for MsgSessionsChanged, the
+// daemon's push when the session listing changed. It runs on the read-loop
+// goroutine, so it only queues.
+func (c *TUIClient) OnSessionsChanged(handler func()) {
+	c.multiClientMu.Lock()
+	c.sessionsChangedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
+// ListingPush reports whether the daemon pushes listing changes, so the
+// listing needs no poll.
+func (c *TUIClient) ListingPush() bool { return c.listingPush.Load() }
 
 // WatchDir asks the daemon to push MsgDirChanged when the names in dir change,
 // for the folder listed for windowID. It replaces the last watch, and an empty
@@ -1813,6 +1836,14 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.multiClientMu.RUnlock()
 		if handler != nil {
 			handler(payload)
+		}
+
+	case MsgSessionsChanged:
+		c.multiClientMu.RLock()
+		handler := c.sessionsChangedHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler()
 		}
 
 	case MsgDetached:

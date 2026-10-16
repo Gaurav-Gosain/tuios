@@ -26,23 +26,30 @@ type idleWakes struct {
 	// input and resizes, and what it expires is a routed request.
 	cleanup wakeLatch
 
-	// detectTicks, stallTicks and cleanupTicks count the timer fires of
-	// agentMonitor, stallMonitor and cleanupLoop.
+	// listing wakes listingNotifier: something a client's session listing
+	// shows may have changed. See daemon_listing_push.go.
+	listing wakeLatch
+
+	// detectTicks, stallTicks, cleanupTicks and listingTicks count the timer
+	// fires of agentMonitor, stallMonitor, cleanupLoop and listingNotifier.
 	detectTicks  atomic.Int64
 	stallTicks   atomic.Int64
 	cleanupTicks atomic.Int64
+	listingTicks atomic.Int64
 }
 
 func (w *idleWakes) init() {
 	w.detect.init()
 	w.stall.init()
 	w.cleanup.init()
+	w.listing.init()
 }
 
 // activity is a pane printing or taking input.
 func (w *idleWakes) activity() {
 	w.detect.Set()
 	w.cleanup.Set()
+	w.listing.Set()
 }
 
 // stateChanged is a change to a session's state: a window opened or closed,
@@ -51,6 +58,7 @@ func (w *idleWakes) stateChanged() {
 	w.detect.Set()
 	w.stall.Set()
 	w.cleanup.Set()
+	w.listing.Set()
 }
 
 // setIdleWakes points the session at the daemon's latches. The daemon calls it
@@ -63,6 +71,15 @@ func (s *Session) setIdleWakes(w *idleWakes) { s.wakes.Store(w) }
 func (s *Session) noteActivity() {
 	if w := s.wakes.Load(); w != nil {
 		w.activity()
+	}
+}
+
+// noteListingChange raises the listing latch for a change to what this
+// session's listing shows outside its state: a title, a folder, a branch, the
+// time it was last active.
+func (s *Session) noteListingChange() {
+	if w := s.wakes.Load(); w != nil {
+		w.listing.Set()
 	}
 }
 

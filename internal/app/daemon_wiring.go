@@ -116,6 +116,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a hosts change")
 		}
 	})
+	// The daemon's session listing changed. The rail refreshes in Update,
+	// where the refresh plan lives; see SessionsChangedMsg.
+	client.OnSessionsChanged(func() {
+		if m.QueueClientEvent(ClientEvent{Type: "sessions-changed"}) {
+			clientLog("ClientEventChan full, displaced an event for a listing change")
+		}
+	})
 	// A paste the daemon refused twice, or one too large to send. The person
 	// is told, so a paste never vanishes. See session/paste_retry.go.
 	client.OnPasteRefused(func(_, message string) {

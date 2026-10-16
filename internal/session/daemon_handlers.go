@@ -17,6 +17,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	payload.Term, payload.ColorTerm = helloTermValue(payload.Term), helloTermValue(payload.ColorTerm)
 	cs.hello = &payload
 	cs.mu.Lock()
+	cs.listingPush = payload.ListingPush
 	changed := cs.treeOps != payload.LayoutTreeOps || cs.scratchWS != payload.ScratchWorkspaces
 	cs.treeOps = payload.LayoutTreeOps
 	cs.scratchWS = payload.ScratchWorkspaces
@@ -97,6 +98,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		SessionUsed: true,
 		// See detach_client.go.
 		DetachOthers: true,
+		// See daemon_listing_push.go.
+		ListingPush: true,
 	})
 }
 
