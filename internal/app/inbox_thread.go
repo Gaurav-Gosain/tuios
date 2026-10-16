@@ -763,7 +763,7 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 	}
 	right, edRow := m.threadLines(e, threadW, rows, now)
 	if a.sheet != nil {
-		right, edRow = fitLines(m.bulkSheetLines(threadW), threadW, rows), -1
+		right, edRow = fitLines(m.bulkSheetLines(threadW, rows), threadW, rows), -1
 	}
 
 	var left []string

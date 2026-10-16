@@ -2288,8 +2288,11 @@ With marks:
   the list has been on screen for a moment. A risky approval, a plan, and one
   the terminal cannot show whole are never in the list: the list says
   `2 need a second look. Allow them one by one.` An approval that changed
-  after the list showed it is not allowed. `2`, always, is never given to
-  many agents at once.
+  after the list showed it is not allowed. The list holds only the approvals
+  the screen has room to show whole. It says how many more wait, and `enter`
+  leaves them out. Press `1` again to see them. `esc`, any other key, a click
+  and closing the Inbox close the list. `2`, always, is never given to many
+  agents at once.
 - `d` dismisses the marked agents' Inbox items, and `z` snoozes them for the
   length you pick next. An item that cannot be snoozed, such as a held
   approval, is left out.

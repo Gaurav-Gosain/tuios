@@ -60,7 +60,7 @@ func TestBulkAllowLeavesOutWhatNeedsASecondLook(t *testing.T) {
 	if sheet == nil || len(sheet.allow) != 1 || sheet.allow[0].item.RequestID != "r1" || len(sheet.held) != 2 {
 		t.Fatalf("sheet = %+v, want r1 to allow and two held back", sheet)
 	}
-	m.bulkSheetLines(80)
+	m.bulkSheetLines(80, 30)
 	// Too soon: nothing goes, and the sheet stays.
 	if cmd := m.InboxAgentsSheetKey("enter"); cmd != nil || m.Inbox.agents.sheet == nil {
 		t.Fatal("enter allowed before the list was on screen for the settle time")
@@ -74,7 +74,7 @@ func TestBulkAllowLeavesOutWhatNeedsASecondLook(t *testing.T) {
 	// An approval that changed after the list showed it is not allowed.
 	m, q = bulkOS(t)
 	m.InboxAgentsBulkAllow()
-	m.bulkSheetLines(80)
+	m.bulkSheetLines(80, 30)
 	m.Inbox.agents.sheet.at = time.Now().Add(-time.Second)
 	for i := range m.Inbox.Items {
 		if m.Inbox.Items[i].RequestID == "r1" {
@@ -84,6 +84,29 @@ func TestBulkAllowLeavesOutWhatNeedsASecondLook(t *testing.T) {
 	runCmds(m.InboxAgentsSheetKey("enter"))
 	if got := sentApprovals(q); len(got) != 0 {
 		t.Fatalf("an approval that changed after the list was allowed: %v", got)
+	}
+}
+
+// TestBulkAllowTakesOnlyWhatTheScreenShowed: on a screen with room for one
+// approval, the sheet draws one, and enter allows that one and not the two
+// the screen left out.
+func TestBulkAllowTakesOnlyWhatTheScreenShowed(t *testing.T) {
+	m, q := bulkOS(t)
+	for i := range m.Inbox.Items {
+		m.Inbox.Items[i].Risk, m.Inbox.Items[i].Kind = nil, session.AttentionApproval
+	}
+	m.InboxAgentsBulkAllow()
+	if n := len(m.Inbox.agents.sheet.allow); n != 3 {
+		t.Fatalf("the sheet holds %d approvals, want 3", n)
+	}
+	lines := m.bulkSheetLines(80, 5)
+	if len(lines) > 5 && m.Inbox.agents.sheet.shown > 1 {
+		t.Fatalf("drew %d lines in 5 rows and %d approvals", len(lines), m.Inbox.agents.sheet.shown)
+	}
+	m.Inbox.agents.sheet.at = time.Now().Add(-time.Second)
+	runCmds(m.InboxAgentsSheetKey("enter"))
+	if got := sentApprovals(q); len(got) != 1 || got["r1"] != session.ApprovalOnce {
+		t.Fatalf("allowed %v, want r1 alone: the others were not on the screen", got)
 	}
 }
 

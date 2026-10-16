@@ -442,6 +442,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		return m.AgentMailOpenSelected()
 	case "inbox":
 		if m.Inbox.agents.on {
+			// A click with the bulk allow's sheet up closes the sheet,
+			// as any key but enter does, and goes nowhere.
+			if m.Inbox.agents.sheet != nil {
+				m.Inbox.agents.sheet = nil
+				return nil
+			}
 			m.InboxSelect(row.Idx)
 			return m.InboxAgentsGo()
 		}

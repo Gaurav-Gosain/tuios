@@ -541,7 +541,7 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 		Hints:      hints,
 		DetailFor: func(width int) []string {
 			if a.sheet != nil {
-				return m.bulkSheetLines(width)
+				return m.bulkSheetLines(width, m.bulkSheetRows())
 			}
 			if replying {
 				return replyDetail(width)

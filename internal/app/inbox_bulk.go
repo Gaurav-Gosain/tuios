@@ -28,7 +28,9 @@ import (
 //   - 3 denies every held approval of the marked agents.
 //   - 1 opens a sheet that lists each approval it would allow, whole. enter
 //     allows them, once the sheet has been on screen for the settle time,
-//     and only those that are as the sheet showed them. A risky approval, a
+//     and only those that are as the sheet showed them. An approval the
+//     screen has no room to show is not allowed: the sheet says how many
+//     wait, and 1 again shows them. A risky approval, a
 //     plan, and one with characters the terminal cannot show are never in a
 //     bulk allow. They stay marked, and the sheet says to allow them one by
 //     one.
@@ -51,7 +53,12 @@ type bulkSheet struct {
 	allow []bulkAllow
 	// held are the approvals left out, as their agents' names.
 	held []string
-	// at is when the sheet was first drawn.
+	// shown is how many of allow, from the first, the last frame drew
+	// whole. enter allows those and no more.
+	shown int
+	// at is when the sheet was first drawn as it is now. It starts again
+	// when shown changes, so an approval that came into view has to be on
+	// screen for the settle time too.
 	at time.Time
 }
 
@@ -261,12 +268,12 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 		return nil
 	}
 	a.sheet = nil
-	if len(sheet.allow) == 0 {
+	if sheet.shown == 0 {
 		return nil
 	}
 	var cmds []tea.Cmd
 	changed := 0
-	for _, b := range sheet.allow {
+	for _, b := range sheet.allow[:sheet.shown] {
 		it, ok := m.inboxItem(b.item.ID)
 		if !ok || inboxShownKey(it) != b.key {
 			// Answered, gone or changed since the sheet showed it: what
@@ -284,12 +291,11 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// bulkSheetLines draws the sheet in width cells.
-func (m *OS) bulkSheetLines(width int) []string {
+// bulkSheetLines draws the sheet in width cells and at most rows lines. Each
+// approval is drawn whole or not at all, and the sheet records how many it
+// drew: enter allows only what the person could read.
+func (m *OS) bulkSheetLines(width, rows int) []string {
 	sheet := m.Inbox.agents.sheet
-	if sheet.at.IsZero() {
-		sheet.at = time.Now()
-	}
 	pal := theme.UI()
 	bg := pal.Surface
 	st := overlay.Style(bg)
@@ -301,19 +307,6 @@ func (m *OS) bulkSheetLines(width int) []string {
 			out = append(out, overlay.Fill(st.Foreground(ink).Render("  "+l), width, bg))
 		}
 	}
-	if n := len(sheet.allow); n > 0 {
-		head := "Allow " + strconv.Itoa(n) + " approvals once?"
-		if n == 1 {
-			head = "Allow 1 approval once?"
-		}
-		out = append(out, overlay.Fill(st.Foreground(fg).Bold(true).Render("  "+head), width, bg))
-		for _, b := range sheet.allow {
-			out = append(out, overlay.Fill(st.Foreground(fg).Render("  "+ansi.Truncate(inboxWho(b.item)+":", width-2, "…")), width, bg))
-			for _, l := range inboxApprovalDetail(b.item, width-2) {
-				out = append(out, overlay.Fill(st.Foreground(dim).Render("  "+l), width, bg))
-			}
-		}
-	}
 	if n := len(sheet.held); n > 0 {
 		words := strconv.Itoa(n) + " need a second look. Allow them one by one."
 		if n == 1 {
@@ -321,12 +314,65 @@ func (m *OS) bulkSheetLines(width int) []string {
 		}
 		line(words+" ("+strings.Join(sheet.held, ", ")+")", overlay.Readable(pal.Warning, bg))
 	}
-	return out
+	held := out
+	out = nil
+	// The approvals, each whole, under the heading line, in the room the
+	// held note and the more line (two lines) leave. Whatever does not fit
+	// is cut from the bottom of the sheet, so it is never an approval.
+	const moreRows = 2
+	room := rows - 1 - len(held) - moreRows
+	var items [][]string
+	used := 0
+	for i, b := range sheet.allow {
+		lines := []string{overlay.Fill(st.Foreground(fg).Render("  "+ansi.Truncate(inboxWho(b.item)+":", width-2, "…")), width, bg)}
+		for _, l := range wrapPlain(printableTitle(b.item.Summary), max(width-4, 8)) {
+			lines = append(lines, overlay.Fill(st.Foreground(dim).Render("    "+l), width, bg))
+		}
+		left := room
+		if i == len(sheet.allow)-1 {
+			// The last approval needs no more line under it.
+			left += moreRows
+		}
+		if i == 0 && len(lines) > left {
+			// A held note too long to leave room for one approval gives
+			// way: the approval goes first, and the note is cut.
+			left = rows - 1
+		}
+		if used+len(lines) > left {
+			break
+		}
+		items = append(items, lines)
+		used += len(lines)
+	}
+	if len(items) != sheet.shown {
+		sheet.shown, sheet.at = len(items), time.Now()
+	}
+	if sheet.at.IsZero() {
+		sheet.at = time.Now()
+	}
+	if n := len(items); n > 0 {
+		head := "Allow " + strconv.Itoa(n) + " approvals once?"
+		if n == 1 {
+			head = "Allow 1 approval once?"
+		}
+		out = append(out, overlay.Fill(st.Foreground(fg).Bold(true).Render("  "+head), width, bg))
+		for _, lines := range items {
+			out = append(out, lines...)
+		}
+	}
+	if more := len(sheet.allow) - len(items); more > 0 {
+		words := strconv.Itoa(more) + " more do not fit on the screen. This allow leaves them out. Press 1 again to see them."
+		if len(items) == 0 {
+			words = "The screen is too small to show an approval whole. Make the window larger, or allow them one by one."
+		}
+		line(words, overlay.Readable(pal.Warning, bg))
+	}
+	return append(out, held...)
 }
 
 // bulkSheetHints are the sheet's keys.
 func (m *OS) bulkSheetHints() []overlay.Hint {
-	if len(m.Inbox.agents.sheet.allow) == 0 {
+	if m.Inbox.agents.sheet.shown == 0 {
 		return []overlay.Hint{{Key: "esc", Label: "close"}}
 	}
 	return []overlay.Hint{{Key: overlay.EnterKey(), Label: "allow"}, {Key: "esc", Label: "cancel"}}
@@ -413,4 +459,15 @@ func (m *OS) bulkHints() []overlay.Hint {
 	)
 	hints = append(hints, m.keyHints("inbox_dismiss", "dismiss", "inbox_snooze", "snooze")...)
 	return append(hints, overlay.Hint{Key: "space", Label: "mark"}, overlay.Hint{Key: "*", Label: "all or none"}, overlay.Hint{Key: "esc", Label: "close"})
+}
+
+// bulkSheetRows is the room the sheet has under the list on a narrow screen:
+// the screen less the panel's frame, its footer, the shortest list and the
+// lines between them.
+func (m *OS) bulkSheetRows() int {
+	rh := m.panelRoomHeight()
+	if rh <= 0 {
+		return m.threadBodyRows()
+	}
+	return max(rh-panelChromeRows-minPanelRows-6, 1)
 }
