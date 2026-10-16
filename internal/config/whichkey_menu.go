@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -50,185 +51,218 @@ func row(action, desc string) menuRow {
 	return menuRow{parts: []menuPart{{action, desc}}, desc: desc}
 }
 
-func subRow(action, desc string) menuRow {
-	r := row(action, desc)
-	r.submenu = true
-	return r
-}
-
 func pair(desc string, parts ...menuPart) menuRow { return menuRow{parts: parts, desc: desc} }
 
 func part(action, desc string) menuPart { return menuPart{action, desc} }
-
-// numbered is a row of actions that differ only in a number, such as the nine
-// workspace switches.
-func numbered(desc string, actions ...string) menuRow {
-	r := menuRow{desc: desc, numbered: true}
-	for _, a := range actions {
-		r.parts = append(r.parts, menuPart{a, desc})
-	}
-	return r
-}
-
-// actionRun is the actions prefix+from .. prefix+to, the names a numbered row
-// is built from.
-func actionRun(prefix string, from, to, step int) []string {
-	var out []string
-	for n := from; n <= to; n += step {
-		out = append(out, fmt.Sprintf("%s%d", prefix, n))
-	}
-	return out
-}
 
 type menuSection struct {
 	title string
 	rows  []menuRow
 }
 
+// The menus are tables, not code that builds them: built per call, the
+// composite literals were 24 KB of machine code, and a package-level literal
+// of constants is data the linker lays out once. The rows that depend on
+// MenuState are put in by menuSections, on a copy.
+
+// workspaceMenuRows is the workspace menu (leader w). The rows after rename are
+// bound by a preset whose tab mode opens this menu (zellij).
+var workspaceMenuRows = []menuRow{
+	{parts: []menuPart{{"workspace_prefix_switch_1", "Switch to workspace"}, {"workspace_prefix_switch_2", "Switch to workspace"}, {"workspace_prefix_switch_3", "Switch to workspace"}, {"workspace_prefix_switch_4", "Switch to workspace"}, {"workspace_prefix_switch_5", "Switch to workspace"}, {"workspace_prefix_switch_6", "Switch to workspace"}, {"workspace_prefix_switch_7", "Switch to workspace"}, {"workspace_prefix_switch_8", "Switch to workspace"}, {"workspace_prefix_switch_9", "Switch to workspace"}}, desc: "Switch to workspace", numbered: true},
+	{parts: []menuPart{{"workspace_prefix_move_1", "Move window to workspace"}, {"workspace_prefix_move_2", "Move window to workspace"}, {"workspace_prefix_move_3", "Move window to workspace"}, {"workspace_prefix_move_4", "Move window to workspace"}, {"workspace_prefix_move_5", "Move window to workspace"}, {"workspace_prefix_move_6", "Move window to workspace"}, {"workspace_prefix_move_7", "Move window to workspace"}, {"workspace_prefix_move_8", "Move window to workspace"}, {"workspace_prefix_move_9", "Move window to workspace"}}, desc: "Move window to workspace", numbered: true},
+	{parts: []menuPart{{"workspace_prefix_rename", "Rename workspace"}}, desc: "Rename workspace"},
+	{parts: []menuPart{{"new_workspace", "New workspace"}}, desc: "New workspace"},
+	{parts: []menuPart{{"close_workspace", "Close workspace"}}, desc: "Close workspace"},
+	{parts: []menuPart{{"prev_workspace", "Previous workspace"}, {"next_workspace", "Next workspace"}}, desc: "Prev/next workspace"},
+	{parts: []menuPart{{"last_workspace", "Last workspace"}}, desc: "Last workspace"},
+	{parts: []menuPart{{"workspace_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// minimizeMenuRows is the minimize menu (leader m). Row 1 says how many
+// windows are minimized; see menuSections.
+var minimizeMenuRows = []menuRow{
+	{parts: []menuPart{{"minimize_prefix_focused", "Minimize focused window"}}, desc: "Minimize focused window"},
+	{parts: []menuPart{{"minimize_prefix_restore_1", "Restore window"}, {"minimize_prefix_restore_2", "Restore window"}, {"minimize_prefix_restore_3", "Restore window"}, {"minimize_prefix_restore_4", "Restore window"}, {"minimize_prefix_restore_5", "Restore window"}, {"minimize_prefix_restore_6", "Restore window"}, {"minimize_prefix_restore_7", "Restore window"}, {"minimize_prefix_restore_8", "Restore window"}, {"minimize_prefix_restore_9", "Restore window"}}, desc: "Restore window", numbered: true},
+	{parts: []menuPart{{"minimize_prefix_restore_all", "Restore all"}}, desc: "Restore all"},
+	{parts: []menuPart{{"minimize_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// windowMenuRows is the window menu (leader t). The rows after tiling are bound
+// by a preset whose pane mode opens this menu (zellij).
+var windowMenuRows = []menuRow{
+	{parts: []menuPart{{"window_prefix_new", "New window"}}, desc: "New window"},
+	{parts: []menuPart{{"window_prefix_close", "Close window"}}, desc: "Close window"},
+	{parts: []menuPart{{"window_prefix_rename", "Rename window"}}, desc: "Rename window"},
+	{parts: []menuPart{{"window_prefix_next", "Next window"}}, desc: "Next window"},
+	{parts: []menuPart{{"window_prefix_prev", "Previous window"}}, desc: "Previous window"},
+	{parts: []menuPart{{"window_prefix_tiling", "Toggle tiling mode"}}, desc: "Toggle tiling mode"},
+	{parts: []menuPart{{"split_vertical", "Split right"}}, desc: "Split right"},
+	{parts: []menuPart{{"split_horizontal", "Split down"}}, desc: "Split down"},
+	{parts: []menuPart{{"prefix_fullscreen", "Toggle zoom"}}, desc: "Toggle zoom"},
+	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"terminal_focus_down", "Focus pane down"}, {"terminal_focus_up", "Focus pane up"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
+	{parts: []menuPart{{"window_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// debugMenuRows is the debug menu (leader D).
+var debugMenuRows = []menuRow{
+	{parts: []menuPart{{"debug_prefix_logs", "Toggle log viewer"}}, desc: "Toggle log viewer"},
+	{parts: []menuPart{{"debug_prefix_cache", "Toggle cache statistics"}}, desc: "Toggle cache statistics"},
+	{parts: []menuPart{{"debug_prefix_showkeys", "Toggle showkeys overlay"}}, desc: "Toggle showkeys overlay"},
+	{parts: []menuPart{{"debug_prefix_animations", "Toggle animations"}}, desc: "Toggle animations"},
+	{parts: []menuPart{{"debug_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// tapeMenuRows is the tape menu (leader T).
+var tapeMenuRows = []menuRow{
+	{parts: []menuPart{{"tape_prefix_manager", "Open tape manager"}}, desc: "Open tape manager"},
+	{parts: []menuPart{{"tape_prefix_review", "Review project tape"}}, desc: "Review project tape"},
+	{parts: []menuPart{{"tape_prefix_record", "Start recording"}}, desc: "Start recording"},
+	{parts: []menuPart{{"tape_prefix_stop", "Stop recording"}}, desc: "Stop recording"},
+	{parts: []menuPart{{"tape_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// layoutMenuRows is the layout menu (leader L).
+var layoutMenuRows = []menuRow{
+	{parts: []menuPart{{"layout_prefix_load", "Load layout"}}, desc: "Load layout"},
+	{parts: []menuPart{{"layout_prefix_save", "Save layout"}}, desc: "Save layout"},
+	{parts: []menuPart{{"snap_corner_1", "Snap window to a corner"}, {"snap_corner_2", "Snap window to a corner"}, {"snap_corner_3", "Snap window to a corner"}, {"snap_corner_4", "Snap window to a corner"}}, desc: "Snap window to a corner", numbered: true},
+	{parts: []menuPart{{"resize_width_50", "Resize focused window width (%)"}, {"resize_width_60", "Resize focused window width (%)"}, {"resize_width_70", "Resize focused window width (%)"}, {"resize_width_80", "Resize focused window width (%)"}, {"resize_width_90", "Resize focused window width (%)"}}, desc: "Resize focused window width (%)", numbered: true},
+	{parts: []menuPart{{"resize_height_50", "Resize focused window height (%)"}, {"resize_height_60", "Resize focused window height (%)"}, {"resize_height_70", "Resize focused window height (%)"}, {"resize_height_80", "Resize focused window height (%)"}, {"resize_height_90", "Resize focused window height (%)"}}, desc: "Resize focused window height (%)", numbered: true},
+	{parts: []menuPart{{"cycle_master_position", "Move master to next side"}}, desc: "Move master to next side"},
+	{parts: []menuPart{{"swap_with_master", "Swap with master"}}, desc: "Swap with master"},
+	{parts: []menuPart{{"focus_master", "Focus master"}}, desc: "Focus master"},
+	{parts: []menuPart{{"add_master", "Add master"}, {"remove_master", "Remove master"}}, desc: "Add/remove master"},
+	{parts: []menuPart{{"layout_prefix_cancel", "Cancel"}}, desc: "Cancel"},
+}
+
+// leaderWorkspaceRows is the leader menu's Workspaces section. A preset
+// binds these (tmux's c n p l 0-9 , & !). A row whose action has no key after
+// the leader is left out, so the tuios menu does not show the section.
+var leaderWorkspaceRows = []menuRow{
+	{parts: []menuPart{{"new_workspace", "New workspace"}}, desc: "New workspace"},
+	{parts: []menuPart{{"next_workspace", "Next workspace"}, {"prev_workspace", "Previous workspace"}}, desc: "Next/prev workspace"},
+	{parts: []menuPart{{"last_workspace", "Last workspace"}}, desc: "Last workspace"},
+	{parts: []menuPart{{"switch_workspace_1", "Go to workspace"}, {"switch_workspace_2", "Go to workspace"}, {"switch_workspace_3", "Go to workspace"}, {"switch_workspace_4", "Go to workspace"}, {"switch_workspace_5", "Go to workspace"}, {"switch_workspace_6", "Go to workspace"}, {"switch_workspace_7", "Go to workspace"}, {"switch_workspace_8", "Go to workspace"}, {"switch_workspace_9", "Go to workspace"}}, desc: "Go to workspace", numbered: true},
+	{parts: []menuPart{{"rename_workspace", "Rename workspace"}}, desc: "Rename workspace"},
+	{parts: []menuPart{{"close_workspace", "Close workspace"}}, desc: "Close workspace"},
+	{parts: []menuPart{{"break_pane", "Pane to a new workspace"}}, desc: "Pane to a new workspace"},
+}
+
+// leaderWindowRows is the leader menu's Windows section.
+var leaderWindowRows = []menuRow{
+	{parts: []menuPart{{"prefix_new_window", "Create window"}}, desc: "Create window"},
+	{parts: []menuPart{{"prefix_close_window", "Close window"}}, desc: "Close window"},
+	{parts: []menuPart{{"prefix_rename_window", "Rename window"}}, desc: "Rename window"},
+	{parts: []menuPart{{"prefix_next_window", "Next window"}, {"prefix_prev_window", "Previous window"}}, desc: "Next/prev window"},
+	{parts: []menuPart{{"prefix_select_0", "Jump to window"}, {"prefix_select_1", "Jump to window"}, {"prefix_select_2", "Jump to window"}, {"prefix_select_3", "Jump to window"}, {"prefix_select_4", "Jump to window"}, {"prefix_select_5", "Jump to window"}, {"prefix_select_6", "Jump to window"}, {"prefix_select_7", "Jump to window"}, {"prefix_select_8", "Jump to window"}, {"prefix_select_9", "Jump to window"}}, desc: "Jump to window", numbered: true},
+	{parts: []menuPart{{"prefix_fullscreen", "Toggle zoom"}}, desc: "Toggle zoom"},
+	{parts: []menuPart{{"minimize_window", "Minimize window"}}, desc: "Minimize window"},
+}
+
+// leaderPaneRows is the leader menu's Panes section. The arrows walk panes,
+// and the prefix stays armed for a moment so a run of them costs one prefix
+// press (see the repeat window in internal/input/prefix_repeat.go). The pane
+// labels share the hints row: one row more made the panel reach the pane's
+// top border at 80x24.
+var leaderPaneRows = []menuRow{
+	{parts: []menuPart{{"terminal_focus_left", "Focus pane left"}, {"terminal_focus_up", "Focus pane up"}, {"terminal_focus_down", "Focus pane down"}, {"terminal_focus_right", "Focus pane right"}}, desc: "Focus pane"},
+	{parts: []menuPart{{"prefix_toggle_tiling", "Toggle tiling"}}, desc: "Toggle tiling"},
+	{parts: []menuPart{{"prefix_split_horizontal", "Split horizontal"}}, desc: "Split horizontal"},
+	{parts: []menuPart{{"prefix_split_vertical", "Split vertical"}}, desc: "Split vertical"},
+	{parts: []menuPart{{"prefix_rotate_split", "Rotate split"}}, desc: "Rotate split"},
+	{parts: []menuPart{{"prefix_equalize_splits", "Equalize splits"}}, desc: "Equalize splits"},
+	{parts: []menuPart{{"hints", "Hints"}, {"display_panes", "Pane labels"}}, desc: "Hints, labels"},
+	{parts: []menuPart{{"last_pane", "Last pane"}}, desc: "Last pane"},
+	{parts: []menuPart{{"mark_pane", "Mark pane"}}, desc: "Mark pane"},
+	{parts: []menuPart{{"resize_pane_left_5", "Resize pane left"}, {"resize_pane_up_5", "Resize pane up"}, {"resize_pane_down_5", "Resize pane down"}, {"resize_pane_right_5", "Resize pane right"}}, desc: "Resize pane"},
+	{parts: []menuPart{{"cycle_layout", "Next layout"}}, desc: "Next layout"},
+}
+
+// leaderSessionRows is the leader menu's Sessions section, before the detach
+// and quit rows menuSections adds for the session kind.
+var leaderSessionRows = []menuRow{
+	{parts: []menuPart{{"prev_session", "Previous session"}, {"next_session", "Next session"}}, desc: "Prev/next session"},
+	{parts: []menuPart{{"prefix_session_switcher", "Sessions"}}, desc: "Sessions"},
+	{parts: []menuPart{{"prefix_workspace_switcher", "Workspaces"}}, desc: "Workspaces"},
+	{parts: []menuPart{{"choose_tree", "Find a pane"}}, desc: "Find a pane"},
+	{parts: []menuPart{{"prefix_close_session", "Close session"}}, desc: "Close session"},
+	{parts: []menuPart{{"toggle_scratch", "Scratch session"}}, desc: "Scratch session"},
+	{parts: []menuPart{{"last_session", "Last session"}}, desc: "Last session"},
+	{parts: []menuPart{{"rename_session", "Rename session"}}, desc: "Rename session"},
+}
+
+// leaderMenuRows is the leader menu's Menus section.
+var leaderMenuRows = []menuRow{
+	{parts: []menuPart{{"prefix_tuios", "tuios"}}, desc: "tuios", submenu: true},
+	{parts: []menuPart{{"prefix_workspace", "Workspace"}}, desc: "Workspace", submenu: true},
+	{parts: []menuPart{{"prefix_minimize", "Minimize"}}, desc: "Minimize", submenu: true},
+	{parts: []menuPart{{"prefix_window", "Window"}}, desc: "Window", submenu: true},
+	{parts: []menuPart{{"prefix_layout", "Layout"}}, desc: "Layout", submenu: true},
+	{parts: []menuPart{{"prefix_tape", "Tape"}}, desc: "Tape", submenu: true},
+	{parts: []menuPart{{"prefix_debug", "Debug"}}, desc: "Debug", submenu: true},
+}
+
+// leaderToolRows is the leader menu's Tools section.
+var leaderToolRows = []menuRow{
+	{parts: []menuPart{{"prefix_command_palette", "Command palette"}}, desc: "Command palette"},
+	{parts: []menuPart{{"reload_config", "Reload config"}}, desc: "Reload config"},
+	{parts: []menuPart{{"send_prefix", "Send the leader"}}, desc: "Send the leader"},
+	{parts: []menuPart{{"launcher", "Launcher"}}, desc: "Launcher"},
+	{parts: []menuPart{{"prefix_settings", "Settings"}}, desc: "Settings"},
+	{parts: []menuPart{{"prefix_keybinds", "Keybindings"}}, desc: "Keybindings"},
+	{parts: []menuPart{{"prefix_screenshot", "Screenshot"}}, desc: "Screenshot"},
+	{parts: []menuPart{{"prefix_transfers", "Copies"}}, desc: "Copies"},
+	{parts: []menuPart{{"prefix_jump_notif", "Newest message"}}, desc: "Newest message"},
+	{parts: []menuPart{{"prefix_last_message", "Show last message"}}, desc: "Show last message"},
+	{parts: []menuPart{{"prefix_help", "Help"}}, desc: "Help"},
+}
+
+// leaderAgentRows is the leader menu's Agents section.
+var leaderAgentRows = []menuRow{
+	{parts: []menuPart{{"prefix_inbox", "Inbox"}}, desc: "Inbox"},
+	{parts: []menuPart{{"prefix_next_attention", "Oldest waiting"}}, desc: "Oldest waiting"},
+	{parts: []menuPart{{"prefix_mail", "Inbox: mail"}}, desc: "Inbox: mail"},
+	{parts: []menuPart{{"prefix_next_finished", "Newest finished"}}, desc: "Newest finished"},
+	{parts: []menuPart{{"prefix_review", "Review changes"}}, desc: "Review changes"},
+	{parts: []menuPart{{"prefix_agents_settings", "Agents settings"}}, desc: "Agents settings"},
+}
+
 // menuSections is the layout of one which-key menu. The sub-prefixes are one
 // untitled section each: they are a handful of lines and a heading over them
 // would say what the panel's title already does.
 func menuSections(prefixType string, st MenuState) []menuSection {
-	one := func(rows ...menuRow) []menuSection { return []menuSection{{rows: rows}} }
-	cancel := func(action string) menuRow { return row(action, "Cancel") }
+	one := func(rows []menuRow) []menuSection { return []menuSection{{rows: rows}} }
 	switch prefixType {
 	case "workspace":
-		return one(
-			numbered("Switch to workspace", actionRun("workspace_prefix_switch_", 1, 9, 1)...),
-			numbered("Move window to workspace", actionRun("workspace_prefix_move_", 1, 9, 1)...),
-			row("workspace_prefix_rename", "Rename workspace"),
-			// Bound by a preset whose tab mode opens this menu (zellij).
-			row("new_workspace", "New workspace"),
-			row("close_workspace", "Close workspace"),
-			pair("Prev/next workspace", part("prev_workspace", "Previous workspace"), part("next_workspace", "Next workspace")),
-			row("last_workspace", "Last workspace"),
-			cancel("workspace_prefix_cancel"),
-		)
+		return one(workspaceMenuRows)
 	case "minimize":
-		restore := "Restore window"
+		rows := minimizeMenuRows
 		if st.Minimized >= 0 {
-			restore = fmt.Sprintf("Restore window (%d minimized)", st.Minimized)
+			// The restore row says how many windows are minimized.
+			rows = slices.Clone(rows)
+			r := rows[1]
+			r.desc = fmt.Sprintf("Restore window (%d minimized)", st.Minimized)
+			r.parts = slices.Clone(r.parts)
+			for i := range r.parts {
+				r.parts[i].desc = r.desc
+			}
+			rows[1] = r
 		}
-		return one(
-			row("minimize_prefix_focused", "Minimize focused window"),
-			numbered(restore, actionRun("minimize_prefix_restore_", 1, 9, 1)...),
-			row("minimize_prefix_restore_all", "Restore all"),
-			cancel("minimize_prefix_cancel"),
-		)
+		return one(rows)
 	case "window":
-		return one(
-			row("window_prefix_new", "New window"),
-			row("window_prefix_close", "Close window"),
-			row("window_prefix_rename", "Rename window"),
-			row("window_prefix_next", "Next window"),
-			row("window_prefix_prev", "Previous window"),
-			row("window_prefix_tiling", "Toggle tiling mode"),
-			// Bound by a preset whose pane mode opens this menu (zellij).
-			row("split_vertical", "Split right"),
-			row("split_horizontal", "Split down"),
-			row("prefix_fullscreen", "Toggle zoom"),
-			pair("Focus pane",
-				part("terminal_focus_left", "Focus pane left"),
-				part("terminal_focus_down", "Focus pane down"),
-				part("terminal_focus_up", "Focus pane up"),
-				part("terminal_focus_right", "Focus pane right")),
-			cancel("window_prefix_cancel"),
-		)
+		return one(windowMenuRows)
 	case "debug":
-		return one(
-			row("debug_prefix_logs", "Toggle log viewer"),
-			row("debug_prefix_cache", "Toggle cache statistics"),
-			row("debug_prefix_showkeys", "Toggle showkeys overlay"),
-			row("debug_prefix_animations", "Toggle animations"),
-			cancel("debug_prefix_cancel"),
-		)
+		return one(debugMenuRows)
 	case "tape":
-		return one(
-			row("tape_prefix_manager", "Open tape manager"),
-			row("tape_prefix_review", "Review project tape"),
-			row("tape_prefix_record", "Start recording"),
-			row("tape_prefix_stop", "Stop recording"),
-			cancel("tape_prefix_cancel"),
-		)
+		return one(tapeMenuRows)
 	case "layout":
-		return one(
-			row("layout_prefix_load", "Load layout"),
-			row("layout_prefix_save", "Save layout"),
-			numbered("Snap window to a corner", actionRun("snap_corner_", 1, 4, 1)...),
-			numbered("Resize focused window width (%)", actionRun("resize_width_", 50, 90, 10)...),
-			numbered("Resize focused window height (%)", actionRun("resize_height_", 50, 90, 10)...),
-			row("cycle_master_position", "Move master to next side"),
-			row("swap_with_master", "Swap with master"),
-			row("focus_master", "Focus master"),
-			pair("Add/remove master", part("add_master", "Add master"), part("remove_master", "Remove master")),
-			cancel("layout_prefix_cancel"),
-		)
+		return one(layoutMenuRows)
 	}
 
 	// The leader's menu, in the sections the panel flows into columns. Each
 	// section is a few lines, so a column holds a section or two whole and the
 	// panel stays short enough to read without scrolling the eye down a list.
-	// The workspace rows are bound by a preset (tmux's c n p l 0-9 , & !). A
-	// row whose action has no key after the leader is left out, so the tuios
-	// menu does not show the section.
-	workspaces := menuSection{title: "Workspaces", rows: []menuRow{
-		row("new_workspace", "New workspace"),
-		pair("Next/prev workspace", part("next_workspace", "Next workspace"), part("prev_workspace", "Previous workspace")),
-		row("last_workspace", "Last workspace"),
-		numbered("Go to workspace", actionRun("switch_workspace_", 1, 9, 1)...),
-		row("rename_workspace", "Rename workspace"),
-		row("close_workspace", "Close workspace"),
-		row("break_pane", "Pane to a new workspace"),
-	}}
-	windows := menuSection{title: "Windows", rows: []menuRow{
-		row("prefix_new_window", "Create window"),
-		row("prefix_close_window", "Close window"),
-		row("prefix_rename_window", "Rename window"),
-		pair("Next/prev window", part("prefix_next_window", "Next window"), part("prefix_prev_window", "Previous window")),
-		numbered("Jump to window", actionRun("prefix_select_", 0, 9, 1)...),
-		row("prefix_fullscreen", "Toggle zoom"),
-		row("minimize_window", "Minimize window"),
-	}}
-	panes := menuSection{title: "Panes", rows: []menuRow{
-		// The arrows walk panes, and the prefix stays armed for a moment
-		// so a run of them costs one prefix press. See the repeat window
-		// in internal/input/prefix_repeat.go.
-		pair("Focus pane",
-			part("terminal_focus_left", "Focus pane left"),
-			part("terminal_focus_up", "Focus pane up"),
-			part("terminal_focus_down", "Focus pane down"),
-			part("terminal_focus_right", "Focus pane right")),
-		row("prefix_toggle_tiling", "Toggle tiling"),
-		row("prefix_split_horizontal", "Split horizontal"),
-		row("prefix_split_vertical", "Split vertical"),
-		row("prefix_rotate_split", "Rotate split"),
-		row("prefix_equalize_splits", "Equalize splits"),
-		// Hints label the focused pane's text. The row is here rather than
-		// under Tools because Tools shares a column with Menus in the narrow
-		// layout, and one row more there made the panel the tallest column
-		// at 80x24, where it reached the pane's bottom border.
-		// The pane labels share the hints row: one row more made the
-		// panel reach the pane's top border at 80x24.
-		pair("Hints, labels", part("hints", "Hints"), part("display_panes", "Pane labels")),
-		row("last_pane", "Last pane"),
-		row("mark_pane", "Mark pane"),
-		pair("Resize pane",
-			part("resize_pane_left_5", "Resize pane left"),
-			part("resize_pane_up_5", "Resize pane up"),
-			part("resize_pane_down_5", "Resize pane down"),
-			part("resize_pane_right_5", "Resize pane right")),
-		row("cycle_layout", "Next layout"),
-	}}
-	sessions := menuSection{title: "Sessions", rows: []menuRow{
-		pair("Prev/next session", part("prev_session", "Previous session"), part("next_session", "Next session")),
-		row("prefix_session_switcher", "Sessions"),
-		row("prefix_workspace_switcher", "Workspaces"),
-		row("choose_tree", "Find a pane"),
-		row("prefix_close_session", "Close session"),
-		row("toggle_scratch", "Scratch session"),
-		row("last_session", "Last session"),
-		row("rename_session", "Rename session"),
-	}}
+	sessions := menuSection{title: "Sessions", rows: slices.Clip(leaderSessionRows)}
 	modes := menuSection{title: "Modes"}
 	// In daemon mode d detaches and Esc leaves for window mode; in local mode
 	// both leave for window mode.
@@ -265,37 +299,16 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		row("prefix_explore", "Focus sidebar"),
 		row("prefix_file_search", "Search files"),
 	)
-	menus := menuSection{title: "Menus", rows: []menuRow{
-		subRow("prefix_tuios", "tuios"),
-		subRow("prefix_workspace", "Workspace"),
-		subRow("prefix_minimize", "Minimize"),
-		subRow("prefix_window", "Window"),
-		subRow("prefix_layout", "Layout"),
-		subRow("prefix_tape", "Tape"),
-		subRow("prefix_debug", "Debug"),
-	}}
-	tools := menuSection{title: "Tools", rows: []menuRow{
-		row("prefix_command_palette", "Command palette"),
-		row("reload_config", "Reload config"),
-		row("send_prefix", "Send the leader"),
-		row("launcher", "Launcher"),
-		row("prefix_settings", "Settings"),
-		row("prefix_keybinds", "Keybindings"),
-		row("prefix_screenshot", "Screenshot"),
-		row("prefix_transfers", "Copies"),
-		row("prefix_jump_notif", "Newest message"),
-		row("prefix_last_message", "Show last message"),
-		row("prefix_help", "Help"),
-	}}
-	agents := menuSection{title: "Agents", rows: []menuRow{
-		row("prefix_inbox", "Inbox"),
-		row("prefix_next_attention", "Oldest waiting"),
-		row("prefix_mail", "Inbox: mail"),
-		row("prefix_next_finished", "Newest finished"),
-		row("prefix_review", "Review changes"),
-		row("prefix_agents_settings", "Agents settings"),
-	}}
-	return []menuSection{workspaces, windows, panes, sessions, modes, menus, tools, agents}
+	return []menuSection{
+		{title: "Workspaces", rows: leaderWorkspaceRows},
+		{title: "Windows", rows: leaderWindowRows},
+		{title: "Panes", rows: leaderPaneRows},
+		sessions,
+		modes,
+		{title: "Menus", rows: leaderMenuRows},
+		{title: "Tools", rows: leaderToolRows},
+		{title: "Agents", rows: leaderAgentRows},
+	}
 }
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
