@@ -23,7 +23,7 @@ import (
 //     does not step down to the terminal's own slot at 16 colours.
 //     TestNamesFollowTheThemeAndTheDepth.
 //   - A role loop in a theme file recurses forever. TestAChromeLoopFailsTheFile.
-//   - A renderer pays for parsing on every frame: the memo and the slot table
+//   - A renderer pays for parsing on every frame: the memo and the slots
 //     are read without a parse; the dock and rail benchmarks hold allocs/op.
 
 // TestParseColorForms is the vocabulary, one row per form.
@@ -89,11 +89,11 @@ func TestParseColorForms(t *testing.T) {
 			t.Errorf("ParseColor(%q): %v", tc.in, err)
 			continue
 		}
-		if got := spec.On(pal); got != tc.want {
+		if got := spec.On(&pal); got != tc.want {
 			t.Errorf("ParseColor(%q) on the palette = %v, want %v", tc.in, got, tc.want)
 		}
 	}
-	if spec, err := ParseColor(""); err != nil || !spec.IsZero() || spec.On(pal) != nil {
+	if spec, err := ParseColor(""); err != nil || !spec.IsZero() || spec.On(&pal) != nil {
 		t.Errorf("ParseColor(\"\") = %+v, %v; want unset, no error, no colour", spec, err)
 	}
 }
@@ -102,8 +102,8 @@ func TestParseColorForms(t *testing.T) {
 // theme in force, so the same value draws the new theme's colour after a
 // switch, and at 16 colours it is the terminal's own slot.
 //
-// Negative control: keying the slot table on the depth alone, without the
-// tint and the generation, keeps theme one's magenta after the switch.
+// Negative control: caching the first answer of slotColor in a package
+// variable keeps theme one's magenta after the switch.
 func TestNamesFollowTheThemeAndTheDepth(t *testing.T) {
 	prev := ColorProfile()
 	t.Cleanup(func() { SetColorProfile(prev) })

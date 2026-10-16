@@ -91,7 +91,7 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 // into no colour at all, which would paint the terminal's default in the
 // middle of the bar, so a bad value is dropped here, where validateDock has
 // already said it is ignored. A role such as accent is the dock's own.
-func tabColor(s string, pal overlay.Palette) color.Color {
+func tabColor(s string, pal *overlay.Palette) color.Color {
 	return theme.ConfigColorOn(s, pal)
 }
 
@@ -104,9 +104,9 @@ func tabColor(s string, pal overlay.Palette) color.Color {
 // does there. A picked-up tab comes up onto Surface, the same lift a dragged
 // pill gets.
 func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette) string {
-	fg, bg, bold := tabColor(t.InactiveFg, pal), tabColor(t.InactiveBg, pal), t.InactiveBold
+	fg, bg, bold := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal), t.InactiveBold
 	if active {
-		fg, bg, bold = tabColor(t.ActiveFg, pal), tabColor(t.ActiveBg, pal), t.ActiveBold
+		fg, bg, bold = tabColor(t.ActiveFg, &pal), tabColor(t.ActiveBg, &pal), t.ActiveBold
 	}
 	st := lipgloss.NewStyle()
 	onAccent := false
@@ -156,7 +156,7 @@ func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 	if !t.Flat() || t.Separator == "" {
 		return strings.Repeat(" ", dockWorkspacePillGap)
 	}
-	if fg := tabColor(t.SeparatorFg, pal); fg != nil {
+	if fg := tabColor(t.SeparatorFg, &pal); fg != nil {
 		return lipgloss.NewStyle().Foreground(fg).Render(t.Separator)
 	}
 	return t.Separator

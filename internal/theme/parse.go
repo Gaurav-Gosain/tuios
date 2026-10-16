@@ -3,13 +3,10 @@ package theme
 import (
 	"fmt"
 	"image/color"
-	"maps"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
-	"charm.land/lipgloss/v2"
 	"charm.land/tone"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/ansi"
@@ -115,30 +112,54 @@ func (r Role) String() string {
 // are measured from the surface, never named: see Chrome.
 func (r Role) Settable() bool { return r >= RoleAccent && r <= RoleCard }
 
-// slotNames maps a slot name to its index. Slot 5 has two names, because the
-// theme files say purple and every ANSI table says magenta.
-var slotNames = func() map[string]int {
-	base := []string{"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}
-	m := make(map[string]int, 2*len(base)+4)
-	for i, n := range base {
-		m[n] = i
-		m["bright_"+n] = i + 8
-	}
-	m["purple"], m["bright_purple"] = 5, 13
-	m["fg"], m["bg"] = slotFg, slotBg
-	return m
-}()
+// slotNames are the eight base slot names, by index. Each has a bright_ form
+// eight higher, and slot 5 has two names, because the theme files say purple
+// and every ANSI table says magenta.
+var slotNames = [8]string{"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}
 
-// toneNames maps a lower-case CharmTone name to its colour, with the two old
-// names CharmTone still keeps as aliases.
-var toneNames = func() map[string]tone.Key {
-	m := make(map[string]tone.Key, len(tone.Keys())+2)
-	for _, k := range tone.Keys() {
-		m[strings.ToLower(k.String())] = k
+// slotIndex is the slot a name means, or false.
+func slotIndex(name string) (int, bool) {
+	switch name {
+	case "fg":
+		return slotFg, true
+	case "bg":
+		return slotBg, true
 	}
-	m["ash"], m["charcoal"] = tone.Ash, tone.Charcoal
-	return m
-}()
+	bright := 0
+	if rest, ok := strings.CutPrefix(name, "bright_"); ok {
+		name, bright = rest, 8
+	}
+	if name == "purple" {
+		name = "magenta"
+	}
+	for i, n := range slotNames {
+		if n == name {
+			return i + bright, true
+		}
+	}
+	return 0, false
+}
+
+// toneColor is the CharmTone colour with lower-case name, or false. It also
+// takes the two old names CharmTone keeps as aliases. A plain search: a value
+// is parsed once (see SpecOf), and a map would be built at every start.
+func toneColor(name string) (color.Color, bool) {
+	switch name {
+	case "ash":
+		name = "sash"
+	case "charcoal":
+		name = "char"
+	}
+	for _, k := range tone.Keys() {
+		if strings.EqualFold(k.String(), name) {
+			// Copied out of the Key, whose RGBA is a map lookup, so a frame
+			// that draws it reads a plain value.
+			r, g, b, _ := k.RGBA()
+			return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff}, true
+		}
+	}
+	return nil, false
+}
 
 // ColorSpec is a colour value read from a file, parsed. The zero value is
 // unset and resolves to nil.
@@ -174,96 +195,86 @@ const ColorHelp = "Use #rrggbb, a number from 0 to 255, a colour name such as br
 // ColorSpec and no error: every colour key reads empty as unset.
 func ParseColor(s string) (ColorSpec, error) {
 	s = strings.TrimSpace(s)
-	if s == "" {
+	switch {
+	case s == "":
 		return ColorSpec{}, nil
-	}
-	if strings.HasPrefix(s, "#") {
-		if c, ok := parseHex(s); ok {
+	case s[0] == '#':
+		// overlay.ParseHex makes the color.RGBA lipgloss.Color makes, so a
+		// value that was hex before this parser draws the same colour.
+		if c, ok := overlay.ParseHex(s); ok {
 			return ColorSpec{kind: kindRGB, rgb: c}, nil
 		}
-		return ColorSpec{}, fmt.Errorf("%q is not a colour. A hex colour has 3 or 6 digits after the #", s)
-	}
-	if n, err := strconv.Atoi(s); err == nil {
+	case s[0] >= '0' && s[0] <= '9':
+		n, err := strconv.Atoi(s)
 		switch {
-		case n < 0 || n > 255:
-			return ColorSpec{}, fmt.Errorf("%q is not a colour. An ANSI colour number is from 0 to 255", s)
+		case err != nil || n > 255:
 		case n < 16:
 			return ColorSpec{kind: kindSlot, slot: n}, nil
 		default:
 			return ColorSpec{kind: kindRGB, rgb: ansi.IndexedColor(uint8(n))}, nil // #nosec G115 -- checked 16-255 above
 		}
-	}
-	name := nameSpelling.Replace(strings.ToLower(s))
-	for r := RoleAccent; r <= RoleMuted; r++ {
-		if roleNames[r] == name {
-			return ColorSpec{kind: kindRole, role: r}, nil
+	default:
+		name := colorName(s)
+		for r := RoleAccent; r <= RoleMuted; r++ {
+			if roleNames[r] == name {
+				return ColorSpec{kind: kindRole, role: r}, nil
+			}
 		}
-	}
-	if i, ok := slotNames[name]; ok {
-		return ColorSpec{kind: kindSlot, slot: i}, nil
-	}
-	if k, ok := toneNames[name]; ok {
-		return ColorSpec{kind: kindRGB, rgb: lipgloss.Color(k.Hex())}, nil
+		if i, ok := slotIndex(name); ok {
+			return ColorSpec{kind: kindSlot, slot: i}, nil
+		}
+		if c, ok := toneColor(name); ok {
+			return ColorSpec{kind: kindRGB, rgb: c}, nil
+		}
 	}
 	return ColorSpec{}, fmt.Errorf("%q is not a colour. %s", s, ColorHelp)
 }
 
-// nameSpelling makes a dash or a space in a name the underscore.
-var nameSpelling = strings.NewReplacer("-", "_", " ", "_")
-
-// parseHex reads #rgb or #rrggbb into the colour lipgloss would make of the
-// six-digit form, so a value that was hex before this parser draws the same
-// colour after it.
-func parseHex(s string) (color.Color, bool) {
-	h := s[1:]
-	if len(h) != 3 && len(h) != 6 {
-		return nil, false
-	}
-	for _, r := range h {
-		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
-			return nil, false
+// colorName is s in lower case with a dash or a space as the underscore.
+func colorName(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		switch {
+		case c >= 'A' && c <= 'Z':
+			b[i] = c + 'a' - 'A'
+		case c == '-', c == ' ':
+			b[i] = '_'
 		}
 	}
-	if len(h) == 3 {
-		h = string([]byte{h[0], h[0], h[1], h[1], h[2], h[2]})
-	}
-	return lipgloss.Color("#" + h), true
+	return string(b)
 }
 
 // On is c's colour on pal: a role is read off pal, so it is the colour the
 // surface pal paints already shows for that role, and a slot is the theme's
-// at pal's depth. Nil when c is unset.
-func (c ColorSpec) On(pal overlay.Palette) color.Color {
+// at pal's depth. A nil pal is for a caller that draws on no palette of its
+// own, such as a pane border or a pane's selection: a role is then read off
+// the dialog palette, UI, and only when c is a role. Nil when c is unset.
+func (c ColorSpec) On(pal *overlay.Palette) color.Color {
 	switch c.kind {
 	case kindRGB:
 		return c.rgb
 	case kindSlot:
+		if pal == nil {
+			return slotColor(c.slot, Depth())
+		}
 		return slotColor(c.slot, pal.Depth)
 	case kindRole:
+		if pal == nil {
+			ui := UI()
+			pal = &ui
+		}
 		return roleOn(c.role, pal)
 	}
 	return nil
 }
 
-// Resolve is On for a caller that draws on no palette of its own, such as a
-// pane border or a pane's selection: a role is read off the dialog palette,
-// UI, and only when c is a role.
-func (c ColorSpec) Resolve() color.Color {
-	switch c.kind {
-	case kindRGB:
-		return c.rgb
-	case kindSlot:
-		return slotColor(c.slot, Depth())
-	case kindRole:
-		return roleOn(c.role, UI())
-	}
-	return nil
-}
+// Resolve is On with no palette of its own. See On.
+func (c ColorSpec) Resolve() color.Color { return c.On(nil) }
 
 // roleOn reads role r off pal. Each role is the palette field a chrome role
 // fills (see buildUI): error is Warn, which is the destructive red, and there
 // is no role for a palette field a theme cannot set.
-func roleOn(r Role, pal overlay.Palette) color.Color {
+func roleOn(r Role, pal *overlay.Palette) color.Color {
 	switch r {
 	case RoleAccent:
 		return pal.Accent
@@ -295,66 +306,39 @@ func roleOn(r Role, pal overlay.Palette) color.Color {
 	return nil
 }
 
-// slotTable is the theme's sixteen, fg and bg, as drawn at one depth.
-type slotTable struct {
-	gen   uint64
-	tint  *tint.Tint
-	depth overlay.Depth
-	cols  [18]color.Color
-}
-
-var slotMemo atomic.Pointer[slotTable]
-
 // slotColor is slot i at depth d. At 16 colours, or with no theme, a slot is
-// the terminal's own, so the user's palette paints it; fg and bg are then the
-// terminal's default colours. With a theme it is the theme's colour, stepped
-// down at 256 colours as the chrome's are. The table is built once per theme
-// and depth, so a frame only reads it.
+// the terminal's own, so the user's palette paints it, and fg and bg are the
+// terminal's default colours. With a theme it is the theme's colour. Reading it
+// is a field read off the theme in force, as a role is off a palette, so a
+// theme change shows on the next frame with nothing to invalidate.
 func slotColor(i int, d overlay.Depth) color.Color {
-	t := Current()
-	gen := Generation()
-	if tab := slotMemo.Load(); tab != nil && tab.gen == gen && tab.tint == t && tab.depth == d {
-		return tab.cols[i]
-	}
-	tab := &slotTable{gen: gen, tint: t, depth: d}
-	var slots [16]*tint.Color
-	if t != nil && d != overlay.Depth16 {
-		slots = ANSIOrder(t)
-	}
-	for n := range 16 {
-		tab.cols[n] = overlay.Slot(n)
-		if slots[n] != nil {
-			tab.cols[n] = themeInk(slots[n], d)
+	var c *tint.Color
+	if t := Current(); t != nil && d != overlay.Depth16 {
+		switch i {
+		case slotFg:
+			c = t.Fg
+		case slotBg:
+			c = t.Bg
+		default:
+			c = ANSIOrder(t)[i]
 		}
 	}
-	tab.cols[slotFg], tab.cols[slotBg] = overlay.NoColor, overlay.NoColor
-	if t != nil && d != overlay.Depth16 {
-		if t.Fg != nil {
-			tab.cols[slotFg] = themeInk(t.Fg, d)
-		}
-		if t.Bg != nil {
-			tab.cols[slotBg] = themeInk(t.Bg, d)
-		}
+	switch {
+	case c != nil:
+		return c
+	case i < 16:
+		return overlay.Slot(i)
 	}
-	slotMemo.Store(tab)
-	return tab.cols[i]
-}
-
-// themeInk is a theme colour as drawn at depth d.
-func themeInk(c *tint.Color, d overlay.Depth) color.Color {
-	if d == overlay.Depth256 {
-		return overlay.To256(c)
-	}
-	return c
+	return overlay.NoColor
 }
 
 // specMemo keeps every colour value parsed so far. Parsing does not depend on
 // the theme, so an entry never goes stale; the memo exists so a renderer that
 // holds a value as the string the config wrote reads a parsed one instead of
-// parsing on every frame. Copy on write: a frame reads it with no lock.
+// parsing on every frame.
 var specMemo struct {
-	mu sync.Mutex
-	m  atomic.Pointer[map[string]ColorSpec]
+	sync.RWMutex
+	m map[string]ColorSpec
 }
 
 // specMemoMax bounds the memo. A config names a handful of colours; the bound
@@ -368,20 +352,19 @@ func SpecOf(s string) ColorSpec {
 	if s == "" {
 		return ColorSpec{}
 	}
-	if m := specMemo.m.Load(); m != nil {
-		if c, ok := (*m)[s]; ok {
-			return c
-		}
+	specMemo.RLock()
+	c, ok := specMemo.m[s]
+	specMemo.RUnlock()
+	if ok {
+		return c
 	}
-	c, _ := ParseColor(s)
-	specMemo.mu.Lock()
-	defer specMemo.mu.Unlock()
-	next := make(map[string]ColorSpec)
-	if m := specMemo.m.Load(); m != nil && len(*m) < specMemoMax {
-		maps.Copy(next, *m)
+	c, _ = ParseColor(s)
+	specMemo.Lock()
+	if specMemo.m == nil || len(specMemo.m) >= specMemoMax {
+		specMemo.m = make(map[string]ColorSpec)
 	}
-	next[s] = c
-	specMemo.m.Store(&next)
+	specMemo.m[s] = c
+	specMemo.Unlock()
 	return c
 }
 
@@ -391,7 +374,7 @@ func ConfigColor(s string) color.Color { return SpecOf(s).Resolve() }
 
 // ConfigColorOn is the colour a config value means on pal, or nil when it is
 // unset or not a colour. See On.
-func ConfigColorOn(s string, pal overlay.Palette) color.Color { return SpecOf(s).On(pal) }
+func ConfigColorOn(s string, pal *overlay.Palette) color.Color { return SpecOf(s).On(pal) }
 
 // IsColor reports whether s is a colour value: empty is not. It reads through
 // the memo, so a caller on the frame path pays a map lookup, not a parse.

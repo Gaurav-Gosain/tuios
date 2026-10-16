@@ -403,7 +403,7 @@ func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) boo
 // a role such as text or accent is the rail's own ink. A value that is not a
 // colour is nil, which the caller reads as "leave the rail's own colour".
 func sidebarTokenColor(name string, pal overlay.Palette) color.Color {
-	return theme.ConfigColorOn(name, pal)
+	return theme.ConfigColorOn(name, &pal)
 }
 
 // sidebarTokenStyle is the rail's own style for a token with the configured

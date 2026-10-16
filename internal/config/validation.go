@@ -532,17 +532,9 @@ func IsHexColor(s string) bool { return hexColorPattern().MatchString(s) }
 // is wrong and what to write instead. keywords are the words the key takes
 // besides a colour, such as off and theme.
 func ColourProblem(v string, keywords ...string) string {
-	_, err := theme.ParseColor(v)
-	if err == nil {
-		err = fmt.Errorf("%q is not a colour. %s", v, theme.ColorHelp)
-	}
-	msg := err.Error()
-	switch len(keywords) {
-	case 0:
-	case 1:
-		msg += ". You can also use " + keywords[0]
-	default:
-		msg += ". You can also use " + strings.Join(keywords[:len(keywords)-1], ", ") + " or " + keywords[len(keywords)-1]
+	msg := fmt.Sprintf("%q is not a colour. %s", v, theme.ColorHelp)
+	if len(keywords) > 0 {
+		msg += ". You can also use one of: " + strings.Join(keywords, ", ")
 	}
 	return msg
 }
@@ -562,41 +554,34 @@ func sentence(s string) string {
 // instead. The value is left in place: the warning says which key is wrong, and
 // the border falls back to the theme's own colour meanwhile.
 func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
-	for _, c := range [...]struct{ key, value string }{
-		{"border_focused_color", cfg.Appearance.BorderFocusedColor},
-		{"border_unfocused_color", cfg.Appearance.BorderUnfocusedColor},
-	} {
-		if c.value == "" || theme.IsColor(c.value) {
-			continue
-		}
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "appearance",
-			Key:     c.key,
-			Message: ColourProblem(c.value) + ". The border uses the theme colour",
-		})
-	}
+	a := &cfg.Appearance
+	warnColours(result, "appearance", "The border uses the theme colour",
+		"border_focused_color", a.BorderFocusedColor,
+		"border_unfocused_color", a.BorderUnfocusedColor)
 }
 
 // validateSelectionColors warns about a selection colour that is not a colour.
 // The mark is drawn without it: a background left out tints nothing, and a
 // foreground left out keeps the program's own colour.
 func validateSelectionColors(cfg *UserConfig, result *ValidationResult) {
-	sel := cfg.Appearance.Selection
-	for _, c := range [...]struct{ key, value string }{
-		{"bg", sel.Bg}, {"fg", sel.Fg},
-		{"search_bg", sel.SearchBg}, {"search_fg", sel.SearchFg},
-		{"match_bg", sel.MatchBg}, {"match_fg", sel.MatchFg},
-		{"cursor_bg", sel.CursorBg}, {"cursor_fg", sel.CursorFg},
-		{"flash_color", sel.FlashColor},
-	} {
-		if c.value == "" || theme.IsColor(c.value) {
-			continue
+	sel := &cfg.Appearance.Selection
+	warnColours(result, "appearance", "The mark is drawn without this colour",
+		"selection.bg", sel.Bg, "selection.fg", sel.Fg,
+		"selection.search_bg", sel.SearchBg, "selection.search_fg", sel.SearchFg,
+		"selection.match_bg", sel.MatchBg, "selection.match_fg", sel.MatchFg,
+		"selection.cursor_bg", sel.CursorBg, "selection.cursor_fg", sel.CursorFg,
+		"selection.flash_color", sel.FlashColor)
+}
+
+// warnColours warns about each set value in kv, key then value, that is not a
+// colour. then says what tuios does instead.
+func warnColours(result *ValidationResult, field, then string, kv ...string) {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if v := kv[i+1]; v != "" && !theme.IsColor(v) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: field, Key: kv[i], Message: ColourProblem(v) + ". " + then,
+			})
 		}
-		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "appearance",
-			Key:     "selection." + c.key,
-			Message: ColourProblem(c.value) + ". The mark is drawn without this colour",
-		})
 	}
 }
 

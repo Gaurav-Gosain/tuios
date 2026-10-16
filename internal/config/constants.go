@@ -1151,10 +1151,12 @@ func (s *Settings) GetScrollbarThumbChar() string {
 // is refused here as well as warned about at load: a bar drawn in nothing is
 // invisible. A keyword wins over a name it shares: muted is the keyword.
 func (s *Settings) ScrollbarTintColor() (string, bool) {
-	if slices.Contains(ScrollbarTints, s.ScrollbarTint) || !theme.IsColor(s.ScrollbarTint) {
+	switch v := s.ScrollbarTint; v {
+	case ScrollbarTintQuiet, ScrollbarTintBorder, ScrollbarTintMuted:
 		return "", false
+	default:
+		return v, theme.IsColor(v)
 	}
-	return s.ScrollbarTint, true
 }
 
 // ScrollbarTintResolved is the keyword the tint is behaving as, with unset

@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The dock's built-in component names. Every segment the bar has ever drawn is
@@ -581,12 +579,9 @@ func validateDockColors(result *ValidationResult, field string, colors map[strin
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	kv := make([]string, 0, 2*len(keys))
 	for _, k := range keys {
-		if v := colors[k]; v != "" && !theme.IsColor(v) {
-			result.Warnings = append(result.Warnings, ValidationError{
-				Field: field, Key: k,
-				Message: ColourProblem(v) + ". The dock ignores it",
-			})
-		}
+		kv = append(kv, k, colors[k])
 	}
+	warnColours(result, field, "The dock ignores it", kv...)
 }

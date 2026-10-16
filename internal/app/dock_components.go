@@ -248,11 +248,11 @@ func (m *OS) dockCustomCell(name string) string {
 // really has. The caps are drawn in that background colour.
 func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) string {
 	bg := pal.Panel
-	if c := theme.ConfigColorOn(st.Bg, pal); c != nil {
+	if c := theme.ConfigColorOn(st.Bg, &pal); c != nil {
 		bg = c
 	}
 	fg := theme.Readable(pal.FgDim, bg)
-	if c := theme.ConfigColorOn(st.Fg, pal); c != nil {
+	if c := theme.ConfigColorOn(st.Fg, &pal); c != nil {
 		fg = c
 	}
 	body := lipgloss.NewStyle().Background(bg).Foreground(fg).Bold(st.Bold).Render(" " + text + " ")

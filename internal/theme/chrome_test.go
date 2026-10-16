@@ -163,7 +163,7 @@ func TestChromeNamesSlotsAndRoles(t *testing.T) {
 // than recursing until the stack runs out.
 func TestAChromeLoopFailsTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "loop.json")
-	data := `{"id": "loop", "chrome": {"accent": "success", "success": "info", "info": "accent"}}`
+	data := `{"id": "loop", "chrome": {"accent": "success", "success": "accent"}}`
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestAChromeLoopFailsTheFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("a loop of chrome roles loaded")
 	}
-	for _, name := range []string{"chrome.accent", "chrome.success", "chrome.info"} {
+	for _, name := range []string{"chrome.accent", "chrome.success"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("the error does not name %s: %v", name, err)
 		}

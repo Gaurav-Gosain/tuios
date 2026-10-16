@@ -175,7 +175,7 @@ func parseChrome(data []byte, t *tint.Tint) (*Chrome, error) {
 // chrome field's to take: the tiers are measured from the surface.
 func parseChromeSpec(s string) ColorSpec {
 	s = strings.TrimSpace(s)
-	if c, ok := parseHex("#" + s); ok && s != "" {
+	if c, ok := overlay.ParseHex(s); ok {
 		return ColorSpec{kind: kindRGB, rgb: c}
 	}
 	c, err := ParseColor(s)
@@ -186,16 +186,13 @@ func parseChromeSpec(s string) ColorSpec {
 }
 
 // chromeFallbackSlot is the slot a chrome role derives from when the file does
-// not set it, for a field that names that role. The neutrals derive from no
-// slot: a field that names an unset one is left unset too.
-var chromeFallbackSlot = [...]func(*tint.Tint) *tint.Color{
-	RoleAccent:       func(t *tint.Tint) *tint.Color { return t.BrightBlue },
-	RoleAccentBright: func(t *tint.Tint) *tint.Color { return t.BrightCyan },
-	RoleSuccess:      func(t *tint.Tint) *tint.Color { return t.BrightGreen },
-	RoleWarning:      func(t *tint.Tint) *tint.Color { return t.Yellow },
-	RoleError:        func(t *tint.Tint) *tint.Color { return t.Red },
-	RoleInfo:         func(t *tint.Tint) *tint.Color { return t.Blue },
-	RoleCard:         nil,
+// not set it, for a field that names that role: accent is bright_blue, and so
+// on. The neutrals derive from no slot (-1): a field that names an unset one is
+// left unset too.
+var chromeFallbackSlot = [RoleCard + 1]int8{
+	RoleAccent: 12, RoleAccentBright: 14, RoleSuccess: 10, RoleWarning: 3,
+	RoleError: 1, RoleInfo: 4,
+	RoleSurface: -1, RoleCanvas: -1, RolePanel: -1, RoleCard: -1,
 }
 
 // chromeRole is role r's colour in the object, following role references.
@@ -215,10 +212,10 @@ func chromeRole(r Role, specs *[RoleCard + 1]ColorSpec, t *tint.Tint, path []Rol
 	case kindRole:
 		return chromeRole(c.role, specs, t, append(path, r))
 	}
-	if len(path) == 0 || t == nil || int(r) >= len(chromeFallbackSlot) || chromeFallbackSlot[r] == nil {
+	if len(path) == 0 || chromeFallbackSlot[r] < 0 {
 		return nil, nil
 	}
-	return AsColor(chromeFallbackSlot[r](t)), nil
+	return chromeSlot(int(chromeFallbackSlot[r]), t), nil
 }
 
 // chromeSlot is slot i of the theme being read.
@@ -235,18 +232,14 @@ func chromeSlot(i int, t *tint.Tint) color.Color {
 	return AsColor(ANSIOrder(t)[i])
 }
 
-// chromeLoopError names the roles in a loop, in the order they name each
-// other.
+// chromeLoopError names a loop by two of its roles: the first, and the one
+// that names it back.
 func chromeLoopError(loop []Role) error {
-	names := make([]string, len(loop))
-	for i, r := range loop {
-		names[i] = "chrome." + r.String()
+	if len(loop) == 1 {
+		return fmt.Errorf("chrome.%s names itself. Set it to a colour", loop[0])
 	}
-	if len(names) == 1 {
-		return fmt.Errorf("%s names itself. Set it to a colour", names[0])
-	}
-	list := strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
-	return fmt.Errorf("%s name each other in a loop. Set one of them to a colour", list)
+	return fmt.Errorf("chrome.%s and chrome.%s name each other in a loop. Set one of them to a colour",
+		loop[0], loop[len(loop)-1])
 }
 
 // deriveRamp fills the neutral steps and ink tiers a theme left to its named
