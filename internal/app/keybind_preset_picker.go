@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,12 +31,18 @@ type presetPickerState struct {
 	// leader is the leader the picker writes with the preset: empty for the
 	// preset's own, or the one sniffed from ~/.tmux.conf.
 	leader string
+	// about and leaders are each preset's text and leader, read when the
+	// picker opens: each is a TOML decode, too slow for every frame.
+	about   []config.PresetAbout
+	leaders []string
 }
 
 // keybindPresetSavedMsg says the config file was written with the new preset.
 type keybindPresetSavedMsg struct {
 	name string
 	err  error
+	// prevPreset and prevLeader are put back when the write fails.
+	prevPreset, prevLeader string
 }
 
 // OpenKeybindPresets opens the picker on the preset the welcome row suggests,
@@ -46,6 +53,11 @@ func (m *OS) OpenKeybindPresets() {
 	p.scroll = 0
 	p.loses = presetLosses(m.currentPreset())
 	names := config.Presets()
+	p.about, p.leaders = make([]config.PresetAbout, len(names)), make([]string, len(names))
+	for i, name := range names {
+		p.about[i], _ = config.PresetInfo(name)
+		p.leaders[i] = config.DefaultKeybindingsFor(name).LeaderKey
+	}
 	p.selected = max(slices.Index(names, m.currentPreset()), 0)
 	if s := m.presetSuggestion(); s.preset != "" {
 		p.selected = max(slices.Index(names, s.preset), 0)
@@ -84,6 +96,7 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 		return nil
 	}
 	kb := &m.UserConfig.Keybindings
+	prevPreset, prevLeader := kb.Preset, kb.LeaderKey
 	kb.Preset = name
 	if name == config.PresetTuios {
 		kb.Preset = ""
@@ -101,7 +114,7 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 	}
 	return func() tea.Msg {
 		_, err := write()
-		return keybindPresetSavedMsg{name: name, err: err}
+		return keybindPresetSavedMsg{name: name, err: err, prevPreset: prevPreset, prevLeader: prevLeader}
 	}
 }
 
@@ -109,6 +122,14 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 // the keys change in this client now. Other clients follow the file.
 func (m *OS) handleKeybindPresetSaved(msg keybindPresetSavedMsg) tea.Cmd {
 	if msg.err != nil {
+		// The preset is in no file and the keys did not change, so the
+		// config goes back to what it was, and a later save does not
+		// write the preset as a side effect.
+		if m.UserConfig != nil {
+			m.UserConfig.Keybindings.Preset = msg.prevPreset
+			m.UserConfig.Keybindings.LeaderKey = msg.prevLeader
+			config.RewindSave(m.UserConfig, msg.err)
+		}
 		m.ShowNotification("Keys not changed: "+msg.err.Error(), "error", 0)
 		return nil
 	}
@@ -164,8 +185,40 @@ type presetSuggestion struct {
 	preset, leader, label string
 }
 
-// tmuxPrefixLine finds the prefix a tmux.conf sets, such as set -g prefix C-a.
-var tmuxPrefixLine = regexp.MustCompile(`(?m)^\s*set(?:-option)?\s+(?:-\w+\s+)*prefix\s+C-([a-z])\b`)
+// tmuxPrefixLine finds the prefix a tmux.conf sets, such as set -g prefix C-a,
+// set-option -g prefix 'C-Space' or set -g prefix ^A.
+var tmuxPrefixLine = regexp.MustCompile(`(?m)^[ \t]*set(?:-option)?[ \t]+(?:-\w+[ \t]+)*prefix[ \t]+['"]?(?:C-|\^)([A-Za-z]|[Ss]pace)['"]?(?:[ \t]|$)`)
+
+// tmuxConfLimit bounds the read of a tmux.conf. A prefix line is near the top,
+// and the file is the person's own but could be anything: a link to a device,
+// a pipe or a huge generated file.
+const tmuxConfLimit = 64 << 10
+
+// tmuxPrefix reads the prefix a tmux.conf sets: tmux keeps the last one. It
+// reads a regular file only, and only its first tmuxConfLimit bytes.
+func tmuxPrefix(path string) string {
+	f, err := os.Open(path) // #nosec G304 - the person's own tmux.conf, read for one line
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(f, tmuxConfLimit))
+	if err != nil {
+		return ""
+	}
+	all := tmuxPrefixLine.FindAllSubmatch(data, -1)
+	if len(all) == 0 {
+		return ""
+	}
+	key := strings.ToLower(string(all[len(all)-1][1]))
+	if key == "b" {
+		return ""
+	}
+	return "ctrl+" + key
+}
 
 // presetSuggestion reads the home folder once per client. A served client is
 // on the operator's machine, whose home says nothing about the person, so it
@@ -192,12 +245,8 @@ func (m *OS) presetSuggestion() presetSuggestion {
 			continue
 		}
 		s.preset, s.label = "tmux", "use tmux keys"
-		// #nosec G304 - the person's own tmux.conf, read for one line
-		if data, err := os.ReadFile(filepath.Join(home, rel)); err == nil {
-			if mm := tmuxPrefixLine.FindSubmatch(data); mm != nil && string(mm[1]) != "b" {
-				s.leader = "ctrl+" + string(mm[1])
-				s.label = "use tmux keys with " + s.leader
-			}
+		if s.leader = tmuxPrefix(filepath.Join(home, rel)); s.leader != "" {
+			s.label = "use tmux keys with " + s.leader
 		}
 		return s
 	}
@@ -216,7 +265,7 @@ func (m *OS) presetSuggestion() presetSuggestion {
 // the picker and the suggestion. Empty when there is none to show.
 func (m *OS) welcomePresetChip() overlay.Hint {
 	label := strings.TrimSpace(m.presetSuggestion().label)
-	if label == "" || m.UserConfig == nil {
+	if label == "" || m.UserConfig == nil || m.currentPreset() != config.PresetTuios {
 		return overlay.Hint{}
 	}
 	keys := m.UserConfig.Keybindings.ModeControl["open_keybind_presets"]

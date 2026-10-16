@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -43,8 +44,11 @@ func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 		Row: func(name string, selected bool, pal overlay.Palette, width int) string {
 			st := overlay.RowState{Cursor: selected, Focused: true}
 			bg := pal.Ground(st, pal.Surface)
-			about, _ := config.PresetInfo(name)
-			leader := config.DefaultKeybindingsFor(name).LeaderKey
+			var about config.PresetAbout
+			var leader string
+			if i := slices.Index(names, name); i >= 0 && i < len(p.about) {
+				about, leader = p.about[i], p.leaders[i]
+			}
 			samples := about.Samples
 			marker := "  "
 			if selected {
@@ -79,9 +83,8 @@ func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 				loses = "Your shell loses: " + strings.Join(keys, ", ") + "."
 			}
 			menu := ""
-			if name != config.PresetTuios {
-				kb := config.DefaultKeybindingsFor(name)
-				menu = kb.LeaderKey + " ctrl+t opens the tuios keys " + name + " moved."
+			if name != config.PresetTuios && p.selected < len(p.leaders) {
+				menu = p.leaders[p.selected] + " ctrl+t opens the tuios keys " + name + " moved."
 			}
 			return []string{
 				"",
