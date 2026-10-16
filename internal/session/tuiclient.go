@@ -105,6 +105,9 @@ type TUIClient struct {
 	// nestedRefusal is the daemon's reason when it took this client off its
 	// session for showing the session inside itself. See NestedRefusal.
 	nestedRefusal atomic.Pointer[string]
+	// upgradedTo is the version a live upgrade told this client the daemon
+	// is becoming, nil when none has. See MsgDaemonUpgrading.
+	upgradedTo atomic.Pointer[string]
 	// detachedReason is the daemon's reason when it detached this client
 	// because another client attached or detach-client named it. See
 	// DetachedReason.
@@ -1892,6 +1895,13 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			resized(payload.Width, payload.Height)
 		}
 
+	case MsgDaemonUpgrading:
+		var payload DaemonUpgradingPayload
+		if err := msg.ParsePayload(&payload); err == nil {
+			v := payload.Version
+			c.upgradedTo.Store(&v)
+		}
+
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
 		if err := msg.ParsePayload(&payload); err != nil {
@@ -2866,4 +2876,13 @@ func windowSummariesAgree(a, b WindowSummary) bool {
 		slices.Equal(a.ProgramStatus, b.ProgramStatus) &&
 		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace &&
 		a.Scratch == b.Scratch && a.Note == b.Note
+}
+
+// UpgradedTo is the version a live upgrade said the daemon was becoming as
+// it closed this client's connection, and whether one did.
+func (c *TUIClient) UpgradedTo() (string, bool) {
+	if v := c.upgradedTo.Load(); v != nil {
+		return *v, true
+	}
+	return "", false
 }

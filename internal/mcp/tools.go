@@ -373,7 +373,7 @@ var EventTypes = []string{
 	"output", "bell", "notification", "mode-changed",
 	"session-created", "session-closed", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
-	"agent-activity", "transcript",
+	"agent-activity", "transcript", "daemon-upgraded",
 	// The daemon sends no transfer event to a restricted connection, which
 	// every connection of tuios mcp is, so these two never arrive here.
 	// They are listed so the list stays the daemon's.

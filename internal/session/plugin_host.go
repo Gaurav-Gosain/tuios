@@ -177,6 +177,17 @@ func (h *pluginHost) stop() {
 	h.runner.StopAll(2 * time.Second)
 }
 
+// restart runs the startup commands again after stop, for a daemon whose
+// live upgrade did not go ahead. Their event hooks never stopped following.
+func (h *pluginHost) restart() {
+	h.mu.Lock()
+	running := h.running
+	h.mu.Unlock()
+	if running {
+		h.runStartups()
+	}
+}
+
 // apply sets the daemon's [plugins] table. byPerson applies all of it. A
 // file change applies only what narrows: a plugin taken off the list stops,
 // a new one waits for the person. It reports whether a change waits.

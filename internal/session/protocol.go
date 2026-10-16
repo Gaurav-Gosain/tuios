@@ -187,7 +187,19 @@ const (
 	// list closes the client's dialog. The daemon sends it only to a client
 	// whose hello set PluginApprovals. See plugin_approval.go.
 	MsgPluginApprovals
+	// MsgDaemonUpgrading tells a TUI client, just before the daemon closes
+	// its connection, that a live upgrade is replacing the daemon's image and
+	// every pane keeps running. The client says so when it exits, rather than
+	// that the daemon was lost. An older client ignores the type and says the
+	// daemon was lost. See handoff.go.
+	MsgDaemonUpgrading
 )
+
+// DaemonUpgradingPayload is the body of MsgDaemonUpgrading: the version the
+// daemon is being upgraded to.
+type DaemonUpgradingPayload struct {
+	Version string
+}
 
 // WatchDirPayload is the body of MsgWatchDir. WindowID is the pane the folder
 // was listed for, which says which machine the folder is on. An empty Dir ends

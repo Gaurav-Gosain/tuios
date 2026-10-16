@@ -117,6 +117,8 @@ var verbScopes = map[string]scopeKind{
 	// restricted caller.
 	"pane-grants":     scopeOpen,
 	"set-pane-grants": scopeDeny,
+	// daemon-upgrade replaces the daemon every session runs under.
+	"daemon-upgrade": scopeDeny,
 	// apply-config is for the person, outside every pane.
 	"apply-config": scopeDeny,
 

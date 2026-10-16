@@ -189,6 +189,26 @@ func (r *handoffRun) prepare() error {
 	d.pauseAccepting()
 	r.undo = append(r.undo, d.resumeAccepting)
 
+	// The daemon's other children go before the panes stop. Each would stay
+	// this pid's child across the exec, cut off from the pipes it talks over
+	// and never waited for, and the new image starts its own: a second copy
+	// of every plugin, and an ssh link per host that nothing reads.
+	d.plugins.stop()
+	d.fleet.stop()
+	if d.federation != nil {
+		d.federation.Stop()
+	}
+	if d.hooks != nil {
+		d.hooks.WaitTimeout(hookDrainTimeout)
+	}
+	r.undo = append(r.undo, func() {
+		if d.federation != nil {
+			d.federation.Resume(d.ctx)
+		}
+		d.fleet.start(d.ctx)
+		d.plugins.restart()
+	})
+
 	// The reaps first: a reap in progress runs the pane's exit, which may
 	// close the pane, and that needs paneLife.
 	shut := map[*PTY]bool{}
@@ -458,7 +478,7 @@ func (r *handoffRun) commit() error {
 		}
 		r.bin = bin
 	}
-	d.closeClientsForHandoff()
+	d.closeClientsForHandoff(r.bin.accepts.Version)
 
 	argv := append([]string{r.bin.path}, d.handoffArgs(int(r.file.Fd()))...) //nolint:gosec // a descriptor number
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))
@@ -490,17 +510,6 @@ func (r *handoffRun) putBack() {
 		r.undo[i]()
 	}
 	r.undo = nil
-}
-
-// closeClientsForHandoff drops every client connection, as shutdown does.
-func (d *Daemon) closeClientsForHandoff() {
-	d.clientsMu.Lock()
-	for _, cs := range d.clients {
-		cs.closeDone()
-		_ = cs.conn.Close()
-	}
-	d.clients = make(map[string]*connState)
-	d.clientsMu.Unlock()
 }
 
 // handoffRecord is the session as the next image rebuilds it.

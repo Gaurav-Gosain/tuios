@@ -113,6 +113,11 @@ func (m *OS) ExitNotice() string {
 			"The daemon stopped, or it failed.\n" +
 			"Connect again after the daemon starts."
 
+	case ExitDaemonUpgraded:
+		return "The daemon was upgraded to " + m.upgradedTo() + ".\n" +
+			"Your programs are still running.\n" +
+			"Connect again to continue."
+
 	case ExitHostLost:
 		reason := m.hostReconnectReason
 		if reason == "" {
@@ -125,4 +130,15 @@ func (m *OS) ExitNotice() string {
 	default:
 		return ""
 	}
+}
+
+// upgradedTo is the version a live upgrade made the daemon, or "a new version"
+// when the daemon did not say.
+func (m *OS) upgradedTo() string {
+	if m.DaemonClient != nil {
+		if v, ok := m.DaemonClient.UpgradedTo(); ok && v != "" {
+			return v
+		}
+	}
+	return "a new version"
 }

@@ -423,6 +423,16 @@ func (m *Manager) Stop() {
 	m.wg.Wait()
 }
 
+// Resume starts the links again after Stop, under ctx. A daemon whose live
+// upgrade did not go ahead stops its links before it and resumes them after.
+func (m *Manager) Resume(ctx context.Context) {
+	m.mu.Lock()
+	m.started, m.stopped = false, false
+	m.links = map[string]*supervised{}
+	m.mu.Unlock()
+	m.Start(ctx)
+}
+
 // link returns the supervised link for a host name.
 func (m *Manager) link(name string) *link {
 	m.mu.Lock()
