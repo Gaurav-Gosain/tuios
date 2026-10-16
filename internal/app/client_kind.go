@@ -45,6 +45,13 @@ func (k ClientKind) Remote() bool {
 	return k == ClientSSH || k == ClientBrowser
 }
 
+// previewsLive reports whether a picker may preview by applying what it
+// highlights. The theme and the glyph set are process-wide, and a tuios ssh or
+// tuios-web process serves many clients, so a preview there repainted every
+// other guest and the operator too. A served client previews inside the
+// picker instead, and Enter still applies.
+func (m *OS) previewsLive() bool { return !m.Client.Remote() }
+
 // applyClientKind fills the per-client flags a kind implies. Each is OR-ed
 // with what the caller set, so a test that sets one flag directly keeps it and
 // a caller that names a kind cannot forget one.

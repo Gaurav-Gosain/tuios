@@ -66,6 +66,11 @@ func (m *OS) CloseThemePicker() {
 // when a live preview actually changed the active theme, so a no-op cancel does
 // not rewrite config.toml (and cannot overwrite the configured theme).
 func (m *OS) CancelThemePicker() tea.Cmd {
+	if !m.previewsLive() {
+		// Nothing was applied, so there is nothing to restore.
+		m.CloseThemePicker()
+		return nil
+	}
 	current := theme.CurrentThemeID()
 	if current == "" {
 		current = themeNone
@@ -87,8 +92,9 @@ func (m *OS) ThemePickerMove(delta int) {
 	if !livePickerMove(&m.ThemePickerSelected, &m.ThemePickerScroll, delta, len(items), visible, m.listWraps()) {
 		return
 	}
-	// Live preview.
-	m.applyTheme(items[m.ThemePickerSelected])
+	if m.previewsLive() {
+		m.applyTheme(items[m.ThemePickerSelected])
+	}
 }
 
 // ThemePickerRefilter resets the selection after the query changes and previews
@@ -96,7 +102,7 @@ func (m *OS) ThemePickerMove(delta int) {
 func (m *OS) ThemePickerRefilter() {
 	m.ThemePickerSelected = 0
 	m.ThemePickerScroll = 0
-	if items := m.themePickerItems(); len(items) > 0 {
+	if items := m.themePickerItems(); len(items) > 0 && m.previewsLive() {
 		m.applyTheme(items[0])
 	}
 }

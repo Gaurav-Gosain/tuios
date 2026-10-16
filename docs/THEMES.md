@@ -46,6 +46,11 @@ and the settings page (`Ctrl+B` `,`) has a Theme row that opens the same picker.
 The picker is searchable and shows a color swatch for each theme; cancelling
 restores the theme that was active when you opened it.
 
+The arrow keys preview the highlighted theme on the whole screen. In a client
+of `tuios ssh` or `tuios-web` they do not: the theme applies to every client of
+that server, so the picker shows a sample line in the highlighted theme
+instead. Enter applies the theme. The glyph picker works the same way.
+
 `charmtone` and `charmtone-light` use the colours of Charm's CharmTone. Their
 chrome uses the Charple accent. See
 [CharmTone themes](CONFIGURATION.md#charmtone-themes).
