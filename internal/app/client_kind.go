@@ -49,8 +49,9 @@ func (k ClientKind) Remote() bool {
 // highlights. The theme and the glyph set are process-wide, and a tuios ssh or
 // tuios-web process serves many clients, so a preview there repainted every
 // other guest and the operator too. A served client previews inside the
-// picker instead, and Enter still applies.
-func (m *OS) previewsLive() bool { return !m.Client.Remote() }
+// picker instead, and Enter still applies. The Learn tour is a browser client
+// in a process of its own, one page per process, so it previews as before.
+func (m *OS) previewsLive() bool { return !m.Client.Remote() || m.LearnMode }
 
 // applyClientKind fills the per-client flags a kind implies. Each is OR-ed
 // with what the caller set, so a test that sets one flag directly keeps it and
