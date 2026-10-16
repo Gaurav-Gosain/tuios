@@ -374,18 +374,15 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 // gave that pane, so the row wears exactly one identity bar instead of an
 // accent chip beside a focus mark. tint nil falls back to the rail accent.
 //
-// appearance.sidebar.row_style picks the current mark: the bar, the marker
-// glyph, or nothing for underline and pill, which mark the name instead (see
-// railCurrentName). A row that wants a human keeps its severity mark there.
+// appearance.sidebar.row_style picks the current mark: the marker glyph, or
+// the bar. underline and pill mark the name instead, but only on the rows that
+// draw the name for it (the session and terminal rows, see railCurrentName and
+// sidebarGutterNameMarked). Every other caller still needs a mark here, or a
+// focused pane on a compact rail and a folded machine header would show none.
 func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
-	style := s.GetRailRowStyle()
 	switch {
-	case current && style == config.RailRowMarker:
+	case current && s.GetRailRowStyle() == config.RailRowMarker:
 		return sidebarStyle(bg, railFocusTint(tint, pal)).Bold(true).Render(s.GetRailMarker())
-	case current && style != config.RailRowBar && sidebarAttention(state):
-		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(s.GetRailAttentionMark())
-	case current && style != config.RailRowBar:
-		return sidebarStyle(bg, nil).Render(" ")
 	case current:
 		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(s.GetRailFocusMark())
 	case sidebarAttention(state):
@@ -393,6 +390,16 @@ func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal o
 	default:
 		return sidebarStyle(bg, nil).Render(" ")
 	}
+}
+
+// sidebarGutterNameMarked is the gutter of a current row whose name the
+// underline or pill row style marks: the severity mark of a row that wants a
+// human, else blank, so the row wears one mark and not two.
+func sidebarGutterNameMarked(state string, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	if sidebarAttention(state) {
+		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(s.GetRailAttentionMark())
+	}
+	return sidebarStyle(bg, nil).Render(" ")
 }
 
 // railNameMarked reports whether the row style marks the current row's name
@@ -406,6 +413,12 @@ func railNameMarked(s *config.Settings) (marked bool, extra int) {
 		return true, lipgloss.Width(s.GetWindowPillLeft()) + lipgloss.Width(s.GetWindowPillRight())
 	}
 	return false, 0
+}
+
+// railNameMarks reports whether the row style marks the current row's name.
+func railNameMarks(s *config.Settings) bool {
+	marked, _ := railNameMarked(s)
+	return marked
 }
 
 // railCurrentName draws the current row's name for the underline and pill
@@ -2853,6 +2866,9 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 	}
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
+	if nameMarked {
+		gutter = sidebarGutterNameMarked(node.AgentState, rowBg, pal, &m.Settings)
+	}
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
 		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 	}
@@ -2873,7 +2889,11 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 // pane's own accent when it has one, else its session's.
 func (m *OS) terminalRowTint(e sidebarTerminalEntry, rowBg color.Color) color.Color {
 	tint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
-	if accent, ok := m.WindowAccent(e.WindowID); ok {
+	accent, ok := m.WindowAccent(e.WindowID)
+	if preview, previewing := m.accentPreview(AccentTargetWindow, e.WindowID); previewing {
+		accent, ok = preview, true
+	}
+	if ok {
 		tint = accent.Color()
 	}
 	return tint
@@ -2905,6 +2925,8 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 			tint = accent.Color()
 		}
 		switch {
+		case e.Focused && railNameMarks(&m.Settings):
+			gutter = sidebarGutterNameMarked(e.State, rowBg, pal, &m.Settings)
 		case e.Focused:
 			gutter = sidebarGutterTinted(true, e.State, tint, rowBg, pal, &m.Settings)
 		case accented && !sidebarAttention(e.State):
