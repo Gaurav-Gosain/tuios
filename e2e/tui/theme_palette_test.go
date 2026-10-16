@@ -288,7 +288,8 @@ func TestThemeExportWritesOnlyTheChanges(t *testing.T) {
 // TestThemeChromeRolesPaint: a theme's chrome.border.unfocused colours the
 // border of a pane without focus, chrome.rule colours the dock's rule, and
 // chrome.dock.ground paints the dock's row. A dock_background in the config
-// wins over the theme's ground.
+// wins over the theme's ground. The focused pane in copy mode takes
+// chrome.border.copy.
 //
 // How this could pass wrongly: the colours are ones no shipped theme or
 // default draws, so a cell in one of them came from the theme file.
@@ -297,7 +298,7 @@ func TestThemeChromeRolesPaint(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, "[appearance]\ntheme = \"roles\"\n")
 	writeConfigPart(t, base, "themes/roles.json", `{"id": "roles", "base": "nord", "chrome": {
-		"border": {"unfocused": "#ff0000"}, "rule": "#0000ff", "dock": {"ground": "#00ff00"}}}`)
+		"border": {"unfocused": "#ff0000", "copy": "#ff00ff"}, "rule": "#0000ff", "dock": {"ground": "#00ff00"}}}`)
 	term := startIn(t, base, startOpts{cols: 120, rows: 30, env: []string{"COLORTERM=truecolor"}})
 	waitBoot(t, term)
 	newWindow(t, term)
@@ -341,4 +342,15 @@ func TestThemeChromeRolesPaint(t *testing.T) {
 		t.Fatalf("dock_background = \"off\" in the config did not win over the theme's dock.ground: %v\n%s", err, term.SnapshotStyled())
 	}
 	saveArtifact(t, term, artifactDir(t), "config-wins")
+
+	// The focused pane in copy mode takes the theme's border.copy.
+	enterTerminalMode(t, term)
+	sendKeys(t, term, tuitest.Ctrl('b'), "[")
+	copyBorder := func(c tuitest.Cell) bool {
+		return is(c.Fg, 0xff, 0, 0xff) && strings.ContainsAny(c.Content, "─│╭╮╰╯┌┐└┘")
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return count(s, copyBorder) >= 10 }, uiTimeout); err != nil {
+		t.Fatalf("the focused pane in copy mode never took the theme's border.copy: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "copy-mode")
 }

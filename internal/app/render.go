@@ -214,7 +214,15 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
 		var borderColorObj color.Color
 		tint, quietTint, tinted := m.sessionBorderTint()
+		var stateColor color.Color
+		if isFocused {
+			stateColor = m.focusedStateBorder(window)
+		}
 		switch {
+		case stateColor != nil:
+			// Copy mode or an agent that waits, in a colour the theme names
+			// for it, outranks the mode and the session.
+			borderColorObj = stateColor
 		case isFocused && m.Mode == TerminalMode:
 			// The mode colour outranks the session's. This border says the keys
 			// are going into the guest, which is the more urgent fact and the
@@ -963,6 +971,25 @@ func (m *OS) fastPathPaints() bool {
 		(m.surfaceGround(surfaceDock).on() && m.Settings.DockbarPosition != "hidden")
 }
 
+// focusedStateBorder is the focused pane's border for a state the theme
+// names a colour for: border.copy in copy mode, status.attention while the
+// pane's agent waits for input. Nil when the pane is in neither state, or
+// the theme names no colour for it, and the mode's colour is drawn.
+func (m *OS) focusedStateBorder(w *terminal.Window) color.Color {
+	if w == nil {
+		return nil
+	}
+	if w.CopyModeVisible() {
+		if c := theme.BorderFocusedCopy(); c != nil {
+			return c
+		}
+	}
+	if c := theme.BorderFocusedAttention(); c != nil && m.windowMarkState(w) == "needs_input" {
+		return c
+	}
+	return nil
+}
+
 // buildFullscreenFrame renders the window box and stacks it with the dock,
 // skipping the compositor. Mutates render state (renders the window, clears its
 // dirty flags), so it must only be called after eligibility is confirmed.
@@ -974,7 +1001,13 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 
 	isFocused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == window
 	var borderColorObj color.Color
+	var stateColor color.Color
+	if isFocused {
+		stateColor = m.focusedStateBorder(window)
+	}
 	switch {
+	case stateColor != nil:
+		borderColorObj = stateColor
 	case isFocused && m.Mode == TerminalMode:
 		borderColorObj = theme.BorderFocusedTerminalOn(m.host.bg)
 	case isFocused:

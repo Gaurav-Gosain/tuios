@@ -304,6 +304,31 @@ func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
 	return slotAt16(10, borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen)))
 }
 
+// BorderFocusedCopy is the focused pane's border while it is in copy mode:
+// the theme's border.copy, or nil when the theme names none. A configured
+// border_focused_color wins, so it is nil then too.
+func BorderFocusedCopy() color.Color {
+	if borderOverride(true) != nil {
+		return nil
+	}
+	if c := chromeFurniture(RoleBorderCopy); c != nil {
+		return borderInk(c)
+	}
+	return nil
+}
+
+// BorderFocusedAttention is the focused pane's border while its agent waits
+// for input: the theme's status.attention, or nil as BorderFocusedCopy.
+func BorderFocusedAttention() color.Color {
+	if borderOverride(true) != nil {
+		return nil
+	}
+	if c := chromeFurniture(RoleAttention); c != nil {
+		return borderInk(c)
+	}
+	return nil
+}
+
 // hostBorderInkMemo keeps the last few answers of hostBorderInk. The border
 // colours are asked for on every pane of every frame, and a lift is a walk of
 // up to sixteen contrast measurements.

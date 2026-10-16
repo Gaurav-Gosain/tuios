@@ -401,6 +401,9 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	if m.Mode == TerminalMode {
 		focusColor = theme.BorderFocusedTerminalOn(m.host.bg)
 	}
+	if c := m.focusedStateBorder(m.GetFocusedWindow()); c != nil {
+		focusColor = c
+	}
 	focusedStr := "\x1b[1m" + sgrForeground(focusColor)
 
 	// Everything below is a function of these inputs, and a keystroke changes

@@ -6669,3 +6669,14 @@ Run on 2026-10-16.
 | The client did not follow the terminal's scheme | yes | `followSchemeTheme` returns at once | `TestThemePairFollowsTheTerminal` ("light: a pane's red reached the host as #bf6169, want #d20f38") | **caught** |
 | The picker wrote theme without asking | yes | `ThemePickerApplySelection` skips the pair question | `TestThemePairFollowsTheTerminal` ("the picker never asked which theme") | **caught** |
 | A --theme flag lost to theme_light on a light terminal | yes | the `FlagTheme` check removed from `followSchemeTheme` | `TestThemePairFollowsTheTerminal` (the flag run: a pane's red reached the host as dracula's #ff5555), run on 2026-10-17 | **caught** |
+
+## The focused border by state
+
+`TestThemeChromeRolesPaint` now also enters copy mode on the focused pane and
+requires its border in the theme's `border.copy`.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The focused border ignored the state colours | yes | `focusedStateBorder` always returns nil | `TestThemeChromeRolesPaint` ("the focused pane in copy mode never took the theme's border.copy") | **caught** |

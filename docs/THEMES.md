@@ -364,10 +364,10 @@ by surface. Each one you leave out draws as before:
 | Field | What it colors | When absent |
 |---|---|---|
 | `border.unfocused` | the border of a pane without focus | `red` |
-| `border.copy` | the copy-mode pill | `warning` |
+| `border.copy` | the copy-mode pill, and the border of the focused pane in copy mode | `warning` for the pill. The border keeps the mode's colour |
 | `border.multifocus` | the border of each pane that takes the keys with multifocus, and the multi copy pill | slot 3, and `border.copy` for the pill |
 | `rule` | the line under the dock and the lines on the rail | measured from the ground |
-| `status.attention` | an agent that waits for input, on the rail | `warning` |
+| `status.attention` | an agent that waits for input, on the rail, and the border of the focused pane while its agent waits | `warning` on the rail. The border keeps the mode's colour |
 | `status.busy` | a working agent on the rail, and the shimmer on its row | `info`, and `accent_bright` for the shimmer |
 | `dots.close`, `dots.minimize`, `dots.zoom` | the window buttons in the dots style | red, amber and green |
 | `dock.ground` | the background of the dock | none |
@@ -378,7 +378,8 @@ by surface. Each one you leave out draws as before:
   `appearance.background` that is a colour or `theme`. See
   [CONFIGURATION.md](CONFIGURATION.md).
 - `appearance.border_unfocused_color` in the config wins over
-  `border.unfocused`.
+  `border.unfocused`. `appearance.border_focused_color` wins over the focused
+  border's colours by state.
 - In a config colour, write a role by its full name, such as
   `fg = "status.attention"`.
 - At 16 colours these fields are not used. Each piece uses its slot, as before.
