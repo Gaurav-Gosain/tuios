@@ -2674,6 +2674,22 @@ pull request, linux/amd64 then darwin/arm64:
 No dependency was added. The new budgets leave 29,734 and 32,534 bytes of
 room.
 
+The budgets went to 36,720,000 (linux/amd64) and 34,565,000 (darwin/arm64)
+for the batch of #781, #782, #787 and #790. Main at 0a376af9 measured
+36,679,842 and 34,519,682 bytes (Go 1.26.9), 5,158 and 15,318 bytes under the
+budgets. The batch brings it to 36,688,034 and 34,536,434, 8,192 and 16,752
+bytes more. By pull request, linux/amd64 then darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #781 the frame ticker stays idle for a dock frame | 8,192 | 112 |
+| #782 the frame ticker stops when the client is idle | 0 | 0 |
+| #787 the maintenance tick runs only when a job is due | 0 | 16,640 |
+| #790 the clock without seconds by default | 0 | 0 |
+
+No dependency was added. The new budgets leave 31,966 and 28,566 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
