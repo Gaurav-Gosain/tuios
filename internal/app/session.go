@@ -278,6 +278,9 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.SessionName = state.Name
 	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
+	// The dock's bell and activity marks name workspaces of the session being
+	// left. See workspace_marks.go.
+	m.workspaceMarkSet = nil
 	// Clamp to a valid workspace: SwitchToWorkspace rejects workspace < 1, so a
 	// state carrying 0 (legacy, or a freshly created session with no windows)
 	// would strand every subsequently created window on an unreachable workspace.

@@ -258,6 +258,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 
 	// Switch to new workspace
 	m.CurrentWorkspace = workspace
+	// Looking at a workspace clears its dock marks now, not at the next pane
+	// output, which an idle workspace may never send.
+	m.clearViewedWorkspaceMarks()
 	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
 
 	// A caller-supplied target wins: focus exactly it, so the switch does not fire
