@@ -162,13 +162,29 @@ func printKeybindReport(rep config.KeybindReport) {
 		}
 	}
 
-	if len(rep.Yielded) > 0 {
+	var fresh, preset []config.YieldedDefault
+	for _, y := range rep.Yielded {
+		if y.Preset != "" {
+			preset = append(preset, y)
+		} else {
+			fresh = append(fresh, y)
+		}
+	}
+	if len(fresh) > 0 {
 		fmt.Printf("\nNEW ACTIONS WITH NO KEY (%s)\n", config.EvidenceCertain)
 		fmt.Println("  The default key of a new action is already yours for another action.")
 		fmt.Println("  tuios kept your binding and left the new action without a key.")
-		for _, y := range rep.Yielded {
+		for _, y := range fresh {
 			fmt.Printf("  %-22s %s runs %s. To use %s, bind it to a free key in [keybindings.%s].\n",
 				y.Action, y.Key, y.TakenBy, y.Action, y.Section)
+		}
+	}
+	if len(preset) > 0 {
+		fmt.Printf("\nPRESET KEYS YOUR BINDINGS TAKE (%s)\n", config.EvidenceCertain)
+		fmt.Printf("  The %s preset gives these keys to other actions. Your bindings keep them.\n", preset[0].Preset)
+		for _, y := range preset {
+			fmt.Printf("  %-22s %s runs %s. To give %s to %s, bind %s to another key in [keybindings.%s].\n",
+				y.Action, y.Key, y.TakenBy, y.Key, y.Action, y.TakenBy, y.Section)
 		}
 	}
 

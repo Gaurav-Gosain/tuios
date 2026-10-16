@@ -85,6 +85,13 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 	if cfg.Keybindings.LeaderKey != "ctrl+b" {
 		t.Errorf("leader is %q, want the preset's ctrl+b", cfg.Keybindings.LeaderKey)
 	}
+	// keybinds doctor names the preset key the user's binding took.
+	// Negative control: fillMapDefaultsYielding returning nil leaves the
+	// report without it.
+	want := YieldedDefault{Section: "prefix_mode", Action: "prev_workspace", Key: "p", TakenBy: "prefix_prev_window", Preset: "tmux"}
+	if rep := r.Report(PaneFacts{}); !slices.Contains(rep.Yielded, want) {
+		t.Errorf("the doctor report does not name the preset key the user took: %+v", rep.Yielded)
+	}
 
 	// A config.toml an older tuios wrote on its first start holds every
 	// default. Those entries are not the user's choice and must not hide the
@@ -95,6 +102,16 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 	for key, want := range map[string]string{"c": "new_workspace", "n": "next_workspace", "o": "prefix_next_window"} {
 		if got := r.GetPrefixAction(key); got != want {
 			t.Errorf("full old config: %s runs %q, want %q", key, got, want)
+		}
+	}
+
+	// The same file holds leader_key = 'ctrl+b', the tuios default. Under a
+	// preset with another leader it gives way. A leader the user changed
+	// stays. Negative control: without the leader check in
+	// fillMissingKeybinds, screen keeps ctrl+b.
+	for leader, want := range map[string]string{"ctrl+b": "ctrl+a", "ctrl+x": "ctrl+x"} {
+		if got := presetConfig(t, "screen", "leader_key = \""+leader+"\"\n").Keybindings.LeaderKey; got != want {
+			t.Errorf("screen with leader_key = %q: leader is %q, want %q", leader, got, want)
 		}
 	}
 }

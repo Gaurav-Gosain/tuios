@@ -3133,16 +3133,33 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// A preset is applied to the defaults first, so everything below fills
 	// from it. The user's keys after the leader and in terminal mode win over
 	// the preset's: there the fill yields.
-	fillPrefix := fillMapDefaults
+	fillPrefix := func(section string, target, defaults map[string][]string) []YieldedDefault {
+		fillMapDefaults(target, defaults)
+		return nil
+	}
 	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
 		kb := defaultCfg.Keybindings
 		if applyPreset(&kb, p) == nil {
+			// A config.toml an older tuios wrote on its first start sets
+			// leader_key to the tuios default. That is the same shadow
+			// dropPresetShadows removes for keys: the preset's leader wins.
+			// A leader the user changed stays.
+			if l := cfg.Keybindings.LeaderKey; l != "" && sameKeyPress(l, defaultCfg.Keybindings.LeaderKey) &&
+				!sameKeyPress(kb.LeaderKey, defaultCfg.Keybindings.LeaderKey) {
+				cfg.Keybindings.LeaderKey = ""
+			}
 			dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode)
 			dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode)
 			dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix)
 			dropPresetShadows(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix, kb.WorkspacePrefix)
 			defaultCfg = &UserConfig{Keybindings: kb}
-			fillPrefix = fillMapDefaultsYielding
+			fillPrefix = func(section string, target, defaults map[string][]string) []YieldedDefault {
+				out := fillMapDefaultsYielding(target, defaults)
+				for i := range out {
+					out[i].Section, out[i].Preset = section, p
+				}
+				return out
+			}
 			if cfg.Keybindings.Repeat == nil {
 				cfg.Keybindings.Repeat = slices.Clone(kb.Repeat)
 			}
@@ -3264,19 +3281,30 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.RestoreMinimized, defaultCfg.Keybindings.RestoreMinimized)
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults[:0],
 		yieldTakenDefaults("prefix_mode", cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)...)
-	fillPrefix(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
+	presetYield := fillPrefix("prefix_mode", cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
 	for _, y := range cfg.YieldedDefaults {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, layoutYield...)
-	fillPrefix(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
+	presetYield = append(presetYield, fillPrefix("window_prefix", cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)...)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
-	fillPrefix(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
+	presetYield = append(presetYield, fillPrefix("workspace_prefix", cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)...)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 	fillMapDefaultsYielding(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
 	fillMapDefaultsYielding(cfg.Keybindings.TuiosPrefix, defaultCfg.Keybindings.TuiosPrefix)
-	fillPrefix(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
+	presetYield = append(presetYield, fillPrefix("terminal_mode", cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)...)
+	sortx.SortFunc(presetYield, func(a, b YieldedDefault) int {
+		return cmp.Compare(a.Section+"\x00"+a.Action+"\x00"+a.Key, b.Section+"\x00"+b.Action+"\x00"+b.Key)
+	})
+	for _, y := range presetYield {
+		// A new default the user's key took is already listed once.
+		if !slices.ContainsFunc(cfg.YieldedDefaults, func(o YieldedDefault) bool {
+			return o.Section == y.Section && o.Action == y.Action && o.Key == y.Key
+		}) {
+			cfg.YieldedDefaults = append(cfg.YieldedDefaults, y)
+		}
+	}
 	// A config written before the global and script sections existed has neither,
 	// so without this the palette and the launcher would come back unbound for
 	// every existing user rather than keeping the keys they already had.
@@ -3365,6 +3393,9 @@ type YieldedDefault struct {
 	Action  string `json:"action"`
 	Key     string `json:"key"`
 	TakenBy string `json:"taken_by"`
+	// Preset names the keybinding preset whose key this is. It is empty
+	// for a new tuios default.
+	Preset string `json:"preset,omitempty"`
 }
 
 // yieldTakenDefaults finds each yielding action the user's table does not
@@ -3432,22 +3463,25 @@ func fillMapDefaults(target, defaults map[string][]string) {
 // on purpose: prefix_settings takes "," back from a config written when ","
 // was a second key for prefix_rename_window (see the migration below), and
 // that needs the default filled in first.
-func fillMapDefaultsYielding(target, defaults map[string][]string) {
-	taken := make(map[string]bool)
-	for _, keys := range target {
+func fillMapDefaultsYielding(target, defaults map[string][]string) []YieldedDefault {
+	taken := make(map[string]string)
+	for action, keys := range target {
 		for _, key := range keys {
 			for _, sp := range keySpellings(key) {
-				taken[sp] = true
+				taken[sp] = action
 			}
 		}
 	}
+	var yielded []YieldedDefault
 	for k, v := range defaults {
 		if _, exists := target[k]; exists {
 			continue
 		}
 		free := make([]string, 0, len(v))
 		for _, key := range v {
-			if !taken[CanonicalKey(key)] {
+			if by, ok := taken[CanonicalKey(key)]; ok {
+				yielded = append(yielded, YieldedDefault{Action: k, Key: key, TakenBy: by})
+			} else {
 				free = append(free, key)
 			}
 		}
@@ -3455,6 +3489,7 @@ func fillMapDefaultsYielding(target, defaults map[string][]string) {
 			target[k] = free
 		}
 	}
+	return yielded
 }
 
 // dropPresetShadows removes the user's entries that hold the tuios default
