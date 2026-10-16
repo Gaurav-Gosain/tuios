@@ -59,7 +59,7 @@ submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; not measured"
 images          = "path_text"
-images_source   = "reads an image path in the prompt; not measured"
+images_source   = "measured on pi 0.73.1: a path pasted on its own stays text in the input box, so it goes in the text; that pi reads it at submit is not measured"
 
 # The conversation survives a daemon restart on disk: pi's hooks report the
 # session id, and --session reopens it by exact or partial id. A restored pane

@@ -76,4 +76,4 @@ submit          = "cr"
 bracketed_paste = true
 source          = "measured on crush v0.96.1 (DECSET 2004 on, kitty flags 1)"
 images          = "path_paste"
-images_source   = "a pasted list of image paths becomes attachments (fsext/paste.go); not measured"
+images_source   = "measured on crush v0.98.1: a path pasted on its own became an attachment over the input box (TestHarnessTakesAPastedImagePath)"

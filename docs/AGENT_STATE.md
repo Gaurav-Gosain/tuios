@@ -3884,7 +3884,11 @@ types the reply, then:
 - `none`: refuses a reply with an image.
 
 Claude Code, Codex, OpenCode, Kilo and Crush say `path_paste`, and pi says
-`path_text`. None of these is measured yet: `images_source` says so.
+`path_text`. `images_source` says which are measured: OpenCode 1.19.3 and
+Crush v0.98.1 attach a path pasted on its own, and pi 0.73.1 keeps it as text.
+Claude Code, Codex and Kilo are not measured yet. The e2e test
+`TestHarnessTakesAPastedImagePath` measures a harness installed on your
+machine, when `TUIOS_E2E_HARNESSES` names it. It submits nothing.
 
 A manifest without the block, and a pane no harness claimed, get the defaults:
 carriage return, and a bracketed paste when the pane asks for one. That is what

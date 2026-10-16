@@ -66,7 +66,7 @@ submit          = "cr"
 bracketed_paste = true
 source          = "measured on opencode 1.18.30 (DECSET 2004 on, no kitty keyboard flags)"
 images          = "path_paste"
-images_source   = "a pasted image path becomes an attachment (local-attachment.ts); not measured"
+images_source   = "measured on opencode 1.19.3: a path pasted on its own became [Image 1] in the input box (TestHarnessTakesAPastedImagePath)"
 
 [resume]
 argv   = ["opencode", "--session", "{session_id}"]
