@@ -254,7 +254,9 @@ func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 		out = agentHookOutcome{Decision: integration.Decision{Harness: harness}, Error: "gave up after " + timeout.String()}
 	}
 	if startHint(out) {
-		_, _ = io.WriteString(hio.stdout, integration.SessionStartHint(shortWindowID(out.Window), out.Session))
+		if hint := integration.SessionStartHint(shortWindowID(out.Window), out.Session); hint != "" {
+			_, _ = io.WriteString(hio.stdout, hint)
+		}
 	}
 	if holdable(out) {
 		out.Hold = holdForAnswer(out, hio)

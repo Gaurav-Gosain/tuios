@@ -15,6 +15,7 @@ package integration
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -388,10 +389,28 @@ func StartsWithContext(harness string) bool {
 // SessionStartHint is what the SessionStart hook prints for the agent: the
 // pane and the session it runs in, and where to learn the rest. It is two
 // short lines because it costs tokens in every session.
+//
+// The text goes into the agent's context, so neither name may carry text of
+// its own there. A session name may hold any printable text, and a pane given
+// by name instead of id may even hold a newline, so the pane must be a short id
+// (hex digits) or nothing is printed, and the session is cut to
+// maxHintSession runes and quoted with every non-printable rune escaped
+// (newlines, U+2028, bidi overrides).
 func SessionStartHint(pane, session string) string {
-	return "You run in tuios pane " + pane + " in session " + session + ".\n" +
+	if pane == "" || session == "" || strings.ContainsFunc(pane, func(r rune) bool {
+		return !('0' <= r && r <= '9' || 'a' <= r && r <= 'f' || 'A' <= r && r <= 'F')
+	}) {
+		return ""
+	}
+	if r := []rune(session); len(r) > maxHintSession {
+		session = string(r[:maxHintSession]) + "..."
+	}
+	return "You run in tuios pane " + pane + " in session " + strconv.Quote(session) + ".\n" +
 		"Run `tuios --skill` to learn how to drive tuios.\n"
 }
+
+// maxHintSession is the most runes of a session name the start hint shows.
+const maxHintSession = 64
 
 // fields reads a decoded payload without panicking on a field of the wrong
 // type: a harness that changes a field's type costs that field, not the hook.

@@ -3416,12 +3416,13 @@ For Claude Code and Codex, a `SessionStart` reported for a pane also prints
 two lines, which the harness adds to the agent's context:
 
 ```text
-You run in tuios pane 3a42ab8f in session work.
+You run in tuios pane 3a42ab8f in session "work".
 Run `tuios --skill` to learn how to drive tuios.
 ```
 
-Outside tuios, when the report fails, and with `--window`, the hook prints
-nothing.
+The session name is quoted, with control and format characters escaped, and
+cut to 64 characters. Outside tuios, when the report fails, with `--window`,
+and when the pane is not a pane id, the hook prints nothing.
 
 | Claude Code event | Reports |
 | ----------------- | ------- |
