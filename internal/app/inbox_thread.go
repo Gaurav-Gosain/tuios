@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -494,8 +495,19 @@ func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (l
 		for _, l := range inboxApprovalDetail(it, width) {
 			bottom = append(bottom, overlay.Fill(st.Foreground(fg).Render(ansi.Truncate(l, width, "…")), width, bg))
 		}
-		keys := "1 allow · 2 always · 3 deny"
-		bottom = append(bottom, overlay.Fill(st.Foreground(overlay.Readable(pal.Warning, bg)).Render("  "+keys), width, bg))
+		// Only the answers this prompt takes: a plan or a prompt with no
+		// always has no 2.
+		var keys []string
+		for _, k := range []struct{ decision, words string }{
+			{session.ApprovalOnce, "1 allow"}, {session.ApprovalAlways, "2 always"}, {session.ApprovalDeny, "3 deny"},
+		} {
+			if slices.Contains(it.Options, k.decision) {
+				keys = append(keys, k.words)
+			}
+		}
+		if len(keys) > 0 {
+			bottom = append(bottom, overlay.Fill(st.Foreground(overlay.Readable(pal.Warning, bg)).Render("  "+strings.Join(keys, " · ")), width, bg))
+		}
 	}
 	edRow = -1
 	if ed := m.Inbox.reply.editor; ed != nil && ed.window == e.WindowID && ed.session == e.SessionID {
