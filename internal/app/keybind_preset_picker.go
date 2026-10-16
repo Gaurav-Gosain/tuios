@@ -112,6 +112,7 @@ func (m *OS) PresetPickerApply() tea.Cmd {
 		m.ShowNotification("Keys not changed: "+err.Error(), "error", 0)
 		return nil
 	}
+	write = m.queueSettingsSave(write)
 	return func() tea.Msg {
 		_, err := write()
 		return keybindPresetSavedMsg{name: name, err: err, prevPreset: prevPreset, prevLeader: prevLeader}

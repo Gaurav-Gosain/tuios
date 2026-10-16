@@ -1006,6 +1006,9 @@ type OS struct {
 	// session, since it would otherwise fire on every keypress in the settings
 	// page.
 	configReadOnlyTold bool
+	// settingsSaves runs the config writes in the order they were made. See
+	// settings_save.go.
+	settingsSaves *settingsSaveQueue
 	// Showkeys overlay: a bottom-right, dock-aware keycast that shows the last
 	// few keypresses as styled pills and expires them after a short timeout. It
 	// renders purely from ShowKeys plus RecentKeys, gated on nothing else.

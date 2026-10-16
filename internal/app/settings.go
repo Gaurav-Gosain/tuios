@@ -263,6 +263,7 @@ func (m *OS) persistSettings() tea.Cmd {
 	// The agent switch applies on this client now. The daemon follows the
 	// file this writes. See agents_off.go.
 	agents := m.applyAgentsSwitch()
+	write = m.queueSettingsSave(write)
 	save := func() tea.Msg {
 		note, err := write()
 		if err != nil {

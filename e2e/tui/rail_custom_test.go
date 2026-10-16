@@ -247,13 +247,10 @@ func TestRailCustomSectionPlacementAndEditorRoundTrip(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	data, err := os.ReadFile(configFile(base))
-	if err != nil {
-		t.Fatalf("read the config: %v", err)
-	}
-	if !editedLayoutRe.Match(data) {
-		t.Fatalf("the editor did not write custom back into the layout:\n%s", data)
-	}
+	// The settings save runs in the background, so the file can lag the
+	// screen. Wait for the layout instead of reading the file once.
+	waitForFileText(t, configFile(base), editedLayoutRe.MatchString,
+		"the editor did not write custom back into the layout")
 }
 
 // editedLayoutRe is the layout line the editor round trip leaves in the file.
