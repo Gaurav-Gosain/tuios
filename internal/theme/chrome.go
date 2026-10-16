@@ -1,7 +1,6 @@
 package theme
 
 import (
-	"encoding/json"
 	"fmt"
 	"image/color"
 	"strings"
@@ -66,24 +65,6 @@ type Chrome struct {
 	fg, fgDim, fgMute color.Color
 }
 
-// chromeFile is the shape read from a theme JSON's optional "chrome" object.
-// Strings rather than colours so an unparseable entry can be dropped on its own
-// rather than failing the theme.
-type chromeFile struct {
-	Chrome *struct {
-		Accent       string `json:"accent"`
-		AccentBright string `json:"accent_bright"`
-		Success      string `json:"success"`
-		Warning      string `json:"warning"`
-		Error        string `json:"error"`
-		Info         string `json:"info"`
-		Surface      string `json:"surface"`
-		Canvas       string `json:"canvas"`
-		Panel        string `json:"panel"`
-		Card         string `json:"card"`
-	} `json:"chrome"`
-}
-
 var chromeRegistry struct {
 	sync.RWMutex
 	byID map[string]*Chrome
@@ -120,7 +101,10 @@ func CurrentChrome() *Chrome {
 	return chromeRegistry.byID[t.ID]
 }
 
-// parseChrome reads the chrome object out of a theme file's bytes. A field that
+// chromeRaw is a chrome object's fields as the file wrote them, by role.
+type chromeRaw [RoleCard + 1]string
+
+// buildChrome resolves a chrome object's fields on the theme t. A field that
 // is absent or unparseable is left nil and derives from the ANSI slots as
 // before: a typo in one colour costs that colour, not the theme.
 //
@@ -129,31 +113,6 @@ func CurrentChrome() *Chrome {
 // every field is read, so the order the file lists them in does not matter. A
 // loop of roles that name each other has no colour to end on, and is the one
 // mistake that fails the file: the error names the roles in the loop.
-func parseChrome(data []byte, t *tint.Tint) (*Chrome, error) {
-	raw, _ := chromeStrings(data)
-	return buildChrome(raw, t)
-}
-
-// chromeRaw is a chrome object's fields as the file wrote them, by role.
-type chromeRaw [RoleCard + 1]string
-
-// chromeStrings reads the chrome object out of a theme file's bytes. ok is
-// false when the file has none.
-func chromeStrings(data []byte) (raw chromeRaw, ok bool) {
-	var f chromeFile
-	if err := json.Unmarshal(data, &f); err != nil || f.Chrome == nil {
-		return raw, false
-	}
-	fc := f.Chrome
-	return chromeRaw{
-		RoleAccent: fc.Accent, RoleAccentBright: fc.AccentBright, RoleSuccess: fc.Success,
-		RoleWarning: fc.Warning, RoleError: fc.Error, RoleInfo: fc.Info,
-		RoleSurface: fc.Surface, RoleCanvas: fc.Canvas, RolePanel: fc.Panel, RoleCard: fc.Card,
-	}, true
-}
-
-// buildChrome resolves a chrome object's fields on the theme t. See
-// parseChrome.
 func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
 	var specs [RoleCard + 1]ColorSpec
 	for r := RoleAccent; r <= RoleCard; r++ {
