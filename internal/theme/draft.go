@@ -292,11 +292,14 @@ func (d *Draft) save(force bool) (string, error) {
 	return path, nil
 }
 
-// PaletteOf is the dialog palette the theme t and its chrome c draw, at the
-// depth in force. It reads no global theme state, so a client measures a
-// draft without putting it in force.
+// PaletteOf is the dialog palette the theme t and its chrome c draw, in the
+// theme's own colours: at truecolor, whatever the depth in force. The editor
+// shows and saves these values, and the frame writer steps them down when it
+// draws them. Built at 256 or 16 colours, a role the theme leaves to a slot
+// showed the palette entry's hex, not the theme's. It reads no global theme
+// state, so a client measures a draft without putting it in force.
 func PaletteOf(t *tint.Tint, c *Chrome) overlay.Palette {
-	return buildUIWith(Depth(), t, c)
+	return buildUIWith(overlay.DepthTrueColor, t, c)
 }
 
 // RoleColour is the colour role r draws for the theme t and chrome c, whose
