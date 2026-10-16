@@ -16,9 +16,15 @@ import (
 // and one that ends without dropping the kept frame holds a screen of cells.
 // Motion none must start nothing at all.
 //
+// The frames also have to keep to the clock's rate. A timer armed for a
+// whole interval after each frame was handled ran slow by the handling time:
+// at full screen the circle went out every 17.1 to 17.5 ms, and a 60 Hz
+// recording showed held frames.
+//
 // Negative controls: dropping the expireThemeTransition term from
 // handleMotionFrame fails the "still runs" check, and dropping t.old = nil
-// from end fails the "kept frame" check.
+// from end fails the "kept frame" check. Arming the motion timer for want
+// again, in motionCmd or in nextMotionWait, fails the grid checks.
 func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	prev := theme.CurrentThemeID()
 	t.Cleanup(func() { _ = theme.Initialize(prev) })
@@ -47,6 +53,31 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
 	if m.renderSkipped {
 		t.Error("a motion frame during the transition was skipped")
+	}
+
+	// The next frame is due one interval after the last was due, however
+	// late that one was handled.
+	frame := m.themeTransitionFrame()
+	late := time.Now().Add(-frame / 2)
+	m.motion.due = late
+	m.motionCmd()
+	if want := late.Add(frame); !m.motion.due.Equal(want) {
+		t.Errorf("a frame handled %v late put the next one at %v past the last, want %v",
+			frame/2, m.motion.due.Sub(late), frame)
+	}
+	// A second of frames, each handled 4 ms after it was due, is still a
+	// second of frames at the full rate.
+	var mo motionState
+	start := time.Now()
+	at := start.Add(mo.nextMotionWait(start, frame))
+	n := 0
+	for at.Before(start.Add(time.Second)) {
+		n++
+		handled := at.Add(4 * time.Millisecond)
+		at = handled.Add(mo.nextMotionWait(handled, frame))
+	}
+	if rate := int(time.Second / frame); n < rate-1 {
+		t.Errorf("frames handled 4 ms late came %d times a second, want %d", n, rate)
 	}
 	m.themeFx.start = time.Now().Add(-time.Hour)
 	m.renderSkipped = true
