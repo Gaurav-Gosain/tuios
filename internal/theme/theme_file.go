@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -90,6 +91,7 @@ type resolvedTheme struct {
 	tint   *tint.Tint
 	chrome chromeRaw
 	path   string
+	base   string
 }
 
 // builtins is every theme tuios ships, by id, as it was before any file in the
@@ -170,7 +172,7 @@ func mergeBase(f *themeFile) (resolvedTheme, error) {
 		}
 	}
 	fillDefaults(&t)
-	return resolvedTheme{tint: &t, chrome: chrome, path: f.path}, nil
+	return resolvedTheme{tint: &t, chrome: chrome, path: f.path, base: f.Base}, nil
 }
 
 // themeColours lists a tint's colour fields, so a merge or a diff walks them
@@ -248,6 +250,20 @@ func ThemeFileOf(id string) (yours, editsBuiltin bool) {
 	_, yours = themeBases.customs[id]
 	_, builtin := themeBases.builtins[id]
 	return yours, yours && builtin
+}
+
+// ThemesBasedOn lists the theme files that name id as their base, sorted.
+func ThemesBasedOn(id string) []string {
+	themeBases.RLock()
+	defer themeBases.RUnlock()
+	var out []string
+	for child, r := range themeBases.customs {
+		if r.base == id && child != id {
+			out = append(out, child)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // DeleteThemeFile removes the file that defines a theme of yours. For an

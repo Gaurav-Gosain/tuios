@@ -57,7 +57,7 @@ Type to filter the list. The picker also takes these keys:
 
 A theme from a file in your themes directory shows `(yours)`. A file that
 uses the id of a built-in theme shows `(edited)`. You cannot delete the theme
-that is in use.
+that is in use, or a theme file that another file names as its `base`.
 
 The arrow keys preview the highlighted theme on the whole screen. In a client
 of `tuios ssh` or `tuios-web` they do not: the theme applies to every client of
