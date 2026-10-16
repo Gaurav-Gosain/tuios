@@ -16,8 +16,8 @@ import (
 // daemon's cleanup interval. Two clients, each on a daemon of its own, get
 // the same panes, the same text, the same resizes and the same program; one
 // releases every second, the other not within the test. The one that
-// releases must hold less heap by at least half a pane of cells per pane,
-// first for the reflow scratch and then again for the alternate screen. After
+// releases must hold less heap by at least half a pane of cells per pane for
+// the reflow scratch, and by a quarter more for the alternate screen. After
 // the releases, a resize, a full-screen program and the shell it returns to
 // must draw exactly as on the client that kept its buffers.
 //
@@ -180,9 +180,13 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 	alt := heap(kept) - heap(released) - scratch
 	t.Logf("client heap after %d panes left a full-screen program: %d KiB more on the client that kept its buffers (%d KiB/pane)",
 		panes, alt/1024, alt/1024/panes)
-	if alt < want {
-		t.Fatalf("ASSERTION: the client released %d KiB of alternate screen across %d panes, want at least %d KiB (half a %dx%d pane of cells per pane)",
-			alt/1024, panes, want/1024, cols/2, rows/2)
+	// This gap is the difference of two heap readings less the first one, so
+	// it carries the noise of both: 1288 to 1704 KiB over four runs on one
+	// machine, against 16 KiB with the release cut. Half the reflow bar still
+	// tells the two apart without failing on a noisy runner.
+	if altWant := want / 2; alt < altWant {
+		t.Fatalf("ASSERTION: the client released %d KiB of alternate screen across %d panes, want at least %d KiB (a quarter of a %dx%d pane of cells per pane)",
+			alt/1024, panes, altWant/1024, cols/2, rows/2)
 	}
 
 	// The next reflow allocates what the release dropped and lays the text
