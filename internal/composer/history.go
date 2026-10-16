@@ -125,9 +125,44 @@ func cellsOf(parts []Part) []cell {
 }
 
 // ReplaceText puts text in place of the whole draft as one undo step, with
-// the cursor at the end, for the text an external editor wrote.
-func (m *Model) ReplaceText(text string) {
-	m.replaceCells(segment(nil, clean(text)), "")
+// the cursor at the end, for the text an external editor wrote. The editor
+// had each image as its label, so a label still in the text gets its image
+// back, once. Text longer than the draft holds is refused, the draft stays as
+// it was, and ReplaceText reports false.
+func (m *Model) ReplaceText(text string) bool {
+	text = clean(text)
+	if len(text) > m.opt.MaxBytes {
+		m.notice = "The editor wrote more than the draft holds. The draft is as it was."
+		return false
+	}
+	var images []*block
+	for _, c := range m.cells {
+		if c.block != nil && c.block.img != nil {
+			images = append(images, c.block)
+		}
+	}
+	var cells []cell
+	for text != "" {
+		at, which := -1, -1
+		for i, b := range images {
+			if b == nil {
+				continue
+			}
+			if j := strings.Index(text, b.label); j >= 0 && (at < 0 || j < at) {
+				at, which = j, i
+			}
+		}
+		if at < 0 {
+			cells = segment(cells, text)
+			break
+		}
+		cells = segment(cells, text[:at])
+		cells = append(cells, blockCell(images[which]))
+		text = text[at+len(images[which].label):]
+		images[which] = nil
+	}
+	m.replaceCells(cells, "")
+	return true
 }
 
 // endHistoryWalk ends a walk: the loaded message is the draft now.

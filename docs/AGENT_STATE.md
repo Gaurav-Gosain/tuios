@@ -4145,7 +4145,10 @@ it. A message keeps at most 256 KB of pastes and images. A larger block is
 not kept, and the editor says so when the message comes back.
 
 `ctrl+g` opens the draft in `$VISUAL` or `$EDITOR`, with each block's text in
-its place, and what you save comes back as the draft. The file is yours
+its place, and what you save comes back as the draft. An image is in the file
+as its label, such as `[Image #1 · 640×480 png]`. Keep the label, and the
+image stays in its place. Remove it, and the image goes. A file larger than a
+draft holds is refused, and the draft stays as it was. The file is yours
 alone, in a folder made for it, and both are removed when the editor
 closes. A reply the daemon refuses keeps its draft too. If you started a new
 draft for the same pane while that reply was out, the reply that was not sent

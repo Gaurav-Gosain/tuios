@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -174,7 +175,7 @@ func (m *OS) replyEditorCmd(comp *composer.Model) tea.Cmd {
 // applyReplyEditorDone puts what the editor wrote in the draft, and removes
 // the file and its folder.
 func (m *OS) applyReplyEditorDone(msg replyEditorDoneMsg) tea.Cmd {
-	data, readErr := os.ReadFile(msg.path)
+	data, readErr := readBounded(msg.path, composer.DefaultMaxBytes+1)
 	_ = os.RemoveAll(msg.dir)
 	if m.replyEditorDir == msg.dir {
 		m.replyEditorDir = ""
@@ -192,6 +193,18 @@ func (m *OS) applyReplyEditorDone(msg replyEditorDoneMsg) tea.Cmd {
 		msg.comp.ReplaceText(strings.TrimRight(string(data), "\n"))
 	}
 	return back
+}
+
+// readBounded reads at most limit bytes of the file at path. An editor that
+// wrote a huge file gives the draft no more than it can hold, and the draft
+// refuses that.
+func readBounded(path string, limit int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(io.LimitReader(f, limit))
 }
 
 // removeReplyEditorFile removes the editor's file, if the client ends while
