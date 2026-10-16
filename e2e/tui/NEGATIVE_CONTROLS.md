@@ -8870,6 +8870,38 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
 go test -count=1 -run '^TestWireCarriesAnOpenCluster$' ./internal/session/
 ```
 
+### PR 4: a different binary, the preflight, the fallback
+
+- `TestDaemonUpgradeKeepsPaneProcesses` (section 1.4 of the spec): the daemon is upgraded to a second copy of the binary with four panes running: a counter printing `tick-N` every 10 ms, a fake agent that answers `got-<line>` and reports `working` through `tuios set-agent-state`, a program on the alternate screen with bracketed paste and SGR mouse on behind `cat -v`, and `yes` writing as fast as it can. The daemon keeps its pid and runs the copy (`ps -o comm=`, or `/proc/<pid>/exe` on Linux), every pane keeps its pid, the counter has no gap or repeat across the upgrade, the agent answers and reports, a paste reaches the alternate-screen program bracketed, and the agent's `exit 7` afterwards reads 7. Its artifact has the pids, the counter's range, the end-to-end time, and the handoff's own measurements, among them the most bytes one pane's kernel buffer held when the panes stopped (1024 on macOS, from `yes`).
+- `TestDaemonUpgradeRefusesAndChangesNothing`: upgrades to `false`, and to an older tuios when `TUIOS_E2E_BASELINE_BIN` names one, are refused by the preflight; the daemon's image, every pane's pid and an open pane stream are unchanged. Run on 2026-10-17 with a build of upstream main at 72c1c367 as the baseline: refused with "does not run as a tuios that can take this daemon's state", since that build has no `daemon handoff-accepts` and refuses to start a second daemon.
+- `TestDaemonUpgradeFallsBackToPreviousBinary`: with `TUIOS_TEST_HANDOFF_FAIL=error`, and with `TUIOS_TEST_HANDOFF_FAIL=hang` and a 1.5 s watchdog, the new image cannot adopt the panes. The daemon comes back on `handoff/tuios.prev`, the binary it kept at start, with the same pid and every pane's pid, says it is the fallback, and the counter has no gap.
+- `TestDaemonUpgradeQueuesCLICallsDuringSwap`: `tuios call hello` in a loop through an upgrade held for a second between the manifest write and the exec. None of 70-odd calls fails; calls are answered by each image, and some that started while the daemon was stopped waited in the backlog and were answered by the new one.
+- `TestDaemonUpgradeRefusesWhileVerifyFanRuns`: an upgrade asked for while `fan verify` runs a 4 s check is refused with "a fan check is running", the image is unchanged, and the check's result still arrives as `2 of 2 passed`.
+
+Run on 2026-10-17 on macOS arm64, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Close-on-exec left on the masters | drop `r.fds = append(r.fds, fds[i])` in `writeManifest` | `TestDaemonUpgradeKeepsPaneProcesses`: "the daemon never answered from a new image within 30s: ... a stale socket is left over" | **caught** |
+| Skip the reader quiesce | `Quiesce(ctx)` replaced by `ctx.Err()` in `prepare` | `TestDaemonUpgradeKeepsPaneProcesses`: "the counter jumps from 177 to 179" | **caught** |
+| The adopted pane does not wait on its pid | drop `pty.proc, _ = os.FindProcess(rec.PID)` in `adoptPTY` | `TestDaemonUpgradeKeepsPaneProcesses`: the agent pane's `wait-for window-exit` times out, "timed out waiting for window ... to exit" | **caught** |
+| Drop `Modes` | `st.Modes = nil` before `ApplyTerminalState` in `applyHandoffPanes` | `TestDaemonUpgradeKeepsPaneProcesses`: "the alternate-screen pane lost its screen or its paste mode: paste \"PASTED\"" | **caught** |
+| Skip the preflight | `preflightBinary` replaced by a stat of the file | `TestDaemonUpgradeRefusesAndChangesNothing`: "an upgrade to /usr/bin/false (not tuios) was not refused by the preflight: <nil>" (the daemon then execs `false` and every pane ends) | **caught** |
+| No fallback exec | `execHandoff` in `adoptFallback.reexec` replaced by an error | `TestDaemonUpgradeFallsBackToPreviousBinary/error`: "the daemon never answered from a new image within 40s: ... a stale socket is left over"; `/hang` likewise | **caught** |
+| No watchdog | `fb.watch(...)` replaced by a no-op | `TestDaemonUpgradeFallsBackToPreviousBinary/hang`: "the daemon never answered from a new image within 40s: call hello: signal: killed" | **caught** |
+| Close and rebind the listener | the main socket is left out of the manifest, closed and unlinked before the exec, and bound again by the new image | `TestDaemonUpgradeQueuesCLICallsDuringSwap`: "1 of 72 calls made during the upgrade failed" | **caught** |
+| No refusal for a pipe the daemon reads | the `d.pipes.first()` check in `handoffRefusal` cut | `TestDaemonUpgradeRefusesWhileVerifyFanRuns`: "the upgrade was not refused while a fan check ran: <nil>", "the fan check's result did not arrive as passed" | **caught** |
+
+The rebind control was run four times and failed every time, with one or two failed calls in 49 to 72; three of the runs also had no call wait through the swap, since with the socket gone a caller fails fast instead of waiting.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/tuios \
+  go test -count=1 -run '^TestDaemonUpgrade' .
+# The 60-pane measurement, slow:
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
+  go test -count=1 -run '^TestDaemonUpgradeMeasuresABusyDaemon$' .
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on

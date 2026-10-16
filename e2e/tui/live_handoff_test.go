@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,13 +36,31 @@ import (
 // handoffTestEnv makes the daemon register the test-only handoff verbs.
 var handoffTestEnv = []string{"TUIOS_TEST_HANDOFF=1"}
 
-// startHandoffDaemon starts a scratch daemon under base with the test verbs.
-func startHandoffDaemon(t *testing.T, base string) {
+// startHandoffDaemon starts a scratch daemon under base with the test verbs,
+// and env, which the daemon and so every image it execs inherits.
+func startHandoffDaemon(t *testing.T, base string, env ...string) {
 	t.Helper()
 	killDaemon(t, base)
-	if out, err := tuiosCLIEnv(t, base, handoffTestEnv, "start-server"); err != nil {
+	if out, err := tuiosCLIEnv(t, base, append(slices.Clone(handoffTestEnv), env...), "start-server"); err != nil {
 		t.Fatalf("start-server: %v\n%s", err, out)
 	}
+}
+
+// handoffCLI runs the tuios binary under base and gives up after timeout: a
+// daemon that hangs leaves a caller waiting in the socket's backlog for good.
+func handoffCLI(t *testing.T, base string, timeout time.Duration, args ...string) (string, error) {
+	t.Helper()
+	pinPreV080Looks(t, base)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, tuiosBin, args...)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	cmd.Env = append(cmd.Env, handoffTestEnv...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // callVerb runs `tuios call verb params` and decodes the result.
@@ -51,7 +70,7 @@ func callVerb(t *testing.T, base, verb string, params any) (map[string]any, erro
 	if err != nil {
 		t.Fatalf("encode %s params: %v", verb, err)
 	}
-	out, err := tuiosCLIEnv(t, base, handoffTestEnv, "call", verb, string(raw))
+	out, err := handoffCLI(t, base, 30*time.Second, "call", verb, string(raw))
 	if err != nil {
 		return nil, fmt.Errorf("call %s: %w: %s", verb, err, strings.TrimSpace(out))
 	}
