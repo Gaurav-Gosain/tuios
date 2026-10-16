@@ -656,12 +656,16 @@ func (m *OS) ThemeEditorFix() {
 	if !ok || row.fixed || row.dark {
 		return
 	}
+	if theme.Depth() == overlay.Depth16 {
+		m.ShowNotification("This terminal shows 16 colours. Its own palette decides the contrast", "info", m.Settings.NotificationDuration)
+		return
+	}
 	floor, ground := m.themeEditorFloor(row)
 	c := m.themeEditorColour(row)
 	if floor <= 0 || ground == nil || c == nil || overlay.IsNoColor(c) {
 		return
 	}
-	if overlay.ContrastRatio(c, ground) >= floor {
+	if themeEditorRatio(c, ground) >= floor {
 		m.ShowNotification(row.label+" already reads on its ground", "info", m.Settings.NotificationDuration)
 		return
 	}

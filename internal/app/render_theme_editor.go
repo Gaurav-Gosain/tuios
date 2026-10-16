@@ -203,7 +203,7 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 	}
 	if row, ok := m.themeEditorRowAt(); ok {
 		if floor, ground := m.themeEditorFloor(row); floor > 0 && ground != nil {
-			if c := m.themeEditorColour(row); c != nil && overlay.ContrastRatio(c, ground) < floor {
+			if c := m.themeEditorColour(row); c != nil && themeEditorRatio(c, ground) < floor {
 				note("! Press f to fix contrast.", pal.Warn)
 			}
 		}

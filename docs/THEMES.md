@@ -118,7 +118,7 @@ decides those colours.
 | `enter` | Open the colour picker on the row. A slot chip stores the slot's name, so the colour follows the theme. On **Dark theme**, switch between dark and light |
 | `e` | Type a value: hex, a slot, a role or a CharmTone name. `tab` completes the name |
 | `x` | Give the row back to the base |
-| `f` | Fix the row's contrast: move its lightness, and only its lightness, until it reads on its ground |
+| `f` | Fix the row's contrast: make it lighter or darker until it reads on its ground. A strong colour that cannot get light or dark enough also becomes less strong. Not at 16 colours |
 | `u` | Undo the last change |
 | `ctrl+s` | Save the theme file |
 | `space` | Hide the sheet to see the whole screen. Press `space` again to show it |
