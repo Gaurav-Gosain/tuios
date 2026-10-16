@@ -3412,6 +3412,16 @@ subagents beside its own report (a `Stop` with `background_tasks`, the
 it. A daemon from before `subagent_update` refuses those, which changes
 nothing.
 
+For Claude Code and Codex, a `SessionStart` reported for a pane also prints
+two lines, which the harness adds to the agent's context:
+
+```text
+You run in tuios pane 3a42ab8f in session work.
+Run `tuios --skill` to learn how to drive tuios.
+```
+
+Outside tuios, and when the report fails, the hook prints nothing.
+
 | Claude Code event | Reports |
 | ----------------- | ------- |
 | `SessionStart` | `idle`, with the session id and transcript path, then a `session_start` activity with the `source` (`report-agent-activity`), which forgets the pane's subagents. `source: compact` reports nothing |

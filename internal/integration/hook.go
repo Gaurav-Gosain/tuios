@@ -376,6 +376,23 @@ func StdoutAnswer(harness string) string {
 	return ""
 }
 
+// StartsWithContext reports whether a harness adds the plain text a
+// SessionStart hook prints to the agent's context. The hook then tells the
+// agent where it runs (see SessionStartHint). Claude Code and Codex both do,
+// and treat an empty stdout as nothing to add.
+func StartsWithContext(harness string) bool {
+	id, _ := Canonical(harness)
+	return id == ClaudeCode || id == Codex
+}
+
+// SessionStartHint is what the SessionStart hook prints for the agent: the
+// pane and the session it runs in, and where to learn the rest. It is two
+// short lines because it costs tokens in every session.
+func SessionStartHint(pane, session string) string {
+	return "You run in tuios pane " + pane + " in session " + session + ".\n" +
+		"Run `tuios --skill` to learn how to drive tuios.\n"
+}
+
 // fields reads a decoded payload without panicking on a field of the wrong
 // type: a harness that changes a field's type costs that field, not the hook.
 type fields map[string]any

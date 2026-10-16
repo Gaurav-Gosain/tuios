@@ -346,6 +346,34 @@ func TestAgentHookSendsASessionOnlyReport(t *testing.T) {
 	}
 }
 
+// TestAgentHookTellsTheAgentWhereItRuns: a Claude Code or Codex SessionStart
+// in a tuios pane prints the pane, the session and the skill command, which
+// the harness adds to the agent's context. Any other event prints nothing,
+// and so does a SessionStart whose pane is not found: outside tuios.
+func TestAgentHookTellsTheAgentWhereItRuns(t *testing.T) {
+	start := `{"hook_event_name":"SessionStart","session_id":"s1","source":"startup"}`
+	for _, harness := range []string{"claude-code", "codex"} {
+		h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "3a42ab8f-0000", "TUIOS_SESSION": "work"}}
+		h.run(t, agentHookOptions{}, start, harness)
+		want := "You run in tuios pane 3a42ab8f in session work.\nRun `tuios --skill` to learn how to drive tuios.\n"
+		if h.stdout.String() != want {
+			t.Fatalf("%s: stdout = %q, want %q (explain %s)", harness, h.stdout.String(), want, h.stderr.String())
+		}
+	}
+
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1", "TUIOS_SESSION": "work"}}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
+	if h.stdout.Len() != 0 {
+		t.Fatalf("a Stop printed %q", h.stdout.String())
+	}
+
+	h = &hookRun{env: map[string]string{}}
+	h.run(t, agentHookOptions{}, start, "claude-code")
+	if h.stdout.Len() != 0 {
+		t.Fatalf("outside tuios the hook printed %q (explain %s)", h.stdout.String(), h.stderr.String())
+	}
+}
+
 // TestAgentHookAnswersAntigravityWithAnObject checks the one other harness
 // that parses a hook's stdout gets the empty object, even when it reports.
 func TestAgentHookAnswersAntigravityWithAnObject(t *testing.T) {
