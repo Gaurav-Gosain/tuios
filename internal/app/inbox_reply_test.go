@@ -187,7 +187,7 @@ func TestQueueKeysFromSendKeysAreRefused(t *testing.T) {
 		t.Errorf("the dock said %q", n.Message)
 	}
 
-	m.Inbox.reply.dropped = &inboxReplyDrop{session: "here", window: "w-2", who: "api", text: "put back", at: time.Now()}
+	m.Inbox.reply.dropped = &inboxReplyDrop{session: "here", window: "w-2", who: "api", reply: inboxSentReply{text: "put back"}, at: time.Now()}
 	m.ProcessingRemoteKeys = true
 	cmd, handled = m.sidebarAgentUndoDrop("here", "w-2")
 	m.ProcessingRemoteKeys = false

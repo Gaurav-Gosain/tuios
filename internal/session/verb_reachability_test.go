@@ -243,6 +243,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
+	"queue-prompt#1":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent; its parts are read and checked first"},
 	"cancel-queued#1": {errCode: ErrVerbInvalidParams, why: "nothing is queued, so q3 is not an entry"},
 	"compare-fan#0":   {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},
 	"verify-fan#0":    {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-1 does not exist here"},

@@ -6512,3 +6512,15 @@ which is the positive half of both rows.
 |---|---|---|---|---|
 | A paste into the reply was flattened onto one line | the composer's paste path | `pasteTakenByOverlay` calls `InboxReplyType(strings.Join(strings.Fields(content), " "))` again | `TestRichRowReplyAndRecap` ("waiting for the paste as one block: … timed out") | **caught** |
 | The block's label was sent in place of its text | n/a, injected | `Model.Text` writes `c.block.label` | `TestRichRowReplyAndRecap` ("the pane read \"\x1b[200~echo r9c1e [Pasted text #1 · 42 lines]\x1b[201~\r\"") | **caught** |
+## A large paste in a reply goes as a file
+
+`TestReplyWithALargePasteGoesAsAFile` pastes 2,048 lines, about 100 KiB, into
+the Inbox reply. The recorder must read the typed words and a label that names
+a file, and never the paste. The file must hold every byte of the paste, with
+mode 0600, in the paste folder. `TestRichRowReplyAndRecap` still reads its
+42 lines in their place, since that reply is under 12 KiB. Both pass on the
+branch.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A large paste was typed into the pane | the file path of `composeQueued` | every part typed in its place (`if true`) | `TestReplyWithALargePasteGoesAsAFile` ("the pane never read \"lines]\x1b[201~\r\"; it read \"\x1b[200~echo b1g9 big paste line 0001 …") | **caught** |

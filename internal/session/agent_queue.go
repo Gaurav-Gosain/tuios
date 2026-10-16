@@ -123,6 +123,14 @@ type queueEntry struct {
 	origin queueOrigin
 	at     int64
 	state  string
+	// parts is the message in parts, nil for one queued as text. text is
+	// then the message as list-queued shows it, each block as its label.
+	parts []queuePart
+	// size is the bytes the entry holds, for the queues' byte bounds.
+	size int
+	// typed is the text an entry in parts was typed as, once its files are
+	// written. See composeQueued.
+	typed string
 }
 
 // paneQueue is one pane's queue.
@@ -132,6 +140,8 @@ type paneQueue struct {
 	entries []*queueEntry
 	// delivering is set while an entry is being typed.
 	delivering bool
+	// bytes is what the entries hold.
+	bytes int
 	// timer is the pending look at the pane, nil when none is armed.
 	timer *time.Timer
 }
@@ -155,6 +165,8 @@ type agentQueues struct {
 	mu    sync.Mutex
 	panes map[string]*paneQueue
 	seq   uint64
+	// bytes is what every entry holds, for queueDaemonMaxBytes.
+	bytes int
 	// typed holds each pane's typedStamp, and stamped its length.
 	typed map[string]typedStamp
 	// total counts entries across every pane, and stamped the panes with a
@@ -297,6 +309,16 @@ func queueFullError(target WindowState, limit int) *verbError {
 	})
 }
 
+// queueBytesError is the refusal for a message that would take a pane's queue,
+// or every queue together, past its bound in bytes.
+func queueBytesError(target WindowState) *verbError {
+	return hintedVerbError(ErrVerbQueueFull, "the queue for window "+shortWindowID(target.ID)+" holds as many bytes as it may: "+strconv.Itoa(queuePaneMaxBytes>>20)+" MiB a pane and "+strconv.Itoa(queueDaemonMaxBytes>>20)+" MiB in all", &VerbHint{
+		Verb:    "list-queued",
+		Command: "tuios queue ls -w " + shortWindowID(target.ID),
+		Detail:  "Nothing was queued. Wait for the agents to take what is queued, or drop an entry with tuios queue rm.",
+	})
+}
+
 // queuePrompt puts e at the back of its pane's queue and, when the agent is at
 // rest, arms the look that types it. sess and target are the pane's session
 // and window as the caller resolved them. It is the entry point for every
@@ -318,6 +340,16 @@ func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (
 		q.panes[target.ID] = pq
 	}
 	pq.session = sess.Name()
+	if e.size == 0 {
+		e.size = len(e.text)
+	}
+	if pq.bytes+e.size > queuePaneMaxBytes || q.bytes+e.size > queueDaemonMaxBytes {
+		if len(pq.entries) == 0 {
+			delete(q.panes, target.ID)
+		}
+		q.mu.Unlock()
+		return queuedResult{}, queueBytesError(target)
+	}
 	if len(pq.entries) >= limit {
 		if len(pq.entries) == 0 {
 			delete(q.panes, target.ID)
@@ -330,6 +362,8 @@ func (d *Daemon) queuePrompt(sess *Session, target WindowState, e *queueEntry) (
 	e.at = now.UnixNano()
 	e.state = queueWaiting
 	pq.entries = append(pq.entries, e)
+	pq.bytes += e.size
+	q.bytes += e.size
 	q.total.Add(1)
 	res := queuedResult{ID: e.id, Position: len(pq.entries), Queued: len(pq.entries)}
 	stamp := q.typed[target.ID].at
@@ -372,6 +406,10 @@ func (q *agentQueues) removeLocked(window string, pq *paneQueue, drop func(*queu
 	}
 	clear(pq.entries[len(kept):])
 	pq.entries = kept
+	for _, e := range gone {
+		pq.bytes -= e.size
+		q.bytes -= e.size
+	}
 	q.total.Add(-int64(len(gone)))
 	if len(pq.entries) == 0 && !pq.delivering {
 		if pq.timer != nil {
@@ -668,7 +706,14 @@ func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (s
 	if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
 		return PromptNotSent, verr.Message, 0
 	}
-	return d.typeFirstPrompt(sess, target.ID, e.text)
+	text, err := d.composeQueued(sess, target, e)
+	if err != nil {
+		// Typing it without its blocks would send a message the person did
+		// not write. It is dropped, and the Inbox says so.
+		d.attention.openQueueFailed(sess.Name(), target, err.Error())
+		return queueRefused, "a pasted block could not be saved: " + err.Error(), 0
+	}
+	return d.typeFirstPrompt(sess, target.ID, text)
 }
 
 // queueOriginRefusal says why the entry's origin may no longer type into
@@ -694,6 +739,9 @@ func (d *Daemon) queueOriginRefusal(e *queueEntry, sess *Session, target WindowS
 				from = o.peer
 			}
 			return "the link from " + from + " may no longer write here"
+		}
+		if hasFileParts(e.parts) && !d.linkAllowsFiles(o.peer) {
+			return "the link from " + firstNonEmpty(o.peer, "a machine that gave no name") + " may no longer put files here"
 		}
 		return ""
 	case "pane":

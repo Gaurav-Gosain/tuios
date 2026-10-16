@@ -243,3 +243,105 @@ func waitRecorded(t *testing.T, file, end string) string {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// TestReplyWithALargePasteGoesAsAFile: a reply whose paste takes it past
+// 12 KiB reaches the agent with the paste as a file. The pane reads the typed
+// words and the label that names the file, and never the paste itself; the
+// file, in the daemon's paste folder, holds every byte of the paste.
+//
+// Negative control: with every block typed in its place (composeQueued), the
+// recorder reads the paste and has no label, and the wait for the label
+// times out.
+func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-big", "--detach"); err != nil {
+		t.Fatalf("create the agent's session: %v\n%s", err, out)
+	}
+	recorded := startRecorder(t, base, "e2e-big")
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-big"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "window management mode", "Window management mode")
+	time.Sleep(insertGuard)
+	hook := func(payload string) {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-big", "--window", "0", "--timeout", "10s")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = strings.NewReader(payload)
+		if out, err := cmd.CombinedOutput(); err != nil || len(out) != 0 {
+			t.Fatalf("the hook for %s failed or printed: %v\n%s", payload, err, out)
+		}
+	}
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"e2e-big","prompt":"find the flaky test"}`)
+	hook(`{"hook_event_name":"PreToolUse","session_id":"e2e-big","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`)
+	waitText(t, term, "the working row", "Bash: go test")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the reply editor", "Reply to", "Type your reply.")
+	if err := term.SendKeys("echo b1g9 "); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the typed reply", "echo b1g9")
+	big := largeReplyPaste()
+	if err := term.Paste(big); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the large paste as one block", "[Pasted text #1 · 2,048 lines]")
+	saveFrame(t, term, "inbox-reply-large-paste")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the queued figure on the row", "1 queued")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+
+	// The turn ends and the reply is typed at the rest.
+	hook(`{"hook_event_name":"Stop","session_id":"e2e-big","last_assistant_message":"Found it."}`)
+	got := waitRecorded(t, recorded, "lines]\x1b[201~\r")
+	start := strings.LastIndex(got, "\x1b[200~")
+	typed := got[start+len("\x1b[200~") : len(got)-len("\x1b[201~\r")]
+	if !strings.HasPrefix(typed, "echo b1g9 [Pasted text #1: ") || !strings.HasSuffix(typed, ", 2,048 lines]") {
+		t.Fatalf("the pane read %q, want the words and the label that names the file", typed)
+	}
+	if strings.Contains(got, "big paste line") {
+		t.Fatal("the paste itself was typed into the pane")
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(typed, "echo b1g9 [Pasted text #1: "), ", 2,048 lines]")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the file the label names: %v", err)
+	}
+	if string(data) != big {
+		t.Fatalf("the file holds %d bytes, want the %d of the paste", len(data), len(big))
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 || filepath.Base(filepath.Dir(path)) != "paste" {
+		t.Fatalf("the file is %s (%v), want mode 0600 in the paste folder", path, err)
+	}
+	alive(t, term, "after the large reply")
+}
+
+// largeReplyPaste is 2,048 lines, about 100 KiB, as a long log is pasted.
+func largeReplyPaste() string {
+	var b strings.Builder
+	for i := 1; i <= 2048; i++ {
+		fmt.Fprintf(&b, "big paste line %04d of the failing run, at main.go:%d\n", i, i)
+	}
+	return b.String()
+}

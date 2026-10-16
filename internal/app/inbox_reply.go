@@ -65,8 +65,8 @@ const inboxReplySentMax = 16
 type inboxReplyState struct {
 	// editor is the open editor, nil when none is.
 	editor *inboxReplyEditor
-	// sent is the text of the replies this client queued, by entry id.
-	sent map[string]string
+	// sent is the replies this client queued, by entry id.
+	sent map[string]inboxSentReply
 	// sentOrder is sent's ids, oldest first, for the bound.
 	sentOrder []string
 	// dropped is the last message x dropped, for u on the same row.
@@ -118,10 +118,18 @@ type inboxReplyEditor struct {
 	frameAt inboxReplyFrame
 }
 
+// inboxSentReply is a reply this client queued, kept so a drop of it can be
+// undone: its text, and its parts when it was sent in parts.
+type inboxSentReply struct {
+	text  string
+	parts []composer.Part
+}
+
 // inboxReplyDrop is one dropped message, for undo.
 type inboxReplyDrop struct {
-	session, window, who, text string
-	at                         time.Time
+	session, window, who string
+	reply                inboxSentReply
+	at                   time.Time
 }
 
 // InboxRepliedMsg is the answer to a queue-prompt the reply editor sent.
@@ -135,6 +143,8 @@ type InboxRepliedMsg struct {
 	Requeue bool
 	// Send is the number of the send whose draft sending holds, 0 for none.
 	Send uint64
+	// Parts is the reply in parts, nil for one sent as text.
+	Parts []composer.Part
 	Err  error
 }
 
@@ -377,22 +387,30 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		m.ShowNotification("A reply that send-keys typed is not sent: only keys from your keyboard queue a message as you", "error", m.Settings.NotificationDuration)
 		return nil
 	}
-	text, ok := ed.comp.Submit()
+	parts, ok := ed.comp.SubmitParts()
 	if !ok {
 		return nil
 	}
-	// Leading blank lines and trailing space are dropped. The first line's
-	// indent stays: it can be the indent of pasted code.
-	text = strings.TrimRightFunc(strings.TrimLeft(text, "\n"), unicode.IsSpace)
-	if len(text) > inboxReplyMax {
+	parts = trimReplyParts(parts)
+	text := composer.JoinParts(parts)
+	blocks := ed.comp.Blocks() > 0
+	if !blocks && len(text) > inboxReplyMax {
 		// A draft with no block was typed or pasted inline, and has no
 		// paste to remove.
-		if ed.comp.Blocks() > 0 {
-			ed.comp.SetNotice("The message is larger than 16 KB. Remove a paste to send.")
-		} else {
-			ed.comp.SetNotice("The message is larger than 16 KB. Make it shorter to send.")
-		}
+		ed.comp.SetNotice("The message is larger than 16 KB. Make it shorter to send.")
 		return nil
+	}
+	if blocks {
+		if why := replyPartsRefusal(parts); why != "" {
+			ed.comp.SetNotice(why)
+			return nil
+		}
+		// The daemon decides how each block travels. text goes too, for a
+		// daemon older than parts, but only when it holds the whole message:
+		// one that cannot gets no text, refuses, and says to update.
+		if len(text) > inboxReplyMax {
+			text = ""
+		}
 	}
 	nonce := m.inboxNonce()
 	if nonce == "" {
@@ -409,15 +427,73 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
-	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq)
+	if !blocks {
+		parts = nil
+	}
+	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
+}
+
+// trimReplyParts drops the message's leading blank lines and trailing space.
+// The first line's indent stays: it can be the indent of pasted code. Only
+// text parts are trimmed. A block is sent as it was pasted.
+func trimReplyParts(parts []composer.Part) []composer.Part {
+	for len(parts) > 0 && parts[0].Kind == composer.PartText {
+		parts[0].Text = strings.TrimLeft(parts[0].Text, "\n")
+		if parts[0].Text != "" {
+			break
+		}
+		parts = parts[1:]
+	}
+	for n := len(parts); n > 0 && parts[n-1].Kind == composer.PartText; n = len(parts) {
+		parts[n-1].Text = strings.TrimRightFunc(parts[n-1].Text, unicode.IsSpace)
+		if parts[n-1].Text != "" {
+			break
+		}
+		parts = parts[:n-1]
+	}
+	return parts
+}
+
+// Bounds of a reply in parts, the daemon's (session/queue_parts.go).
+const (
+	inboxReplyPartsMax = 64
+	inboxReplyBytesMax = 8 << 20
+)
+
+// replyPartsRefusal says why the daemon would refuse a reply in parts, or ""
+// when it would not, so the draft stays open with the reason.
+func replyPartsRefusal(parts []composer.Part) string {
+	if len(parts) > inboxReplyPartsMax {
+		return "The message has too many pastes. Remove a paste to send."
+	}
+	size, typed := 0, 0
+	for _, p := range parts {
+		size += len(p.Text)
+		if p.Kind == composer.PartText {
+			typed += len(p.Text)
+		} else {
+			// The label that names the file, as the daemon counts it.
+			typed += 64 + 256
+		}
+	}
+	if size > inboxReplyBytesMax {
+		return "The message is larger than 8 MB. Remove a paste to send."
+	}
+	if typed > inboxReplyMax {
+		return "The typed text is larger than 16 KB. Make it shorter to send."
+	}
+	return ""
 }
 
 // inboxQueueCmd sends queue-prompt as the person.
-func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64) tea.Cmd {
+func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
 	call := m.inboxCaller()
 	params := map[string]any{"session": sessionID, "window": windowID, "text": text, "human_nonce": nonce}
+	if parts != nil {
+		params["parts"] = wireReplyParts(parts)
+	}
 	return func() tea.Msg {
-		msg := InboxRepliedMsg{Session: sessionID, Window: windowID, Who: who, Text: text, Requeue: requeue, Send: send}
+		msg := InboxRepliedMsg{Session: sessionID, Window: windowID, Who: who, Text: text, Parts: parts, Requeue: requeue, Send: send}
 		raw, err := call("queue-prompt", params, inboxReplyTimeout)
 		if err != nil {
 			msg.Err = err
@@ -438,6 +514,25 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 	}
 }
 
+// replyPart is one part of a reply on the wire, as queue-prompt takes it.
+type replyPart struct {
+	Kind string `json:"kind"`
+	Text string `json:"text"`
+	N    int    `json:"n,omitempty"`
+}
+
+// wireReplyParts is a reply's parts as queue-prompt takes them.
+func wireReplyParts(parts []composer.Part) []replyPart {
+	out := make([]replyPart, len(parts))
+	for i, p := range parts {
+		out[i] = replyPart{Kind: "text", Text: p.Text}
+		if p.Kind == composer.PartPaste {
+			out[i] = replyPart{Kind: "paste", Text: p.Text, N: p.N}
+		}
+	}
+	return out
+}
+
 // applyInboxReplied says what happened to a reply, and keeps its text so a
 // drop of it can be undone.
 func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
@@ -456,7 +551,18 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 				m.Inbox.reply.noQueue = true
 				m.ShowNotification("This daemon cannot queue a reply. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
 				return
+			case session.ErrVerbInvalidParams:
+				if msg.Parts != nil && msg.Text == "" && strings.Contains(callErr.Message, "text is required") {
+					// A daemon older than parts read no message: the reply
+					// was too large to send as text too.
+					m.ShowNotification("This daemon cannot take a reply with a large paste. Restart it with a newer tuios: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					return
+				}
 			case session.ErrVerbQueueFull:
+				if strings.Contains(callErr.Message, "bytes") {
+					m.ShowNotification("The queue for "+msg.Who+" is full. Wait for "+msg.Who+" to take what is queued. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					return
+				}
 				m.ShowNotification(msg.Who+" already has as many messages queued as [agents.queue] max allows. Nothing was queued", "error", m.Settings.NotificationDuration*2)
 				return
 			}
@@ -464,7 +570,7 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 		m.ShowNotification("The reply to "+msg.Who+" was not queued: "+msg.Err.Error()+". Your draft is kept", "error", m.Settings.NotificationDuration*2)
 		return
 	}
-	m.rememberInboxReply(msg.ID, msg.Text)
+	m.rememberInboxReply(msg.ID, inboxSentReply{text: msg.Text, parts: msg.Parts})
 	switch {
 	case msg.Delivering:
 		m.ShowNotification("Typing your reply to "+msg.Who, "success", m.Settings.NotificationDuration)
@@ -475,19 +581,19 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	}
 }
 
-// rememberInboxReply keeps a sent reply's text by its entry id.
-func (m *OS) rememberInboxReply(id, text string) {
+// rememberInboxReply keeps a sent reply by its entry id.
+func (m *OS) rememberInboxReply(id string, r inboxSentReply) {
 	if id == "" {
 		return
 	}
 	st := &m.Inbox.reply
 	if st.sent == nil {
-		st.sent = make(map[string]string)
+		st.sent = make(map[string]inboxSentReply)
 	}
 	if _, ok := st.sent[id]; !ok {
 		st.sentOrder = append(st.sentOrder, id)
 	}
-	st.sent[id] = text
+	st.sent[id] = r
 	for len(st.sentOrder) > inboxReplySentMax {
 		delete(st.sent, st.sentOrder[0])
 		st.sentOrder = st.sentOrder[1:]
@@ -607,7 +713,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 		return
 	}
 	st := &m.Inbox.reply
-	text, known := st.sent[msg.ID]
+	sent, known := st.sent[msg.ID]
 	if !known {
 		st.dropped = nil
 		m.ShowNotification("Dropped 1 queued message to "+msg.Who, "info", m.Settings.NotificationDuration)
@@ -615,7 +721,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 	}
 	delete(st.sent, msg.ID)
 	st.sentOrder = slices.DeleteFunc(st.sentOrder, func(id string) bool { return id == msg.ID })
-	st.dropped = &inboxReplyDrop{session: msg.Session, window: msg.Window, who: msg.Who, text: text, at: time.Now()}
+	st.dropped = &inboxReplyDrop{session: msg.Session, window: msg.Window, who: msg.Who, reply: sent, at: time.Now()}
 	key := m.sidebarAgentKeyOr(config.ActionAgentUnread, "u")
 	m.ShowNotification("Dropped 1 queued message to "+msg.Who+". "+key+" undoes.", "info", inboxUndoNotice)
 }
@@ -641,7 +747,7 @@ func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	if nonce == "" {
 		return nil, false
 	}
-	return m.inboxQueueCmd(d.session, d.window, d.who, d.text, nonce, true, 0), true
+	return m.inboxQueueCmd(d.session, d.window, d.who, d.reply.text, nonce, true, 0, d.reply.parts), true
 }
 
 // sidebarAgentKeyOr is the key an agent row action is bound to, or fallback.

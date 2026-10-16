@@ -65,6 +65,17 @@ const PasteImageMaxBytes = pasteImageMaxBytes
 // directory from growing for the life of the daemon.
 const pasteFileTTL = time.Hour
 
+// pasteReplyPrefix starts the name of a file a queued reply carries: a long
+// paste or an image the person attached to it. It starts with pasteFilePrefix,
+// so every sweep and cap that knows pasted files knows these too.
+const pasteReplyPrefix = pasteFilePrefix + "reply-"
+
+// pasteReplyTTL is how long a file a queued reply carries stays on disk. It is
+// written when the reply is typed, and the agent can read it again at any
+// point of the work that follows, so it is kept for a day, as dropped files
+// are.
+const pasteReplyTTL = 24 * time.Hour
+
 // pasteMaxFiles and pasteMaxDirBytes bound the paste directory. It is under
 // the runtime directory, which is often a small tmpfs, and a run of pastes
 // inside the TTL must not fill it. The oldest pasted files go first.
@@ -130,6 +141,8 @@ type pasteStore struct {
 	dir func() (string, error)
 	now func() time.Time
 	ttl time.Duration
+	// replyTTL is pasteReplyTTL. Only tests change it.
+	replyTTL time.Duration
 	// maxFiles and maxBytes cap the directory. Zero means the defaults.
 	maxFiles int
 	maxBytes int64
@@ -155,9 +168,10 @@ func newPasteStore(socketPath func() string) *pasteStore {
 			}
 			return filepath.Join(filepath.Dir(sock), "paste"), nil
 		},
-		now:     time.Now,
-		ttl:     pasteFileTTL,
-		written: map[string]bool{},
+		now:      time.Now,
+		ttl:      pasteFileTTL,
+		replyTTL: pasteReplyTTL,
+		written:  map[string]bool{},
 	}
 }
 
@@ -173,6 +187,29 @@ func (s *pasteStore) save(data []byte) (string, error) {
 	if ext == "" {
 		return "", errPasteNotImage
 	}
+	return s.write(data, pasteFilePrefix, ext)
+}
+
+// saveReply writes one part of a queued reply, a long paste or an image, and
+// returns its absolute path. It is kept for pasteReplyTTL, since the agent
+// can read it again later in its turn. ext must be one this package chose:
+// ".txt", or one sniffImage returned.
+func (s *pasteStore) saveReply(data []byte, ext string) (string, error) {
+	if s == nil {
+		return "", errors.New("this daemon has no store for pasted files")
+	}
+	return s.write(data, pasteReplyPrefix, ext)
+}
+
+// write puts data in a new file named prefix, the time, random letters and
+// ext, in the paste directory, and returns its absolute path.
+//
+// Nothing is written through a link. The directory is refused when it is a
+// link, and the file is opened through an os.Root at the directory that was
+// checked, so a link swapped in for the directory, or planted inside it, cannot
+// carry the write anywhere else. The file is created with O_EXCL, so a name
+// that exists, a link included, is refused rather than written through.
+func (s *pasteStore) write(data []byte, prefix, ext string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dir, err := s.dir()
@@ -186,37 +223,47 @@ func (s *pasteStore) save(data []byte) (string, error) {
 		return "", err
 	}
 	// A link planted where the directory goes is refused, not followed.
-	if info, err := os.Lstat(dir); err != nil {
+	info, err := os.Lstat(dir)
+	if err != nil {
 		return "", err
-	} else if !info.IsDir() {
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s: %w", dir, errPasteDirLink)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	// The root must be the directory that was checked, not one swapped in
+	// for it since.
+	if opened, err := root.Stat("."); err != nil || !os.SameFile(opened, info) {
 		return "", fmt.Errorf("%s: %w", dir, errPasteDirLink)
 	}
 	// Mkdir leaves an existing directory's mode alone. This one is ours, so
 	// it is put back to the owner's alone.
-	_ = os.Chmod(dir, pasteDirPerm)
+	_ = root.Chmod(".", pasteDirPerm)
 	s.sweepLocked(dir)
 
 	var rnd [6]byte
 	if _, err := rand.Read(rnd[:]); err != nil {
 		return "", err
 	}
-	name := pasteFilePrefix + s.now().Format("20060102-150405") + "-" + hex.EncodeToString(rnd[:]) + ext
-	path := filepath.Join(dir, name)
-	// O_EXCL, so a name that somehow exists, or a link planted under it, is
-	// refused rather than written through.
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, pasteFilePerm)
+	name := prefix + s.now().Format("20060102-150405") + "-" + hex.EncodeToString(rnd[:]) + ext
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, pasteFilePerm)
 	if err != nil {
 		return "", err
 	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		_ = os.Remove(path)
+		_ = root.Remove(name)
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(path)
+		_ = root.Remove(name)
 		return "", err
 	}
+	path := filepath.Join(dir, name)
 	s.written[path] = true
 	s.capLocked(dir, path)
 	s.armLocked(dir)
@@ -276,27 +323,39 @@ func (s *pasteStore) pastedEntries(dir string) []os.DirEntry {
 	})
 }
 
-// armLocked sets the timer for the next TTL sweep: when the oldest pasted
+// ttlFor is how long the pasted file called name is kept.
+func (s *pasteStore) ttlFor(name string) time.Duration {
+	if strings.HasPrefix(name, pasteReplyPrefix) && s.replyTTL > 0 {
+		return s.replyTTL
+	}
+	return s.ttl
+}
+
+// armLocked sets the timer for the next TTL sweep: when the first pasted
 // file in dir expires. With no pasted file left it sets none.
 func (s *pasteStore) armLocked(dir string) {
 	if s.timer != nil {
 		s.timer.Stop()
 		s.timer = nil
 	}
-	var oldest time.Time
+	var first time.Time
 	for _, e := range s.pastedEntries(dir) {
-		if info, err := e.Info(); err == nil && (oldest.IsZero() || info.ModTime().Before(oldest)) {
-			oldest = info.ModTime()
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if expiry := info.ModTime().Add(s.ttlFor(e.Name())); first.IsZero() || expiry.Before(first) {
+			first = expiry
 		}
 	}
-	if oldest.IsZero() {
+	if first.IsZero() {
 		return
 	}
-	wait := max(oldest.Add(s.ttl).Sub(s.now())+10*time.Millisecond, 10*time.Millisecond)
+	wait := max(first.Sub(s.now())+10*time.Millisecond, 10*time.Millisecond)
 	s.timer = time.AfterFunc(wait, s.sweep)
 }
 
-// sweep deletes the pasted files older than the TTL.
+// sweep deletes the pasted files older than their TTL.
 func (s *pasteStore) sweep() {
 	if s == nil {
 		return
@@ -316,10 +375,10 @@ func (s *pasteStore) sweep() {
 
 // sweepLocked is sweep with s.mu held.
 func (s *pasteStore) sweepLocked(dir string) {
-	cutoff := s.now().Add(-s.ttl)
+	now := s.now()
 	for _, e := range s.pastedEntries(dir) {
 		info, err := e.Info()
-		if err != nil || info.ModTime().After(cutoff) {
+		if err != nil || info.ModTime().After(now.Add(-s.ttlFor(e.Name()))) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())

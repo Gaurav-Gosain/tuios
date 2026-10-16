@@ -176,6 +176,13 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**queue-prompt takes a message in parts.** `text` is no longer required when
+`parts` is given, and the result gains `parts`, the count read. A message
+with a long paste can now put a file in the paste folder when it is typed. The
+queues are also bounded in bytes, 32 MiB a pane and 128 MiB in all, and
+`queue_full` covers both bounds. See [The delivery queue](#the-delivery-queue).
+A caller that sends only `text` sees no change.
+
 **A link checks that its host still answers.** A link that carried no frame
 for 15 seconds sends `hello`, with no params, on a stream of its own. A reply
 of any kind, an error included, counts as an answer. Two pings in a row with
@@ -6379,13 +6386,43 @@ by printing something and then going silent for 5 seconds. [AGENT_STATE.md](AGEN
 describes the whole lifecycle.
 
 `queue-prompt` params: `session`, `window` (default the focused window; it
-must run an agent, and `human` is `no_keyboard`), `text` (required, at most
-16 KiB), `human_nonce`, `from`.
+must run an agent, and `human` is `no_keyboard`), `text` (at most 16 KiB,
+required without `parts`), `parts`, `human_nonce`, `from`.
 
 ```json
 {"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}
 {"id":1,"result":{"type":"prompt_queued","id":"q3","position":1,"queued":1,"delivering":false}}
 ```
+
+`parts` is the message as ordered parts, the form the reply composer sends:
+`{"kind":"text","text":…}` for typed text and `{"kind":"paste","text":…,"n":1}`
+for a pasted block, where `n` is the block's number as the person saw it. A
+message takes at most 64 parts and 8 MiB. With `parts`, `text` is ignored, so
+a client can send both and a daemon older than `parts` types the text. Such a
+daemon answers without the `parts` count in the result.
+
+```json
+{"id":1,"verb":"queue-prompt","params":{"window":"build","parts":[{"kind":"text","text":"this fails: "},{"kind":"paste","text":"--- FAIL: TestJitter\n…","n":1}]}}
+{"id":1,"result":{"type":"prompt_queued","id":"q4","position":1,"queued":1,"delivering":true,"parts":2}}
+```
+
+The daemon on the pane's machine chooses how each block travels when it types
+the message, not when it queues it:
+
+- When the whole message is 12 KiB or less and the pane takes a bracketed
+  paste, each block is typed in its place, as one paste.
+- Otherwise each block is written to a file in the paste folder beside the
+  daemon's socket, and the typed text names it in the block's place:
+  `[Pasted text #1: PATH, 42 lines]`. The file is mode 0600 in a 0700 folder,
+  written through an `os.Root` at the folder and never through a link. It is
+  kept for 24 hours and removed when the daemon stops.
+
+The text parts with each block's label must fit 16 KiB. A pane's queue holds
+at most 32 MiB and every queue together 128 MiB; past either, `queue_full`.
+Over a link, a message with a block needs `files` in that machine's
+`[hosts]` policy, at `queue-prompt` and again when it is typed. A message
+whose file cannot be written is dropped, and an Inbox question says so on the
+pane's blocking key.
 
 `delivering` is true when the entry is next and the agent is at rest now, so
 it is typed within about a second. Errors: `queue_full` when the pane already

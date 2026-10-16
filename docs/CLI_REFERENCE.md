@@ -2125,7 +2125,9 @@ question in the Inbox; it holds the messages behind it until the agent next
 works or you drop it, and the next message is then typed at the next rest.
 
 A pane holds at most `[agents.queue] max` messages (8 by default) of at most
-16 KiB each. The queue lives in the daemon's memory, so a daemon restart drops
+16 KiB each. A reply from the Inbox with a long paste can carry more, as a
+file the daemon writes when it types the reply (see `queue-prompt` in
+[protocol.md](protocol.md#the-delivery-queue)). The queue lives in the daemon's memory, so a daemon restart drops
 it, and so do the pane closing and the agent leaving the pane. From inside a
 pane the message is checked like `send-text` when it is queued, and against
 the pane's grants again when it is typed. See

@@ -65,6 +65,10 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   it with `r`. The reply is queued and typed when you are next at rest, so
   end each turn at your prompt; a reply never lands while you wait on a
   prompt.
+- A long paste in the person's reply can reach you as a file. The reply
+  then holds a label in the paste's place, such as
+  `[Pasted text #1: /run/user/1000/tuios/paste/tuios-paste-reply-….txt, 2,048 lines]`.
+  Read the file with your own tools. It is kept for 24 hours.
 - Keep your prompt on screen with its options numbered. The person can then
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
   `d` presses the answer your harness's manifest declares). Crush's permission

@@ -3870,8 +3870,10 @@ drops every queue, since the conversation a message was for ended with the
 process. A queue is also dropped when its pane closes, when the agent leaves
 the pane (state `none`), and when its session ends, and a message a pane
 queued is dropped when that pane closes. A pane holds at most
-`[agents.queue] max` messages (8 by default), each at most 16 KiB; one more is
-refused with `queue_full`.
+`[agents.queue] max` messages (8 by default), each at most 16 KiB of typed
+text; one more is refused with `queue_full`. A message in parts, which the
+Inbox reply sends when it holds a paste block, can carry up to 8 MiB of
+pasted text, and the queues hold at most 32 MiB a pane and 128 MiB in all.
 
 **The count.** Each pane's window state carries `agent_queued`, the length of
 its queue, and `get-agent-state` and `list-agents` report it as `queued`. It
@@ -3938,11 +3940,30 @@ A paste of more than 800 characters or 3 lines shows as one block, such as
 is drawn selected and the footer shows its keys: `ctrl+o` opens its text to
 read (the arrows and page keys scroll, `esc` goes back), `ctrl+e` puts its
 text into the draft to edit, and `backspace` removes it. Undo brings back a
-removed or expanded block. The block's text is sent in its place. The
-whole message, blocks included, must fit in 16 KB: a larger one stays open
-and says `The message is larger than 16 KB. Remove a paste to send.` A
-message with no paste block says `Make it shorter to send.` in place of the
-second sentence.
+removed or expanded block.
+
+When the reply is typed, the daemon on the pane's machine decides how each
+block reaches the agent. A message of 12 KB or less goes in one paste, with
+each block's text in its place. A larger one puts each block in a file and
+types a label that names the file in its place:
+
+```
+make the backoff jitter configurable. The failing run:
+[Pasted text #1: /run/user/1000/tuios/paste/tuios-paste-reply-20261016-101500-3fa2c1.txt, 2,048 lines]
+```
+
+The agent reads the file with its own tools. The file is yours alone, in the
+paste folder beside the daemon's socket. It is written when the reply is
+typed, so a reply that waits in the queue never points at a file that is
+gone. It is kept for 24 hours and removed when the daemon stops.
+
+The typed words, without the blocks, must fit in 16 KB, and the whole message
+in 8 MB. A larger one stays open and says why: `The message is larger than
+16 KB. Make it shorter to send.` for a draft with no block, and `The message
+is larger than 8 MB. Remove a paste to send.` for one with blocks. A daemon
+from before this release takes a message with blocks only when the whole
+message fits in 16 KB. A larger one keeps the draft and says to restart the
+daemon with `tuios kill-server`.
 
 Before it sends, the editor removes invisible characters (Unicode tags, bidi
 controls, zero-width spaces). When it removed any, it does not send and says
@@ -3950,8 +3971,10 @@ controls, zero-width spaces). When it removed any, it does not send and says
 Text pasted from a web page can hide instructions in them.
 
 `esc` closes the editor and keeps the draft: `r` on the same pane opens it
-again. A reply the daemon refuses keeps its draft too. Drafts stay in the
-client's memory and end with it.
+again. A reply the daemon refuses keeps its draft too. If you started a new
+draft for the same pane while that reply was out, the reply that was not sent
+goes back at the top of it. Drafts stay in the client's memory and end with
+it.
 
 `enter` queues it with `queue-prompt` as you: if the agent is at rest it is
 typed within a second or so, and otherwise the row says `1 queued` and it is

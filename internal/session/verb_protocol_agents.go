@@ -313,7 +313,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "The agent's window, by id or name. Omit to target the focused window. It must run an agent tuios knows of; human is refused with no_keyboard."},
-				{Name: "text", Type: "string", Required: true, Description: "The message, at most 16 KiB."},
+				{Name: "text", Type: "string", Description: "The message, at most 16 KiB. Required without parts. With parts it is ignored, so a client can send the message both ways and a daemon older than parts types the text."},
+				{Name: "parts", Type: "[]object", Description: "The message as ordered parts, at most 64 and 8 MiB in all: {kind: text, text} for typed text, {kind: paste, text, n} for a pasted block, where n is the block's number as the person saw it. When the message is typed, its blocks go in their place if it is 12 KiB or less and the pane takes a bracketed paste. Otherwise each block is written to a file in the paste folder on the pane's machine, kept for 24 hours, and the typed text names it: [Pasted text #1: PATH, 42 lines]. The text parts with the labels must fit 16 KiB. Over a link, blocks need files in the link's policy."},
 				{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to queue as the person (by human). One that does not verify is refused with not_human."},
 				{Name: "from", Type: "string", Description: "The window the message is from. From a pane, its own; omit it there. human needs human_nonce."},
 			},
@@ -322,9 +323,11 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "position", Type: "int", Description: "Its place in the queue, 1 for next."},
 				{Name: "queued", Type: "int", Description: "How many entries the queue holds now."},
 				{Name: "delivering", Type: "bool", Description: "True when it is next and the agent is at rest now, so it is typed within about a second rather than after the agent's turn."},
+				{Name: "parts", Type: "int", Description: "With parts, how many were read. A daemon older than parts leaves it out."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}`,
+				`{"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","parts":[{"kind":"text","text":"this test fails: "},{"kind":"paste","text":"--- FAIL: TestJitter\n...","n":1}]}}`,
 			},
 			handler: (*Daemon).verbQueuePrompt,
 		},
