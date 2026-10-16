@@ -3936,7 +3936,9 @@ A paste of more than 800 characters or 3 lines shows as one block, such as
 `[Pasted text #1 · 42 lines]`. The cursor steps over a block in one move, and
 `backspace` deletes all of it. The block's text is sent in its place. The
 whole message, blocks included, must fit in 16 KB: a larger one stays open
-and says `The message is larger than 16 KB. Remove a paste to send.`
+and says `The message is larger than 16 KB. Remove a paste to send.` A
+message with no paste block says `Make it shorter to send.` in place of the
+second sentence.
 
 Before it sends, the editor removes invisible characters (Unicode tags, bidi
 controls, zero-width spaces). When it removed any, it does not send and says

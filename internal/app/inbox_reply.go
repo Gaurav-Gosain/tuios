@@ -359,7 +359,13 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	// indent stays: it can be the indent of pasted code.
 	text = strings.TrimRightFunc(strings.TrimLeft(text, "\n"), unicode.IsSpace)
 	if len(text) > inboxReplyMax {
-		ed.comp.SetNotice("The message is larger than 16 KB. Remove a paste to send.")
+		// A draft with no block was typed or pasted inline, and has no
+		// paste to remove.
+		if ed.comp.Blocks() > 0 {
+			ed.comp.SetNotice("The message is larger than 16 KB. Remove a paste to send.")
+		} else {
+			ed.comp.SetNotice("The message is larger than 16 KB. Make it shorter to send.")
+		}
 		return nil
 	}
 	nonce := m.inboxNonce()
