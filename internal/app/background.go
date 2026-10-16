@@ -91,11 +91,23 @@ func surfaceSetting(s *config.Settings, which surface) string {
 	case surfaceChrome:
 		return s.WindowChromeBackgroundResolved()
 	case surfaceDock:
-		return s.DockBackgroundResolved()
+		return themeGround(s.DockBackground, s.Background, s.DockBackgroundResolved(), theme.RoleDockGround)
 	case surfaceSidebar:
-		return s.SidebarBackgroundResolved()
+		return themeGround(s.SidebarBackground, s.Background, s.SidebarBackgroundResolved(), theme.RoleRailGround)
 	}
 	return config.BackgroundOff
+}
+
+// themeGround is a dock or rail setting, or the theme's chrome.dock.ground or
+// chrome.rail.ground when the surface's own key is not set and
+// appearance.background paints nothing, which is its default. The surface's
+// key wins, off included. The role's name is the setting, so the ground
+// resolves and is memoised like a colour from the config.
+func themeGround(own, all, resolved string, role theme.Role) string {
+	if own != "" || (all != "" && all != config.BackgroundOff) || !theme.ChromeNames(role) {
+		return resolved
+	}
+	return role.String()
 }
 
 // ground is the colours painted on one surface on this frame.

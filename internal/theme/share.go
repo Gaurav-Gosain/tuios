@@ -64,20 +64,9 @@ func (d themeDoc) encode(indent bool) []byte {
 			add(colourKeys[i], c)
 		}
 	}
-	var chrome bytes.Buffer
-	for r := RoleAccent; r <= RoleCard; r++ {
-		if d.Chrome[r] == "" {
-			continue
-		}
-		if chrome.Len() > 0 {
-			chrome.WriteString(", ")
-		}
-		chrome.Write(quote(r.String()))
-		chrome.WriteString(": ")
-		chrome.Write(quote(d.Chrome[r]))
-	}
-	if chrome.Len() > 0 {
-		fields = append(fields, field{"chrome", []byte("{" + chrome.String() + "}")})
+	chrome := encodeChrome(d.Chrome, quote)
+	if chrome != nil {
+		fields = append(fields, field{"chrome", chrome})
 	}
 
 	var b bytes.Buffer
@@ -101,6 +90,60 @@ func (d themeDoc) encode(indent bool) []byte {
 	}
 	out.WriteByte('\n')
 	return out.Bytes()
+}
+
+// encodeChrome writes the chrome fields as one JSON object on one line, in
+// role order. A role named group.field goes in the nested object group, which
+// sits where the group's first role would. Nil when no field is set.
+func encodeChrome(raw chromeRaw, quote func(any) []byte) []byte {
+	var b bytes.Buffer
+	open := "" // the nested object being written, or "" at the top
+	top, inGroup := 0, 0
+	for r := RoleAccent; r <= roleLastSettable; r++ {
+		if raw[r] == "" {
+			continue
+		}
+		group, field, nested := strings.Cut(r.String(), ".")
+		if !nested {
+			group, field = "", r.String()
+		}
+		if group != open {
+			if open != "" {
+				b.WriteString("}")
+			}
+			open = group
+			if group != "" {
+				if top > 0 {
+					b.WriteString(", ")
+				}
+				top++
+				b.Write(quote(group))
+				b.WriteString(": {")
+				inGroup = 0
+			}
+		}
+		if group == "" {
+			if top > 0 {
+				b.WriteString(", ")
+			}
+			top++
+		} else {
+			if inGroup > 0 {
+				b.WriteString(", ")
+			}
+			inGroup++
+		}
+		b.Write(quote(field))
+		b.WriteString(": ")
+		b.Write(quote(raw[r]))
+	}
+	if top == 0 {
+		return nil
+	}
+	if open != "" {
+		b.WriteString("}")
+	}
+	return []byte("{" + b.String() + "}")
 }
 
 // tintHex is a theme colour as #rrggbb, or "" for an unset one.
@@ -157,7 +200,7 @@ func exportDoc(id string, full bool) (themeDoc, error) {
 			d.Colours[i] = h
 		}
 	}
-	for role := RoleAccent; role <= RoleCard; role++ {
+	for role := RoleAccent; role <= roleLastSettable; role++ {
 		if r.chrome[role] != anchor.chrome[role] {
 			d.Chrome[role] = r.chrome[role]
 		}

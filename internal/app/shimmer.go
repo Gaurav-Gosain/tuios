@@ -97,7 +97,7 @@ func (m *OS) applyShimmer(canvas *frameCanvas, now time.Time) {
 	truecolor := theme.Depth() == overlay.DepthTrueColor
 	s := &m.motion.shimmer
 	if truecolor {
-		s.setToward(theme.UI().AccentBright)
+		s.setToward(theme.ShimmerInk())
 		s.syncLevels(shimmerPeak)
 	}
 	const maxLevel = config.SpotlightLevels - 1

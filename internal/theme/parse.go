@@ -78,10 +78,29 @@ const (
 	RoleCanvas
 	RolePanel
 	RoleCard
+	// The roles below RoleCard name one piece of furniture each. A theme file
+	// writes them in nested objects (see chromeGroups), so their names carry
+	// the object: "border.unfocused" is chrome.border.unfocused. Each one left
+	// unset draws what it drew before the role existed.
+	RoleBorderUnfocused
+	RoleBorderCopy
+	RoleBorderMultifocus
+	RoleRule
+	RoleAttention
+	RoleBusy
+	RoleDotClose
+	RoleDotMinimize
+	RoleDotZoom
+	RoleDockGround
+	RoleRailGround
 	RoleText
 	RoleDim
 	RoleMuted
 )
+
+// roleLastSettable is the last role a theme's chrome object may set. The ink
+// tiers after it are measured, never named.
+const roleLastSettable = RoleRailGround
 
 // roleNames maps each role to the name a file writes.
 var roleNames = [...]string{
@@ -95,9 +114,22 @@ var roleNames = [...]string{
 	RoleCanvas:       "canvas",
 	RolePanel:        "panel",
 	RoleCard:         "card",
-	RoleText:         "text",
-	RoleDim:          "dim",
-	RoleMuted:        "muted",
+
+	RoleBorderUnfocused:  "border.unfocused",
+	RoleBorderCopy:       "border.copy",
+	RoleBorderMultifocus: "border.multifocus",
+	RoleRule:             "rule",
+	RoleAttention:        "status.attention",
+	RoleBusy:             "status.busy",
+	RoleDotClose:         "dots.close",
+	RoleDotMinimize:      "dots.minimize",
+	RoleDotZoom:          "dots.zoom",
+	RoleDockGround:       "dock.ground",
+	RoleRailGround:       "rail.ground",
+
+	RoleText:  "text",
+	RoleDim:   "dim",
+	RoleMuted: "muted",
 }
 
 // String is the name a file writes for r.
@@ -110,7 +142,7 @@ func (r Role) String() string {
 
 // Settable reports whether a theme's chrome object may set r. The ink tiers
 // are measured from the surface, never named: see Chrome.
-func (r Role) Settable() bool { return r >= RoleAccent && r <= RoleCard }
+func (r Role) Settable() bool { return r >= RoleAccent && r <= roleLastSettable }
 
 // slotNames are the eight base slot names, by index. Each has a bright_ form
 // eight higher, and slot 5 has two names, because the theme files say purple
@@ -302,8 +334,12 @@ func roleOn(r Role, pal *overlay.Palette) color.Color {
 		return pal.FgDim
 	case RoleMuted:
 		return pal.FgMute
+	case RoleAttention:
+		return pal.Attention
+	case RoleBusy:
+		return pal.Busy
 	}
-	return nil
+	return furnitureRole(r)
 }
 
 // slotColor is slot i at depth d. At 16 colours, or with no theme, a slot is

@@ -6626,3 +6626,18 @@ Run on 2026-10-16.
 |---|---|---|---|---|
 | The export wrote every colour | yes | `if full || true` in `exportDoc` | `TestThemeExportWritesOnlyTheChanges` ("the export of ember2 is ...") | **caught** |
 | The export did not follow a base that is a file | yes | the loop in `builtinAnchor` skips the files | `TestThemeExportWritesOnlyTheChanges` ("the export of ember2 is ...") | **caught** |
+
+## Chrome roles for one piece of chrome
+
+`TestThemeChromeRolesPaint` loads a theme with `chrome.border.unfocused`,
+`chrome.rule` and `chrome.dock.ground` in colours no shipped theme draws, and
+reads them off the frame: the unfocused border, the dock's rule and the dock's
+row. Then `dock_background = "off"` in the config must win over the theme.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The unfocused border ignored the theme | yes | `&& false` on the `RoleBorderUnfocused` check in `BorderUnfocusedOn` | `TestThemeChromeRolesPaint` ("the theme's border.unfocused, rule and dock.ground never painted") | **caught** |
+| The dock ignored the theme's ground | yes | `themeGround` always returns the config's setting | `TestThemeChromeRolesPaint` (same message) | **caught** |
+| The rule ignored the theme | yes | `&& false` on the `RoleRule` check in `RailRuleOn` | `TestThemeChromeRolesPaint` (same message) | **caught** |

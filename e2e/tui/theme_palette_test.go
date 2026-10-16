@@ -284,3 +284,61 @@ func TestThemeExportWritesOnlyTheChanges(t *testing.T) {
 		}
 	}
 }
+
+// TestThemeChromeRolesPaint: a theme's chrome.border.unfocused colours the
+// border of a pane without focus, chrome.rule colours the dock's rule, and
+// chrome.dock.ground paints the dock's row. A dock_background in the config
+// wins over the theme's ground.
+//
+// How this could pass wrongly: the colours are ones no shipped theme or
+// default draws, so a cell in one of them came from the theme file.
+// Negative controls are in NEGATIVE_CONTROLS.md.
+func TestThemeChromeRolesPaint(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"roles\"\n")
+	writeConfigPart(t, base, "themes/roles.json", `{"id": "roles", "base": "nord", "chrome": {
+		"border": {"unfocused": "#ff0000"}, "rule": "#0000ff", "dock": {"ground": "#00ff00"}}}`)
+	term := startIn(t, base, startOpts{cols: 120, rows: 30, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+
+	is := func(c tuitest.Color, r, g, b uint8) bool {
+		return c.Kind == tuitest.ColorRGB && c.R == r && c.G == g && c.B == b
+	}
+	count := func(s tuitest.Screen, match func(tuitest.Cell) bool) int {
+		n := 0
+		cols, rows := s.Size()
+		for y := range rows {
+			for x := range cols {
+				if match(s.Cell(x, y)) {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	unfocused := func(c tuitest.Cell) bool {
+		return is(c.Fg, 0xff, 0, 0) && strings.ContainsAny(c.Content, "─│╭╮╰╯┌┐└┘")
+	}
+	rule := func(c tuitest.Cell) bool { return is(c.Fg, 0, 0, 0xff) && c.Content == "─" }
+	dockRowGround := func(s tuitest.Screen) bool {
+		r := dockStatusRow(s)
+		return r >= 0 && is(s.Cell(cellColumnOf(s, r, "1:"), r).Bg, 0, 0xff, 0)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return count(s, unfocused) >= 10 && count(s, rule) >= 10 && dockRowGround(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the theme's border.unfocused, rule and dock.ground never painted: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "roles")
+
+	writeConfig(t, base, "[appearance]\ntheme = \"roles\"\ndock_background = \"off\"\n")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := dockStatusRow(s)
+		return r >= 0 && !dockRowGround(s)
+	}, uiTimeout); err != nil {
+		t.Fatalf("dock_background = \"off\" in the config did not win over the theme's dock.ground: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "config-wins")
+}

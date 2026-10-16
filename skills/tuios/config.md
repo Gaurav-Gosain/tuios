@@ -233,6 +233,11 @@ theme, name it as `base` and write only the changes:
 {"id": "nord_warm", "base": "nord", "chrome": {"accent": "yellow"}}
 ```
 
+`chrome` also takes nested roles for one piece each: `border` (`unfocused`,
+`copy`, `multifocus`), `rule`, `status` (`attention`, `busy`), `dots`
+(`close`, `minimize`, `zoom`), `dock.ground` and `rail.ground`. A config key
+such as `dock_background` wins over the theme.
+
 The running clients read a theme file again when it is saved. `tuios theme
 reload` asks every client on the machine to read the files now.
 

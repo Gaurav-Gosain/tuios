@@ -643,9 +643,12 @@ file's `chrome` object.
 
 The role names are `accent`, `accent_bright`, `success`, `warning`,
 `error`, `info`, `surface`, `canvas`, `panel` and `card`, the roles a
-theme's `chrome` object sets (see [THEMES.md](THEMES.md)). `text`, `dim`
-and `muted` are the three text inks. You can use them, but a theme cannot
-set them.
+theme's `chrome` object sets (see [THEMES.md](THEMES.md)). The roles for one
+piece of chrome have a dotted name: `border.unfocused`, `border.copy`,
+`border.multifocus`, `rule`, `status.attention`, `status.busy`,
+`dots.close`, `dots.minimize`, `dots.zoom`, `dock.ground` and `rail.ground`.
+`text`, `dim` and `muted` are the three text inks. You can use them, but a
+theme cannot set them.
 
 A slot name or a role name follows the theme. Change the theme and the
 colour changes with it. At 16 colours, a slot name is the terminal's own
@@ -689,6 +692,11 @@ instead, one surface at a time or all at once.
 | `appearance.window_chrome_background` | Pane borders and title bars, the lines between shared-border panes, the capture marquee | `off`, `theme`, a colour, or empty | empty (follows `background`) |
 | `appearance.dock_background` | The dock | `off`, `theme`, a colour, or empty | empty (follows `background`) |
 | `appearance.sidebar.background` | The rail | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+
+A theme can name a ground for the dock and the rail (`chrome.dock.ground` and
+`chrome.rail.ground`, see [THEMES.md](THEMES.md#roles-for-one-piece-of-chrome)).
+The theme's ground shows when `dock_background` or `sidebar.background` is
+empty and `background` is `off`. A value in either key wins.
 
 What each value paints:
 

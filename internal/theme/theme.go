@@ -261,6 +261,9 @@ func BorderUnfocusedOn(hostBg color.Color) color.Color {
 	if t == nil {
 		return slotAt16(1, hostBorderInk(lipgloss.Color("#FAAAAA"), hostBg))
 	}
+	if c := chromeFurniture(RoleBorderUnfocused); c != nil {
+		return borderInk(c)
+	}
 	// Light pinkish red: the theme's regular red, which gives a softer, more
 	// muted tone for unfocused windows than bright red.
 	return slotAt16(1, borderInk(t.Red))
@@ -351,13 +354,48 @@ func DockColorTerminal() color.Color {
 	return slotAt16(10, chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 }
 
-// DockColorCopy returns the dock indicator color for copy mode.
+// DockColorCopy returns the dock indicator color for copy mode: the theme's
+// border.copy, else its warning.
 func DockColorCopy() color.Color {
 	t := Current()
 	if t == nil {
 		return slotAt16(3, lipgloss.Color("#e0af68")) // Soft amber
 	}
+	if c := chromeFurniture(RoleBorderCopy); c != nil {
+		return c
+	}
 	return slotAt16(3, chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow))
+}
+
+// DockColorMultifocus returns the dock indicator color while several panes
+// take the keys: the theme's border.multifocus, else the copy mode colour.
+func DockColorMultifocus() color.Color {
+	if c := chromeFurniture(RoleBorderMultifocus); c != nil {
+		return c
+	}
+	return DockColorCopy()
+}
+
+// furnitureRole is the colour a config value naming one of the roles after
+// RoleCard draws: what that piece of chrome draws now, theme or not. A ground
+// is the theme's only, nil when it names none.
+func furnitureRole(r Role) color.Color {
+	switch r {
+	case RoleBorderUnfocused:
+		return BorderUnfocused()
+	case RoleBorderCopy:
+		return DockColorCopy()
+	case RoleBorderMultifocus:
+		return BorderMultifocus()
+	case RoleRule:
+		return RailRule()
+	case RoleDotClose, RoleDotMinimize, RoleDotZoom:
+		closeDot, minimise, zoom := WindowDots()
+		return [...]color.Color{closeDot, minimise, zoom}[r-RoleDotClose]
+	case RoleDockGround, RoleRailGround:
+		return chromeFurniture(r)
+	}
+	return nil
 }
 
 // NotificationError returns the color for error notifications.

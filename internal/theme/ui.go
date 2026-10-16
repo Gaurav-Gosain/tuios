@@ -62,6 +62,9 @@ var railRuleMemo struct {
 // RailRuleOn is the structure ink for a rule drawn on a ground its caller
 // paints itself, like the collapsed strip's bands.
 func RailRuleOn(bg color.Color) color.Color {
+	if c := chromeFurniture(RoleRule); c != nil {
+		return c
+	}
 	r, g, b, a := bg.RGBA()
 	key := [4]uint32{r, g, b, a}
 
@@ -247,6 +250,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 			if c.Card != nil {
 				p.Card, customRamp = c.Card, true
 			}
+			p.Attention, p.Busy = c.Furniture(RoleAttention), c.Furniture(RoleBusy)
 		}
 	}
 
@@ -277,6 +281,8 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		// which is picked to read on its own background; the quiet ink is
 		// bright black, the one slot every palette makes a quiet grey.
 		p.Fg, p.FgDim, p.FgMute = overlay.NoColor, overlay.NoColor, overlay.Slot(8)
+		// Derive takes them from the warning and info slots.
+		p.Attention, p.Busy = nil, nil
 	case overlay.Depth256:
 		if !customRamp && !light {
 			// Set by hand on the grey ramp. Stepping the charmtone neutrals
@@ -290,6 +296,12 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		p.Accent, p.AccentBright, p.Selected = overlay.To256(p.Accent), overlay.To256(p.AccentBright), overlay.To256(p.Selected)
 		p.Warn, p.Success = overlay.To256(p.Warn), overlay.To256(p.Success)
 		p.Info, p.Warning = overlay.To256(p.Info), overlay.To256(p.Warning)
+		if p.Attention != nil {
+			p.Attention = overlay.To256(p.Attention)
+		}
+		if p.Busy != nil {
+			p.Busy = overlay.To256(p.Busy)
+		}
 	}
 	if light {
 		liftOnLight(&p, d)

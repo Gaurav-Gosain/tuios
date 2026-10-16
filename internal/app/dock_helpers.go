@@ -728,7 +728,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	case focusedWindow != nil && m.MultiCopy.Has(focusedWindow.ID):
 		// Multi copy mode is held from either mode, so it names itself in
 		// both: how many panes it drives, and after a search how many matched.
-		modeInfo.Color = theme.DockColorCopy()
+		modeInfo.Color = theme.DockColorMultifocus()
 		modeLabel, _ = m.multiCopyPill()
 	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {

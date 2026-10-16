@@ -57,10 +57,16 @@ func readThemeFile(path string, data []byte) (*themeFile, error) {
 	return f, nil
 }
 
-// chromeOf reads a chrome object's fields by role.
+// chromeOf reads a chrome object's fields by role. A role named group.field
+// is read from the nested object group.
 func chromeOf(m map[string]any) (raw chromeRaw) {
-	for r := RoleAccent; r <= RoleCard; r++ {
-		raw[r], _ = m[r.String()].(string)
+	for r := RoleAccent; r <= roleLastSettable; r++ {
+		obj, key := m, r.String()
+		if group, field, nested := strings.Cut(key, "."); nested {
+			obj, _ = m[group].(map[string]any)
+			key = field
+		}
+		raw[r], _ = obj[key].(string)
 	}
 	return raw
 }
@@ -79,6 +85,11 @@ func chromeRawOf(c *Chrome) (raw chromeRaw) {
 	for r := RoleAccent; r <= RoleCard; r++ {
 		if named[r] != nil && !c.derived[r] {
 			raw[r] = ColorToString(named[r])
+		}
+	}
+	for r := RoleCard + 1; r <= roleLastSettable; r++ {
+		if f := c.furniture[r]; f != nil {
+			raw[r] = ColorToString(f)
 		}
 	}
 	return raw

@@ -61,6 +61,12 @@ type Palette struct {
 	Info    color.Color // informational
 	Warning color.Color // caution
 
+	// Attention marks a state that needs a person, such as an agent that
+	// waits for input. Busy marks work in progress, such as a working agent.
+	// Derive fills a nil one from Warning and Info.
+	Attention color.Color
+	Busy      color.Color
+
 	// RowSelQuiet is the cursor row of a list that does not have the keyboard.
 	// It stays visible, so the user can see where the cursor will be when the
 	// list gets focus back, and it is quieter than RowSel, so only one list on
@@ -104,6 +110,12 @@ type Palette struct {
 func Derive(p Palette) Palette {
 	d := CurrentDepth()
 	p.Depth = d
+	if p.Attention == nil {
+		p.Attention = p.Warning
+	}
+	if p.Busy == nil {
+		p.Busy = p.Info
+	}
 	if d == Depth16 {
 		return derive16(p)
 	}

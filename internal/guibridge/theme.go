@@ -28,6 +28,8 @@ type Theme struct {
 	BorderFocused         string `json:"border_focused"`
 	BorderFocusedTerminal string `json:"border_focused_terminal"`
 	BorderUnfocused       string `json:"border_unfocused"`
+	BorderCopy            string `json:"border_copy"`
+	BorderMultifocus      string `json:"border_multifocus"`
 	// Agent state colours, as the rail draws them.
 	Agent map[string]string `json:"agent"`
 }
@@ -89,9 +91,11 @@ func CurrentTheme() Theme {
 	t.BorderFocused = hex(theme.BorderFocusedWindow())
 	t.BorderFocusedTerminal = hex(theme.BorderFocusedTerminal())
 	t.BorderUnfocused = hex(theme.BorderUnfocused())
+	t.BorderCopy = hex(theme.DockColorCopy())
+	t.BorderMultifocus = hex(overlay.Shown(theme.BorderMultifocus()))
 	t.Agent = map[string]string{
-		"working":     hex(overlay.Shown(gp.Info)),
-		"needs_input": hex(overlay.Shown(gp.Warning)),
+		"working":     hex(overlay.Shown(gp.Busy)),
+		"needs_input": hex(overlay.Shown(gp.Attention)),
 		"idle":        hex(overlay.Shown(gp.FgMute)),
 		"done":        hex(overlay.Shown(gp.Success)),
 		"errored":     hex(overlay.Shown(gp.Warn)),

@@ -297,9 +297,9 @@ func sidebarVariant(w int) int {
 func agentGlyphColor(state string, pal overlay.Palette) color.Color {
 	switch state {
 	case "working":
-		return pal.Info
+		return pal.Busy
 	case "needs_input":
-		return pal.Warning
+		return pal.Attention
 	case "idle":
 		return pal.FgMute
 	case "done":
@@ -309,7 +309,7 @@ func agentGlyphColor(state string, pal overlay.Palette) color.Color {
 	case string(agentStateWaiting):
 		// The working ink, without the shimmer: work goes on, and nothing
 		// about it moves on screen, so no motion clock starts.
-		return pal.Info
+		return pal.Busy
 	default:
 		return pal.FgMute
 	}

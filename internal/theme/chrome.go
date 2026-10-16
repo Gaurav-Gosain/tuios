@@ -68,6 +68,34 @@ type Chrome struct {
 	// this theme as its base inherits only the steps the theme named, and
 	// derives the rest from its own surface.
 	derived [RoleCard + 1]bool
+
+	// furniture holds the roles after RoleCard by role: the borders by
+	// state, the rule, the status inks, the window dots and the dock and rail
+	// grounds. Nil is unset, and the piece draws what it drew before.
+	furniture [roleLastSettable + 1]color.Color
+}
+
+// Furniture is the colour the theme names for one of the roles after
+// RoleCard, or nil.
+func (c *Chrome) Furniture(r Role) color.Color {
+	if c == nil || r <= RoleCard || r > roleLastSettable {
+		return nil
+	}
+	return c.furniture[r]
+}
+
+// ChromeNames reports whether the theme in force names role r in its chrome.
+func ChromeNames(r Role) bool { return chromeFurniture(r) != nil }
+
+// chromeFurniture is the theme in force's colour for role r, or nil. At 16
+// colours it is nil too: a piece of chrome there is drawn in a slot the
+// terminal paints, and a named colour would be a guess at the user's palette.
+func chromeFurniture(r Role) color.Color {
+	c := CurrentChrome()
+	if c == nil || Depth() == overlay.Depth16 {
+		return nil
+	}
+	return c.Furniture(r)
 }
 
 var chromeRegistry struct {
@@ -107,7 +135,7 @@ func CurrentChrome() *Chrome {
 }
 
 // chromeRaw is a chrome object's fields as the file wrote them, by role.
-type chromeRaw [RoleCard + 1]string
+type chromeRaw [roleLastSettable + 1]string
 
 // buildChrome resolves a chrome object's fields on the theme t. A field that
 // is absent or unparseable is left nil and derives from the ANSI slots as
@@ -119,12 +147,12 @@ type chromeRaw [RoleCard + 1]string
 // loop of roles that name each other has no colour to end on, and is the one
 // mistake that fails the file: the error names the roles in the loop.
 func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
-	var specs [RoleCard + 1]ColorSpec
-	for r := RoleAccent; r <= RoleCard; r++ {
+	var specs [roleLastSettable + 1]ColorSpec
+	for r := RoleAccent; r <= roleLastSettable; r++ {
 		specs[r] = parseChromeSpec(raw[r])
 	}
-	var got [RoleCard + 1]color.Color
-	for r := RoleAccent; r <= RoleCard; r++ {
+	var got [roleLastSettable + 1]color.Color
+	for r := RoleAccent; r <= roleLastSettable; r++ {
 		c, err := chromeRole(r, &specs, t, nil)
 		if err != nil {
 			return nil, err
@@ -136,6 +164,7 @@ func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
 		Warning: got[RoleWarning], Error: got[RoleError], Info: got[RoleInfo],
 		Surface: got[RoleSurface], Canvas: got[RoleCanvas], Panel: got[RolePanel], Card: got[RoleCard],
 	}
+	copy(c.furniture[RoleCard+1:], got[RoleCard+1:])
 	named := false
 	for _, g := range got {
 		named = named || g != nil
@@ -168,15 +197,18 @@ func parseChromeSpec(s string) ColorSpec {
 // not set it, for a field that names that role: accent is bright_blue, and so
 // on. The neutrals derive from no slot (-1): a field that names an unset one is
 // left unset too.
-var chromeFallbackSlot = [RoleCard + 1]int8{
+var chromeFallbackSlot = [roleLastSettable + 1]int8{
 	RoleAccent: 12, RoleAccentBright: 14, RoleSuccess: 10, RoleWarning: 3,
 	RoleError: 1, RoleInfo: 4,
 	RoleSurface: -1, RoleCanvas: -1, RolePanel: -1, RoleCard: -1,
+	RoleBorderUnfocused: 1, RoleBorderCopy: 3, RoleBorderMultifocus: 3, RoleRule: -1,
+	RoleAttention: 3, RoleBusy: 4, RoleDotClose: 9, RoleDotMinimize: 11, RoleDotZoom: 10,
+	RoleDockGround: -1, RoleRailGround: -1,
 }
 
 // chromeRole is role r's colour in the object, following role references.
 // path is the chain of roles that led here, for the loop error.
-func chromeRole(r Role, specs *[RoleCard + 1]ColorSpec, t *tint.Tint, path []Role) (color.Color, error) {
+func chromeRole(r Role, specs *[roleLastSettable + 1]ColorSpec, t *tint.Tint, path []Role) (color.Color, error) {
 	for i, p := range path {
 		if p == r {
 			return nil, chromeLoopError(path[i:])

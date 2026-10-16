@@ -294,6 +294,49 @@ other in a loop, such as `"accent": "info"` and `"info": "accent"`, have no
 colour. tuios does not load that file, and `tuios list-themes` names the
 roles in the loop.
 
+### Roles for one piece of chrome
+
+These fields colour one piece of the screen each. They sit in nested objects
+by surface. Each one you leave out draws as before:
+
+```json
+"chrome": {
+  "border": { "unfocused": "bright_black", "copy": "yellow", "multifocus": "magenta" },
+  "rule":   "surface",
+  "status": { "attention": "bright_red", "busy": "accent" },
+  "dots":   { "close": "red", "minimize": "yellow", "zoom": "green" },
+  "dock":   { "ground": "#181825" },
+  "rail":   { "ground": "#181825" }
+}
+```
+
+| Field | What it colors | When absent |
+|---|---|---|
+| `border.unfocused` | the border of a pane without focus | `red` |
+| `border.copy` | the copy-mode pill | `warning` |
+| `border.multifocus` | the border of each pane that takes the keys with multifocus, and the multi copy pill | slot 3, and `border.copy` for the pill |
+| `rule` | the line under the dock and the lines on the rail | measured from the ground |
+| `status.attention` | an agent that waits for input, on the rail | `warning` |
+| `status.busy` | a working agent on the rail, and the shimmer on its row | `info`, and `accent_bright` for the shimmer |
+| `dots.close`, `dots.minimize`, `dots.zoom` | the window buttons in the dots style | red, amber and green |
+| `dock.ground` | the background of the dock | none |
+| `rail.ground` | the background of the rail | none |
+
+- `appearance.dock_background` and `appearance.sidebar.background` in the
+  config win over `dock.ground` and `rail.ground`, `off` included. So does an
+  `appearance.background` that is a colour or `theme`. See
+  [CONFIGURATION.md](CONFIGURATION.md).
+- `appearance.border_unfocused_color` in the config wins over
+  `border.unfocused`.
+- In a config colour, write a role by its full name, such as
+  `fg = "status.attention"`.
+- At 16 colours these fields are not used. Each piece uses its slot, as before.
+
+With a theme, three more pieces take their colours from the roles above: the
+link under the pointer uses `accent_bright`, the scrollback position on a
+pane's border uses `warning`, and the leader key in the key cast uses
+`accent_bright`. With no theme they keep their fixed colours.
+
 ### The surface
 
 The dialogs are not painted from the sixteen at all. They sit on a constant
