@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -578,7 +579,6 @@ func (m *OS) agentsRow(e sidebarAgentEntry, selected, focused bool, bg color.Col
 // agentsRowText draws an agent's row on bg at width cells.
 func agentsRowText(e sidebarAgentEntry, mail int, bg color.Color, pal overlay.Palette, width int, now time.Time) string {
 	stateInk := overlay.Readable(sidebarStateColor(e.State, e.DoneSeen, pal), bg)
-	st := overlay.Style(bg)
 	mark := agentStateIndicator(e.State)
 	if mark == "" {
 		mark = " "
@@ -614,18 +614,49 @@ func agentsRowText(e sidebarAgentEntry, mail int, bg color.Color, pal overlay.Pa
 	if name == "" {
 		name = shortWindowLabel(e.WindowID)
 	}
-	nameInk := overlay.Readable(pal.Fg, bg)
+	// Each column is one SGR span on the row's ground, written with
+	// ansi.Style directly: lipgloss's Render measured and split every span
+	// again, and a list of two hundred agents drawn again at once spent most
+	// of its frame there.
 	var b strings.Builder
-	b.WriteString(st.Render("  "))
-	b.WriteString(st.Foreground(stateInk).Render(padTo(mark, markW)))
-	b.WriteString(st.Foreground(nameInk).Bold(sidebarAttention(e.State)).Render(padTo(ansi.Truncate(name, max(nameW, 1), "…"), max(nameW, 1))))
-	b.WriteString(st.Foreground(overlay.Readable(pal.FgDim, bg)).Render(padTo(ansi.Truncate(agentSessionWords(e), sessW, "…"), sessW) + " "))
-	b.WriteString(st.Foreground(stateInk).Render(padTo(ansi.Truncate(words, stateW, "…"), stateW) + " "))
-	b.WriteString(st.Foreground(overlay.Readable(pal.FgMute, bg)).Render(padLeft(wait, waitW)))
+	b.Grow(width + 160)
+	// At 16 colours the grounds and some inks are overlay.NoColor, which
+	// lipgloss left out and ansi.Style would write as black: such a colour
+	// is not written at all.
+	var ground ansi.Style
+	if !noColor(bg) {
+		ground = ground.BackgroundColor(ansi.Color(bg))
+	}
+	span := func(ink color.Color, bold bool, text string) {
+		s := ground
+		if !noColor(ink) {
+			s = s.ForegroundColor(ansi.Color(ink))
+		}
+		if bold {
+			s = s.Bold()
+		}
+		b.WriteString(s.Styled(text))
+	}
+	b.WriteString(ground.Styled("  "))
+	span(stateInk, false, padTo(mark, markW))
+	span(overlay.Readable(pal.Fg, bg), sidebarAttention(e.State), padTo(ansi.Truncate(name, max(nameW, 1), "…"), max(nameW, 1)))
+	dim := overlay.Readable(pal.FgDim, bg)
+	span(dim, false, padTo(ansi.Truncate(agentSessionWords(e), sessW, "…"), sessW)+" ")
+	span(stateInk, false, padTo(ansi.Truncate(words, stateW, "…"), stateW)+" ")
+	span(overlay.Readable(pal.FgMute, bg), false, padLeft(wait, waitW))
 	if extraW > 0 && extra != "" {
-		b.WriteString(st.Foreground(overlay.Readable(pal.FgDim, bg)).Render("  " + ansi.Truncate(extra, extraW-2, "…")))
+		span(dim, false, "  "+ansi.Truncate(extra, extraW-2, "…"))
 	}
 	return b.String()
+}
+
+// noColor reports whether c is no colour at all: nil or overlay.NoColor.
+func noColor(c color.Color) bool {
+	if c == nil {
+		return true
+	}
+	_, ok := c.(lipgloss.NoColor)
+	return ok
 }
 
 // agentRowStateWords is an agent's state as its row says it: what it needs
