@@ -976,5 +976,11 @@ var ActionDescriptions = map[string]string{
 	"layout_prefix_load":   "Open the layout picker",
 	"layout_prefix_save":   "Save the current layout",
 	"layout_prefix_cancel": "Cancel layout prefix",
+	"window_prefix_new":    "Create a window",
+	"window_prefix_close":  "Close the window",
+	"window_prefix_rename": "Rename the window",
+	"window_prefix_next":   "Focus the next window",
+	"window_prefix_prev":   "Focus the previous window",
+	"window_prefix_tiling": "Turn tiling on or off",
 	"prefix_tuios":         "Open the tuios menu: the tuios keys a preset moved",
 }

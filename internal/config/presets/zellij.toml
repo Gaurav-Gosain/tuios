@@ -23,8 +23,6 @@ missing = [
   "A mode that stays open. A menu here runs one key and closes",
   "Floating and stacked panes, and pane frames on or off",
   "e in scroll mode: open the scrollback in $EDITOR",
-  "p d, p r, p f: split down or right, or fullscreen. Press ctrl+g -, ctrl+g | or ctrl+g z. p r renames here",
-  "t n, t x, t h, t l: new, close, previous or next tab. t 1 to 9 goes to a tab",
 ]
 notes = [
   "Press ctrl+g two times to send ctrl+g to the program in the pane.",
@@ -47,3 +45,23 @@ prefix_next_attention = []
 prefix_prev_window = ["p"]
 prefix_scrollback = ["s"]
 prefix_next_attention = ["o"]
+
+# Pane mode: ctrl+g p, then one key.
+[window_prefix]
+split_horizontal = ["d"]
+split_vertical = ["r"]
+prefix_fullscreen = ["f"]
+terminal_focus_left = ["h", "left"]
+terminal_focus_down = ["j", "down"]
+terminal_focus_up = ["k", "up"]
+terminal_focus_right = ["l", "right"]
+window_prefix_next = ["p", "tab"]
+window_prefix_rename = ["c"]
+
+# Tab mode: ctrl+g t, then one key.
+[workspace_prefix]
+new_workspace = ["n"]
+close_workspace = ["x"]
+prev_workspace = ["h", "k", "left", "up"]
+next_workspace = ["l", "j", "right", "down"]
+last_workspace = ["tab"]

@@ -32,19 +32,21 @@ func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 	// A leader row may name an action only a preset binds: the row is left
 	// out where the action has no key. Every action a preset binds after the
 	// leader needs a row as much as a default one does.
-	presetBound := map[string]bool{}
-	for _, name := range Presets()[1:] {
-		kb := DefaultKeybindingsFor(name)
-		bound := map[string]bool{}
-		for action, keys := range kb.PrefixMode {
-			if len(keys) > 0 {
-				bound[action], presetBound[action] = true, true
-			}
-		}
-		rows := PrefixMenuActions("", MenuState{})
-		for action := range bound {
-			if !slices.Contains(rows, action) {
-				t.Errorf("preset %s binds %q after the leader, and the which-key layout has no row for it", name, action)
+	presetBound := map[string]map[string]bool{}
+	for _, table := range prefixTables {
+		presetBound[table.name] = map[string]bool{}
+		for _, name := range Presets()[1:] {
+			pcfg := DefaultConfig()
+			pcfg.Keybindings = DefaultKeybindingsFor(name)
+			rows := PrefixMenuActions(table.name, MenuState{})
+			for action, keys := range table.section(pcfg) {
+				if len(keys) == 0 {
+					continue
+				}
+				presetBound[table.name][action] = true
+				if !slices.Contains(rows, action) {
+					t.Errorf("preset %s binds %q in the %q menu, and the which-key layout has no row for it", name, action, table.name)
+				}
 			}
 		}
 	}
@@ -63,7 +65,7 @@ func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 					}
 				}
 				for _, action := range rows {
-					if _, ok := section[action]; !ok && !(table.name == "" && presetBound[action]) {
+					if _, ok := section[action]; !ok && !presetBound[table.name][action] {
 						t.Errorf("the %s which-key layout (daemon %v) has a row for %q, which that prefix does not bind", name, daemon, action)
 					}
 				}

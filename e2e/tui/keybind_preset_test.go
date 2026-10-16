@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -109,7 +111,11 @@ func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 
 // TestZellijPresetOpensModes: under the zellij preset ctrl+g t opens the
 // workspace menu (a zellij tab is a workspace) and ctrl+g p the window menu
-// (a zellij pane is a window).
+// (a zellij pane is a window), and the zellij keys in them work: p r splits
+// right, t n opens a workspace, t h goes to the one before.
+//
+// Negative control: without the preset's [window_prefix], p r renames the
+// window (the tuios key) and the wait for two windows fails.
 func TestZellijPresetOpensModes(t *testing.T) {
 	term, base := panesSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
 	waitForSettledGeometryIn(t, base, "zellijkeys", 1)
@@ -127,4 +133,26 @@ func TestZellijPresetOpensModes(t *testing.T) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
+
+	// Pane mode: p r splits right. Tab mode: t n opens a workspace and t h
+	// goes back to the one before it.
+	if err := term.SendKeys(tuitest.Ctrl('g'), "p", "r"); err != nil {
+		t.Fatalf("press ctrl+g p r: %v", err)
+	}
+	waitForSettledGeometryIn(t, base, "zellijkeys", 2)
+	if err := term.SendKeys(tuitest.Ctrl('g'), "t", "n"); err != nil {
+		t.Fatalf("press ctrl+g t n: %v", err)
+	}
+	waitWorkspace(t, base, "zellijkeys", 2)
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if slices.ContainsFunc(slices.Collect(maps.Values(listPanes(t, base, "zellijkeys"))), func(p paneRow) bool { return p.Workspace == 2 }) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('g'), "t", "h"); err != nil {
+		t.Fatalf("press ctrl+g t h: %v", err)
+	}
+	waitWorkspace(t, base, "zellijkeys", 1)
 }

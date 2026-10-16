@@ -38,7 +38,7 @@ in use, and `tuios keybinds preset list` shows them all.
 | `tuios` | `ctrl+b` | The tuios keys. This is the default |
 | `tmux` | `ctrl+b` | tmux 3.8's keys after the leader |
 | `screen` | `ctrl+a` | GNU screen's keys after the leader, also on the control variant (`ctrl+a ctrl+n`). `ctrl+a ctrl+a` goes to the last workspace. `ctrl+a a` sends `ctrl+a` to the pane |
-| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens the window menu, `t` the workspace menu, `s` copy mode and `o` the session switcher. The next key runs one action |
+| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens pane mode (the window menu), `t` tab mode (the workspace menu), `s` copy mode and `o` the session switcher. The next key runs one action. In pane mode `r` splits right, `d` splits down, `f` zooms, `h` `j` `k` `l` move focus and `c` renames. In tab mode `n` opens a workspace, `x` closes it, and `h` and `l` go to the previous and next |
 
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
   `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.

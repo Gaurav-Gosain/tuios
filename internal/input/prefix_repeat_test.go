@@ -209,6 +209,7 @@ func TestEveryPresetActionIsRegistered(t *testing.T) {
 	def := config.DefaultConfig().Keybindings
 	defaults := map[string]map[string][]string{
 		"prefix_mode": def.PrefixMode, "terminal_mode": def.TerminalMode, "tuios_prefix": def.TuiosPrefix,
+		"window_prefix": def.WindowPrefix, "workspace_prefix": def.WorkspacePrefix,
 	}
 	for _, name := range config.Presets()[1:] {
 		cfg, err := config.ParseUserConfig([]byte("[keybindings]\npreset = \"" + name + "\"\n"))
@@ -218,6 +219,7 @@ func TestEveryPresetActionIsRegistered(t *testing.T) {
 		kb := cfg.Keybindings
 		for section, m := range map[string]map[string][]string{
 			"prefix_mode": kb.PrefixMode, "terminal_mode": kb.TerminalMode, "tuios_prefix": kb.TuiosPrefix,
+			"window_prefix": kb.WindowPrefix, "workspace_prefix": kb.WorkspacePrefix,
 		} {
 			for action, keys := range m {
 				// Only what the preset changed: a few tuios terminal-mode

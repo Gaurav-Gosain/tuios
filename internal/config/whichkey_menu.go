@@ -97,6 +97,11 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 			numbered("Switch to workspace", actionRun("workspace_prefix_switch_", 1, 9, 1)...),
 			numbered("Move window to workspace", actionRun("workspace_prefix_move_", 1, 9, 1)...),
 			row("workspace_prefix_rename", "Rename workspace"),
+			// Bound by a preset whose tab mode opens this menu (zellij).
+			row("new_workspace", "New workspace"),
+			row("close_workspace", "Close workspace"),
+			pair("Prev/next workspace", part("prev_workspace", "Previous workspace"), part("next_workspace", "Next workspace")),
+			row("last_workspace", "Last workspace"),
 			cancel("workspace_prefix_cancel"),
 		)
 	case "minimize":
@@ -118,6 +123,15 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 			row("window_prefix_next", "Next window"),
 			row("window_prefix_prev", "Previous window"),
 			row("window_prefix_tiling", "Toggle tiling mode"),
+			// Bound by a preset whose pane mode opens this menu (zellij).
+			row("split_vertical", "Split right"),
+			row("split_horizontal", "Split down"),
+			row("prefix_fullscreen", "Toggle zoom"),
+			pair("Focus pane",
+				part("terminal_focus_left", "Focus pane left"),
+				part("terminal_focus_down", "Focus pane down"),
+				part("terminal_focus_up", "Focus pane up"),
+				part("terminal_focus_right", "Focus pane right")),
 			cancel("window_prefix_cancel"),
 		)
 	case "debug":

@@ -3139,6 +3139,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		if applyPreset(&kb, p) == nil {
 			dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode)
 			dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode)
+			dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix)
+			dropPresetShadows(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix, kb.WorkspacePrefix)
 			defaultCfg = &UserConfig{Keybindings: kb}
 			fillPrefix = fillMapDefaultsYielding
 			if cfg.Keybindings.Repeat == nil {
@@ -3267,9 +3269,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, layoutYield...)
-	fillMapDefaults(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
+	fillPrefix(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix)
 	fillMapDefaults(cfg.Keybindings.MinimizePrefix, defaultCfg.Keybindings.MinimizePrefix)
-	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
+	fillPrefix(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 	fillMapDefaultsYielding(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)

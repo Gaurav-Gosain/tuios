@@ -58,6 +58,10 @@ type keybindPreset struct {
 	PrefixMode   map[string][]string `toml:"prefix_mode"`
 	TerminalMode map[string][]string `toml:"terminal_mode"`
 	TuiosPrefix  map[string][]string `toml:"tuios_prefix"`
+	// The window and workspace menus, for a preset whose mode keys open
+	// them (zellij's pane and tab modes).
+	WindowPrefix    map[string][]string `toml:"window_prefix"`
+	WorkspacePrefix map[string][]string `toml:"workspace_prefix"`
 }
 
 // Presets lists the preset names, tuios first.
@@ -132,6 +136,8 @@ func applyPreset(kb *KeybindingsConfig, name string) error {
 	kb.PrefixMode = overlayPresetSection(kb.PrefixMode, p.PrefixMode)
 	kb.TerminalMode = overlayPresetSection(kb.TerminalMode, p.TerminalMode)
 	kb.TuiosPrefix = overlayPresetSection(kb.TuiosPrefix, p.TuiosPrefix)
+	kb.WindowPrefix = overlayPresetSection(kb.WindowPrefix, p.WindowPrefix)
+	kb.WorkspacePrefix = overlayPresetSection(kb.WorkspacePrefix, p.WorkspacePrefix)
 	return nil
 }
 
@@ -203,6 +209,29 @@ func PresetCheatSheet(name string) (CheatSheet, error) {
 	for _, action := range slices.Compact(same) {
 		if keys := kb.PrefixMode[action]; len(keys) > 0 {
 			sheet.Same = append(sheet.Same, CheatSheetLine{Keys: leader + " " + strings.Join(keys, " or "), Does: describe(action)})
+		}
+	}
+	// A preset's window and workspace menu keys, behind the key that opens
+	// the menu: ctrl+g p r under zellij.
+	for _, sub := range []struct {
+		gate    string
+		preset  map[string][]string
+		resolve map[string][]string
+	}{
+		{"prefix_window", p.WindowPrefix, kb.WindowPrefix},
+		{"prefix_workspace", p.WorkspacePrefix, kb.WorkspacePrefix},
+	} {
+		gate := kb.PrefixMode[sub.gate]
+		if len(gate) == 0 {
+			continue
+		}
+		for _, action := range slices.Sorted(maps.Keys(sub.preset)) {
+			if keys := sub.resolve[action]; len(keys) > 0 {
+				sheet.Same = append(sheet.Same, CheatSheetLine{
+					Keys: leader + " " + gate[0] + " " + strings.Join(keys, " or "),
+					Does: describe(action),
+				})
+			}
 		}
 	}
 	menu := leader + " " + strings.Join(kb.PrefixMode["prefix_tuios"], " or ")
