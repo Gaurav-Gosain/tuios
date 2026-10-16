@@ -19,7 +19,38 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The shard count and the time each shard may take. shardplan packs the tests
+# into E2E_SHARDS shards by the measured times in
+# e2e/tui/shardplan/durations.txt. The shard plan job fails when a shard's
+# estimate is over E2E_SHARD_LIMIT, which leaves a wide margin under the 18
+# minute go test timeout. Keep the matrix below in step with E2E_SHARDS.
+env:
+  E2E_SHARDS: "9"
+  E2E_SHARD_LIMIT: 11m
+
 jobs:
+  shard-plan:
+    name: e2e-tui shard plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: e2e/tui/go.mod
+          cache-dependency-path: |
+            go.sum
+            e2e/tui/go.sum
+
+      - name: Check that every shard fits its time
+        working-directory: e2e/tui
+        env:
+          TUIOS_E2E: "1"
+        run: |
+          set -euo pipefail
+          go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$E2E_SHARDS" -max "$E2E_SHARD_LIMIT"
+
   e2e-tui:
     runs-on: ubuntu-latest
     # The suite spawns multiplexer daemons and shells. The job timeout is a
@@ -38,13 +69,15 @@ jobs:
     # process would multiply the memory rather than the throughput. Splitting
     # across machines gives each shard the whole runner.
     #
-    # Seven shards since shard 2 of six ran 1003 seconds against its 1080
-    # second test timeout, and one more 40 second test took it over.
+    # The split was a hash of the test name until seven shards ran between 525
+    # and 1054 seconds, and the long one crossed the 1080 second timeout. A
+    # hash balances the count of tests, and a few tests take a minute or two.
+    # The split is now by measured time, with nine shards near ten minutes.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7]
-    name: e2e-tui (shard ${{ matrix.shard }} of 7)
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    name: e2e-tui (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     timeout-minutes: 20
 
     steps:
@@ -76,10 +109,10 @@ jobs:
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
           SHARD: ${{ matrix.shard }}
-          SHARDS: "7"
-        # The split is by a hash of the test name, not by the order the list
-        # comes back in, so adding or renaming a test moves only that test
-        # between shards instead of resegmenting every one of them.
+          SHARDS: ${{ strategy.job-total }}
+        # Every shard computes the same plan from the same test list and
+        # durations file, so together they run each test once. A test that is
+        # not in the file yet counts as the mean.
         #
         # Listing needs TUIOS_E2E as well: without it the suite's TestMain
         # returns before it can print a name, and the shard would silently be
@@ -91,16 +124,25 @@ jobs:
         # instrument only the harness.
         run: |
           set -euo pipefail
-          names=$(go test -list '^Test' ./... | grep '^Test' | sort | awk -v n="$SHARD" -v t="$SHARDS" '
-            { h = 0
-              for (i = 1; i <= length($0); i++) h = (h * 31 + index("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", substr($0, i, 1))) % 1000003 }
-            (h % t) == (n - 1) { print }')
+          if [ "$SHARDS" != "$E2E_SHARDS" ]; then
+            echo "The matrix has $SHARDS shards and E2E_SHARDS is $E2E_SHARDS. Make them the same." >&2
+            exit 1
+          fi
+          names=$(go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$SHARDS" -shard "$SHARD")
           if [ -z "$names" ]; then
             echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
             exit 1
           fi
           echo "$names" | wc -l | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
+          start=$SECONDS
           go test -count=1 -timeout 18m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./...
+          # A shard that ran over the limit still passes, but says so, so the
+          # drift shows before it reaches the timeout.
+          took=$((SECONDS - start))
+          limit=$(( ${E2E_SHARD_LIMIT%m} * 60 ))
+          if [ "$took" -gt "$limit" ]; then
+            echo "::warning title=Slow e2e shard::Shard $SHARD ran ${took}s, over the $E2E_SHARD_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
+          fi
 
       - name: Reap any surviving daemons
         # The harness tears down its own process groups, but a hard job failure
