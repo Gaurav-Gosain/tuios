@@ -5021,6 +5021,22 @@ before it types, and fails when the dock names the spotlight.
 Not covered here: the divider clip in `clipScratchSplits`. The suite pins
 the looks from before v0.8.0, so the panes keep their own borders and no
 divider is drawn.
+
+### The fill and the split race
+
+Run on 2026-10-16 on branch `fix/scratch-zoom-fill-race`. The test sent the
+first split right after it typed the `@` fill. When the split came first,
+`tput` read the half-width pane: the fill was 1484 cells, not 3024, and left
+no history. The zoom then kept it at the top of the widened pane, above the
+rows the camera shows, and "no pane shows beside the zoomed one" failed. It
+failed in 1 of 90 local runs, and in 3 of 148 runs on two loaded cores. The
+test now waits for each fill to show before it splits: 0 of 120 runs on two
+loaded cores.
+
+| Control | Build | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| `sleep 0.5;` before the `@` fill, so the split always wins | the test before the fix | standalone, 5 of 5: no pane shows beside the zoomed one | **caught** (the race, forced) |
+| The same delay | this branch | none, 5 of 5 runs | **guard** |
 ## The rail's worktree dialog
 
 `TestRailRightClickMakesAWorktree` opens the dialog from a repository's group

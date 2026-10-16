@@ -75,6 +75,20 @@ func fillScratchPane(t *testing.T, term *tuitest.Terminal, escape string) {
 	}
 }
 
+// waitFillShown waits until the fill character is on the screen, which says
+// the shell has already read the pane's size. A split sent before that races
+// the shell: tput then reads the half-width pane and the fill is half as long.
+// The short fill leaves no history, so the zoom keeps it at the top of the
+// widened pane, above the rows the camera shows, and no neighbour peeks.
+func waitFillShown(t *testing.T, term *tuitest.Terminal, char string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), char)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the fill %q never showed: %v\n%s", char, err, term.Snapshot())
+	}
+}
+
 // scratchBoxRect is the outer scratch box on the screen, frame included.
 type scratchBoxRect struct{ x0, y0, x1, y1 int }
 
@@ -350,10 +364,12 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 			waitPanes(t, term, 2, "the group shown")
 			typeUntil(t, term, "echo AAA-$((1+1))", "AAA-2")
 			fillScratchPane(t, term, scratchFills[0].escape)
+			waitFillShown(t, term, scratchFills[0].char)
 			prefix(t, term, "|")
 			waitPanes(t, term, 3, "the first split")
 			typeUntil(t, term, "echo BBB-$((2+2))", "BBB-4")
 			fillScratchPane(t, term, scratchFills[1].escape)
+			waitFillShown(t, term, scratchFills[1].char)
 			prefix(t, term, "-")
 			waitPanes(t, term, 4, "the second split")
 			typeUntil(t, term, "echo CCC-$((3+3))", "CCC-6")
