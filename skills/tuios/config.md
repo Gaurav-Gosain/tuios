@@ -495,6 +495,7 @@ repeat = ["resize_pane_up_5", "resize_pane_down_5"]
 
 [keybindings.prefix_mode]
 resize_pane_up_5 = ["alt+up"]   # ctrl+b alt+up alt+up alt+up
+resize_pane_down_5 = ["alt+down"]
 next_workspace = ["n"]          # runs once
 ```
 

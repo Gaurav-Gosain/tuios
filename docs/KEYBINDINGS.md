@@ -1547,13 +1547,15 @@ replaces the default list. An empty list turns repeat off:
 [keybindings]
 # n and p switch workspaces once, so the next n or p you type reaches the shell
 repeat = ["terminal_focus_left", "terminal_focus_right", "terminal_focus_up",
-          "terminal_focus_down", "resize_pane_left_5", "resize_pane_right_5",
-          "resize_pane_up_5", "resize_pane_down_5"]
+          "terminal_focus_down"]
 
 [keybindings.prefix_mode]
 next_workspace = ["n"]
 prev_workspace = ["p"]
 ```
+
+An action in the list repeats only when a key runs it after the leader. tuios
+warns about an entry with no such key, and about a misspelt action.
 
 Workspace switching on `opt+1` to `opt+9` works with no configuration on a
 US or ABC keyboard layout. It also works in a terminal that reports Alt with
