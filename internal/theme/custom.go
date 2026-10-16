@@ -1,11 +1,11 @@
 package theme
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/adrg/xdg"
@@ -49,22 +49,36 @@ func readCustomThemes(themesDir string) (loaded, problems []string, err error) {
 		return nil, nil, fmt.Errorf("failed to read themes directory: %w", err)
 	}
 
+	// Every file is read before any is registered, so a file's base can be
+	// another file whatever order the directory lists them in.
+	files := make(map[string]*themeFile)
+	names := make(map[string]string)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
 			continue
 		}
-
 		path := filepath.Join(themesDir, entry.Name())
-		t, err := LoadCustomThemeFile(path)
-		if err != nil {
-			problems = append(problems, fmt.Sprintf("skipping custom theme %s: %v", entry.Name(), err))
-			continue
+		// #nosec G304 - path is from user's config directory, reading custom themes is intentional
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var f *themeFile
+			if f, err = readThemeFile(path, data); err == nil {
+				files[f.ID], names[f.ID] = f, entry.Name()
+				continue
+			}
 		}
-
-		tint.Register(t)
-		loaded = append(loaded, t.ID)
+		problems = append(problems, fmt.Sprintf("skipping custom theme %s: %v", entry.Name(), err))
 	}
 
+	resolved, failed := loadThemeFiles(files)
+	for id := range resolved {
+		loaded = append(loaded, id)
+	}
+	for id, err := range failed {
+		problems = append(problems, fmt.Sprintf("skipping custom theme %s: %v", names[id], err))
+	}
+	sort.Strings(loaded)
+	sort.Strings(problems)
 	return loaded, problems, nil
 }
 
@@ -117,49 +131,30 @@ func Exists(id string) bool {
 	return ok
 }
 
-// LoadCustomThemeFile reads a JSON file and returns a *tint.Tint.
-// Derives ID from filename if the id field is empty.
-// Sets DisplayName from ID if empty. Fills missing color fields with defaults.
+// LoadCustomThemeFile reads one theme file and returns its theme, with its
+// base merged in. The id comes from the file name when the file names none. A
+// colour the file and its bases leave out is the xterm default. The chrome is
+// filed under the id; the caller registers the tint.
 func LoadCustomThemeFile(path string) (*tint.Tint, error) {
 	// #nosec G304 - path is from user's config directory, reading custom themes is intentional
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read theme file: %w", err)
 	}
-
-	var t tint.Tint
-	if err := json.Unmarshal(data, &t); err != nil {
-		return nil, fmt.Errorf("failed to parse theme JSON: %w", err)
-	}
-
-	// Derive ID from filename if not set in JSON
-	if t.ID == "" {
-		base := filepath.Base(path)
-		t.ID = strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
-	}
-
-	if t.ID == "" {
-		return nil, fmt.Errorf("theme has no ID")
-	}
-
-	// Set DisplayName from ID if empty
-	if t.DisplayName == "" {
-		t.DisplayName = t.ID
-	}
-
-	fillDefaults(&t)
-
-	// The chrome object is read from the same bytes rather than from the tint:
-	// tint.Tint is a third-party struct with sixteen slots and no room for
-	// tuios's own colours, so the two halves of a theme file are parsed
-	// separately and filed under the same id.
-	chrome, err := parseChrome(data, &t)
+	f, err := readThemeFile(path, data)
 	if err != nil {
 		return nil, err
 	}
-	registerChrome(t.ID, chrome)
-
-	return &t, nil
+	r, err := mergeBase(f)
+	if err != nil {
+		return nil, err
+	}
+	chrome, err := buildChrome(r.chrome, r.tint)
+	if err != nil {
+		return nil, err
+	}
+	registerChrome(r.tint.ID, chrome)
+	return r.tint, nil
 }
 
 // fillDefaults fills nil color pointers with xterm defaults.

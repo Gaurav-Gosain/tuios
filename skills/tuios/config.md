@@ -222,8 +222,15 @@ one to act on.
 To write a theme, put `<id>.json` in the themes dir `list-themes` reported (keys
 `fg`, `bg`, `cursor`, `black` through `white` and `bright_black` through
 `bright_white`; it is `purple`, not `magenta`). It is selectable at once. A file
-that does not parse is listed under `problems`. To convert a kitty, ghostty,
-alacritty or wezterm scheme rather than transcribe it:
+that does not parse is listed under `problems`. To change a few colours of a
+theme, name it as `base` and write only the changes:
+
+```json
+{"id": "nord_warm", "base": "nord", "chrome": {"accent": "yellow"}}
+```
+
+To convert a kitty, ghostty, alacritty or wezterm scheme rather than
+transcribe it:
 
 ```sh
 tuios import-theme ~/.config/kitty/current-theme.conf --name mine

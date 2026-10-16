@@ -130,16 +130,31 @@ func CurrentChrome() *Chrome {
 // loop of roles that name each other has no colour to end on, and is the one
 // mistake that fails the file: the error names the roles in the loop.
 func parseChrome(data []byte, t *tint.Tint) (*Chrome, error) {
+	raw, _ := chromeStrings(data)
+	return buildChrome(raw, t)
+}
+
+// chromeRaw is a chrome object's fields as the file wrote them, by role.
+type chromeRaw [RoleCard + 1]string
+
+// chromeStrings reads the chrome object out of a theme file's bytes. ok is
+// false when the file has none.
+func chromeStrings(data []byte) (raw chromeRaw, ok bool) {
 	var f chromeFile
 	if err := json.Unmarshal(data, &f); err != nil || f.Chrome == nil {
-		return nil, nil
+		return raw, false
 	}
 	fc := f.Chrome
-	raw := [...]string{
+	return chromeRaw{
 		RoleAccent: fc.Accent, RoleAccentBright: fc.AccentBright, RoleSuccess: fc.Success,
 		RoleWarning: fc.Warning, RoleError: fc.Error, RoleInfo: fc.Info,
 		RoleSurface: fc.Surface, RoleCanvas: fc.Canvas, RolePanel: fc.Panel, RoleCard: fc.Card,
-	}
+	}, true
+}
+
+// buildChrome resolves a chrome object's fields on the theme t. See
+// parseChrome.
+func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
 	var specs [RoleCard + 1]ColorSpec
 	for r := RoleAccent; r <= RoleCard; r++ {
 		specs[r] = parseChromeSpec(raw[r])

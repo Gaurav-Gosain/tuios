@@ -10,6 +10,7 @@ overlays, the dockbar) from them.
 - [Selecting a Theme](#selecting-a-theme)
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
+- [Start from Another Theme](#start-from-another-theme)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
 - [Chrome Colors](#chrome-colors)
 - [Colour Depth](#colour-depth)
@@ -123,10 +124,36 @@ Two fields control identity:
 
 Note the color names: TUIOS uses `purple`, not `magenta`.
 
+## Start from Another Theme
+
+`base` names a theme to start from. A field the file leaves out comes from the
+base:
+
+```json
+{
+  "id": "dracula-ember",
+  "base": "dracula",
+  "red": "#ff5555",
+  "chrome": { "accent": "bright_red", "accent_bright": "#ff9e64" }
+}
+```
+
+- The base is a built-in theme or another file in the themes directory. A base
+  can have a base of its own.
+- `dark` comes from the base unless the file sets it.
+- The base's `chrome` fields are kept unless the file sets them. A slot name
+  or a role name in `chrome` is read after the merge, so `"accent":
+  "bright_red"` follows a `bright_red` the file changes.
+- A file can use the id of a built-in theme and name that theme as its base.
+  This edits the built-in theme for you only.
+- Files that name each other as base load as none of them. `tuios list-themes`
+  shows the loop.
+
 ## Defaults for Omitted Colors
 
 Every color field is optional. A field you leave out is filled in rather than
-left unset, so a partial theme is valid:
+left unset, so a partial theme is valid. With a `base`, the base fills it.
+Without one:
 
 | Field | Fallback |
 |---|---|
