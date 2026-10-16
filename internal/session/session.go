@@ -847,6 +847,24 @@ type PTY struct {
 	host string
 	pty  paneIO
 	cmd  *exec.Cmd
+	// proc is the pane's process: cmd's for a pane started here, and one
+	// found by its pid for a pane adopted across an exec, which has no
+	// exec.Cmd. Nil for a pane on another machine. See monitorExit.
+	proc *os.Process
+	// reap holds back the reap of a process that has exited while a handoff
+	// writes the panes down. See pty_reap.go.
+	reap reapGate
+	// gate, readMu, quiesced and resumed stop and restart the reader without
+	// losing a byte, and respMu and respWake do the same for the replies the
+	// emulator sends the program. vtDone closes when vtWriter returns. See
+	// pty_quiesce.go.
+	gate     *readGate
+	readMu   sync.Mutex
+	quiesced bool
+	resumed  chan struct{}
+	respMu   sync.Mutex
+	respWake chan struct{}
+	vtDone   chan struct{}
 	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
 	// for it, and is nil otherwise. See pty_log.go.
 	rawLog *ptyLogger
@@ -2333,6 +2351,20 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	} else {
 		terminal = vt.NewWithScrollback(width, height, s.scrollbackLines())
 	}
+	pty := s.installPTY(ctx, cancel, id, ptyInstance, cmd, width, height, sp, terminal)
+	if cmd != nil {
+		pty.proc = cmd.Process
+	}
+	pty.startPTY()
+	s.TouchActive()
+	return pty, nil
+}
+
+// installPTY builds the PTY around a pane's terminal device and emulator and
+// enters it in the session, without starting its goroutines. The caller holds
+// ptysMu. createPTY and adoptPTY differ only in where the device and the
+// process came from.
+func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id string, ptyInstance paneIO, cmd *exec.Cmd, width, height int, sp ptySpawn, terminal vt.Terminal) *PTY {
 	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
 	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
 	// remote pane runs on a real PTY at the far end and keeps it.
@@ -2357,6 +2389,8 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		subscribers:  make(map[string]*ptySubscriber),
 		paceWake:     make(chan struct{}, 1),
 		vtWriteChan:  make(chan vtChunk, 256),
+		vtDone:       make(chan struct{}),
+		respWake:     make(chan struct{}, 1),
 		onExit:       sp.onExit,
 		debug:        debugEnabled(),
 		rawLog:       newPTYLogger(id),
@@ -2364,6 +2398,9 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	}
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()
+	}
+	if sp.host == "" {
+		pty.gate = newReadGate(ptyInstance)
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -2507,6 +2544,12 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		s.places.Store(id, pty)
 	}
 
+	return pty
+}
+
+// startPTY starts the goroutines that move a pane's bytes and wait for its
+// process.
+func (pty *PTY) startPTY() {
 	// Start VT writer goroutine (single, persistent)
 	go pty.vtWriter()
 
@@ -2515,14 +2558,13 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 
 	// Start terminal response forwarder. The daemon's emulator generates query responses
 	// (DA, CPR, etc.) which must be sent to the PTY for applications to receive.
-	// Client emulators DRAIN their responses to prevent duplicates.
+	// Client emulators DRAIN their responses to prevent duplicates. Woken once
+	// for anything the emulator queued before it started.
 	go pty.forwardTerminalResponses()
+	pty.wakeResponses()
 
 	// Monitor process exit
 	go pty.monitorExit()
-
-	s.TouchActive()
-	return pty, nil
 }
 
 // TouchActive records that the session was just used.
@@ -4597,8 +4639,13 @@ func (p *PTY) Close() error {
 	p.subscribersMu.Unlock()
 
 	// Kill process
-	if p.cmd != nil && p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
+	if p.proc != nil {
+		_ = p.proc.Kill()
+	}
+	// A reader waiting for output is in poll, which closing the master does
+	// not end.
+	if p.gate != nil {
+		p.gate.wake()
 	}
 
 	// Mark the VT emulator closed so forwardTerminalResponses returns EOF on
@@ -4635,20 +4682,20 @@ func (p *PTY) ProcessCwd() (string, bool) {
 	if rp, ok := p.pty.(*remotePane); ok {
 		return rp.Cwd()
 	}
-	if p.cmd == nil || p.cmd.Process == nil {
+	if p.proc == nil {
 		return "", false
 	}
-	return ptyspawn.ProcessCwd(p.cmd.Process.Pid)
+	return ptyspawn.ProcessCwd(p.proc.Pid)
 }
 
 // ShellPID returns the process id of the PTY's shell child, or 0 when the process
 // is not running. It is the anchor the agent auto-detector uses to resolve the
 // pane's foreground process group.
 func (p *PTY) ShellPID() int {
-	if p.cmd == nil || p.cmd.Process == nil {
+	if p.proc == nil {
 		return 0
 	}
-	return p.cmd.Process.Pid
+	return p.proc.Pid
 }
 
 // TTYName returns the path of the pane's terminal device, such as /dev/pts/3.
@@ -4693,6 +4740,9 @@ func (p *PTY) readOutput() {
 		close(p.vtWriteChan)
 		p.streamMu.Unlock()
 		p.rawLog.Close()
+		if p.gate != nil {
+			p.gate.close()
+		}
 	}()
 
 	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
@@ -4708,8 +4758,26 @@ func (p *PTY) readOutput() {
 		// being cut. See holdForSlowSubscribers.
 		p.holdForSlowSubscribers()
 
+		// Output is waited for outside readMu and read under it, so a
+		// quiesce never waits on a quiet program. See pty_quiesce.go.
+		if p.gate != nil && !p.gate.wait(p.pty) {
+			return
+		}
+		p.readMu.Lock()
+		if p.quiesced {
+			resumed := p.resumed
+			p.readMu.Unlock()
+			select {
+			case <-resumed:
+			case <-p.ctx.Done():
+				return
+			}
+			continue
+		}
+
 		n, err := p.pty.Read(buf)
 		if err != nil {
+			p.readMu.Unlock()
 			// A pane on another machine ends here. Its stream stopping is the
 			// only notice that crosses: the far side closes the connection
 			// when the process exits, when the owner hangs up and when the
@@ -4744,7 +4812,12 @@ func (p *PTY) readOutput() {
 			// Held across all three steps so a resize taken under the same
 			// lock cannot land between two of them: the daemon's emulator and
 			// every subscriber must change width at the same byte.
+			//
+			// Taken before readMu is let go, so a quiesce that gets readMu
+			// next finds this chunk either queued or still holding streamMu,
+			// and its own marker lands behind it.
 			p.streamMu.Lock()
+			p.readMu.Unlock()
 
 			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
@@ -4788,6 +4861,8 @@ func (p *PTY) readOutput() {
 			if p.emit != nil {
 				p.emit(SessionEvent{Type: EventOutput, Bytes: n})
 			}
+		} else {
+			p.readMu.Unlock()
 		}
 	}
 }
@@ -4802,13 +4877,23 @@ type vtChunk struct {
 	// holding an OSC 7501 report, plus one; 0 for any other chunk. See
 	// PTY.reportGroup.
 	group int64
+	// ack, when set, marks no output: vtWriter closes it once every chunk
+	// queued before it is written. See PTY.Quiesce.
+	ack chan struct{}
 }
 
 // vtWriter is a single persistent goroutine that feeds the daemon's VT
 // emulator. Using a dedicated goroutine (instead of spawning one per PTY
 // read) prevents unbounded goroutine growth at high FPS.
 func (p *PTY) vtWriter() {
+	if p.vtDone != nil {
+		defer close(p.vtDone)
+	}
 	for chunk := range p.vtWriteChan {
+		if chunk.ack != nil {
+			close(chunk.ack)
+			continue
+		}
 		if chunk.width > 0 && chunk.height > 0 {
 			// The pane's size and its emulator move together, so a snapshot
 			// can never report a width the grid it serializes is not at.
@@ -4824,6 +4909,7 @@ func (p *PTY) vtWriter() {
 				p.vtResizes++
 			}
 			p.terminalMu.Unlock()
+			p.wakeResponses()
 			continue
 		}
 		p.terminalMu.Lock()
@@ -4839,6 +4925,7 @@ func (p *PTY) vtWriter() {
 		p.vtSeq = chunk.seq
 		focusOn := p.terminal != nil && p.terminal.FocusReportingEnabled()
 		p.terminalMu.Unlock()
+		p.wakeResponses()
 		p.noteFocusReporting(focusOn)
 		p.flushProgramStatus()
 	}
@@ -4930,25 +5017,6 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	}
 }
 
-func (p *PTY) monitorExit() {
-	if p.cmd == nil {
-		// A pane on another machine. There is no process here to wait on, so
-		// its exit is heard where its bytes stop instead: see readOutput.
-		return
-	}
-
-	_ = p.cmd.Wait()
-
-	code := 0
-	if p.cmd.ProcessState != nil {
-		code = p.cmd.ProcessState.ExitCode()
-		if sig := exitSignal(p.cmd.ProcessState); sig > 0 {
-			p.exitSignal.Store(int32(sig))
-		}
-	}
-	p.noteExit(code)
-}
-
 // noteExit marks the process gone and tells everything that was waiting on it.
 // It is idempotent: a pane on another machine can reach it from the read loop
 // and from a close at the same time.
@@ -4990,31 +5058,49 @@ func (p *PTY) noteExit(code int) {
 	}
 }
 
-// forwardTerminalResponses reads responses from the daemon's terminal emulator and
-// forwards them to the PTY as input for applications to receive.
-// The emulator writes responses (like DA1, CPR) to its pipe. If nothing reads from the pipe,
-// Write() will block forever (io.Pipe is synchronous).
-// Client emulators DRAIN their responses to prevent duplicates.
+// forwardTerminalResponses sends the replies the daemon's emulator queues
+// (DA1, CPR and the rest) to the program. Client emulators drain theirs, so
+// the program gets one copy.
+//
+// The emulator queues a reply only while vtWriter writes to it, so vtWriter
+// wakes this loop after each write, and the replies are taken and written
+// under respMu. Taking them under the lock is what lets a quiesce flush
+// them: once it holds respMu, no reply is in this goroutine's hands. See
+// pty_quiesce.go.
 func (p *PTY) forwardTerminalResponses() {
 	if p.terminal == nil {
 		return
 	}
-
-	buf := make([]byte, 4096)
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
-		default:
-			n, err := p.terminal.Read(buf)
-			if err != nil {
-				return
-			}
-			if n > 0 && p.pty != nil {
-				// Forward response to PTY as input
-				_, _ = p.pty.Write(buf[:n])
-			}
+		case <-p.respWake:
 		}
+		p.respMu.Lock()
+		p.sendResponsesLocked()
+		p.respMu.Unlock()
+	}
+}
+
+// sendResponsesLocked writes every queued reply to the program. The caller
+// holds respMu.
+func (p *PTY) sendResponsesLocked() {
+	for {
+		data := p.terminal.TakeResponses()
+		if data == nil || p.pty == nil {
+			return
+		}
+		_, _ = p.pty.Write(data)
+	}
+}
+
+// wakeResponses tells forwardTerminalResponses the emulator may have queued
+// a reply. It never blocks: one pending wake covers any number of writes.
+func (p *PTY) wakeResponses() {
+	select {
+	case p.respWake <- struct{}{}:
+	default:
 	}
 }
 
