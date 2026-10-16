@@ -197,6 +197,7 @@ tuios/
 │   ├── stopevent/          # The Windows event tuios kill-server sets to stop a daemon
 │   ├── scrollback/         # OSC 133 scrollback browser
 │   ├── overlay/            # Panel and dialog primitives for chrome
+│   ├── composer/           # The editor a person writes to an agent in: multiline, undo, paste blocks
 │   ├── sessiontree/        # Sidebar session tree model
 │   ├── tape/               # Tape scripting automation
 │   │   ├── lexer.go        # Tokenizer
@@ -299,8 +300,8 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
   (the rail and the dock), both an `overlay.Palette`, or from a named token in
   `internal/theme`. Never write a literal: `internal/lint` rejects
   `lipgloss.Color("#...")`, constant `color.RGBA{...}`, CharmTone colours (`tone.*`) and
-  constant `ansi.BasicColor`/`IndexedColor` in `internal/app` and
-  `internal/overlay`. A deliberate exception carries `//tuios:allow-color <reason>`.
+  constant `ansi.BasicColor`/`IndexedColor` in `internal/app`,
+  `internal/overlay` and `internal/composer`. A deliberate exception carries `//tuios:allow-color <reason>`.
 - The palette is built per colour depth (`overlay.Depth`: truecolor, 256, 16).
   At 16 colours every ground is `overlay.NoColor`, so a state that a ground
   would show has to go through `pal.Row` or `pal.Mark`.
