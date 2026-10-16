@@ -2655,6 +2655,25 @@ under the budgets. The transition brings it to 36,589,730 and 34,434,962,
 table and the two options. No dependency was added. The new budgets leave
 30,270 and 30,038 bytes of room.
 
+The budgets went to 36,685,000 (linux/amd64) and 34,535,000 (darwin/arm64)
+for the batch of #760 to #767. Main at b676cc47 measured 36,593,826 and
+34,434,978 bytes (Go 1.26.9), 26,174 and 30,022 bytes under the budgets. The
+batch brings it to 36,655,266 and 34,502,466, 61,440 and 67,488 bytes more. By
+pull request, linux/amd64 then darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #760 a heading per space in the rail | 8,192 | 16,592 |
+| #761 `ls` groups by space | 4,096 | 32 |
+| #762 the client releases its emulator buffers | 4,096 | 128 |
+| #764 new-window `--keep-open` and `--wait` | 20,480 | 17,088 |
+| #765 the skill stub with the hooks | 16,384 | 16,928 |
+| #766 capture-pane `--unwrap` and `--trim` | 8,192 | 16,720 |
+| #767 the session start hint | 0 | 0 |
+
+No dependency was added. The new budgets leave 29,734 and 32,534 bytes of
+room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
