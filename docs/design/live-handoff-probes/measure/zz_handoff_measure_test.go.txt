@@ -1,0 +1,295 @@
+package session
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+
+	"tuios.dev/vt"
+	"tuios.dev/vt/snapshot"
+)
+
+// Temporary measurement for docs/design/live-handoff.md. Not to be committed.
+
+const (
+	hmCols  = 200
+	hmRows  = 50
+	hmPanes = 60
+)
+
+func hmBuild(tb testing.TB, kind string, depth int) *PTY {
+	switch kind {
+	case "palette":
+		return wirePTY(tb, hmCols, hmRows, depth)
+	case "truecolor":
+		return wirePTYTruecolor(tb, hmCols, hmRows, depth)
+	}
+	tb.Fatalf("kind %q", kind)
+	return nil
+}
+
+// hmCapture is the daemon path GetTerminalStatePacked plus the gob the wire
+// (or a manifest) would carry.
+func hmCapture(tb testing.TB, p *PTY, depth int) (data []byte, locked time.Duration) {
+	md := depth
+	if md == 0 {
+		md = -1
+	}
+	t0 := time.Now()
+	p.terminalMu.RLock()
+	state, finish := snapshot.CapturePacked(p.terminal, p.terminal.Width(), p.terminal.Height(), md, 0)
+	state.Seq = p.vtSeq
+	p.terminalMu.RUnlock()
+	locked = time.Since(t0)
+	finish()
+	data, err := encodePayload(&TerminalStatePayload{PTYID: p.ID, State: state})
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return data, locked
+}
+
+func hmApply(tb testing.TB, data []byte) vt.Terminal {
+	var payload TerminalStatePayload
+	if err := decodePayload(data, &payload); err != nil {
+		tb.Fatal(err)
+	}
+	if err := payload.State.CheckPacked(); err != nil {
+		tb.Fatal(err)
+	}
+	em := vt.NewEmulator(hmCols, hmRows)
+	ApplyTerminalState(em, payload.State)
+	return em
+}
+
+func hmMedian(ds []time.Duration) time.Duration {
+	sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
+	return ds[len(ds)/2]
+}
+
+func hmAlloc() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.TotalAlloc
+}
+
+func TestHandoffMeasure(t *testing.T) {
+	if os.Getenv("HANDOFF_MEASURE") == "" {
+		t.Skip("HANDOFF_MEASURE unset")
+	}
+	workers := runtime.GOMAXPROCS(0)
+	fmt.Printf("GOMAXPROCS=%d %s/%s %s\n", workers, runtime.GOOS, runtime.GOARCH, runtime.Version())
+	fmt.Println("kind|depth|bytes/pane|capture ms (median)|locked ms|capture alloc MB|apply ms|apply alloc MB|60 cap serial s|60 apply serial s|60 cap par s|60 apply par s|60 total bytes MB|scrollback after apply")
+	for _, kind := range []string{"palette", "truecolor"} {
+		for _, depth := range []int{0, 1000, 10000} {
+			p := hmBuild(t, kind, depth)
+			// warm
+			data, _ := hmCapture(t, p, depth)
+			hmApply(t, data)
+
+			const reps = 9
+			var caps, locks, apps []time.Duration
+			var capAlloc, appAlloc uint64
+			for range reps {
+				runtime.GC()
+				a0 := hmAlloc()
+				t0 := time.Now()
+				d, l := hmCapture(t, p, depth)
+				caps = append(caps, time.Since(t0))
+				locks = append(locks, l)
+				capAlloc += hmAlloc() - a0
+				data = d
+				runtime.GC()
+				a0 = hmAlloc()
+				t0 = time.Now()
+				em := hmApply(t, data)
+				apps = append(apps, time.Since(t0))
+				appAlloc += hmAlloc() - a0
+				_ = em
+			}
+			sbAfter := hmApply(t, data).ScrollbackLen()
+
+			// 60 distinct panes, as a daemon has.
+			panes := make([]*PTY, hmPanes)
+			panes[0] = p
+			for i := 1; i < hmPanes; i++ {
+				panes[i] = hmBuild(t, kind, depth)
+			}
+			blobs := make([][]byte, hmPanes)
+			runtime.GC()
+			t0 := time.Now()
+			var total int
+			for i, pp := range panes {
+				blobs[i], _ = hmCapture(t, pp, depth)
+				total += len(blobs[i])
+			}
+			capSerial := time.Since(t0)
+			runtime.GC()
+			t0 = time.Now()
+			for _, b := range blobs {
+				hmApply(t, b)
+			}
+			appSerial := time.Since(t0)
+
+			par := func(fn func(i int)) time.Duration {
+				runtime.GC()
+				var wg sync.WaitGroup
+				ch := make(chan int)
+				t0 := time.Now()
+				for range workers {
+					wg.Go(func() {
+						for i := range ch {
+							fn(i)
+						}
+					})
+				}
+				for i := range hmPanes {
+					ch <- i
+				}
+				close(ch)
+				wg.Wait()
+				return time.Since(t0)
+			}
+			heapNow := func() uint64 {
+				runtime.GC()
+				runtime.GC()
+				var m runtime.MemStats
+				runtime.ReadMemStats(&m)
+				return m.HeapAlloc
+			}
+			blobBytes := uint64(total)
+			h0 := heapNow()
+			runtime.KeepAlive(panes)
+			kept := make([]vt.Terminal, hmPanes)
+			for i, b := range blobs {
+				kept[i] = hmApply(t, b)
+			}
+			retained := heapNow() - h0
+			fmt.Printf("  retained heap of 60 applied emulators: %.2f MB (%.2f MB/pane); blobs held %.2f MB\n", float64(retained)/1e6, float64(retained)/60/1e6, float64(blobBytes)/1e6)
+			runtime.KeepAlive(kept)
+			runtime.KeepAlive(blobs)
+			kept = nil
+			capPar := par(func(i int) { hmCapture(t, panes[i], depth) })
+			appPar := par(func(i int) { hmApply(t, blobs[i]) })
+
+			fmt.Printf("%s|%d|%d|%.2f|%.2f|%.2f|%.2f|%.2f|%.3f|%.3f|%.3f|%.3f|%.2f|%d\n",
+				kind, depth, len(data),
+				float64(hmMedian(caps))/1e6, float64(hmMedian(locks))/1e6, float64(capAlloc)/reps/1e6,
+				float64(hmMedian(apps))/1e6, float64(appAlloc)/reps/1e6,
+				capSerial.Seconds(), appSerial.Seconds(), capPar.Seconds(), appPar.Seconds(),
+				float64(total)/1e6, sbAfter)
+			panes, blobs = nil, nil
+			runtime.GC()
+		}
+	}
+}
+
+func TestHandoffMeasureIdle(t *testing.T) {
+	if os.Getenv("HANDOFF_MEASURE") == "" {
+		t.Skip("HANDOFF_MEASURE unset")
+	}
+	heapNow := func() uint64 {
+		runtime.GC()
+		runtime.GC()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return m.HeapAlloc
+	}
+	h0 := heapNow()
+	src := make([]*PTY, hmPanes)
+	for i := range src {
+		em := vt.NewEmulator(hmCols, hmRows)
+		_, _ = em.Write([]byte("\x1b[32muser@host\x1b[m ~/src $ "))
+		src[i] = &PTY{ID: "idle", terminal: em, width: hmCols, height: hmRows}
+	}
+	h1 := heapNow()
+	blobs := make([][]byte, hmPanes)
+	var total int
+	t0 := time.Now()
+	for i, p := range src {
+		blobs[i], _ = hmCapture(t, p, 0)
+		total += len(blobs[i])
+	}
+	capT := time.Since(t0)
+	h2 := heapNow()
+	t0 = time.Now()
+	kept := make([]vt.Terminal, hmPanes)
+	for i, b := range blobs {
+		kept[i] = hmApply(t, b)
+	}
+	appT := time.Since(t0)
+	h3 := heapNow()
+	runtime.KeepAlive(src)
+	runtime.KeepAlive(blobs)
+	runtime.KeepAlive(kept)
+	fmt.Printf("idle prompt 200x50 x60: source emulators %.2f MB, blobs %d B total (%.0f B/pane), applied emulators %.2f MB; capture 60 serial %v, apply 60 serial %v\n",
+		float64(h1-h0)/1e6, total, float64(total)/60, float64(h3-h2)/1e6, capT, appT)
+}
+
+func TestHandoffMeasurePeak(t *testing.T) {
+	if os.Getenv("HANDOFF_MEASURE") == "" {
+		t.Skip("HANDOFF_MEASURE unset")
+	}
+	for _, depth := range []int{0, 1000} {
+		for _, kind := range []string{"palette", "truecolor"} {
+			blobs := make([][]byte, hmPanes)
+			for i := range blobs {
+				p := hmBuild(t, kind, depth)
+				blobs[i], _ = hmCapture(t, p, depth)
+			}
+			for _, w := range []int{1, 4, runtime.GOMAXPROCS(0)} {
+				runtime.GC()
+				runtime.GC()
+				var m runtime.MemStats
+				runtime.ReadMemStats(&m)
+				base := m.HeapInuse
+				var peak uint64
+				stop := make(chan struct{})
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					var ms runtime.MemStats
+					for {
+						select {
+						case <-stop:
+							return
+						default:
+						}
+						runtime.ReadMemStats(&ms)
+						peak = max(peak, ms.HeapInuse)
+						time.Sleep(2 * time.Millisecond)
+					}
+				}()
+				kept := make([]vt.Terminal, hmPanes)
+				ch := make(chan int)
+				var wg sync.WaitGroup
+				t0 := time.Now()
+				for range w {
+					wg.Go(func() {
+						for i := range ch {
+							kept[i] = hmApply(t, blobs[i])
+						}
+					})
+				}
+				for i := range hmPanes {
+					ch <- i
+				}
+				close(ch)
+				wg.Wait()
+				el := time.Since(t0)
+				close(stop)
+				<-done
+				runtime.GC()
+				runtime.ReadMemStats(&m)
+				fmt.Printf("apply 60 %s depth=%d workers=%d: %v, HeapInuse base %.1f MB, peak %.1f MB (+%.1f), after GC %.1f MB (retained +%.1f)\n",
+					kind, depth, w, el.Round(time.Millisecond), float64(base)/1e6, float64(peak)/1e6, float64(peak-base)/1e6, float64(m.HeapInuse)/1e6, float64(int64(m.HeapInuse)-int64(base))/1e6)
+				runtime.KeepAlive(kept)
+				runtime.KeepAlive(blobs)
+			}
+		}
+	}
+}

@@ -1,0 +1,153 @@
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+Linux a6c2c9084158 6.8.0-100-generic #100-Ubuntu SMP PREEMPT_DYNAMIC Tue Jan 13 16:39:21 UTC 2026 aarch64 GNU/Linux
+go version go1.26.9 linux/arm64
+go: finding module for package golang.org/x/sys/unix
+go: finding module for package github.com/creack/pty
+go: downloading golang.org/x/sys v0.49.0
+go: downloading github.com/creack/pty v1.1.24
+go: found github.com/creack/pty in github.com/creack/pty v1.1.24
+go: found golang.org/x/sys/unix in golang.org/x/sys v0.49.0
+
+== probe 1: PTY kernel buffer (Linux) ==
+-- slave -> master (program output, master unread) --
+  cooked(default)  byte-at-a-time: 19457 bytes before EAGAIN (+0 after 50ms retry), drained 19457
+  [PASS] cooked(default) 1-byte: drained bytes equal written bytes (EAGAIN meant full, nothing lost)
+  [PASS] cooked(default) negative control: after drain a write succeeds again (err=<nil>)
+  cooked(default)  4KB chunks:     12288 bytes in 3 writes before EAGAIN (+0 after 50ms retry), drained 12288
+  [PASS] cooked(default) 4KB: drained bytes equal written bytes
+  raw              byte-at-a-time: 20480 bytes before EAGAIN (+0 after 50ms retry), drained 20480
+  [PASS] raw 1-byte: drained bytes equal written bytes (EAGAIN meant full, nothing lost)
+  [PASS] raw negative control: after drain a write succeeds again (err=<nil>)
+  raw              4KB chunks:     11776 bytes in 3 writes before EAGAIN (+3584 after 50ms retry), drained 15360
+  [PASS] raw 4KB: drained bytes equal written bytes
+-- master -> slave (input to program, slave unread) --
+  (-1 means the kernel accepted >1 MiB without EAGAIN)
+  cooked(echo on)  byte-at-a-time: -1 bytes accepted before EAGAIN (+-1 after retry); slave read 0, echoed back to master 19457
+  cooked(echo on)  4KB chunks:     11776 bytes accepted in 3 writes before EAGAIN; slave read 0
+  cooked(echo off) byte-at-a-time: -1 bytes accepted before EAGAIN (+-1 after retry); slave read 0, echoed back to master 0
+  cooked(echo off) 4KB chunks:     11776 bytes accepted in 3 writes before EAGAIN; slave read 0
+  raw              byte-at-a-time: 20480 bytes accepted before EAGAIN (+0 after retry); slave read 20480, echoed back to master 0
+  raw              4KB chunks:     11776 bytes accepted in 3 writes before EAGAIN; slave read 11776
+  cooked(echo off) 4KB chunks with a newline every 64 bytes: 11776 bytes accepted in 3 writes before EAGAIN; slave read 11776
+  [PASS] cooked with newlines: every accepted input byte is readable by the slave (11776 of 11776)
+  note: in canonical mode without a newline the slave's read() returns nothing (no complete line), so 'slave read 0' is expected there
+-- blocking child writes 200000 bytes, master unread for 1s --
+  after 1s unread: child state="S" wchan="wait_woken"
+  [PASS] child is still running and sleeping (blocked in write), not exited and not errored
+  child exit=<nil>, bytes read=200000, elapsed=1.007s
+  [PASS] child exited 0 (its write never errored)
+  [PASS] all 200000 bytes arrived intact and in order (verify=-1)
+-- negative control: same child, master read concurrently from the start --
+  child exit=<nil>, bytes read=200000, elapsed=2ms
+  [PASS] child exited 0 (its write never errored)
+  [PASS] all 200000 bytes arrived intact and in order (verify=-1)
+  [PASS] with a reader the child finishes fast (2ms), so the 1s hold above really was blocking
+  [PASS] negative control: verifier detects a single corrupted byte at 123456 (got 123456)
+RESULT ptybuf: all checks passed
+
+== probe 2: exec in place (Linux) ==
+  before exec: pid=1683
+  started children: exit7 pid=1690, exit9 pid=1691
+  pidfds held by this process after os.StartProcess: [fd11(anon_inode:[pidfd],CLOEXEC) fd12(anon_inode:[pidfd],CLOEXEC)]
+  [PASS] Go runtime opened one pidfd per child (CLONE_PIDFD)
+  [PASS] every pidfd is CLOEXEC, so it vanishes at exec
+  exit7 child state before exec: Z
+  [PASS] exit7 child is a zombie before exec
+  client dialed and wrote before exec; connection not accepted
+  lockcheck before exec: HELD (LOCK_EX|LOCK_NB -> EWOULDBLOCK)
+  SigIgn before exec=0000000000000000 SigBlk(main thread)=0000000000000000
+  after exec: pid=1683
+  [PASS] same pid after syscall.Exec
+  fds after exec: 0->pipe:[2688292] 1->pipe:[2688293] 2->pipe:[2688294] 3->/sys/fs/cgroup/cpu.max 4-> 7->socket:[2688798] 8->/tmp/handoff-probe.lock
+  [PASS] no pidfd survived exec
+  SigIgn after exec=0000000000000000 SigBlk=0000000000000000
+  [PASS] SIGCHLD is not ignored after exec (otherwise children would auto-reap and Wait would get ECHILD)
+  [PASS] listener fd 7 and lock fd 8 survived exec
+  lockcheck after exec (other process): HELD (LOCK_EX|LOCK_NB -> EWOULDBLOCK)
+  [PASS] LOCK_EX still held across exec, seen from another process
+  accepted queued connection, read "hello-before-exec"
+  [PASS] net.FileListener accepted the pre-exec queued connection and read its data
+  [PASS] negative control: a second Accept with nothing queued times out (accept unix /tmp/handoff-probe.sock: i/o timeout)
+  pidfds after FindProcess(c7): [fd9(anon_inode:[pidfd],CLOEXEC)]
+  FindProcess(1690).Wait() -> exit status 7 err=<nil>
+  [PASS] pre-exec zombie reaped with real exit code 7
+  FindProcess(1691).Wait() -> exit status 9 err=<nil>
+  [PASS] child exiting after exec reaped with real exit code 9
+  negative control: second Wait on reaped pid 1690 -> err=waitid: no child processes
+  [PASS] a second Wait on an already-reaped child fails (would detect lost status)
+  negative control: Wait on non-child pid 1 -> err=waitid: no child processes
+  [PASS] Wait on a non-child fails, so the 7/9 above came from parenthood
+  negative control lockcheck after closing lock fd: FREE (acquired)
+  [PASS] lockcheck reports FREE once the fd is closed, so HELD above was real
+RESULT execinplace: all checks passed
+
+== probe 3: exit status of a non-child, and subreaper (Linux) ==
+  checker pid=1731 (sibling, not parent) target pid=1730 target ppid=1723
+  [PASS] pidfd_open on a non-child works (err=<nil>)
+  poll(pidfd, 200ms) while alive -> n=0 revents=0x0
+  [PASS] negative control: pidfd not readable while target alive
+  poll(pidfd, 3s) -> n=1 revents=0x1 after 800ms
+  [PASS] pidfd becomes readable when the non-child exits (liveness works)
+  waitid(P_PIDFD, WEXITED|WNOWAIT) from non-child -> err=no child processes
+  [PASS] non-child gets ECHILD: no exit status available
+  waitid(P_PID, WEXITED|WNOWAIT) from non-child -> err=no child processes
+  [PASS] P_PID also ECHILD
+  /proc/1730/stat of zombie: state=Z exit_code field=1280 (raw wait status, readable by a non-child while it is a zombie)
+RESULT nonchild-checker: all checks passed
+  negative control: real parent waitid(P_PIDFD) -> err=<nil> status=5
+  [PASS] the parent gets exit status 5 through the same call, so ECHILD in the checker is about parenthood
+-- PR_SET_CHILD_SUBREAPER: S (this process) -> D (old daemon) -> P (pane), D exits --
+  S pid=1723, D pid=1738 exited, P pid=1745 now has ppid=1723
+  [PASS] P reparented to the subreaper S
+  S wait4(P) -> pid=1745 exit=11 err=<nil>
+  [PASS] subreaper gets P's real exit status 11
+-- negative control: same without subreaper --
+  S pid=1723, D pid=1747 exited, P pid=1755 now has ppid=1
+  [PASS] without subreaper P reparents elsewhere (ppid=1)
+  S wait4(P) -> err=no child processes
+  [PASS] without subreaper S cannot wait for P (ECHILD)
+RESULT nonchild: all checks passed
+
+== probe 4: readiness on a Linux PTY master ==
+  poll(master) idle -> n=0 revents=0x0 err=<nil>
+  [PASS] negative control: idle master is not readable
+  poll(master) after slave write -> n=1 revents=0x1 err=<nil>
+  [PASS] data -> POLLIN
+  read "hi"
+  poll(master) after last slave close -> n=1 revents=0x10 (POLLIN=0x1 POLLHUP=0x10)
+  [PASS] slave closed -> POLLHUP
+  read(master) -> err=input/output error
+  [PASS] read after hangup gives EIO
+-- spec 2.4 mechanism 1: is the creack/pty v1.1.24 master (via xpty) in Go's poller on Linux? --
+  creack/pty v1.1.24 pty.Open() master: SetReadDeadline err=<nil>, Read err=<nil> hung>1s=true
+  [PASS] creack/pty pty.Open() master ignores read deadlines: its ptsname/unlockpt ioctls call os.File.Fd(), which put the fd in blocking mode; SetReadDeadline still returns nil and Read blocks in the kernel (contradicts spec 2.4 mechanism 1)
+-- positive control: /dev/ptmx opened with os.OpenFile and ioctls via SyscallConn keeps deadlines --
+  SetReadDeadline err=<nil>, Read err=read /dev/ptmx: i/o timeout hung>1s=false
+  [PASS] a poller-registered master supports read deadlines on Linux
+  after f.Fd(): SetReadDeadline err=<nil>, Read err=<nil> hung>1s=true
+  [PASS] os.File.Fd() makes deadlines silently ineffective (SetReadDeadline err=<nil>, read blocks)
+RESULT ptypoll: all checks passed
+
+== probe 5: sealed memfd manifest across exec ==
+  wrote 2097152 bytes, sha256=a702910980405470, sealed; write after seal -> operation not permitted
+  [PASS] negative control: sealed memfd rejects writes
+  after exec: fd 4 -> /memfd:handoff-manifest (deleted)
+  seals=0xf err=<nil>
+  [PASS] seals survived exec
+  inherited file offset=2097152 (shared open file description, so readers must pread or seek to 0)
+  size=2097152 read=2097152 err=<nil> sha256 match=true
+  [PASS] 2 MB read back intact after exec
+  negative control: CLOEXEC memfd fd 5 after exec -> bad file descriptor
+  [PASS] the memfd left CLOEXEC is gone, so survival above is due to clearing CLOEXEC
+RESULT memfd: all checks passed
