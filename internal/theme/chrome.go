@@ -63,6 +63,11 @@ type Chrome struct {
 	// in the file: a text colour a theme could set is a text colour that can
 	// be set unreadable, and the tiers are their ratios rather than their hex.
 	fg, fgDim, fgMute color.Color
+
+	// derived marks the ramp steps deriveRamp filled, so a file that names
+	// this theme as its base inherits only the steps the theme named, and
+	// derives the rest from its own surface.
+	derived [RoleCard + 1]bool
 }
 
 var chromeRegistry struct {
@@ -225,12 +230,15 @@ func (c *Chrome) deriveRamp() {
 		return
 	}
 	if c.Canvas == nil {
+		c.derived[RoleCanvas] = true
 		c.Canvas = overlay.Darker(c.Surface, chromeRamp.canvas)
 	}
 	if c.Panel == nil {
+		c.derived[RolePanel] = true
 		c.Panel = overlay.Darker(c.Surface, chromeRamp.panel)
 	}
 	if c.Card == nil {
+		c.derived[RoleCard] = true
 		c.Card = overlay.Lighter(c.Surface, chromeRamp.card)
 	}
 	// Each tier is measured on Surface at its target, then held to its floor

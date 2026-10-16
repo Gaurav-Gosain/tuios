@@ -38,14 +38,19 @@ func writeThemeDir(t *testing.T, files map[string]string) (loaded, problems []st
 // base may be another file listed in any order, and the chrome is resolved on
 // the merged colours, so a slot name follows a colour the child changes.
 //
+// A built-in base passes on its chrome too, and a chrome field that is not a
+// string costs that field, not the file.
+//
 // Negative controls: without the chrome merge, ember_red has no accent; without
-// the colour merge, ember's background is the xterm black.
+// the colour merge, ember's background is the xterm black; without the
+// built-in's chrome, ember_ct has no accent.
 func TestAThemeInheritsItsBase(t *testing.T) {
 	loaded, problems := writeThemeDir(t, map[string]string{
-		"a_child.json": `{"id": "ember_red", "base": "ember", "bright_red": "#123456"}`,
-		"ember.json":   `{"id": "ember", "base": "dracula", "chrome": {"accent": "bright_red"}}`,
+		"a_child.json":  `{"id": "ember_red", "base": "ember", "bright_red": "#123456"}`,
+		"ember.json":    `{"id": "ember", "base": "dracula", "chrome": {"accent": "bright_red"}}`,
+		"ember_ct.json": `{"id": "ember_ct", "base": "charmtone", "chrome": {"info": 5}}`,
 	})
-	if len(problems) > 0 || len(loaded) != 2 {
+	if len(problems) > 0 || len(loaded) != 3 {
 		t.Fatalf("loaded %v, problems %v", loaded, problems)
 	}
 	dracula, _ := tint.GetTint("dracula")
@@ -57,6 +62,7 @@ func TestAThemeInheritsItsBase(t *testing.T) {
 	for _, tc := range []struct{ id, want string }{
 		{"ember", hexOf(t, dracula.BrightRed)},
 		{"ember_red", "#123456"},
+		{"ember_ct", "#6b50ff"},
 	} {
 		chromeRegistry.RLock()
 		c := chromeRegistry.byID[tc.id]
