@@ -746,6 +746,7 @@ it matched.`,
 	var capturePanePalette []string
 	var capturePaneLines int
 	var capturePaneLastCommand bool
+	var capturePaneUnwrap, capturePaneTrim bool
 	var capturePaneJSON bool
 	capturePaneCmd := &cobra.Command{
 		Use:   "capture-pane",
@@ -761,6 +762,9 @@ Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
 --palette (16 hex colours of your theme, xterm defaults otherwise).
 Use --last-command to read only what the last finished command printed. It
 needs a shell that marks its commands with OSC 133, and it is plain text.
+Use --unwrap to join the rows that the pane wrapped because a line was longer
+than the pane. Each line then comes back as the program wrote it.
+Use --trim to drop the blank lines at the end of the capture.
 
 A capture from a session on another machine (-s host:session) is fenced as
 untrusted content. With --ansi or --resolved, only colour and style codes are
@@ -780,6 +784,9 @@ kept from it. With --json the result carries host and "untrusted": true.`,
   # Capture with colours resolved to RGB against your theme palette
   tuios capture-pane --ansi --resolved --palette "#45475a,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#bac2de,#585b70,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#a6adc8"
 
+  # Search the whole log for a long line that wrapped in the pane
+  tuios capture-pane -w build --scrollback --unwrap --trim | grep 'FAIL'
+
   # Pipe to a file
   tuios capture-pane -w editor --scrollback > pane.txt
 
@@ -789,7 +796,12 @@ kept from it. With --json the result carries host and "untrusted": true.`,
   # Read pane 0 of session api on host build, as JSON
   tuios capture-pane -w build:api:0 --json`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines, capturePaneLastCommand, capturePaneJSON)
+			return runCapturePane(captureOptions{
+				session: capturePaneSession, window: capturePaneWindow,
+				scrollback: capturePaneScrollback, ansi: capturePaneANSI, resolved: capturePaneResolved,
+				palette: capturePanePalette, lines: capturePaneLines, lastCommand: capturePaneLastCommand,
+				unwrap: capturePaneUnwrap, trim: capturePaneTrim, jsonOut: capturePaneJSON,
+			})
 		},
 	}
 	capturePaneCmd.Flags().BoolVar(&capturePaneLastCommand, "last-command", false, "Capture only what the last finished command printed (needs OSC 133 shell integration)")
@@ -800,6 +812,8 @@ kept from it. With --json the result carries host and "untrusted": true.`,
 	capturePaneCmd.Flags().BoolVar(&capturePaneResolved, "resolved", false, "Rewrite ANSI index colours to 24-bit RGB")
 	capturePaneCmd.Flags().StringSliceVar(&capturePanePalette, "palette", nil, "16 hex colours (#rrggbb) to resolve against (default: xterm)")
 	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
+	capturePaneCmd.Flags().BoolVar(&capturePaneUnwrap, "unwrap", false, "Join the rows that the pane wrapped, so each line is one line")
+	capturePaneCmd.Flags().BoolVar(&capturePaneTrim, "trim", false, "Drop the blank lines at the end")
 	capturePaneCmd.Flags().BoolVar(&capturePaneJSON, "json", false, "Output result as JSON")
 	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 

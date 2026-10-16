@@ -104,8 +104,10 @@ tuios capture-pane -s work -w build --scrollback --lines 40
 
 The listing commands take `--json` when you want to parse rather than read.
 `capture-pane` without `--scrollback` is the visible screen, which ends in the
-blank rows below the cursor. `--lines` counts from the last line with content.
-Leave `--ansi` off when you match text.
+blank rows below the cursor. `--trim` drops those rows. `--lines` counts from
+the last line with content. A line longer than the pane comes back in rows.
+`--unwrap` joins them, so a search finds a long path or URL. Leave `--ansi` off
+when you match text.
 
 ## Drive other windows: open, address, send keys, check
 

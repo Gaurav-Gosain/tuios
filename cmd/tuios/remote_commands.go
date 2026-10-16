@@ -781,35 +781,61 @@ func runSendText(sessionName, windowTarget, text string, jsonOutput bool) error 
 // A capture from another machine is fenced as untrusted content, like mail,
 // because it is text a program there wrote. Control characters are removed
 // from it unless the caller asked for escape codes with --ansi or --resolved.
-func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int, lastCommand, jsonOutput bool) error {
-	t, err := dialTarget(sessionName, windowTarget)
+// captureOptions is the `tuios capture-pane` command line.
+type captureOptions struct {
+	session, window            string
+	scrollback, ansi, resolved bool
+	palette                    []string
+	lines                      int
+	lastCommand, unwrap, trim  bool
+	jsonOut                    bool
+}
+
+func runCapturePane(o captureOptions) error {
+	t, err := dialTarget(o.session, o.window)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
 	params := map[string]any{
-		"session":    sessionName,
-		"window":     windowTarget,
-		"scrollback": scrollback,
-		"ansi":       ansi,
-		"resolved":   resolved,
-		"palette":    palette,
-		"lines":      lines,
+		"session":    o.session,
+		"window":     o.window,
+		"scrollback": o.scrollback,
+		"ansi":       o.ansi,
+		"resolved":   o.resolved,
+		"palette":    o.palette,
+		"lines":      o.lines,
 	}
 	// Sent only when asked for, so a capture against an older daemon keeps
 	// working: it would refuse a source it does not know.
-	if lastCommand {
+	if o.lastCommand {
 		params["source"] = "last-command-output"
+	}
+	if o.unwrap {
+		params["unwrap"] = true
+	}
+	if o.trim {
+		params["trim"] = true
 	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
 	if err != nil {
-		return reportVerbError(t.explain("capture-pane", err), jsonOutput)
+		return reportVerbError(t.explain("capture-pane", err), o.jsonOut)
 	}
-	if jsonOutput {
-		return printVerbResultOn(t, raw, jsonOutput)
+	// A daemon older than unwrap and trim ignores them and captures as
+	// before. Say so, because a search over the capture can then miss a
+	// line that wrapped.
+	var echo struct {
+		Unwrapped bool `json:"unwrapped"`
+		Trimmed   bool `json:"trimmed"`
 	}
-	return printCapture(os.Stdout, raw, t.host, t.window, ansi || resolved)
+	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
+		fmt.Fprintln(os.Stderr, "warning: the daemon does not support --unwrap or --trim. Run 'tuios kill-server' and start tuios again to update it.")
+	}
+	if o.jsonOut {
+		return printVerbResultOn(t, raw, o.jsonOut)
+	}
+	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
 }
 
 // printCapture writes a capture-pane result. A capture from this machine is

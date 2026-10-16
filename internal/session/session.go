@@ -4415,18 +4415,30 @@ func (p *PTY) Meta() paneMeta {
 
 // CaptureContentMeta is CaptureContent plus the pane's paneMeta, read under
 // the same lock, so the revision is the one the content was taken at.
-func (p *PTY) CaptureContentMeta(scrollback, ansi bool) (string, paneMeta) {
+//
+// unwrap joins the rows the terminal soft-wrapped (see capture_unwrap.go). It
+// is read under the same lock as the content, so the wrap flags describe the
+// rows that were captured.
+func (p *PTY) CaptureContentMeta(scrollback, ansi, unwrap bool) (string, paneMeta) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return p.captureContent(scrollback, ansi), p.metaLocked()
+	content := p.captureContent(scrollback, ansi)
+	if unwrap {
+		content = unwrapCapture(p.terminal, content, scrollback)
+	}
+	return content, p.metaLocked()
 }
 
 // CaptureContentResolvedMeta is CaptureContentResolved plus the pane's
 // paneMeta, read under the same lock.
-func (p *PTY) CaptureContentResolvedMeta(scrollback bool, palette [16]color.Color) (string, paneMeta) {
+func (p *PTY) CaptureContentResolvedMeta(scrollback bool, palette [16]color.Color, unwrap bool) (string, paneMeta) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return ResolveSGR(p.captureContent(scrollback, true), palette), p.metaLocked()
+	content := p.captureContent(scrollback, true)
+	if unwrap {
+		content = unwrapCapture(p.terminal, content, scrollback)
+	}
+	return ResolveSGR(content, palette), p.metaLocked()
 }
 
 // captureContent is the shared core of the two capture paths. Callers hold

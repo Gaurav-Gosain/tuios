@@ -1109,6 +1109,8 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		End        int      `json:"end"`        // 1-based inclusive region end
 		Resolved   bool     `json:"resolved"`   // resolve SGR index colours to 24-bit RGB
 		Palette    []string `json:"palette"`    // 16 hex colours to resolve against (default: xterm)
+		Unwrap     bool     `json:"unwrap"`     // join the rows the terminal soft-wrapped
+		Trim       bool     `json:"trim"`       // drop the blank lines at the end
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -1127,7 +1129,7 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	}
 
 	if p.Source == captureLastCommand {
-		return captureLastCommandOutput(pty, p.Window, p.Styled || p.ANSI || p.Resolved, p.Start, p.End, p.Lines)
+		return captureLastCommandOutput(pty, p.Window, p.Styled || p.ANSI || p.Resolved, p.Unwrap, p.Trim, p.Start, p.End, p.Lines)
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent"
@@ -1142,9 +1144,12 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		if verr != nil {
 			return nil, verr
 		}
-		content, meta = pty.CaptureContentResolvedMeta(scrollback, palette)
+		content, meta = pty.CaptureContentResolvedMeta(scrollback, palette, p.Unwrap)
 	} else {
-		content, meta = pty.CaptureContentMeta(scrollback, ansi)
+		content, meta = pty.CaptureContentMeta(scrollback, ansi, p.Unwrap)
+	}
+	if p.Trim {
+		content = trimCapture(content)
 	}
 	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
 
@@ -1164,6 +1169,14 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		"resolved":     p.Resolved,
 		"history_rows": meta.HistoryRows,
 		"revision":     meta.Revision,
+	}
+	// Echoed only when asked for, so a caller can tell a daemon that knows
+	// them from one that ignored them.
+	if p.Unwrap {
+		out["unwrapped"] = true
+	}
+	if p.Trim {
+		out["trimmed"] = true
 	}
 	// A revision counts from 0 again when the daemon restarts, so it is a
 	// cache key only beside the daemon start it came from.

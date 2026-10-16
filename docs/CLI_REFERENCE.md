@@ -3422,6 +3422,13 @@ tuios capture-pane [flags]
 - `--last-command`: Capture only what the last finished command printed, as
   plain text, read between the shell's OSC 133 marks. Fails with
   `no_shell_integration` when no command has finished under them.
+- `--unwrap`: Join the rows that the pane wrapped because a line was longer
+  than the pane. Each line then comes back as the program wrote it, so a
+  search finds a long path or URL. A row that ends with a newline stays a line.
+- `--trim`: Drop the blank lines at the end of the capture.
+
+A daemon that does not know `--unwrap` or `--trim` ignores them. The command
+then prints a warning.
 
 A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
 `\x1b[31m`); the consumer resolves them against its own palette. `--resolved`

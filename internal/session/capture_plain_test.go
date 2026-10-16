@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"tuios.dev/vt"
 )
 
@@ -113,5 +114,65 @@ func TestWaitForOutputBackstopSeesUnannouncedChange(t *testing.T) {
 				t.Fatal("the backstop never re-checked the changed pane")
 			}
 		})
+	}
+}
+
+// TestUnwrapCaptureJoinsWrappedRows writes lines longer than the pane, some
+// with a space or a wide character at the wrap edge, and requires an unwrapped
+// capture to give back each line as it was written. A line that fills the row
+// exactly and then ends must stay a line of its own. Runs on whichever backend
+// the build uses, so the ghostty workflow covers that backend too.
+func TestUnwrapCaptureJoinsWrappedRows(t *testing.T) {
+	const width = 10
+	lines := []string{
+		"short",
+		"exactly10!",
+		"a path/that/is/longer/than/the/pane/width.go:42",
+		"edge-at-9 wraps here", // a space lands in the last column
+		"wide 日本語日本語日本語 end",   // a wide character meets the edge
+		"\x1b[31mred text that wraps around\x1b[0m",
+		"last",
+	}
+	term := vt.NewWithScrollback(width, 4, 100)
+	for _, l := range lines {
+		_, _ = fmt.Fprintf(term, "%s\r\n", l)
+	}
+	p := &PTY{terminal: term}
+
+	got, _ := p.CaptureContentMeta(true, false, true)
+	got = trimCapture(got)
+	var want strings.Builder
+	for _, l := range lines {
+		want.WriteString(ansi.Strip(l) + "\n")
+	}
+	if got != want.String() {
+		t.Fatalf("unwrapped capture:\n got %q\nwant %q", got, want.String())
+	}
+
+	// Styled, the joined line keeps its escapes and still reads as one line.
+	styled, _ := p.CaptureContentMeta(true, true, true)
+	if n := strings.Count(trimCapture(styled), "\n"); n != len(lines) {
+		t.Fatalf("styled unwrapped capture has %d lines, want %d:\n%q", n, len(lines), styled)
+	}
+
+	// Without unwrap the rows stay as the pane shows them.
+	plain, _ := p.CaptureContentMeta(true, false, false)
+	if strings.Contains(plain, "longer/than/the/pane") {
+		t.Fatalf("a capture without unwrap joined rows: %q", plain)
+	}
+}
+
+// TestTrimCaptureDropsTheBlankRowsBelow keeps every line with content and the
+// blank lines between them, and drops only the blank lines at the end.
+func TestTrimCaptureDropsTheBlankRowsBelow(t *testing.T) {
+	for in, want := range map[string]string{
+		"a\n\nb\n\n   \n\x1b[0m\n": "a\n\nb\n",
+		"a":                        "a\n",
+		"\n\n":                     "",
+		"":                         "",
+	} {
+		if got := trimCapture(in); got != want {
+			t.Errorf("trimCapture(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

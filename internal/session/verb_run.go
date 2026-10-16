@@ -389,7 +389,7 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 				if ev.CommandSeq <= baseline {
 					continue
 				}
-				output, truncated, _ := pty.LastCommandOutput()
+				output, truncated, _ := pty.LastCommandOutput(false)
 				output = sliceCaptureLines(output, 0, 0, p.Lines)
 				res := commandFinishedData(sess.Name(), w.ID, ev)
 				res["type"] = "command_result"
@@ -405,12 +405,12 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 // the plain text the pane's last finished command printed, with the facts the
 // shell reported about it. It is plain only, because the rows are read out
 // of the emulator cell by cell and carry no styling.
-func captureLastCommandOutput(pty *PTY, window string, styled bool, start, end, lines int) (any, *verbError) {
+func captureLastCommandOutput(pty *PTY, window string, styled, unwrap, trim bool, start, end, lines int) (any, *verbError) {
 	if styled {
 		return nil, invalidParam("styled", "last-command-output is plain text; drop styled, ansi and resolved")
 	}
 	facts := pty.ShellFacts()
-	output, truncated, ok := pty.LastCommandOutput()
+	output, truncated, ok := pty.LastCommandOutput(unwrap)
 	if !facts.Seen || !ok {
 		if window == "" {
 			window = "focused"
@@ -422,6 +422,9 @@ func captureLastCommandOutput(pty *PTY, window string, styled bool, start, end, 
 			})
 		}
 		return nil, noShellIntegration(window)
+	}
+	if trim {
+		output = trimCapture(output)
 	}
 	res := map[string]any{
 		"type":        "pane_content",
@@ -435,6 +438,12 @@ func captureLastCommandOutput(pty *PTY, window string, styled bool, start, end, 
 	}
 	if facts.LastExit != nil {
 		res["exit_code"] = *facts.LastExit
+	}
+	if unwrap {
+		res["unwrapped"] = true
+	}
+	if trim {
+		res["trimmed"] = true
 	}
 	return res, nil
 }

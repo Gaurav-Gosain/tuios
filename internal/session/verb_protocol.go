@@ -1411,9 +1411,13 @@ func init() {
 				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
+				{Name: "unwrap", Type: "bool", Description: "Join the rows the terminal wrapped because a line was longer than the pane, so each line is one line as the program wrote it. A row that ends with a newline stays a line of its own. lines, start and end then count the joined lines.", Default: "false"},
+				{Name: "trim", Type: "bool", Description: "Drop the blank lines at the end of the capture, which are the empty rows below the cursor. lines, start and end then count what is left.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "content", Type: "string", Description: "The captured text, one line per row."},
+				{Name: "content", Type: "string", Description: "The captured text, one line per row, or per line with unwrap."},
+				{Name: "unwrapped", Type: "bool", Description: "True when unwrap joined the wrapped rows. Omitted otherwise. A daemon that does not know unwrap omits it too."},
+				{Name: "trimmed", Type: "bool", Description: "True when trim dropped the blank lines at the end. Omitted otherwise."},
 				{Name: "source", Type: "string", Description: "The buffer captured.", Accepted: captureSources},
 				{Name: "styled", Type: "bool", Description: "Whether content carries ANSI styling."},
 				{Name: "resolved", Type: "bool", Description: "Whether index colours were rewritten to 24-bit RGB."},
@@ -1421,8 +1425,11 @@ func init() {
 				{Name: "revision", Type: "int", Description: "A number that grows each time the pane's content can change: output reaches it, or it is resized. Two captures of one source with one revision have the same content. It counts from 0 again when the daemon restarts. Not on a last-command-output capture."},
 				{Name: "boot_id", Type: "string", Description: "The daemon start the revision belongs to, the boot_id of subscribe and list-attention. Compare revisions only when boot_id is the same."},
 			},
-			examples: []string{`{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","lines":50}}`},
-			handler:  (*Daemon).verbCapturePane,
+			examples: []string{
+				`{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","lines":50}}`,
+				`{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","unwrap":true,"trim":true}}`,
+			},
+			handler: (*Daemon).verbCapturePane,
 		},
 		"screenshot": {
 			description: "Render a window to an image file.",

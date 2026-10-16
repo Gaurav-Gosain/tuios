@@ -370,8 +370,8 @@ const shellCommandOutputMax = 256 * 1024
 // read from the emulator between its C and D marks, and whether there was such
 // a command. truncated is true when the output was cut to its last
 // shellCommandOutputMax bytes, or when its start has already left the
-// scrollback.
-func (p *PTY) LastCommandOutput() (output string, truncated, ok bool) {
+// scrollback. unwrap joins the rows the terminal soft-wrapped.
+func (p *PTY) LastCommandOutput(unwrap bool) (output string, truncated, ok bool) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 	if p.terminal == nil {
@@ -386,6 +386,11 @@ func (p *PTY) LastCommandOutput() (output string, truncated, ok bool) {
 		return "", false, false
 	}
 	lines, cut := readTerminalLines(p.terminal, c, d)
+	if unwrap {
+		// The lines start at the C mark's row, or at the oldest row the
+		// history still holds when the start has rolled off.
+		lines = unwrapRows(p.terminal, lines, max(c.AbsLine, 0))
+	}
 	out := strings.Join(lines, "\n")
 	if len(out) > shellCommandOutputMax {
 		out = out[len(out)-shellCommandOutputMax:]

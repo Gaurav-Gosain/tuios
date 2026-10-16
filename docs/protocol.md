@@ -3292,6 +3292,15 @@ Params:
   only the last N lines.
 - `start`, `end` (optional ints): a 1 based inclusive line region. When set, the
   region wins over `lines`.
+- `unwrap` (optional bool): join the rows the terminal wrapped because a line
+  was longer than the pane, so each line comes back as the program wrote it. A
+  row that ends with a newline stays a line of its own. `lines`, `start` and
+  `end` then count the joined lines. The result adds `unwrapped: true`.
+- `trim` (optional bool): drop the blank lines at the end of the capture. The
+  result adds `trimmed: true`.
+
+An older daemon ignores `unwrap` and `trim` and omits `unwrapped` and
+`trimmed`, so a caller checks for those fields.
 
 Request:
 

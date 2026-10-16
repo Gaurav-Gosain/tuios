@@ -248,7 +248,7 @@ func TestLastCommandOutputReadsBetweenTheMarks(t *testing.T) {
 	write("\x1b]133;A\x07$ \x1b]133;B\x07echo one\r\n\x1b]133;C\x07one\r\n\x1b]133;D;0\x07")
 	write("\x1b]133;A\x07$ \x1b]133;B\x07seq 3\r\n\x1b]133;C\x071\r\n2\r\n3\r\n\x1b]133;D;0\x07")
 	write("\x1b]133;A\x07$ ")
-	out, truncated, ok := p.LastCommandOutput()
+	out, truncated, ok := p.LastCommandOutput(false)
 	if !ok {
 		t.Fatal("no finished command was found")
 	}
