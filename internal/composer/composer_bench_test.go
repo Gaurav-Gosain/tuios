@@ -32,3 +32,17 @@ func BenchmarkKeystroke16KiB(b *testing.B) {
 		m.Render(80, pal, pal.Surface)
 	}
 }
+
+// BenchmarkFrameUnchanged is a frame of an 8-row draft with nothing changed
+// since the last frame: what the editor costs on every frame the host draws
+// for another reason. A frame with no change must not draw again.
+func BenchmarkFrameUnchanged(b *testing.B) {
+	m := New(Options{})
+	m.Insert(strings.Repeat("the quick brown fox jumps over the lazy dog\n", 8), false)
+	pal := theme.UI()
+	m.Render(80, pal, pal.Surface)
+	b.ReportAllocs()
+	for b.Loop() {
+		m.Render(80, pal, pal.Surface)
+	}
+}

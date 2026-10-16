@@ -80,9 +80,12 @@ type inboxReplyState struct {
 	// bound.
 	drafts     map[string]*composer.Model
 	draftOrder []string
-	// sending are the drafts of replies out to the daemon, by pane, so a
-	// reply the daemon refuses keeps its draft.
-	sending map[string]*composer.Model
+	// sending are the drafts of replies out to the daemon, by send, so a
+	// reply the daemon refuses keeps its draft. Two replies to one pane can
+	// be out at once, so the key is the send and not the pane.
+	sending map[uint64]*composer.Model
+	// sendSeq numbers the sends.
+	sendSeq uint64
 }
 
 // inboxReplyDraftsMax is how many closed drafts the client keeps. They live
@@ -109,6 +112,10 @@ type inboxReplyEditor struct {
 	// closeAfter closes the Inbox when the editor closes, for an editor the
 	// rail opened.
 	closeAfter bool
+	// frame is the editor's lines as last drawn, and frameAt what they were
+	// drawn from.
+	frame   []string
+	frameAt inboxReplyFrame
 }
 
 // inboxReplyDrop is one dropped message, for undo.
@@ -126,7 +133,9 @@ type InboxRepliedMsg struct {
 	Delivering                 bool
 	// Requeue marks a reply queued again by an undo of a drop.
 	Requeue bool
-	Err     error
+	// Send is the number of the send whose draft sending holds, 0 for none.
+	Send uint64
+	Err  error
 }
 
 // InboxQueueDroppedMsg is the answer to the x on a rail row.
@@ -237,6 +246,23 @@ func (m *OS) keepInboxDraft(sessionID, windowID string, comp *composer.Model) {
 		delete(st.drafts, st.draftOrder[0])
 		st.draftOrder = st.draftOrder[1:]
 	}
+}
+
+// restoreInboxDraft gives a pane back the draft of a reply the daemon did not
+// take. The person may have started a new draft for the pane while the reply
+// was out: the editor may be open on it, or esc may have kept it. The draft
+// that was not sent then goes at the top of that one, so neither is lost.
+func (m *OS) restoreInboxDraft(sessionID, windowID string, comp *composer.Model) {
+	if ed := m.Inbox.reply.editor; ed != nil && ed.session == sessionID && ed.window == windowID {
+		ed.comp.PutBack(comp)
+		ed.comp.SetNotice("Your reply that was not sent is back at the top.")
+		return
+	}
+	if kept := m.takeInboxDraft(sessionID, windowID); kept != nil {
+		kept.PutBack(comp)
+		comp = kept
+	}
+	m.keepInboxDraft(sessionID, windowID, comp)
 }
 
 // SidebarAgentReply opens the reply editor for a rail agent row's pane. The
@@ -379,18 +405,19 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	st := &m.Inbox.reply
 	if st.sending == nil {
-		st.sending = make(map[string]*composer.Model)
+		st.sending = make(map[uint64]*composer.Model)
 	}
-	st.sending[inboxDraftKey(ed.session, ed.window)] = ed.comp
-	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false)
+	st.sendSeq++
+	st.sending[st.sendSeq] = ed.comp
+	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq)
 }
 
 // inboxQueueCmd sends queue-prompt as the person.
-func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool) tea.Cmd {
+func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64) tea.Cmd {
 	call := m.inboxCaller()
 	params := map[string]any{"session": sessionID, "window": windowID, "text": text, "human_nonce": nonce}
 	return func() tea.Msg {
-		msg := InboxRepliedMsg{Session: sessionID, Window: windowID, Who: who, Text: text, Requeue: requeue}
+		msg := InboxRepliedMsg{Session: sessionID, Window: windowID, Who: who, Text: text, Requeue: requeue, Send: send}
 		raw, err := call("queue-prompt", params, inboxReplyTimeout)
 		if err != nil {
 			msg.Err = err
@@ -416,11 +443,10 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	// The draft of a reply the daemon took is done with. The draft of one
 	// it refused is kept, so r on the pane opens it again.
-	k := inboxDraftKey(msg.Session, msg.Window)
-	if comp, ok := m.Inbox.reply.sending[k]; ok && !msg.Requeue {
-		delete(m.Inbox.reply.sending, k)
+	if comp, ok := m.Inbox.reply.sending[msg.Send]; ok {
+		delete(m.Inbox.reply.sending, msg.Send)
 		if msg.Err != nil {
-			m.keepInboxDraft(msg.Session, msg.Window, comp)
+			m.restoreInboxDraft(msg.Session, msg.Window, comp)
 		}
 	}
 	if msg.Err != nil {
@@ -615,7 +641,7 @@ func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	if nonce == "" {
 		return nil, false
 	}
-	return m.inboxQueueCmd(d.session, d.window, d.who, d.text, nonce, true), true
+	return m.inboxQueueCmd(d.session, d.window, d.who, d.text, nonce, true, 0), true
 }
 
 // sidebarAgentKeyOr is the key an agent row action is bound to, or fallback.
@@ -637,22 +663,37 @@ func (m *OS) inboxReplyDetail() (detail func(width int) []string, hints []overla
 	if ed == nil {
 		return nil, nil, false
 	}
-	// The list draws the detail twice a frame, once to measure it. The
-	// lines are kept for the width.
-	var lines []string
-	linesW := -1
-	detail = func(width int) []string {
-		if width != linesW {
-			lines, linesW = inboxReplyLines(ed, width), width
-		}
-		return lines
+	return ed.lines, ed.comp.Hints(), true
+}
+
+// lines is the editor as drawn at width. The lines are kept until the width,
+// the theme or the draft's frame changes, so a frame drawn for something else
+// on screen does not draw the editor again. The list asks twice a frame, once
+// to measure it.
+func (ed *inboxReplyEditor) lines(width int) []string {
+	pal := theme.UI()
+	inner := max(width-2, 8)
+	// The composer keeps its own last frame, so this call is cheap when
+	// nothing changed, and Drawn says whether it drew a new one.
+	body := ed.comp.Render(inner, pal, pal.Surface)
+	key := inboxReplyFrame{width: width, theme: theme.Generation(), drawn: ed.comp.Drawn()}
+	if ed.frame != nil && ed.frameAt == key {
+		return ed.frame
 	}
-	return detail, ed.comp.Hints(), true
+	ed.frame, ed.frameAt = inboxReplyLines(ed, width, body), key
+	return ed.frame
+}
+
+// inboxReplyFrame is what the editor's lines were drawn from.
+type inboxReplyFrame struct {
+	width int
+	theme uint64
+	drawn uint64
 }
 
 // inboxReplyLines draws the editor: who it is for and where that agent is,
 // then the draft.
-func inboxReplyLines(ed *inboxReplyEditor, width int) []string {
+func inboxReplyLines(ed *inboxReplyEditor, width int, body []string) []string {
 	pal := theme.UI()
 	bg := pal.Surface
 	inner := max(width-2, 8)
@@ -668,7 +709,7 @@ func inboxReplyLines(ed *inboxReplyEditor, width int) []string {
 		wait := overlay.Style(bg).Foreground(pal.FgDim).Render("It is typed when " + ed.who + " is at rest.")
 		out = append(out, overlay.Fill(pad+ansi.Truncate(wait, inner, "…"), width, bg))
 	}
-	for _, l := range ed.comp.Render(inner, pal, bg) {
+	for _, l := range body {
 		out = append(out, pad+l)
 	}
 	return out

@@ -55,6 +55,21 @@ func newInks(pal overlay.Palette, surface color.Color) inks {
 // a block is open it is the block instead.
 func (m *Model) Render(width int, pal overlay.Palette, surface color.Color) []string {
 	width = max(width, gutter+4)
+	key := m.frameKey(width, pal, surface)
+	if m.frame != nil && m.frameAt == key {
+		return m.frame
+	}
+	m.frame, m.frameAt = m.render(width, pal, surface), key
+	m.drawn++
+	return m.frame
+}
+
+// Drawn counts the frames Render drew rather than took from its cache. A host
+// that wraps the lines keeps its own copy until this changes.
+func (m *Model) Drawn() uint64 { return m.drawn }
+
+// render draws a frame the cache does not hold.
+func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []string {
 	in := newInks(pal, surface)
 	if m.pager != nil {
 		return m.renderPager(width, in)
@@ -202,7 +217,10 @@ func renderBlock(bl *block, maxW int, selected, skipOpen bool, in inks) string {
 			st.Foreground(dim).Render(tail[numEnd:])
 	}
 	if selected {
-		s = in.pal.Mark(s, overlay.RowState{Cursor: true, Focused: true})
+		// At 16 colours a selected block is underlined, not reversed: the
+		// cursor right after it is drawn in reverse video, and two reversed
+		// spans side by side read as one bar with no cursor in it.
+		s = in.pal.Mark(s, overlay.RowState{Cursor: true})
 	}
 	return s
 }

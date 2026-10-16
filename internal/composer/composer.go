@@ -99,6 +99,12 @@ type Model struct {
 
 	// pager is the open block, nil when none is.
 	pager *pager
+
+	// frame is the last frame Render drew, and frameAt what it was drawn
+	// from. The lines are shared: the host must not change them.
+	frame   []string
+	frameAt frameKey
+	drawn   uint64
 }
 
 // New returns an empty draft.
@@ -618,4 +624,37 @@ func (m *Model) vertical(d int) {
 		m.cur = m.indexAt(rows[t], m.goal, width)
 	}
 	m.joinTyping = false
+}
+
+// PutBack puts the draft of an earlier message that was not sent at the start
+// of this one, with a blank line between them, as one undo step. Blocks keep
+// their numbers unless this draft already uses one; such a block takes the
+// next free number. old is not used again.
+func (m *Model) PutBack(old *Model) {
+	if old == nil || len(old.cells) == 0 {
+		return
+	}
+	used := make(map[int]bool)
+	for _, c := range m.cells {
+		if c.block != nil {
+			used[c.block.n] = true
+		}
+	}
+	next := max(m.nextBlock(), old.nextBlock())
+	ins := make([]cell, 0, len(old.cells)+2)
+	for _, c := range old.cells {
+		if c.block != nil && used[c.block.n] {
+			c = blockCell(newBlock(next, c.block.text))
+			next++
+		}
+		ins = append(ins, c)
+	}
+	if len(m.cells) > 0 {
+		ins = append(ins, cell{s: "\n", space: true}, cell{s: "\n", space: true})
+	}
+	if old.automated {
+		m.automated = true
+	}
+	m.edited()
+	m.change(0, 0, ins, m.cur+len(ins))
 }

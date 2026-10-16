@@ -212,3 +212,35 @@ func forgetSidebarState(t *testing.T) {
 	_ = os.Remove(path)
 	t.Cleanup(func() { _ = os.Remove(path) })
 }
+
+// TestFailedReplyKeepsBothDrafts: a reply is out to the daemon, the person
+// opens the editor on the same pane and starts a new draft, and then the
+// daemon refuses the first reply. Neither draft may be lost, whether the
+// new one is still open or esc kept it.
+func TestFailedReplyKeepsBothDrafts(t *testing.T) {
+	for _, closeFirst := range []bool{false, true} {
+		done := item("1", session.AttentionFinished, "here", "w-2", "done", 1)
+		m, q := replyOS(t, done)
+		m.OpenInbox("")
+		m.InboxReply()
+		m.InboxReplyType("first reply")
+		first := m.InboxReplySend()
+		m.InboxReply()
+		m.InboxReplyType("second draft")
+		if closeFirst {
+			m.InboxReplyCancel()
+		}
+		q.err = &session.VerbCallError{Code: session.ErrVerbInternal, Message: "boom"}
+		runMsg(t, m, first)
+		if closeFirst {
+			m.InboxReply()
+		}
+		if !m.InboxReplyOpen() {
+			t.Fatal("the editor is not open")
+		}
+		got := m.Inbox.reply.editor.comp.Text()
+		if got != "first reply\n\nsecond draft" {
+			t.Fatalf("closed first %v: the draft is %q, want both", closeFirst, got)
+		}
+	}
+}
