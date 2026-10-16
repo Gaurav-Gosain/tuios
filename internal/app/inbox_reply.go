@@ -58,8 +58,14 @@ const inboxReplyTimeout = 5 * time.Second
 const inboxRemoteQueueRefusal = "A key from send-keys does not change the queue: only keys from your keyboard queue or drop a message as you"
 
 // inboxReplySentMax is how many sent replies this client keeps the text of,
-// so a drop of one can be undone.
-const inboxReplySentMax = 16
+// so a drop of one can be undone. inboxReplySentMaxBytes bounds what they
+// hold: a reply can carry 8 MB of images, and 16 of them would keep 128 MB
+// in the client for an undo that is rarely used. The oldest go first, and
+// the newest is always kept.
+const (
+	inboxReplySentMax      = 16
+	inboxReplySentMaxBytes = 16 << 20
+)
 
 // inboxReplyState is the reply editor and what it remembers.
 type inboxReplyState struct {
@@ -69,6 +75,8 @@ type inboxReplyState struct {
 	sent map[string]inboxSentReply
 	// sentOrder is sent's ids, oldest first, for the bound.
 	sentOrder []string
+	// sentBytes is what sent holds, by inboxSentReply.size.
+	sentBytes int
 	// dropped is the last message x dropped, for u on the same row.
 	dropped *inboxReplyDrop
 	// noQueue is set once the daemon answered queue-prompt with
@@ -123,6 +131,18 @@ type inboxReplyEditor struct {
 type inboxSentReply struct {
 	text  string
 	parts []composer.Part
+}
+
+// size is about the bytes r keeps: its text and each part's text and image.
+func (r inboxSentReply) size() int {
+	n := len(r.text)
+	for _, p := range r.parts {
+		n += len(p.Text)
+		if p.Image != nil {
+			n += len(p.Image.Data)
+		}
+	}
+	return n
 }
 
 // inboxReplyDrop is one dropped message, for undo.
@@ -621,13 +641,26 @@ func (m *OS) rememberInboxReply(id string, r inboxSentReply) {
 	if st.sent == nil {
 		st.sent = make(map[string]inboxSentReply)
 	}
-	if _, ok := st.sent[id]; !ok {
+	if old, ok := st.sent[id]; ok {
+		st.sentBytes -= old.size()
+	} else {
 		st.sentOrder = append(st.sentOrder, id)
 	}
 	st.sent[id] = r
-	for len(st.sentOrder) > inboxReplySentMax {
-		delete(st.sent, st.sentOrder[0])
-		st.sentOrder = st.sentOrder[1:]
+	st.sentBytes += r.size()
+	for len(st.sentOrder) > 1 && (len(st.sentOrder) > inboxReplySentMax || st.sentBytes > inboxReplySentMaxBytes) {
+		st.forgetSent(st.sentOrder[0])
+	}
+}
+
+// forgetSent drops the sent reply id, and its bytes from the count.
+func (st *inboxReplyState) forgetSent(id string) {
+	if r, ok := st.sent[id]; ok {
+		st.sentBytes -= r.size()
+		delete(st.sent, id)
+	}
+	if i := slices.Index(st.sentOrder, id); i >= 0 {
+		st.sentOrder = slices.Delete(st.sentOrder, i, i+1)
 	}
 }
 
@@ -750,8 +783,7 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 		m.ShowNotification("Dropped 1 queued message to "+msg.Who, "info", m.Settings.NotificationDuration)
 		return
 	}
-	delete(st.sent, msg.ID)
-	st.sentOrder = slices.DeleteFunc(st.sentOrder, func(id string) bool { return id == msg.ID })
+	st.forgetSent(msg.ID)
 	st.dropped = &inboxReplyDrop{session: msg.Session, window: msg.Window, who: msg.Who, reply: sent, at: time.Now()}
 	key := m.sidebarAgentKeyOr(config.ActionAgentUnread, "u")
 	m.ShowNotification("Dropped 1 queued message to "+msg.Who+". "+key+" undoes.", "info", inboxUndoNotice)
