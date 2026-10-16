@@ -1172,6 +1172,11 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	}
 
 	if !foreground {
+		// start-server returns once the daemon is up, so a --pprof given to it
+		// is only any use to the daemon.
+		if pprofAddr != "" {
+			return startDaemonBackground("--pprof", pprofAddr)
+		}
 		return startDaemonBackground()
 	}
 

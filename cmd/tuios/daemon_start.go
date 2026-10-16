@@ -76,7 +76,7 @@ func daemonStderr() *os.File {
 // variable so a test can make the daemon refuse to start, which is the one
 // failure a bare "tuios" recovers from and therefore the one that has to be
 // proved rather than assumed.
-var spawnDaemon = startDaemonBackground
+var spawnDaemon = func() error { return startDaemonBackground() }
 
 // startDaemonBackground spawns a detached daemon and returns once a daemon is
 // reachable.
@@ -84,13 +84,17 @@ var spawnDaemon = startDaemonBackground
 // Success is "a daemon is up", not "my child is up". Two clients can decide to
 // start one at the same moment; the daemon's own start lock picks a winner and
 // the loser exits, which is the right outcome for both clients.
-func startDaemonBackground() error {
+//
+// daemonArgs are added after "daemon". Only start-server passes any: a client
+// that starts a daemon on the way to attaching keeps its own --pprof, and
+// handing the address on would make the two processes race to bind it.
+func startDaemonBackground(daemonArgs ...string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	cmd := exec.Command(executable, "daemon")
+	cmd := exec.Command(executable, append([]string{"daemon"}, daemonArgs...)...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = daemonStderr()

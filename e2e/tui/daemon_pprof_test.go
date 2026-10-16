@@ -48,3 +48,33 @@ func TestDaemonServesPprof(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// TestStartServerPassesPprofToTheDaemon starts the daemon with
+// "tuios --pprof ADDR start-server" and reads the heap profile once
+// start-server has returned. start-server spawns "tuios daemon" detached, so
+// the flag has to be handed on: the process it was given to is gone by the
+// time anyone asks for a profile.
+func TestStartServerPassesPprofToTheDaemon(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+
+	if out, err := tuiosCLI(t, base, "--pprof", addr, "start-server"); err != nil {
+		t.Fatalf("start-server: %v: %s", err, out)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		heap, err := pprofHeapInUse(addr)
+		if err == nil {
+			if heap == 0 {
+				t.Fatal("the daemon reports an in-use heap of 0 bytes")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the daemon start-server started never served /debug/pprof on %s: %v", addr, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}

@@ -6416,3 +6416,12 @@ from config.toml.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | No offer on the welcome screen | the picker and the offer | a build of the parent commit (#801) | `TestWelcomeSuggestsThePresetAndWaits` ("the welcome screen did not offer the tmux keys") | **caught** |
+## start-server hands --pprof to the daemon
+
+`TestStartServerPassesPprofToTheDaemon` runs `tuios --pprof ADDR start-server` against a scratch daemon and, once start-server has returned, reads the heap profile from ADDR. start-server spawns `tuios daemon` detached and exits, so only the daemon can be answering.
+
+The control was run on 2026-10-16 on the branch fix/start-server-pprof.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The flag not handed on | a build of main at 8a69099b, where `startDaemonBackground` runs `daemon` with no flags | `TestStartServerPassesPprofToTheDaemon`: "the daemon start-server started never served /debug/pprof on 127.0.0.1:59545: … connect: connection refused" | **caught** |
