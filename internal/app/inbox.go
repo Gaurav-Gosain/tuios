@@ -144,6 +144,8 @@ type InboxState struct {
 	// agents is the agents view, which tab switches to. See
 	// inbox_agents.go.
 	agents inboxAgentsState
+	// threads are the agents' threads the view shows. See inbox_thread.go.
+	threads threadsState
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -1137,6 +1139,8 @@ func (m *OS) OpenInboxOn(id string) {
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
 	m.stopInboxAgentsTick()
+	m.stopThreadWatch()
+	m.Inbox.threads.open = false
 	m.Inbox.Peek = nil
 	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
 	m.Inbox.reply.editor = nil

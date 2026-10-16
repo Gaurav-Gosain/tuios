@@ -1093,6 +1093,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case inboxAgentsTickMsg:
 		return m, m.applyInboxAgentsTick(msg)
 
+	case threadPageMsg:
+		return m, m.applyThreadPage(msg)
+
+	case threadRecapMsg:
+		m.applyThreadRecap(msg)
+		return m, nil
+
+	case threadGrewMsg:
+		return m, m.applyThreadGrew(msg)
+
+	case threadWatchEnded:
+		m.applyThreadWatchEnded(msg)
+		return m, m.InboxThreadFetch()
+
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
 		return m, nil

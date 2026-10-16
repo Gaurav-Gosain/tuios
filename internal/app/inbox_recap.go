@@ -187,24 +187,8 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 			add("Last said: " + s)
 		}
 	default:
-		rc := v.recap
-		if v.since > 0 {
-			add("While you were away (" + inboxWait(v.since, now) + ")")
-		} else if rc.Since > 0 {
-			add("Since " + time.Unix(0, rc.Since).Format("15:04") + " (" + inboxWait(rc.Since, now) + " ago)")
-		}
-		line := recapCount(int(rc.Turns), "turn", "turns") + "."
-		if rc.FilesTotal > 0 {
-			line += " " + recapCount(rc.FilesTotal, "file", "files") + ": " + recapFiles(rc.Files, rc.FilesTotal, 2)
-		}
-		add(line)
-		line = recapCount(rc.Commands, "command", "commands") + "."
-		if t := rc.Tests; t != nil {
-			line += " Tests: " + printableTitle(t.Cmdline) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
-		}
-		add(line)
-		if rc.LastSaid != "" {
-			add("Last said: " + printableTitle(rc.LastSaid))
+		for _, s := range recapSentences(v.recap, v.since, now) {
+			add(s)
 		}
 	}
 	if facts := m.agentFactsLine(it.Session, it.Window, it.Harness); facts != "" {
@@ -450,4 +434,29 @@ func agentReturnState(state string) string {
 		return ""
 	}
 	return sidebarStateWords(state)
+}
+
+// recapSentences is what a recap says, a sentence a line: since when, the
+// turns and files, the commands and the last test run, and the last words.
+func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time) []string {
+	var out []string
+	if since > 0 {
+		out = append(out, "While you were away ("+inboxWait(since, now)+")")
+	} else if rc.Since > 0 {
+		out = append(out, "Since "+time.Unix(0, rc.Since).Format("15:04")+" ("+inboxWait(rc.Since, now)+" ago)")
+	}
+	line := recapCount(int(rc.Turns), "turn", "turns") + "."
+	if rc.FilesTotal > 0 {
+		line += " " + recapCount(rc.FilesTotal, "file", "files") + ": " + recapFiles(rc.Files, rc.FilesTotal, 2)
+	}
+	out = append(out, line)
+	line = recapCount(rc.Commands, "command", "commands") + "."
+	if t := rc.Tests; t != nil {
+		line += " Tests: " + printableTitle(t.Cmdline) + " " + recapTestWord(t.OK) + " " + inboxWait(t.At, now) + " ago"
+	}
+	out = append(out, line)
+	if rc.LastSaid != "" {
+		out = append(out, "Last said: "+printableTitle(rc.LastSaid))
+	}
+	return out
 }

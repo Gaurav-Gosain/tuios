@@ -162,7 +162,11 @@ func (m *OS) InboxToggleAgents() tea.Cmd {
 	m.stopInboxAgentsTick()
 	a.on = !a.on
 	m.Inbox.reply.editor = nil
-	return m.InboxAgentsTick()
+	m.Inbox.threads.open = false
+	if !a.on {
+		m.stopThreadWatch()
+	}
+	return tea.Batch(m.InboxAgentsTick(), m.InboxThreadFetch())
 }
 
 // InboxAgentsTick arms the minute tick while the view is on screen and none
@@ -487,6 +491,14 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 	replyDetail, replyHints, replying := m.inboxReplyDetail()
 	if replying {
 		hints = replyHints
+	}
+	// The thread beside the list on a wide screen, or in its place when it
+	// is open on a narrow one. See inbox_thread.go.
+	if m.GetRenderWidth() >= threadWideMin || st.threads.open {
+		if !replying {
+			hints = m.inboxThreadHints()
+		}
+		return m.renderAgentsWithThread(list, title, hints)
 	}
 	now := time.Now()
 	minute := now.Unix() / 60

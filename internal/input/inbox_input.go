@@ -227,6 +227,15 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // to step the sort, / to search, tab back to the attention list, m for the
 // mailbox, and esc or q to close.
 func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// 1, 2 and 3 answer the approval the selected agent waits on, with the
+	// attention list's rules. They are not bindings.
+	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '3' {
+		return o, o.InboxAgentsNumber(int(key[0] - '0'))
+	}
+	// i opens the reply editor too, as in an editor.
+	if msg.String() == "i" {
+		return o, o.InboxAgentsReply()
+	}
 	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
 	if action == "" {
 		return o, nil
@@ -236,9 +245,11 @@ func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case config.ActionInboxAgents:
 		return o, o.InboxToggleAgents()
 	case config.ActionInboxClose:
-		o.CloseInbox()
+		if !o.InboxAgentsBack() {
+			o.CloseInbox()
+		}
 	case config.ActionInboxGo:
-		return o, o.InboxAgentsGo()
+		return o, o.InboxAgentsEnter()
 	case config.ActionInboxReply:
 		return o, o.InboxAgentsReply()
 	case config.ActionInboxFilter:

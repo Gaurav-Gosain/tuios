@@ -2255,9 +2255,28 @@ list, and other words match the name, the session and the agent's last
 message. `enter` goes to the agent's pane, and `r` opens the reply editor for
 it.
 
+On a screen 110 columns wide or more, the selected agent's thread sits beside
+the list. On a narrower one, `enter` opens it in place of the list, `enter`
+there goes to the pane, and `esc` goes back.
+
+The thread shows what the agent said and did. For Claude Code it is the
+conversation, read from its transcript: your prompts, its answers, its tool
+calls with their status, plans and todo lists. tuios follows the transcript of
+the selected agent only, and the thread grows as the agent works. For other
+agents it is the recap of their turns, their last message, and the last mail
+between them and other agents. Everything an agent wrote is drawn behind a
+quiet mark in the gutter, and nothing in it is a link or a key.
+
+When the agent waits on an approval the Inbox holds, the approval is at the
+bottom of the thread, whole. `1` allows it once, `2` always, `3` denies, with
+the same rules as in the attention list: a key does nothing until the
+approval has been on screen for a moment, and a risky allow needs a second
+press. `r` or `i` opens the reply editor under the thread, and `esc` closes it
+and keeps the draft.
+
 Nothing polls. The list changes when an agent's state changes, and the times
 move on once a minute while the view is on screen. With the view closed,
-nothing runs.
+nothing runs. The client keeps the threads of the last 3 agents shown.
 
 A row follows the pane's latest report. A pane that stays on `needs_input` and
 reports again with a new kind or message moves between Questions and Approvals

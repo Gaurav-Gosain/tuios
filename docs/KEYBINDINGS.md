@@ -1185,7 +1185,10 @@ clears it), `m` opens the mailbox, `tab` shows the agents view, `esc` closes.
 In the agents view: `j` and `k` move, `enter` goes to the agent's pane, `r`
 replies to it, `f` steps the group shown (all, needs you, working, done,
 error), `s` steps the sort (needs you, name, recent, session), `/` searches,
-`tab` goes back to the attention list, `esc` closes. On the search line a
+`tab` goes back to the attention list, `esc` closes. With the thread showing,
+`1`, `2` and `3` answer the approval the agent waits on, and `i` opens the
+reply editor too. On a screen narrower than 110 columns, `enter` opens the
+thread, `enter` there goes to the pane, and `esc` goes back to the list. On the search line a
 `key:value` term is a selector, such as `harness:codex`, and other words
 search the name, the session and the agent's last message.
 
