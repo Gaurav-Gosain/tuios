@@ -192,7 +192,7 @@ func writeOwned(path string, data []byte) error {
 		werr = cerr
 	}
 	if werr == nil {
-		werr = os.Chmod(name, 0o644)
+		werr = os.Chmod(name, 0o644) //nolint:gosec // a skill file the harness and the person read, like the files beside it
 	}
 	if werr == nil {
 		werr = os.Rename(name, path)
