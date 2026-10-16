@@ -2039,6 +2039,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case tea.FocusMsg:
 		// The host terminal gained focus. See host_focus.go.
+		//
+		// The dock's timers read the wall clock again, so a clock that slept
+		// through a suspend shows the time now rather than after its next
+		// dockWallCheck. Focus coming back is often the first sign of a wake.
+		m.dockEngine.replan()
 		return m, m.noteHostFocus(true)
 
 	case tea.BlurMsg:

@@ -378,6 +378,18 @@ func (e *dockEngine) replan() {
 	}
 }
 
+// dockWallCheck is the longest the scheduler sleeps before it reads the wall
+// clock again.
+//
+// A Go timer counts time the machine is awake. A clock that shows minutes is
+// due at the top of the next minute by the wall clock, and its timer is armed
+// for up to 59 s. Suspend the machine during that wait and the timer still
+// has the rest of it to run after the wake, so the clock showed the time of
+// the suspend for up to 59 s. Waking every dockWallCheck to compare with the
+// wall clock bounds that to 15 s, for 4 wakeups a minute where the clock needs
+// 1. The wake reads the time and sleeps again: no message, no frame.
+const dockWallCheck = 15 * time.Second
+
 // schedule is the single-timer loop. When no component has a deadline it parks
 // on a receive and no timer exists at all, which is the invariant this whole
 // design is built to hold.
@@ -393,9 +405,14 @@ func (e *dockEngine) schedule() {
 			}
 		}
 
-		timer := time.NewTimer(time.Until(due))
+		timer := time.NewTimer(min(time.Until(due), dockWallCheck))
 		select {
 		case <-timer.C:
+			// A wake for dockWallCheck only: read the wall clock again and
+			// sleep on if the component is not due yet.
+			if time.Until(due) > 0 {
+				continue
+			}
 			e.fire(next)
 		case <-e.wake:
 			timer.Stop()

@@ -3618,3 +3618,16 @@ Same harness, `show_clock = true` and no format, 130 s runs, counts over 120 s.
 |---|---|---|---|---|---|
 | `15:04:05` (1 run) | before | 0.16% | 18.3 | 120 | 1 clock, 0.33 listing |
 | `15:04` (3 runs) | after | 0.02% | 6.7 to 7.5 | 2 | 0.02 clock, 0.33 listing |
+
+### After a suspend
+
+A Go timer counts time the machine is awake. The minute clock's timer is armed
+for up to 59 s, and a suspend in that wait left the clock showing the time of
+the suspend for the rest of it after the wake. The dock engine now sleeps at
+most `dockWallCheck` (15 s) before it reads the wall clock again, and a focus
+report from the terminal makes it read it at once. The extra wakes read the
+time and sleep again: no message and no frame.
+
+Same harness, default clock, 130 s runs, 2 runs each: 6.6 to 7.6 context
+switches a second with the check against 6.1 to 6.7 without, 0.02 to 0.03% CPU
+either way, and still 2 clock frames in 120 s.
