@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"slices"
 	"strconv"
 	"strings"
@@ -70,10 +72,15 @@ type inboxArmed struct {
 type inboxReasonLine struct {
 	itemID    string
 	requestID string
-	draft     string
-	// automated is set when a key that did not come from the keyboard
-	// touched the draft. Such a draft is never sent.
-	automated bool
+	// ed is the line, a one-line composer. It records a key that did not
+	// come from the keyboard, and such a draft is never sent.
+	ed *composer.Model
+}
+
+// newLineEditor is a one-line composer of at most maxBytes, for an answer
+// typed into a prompt: a deny reason, a peek answer, a selector.
+func newLineEditor(maxBytes int, placeholder string) *composer.Model {
+	return composer.New(composer.Options{SingleLine: true, MaxRows: 3, MaxBytes: maxBytes, Placeholder: placeholder})
 }
 
 // inboxPlanView is the plan get-approval served for the selected plan item.
@@ -205,7 +212,11 @@ func (m *OS) InboxDenyReason() (tea.Cmd, bool) {
 		return nil, true
 	}
 	m.Inbox.approvals.armed = inboxArmed{}
-	m.Inbox.approvals.reason = &inboxReasonLine{itemID: it.ID, requestID: it.RequestID, automated: m.ProcessingRemoteKeys}
+	ed := newLineEditor(inboxReasonMax, "Type the reason, or press enter to deny without one.")
+	if m.ProcessingRemoteKeys {
+		ed.MarkAutomated()
+	}
+	m.Inbox.approvals.reason = &inboxReasonLine{itemID: it.ID, requestID: it.RequestID, ed: ed}
 	return nil, true
 }
 
@@ -226,38 +237,40 @@ func (m *OS) InboxReasonOpen() bool {
 	return true
 }
 
-// InboxReasonType appends typed text to the reason.
+// InboxReasonType types text into the reason at the cursor.
 func (m *OS) InboxReasonType(text string) {
+	if r := m.Inbox.approvals.reason; r != nil && text != "" {
+		r.ed.Insert(text, m.ProcessingRemoteKeys)
+	}
+}
+
+// InboxReasonPaste puts a paste into the reason, on one line.
+func (m *OS) InboxReasonPaste(text string) {
+	if r := m.Inbox.approvals.reason; r != nil && text != "" {
+		r.ed.Paste(text, m.ProcessingRemoteKeys)
+	}
+}
+
+// InboxReasonKey gives a key to the reason line: enter denies with it, esc
+// closes it, and every other key edits it.
+func (m *OS) InboxReasonKey(msg tea.KeyPressMsg) tea.Cmd {
 	r := m.Inbox.approvals.reason
-	if r == nil || text == "" {
-		return
+	if r == nil {
+		return nil
 	}
-	if m.ProcessingRemoteKeys {
-		r.automated = true
+	switch r.ed.Update(msg, m.ProcessingRemoteKeys) {
+	case composer.EventSend:
+		return m.InboxReasonSend()
+	case composer.EventClose:
+		m.InboxReasonCancel()
+	case composer.EventPaste:
+		return m.RequestHostPaste()
 	}
-	for _, ch := range text {
-		if len(r.draft) >= inboxReasonMax || !printableRune(ch, false) {
-			continue
-		}
-		r.draft += string(ch)
-	}
+	return nil
 }
 
 // inboxReasonMax bounds the reason, the bound the daemon applies too.
 const inboxReasonMax = 500
-
-// InboxReasonBackspace removes the last rune of the reason.
-func (m *OS) InboxReasonBackspace() {
-	r := m.Inbox.approvals.reason
-	if r == nil || r.draft == "" {
-		return
-	}
-	if m.ProcessingRemoteKeys {
-		r.automated = true
-	}
-	rs := []rune(r.draft)
-	r.draft = string(rs[:len(rs)-1])
-}
 
 // InboxReasonCancel closes the reason line and drops what was typed.
 func (m *OS) InboxReasonCancel() {
@@ -271,7 +284,7 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 	if r == nil || !m.InboxReasonOpen() {
 		return nil
 	}
-	if r.automated || m.ProcessingRemoteKeys {
+	if r.ed.Automated() || m.ProcessingRemoteKeys {
 		m.Inbox.approvals.reason = nil
 		m.ShowNotification("A reason that send-keys typed is not sent: only keys from your keyboard answer an approval", "error", m.Settings.NotificationDuration)
 		return nil
@@ -281,8 +294,13 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 		m.ShowNotification("This prompt just changed. Read it, then answer", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	text, ok := r.ed.Submit()
+	if !ok {
+		// Invisible characters were removed; the line says so.
+		return nil
+	}
 	m.Inbox.approvals.reason = nil
-	return m.inboxReplyCmdWith(it, session.ApprovalDeny, strings.TrimSpace(r.draft))
+	return m.inboxReplyCmdWith(it, session.ApprovalDeny, strings.TrimSpace(text))
 }
 
 // InboxDetailScroll scrolls the detail under the list, such as a long plan,
@@ -539,8 +557,18 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 			verb = "keep planning"
 		}
 		detail = func(width int) []string {
-			lines := wrapPlain("  "+printableTitle(it.Summary), max(width-2, 8))
-			return append(lines, "  Reason: "+printableRunes(r.draft)+"_")
+			pal := theme.UI()
+			bg := pal.Surface
+			st := overlay.Style(bg)
+			var lines []string
+			for _, l := range wrapPlain(printableTitle(it.Summary), max(width-4, 8)) {
+				lines = append(lines, overlay.Fill(st.Foreground(pal.Fg).Render("  "+l), width, bg))
+			}
+			lines = append(lines, overlay.Fill(st.Foreground(overlay.Readable(pal.FgDim, bg)).Render("  Reason:"), width, bg))
+			for _, l := range r.ed.Render(max(width-2, 8), pal, bg) {
+				lines = append(lines, st.Render("  ")+l)
+			}
+			return lines
 		}
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: verb}, {Key: "esc", Label: "cancel"}}
 		return detail, hints, true

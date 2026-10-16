@@ -770,7 +770,7 @@ func (m *OS) inboxAgentsHints() []overlay.Hint {
 // and its words as the search.
 func (m *OS) inboxAgentsSelectApply() {
 	st := &m.Inbox
-	sel, query := m.inboxAgentsSearch(st.selectDraft)
+	sel, query := m.inboxAgentsSearch(st.selectDraft())
 	if sel == "" {
 		st.Select, st.selector = "", nil
 	} else {
@@ -783,6 +783,7 @@ func (m *OS) inboxAgentsSelectApply() {
 		st.Select, st.selector = parsed.String(), parsed
 	}
 	st.agents.query = query
+	st.selectEd = nil
 	st.selectEditing = false
 	st.selectErr = ""
 	st.agents.sel, st.agents.scroll = 0, 0

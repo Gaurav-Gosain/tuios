@@ -125,22 +125,10 @@ func overlayKeys(o *app.OS) *config.KeybindRegistry {
 }
 
 // handleInboxReasonInput handles keyboard input while the reason line for a
-// deny is open: every printable key is text, enter denies with it, backspace
-// deletes, and esc closes the line and denies nothing.
+// deny is open. The line is a one-line composer: enter denies with it, esc
+// closes it and denies nothing, and every other key edits it.
 func handleInboxReasonInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch key := msg.String(); key {
-	case "esc":
-		o.InboxReasonCancel()
-	case "enter":
-		return o, o.InboxReasonSend()
-	case "backspace":
-		o.InboxReasonBackspace()
-	case "space":
-		o.InboxReasonType(" ")
-	default:
-		o.InboxReasonType(msg.Text)
-	}
-	return o, nil
+	return o, o.InboxReasonKey(msg)
 }
 
 // handleInboxReplyInput handles keyboard input while the reply editor is
@@ -159,22 +147,11 @@ func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // handleInboxSelectInput handles keyboard input while the selector line is
-// open: every printable key is text, enter applies the selector (an empty line
-// clears it), backspace deletes, and esc closes the line and keeps the
-// selector in force.
+// open. The line is a one-line composer: enter applies the selector (an empty
+// line clears it), esc closes the line and keeps the selector in force, and
+// every other key edits it.
 func handleInboxSelectInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	switch key := msg.String(); key {
-	case "esc":
-		o.InboxSelectCancel()
-	case "enter":
-		o.InboxSelectApply()
-	case "backspace":
-		o.InboxSelectBackspace()
-	case "space":
-		o.InboxSelectType(" ")
-	default:
-		o.InboxSelectType(msg.Text)
-	}
+	o.InboxSelectKey(msg)
 	return o, nil
 }
 
@@ -186,21 +163,7 @@ func handleInboxSelectInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.InboxPeekComposing() {
-		switch key {
-		case "esc":
-			o.InboxPeekCancelText()
-		case "enter":
-			return o, o.InboxPeekSendText()
-		case "backspace":
-			o.InboxPeekBackspace()
-		default:
-			text := msg.Text
-			if key == "space" {
-				text = " "
-			}
-			o.InboxPeekType(text)
-		}
-		return o, nil
+		return o, o.InboxPeekTextKey(msg)
 	}
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		return o, o.InboxAnswer(harness.ActionChoose, key)

@@ -23,6 +23,9 @@ type listOverlay struct {
 	MaxVisible int
 	Search     bool
 	Query      string
+	// SearchLine, when set, draws the search line in place of the sigil,
+	// the query and a cursor at its end, for a line edited with a cursor.
+	SearchLine func(width int) string
 	Count      int
 	Selected   int
 	// Scroll points at the caller's scroll offset; the renderer clamps it to the
@@ -105,6 +108,9 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil()) +
 			overlay.Style(bg).Foreground(pal.Fg).Render(cfg.Query) +
 			overlay.Cursor(" ", bg, pal.Fg)
+		if cfg.SearchLine != nil {
+			search = cfg.SearchLine(cfg.Width)
+		}
 		lines = append(lines, search, overlay.Rule(cfg.Width, bg, pal))
 		rowYOffset = 2
 	}

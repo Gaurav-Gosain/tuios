@@ -1,6 +1,10 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"os"
 	"strings"
 
@@ -24,35 +28,65 @@ func (m *OS) InboxSelecting() bool {
 func (m *OS) InboxStartSelect() {
 	st := &m.Inbox
 	st.selectEditing = true
-	st.selectDraft = st.Select
+	text := st.Select
 	if st.agents.on && st.agents.query != "" {
-		st.selectDraft = strings.TrimSpace(st.Select + " " + st.agents.query)
+		text = strings.TrimSpace(st.Select + " " + st.agents.query)
 	}
+	st.selectEd = composer.New(composer.Options{SingleLine: true, MaxRows: 1, MaxBytes: 1024})
+	st.selectEd.SetText(text)
 	st.selectErr = ""
 }
 
-// InboxSelectType adds typed text to the selector line.
+// selectDraft is what the selector line holds.
+func (st *InboxState) selectDraft() string {
+	if st.selectEd == nil {
+		return ""
+	}
+	return st.selectEd.Text()
+}
+
+// InboxSelectType types text into the selector line at the cursor.
 func (m *OS) InboxSelectType(text string) {
-	if text == "" || strings.ContainsAny(text, "\r\n\x1b") {
+	if ed := m.Inbox.selectEd; ed != nil && text != "" {
+		ed.Paste(text, false)
+		m.Inbox.selectErr = ""
+	}
+}
+
+// InboxSelectKey gives a key to the selector line: enter applies it, esc
+// closes it, and every other key edits it.
+func (m *OS) InboxSelectKey(msg tea.KeyPressMsg) {
+	ed := m.Inbox.selectEd
+	if ed == nil {
 		return
 	}
-	m.Inbox.selectDraft += text
-	m.Inbox.selectErr = ""
-}
-
-// InboxSelectBackspace removes the last character of the selector line.
-func (m *OS) InboxSelectBackspace() {
-	st := &m.Inbox
-	if r := []rune(st.selectDraft); len(r) > 0 {
-		st.selectDraft = string(r[:len(r)-1])
+	switch ed.Update(msg, false) {
+	case composer.EventSend:
+		m.InboxSelectApply()
+	case composer.EventClose:
+		m.InboxSelectCancel()
+	default:
+		m.Inbox.selectErr = ""
 	}
-	st.selectErr = ""
 }
 
 // InboxSelectCancel closes the selector line and keeps the selector in force.
 func (m *OS) InboxSelectCancel() {
 	m.Inbox.selectEditing = false
+	m.Inbox.selectEd = nil
 	m.Inbox.selectErr = ""
+}
+
+// selectLine draws the selector line at width cells.
+func (m *OS) selectLine(width int) string {
+	pal := theme.UI()
+	bg := pal.Surface
+	label := overlay.Style(bg).Foreground(overlay.Readable(pal.FgDim, bg)).Render("select ")
+	lines := m.Inbox.selectEd.Render(max(width-7, 8), pal, bg)
+	if len(lines) == 0 {
+		return label
+	}
+	return label + lines[0]
 }
 
 // InboxSelectApply puts the typed selector in force, or clears it when the
@@ -64,7 +98,7 @@ func (m *OS) InboxSelectApply() {
 		return
 	}
 	st := &m.Inbox
-	text := strings.TrimSpace(st.selectDraft)
+	text := strings.TrimSpace(st.selectDraft())
 	if text == "" {
 		st.Select, st.selector = "", nil
 	} else {
@@ -77,6 +111,7 @@ func (m *OS) InboxSelectApply() {
 		st.Select, st.selector = sel.String(), sel
 	}
 	st.selectEditing = false
+	st.selectEd = nil
 	st.selectErr = ""
 	// The rows changed under the cursor, so nothing counts as on screen until
 	// the next draw, the rule OpenInbox follows for the answer keys.

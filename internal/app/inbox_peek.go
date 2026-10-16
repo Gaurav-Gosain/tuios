@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"strconv"
 	"strings"
 	"time"
@@ -60,12 +61,11 @@ type inboxPeek struct {
 	// Note is what the peek says above the prompt: that the prompt changed
 	// before an answer landed, for one.
 	Note string
-	// Composing is true while the text line is open, and Draft is its text.
+	// Composing is true while the text line is open, and Answer is the
+	// line, a one-line composer. It records a key that did not come from
+	// the keyboard, and such a draft is never sent.
 	Composing bool
-	Draft     string
-	// DraftAutomated is true when a key that did not come from the keyboard
-	// touched the draft. Such a draft is never sent.
-	DraftAutomated bool
+	Answer    *composer.Model
 	// gen tells a reply to this peek from one to a peek since closed.
 	gen uint64
 }
@@ -243,7 +243,7 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 	if p == nil || p.Sending || p.Loading {
 		return nil
 	}
-	if m.ProcessingRemoteKeys || (action == harness.ActionText && p.DraftAutomated) {
+	if m.ProcessingRemoteKeys || (action == harness.ActionText && p.draftAutomated()) {
 		p.Err = "An answer that send-keys typed is not sent: only a key from your keyboard answers a prompt."
 		return nil
 	}
@@ -348,7 +348,7 @@ func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 		var callErr *session.VerbCallError
 		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbPromptChanged {
 			p.Note = "The prompt changed before your answer, or another client answered it, so nothing was pressed. This is the prompt now."
-			p.Composing, p.Draft = false, ""
+			p.Composing, p.Answer = false, nil
 			return m.inboxPeekRead()
 		}
 		p.Err = "The answer did not go through: " + msg.Err.Error()
@@ -391,49 +391,72 @@ func (m *OS) InboxPeekStartText() {
 		}
 		return
 	}
-	p.Composing, p.Draft, p.Err = true, "", ""
-	p.DraftAutomated = m.ProcessingRemoteKeys
+	p.Composing, p.Err = true, ""
+	p.Answer = newLineEditor(inboxPeekAnswerMax, "Type the answer.")
+	if m.ProcessingRemoteKeys {
+		p.Answer.MarkAutomated()
+	}
+}
+
+// inboxPeekAnswerMax bounds a typed answer.
+const inboxPeekAnswerMax = 4 << 10
+
+// draftAutomated reports whether a key that did not come from the keyboard
+// touched the answer.
+func (p *inboxPeek) draftAutomated() bool {
+	return p.Answer != nil && p.Answer.Automated()
 }
 
 // InboxPeekCancelText closes the text line and drops the draft.
 func (m *OS) InboxPeekCancelText() {
 	if p := m.Inbox.Peek; p != nil {
-		p.Composing, p.Draft, p.DraftAutomated = false, "", false
+		p.Composing, p.Answer = false, nil
 	}
 }
 
-// InboxPeekType appends typed text to the draft.
+// InboxPeekType types text into the answer at the cursor.
 func (m *OS) InboxPeekType(text string) {
-	p := m.Inbox.Peek
-	if p == nil || !p.Composing || text == "" {
-		return
+	if p := m.Inbox.Peek; p != nil && p.Composing && text != "" {
+		p.Answer.Insert(text, m.ProcessingRemoteKeys)
 	}
-	if m.ProcessingRemoteKeys {
-		p.DraftAutomated = true
-	}
-	p.Draft += text
 }
 
-// InboxPeekBackspace removes the last rune of the draft.
-func (m *OS) InboxPeekBackspace() {
+// InboxPeekPaste puts a paste into the answer, on one line.
+func (m *OS) InboxPeekPaste(text string) {
+	if p := m.Inbox.Peek; p != nil && p.Composing && text != "" {
+		p.Answer.Paste(text, m.ProcessingRemoteKeys)
+	}
+}
+
+// InboxPeekTextKey gives a key to the answer line: enter sends it, esc closes
+// it, and every other key edits it.
+func (m *OS) InboxPeekTextKey(msg tea.KeyPressMsg) tea.Cmd {
 	p := m.Inbox.Peek
-	if p == nil || !p.Composing || p.Draft == "" {
-		return
+	if p == nil || !p.Composing {
+		return nil
 	}
-	if m.ProcessingRemoteKeys {
-		p.DraftAutomated = true
+	switch p.Answer.Update(msg, m.ProcessingRemoteKeys) {
+	case composer.EventSend:
+		return m.InboxPeekSendText()
+	case composer.EventClose:
+		m.InboxPeekCancelText()
+	case composer.EventPaste:
+		return m.RequestHostPaste()
 	}
-	r := []rune(p.Draft)
-	p.Draft = string(r[:len(r)-1])
+	return nil
 }
 
 // InboxPeekSendText sends the draft as the answer.
 func (m *OS) InboxPeekSendText() tea.Cmd {
 	p := m.Inbox.Peek
-	if p == nil || !p.Composing || strings.TrimSpace(p.Draft) == "" {
+	if p == nil || !p.Composing || p.Answer.Empty() {
 		return nil
 	}
-	cmd := m.InboxAnswer(harness.ActionText, p.Draft)
+	text, ok := p.Answer.Submit()
+	if !ok {
+		return nil
+	}
+	cmd := m.InboxAnswer(harness.ActionText, text)
 	if cmd != nil {
 		p.Composing = false
 	}

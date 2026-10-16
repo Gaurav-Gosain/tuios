@@ -289,6 +289,9 @@ func (m *Model) Hints() []overlay.Hint {
 			{Key: "esc", Label: "close"},
 		}
 	}
+	if m.opt.SingleLine {
+		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
+	}
 	hints := []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "send"},
 		{Key: "ctrl+j", Label: "new line"},

@@ -152,7 +152,7 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		DetailFor:  detailFor,
 		// The reply editor draws its own colours, and its pictures go
 		// where its lines were drawn.
-		DetailStyled: replying,
+		DetailStyled: replying || m.Inbox.approvals.reason != nil,
 		DetailAt:     m.inboxReplyDetailAt(replying),
 		// Typing a reply takes the keyboard, so the row it answers goes quiet.
 		Unfocused: replying,
@@ -320,7 +320,8 @@ func (m *OS) renderInboxSelecting(title string) (string, overlay.Geometry, []ove
 		Width:      inboxWidth,
 		MaxVisible: 14,
 		Search:     true,
-		Query:      "select " + st.selectDraft,
+		Query:      "select " + st.selectDraft(),
+		SearchLine: m.selectLine,
 		Count:      len(rows),
 		Selected:   st.Selected,
 		Scroll:     &st.Scroll,
@@ -541,7 +542,10 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 
 	if p.Composing {
 		body = append(body, "")
-		add(pal.Fg, "Answer: "+printableRunes(p.Draft)+"_")
+		add(pal.FgDim, "Answer:")
+		for _, l := range p.Answer.Render(max(textW-2, 8), pal, bg) {
+			body = append(body, overlay.Style(bg).Render("  ")+l)
+		}
 		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	}
 	switch {

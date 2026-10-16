@@ -241,6 +241,19 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 	if o.InboxReplyOpen() {
 		return true
 	}
+	// The Inbox's one-line editors take a paste on one line. Before they
+	// were composers, a paste here reached the pane under the Inbox.
+	switch {
+	case o.ShowInbox && o.InboxReasonOpen():
+		o.InboxReasonPaste(content)
+		return true
+	case o.ShowInbox && o.InboxPeekComposing():
+		o.InboxPeekPaste(content)
+		return true
+	case o.ShowInbox && o.InboxSelecting():
+		o.InboxSelectType(content)
+		return true
+	}
 	// Hints mode takes labels one key at a time. A paste, or an input
 	// method's commit that arrives as one, is not a label, and nothing
 	// typed while the labels are up may reach the pane.

@@ -48,6 +48,10 @@ type Options struct {
 	Placeholder string
 	// Images says the draft takes images (AddImage).
 	Images bool
+	// SingleLine makes a one-line answer, such as a deny reason: the new
+	// line keys do nothing, a paste's line breaks become spaces, and a long
+	// paste is text, never a block. The line still wraps on screen.
+	SingleLine bool
 }
 
 // Event is what a key asks the host to do.
@@ -277,6 +281,9 @@ func (m *Model) Insert(text string, remote bool) {
 		m.automated = true
 	}
 	text = clean(text)
+	if m.opt.SingleLine {
+		text = oneLine(text)
+	}
 	if text == "" {
 		return
 	}
@@ -298,6 +305,11 @@ func (m *Model) Paste(text string, remote bool) {
 		m.automated = true
 	}
 	text = clean(text)
+	if m.opt.SingleLine {
+		text = oneLine(text)
+		m.Insert(text, false)
+		return
+	}
 	if text == "" {
 		return
 	}
@@ -452,14 +464,16 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	case "enter":
 		// A backslash right before the cursor asks for a new line, for a
 		// terminal that reports no modifier with enter.
-		if m.cur > 0 && m.cells[m.cur-1].s == `\` && m.cells[m.cur-1].block == nil {
+		if !m.opt.SingleLine && m.cur > 0 && m.cells[m.cur-1].s == `\` && m.cells[m.cur-1].block == nil {
 			m.edited()
 			m.change(m.cur-1, 1, []cell{{s: "\n", space: true}}, m.cur)
 			return EventNone
 		}
 		return EventSend
 	case "ctrl+j", "shift+enter", "alt+enter", "ctrl+enter":
-		m.typeKey("\n")
+		if !m.opt.SingleLine {
+			m.typeKey("\n")
+		}
 	case "esc":
 		return EventClose
 	case "ctrl+v":
@@ -716,4 +730,21 @@ func (m *Model) Clone() *Model {
 	c.ver = 1
 	c.preview = m.preview
 	return c
+}
+
+// oneLine makes text one line: each run of line breaks and tabs a space.
+func oneLine(text string) string {
+	if !strings.ContainsAny(text, "\n\t") {
+		return text
+	}
+	return strings.Join(strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\t' }), " ")
+}
+
+// SetText puts text in an empty draft, as typed, with the cursor at its end,
+// for a line that opens on what it held before.
+func (m *Model) SetText(text string) {
+	m.Clear()
+	m.undo, m.redo, m.undoSize = nil, nil, 0
+	m.Insert(text, false)
+	m.undo, m.redo, m.undoSize = nil, nil, 0
 }

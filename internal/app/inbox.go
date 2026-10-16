@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"maps"
 	"slices"
 	"strconv"
@@ -70,7 +71,7 @@ type InboxState struct {
 	// selectEditing, selectDraft and selectErr are the selector line: open,
 	// what is typed on it, and why it did not parse.
 	selectEditing bool
-	selectDraft   string
+	selectEd      *composer.Model
 	selectErr     string
 	// Selected is the overlay's cursor, an index into its rows. It is always
 	// on an item row, never on a group heading, unless there are no items.
