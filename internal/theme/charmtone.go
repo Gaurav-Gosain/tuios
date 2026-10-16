@@ -11,8 +11,8 @@ import (
 // The colours are CharmTone's, copied from charm.land/tone v0.1.0 (commit
 // b528027a84fe), Copyright 2026 Charmbracelet, Inc., Apache License 2.0. They
 // are baked in as hex rather than imported so the theme adds no dependency;
-// github.com/charmbracelet/x/exp/charmtone, which the chrome already uses,
-// holds the same values at the version go.mod pins.
+// charm.land/tone, which the chrome already uses, holds the same values at the
+// version go.mod pins.
 //
 // The dark theme is the ANSI mapping Crush ships for its default theme,
 // charmtone-panther (charmtoneOpts in internal/ui/styles/themes.go of

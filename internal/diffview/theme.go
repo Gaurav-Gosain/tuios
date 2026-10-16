@@ -3,9 +3,9 @@ package diffview
 import (
 	"image/color"
 
+	"charm.land/tone"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
 )
 
 // Palette is what a Theme is built from: the ground the diff is drawn on,
@@ -118,7 +118,7 @@ func NewTheme(p Palette) *Theme {
 		return newTheme16(p)
 	}
 	if p.Ground == nil || overlay.IsNoColor(p.Ground) {
-		p.Ground = charmtone.Char
+		p.Ground = tone.Char
 	}
 	p.Ground = solid(p.Ground)
 	if p.Fg == nil || overlay.IsNoColor(p.Fg) {
@@ -126,13 +126,13 @@ func NewTheme(p Palette) *Theme {
 	}
 	p.Fg = overlay.Readable(solid(p.Fg), p.Ground)
 	if p.Accent == nil {
-		p.Accent = charmtone.Charple
+		p.Accent = tone.Charple
 	}
 	if p.Add == nil {
-		p.Add = charmtone.Julep
+		p.Add = tone.Julep
 	}
 	if p.Delete == nil {
-		p.Delete = charmtone.Cherry
+		p.Delete = tone.Cherry
 	}
 	p.Accent, p.Add, p.Delete = solid(p.Accent), solid(p.Add), solid(p.Delete)
 
@@ -351,19 +351,19 @@ func SyntaxFromANSI(pal [16]color.Color) [NumClasses]color.Color {
 // the charmtone palette the rest of tuios's chrome is drawn in.
 func DefaultSyntax() [NumClasses]color.Color {
 	var s [NumClasses]color.Color
-	s[Keyword] = charmtone.Mauve
-	s[Type] = charmtone.Guppy
-	s[Func] = charmtone.Malibu
-	s[Builtin] = charmtone.Turtle
-	s[String] = charmtone.Cumin
-	s[Number] = charmtone.Tang
-	s[Comment] = charmtone.Squid
-	s[Operator] = charmtone.Salmon
-	s[Preproc] = charmtone.Bengal
-	s[Tag] = charmtone.Mauve
-	s[Attr] = charmtone.Hazy
-	s[Heading] = charmtone.Malibu
-	s[Meta] = charmtone.Squid
+	s[Keyword] = tone.Mauve
+	s[Type] = tone.Guppy
+	s[Func] = tone.Malibu
+	s[Builtin] = tone.Turtle
+	s[String] = tone.Cumin
+	s[Number] = tone.Tang
+	s[Comment] = tone.Squid
+	s[Operator] = tone.Salmon
+	s[Preproc] = tone.Bengal
+	s[Tag] = tone.Mauve
+	s[Attr] = tone.Hazy
+	s[Heading] = tone.Malibu
+	s[Meta] = tone.Squid
 	return s
 }
 

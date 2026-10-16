@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/exp/charmtone"
+	"charm.land/tone"
 	"github.com/charmbracelet/x/term"
 )
 
@@ -35,21 +35,21 @@ type ColorScheme struct {
 // DefaultColorScheme is the default colorscheme.
 func DefaultColorScheme(c lipgloss.LightDarkFunc) ColorScheme {
 	return ColorScheme{
-		Base:           c(charmtone.Charcoal, charmtone.Ash),
-		Title:          charmtone.Charple,
-		Codeblock:      c(charmtone.Salt, lipgloss.Color("#2F2E36")),
-		Program:        c(charmtone.Malibu, charmtone.Guppy),
-		Command:        c(charmtone.Pony, charmtone.Cheeky),
-		DimmedArgument: c(charmtone.Squid, charmtone.Oyster),
-		Comment:        c(charmtone.Squid, lipgloss.Color("#747282")),
-		Flag:           c(lipgloss.Color("#0CB37F"), charmtone.Guac),
-		Argument:       c(charmtone.Charcoal, charmtone.Ash),
-		Description:    c(charmtone.Charcoal, charmtone.Ash), // flag and command descriptions
-		FlagDefault:    c(charmtone.Smoke, charmtone.Squid),  // flag default values in descriptions
-		QuotedString:   c(charmtone.Coral, charmtone.Salmon),
+		Base:           c(tone.Charcoal, tone.Ash),
+		Title:          tone.Charple,
+		Codeblock:      c(tone.Salt, lipgloss.Color("#2F2E36")),
+		Program:        c(tone.Malibu, tone.Guppy),
+		Command:        c(tone.Pony, tone.Cheeky),
+		DimmedArgument: c(tone.Squid, tone.Oyster),
+		Comment:        c(tone.Squid, lipgloss.Color("#747282")),
+		Flag:           c(lipgloss.Color("#0CB37F"), tone.Guac),
+		Argument:       c(tone.Charcoal, tone.Ash),
+		Description:    c(tone.Charcoal, tone.Ash), // flag and command descriptions
+		FlagDefault:    c(tone.Smoke, tone.Squid),  // flag default values in descriptions
+		QuotedString:   c(tone.Coral, tone.Salmon),
 		ErrorHeader: [2]color.Color{
-			charmtone.Butter,
-			charmtone.Cherry,
+			tone.Butter,
+			tone.Cherry,
 		},
 	}
 }

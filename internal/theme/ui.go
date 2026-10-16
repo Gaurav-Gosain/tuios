@@ -4,8 +4,8 @@ import (
 	"image/color"
 	"sync"
 
+	"charm.land/tone"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/charmbracelet/x/exp/charmtone"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -41,7 +41,7 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 // spelled inside UI() because RailGround reads it once per drawn row, and
 // building the whole palette to reach one constant field means measuring a pill
 // foreground's contrast every time.
-var uiCanvas = charmtone.Pepper
+var uiCanvas = tone.Pepper
 
 // railRuleMemo holds the grounds a structure ink has been measured for and the
 // answers. The measurement bisects over contrast ratios, and the grounds a
@@ -104,12 +104,12 @@ var chromeRamp = struct {
 	canvas, panel, card float64 // steps below, below and above Surface
 	fg, fgDim, fgMute   float64 // ink tiers on Surface
 }{
-	canvas: overlay.ContrastRatio(charmtone.Char, charmtone.Pepper),
-	panel:  overlay.ContrastRatio(charmtone.Char, charmtone.BBQ),
-	card:   overlay.ContrastRatio(charmtone.Iron, charmtone.Char),
-	fg:     overlay.ContrastRatio(charmtone.Butter, charmtone.Char),
-	fgDim:  overlay.ContrastRatio(charmtone.Smoke, charmtone.Char),
-	fgMute: overlay.ContrastRatio(charmtone.Squid, charmtone.Char),
+	canvas: overlay.ContrastRatio(tone.Char, tone.Pepper),
+	panel:  overlay.ContrastRatio(tone.Char, tone.BBQ),
+	card:   overlay.ContrastRatio(tone.Iron, tone.Char),
+	fg:     overlay.ContrastRatio(tone.Butter, tone.Char),
+	fgDim:  overlay.ContrastRatio(tone.Smoke, tone.Char),
+	fgMute: overlay.ContrastRatio(tone.Squid, tone.Char),
 }
 
 // UI returns the active chrome palette. Neutrals and semantic status colors come
@@ -178,28 +178,28 @@ var uiMemo struct {
 func buildUI(d overlay.Depth) overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
-		Panel:    charmtone.BBQ,
-		Surface:  charmtone.Char,
-		RowSel:   charmtone.BBQ,
-		Card:     charmtone.Iron,
-		Selected: charmtone.Charple,
+		Panel:    tone.BBQ,
+		Surface:  tone.Char,
+		RowSel:   tone.BBQ,
+		Card:     tone.Iron,
+		Selected: tone.Charple,
 
-		Fg:    charmtone.Butter,
-		FgDim: charmtone.Smoke,
+		Fg:    tone.Butter,
+		FgDim: tone.Smoke,
 		// One step up the ramp from Oyster, which measures 2.60:1 on the
 		// canvas, 1.81:1 on the surface a settings hint is written on, 1.35:1
 		// on a card. Quiet is a tier of the hierarchy, not permission to be
 		// unreadable.
-		FgMute: charmtone.Squid,
+		FgMute: tone.Squid,
 
-		Accent:       charmtone.Charple,
-		AccentBright: charmtone.Hazy,
-		PillFg:       charmtone.Pepper,
+		Accent:       tone.Charple,
+		AccentBright: tone.Hazy,
+		PillFg:       tone.Pepper,
 
-		Warn:    charmtone.Cherry,
-		Success: charmtone.Julep,
-		Info:    charmtone.Malibu,
-		Warning: charmtone.Tang,
+		Warn:    tone.Cherry,
+		Success: tone.Julep,
+		Info:    tone.Malibu,
+		Warning: tone.Tang,
 	}
 	customRamp := false
 

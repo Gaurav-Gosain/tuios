@@ -1,5 +1,7 @@
 charm.land/lipgloss/v2 v2.0.6 h1:EaGKeuA8FvF+v2BT5VmZd2LoYLaMZJXA5n34th8nCIQ=
 charm.land/lipgloss/v2 v2.0.6/go.mod h1:ipDDJNSGa1hlwDtSfW1s2/xR8Vdhbut4PXh2zEKZd0Q=
+charm.land/tone v0.1.0 h1:Zkt+57z72FFgEq03KcD44vkoP0nx/p9ZTKFNGcN94eQ=
+charm.land/tone v0.1.0/go.mod h1:NkPXXPADDO9RdGtE2eBtkeGYrjP8sH25PP8JeKUvyiI=
 github.com/Gaurav-Gosain/tuitest v0.1.0 h1:DgAZUrdZ/yyvsMM77NxW5QS/ahg3mi76X+9TuH3tNPI=
 github.com/Gaurav-Gosain/tuitest v0.1.0/go.mod h1:WIByDhvqwFrfqT3bAsy3AYNAC3KYri3nyiRfuicc8qs=
 github.com/adrg/xdg v0.5.3 h1:xRnxJXne7+oWDatRhR1JLnvuccuIeCoBu2rtuLqQB78=

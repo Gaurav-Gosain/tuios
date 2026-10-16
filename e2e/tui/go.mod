@@ -11,6 +11,7 @@ require (
 
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
+	charm.land/tone v0.1.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260816001655-68d539dca504 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

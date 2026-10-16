@@ -8,6 +8,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/ssh v0.4.3
+	charm.land/tone v0.1.0
 	charm.land/wish/v2 v2.0.3
 	github.com/Gaurav-Gosain/sip v0.9.3
 	github.com/Gaurav-Gosain/tuiffects v0.7.1
@@ -51,7 +52,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/conpty v0.2.0 // indirect
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260816001655-68d539dca504
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect

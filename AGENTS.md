@@ -298,7 +298,7 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 - Take every chrome colour from `theme.UI()` (dialogs) or `theme.GroundUI()`
   (the rail and the dock), both an `overlay.Palette`, or from a named token in
   `internal/theme`. Never write a literal: `internal/lint` rejects
-  `lipgloss.Color("#...")`, constant `color.RGBA{...}`, `charmtone.*` and
+  `lipgloss.Color("#...")`, constant `color.RGBA{...}`, CharmTone colours (`tone.*`) and
   constant `ansi.BasicColor`/`IndexedColor` in `internal/app` and
   `internal/overlay`. A deliberate exception carries `//tuios:allow-color <reason>`.
 - The palette is built per colour depth (`overlay.Depth`: truecolor, 256, 16).

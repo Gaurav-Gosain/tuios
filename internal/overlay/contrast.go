@@ -4,8 +4,8 @@ import (
 	"image/color"
 	"math"
 
+	"charm.land/tone"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
 )
 
 // ContrastFloor is the ratio a chrome label has to clear against the ground it
@@ -198,10 +198,10 @@ func readableOwned(c, bg color.Color) color.Color {
 // writes as slot 15, and a light theme paints slot 15 close to its own ground.
 func ContrastText(bg color.Color) color.Color {
 	bg = slotAsXTerm(bg)
-	if ContrastRatio(charmtone.Butter, bg) >= ContrastRatio(charmtone.Pepper, bg) {
-		return charmtone.Butter
+	if ContrastRatio(tone.Butter, bg) >= ContrastRatio(tone.Pepper, bg) {
+		return tone.Butter
 	}
-	return charmtone.Pepper
+	return tone.Pepper
 }
 
 // xtermSlots are xterm's default colours for the sixteen slots.

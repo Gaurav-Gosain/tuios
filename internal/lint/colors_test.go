@@ -29,7 +29,8 @@ const allowColor = "//tuios:allow-color"
 //
 //   - lipgloss.Color with a constant argument: lipgloss.Color("#7dcfff").
 //   - A color.RGBA or color.NRGBA literal whose fields are all constants.
-//   - color.Black, color.White and any charmtone colour.
+//   - color.Black, color.White and any CharmTone colour, found by its import
+//     path so a renamed import cannot hide it.
 //   - ansi.BasicColor or ansi.IndexedColor of a constant.
 //
 // A colour computed from something (a setting, a theme, a blend) passes: the
@@ -72,11 +73,17 @@ func TestNoHardCodedColoursInRenderCode(t *testing.T) {
 func TestColourLintCatchesEachForm(t *testing.T) {
 	src := `package x
 
+import (
+	"charm.land/tone"
+	ct "github.com/charmbracelet/x/exp/charmtone"
+)
+
 func f() {
 	_ = lipgloss.Color("#7dcfff")
 	_ = color.RGBA{R: 1, G: 2, B: 3, A: 255}
 	_ = color.White
-	_ = charmtone.Charple
+	_ = tone.Charple
+	_ = ct.Pepper
 	_ = ansi.BasicColor(3)
 	_ = ansi.IndexedColor(17)
 
@@ -89,8 +96,8 @@ func f() {
 }
 `
 	got := colourLiterals(t, "x.go", []byte(src))
-	if len(got) != 6 {
-		t.Fatalf("the lint found %d literals, want the 6 rejected forms:\n%s", len(got), strings.Join(got, "\n"))
+	if len(got) != 7 {
+		t.Fatalf("the lint found %d literals, want the 7 rejected forms:\n%s", len(got), strings.Join(got, "\n"))
 	}
 }
 
@@ -110,6 +117,19 @@ func colourLiterals(t *testing.T, name string, src []byte) []string {
 				allowed[line], allowed[line+1] = true, true
 			}
 		}
+	}
+	// The local names CharmTone is imported under in this file.
+	tones := map[string]bool{}
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if path != "charm.land/tone" && path != "github.com/charmbracelet/x/exp/charmtone" {
+			continue
+		}
+		name := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		tones[name] = true
 	}
 	var out []string
 	report := func(n ast.Node, what string) {
@@ -144,7 +164,7 @@ func colourLiterals(t *testing.T, name string, src []byte) []string {
 			}
 		case *ast.SelectorExpr:
 			pkg, sel := selector(v)
-			if pkg == "charmtone" || (pkg == "color" && (sel == "Black" || sel == "White")) {
+			if tones[pkg] || (pkg == "color" && (sel == "Black" || sel == "White")) {
 				report(v, pkg+"."+sel)
 			}
 		}
