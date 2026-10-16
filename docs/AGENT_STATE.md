@@ -76,8 +76,9 @@ matches the build.
    grants = ["read", "write", "fan"]
    ```
 
-5. Optional: give your agents the tools. Either the skill, which an agent reads
-   with `tuios --skill`, or MCP:
+5. Optional: give your agents the tools. Step 1 already installed the skill
+   for Claude Code, Codex, opencode and Pi: a short `SKILL.md` that tells the
+   agent to run `tuios --skill`. For MCP instead:
 
    ```bash
    tuios integration install claude-code --mcp

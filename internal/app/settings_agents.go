@@ -660,6 +660,11 @@ func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 			return msg
 		}
 		msg.result, msg.err = t.Install(env, st.InstallProgram(agentsCommand))
+		// The skill stub goes with the hooks, as tuios integration install
+		// writes it. A tuios skill the person wrote is left alone.
+		if msg.err == nil && t.SupportsSkill() {
+			_, _ = t.InstallSkill(env)
+		}
 		return msg
 	}
 }

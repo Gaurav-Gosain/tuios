@@ -90,7 +90,7 @@ beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.`,
 }
 
 func newIntegrationInstallCommand() *cobra.Command {
-	var all, mcp, mcpWrite, statusLine bool
+	var all, mcp, mcpWrite, statusLine, noSkill bool
 	var command, then string
 	cmd := &cobra.Command{
 		Use:   "install [harness...]",
@@ -100,6 +100,13 @@ func newIntegrationInstallCommand() *cobra.Command {
 Pi and omp both read PI_CODING_AGENT_DIR. When it is set, --all skips those
 two integrations and installs other harnesses. Install the one you use by
 name. Installing one into a directory identified as the other's also refuses.
+
+For Claude Code, install also writes a short tuios skill to
+skills/tuios/SKILL.md in its configuration directory. For Codex, opencode and
+Pi, it writes the skill to ~/.agents/skills/tuios/SKILL.md. The skill tells
+the agent to run "tuios --skill", so the text the agent reads always matches
+the tuios you have installed. A tuios skill that tuios did not write is left
+alone. --no-skill writes no skill.
 
 With --mcp, also register tuios mcp as an MCP server named tuios, for the
 harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.
@@ -179,6 +186,11 @@ stays as it was. Uninstall puts your command back.`,
 				for _, n := range res.Notes {
 					fmt.Printf("  note: %s\n", n)
 				}
+				if !noSkill && t.SupportsSkill() && err == nil {
+					if !installSkillFor(t, env) {
+						failed = append(failed, t.ID+" (skill)")
+					}
+				}
 				if mcp && t.SupportsMCP() && err == nil {
 					if !installMCPFor(t, env, command, mcpWrite) {
 						failed = append(failed, t.ID+" (mcp)")
@@ -198,6 +210,7 @@ stays as it was. Uninstall puts your command back.`,
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Install for every supported harness whose configuration directory exists")
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program the hooks run, when tuios is not on the harness's PATH")
+	cmd.Flags().BoolVar(&noSkill, "no-skill", false, "Do not write the tuios skill for the harness")
 	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, without the tools that type into panes, as an MCP server named tuios")
 	cmd.Flags().BoolVar(&mcpWrite, "mcp-write", false, "Register tuios mcp with --write, which adds the tools that type into panes. Implies --mcp")
 	cmd.Flags().BoolVar(&statusLine, "statusline", false, "Also feed the model, context use and cost to tuios from Claude Code's status line")
@@ -238,6 +251,25 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// installSkillFor writes the skill stub for one harness and says what it did.
+// A tuios skill the person wrote is a note, not a failure: it is left alone
+// on purpose.
+func installSkillFor(t *integration.Target, env integration.Env) bool {
+	res, err := t.InstallSkill(env)
+	switch {
+	case errors.Is(err, integration.ErrSkillNotOurs):
+		fmt.Printf("  note: %v\n", err)
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "%s: skill: %v\n", t.Name, err)
+		return false
+	case res.Changed:
+		fmt.Printf("%s: skill installed in %s\n", t.Name, res.Path)
+	default:
+		fmt.Printf("%s: skill already installed and current in %s\n", t.Name, res.Path)
+	}
+	return true
+}
+
 // installMCPFor registers the MCP server with one harness and says what it did.
 func installMCPFor(t *integration.Target, env integration.Env, command string, write bool) bool {
 	res, err := t.InstallMCP(env, command, write)
@@ -266,7 +298,7 @@ func newIntegrationUninstallCommand() *cobra.Command {
 		Use:   "uninstall [harness...]",
 		Short: "Remove the hook entries tuios wrote, and nothing else",
 		Long: `Remove what 'tuios integration install' wrote: the hook entries or the
-plugin, the MCP server entry, and the Claude Code status line. When the status
+plugin, the MCP server entry, the skill, and the Claude Code status line. When the status
 line chained to a command of your own, that command is put back.
 
 Entries and files that tuios did not write are not changed. With no harness
@@ -374,6 +406,9 @@ func printRemovalStep(t *integration.Target, step integration.RemovalStep) bool 
 	case step.Part == "":
 		fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
 	}
+	for _, n := range step.Result.Notes {
+		fmt.Printf("  note: %s\n", n)
+	}
 	return true
 }
 
@@ -405,6 +440,9 @@ func printIntegrationStatus(w io.Writer, statuses []integration.Status, asJSON b
 		if v := statusLineVerdict(s); v != "" {
 			fmt.Fprintf(w, "%-12s statusline: %s\n", "", v)
 		}
+		if v := skillVerdict(s); v != "" {
+			fmt.Fprintf(w, "%-12s skill: %s\n", "", v)
+		}
 		for _, n := range s.Notes {
 			fmt.Fprintf(w, "%-12s note: %s\n", "", n)
 		}
@@ -430,6 +468,25 @@ func mcpVerdict(s integration.Status) string {
 		return "registered, out of date: run tuios integration install " + s.Harness + " --mcp"
 	case m.Foreign:
 		return "a server named tuios is registered that tuios did not write; left alone"
+	}
+	return ""
+}
+
+// skillVerdict says whether the skill stub is in place. It says nothing for a
+// harness whose hooks are not installed either, so the report stays short.
+func skillVerdict(s integration.Status) string {
+	sk := s.Skill
+	switch {
+	case sk == nil:
+		return ""
+	case sk.Installed && sk.Current:
+		return fmt.Sprintf("installed, current (v%d) in %s", sk.Version, sk.Path)
+	case sk.Installed:
+		return "installed, out of date: run tuios integration install " + s.Harness
+	case sk.Foreign:
+		return "a tuios skill that tuios did not write is in " + sk.Path + "; left alone"
+	case s.Installed:
+		return "not installed: run tuios integration install " + s.Harness
 	}
 	return ""
 }

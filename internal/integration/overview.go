@@ -128,15 +128,16 @@ func (s Status) Verdict() string {
 // RemovalStep is one part of what UninstallAll removed: the hook entries, the
 // status line, or the MCP server.
 type RemovalStep struct {
-	// Part is "" for the hook entries, "status line" or "MCP server".
+	// Part is "" for the hook entries, "status line", "MCP server" or
+	// "skill".
 	Part   string
 	Result Result
 	Err    error
 }
 
 // UninstallAll removes everything tuios integration install can write for
-// the harness: the hook entries or the plugin, the status line, and the MCP
-// server entry. Every part is tried, and each says what it did.
+// the harness: the hook entries or the plugin, the status line, the MCP
+// server entry and the skill stub. Every part is tried, and each says what it did.
 func (t *Target) UninstallAll(env Env) []RemovalStep {
 	res, err := t.Uninstall(env)
 	steps := []RemovalStep{{Result: res, Err: err}}
@@ -147,6 +148,10 @@ func (t *Target) UninstallAll(env Env) []RemovalStep {
 	if t.SupportsMCP() {
 		res, err := t.UninstallMCP(env)
 		steps = append(steps, RemovalStep{Part: "MCP server", Result: res, Err: err})
+	}
+	if t.SupportsSkill() {
+		res, err := t.UninstallSkill(env)
+		steps = append(steps, RemovalStep{Part: "skill", Result: res, Err: err})
 	}
 	return steps
 }

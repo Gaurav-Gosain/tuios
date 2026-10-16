@@ -702,6 +702,9 @@ type Status struct {
 	// StatusLine is the status line slot, for a harness tuios can feed from
 	// one (Claude Code). See statusline.go.
 	StatusLine *StatusLineStatus `json:"status_line,omitempty"`
+	// Skill is the skill stub, for a harness install writes one for. See
+	// skill.go.
+	Skill *SkillStatus `json:"skill,omitempty"`
 }
 
 var versionRe = regexp.MustCompile(`TUIOS_INTEGRATION_VERSION=(\d+)|` + managedMarker + ` (\d+)`)
@@ -726,6 +729,10 @@ func (t *Target) Status(env Env, tuios string) Status {
 	if t.SupportsStatusLine() {
 		sl := t.StatusLineState(env, tuios)
 		st.StatusLine = &sl
+	}
+	if t.SupportsSkill() {
+		sk := t.SkillState(env)
+		st.Skill = &sk
 	}
 	if fi, err := os.Stat(t.ConfigDir(env)); err == nil && fi.IsDir() {
 		st.ConfigDirExists = true

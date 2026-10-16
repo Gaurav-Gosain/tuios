@@ -207,6 +207,51 @@ func TestOpenCodeLeavesAFileItDidNotWrite(t *testing.T) {
 	}
 }
 
+// A tuios SKILL.md the person wrote or copied is never overwritten or
+// removed. The stub tuios writes is replaced when it is out of date, and
+// leaves the shared ~/.agents copy while another harness still uses it.
+func TestSkillLeavesAFileItDidNotWrite(t *testing.T) {
+	env := testEnv(t)
+	claude := mustTarget(t, ClaudeCode)
+	path := claude.SkillPath(env)
+	writeFile(t, path, "---\nname: tuios\n---\nmy own copy\n")
+	if _, err := claude.InstallSkill(env); err == nil || readFile(t, path) != "---\nname: tuios\n---\nmy own copy\n" {
+		t.Fatalf("install overwrote a skill tuios did not write: %v", err)
+	}
+	if res, err := claude.UninstallSkill(env); err != nil || res.Changed {
+		t.Fatalf("uninstall removed a skill tuios did not write: %+v %v", res, err)
+	}
+	if st := claude.SkillState(env); !st.Foreign || st.Installed {
+		t.Fatalf("status of a skill tuios did not write = %+v, want foreign", st)
+	}
+
+	codex, opencode := mustTarget(t, Codex), mustTarget(t, OpenCode)
+	shared := codex.SkillPath(env)
+	writeFile(t, shared, strings.Replace(string(SkillStub()), "TUIOS_INTEGRATION_VERSION=", "TUIOS_INTEGRATION_VERSION=0", 1))
+	if st := codex.SkillState(env); !st.Installed || st.Current {
+		t.Fatalf("status of an older stub = %+v, want installed and out of date", st)
+	}
+	if _, err := codex.InstallSkill(env); err != nil || readFile(t, shared) != string(SkillStub()) {
+		t.Fatalf("install did not replace an older stub: %v", err)
+	}
+	if !strings.Contains(string(SkillStub()), "tuios --skill") {
+		t.Fatal("the stub does not tell the agent to run tuios --skill")
+	}
+	writeFile(t, filepath.Join(opencode.ConfigDir(env), "x"), "")
+	if _, err := opencode.Install(env, "tuios"); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := codex.UninstallSkill(env); err != nil || res.Changed {
+		t.Fatalf("uninstall removed the stub opencode still uses: %+v %v", res, err)
+	}
+	if _, err := opencode.Uninstall(env); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := opencode.UninstallSkill(env); err != nil || !res.Changed {
+		t.Fatalf("uninstall kept the stub nothing uses: %+v %v", res, err)
+	}
+}
+
 // TestBackupKeepsTheFileFromBeforeTuios checks a second write that changes the
 // file does not overwrite the backup of the original.
 func TestBackupKeepsTheFileFromBeforeTuios(t *testing.T) {
