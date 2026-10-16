@@ -76,10 +76,11 @@ test.describe('the config file reaches a browser session', () => {
     // The clock sits in the dock's right block, and a dock message takes that
     // block over while it shows. A session opens with a few of them, so the
     // clock can be hidden for several seconds after the first frame. Wait for
-    // the messages to clear rather than reading the first frame.
+    // the messages to clear rather than reading the first frame. The default
+    // layout is hours and minutes.
     await expect
       .poll(async () => (await screen(page)).join('\n'), { timeout: 15_000 })
-      .toMatch(/\d{2}:\d{2}:\d{2}/);
+      .toMatch(/\b\d{2}:\d{2}\b/);
   });
 
   // The two halves of one claim: a value the user wrote that the browser

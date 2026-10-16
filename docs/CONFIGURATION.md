@@ -1159,6 +1159,11 @@ on-click = "tuios new-window log -- git log --oneline -20"
 ```
 
 The lists above are the default: omit the whole table and the bar is unchanged.
+
+The clock draws hours and minutes (`15:04`) unless `dock.clock.format` or
+`appearance.clock_format` sets another Go time layout. To show seconds, set
+`format = "15:04:05"`. A clock with seconds draws a frame every second. A
+clock without seconds draws one frame a minute.
 When the `center` list has a clock or a custom cell, the center is at the
 middle of the terminal. A notification does not move it or shorten its
 minimized pane labels. On a crowded bar, the center moves left to keep the

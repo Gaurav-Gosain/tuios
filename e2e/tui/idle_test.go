@@ -101,7 +101,9 @@ func TestIdleCostStaysLow(t *testing.T) {
 		}, nil, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
-		runIdleWindow(t, "[appearance]\nshow_clock = true\n", idleBudget{
+		// With seconds, so the window holds ten clock frames. The default
+		// layout has no seconds and draws once a minute.
+		runIdleWindow(t, "[appearance]\nshow_clock = true\nclock_format = \"15:04:05\"\n", idleBudget{
 			// Ten clock frames, and they must go out.
 			wire: 4 * idleWireBudget, minWire: 100,
 			ticks: 2, work: 1,

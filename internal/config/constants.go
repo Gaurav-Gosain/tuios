@@ -732,8 +732,12 @@ const (
 // setting worked and no way to tell a dimmed pane from a crashed one.
 const DimUnfocusedMax = 90
 
-// DefaultClockFormat is what the clock has always drawn.
-const DefaultClockFormat = "15:04:05"
+// DefaultClockFormat is the layout the clock draws with when none is set. It
+// has no seconds: the dock engine arms the clock's timer for the next change
+// of what it draws, so a clock without seconds wakes the client once a minute
+// where one with seconds wakes it every second. A layout with seconds, such as
+// "15:04:05", still draws them.
+const DefaultClockFormat = "15:04"
 
 // GetClockFormat returns the layout in effect.
 func (s *Settings) GetClockFormat() string {

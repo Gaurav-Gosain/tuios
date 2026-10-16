@@ -408,7 +408,7 @@ type AppearanceConfig struct {
 	ScrollColumnMax   int    `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
 	ZoomSize          int    `toml:"zoom_size"`           // How much of the screen a zoomed pane takes, percent (default: 95)
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
-	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
+	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 	DimMultifocus     bool   `toml:"dim_multifocus"`      // Dim the panes in the multifocus set too (default: false)
 

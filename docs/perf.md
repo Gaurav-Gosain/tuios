@@ -3605,3 +3605,16 @@ equal to the last, same harness, 2 runs each:
 
 `TestIdleCostStaysLow/git_section` holds it: 260 to 300 context switches in
 10 s, and 1186 with an equal frame waking the ticker.
+## 2026-10 the clock draws minutes by default
+
+`DefaultClockFormat` is `15:04`. The dock engine arms the clock's timer for the
+next change of what it draws, so the default clock wakes the client once a
+minute. A layout with seconds still draws them, and still costs one frame a
+second.
+
+Same harness, `show_clock = true` and no format, 130 s runs, counts over 120 s.
+
+| Default layout | | client CPU | client ctxsw/s | clock frames | timer wakeups/s |
+|---|---|---|---|---|---|
+| `15:04:05` (1 run) | before | 0.16% | 18.3 | 120 | 1 clock, 0.33 listing |
+| `15:04` (3 runs) | after | 0.02% | 6.7 to 7.5 | 2 | 0.02 clock, 0.33 listing |
