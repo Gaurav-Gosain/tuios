@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -163,5 +164,44 @@ func TestPickerShowsTheUsersOwnSixteen(t *testing.T) {
 	// sixteen slots are on offer.
 	if len(seen) < 15 {
 		t.Errorf("the picker painted %d of the terminal's own palette slots, want 15\n%s", len(seen), term.Snapshot())
+	}
+}
+
+// TestAnEditedThemeFileRepaints is the save-and-look loop: the theme in use is
+// a file in the themes directory, and saving that file puts the edited colours
+// in force with no restart and no reselect. The file is saved the way an
+// editor saves, a new file renamed into place.
+//
+// Negative control: a build without the themes watch keeps the old red.
+func TestAnEditedThemeFileRepaints(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"mine\"\n")
+	writeConfigPart(t, base, "themes/mine.json", `{"id": "mine", "base": "nord", "red": "#ff0000"}`)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	runInShell(t, term, probeCmd("A"), "INKA", shellTimeout)
+	if got := probeInk(t, term, "INKA"); got.Kind != tuitest.ColorRGB || got.R != 0xff || got.G != 0 {
+		t.Fatalf("the theme's red reached the host as %+v, want #ff0000", got)
+	}
+
+	writeConfigPart(t, base, "themes/mine.json", `{"id": "mine", "base": "nord", "red": "#00ff00"}`)
+	// The reload lands after the watcher's debounce, so the probe is printed
+	// again until it shows, within the usual wait.
+	deadline := time.Now().Add(uiTimeout)
+	for i := 0; ; i++ {
+		marker := fmt.Sprintf("INKB%d", i)
+		runInShell(t, term, probeCmd(fmt.Sprintf("B%d", i)), marker, shellTimeout)
+		got := probeInk(t, term, marker)
+		if got.Kind == tuitest.ColorRGB && got.R == 0 && got.G == 0xff {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after the theme file was saved, the theme's red reached the host as %+v, want #00ff00\n%s",
+				got, term.Snapshot())
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }

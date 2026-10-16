@@ -3657,6 +3657,7 @@ there.
 | `tuios get-config <path>` | Read a configuration option from a running session. `-s` names the session. `--json` adds the source: `session`, `config` or `default` |
 | `tuios list-themes [theme]` | List the themes, and describe one. `--filter TEXT` lists only the ids that contain it, such as `gruvbox` |
 | `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
+| `tuios theme reload` | Read the theme and glyph files again in every tuios client on this machine. Clients also do this when a file in the themes or glyphs directory changes |
 | `tuios list-glyphs [set]` | List the glyph sets, and describe one |
 | `tuios logs` | View daemon logs |
 

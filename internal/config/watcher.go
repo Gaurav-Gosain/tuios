@@ -89,7 +89,19 @@ type WatcherOptions struct {
 	// what is in force, and an edit and its undo inside one debounce must
 	// still reach it.
 	DeliverUnchanged bool
+	// AssetDirs are directories of files the config names by id, the themes
+	// and glyphs directories, watched beside the config. A directory that is
+	// not there at start is watched once it is made in the config directory.
+	// A change to a .json file in one, or to ThemeReloadStamp, calls OnAssets
+	// after the same debounce. OnAssets runs on the watcher's goroutine.
+	AssetDirs []string
+	OnAssets  func()
 }
+
+// ThemeReloadStamp is a file in the config directory whose change asks every
+// watcher to read the theme and glyph files again: what tuios theme reload
+// writes and removes.
+const ThemeReloadStamp = ".reload-themes"
 
 // Watcher watches the config file for changes and triggers reloads. A config
 // split over several files is watched as a whole: every included file, every
@@ -115,6 +127,9 @@ type Watcher struct {
 	files map[string]bool
 	// dirs are the directories under watch.
 	dirs map[string]bool
+	// assets are the asset directories, true once under watch.
+	assets      map[string]bool
+	assetsTimer *time.Timer
 }
 
 // NewWatcher creates a file watcher for the config file.
@@ -140,6 +155,7 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 		stopCh:   make(chan struct{}),
 		files:    map[string]bool{main: true},
 		dirs:     map[string]bool{},
+		assets:   map[string]bool{},
 	}
 
 	// The directory, not the file: see the note at the top of this file. Added
@@ -150,6 +166,14 @@ func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opt
 		return nil, err
 	}
 	cw.dirs[filepath.Dir(main)] = true
+	if opts.OnAssets != nil {
+		for _, dir := range opts.AssetDirs {
+			dir = absPath(dir)
+			// One watch per directory that is there. One that is not costs
+			// nothing until it is made.
+			cw.assets[dir] = w.Add(dir) == nil
+		}
+	}
 
 	// The files as they stand are what the client is already running, so the
 	// first event that finds them unchanged is dropped rather than delivered.
@@ -237,7 +261,12 @@ func (cw *Watcher) run() {
 			if !ok {
 				return
 			}
-			if !cw.relevant(filepath.Clean(event.Name)) {
+			name := filepath.Clean(event.Name)
+			if cw.assetEvent(name, event) {
+				cw.armAssets()
+				continue
+			}
+			if !cw.relevant(name) {
 				continue
 			}
 			// Chmod alone is not a content change. Rename and Remove are: an
@@ -261,6 +290,43 @@ func (cw *Watcher) run() {
 			return
 		}
 	}
+}
+
+// assetEvent reports whether an event is about a theme or glyph file, and
+// starts watching an asset directory that has just been made.
+func (cw *Watcher) assetEvent(name string, event fsnotify.Event) bool {
+	if cw.opts.OnAssets == nil {
+		return false
+	}
+	if name == filepath.Join(filepath.Dir(cw.path), ThemeReloadStamp) {
+		return true
+	}
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	if watched, ok := cw.assets[name]; ok {
+		if !watched && event.Has(fsnotify.Create) {
+			cw.assets[name] = cw.watcher.Add(name) == nil
+		}
+		return true
+	}
+	return cw.assets[filepath.Dir(name)] && strings.HasSuffix(strings.ToLower(name), ".json")
+}
+
+// armAssets restarts the asset debounce, apart from the config's, so a theme
+// save does not delay a config save or make it read the config again.
+func (cw *Watcher) armAssets() {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+	if cw.assetsTimer != nil {
+		cw.assetsTimer.Stop()
+	}
+	cw.assetsTimer = time.AfterFunc(configDebounce, func() {
+		select {
+		case <-cw.stopCh:
+		default:
+			cw.opts.OnAssets()
+		}
+	})
 }
 
 // arm restarts the debounce timer.
@@ -352,6 +418,9 @@ func (cw *Watcher) Stop() {
 		cw.mu.Lock()
 		if cw.debounceTimer != nil {
 			cw.debounceTimer.Stop()
+		}
+		if cw.assetsTimer != nil {
+			cw.assetsTimer.Stop()
 		}
 		cw.mu.Unlock()
 		_ = cw.watcher.Close()

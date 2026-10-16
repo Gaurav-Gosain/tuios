@@ -275,3 +275,58 @@ func TestReloadRefusesAFileThatDoesNotValidate(t *testing.T) {
 		t.Errorf("a config was returned beside the error: %+v", cfg)
 	}
 }
+
+// TestWatcherFollowsThemeFiles: a theme file saved in a themes directory made
+// after the watcher started, and the stamp tuios theme reload writes, each
+// reach OnAssets once, and neither is taken for a config change. The config
+// half is the positive control that the config is still watched.
+//
+// Negative controls: without the watch added on the directory's Create, the
+// theme save delivers nothing; without the stamp check, the stamp delivers
+// nothing.
+func TestWatcherFollowsThemeFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(watcherBase), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	themes := filepath.Join(dir, "themes")
+	assets := make(chan struct{}, 8)
+	reports := make(chan watcherReport, 8)
+	w, err := NewWatcherWithOptions(path, func(cfg *UserConfig, err error) {
+		reports <- watcherReport{cfg: cfg, err: err}
+	}, WatcherOptions{AssetDirs: []string{themes}, OnAssets: func() { assets <- struct{}{} }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Stop)
+
+	waitAssets := func(why string) {
+		t.Helper()
+		select {
+		case <-assets:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s: OnAssets was not called", why)
+		}
+	}
+
+	if err := os.Mkdir(themes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	waitAssets("the themes directory was made")
+	saveLikeVim(t, filepath.Join(themes, "mine.json"), `{"red": "#ff0000"}`)
+	waitAssets("a theme file was saved")
+
+	stamp := filepath.Join(dir, ThemeReloadStamp)
+	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(stamp)
+	waitAssets("tuios theme reload wrote its stamp")
+	noReport(t, reports, "theme files are not the config")
+
+	saveLikeVim(t, path, "[appearance]\ntheme = \"nord\"\n")
+	if got := nextReport(t, reports, "the config is still watched"); got.err != nil {
+		t.Fatal(got.err)
+	}
+}
