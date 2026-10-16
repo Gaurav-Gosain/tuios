@@ -1101,12 +1101,21 @@ func (m *OS) View() tea.View {
 		// A frame to flush: the frame ticker runs at the frame rate again.
 		// It goes out now rather than at its next tick, unless it equals the
 		// last one; see below.
+		//
+		// A frame equal to the last one leaves the ticker where it is. It has
+		// nothing to write, and the cursor, the one thing it can still move,
+		// goes out through kickFlush. The git section's reading every 2 s
+		// composes such a frame, and waking the ticker for it kept an idle
+		// client with that section at about 110 context switches a second.
 		if content != m.cachedViewContent {
 			composed = true
 		}
 		m.cachedViewContent = content
-		if !m.quietFrame {
+		if composed && !m.quietFrame {
 			m.noteFrame()
+			// The panes may have reflowed or used the alternate screen
+			// for this frame. See releaseEmulatorScratch.
+			m.emulatorReleasePending = true
 		}
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather

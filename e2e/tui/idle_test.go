@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -126,7 +127,56 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 800,
 		}, writeLate, sawLateOutput)
 	})
+	t.Run("git section", func(t *testing.T) {
+		// The rail's git section reads the focused pane's repository every
+		// 2 s, and each reading composes a frame equal to the last one. That
+		// frame must not wake the frame ticker: it has nothing to write.
+		runIdleWindowOpts(t, idleGitConfig, startOpts{daemonDefault: true}, idleBudget{
+			wire: idleWireBudget,
+			// One tick for each reading's due time, about five.
+			ticks: 8, work: 1,
+			// Five, one per reading, when an equal frame woke it.
+			tickerWakes: 1,
+			// 260 to 300, and 1186 with an equal frame waking the ticker.
+			ctxsw: 600,
+		}, gitRepoPane, nil)
+	})
 }
+
+// idleGitConfig is the rail with its git section, in a daemon session: a
+// standalone client draws no git section.
+const idleGitConfig = `[startup]
+daemon = true
+
+[appearance.sidebar]
+enabled = true
+position = "left"
+width = 28
+sections = "sessions,git"
+`
+
+// gitRepoPane puts the focused pane in a new repository and waits for the
+// rail's git section to show it.
+func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	dir := filepath.Join(base, "repo")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+` && printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
+	leaveTerminalMode(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railHeaderRow(s, "git") >= 0 && !strings.Contains(s.Text(), "Window management mode")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the git section never showed the repository: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// lateOutputAfter is how long after writeLate returns its pane writes
 
 // lateOutputAfter is how long after writeLate returns its pane writes: past
 // the settle and the second runIdleWindow waits, so inside the idle window.
@@ -171,16 +221,21 @@ func sawLateOutput(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
 // once the shells are open, with the client's base directory. after, when set,
 // runs on the idle client once the window is over.
 func runIdleWindow(t *testing.T, config string, budget idleBudget, setup func(*testing.T, *tuitest.Terminal, string), after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
+	runIdleWindowOpts(t, config, startOpts{}, budget, setup, after)
+}
+
+// runIdleWindowOpts is runIdleWindow with start options: daemonDefault for a
+// client attached to a daemon, which the rail's git section needs.
+func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudget, setup func(*testing.T, *tuitest.Terminal, string), after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
 	base := t.TempDir()
 	if config != "" {
 		writeConfig(t, base, config)
 	}
 	wire := &wireRecorder{}
 	statsPath := filepath.Join(base, "tickstats")
-	term := startIn(t, base, startOpts{
-		out: wire,
-		env: []string{"TUIOS_STATS_FILE=" + statsPath},
-	})
+	o.out = wire
+	o.env = append(o.env, "TUIOS_STATS_FILE="+statsPath)
+	term := startIn(t, base, o)
 	waitBoot(t, term)
 
 	newWindow(t, term)
@@ -245,9 +300,14 @@ func runIdleWindow(t *testing.T, config string, budget idleBudget, setup func(*t
 		after(t, term, wire)
 	}
 
-	// Standalone with only idle shells quits at once on leader-q.
-	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
-		t.Fatalf("send leader q: %v", err)
+	// Standalone with only idle shells quits at once on leader-q. A daemon
+	// client detaches on leader-d.
+	quit := "q"
+	if o.daemonDefault {
+		quit = "d"
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), quit); err != nil {
+		t.Fatalf("send leader %s: %v", quit, err)
 	}
 	waitExit(t, term, "idle test quit")
 }

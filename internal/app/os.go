@@ -463,6 +463,10 @@ type OS struct {
 	// emulatorReleasedAt is when the maintenance tick last dropped the panes'
 	// spare emulator buffers. See emulator_release.go.
 	emulatorReleasedAt time.Time
+	// emulatorReleasePending says a frame changed since the last release, so
+	// the panes may hold buffers again. The release is armed only while it is
+	// set, so an idle client releases once and then sleeps.
+	emulatorReleasePending bool
 	// tick is the maintenance tick armed for the next job that is due. See
 	// tick_deadline.go.
 	tick tickTimer

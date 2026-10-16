@@ -140,6 +140,10 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 	if m.announceGestureHeld && m.pointerDown && !m.lastPointerAt.IsZero() {
 		at(m.lastPointerAt.Add(announceHoldTimeout + time.Millisecond))
 	}
+	// The panes' spare emulator buffers, once after a frame changed.
+	if t, ok := m.emulatorReleaseDue(); ok {
+		at(t)
+	}
 	// The frame ticker stops idleTickerAfter after the last frame.
 	if fr := &m.frameRate; fr.program != nil && !fr.idle {
 		at(fr.lastFrame.Add(idleTickerAfter))

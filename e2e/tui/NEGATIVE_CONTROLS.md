@@ -6327,3 +6327,20 @@ on Linux.
 | --- | --- | --- | --- |
 | No tick armed after View wakes the ticker | `Update`, `case flushMsg`: return nil in place of `m.frameIdleTickCmd()` (the branch before the fix) | `TestIdleCostStaysLow/one_late_output`: "made 2708 context switches (budget 800)", with 0 ticks: the ticker ran from the output to the end of the window | **caught** |
 | The positive half | the fixed branch | none | **guard** |
+
+### An equal frame, and the buffer release, on the deadline tick
+
+Two fixes on the branch perf/deadline-tick after #762 landed. A frame equal
+to the last one no longer wakes the frame ticker. And #762's release of the
+panes' spare emulator buffers, which ran from the idle tick this branch
+removes, runs once after a frame changed and is then not armed again until
+the next one. A new `TestIdleCostStaysLow/git_section` runs a daemon client
+with the rail's git section, whose reading every 2 s composes a frame equal
+to the last. On the branch it saw 5 ticks, 0 frame ticker wakes and 260 to
+300 context switches in 10 s. Run on 2026-10-16 on Linux.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| An equal frame wakes the frame ticker | `View`: `if composed && !m.quietFrame` back to `if !m.quietFrame` | `TestIdleCostStaysLow/git_section`: "handled 10 maintenance ticks (budget 8)", "woke the frame ticker 5 times (budget 1)", "made 1186 context switches (budget 600)" | **caught** |
+| The release is never armed | `nextWake`: the `emulatorReleaseDue` deadline never added | `TestClientReleasesEmulatorScratch`: "the client released 96 KiB of reflow scratch across 4 panes, want at least 945 KiB". With the deadline it released 15824 KiB, then 1184 KiB of alternate screen | **caught** |
+| The positive half | this branch | none: the other `TestIdleCostStaysLow` windows still see 0 ticks, so the release does not keep an idle client awake | **guard** |

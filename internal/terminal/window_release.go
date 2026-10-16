@@ -21,10 +21,10 @@ type altScreenReleaser interface {
 //
 // It takes ioMu only if it is free. The caller is the UI goroutine, which
 // must not wait behind a PTY writer in the middle of a burst; a pane that is
-// busy now is released on a later call.
-func (w *Window) TryReleaseEmulatorScratch() {
+// busy now is released on a later call. It reports false for such a pane.
+func (w *Window) TryReleaseEmulatorScratch() bool {
 	if !w.ioMu.TryLock() {
-		return
+		return false
 	}
 	defer w.ioMu.Unlock()
 	if r, ok := w.Terminal.(reflowScratchReleaser); ok {
@@ -33,4 +33,5 @@ func (w *Window) TryReleaseEmulatorScratch() {
 	if r, ok := w.Terminal.(altScreenReleaser); ok {
 		r.ReleaseAltScreen()
 	}
+	return true
 }

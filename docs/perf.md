@@ -3586,3 +3586,22 @@ gate's pass over the windows now also runs after every message, which is the
 cost of the time. `BenchmarkNotificationTick`: 38 to 30 allocations, the same
 time. `BenchmarkClientFrame` and `BenchmarkKeystrokeFrame` at 1 to 20 panes:
 no change.
+
+### Equal frames and the buffer release
+
+Two follow-ups. A frame equal to the last one no longer wakes the frame
+ticker: it has nothing to write. And #762's release of the panes' spare
+emulator buffers, which ran from every maintenance tick, now runs once after
+a frame changed (`emulatorReleasePending`), at its 30 s interval, through a
+deadline in `nextWake`. An idle client releases once and then sleeps.
+
+With the rail's git section on, whose reading every 2 s composes a frame
+equal to the last, same harness, 2 runs each:
+
+| | client CPU | client ctxsw/s | frame ticker fires/s |
+|---|---|---|---|
+| before | 0.14 to 0.18% | 113 to 115 | 17.1 |
+| after | 0.08 to 0.10% | 21.7 to 25.4 | 0.8 |
+
+`TestIdleCostStaysLow/git_section` holds it: 260 to 300 context switches in
+10 s, and 1186 with an equal frame waking the ticker.
