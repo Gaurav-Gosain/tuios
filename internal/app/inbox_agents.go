@@ -147,6 +147,9 @@ type agentsRowKey struct {
 	selected, focused       bool
 	theme                   uint64
 	sessionLabel            string
+	// wrapped marks a row kept with its ground, as the list beside the
+	// thread draws it (agentsRowWrapped).
+	wrapped bool
 }
 
 // inboxAgentsTickMsg moves the time labels on. gen is the tick it belongs to:

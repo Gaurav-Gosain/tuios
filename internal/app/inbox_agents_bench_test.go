@@ -29,7 +29,32 @@ func benchAgents200OS(b *testing.B) *OS {
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: benchInboxItems()})
 	m.OpenInbox("")
 	m.Inbox.agents.on = true
+	benchThread(m)
 	return m
+}
+
+// benchThread gives the selected agent a read transcript of two hundred
+// entries, the most a thread keeps, so a frame draws a full conversation.
+func benchThread(m *OS) {
+	m.renderInbox()
+	e, ok := m.inboxAgentSelected()
+	if !ok {
+		return
+	}
+	t := m.thread(e)
+	t.read = true
+	for i := range 200 {
+		en := threadEntry{ID: strconv.Itoa(i), Role: "assistant", Kind: "text",
+			Text: "Reading the handler and the tests around it before changing the retry loop, entry " + strconv.Itoa(i) + "."}
+		switch i % 4 {
+		case 0:
+			en.Role = "user"
+		case 1:
+			en.Kind, en.Tool, en.Target = "tool_call", "Read", "internal/app/inbox_thread.go"
+		}
+		t.entries = append(t.entries, en)
+	}
+	t.gen++
 }
 
 // BenchmarkInboxAgents200 is a frame of the agents view over two hundred

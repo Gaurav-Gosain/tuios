@@ -83,6 +83,20 @@ type agentThread struct {
 	recap    *session.AgentActivityRecap
 	// gen changes when what the thread shows changes, for the drawn lines.
 	gen uint64
+	// body is the conversation's lines as last drawn, and bodyAt what they
+	// were drawn from, so a frame drawn for another reason does not wrap
+	// and style the conversation again.
+	body   []string
+	bodyAt threadBodyKey
+}
+
+// threadBodyKey is what a thread's drawn lines depend on.
+type threadBodyKey struct {
+	gen, mailGen, theme uint64
+	width, room         int
+	minute              int64
+	ascii               bool
+	title, message      string
 }
 
 // threadsState is the threads kept and the transcript subscription.
@@ -470,12 +484,13 @@ func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (l
 	}
 	head += st.Foreground(dim).Render(" · " + strings.Join(facts, " · "))
 	top := []string{overlay.Fill(ansi.Truncate(head, width, "…"), width, bg)}
+	blank := overlay.Fill("", width, bg)
 
 	// The bottom: the approval it waits on, then the reply editor.
 	var bottom []string
 	if it, ok := m.threadApproval(e); ok {
 		m.noteInboxShown(it, inboxShowsWhole(it), now)
-		bottom = append(bottom, overlay.Fill("", width, bg))
+		bottom = append(bottom, blank)
 		for _, l := range inboxApprovalDetail(it, width) {
 			bottom = append(bottom, overlay.Fill(st.Foreground(fg).Render(ansi.Truncate(l, width, "…")), width, bg))
 		}
@@ -489,7 +504,7 @@ func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (l
 	}
 
 	room := rows - len(top) - len(bottom)
-	body := m.threadBody(e, width, now)
+	body := m.threadBody(e, width, max(room, 0), now)
 	if len(body) > room {
 		body = body[len(body)-max(room, 0):]
 	}
@@ -497,7 +512,7 @@ func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (l
 	out = append(out, top...)
 	out = append(out, body...)
 	for len(out) < rows-len(bottom) {
-		out = append(out, overlay.Fill("", width, bg))
+		out = append(out, blank)
 	}
 	if edRow >= 0 {
 		edRow += len(out)
@@ -507,12 +522,32 @@ func (m *OS) threadLines(e sidebarAgentEntry, width, rows int, now time.Time) (l
 }
 
 // threadBody is the thread's text, oldest first: the conversation for a
-// transcript agent, the recap and the mail for the rest.
-func (m *OS) threadBody(e sidebarAgentEntry, width int, now time.Time) []string {
+// transcript agent, the recap and the mail for the rest. It holds at least
+// the last room lines, and is kept on the thread until what it shows changes.
+func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time) []string {
+	t := m.Inbox.threads.byKey[agentKey(e)]
+	if t == nil {
+		return m.threadBodyLines(e, nil, width, room, now)
+	}
+	key := threadBodyKey{
+		gen: t.gen, mailGen: m.AgentMail.Gen, theme: theme.Generation(),
+		width: width, room: room, minute: now.Unix() / 60, ascii: overlay.UseASCII(),
+		title: e.Title + "\x00" + e.Host, message: e.Message,
+	}
+	if t.body != nil && t.bodyAt == key {
+		return t.body
+	}
+	t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now), key
+	return t.body
+}
+
+// threadBodyLines draws threadBody. A conversation is drawn from its newest
+// entry back, until room lines are drawn: the thread shows the bottom, and
+// two hundred entries wrapped and styled on every change cost milliseconds.
+func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time) []string {
 	pal := theme.UI()
 	bg := pal.Surface
 	st := overlay.Style(bg)
-	t := m.Inbox.threads.byKey[agentKey(e)]
 	var out []string
 	note := func(s string) {
 		for _, l := range wrapPlain(s, max(width-2, 8)) {
@@ -532,8 +567,15 @@ func (m *OS) threadBody(e sidebarAgentEntry, width int, now time.Time) []string 
 			note(t.err)
 			return out
 		}
-		for _, en := range t.entries {
-			out = append(out, threadEntryLines(en, e, width, bg, pal)...)
+		var rev [][]string
+		n := 0
+		for i := len(t.entries) - 1; i >= 0 && n < room; i-- {
+			lines := threadEntryLines(t.entries[i], e, width, bg, pal)
+			rev = append(rev, lines)
+			n += len(lines)
+		}
+		for i := len(rev) - 1; i >= 0; i-- {
+			out = append(out, rev[i]...)
 		}
 		if len(out) == 0 {
 			note("No conversation yet.")
@@ -706,6 +748,7 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 	right, edRow := m.threadLines(e, threadW, rows, now)
 
 	var left []string
+	blank := ""
 	if wide {
 		a.scroll = min(max(a.scroll, a.sel-rows+1), a.sel)
 		a.scroll = max(min(a.scroll, len(list)-rows), 0)
@@ -713,12 +756,13 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 		for i := range rows {
 			idx := a.scroll + i
 			if idx >= len(list) {
-				left = append(left, overlay.Fill("", listW, bg))
+				if blank == "" {
+					blank = overlay.Fill("", listW, bg)
+				}
+				left = append(left, blank)
 				continue
 			}
-			rs := overlay.RowState{Cursor: idx == a.sel, Focused: !replying}
-			ground := pal.Ground(rs, bg)
-			left = append(left, pal.Row(m.agentsRow(list[idx], idx == a.sel, !replying, ground, pal, listW, minute, gen, now), listW, rs, bg))
+			left = append(left, m.agentsRowWrapped(list[idx], idx == a.sel, !replying, pal, listW, minute, gen, now))
 		}
 	}
 	body := make([]string, rows)
@@ -804,6 +848,26 @@ func (m *OS) InboxAgentsBack() bool {
 		return true
 	}
 	return false
+}
+
+// agentsRowWrapped is an agent's row with its ground, as the list beside the
+// thread draws it, kept with the rows until what it shows changes.
+func (m *OS) agentsRowWrapped(e sidebarAgentEntry, selected, focused bool, pal overlay.Palette, width int, minute int64, gen uint64, now time.Time) string {
+	a := &m.Inbox.agents
+	k := agentsRowKey{
+		session: e.SessionID, window: e.WindowID, host: e.Host, title: e.Title,
+		state: e.State, kind: e.AgentKind, doneSeen: e.DoneSeen, minute: minute,
+		queued: e.Queued, subagents: e.Subagents, mail: a.mail[e.WindowID],
+		width: width, selected: selected, focused: focused, theme: gen,
+		sessionLabel: e.SessionLabel, wrapped: true,
+	}
+	if s, ok := a.rows[k]; ok {
+		return s
+	}
+	rs := overlay.RowState{Cursor: selected, Focused: focused}
+	s := pal.Row(m.agentsRow(e, selected, focused, pal.Ground(rs, pal.Surface), pal, width, minute, gen, now), width, rs, pal.Surface)
+	a.rows[k] = s
+	return s
 }
 
 // threadWrap breaks an entry's text onto lines of at most width cells: at its
