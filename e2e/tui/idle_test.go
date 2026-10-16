@@ -93,20 +93,20 @@ func TestIdleCostStaysLow(t *testing.T) {
 	t.Run("clock off", func(t *testing.T) {
 		runIdleWindow(t, "[appearance.selection]\nosc52_write = \"on\"\n", idleBudget{
 			wire: idleWireBudget,
-			// IdleFPS is 10 a second, plus slack for a slow machine.
-			ticks: 110, work: 1,
+			// The tick is armed only for a job that is due, and none is.
+			ticks: 2, work: 1,
 			tickerWakes: 1,
-			ctxsw:       1500,
+			ctxsw:       400,
 		}, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
 		runIdleWindow(t, "[appearance]\nshow_clock = true\n", idleBudget{
 			// Ten clock frames, and they must go out.
 			wire: 4 * idleWireBudget, minWire: 100,
-			ticks: 110, work: 1,
+			ticks: 2, work: 1,
 			// Was 10, one per clock frame.
 			tickerWakes: 1,
-			ctxsw:       1500,
+			ctxsw:       400,
 		}, nil)
 	})
 }

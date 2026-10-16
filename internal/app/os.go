@@ -463,6 +463,9 @@ type OS struct {
 	// emulatorReleasedAt is when the maintenance tick last dropped the panes'
 	// spare emulator buffers. See emulator_release.go.
 	emulatorReleasedAt time.Time
+	// tick is the maintenance tick armed for the next job that is due. See
+	// tick_deadline.go.
+	tick tickTimer
 	// screensaver is the idle animation. It deliberately adds nothing to the
 	// maintenance tick: arming is one deferred timer and the running animation
 	// drives its own frames. See screensaver.go.

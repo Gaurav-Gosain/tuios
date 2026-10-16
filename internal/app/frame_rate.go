@@ -125,7 +125,8 @@ func (m *OS) applyFrameRate() {
 }
 
 // idleFrameTicker stops the program's frame ticker once the client has gone
-// idleTickerAfter without composing a frame. The maintenance tick calls it.
+// idleTickerAfter without composing a frame. The maintenance tick calls it, and
+// nextWake arms a tick for that moment.
 //
 // Bubble Tea flushes frames from a ticker that runs at the frame rate for the
 // life of the program, frame or no frame. At idle each of those ticks finds
@@ -187,7 +188,8 @@ func (m *OS) rendererRestarted(msg tea.Msg) {
 // ticker, so with the ticker stopped any message may leave something that
 // nothing would write. One flushMsg per message is the cost, and messages are
 // rare at idle. A maintenance tick that slept changes nothing and is left out,
-// so the idle tick does not wake the renderer.
+// so a tick armed for a job that turned out to have nothing to draw does not
+// wake the renderer.
 func (m *OS) flushWhileIdle(msg tea.Msg) bool {
 	if !m.frameRate.idle {
 		return false

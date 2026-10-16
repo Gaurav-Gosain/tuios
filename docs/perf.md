@@ -3190,11 +3190,11 @@ the frame-rate wait back it takes 360 ticks and fails.
 
 ### Measured and deliberately not changed
 
-With no message, an idle client still wakes about 20 times a second: the
-maintenance tick and Bubble Tea's frame ticker both run at `IdleFPS`. Neither
-writes a byte. Removing them needs every event the idle gate polls (a process
-exit, a title change, a moved daemon listing, a cursor-only change) to arrive
-as a message first.
+With no message, an idle client still woke about 20 times a second: the
+maintenance tick and Bubble Tea's frame ticker both ran at `IdleFPS`. Neither
+wrote a byte. The frame ticker now stops at idle and the maintenance tick runs
+only when a job is due. See "the frame ticker stops at idle" and "the
+maintenance tick runs only when a job is due" below.
 
 ## 2026-10 the daemon at idle
 
@@ -3522,3 +3522,67 @@ marker from the shell after Python exited. One of its 7 runs took 184 ms. That
 run was the only one in which the daemon used real CPU: 0.26 s over 25 s,
 against 0.00 to 0.01 s in every other run. The delay was outside the client's
 wake path, and 30 runs here did not repeat it.
+
+## 2026-10 the maintenance tick runs only when a job is due
+
+The maintenance tick ran for the life of the client. At idle its gate
+(`tickNeedsWork`) found nothing to do, ten times a second, and each of those
+ticks woke four goroutines.
+
+### What changed
+
+- `nextWake` says when the next job is due, and Update arms one tick for that
+  moment after every message (`tickWakeCmd`). With nothing due, no tick is
+  armed. A tick armed later than a new due time is replaced, and the old one is
+  dropped by its generation when it fires.
+- The due times: the frame rate while something moves (as before), the next
+  cell of a burning message and the end of a pointer hold on it, held agent
+  and program alerts, the zen reveal and a gesture hold running out, the frame
+  ticker's idle switch, the git section's 2 s re-read and the files section's
+  retry.
+- Work the idle gate finds by looking (an exited process, unflushed output, a
+  drifted title, a moved listing, a stranded gesture) is looked at again every
+  100 ms while it lasts, which is the old idle rate. Each of those is set on the
+  Update goroutine or followed by a message, so asking after every message
+  sees it.
+- A sticky message keeps no tick running. It used to keep the idle tick.
+- `IdleTickCmd`, `TickCmd` and `notifTickCmd` are gone.
+
+### Numbers
+
+Same harness, 3 runs each, 50 s, counts over 40 s.
+
+| Setup | | client CPU | client ctxsw/s | timer wakeups/s |
+|---|---|---|---|---|
+| clock off | before | 0.12 to 0.14% | 84 to 87 | 10 tick, 0.33 listing |
+| | after | 0.04 to 0.06% | 8.0 to 9.1 | 0.33 listing |
+| clock on | before | 0.28 to 0.32% | 94 to 101 | 10 tick, 1 clock, 0.33 listing |
+| | after | 0.16 to 0.18% | 17.7 to 19.2 | 1 clock, 0.33 listing |
+
+From the start of this work (main before #781, one idle client): clock off,
+0.20 to 0.22% CPU and 124 to 135 context switches a second down to 0.04 to
+0.06% and 8 to 9. Clock on, 0.40 to 0.56% and 270 to 277 down to 0.16 to
+0.18% and 18 to 19. The wire bytes are the same in every run. The listing
+poll is the one timer left with the rail open. Each poll is one message, one
+flush and one frame ticker kick.
+
+`TestIdleCostStaysLow`, standalone, over 10 s: 0 ticks, and 59 voluntary
+context switches with the clock off and 152 with it on. Before, 100 ticks, and
+816 to 895 and 928 to 989.
+
+First pane output after 20 s idle, same probe as the section above: 1.4 to
+1.8 ms over 20 runs, against 1.4 to 1.6 ms over 10 runs on main.
+
+A scratch build ran the old idle gate every 100 ms next to the deadline tick
+and logged work the gate found that no armed tick covered, three looks in a
+row. Over the whole e2e suite it found no
+job the deadlines missed: each hit was a sticky error message, which needs no
+tick, or pane output already on its way in its own `PTYDataMsg`.
+
+`benchstat`, main against this branch, 6 interleaved runs. `BenchmarkIdleTick`
+and its two variants: 5 allocations (296 B) to 1 (24 B) a tick, because the
+idle tick arms no timer. Time 689 to 714 ns, within the noise (p=0.065). The
+gate's pass over the windows now also runs after every message, which is the
+cost of the time. `BenchmarkNotificationTick`: 38 to 30 allocations, the same
+time. `BenchmarkClientFrame` and `BenchmarkKeystrokeFrame` at 1 to 20 panes:
+no change.

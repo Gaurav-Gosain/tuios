@@ -73,7 +73,7 @@ func drainCommand(t *testing.T, cmd tea.Cmd) {
 	}
 	for _, c := range batch {
 		if c != nil {
-			c()
+			drainCommand(t, c)
 		}
 	}
 }

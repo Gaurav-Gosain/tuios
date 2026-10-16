@@ -6279,3 +6279,32 @@ goes out with the ticker stopped. Run on 2026-10-16 on Linux.
 `TestKickFlushWritesTheFrame` (`internal/app`) is the in-process check of the
 mechanism: with the ticker stopped at 100 frames a second, nothing is written
 in 200 ms, and one value on the channel writes the frame.
+
+### The maintenance tick runs only when a job is due
+
+The branch perf/deadline-tick arms the maintenance tick for the next job that
+is due (`nextWake`), and arms none when nothing is. `TestIdleCostStaysLow` now
+allows 2 ticks and 400 voluntary context switches in its 10 s window, with the
+clock off and on. On the branch it saw 0 ticks, 59 and 152 context switches,
+and the clipboard write reached the terminal 3.16 s after the command was
+typed. Run on 2026-10-16 on Linux.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The idle tick is re-armed | `handleMsg`, `case TickerMsg`: the idle gate returns `m.armTick(tickPollPeriod)` instead of nil | `TestIdleCostStaysLow`: "handled 100 maintenance ticks (budget 2)", and 707 and 822 context switches (budget 400). Unit `TestIdleTickSkipsScans`: "an idle client has a tick due" | **caught** |
+| The frame ticker drops to `IdleFPS` instead of stopping | `idleFrameTicker`: `setProgramFPS(fr.program, config.IdleFPS)` in place of `ticker.Stop()` | `TestIdleCostStaysLow`: 574 and 728 context switches (budget 400). This is the control the section above could not catch | **caught** |
+| The positive half | this branch | none | **guard** |
+
+A scratch build also ran the old idle gate every 100 ms beside the deadline
+tick, and logged any work the gate found that no armed tick covered for three
+looks in a row. It ran the whole suite, 7 shards
+and 1256 tests. Every hit was one of two kinds. A sticky error message on the
+dock, which has nothing to wait for and arms no tick. Or a pane's output that
+its own `PTYDataMsg` was carrying: a run with more detail showed a compose for
+pane output within 3 ms of each hit, and each hit cleared within 400 ms. The
+build failed six tests: four nested-client tests whose expected text wrapped
+on the audit binary's longer path, and the two idle budgets the audit's own
+10 Hz wakeups break. `TestCopiesReadAtLowColour` also failed once in that run
+and passes on the branch binary. The run also found that the stats line had
+grown a field after `motion=`, which `TestFullMotionWithoutAgentsStaysIdle`
+read as a suffix. The test now parses the line by name.

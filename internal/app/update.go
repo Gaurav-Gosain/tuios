@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"runtime/debug"
 	"slices"
 	"strconv"
@@ -356,7 +357,7 @@ func (m *OS) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.listenSidebarSession(),
 		m.refreshSidebarSessions(),
-		TickCmd(&m.Settings),
+		m.armTick(m.framePeriod()),
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
@@ -546,14 +547,6 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 	}
 }
 
-// TickCmd creates a maintenance tick for animations, dock stats, and script playback.
-// This runs at a low rate and does NOT drive PTY rendering.
-func TickCmd(s *config.Settings) tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(t time.Time) tea.Msg {
-		return TickerMsg(t)
-	})
-}
-
 // tickNeedsWork reports whether this maintenance tick has anything to do. It is
 // the idle gate: false means no animation, interaction, script, notification,
 // dock stat, marquee, or settling title is live, and one cheap atomic pass over
@@ -561,10 +554,25 @@ func TickCmd(s *config.Settings) tea.Cmd {
 // manipulation. Everything it checks is an O(1) flag or an atomic load, so the
 // gate stays bounded no matter how many idle shells are open.
 func (m *OS) tickNeedsWork() bool {
-	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
-		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
-		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
-		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.spotlightMotionPending {
+	return m.tickAtFrameRate() || len(m.Notifications) > 0 ||
+		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.spotlightMotionPending ||
+		m.tickPolledWork()
+}
+
+// tickAtFrameRate reports whether something moves on every frame and the
+// maintenance tick has to run at the frame rate: an animation, a gesture, the
+// prefix, a script, a marquee, a tooltip on its way, or a rail title settling.
+func (m *OS) tickAtFrameRate() bool {
+	return m.InteractionMode || m.HasActiveAnimations() || m.PrefixActive || m.ScriptMode ||
+		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending
+}
+
+// tickPolledWork reports the work the idle gate finds by looking rather than
+// by being told: a stranded gesture, a zen crossing, a moved daemon listing,
+// and per window an exited process, unflushed output, a stranded
+// manipulation, or a title that has drifted from the rail.
+func (m *OS) tickPolledWork() bool {
+	if len(m.Animations) > 0 || m.Dragging || m.Resizing {
 		return true
 	}
 	// A gesture's announcement hold that nothing is holding any more. The sweep
@@ -611,35 +619,23 @@ const notifTickSlack = time.Millisecond
 
 // notifTickWait is how long the maintenance tick sleeps when a live message
 // is the only thing that moves on its own. It wakes when the message block
-// next draws differently (see notifNextMove), never sooner than one frame, and
-// never later than the idle tick, which still has its own sweeps to run.
+// next draws differently (see notifNextMove), and never sooner than one frame.
+// A sticky message that nothing ages gives notifNoMove.
 func (m *OS) notifTickWait(now time.Time) time.Duration {
 	frame := m.framePeriod()
 	wait, ok := m.notifNextMove(now)
 	if !ok {
 		return frame
 	}
-	idle := time.Second / time.Duration(config.IdleFPS)
-	if wait >= idle-notifTickSlack {
-		return idle
+	if wait >= notifNoMove {
+		return notifNoMove
 	}
 	return max(wait+notifTickSlack, frame)
 }
 
-// notifTickCmd is the maintenance tick notifTickWait from now.
-func (m *OS) notifTickCmd(now time.Time) tea.Cmd {
-	return tea.Tick(m.notifTickWait(now), func(t time.Time) tea.Msg {
-		return TickerMsg(t)
-	})
-}
-
-// IdleTickCmd creates a command that generates tick messages at 10 FPS.
-// Used when the terminal has been idle for a sustained period to reduce CPU.
-func IdleTickCmd() tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.IdleFPS), func(t time.Time) tea.Msg {
-		return TickerMsg(t)
-	})
-}
+// notifNoMove is the wait notifTickWait gives when no live message will ever
+// draw differently on its own: a sticky one.
+const notifNoMove = time.Duration(math.MaxInt64)
 
 // autoScrollTick schedules the next AutoScrollTickMsg, which keeps scrolling
 // while a drag is held outside the content area.
@@ -842,6 +838,16 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderSkipped = true
 		return m, nil
 	}
+	// The maintenance tick, armed for the next job that is due. One from an
+	// arming a later one replaced is dropped.
+	if dt, ok := msg.(deadlineTickMsg); ok {
+		if dt.gen != m.tick.gen {
+			m.renderSkipped = true
+			return m, nil
+		}
+		m.tick.due = time.Time{}
+		msg = TickerMsg(dt.at)
+	}
 	model, cmd := m.update(msg)
 	// Input may switch the center workspace, edit an edge's session assignment,
 	// or finish a rail resize. Reconcile after it has changed the model.
@@ -944,10 +950,14 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// the settings page opening and a pane starting an agent are both things
 	// any handler can do. See settings_agents.go.
 	agents := m.agentsSyncCmd()
-	if sync == nil && replan == nil && gitSync == nil && secondFiles == nil && secondGit == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil {
+	// The maintenance tick last, after every sync above has said what it asked
+	// for: it is armed for the earliest job that is due, and not at all when
+	// none is. See nextWake.
+	tick := m.tickWakeCmd()
+	if sync == nil && replan == nil && gitSync == nil && secondFiles == nil && secondGit == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil && tick == nil {
 		return model, cmd
 	}
-	return model, tea.Batch(cmd, sync, replan, gitSync, secondFiles, secondGit, dockSync, railSync, loading, motion, agents)
+	return model, tea.Batch(cmd, sync, replan, gitSync, secondFiles, secondGit, dockSync, railSync, loading, motion, agents, tick)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -1185,13 +1195,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.releaseEmulatorScratch(time.Time(msg))
 
 		// Idle diet: when nothing periodic needs attention the per-tick scans have
-		// no work, so skip them, hold the frame, and re-arm the slow tick. Process
-		// exits and PTY output wake the loop through their own channels; the gate
-		// itself does one cheap atomic pass to catch a pending exit, unflushed
-		// output, or a stranded manipulation before deciding to sleep.
+		// no work, so skip them and hold the frame. Process exits and PTY output
+		// wake the loop through their own channels; the gate itself does one
+		// cheap atomic pass to catch a pending exit, unflushed output, or a
+		// stranded manipulation before deciding to sleep. The tick is not
+		// re-armed here: Update arms the next one for the next job that is due,
+		// and none at all when nothing is (see nextWake).
 		if !m.tickNeedsWork() {
 			m.renderSkipped = true
-			return m, IdleTickCmd()
+			return m, nil
 		}
 		m.tickStats.Work++
 
@@ -1240,15 +1252,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// nothing else is guaranteed to follow it.
 		leftScriptMode := m.maybeExitFinishedScript()
 
-		// Handle script playback if in script mode
-		cmds := []tea.Cmd{TickCmd(&m.Settings)}
+		// Handle script playback if in script mode. The tick runs at the frame
+		// rate while a script plays: nextWake arms it.
+		var cmds []tea.Cmd
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
 			player := m.ScriptPlayer
 			if !player.IsFinished() {
 				// Wait for animations to complete before executing next command
 				// This ensures visual consistency during script playback
 				if m.HasActiveAnimations() {
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 
 				// Hold the next command until a pane the previous one asked for
@@ -1258,32 +1271,32 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// was splitting away from, so the next Type would be typed into
 				// the wrong pane.
 				if !m.scriptPaneReady() {
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 
 				// Hold the next command until Update has run the one before
 				// it. See OS.scriptInFlight.
 				if m.scriptInFlight {
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 
 				// Hold for a WaitFor until its condition holds. A wait that
 				// runs out of time fails the tape, which stops the player.
 				if m.ScriptWait != nil && !m.checkScriptWait() {
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 
 				// Check if we're blocking on a WaitUntilRegex condition from a
 				// previously dispatched command.
 				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
 					// Condition not met and not timed out yet, keep waiting.
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet
-					return m, TickCmd(&m.Settings)
+					return m, nil
 				}
 				// Sleep finished or wasn't waiting, clear the sleep time
 				m.ScriptSleepUntil = time.Time{}
@@ -1353,30 +1366,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		//
 		// The tick that retires something draws one more frame so the message
 		// actually leaves the screen, which is what notifExpired carries. A live
-		// message keeps the tick at the frame rate, because the hairline under
-		// it is burning down, but a tick composes for it only when the burn has
+		// message wakes the tick when the hairline under it next loses a cell
+		// (notifNextMove), and a tick composes for it only when the burn has
 		// moved a cell since the frame that last drew it (notifBurnMoved).
 		notifExpired := m.CleanupNotifications()
-		hasNotifications := len(m.Notifications) > 0
-		needsScriptFrame := m.ScriptMode || leftScriptMode
 
-		// Determine next tick rate
-		var nextTick tea.Cmd
-		if m.InteractionMode {
-			// Motion events are coalesced to a frame budget in the input path,
-			// so this tick is what flushes the most recent skipped position.
-			// It runs at the normal rate: dropping it to a lower one used to
-			// cost smoothness without limiting the motion flood, since motion
-			// events drove their own renders regardless of the tick rate.
-			nextTick = TickCmd(&m.Settings)
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
-			nextTick = TickCmd(&m.Settings) // Normal FPS when things need periodic updates
-		} else if hasNotifications {
-			nextTick = m.notifTickCmd(time.Now())
-		} else {
-			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
-		}
-		cmds[0] = nextTick
+		// The next tick is armed by nextWake after this message: at the frame
+		// rate while something moves, at the next cell of a burning message,
+		// and not at all when nothing is due.
 
 		// Sync background windows that have accumulated output.
 		// This catches windows whose HasNewOutput flag was preserved by
@@ -1407,10 +1404,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.spotlightMotionPending
 		if !needsRender {
 			m.renderSkipped = true
-			if len(cmds) > 1 {
-				return m, tea.Batch(cmds...)
-			}
-			return m, nextTick
+			return m, tea.Batch(cmds...)
 		}
 		// A frame for the message block alone is the burn moving one cell, or
 		// a message leaving. It goes out through kickFlush like any other,
@@ -1430,10 +1424,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 
-		if len(cmds) > 1 {
-			return m, tea.Batch(cmds...)
-		}
-		return m, nextTick
+		return m, tea.Batch(cmds...)
 
 	case dockComponentMsg:
 		// A component said something. The frame is drawn only if what it said

@@ -108,8 +108,8 @@ func (m *OS) notifBurnMoved() bool {
 // and a tick at 60 or 240 frames a second woke the client ten to forty times
 // for each of those moves.
 //
-// While the pointer holds the burn there is no deadline at all. The hold ends
-// on a pointer move, a key, or notifMaxHold, and the slow tick sees the last.
+// While the pointer holds the burn, the next move is the end of the hold. A
+// pointer move or a key ends it sooner, and each is a message of its own.
 func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	s, ok := m.notifStatus()
 	if !ok {
@@ -122,7 +122,9 @@ func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	}
 	next := time.Duration(math.MaxInt64)
 	if m.notifPaused() {
-		return next, true
+		// Nothing moves until the hold ends, and notifMaxHold ends it with
+		// no event of its own.
+		return m.notifHoverAt.Add(notifMaxHold).Sub(now), true
 	}
 	for _, n := range m.Notifications {
 		if !n.Sticky {

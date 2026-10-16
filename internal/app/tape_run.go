@@ -219,7 +219,7 @@ func (m *OS) PlayTape(name, script string) (tea.Cmd, error) {
 	if name != "" {
 		m.ShowNotification("Playing "+name, "info", 2*time.Second)
 	}
-	return TickCmd(&m.Settings), nil
+	return m.armTick(m.framePeriod()), nil
 }
 
 // seedCommands builds the leading commands that give an asynchronously created

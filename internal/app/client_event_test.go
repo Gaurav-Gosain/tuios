@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -31,8 +32,43 @@ func TestEveryClientEventKeepsTheListenerArmed(t *testing.T) {
 		// The command it returned has to be the listener itself: put an event in
 		// the channel and see it come back out as a message.
 		m.ClientEventChan <- ClientEvent{Type: "resize", Width: 1, Height: 2, ClientCount: 3}
-		if _, ok := cmd().(SessionResizeMsg); !ok {
+		if !answersAtOnce(cmd, func(msg tea.Msg) bool { _, ok := msg.(SessionResizeMsg); return ok }) {
 			t.Errorf("%T returned a command that is not the client-event listener", msg)
+		}
+	}
+}
+
+// answersAtOnce reports whether cmd, or a command batched in it, returns a
+// message want accepts within a second. Each command runs on its own
+// goroutine, so a maintenance tick batched beside the listener is left to
+// fire on its own.
+func answersAtOnce(cmd tea.Cmd, want func(tea.Msg) bool) bool {
+	got := make(chan tea.Msg, 16)
+	var run func(tea.Cmd)
+	run = func(c tea.Cmd) {
+		go func() {
+			msg := c()
+			if batch, ok := msg.(tea.BatchMsg); ok {
+				for _, inner := range batch {
+					if inner != nil {
+						run(inner)
+					}
+				}
+				return
+			}
+			got <- msg
+		}()
+	}
+	run(cmd)
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case msg := <-got:
+			if want(msg) {
+				return true
+			}
+		case <-deadline:
+			return false
 		}
 	}
 }

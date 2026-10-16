@@ -52,7 +52,11 @@ func BenchmarkIdleTick(b *testing.B) {
 // TestIdleTickSkipsScans is the idle diet's precise guard: once the model is
 // idle, a run of maintenance ticks must take the fast path and do no scan work,
 // so the Work counter stays flat while Ticks climbs. A regression that puts a
-// full-window scan back on the idle path trips this.
+// full-window scan back on the idle path trips this. And once idle, nothing
+// arms another tick: the client sleeps until a message arrives.
+//
+// Negative control: re-arming the tick at IdleFPS from the idle gate fails
+// the last check ("a tick is armed").
 func TestIdleTickSkipsScans(t *testing.T) {
 	m := idleOS(t, 3)
 	// Settle any first-frame output so the model reaches true idle.
@@ -72,6 +76,10 @@ func TestIdleTickSkipsScans(t *testing.T) {
 	}
 	if gotTicks < ticks {
 		t.Fatalf("Ticks did not advance past %d", ticks)
+	}
+	if due, ok := m.nextWake(time.Now()); ok || !m.tick.due.IsZero() {
+		t.Fatalf("an idle client has a tick due at %v (armed %v); it must sleep until a message arrives",
+			due, m.tick.due)
 	}
 }
 

@@ -324,5 +324,5 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 		m.Settings.AnimationsSuppressed = true
 		m.scriptRestoreAnimations = true
 	}
-	return TickCmd(&m.Settings), nil
+	return m.armTick(m.framePeriod()), nil
 }

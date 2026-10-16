@@ -78,6 +78,9 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 // taken away.
 func TestCelebrationIsFreeWhenIdle(t *testing.T) {
 	m := celebrateTestOS(t)
+	// The fixture's pane output counts as drawn: the client is idle, and no
+	// maintenance tick is due for it either.
+	m.Windows[0].HasNewOutput.Store(false)
 	if m.celebration.active() {
 		t.Fatal("a new OS has a celebration running")
 	}
