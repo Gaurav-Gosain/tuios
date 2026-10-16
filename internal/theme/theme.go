@@ -74,6 +74,7 @@ func Initialize(themeName string) error {
 			generation.Add(1)
 		}
 	}()
+	matchHost.Store(themeName == NoneID)
 	switch themeName {
 	case NoneID:
 		enabled = false

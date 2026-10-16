@@ -132,6 +132,12 @@ func (m *OS) setHostBg(c color.Color) bool {
 	}
 	h.bg, h.bgHex = c, hex
 	h.gen++
+	// The local client is alone in its process, so the dialogs may follow
+	// its terminal while no theme is set. A served client's terminal is one
+	// of several, and the process-wide chrome is not its to move.
+	if m.Client == ClientLocal && !m.LearnMode {
+		theme.SetHostGround(c, h.light)
+	}
 	return true
 }
 

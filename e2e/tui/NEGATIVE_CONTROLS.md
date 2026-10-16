@@ -6641,3 +6641,15 @@ Run on 2026-10-16.
 | The unfocused border ignored the theme | yes | `&& false` on the `RoleBorderUnfocused` check in `BorderUnfocusedOn` | `TestThemeChromeRolesPaint` ("the theme's border.unfocused, rule and dock.ground never painted") | **caught** |
 | The dock ignored the theme's ground | yes | `themeGround` always returns the config's setting | `TestThemeChromeRolesPaint` (same message) | **caught** |
 | The rule ignored the theme | yes | `&& false` on the `RoleRule` check in `RailRuleOn` | `TestThemeChromeRolesPaint` (same message) | **caught** |
+
+## Theme none follows the terminal's background
+
+`TestThemeNoneMatchesTheTerminal` runs tuios under hostterm with a dark green
+background. With `theme = "none"` the command palette's ground must be green.
+With an empty theme it must not be: the default stays the constant ramp.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The local client did not tell the chrome its ground | yes | `&& false` on the `theme.SetHostGround` call in `setHostBg` | `TestThemeNoneMatchesTheTerminal/none` ("the palette's ground is {... R:58 G:57 B:67}, want green true") | **caught** |

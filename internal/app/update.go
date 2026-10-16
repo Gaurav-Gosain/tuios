@@ -2588,6 +2588,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			m.ShowNotification(msg.Problems[0], "warning", m.Settings.NotificationWarningDuration)
 		}
+		// tuios theme reload also means the terminal's colours may have
+		// changed, as a wallpaper tool changes both. Ask for them again.
+		if m.asksHostColors() {
+			return m, tea.Batch(hostColorRequests()...)
+		}
 		return m, nil
 
 	case displayRateMsg:

@@ -755,3 +755,53 @@ func TestOmarchyThemeSwitchIsFollowed(t *testing.T) {
 	saveArtifact(t, term, artifacts, "catppuccin-latte")
 	renderScreenPNG(t, term.Screen(), hostGroundPalette("#4c4f69", "#eff1f5"), filepath.Join(artifacts, "catppuccin-latte.png"))
 }
+
+// TestThemeNoneMatchesTheTerminal: with theme = "none", the dialogs are drawn
+// on a ramp built from the terminal's own background, so a terminal themed
+// elsewhere gets dialogs in its own greys. An empty theme keeps the constant
+// ramp, as it did before.
+//
+// How this could pass wrongly: the constant ramp is a dark violet grey, and
+// the host's ground here is a dark green no tuios ramp is near, so a green
+// dialog surface came from the host. The empty-theme run is the control in
+// the same test: the same host, the same dialog, and no green.
+func TestThemeNoneMatchesTheTerminal(t *testing.T) {
+	const hostBg, hostFg = "#0f2a14", "#d0e8d0"
+	green := func(c tuitest.Color) bool {
+		return c.Kind == tuitest.ColorRGB && int(c.G) > int(c.R)+8 && int(c.G) > int(c.B)+8
+	}
+	for _, tc := range []struct {
+		name, theme string
+		wantGreen   bool
+	}{
+		{"none", "none", true},
+		{"empty", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			host := buildHostTerm(t)
+			writeConfig(t, base, "[appearance]\ntheme = \""+tc.theme+"\"\n")
+			term := startIn(t, base, startOpts{
+				cols: 120, rows: 40,
+				env:  []string{"COLORTERM=truecolor"},
+				wrap: []string{host, "run", "-bg", hostBg, "-fg", hostFg, "-ansi", hostANSISpec(), "--"},
+			})
+			waitBoot(t, term)
+			sendKeys(t, term, legacyCtrlP)
+			waitScreen(t, term, "the palette never opened", paletteTitle, "Run a program")
+			s := term.Screen()
+			row, col, ok := textAt(s, paletteTitle, 0)
+			if !ok {
+				t.Fatalf("no palette title on screen\n%s", term.Snapshot())
+			}
+			// The title sits in an accent chip. Two cells past its end is
+			// the dialog's surface.
+			surface := s.Cell(col+len(paletteTitle)+2, row).Bg
+			saveArtifact(t, term, artifactDir(t), "palette")
+			if green(surface) != tc.wantGreen {
+				t.Fatalf("theme %q on a %s terminal: the palette's ground is %+v, want green %v\n%s",
+					tc.theme, hostBg, surface, tc.wantGreen, term.SnapshotStyled())
+			}
+		})
+	}
+}

@@ -158,6 +158,7 @@ type uiKey struct {
 	tint    *tint.Tint
 	colours [6]*tint.Color
 	chrome  *Chrome
+	host    *hostGround
 }
 
 func currentUIKey() uiKey {
@@ -166,6 +167,8 @@ func currentUIKey() uiKey {
 		k.tint = t
 		k.colours = [6]*tint.Color{t.BrightBlue, t.BrightCyan, t.BrightRed, t.BrightGreen, t.Yellow, t.Bg}
 		k.chrome = CurrentChrome()
+	} else {
+		k.host = hostInForce()
 	}
 	return k
 }
@@ -261,12 +264,31 @@ func buildUI(d overlay.Depth) overlay.Palette {
 	// is (see GroundUI), with the ink tiers measured on it. A theme that names
 	// its own ramp has chosen already, and at 16 colours the ground is the
 	// terminal's.
+	//
+	// With theme = "none", the ground is the local terminal's own when it
+	// said (see SetHostGround). A dark one moves the ramp the way a theme's
+	// surface does.
 	light := false
-	if t := Current(); t != nil && !customRamp && d != overlay.Depth16 && GroundIsLight(t.Bg) {
-		light = true
-		c := lightDialogChrome(t.Bg)
-		p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
-		p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+	var ground color.Color
+	groundLight := false
+	if t := Current(); t != nil {
+		ground, groundLight = AsColor(t.Bg), GroundIsLight(t.Bg)
+	} else if h := hostInForce(); h != nil {
+		ground, groundLight = h.bg, h.light
+	}
+	if ground != nil && !customRamp && d != overlay.Depth16 {
+		var c Chrome
+		if groundLight {
+			light = true
+			c = lightDialogChrome(ground)
+		} else if Current() == nil {
+			customRamp = true
+			c = hostDarkChrome(ground)
+		}
+		if light || customRamp {
+			p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
+			p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+		}
 	}
 
 	switch d {

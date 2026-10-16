@@ -2057,8 +2057,8 @@ straight away without a restart.`,
 		Use:   "reload",
 		Short: "Read the theme and glyph files again in every client",
 		Long: `Read the theme and glyph files again in every tuios client on this machine,
-and repaint. A client also does this by itself when a file in the themes or
-glyphs directory changes.
+ask each terminal for its colours again, and repaint. A client also does this
+by itself when a file in the themes or glyphs directory changes.
 
 Run it from a wallpaper tool that writes a theme file: pywal with wal -o, or
 matugen with a post_hook.`,

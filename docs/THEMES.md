@@ -8,6 +8,7 @@ overlays, the dockbar) from them.
 ## Table of Contents
 
 - [Selecting a Theme](#selecting-a-theme)
+- [Match Your Terminal](#match-your-terminal)
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
 - [Start from Another Theme](#start-from-another-theme)
@@ -72,6 +73,31 @@ chrome uses the Charple accent. See
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.
+
+## Match Your Terminal
+
+If your terminal already has a theme, in kitty, ghostty or another terminal,
+tuios can use it with no theme file:
+
+```toml
+[appearance]
+theme = "none"
+```
+
+- The panes use the terminal's own colours. A program in a pane that asks for
+  the background or the sixteen colours gets the terminal's answer.
+- The dialogs, the rail and the dock use a ramp built from the terminal's
+  background. On a dark background the dialogs sit one step lighter than it.
+  On a light background they sit one small step darker.
+- The accents stay tuios's own. To change them, use a theme file with a
+  `chrome` object.
+- `tuios theme reload` also asks each terminal for its colours again. Run it
+  after a tool changes the terminal's colours.
+
+An empty `theme` keeps the terminal's colours for the panes too, but the
+dialogs keep tuios's constant ramp on a dark terminal. In a client of
+`tuios ssh` or `tuios-web`, the dialogs keep the constant ramp, because one
+server serves many terminals.
 
 ## Custom Themes
 
@@ -465,7 +491,9 @@ pointer are underlined.
 - **The chrome's neutrals do not follow the sixteen.** Dialogs and the
   which-key popup draw on a constant grey ramp on a dark theme, and on a ramp
   built from the background on a light one, whatever the sixteen are;
-  `chrome.surface` is the knob that moves it.
+  `chrome.surface` is the knob that moves it. With `theme = "none"` the ramp
+  follows the terminal's background (see
+  [Match Your Terminal](#match-your-terminal)).
 
 ## Related Documentation
 

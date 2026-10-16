@@ -239,7 +239,11 @@ theme, name it as `base` and write only the changes:
 such as `dock_background` wins over the theme.
 
 The running clients read a theme file again when it is saved. `tuios theme
-reload` asks every client on the machine to read the files now.
+reload` asks every client on the machine to read the files now, and to ask
+its terminal for its colours again.
+
+`theme = "none"` keeps the terminal's own colours and builds the dialogs'
+greys from the terminal's background, for a terminal themed elsewhere.
 
 `tuios theme export ID` prints a theme as a file with only what differs from
 its built-in base (`--full` for every colour, `--format base16` for a base16
