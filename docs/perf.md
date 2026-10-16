@@ -2646,6 +2646,15 @@ request, linux/amd64 then darwin/arm64:
 No dependency was added. The new budgets leave 32,134 and 30,454 bytes of
 room.
 
+The budgets went to 36,620,000 (linux/amd64) and 34,465,000 (darwin/arm64)
+for the theme transition (#757), which shows a change of theme as a circle
+that grows from the middle of the screen, or as a fade. Main at 81bd3d46
+measured 36,573,346 and 34,401,442 bytes (Go 1.26.9), 11,654 and 13,558 bytes
+under the budgets. The transition brings it to 36,589,730 and 34,434,962,
+16,384 and 33,520 bytes more: the pass over the composed frame, the blend
+table and the two options. No dependency was added. The new budgets leave
+30,270 and 30,038 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
