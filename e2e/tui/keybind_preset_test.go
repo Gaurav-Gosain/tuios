@@ -27,10 +27,27 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 			t.Fatalf("press ctrl+b %v: %v", keys, err)
 		}
 	}
+	// p and n step through workspaces that hold a pane, so each new
+	// workspace's pane is waited for before the next key.
+	paneOn := func(ws int) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for time.Now().Before(deadline) {
+			for _, p := range listPanes(t, base, "tmuxkeys") {
+				if p.Workspace == ws {
+					return
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("no pane opened on workspace %d", ws)
+	}
 	press("c")
 	waitWorkspace(t, base, "tmuxkeys", 2)
+	paneOn(2)
 	press("c")
 	waitWorkspace(t, base, "tmuxkeys", 3)
+	paneOn(3)
 	press("p")
 	waitWorkspace(t, base, "tmuxkeys", 2)
 	press("n")
