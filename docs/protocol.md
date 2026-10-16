@@ -176,6 +176,13 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**send-agent-message takes a message in parts.** `text` is no longer
+required when `parts` is given. `parts` is the form `queue-prompt` takes. A
+message that fits 8 KiB and holds no image has its blocks put in place. Any
+other has each paste and image written to the paste folder, attached, and
+named in the body. A daemon from before this answers `text is required` for a
+message sent in parts alone.
+
 **queue-prompt takes images.** A part may be `{"kind":"image","data":…}`. A
 daemon from before this answers `invalid_params` for the kind. See
 [The delivery queue](#the-delivery-queue).

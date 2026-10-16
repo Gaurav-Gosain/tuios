@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"os"
 	"sort"
 	"strconv"
@@ -105,17 +107,19 @@ type AgentMailState struct {
 	Scroll int
 	// Thread is the open thread, zero for the list of threads.
 	Thread uint64
-	// Composing is true while the reply line is open. Draft is its text.
-	Composing bool
-	Draft     string
-	// DraftAutomated is true once anything other than the keyboard touched
-	// the reply line: a key a send-keys or tape script routed to this client
+	// Composing is true while the reply editor is open. Comp is the draft,
+	// a composer: line breaks, paste blocks and images, as the Inbox reply
+	// has them.
+	//
+	// The composer records whether anything other than the keyboard touched
+	// the draft: a key a send-keys or tape script routed to this client
 	// opened it, typed into it or sent it. Such a reply is sent without the
 	// attach nonce, so the daemon stores it as claimed_human, not as the
 	// person's answer. Without this, an agent in a pane could drive this
 	// client's own reply line with send-keys and have tuios sign its answer
-	// as the person. It is cleared when the reply line closes.
-	DraftAutomated bool
+	// as the person. It goes with the draft when the editor closes.
+	Composing bool
+	Comp      *composer.Model
 	// Error is the last failure, drawn in the panel until the next action.
 	Error string
 	// Loading is true between a read being asked for and the daemon answering.
@@ -428,8 +432,7 @@ func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
 	st.Selected = 0
 	st.Scroll = 0
 	st.Composing = false
-	st.Draft = ""
-	st.DraftAutomated = false
+	st.Comp = nil
 	st.Error = ""
 	st.Sending = false
 	st.Picking = false
@@ -497,8 +500,7 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	m.ShowAgentMail = true
 	st.Inbox = ""
 	st.Composing = false
-	st.Draft = ""
-	st.DraftAutomated = false
+	st.Comp = nil
 	st.Error = ""
 	st.Sending = false
 	st.Picking = false
@@ -538,8 +540,7 @@ func (m *OS) CloseAgentMail() {
 	st.Seen = nil
 	m.ShowAgentMail = false
 	st.Composing = false
-	st.Draft = ""
-	st.DraftAutomated = false
+	st.Comp = nil
 	st.Error = ""
 	st.Picking = false
 	st.ComposeTo = ""
@@ -781,8 +782,7 @@ func (m *OS) AgentMailBack() {
 	st.Thread = 0
 	st.Scroll = 0
 	st.Composing = false
-	st.Draft = ""
-	st.DraftAutomated = false
+	st.Comp = nil
 	st.Error = ""
 }
 
@@ -830,18 +830,16 @@ func (m *OS) AgentMailStartReply() bool {
 		return false
 	}
 	st.Composing = true
-	st.Draft = ""
+	st.Comp = m.newMailDraft()
 	st.Error = ""
 	st.Scroll = agentMailBottom
-	st.DraftAutomated = m.ProcessingRemoteKeys
 	return true
 }
 
 // AgentMailCancelReply closes the reply line and drops the draft.
 func (m *OS) AgentMailCancelReply() {
 	m.AgentMail.Composing = false
-	m.AgentMail.Draft = ""
-	m.AgentMail.DraftAutomated = false
+	m.AgentMail.Comp = nil
 	m.AgentMail.ComposeTo = ""
 }
 
@@ -897,55 +895,81 @@ func (m *OS) AgentMailPick() bool {
 	st.Picking = false
 	st.ComposeTo = w.ID
 	st.Composing = true
-	st.Draft = ""
+	st.Comp = m.newMailDraft()
 	st.Error = ""
-	st.DraftAutomated = m.ProcessingRemoteKeys
 	return true
 }
 
-// noteDraftTouched marks the draft automated when the key that touched it
-// did not come from the keyboard. See DraftAutomated.
-func (m *OS) noteDraftTouched() {
+// agentMailMaxText is the daemon's bound for one message body.
+const agentMailMaxText = 8 << 10
+
+// agentMailMaxDraft bounds a mail draft, blocks included. The daemon writes a
+// block that does not fit in a message to a file.
+const agentMailMaxDraft = 1 << 20
+
+// newMailDraft is an empty mail draft. A key that did not come from the
+// keyboard opening it marks it at once.
+func (m *OS) newMailDraft() *composer.Model {
+	comp := composer.New(composer.Options{MaxRows: agentMailDraftRows, MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true})
 	if m.ProcessingRemoteKeys {
-		m.AgentMail.DraftAutomated = true
+		comp.MarkAutomated()
 	}
+	return comp
 }
 
-// AgentMailType appends typed text to the draft.
+// agentMailDraftRows is how many rows the mail editor grows to.
+const agentMailDraftRows = 6
+
+// AgentMailType types text into the draft at the cursor.
 func (m *OS) AgentMailType(text string) {
-	if !m.AgentMail.Composing || text == "" {
-		return
-	}
-	m.noteDraftTouched()
-	m.AgentMail.Draft += text
-	m.AgentMail.Error = ""
-}
-
-// AgentMailBackspace removes the last rune of the draft.
-func (m *OS) AgentMailBackspace() {
 	st := &m.AgentMail
-	if !st.Composing || st.Draft == "" {
+	if !st.Composing || st.Comp == nil || text == "" {
 		return
 	}
-	m.noteDraftTouched()
-	r := []rune(st.Draft)
-	st.Draft = string(r[:len(r)-1])
+	st.Comp.Insert(text, m.ProcessingRemoteKeys)
+	st.Error = ""
 }
 
-// AgentMailClearDraft empties the draft and keeps the reply line open. A draft
-// the person cleared by hand is theirs again from here.
-func (m *OS) AgentMailClearDraft() {
-	if m.AgentMail.Composing {
-		m.AgentMail.Draft = ""
-		m.AgentMail.DraftAutomated = m.ProcessingRemoteKeys
+// AgentMailPaste puts a paste into the draft: text, a block for a long one,
+// or an image for the path of an image file or an empty paste.
+func (m *OS) AgentMailPaste(text string) tea.Cmd {
+	st := &m.AgentMail
+	if !st.Composing || st.Comp == nil {
+		return nil
 	}
+	st.Error = ""
+	return m.composerPasteCmd(st.Comp, "", text)
+}
+
+// AgentMailKey gives a key to the mail editor and does what it asks.
+func (m *OS) AgentMailKey(msg tea.KeyPressMsg) tea.Cmd {
+	st := &m.AgentMail
+	if !st.Composing || st.Comp == nil {
+		return nil
+	}
+	st.Error = ""
+	switch st.Comp.Update(msg, m.ProcessingRemoteKeys) {
+	case composer.EventSend:
+		return m.AgentMailSendReply()
+	case composer.EventClose:
+		m.AgentMailCancelReply()
+	case composer.EventPaste:
+		return m.composerClipboardCmd(st.Comp, "")
+	}
+	return nil
+}
+
+// draftAutomated reports whether a key that did not come from the keyboard
+// touched the mail draft.
+func (st *AgentMailState) draftAutomated() bool {
+	return st.Comp != nil && st.Comp.Automated()
 }
 
 // agentMailReplyNonce is the attach nonce a reply carries: attach, the nonce
 // of this client's attach, or "" for a reply that anything other than the
 // keyboard touched. See DraftAutomated.
 func (m *OS) agentMailReplyNonce(attach string) string {
-	if m.AgentMail.DraftAutomated || m.ProcessingRemoteKeys {
+	if m.AgentMail.draftAutomated() || m.ProcessingRemoteKeys {
 		return ""
 	}
 	return attach
@@ -955,13 +979,38 @@ func (m *OS) agentMailReplyNonce(attach string) string {
 // person's address, off the Update goroutine. An empty draft sends nothing.
 func (m *OS) AgentMailSendReply() tea.Cmd {
 	st := &m.AgentMail
-	text := strings.TrimSpace(st.Draft)
-	if !st.Composing || st.Sending {
+	if !st.Composing || st.Sending || st.Comp == nil {
 		return nil
 	}
-	if text == "" {
+	if st.Comp.Empty() {
 		st.Error = "Type a message first."
 		return nil
+	}
+	parts, ok := st.Comp.SubmitParts()
+	if !ok {
+		// Invisible characters were removed; the editor says so.
+		return nil
+	}
+	parts = trimReplyParts(parts)
+	text := composer.JoinParts(parts)
+	blocks := st.Comp.Blocks() > 0
+	if !blocks && len(text) > agentMailMaxText {
+		st.Error = "The message is larger than 8 KB. Paste the long part to send it as a file."
+		return nil
+	}
+	if blocks {
+		if why := replyPartsRefusal(parts); why != "" {
+			st.Error = why
+			return nil
+		}
+		// The daemon writes a block that does not fit, and every image, to
+		// a file and attaches it. text goes too, for a daemon older than
+		// parts, only when it holds the whole message.
+		if n, _ := st.Comp.Images(); n > 0 || len(text) > agentMailMaxText {
+			text = ""
+		}
+	} else {
+		parts = nil
 	}
 	// A new message goes to the chosen pane and answers nothing, so the
 	// daemon starts a thread with it.
@@ -982,7 +1031,7 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()))
+	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()), parts)
 }
 
 // agentMailSendCmd is the send-agent-message call a reply makes. remote says
@@ -991,14 +1040,22 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 // issued in this client's attach reply, and it is what makes the daemon store
 // the reply as verified_human rather than as a claim. It is sent only when
 // there is one, since a daemon that issues none also refuses the parameter.
-func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text, nonce string) tea.Cmd {
+func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text, nonce string, parts []composer.Part) tea.Cmd {
 	return func() tea.Msg {
 		client, err := dial()
 		if err != nil {
 			return AgentMailSentMsg{Err: err, New: replyTo == 0}
 		}
 		defer func() { _ = client.Close() }()
-		_, err = client.Call("send-agent-message", agentMailReplyParams(remote, sessionName, inbox, replyTo, text, nonce))
+		params := agentMailReplyParams(remote, sessionName, inbox, replyTo, text, nonce)
+		if parts != nil {
+			params["parts"] = wireReplyParts(parts)
+		}
+		_, err = client.Call("send-agent-message", params)
+		if err != nil && text == "" && parts != nil && strings.Contains(err.Error(), "text is required") {
+			// A daemon older than parts read no message.
+			err = errors.New("this daemon cannot take images or long pastes in mail. Update the daemon: tuios kill-server")
+		}
 		// A reply always answers a message, so no reply_to is a new message.
 		return AgentMailSentMsg{Err: err, New: replyTo == 0}
 	}
@@ -1045,8 +1102,7 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 		st.Scroll = 0
 	}
 	st.Composing = false
-	st.Draft = ""
-	st.DraftAutomated = false
+	st.Comp = nil
 	st.ComposeTo = ""
 }
 

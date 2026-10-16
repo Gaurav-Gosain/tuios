@@ -128,6 +128,10 @@ pane, and that reads back `"claimed_human": true` and is fenced `UNVERIFIED`.
 Trust only a verified reply as the person's answer. `ask-agent -w human` is
 refused with `no_keyboard`.
 
+The person's reply can carry files: a long paste or an image goes as a file,
+named in the text as `[Pasted text #1: PATH, 42 lines]` or `[Image #1: PATH]`
+and listed in the message's `attachments`. Read them with your own tools.
+
 The person can also write to you first. A message from `human` with no
 `reply_to` starts a new thread. Read it with `read-agent-messages` on your own
 inbox, and reply with `--reply-to` its id.

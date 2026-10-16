@@ -219,7 +219,8 @@ func TestReplyCarriesTheAttachNonce(t *testing.T) {
 func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 	m := &OS{}
 	m.AgentMail.Composing = true
-	m.AgentMail.Draft = "yes, "
+	m.AgentMail.Comp = m.newMailDraft()
+	m.AgentMailType("yes, ")
 
 	m.AgentMailType("go ahead")
 	if got := m.agentMailReplyNonce("abc123"); got != "abc123" {
@@ -230,7 +231,7 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 	m.ProcessingRemoteKeys = true
 	m.AgentMailType("!")
 	m.ProcessingRemoteKeys = false
-	if !m.AgentMail.DraftAutomated {
+	if !m.AgentMail.draftAutomated() {
 		t.Fatal("a routed key typed into the draft did not mark it automated")
 	}
 	if got := m.agentMailReplyNonce("abc123"); got != "" {
@@ -240,6 +241,7 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 	// A reply sent by a routed Enter is automated whoever typed the text.
 	m.AgentMailCancelReply()
 	m.AgentMail.Composing = true
+	m.AgentMail.Comp = m.newMailDraft()
 	m.AgentMailType("typed by hand")
 	m.ProcessingRemoteKeys = true
 	if got := m.agentMailReplyNonce("abc123"); got != "" {
@@ -250,7 +252,7 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 	// Closing the reply line clears the mark, and a fresh draft is the
 	// keyboard's again.
 	m.AgentMailCancelReply()
-	if m.AgentMail.DraftAutomated {
+	if m.AgentMail.draftAutomated() {
 		t.Error("the automated mark outlived the reply line")
 	}
 }

@@ -1192,7 +1192,8 @@ zooms it, and `ctrl+b i` comes back to the same agent. `space` marks an agent
 and `*` marks all of them. With marks, `r` replies to each, `1` lists the
 approvals to allow and `enter` allows them, `3` denies them, `d` dismisses
 and `z` snoozes. On a screen narrower than 110 columns, `enter` opens the
-thread, `enter` there goes to the pane, and `esc` goes back to the list. On the search line a
+thread, `enter` there goes to the pane, and `esc` goes back to the list.
+On the search line a
 `key:value` term is a selector, such as `harness:codex`, and other words
 search the name, the session and the agent's last message.
 
@@ -1206,6 +1207,11 @@ message, `esc` closes. `n` opens a list of the agents in this session. Choose
 one with `enter`, type the message, and press `enter` to send it. In an open
 thread, `r` replies, `o` goes to the pane that last wrote, and `esc` goes back
 to the list.
+
+The message editor works as the Inbox reply does: `ctrl+j` adds a line, a
+long paste shows as one block, and `ctrl+v` attaches the clipboard's image. A
+message that does not fit in 8 KB, or that holds an image, goes with each
+block and image as a file the message attaches.
 
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
 approves and does not ask again, `d` denies, `tab` types an answer, `r` reads

@@ -151,6 +151,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if o.InboxReplyOpen() {
 			return o, o.InboxReplyPaste(msg.Content)
 		}
+		if o.ShowAgentMail && o.AgentMail.Composing {
+			return o, o.AgentMailPaste(msg.Content)
+		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
 		}
@@ -198,6 +201,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			}
 			return o, o.InboxReplyPaste(msg.Content)
 		}
+		if o.ShowAgentMail && o.AgentMail.Composing {
+			if msg.Content == "" {
+				return o, nil
+			}
+			return o, o.AgentMailPaste(msg.Content)
+		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
 		}
@@ -239,6 +248,11 @@ func pasteTakenByOverlay(o *app.OS, content string) bool {
 	// line breaks and all. A long paste is held as one block.
 	// The reply editor is handled by the two callers, before this.
 	if o.InboxReplyOpen() {
+		return true
+	}
+	// The mail editor takes a paste as the reply does. Its image work is
+	// done by the two callers.
+	if o.ShowAgentMail && o.AgentMail.Composing {
 		return true
 	}
 	// The Inbox's one-line editors take a paste on one line. Before they

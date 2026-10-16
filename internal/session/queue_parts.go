@@ -83,6 +83,12 @@ func queuePartsError(msg string) *verbError {
 // the message as list-queued and the log show it, with each block as its
 // label, and the bytes it holds.
 func checkQueueParts(parts []queuePart) (string, int, *verbError) {
+	return checkParts(parts, queueMaxText)
+}
+
+// checkParts is checkQueueParts for a message whose typed text, labels
+// included, is bounded by typedMax.
+func checkParts(parts []queuePart, typedMax int) (string, int, *verbError) {
 	if len(parts) > queueMaxParts {
 		return "", 0, queuePartsError("parts holds " + strconv.Itoa(len(parts)) + " parts, and a message takes at most " + strconv.Itoa(queueMaxParts))
 	}
@@ -145,8 +151,8 @@ func checkQueueParts(parts []queuePart) (string, int, *verbError) {
 	if size > queueMessageMaxBytes {
 		return "", 0, queuePartsError("the message is " + strconv.Itoa(size) + " bytes, and a message takes at most " + strconv.Itoa(queueMessageMaxBytes))
 	}
-	if typed > queueMaxText {
-		return "", 0, queuePartsError("the typed text of the message is longer than " + strconv.Itoa(queueMaxText) + " bytes. Send long text as a paste part")
+	if typed > typedMax {
+		return "", 0, queuePartsError("the typed text of the message is longer than " + strconv.Itoa(typedMax) + " bytes. Send long text as a paste part")
 	}
 	return shown.String(), size, nil
 }
@@ -319,4 +325,49 @@ func groupDigits(n int) string {
 		s = s[:i] + "," + s[i:]
 	}
 	return s
+}
+
+// partsText is the text parts and paste parts joined, and whether any part is
+// an image.
+func partsText(parts []queuePart) (text string, images bool) {
+	var b strings.Builder
+	for _, p := range parts {
+		if p.Kind == queuePartImage {
+			images = true
+			continue
+		}
+		b.WriteString(p.Text)
+	}
+	return b.String(), images
+}
+
+// fileParts writes each paste and image of a message to the paste folder and
+// returns the text with each in its place as a label that names its file, and
+// the paths, in order.
+func (d *Daemon) fileParts(parts []queuePart) (string, []string, error) {
+	var b strings.Builder
+	held := map[string]bool{}
+	var paths []string
+	for i := range parts {
+		p := &parts[i]
+		switch p.Kind {
+		case queuePartText:
+			b.WriteString(p.Text)
+		case queuePartPaste:
+			path, err := d.pastes.saveReply([]byte(p.Text), ".txt", held)
+			if err != nil {
+				return "", paths, err
+			}
+			paths = append(paths, path)
+			b.WriteString(pasteLabel(p, path))
+		case queuePartImage:
+			path, err := d.pastes.saveReply(p.Data, sniffImage(p.Data), held)
+			if err != nil {
+				return "", paths, err
+			}
+			paths = append(paths, path)
+			b.WriteString("[Image #" + strconv.Itoa(p.N) + ": " + path + "]")
+		}
+	}
+	return b.String(), paths, nil
 }

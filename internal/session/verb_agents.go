@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"maps"
 	"slices"
 	"strconv"
@@ -363,10 +364,14 @@ type sendAgentMessageParams struct {
 	Text        string   `json:"text"`
 	ReplyTo     uint64   `json:"reply_to"`
 	Attachments []string `json:"attachments"`
-	HumanNonce  string   `json:"human_nonce"`
-	Host        string   `json:"host"`
-	Select      string   `json:"select"`
-	Confirm     string   `json:"confirm"`
+	// Parts is the message in parts, as queue-prompt takes them: a long
+	// paste or an image is written to the paste folder and attached. With
+	// parts, text is ignored. See mailParts.
+	Parts      []queuePart `json:"parts"`
+	HumanNonce string      `json:"human_nonce"`
+	Host       string      `json:"host"`
+	Select     string      `json:"select"`
+	Confirm    string      `json:"confirm"`
 	// raw is the call's params as sent, which a send with host forwards to
 	// the far machine as they are, so an older daemon there sees only the
 	// names the caller used.
@@ -433,6 +438,38 @@ func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams)
 // pane is in one session and the recipients are in many.
 func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromAnySession bool) (map[string]any, *verbError) {
 	viaLink := cs != nil && cs.viaLink
+	// A message in parts is checked here, and its files are written only
+	// once every other check has passed. Mail to another machine carries
+	// its parts there, and that machine writes them.
+	var filed bool
+	if p.Parts != nil && p.Host == "" {
+		shown, size, verr := checkParts(p.Parts, agentMsgMaxText)
+		if verr != nil {
+			return nil, verr
+		}
+		joined, images := partsText(p.Parts)
+		filed = images || size > agentMsgMaxText
+		if filed {
+			p.Text = shown
+			n := len(p.Attachments)
+			for _, part := range p.Parts {
+				if part.Kind != queuePartText {
+					n++
+				}
+			}
+			if n > agentMsgMaxAttachments {
+				return nil, invalidParam("parts", "a message carries at most 8 attachments, its pastes and images included")
+			}
+			if viaLink && !d.linkPolicy(cs).Allows(config.LinkAllowFiles) {
+				cs.mu.Lock()
+				peer := cs.linkPeer
+				cs.mu.Unlock()
+				return nil, linkFilesRefusal(peer)
+			}
+		} else {
+			p.Text = joined
+		}
+	}
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, invalidParam("text", "text is required: a message with no body tells the reader nothing")
 	}
@@ -601,6 +638,21 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 				Param:  "to",
 				Detail: "A notice from another machine is kept until the ring drops it. Send a message to one window instead.",
 			})
+		}
+	}
+
+	if filed {
+		text, paths, err := d.fileParts(p.Parts)
+		if err != nil {
+			return nil, newVerbError(ErrVerbInternal, "send-agent-message: a pasted block could not be saved: "+err.Error())
+		}
+		msg.Text = text
+		for _, path := range paths {
+			att, err := classifyAttachment(path)
+			if err != nil {
+				return nil, newVerbError(ErrVerbInternal, "send-agent-message: a saved block cannot be attached: "+err.Error())
+			}
+			msg.Attachments = append(msg.Attachments, att)
 		}
 	}
 

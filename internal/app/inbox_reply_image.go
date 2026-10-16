@@ -53,14 +53,32 @@ func (m *OS) replyImagesOK() bool {
 // inboxReplyClipboard is ctrl+v in the reply: the clipboard's image when it
 // holds one and no text, its text otherwise.
 func (m *OS) inboxReplyClipboard(ed *inboxReplyEditor) tea.Cmd {
-	if !ed.comp.TakesImages() || !m.replyImagesOK() || m.imagePaste.keyProbeOff {
+	return m.composerClipboardCmd(ed.comp, ed.window)
+}
+
+// composerClipboardCmd is ctrl+v in a draft: the clipboard's image when it
+// holds one and no text, its text otherwise.
+func (m *OS) composerClipboardCmd(comp *composer.Model, window string) tea.Cmd {
+	if !comp.TakesImages() || !m.replyImagesOK() || m.imagePaste.keyProbeOff {
 		return m.RequestHostPaste()
 	}
 	clip := m.imageClipboardHere()
 	if clip == nil {
 		return m.RequestHostPaste()
 	}
-	return forReply(ed.comp, probeImageCmd(clip, ed.window, imagePasteKey))
+	return forReply(comp, probeImageCmd(clip, window, imagePasteKey))
+}
+
+// composerLive reports whether comp is a draft open now: the Inbox reply's or
+// the mail editor's. A read for any other draft is dropped.
+func (m *OS) composerLive(comp *composer.Model) bool {
+	if comp == nil {
+		return false
+	}
+	if ed := m.Inbox.reply.editor; ed != nil && ed.comp == comp {
+		return true
+	}
+	return m.AgentMail.Composing && m.AgentMail.Comp == comp
 }
 
 // forReply marks the clipboard probe's answer as the draft's.
@@ -79,8 +97,13 @@ func forReply(comp *composer.Model, probe tea.Cmd) tea.Cmd {
 // loop: an empty paste looks for a clipboard image, and a path to an image
 // file reads the file. Any other paste is text, put in the draft at once.
 func (m *OS) inboxReplyPasteCmd(ed *inboxReplyEditor, text string) tea.Cmd {
-	if !ed.comp.TakesImages() || !m.replyImagesOK() {
-		ed.comp.Paste(text, m.ProcessingRemoteKeys)
+	return m.composerPasteCmd(ed.comp, ed.window, text)
+}
+
+// composerPasteCmd is inboxReplyPasteCmd for any draft.
+func (m *OS) composerPasteCmd(comp *composer.Model, window, text string) tea.Cmd {
+	if !comp.TakesImages() || !m.replyImagesOK() {
+		comp.Paste(text, m.ProcessingRemoteKeys)
 		return nil
 	}
 	if text == "" {
@@ -91,14 +114,13 @@ func (m *OS) inboxReplyPasteCmd(ed *inboxReplyEditor, text string) tea.Cmd {
 		if clip == nil {
 			return nil
 		}
-		return forReply(ed.comp, probeImageCmd(clip, ed.window, imagePasteEmpty))
+		return forReply(comp, probeImageCmd(clip, window, imagePasteEmpty))
 	}
 	path, ok := imagePathOfPaste(text)
 	if !ok {
-		ed.comp.Paste(text, m.ProcessingRemoteKeys)
+		comp.Paste(text, m.ProcessingRemoteKeys)
 		return nil
 	}
-	comp := ed.comp
 	return func() tea.Msg {
 		data, err := readImageFile(path)
 		if errors.Is(err, composer.ErrImageTooLarge) {
@@ -120,8 +142,7 @@ func (m *OS) applyReplyImageProbe(msg imageProbeMsg) tea.Cmd {
 	if msg.keyProbeOff {
 		m.imagePaste.keyProbeOff = true
 	}
-	ed := m.Inbox.reply.editor
-	if ed == nil || ed.comp != msg.reply {
+	if !m.composerLive(msg.reply) {
 		return nil
 	}
 	if msg.fallback {
@@ -141,21 +162,21 @@ func (m *OS) applyReplyImageProbe(msg imageProbeMsg) tea.Cmd {
 
 // applyReplyImage puts a read image in the draft it was read for.
 func (m *OS) applyReplyImage(msg replyImageMsg) {
-	ed := m.Inbox.reply.editor
-	if ed == nil || ed.comp != msg.comp {
+	if !m.composerLive(msg.comp) {
 		return
 	}
+	comp := msg.comp
 	switch {
 	case msg.text != "":
-		ed.comp.Paste(msg.text, false)
+		comp.Paste(msg.text, false)
 	case errors.Is(msg.err, composer.ErrImageTooLarge), errors.Is(msg.err, errClipboardTooLarge):
-		ed.comp.SetNotice("The image is larger than 8 MB. Make it smaller and paste it again.")
+		comp.SetNotice("The image is larger than 8 MB. Make it smaller and paste it again.")
 	case errors.Is(msg.err, errNoClipboardImage):
-		ed.comp.SetNotice("The clipboard holds no image.")
+		comp.SetNotice("The clipboard holds no image.")
 	case msg.err != nil:
-		ed.comp.SetNotice("tuios cannot read the clipboard image: " + msg.err.Error())
+		comp.SetNotice("tuios cannot read the clipboard image: " + msg.err.Error())
 	case msg.img != nil:
-		ed.comp.AddImage(msg.img, false)
+		comp.AddImage(msg.img, false)
 	}
 }
 
