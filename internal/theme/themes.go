@@ -45,6 +45,7 @@ func EnsureRegistry() {
 		newBuiltinRegistry()
 		registerCharmToneThemes()
 		registerOmarchyThemes()
+		rememberBuiltins()
 		if themesDir, err := GetThemesDir(); err == nil {
 			if _, err := LoadCustomThemes(themesDir); err != nil {
 				log.Printf("Warning: error loading custom themes: %v", err)
