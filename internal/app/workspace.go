@@ -43,6 +43,30 @@ func (m *OS) NextWorkspace() { m.cycleWorkspace(1) }
 // PrevWorkspace is NextWorkspace in the other direction.
 func (m *OS) PrevWorkspace() { m.cycleWorkspace(-1) }
 
+// LastWorkspace goes back to the workspace this client was on before the
+// current one, as tmux's last-window does. Two presses go back and forth.
+func (m *OS) LastWorkspace() {
+	if m.lastWorkspace < 1 || m.lastWorkspace == m.CurrentWorkspace {
+		m.ShowNotification("No last workspace", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.SwitchToWorkspace(m.lastWorkspace)
+}
+
+// BreakPane moves the focused pane to the first workspace with no pane and
+// goes with it, as tmux's break-pane does.
+func (m *OS) BreakPane() {
+	ws := m.NewWorkspaceTarget()
+	switch {
+	case m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows):
+		return
+	case ws == 0:
+		m.ShowNotification("Every workspace has a pane", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.MoveWindowToWorkspaceAndFollow(m.FocusedWindow, ws)
+}
+
 func (m *OS) cycleWorkspace(step int) {
 	n := m.NumWorkspaces
 	for i := 1; i < n; i++ {
@@ -187,6 +211,9 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	}
 
 	oldWorkspace := m.CurrentWorkspace
+	if !session.IsScratchWorkspace(oldWorkspace) && !session.IsScratchWorkspace(workspace) {
+		m.lastWorkspace = oldWorkspace
+	}
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 

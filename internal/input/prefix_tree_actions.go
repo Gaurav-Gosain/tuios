@@ -37,6 +37,24 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 
 	// Workspaces as tmux windows.
 	d.Register("new_workspace", handleNewWorkspace)
+	d.Register("last_workspace", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.LastWorkspace()
+		return o, nil
+	})
+	d.Register("break_pane", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.BreakPane()
+		return o, nil
+	})
+	d.Register("last_session", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.LastSession()
+		return o, nil
+	})
+	// The leader itself, to the pane: what pressing it twice does in terminal
+	// mode, as a key of its own, for screen's C-a a and a nested tmux.
+	d.Register("send_prefix", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		forwardKeyToFocusedWindow(o.LeaderKeyPress(), o)
+		return o, nil
+	})
 	d.Register("move_workspace_left", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.MoveWorkspaceBy(-1)
 		return o, nil

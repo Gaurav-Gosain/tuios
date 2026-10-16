@@ -499,6 +499,17 @@ resize_pane_down_5 = ["alt+down"]
 next_workspace = ["n"]          # runs once
 ```
 
+### tmux keys with no default
+
+`last_workspace` (tmux `l`), `break_pane` (`!`), `last_session` (`L`) and
+`send_prefix` (screen `C-a a`) have no default key. Bind them:
+
+```toml
+[keybindings.prefix_mode]
+last_workspace = ["l"]
+break_pane = ["!"]
+```
+
 ### Copy mode for a tmux user
 
 Copy mode starts with its cursor on the terminal cursor, usually the prompt

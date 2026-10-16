@@ -1611,3 +1611,13 @@ func (m *OS) capturePane(windowTarget, flags string) (string, error) {
 	// grid; a capture is text and gets blanks in their place.
 	return vt.StripKittyPlaceholders(content), nil
 }
+
+// LeaderKeyPress is the leader key as the key press it is, for send_prefix,
+// which hands it to the pane the way a second press of the leader does.
+func (m *OS) LeaderKeyPress() tea.KeyPressMsg {
+	leader := m.Settings.LeaderKey
+	if leader == "" {
+		leader = config.DefaultLeaderKey
+	}
+	return m.parseKeyToMessage(leader)
+}
