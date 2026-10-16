@@ -46,6 +46,11 @@ import (
 // tens of kilobytes at most.
 const replyPreviewMax = 64
 
+// replyPreviewMaxPixels bounds the images a preview decodes, by the size the
+// header gives. A small file can declare a huge image, and decoding it would
+// take gigabytes. A larger image is still sent; it is shown blank here.
+const replyPreviewMaxPixels = 24 << 20
+
 // replyPreviewIDBase is where the reply previews' kitty image ids start, apart
 // from the launcher's (0xF000_0000) and the screenshot preview's
 // (0xF100_0000).
@@ -271,6 +276,9 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 // bytes of the box's size in pixels. It returns nil for an image this build
 // cannot decode, such as WebP, which is then shown blank.
 func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground color.Color) *previewPicture {
+	if img.Width <= 0 || img.Height <= 0 || img.Width > replyPreviewMaxPixels/img.Height {
+		return nil
+	}
 	src, _, err := image.Decode(bytes.NewReader(img.Data))
 	if err != nil {
 		return nil
