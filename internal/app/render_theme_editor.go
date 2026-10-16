@@ -230,7 +230,12 @@ func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal 
 	b.WriteString(themeEditorInk(ground, pal.FgDim, fitLine(hex, themeEditorHexW), false))
 	if floor, on := m.themeEditorFloor(row); floor > 0 && on != nil && c != nil && !overlay.IsNoColor(c) {
 		ratio := themeEditorRatio(c, on)
+		// Five cells at most, so "! " and the badge fit the row's last
+		// seven: 10.9:1 ran one cell into the sheet's padding.
 		badge := fmt.Sprintf("%.1f:1", ratio)
+		if ratio >= 10 {
+			badge = fmt.Sprintf("%.0f:1", ratio)
+		}
 		if ratio < floor {
 			b.WriteString(themeEditorInk(ground, pal.Warn, "! "+badge, true))
 		} else {
