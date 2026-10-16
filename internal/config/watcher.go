@@ -303,9 +303,19 @@ func (cw *Watcher) assetEvent(name string, event fsnotify.Event) bool {
 	}
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
-	if watched, ok := cw.assets[name]; ok {
-		if !watched && event.Has(fsnotify.Create) {
+	if _, ok := cw.assets[name]; ok {
+		// The directory itself came or went. A watch follows an inode, so a
+		// directory removed and made again, or a symlink pointed at another
+		// directory (home-manager, stow), needs a new watch: the old one is
+		// gone, or still on the old target. Remove fails harmlessly when the
+		// kernel already dropped the watch.
+		switch {
+		case event.Has(fsnotify.Create):
+			_ = cw.watcher.Remove(name)
 			cw.assets[name] = cw.watcher.Add(name) == nil
+		case event.Has(fsnotify.Remove), event.Has(fsnotify.Rename):
+			_ = cw.watcher.Remove(name)
+			cw.assets[name] = false
 		}
 		return true
 	}

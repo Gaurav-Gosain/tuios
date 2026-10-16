@@ -281,9 +281,14 @@ func TestReloadRefusesAFileThatDoesNotValidate(t *testing.T) {
 // reach OnAssets once, and neither is taken for a config change. The config
 // half is the positive control that the config is still watched.
 //
+// The directory is also removed and made again, and then made a symlink that
+// is pointed at another directory, and a save after each still arrives.
+//
 // Negative controls: without the watch added on the directory's Create, the
 // theme save delivers nothing; without the stamp check, the stamp delivers
-// nothing.
+// nothing; without the watch dropped on Remove, the save in the directory made
+// again delivers nothing; without the watch renewed on a Create of a directory
+// already watched, the save behind the new symlink target delivers nothing.
 func TestWatcherFollowsThemeFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -316,6 +321,55 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 	waitAssets("the themes directory was made")
 	saveLikeVim(t, filepath.Join(themes, "mine.json"), `{"red": "#ff0000"}`)
 	waitAssets("a theme file was saved")
+
+	// settle drains the calls a directory change makes, so the next wait
+	// counts only the save after it.
+	settle := func() {
+		for {
+			select {
+			case <-assets:
+			case <-time.After(3 * configDebounce):
+				return
+			}
+		}
+	}
+
+	// Removed and made again: the old watch died with the old directory.
+	if err := os.RemoveAll(themes); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	if err := os.Mkdir(themes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	saveLikeVim(t, filepath.Join(themes, "mine.json"), `{"red": "#00ff00"}`)
+	waitAssets("a theme file was saved in a directory made again")
+
+	// A symlink pointed at another directory, the way home-manager switches
+	// a generation: a new link renamed over the old one.
+	gen1, gen2 := filepath.Join(dir, "gen1"), filepath.Join(dir, "gen2")
+	for _, g := range []string{gen1, gen2} {
+		if err := os.Mkdir(g, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.RemoveAll(themes); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(gen1, themes); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	if err := os.Symlink(gen2, themes+".new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(themes+".new", themes); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	saveLikeVim(t, filepath.Join(gen2, "mine.json"), `{"red": "#0000ff"}`)
+	waitAssets("a theme file was saved behind a symlink pointed at a new directory")
 
 	stamp := filepath.Join(dir, ThemeReloadStamp)
 	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
