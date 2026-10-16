@@ -485,11 +485,17 @@ directly.
 
 tmux `bind -r` is built in. After the resize, focus, scroll and workspace-step
 actions, the leader stays armed for `appearance.prefix_repeat_time` (500 ms).
-Press the same key again to repeat the action. There is no per-binding flag:
+Press the same key again to repeat the action. `keybindings.repeat` replaces
+the list of actions that repeat. Leave a letter key's action out of it, so the
+letter typed next reaches the shell:
 
 ```toml
+[keybindings]
+repeat = ["resize_pane_up_5", "resize_pane_down_5"]
+
 [keybindings.prefix_mode]
 resize_pane_up_5 = ["alt+up"]   # ctrl+b alt+up alt+up alt+up
+next_workspace = ["n"]          # runs once
 ```
 
 ### Copy mode for a tmux user

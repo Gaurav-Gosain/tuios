@@ -150,9 +150,48 @@ func keyByName(name string) tea.KeyPressMsg {
 // Negative control: putting "resize_left" back in the set fails this.
 func TestEveryRepeatableActionExists(t *testing.T) {
 	d := GetDispatcher()
-	for action := range repeatablePrefixActions {
+	for _, action := range config.DefaultPrefixRepeat {
 		if !d.HasAction(action) && !app.PrefixWorkActions[action] {
 			t.Errorf("%q is repeatable but no action of that name is registered", action)
 		}
+	}
+}
+
+// TestARepeatListReplacesTheDefault: keybindings.repeat is the whole set, not
+// an addition to it. A tmux user who binds next_workspace to n leaves it out,
+// so the n of a word typed right after ctrl+b n reaches the shell. An empty
+// list turns repeat off.
+//
+// Negative control: merging the list into DefaultPrefixRepeat keeps
+// terminal_focus_right armed in both rows.
+func TestARepeatListReplacesTheDefault(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		repeat []string
+		arms   map[string]bool
+	}{
+		{"own list", []string{"prefix_next_window"}, map[string]bool{"prefix_next_window": true, "terminal_focus_right": false}},
+		{"empty", []string{}, map[string]bool{"prefix_next_window": false, "terminal_focus_right": false}},
+		{"unset", nil, map[string]bool{"prefix_next_window": false, "terminal_focus_right": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.Keybindings.Repeat = tc.repeat
+			m := app.NewOS(app.OSOptions{UserConfig: cfg})
+			m.KeybindRegistry = config.NewKeybindRegistry(cfg)
+			m.Settings.PrefixRepeatTime = config.PrefixRepeatTimeDefault
+			for action, want := range tc.arms {
+				m.ClearPrefixRepeat()
+				m.PrefixActive = true
+				key, ok := prefixKeyFor(t, m, action)
+				if !ok {
+					t.Fatalf("ASSERTION: no prefix key runs %s", action)
+				}
+				HandlePrefixCommand(key, m)
+				if got := m.PrefixRepeatLive(); got != want {
+					t.Errorf("after %s the prefix is armed = %v, want %v", action, got, want)
+				}
+			}
+		})
 	}
 }
