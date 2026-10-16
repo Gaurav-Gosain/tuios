@@ -183,8 +183,31 @@ so a theme written without a `chrome` object renders identically:
 | `panel` | the outer band and the selected-row bar | derived from `surface` |
 | `card` | inset chips and input fields | derived from `surface` |
 
-A field that is not a hex color is dropped on its own and that role derives as
-usual, so a typo costs one color rather than the theme.
+A field takes any colour value from
+[CONFIGURATION.md](CONFIGURATION.md#colour-values): hex, an ANSI number, a slot
+name, a CharmTone name, or another role. A slot name is a colour of this
+theme's own sixteen, so `"accent": "bright_magenta"` takes this file's
+`bright_purple`. A role name is another field of the same object:
+
+```json
+"chrome": {
+  "accent": "bright_red",
+  "info":   "accent",
+  "card":   "#2a2a37"
+}
+```
+
+A role that the object does not set is the colour that role derives from, so
+`"info": "warning"` with no `warning` field is the theme's `yellow`. Hex can be
+written with or without the `#`, as before. A number with 3 or 6 digits and no
+`#` is read as hex. `text`, `dim` and `muted` are not fields, because tuios
+measures the text inks from the surface.
+
+A field that is not a colour is dropped on its own and that role derives as
+usual, so a typo costs one color rather than the theme. Roles that name each
+other in a loop, such as `"accent": "info"` and `"info": "accent"`, have no
+colour. tuios does not load that file, and `tuios list-themes` names the
+roles in the loop.
 
 ### The surface
 

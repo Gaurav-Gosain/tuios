@@ -23,6 +23,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/atomicfile"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -141,13 +142,15 @@ func Palette(themeID string) (p *shot.Palette, warn string) {
 //
 // The palette passed in is not modified.
 func WithPaneBackground(p *shot.Palette, setting, themeID string) *shot.Palette {
-	if p == nil || !config.IsHexColor(setting) {
+	if p == nil || setting == config.BackgroundOff || setting == config.BackgroundTheme {
 		return p
 	}
-	bg, ok := shot.ParseHex(setting)
-	if !ok {
+	c := theme.ConfigColor(setting)
+	if c == nil || overlay.IsNoColor(c) {
 		return p
 	}
+	r, g, b, _ := c.RGBA()
+	bg := shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 	out := *p
 	out.BG = bg
 	if themeID != "" {

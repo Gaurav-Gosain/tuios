@@ -30,7 +30,7 @@ border_style = "double"
 tokens = ["name", "colour", "name"]
 
 [appearance.sidebar.agent_row.name]
-fg = "purple"
+fg = "lavender"
 bold = "yes"
 size = 3
 
@@ -66,7 +66,7 @@ fg = "info"
 	for _, want := range []string{
 		"no agent row token called \"colour\"",
 		"listed twice",
-		"fg is \"purple\"",
+		"fg: \"lavender\" is not a colour",
 		"bold must be true or false",
 		"size is not a key",
 		"has equals and contains",

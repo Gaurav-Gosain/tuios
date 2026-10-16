@@ -293,8 +293,10 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 	case config.ScrollbarTintMuted:
 		return theme.BorderUnfocusedOn(m.host.bg), track
 	}
-	if hex, ok := m.Settings.ScrollbarTintHex(); ok {
-		return lipgloss.Color(hex), track
+	if v, ok := m.Settings.ScrollbarTintColor(); ok {
+		if c := theme.ConfigColor(v); c != nil {
+			return c, track
+		}
 	}
 	if !focused {
 		return theme.BorderUnfocusedOn(m.host.bg), track

@@ -48,9 +48,9 @@ func (m *OS) renderScrollbackBrowser() string {
 	// The marks a pane paints over its own output, so the browser's search
 	// and selection read as the same thing the pane's do. See
 	// config.SelectionConfig.
-	searchBgColor := lipgloss.Color(m.Settings.SearchBg)
-	matchFg := lipgloss.Color(m.Settings.MatchFg)
-	matchBgColor := lipgloss.Color(m.Settings.MatchBg)
+	searchBgColor := configInk(m.Settings.SearchBg)
+	matchFg := configInk(m.Settings.MatchFg)
+	matchBgColor := configInk(m.Settings.MatchBg)
 
 	// Inner content area (border=2, padding=2 top/bot, 4 left/right)
 	innerW := w - 6 // border(2) + padding-left(2) + padding-right(2)
@@ -160,9 +160,9 @@ func (m *OS) renderScrollbackBrowser() string {
 	}
 	rightLines := buildRightPane(browser, rightW, paneH, dimFg, accent, okClr, failClr, browserMarks{
 		cursorBg: pal.Selected,
-		visualBg: lipgloss.Color(m.Settings.SelectionBg),
+		visualBg: configInk(m.Settings.SelectionBg),
 		searchBg: searchBgColor,
-		searchFg: lipgloss.Color(m.Settings.SearchFg),
+		searchFg: configInk(m.Settings.SearchFg),
 		normalFg: pal.FgDim,
 	})
 

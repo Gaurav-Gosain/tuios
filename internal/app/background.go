@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -123,6 +123,7 @@ func (g ground) on() bool { return g.bg != nil }
 type groundMemo struct {
 	setting, themeID string
 	themeGen         uint64
+	depth            overlay.Depth
 	valid            bool
 	ground           ground
 }
@@ -138,13 +139,15 @@ func (m *OS) surfaceGround(which surface) ground {
 	}
 	// The generation, not the id alone: the omarchy theme keeps its id while
 	// its colours change.
-	gen := theme.Generation()
+	// The depth too: a slot name resolves to the terminal's own slot at 16
+	// colours.
+	gen, depth := theme.Generation(), theme.Depth()
 	memo := &m.groundCache[which]
-	if memo.valid && memo.setting == setting && memo.themeGen == gen {
+	if memo.valid && memo.setting == setting && memo.themeGen == gen && memo.depth == depth {
 		return memo.ground
 	}
 	themeID := theme.CurrentThemeID()
-	memo.setting, memo.themeID, memo.themeGen, memo.valid = setting, themeID, gen, true
+	memo.setting, memo.themeID, memo.themeGen, memo.depth, memo.valid = setting, themeID, gen, depth, true
 	memo.ground = resolveGround(setting, themeID)
 	return memo.ground
 }
@@ -184,6 +187,8 @@ func (m *OS) frameGrounds() frameGrounds {
 // foreground is the theme's lifted until it reads on it when a theme is set,
 // and the host's own when none is, since tuios does not know the host's
 // palette and choosing a stranger's is worse than trusting the user's pick.
+// A role or a slot name is a colour too, resolved on the theme in force; one
+// that resolves to the terminal's default colour paints nothing.
 func resolveGround(setting, themeID string) ground {
 	var g ground
 	switch setting {
@@ -202,17 +207,18 @@ func resolveGround(setting, themeID string) ground {
 			g.fg = solidColor(fg)
 		}
 	default:
-		if !config.IsHexColor(setting) {
+		bg := theme.ConfigColor(setting)
+		if isNilColor(bg) || overlay.IsNoColor(bg) {
 			return g
 		}
-		g.bg = solidColor(lipgloss.Color(setting))
+		g.bg = solidColor(bg)
 		if themeID != "" {
 			if fg := theme.TerminalFg(); !isNilColor(fg) {
 				g.fg = solidColor(theme.ReadableAt(fg, g.bg, theme.ContrastFloor))
 			}
 		}
 	}
-	g.key = setting + "\x00" + themeID + "\x00" + strconv.FormatUint(theme.Generation(), 10)
+	g.key = setting + "\x00" + themeID + "\x00" + strconv.FormatUint(theme.Generation(), 10) + "\x00" + theme.Depth().String()
 	g.bgSGR = sgrColor(48, g.bg)
 	if g.fg != nil {
 		g.fgSGR = sgrColor(38, g.fg)

@@ -240,19 +240,20 @@ func (m *OS) dockCustomCell(name string) string {
 // renderDockCell draws a cell's text with a column either side. A cell with no
 // style rests on Panel in FgDim, as every cell did before styles existed. A
 // styled one takes its own colours; an unset background still falls back to
-// Panel, for the SGR-reset reason dockCustomCell gives. A colour that is not
-// "#rrggbb" counts as unset, because lipgloss turns it into no colour at all,
+// Panel, for the SGR-reset reason dockCustomCell gives. A value that is not a
+// colour counts as unset, because lipgloss turns it into no colour at all,
 // which is the hole that fallback exists to close; the config warns about it.
+// A role such as accent is read off the dock's own palette.
 // An unset foreground is the dim ink made readable on the background the cell
 // really has. The caps are drawn in that background colour.
 func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) string {
 	bg := pal.Panel
-	if config.IsHexColor(st.Bg) {
-		bg = lipgloss.Color(st.Bg)
+	if c := theme.ConfigColorOn(st.Bg, pal); c != nil {
+		bg = c
 	}
 	fg := theme.Readable(pal.FgDim, bg)
-	if config.IsHexColor(st.Fg) {
-		fg = lipgloss.Color(st.Fg)
+	if c := theme.ConfigColorOn(st.Fg, pal); c != nil {
+		fg = c
 	}
 	body := lipgloss.NewStyle().Background(bg).Foreground(fg).Bold(st.Bold).Render(" " + text + " ")
 	if st.CapLeft == "" && st.CapRight == "" {

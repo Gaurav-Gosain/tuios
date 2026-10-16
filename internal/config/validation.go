@@ -391,6 +391,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	validateDimUnfocused(cfg, result)
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
+	validateSelectionColors(cfg, result)
 	validateScrollbar(cfg, result)
 	validateDockModeIcons(cfg, result)
 	validateBackgrounds(cfg, result)
@@ -419,24 +420,22 @@ func validateBackgrounds(cfg *UserConfig, result *ValidationResult) {
 // validateBackground is validateBackgrounds for one option.
 func validateBackground(key, v, surface string, themed bool, result *ValidationResult) {
 	switch {
-	case v == "" || v == BackgroundOff || IsHexColor(v):
+	case v == "" || v == BackgroundOff || theme.IsColor(v):
 		return
 	case v == BackgroundTheme:
 		if themed {
 			return
 		}
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "appearance",
-			Key:   key,
-			Message: fmt.Sprintf("%s is theme but no theme is set, so there is no theme background "+
-				"to paint and %s; set a theme or a #RRGGBB colour", key, surface),
+			Field:   "appearance",
+			Key:     key,
+			Message: fmt.Sprintf("%s is theme, but no theme is set. %s. Set a theme or a colour", key, sentence(surface)),
 		})
 	default:
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field: "appearance",
-			Key:   key,
-			Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); %s",
-				v, strings.Join(Backgrounds, ", "), surface),
+			Field:   "appearance",
+			Key:     key,
+			Message: fmt.Sprintf("%s. %s", ColourProblem(v, Backgrounds...), sentence(surface)),
 		})
 	}
 }
@@ -524,10 +523,37 @@ func validateClockFormat(format string, result *ValidationResult) {
 // hexColorPattern matches the one colour literal the config accepts.
 var hexColorPattern = lazyre.New(`^#[0-9a-fA-F]{6}$`)
 
-// IsHexColor reports whether s is a colour literal the config can hold. One
-// spelling, so a value written by the settings panel, typed at the CLI or put in
-// the file by hand is the same string either way.
+// IsHexColor reports whether s is #rrggbb, the one spelling the colour picker
+// writes. A config value may be any colour theme.ParseColor reads; this only
+// tells a picked hex from a name.
 func IsHexColor(s string) bool { return hexColorPattern().MatchString(s) }
+
+// ColourProblem is the warning for a colour value v that is not a colour: what
+// is wrong and what to write instead. keywords are the words the key takes
+// besides a colour, such as off and theme.
+func ColourProblem(v string, keywords ...string) string {
+	_, err := theme.ParseColor(v)
+	if err == nil {
+		err = fmt.Errorf("%q is not a colour. %s", v, theme.ColorHelp)
+	}
+	msg := err.Error()
+	switch len(keywords) {
+	case 0:
+	case 1:
+		msg += ". You can also use " + keywords[0]
+	default:
+		msg += ". You can also use " + strings.Join(keywords[:len(keywords)-1], ", ") + " or " + keywords[len(keywords)-1]
+	}
+	return msg
+}
+
+// sentence makes a lower-case clause a sentence.
+func sentence(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
 
 // validateBorderColors warns about a border override that is not a colour.
 //
@@ -540,13 +566,36 @@ func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 		{"border_focused_color", cfg.Appearance.BorderFocusedColor},
 		{"border_unfocused_color", cfg.Appearance.BorderUnfocusedColor},
 	} {
-		if c.value == "" || IsHexColor(c.value) {
+		if c.value == "" || theme.IsColor(c.value) {
 			continue
 		}
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance",
 			Key:     c.key,
-			Message: fmt.Sprintf("'%s' is not a colour (expected #RRGGBB); the theme's border colour is used instead", c.value),
+			Message: ColourProblem(c.value) + ". The border uses the theme colour",
+		})
+	}
+}
+
+// validateSelectionColors warns about a selection colour that is not a colour.
+// The mark is drawn without it: a background left out tints nothing, and a
+// foreground left out keeps the program's own colour.
+func validateSelectionColors(cfg *UserConfig, result *ValidationResult) {
+	sel := cfg.Appearance.Selection
+	for _, c := range [...]struct{ key, value string }{
+		{"bg", sel.Bg}, {"fg", sel.Fg},
+		{"search_bg", sel.SearchBg}, {"search_fg", sel.SearchFg},
+		{"match_bg", sel.MatchBg}, {"match_fg", sel.MatchFg},
+		{"cursor_bg", sel.CursorBg}, {"cursor_fg", sel.CursorFg},
+		{"flash_color", sel.FlashColor},
+	} {
+		if c.value == "" || theme.IsColor(c.value) {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "selection." + c.key,
+			Message: ColourProblem(c.value) + ". The mark is drawn without this colour",
 		})
 	}
 }
@@ -598,14 +647,13 @@ func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
 		checkGlyph("track", sb.Track)
 	}
 
-	if sb.Tint == "" || slices.Contains(ScrollbarTints, sb.Tint) || IsHexColor(sb.Tint) {
+	if sb.Tint == "" || slices.Contains(ScrollbarTints, sb.Tint) || theme.IsColor(sb.Tint) {
 		return
 	}
 	result.Warnings = append(result.Warnings, ValidationError{
-		Field: "appearance",
-		Key:   "scrollbar.tint",
-		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s, or #RRGGBB); falling back to default",
-			sb.Tint, strings.Join(ScrollbarTints, ", ")),
+		Field:   "appearance",
+		Key:     "scrollbar.tint",
+		Message: ColourProblem(sb.Tint, ScrollbarTints...) + ". The scrollbar uses the quiet tint",
 	})
 }
 

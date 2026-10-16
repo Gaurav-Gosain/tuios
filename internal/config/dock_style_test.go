@@ -56,8 +56,9 @@ func TestValidateDockCellColors(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Dock.Session.Fg = "#12345"
 	cfg.Dock.Custom = map[string]DockCustomConfig{
-		"x": {Command: "echo", DockCellStyle: DockCellStyle{Bg: "green"}},
-		"y": {Command: "echo", DockCellStyle: DockCellStyle{Bg: "#7fbbb3"}},
+		"x": {Command: "echo", DockCellStyle: DockCellStyle{Bg: "lime"}},
+		"y": {Command: "echo", DockCellStyle: DockCellStyle{Bg: "#7fbbb3", Fg: "bright_magenta"}},
+		"z": {Command: "echo", DockCellStyle: DockCellStyle{Bg: "accent", Fg: "212"}},
 	}
 	result := &ValidationResult{}
 	validateDock(cfg, result)
@@ -71,7 +72,9 @@ func TestValidateDockCellColors(t *testing.T) {
 			t.Errorf("warnings %q do not name %s", got, want)
 		}
 	}
-	if strings.Contains(got, "dock.custom.y.bg") {
-		t.Errorf("a valid colour was warned about: %q", got)
+	for _, valid := range []string{"dock.custom.y.bg", "dock.custom.y.fg", "dock.custom.z.bg", "dock.custom.z.fg"} {
+		if strings.Contains(got, valid) {
+			t.Errorf("a valid colour was warned about: %s in %q", valid, got)
+		}
 	}
 }

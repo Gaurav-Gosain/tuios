@@ -1735,12 +1735,12 @@ name alone. Some of them:
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn. On the left, the pill order is close, zoom, minimize, so close sits at the outer corner |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
-| `background` | `off`, `theme`, `#RRGGBB` | Background painted on every surface not set on its own: panes, desktop, window chrome, dock and rail (default `off`) |
-| `pane_background` | `off`, `theme`, `#RRGGBB`, or empty | Background behind pane content where the program left the default; empty follows `background` |
-| `desktop_background` | `off`, `theme`, `#RRGGBB`, or empty | Background behind and between panes; empty follows `background` |
-| `window_chrome_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under pane borders and title bars, which keep their own ink; empty follows `background` |
-| `dock_background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the dock; empty follows `background` |
-| `appearance.sidebar.background` | `off`, `theme`, `#RRGGBB`, or empty | Background under the rail; empty follows `background` |
+| `background` | `off`, `theme`, a colour | Background painted on every surface not set on its own: panes, desktop, window chrome, dock and rail (default `off`) |
+| `pane_background` | `off`, `theme`, a colour, or empty | Background behind pane content where the program left the default; empty follows `background` |
+| `desktop_background` | `off`, `theme`, a colour, or empty | Background behind and between panes; empty follows `background` |
+| `window_chrome_background` | `off`, `theme`, a colour, or empty | Background under pane borders and title bars, which keep their own ink; empty follows `background` |
+| `dock_background` | `off`, `theme`, a colour, or empty | Background under the dock; empty follows `background` |
+| `appearance.sidebar.background` | `off`, `theme`, a colour, or empty | Background under the rail; empty follows `background` |
 | `hints.all_panes` | `true`, `false` | The hints key puts labels on all panes on the workspace, not only on the focused pane (default `false`) |
 | `scratch.width` | cells (`100`) or percent (`80%`) | Width of the scratch terminal that `Ctrl+B g` shows (default `80%`) |
 | `scratch.height` | cells (`30`) or percent (`80%`) | Height of the scratch terminal (default `80%`) |

@@ -176,7 +176,7 @@ number_glyphs = ["A"]
 }
 
 // TestDockTabsFlatColourFallbacks: a flat strip that sets no colour, or sets
-// one that is not #rrggbb, still says which workspace is current. The current
+// one that is not a colour, still says which workspace is current. The current
 // tab sits on the palette's accent and the other is dim text on the bar's own
 // ground. A bad value is dropped where it is drawn: handed to lipgloss as is,
 // "a7c080" resolves to no colour, which paints the terminal's default over the
@@ -225,9 +225,10 @@ func TestDockTabsFlatColourFallbacks(t *testing.T) {
 	}
 }
 
-// TestDockTabsConfigWarnings: a [dock.tabs] with an unknown style and a colour
-// that is not #rrggbb is reported at load, one problem each, and a valid one is
-// not. The count is what the notification says.
+// TestDockTabsConfigWarnings: a [dock.tabs] with an unknown style and a value
+// that is not a colour is reported at load, one problem each, and a valid one
+// is not. The count is what the notification says. The valid case writes a
+// colour in each form: hex, a slot name, a role and an ANSI index.
 //
 // Negative controls: with the `validateDockColors(result, "dock.tabs", ...)`
 // call removed from validateDock the bad case says "1 config problem"; with the
@@ -236,7 +237,7 @@ func TestDockTabsFlatColourFallbacks(t *testing.T) {
 func TestDockTabsConfigWarnings(t *testing.T) {
 	t.Run("bad", func(t *testing.T) {
 		base := t.TempDir()
-		writeConfig(t, base, "[dock.tabs]\nstyle = \"round\"\nactive_bg = \"green\"\n")
+		writeConfig(t, base, "[dock.tabs]\nstyle = \"round\"\nactive_bg = \"lime\"\n")
 		term := startIn(t, base, startOpts{cols: 120, rows: 30})
 		if err := term.WaitForText("2 config problems", bootTimeout); err != nil {
 			t.Fatalf("a bad style and a bad colour were not both reported: %v\n%s", err, term.Snapshot())
@@ -244,7 +245,8 @@ func TestDockTabsConfigWarnings(t *testing.T) {
 	})
 	t.Run("valid", func(t *testing.T) {
 		base := t.TempDir()
-		writeConfig(t, base, "[dock.tabs]\nstyle = \"flat\"\nactive_bg = \"#a7c080\"\n")
+		writeConfig(t, base, "[dock.tabs]\nstyle = \"flat\"\nactive_bg = \"#a7c080\"\n"+
+			"inactive_fg = \"bright_black\"\nseparator_fg = \"muted\"\nactive_fg = \"231\"\n")
 		term := startIn(t, base, startOpts{cols: 120, rows: 30})
 		if err := term.WaitForText("1:0", bootTimeout); err != nil {
 			t.Fatalf("the dock never drew: %v\n%s", err, term.Snapshot())

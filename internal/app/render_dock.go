@@ -86,15 +86,13 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	return caps.Render(lc) + pill + caps.Render(rc)
 }
 
-// tabColor is a configured [dock.tabs] colour, or nil when it is unset or not
-// #rrggbb. lipgloss turns a value it cannot parse into no colour at all, which
-// would paint the terminal's default in the middle of the bar, so a bad value
-// is dropped here, where validateDock has already said it is ignored.
-func tabColor(s string) color.Color {
-	if !config.IsHexColor(s) {
-		return nil
-	}
-	return lipgloss.Color(s)
+// tabColor is a configured [dock.tabs] colour on the dock's palette, or nil
+// when it is unset or not a colour. lipgloss turns a value it cannot parse
+// into no colour at all, which would paint the terminal's default in the
+// middle of the bar, so a bad value is dropped here, where validateDock has
+// already said it is ignored. A role such as accent is the dock's own.
+func tabColor(s string, pal overlay.Palette) color.Color {
+	return theme.ConfigColorOn(s, pal)
 }
 
 // flatWorkspaceTab renders one [dock.tabs] style = "flat" tab: the label with a
@@ -106,9 +104,9 @@ func tabColor(s string) color.Color {
 // does there. A picked-up tab comes up onto Surface, the same lift a dragged
 // pill gets.
 func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette) string {
-	fg, bg, bold := tabColor(t.InactiveFg), tabColor(t.InactiveBg), t.InactiveBold
+	fg, bg, bold := tabColor(t.InactiveFg, pal), tabColor(t.InactiveBg, pal), t.InactiveBold
 	if active {
-		fg, bg, bold = tabColor(t.ActiveFg), tabColor(t.ActiveBg), t.ActiveBold
+		fg, bg, bold = tabColor(t.ActiveFg, pal), tabColor(t.ActiveBg, pal), t.ActiveBold
 	}
 	st := lipgloss.NewStyle()
 	onAccent := false
@@ -154,11 +152,11 @@ func groundOr(c, fallback color.Color) color.Color {
 
 // dockTabGapText is what is drawn between two tabs: the flat style's styled
 // separator, or bare columns.
-func dockTabGapText(t *config.DockTabsConfig) string {
+func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 	if !t.Flat() || t.Separator == "" {
 		return strings.Repeat(" ", dockWorkspacePillGap)
 	}
-	if fg := tabColor(t.SeparatorFg); fg != nil {
+	if fg := tabColor(t.SeparatorFg, pal); fg != nil {
 		return lipgloss.NewStyle().Foreground(fg).Render(t.Separator)
 	}
 	return t.Separator
@@ -214,7 +212,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	gutter(m.Settings.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
 
 	drawn := 0
-	gapText := dockTabGapText(&style)
+	gapText := dockTabGapText(&style, pal)
 	for i, t := range s.Pills {
 		if i > 0 {
 			b.WriteString(gapText)

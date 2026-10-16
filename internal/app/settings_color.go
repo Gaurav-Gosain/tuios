@@ -128,7 +128,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Background behind text selected in copy mode",
 		apply: selectionColorApply(func(s *config.Settings, v string) { s.SelectionBg = v }),
 		effective: func(_ color.Color, s *config.Settings) color.Color {
-			return lipgloss.Color(s.SelectionBg)
+			return configInk(s.SelectionBg)
 		},
 	},
 	{
@@ -147,7 +147,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Background behind every match of a search",
 		apply: selectionColorApply(func(s *config.Settings, v string) { s.SearchBg = v }),
 		effective: func(_ color.Color, s *config.Settings) color.Color {
-			return lipgloss.Color(s.SearchBg)
+			return configInk(s.SearchBg)
 		},
 	},
 	{
@@ -166,7 +166,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Background behind the one match the cursor is on",
 		apply: selectionColorApply(func(s *config.Settings, v string) { s.MatchBg = v }),
 		effective: func(_ color.Color, s *config.Settings) color.Color {
-			return lipgloss.Color(s.MatchBg)
+			return configInk(s.MatchBg)
 		},
 	},
 	{
@@ -185,7 +185,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Background of the block copy mode draws where its cursor is",
 		apply: selectionColorApply(func(s *config.Settings, v string) { s.CopyCursorBg = v }),
 		effective: func(_ color.Color, s *config.Settings) color.Color {
-			return lipgloss.Color(s.CopyCursorBg)
+			return configInk(s.CopyCursorBg)
 		},
 	},
 	{
@@ -204,7 +204,7 @@ var colorSettings = []colorSetting{
 		Desc:  "The light that crosses text you just copied",
 		apply: selectionColorApply(func(s *config.Settings, v string) { s.CopyFlashColor = v }),
 		effective: func(_ color.Color, s *config.Settings) color.Color {
-			return lipgloss.Color(s.CopyFlashColor)
+			return configInk(s.CopyFlashColor)
 		},
 	},
 }
@@ -229,7 +229,17 @@ func selectionInk(v string, ground color.Color) color.Color {
 	if v == "" {
 		return ground
 	}
-	return lipgloss.Color(v)
+	return configInk(v)
+}
+
+// configInk is a colour value from the config as a style takes it: the
+// terminal's default colour when it is unset or not a colour, which is what
+// lipgloss made of such a value before the config read names and roles.
+func configInk(v string) color.Color {
+	if c := theme.ConfigColor(v); c != nil {
+		return c
+	}
+	return lipgloss.NoColor{}
 }
 
 // scrollbarTintColor is the colour the scrollbar's thumb is being drawn in,
@@ -240,8 +250,10 @@ func selectionInk(v string, ground color.Color) color.Color {
 // rule produces where the swatch is, which is the honest thing a swatch on this
 // panel can show.
 func scrollbarTintColor(ground color.Color, s *config.Settings) color.Color {
-	if hex, ok := s.ScrollbarTintHex(); ok {
-		return lipgloss.Color(hex)
+	if v, ok := s.ScrollbarTintColor(); ok {
+		if c := theme.ConfigColor(v); c != nil {
+			return c
+		}
 	}
 	return scrollbarTintKeywordColor(s.ScrollbarTintResolved(), ground)
 }
@@ -282,8 +294,8 @@ func backgroundSetting(path, label, desc, unset string,
 		},
 		effective: func(ground color.Color, s *config.Settings) color.Color {
 			v := resolved(s)
-			if config.IsHexColor(v) {
-				return lipgloss.Color(v)
+			if c := theme.ConfigColor(v); c != nil {
+				return c
 			}
 			return backgroundKeywordColor(v, ground)
 		},

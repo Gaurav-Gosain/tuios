@@ -626,6 +626,53 @@ omarchy: Tokyo Night, from /home/you/.local/state/omarchy/current. tuios follows
 
 `SWATCH_OMARCHY_DIR` names another `current` directory to read.
 
+## Colour values
+
+Every colour key in tuios takes the same values: the backgrounds, the
+border colours, `scrollbar.tint`, `[appearance.selection]`, the dock's
+`fg` and `bg` keys, `[dock.tabs]`, the agent row's `fg`, and a theme
+file's `chrome` object.
+
+| Value | Example | What it is |
+|---|---|---|
+| Hex | `"#7dcfff"`, `"#7cf"` | That colour on every theme. |
+| ANSI number | `"5"`, `"208"` | `0` to `15` are the sixteen slots below. `16` to `255` are the 256-colour palette. |
+| Slot name | `"magenta"`, `"bright_magenta"`, `"fg"`, `"bg"` | One of the theme's sixteen colours, or its foreground or background. `purple` is the same slot as `magenta`. |
+| Role name | `"accent"`, `"warning"`, `"surface"` | The colour the chrome uses for that role. See the list below. |
+| CharmTone name | `"charple"`, `"guac"` | A colour from Charm's CharmTone palette. |
+
+The role names are `accent`, `accent_bright`, `success`, `warning`,
+`error`, `info`, `surface`, `canvas`, `panel` and `card`, the roles a
+theme's `chrome` object sets (see [THEMES.md](THEMES.md)). `text`, `dim`
+and `muted` are the three text inks. You can use them, but a theme cannot
+set them.
+
+A slot name or a role name follows the theme. Change the theme and the
+colour changes with it. At 16 colours, a slot name is the terminal's own
+slot, so your terminal's palette paints it. A hex colour stays the same on
+every theme.
+
+```toml
+[appearance]
+border_focused_color = "accent"          # the theme's accent, on every theme
+dock_background      = "surface"
+
+[appearance.selection]
+bg = "bright_black"
+
+[dock.tabs]
+active_bg = "accent"
+inactive_fg = "muted"
+```
+
+Case does not matter, and `bright-magenta` is the same as
+`bright_magenta`. A key that has its own words keeps them: `off` and
+`theme` for a background, and `quiet`, `border` and `muted` for the
+scrollbar tint. There `muted` is the tint word, not the text ink. tuios
+reads each value when the config or the theme changes, not on each frame.
+A value that is not a colour is ignored, and the validator says what to
+write instead.
+
 ## Backgrounds
 
 A cell that has no background of its own is transparent, so your terminal's
@@ -636,12 +683,12 @@ instead, one surface at a time or all at once.
 
 | Option | Surface | Values | Default |
 |---|---|---|---|
-| `appearance.background` | Every surface below that is not set on its own | `off`, `theme`, `#RRGGBB` | `off` |
-| `appearance.pane_background` | Pane content, the thin scrollbar over it and the scrollback browser | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
-| `appearance.desktop_background` | Behind and between panes: gaps between tiled panes, the space around floating ones, an empty workspace and its welcome splash | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
-| `appearance.window_chrome_background` | Pane borders and title bars, the lines between shared-border panes, the capture marquee | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
-| `appearance.dock_background` | The dock | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
-| `appearance.sidebar.background` | The rail | `off`, `theme`, `#RRGGBB`, or empty | empty (follows `background`) |
+| `appearance.background` | Every surface below that is not set on its own | `off`, `theme`, a [colour](#colour-values) | `off` |
+| `appearance.pane_background` | Pane content, the thin scrollbar over it and the scrollback browser | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+| `appearance.desktop_background` | Behind and between panes: gaps between tiled panes, the space around floating ones, an empty workspace and its welcome splash | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+| `appearance.window_chrome_background` | Pane borders and title bars, the lines between shared-border panes, the capture marquee | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+| `appearance.dock_background` | The dock | `off`, `theme`, a colour, or empty | empty (follows `background`) |
+| `appearance.sidebar.background` | The rail | `off`, `theme`, a colour, or empty | empty (follows `background`) |
 
 What each value paints:
 
@@ -649,7 +696,7 @@ What each value paints:
 |---|---|
 | `off` | Nothing. The cell is transparent and your terminal's own background shows through. |
 | `theme` | The active theme's background, with the theme's foreground on text left in the default colour. With no theme set there is no theme background, so it behaves as `off`. |
-| `#RRGGBB` | That colour. With a theme set, default-coloured text takes the theme's foreground, lifted until it reads on the colour; with none, it keeps your terminal's own. |
+| A [colour](#colour-values) | That colour. With a theme set, default-coloured text takes the theme's foreground, lifted until it reads on the colour; with none, it keeps your terminal's own. |
 
 **Precedence.** A surface's own option wins whenever it holds a value, `off`
 included. Left empty, it follows `appearance.background`. So one line paints
@@ -665,7 +712,7 @@ pane_background = "off"       # panes keep the terminal's own background
 background = "#181825"
 ```
 
-A value that is not a keyword or a `#RRGGBB` literal resolves to `off` for that
+A value that is not a keyword or a colour resolves to `off` for that
 surface (it does not fall back to `background`), and the validator warns about
 it, as it does about `theme` with no theme set.
 
@@ -1177,7 +1224,7 @@ count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 `session` shows the session name, workspace and pane, `main 2:1`, and is in no
 default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `{pane}`) and the cell style keys `fg`, `bg`, `bold`, `cap_left` and
-`cap_right`, which `[dock.custom.NAME]` takes too. Colours are `#rrggbb`.
+`cap_right`, which `[dock.custom.NAME]` takes too. Colours take any [colour value](#colour-values).
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 
@@ -1203,10 +1250,11 @@ zoom_marker   = " [ ]"        # {zoom} on the current workspace while a pane is 
 show_add      = false         # keep the trailing "+" tab in the flat style
 ```
 
-Colours are `#rrggbb`. The colours are overrides: a flat strip with none set
-puts the current tab on the theme's accent, in bold, and draws the others in
-dim text on the bar's own ground, so it still shows where you are. A colour
-that is not `#rrggbb` is ignored, with a warning, as if it were unset.
+Colours take any [colour value](#colour-values). The colours are overrides:
+a flat strip with none set puts the current tab on the theme's accent, in
+bold, and draws the others in dim text on the bar's own ground, so it still
+shows where you are. A value that is not a colour is ignored, with a
+warning, as if it were unset.
 Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
 The flat style shows even a lone workspace and drops the `+` tab unless
 `show_add` is on. With no `[dock.tabs]` table the strip is unchanged.

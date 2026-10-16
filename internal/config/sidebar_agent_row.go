@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The agent row's tokens and how each is drawn, from [appearance.sidebar.agent_row].
@@ -123,10 +123,6 @@ func sidebarKnownToken(name string) bool {
 func sidebarTokenNames() string {
 	return strings.Join(SidebarAgentRowTokens, ", ") + ", or $key for one metadata key"
 }
-
-// SidebarTokenColors are the palette names a token's fg may take, beside a
-// #rrggbb literal. They are the rail's own tiers and the four status inks.
-var SidebarTokenColors = []string{"text", "dim", "muted", "accent", "warning", "error", "success", "info"}
 
 // sidebarTokenTests are the tests a rule may carry, exactly one per rule.
 var sidebarTokenTests = []string{"equals", "contains", "starts_with", "gt", "lt"}
@@ -372,12 +368,13 @@ func parseLook(where string, table map[string]any, problem func(string, ...any))
 		s = strings.ToLower(strings.TrimSpace(s))
 		switch {
 		case !isString:
-			problem("%s.fg must be a colour name or #rrggbb in quotes, so it is ignored", where)
-		case slices.Contains(SidebarTokenColors, s), isHexColor(s):
+			problem("%s.fg must be a colour in quotes. The row ignores it", where)
+		case theme.IsColor(s):
+			// A role such as text or accent is read off the rail's own
+			// palette when the row is drawn, so it is the rail's ink.
 			look.Fg = s
 		default:
-			problem("%s.fg is %s, which is not a colour the row knows. Use one of %s, or #rrggbb",
-				where, strconv.Quote(s), strings.Join(SidebarTokenColors, ", "))
+			problem("%s.fg: %s. The row ignores it", where, ColourProblem(s))
 		}
 	}
 	for _, key := range []string{"bold", "dim"} {
@@ -489,15 +486,6 @@ func lookString(l SidebarTokenLook) string {
 		return strconv.FormatBool(*p)
 	}
 	return l.Fg + "/" + tri(l.Bold) + "/" + tri(l.Dim)
-}
-
-// isHexColor reports whether s is #rgb or #rrggbb.
-func isHexColor(s string) bool {
-	if !strings.HasPrefix(s, "#") {
-		return false
-	}
-	_, ok := overlay.ParseHex(s)
-	return ok
 }
 
 // stringList reads a TOML array of strings.

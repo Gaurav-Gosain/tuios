@@ -335,12 +335,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.border_focused_color", Type: OptionString, Section: "appearance",
-		Description: "Hex colour overriding the focused pane's border, e.g. #89b4fa",
+		Description: "Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
 		Default:     "", Color: true,
 	},
 	{
 		Path: "appearance.border_unfocused_color", Type: OptionString, Section: "appearance",
-		Description: "Hex colour overriding an unfocused pane's border, e.g. #585b70",
+		Description: "Colour overriding an unfocused pane's border: #585b70, a slot name such as bright_black, or a role such as muted",
 		Default:     "", Color: true,
 	},
 	{
@@ -527,27 +527,27 @@ var optionSpecs = []Option{
 	// ResolveBackground.
 	{
 		Path: "appearance.background", Type: OptionString, Section: "appearance",
-		Description: "Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a #RRGGBB literal",
+		Description: "Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a colour (#rrggbb, 0-255, a slot name or a role name)",
 		Accepted:    Backgrounds, Default: BackgroundOff, Color: true,
 	},
 	{
 		Path: "appearance.pane_background", Type: OptionString, Section: "appearance",
-		Description: "Background behind pane content: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Description: "Background behind pane content: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
 		Path: "appearance.desktop_background", Type: OptionString, Section: "appearance",
-		Description: "Background behind and between panes, including gaps and an empty workspace: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Description: "Background behind and between panes, including gaps and an empty workspace: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
 		Path: "appearance.window_chrome_background", Type: OptionString, Section: "appearance",
-		Description: "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Description: "Background under pane borders, title bars and the lines between shared-border panes: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
 		Path: "appearance.dock_background", Type: OptionString, Section: "dock",
-		Description: "Background under the dock: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Description: "Background under the dock: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
@@ -688,7 +688,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.scrollbar.tint", Type: OptionString, Section: "scrollbar",
-		Description: "Bar colour: quiet, border, muted, or a #RRGGBB literal",
+		Description: "Bar colour: quiet, border, muted, or a colour (#rrggbb, 0-255, a slot name or a role name)",
 		Accepted:    ScrollbarTints, Default: ScrollbarTintQuiet, Color: true,
 	},
 
@@ -839,7 +839,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.background", Type: OptionString, Section: "sidebar",
-		Description: "Background under the rail: off, theme, or a #RRGGBB literal; empty follows appearance.background",
+		Description: "Background under the rail: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background",
 		Accepted:    Backgrounds, Default: "", Color: true,
 	},
 	{
@@ -1457,14 +1457,10 @@ func (o Option) checkValue(value string) error {
 	if o.Color {
 		// Empty is how a colour option says unset: the border falls back to the
 		// theme's, the tint to its own default. Clearing has to stay reachable.
-		if value == "" || slices.Contains(o.Accepted, value) || IsHexColor(value) {
+		if value == "" || slices.Contains(o.Accepted, value) || theme.IsColor(value) {
 			return nil
 		}
-		if len(o.Accepted) > 0 {
-			return fmt.Errorf("%s: %q is not a colour; expected #RRGGBB, one of %s, or empty",
-				o.Path, value, strings.Join(o.Accepted, ", "))
-		}
-		return fmt.Errorf("%s: %q is not a colour; expected #RRGGBB or empty", o.Path, value)
+		return fmt.Errorf("%s: %s. Use an empty value to unset it", o.Path, ColourProblem(value, o.Accepted...))
 	}
 	if o.Theme && !theme.Exists(value) {
 		// Exists re-reads the custom themes directory before it says no, so a

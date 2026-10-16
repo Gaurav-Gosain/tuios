@@ -32,33 +32,31 @@ var enabled bool
 // the part that has to be true either way.
 var (
 	borderMu                sync.RWMutex
-	borderFocusedOverride   color.Color
-	borderUnfocusedOverride color.Color
+	borderFocusedOverride   ColorSpec
+	borderUnfocusedOverride ColorSpec
 )
 
-// SetBorderOverrides sets custom border colors from hex strings (e.g. "#89b4fa").
-// An empty string clears the corresponding override and restores the theme color.
-func SetBorderOverrides(focusedHex, unfocusedHex string) {
+// SetBorderOverrides sets the border colours from config values, in any form
+// ParseColor reads. An empty or unparseable value clears that override and
+// restores the theme colour; the config validator has said why.
+func SetBorderOverrides(focused, unfocused string) {
 	borderMu.Lock()
 	defer borderMu.Unlock()
-	if focusedHex != "" {
-		borderFocusedOverride = lipgloss.Color(focusedHex)
-	} else {
-		borderFocusedOverride = nil
-	}
-	if unfocusedHex != "" {
-		borderUnfocusedOverride = lipgloss.Color(unfocusedHex)
-	} else {
-		borderUnfocusedOverride = nil
-	}
+	borderFocusedOverride = SpecOf(focused)
+	borderUnfocusedOverride = SpecOf(unfocused)
 }
 
-// borderOverrides reads the pair under the lock, so a caller cannot see one
-// half of a change.
-func borderOverrides() (focused, unfocused color.Color) {
+// borderOverride reads one override under the lock and resolves it, nil when
+// it is unset. A role or a slot resolves on the theme in force, so an override
+// written as "accent" follows a theme change.
+func borderOverride(focused bool) color.Color {
 	borderMu.RLock()
-	defer borderMu.RUnlock()
-	return borderFocusedOverride, borderUnfocusedOverride
+	c := borderUnfocusedOverride
+	if focused {
+		c = borderFocusedOverride
+	}
+	borderMu.RUnlock()
+	return c.Resolve()
 }
 
 // Initialize makes the named theme the active one.
@@ -256,7 +254,7 @@ func BorderUnfocused() color.Color { return BorderUnfocusedOn(nil) }
 func BorderUnfocusedOn(hostBg color.Color) color.Color {
 	// A configured colour is returned as chosen: measurement was overridden on
 	// purpose, the same way the scrollbar treats a configured tint.
-	if _, unfocused := borderOverrides(); unfocused != nil {
+	if unfocused := borderOverride(false); unfocused != nil {
 		return unfocused
 	}
 	t := Current()
@@ -274,7 +272,7 @@ func BorderFocusedWindow() color.Color { return BorderFocusedWindowOn(nil) }
 // BorderFocusedWindowOn is BorderFocusedWindow on a known host background.
 // See BorderUnfocusedOn.
 func BorderFocusedWindowOn(hostBg color.Color) color.Color {
-	if focused, _ := borderOverrides(); focused != nil {
+	if focused := borderOverride(true); focused != nil {
 		return focused
 	}
 	t := Current()
@@ -291,7 +289,7 @@ func BorderFocusedTerminal() color.Color { return BorderFocusedTerminalOn(nil) }
 // BorderFocusedTerminalOn is BorderFocusedTerminal on a known host
 // background. See BorderUnfocusedOn.
 func BorderFocusedTerminalOn(hostBg color.Color) color.Color {
-	if focused, _ := borderOverrides(); focused != nil {
+	if focused := borderOverride(true); focused != nil {
 		return focused
 	}
 	t := Current()

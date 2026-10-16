@@ -314,7 +314,7 @@ func TestDockCellStyleAndSessionComponent(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, `
 [dock]
-left  = ["mode", "workspaces", "trail", "custom/plain", "custom/light"]
+left  = ["mode", "workspaces", "trail", "custom/plain", "custom/light", "custom/named"]
 right = ["session", "notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
 [dock.session]
@@ -334,6 +334,12 @@ command   = "echo LIGHTCELL"
 refresh   = "once"
 bg        = "#f5f5f5"
 cap_right = ")"
+
+[dock.custom.named]
+command = "echo NAMEDCELL"
+refresh = "once"
+bg      = "bright_magenta"
+fg      = "accent"
 `)
 	term := startIn(t, base, startOpts{env: []string{"COLORTERM=truecolor"}})
 	waitBoot(t, term)
@@ -349,7 +355,8 @@ cap_right = ")"
 		_, _, a := dockCellFind(s, "S[2:0]")
 		_, _, b := dockCellFind(s, "PLAINCELL")
 		_, _, c := dockCellFind(s, "LIGHTCELL")
-		return a && b && c
+		_, _, d := dockCellFind(s, "NAMEDCELL")
+		return a && b && c && d
 	}, uiTimeout); err != nil {
 		t.Fatalf("the session and custom cells never all drew: %v\n%s", err, term.Snapshot())
 	}
@@ -387,10 +394,22 @@ cap_right = ")"
 	if c := s.Cell(lx+len("LIGHTCELL")+1, ly); c.Content != ")" || c.Fg != light {
 		t.Errorf("styled custom cell's cap is %q in %+v, want \")\" in %+v", c.Content, c.Fg, light)
 	}
+
+	// A slot name and a role name. With no theme, bright_magenta is the
+	// terminal's own slot 13, so the host's palette paints it, and accent is
+	// the dock's own accent, the CharmTone Charple the mode pill uses.
+	nx, ny, _ := dockCellFind(s, "NAMEDCELL")
+	nc := s.Cell(nx, ny)
+	if nc.Bg.Kind != tuitest.ColorIndexed || nc.Bg.Index != 13 {
+		t.Errorf("a cell with bg = \"bright_magenta\" is on %+v, want slot 13", nc.Bg)
+	}
+	if charple := dockRGB(0x6b, 0x50, 0xff); nc.Fg != charple {
+		t.Errorf("a cell with fg = \"accent\" is in %+v, want the dock's accent %+v", nc.Fg, charple)
+	}
 }
 
-// TestDockCellBadColoursKeepTheDocksGround is what a colour that is not #rrggbb
-// does: it is dropped where the cell is drawn, as the config warning says, so
+// TestDockCellBadColoursKeepTheDocksGround is what a value that is not a
+// colour does: it is dropped where the cell is drawn, as the config warning says, so
 // the cell keeps the dock's own ground. Passed on as it is, lipgloss would make
 // it no colour at all and the cell would draw on the terminal's background.
 // The bad cell is compared with an unstyled one beside it, which is the
@@ -409,7 +428,7 @@ refresh = "once"
 command   = "echo BADCELL"
 refresh   = "once"
 bg        = "pink"
-fg        = "red"
+fg        = "rouge"
 cap_right = "}"
 `)
 	term := startIn(t, base, startOpts{env: []string{"COLORTERM=truecolor"}})

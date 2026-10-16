@@ -235,6 +235,32 @@ On Omarchy an empty `appearance.theme` uses the Omarchy theme, and
 explicitly, `none` keeps the terminal's colours, and `omarchy/NAME` is one
 installed Omarchy theme, fixed.
 
+### Colour values
+
+Every colour key takes one vocabulary: the backgrounds, the border colours,
+`scrollbar.tint`, `[appearance.selection]`, the dock's `fg` and `bg`,
+`[dock.tabs]`, the agent row `fg`, and a theme's `chrome` object.
+
+- Hex: `#7dcfff` or `#7cf`. The same colour on every theme.
+- ANSI number: `0` to `255`. `0` to `15` are the sixteen slots.
+- Slot name: `red`, `bright_magenta`, `fg`, `bg`. `purple` is `magenta`.
+- Role name: `accent`, `accent_bright`, `success`, `warning`, `error`, `info`,
+  `surface`, `canvas`, `panel`, `card`. `text`, `dim` and `muted` are the
+  text inks. You can read them, but a theme cannot set them.
+- CharmTone name: `charple`, `guac`.
+
+Prefer a slot or a role name to hex. It follows a theme change, and at 16
+colours it is the terminal's own slot:
+
+```sh
+tuios set-config appearance.border_focused_color accent
+tuios set-config appearance.selection.bg bright_black
+```
+
+A key's own words win: `off` and `theme` for a background, and `quiet`,
+`border` and `muted` for `scrollbar.tint`. A bad value is ignored, and
+`set-config` refuses it with the forms it takes.
+
 ### Shape: glyph sets
 
 ```sh
@@ -317,7 +343,7 @@ tuios set-config appearance.sidebar.background ''             # follow backgroun
 A cell with no background of its own is transparent, so the person's terminal
 shows through. The background options paint it instead: `off` paints nothing,
 `theme` paints the theme's background and gives default-coloured text the
-theme's foreground, and `#RRGGBB` paints that colour. `appearance.background`
+theme's foreground, and a colour paints that colour. `appearance.background`
 (default `off`) covers every surface; `pane_background`,
 `desktop_background` (gaps, the space around panes, an empty workspace),
 `window_chrome_background` (borders, title bars, shared-border lines),
@@ -349,7 +375,7 @@ on-click = "tuios list-windows"
 
 The built-in `session` component shows `session workspace:pane`. `[dock.session]`
 sets `format` (`{session}`, `{workspace}`, `{pane}`); it and `[dock.custom.NAME]`
-take `fg`, `bg` (`#rrggbb`), `bold`, `cap_left` and `cap_right`.
+take `fg`, `bg` (any colour value), `bold`, `cap_left` and `cap_right`.
 
 ```sh
 tuios refresh-dock agents

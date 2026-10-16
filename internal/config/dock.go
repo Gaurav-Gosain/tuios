@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The dock's built-in component names. Every segment the bar has ever drawn is
@@ -570,9 +572,9 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateDockColors warns about every set colour that is not "#rrggbb". The
-// value is dropped where it is drawn, so the cell still draws, without that
-// colour.
+// validateDockColors warns about every set colour that is not a colour (see
+// theme.ParseColor). The value is dropped where it is drawn, so the cell still
+// draws, without that colour.
 func validateDockColors(result *ValidationResult, field string, colors map[string]string) {
 	keys := make([]string, 0, len(colors))
 	for k := range colors {
@@ -580,10 +582,10 @@ func validateDockColors(result *ValidationResult, field string, colors map[strin
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		if v := colors[k]; v != "" && !IsHexColor(v) {
+		if v := colors[k]; v != "" && !theme.IsColor(v) {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field: field, Key: k,
-				Message: fmt.Sprintf("colour %q is not #rrggbb; it is ignored", v),
+				Message: ColourProblem(v) + ". The dock ignores it",
 			})
 		}
 	}

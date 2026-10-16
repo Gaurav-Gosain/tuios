@@ -153,7 +153,11 @@ func LoadCustomThemeFile(path string) (*tint.Tint, error) {
 	// tint.Tint is a third-party struct with sixteen slots and no room for
 	// tuios's own colours, so the two halves of a theme file are parsed
 	// separately and filed under the same id.
-	registerChrome(t.ID, parseChrome(data))
+	chrome, err := parseChrome(data, &t)
+	if err != nil {
+		return nil, err
+	}
+	registerChrome(t.ID, chrome)
 
 	return &t, nil
 }

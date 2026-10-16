@@ -2,6 +2,7 @@ package theme
 
 import (
 	"encoding/json"
+	"fmt"
 	"image/color"
 	"strings"
 	"sync"
@@ -122,35 +123,130 @@ func CurrentChrome() *Chrome {
 // parseChrome reads the chrome object out of a theme file's bytes. A field that
 // is absent or unparseable is left nil and derives from the ANSI slots as
 // before: a typo in one colour costs that colour, not the theme.
-func parseChrome(data []byte) *Chrome {
+//
+// A field may name a colour any way ParseColor reads one. A slot is the theme's
+// own, from t. A role is another field of the same object, resolved after
+// every field is read, so the order the file lists them in does not matter. A
+// loop of roles that name each other has no colour to end on, and is the one
+// mistake that fails the file: the error names the roles in the loop.
+func parseChrome(data []byte, t *tint.Tint) (*Chrome, error) {
 	var f chromeFile
 	if err := json.Unmarshal(data, &f); err != nil || f.Chrome == nil {
-		return nil
+		return nil, nil
+	}
+	fc := f.Chrome
+	raw := [...]string{
+		RoleAccent: fc.Accent, RoleAccentBright: fc.AccentBright, RoleSuccess: fc.Success,
+		RoleWarning: fc.Warning, RoleError: fc.Error, RoleInfo: fc.Info,
+		RoleSurface: fc.Surface, RoleCanvas: fc.Canvas, RolePanel: fc.Panel, RoleCard: fc.Card,
+	}
+	var specs [RoleCard + 1]ColorSpec
+	for r := RoleAccent; r <= RoleCard; r++ {
+		specs[r] = parseChromeSpec(raw[r])
+	}
+	var got [RoleCard + 1]color.Color
+	for r := RoleAccent; r <= RoleCard; r++ {
+		c, err := chromeRole(r, &specs, t, nil)
+		if err != nil {
+			return nil, err
+		}
+		got[r] = c
 	}
 	c := &Chrome{
-		Accent:       parseChromeColor(f.Chrome.Accent),
-		AccentBright: parseChromeColor(f.Chrome.AccentBright),
-		Success:      parseChromeColor(f.Chrome.Success),
-		Warning:      parseChromeColor(f.Chrome.Warning),
-		Error:        parseChromeColor(f.Chrome.Error),
-		Info:         parseChromeColor(f.Chrome.Info),
-		Surface:      parseChromeColor(f.Chrome.Surface),
-		Canvas:       parseChromeColor(f.Chrome.Canvas),
-		Panel:        parseChromeColor(f.Chrome.Panel),
-		Card:         parseChromeColor(f.Chrome.Card),
+		Accent: got[RoleAccent], AccentBright: got[RoleAccentBright], Success: got[RoleSuccess],
+		Warning: got[RoleWarning], Error: got[RoleError], Info: got[RoleInfo],
+		Surface: got[RoleSurface], Canvas: got[RoleCanvas], Panel: got[RolePanel], Card: got[RoleCard],
 	}
 	named := false
-	for _, got := range []color.Color{c.Accent, c.AccentBright, c.Success, c.Warning,
-		c.Error, c.Info, c.Surface, c.Canvas, c.Panel, c.Card} {
-		named = named || got != nil
+	for _, g := range got {
+		named = named || g != nil
 	}
 	if !named {
 		// An empty or entirely unparseable object is the same as none, and
 		// saying so keeps CurrentChrome's nil meaning "derive everything".
-		return nil
+		return nil, nil
 	}
 	c.deriveRamp()
+	return c, nil
+}
+
+// parseChromeSpec reads one chrome field. A theme file wrote hex with or
+// without its #, so a bare one still reads as hex. An ink tier is not a
+// chrome field's to take: the tiers are measured from the surface.
+func parseChromeSpec(s string) ColorSpec {
+	s = strings.TrimSpace(s)
+	if c, ok := parseHex("#" + s); ok && s != "" {
+		return ColorSpec{kind: kindRGB, rgb: c}
+	}
+	c, err := ParseColor(s)
+	if err != nil || (c.kind == kindRole && !c.role.Settable()) {
+		return ColorSpec{}
+	}
 	return c
+}
+
+// chromeFallbackSlot is the slot a chrome role derives from when the file does
+// not set it, for a field that names that role. The neutrals derive from no
+// slot: a field that names an unset one is left unset too.
+var chromeFallbackSlot = [...]func(*tint.Tint) *tint.Color{
+	RoleAccent:       func(t *tint.Tint) *tint.Color { return t.BrightBlue },
+	RoleAccentBright: func(t *tint.Tint) *tint.Color { return t.BrightCyan },
+	RoleSuccess:      func(t *tint.Tint) *tint.Color { return t.BrightGreen },
+	RoleWarning:      func(t *tint.Tint) *tint.Color { return t.Yellow },
+	RoleError:        func(t *tint.Tint) *tint.Color { return t.Red },
+	RoleInfo:         func(t *tint.Tint) *tint.Color { return t.Blue },
+	RoleCard:         nil,
+}
+
+// chromeRole is role r's colour in the object, following role references.
+// path is the chain of roles that led here, for the loop error.
+func chromeRole(r Role, specs *[RoleCard + 1]ColorSpec, t *tint.Tint, path []Role) (color.Color, error) {
+	for i, p := range path {
+		if p == r {
+			return nil, chromeLoopError(path[i:])
+		}
+	}
+	c := specs[r]
+	switch c.kind {
+	case kindRGB:
+		return c.rgb, nil
+	case kindSlot:
+		return chromeSlot(c.slot, t), nil
+	case kindRole:
+		return chromeRole(c.role, specs, t, append(path, r))
+	}
+	if len(path) == 0 || t == nil || int(r) >= len(chromeFallbackSlot) || chromeFallbackSlot[r] == nil {
+		return nil, nil
+	}
+	return AsColor(chromeFallbackSlot[r](t)), nil
+}
+
+// chromeSlot is slot i of the theme being read.
+func chromeSlot(i int, t *tint.Tint) color.Color {
+	if t == nil {
+		return nil
+	}
+	switch i {
+	case slotFg:
+		return AsColor(t.Fg)
+	case slotBg:
+		return AsColor(t.Bg)
+	}
+	return AsColor(ANSIOrder(t)[i])
+}
+
+// chromeLoopError names the roles in a loop, in the order they name each
+// other.
+func chromeLoopError(loop []Role) error {
+	names := make([]string, len(loop))
+	for i, r := range loop {
+		names[i] = "chrome." + r.String()
+	}
+	if len(names) == 1 {
+		return fmt.Errorf("%s names itself. Set it to a colour", names[0])
+	}
+	list := strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	return fmt.Errorf("%s name each other in a loop. Set one of them to a colour", list)
 }
 
 // deriveRamp fills the neutral steps and ink tiers a theme left to its named
@@ -191,27 +287,6 @@ func (c *Chrome) deriveRamp() {
 	for _, g := range text[:3] {
 		c.fgMute = overlay.ReadableAt(c.fgMute, g, MarkFloor)
 	}
-}
-
-// parseChromeColor accepts the hex spellings a theme file already uses for its
-// sixteen, and answers nil for anything else.
-func parseChromeColor(s string) color.Color {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	if !strings.HasPrefix(s, "#") {
-		s = "#" + s
-	}
-	if len(s) != 4 && len(s) != 7 {
-		return nil
-	}
-	for _, r := range s[1:] {
-		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
-			return nil
-		}
-	}
-	return AsColor(tint.FromHex(s))
 }
 
 // chromeOr returns the theme's colour for a role, or fallback when the theme

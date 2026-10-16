@@ -1146,14 +1146,15 @@ func (s *Settings) GetScrollbarThumbChar() string {
 	return scrollbarThinThumb
 }
 
-// ScrollbarTintHex returns the configured tint when it is a colour literal
-// rather than a keyword. A malformed one is not a colour, so it is refused here
-// as well as warned about at load: a bar drawn in nothing is invisible.
-func (s *Settings) ScrollbarTintHex() (string, bool) {
-	if IsHexColor(s.ScrollbarTint) {
-		return s.ScrollbarTint, true
+// ScrollbarTintColor returns the configured tint when it is a colour rather
+// than a keyword (see theme.ParseColor). A malformed one is not a colour, so it
+// is refused here as well as warned about at load: a bar drawn in nothing is
+// invisible. A keyword wins over a name it shares: muted is the keyword.
+func (s *Settings) ScrollbarTintColor() (string, bool) {
+	if slices.Contains(ScrollbarTints, s.ScrollbarTint) || !theme.IsColor(s.ScrollbarTint) {
+		return "", false
 	}
-	return "", false
+	return s.ScrollbarTint, true
 }
 
 // ScrollbarTintResolved is the keyword the tint is behaving as, with unset
@@ -1171,7 +1172,8 @@ func (s *Settings) ScrollbarTintResolved() string {
 }
 
 // ResolveBackground is what one surface's background is behaving as, given its
-// own setting and appearance.background: off, theme, or a #RRGGBB literal.
+// own setting and appearance.background: off, theme, or a colour (see
+// theme.ParseColor).
 //
 // The surface's own setting wins whenever it holds a value, off included, so
 // one surface can be left bare while the rest are painted. Empty follows the
@@ -1184,7 +1186,7 @@ func ResolveBackground(own, all string) string {
 		v = all
 	}
 	switch {
-	case v == BackgroundTheme, IsHexColor(v):
+	case v == BackgroundTheme, theme.IsColor(v):
 		return v
 	default:
 		return BackgroundOff

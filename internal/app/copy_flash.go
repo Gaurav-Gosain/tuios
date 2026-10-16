@@ -647,8 +647,8 @@ func (m *OS) copyFlashReach() float64 { return 0.30 }
 // familiar "this region is marked" signal in the product: an acknowledgement
 // should land just under it, the same order and read as weaker.
 func (m *OS) copyFlashTint() color.Color {
-	if c := m.Settings.CopyFlashColor; c != "" {
-		return lipgloss.Color(c)
+	if c := theme.ConfigColor(m.Settings.CopyFlashColor); c != nil {
+		return c
 	}
 	return overlay.Tone(m.terminalBg(), copyFlashLift)
 }

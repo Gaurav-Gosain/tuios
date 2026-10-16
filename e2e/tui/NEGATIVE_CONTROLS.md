@@ -6344,3 +6344,20 @@ to the last. On the branch it saw 5 ticks, 0 frame ticker wakes and 260 to
 | An equal frame wakes the frame ticker | `View`: `if composed && !m.quietFrame` back to `if !m.quietFrame` | `TestIdleCostStaysLow/git_section`: "handled 10 maintenance ticks (budget 8)", "woke the frame ticker 5 times (budget 1)", "made 1186 context switches (budget 600)" | **caught** |
 | The release is never armed | `nextWake`: the `emulatorReleaseDue` deadline never added | `TestClientReleasesEmulatorScratch`: "the client released 96 KiB of reflow scratch across 4 panes, want at least 945 KiB". With the deadline it released 15824 KiB, then 1184 KiB of alternate screen | **caught** |
 | The positive half | this branch | none: the other `TestIdleCostStaysLow` windows still see 0 ticks, so the release does not keep an idle client awake | **guard** |
+## One colour parser: names and roles in the dock
+
+`TestDockCellStyleAndSessionComponent` has a `named` cell with
+`bg = "bright_magenta"` and `fg = "accent"`. `TestDockTabsConfigWarnings/valid`
+writes a `[dock.tabs]` colour in each form: hex, a slot name, a role and an
+ANSI number. Both were run against a build of the parent commit, which reads
+only `#rrggbb`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A slot name drew on the dock's own ground | the whole parser | a build of the parent commit | `TestDockCellStyleAndSessionComponent` ("a cell with bg = \"bright_magenta\" is on {Kind:2 … R:45 G:44 B:54}, want slot 13") | **caught** |
+| A role name drew in the dim ink | the whole parser | the same build | `TestDockCellStyleAndSessionComponent` ("a cell with fg = \"accent\" is in {Kind:2 … R:191 G:188 B:200}, want the dock's accent {Kind:2 … R:107 G:80 B:255}") | **caught** |
+| A valid name was reported as a config problem | the whole parser | the same build | `TestDockTabsConfigWarnings/valid` ("a valid [dock.tabs] was reported as a config problem", the dock reads "3 config problems") | **caught** |
+
+`TestDockCellBadColoursKeepTheDocksGround` and `TestDockTabsConfigWarnings/bad`
+wrote `fg = "red"` and `active_bg = "green"` as their bad colours. Both are
+slot names now, so they write `rouge` and `lime`.

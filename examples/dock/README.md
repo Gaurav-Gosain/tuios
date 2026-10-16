@@ -65,8 +65,9 @@ cap_right = "\ue0b4"
 ```
 
 `fg`, `bg`, `bold`, `cap_left` and `cap_right` work the same way in a
-`[dock.custom.NAME]` table. Colours are `#rrggbb`; anything else is warned
-about and ignored. With none of them set a cell draws as it always has.
+`[dock.custom.NAME]` table. Colours take hex, an ANSI number, a slot name such
+as `bright_magenta`, a role such as `accent`, or a CharmTone name. See "Colour
+values" in docs/CONFIGURATION.md. Anything else is warned about and ignored. With none of them set a cell draws as it always has.
 
 ## The clock
 

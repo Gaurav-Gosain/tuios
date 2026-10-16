@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -90,6 +91,8 @@ func TestABadChromeColourCostsOnlyThatColour(t *testing.T) {
 	}
 }
 
+// TestParseChromeColorSpellings: a chrome field reads every form ParseColor
+// does, and keeps the bare hex theme files were written with before it.
 func TestParseChromeColorSpellings(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -98,15 +101,79 @@ func TestParseChromeColorSpellings(t *testing.T) {
 		{"#ffb454", true},
 		{"ffb454", true},
 		{"#fb4", true},
+		{"bright_red", true},
+		{"accent", true},
+		{"charple", true},
 		{"", false},
 		{"   ", false},
 		{"not a colour", false},
 		{"#ggg", false},
 		{"#ffb4544", false},
+		// An ink tier is measured from the surface, never set.
+		{"text", false},
 	} {
-		got := parseChromeColor(tc.in) != nil
+		got := !parseChromeSpec(tc.in).IsZero()
 		if got != tc.want {
-			t.Errorf("parseChromeColor(%q) parsed = %v, want %v", tc.in, got, tc.want)
+			t.Errorf("parseChromeSpec(%q) parsed = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestChromeNamesSlotsAndRoles: a chrome field may name one of the theme's
+// own slots or another field, in any order, and a field that names a role the
+// file leaves unset takes the slot that role derives from.
+//
+// Negative control: resolving references in file order (one pass, no
+// recursion) leaves info unset, because accent is read after it.
+func TestChromeNamesSlotsAndRoles(t *testing.T) {
+	id := writeThemeFile(t, map[string]any{
+		"id":            "refs",
+		"bright_purple": "#bb9af7",
+		"yellow":        "#e0af68",
+		"chrome": map[string]string{
+			"info":    "accent",
+			"accent":  "bright_magenta",
+			"success": "warning",
+		},
+	})
+	restore := useTheme(t, id)
+	defer restore()
+
+	c := CurrentChrome()
+	if c == nil {
+		t.Fatal("the chrome object did not load")
+	}
+	for _, tc := range []struct {
+		role string
+		got  color.Color
+		want string
+	}{
+		{"accent", c.Accent, "#bb9af7"},
+		{"info", c.Info, "#bb9af7"},
+		{"success", c.Success, "#e0af68"},
+	} {
+		if got := hexOf(t, tc.got); got != tc.want {
+			t.Errorf("chrome.%s = %s, want %s", tc.role, got, tc.want)
+		}
+	}
+}
+
+// TestAChromeLoopFailsTheFile: roles that name each other have no colour to
+// end on. The file fails to load with an error that names the roles, rather
+// than recursing until the stack runs out.
+func TestAChromeLoopFailsTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "loop.json")
+	data := `{"id": "loop", "chrome": {"accent": "success", "success": "info", "info": "accent"}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadCustomThemeFile(path)
+	if err == nil {
+		t.Fatal("a loop of chrome roles loaded")
+	}
+	for _, name := range []string{"chrome.accent", "chrome.success", "chrome.info"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("the error does not name %s: %v", name, err)
 		}
 	}
 }

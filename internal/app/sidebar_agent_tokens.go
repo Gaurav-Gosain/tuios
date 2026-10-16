@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // An agent row is drawn from tokens: the facts the row has about its pane, each
@@ -398,32 +399,11 @@ func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) boo
 	return false
 }
 
-// sidebarTokenColor is the colour a configured name means, on this palette. A
-// hex literal is itself; a name the palette does not know is nil, which the
-// caller reads as "leave the rail's own colour".
+// sidebarTokenColor is the colour a configured value means, on this palette:
+// a role such as text or accent is the rail's own ink. A value that is not a
+// colour is nil, which the caller reads as "leave the rail's own colour".
 func sidebarTokenColor(name string, pal overlay.Palette) color.Color {
-	switch name {
-	case "text":
-		return pal.Fg
-	case "dim":
-		return pal.FgDim
-	case "muted":
-		return pal.FgMute
-	case "accent":
-		return pal.Accent
-	case "warning":
-		return pal.Warning
-	case "error":
-		return pal.Warn
-	case "success":
-		return pal.Success
-	case "info":
-		return pal.Info
-	}
-	if c, ok := parseHexColor(name); ok {
-		return c
-	}
-	return nil
+	return theme.ConfigColorOn(name, pal)
 }
 
 // sidebarTokenStyle is the rail's own style for a token with the configured
