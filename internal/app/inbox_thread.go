@@ -67,14 +67,17 @@ type threadEntry struct {
 
 // agentThread is one agent's thread.
 type agentThread struct {
-	key      string
-	session  string
-	window   string
-	harness  string
-	entries  []threadEntry
-	cursor   string
-	read     bool
-	loading  bool
+	key     string
+	session string
+	window  string
+	harness string
+	entries []threadEntry
+	cursor  string
+	read    bool
+	loading bool
+	// again says the transcript grew while a read was out, so another
+	// read follows it.
+	again    bool
 	err      string
 	recapKey string
 	recap    *session.AgentActivityRecap
@@ -282,7 +285,8 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if msg.cursor != "" {
 		t.cursor = msg.cursor
 	}
-	if msg.more {
+	if msg.more || t.again {
+		t.again = false
 		t.loading = true
 		return m.threadPageCmd(t, t.cursor)
 	}
@@ -387,7 +391,11 @@ func (m *OS) applyThreadGrew(msg threadGrewMsg) tea.Cmd {
 	}
 	listen := listenThread(ts.events, msg.key)
 	t := ts.byKey[msg.key]
-	if t == nil || t.loading {
+	if t == nil {
+		return listen
+	}
+	if t.loading {
+		t.again = true
 		return listen
 	}
 	t.loading = true
