@@ -141,6 +141,7 @@ func (d *Daemon) SetAgentsEnabled(on bool) {
 	if on {
 		LogBasic("Agent features are on")
 		d.wakes.detect.Set()
+		d.wakes.stall.Set()
 		d.goTracked(d.rescanAgents)
 		return
 	}

@@ -2350,46 +2350,99 @@ func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroun
 	}
 }
 
-// stallMonitor periodically applies the agent-state output-stall heuristic to
-// every live session, demoting panes that reported working but have gone quiet
-// to idle after the screen tier has had a last look at them. It is the fallback
-// for agents that never report their own state and is strictly secondary to
+// stallMonitor applies the agent-state output-stall heuristic to every live
+// session, demoting panes that reported working but have gone quiet to idle
+// after the screen tier has had a last look at them. It is the fallback for
+// agents that never report their own state and is strictly secondary to
 // explicit reports (see Session.applyStallHeuristic). It exits when the daemon
 // context is cancelled, and does nothing at all when the heuristic is disabled.
+//
+// It sleeps until the earliest working pane could stall, and arms no timer
+// while no pane is working. A pane starts working through a change to its
+// session's state, which raises the stall latch and makes the monitor work
+// out its deadline again. Output only moves a deadline later, so the timer
+// firing early costs one look and a new deadline. A pane the screen tier kept
+// working has a deadline in the past, and is looked at again every interval,
+// as every pane was before.
 func (d *Daemon) stallMonitor() {
 	if d.agentStallTimeout <= 0 {
 		return
 	}
-	// Tick often enough to demote within a fraction of the timeout, but never
-	// spin: at least once a second, at most once every ten.
+	// Look again at a pane kept working often enough to demote within a
+	// fraction of the timeout, but never spin: at least once a second, at most
+	// once every ten.
 	interval := min(max(d.agentStallTimeout/4, time.Second), 10*time.Second)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	timer := time.NewTimer(time.Hour)
+	timer.Stop()
+	defer timer.Stop()
 
 	for {
+		if at, ok := d.nextStallCheck(interval); ok {
+			timer.Reset(time.Until(at))
+		} else {
+			timer.Stop()
+		}
 		select {
 		case <-d.ctx.Done():
 			return
-		case <-ticker.C:
-			if d.agentsOff.Load() {
-				continue
-			}
-			now := time.Now()
-			reg := d.agentMatcher.registry
-			for _, sess := range d.manager.AllSessions() {
-				sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
-					if pty := sess.GetPTY(ptyID); pty != nil {
-						return pty.LastOutput()
-					}
-					return 0
-				}, func(ptyID string) bool {
-					// The last look before the pane is called idle. A stalled pane
-					// emits nothing, so the scan the output path would have run is
-					// the one that never happens.
-					return sess.scanStalledPane(ptyID, reg)
-				})
-			}
+		case <-d.wakes.stall.C():
+			d.wakes.stall.Take()
+		case <-timer.C:
+			d.wakes.stallTicks.Add(1)
+			d.stallScan(time.Now())
 		}
+	}
+}
+
+// nextStallCheck is when stallMonitor next looks, and false when no pane is
+// working. A deadline already past is a pane the last look kept working: it is
+// looked at again after interval.
+func (d *Daemon) nextStallCheck(interval time.Duration) (time.Time, bool) {
+	if d.agentsOff.Load() {
+		return time.Time{}, false
+	}
+	var next int64
+	found := false
+	for _, sess := range d.manager.AllSessions() {
+		at, ok := sess.nextStallAt(d.agentStallTimeout, func(ptyID string) int64 {
+			if pty := sess.GetPTY(ptyID); pty != nil {
+				return pty.LastOutput()
+			}
+			return 0
+		})
+		if ok && (!found || at < next) {
+			next, found = at, true
+		}
+	}
+	if !found {
+		return time.Time{}, false
+	}
+	now := time.Now()
+	at := time.Unix(0, next)
+	if !at.After(now) {
+		at = now.Add(interval)
+	}
+	return at, true
+}
+
+// stallScan is one look of stallMonitor at every session.
+func (d *Daemon) stallScan(now time.Time) {
+	if d.agentsOff.Load() {
+		return
+	}
+	reg := d.agentMatcher.registry
+	for _, sess := range d.manager.AllSessions() {
+		sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
+			if pty := sess.GetPTY(ptyID); pty != nil {
+				return pty.LastOutput()
+			}
+			return 0
+		}, func(ptyID string) bool {
+			// The last look before the pane is called idle. A stalled pane
+			// emits nothing, so the scan the output path would have run is
+			// the one that never happens.
+			return sess.scanStalledPane(ptyID, reg)
+		})
 	}
 }
 

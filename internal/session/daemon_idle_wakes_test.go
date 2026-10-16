@@ -61,7 +61,8 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	t.Cleanup(func() { agentDetectQuietBound = prevBound })
 	const interval = 100 * time.Millisecond
 
-	d, _ := startTestDaemonWith(t, &DaemonConfig{AgentDetectInterval: interval})
+	const stall = 600 * time.Millisecond
+	d, _ := startTestDaemonWith(t, &DaemonConfig{AgentDetectInterval: interval, AgentStallTimeout: stall})
 	sess, err := d.manager.CreateSession("idle", &SessionConfig{}, 80, 24)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -72,6 +73,7 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	}
 	counters := []idleCounters{
 		{"agent monitor", &d.wakes.detectTicks},
+		{"stall monitor", &d.wakes.stallTicks},
 		{"session saver", &sess.saverWakes},
 	}
 
@@ -90,6 +92,27 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		}
 	}
 
+	// A pane that reports working is demoted when it has been quiet for the
+	// stall timeout. The stall monitor sleeps until then, and once the pane is
+	// no longer working it sleeps for good.
+	stallBefore := d.wakes.stallTicks.Load()
+	if err := sess.SetDaemonWindowAgentState(win.ID, AgentStateWorking, ""); err != nil {
+		t.Fatalf("set working: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for agentStateOf(t, sess, win.ID) == AgentStateWorking {
+		if time.Now().After(deadline) {
+			t.Fatal("a quiet working pane was not demoted by the stall monitor")
+		}
+		time.Sleep(interval / 2)
+	}
+	waitIdleSettled(t, counters, 10*interval, 10*time.Second)
+	// One fire at the deadline. A second is allowed for a screen look that
+	// kept the pane working once.
+	if n := d.wakes.stallTicks.Load() - stallBefore; n < 1 || n > 2 {
+		t.Errorf("the stall monitor fired %d times to demote one pane, want 1 or 2", n)
+	}
+
 	// Typing into the pane wakes the agent monitor again.
 	pty := sess.GetPTY(win.PTYID)
 	if pty == nil {
@@ -99,7 +122,7 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	if _, err := pty.Write([]byte("echo awake\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	for d.wakes.detectTicks.Load() == woke {
 		if time.Now().After(deadline) {
 			t.Fatal("input in a pane did not wake the agent monitor")

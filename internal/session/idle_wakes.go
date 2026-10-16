@@ -1,6 +1,9 @@
 package session
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // idleWakes holds the latches the daemon's background loops sleep on while
 // nothing happens, and counts how often each loop's timer fired.
@@ -15,12 +18,19 @@ type idleWakes struct {
 	// that takes input, prints, or was just made.
 	detect wakeLatch
 
-	// detectTicks counts agentMonitor's timer fires.
+	// stall wakes stallMonitor to work out its next deadline: a pane can only
+	// start working through a change to its session's state.
+	stall wakeLatch
+
+	// detectTicks and stallTicks count the timer fires of agentMonitor and
+	// stallMonitor.
 	detectTicks atomic.Int64
+	stallTicks  atomic.Int64
 }
 
 func (w *idleWakes) init() {
 	w.detect.init()
+	w.stall.init()
 }
 
 // activity is a pane printing or taking input.
@@ -32,6 +42,7 @@ func (w *idleWakes) activity() {
 // an agent state set.
 func (w *idleWakes) stateChanged() {
 	w.detect.Set()
+	w.stall.Set()
 }
 
 // setIdleWakes points the session at the daemon's latches. The daemon calls it
@@ -66,4 +77,29 @@ func (s *Session) detectPending() bool {
 		}
 	}
 	return false
+}
+
+// nextStallAt is when the earliest working pane of this session goes quiet
+// for stall, in unix nanoseconds, and false when no pane is working. It is the
+// moment applyStallHeuristic would first find the pane stalled: see stalledAt.
+func (s *Session) nextStallAt(stall time.Duration, lastOutput func(ptyID string) int64) (int64, bool) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	var next int64
+	found := false
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		if w.AgentState != AgentStateWorking {
+			continue
+		}
+		at := w.AgentStateAt
+		if w.PTYID != "" {
+			at = max(at, lastOutput(w.PTYID))
+		}
+		at += int64(stall)
+		if !found || at < next {
+			next, found = at, true
+		}
+	}
+	return next, found
 }
