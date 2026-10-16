@@ -82,11 +82,14 @@ func (d *Daemon) listingNotifier() {
 	}
 }
 
-// listingReader reports whether cs reads MsgSessionsChanged.
+// listingReader reports whether cs reads MsgSessionsChanged. A client that
+// has not had its attach reply yet reads its next message as that reply, so
+// a push must not come first; broadcastHostsChanged keeps the same rule. The
+// client refreshes its listing once it is attached.
 func listingReader(cs *connState) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	return cs.isTUIClient && cs.listingPush
+	return cs.isTUIClient && cs.attached && cs.listingPush
 }
 
 // hasListingReaders reports whether any client reads MsgSessionsChanged.
