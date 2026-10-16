@@ -91,6 +91,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	warnEnum(result, "keybindings", "keyboard_layout", cfg.Keybindings.KeyboardLayout, KeyboardLayouts, KeyboardLayoutUS)
 	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsAuto)
+	validatePrefixRepeat(cfg, result)
 
 	// Validate all sections
 	for _, section := range keySections(&cfg.Keybindings) {
@@ -206,6 +207,23 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 // typo would otherwise go unnoticed. An empty value is left to the default.
 func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "tape", "autorun", cfg.Tape.Autorun, TapeAutorunModes, "default")
+}
+
+// validatePrefixRepeat warns about a keybindings.repeat entry that no key
+// runs after the leader. Repeat looks the action up from the key pressed under
+// the leader, so such an entry never repeats. That covers a misspelt action
+// too, which would otherwise do nothing with no word anywhere.
+func validatePrefixRepeat(cfg *UserConfig, result *ValidationResult) {
+	for _, action := range cfg.Keybindings.Repeat {
+		if len(cfg.Keybindings.PrefixMode[action]) > 0 {
+			continue
+		}
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "keybindings",
+			Key:     "repeat",
+			Message: fmt.Sprintf("No key runs '%s' after the leader, so it does not repeat. Bind it in [keybindings.prefix_mode] or remove it from the list.", action),
+		})
+	}
 }
 
 // warnEnum warns when field.key holds a value outside allowed, and names the
