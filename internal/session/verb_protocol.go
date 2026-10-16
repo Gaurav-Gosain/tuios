@@ -1416,7 +1416,7 @@ func init() {
 			},
 			returns: []verbParam{
 				{Name: "content", Type: "string", Description: "The captured text, one line per row, or per line with unwrap."},
-				{Name: "unwrapped", Type: "bool", Description: "True when unwrap joined the wrapped rows. Omitted otherwise. A daemon that does not know unwrap omits it too."},
+				{Name: "unwrapped", Type: "bool", Description: "True when unwrap joined the wrapped rows. Omitted otherwise."},
 				{Name: "trimmed", Type: "bool", Description: "True when trim dropped the blank lines at the end. Omitted otherwise."},
 				{Name: "source", Type: "string", Description: "The buffer captured.", Accepted: captureSources},
 				{Name: "styled", Type: "bool", Description: "Whether content carries ANSI styling."},

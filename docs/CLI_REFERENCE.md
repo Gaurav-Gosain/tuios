@@ -3427,8 +3427,8 @@ tuios capture-pane [flags]
   search finds a long path or URL. A row that ends with a newline stays a line.
 - `--trim`: Drop the blank lines at the end of the capture.
 
-A daemon that does not know `--unwrap` or `--trim` ignores them. The command
-then prints a warning.
+A daemon older than this tuios refuses `--unwrap` and `--trim`. The command
+then says to run `tuios kill-server` and start tuios again.
 
 A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
 `\x1b[31m`); the consumer resolves them against its own palette. `--resolved`

@@ -3299,8 +3299,9 @@ Params:
 - `trim` (optional bool): drop the blank lines at the end of the capture. The
   result adds `trimmed: true`.
 
-An older daemon ignores `unwrap` and `trim` and omits `unwrapped` and
-`trimmed`, so a caller checks for those fields.
+A daemon from v0.8.0 on that does not know `unwrap` or `trim` refuses the
+call with `invalid_params`, and its hint names the parameter. A daemon older
+than v0.8.0 ignores them and omits `unwrapped` and `trimmed`.
 
 Request:
 

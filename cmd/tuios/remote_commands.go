@@ -820,23 +820,32 @@ func runCapturePane(o captureOptions) error {
 	}
 	raw, err := t.client.Call("capture-pane", t.params(params))
 	if err != nil {
+		if call, ok := errors.AsType[*session.VerbCallError](err); ok && call.Code == session.ErrVerbInvalidParams &&
+			call.Hint != nil && (call.Hint.Param == "unwrap" || call.Hint.Param == "trim") {
+			return reportVerbError(errStaleCapture, o.jsonOut)
+		}
 		return reportVerbError(t.explain("capture-pane", err), o.jsonOut)
 	}
-	// A daemon older than unwrap and trim ignores them and captures as
-	// before. Say so, because a search over the capture can then miss a
-	// line that wrapped.
+	// A daemon older than v0.8.0 ignores unknown parameters and omits the
+	// fields that say unwrap and trim were used.
 	var echo struct {
 		Unwrapped bool `json:"unwrapped"`
 		Trimmed   bool `json:"trimmed"`
 	}
 	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
-		fmt.Fprintln(os.Stderr, "warning: the daemon does not support --unwrap or --trim. Run 'tuios kill-server' and start tuios again to update it.")
+		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
 	}
 	if o.jsonOut {
 		return printVerbResultOn(t, raw, o.jsonOut)
 	}
 	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
 }
+
+// errStaleCapture is what capture-pane says when the daemon does not know
+// unwrap or trim. Since v0.8.0 a daemon refuses a parameter it does not know,
+// and its own wording ("fix the name") points at the caller instead of at the
+// daemon.
+var errStaleCapture = errors.New("the running daemon is older than this tuios and does not know --unwrap or --trim. Run 'tuios kill-server' and start tuios again to update it")
 
 // printCapture writes a capture-pane result. A capture from this machine is
 // the content as it is. A capture from host is fenced with
