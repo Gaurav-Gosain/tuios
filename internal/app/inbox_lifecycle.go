@@ -458,6 +458,10 @@ func (m *OS) InboxSnoozeKey(key string) tea.Cmd {
 		if c.key != key {
 			continue
 		}
+		if id == bulkSnoozeID {
+			now := time.Now()
+			return m.bulkSnoozeCmd(func() map[string]any { return c.params(now) }, c.words)
+		}
 		it, ok := m.inboxItem(id)
 		if !ok {
 			m.ShowNotification("That item is gone from the Inbox", "info", m.Settings.NotificationDuration)

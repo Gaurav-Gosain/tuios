@@ -693,3 +693,14 @@ func (m *Model) PutBack(old *Model) {
 	m.edited()
 	m.change(0, 0, ins, m.cur+len(ins))
 }
+
+// Clone is a new draft with the same text and blocks, and no undo history.
+// The blocks are shared: their text and images are never changed in place.
+func (m *Model) Clone() *Model {
+	c := New(m.opt)
+	c.cells = append([]cell(nil), m.cells...)
+	c.cur, c.size, c.automated = m.cur, m.size, m.automated
+	c.ver = 1
+	c.preview = m.preview
+	return c
+}

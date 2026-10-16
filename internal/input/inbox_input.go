@@ -234,13 +234,40 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // to step the sort, / to search, tab back to the attention list, m for the
 // mailbox, and esc or q to close.
 func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// 1, 2 and 3 answer the approval the selected agent waits on, with the
-	// attention list's rules. They are not bindings.
-	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '3' {
+	// The bulk allow's sheet takes the next key: enter allows, anything
+	// else closes it.
+	if o.InboxAgentsSheetOpen() {
+		return o, o.InboxAgentsSheetKey(msg.String())
+	}
+	marks := o.InboxAgentsMarks() > 0
+	switch key := msg.String(); key {
+	case "space":
+		o.InboxAgentsToggleMark()
+		return o, nil
+	case "*":
+		o.InboxAgentsMarkAll()
+		return o, nil
+	case "1", "2", "3":
+		// With marks, 1 opens the bulk allow's sheet and 3 denies every
+		// marked approval; 2 (always) is never given in bulk. Without, the
+		// digits answer the selected agent's approval, with the attention
+		// list's rules. They are not bindings.
+		if marks {
+			switch key {
+			case "1":
+				o.InboxAgentsBulkAllow()
+			case "3":
+				return o, o.InboxAgentsBulkDeny()
+			}
+			return o, nil
+		}
 		return o, o.InboxAgentsNumber(int(key[0] - '0'))
 	}
 	// i opens the reply editor too, as in an editor.
 	if msg.String() == "i" {
+		if marks {
+			return o, o.InboxAgentsBulkReply()
+		}
 		return o, o.InboxAgentsReply()
 	}
 	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
@@ -257,7 +284,18 @@ func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	case config.ActionInboxGo:
 		return o, o.InboxAgentsEnter()
+	case config.ActionInboxDismiss:
+		if marks {
+			return o, o.InboxAgentsBulkDismiss()
+		}
+	case config.ActionInboxSnooze:
+		if marks {
+			o.InboxAgentsBulkSnooze()
+		}
 	case config.ActionInboxReply:
+		if marks {
+			return o, o.InboxAgentsBulkReply()
+		}
 		return o, o.InboxAgentsReply()
 	case config.ActionInboxFilter:
 		o.InboxAgentsCycleFilter()

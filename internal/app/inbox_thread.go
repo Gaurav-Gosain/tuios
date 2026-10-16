@@ -130,6 +130,7 @@ type threadPanelKey struct {
 	open, live, replied bool
 	keys                *config.KeybindRegistry
 	title               string
+	marks               uint64
 }
 
 // threadPageMsg is an agent-transcript reply.
@@ -738,11 +739,14 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 	}
 	e, _ := m.inboxAgentSelected()
 	replying := m.Inbox.reply.editor != nil
+	if a.sheet != nil {
+		ts.panelAt = threadPanelKey{}
+	}
 	key := threadPanelKey{
 		list: a.listAt, sel: a.sel, scroll: a.scroll, width: m.GetRenderWidth(), height: m.GetRenderHeight(),
 		minute: now.Unix() / 60, theme: theme.Generation(), thread: agentKey(e),
 		inboxGen: m.Inbox.Gen, mailGen: m.AgentMail.Gen, open: ts.open, live: m.Inbox.Live,
-		keys: m.KeybindRegistry, title: title,
+		keys: m.KeybindRegistry, title: title, marks: a.marksGen,
 	}
 	if t := ts.byKey[key.thread]; t != nil {
 		key.threadGen = t.gen
@@ -758,6 +762,9 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 		return ts.panel.content, ts.panel.geo, ts.panel.rows
 	}
 	right, edRow := m.threadLines(e, threadW, rows, now)
+	if a.sheet != nil {
+		right, edRow = fitLines(m.bulkSheetLines(threadW), threadW, rows), -1
+	}
 
 	var left []string
 	blank := ""
@@ -805,7 +812,9 @@ func (m *OS) renderAgentsWithThread(list []sidebarAgentEntry, title string, hint
 			hits = append(hits, overlayRowHit{Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.BodyX + listW, Y1: y + 1}, Idx: a.scroll + i})
 		}
 	}
-	ts.panel, ts.panelAt = agentsPanel{content: content, geo: geo, rows: hits}, key
+	if a.sheet == nil {
+		ts.panel, ts.panelAt = agentsPanel{content: content, geo: geo, rows: hits}, key
+	}
 	return content, geo, hits
 }
 
@@ -871,7 +880,7 @@ func (m *OS) agentsRowWrapped(e sidebarAgentEntry, selected, focused bool, pal o
 		state: e.State, kind: e.AgentKind, doneSeen: e.DoneSeen, minute: minute,
 		queued: e.Queued, subagents: e.Subagents, mail: a.mail[e.WindowID],
 		width: width, selected: selected, focused: focused, theme: gen,
-		sessionLabel: e.SessionLabel, wrapped: true,
+		sessionLabel: e.SessionLabel, marked: a.marks[agentKey(e)], wrapped: true,
 	}
 	if s, ok := a.rows[k]; ok {
 		return s
@@ -924,4 +933,16 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
 	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
 	return nil
+}
+
+// fitLines pads or cuts lines to exactly rows lines of width cells.
+func fitLines(lines []string, width, rows int) []string {
+	bg := theme.UI().Surface
+	if len(lines) > rows {
+		lines = lines[:rows]
+	}
+	for len(lines) < rows {
+		lines = append(lines, overlay.Fill("", width, bg))
+	}
+	return lines
 }

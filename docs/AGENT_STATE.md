@@ -2274,6 +2274,28 @@ approval has been on screen for a moment, and a risky allow needs a second
 press. `r` or `i` opens the reply editor under the thread, and `esc` closes it
 and keeps the draft.
 
+#### Many agents at once
+
+`space` marks the selected agent, and `*` marks every agent shown, or clears
+the marks when all of them are marked. The title says how many are marked.
+With marks:
+
+- `r` opens one reply editor, and `enter` queues the same message to each
+  marked agent, at most 32. An agent that waits on a prompt, or runs on
+  another machine, is left out, and the dock says which.
+- `3` denies every approval the marked agents wait on.
+- `1` lists each approval it would allow, whole, and `enter` allows them once
+  the list has been on screen for a moment. A risky approval, a plan, and one
+  the terminal cannot show whole are never in the list: the list says
+  `2 need a second look. Allow them one by one.` An approval that changed
+  after the list showed it is not allowed. `2`, always, is never given to
+  many agents at once.
+- `d` dismisses the marked agents' Inbox items, and `z` snoozes them for the
+  length you pick next. An item that cannot be snoozed, such as a held
+  approval, is left out.
+
+A key that `send-keys` typed does none of these.
+
 `ctrl+]` shows the agent's own screen: the Inbox closes, the agent's pane
 gets the focus and is zoomed, and the dock says `Press ctrl+b i to go back to
 the agents.` The Inbox opens again on the agents view, with the same agent

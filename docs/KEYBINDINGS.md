@@ -1188,7 +1188,10 @@ error), `s` steps the sort (needs you, name, recent, session), `/` searches,
 `tab` goes back to the attention list, `esc` closes. With the thread showing,
 `1`, `2` and `3` answer the approval the agent waits on, and `i` opens the
 reply editor too. `ctrl+]` closes the Inbox, goes to the agent's pane and
-zooms it, and `ctrl+b i` comes back to the same agent. On a screen narrower than 110 columns, `enter` opens the
+zooms it, and `ctrl+b i` comes back to the same agent. `space` marks an agent
+and `*` marks all of them. With marks, `r` replies to each, `1` lists the
+approvals to allow and `enter` allows them, `3` denies them, `d` dismisses
+and `z` snoozes. On a screen narrower than 110 columns, `enter` opens the
 thread, `enter` there goes to the pane, and `esc` goes back to the list. On the search line a
 `key:value` term is a selector, such as `harness:codex`, and other words
 search the name, the session and the agent's last message.

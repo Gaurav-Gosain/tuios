@@ -99,6 +99,14 @@ type inboxAgentsState struct {
 	mail map[string]int
 	// rows keeps each drawn row until what it shows changes.
 	rows map[agentsRowKey]string
+	// marks are the marked agents, by key, and marksGen changes with them.
+	// See inbox_bulk.go.
+	marks    map[string]bool
+	marksGen uint64
+	// sheet is the bulk allow's confirm sheet, nil when it is not up.
+	sheet *bulkSheet
+	// snooze are the items the snooze picker picks a length for.
+	snooze []string
 	// panel is the last panel drawn, and panelAt what it was drawn from, so
 	// a frame drawn for another reason costs the key and nothing more.
 	panel   agentsPanel
@@ -121,6 +129,8 @@ type agentsPanelKey struct {
 	theme         uint64
 	live          bool
 	keys          *config.KeybindRegistry
+	marks         uint64
+	sheet         bool
 }
 
 // agentsListKey is what the list was built from.
@@ -147,6 +157,7 @@ type agentsRowKey struct {
 	selected, focused       bool
 	theme                   uint64
 	sessionLabel            string
+	marked                  bool
 	// wrapped marks a row kept with its ground, as the list beside the
 	// thread draws it (agentsRowWrapped).
 	wrapped bool
@@ -484,6 +495,12 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 	defer func() { a.inFrame = false }()
 	title := m.agentsTitle()
 	hints := m.inboxAgentsHints()
+	if len(a.marks) > 0 {
+		hints = m.bulkHints()
+	}
+	if a.sheet != nil {
+		hints = m.bulkSheetHints()
+	}
 	if len(list) == 0 {
 		lines := []string{"No agents are running.", "Start one with tuios start-agent."}
 		if a.counts.total > 0 {
@@ -498,7 +515,7 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 	// The thread beside the list on a wide screen, or in its place when it
 	// is open on a narrow one. See inbox_thread.go.
 	if m.GetRenderWidth() >= threadWideMin || st.threads.open {
-		if !replying {
+		if !replying && a.sheet == nil && len(a.marks) == 0 {
 			hints = m.inboxThreadHints()
 		}
 		return m.renderAgentsWithThread(list, title, hints)
@@ -509,8 +526,9 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 	key := agentsPanelKey{
 		list: a.listAt, sel: a.sel, scroll: a.scroll, width: m.GetRenderWidth(), height: m.GetRenderHeight(),
 		minute: minute, theme: gen, live: st.Live, keys: m.KeybindRegistry,
+		marks: a.marksGen, sheet: a.sheet != nil,
 	}
-	if !replying && a.panelAt == key && a.panel.content != "" {
+	if !replying && a.sheet == nil && a.panelAt == key && a.panel.content != "" {
 		return a.panel.content, a.panel.geo, a.panel.rows
 	}
 	content, geo, rows := m.renderListOverlay(listOverlay{
@@ -522,12 +540,15 @@ func (m *OS) renderInboxAgents() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &a.scroll,
 		Hints:      hints,
 		DetailFor: func(width int) []string {
+			if a.sheet != nil {
+				return m.bulkSheetLines(width)
+			}
 			if replying {
 				return replyDetail(width)
 			}
 			return nil
 		},
-		DetailStyled: replying,
+		DetailStyled: replying || a.sheet != nil,
 		DetailAt:     m.inboxReplyDetailAt(replying),
 		Unfocused:    replying,
 		Position: func() (int, int) {
@@ -586,6 +607,9 @@ func (m *OS) agentsTitle() string {
 	if a.query != "" {
 		parts = append(parts, "search "+a.query)
 	}
+	if n := len(a.marks); n > 0 {
+		parts = append(parts, strconv.Itoa(n)+" marked")
+	}
 	title := strings.Join(parts, " · ")
 	if st.Select != "" {
 		title += " [select " + st.Select + "]"
@@ -605,12 +629,12 @@ func (m *OS) agentsRow(e sidebarAgentEntry, selected, focused bool, bg color.Col
 		state: e.State, kind: e.AgentKind, doneSeen: e.DoneSeen, minute: minute,
 		queued: e.Queued, subagents: e.Subagents, mail: a.mail[e.WindowID],
 		width: width, selected: selected, focused: focused, theme: gen,
-		sessionLabel: e.SessionLabel,
+		sessionLabel: e.SessionLabel, marked: a.marks[agentKey(e)],
 	}
 	if s, ok := a.rows[k]; ok {
 		return s
 	}
-	s := agentsRowText(e, k.mail, bg, pal, width, now)
+	s := agentsRowText(e, k.mail, k.marked, bg, pal, width, now)
 	if a.rows == nil || len(a.rows) > 1024 {
 		a.rows = make(map[agentsRowKey]string)
 	}
@@ -619,7 +643,7 @@ func (m *OS) agentsRow(e sidebarAgentEntry, selected, focused bool, bg color.Col
 }
 
 // agentsRowText draws an agent's row on bg at width cells.
-func agentsRowText(e sidebarAgentEntry, mail int, bg color.Color, pal overlay.Palette, width int, now time.Time) string {
+func agentsRowText(e sidebarAgentEntry, mail int, marked bool, bg color.Color, pal overlay.Palette, width int, now time.Time) string {
 	stateInk := overlay.Readable(sidebarStateColor(e.State, e.DoneSeen, pal), bg)
 	mark := agentStateIndicator(e.State)
 	if mark == "" {
@@ -679,7 +703,15 @@ func agentsRowText(e sidebarAgentEntry, mail int, bg color.Color, pal overlay.Pa
 		}
 		b.WriteString(s.Styled(text))
 	}
-	b.WriteString(ground.Styled("  "))
+	if marked {
+		tick := "✓ "
+		if overlay.UseASCII() {
+			tick = "* "
+		}
+		span(overlay.Readable(pal.AccentBright, bg), true, tick)
+	} else {
+		b.WriteString(ground.Styled("  "))
+	}
 	span(stateInk, false, padTo(mark, markW))
 	span(overlay.Readable(pal.Fg, bg), sidebarAttention(e.State), padTo(ansi.Truncate(name, max(nameW, 1), "…"), max(nameW, 1)))
 	dim := overlay.Readable(pal.FgDim, bg)

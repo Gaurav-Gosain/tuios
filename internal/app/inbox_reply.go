@@ -120,6 +120,9 @@ type inboxReplyEditor struct {
 	// closeAfter closes the Inbox when the editor closes, for an editor the
 	// rail opened.
 	closeAfter bool
+	// targets are the agents a bulk reply goes to, nil for one agent. See
+	// inbox_bulk.go.
+	targets []replyTarget
 	// frame is the editor's lines as last drawn, and frameAt what they were
 	// drawn from.
 	frame   []string
@@ -408,7 +411,7 @@ func (m *OS) InboxReplyCancel() {
 	if ed == nil {
 		return
 	}
-	if !ed.comp.Empty() && !ed.comp.Automated() {
+	if !ed.comp.Empty() && !ed.comp.Automated() && len(ed.targets) == 0 {
 		ed.comp.SetNotice("")
 		m.keepInboxDraft(ed.session, ed.window, ed.comp)
 	}
@@ -475,11 +478,24 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	if st.sending == nil {
 		st.sending = make(map[uint64]*composer.Model)
 	}
-	st.sendSeq++
-	st.sending[st.sendSeq] = ed.comp
 	if !blocks {
 		parts = nil
 	}
+	if len(ed.targets) > 0 {
+		// The same message to each. A reply one of them refuses gets a
+		// copy of the draft as that pane's own.
+		m.Inbox.agents.marks = nil
+		m.Inbox.agents.marksGen++
+		cmds := make([]tea.Cmd, 0, len(ed.targets))
+		for _, t := range ed.targets {
+			st.sendSeq++
+			st.sending[st.sendSeq] = ed.comp.Clone()
+			cmds = append(cmds, m.inboxQueueCmd(t.session, t.window, t.who, text, nonce, false, st.sendSeq, parts))
+		}
+		return tea.Batch(cmds...)
+	}
+	st.sendSeq++
+	st.sending[st.sendSeq] = ed.comp
 	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
 
