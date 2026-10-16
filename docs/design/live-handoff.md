@@ -579,14 +579,14 @@ Risks:
 Settled:
 - **Exec in place, not a second process** (section 2.1). Review proposed herdr's two-process design plus a small reaper that forwards exit codes, for true rollback until commit. The measurements decide against it: a second process needs two platform-specific exit-status paths (kqueue `NOTE_EXITSTATUS` that misses existing zombies on macOS, a permanent subreaper ancestor on Linux), holds about 100 MB more at peak, and saves nothing on pause (exec plus init is 11–31 ms). The maintainer may still prefer the stronger rollback. PR #628's "new daemon image" fits exec.
 
-Open questions:
-1. **PR split.** Is the PR 2 to PR 5 split above the plan's intended order?
-2. **Default history depth.** Should the later `handoff_scrollback` default to `snapshot` (1000 rows) or `none`? Should `persist_scrollback = false` imply `none`? This spec says no: they answer different questions.
-3. **Clients across a protocol bump.** Re-exec the client into the new binary (one version per box), or keep a compatible old client attached?
-4. **Hosted panes before the completeness step:** refuse, or `--force` closing them?
-5. **Leases and in-flight verbs** (`wait-for`, `popup` waits): fail them with a retryable error, or carry them?
-6. **Hooks:** add an `after-daemon-upgrade` hook, or only an event?
-7. **install.sh default:** when does "upgrade live" become the default answer?
+Open questions, with the answers the first slice takes (PR 2 to PR 5):
+1. **PR split.** Is the PR 2 to PR 5 split above the plan's intended order? The branch keeps each PR's commits contiguous, so it can be split along it.
+2. **Default history depth.** Fixed at 1000 rows, the depth a client gets on attach. There is no `handoff_scrollback` knob yet, and `persist_scrollback = false` does not change it: they answer different questions.
+3. **Clients across a protocol bump.** No client follows the upgrade yet. A TUI client is sent `MsgDaemonUpgrading` with the new version before its connection closes, and exits with status 0 saying the daemon was upgraded, its programs are still running, and `tuios attach <session>` continues. An older client says the daemon was lost. Re-exec of the client is left to the clients-follow step.
+4. **Hosted panes before the completeness step.** Refused, with nothing changed, as are a daemon embedded in another program, a window whose process runs on another machine, a running verify-fan and a `capture_stdout` popup. There is no `--force`.
+5. **Leases and in-flight verbs.** Failed with a retryable error: a JSON verb call still running or waiting when the clients are dropped is answered `daemon_upgrading`, and calling again reaches the new image. Leases end with their connections; pane-view takes its lease again when it reconnects.
+6. **Hooks.** An event only: `daemon-upgraded`, raised once by the image that took the panes over, with the build they came from, the build that has them, and `fallback` when the previous binary took them back. No hook.
+7. **install.sh default.** Opt-in only: `tuios daemon upgrade [--binary PATH]`. install.sh, `tuios update` and `hosts sync` are unchanged.
 
 ## 7. Implementation notes
 
