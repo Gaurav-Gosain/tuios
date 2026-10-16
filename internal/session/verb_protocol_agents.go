@@ -331,6 +331,33 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbQueuePrompt,
 		},
+		// reply_history.go
+		"reply-history": {
+			description: "Read what the person sent to an agent, oldest first, for the reply editor's up and ctrl+r. It is kept in the daemon's memory only and ends with it: 100 messages a target, 64 targets, the least used going first. Only the person reads it, with a live human_nonce.",
+			params: []verbParam{
+				{Name: "target", Type: "string", Required: true, Description: "The key the client keeps the history under, such as the agent's harness and folder. At most 512 bytes."},
+				humanNonce,
+			},
+			returns: []verbParam{
+				{Name: "target", Type: "string", Description: "The target read."},
+				{Name: "entries", Type: "[]object", Description: "parts (as queue-prompt takes them), at (unix ms), and dropped: the blocks too large to keep, such as \"Pasted text #1\"."},
+			},
+			examples: []string{`{"id":1,"verb":"reply-history","params":{"target":"claude-code:/work/api","human_nonce":"<from the attach reply>"}}`},
+			handler:  (*Daemon).verbReplyHistory,
+		},
+		"add-reply-history": {
+			description: "Keep a message the person sent to an agent in the reply history. The same message again moves to the end. A message keeps at most 256 KiB of pastes and images: past that the largest are dropped and named. Only the person adds to it, with a live human_nonce.",
+			params: []verbParam{
+				{Name: "target", Type: "string", Required: true, Description: "The key the client keeps the history under."},
+				{Name: "parts", Type: "[]object", Required: true, Description: "The message, as queue-prompt takes it."},
+				humanNonce,
+			},
+			returns: []verbParam{
+				{Name: "dropped", Type: "[]string", Description: "The blocks too large to keep."},
+			},
+			examples: []string{`{"id":1,"verb":"add-reply-history","params":{"target":"claude-code:/work/api","parts":[{"kind":"text","text":"rerun with -count=1"}],"human_nonce":"<from the attach reply>"}}`},
+			handler:  (*Daemon).verbAddReplyHistory,
+		},
 		"list-queued": {
 			description: "List the messages waiting in a pane's delivery queue, or in every pane of the session.",
 			params: []verbParam{

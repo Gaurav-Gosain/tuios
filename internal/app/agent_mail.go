@@ -955,6 +955,10 @@ func (m *OS) AgentMailKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.AgentMailCancelReply()
 	case composer.EventPaste:
 		return m.composerClipboardCmd(st.Comp, "")
+	case composer.EventEditor:
+		if !m.ProcessingRemoteKeys {
+			return m.replyEditorCmd(st.Comp)
+		}
 	}
 	return nil
 }

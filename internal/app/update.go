@@ -2350,7 +2350,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case InboxRepliedMsg:
 		m.applyInboxReplied(msg)
+		return m, m.replyHistoryOnSent(msg)
+
+	case replyHistoryMsg:
+		m.applyReplyHistory(msg)
 		return m, nil
+
+	case replyEditorDoneMsg:
+		return m, m.applyReplyEditorDone(msg)
 
 	case ReviewDiffMsg:
 		m.applyReviewDiff(msg)

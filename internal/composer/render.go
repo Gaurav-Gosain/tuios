@@ -104,6 +104,9 @@ func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []st
 		out = append(out, overlay.Fill(b.String(), width, in.field))
 	}
 	out = append(out, m.renderMentions(width, in)...)
+	if m.hsearch != nil {
+		out = append(out, m.renderHistorySearch(width, in)...)
+	}
 	if m.notice != "" {
 		warn := overlay.Readable(pal.Warning, surface)
 		for _, l := range wrapWords(m.notice, width-gutter) {
@@ -264,6 +267,8 @@ func (m *Model) Hints() []overlay.Hint {
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "back"},
 		}
+	case m.hsearch != nil:
+		return historyHints()
 	case m.mention != nil:
 		return mentionHints()
 	case m.pager != nil && m.pager.block.img != nil:

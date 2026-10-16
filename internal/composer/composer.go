@@ -70,6 +70,12 @@ const (
 	// EventOpenImage: the person asked to open the image the view shows in
 	// the desktop's image viewer (OpenedImage).
 	EventOpenImage
+	// EventEditor: the person asked to write the draft in their own editor
+	// (ctrl+g). The host runs it and calls ReplaceText with what it wrote.
+	EventEditor
+	// EventCleared: ctrl+c cleared the draft. Cleared holds what it was,
+	// for the host to keep in the history.
+	EventCleared
 )
 
 // Model is one draft and its editor.
@@ -127,6 +133,16 @@ type Model struct {
 	completer   Completer
 	mention     *mention
 	dismissedAt int
+
+	// hist is the target's history, oldest first, and histAt the entry the
+	// draft shows, -1 when it shows no entry; histDraft is the draft the walk
+	// started from. hsearch is the open ctrl+r search. cleared is the draft
+	// ctrl+c cleared last. See history.go.
+	hist      []HistoryEntry
+	histAt    int
+	histDraft []cell
+	hsearch   *histSearch
+	cleared   []Part
 }
 
 // New returns an empty draft.
@@ -143,7 +159,7 @@ func New(o Options) *Model {
 	if o.MaxBytes <= 0 {
 		o.MaxBytes = DefaultMaxBytes
 	}
-	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1}
+	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1, histAt: -1}
 }
 
 // Automated reports whether a key that did not come from the keyboard
@@ -453,8 +469,15 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		return m.pagerKey(msg)
 	}
 	key := msg.String()
+	if m.hsearch != nil {
+		m.historyKey(msg)
+		return EventNone
+	}
 	if m.mention != nil && m.mentionKey(key) {
 		return EventNone
+	}
+	if key != "up" && key != "down" {
+		m.endHistoryWalk()
 	}
 	defer m.syncMention()
 	if key != "up" && key != "down" {
@@ -479,8 +502,19 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	case "ctrl+v":
 		return EventPaste
 	case "ctrl+c":
+		if m.Empty() {
+			return EventNone
+		}
+		m.cleared = m.Parts()
 		m.edited()
 		m.Clear()
+		return EventCleared
+	case "ctrl+r":
+		m.OpenHistorySearch()
+	case "ctrl+g":
+		if !m.opt.SingleLine {
+			return EventEditor
+		}
 	case "left":
 		m.move(m.cur - 1)
 	case "right":
@@ -670,6 +704,10 @@ func (m *Model) vertical(d int) {
 		m.goal = m.colOf(rows[r], m.cur, width)
 	}
 	switch t := r + d; {
+	case t < 0 && m.historyActive() && !m.opt.SingleLine:
+		m.historyStep(-1)
+	case t >= len(rows) && m.histAt >= 0:
+		m.historyStep(1)
 	case t < 0:
 		m.cur = 0
 	case t >= len(rows):

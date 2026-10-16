@@ -69,6 +69,8 @@ var agentOnlyVerbs = []string{
 	"get-approval", "ask-human", "answer-ask",
 	// The queue, and the review sent to an agent.
 	"queue-prompt", "list-queued", "cancel-queued", "send-review",
+	// The person's reply history.
+	"reply-history", "add-reply-history",
 }
 
 // agentWaitConditions are the wait-for conditions that read agent state or

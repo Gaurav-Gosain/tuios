@@ -4132,7 +4132,22 @@ controls, zero-width spaces). When it removed any, it does not send and says
 Text pasted from a web page can hide instructions in them.
 
 `esc` closes the editor and keeps the draft: `r` on the same pane opens it
-again. A reply the daemon refuses keeps its draft too. If you started a new
+again.
+
+`up` on the draft's first row brings back what you sent to this agent
+before, newest first, and `down` on the last row goes the other way, back to
+the draft you had. `ctrl+r` searches what you sent: type to narrow the list,
+the arrows choose, and `enter` loads the message. A draft that `ctrl+c`
+cleared is kept there too. The history is kept by the daemon, in memory only,
+under the agent's harness and folder: a pane that opens again on the same
+folder keeps it, and it ends with the daemon. Only your attached client reads
+it. A message keeps at most 256 KB of pastes and images. A larger block is
+not kept, and the editor says so when the message comes back.
+
+`ctrl+g` opens the draft in `$VISUAL` or `$EDITOR`, with each block's text in
+its place, and what you save comes back as the draft. The file is yours
+alone, in a folder made for it, and both are removed when the editor
+closes. A reply the daemon refuses keeps its draft too. If you started a new
 draft for the same pane while that reply was out, the reply that was not sent
 goes back at the top of it. Drafts stay in the client's memory and end with
 it.

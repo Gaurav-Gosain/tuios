@@ -6476,6 +6476,32 @@ typed. An entry being typed cannot be dropped. A pane on another machine,
 whose calls arrive through its report channel, may neither queue nor drop:
 both verbs answer `forbidden`.
 
+### The reply history
+
+`reply-history` and `add-reply-history` keep what the person sent to each
+agent, for the reply editor's `up` and `ctrl+r`. The history is in the
+daemon's memory only and ends with it: replies hold pasted logs and secrets.
+Both verbs take a live `human_nonce`, so no pane and no caller without it
+reads or adds to it. Over a link they need `respond`.
+
+`add-reply-history` params: `target` (the key the client keeps the history
+under, at most 512 bytes), `parts` (as `queue-prompt` takes them),
+`human_nonce`. A target keeps 100 messages, and 64 targets are kept, the
+least used going first. The same message again moves to the end. A message
+keeps at most 256 KiB of pastes and images: past that the largest are
+dropped, and `dropped` names them.
+
+`reply-history` params: `target`, `human_nonce`. It answers `entries`, oldest
+first, each with `parts`, `at` (Unix ms) and `dropped`.
+
+```json
+{"id":1,"verb":"reply-history","params":{"target":"harness:claude-code:/work/api","human_nonce":"…"}}
+{"id":1,"result":{"type":"reply_history","target":"harness:claude-code:/work/api","entries":[{"parts":[{"kind":"text","text":"rerun with -count=1"}],"at":1792181183703}]}}
+```
+
+The TUI's target is `harness:HARNESS:FOLDER` when it knows both, and
+`pane:SESSION/WINDOW` otherwise.
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues

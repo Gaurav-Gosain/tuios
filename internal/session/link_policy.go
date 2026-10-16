@@ -232,6 +232,8 @@ var verbCapabilities = map[string][]string{
 	// The conversation holds the prompts, file contents and command output.
 	// Reading it is as much the person's act as answering for them.
 	"agent-transcript":      {config.LinkAllowRespond},
+	"reply-history":         {config.LinkAllowRespond},
+	"add-reply-history":     {config.LinkAllowRespond},
 	"dismiss-attention":     {config.LinkAllowRespond},
 	"release-agent-message": {config.LinkAllowRespond},
 	"answer-ask":            {config.LinkAllowRespond},

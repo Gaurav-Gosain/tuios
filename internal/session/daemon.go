@@ -251,6 +251,9 @@ type Daemon struct {
 	// pastes holds the images the person pasted into panes. See
 	// paste_image.go.
 	pastes *pasteStore
+	// replyHistory is what the person sent to each agent, in memory only.
+	// See reply_history.go.
+	replyHistory replyHistory
 	// buffers holds the paste buffers every client and session shares. See
 	// verb_buffers.go.
 	buffers     *pastebuf.Store

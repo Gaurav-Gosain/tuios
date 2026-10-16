@@ -257,6 +257,8 @@ var verbScopes = map[string]scopeKind{
 	// The conversation is the person's to read. A restricted connection is
 	// automation, never the person.
 	"agent-transcript": scopeDeny,
+	"reply-history":     scopeDeny,
+	"add-reply-history": scopeDeny,
 
 	// From the host policy and dropped-link work: the link handshake,
 	// ending a hosted pane, and passing on held mail are for a link

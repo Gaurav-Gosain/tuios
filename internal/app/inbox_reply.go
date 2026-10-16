@@ -128,6 +128,9 @@ type inboxReplyEditor struct {
 	targets []replyTarget
 	// mentions is the @ list's completer. See inbox_reply_mention.go.
 	mentions *replyMentions
+	// historyAsked says the target's history was asked for. See
+	// inbox_reply_history.go.
+	historyAsked bool
 	// frame is the editor's lines as last drawn, and frameAt what they were
 	// drawn from.
 	frame   []string
@@ -403,6 +406,18 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 		cmd = m.inboxReplyClipboard(ed)
 	case composer.EventOpenImage:
 		cmd = m.replyOpenImage(ed.comp.OpenedImage())
+	case composer.EventEditor:
+		if m.ProcessingRemoteKeys {
+			ed.comp.SetNotice("A key from send-keys does not open the editor.")
+		} else {
+			cmd = m.replyEditorCmd(ed.comp)
+		}
+	case composer.EventCleared:
+		// A draft cleared by mistake is not lost: it goes to the history,
+		// unless keys from outside the keyboard touched it.
+		if !ed.comp.Automated() && !m.ProcessingRemoteKeys && len(ed.targets) == 0 {
+			cmd = m.replyHistoryAdd(ed.session, ed.window, ed.comp.Cleared())
+		}
 	}
 	// A view that closed takes its copy for the desktop viewer with it,
 	// and one that opened, or a strip that changed, may need pictures.

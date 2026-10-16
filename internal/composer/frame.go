@@ -23,8 +23,12 @@ type frameKey struct {
 	// The @ list: open, its selection, and the completer's version.
 	mentionAt, mentionSel int
 	mentionV              uint64
-	depth                 overlay.Depth
-	colours               [10][4]uint32
+	// The ctrl+r search: open, its query and its selection.
+	hopen   bool
+	hsearch string
+	hsel    int
+	depth   overlay.Depth
+	colours [10][4]uint32
 }
 
 // frameKey is the key of a frame drawn now at width.
@@ -38,6 +42,10 @@ func (m *Model) frameKey(width int, pal overlay.Palette, surface color.Color) fr
 	}
 	if m.preview != nil {
 		k.preview, k.previewV = m.preview.Mode(), m.preview.Version()
+	}
+	if m.hsearch != nil {
+		k.hsearch, k.hsel = m.hsearch.query, m.hsearch.sel
+		k.hopen = true
 	}
 	k.mentionAt = -1
 	if m.mention != nil {

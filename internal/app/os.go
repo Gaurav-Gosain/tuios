@@ -1201,6 +1201,9 @@ type OS struct {
 	// replyPreview draws the images of a reply's draft, nil until one does.
 	// See inbox_reply_preview.go.
 	replyPreview *replyPreview
+	// replyEditorDir is the private folder of the file $EDITOR has open for
+	// a draft, removed when it closes. See inbox_reply_history.go.
+	replyEditorDir string
 	// launcherIconCells is where the last frame put each row's icon, in
 	// panel-relative cells, for the flush that follows the frame.
 	launcherIconCells []launcherIconPlacement
@@ -2186,6 +2189,7 @@ func (m *OS) Cleanup() {
 	m.stopSidebarSessions()
 	// The copy of an image the desktop viewer was given.
 	m.replyPreview.removeOpened()
+	m.removeReplyEditorFile()
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	m.endOmarchyFollow()
