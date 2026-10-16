@@ -579,6 +579,10 @@ type model struct {
 	// read's answer goes. See git.
 	gitBusy map[string]bool
 	program *tea.Program
+	// gitNext is when the earliest reading export used goes stale, and
+	// gitArmed says a gitDueMsg is on its way. See armGitRefresh.
+	gitNext  time.Time
+	gitArmed bool
 	// keysFrom is the config the last keybinds event was built from. A
 	// reload replaces the registry's config, and the next message sends the
 	// keys again.
@@ -645,6 +649,14 @@ type gitReadMsg struct {
 	entry gitEntry
 }
 
+// gitStaleAfter is how old a reading of a folder's checkout can get before
+// export asks for a new one.
+const gitStaleAfter = 4 * time.Second
+
+// gitDueMsg says a reading export used has gone stale. Update runs export on
+// it, which reads the folder again.
+type gitDueMsg struct{}
+
 // git names the repository and branch of dir from the last reading, and
 // starts a new reading when that one is older than a few seconds. The read
 // runs on its own goroutine, because it can run git, and export runs after
@@ -655,7 +667,13 @@ func (m *model) git(dir string) (string, string) {
 		return "", ""
 	}
 	e, ok := m.gitSeen[dir]
-	if (!ok || time.Since(e.at) >= 4*time.Second) && !m.gitBusy[dir] && m.program != nil {
+	stale := !ok || time.Since(e.at) >= gitStaleAfter
+	if !stale && !m.gitBusy[dir] {
+		if due := e.at.Add(gitStaleAfter); m.gitNext.IsZero() || due.Before(m.gitNext) {
+			m.gitNext = due
+		}
+	}
+	if stale && !m.gitBusy[dir] && m.program != nil {
 		if m.gitBusy == nil {
 			m.gitBusy = map[string]bool{}
 		}
@@ -671,6 +689,24 @@ func (m *model) git(dir string) (string, string) {
 		}()
 	}
 	return e.repo, e.branch
+}
+
+// armGitRefresh adds a gitDueMsg for when the earliest reading export used
+// goes stale. A checkout can change while nothing else happens: a branch
+// switched in another terminal, or a command that prints nothing. The
+// refresh used to ride the client's idle tick and then the session listing
+// poll, and neither runs at idle any more. One timer serves every folder,
+// and none runs while no pane sits in a folder.
+func (m *model) armGitRefresh(cmd tea.Cmd) tea.Cmd {
+	if m.gitArmed || m.gitNext.IsZero() {
+		return cmd
+	}
+	m.gitArmed = true
+	tick := tea.Tick(time.Until(m.gitNext), func(time.Time) tea.Msg { return gitDueMsg{} })
+	if cmd == nil {
+		return tick
+	}
+	return tea.Batch(cmd, tick)
 }
 
 func (m *model) Init() tea.Cmd { return m.os.Init() }
@@ -690,6 +726,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.gitSeen[g.dir] = g.entry
 		delete(m.gitBusy, g.dir)
+	} else if _, ok := msg.(gitDueMsg); ok {
+		m.gitArmed = false
 	} else if c, ok := msg.(cmdMsg); ok {
 		cmd = m.handle(Command(c))
 	} else {
@@ -718,7 +756,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.paletteKey = key
 		m.sendPalette()
 	}
+	m.gitNext = time.Time{}
 	m.export()
+	cmd = m.armGitRefresh(cmd)
 	m.exportAttention()
 	m.exportNotify()
 	for i := range m.results {
