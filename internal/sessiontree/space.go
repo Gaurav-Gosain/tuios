@@ -36,6 +36,11 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 	if within == nil {
 		within = func(n []Node) []Node { return n }
 	}
+	// The common case is no space at all. The rail rebuilds on every frame of
+	// a marquee or a drag, so that case hands the list on without a copy.
+	if !slices.ContainsFunc(nodes, func(n Node) bool { return n.Space != "" }) {
+		return within(nodes)
+	}
 	members := map[string][]Node{}
 	var rest []Node
 	for _, n := range nodes {

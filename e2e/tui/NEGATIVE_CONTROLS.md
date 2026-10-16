@@ -6157,6 +6157,7 @@ screen, so they stay unit tests in `internal/config/dock_style_test.go`:
 | A custom cell's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.custom."+name, …)` line | `TestValidateDockCellColors` ("warnings … do not name dock.custom.x.bg"); the valid `custom.y` is the positive half | **caught** |
 | The session's bad colour drew no warning | n/a, injected, cuts the call site | drop the `validateDockColors(result, "dock.session", …)` call | `TestValidateDockCellColors` ("warnings … do not name dock.session.fg") | **caught** |
 | The embedded style was read from a nested table | n/a, injected | rename the `cap_right` tag | `TestDockCellStyleTablesRoundTrip` ("[dock.session] read as {… CapRight:} …", "round trip lost the style:") | **caught** |
+
 ## Space headings in the rail
 
 Run on 2026-10-16 on macOS on branch `feat/spaces-sidebar`, from upstream `main` (`ce82a422`). The tests are in `space_rail_test.go`: `TestSpaceRailHeadings`, `TestSpaceRailHeadingsFollowTheLabel`, `TestSpaceRailHeadingsSurviveTheDaemon` and `TestSpaceRailCursorPassesASplitRepository`. The fixed build passes all four. Each control cuts one wire from the fixed build, builds it, and runs the tests named in its row.
