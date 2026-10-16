@@ -3,6 +3,7 @@ package app
 import (
 	"log"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,6 +37,10 @@ type configWatchHub struct {
 	watcher *config.Watcher
 	// subs maps each session's config channel to its theme channel.
 	subs map[chan tea.Msg]chan ThemeFilesReloadedMsg
+	// themeProblems are the problems the last theme reload reported. A save
+	// that leaves them as they were does not warn again, so one broken file
+	// does not raise a warning on every save of another.
+	themeProblems []string
 }
 
 // ThemeFilesReloadedMsg says the theme and glyph files were read again and the
@@ -124,9 +129,14 @@ func (h *configWatchHub) deliver(cfg *config.UserConfig, err error) {
 // process-wide, and then every session is told to repaint. A session that has
 // not taken the last message yet gets this one in its place.
 func (h *configWatchHub) reloadThemeFiles() {
-	msg := ThemeFilesReloadedMsg{Problems: theme.ReloadThemeFiles()}
+	problems := theme.ReloadThemeFiles()
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	msg := ThemeFilesReloadedMsg{}
+	if !slices.Equal(problems, h.themeProblems) {
+		msg.Problems = problems
+	}
+	h.themeProblems = problems
 	for _, ch := range h.subs {
 		select {
 		case <-ch:
