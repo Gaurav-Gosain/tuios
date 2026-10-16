@@ -3,7 +3,9 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -93,6 +95,49 @@ func (m *OS) notifBurnMoved() bool {
 	d := m.notifDrawn
 	return s.msg.ID != d.id || s.queued != d.queued ||
 		notifLitSpan(s.frac, d.span) != d.lit
+}
+
+// notifNextMove is how long from now until the live messages would draw
+// differently with nothing else happening: the next lit cell of the drawn rule
+// going out, or a message running out. ok is false when the last frame did not
+// draw the live message as it stands now. The tick answers that at the frame
+// rate, as it did before it asked.
+//
+// The tick sleeps until this moment instead of waking at the frame rate. A
+// six second message on a rule 35 cells wide moves about six times a second,
+// and a tick at 60 or 240 frames a second woke the client ten to forty times
+// for each of those moves.
+//
+// While the pointer holds the burn there is no deadline at all. The hold ends
+// on a pointer move, a key, or notifMaxHold, and the slow tick sees the last.
+func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
+	s, ok := m.notifStatus()
+	if !ok {
+		return 0, false
+	}
+	d := m.notifDrawn
+	if s.msg.ID != d.id || s.queued != d.queued || d.span <= 0 ||
+		notifLitSpan(s.frac, d.span) != d.lit {
+		return 0, false
+	}
+	next := time.Duration(math.MaxInt64)
+	if m.notifPaused() {
+		return next, true
+	}
+	for _, n := range m.Notifications {
+		if !n.Sticky {
+			next = min(next, n.StartTime.Add(n.Duration).Sub(now))
+		}
+	}
+	// notifLitSpan keeps d.lit cells while span*frac+0.5 >= d.lit, so the next
+	// cell goes out when frac falls below (d.lit-0.5)/span. The last cell
+	// stays lit until the message runs out, which the loop above covers.
+	if top := s.msg; !top.Sticky && top.Duration > 0 && d.lit > 1 {
+		frac := (float64(d.lit) - 0.5) / float64(d.span)
+		at := top.StartTime.Add(time.Duration((1 - frac) * float64(top.Duration)))
+		next = min(next, at.Sub(now))
+	}
+	return next, true
 }
 
 // notifStatus is the reading of the live queue that the block is drawn from:

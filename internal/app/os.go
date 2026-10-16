@@ -456,6 +456,7 @@ type OS struct {
 	cachedSeparatorColor color.Color // Rule colour the cached separator was styled in
 	cachedViewContent    string      // Cached full View() output to skip rendering on idle ticks
 	renderSkipped        bool        // True when frame-skip fired; View() returns cached content
+	quietFrame           bool        // The tick composes for the message block alone; see TickerMsg
 	// tickStats records how the maintenance tick spent itself so the idle
 	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
 	tickStats tickStats

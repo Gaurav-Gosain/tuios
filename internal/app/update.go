@@ -605,6 +605,34 @@ func (m *OS) tickNeedsWork() bool {
 	return false
 }
 
+// notifTickSlack is added to the time notifNextMove gives, so the tick lands
+// just past the moment the rule moves rather than a rounding short of it.
+const notifTickSlack = time.Millisecond
+
+// notifTickWait is how long the maintenance tick sleeps when a live message
+// is the only thing that moves on its own. It wakes when the message block
+// next draws differently (see notifNextMove), never sooner than one frame, and
+// never later than the idle tick, which still has its own sweeps to run.
+func (m *OS) notifTickWait(now time.Time) time.Duration {
+	frame := m.framePeriod()
+	wait, ok := m.notifNextMove(now)
+	if !ok {
+		return frame
+	}
+	idle := time.Second / time.Duration(config.IdleFPS)
+	if wait >= idle-notifTickSlack {
+		return idle
+	}
+	return max(wait+notifTickSlack, frame)
+}
+
+// notifTickCmd is the maintenance tick notifTickWait from now.
+func (m *OS) notifTickCmd(now time.Time) tea.Cmd {
+	return tea.Tick(m.notifTickWait(now), func(t time.Time) tea.Msg {
+		return TickerMsg(t)
+	})
+}
+
 // IdleTickCmd creates a command that generates tick messages at 10 FPS.
 // Used when the terminal has been idle for a sustained period to reduce CPU.
 func IdleTickCmd() tea.Cmd {
@@ -840,6 +868,7 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
 	m.msgClock = time.Now()
+	m.quietFrame = false
 	m.reportActivity(msg)
 	// Input wakes the frame ticker before it is handled, so the frame it
 	// makes does not wait on a slow tick. So does a raw write, which Bubble
@@ -1332,8 +1361,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd(&m.Settings)
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
 			nextTick = TickCmd(&m.Settings) // Normal FPS when things need periodic updates
+		} else if hasNotifications {
+			nextTick = m.notifTickCmd(time.Now())
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
 		}
@@ -1373,6 +1404,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			return m, nextTick
 		}
+		// A frame for the message block alone is the burn moving one cell, or
+		// a message leaving. It goes out through kickFlush like any other,
+		// and it must not wake the frame ticker to the frame rate for the
+		// next idleTickerAfter: the next such frame is a whole cell away.
+		m.quietFrame = !(hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
+			hasBackgroundChanges || leftScriptMode || m.SidebarMarqueeActive() || m.TooltipPending() ||
+			railTitleChanged || zenCrossed || m.spotlightMotionPending)
 		m.renderSkipped = false
 		m.spotlightMotionPending = false
 		m.tickStats.Render++

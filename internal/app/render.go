@@ -1105,7 +1105,9 @@ func (m *OS) View() tea.View {
 			composed = true
 		}
 		m.cachedViewContent = content
-		m.noteFrame()
+		if !m.quietFrame {
+			m.noteFrame()
+		}
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather
 		// than on the motion path so a frame composed for any other reason (a

@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestNotificationKeepsTheFrameDrawing is the regression test for a message
@@ -177,4 +179,72 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 	if m.notifDrawn.queued != 1 {
 		t.Errorf("the drawn block counts %d queued, want 1", m.notifDrawn.queued)
 	}
+}
+
+// TestNotificationTickSleepsUntilTheBurnMoves is the perf budget of a live
+// message: the maintenance tick wakes about once per cell of the burn, plus the
+// idle tick, and not at the frame rate. A six second message on a rule about
+// thirty cells wide moves five times a second, and a tick at the frame rate
+// woke the client sixty to two hundred and forty times a second for it.
+//
+// The clock is the messages' own: each step ages them by the wait the tick
+// would sleep, so the run covers one whole message life in tick-sized steps.
+// Every cell of the burn must still reach the screen.
+//
+// Negative control: making notifTickWait return m.framePeriod() fails the
+// tick budget (360 ticks for 6 s at 60 frames a second).
+func TestNotificationTickSleepsUntilTheBurnMoves(t *testing.T) {
+	win := newTestWindow(t, "notif-wait-0001", 60, 34)
+	m := newTestOS(win)
+	m.Width, m.Height = 120, 40
+	m.Settings.NormalFPS = 60
+
+	m.ShowNotification("attached to the session", "info", m.Settings.NotificationDuration)
+	_, _ = m.Update(TickerMsg(time.Now()))
+	m.View()
+	span := m.notifDrawn.span
+	if span < 2 {
+		t.Fatalf("setup: the dock drew the message across %d cells, not a rule that can burn", span)
+	}
+	duration := m.Notifications[0].Duration
+
+	ticks, frames, lits := 0, 0, []int{m.notifDrawn.lit}
+	var slept time.Duration
+	for len(m.Notifications) > 0 {
+		if slept > 2*duration {
+			t.Fatalf("the message outlived %v of ticks", slept)
+		}
+		wait := m.notifTickWait(time.Now())
+		slept += wait
+		for i := range m.Notifications {
+			m.Notifications[i].StartTime = m.Notifications[i].StartTime.Add(-wait)
+		}
+		ticks++
+		_, _ = m.Update(TickerMsg(time.Now()))
+		if m.renderSkipped {
+			continue
+		}
+		frames++
+		m.View()
+		if len(m.Notifications) > 0 {
+			lits = append(lits, m.notifDrawn.lit)
+		}
+	}
+
+	// span-1 cells go out one at a time, then the last frame takes the message
+	// off the dock.
+	if frames < span {
+		t.Errorf("the burn drew %d frames for a rule of %d cells; lit cells per frame %v", frames, span, lits)
+	}
+	for i := 1; i < len(lits); i++ {
+		if lits[i] != lits[i-1]-1 {
+			t.Errorf("frame %d drew %d lit cells after %d; the burn skipped or repeated a cell", i, lits[i], lits[i-1])
+		}
+	}
+	idle := int(duration*time.Duration(config.IdleFPS)/time.Second) + 2
+	if ticks > frames+idle {
+		t.Errorf("a %v message took %d ticks for %d frames; the budget is the frames plus %d idle ticks",
+			duration, ticks, frames, idle)
+	}
+	t.Logf("%v message, %d-cell rule: %d ticks, %d frames", duration, span, ticks, frames)
 }

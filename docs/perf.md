@@ -3129,3 +3129,50 @@ the flush before the save and the cursor reads, about 0.8 µs a save.
 `BenchmarkBackendScroll`, which saves nothing, measured 44 to 64 ms on main
 and 47 to 50 ms here in the same runs, which is within the noise of this
 machine.
+
+## 2026-10 the message burn tick
+
+An idle client with a message on the dock wrote one `─` cell every 100 to
+200 ms. That write is the burn: the rule under the message loses one lit cell
+at a time, so each write is a real change. The cost was in the wakeups around
+it. While a message was up, the maintenance tick ran at the frame rate (60, or
+up to 240 on `max_fps = "auto"`), and every frame the burn drew woke Bubble
+Tea's frame ticker to the frame rate for 500 ms. A rule 30 cells wide on a 6 s
+message moves 5 times a second, so the client woke 60 or more times a second to
+draw 5 frames.
+
+### What changed
+
+- `notifTickWait`: when a message is the only thing that moves, the tick
+  sleeps until the rule next loses a cell or a message runs out
+  (`notifNextMove`). It never sleeps less than one frame or more than the idle
+  tick. A message the last frame did not draw keeps the frame rate.
+- A frame the tick composes for the message block alone flushes through
+  `kickFlush` and leaves the frame ticker at `IdleFPS` (`quietFrame`).
+
+### Numbers
+
+Throwaway daemon, client in a detached tmux at 120x36, truecolor, one idle
+shell, `/proc/<pid>/stat` and the threads' context switches. The wire bytes
+are the same before and after.
+
+| Window | | client CPU | client ctxsw/s |
+|--------|---|-----------|----------------|
+| 60 s message, 30 s sample (1 write per 1.7 s) | before | 0.77% | 478 |
+| | after | 0.27% | 129 |
+| default 6 s message, first 5 s (3 runs) | before | 1.4 to 1.6% | 574 to 606 |
+| | after | 0.8 to 1.2% | 244 to 262 |
+| no message, 60 s (0 bytes) | before | 0.13 to 0.15% | 118 to 122 |
+| | after | 0.12 to 0.15% | 119 to 121 |
+
+`TestNotificationTickSleepsUntilTheBurnMoves` holds the budget: a 6 s message
+on a 30-cell rule takes 60 ticks for 30 frames, and every cell is drawn. With
+the frame-rate wait back it takes 360 ticks and fails.
+
+### Measured and deliberately not changed
+
+With no message, an idle client still wakes about 20 times a second: the
+maintenance tick and Bubble Tea's frame ticker both run at `IdleFPS`. Neither
+writes a byte. Removing them needs every event the idle gate polls (a process
+exit, a title change, a moved daemon listing, a cursor-only change) to arrive
+as a message first.
