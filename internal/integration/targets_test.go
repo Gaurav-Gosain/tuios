@@ -225,6 +225,20 @@ func TestSkillLeavesAFileItDidNotWrite(t *testing.T) {
 		t.Fatalf("status of a skill tuios did not write = %+v, want foreign", st)
 	}
 
+	// The stub with a line the person added, a stub a newer tuios wrote, and
+	// a link to a stub: each stays as it is.
+	edited := string(SkillStub()) + "Always pass --json.\n"
+	newer := strings.Replace(string(SkillStub()), "TUIOS_INTEGRATION_VERSION=1 ", "TUIOS_INTEGRATION_VERSION=9 ", 1)
+	for name, text := range map[string]string{"edited": edited, "newer": newer} {
+		writeFile(t, path, text)
+		if _, err := claude.InstallSkill(env); readFile(t, path) != text {
+			t.Fatalf("install replaced the %s stub: %v", name, err)
+		}
+		if _, err := claude.UninstallSkill(env); name == "edited" && readFile(t, path) != text {
+			t.Fatalf("uninstall removed the edited stub: %v", err)
+		}
+	}
+
 	codex, opencode := mustTarget(t, Codex), mustTarget(t, OpenCode)
 	shared := codex.SkillPath(env)
 	writeFile(t, shared, strings.Replace(string(SkillStub()), "TUIOS_INTEGRATION_VERSION=", "TUIOS_INTEGRATION_VERSION=0", 1))
@@ -249,6 +263,24 @@ func TestSkillLeavesAFileItDidNotWrite(t *testing.T) {
 	}
 	if res, err := opencode.UninstallSkill(env); err != nil || !res.Changed {
 		t.Fatalf("uninstall kept the stub nothing uses: %+v %v", res, err)
+	}
+
+	target := filepath.Join(t.TempDir(), "SKILL.md")
+	linked := strings.Replace(string(SkillStub()), "TUIOS_INTEGRATION_VERSION=", "TUIOS_INTEGRATION_VERSION=0", 1)
+	writeFile(t, target, linked)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	_, _ = claude.InstallSkill(env)
+	_, _ = claude.UninstallSkill(env)
+	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 || readFile(t, target) != linked {
+		t.Fatalf("install or uninstall replaced a linked SKILL.md: %v", err)
 	}
 }
 

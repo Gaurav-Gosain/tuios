@@ -481,8 +481,12 @@ func skillVerdict(s integration.Status) string {
 		return ""
 	case sk.Installed && sk.Current:
 		return fmt.Sprintf("installed, current (v%d) in %s", sk.Version, sk.Path)
+	case sk.Installed && sk.Newer:
+		return fmt.Sprintf("installed by a newer tuios (v%d) in %s", sk.Version, sk.Path)
 	case sk.Installed:
 		return "installed, out of date: run tuios integration install " + s.Harness
+	case sk.Edited:
+		return "the tuios skill in " + sk.Path + " has changes; left alone"
 	case sk.Foreign:
 		return "a tuios skill that tuios did not write is in " + sk.Path + "; left alone"
 	case s.Installed:
