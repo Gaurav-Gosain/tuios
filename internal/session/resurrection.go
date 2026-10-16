@@ -413,6 +413,9 @@ func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatc
 				}
 				if err := save(state); err != nil {
 					LogError("Resurrection save for session %q failed: %v", state.Name, err)
+					// Try again within resurrectionInterval, as the old
+					// blind tick did: an idle session raises nothing else.
+					stale.Set()
 				}
 			case <-stopCh:
 				return
