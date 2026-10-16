@@ -6680,3 +6680,15 @@ Run on 2026-10-16.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The focused border ignored the state colours | yes | `focusedStateBorder` always returns nil | `TestThemeChromeRolesPaint` ("the focused pane in copy mode never took the theme's border.copy") | **caught** |
+
+## The focused border gradient
+
+`TestBorderGradientSteps` sets `border_focused_gradient = "#ff0000 #0000ff"`
+at angle 0 and requires the focused border's top row to step through three to
+eight colours from red to blue, on a floating pane and then on a tiled one.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The gradient was never drawn | yes | `gradientOn` always returns false | `TestBorderGradientSteps` ("floating: the focused border never stepped through the gradient: 1 steps") | **caught** |

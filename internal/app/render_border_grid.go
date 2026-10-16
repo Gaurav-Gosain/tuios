@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"slices"
@@ -403,6 +404,9 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 	if c := m.focusedStateBorder(m.GetFocusedWindow()); c != nil {
 		focusColor = c
+	} else if focus.ok && m.gradientOn() {
+		// The shared frame runs one cell outside the pane.
+		m.markGradient("", image.Rect(focus.left, focus.top, focus.right+1, focus.bottom+1), focusColor)
 	}
 	focusedStr := "\x1b[1m" + sgrForeground(focusColor)
 

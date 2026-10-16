@@ -1087,6 +1087,35 @@ When clients with different docks share a session, the panes keep the
 largest dock height. A client with a compact dock shows a blank row in that
 case.
 
+## Focused border gradient
+
+`appearance.border_focused_gradient` draws the focused pane's border in two
+or more colours that blend from one to the next.
+`appearance.border_gradient_angle` sets the direction in degrees.
+
+| Option | Values | Default |
+|---|---|---|
+| `appearance.border_focused_gradient` | two or more [colours](#colour-values), separated by spaces or commas. Empty draws one colour | empty |
+| `appearance.border_gradient_angle` | `0` to `359`. `0` runs left to right, `90` top to bottom, `45` from the top left corner to the bottom right one | `45` |
+
+```toml
+[appearance]
+border_focused_gradient = "#33ccff #00ff99"
+border_gradient_angle = 45
+```
+
+- The gradient is static. It changes only when the pane moves, resizes or
+  takes focus.
+- The border steps through 8 colours, so the cells of one step share one
+  colour code. This keeps the bytes sent to the terminal small.
+- The window buttons and the title keep their own colours.
+- A focused border in a colour for its state (copy mode or an agent that
+  waits, see [THEMES.md](THEMES.md#roles-for-one-piece-of-chrome)) is drawn
+  in that colour, not the gradient.
+- At 16 colours the border uses one colour, as before.
+- A colour value can name a slot or a role, such as `"accent accent_bright"`,
+  so the gradient follows the theme.
+
 ## Borderless zoom
 
 `z` zooms the focused pane. By default the zoomed pane keeps its border, and

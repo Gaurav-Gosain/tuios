@@ -411,6 +411,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.scrollbar.track"),
 			opt("appearance.border_focused_color"),
 			opt("appearance.border_unfocused_color"),
+			opt("appearance.border_focused_gradient"),
+			opt("appearance.border_gradient_angle"),
 			custom("appearance.gap", m.paneGapItem()),
 			opt("appearance.tiling_scheme"),
 			opt("appearance.drop_preview"),

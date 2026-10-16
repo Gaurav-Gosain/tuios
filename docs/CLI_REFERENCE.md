@@ -1726,6 +1726,8 @@ name alone. Some of them:
 | `dock_mode_icon_tiling` | text, `""` or `default` | Icon in the mode pill while tiling is on |
 | `dock_prefix_indicator` | `pill`, `badge` | Where the dock shows an armed leader key (default `pill`) |
 | `theme_light` | a theme id, or empty | The theme while the terminal is light. `theme` is then the dark theme (default empty) |
+| `border_focused_gradient` | two or more colours, or empty | Colours the focused pane's border blends through (default empty) |
+| `border_gradient_angle` | `0` to `359` | Direction of the gradient in degrees (default `45`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `theme_transition` | `none`, `circle`, `fade` | How a theme change shows: `circle` grows the new theme from the middle of the screen, `fade` changes all cells at the same time (default `none`) |

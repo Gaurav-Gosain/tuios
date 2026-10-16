@@ -586,6 +586,31 @@ func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 	warnColours(result, "appearance", "The border uses the theme colour",
 		"border_focused_color", a.BorderFocusedColor,
 		"border_unfocused_color", a.BorderUnfocusedColor)
+	if a.BorderFocusedGradient == "" {
+		return
+	}
+	stops := GradientStops(a.BorderFocusedGradient)
+	for _, v := range stops {
+		if !theme.IsColor(v) {
+			result.Warnings = append(result.Warnings, ValidationError{
+				Field: "appearance", Key: "border_focused_gradient",
+				Message: ColourProblem(v) + ". The focused border uses one colour",
+			})
+			return
+		}
+	}
+	if len(stops) < 2 {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance", Key: "border_focused_gradient",
+			Message: "A gradient needs two colours or more. The focused border uses one colour",
+		})
+	}
+}
+
+// GradientStops splits appearance.border_focused_gradient into its colour
+// values: separated by spaces, commas or both.
+func GradientStops(v string) []string {
+	return strings.FieldsFunc(v, func(r rune) bool { return r == ' ' || r == ',' || r == '\t' })
 }
 
 // validateSelectionColors warns about a selection colour that is not a colour.

@@ -131,6 +131,9 @@ const (
 	DefaultSidebarPosition     = "right"
 	DefaultWindowTitlePosition = "top"
 	DefaultDockPrefixIndicator = "pill"
+	// DefaultBorderGradientAngle runs the gradient from the top left corner
+	// to the bottom right one.
+	DefaultBorderGradientAngle = 45
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -346,6 +349,16 @@ var optionSpecs = []Option{
 		Path: "appearance.border_focused_color", Type: OptionString, Section: "appearance",
 		Description: "Colour overriding the focused pane's border: #89b4fa, a slot name such as bright_cyan, or a role such as accent",
 		Default:     "", Color: true,
+	},
+	{
+		Path: "appearance.border_focused_gradient", Type: OptionString, Section: "appearance",
+		Description: "Two or more colours, separated by spaces, that the focused pane's border steps through. Empty draws one colour",
+		Default:     "",
+	},
+	{
+		Path: "appearance.border_gradient_angle", Type: OptionInt, Section: "appearance",
+		Description: "Direction of the focused border's gradient in degrees: 0 runs left to right, 90 top to bottom",
+		Default:     "45", Min: 0, Max: 359,
 	},
 	{
 		Path: "appearance.border_unfocused_color", Type: OptionString, Section: "appearance",

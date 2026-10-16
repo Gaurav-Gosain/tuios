@@ -66,6 +66,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// window composed from its cached layer is not redrawn and still has them on
 	// screen. What has to go is a closed window's.
 	m.pruneWindowButtonRects()
+	// The focused border's gradient is marked again by whichever path draws
+	// that border on this frame. See border_gradient.go.
+	m.gradient.on = false
+	gradient := m.gradientOn()
 
 	topMargin := m.GetTopMargin()
 	viewportHeight := m.GetUsableHeight()
@@ -244,6 +248,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			borderColorObj = quietTint
 		default:
 			borderColorObj = theme.BorderUnfocusedOn(m.host.bg)
+		}
+		if gradient && isFocused && stateColor == nil && !rendersBorderless(window) && !m.zenBordersHidden(true) {
+			m.markGradient(window.ID, image.Rect(window.X, window.Y, window.X+window.Width, window.Y+window.Height), borderColorObj)
 		}
 
 		// Effective z-index, computed once so the cached and freshly-rendered
@@ -833,6 +840,11 @@ func (m *OS) composeFrameOnce() string {
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if len(m.Animations) > 0 || m.Renaming() {
+		return nil, false
+	}
+	// A gradient border is a pass over the canvas, which this path does not
+	// build. Only when one is configured.
+	if m.Settings.BorderFocusedGradient != "" && m.gradientOn() {
 		return nil, false
 	}
 	// The screen saver is a compositor overlay, and the fast path skips

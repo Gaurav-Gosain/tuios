@@ -354,3 +354,66 @@ func TestThemeChromeRolesPaint(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "copy-mode")
 }
+
+// TestBorderGradientSteps: appearance.border_focused_gradient draws the
+// focused pane's top border from the first colour at its left end to the last
+// at its right end (angle 0), in at most eight steps, on a floating pane and,
+// after tiling is turned on, on the shared border grid of a tiled one.
+//
+// How this could pass wrongly: a border in one colour has one step, so the
+// test requires three or more, red at the left end and blue at the right.
+// Negative control in NEGATIVE_CONTROLS.md.
+func TestBorderGradientSteps(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\nborder_focused_gradient = \"#ff0000 #0000ff\"\nborder_gradient_angle = 0\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 30, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	// steps reads each run of border cells on one row, left to right, and
+	// returns the colours along the run that changes colour most often.
+	steps := func(s tuitest.Screen) []tuitest.Color {
+		cols, rows := s.Size()
+		var best []tuitest.Color
+		for y := range rows {
+			var run []tuitest.Color
+			flush := func() {
+				if len(run) > len(best) {
+					best = run
+				}
+				run = nil
+			}
+			for x := range cols {
+				c := s.Cell(x, y)
+				if c.Content == "─" && c.Fg.Kind == tuitest.ColorRGB {
+					if len(run) == 0 || run[len(run)-1] != c.Fg {
+						run = append(run, c.Fg)
+					}
+					continue
+				}
+				flush()
+			}
+			flush()
+		}
+		return best
+	}
+	check := func(name string) {
+		t.Helper()
+		var got []tuitest.Color
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			got = steps(s)
+			return len(got) >= 3
+		}, uiTimeout); err != nil {
+			t.Fatalf("%s: the focused border never stepped through the gradient: %d steps\n%s", name, len(got), term.SnapshotStyled())
+		}
+		first, last := got[0], got[len(got)-1]
+		if len(got) > 8 || first.R < first.B || last.B < last.R {
+			t.Fatalf("%s: the border steps %+v, want at most 8 from red to blue\n%s", name, got, term.SnapshotStyled())
+		}
+		saveArtifact(t, term, artifactDir(t), name)
+	}
+	check("floating")
+
+	sendKeys(t, term, "t")
+	check("tiled")
+}

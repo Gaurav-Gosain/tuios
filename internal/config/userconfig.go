@@ -357,7 +357,12 @@ type AppearanceConfig struct {
 	ThemeLight               string                  `toml:"theme_light"`                  // Theme while the terminal is light; theme is then the dark one (default: empty, theme for both)
 	SharedBorders            *bool                   `toml:"shared_borders"`               // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
+	BorderFocusedColor string `toml:"border_focused_color"` // Hex color for focused pane border (e.g., "#89b4fa")
+	// BorderFocusedGradient is two or more colours the focused border steps
+	// through, separated by spaces or commas. Empty draws one colour.
+	BorderFocusedGradient string `toml:"border_focused_gradient"`
+	// BorderGradientAngle is the gradient's direction in degrees.
+	BorderGradientAngle  *int   `toml:"border_gradient_angle"`
 	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
 	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
 	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
@@ -2864,6 +2869,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// clear any override and restore theme colors. This runs after the theme
 	// switch above, which resets the derived colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderFocusedColor, cfg.Appearance.BorderUnfocusedColor)
+	s.BorderFocusedGradient = cfg.Appearance.BorderFocusedGradient
+	s.BorderGradientAngle = DefaultBorderGradientAngle
+	if a := cfg.Appearance.BorderGradientAngle; a != nil {
+		s.BorderGradientAngle = ((*a % 360) + 360) % 360
+	}
 
 	// [notifications] rides along here rather than in its own funnel because
 	// this is the one function every path that loads a config file already

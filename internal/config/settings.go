@@ -337,6 +337,12 @@ type Settings struct {
 	// drawn either way when the dock is hidden or has no mode pill.
 	DockPrefixIndicator string
 
+	// BorderFocusedGradient and BorderGradientAngle are
+	// appearance.border_focused_gradient and border_gradient_angle. Read the
+	// stops through BorderGradientStops.
+	BorderFocusedGradient string
+	BorderGradientAngle   int
+
 	// DockModeIconWindow, DockModeIconTerminal and DockModeIconTiling are the
 	// mode pill's icons from appearance.dock_mode_icon_*. Nil is unset, which
 	// draws the built-in for the glyph set. An empty string draws no icon.
@@ -848,6 +854,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceLabelMax:       12,
 		DockPillCaps:                true,
 		DockPrefixIndicator:         DefaultDockPrefixIndicator,
+		BorderGradientAngle:         DefaultBorderGradientAngle,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,
 		WindowButtonPosition:        WindowButtonPositionLeft,

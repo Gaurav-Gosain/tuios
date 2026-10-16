@@ -1410,6 +1410,8 @@ type OS struct {
 	ThemePickerPair string
 	// schemeApplied is the theme followSchemeTheme last put in force.
 	schemeApplied string
+	// gradient is the focused border's gradient. See border_gradient.go.
+	gradient borderGradient
 
 	// Glyph picker overlay state, the theme picker's opposite number.
 	ShowGlyphPicker     bool

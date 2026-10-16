@@ -321,6 +321,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 				continue
 			}
 			m.drawPaneLayer(canvas, cl, at, view.clip, painted, &grounds)
+			if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {
+				m.applyBorderGradient(canvas, at.Intersect(view.clip), image.Pt(view.dx, view.dy))
+			}
 			if m.hints != nil {
 				m.applyHints(canvas, cl.layer.GetID(), &grounds)
 			}
@@ -342,6 +345,9 @@ func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, pane
 			scrimmed = true
 		}
 		m.drawComposedLayer(canvas, cl, painted, &grounds, area)
+		if m.gradient.on && m.gradientLayer(cl.layer.GetID()) {
+			m.applyBorderGradient(canvas, cl.bounds, image.Point{})
+		}
 		if m.hints != nil {
 			m.applyHints(canvas, cl.layer.GetID(), &grounds)
 		}
