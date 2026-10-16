@@ -23,6 +23,8 @@ missing = [
   "A mode that stays open. A menu here runs one key and closes",
   "Floating and stacked panes, and pane frames on or off",
   "e in scroll mode: open the scrollback in $EDITOR",
+  "p d, p r, p f: split down or right, or fullscreen. Press ctrl+g -, ctrl+g | or ctrl+g z. p r renames here",
+  "t n, t x, t h, t l: new, close, previous or next tab. t 1 to 9 goes to a tab",
 ]
 notes = [
   "Press ctrl+g two times to send ctrl+g to the program in the pane.",

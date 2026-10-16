@@ -23,11 +23,12 @@ missing = [
   "H: log the window to a file",
   "M, _: monitor activity or silence. The Inbox covers agents only",
   "x: lock the screen",
-  "z: suspend",
+  "C-z: suspend. z zooms the window here, as in tmux",
+  "0: the first window. Workspaces start at 1, so press 1",
   "C-a c fills the current region with a new window. Here a new window is a new workspace",
 ]
 notes = [
-  "Press ctrl+c to cancel the leader.",
+  "ctrl+c cancels the leader, so ctrl+a ctrl+c does not make a window. Press ctrl+a c.",
   "Press ctrl+a a to send ctrl+a to the program in the pane.",
   "Copy mode uses vi keys. [[keybindings.copy_pipe]] pipes a copy through a command.",
 ]
