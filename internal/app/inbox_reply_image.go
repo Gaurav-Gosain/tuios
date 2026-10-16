@@ -207,8 +207,26 @@ func unescapeShell(s string) string {
 }
 
 // readImageFile reads a regular file of at most MaxImageBytes.
+//
+// The path comes from a paste, so it can name anything: a named pipe called
+// shot.png blocks an open for reading until a writer comes, and the read would
+// hold its background task for good. The path is checked before it is opened,
+// anything that is not a regular file is refused, and the open does not block
+// where the platform has O_NONBLOCK. The open file is checked again, so a
+// pipe swapped in between the two is refused too.
 func readImageFile(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	errNotFile := errors.New("not a regular file")
+	before, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, errNotFile
+	}
+	if before.Size() > composer.MaxImageBytes {
+		return nil, composer.ErrImageTooLarge
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|openNonblock, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +235,8 @@ func readImageFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() {
-		return nil, errors.New("not a regular file")
+	if !info.Mode().IsRegular() || !os.SameFile(before, info) {
+		return nil, errNotFile
 	}
 	if info.Size() > composer.MaxImageBytes {
 		return nil, composer.ErrImageTooLarge
