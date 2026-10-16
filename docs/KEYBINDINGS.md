@@ -770,7 +770,7 @@ section where you want them.
 | --- | --- |
 | `mark_pane` | Marks the focused pane, or clears the mark when it is the marked one. The marked pane shows `[marked]` in its title bar. |
 | `join_marked_left`, `join_marked_right`, `join_marked_up`, `join_marked_down` | Moves the marked pane next to the focused one, on that side, from this workspace or another. Needs BSP tiling. |
-| `resize_pane_left_5`, `resize_pane_right_5`, `resize_pane_up_5`, `resize_pane_down_5` | Moves the focused pane's edge by 5 cells. The `_20` actions move it by 20. |
+| `resize_pane_left_5`, `resize_pane_right_5`, `resize_pane_up_5`, `resize_pane_down_5` | Moves the focused pane's edge by 5 cells. The `_20` actions move it by 20. Under the leader, the key repeats without a second leader press, as tmux `bind -r` does. |
 | `new_workspace` | Goes to the first workspace with no pane, the one the dock's `+` button opens, and opens a pane there. |
 | `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
 | `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
@@ -1533,6 +1533,12 @@ The prefix stays armed for half a second after a command worth repeating, so
 `ctrl+b` then left left left walks three panes on one prefix press. This is
 tmux's `repeat-time`, and `appearance.prefix_repeat_time` changes it. Zero
 turns it off.
+
+These actions repeat when you bind them under the leader: the focus moves,
+`next_window`, `prev_window`, `next_workspace`, `prev_workspace`, the
+`resize_pane_*` steps, the `resize_master_*` and `resize_height_*` steps, and
+the `scroll_*` moves and width cycle. `ctrl+b o` and `ctrl+b O` repeat too.
+Other actions run once.
 
 Workspace switching on `opt+1` to `opt+9` works with no configuration on a
 US or ABC keyboard layout. It also works in a terminal that reports Alt with
