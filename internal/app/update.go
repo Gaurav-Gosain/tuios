@@ -1657,6 +1657,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case foreignSessionsChangedMsg:
 		// The rail's render cache keys on the listing's generation, so this
 		// frame rebuilds the rows the refresh moved.
+		// The push prunes before its refresh, so prune again against the
+		// listing the refresh brought.
+		m.pruneWindowKeyedState()
 		m.renderSkipped = false
 		return m, nil
 

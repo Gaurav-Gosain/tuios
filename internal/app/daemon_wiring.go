@@ -77,6 +77,11 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	if client == nil {
 		return
 	}
+	// The listing poll is planned per connection: a daemon that pushes
+	// listing changes stopped it, and one that does not (an older host)
+	// needs it again. The new client's cache holds names only until its
+	// first refresh. Update re-plans both; see foreignSessionReplanCmd.
+	m.foreignSessionReplan = true
 	// A new connection starts with nothing said about focus. A client that
 	// replaces a lost one already knows, so it says so at once.
 	if m.hostFocus != hostFocusUnknown {
