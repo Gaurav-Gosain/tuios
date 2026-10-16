@@ -3367,3 +3367,63 @@ trim.
   subscribers. Those runs also used the two-lock drain, so part of the cost
   was the harness. The one-second trim keeps the steady flood at the
   old cost.
+
+## 2026-10 allocations on the output path
+
+The kernel hands the daemon's read loop one line at a time when lines are
+short: `yes` arrives in reads of about 160 bytes, `seq` in about 1 KiB. Only
+`cat` of long lines fills the 16 KiB buffer. Three steps paid for every read
+allocated: the nesting probe scan joined the last read's tail to the new one,
+the graphics scan grew a segment slice, and the screen tracker grew a slice
+byte by byte for every escape sequence, so coloured output allocated once per
+colour. On a `yes` flood that was most of the daemon's garbage. The client
+read each output frame through a 4 KiB buffer that doubled up to the frame
+size.
+
+### What changed
+
+- The probe scan keeps the last read's tail only from its last ESC. The
+  prefix and nonce a probe is recognised by hold one ESC, at the start, so a
+  probe cut by a read starts there. The join is copied into an array on the
+  PTY.
+- The graphics scan hands its segments out in one slice that it reuses. No
+  caller keeps them past `broadcast`.
+- The screen tracker gathers a sequence in an array on the stack.
+- `readFramePayload` starts at twice the bytes a buffered reader already
+  holds. A sender that announces more than it sends still costs at most twice
+  what it sent.
+
+### Numbers
+
+`BenchmarkPTYOutputScan` and `BenchmarkReadFramePayload`, six interleaved
+runs, benchstat:
+
+| Benchmark | before | after |
+|---|---|---|
+| scan, 128 B chunk | 159 ns, 3 allocs | 51 ns, 0 allocs |
+| scan, 1 KiB chunk | 186 ns, 3 allocs | 78 ns, 0 allocs |
+| scan, 16 KiB chunk | 640 ns, 3 allocs | 561 ns, 0 allocs |
+| scan, 1 KiB coloured | 2.72 µs, 77 allocs | 1.47 µs, 0 allocs |
+| read frame, 16 KiB | 5.3 µs, 28 KiB, 3 allocs | 2.7 µs, 16 KiB, 1 alloc |
+| read frame, 64 KiB | 21.3 µs, 124 KiB, 5 allocs | 12.0 µs, 64 KiB, 1 alloc |
+| `PTYOutputChunk`, 4 subscribers | 1,043 ns, 1 alloc | 935 ns, 0 allocs |
+
+Real binary, one pane, client attached, three interleaved runs. Allocation
+and GC counts are from `/debug/pprof/heap` before and after the flood:
+
+| Flood | daemon alloc | daemon GCs | client alloc | client GCs |
+|---|---|---|---|---|
+| `yes`, 100 MB, before | 754 to 950 MB | 140 to 173 | 353 to 362 MB | 79 to 82 |
+| after | 175 to 180 MB | 35 to 37 | 193 to 194 MB | 43 to 46 |
+| `seq 1e7`, before | 161 to 198 MB | 32 to 37 | 207 to 216 MB | 40 |
+| after | 94 to 96 MB | 19 to 20 | 105 to 106 MB | 20 to 22 |
+| `cat` 200 MB, before | 233 to 236 MB | 32 | 523 to 528 MB | 76 to 80 |
+| after | 217 to 229 MB | 30 to 32 | 263 to 273 MB | 38 to 48 |
+
+CPU per MB and the time to finish moved inside the noise of a shared machine.
+
+`TestOutputScanAllocatesNothing` holds the budget: a chunk with colours and a
+cut OSC allocates nothing. On the tree before it allocates 5 times.
+`TestNestProbeSplitAcrossReads` now cuts a probe at every byte.
+`TestFrameBodyGrowsWithWhatArrives` checks the bound through a buffered
+reader.

@@ -119,6 +119,10 @@ type gfxScanner struct {
 	// always starts at an ESC, and the next scan starts with it.
 	carry []byte
 
+	// segs is the storage scan hands its segments out in. A caller uses
+	// them before the next scan, so one slice serves every read.
+	segs []gfxSeg
+
 	cmdFrame bool // the command in progress belongs to a frame
 	cmdLast  bool // the command in progress ends its frame
 
@@ -171,6 +175,8 @@ const maxCUP = 16
 func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	buf := data
 	base := end - int64(len(data))
+	segs = s.segs[:0]
+	defer func() { s.segs = segs[:0] }()
 	if len(s.carry) > 0 {
 		buf = make([]byte, 0, len(s.carry)+len(data))
 		buf = append(buf, s.carry...)
@@ -354,12 +360,16 @@ const maxMode = 32
 // follows the screen switches: CSI ? 47, 1047 or 1049 with h or l, and RIS
 // (ESC c), which returns to the main screen. Everything else is ignored.
 func (s *gfxScanner) trackScreen(buf []byte, at int) {
-	seq := s.mode
+	// The sequence is gathered in an array on the stack. Every escape in a
+	// pane's output comes through here, most of them colours, and a slice
+	// grown per byte allocated once for each.
+	var arr [maxMode]byte
+	seq := append(arr[:0], s.mode...)
 	if len(seq) == 0 {
-		seq = buf[at : at+1]
+		seq = append(seq, buf[at])
 		at++
 	}
-	s.mode = nil
+	s.mode = s.mode[:0]
 	for i := at; i < len(buf); i++ {
 		c := buf[i]
 		switch {
@@ -380,7 +390,16 @@ func (s *gfxScanner) trackScreen(buf []byte, at int) {
 				return
 			}
 		case c == 'h', c == 'l':
-			for _, param := range bytes.Split(seq[3:], []byte{';'}) {
+			// Split by hand: a range over bytes.SplitSeq moves arr to
+			// the heap.
+			params := seq[3:]
+			for len(params) > 0 {
+				param := params
+				if j := bytes.IndexByte(params, ';'); j >= 0 {
+					param, params = params[:j], params[j+1:]
+				} else {
+					params = nil
+				}
 				switch string(param) {
 				case "47", "1047", "1049":
 					s.alt = c == 'h'
@@ -390,10 +409,10 @@ func (s *gfxScanner) trackScreen(buf []byte, at int) {
 		default:
 			return
 		}
-		seq = append(seq[:len(seq):len(seq)], c)
+		seq = append(seq, c)
 	}
 	// The read ended inside the sequence: keep it for the next one.
-	s.mode = append([]byte(nil), seq...)
+	s.mode = append(s.mode, seq...)
 }
 
 // keepTail records the last bytes the scan has passed.

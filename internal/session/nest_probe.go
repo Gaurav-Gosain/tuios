@@ -112,13 +112,23 @@ func (p *PTY) scanNestProbes(data []byte) {
 		return
 	}
 	if len(p.probeTail) > 0 {
-		// A probe split across the last read and this one.
-		joined := append(append([]byte(nil), p.probeTail...), data[:min(len(data), nestProbeMax)]...)
-		recordNestProbes(joined, sessionID)
+		// A probe split across the last read and this one. The tail starts
+		// at an ESC, so it is empty unless a probe can still be in it.
+		n := copy(p.probeJoin[:], p.probeTail)
+		n += copy(p.probeJoin[n:], data[:min(len(data), nestProbeMax)])
+		recordNestProbes(p.probeJoin[:n], sessionID)
 	}
 	recordNestProbes(data, sessionID)
-	keep := min(len(data), nestProbeMax-1)
-	p.probeTail = append(p.probeTail[:0], data[len(data)-keep:]...)
+	// Keep the end of the chunk from its last ESC. A probe is recognised by
+	// its prefix and nonce, which hold one ESC, at the start, so a probe cut
+	// by this read starts there. Text with no ESC near its end keeps nothing,
+	// and the join above costs nothing.
+	keep := data[len(data)-min(len(data), nestProbeMax-1):]
+	if i := bytes.LastIndexByte(keep, 0x1b); i >= 0 {
+		p.probeTail = append(p.probeTail[:0], keep[i:]...)
+	} else {
+		p.probeTail = p.probeTail[:0]
+	}
 }
 
 func recordNestProbes(b []byte, sessionID string) {

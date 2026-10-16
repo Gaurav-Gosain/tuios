@@ -1157,14 +1157,22 @@ func readFramePayloadOf(r io.Reader, h frameHeader) (*Message, error) {
 }
 
 // readFramePayload reads n payload bytes into memory that grows as they
-// arrive: it starts at firstFrameChunk at most and doubles, by frameGrowStep
-// at most, up to n. A sender that announces more than it sends costs what it
-// sent, not what it announced.
+// arrive: it starts at firstFrameChunk, or twice what a buffered reader
+// already holds, and doubles, by frameGrowStep at most, up to n. A sender that
+// announces more than it sends costs at most twice what it sent, not what it
+// announced.
 func readFramePayload(r io.Reader, n int) ([]byte, error) {
 	if n == 0 {
 		return nil, nil
 	}
-	payload := make([]byte, 0, min(n, firstFrameChunk))
+	first := firstFrameChunk
+	// Bytes a buffered reader already holds have arrived. Starting at twice
+	// them costs no more than the doublings would after them, and takes most
+	// frames in one buffer.
+	if b, ok := r.(interface{ Buffered() int }); ok {
+		first = max(first, 2*b.Buffered())
+	}
+	payload := make([]byte, 0, min(n, first))
 	for len(payload) < n {
 		if len(payload) == cap(payload) {
 			want := min(n, cap(payload)+min(cap(payload), frameGrowStep))

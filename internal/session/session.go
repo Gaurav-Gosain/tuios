@@ -838,6 +838,9 @@ type PTY struct {
 	// probeTail is the end of the last output chunk, so a probe split across
 	// two reads is still seen. Only readOutput touches it.
 	probeTail []byte
+	// probeJoin is scanNestProbes' scratch for the tail and the start of the
+	// next chunk, so a join costs no allocation.
+	probeJoin [2 * nestProbeMax]byte
 	// host is the machine the process is on, empty for this one. It is what
 	// tells the two halves of exit detection apart: a pane here has an
 	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.

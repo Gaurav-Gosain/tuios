@@ -19,14 +19,18 @@ func TestNestProbeSafe(t *testing.T) {
 	}
 }
 
-// TestNestProbeSplitAcrossReads covers a probe that arrives in two reads.
+// TestNestProbeSplitAcrossReads covers a probe that arrives in two reads, cut
+// at every byte. The probe holds two ESCs, its first byte and the first byte
+// of its terminator, so a cut between the terminator's two bytes is the one a
+// tail kept from the last ESC would lose.
 func TestNestProbeSplitAcrossReads(t *testing.T) {
-	nonce, seq := NewNestProbe()
-	p := &PTY{sessionID: "split-session"}
-	cut := len(seq) / 2
-	p.scanNestProbes(append([]byte("before"), seq[:cut]...))
-	p.scanNestProbes(append(bytes.Clone(seq[cut:]), "after"...))
-	if got := seenNestProbe(nonce); got != "split-session" {
-		t.Errorf("a probe split across two reads was recorded against %q, want split-session", got)
+	for cut := 1; cut < len(nestProbePrefix)+nestNonceLen+len(nestProbeEnd); cut++ {
+		nonce, seq := NewNestProbe()
+		p := &PTY{sessionID: "split-session"}
+		p.scanNestProbes(append([]byte("before \x1b[0m text"), seq[:cut]...))
+		p.scanNestProbes(append(bytes.Clone(seq[cut:]), "after"...))
+		if got := seenNestProbe(nonce); got != "split-session" {
+			t.Errorf("a probe cut after byte %d was recorded against %q, want split-session", cut, got)
+		}
 	}
 }

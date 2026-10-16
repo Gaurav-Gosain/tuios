@@ -95,6 +95,23 @@ func TestFrameBodyGrowsWithWhatArrives(t *testing.T) {
 		}
 	})
 
+	t.Run("through a buffered reader it costs at most twice what was sent", func(t *testing.T) {
+		const sent = 48 << 10
+		frame := append(rawFrameHeader(MsgInput, maxFrameBytes-2), make([]byte, sent)...)
+		br := bufio.NewReaderSize(bytes.NewReader(frame), clientReadBuffer)
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		_, err := readOne(br)
+		runtime.ReadMemStats(&after)
+		if !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("a cut frame read as %v, want an unexpected EOF", err)
+		}
+		if got := after.TotalAlloc - before.TotalAlloc; got > 3*sent {
+			t.Fatalf("reading %d bytes of a frame that announced 16 MiB allocated %d bytes", sent, got)
+		}
+	})
+
 	t.Run("a large frame reads back byte for byte at every chunk edge", func(t *testing.T) {
 		sizes := []int{0, 1, firstFrameChunk - 1, firstFrameChunk, firstFrameChunk + 1,
 			largeFrame - 1, largeFrame, largeFrame + 1, frameGrowStep + 1, 3*frameGrowStep + 7, maxFrameBytes - 2}
