@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
@@ -457,4 +458,86 @@ func tinyPNG(t *testing.T, w, h int) []byte {
 		t.Fatal(err)
 	}
 	return b.Bytes()
+}
+
+// TestReplyToAnAgentOnAHost: a reply for an agent on a linked machine goes to
+// this machine's daemon with host, which passes it over the link. The far
+// daemon queues it as the link's, writes the large paste to a file on its own
+// machine, and types the reply into the pane there when the agent comes to
+// rest. The pane is a recorder; it reads the typed words and the label that
+// names the file, and the file holds the paste.
+//
+// Negative control: with host left out of queuePromptParams (the forward
+// gone), this daemon looks for the far session here and the call fails
+// with session_not_found.
+func TestReplyToAnAgentOnAHost(t *testing.T) {
+	f := startGlobalFleet(t)
+	recorded := startRecorderWithin(t, f.alpha, f.env, "far")
+	if out, err := cliWithin(t, f.alpha, f.env, "set-agent-state", "working", "-s", "far", "--harness", "claude-code"); err != nil {
+		t.Fatalf("mark the far pane an agent: %v\n%s", err, out)
+	}
+	var window string
+	for id := range sessionWindowHosts(t, f.alpha, f.env, "far") {
+		window = id
+	}
+	big := largeReplyPaste()
+	params, _ := json.Marshal(map[string]any{
+		"host": "alpha", "session": "far", "window": window,
+		"parts": []map[string]any{
+			{"kind": "text", "text": "echo h0st "},
+			{"kind": "paste", "text": big, "n": 1},
+		},
+	})
+	out, err := cliWithin(t, f.here, f.env, "call", "queue-prompt", string(params))
+	if err != nil || !strings.Contains(out, `"host":"alpha"`) {
+		t.Fatalf("queue-prompt with host: %v\n%s", err, out)
+	}
+	ls, _ := cliWithin(t, f.alpha, f.env, "queue", "ls", "-s", "far")
+	if !strings.Contains(ls, "link:") {
+		t.Fatalf("the far queue does not hold the link's entry:\n%s", ls)
+	}
+	if out, err := cliWithin(t, f.alpha, f.env, "set-agent-state", "idle", "-s", "far", "--harness", "claude-code"); err != nil {
+		t.Fatalf("rest the far agent: %v\n%s", err, out)
+	}
+	got := waitRecorded(t, recorded, "lines]\x1b[201~\r")
+	start := strings.LastIndex(got, "\x1b[200~")
+	typed := got[start+len("\x1b[200~") : len(got)-len("\x1b[201~\r")]
+	if !strings.HasPrefix(typed, "echo h0st [Pasted text #1: ") {
+		t.Fatalf("the far pane read %q, want the words and the label that names the file", typed)
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(typed, "echo h0st [Pasted text #1: "), ", 2,048 lines]")
+	if farRuntime := xdgDir(f.alpha, "XDG_RUNTIME_DIR"); !strings.HasPrefix(path, farRuntime) {
+		t.Fatalf("the file %s is not in the far machine's runtime folder %s", path, farRuntime)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != big {
+		t.Fatalf("the far file holds %d bytes (%v), want the %d of the paste", len(data), err, len(big))
+	}
+}
+
+// startRecorderWithin is startRecorder for the daemon at base with env.
+func startRecorderWithin(t *testing.T, base string, env []string, sessionName string) string {
+	t.Helper()
+	dir := t.TempDir()
+	script := filepath.Join(dir, "recorder.sh")
+	if err := os.WriteFile(script, []byte(recorderScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "recorded")
+	if o, err := cliWithin(t, base, env, "send-keys", "-s", sessionName, "--raw", "exec sh "+script+" "+out); err != nil {
+		t.Fatalf("start the recorder: %v\n%s", err, o)
+	}
+	if o, err := cliWithin(t, base, env, "send-keys", "-s", sessionName, "Enter"); err != nil {
+		t.Fatalf("start the recorder: %v\n%s", err, o)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		pane, _ := cliWithin(t, base, env, "capture-pane", "-s", sessionName)
+		if strings.Contains(pane, "recorder ready") {
+			return out
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the recorder never started:\n%s", pane)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }

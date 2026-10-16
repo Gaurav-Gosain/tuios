@@ -183,6 +183,9 @@ other has each paste and image written to the paste folder, attached, and
 named in the body. A daemon from before this answers `text is required` for a
 message sent in parts alone.
 
+**queue-prompt takes host.** A message for a pane on a linked machine is
+passed there over the link. See [The delivery queue](#the-delivery-queue).
+
 **queue-prompt takes images.** A part may be `{"kind":"image","data":…}`. A
 daemon from before this answers `invalid_params` for the kind. See
 [The delivery queue](#the-delivery-queue).
@@ -6404,6 +6407,14 @@ required without `parts`), `parts`, `human_nonce`, `from`.
 {"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}
 {"id":1,"result":{"type":"prompt_queued","id":"q3","position":1,"queued":1,"delivering":false}}
 ```
+
+`host` names a machine from `[hosts]`: the message is for a pane there. This
+daemon passes it, with its parts, to that machine's daemon over the link, on
+a connection of its own, and answers with the far daemon's result and `host`.
+The far daemon queues it as `link:THIS-MACHINE`, held to its policy for this
+machine: `write`, and `files` for a block or an image. Only a caller outside
+every pane may send one, since the far daemon sees only the link. The
+person's nonce is checked here and not sent on.
 
 `parts` is the message as ordered parts, the form the reply composer sends:
 `{"kind":"text","text":…}` for typed text, `{"kind":"paste","text":…,"n":1}`

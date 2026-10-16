@@ -4165,8 +4165,11 @@ typed the moment the agent comes to rest. From the rail the Inbox opens with
 the editor and closes again when you send or close it. On a pane waiting on a
 prompt, or with an `ask-human` question open (the rail draws both as waiting
 on you), `r` says so and opens nothing: `api is waiting on a prompt. Answer it
-first (space to peek).` A pane on another machine is replied to from a client
-attached there.
+first (space to peek).` A reply to an agent on a linked machine goes to this
+machine's daemon, which passes it over the link. That machine queues it as its
+link's, writes any paste or image file there, and types it when the agent
+comes to rest. Its `[hosts]` policy for this machine must allow `write`, and
+`files` for a paste block or an image.
 
 `x` on a rail row with messages queued drops the newest one still waiting
 (`cancel-queued`), and the dock says `Dropped 1 queued message to api. u

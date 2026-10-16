@@ -113,6 +113,9 @@ func inboxDraftKey(sessionID, windowID string) string { return sessionID + "/" +
 type inboxReplyEditor struct {
 	session string
 	window  string
+	// host is the linked machine the pane is on, empty for this one. The
+	// reply then goes with host, and this machine's daemon passes it on.
+	host string
 	who     string
 	// context says where the agent is, as the editor's label shows it:
 	// "done 4m", "working".
@@ -215,15 +218,15 @@ func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 	if !inboxReplyKind(it) || !m.inboxReplySupported() {
 		return nil, false
 	}
-	if it.Host != "" {
-		m.ShowNotification(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to reply", "info", m.Settings.NotificationDuration)
-		return nil, true
-	}
 	context := "done"
 	if it.Kind == session.AttentionErrored {
 		context = "errored"
 	}
 	context += " " + inboxWait(it.Since, time.Now())
+	if it.Host != "" {
+		m.openHostReply(it.Host, it.Session, it.Window, inboxWho(it), context)
+		return nil, true
+	}
 	m.openInboxReply(it.Session, it.Window, inboxWho(it), context, false)
 	return nil, true
 }
@@ -265,6 +268,40 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 		context:    context,
 		comp:       comp,
 		closeAfter: closeAfter,
+	}
+	return true
+}
+
+// openHostReply opens the editor for a pane on a linked machine. The reply
+// goes to this machine's daemon with host, which passes it on (see
+// session/queue_host.go). The far daemon refuses it while the agent waits on
+// a prompt, as it refuses any queued message then.
+func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool {
+	if sessionID == "" {
+		return false
+	}
+	if !m.inboxCanMark("Replying") {
+		return false
+	}
+	m.Inbox.approvals.armed = inboxArmed{}
+	comp := m.takeInboxDraft(sessionID, windowID)
+	if comp == nil {
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
+	}
+	if m.ProcessingRemoteKeys {
+		comp.MarkAutomated()
+	}
+	m.replyPreviewAttach(comp)
+	mentions := m.newReplyMentions("", "")
+	comp.SetCompleter(mentions)
+	m.Inbox.reply.editor = &inboxReplyEditor{
+		mentions: mentions,
+		session:  sessionID,
+		window:   windowID,
+		host:     host,
+		who:      who + " on " + printableTitle(host),
+		context:  context,
+		comp:     comp,
 	}
 	return true
 }
@@ -523,7 +560,7 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	st.sendSeq++
 	st.sending[st.sendSeq] = ed.comp
-	return m.inboxQueueCmd(ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
+	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
 
 // trimReplyParts drops the message's leading blank lines and trailing space.
@@ -583,8 +620,17 @@ func replyPartsRefusal(parts []composer.Part) string {
 
 // inboxQueueCmd sends queue-prompt as the person.
 func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
+	return m.inboxQueueCmdOn("", sessionID, windowID, who, text, nonce, requeue, send, parts)
+}
+
+// inboxQueueCmdOn is inboxQueueCmd for a pane on host, empty for this
+// machine.
+func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
 	call := m.inboxCaller()
 	params := map[string]any{"session": sessionID, "window": windowID, "text": text, "human_nonce": nonce}
+	if host != "" {
+		params["host"] = host
+	}
 	if parts != nil {
 		params["parts"] = wireReplyParts(parts)
 	}

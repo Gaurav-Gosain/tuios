@@ -6536,3 +6536,15 @@ the image's bytes in the paste folder. It passes on the branch.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A pasted image path stayed text | the image read in `inboxReplyPasteCmd` | every paste taken as text (`if ok \|\| !ok`) | `TestReplyWithAnImageGoesAsAFile` ("waiting for the image as one block: … timed out") | **caught** |
+## A reply for an agent on a host goes over the link
+
+`TestReplyToAnAgentOnAHost` starts this machine's daemon linked to alpha
+through the fake ssh, and runs a recorder as an agent in a pane on alpha. It
+sends `queue-prompt` with `host` to this machine's daemon, with a 100 KiB
+paste. alpha's queue must list the entry as the link's. When the agent rests,
+the recorder must read the words and a label that names a file in alpha's
+runtime folder, and the file must hold the paste. It passes on the branch.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A reply with host was not passed on | the forward in `verbQueuePrompt` | `if false && p.Host != ""` | `TestReplyToAnAgentOnAHost` ("queue-prompt with host: exit status 1 … session_not_found") | **caught** |

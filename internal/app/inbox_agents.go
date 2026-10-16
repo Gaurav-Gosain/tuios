@@ -456,13 +456,17 @@ func (m *OS) InboxAgentsReply() tea.Cmd {
 	if who == "" {
 		who = shortWindowLabel(e.WindowID)
 	}
-	if e.Host != "" {
-		m.ShowNotification(who+" is on "+printableTitle(e.Host)+". Attach there to reply", "info", m.Settings.NotificationDuration)
-		return nil
-	}
 	ctx := sidebarStateWords(e.State)
 	if e.StateAt > 0 {
 		ctx += " " + inboxWait(e.StateAt, time.Now())
+	}
+	if e.Host != "" {
+		if e.State == "needs_input" {
+			m.ShowNotification(who+" is waiting on a prompt. Answer it first.", "info", m.Settings.NotificationDuration)
+			return nil
+		}
+		m.openHostReply(e.Host, e.SessionID, e.WindowID, who, ctx)
+		return nil
 	}
 	m.openInboxReply(e.SessionID, e.WindowID, who, ctx, false)
 	return nil

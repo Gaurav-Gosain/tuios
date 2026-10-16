@@ -61,6 +61,9 @@ type queuePromptParams struct {
 	// ignored: a client sends both so a daemon older than parts types the
 	// text. See queue_parts.go.
 	Parts []queuePart `json:"parts"`
+	// Host is the machine the pane is on, for a pane of a linked machine.
+	// See queue_host.go.
+	Host string `json:"host"`
 }
 
 // verbQueuePrompt answers queue-prompt.
@@ -68,6 +71,9 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 	var p queuePromptParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Host != "" {
+		return d.queuePromptToHost(cs, p)
 	}
 	text, size := p.Text, len(p.Text)
 	if p.Parts != nil {
