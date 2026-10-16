@@ -413,6 +413,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition, WhichKeyPositions)
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
+	checkEnum("window_title_style", cfg.Appearance.WindowTitleStyle, WindowTitleStyles)
+	checkEnum("window_title_align", cfg.Appearance.WindowTitleAlign, WindowTitleAligns)
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
 	validateGlyphSet(cfg, result)
 	validateOmarchyTheme(cfg, result)

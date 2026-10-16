@@ -397,6 +397,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.glyphs", m.glyphItem()),
 			opt("appearance.border_style"),
 			opt("appearance.window_title_position"),
+			opt("appearance.window_title_style"),
+			opt("appearance.window_title_align"),
 			opt("appearance.window_title_format"),
 			// Hand-written: the value in force is the session's pane geometry,
 			// not this client's config. See sharedBordersItem.

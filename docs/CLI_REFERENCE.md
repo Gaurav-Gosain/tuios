@@ -1728,6 +1728,8 @@ name alone. Some of them:
 | `theme_light` | a theme id, or empty | The theme while the terminal is light. `theme` is then the dark theme (default empty) |
 | `border_focused_gradient` | two or more colours, or empty | Colours the focused pane's border blends through (default empty) |
 | `border_gradient_angle` | `0` to `359` | Direction of the gradient in degrees (default `45`) |
+| `window_title_style` | `pill`, `tab`, `plain` | Shape of a pane's title (default `pill`) |
+| `window_title_align` | `auto`, `left`, `center`, `right` | Place of a pane's title on its row (default `auto`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `motion` | `none`, `basic`, `full` | How much moves: `basic` keeps window slides and the copy sweep, `full` (the default) adds the overlay fade-in and the working-agent shimmer |
 | `theme_transition` | `none`, `circle`, `fade` | How a theme change shows: `circle` grows the new theme from the middle of the screen, `fade` changes all cells at the same time (default `none`) |

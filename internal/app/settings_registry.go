@@ -47,6 +47,8 @@ var settingLabels = map[string]string{
 	"appearance.dockbar_position":         "Dock position",
 	"appearance.glyphs":                   "Glyph set",
 	"appearance.theme_light":              "Light theme",
+	"appearance.window_title_style":       "Title style",
+	"appearance.window_title_align":       "Title place",
 	"appearance.border_focused_gradient":  "Focused border gradient",
 	"appearance.border_gradient_angle":    "Gradient angle",
 	"appearance.hide_clock":               "Clock in the badge",

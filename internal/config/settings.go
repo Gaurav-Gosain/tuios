@@ -421,6 +421,11 @@ type Settings struct {
 	// Set via --window-title-position flag or appearance.window_title_position config
 	WindowTitlePosition string
 
+	// WindowTitleStyle and WindowTitleAlign are appearance.window_title_style
+	// and window_title_align.
+	WindowTitleStyle string
+	WindowTitleAlign string
+
 	// WindowTitleFormat is the template used to build a window's displayed title.
 	// Empty (the default) means the title is shown as-is. See FormatWindowTitle for
 	// the supported placeholders.
@@ -880,6 +885,8 @@ func DefaultSettings() Settings {
 		OSC52Write:                  OSC52WriteFocused,
 		HideScrollbar:               false,
 		WindowTitlePosition:         DefaultWindowTitlePosition,
+		WindowTitleStyle:            DefaultWindowTitleStyle,
+		WindowTitleAlign:            DefaultWindowTitleAlign,
 		WindowTitleFormat:           "",
 		HideClock:                   false,
 		ShowClock:                   false,

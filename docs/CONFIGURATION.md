@@ -1087,6 +1087,26 @@ When clients with different docks share a session, the panes keep the
 largest dock height. A client with a compact dock shows a blank row in that
 case.
 
+## Window titles
+
+A pane's title sits on its border. Two options set its shape and its place:
+
+| Option | Values | Default |
+|---|---|---|
+| `appearance.window_title_style` | `pill`: the name on a fill in the border's colour, with rounded caps. `tab`: the fill with no caps. `plain`: the name in the border's colour, with no fill | `pill` |
+| `appearance.window_title_align` | `auto`: on the top row, the end away from the window buttons; on the bottom row, the middle. `left`, `center`, `right`: that place in the room the buttons leave | `auto` |
+
+```toml
+[appearance]
+window_title_style = "plain"
+window_title_align = "center"
+```
+
+`appearance.window_title_position` sets the row: `top`, `bottom` or
+`hidden`. The caps of `pill` come from the glyph set. Both options are on the
+settings page, in the Appearance section, and `tuios set-config` applies them
+at once.
+
 ## Focused border gradient
 
 `appearance.border_focused_gradient` draws the focused pane's border in two

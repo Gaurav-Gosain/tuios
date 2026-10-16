@@ -119,7 +119,14 @@ var (
 	// DockPrefixIndicators are where an armed leader shows: on the dock's
 	// mode pill, or on the floating badge it had before the pill could.
 	DockPrefixIndicators = []string{"pill", "badge"}
-	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
+	// WindowTitleStyles are the shapes of a pane's title: pill has rounded
+	// caps on a fill, tab is the fill alone, plain is the text on the line.
+	WindowTitleStyles = []string{"pill", "tab", "plain"}
+	// WindowTitleAligns are where the title sits on its row. auto is the end
+	// away from the window buttons on the top row, and the middle on the
+	// bottom row.
+	WindowTitleAligns = []string{"auto", "left", "center", "right"}
+	daemonLogLevels   = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
 )
 
 // The shipped edges for the dock, the rail and the window title. Named because
@@ -134,6 +141,8 @@ const (
 	// DefaultBorderGradientAngle runs the gradient from the top left corner
 	// to the bottom right one.
 	DefaultBorderGradientAngle = 45
+	DefaultWindowTitleStyle    = "pill"
+	DefaultWindowTitleAlign    = "auto"
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -329,6 +338,16 @@ var optionSpecs = []Option{
 		Path: "appearance.window_title_position", Type: OptionString, Section: "appearance",
 		Description: "Edge of the pane the title is drawn on",
 		Accepted:    WindowTitlePositions, Default: DefaultWindowTitlePosition,
+	},
+	{
+		Path: "appearance.window_title_style", Type: OptionString, Section: "appearance",
+		Description: "Shape of a pane's title: pill has rounded caps, tab is a plain fill, plain is the text on the border",
+		Accepted:    WindowTitleStyles, Default: DefaultWindowTitleStyle,
+	},
+	{
+		Path: "appearance.window_title_align", Type: OptionString, Section: "appearance",
+		Description: "Where a pane's title sits on its row. auto keeps it away from the window buttons",
+		Accepted:    WindowTitleAligns, Default: DefaultWindowTitleAlign,
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",

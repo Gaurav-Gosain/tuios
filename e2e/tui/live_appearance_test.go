@@ -33,6 +33,8 @@ var liveAppearanceCases = []liveAppearanceCase{
 	{path: "appearance.border_style", value: "hidden", restore: "rounded", changesFrame: true},
 	{path: "appearance.border_style", value: "thick", restore: "rounded", changesFrame: true},
 	{path: "appearance.window_title_position", value: "hidden", restore: "top", changesFrame: true},
+	{path: "appearance.window_title_style", value: "plain", restore: "pill", changesFrame: true},
+	{path: "appearance.window_title_align", value: "center", restore: "auto", changesFrame: true},
 	{path: "appearance.shared_borders", value: "true", restore: "false", changesFrame: true},
 	{path: "appearance.motion", value: "none", restore: "full"},
 	{path: "appearance.glyphs", value: "unicode", restore: "default", changesFrame: true},

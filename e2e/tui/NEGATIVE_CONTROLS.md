@@ -6692,3 +6692,16 @@ Run on 2026-10-16.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The gradient was never drawn | yes | `gradientOn` always returns false | `TestBorderGradientSteps` ("floating: the focused border never stepped through the gradient: 1 steps") | **caught** |
+
+## Window title style and place
+
+`TestLiveAppearanceKeepsTheScreen` gains `window_title_style=plain` and
+`window_title_align=center`. Each must change the frame, keep the panes drawn,
+and restore the frame when set back.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| plain drew the pill | yes | the `plain` case in `windowTitleBadge` never matches | `TestLiveAppearanceKeepsTheScreen/window_title_style=plain` ("changed nothing on screen") | **caught** |
+| The title ignored its place | yes | `layoutBorderRow` never calls `alignedBorderRow` | `TestLiveAppearanceKeepsTheScreen/window_title_align=center` ("changed nothing on screen") | **caught** |

@@ -349,6 +349,8 @@ type AppearanceConfig struct {
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
 	WrapLists                *bool                   `toml:"wrap_lists"`                   // Up on a list's first row goes to its last, and down on the last to the first (default: true)
 	WindowTitlePosition      string                  `toml:"window_title_position"`        // Window title position: bottom, top, hidden (default: top). Shows CustomName if set, else terminal title.
+	WindowTitleStyle         string                  `toml:"window_title_style"`           // Title shape: pill, tab, plain (default: pill)
+	WindowTitleAlign         string                  `toml:"window_title_align"`           // Title place on its row: auto, left, center, right (default: auto)
 	HideClock                bool                    `toml:"hide_clock"`                   // Hide the clock overlay (deprecated, use show_clock)
 	ShowClock                bool                    `toml:"show_clock"`                   // Show the clock overlay (default: false)
 	ShowCPU                  bool                    `toml:"show_cpu"`                     // Show CPU graph in dock (default: false)
@@ -1012,6 +1014,8 @@ func DefaultConfig() *UserConfig {
 			DockbarPosition:          DefaultDockbarPosition,
 			DockPrefixIndicator:      DefaultDockPrefixIndicator,
 			WindowTitlePosition:      DefaultWindowTitlePosition,
+			WindowTitleStyle:         DefaultWindowTitleStyle,
+			WindowTitleAlign:         DefaultWindowTitleAlign,
 			PreferredShell:           "",
 			ClickToType:              ClickToTypeDouble,
 			FocusFollowsMousePause:   FocusFollowsMousePauseOff,
@@ -2745,6 +2749,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	} else if cfg.Appearance.WindowTitlePosition != "" {
 		s.WindowTitlePosition = DefaultWindowTitlePosition
+	}
+
+	s.WindowTitleStyle = DefaultWindowTitleStyle
+	if slices.Contains(WindowTitleStyles, cfg.Appearance.WindowTitleStyle) {
+		s.WindowTitleStyle = cfg.Appearance.WindowTitleStyle
+	}
+	s.WindowTitleAlign = DefaultWindowTitleAlign
+	if slices.Contains(WindowTitleAligns, cfg.Appearance.WindowTitleAlign) {
+		s.WindowTitleAlign = cfg.Appearance.WindowTitleAlign
 	}
 
 	// HideClock defaults to false
