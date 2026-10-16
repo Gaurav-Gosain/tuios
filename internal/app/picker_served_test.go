@@ -73,26 +73,41 @@ func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 // served client must not reach it. The local row is the positive half.
 //
 // Negative control: with the ConfigReadOnly check removed from
-// ThemePickerAskDelete, the ssh row deletes the file.
+// ThemePickerAskDelete, the ssh row deletes the file. With the ThemesBasedOn
+// check removed, the base row deletes a file another theme is built on.
 func TestServedPickerCannotDeleteThemeFiles(t *testing.T) {
 	dir, err := theme.GetThemesDir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
+		name    string
 		kind    ClientKind
+		child   bool
 		deletes bool
 	}{
-		{ClientSSH, false},
-		{ClientLocal, true},
+		{"ssh", ClientSSH, false, false},
+		{"local", ClientLocal, false, true},
+		// Another file names it as its base, and would stop loading.
+		{"local base", ClientLocal, true, false},
 	} {
-		t.Run(tc.kind.String(), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(dir, "doomed.json")
 			if err := os.WriteFile(path, []byte(`{"id": "doomed", "base": "nord"}`), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = os.Remove(path) })
+			if tc.child {
+				kid := filepath.Join(dir, "kid.json")
+				if err := os.WriteFile(kid, []byte(`{"id": "kid", "base": "doomed"}`), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = os.Remove(kid) })
+			}
 			theme.ReloadCustomThemes()
+			// A local client previews the theme it highlights, and a refused
+			// delete leaves that preview up. Later tests expect no theme.
+			t.Cleanup(func() { _ = theme.Initialize(theme.NoneID) })
 
 			m := &OS{Settings: config.Global, Width: 120, Height: 40, Client: tc.kind,
 				ConfigReadOnly: tc.kind.Remote()}

@@ -214,12 +214,17 @@ func (m *OS) themePickerHighlighted() (string, bool) {
 // the footer for y.
 func (m *OS) ThemePickerAskDelete() {
 	id, ok := m.themePickerHighlighted()
-	yours, _ := theme.ThemeFileOf(id)
+	yours, edited := theme.ThemeFileOf(id)
 	switch {
 	case !ok || !yours:
 		m.ShowNotification("Only your own theme files can be deleted", "info", m.Settings.NotificationDuration)
 	case m.ConfigReadOnly:
 		m.ShowNotification("This client cannot change the theme files", "info", m.Settings.NotificationDuration)
+	case !edited && len(theme.ThemesBasedOn(id)) > 0:
+		// The themes that name it as their base would stop loading. An
+		// edited built-in is safe to remove: they fall back to the built-in.
+		m.ShowNotification(id+" is the base of "+strings.Join(theme.ThemesBasedOn(id), ", ")+". Delete those first",
+			"warning", m.Settings.NotificationWarningDuration)
 	default:
 		m.ThemePickerDelete = id
 	}
