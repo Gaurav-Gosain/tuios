@@ -1320,6 +1320,9 @@ type Session struct {
 	saveStale wakeLatch
 	// saverWakes counts the resurrection saver's timer fires.
 	saverWakes atomic.Int64
+	// wakes are the daemon's idle latches, raised by this session's panes
+	// and state. Nil until the daemon adopts the session. See idle_wakes.go.
+	wakes atomic.Pointer[idleWakes]
 	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
 	// by stateWakeMu, which is never held with another lock taken after it.
 	stateWake   chan struct{}
@@ -1885,6 +1888,7 @@ func (s *Session) SetEventSink(fn func(SessionEvent)) {
 func (s *Session) emit(ev SessionEvent) {
 	if ev.Type == EventOutput {
 		s.saveStale.Set()
+		s.noteActivity()
 	}
 	s.eventSinkMu.RLock()
 	fn := s.eventSink
@@ -4105,6 +4109,9 @@ func (p *PTY) Write(data []byte) (int, error) {
 		defer p.giveLargeSlot()
 	}
 	p.flushWinsize()
+	if s := p.owner(); s != nil {
+		s.noteActivity()
+	}
 	return p.pty.Write(data)
 }
 

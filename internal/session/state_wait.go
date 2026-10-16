@@ -11,6 +11,7 @@ func (s *Session) noteStateChangeLocked() {
 	s.changeSeq++
 	s.noteWorkspaceLocked()
 	s.stateDirty.Set()
+	s.noteIdleStateChange()
 	s.wakeStateWaiters()
 }
 

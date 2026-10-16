@@ -337,6 +337,10 @@ type Daemon struct {
 	// agents_switch.go. It is read on every tick, verb and output event, and
 	// written by a config reload, so it is atomic.
 	agentsOff atomic.Bool
+
+	// wakes are the latches the background loops sleep on at idle. See
+	// idle_wakes.go.
+	wakes idleWakes
 	// agentsSwitchMu orders a switch with the clear a racing detection pass
 	// makes after it. See noteSessionScanned.
 	agentsSwitchMu sync.Mutex
@@ -384,7 +388,14 @@ const defaultAgentDetectInterval = 2 * time.Second
 // starts in it goes unechoed, so output is what says it is worth reading
 // again, and this bound covers a program started with no output at all. At the
 // default two-second tick it is every fifth tick. See PTY.detectScanDue.
-const agentDetectQuietBound = 10 * time.Second
+//
+// It is also how long the monitor keeps looking after the last activity before
+// it sleeps, so the bound holds for a program started within it. One started
+// with no output and no input later than that is found when the pane next
+// prints. See agentMonitor.
+//
+// A variable so the idle budget test can shorten it.
+var agentDetectQuietBound = 10 * time.Second
 
 // detectQuietTicks is how many ticks a quiet pane waits between reads at the
 // given poll interval: agentDetectQuietBound in ticks, and never less than one,
@@ -902,6 +913,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.agentsOff.Store(cfg.AgentsOff)
+	d.wakes.init()
 	d.loadHooks(cfg)
 	d.notify = newPushNotifier(d, cfg.Notify)
 
@@ -974,6 +986,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	// A new or restored session's panes start with the link, so it has to
 	// point somewhere from the start. See ssh_agent_follow.go.
 	d.agentEnsureSession(s.ID)
+	s.setIdleWakes(&d.wakes)
 	name := s.Name()
 	// Every daemon-side mutation reaches the attached clients from here, so a
 	// change the daemon made itself shows up in a live TUI without the verb that
@@ -2200,44 +2213,88 @@ func resolveAgentDetectInterval(enabled *bool, cfg time.Duration) time.Duration 
 // running set-agent-state. It is strictly subordinate to explicit reports and to
 // the stall heuristic (see Session.scanAgentDetection). It exits when the daemon
 // context is cancelled, and does nothing at all when auto-detection is disabled.
+//
+// It sleeps while nothing happens. A program starts or stops in a pane that
+// takes input, prints, or was just made, and each of those raises the detect
+// latch. After quietTicks looks with the latch down, which is the quiet bound
+// in which every pane is read once more, the monitor stops its timer and waits
+// for the latch. It keeps looking while an agent it owns is out of the
+// foreground, because the misses that clear it take consecutive looks. Output
+// also runs the exit probe on its own (reconcileAgentOnOutput), so a sleeping
+// monitor misses no exit.
 func (d *Daemon) agentMonitor() {
 	if d.agentDetectInterval <= 0 {
 		return
 	}
-	ticker := time.NewTicker(d.agentDetectInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(d.agentDetectInterval)
+	defer timer.Stop()
 	quietTicks := detectQuietTicks(d.agentDetectInterval)
+	quiet := int32(0)
+	asleep := false
 
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
-		case <-ticker.C:
+		case <-d.wakes.detect.C():
+			// The token can outlive the flag: a look took the flag before
+			// this token was read.
+			if asleep && d.wakes.detect.Up() {
+				asleep, quiet = false, 0
+				timer.Reset(d.agentDetectInterval)
+			}
+		case <-timer.C:
+			d.wakes.detectTicks.Add(1)
+			active := d.wakes.detect.Take()
 			// With the agent features off the tick reads nothing: no
-			// process table, no transcript. See agents_switch.go.
+			// process table, no transcript. See agents_switch.go. Turning
+			// them on raises the latch.
 			if d.agentsOff.Load() {
+				asleep = true
 				continue
 			}
-			reg := d.agentMatcher.registry
-			now := time.Now().UnixNano()
-			for _, sess := range d.manager.AllSessions() {
-				due := func(ptyID string) bool {
-					pty := sess.GetPTY(ptyID)
-					return pty == nil || pty.detectScanDue(now, quietTicks)
-				}
-				sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, due)
-				// The transcript joins ride this tick rather than one of their
-				// own. It runs only for a pane already known to be running a
-				// harness that has a transcript and that has no join yet, so a
-				// session that is fully joined, or that runs no agent at all,
-				// does nothing here.
-				sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
-				if d.noteSessionScanned(sess) {
-					break
-				}
+			pending := d.agentDetectScan()
+			if active {
+				quiet = 0
+			} else {
+				quiet++
 			}
+			if quiet >= quietTicks && !pending {
+				asleep = true
+				continue
+			}
+			timer.Reset(d.agentDetectInterval)
 		}
 	}
+}
+
+// agentDetectScan is one look of agentMonitor at every session. It reports
+// whether a session needs another look with nothing new happening.
+func (d *Daemon) agentDetectScan() bool {
+	quietTicks := detectQuietTicks(d.agentDetectInterval)
+	reg := d.agentMatcher.registry
+	now := time.Now().UnixNano()
+	pending := false
+	for _, sess := range d.manager.AllSessions() {
+		due := func(ptyID string) bool {
+			pty := sess.GetPTY(ptyID)
+			return pty == nil || pty.detectScanDue(now, quietTicks)
+		}
+		sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, due)
+		// The transcript joins ride this tick rather than one of their
+		// own. It runs only for a pane already known to be running a
+		// harness that has a transcript and that has no join yet, so a
+		// session that is fully joined, or that runs no agent at all,
+		// does nothing here.
+		sess.maintainAgentTranscripts(reg, d.paneAgentIdentifier(sess))
+		if d.noteSessionScanned(sess) {
+			break
+		}
+		if sess.detectPending() {
+			pending = true
+		}
+	}
+	return pending
 }
 
 // paneAgentIdentifier reports the working directory and build version of the
