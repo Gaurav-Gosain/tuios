@@ -177,6 +177,11 @@ func (m *OS) CloseGlyphPicker() {
 // when a preview actually changed the set, so a no-op cancel does not rewrite
 // config.toml over the set the file already named.
 func (m *OS) CancelGlyphPicker() tea.Cmd {
+	if !m.previewsLive() {
+		// Nothing was applied, so there is nothing to restore.
+		m.CloseGlyphPicker()
+		return nil
+	}
 	current := theme.ActiveGlyphSetID()
 	m.applyGlyphSet(m.GlyphPickerOriginal)
 	var save tea.Cmd
@@ -202,7 +207,9 @@ func (m *OS) GlyphPickerMove(delta int) {
 	if !livePickerMove(&m.GlyphPickerSelected, &m.GlyphPickerScroll, delta, len(items), visible, m.listWraps()) {
 		return
 	}
-	m.applyGlyphSet(items[m.GlyphPickerSelected])
+	if m.previewsLive() {
+		m.applyGlyphSet(items[m.GlyphPickerSelected])
+	}
 }
 
 // GlyphPickerRefilter resets the selection after the query changes and previews
@@ -210,7 +217,7 @@ func (m *OS) GlyphPickerMove(delta int) {
 func (m *OS) GlyphPickerRefilter() {
 	m.GlyphPickerSelected = 0
 	m.GlyphPickerScroll = 0
-	if items := m.glyphPickerItems(); len(items) > 0 {
+	if items := m.glyphPickerItems(); len(items) > 0 && m.previewsLive() {
 		m.applyGlyphSet(items[0])
 	}
 }

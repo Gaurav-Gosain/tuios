@@ -17,10 +17,18 @@ const (
 )
 
 // themePickerHints is the theme picker footer, shared by the renderer and the
-// sizing helper so both measure the same panel.
+// sizing helper so both measure the same panel. A served client does not
+// preview by applying (see previewsLive), so its arrows only move.
 var themePickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
 	{Key: "↑↓", Label: "preview"},
+	{Key: overlay.EnterGlyph, Label: "apply"},
+	{Key: "esc", Label: "cancel"},
+}
+
+var themePickerServedHints = []overlay.Hint{
+	{Key: "type", Label: "filter"},
+	{Key: "↑↓", Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }
@@ -29,8 +37,12 @@ var themePickerHints = []overlay.Hint{
 func (m *OS) themePickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(themePickerInnerWidth)
 	// Body lines that are not theme rows: the search input, its rule, and the
-	// count line.
-	rows, hints = m.panelBody(themePickerVisibleRows, 3, width, nil, themePickerHints)
+	// count line, and on a served client the specimen line.
+	if m.previewsLive() {
+		rows, hints = m.panelBody(themePickerVisibleRows, 3, width, nil, themePickerHints)
+	} else {
+		rows, hints = m.panelBody(themePickerVisibleRows, 4, width, nil, themePickerServedHints)
+	}
 	return width, rows, hints
 }
 
@@ -52,11 +64,15 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 		Row:      m.themeRow,
 		Footer: func(pal overlay.Palette) []string {
 			bg := pal.Surface
+			count := overlay.Style(bg).Render(" ")
 			if len(items) > visible {
 				info := lipgloss.Sprintf("%d of %d themes", m.ThemePickerSelected+1, len(items))
-				return []string{overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  " + info)}
+				count = overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  " + info)
 			}
-			return []string{overlay.Style(bg).Render(" ")}
+			if m.previewsLive() || m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+				return []string{count}
+			}
+			return []string{themeSpecimen(items[m.ThemePickerSelected], width, pal), count}
 		},
 	})
 }
@@ -100,4 +116,37 @@ func themeSwatchStrip(id string, bg color.Color) string {
 	}
 	// A trailing surface cell separates the strip from the panel edge cleanly.
 	return b.String() + overlay.Style(bg).Render(" ")
+}
+
+// themeSpecimenText is a short prompt line, each word in the slot a shell
+// would draw it in.
+var themeSpecimenText = [...]struct {
+	text string
+	slot int
+}{{"$ ", -1}, {"ls ", 12}, {"main ", 10}, {"ok ", 2}, {"warn ", 3}, {"error", 1}}
+
+// themeSpecimen is the preview a served client gets in place of applying the
+// highlighted theme: a prompt line in that theme's own colours, on its own
+// background. "none" is the terminal's own colours, so it shows those words.
+func themeSpecimen(id string, width int, pal overlay.Palette) string {
+	slots, fg, bg, _, ok := theme.Colors(id)
+	if !ok {
+		return overlay.Style(pal.Surface).Foreground(pal.FgDim).
+			Render(overlay.Truncate("  Your terminal's own colours", width))
+	}
+	var b strings.Builder
+	b.WriteString(overlay.Style(pal.Surface).Render("  "))
+	used := 2
+	for _, w := range themeSpecimenText {
+		ink := fg
+		if w.slot >= 0 {
+			ink = slots[w.slot]
+		}
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(ink).Render(w.text))
+		used += len(w.text)
+	}
+	if used > width {
+		return overlay.Style(pal.Surface).Render(strings.Repeat(" ", width))
+	}
+	return b.String() + overlay.Style(pal.Surface).Render(strings.Repeat(" ", width-used))
 }
