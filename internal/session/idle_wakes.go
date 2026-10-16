@@ -22,20 +22,27 @@ type idleWakes struct {
 	// start working through a change to its session's state.
 	stall wakeLatch
 
-	// detectTicks and stallTicks count the timer fires of agentMonitor and
-	// stallMonitor.
-	detectTicks atomic.Int64
-	stallTicks  atomic.Int64
+	// cleanup wakes cleanupLoop. What it releases is left behind by output,
+	// input and resizes, and what it expires is a routed request.
+	cleanup wakeLatch
+
+	// detectTicks, stallTicks and cleanupTicks count the timer fires of
+	// agentMonitor, stallMonitor and cleanupLoop.
+	detectTicks  atomic.Int64
+	stallTicks   atomic.Int64
+	cleanupTicks atomic.Int64
 }
 
 func (w *idleWakes) init() {
 	w.detect.init()
 	w.stall.init()
+	w.cleanup.init()
 }
 
 // activity is a pane printing or taking input.
 func (w *idleWakes) activity() {
 	w.detect.Set()
+	w.cleanup.Set()
 }
 
 // stateChanged is a change to a session's state: a window opened or closed,
@@ -43,6 +50,7 @@ func (w *idleWakes) activity() {
 func (w *idleWakes) stateChanged() {
 	w.detect.Set()
 	w.stall.Set()
+	w.cleanup.Set()
 }
 
 // setIdleWakes points the session at the daemon's latches. The daemon calls it

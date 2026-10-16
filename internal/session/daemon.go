@@ -2101,39 +2101,71 @@ func CleanupEvery() time.Duration {
 	return 30 * time.Second
 }
 
+// cleanupLoop releases what activity leaves behind and expires routed
+// requests whose result never came, every cleanupEvery.
+//
+// It sleeps while nothing happens. What it releases (alternate screens, reflow
+// scratch, the heap a flood left behind) is left by output, input and
+// resizes, and what it expires is a routed request. Each of those raises the
+// cleanup latch. A run that finds the latch down and no request waiting is
+// the last one until the latch goes up again, so the loop runs at most twice
+// after the last activity and then arms no timer.
 func (d *Daemon) cleanupLoop() {
-	ticker := time.NewTicker(CleanupEvery())
-	defer ticker.Stop()
-
-	const pendingRequestTTL = 2 * time.Minute
+	every := CleanupEvery()
+	timer := time.NewTimer(every)
+	defer timer.Stop()
+	asleep := false
 
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
-		case <-ticker.C:
-			d.releaseAltScreens()
-			// Expire stale pending requests whose TUI result never arrived so
-			// they do not pin the requester's connState forever.
-			now := time.Now()
-			d.pendingRequestsMu.Lock()
-			for id, pr := range d.pendingRequests {
-				ttl := pendingRequestTTL
-				if pr.ttl > 0 {
-					ttl = pr.ttl
-				}
-				if now.Sub(pr.created) > ttl {
-					delete(d.pendingRequests, id)
-				}
+		case <-d.wakes.cleanup.C():
+			// The token can outlive the flag: a run took the flag before this
+			// token was read.
+			if asleep && d.wakes.cleanup.Up() {
+				asleep = false
+				timer.Reset(every)
 			}
-			d.pendingRequestsMu.Unlock()
-			d.releaseReflowScratch()
-			// A flood of output that has ended leaves its garbage and its
-			// peak heap goal behind, and an idle daemon runs no collection to
-			// lower either. memtrim trims only when the daemon is quiet.
-			memtrim.Request()
+		case <-timer.C:
+			d.wakes.cleanupTicks.Add(1)
+			active := d.wakes.cleanup.Take()
+			if !d.cleanupOnce() && !active {
+				asleep = true
+				continue
+			}
+			timer.Reset(every)
 		}
 	}
+}
+
+// cleanupOnce is one run of cleanupLoop. It reports whether a routed request
+// is still waiting, which needs another run to expire it.
+func (d *Daemon) cleanupOnce() bool {
+	const pendingRequestTTL = 2 * time.Minute
+
+	d.releaseAltScreens()
+	// Expire stale pending requests whose TUI result never arrived so
+	// they do not pin the requester's connState forever.
+	now := time.Now()
+	d.pendingRequestsMu.Lock()
+	for id, pr := range d.pendingRequests {
+		ttl := pendingRequestTTL
+		if pr.ttl > 0 {
+			ttl = pr.ttl
+		}
+		if now.Sub(pr.created) > ttl {
+			delete(d.pendingRequests, id)
+		}
+	}
+	waiting := len(d.pendingRequests) > 0
+	d.pendingRequestsMu.Unlock()
+	d.releaseReflowScratch()
+	// A flood of output that has ended leaves its garbage and its
+	// peak heap goal behind, and an idle daemon runs no collection to
+	// lower either. memtrim trims only when the daemon is quiet.
+	memtrim.Request()
+	return waiting
 }
 
 // resolveAgentStallTimeout picks the stall heuristic's silence window: an

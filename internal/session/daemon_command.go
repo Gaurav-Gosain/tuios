@@ -228,6 +228,8 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 		d.pendingRequests[payload.RequestID] = pr
 		d.pendingRequestsMu.Unlock()
+		// cleanupLoop expires it if no result comes.
+		d.wakes.cleanup.Set()
 	}
 
 	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
@@ -316,6 +318,7 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 	d.pendingRequestsMu.Lock()
 	d.pendingRequests[requestID] = &pendingRequest{resultCh: ch, created: time.Now()}
 	d.pendingRequestsMu.Unlock()
+	d.wakes.cleanup.Set()
 
 	clearPending := func() {
 		d.pendingRequestsMu.Lock()

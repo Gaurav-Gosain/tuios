@@ -56,6 +56,9 @@ func equalInt64s(a, b []int64) bool {
 
 func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
+	// One second, so the loop runs, runs once more and sleeps inside the
+	// settle wait.
+	t.Setenv("TUIOS_CLEANUP_SECONDS", "1")
 	prevBound := agentDetectQuietBound
 	agentDetectQuietBound = 300 * time.Millisecond
 	t.Cleanup(func() { agentDetectQuietBound = prevBound })
@@ -74,6 +77,7 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	counters := []idleCounters{
 		{"agent monitor", &d.wakes.detectTicks},
 		{"stall monitor", &d.wakes.stallTicks},
+		{"cleanup loop", &d.wakes.cleanupTicks},
 		{"session saver", &sess.saverWakes},
 	}
 
@@ -113,19 +117,19 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		t.Errorf("the stall monitor fired %d times to demote one pane, want 1 or 2", n)
 	}
 
-	// Typing into the pane wakes the agent monitor again.
+	// Typing into the pane wakes the agent monitor and the cleanup loop again.
 	pty := sess.GetPTY(win.PTYID)
 	if pty == nil {
 		t.Fatal("the window has no PTY")
 	}
-	woke := d.wakes.detectTicks.Load()
+	woke := []int64{d.wakes.detectTicks.Load(), d.wakes.cleanupTicks.Load()}
 	if _, err := pty.Write([]byte("echo awake\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	deadline = time.Now().Add(5 * time.Second)
-	for d.wakes.detectTicks.Load() == woke {
+	for d.wakes.detectTicks.Load() == woke[0] || d.wakes.cleanupTicks.Load() == woke[1] {
 		if time.Now().After(deadline) {
-			t.Fatal("input in a pane did not wake the agent monitor")
+			t.Fatal("input in a pane did not wake the agent monitor and the cleanup loop")
 		}
 		time.Sleep(interval / 2)
 	}
