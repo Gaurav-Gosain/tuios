@@ -373,8 +373,19 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 // of the caller's choosing: the focused pane's gutter burns the accent the user
 // gave that pane, so the row wears exactly one identity bar instead of an
 // accent chip beside a focus mark. tint nil falls back to the rail accent.
+//
+// appearance.sidebar.row_style picks the current mark: the bar, the marker
+// glyph, or nothing for underline and pill, which mark the name instead (see
+// railCurrentName). A row that wants a human keeps its severity mark there.
 func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	style := s.GetRailRowStyle()
 	switch {
+	case current && style == config.RailRowMarker:
+		return sidebarStyle(bg, railFocusTint(tint, pal)).Bold(true).Render(s.GetRailMarker())
+	case current && style != config.RailRowBar && sidebarAttention(state):
+		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(s.GetRailAttentionMark())
+	case current && style != config.RailRowBar:
+		return sidebarStyle(bg, nil).Render(" ")
 	case current:
 		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(s.GetRailFocusMark())
 	case sidebarAttention(state):
@@ -382,6 +393,33 @@ func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal o
 	default:
 		return sidebarStyle(bg, nil).Render(" ")
 	}
+}
+
+// railNameMarked reports whether the row style marks the current row's name
+// rather than its gutter, and the cells it adds to the name: the two caps of
+// a pill.
+func railNameMarked(s *config.Settings) (marked bool, extra int) {
+	switch s.GetRailRowStyle() {
+	case config.RailRowUnderline:
+		return true, 0
+	case config.RailRowPill:
+		return true, lipgloss.Width(s.GetWindowPillLeft()) + lipgloss.Width(s.GetWindowPillRight())
+	}
+	return false, 0
+}
+
+// railCurrentName draws the current row's name for the underline and pill
+// row styles: underlined in the row's colour, or on a fill of that colour
+// with the pill caps and an ink measured against it. text is the name as it
+// fits the row, without the caps.
+func railCurrentName(text string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	ink := railFocusTint(tint, pal)
+	if s.GetRailRowStyle() == config.RailRowUnderline {
+		return sidebarStyle(bg, ink).Underline(true).Render(text)
+	}
+	caps := sidebarStyle(bg, ink)
+	fill := lipgloss.NewStyle().Background(ink).Foreground(overlay.ContrastText(ink))
+	return caps.Render(s.GetWindowPillLeft()) + fill.Render(text) + caps.Render(s.GetWindowPillRight())
 }
 
 // agentElapsedBucket is the minute the stamp currently reads as, for the render
@@ -2796,15 +2834,23 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 			Render(strconv.Itoa(sessionIdx) + " ")
 		markW = len(strconv.Itoa(sessionIdx)) + 1
 	}
-	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW)
+	nameMarked, capsW := railNameMarked(&m.Settings)
+	nameMarked = nameMarked && node.IsCurrent
+	if !nameMarked {
+		capsW = 0
+	}
+	keep, avail := railRowFitInto(s.keep, titleW, railNameKeep(titleW), s.tokens, sidebarNameAvailIn(cw, 0, indent)-markW-capsW)
 	s.keep = keep
 	branch := ""
 	if keep[0] {
 		branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
 	}
 	right := sidebarJoinFigures(figures[:], keep[1:], sidebarStyle(rowBg, pal.FgMute))
-	name := mark + sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-		Render(m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)) + branch
+	shown := m.sidebarMarquee("s:"+node.ID, title, max(avail, 1), st.Cursor)
+	name := mark + sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).Render(shown) + branch
+	if nameMarked {
+		name = mark + railCurrentName(shown, tint, rowBg, pal, &m.Settings) + branch
+	}
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
@@ -2823,6 +2869,16 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, sessionIdx, variant, cw in
 // A peeked row is a photograph: uniformly dim, no focus mark, no unread
 // emphasis. Severity gutters and state glyph colours stay, because they are
 // what the user peeked to see.
+// terminalRowTint is the identity colour a pane row's focus mark burns: the
+// pane's own accent when it has one, else its session's.
+func (m *OS) terminalRowTint(e sidebarTerminalEntry, rowBg color.Color) color.Color {
+	tint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
+	if accent, ok := m.WindowAccent(e.WindowID); ok {
+		tint = accent.Color()
+	}
+	return tint
+}
+
 func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, st sidebarRowState, peeked bool) string {
 	rowBg := sidebarRowBg(st, pal)
 
@@ -2894,8 +2950,16 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		fg = pal.Fg
 	}
 
-	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).
-		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), st.lit()))
+	nameMarked, capsW := railNameMarked(&m.Settings)
+	nameMarked = nameMarked && e.Focused && !peeked
+	if !nameMarked {
+		capsW = 0
+	}
+	shown := m.sidebarMarquee("t:"+e.WindowID, title, max(sidebarNameAvail(cw, rightW)-capsW, 1), st.lit())
+	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).Render(shown)
+	if nameMarked {
+		name = railCurrentName(shown, m.terminalRowTint(e, rowBg), rowBg, pal, &m.Settings)
+	}
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
 

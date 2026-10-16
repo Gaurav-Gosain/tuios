@@ -1451,6 +1451,27 @@ rail currently opens Sidebar Settings, not a pane picker. The assignment can
 be entered before its daemon session exists: the rail shows an attach error
 and retries when the session is created. Standalone mode cannot attach sessions.
 
+## The rail's current row
+
+`appearance.sidebar.row_style` sets how the rail marks the session you are on
+and the pane that has focus:
+
+| Value | What it draws |
+|---|---|
+| `bar` | A bar in the gutter, in the session's colour. This is the default |
+| `marker` | A `›` in the gutter, in the session's colour. `>` with ASCII glyphs |
+| `underline` | The name underlined, in the session's colour |
+| `pill` | The name on a fill of the session's colour, with the pill caps of the glyph set |
+
+```toml
+[appearance.sidebar]
+row_style = "pill"
+```
+
+A row that waits for a person keeps its attention mark in the gutter. The
+marker glyph is the `marker` role of the glyph set (see [GLYPHS.md](GLYPHS.md)).
+The option is on the settings page, in the Sidebar section.
+
 ## A rail section that overflows
 
 A section with more rows than the lines it is given shows as many as fit. It ends in `… +N` for the rest. The wheel over a section scrolls it. The keyboard cursor scrolls it to keep itself in view.

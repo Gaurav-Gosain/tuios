@@ -814,6 +814,9 @@ type SidebarConfig struct {
 	// HeaderCase is how the rail's section headers read: lowercase or uppercase
 	// (default: lowercase). See RailHeaderCases.
 	HeaderCase string `toml:"header_case"`
+	// RowStyle is how the row you are on is marked: bar, marker, underline or
+	// pill (default: bar). See RailRowStyles.
+	RowStyle string `toml:"row_style"`
 	// Editor is the terminal editor command for files (default: $EDITOR,
 	// $VISUAL or vi).
 	Editor string `toml:"editor"`
@@ -1061,6 +1064,7 @@ func DefaultConfig() *UserConfig {
 				Sections:      SidebarDefaultSections,
 				FolderClick:   SidebarFolderClickNavigate,
 				HeaderCase:    RailHeaderLowercase,
+				RowStyle:      RailRowBar,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
@@ -2477,6 +2481,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.RailHeaderCase = sb.HeaderCase
 	} else if sb.HeaderCase != "" {
 		s.RailHeaderCase = RailHeaderLowercase
+	}
+	s.RailRowStyle = RailRowBar
+	if slices.Contains(RailRowStyles, sb.RowStyle) {
+		s.RailRowStyle = sb.RowStyle
 	}
 	s.SidebarEditor = sb.Editor
 	if sb.FileActions != nil {

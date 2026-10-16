@@ -6735,3 +6735,16 @@ Run on 2026-10-17.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | f did not change the colour | yes | `ThemeEditorFix` sets the colour it already had | `TestThemeEditorQuickAndFix` ("f did not fix the accent's contrast") | **caught** |
+
+## The rail's row style
+
+`TestLiveAppearanceKeepsTheScreen` gains `sidebar.row_style=pill` and
+`sidebar.row_style=marker`. Each must change the frame, show the session name
+in the pill caps or behind the marker, and restore on set back.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| pill did not mark the name | yes | `nameMarked` forced false in `sidebarSessionRow` | `.../sidebar.row_style=pill` ("the frame does not show \"\ue0b6home\ue0b4\"") | **caught** |
+| marker did not draw its glyph | yes | the marker case in `sidebarGutterTinted` never matches | `.../sidebar.row_style=marker` ("the frame does not show \"›· home\"") | **caught** |

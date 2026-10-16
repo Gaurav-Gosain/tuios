@@ -181,7 +181,9 @@ question about the screen. Do not change them unless the person asks.
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
 A pane title's shape and place: `window_title_style` (`pill`, `tab`, `plain`)
-and `window_title_align` (`auto`, `left`, `center`, `right`).
+and `window_title_align` (`auto`, `left`, `center`, `right`). The rail's
+current row: `appearance.sidebar.row_style` (`bar`, `marker`, `underline`,
+`pill`).
 
 The dock's workspace tabs take two composition knobs of their own:
 `dock_workspace_tab_format` is the format string each tab prints, and

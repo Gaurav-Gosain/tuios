@@ -140,6 +140,20 @@ func (s *Settings) GetRailHeaderCase() string {
 	return s.RailHeaderCase
 }
 
+// GetRailRowStyle is how the rail marks the row you are on. A nil or unset
+// settings reads as bar, the mark the rail has always drawn.
+func (s *Settings) GetRailRowStyle() string {
+	if s == nil || s.RailRowStyle == "" {
+		return RailRowBar
+	}
+	return s.RailRowStyle
+}
+
+// GetRailMarker is the gutter glyph of the marker row style.
+func (s *Settings) GetRailMarker() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Marker }, "›", ">")
+}
+
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
 //
 // Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the

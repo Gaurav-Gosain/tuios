@@ -259,6 +259,8 @@ func (m *OS) sidebarSignature() uint64 {
 
 	// The switch numbers are drawn state, on while show_numbers is set.
 	mixB(m.Settings.SidebarShowNumbers)
+	// The row style marks the current row's gutter or its name.
+	mixS(m.Settings.RailRowStyle)
 
 	// Which terminal rows carry a workspace tag turns on which workspace is
 	// current; the per-window workspaces themselves are folded in below. The

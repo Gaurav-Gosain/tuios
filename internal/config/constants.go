@@ -544,6 +544,20 @@ const (
 // RailHeaderCases lists the valid values for appearance.sidebar.header_case.
 var RailHeaderCases = []string{RailHeaderLowercase, RailHeaderUppercase}
 
+// The rail's row styles, appearance.sidebar.row_style: how the row you are on
+// is marked. bar is the gutter mark the rail has always drawn, marker a
+// pointer glyph in the gutter, underline the name underlined in the row's
+// colour, and pill the name on a fill of that colour.
+const (
+	RailRowBar       = "bar"
+	RailRowMarker    = "marker"
+	RailRowUnderline = "underline"
+	RailRowPill      = "pill"
+)
+
+// RailRowStyles lists the valid values for appearance.sidebar.row_style.
+var RailRowStyles = []string{RailRowBar, RailRowMarker, RailRowUnderline, RailRowPill}
+
 // Where a delete from the files section sends the file.
 //
 // Trash is the default. The rail is an incidental place for a keystroke to land

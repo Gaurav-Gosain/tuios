@@ -124,7 +124,8 @@ reports it under `problems` with the reason.
   disc), `pill_left`, `pill_right`
 - **Rules and separators:** `rule` (the hairline, repeated), `separator` (the
   dock's gap between groups), `arrow_left`, `arrow_right` (overflow chevrons)
-- **Rail marks:** `focus` ("you are here"), `attention` ("this one wants a
+- **Rail marks:** `focus` ("you are here"), `marker` ("you are here" with
+  `appearance.sidebar.row_style = "marker"`), `attention` ("this one wants a
   human"), `bullet` (a resting row), `add`, `collapse`, `expand`,
   `tree_branch` and `tree_last` (in front of a worktree session under its
   repository), `fold_open` and `fold_shut` (on a machine's group header in the

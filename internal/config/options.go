@@ -914,6 +914,11 @@ var optionSpecs = []Option{
 		Accepted:    RailHeaderCases, Default: RailHeaderLowercase,
 	},
 	{
+		Path: "appearance.sidebar.row_style", Type: OptionString, Section: "sidebar",
+		Description: "How the rail marks the row you are on: bar in the gutter, marker glyph, underline, or pill",
+		Accepted:    RailRowStyles, Default: RailRowBar,
+	},
+	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
 		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
 		Default:     "",

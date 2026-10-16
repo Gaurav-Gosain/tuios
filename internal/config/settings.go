@@ -213,6 +213,9 @@ type Settings struct {
 	// the heading treatment (bold, secondary ink, the rule glyph and the
 	// uppercase label). Set via appearance.sidebar.header_case.
 	RailHeaderCase string
+	// RailRowStyle is how the rail marks the row you are on. Set via
+	// appearance.sidebar.row_style; read it through GetRailRowStyle.
+	RailRowStyle string
 	// SidebarEditor is the terminal editor command; empty uses the environment.
 	SidebarEditor string
 

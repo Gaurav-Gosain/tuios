@@ -90,6 +90,7 @@ type GlyphSet struct {
 
 	// The rail's marks, one cell each.
 	Focus     string `json:"focus,omitempty"`     // "you are here"
+	Marker    string `json:"marker,omitempty"`    // "you are here", the marker row style
 	Attention string `json:"attention,omitempty"` // "this one wants a human"
 	Bullet    string `json:"bullet,omitempty"`    // a resting row
 	Add       string `json:"add,omitempty"`       // the new-thing control
@@ -152,7 +153,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Close: "×", Maximize: "□", Minimize: "−", Dot: "●",
 		PillLeft: "▏", PillRight: "▕",
 		Rule: "─", ArrowLeft: "‹", ArrowRight: "›",
-		Focus: "▎", Attention: "▎", Bullet: "·",
+		Focus: "▎", Attention: "▎", Bullet: "·", Marker: "›",
 		Add: "+", Collapse: "«", Expand: "»",
 		TreeBranch: "├─ ", TreeLast: "└─ ",
 		FoldOpen: "▾", FoldShut: "▸",
@@ -189,7 +190,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Close: "X", Maximize: "O", Minimize: "-", Dot: "o",
 		PillLeft: "[", PillRight: "]",
 		Rule: "-", Separator: " | ", ArrowLeft: "<", ArrowRight: ">",
-		Focus: ">", Attention: "!", Bullet: ".",
+		Focus: ">", Attention: "!", Bullet: ".", Marker: ">",
 		Add: "+", Collapse: "<<", Expand: ">>",
 		TreeBranch: "|- ", TreeLast: "`- ",
 		FoldOpen: "v", FoldShut: ">",
@@ -333,6 +334,7 @@ var glyphRoles = []glyphRole{
 	{"arrow_left", func(g *GlyphSet) *string { return &g.ArrowLeft }, 1},
 	{"arrow_right", func(g *GlyphSet) *string { return &g.ArrowRight }, 1},
 	{"focus", func(g *GlyphSet) *string { return &g.Focus }, 1},
+	{"marker", func(g *GlyphSet) *string { return &g.Marker }, 1},
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},
