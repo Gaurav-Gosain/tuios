@@ -294,6 +294,13 @@ func (d *Daemon) sweepDisplayLinks() {
 // restored.
 func (d *Daemon) startDisplayFollow() {
 	d.sweepDisplayLinks()
+	d.initDisplayFollow()
+}
+
+// initDisplayFollow is startDisplayFollow without the sweep, for a daemon
+// image adopting its predecessor's panes, whose WAYLAND_DISPLAY names the
+// links.
+func (d *Daemon) initDisplayFollow() {
 	if !d.displayFollowing() {
 		return
 	}

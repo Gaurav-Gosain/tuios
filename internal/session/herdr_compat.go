@@ -307,6 +307,9 @@ func (d *Daemon) acceptHerdrLoop(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			if d.acceptPaused.Load() {
+				return
+			}
 			select {
 			case <-d.ctx.Done():
 				return

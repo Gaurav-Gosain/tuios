@@ -70,6 +70,9 @@ type Manager struct {
 	// [agents.permissions] default. It is stamped into every session made
 	// here. See pane_grants.go.
 	grants *paneGrantTable
+	// paneLife is held for reading while a pane starts or closes, and for
+	// writing by a handoff. See SessionConfig.paneLife.
+	paneLife sync.RWMutex
 
 	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
 	// registered; onDelete fires after it is removed but before it is stopped.
@@ -317,6 +320,7 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if cfg.grants == nil {
 		cfg.grants = m.grants
 	}
+	cfg.paneLife = &m.paneLife
 
 	// A restored id is kept only when it is a well-formed id no live session
 	// holds. Anything else gets a new one, as before ids were saved.

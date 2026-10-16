@@ -46,6 +46,19 @@ type Daemon struct {
 	// herdrListener is the socket harnesses that speak herdr's pane state
 	// protocol report to. See herdr_compat.go.
 	herdrListener net.Listener
+	// acceptWG counts the accept loops, and acceptPaused tells them to
+	// return on the error a deadline gives Accept. See pauseAccepting.
+	acceptWG     sync.WaitGroup
+	acceptPaused atomic.Bool
+	// handoffArgs builds the command line a handoff execs the next image
+	// with, given the manifest's descriptor. Nil for a daemon inside another
+	// program, which cannot hand off. handoffMu is held by the handoff in
+	// progress. See handoff.go.
+	handoffArgs func(manifestFD int) []string
+	handoffMu   sync.Mutex
+	// adopting is set while a new daemon image rebuilds the sessions its
+	// predecessor handed over. See handoff_adopt.go.
+	adopting atomic.Bool
 	// herdrSeqs is the highest seq each pane's herdr reporter has sent.
 	herdrSeqs herdrSeqs
 	// herdrWorkspaceMeta holds the tokens tools report on a session with
@@ -734,6 +747,11 @@ type connState struct {
 type DaemonConfig struct {
 	Version    string
 	SocketPath string
+	// HandoffArgs is the command line, after the program, that runs this
+	// daemon again adopting the panes a handoff wrote to the descriptor
+	// manifestFD. The tuios binary sets it. A daemon run inside another
+	// program leaves it nil, and refuses to hand off. See handoff.go.
+	HandoffArgs func(manifestFD int) []string
 	// Foreground is true for `tuios daemon`, which owns a terminal. A foreground
 	// daemon echoes its log to stderr; a background one does not, because its
 	// stderr belongs to the process that spawned it.
@@ -873,6 +891,7 @@ type DaemonConfig struct {
 
 // NewDaemon creates a new daemon instance.
 func NewDaemon(cfg *DaemonConfig) *Daemon {
+	registerHandoffTestVerbs()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d := &Daemon{
@@ -893,6 +912,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		respondFromShell:   cfg.RespondFromShell,
 		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
 		windowSize:         windowSizePolicy(cfg.WindowSize),
+		handoffArgs:        cfg.HandoffArgs,
 	}
 	d.singleClient.Store(cfg.SingleClient)
 	d.SetSSHAgent(cfg.SSHAgent)
@@ -1215,7 +1235,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			CommandSeq: ev.CommandSeq,
 		})
 	})
-	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+	// A session a new daemon image adopts was created long ago, as far as
+	// anyone watching the stream knows.
+	if !d.adopting.Load() {
+		d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})
+	}
 }
 
 // onSessionRenamed moves what the daemon keeps by session name to the new
@@ -1350,22 +1374,7 @@ func (d *Daemon) Start() error {
 	// pane is told it may report there, and the screen rules carry those
 	// harnesses as before.
 	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
-		d.herdrListener = l
-		d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
-		// herdr's command line, for a tool that runs "$HERDR_BIN_PATH"
-		// pane split and the rest, is this binary run as herdr: a link
-		// named herdr beside the daemon socket, as the tmux shim's is.
-		// Where the link cannot be made, the binary itself answers
-		// herdr's pane and notification commands. See internal/herdrcli.
-		if exe, err := d.agentProtoExecutable(); err == nil {
-			bin := exe
-			if link, err := herdrcli.InstallLink(HerdrLinkDir(socketPath), exe); err == nil {
-				bin = link
-			} else {
-				log.Printf("The herdr link could not be made: %v. Panes get the tuios binary as HERDR_BIN_PATH, which answers herdr's pane and notification commands only.", err)
-			}
-			d.manager.SetHerdrBin(bin)
-		}
+		d.serveHerdrOn(l, socketPath)
 	}
 
 	if err := d.writePidFile(); err != nil {
@@ -1421,6 +1430,36 @@ func (d *Daemon) Start() error {
 	d.applyResumeOffers(d.pendingResumes)
 	d.pendingResumes = nil
 
+	d.serve()
+	return nil
+}
+
+// serveHerdrOn takes l as the herdr protocol socket and points the panes at
+// it. A daemon image adopting its predecessor's socket runs it too, so the
+// link it makes is to the binary that now answers.
+func (d *Daemon) serveHerdrOn(l net.Listener, socketPath string) {
+	d.herdrListener = l
+	d.manager.SetHerdrSocket(HerdrSocketPath(socketPath))
+	// herdr's command line, for a tool that runs "$HERDR_BIN_PATH"
+	// pane split and the rest, is this binary run as herdr: a link
+	// named herdr beside the daemon socket, as the tmux shim's is.
+	// Where the link cannot be made, the binary itself answers
+	// herdr's pane and notification commands. See internal/herdrcli.
+	if exe, err := d.agentProtoExecutable(); err == nil {
+		bin := exe
+		if link, err := herdrcli.InstallLink(HerdrLinkDir(socketPath), exe); err == nil {
+			bin = link
+		} else {
+			log.Printf("The herdr link could not be made: %v. Panes get the tuios binary as HERDR_BIN_PATH, which answers herdr's pane and notification commands only.", err)
+		}
+		d.manager.SetHerdrBin(bin)
+	}
+}
+
+// serve starts everything that runs once the sessions are in place: the
+// links, the watchers, the plugins and the accept loops. Start runs it after a
+// restore, and adopt after taking over a predecessor's panes.
+func (d *Daemon) serve() {
 	// The links come up in the background. Start returns at once whatever the
 	// remote machines are doing, so a host that is powered off cannot delay the
 	// daemon's own socket by one millisecond.
@@ -1442,22 +1481,62 @@ func (d *Daemon) Start() error {
 	d.plugins.start()
 
 	go d.handleSignals()
-	go d.acceptLoop()
-	if d.linkListener != nil {
-		go d.acceptLinkLoop()
-	}
-	if d.linkHumanListener != nil {
-		go d.acceptLinkOn(d.linkHumanListener, true)
-	}
-	if d.herdrListener != nil {
-		go d.acceptHerdrLoop(d.herdrListener)
-	}
+	d.startAccepting()
 	go d.cleanupLoop()
 	go d.stallMonitor()
 	go d.agentMonitor()
 	go d.listingNotifier()
+}
 
-	return nil
+// startAccepting starts a loop on each listening socket. pauseAccepting
+// stops them without closing a socket.
+func (d *Daemon) startAccepting() {
+	d.acceptWG.Go(d.acceptLoop)
+	if d.linkListener != nil {
+		d.acceptWG.Go(d.acceptLinkLoop)
+	}
+	if d.linkHumanListener != nil {
+		d.acceptWG.Go(func() { d.acceptLinkOn(d.linkHumanListener, true) })
+	}
+	if d.herdrListener != nil {
+		d.acceptWG.Go(func() { d.acceptHerdrLoop(d.herdrListener) })
+	}
+}
+
+// pauseAccepting stops every accept loop and returns once they have
+// returned. The sockets stay open, so a caller dialling meanwhile waits in
+// the kernel's backlog and is accepted by whoever accepts next: this image
+// after resumeAccepting, or the image a handoff execs.
+func (d *Daemon) pauseAccepting() {
+	d.acceptPaused.Store(true)
+	for _, l := range d.listeners() {
+		if dl, ok := l.(interface{ SetDeadline(time.Time) error }); ok {
+			_ = dl.SetDeadline(time.Now())
+		}
+	}
+	d.acceptWG.Wait()
+}
+
+// resumeAccepting undoes pauseAccepting.
+func (d *Daemon) resumeAccepting() {
+	for _, l := range d.listeners() {
+		if dl, ok := l.(interface{ SetDeadline(time.Time) error }); ok {
+			_ = dl.SetDeadline(time.Time{})
+		}
+	}
+	d.acceptPaused.Store(false)
+	d.startAccepting()
+}
+
+// listeners is every socket the daemon accepts on.
+func (d *Daemon) listeners() []net.Listener {
+	var out []net.Listener
+	for _, l := range []net.Listener{d.listener, d.linkListener, d.linkHumanListener, d.herdrListener} {
+		if l != nil {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // Run starts the daemon and blocks until shutdown.
@@ -1690,6 +1769,9 @@ func (d *Daemon) acceptLoop() {
 	for {
 		conn, err := d.listener.Accept()
 		if err != nil {
+			if d.acceptPaused.Load() {
+				return
+			}
 			select {
 			case <-d.ctx.Done():
 				return
@@ -1721,6 +1803,9 @@ func (d *Daemon) acceptLinkOn(l net.Listener, human bool) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			if d.acceptPaused.Load() {
+				return
+			}
 			select {
 			case <-d.ctx.Done():
 				return

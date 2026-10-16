@@ -1639,6 +1639,11 @@ type SessionConfig struct {
 	// it. Nil for a session made outside a manager, whose panes hold the
 	// default. See pane_grants.go.
 	grants *paneGrantTable
+	// paneLife is the manager's pane lifecycle lock: starting and closing a
+	// pane hold it for reading, and a handoff holds it for writing from the
+	// moment it writes the panes down to the exec, so the panes it wrote are
+	// the panes there are. Nil for a session made outside a manager.
+	paneLife *sync.RWMutex
 	// history is what the session does with its panes' history across a
 	// restart. The manager stamps it from the daemon's config. Nil saves
 	// nothing.
@@ -2220,6 +2225,7 @@ type ptySpawn struct {
 // when the process exits, so the process is never placed in a pane the table
 // does not know. See pane_grants.go.
 func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
+	defer s.holdPaneLife()()
 	// A window that was given grants and gets a new process with none named
 	// keeps what it was given, even when its last process has already gone
 	// and taken its entry in the grant table with it. Read before ptysMu is
@@ -2628,6 +2634,16 @@ func (s *Session) setLastUsed(t time.Time) {
 	s.activeMu.Unlock()
 }
 
+// holdPaneLife takes the pane lifecycle lock for reading and returns its
+// release. It is taken before ptysMu, never under it.
+func (s *Session) holdPaneLife() func() {
+	if s.config == nil || s.config.paneLife == nil {
+		return func() {}
+	}
+	s.config.paneLife.RLock()
+	return s.config.paneLife.RUnlock
+}
+
 // GetPTY returns a PTY by ID.
 func (s *Session) GetPTY(id string) *PTY {
 	s.ptysMu.RLock()
@@ -2637,6 +2653,7 @@ func (s *Session) GetPTY(id string) *PTY {
 
 // ClosePTY closes and removes a PTY.
 func (s *Session) ClosePTY(id string) error {
+	defer s.holdPaneLife()()
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -3415,6 +3432,7 @@ func (s *Session) Stop() {
 	s.subagentPrune.stop()
 	s.subagentFlush.stop()
 
+	defer s.holdPaneLife()()
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
