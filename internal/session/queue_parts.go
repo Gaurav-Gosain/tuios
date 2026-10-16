@@ -186,13 +186,14 @@ func (d *Daemon) composeQueued(sess *Session, target WindowState, e *queueEntry)
 		}
 	}
 	var b strings.Builder
+	held := map[string]bool{}
 	for i := range e.parts {
 		p := &e.parts[i]
 		if p.Kind == queuePartText || inline {
 			b.WriteString(p.Text)
 			continue
 		}
-		path, err := d.pastes.saveReply([]byte(p.Text), ".txt")
+		path, err := d.pastes.saveReply([]byte(p.Text), ".txt", held)
 		if err != nil {
 			return "", err
 		}

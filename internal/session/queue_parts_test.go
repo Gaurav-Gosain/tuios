@@ -58,7 +58,7 @@ func TestQueuedReplyFilesStayInThePasteFolder(t *testing.T) {
 	s, dir, now := newTestPasteStore(t)
 	s.replyTTL = 24 * time.Hour
 	data := []byte(strings.Repeat("pasted log line\n", 100))
-	path, err := s.saveReply(data, ".txt")
+	path, err := s.saveReply(data, ".txt", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestQueuedReplyFilesStayInThePasteFolder(t *testing.T) {
 	if err := os.Symlink(target, dir2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s2.saveReply(data, ".txt"); !errors.Is(err, errPasteDirLink) {
+	if _, err := s2.saveReply(data, ".txt", nil); !errors.Is(err, errPasteDirLink) {
 		t.Errorf("a reply file through a linked folder returned %v, want it refused", err)
 	}
 	if entries, _ := os.ReadDir(target); len(entries) != 0 {
@@ -137,5 +137,61 @@ func TestALargeQueuedPasteIsTypedAsAFile(t *testing.T) {
 	}
 	if paneShows(t, d, sess, b, "log line of the failing run") {
 		t.Error("the block's text was typed into the pane as well as its file")
+	}
+}
+
+// TestALongMessageKeepsEveryFileItWrites: a message may hold more parts than
+// the paste folder keeps files. The folder's cap must not delete a file of the
+// message being written, or the agent finds the first paths gone.
+func TestALongMessageKeepsEveryFileItWrites(t *testing.T) {
+	s, _, _ := newTestPasteStore(t)
+	held := map[string]bool{}
+	var paths []string
+	for i := range queueMaxParts {
+		p, err := s.saveReply([]byte("block "+strings.Repeat("x", i)), ".txt", held)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	if queueMaxParts <= pasteMaxFiles {
+		t.Fatalf("queueMaxParts %d is within pasteMaxFiles %d: this test proves nothing", queueMaxParts, pasteMaxFiles)
+	}
+	for i, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("file %d of the message is gone before the agent read it: %v", i+1, err)
+		}
+	}
+}
+
+// TestPasteFilesOfTheSameSecondGoInTheOrderTheyWereWritten: the cap deletes
+// the oldest file first. Files with the same modification time, which a
+// coarse file system clock gives files written close together, go in the
+// order they were written, not by the random letters in their names.
+func TestPasteFilesOfTheSameSecondGoInTheOrderTheyWereWritten(t *testing.T) {
+	s, dir, _ := newTestPasteStore(t)
+	s.maxFiles = 3
+	// Every file already on disk gets the same time, later than any new
+	// file's, so the cap can tell them apart by nothing but their names.
+	same := time.Now().Add(time.Hour)
+	var paths []string
+	for i := range 10 {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if err := os.Chtimes(filepath.Join(dir, e.Name()), same, same); err != nil {
+				t.Fatal(err)
+			}
+		}
+		p, err := s.saveReply([]byte("block "+strings.Repeat("x", i)), ".txt", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	for i, p := range paths {
+		_, err := os.Stat(p)
+		if kept := err == nil; kept != (i >= len(paths)-3) {
+			t.Errorf("file %d of 10: kept = %v, want only the last 3 kept", i+1, kept)
+		}
 	}
 }
