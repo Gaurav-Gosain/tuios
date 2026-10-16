@@ -1187,7 +1187,8 @@ replies to it, `f` steps the group shown (all, needs you, working, done,
 error), `s` steps the sort (needs you, name, recent, session), `/` searches,
 `tab` goes back to the attention list, `esc` closes. With the thread showing,
 `1`, `2` and `3` answer the approval the agent waits on, and `i` opens the
-reply editor too. On a screen narrower than 110 columns, `enter` opens the
+reply editor too. `ctrl+]` closes the Inbox, goes to the agent's pane and
+zooms it, and `ctrl+b i` comes back to the same agent. On a screen narrower than 110 columns, `enter` opens the
 thread, `enter` there goes to the pane, and `esc` goes back to the list. On the search line a
 `key:value` term is a selector, such as `harness:codex`, and other words
 search the name, the session and the agent's last message.
@@ -1215,7 +1216,7 @@ These keys are in three sections of their own, rebindable like any other:
 `inbox_page_up`, `inbox_first`, `inbox_last`, `inbox_go`, `inbox_peek`,
 `inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
 `inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
-`inbox_agents`, `inbox_sort`),
+`inbox_agents`, `inbox_sort`, `inbox_view_pane`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

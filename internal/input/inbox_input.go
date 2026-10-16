@@ -148,6 +148,13 @@ func handleInboxReasonInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // new line, and esc closes the editor and keeps the draft. See
 // internal/composer for the rest.
 func handleInboxReplyInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// In the agents view the key that views the pane works while the editor
+	// is open: the draft is kept, as esc keeps it. The composer binds no
+	// ctrl+] of its own.
+	if o.InboxAgentsOn() && lookupAction(o, msg, overlayKeys(o).GetInboxAction) == config.ActionInboxViewPane {
+		o.InboxReplyCancel()
+		return o, o.InboxAgentsViewPane()
+	}
 	return o, o.InboxReplyKey(msg)
 }
 
@@ -256,6 +263,8 @@ func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxAgentsCycleFilter()
 	case config.ActionInboxSort:
 		o.InboxAgentsCycleSort()
+	case config.ActionInboxViewPane:
+		return o, o.InboxAgentsViewPane()
 	case config.ActionInboxSelect:
 		o.InboxStartSelect()
 	case config.ActionInboxMailbox:

@@ -2274,6 +2274,12 @@ approval has been on screen for a moment, and a risky allow needs a second
 press. `r` or `i` opens the reply editor under the thread, and `esc` closes it
 and keeps the draft.
 
+`ctrl+]` shows the agent's own screen: the Inbox closes, the agent's pane
+gets the focus and is zoomed, and the dock says `Press ctrl+b i to go back to
+the agents.` The Inbox opens again on the agents view, with the same agent
+selected, at the same scroll, and with every draft kept. The key works with
+the reply editor open too, and keeps its draft.
+
 Nothing polls. The list changes when an agent's state changes, and the times
 move on once a minute while the view is on screen. With the view closed,
 nothing runs. The client keeps the threads of the last 3 agents shown.

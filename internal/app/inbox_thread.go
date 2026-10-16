@@ -830,7 +830,7 @@ func (m *OS) inboxThreadHints() []overlay.Hint {
 		hints = append(hints, m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply")...)
 		return append(hints, overlay.Hint{Key: "esc", Label: "back"})
 	}
-	hints = append(hints, m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply")...)
+	hints = append(hints, m.keyHints(config.ActionInboxGo, "go", config.ActionInboxReply, "reply", config.ActionInboxViewPane, "view pane")...)
 	return append(hints, m.keyHints(config.ActionInboxFilter, "show", config.ActionInboxSort, "sort",
 		config.ActionInboxSelect, "search", config.ActionInboxAgents, "Inbox", config.ActionInboxClose, "close")...)
 }
@@ -901,4 +901,27 @@ func threadWrap(text string, width int) []string {
 		out = append(out, wrapPlain(line, width)...)
 	}
 	return out
+}
+
+// InboxAgentsViewPane closes the Inbox, goes to the selected agent's pane and
+// zooms it, so the person can read the agent's own screen. The dock says how
+// to come back. The Inbox opens again on the agents view with the same agent
+// selected, at the same scroll, and every draft is kept.
+func (m *OS) InboxAgentsViewPane() tea.Cmd {
+	e, ok := m.inboxAgentSelected()
+	if !ok {
+		return nil
+	}
+	if e.Host != "" {
+		m.ShowNotification(printableTitle(e.Title)+" runs on "+printableTitle(e.Host)+". Attach there to see its pane", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	m.CloseInbox()
+	m.inboxJump(session.AttentionItem{Session: e.SessionID, Window: e.WindowID})
+	if w := m.GetFocusedWindow(); w != nil && w.ID == e.WindowID && !w.Zoomed {
+		m.ToggleZoom()
+	}
+	key := m.sidebarAgentKeyOr("prefix_inbox", "ctrl+b i")
+	m.ShowNotification("Press "+key+" to go back to the agents.", "info", m.Settings.NotificationDuration*2)
+	return nil
 }

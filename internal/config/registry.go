@@ -623,6 +623,7 @@ var ActionDescriptions = map[string]string{
 	"inbox_close":        "Inbox: close",
 	"inbox_agents":       "Inbox: switch between the attention list and the agents view",
 	"inbox_sort":         "Inbox: step the agents view's sort",
+	"inbox_view_pane":    "Inbox: zoom the selected agent's pane, and come back with the Inbox key",
 	"inbox_review":       "Inbox: review the changes in the item's pane",
 	"inbox_snooze":       "Inbox: snooze the item, then 1 to 4 for how long",
 	"inbox_undo":         "Inbox: undo the last dismiss or snooze",
