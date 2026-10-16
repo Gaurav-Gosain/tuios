@@ -135,7 +135,7 @@ var settingLabels = map[string]string{
 	"appearance.zoom_max_width":                 "Zoom width",
 	"appearance.alt_drag":                       "Alt-drag to move",
 	"appearance.auto_enter_terminal_on_focus":   "Type in a pane when focus moves to it",
-	"appearance.focus_follows_mouse_pause":      "Hold to keep focus",
+	"appearance.focus_follows_mouse_pause":      "Key that pauses focus follows mouse",
 	"startup.tiled":                             "Start tiled",
 	"startup.daemon":                            "Daemon by default",
 
