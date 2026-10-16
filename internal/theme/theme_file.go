@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 // embedded tint so one decode reads the whole file; Dark shadows the tint's
 // own so an unset one can be told from false, and inherit the base's.
 type themeFile struct {
+	path string
 	tint.Tint
 	Base string `json:"base,omitempty"`
 	Dark *bool  `json:"dark,omitempty"`
@@ -36,7 +38,7 @@ type themeFile struct {
 // readThemeFile parses a theme file's bytes. The id comes from the file name
 // when the file names none.
 func readThemeFile(path string, data []byte) (*themeFile, error) {
-	f := &themeFile{}
+	f := &themeFile{path: path}
 	if err := json.Unmarshal(data, f); err != nil {
 		return nil, fmt.Errorf("failed to parse theme JSON: %w", err)
 	}
@@ -87,6 +89,7 @@ func chromeRawOf(c *Chrome) (raw chromeRaw) {
 type resolvedTheme struct {
 	tint   *tint.Tint
 	chrome chromeRaw
+	path   string
 }
 
 // builtins is every theme tuios ships, by id, as it was before any file in the
@@ -167,7 +170,7 @@ func mergeBase(f *themeFile) (resolvedTheme, error) {
 		}
 	}
 	fillDefaults(&t)
-	return resolvedTheme{tint: &t, chrome: chrome}, nil
+	return resolvedTheme{tint: &t, chrome: chrome, path: f.path}, nil
 }
 
 // themeColours lists a tint's colour fields, so a merge or a diff walks them
@@ -233,5 +236,42 @@ func registerResolved(r resolvedTheme) error {
 	}
 	tint.Register(r.tint)
 	registerChrome(r.tint.ID, chrome)
+	return nil
+}
+
+// ThemeFileOf reports whether a theme comes from a file in the themes
+// directory, and whether that file takes the id of a built-in theme, which
+// makes it an edited copy of the built-in.
+func ThemeFileOf(id string) (yours, editsBuiltin bool) {
+	themeBases.RLock()
+	defer themeBases.RUnlock()
+	_, yours = themeBases.customs[id]
+	_, builtin := themeBases.builtins[id]
+	return yours, yours && builtin
+}
+
+// DeleteThemeFile removes the file that defines a theme of yours. For an
+// edited built-in that brings the built-in back. The theme in force is not
+// changed: the caller selects another first, or selects the built-in again.
+func DeleteThemeFile(id string) error {
+	themeBases.Lock()
+	r, ok := themeBases.customs[id]
+	builtin, isBuiltin := themeBases.builtins[id]
+	if ok {
+		delete(themeBases.customs, id)
+	}
+	themeBases.Unlock()
+	if !ok || r.path == "" {
+		return fmt.Errorf("%s is not a theme file", id)
+	}
+	if err := os.Remove(r.path); err != nil {
+		return err
+	}
+	registerChrome(id, nil)
+	tint.UnregisterIDs(id)
+	// An edited built-in gives way to the built-in, chrome and all.
+	if isBuiltin && builtin.tint != nil {
+		return registerResolved(builtin)
+	}
 	return nil
 }

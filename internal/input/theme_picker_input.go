@@ -8,7 +8,26 @@ import (
 // handleThemePickerInput handles keyboard input for the theme picker. Selection
 // live-previews the theme; Enter commits, Esc restores the original.
 func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// A delete waits for y. Any other key keeps the theme, and is used up.
+	if o.ThemePickerDelete != "" {
+		return o, o.ThemePickerConfirmDelete(msg.String() == "y")
+	}
 	if listKey(o, msg.String(), false, listPage, o.ThemePickerMove) {
+		return o, nil
+	}
+	// The commands are ctrl chords, because a typed letter filters. ctrl+n and
+	// ctrl+p move the list, and ctrl+u clears the query.
+	switch msg.String() {
+	case "ctrl+f":
+		o.ThemePickerCycleShade()
+		return o, nil
+	case "ctrl+r":
+		o.ThemePickerShuffle()
+		return o, nil
+	case "ctrl+y":
+		return o, o.ThemePickerCopyID()
+	case "ctrl+d":
+		o.ThemePickerAskDelete()
 		return o, nil
 	}
 	switch msg.String() {

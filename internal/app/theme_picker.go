@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math/rand/v2"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,16 @@ import (
 // current query. "none" (standard terminal colors) is always first.
 func (m *OS) themePickerItems() []string {
 	all := append([]string{themeNone}, theme.AvailableThemes()...)
+	if m.ThemePickerShade != themeShadeAll {
+		dark := m.ThemePickerShade == themeShadeDark
+		kept := all[:1]
+		for _, id := range all[1:] {
+			if d, ok := theme.ThemeIsDark(id); ok && d == dark {
+				kept = append(kept, id)
+			}
+		}
+		all = kept
+	}
 	q := strings.ToLower(strings.TrimSpace(m.ThemePickerQuery))
 	if q == "" {
 		return all
@@ -31,6 +42,7 @@ func (m *OS) OpenThemePicker() {
 	theme.EnsureRegistry()
 	m.ShowThemePicker = true
 	m.ThemePickerQuery = ""
+	m.ThemePickerShade, m.ThemePickerDelete = themeShadeAll, ""
 	m.ThemePickerScroll = 0
 	current := theme.CurrentThemeID()
 	if current == "" {
@@ -147,4 +159,105 @@ func (m *OS) setThemeSelection(sel string) {
 			a.Theme = sel
 		}
 	})
+}
+
+// The shades the picker can list: ctrl+f steps through them.
+const (
+	themeShadeAll = iota
+	themeShadeDark
+	themeShadeLight
+)
+
+// themeShadeNames are the words the picker's title shows for each shade.
+var themeShadeNames = [...]string{"all", "dark", "light"}
+
+// ThemePickerCycleShade lists all themes, then the dark ones, then the light
+// ones, and back.
+func (m *OS) ThemePickerCycleShade() {
+	m.ThemePickerShade = (m.ThemePickerShade + 1) % len(themeShadeNames)
+	m.ThemePickerRefilter()
+}
+
+// ThemePickerShuffle jumps to a random theme of those listed, and previews
+// it as an arrow would.
+func (m *OS) ThemePickerShuffle() {
+	n := len(m.themePickerItems())
+	if n < 2 {
+		return
+	}
+	// #nosec G404 - a theme to try, not a secret
+	delta := 1 + rand.IntN(n-1)
+	m.ThemePickerMove(delta)
+}
+
+// ThemePickerCopyID copies the highlighted theme's id.
+func (m *OS) ThemePickerCopyID() tea.Cmd {
+	id, ok := m.themePickerHighlighted()
+	if !ok || id == themeNone {
+		return nil
+	}
+	m.ShowNotification("Copied the theme id "+id, "success", m.Settings.NotificationDuration)
+	return m.clipboardWriteCmd(id)
+}
+
+// themePickerHighlighted is the theme under the cursor.
+func (m *OS) themePickerHighlighted() (string, bool) {
+	items := m.themePickerItems()
+	if m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+		return "", false
+	}
+	return items[m.ThemePickerSelected], true
+}
+
+// ThemePickerAskDelete asks to delete the highlighted theme, if it is a file
+// of yours. An edited built-in reverts to the built-in. The question waits in
+// the footer for y.
+func (m *OS) ThemePickerAskDelete() {
+	id, ok := m.themePickerHighlighted()
+	yours, _ := theme.ThemeFileOf(id)
+	switch {
+	case !ok || !yours:
+		m.ShowNotification("Only your own theme files can be deleted", "info", m.Settings.NotificationDuration)
+	case m.ConfigReadOnly:
+		m.ShowNotification("This client cannot change the theme files", "info", m.Settings.NotificationDuration)
+	default:
+		m.ThemePickerDelete = id
+	}
+}
+
+// ThemePickerConfirmDelete answers the question ThemePickerAskDelete asked.
+// A theme of yours that is in use is not deleted: the screen would have no
+// theme to draw. An edited built-in in use goes back to the built-in.
+func (m *OS) ThemePickerConfirmDelete(yes bool) tea.Cmd {
+	id := m.ThemePickerDelete
+	m.ThemePickerDelete = ""
+	if !yes || id == "" {
+		return nil
+	}
+	// In use means the theme the picker will go back to on Esc, the one the
+	// config names. The highlighted theme is only a preview.
+	_, edited := theme.ThemeFileOf(id)
+	if m.ThemePickerOriginal == id && !edited {
+		m.ShowNotification(id+" is in use. Pick another theme, then delete it", "warning", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	previewed := theme.CurrentThemeID() == id
+	if err := theme.DeleteThemeFile(id); err != nil {
+		m.ShowNotification("Theme not deleted: "+err.Error(), "error", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	switch {
+	case edited && (previewed || m.ThemePickerOriginal == id):
+		m.applyTheme(id) // the built-in, under the same id
+	case previewed:
+		m.applyTheme(m.ThemePickerOriginal)
+	}
+	if edited {
+		m.ShowNotification(id+" is the built-in theme again", "success", m.Settings.NotificationDuration)
+	} else {
+		m.ShowNotification("Deleted the theme "+id, "success", m.Settings.NotificationDuration)
+	}
+	items := m.themePickerItems()
+	m.ThemePickerSelected = min(m.ThemePickerSelected, max(len(items)-1, 0))
+	return nil
 }

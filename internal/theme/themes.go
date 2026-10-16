@@ -75,3 +75,13 @@ func CurrentThemeID() string {
 	}
 	return t.ID
 }
+
+// ThemeIsDark reports whether a registered theme is a dark one, as its file or
+// the built-in table says.
+func ThemeIsDark(id string) (dark, ok bool) {
+	t, ok := tint.GetTint(id)
+	if !ok || t == nil {
+		return false, false
+	}
+	return t.Dark, true
+}
