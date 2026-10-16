@@ -229,6 +229,9 @@ theme, name it as `base` and write only the changes:
 {"id": "nord_warm", "base": "nord", "chrome": {"accent": "yellow"}}
 ```
 
+The running clients read a theme file again when it is saved. `tuios theme
+reload` asks every client on the machine to read the files now.
+
 To convert a kitty, ghostty, alacritty or wezterm scheme rather than
 transcribe it:
 

@@ -72,12 +72,22 @@ built-in one. Subdirectories are not scanned. A file that fails to parse is
 skipped with a warning in the log and does not prevent the other themes, or the
 app, from loading.
 
-The directory is read at startup, and read again in two cases: when a theme id
-that is not registered yet is selected with `tuios set-config appearance.theme
-<id>`, and on every `tuios list-themes`. So a new theme file can be
-selected without a restart: write the file, then select its id. Selecting a
-theme that is already registered does not re-read its file, so to see an edit
-to a theme that is already loaded, save it under a new id or restart tuios.
+Every tuios client watches the themes and glyphs directories. When you save a
+file there, the client reads the files again and repaints. An edit to the
+theme in use shows at once, with no restart and no new id. A file that does
+not load shows a warning, and the other themes stay. New output in a pane
+takes the edited colours.
+
+`tuios theme reload` does the same in every client on this machine. Use it
+when a program writes a theme file and you want the clients to read it now:
+
+```sh
+# pywal: write a tuios theme from the wallpaper, then reload
+wal -i ~/wall.png -o "tuios theme reload"
+```
+
+For matugen, write the theme from a template and set `post_hook = "tuios theme
+reload"` on that template.
 
 ## Theme File Format
 

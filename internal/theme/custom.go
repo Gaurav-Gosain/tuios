@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -232,4 +233,23 @@ func copyColor(c *tint.Color) *tint.Color {
 	}
 	dup := *c
 	return &dup
+}
+
+// ReloadThemeFiles reads the theme and glyph directories again and puts what
+// changed in force: a theme in use that a file defines is selected again, so
+// the frame draws the edited colours, and the generation moves so every memo
+// keyed on it is rebuilt. It returns one line per theme file it could not
+// use. A glyph set's problems are for tuios list-glyphs, since most are roles
+// a set names and tuios does not draw, which no save fixes.
+//
+// It changes process-wide state, like every theme selection. Call it once per
+// process, not once per client.
+func ReloadThemeFiles() []string {
+	loaded, problems := ReloadCustomThemes()
+	ReloadGlyphSets()
+	if t := Current(); t != nil && slices.Contains(loaded, t.ID) {
+		tint.SetTintID(t.ID)
+		generation.Add(1)
+	}
+	return problems
 }

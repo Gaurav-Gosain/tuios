@@ -611,6 +611,7 @@ type OS struct {
 	// configReloads is this session's subscription to the config file, and
 	// stopConfigWatch ends it. See config_watch.go.
 	configReloads   <-chan tea.Msg
+	themeReloads    <-chan ThemeFilesReloadedMsg
 	stopConfigWatch func()
 	// omarchyChanges is this session's subscription to the Omarchy theme,
 	// and stopOmarchyFollow ends it. See omarchy_follow.go.

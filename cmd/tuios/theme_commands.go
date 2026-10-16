@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -223,4 +225,36 @@ func printThemePalette(w io.Writer, p themePalette) {
 			len(p.Illegible), strings.Join(p.Illegible, ", "))
 		fmt.Fprintln(w, "tuios adjusts a border drawn in one of them so it stays visible. Text printed in one stays as the theme wrote it.")
 	}
+}
+
+// runThemeReload reads the theme and glyph files again in every tuios client
+// on this machine. Each client's config watcher follows the stamp file in the
+// config directory, so writing and removing it reaches clients of every kind,
+// the ssh and web servers' included, with no protocol of its own. The files
+// are read here too, so the command can say which ones fail.
+func runThemeReload(jsonOutput bool) error {
+	loaded, problems := theme.ReloadCustomThemes()
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return err
+	}
+	stamp := filepath.Join(filepath.Dir(path), config.ThemeReloadStamp)
+	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
+		return fmt.Errorf("ask the clients to reload: %w", err)
+	}
+	_ = os.Remove(stamp)
+
+	if jsonOutput {
+		out, err := json.MarshalIndent(map[string]any{"themes": loaded, "problems": problems}, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+	fmt.Printf("Read %d theme files. Every tuios client on this machine reloads them.\n", len(loaded))
+	for _, p := range problems {
+		fmt.Println("problem: " + p)
+	}
+	return nil
 }

@@ -2,11 +2,13 @@ package app
 
 import (
 	"log"
+	"path/filepath"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The config file watcher, for every client.
@@ -32,7 +34,14 @@ import (
 type configWatchHub struct {
 	mu      sync.Mutex
 	watcher *config.Watcher
-	subs    map[chan tea.Msg]struct{}
+	// subs maps each session's config channel to its theme channel.
+	subs map[chan tea.Msg]chan ThemeFilesReloadedMsg
+}
+
+// ThemeFilesReloadedMsg says the theme and glyph files were read again and the
+// result is in force. Problems are the theme files that could not be used.
+type ThemeFilesReloadedMsg struct {
+	Problems []string
 }
 
 var configWatch configWatchHub
@@ -45,18 +54,19 @@ var configWatchPath = config.GetConfigPath
 // that ends the subscription. The channel holds one message: a reload that
 // arrives while the last is still waiting replaces it, because the newest file
 // is the only one worth applying.
-func (h *configWatchHub) subscribe() (<-chan tea.Msg, func()) {
+func (h *configWatchHub) subscribe() (<-chan tea.Msg, <-chan ThemeFilesReloadedMsg, func()) {
 	ch := make(chan tea.Msg, 1)
+	themes := make(chan ThemeFilesReloadedMsg, 1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.subs == nil {
-		h.subs = make(map[chan tea.Msg]struct{})
+		h.subs = make(map[chan tea.Msg]chan ThemeFilesReloadedMsg)
 	}
-	h.subs[ch] = struct{}{}
+	h.subs[ch] = themes
 	if h.watcher == nil {
 		h.start()
 	}
-	return ch, func() { h.unsubscribe(ch) }
+	return ch, themes, func() { h.unsubscribe(ch) }
 }
 
 // start opens the watcher. Called with the lock held. A watcher that cannot be
@@ -68,7 +78,11 @@ func (h *configWatchHub) start() {
 		log.Printf("Config watcher unavailable, edits need a restart: %v", err)
 		return
 	}
-	w, err := config.NewWatcher(path, h.deliver)
+	dir := filepath.Dir(path)
+	w, err := config.NewWatcherWithOptions(path, h.deliver, config.WatcherOptions{
+		AssetDirs: []string{filepath.Join(dir, "themes"), filepath.Join(dir, "glyphs")},
+		OnAssets:  h.reloadThemeFiles,
+	})
 	if err != nil {
 		log.Printf("Config watcher unavailable, edits need a restart: %v", err)
 		return
@@ -105,15 +119,37 @@ func (h *configWatchHub) deliver(cfg *config.UserConfig, err error) {
 	}
 }
 
+// reloadThemeFiles runs on the watcher goroutine when a theme or glyph file
+// changes. The files are read once for the process, since the theme is
+// process-wide, and then every session is told to repaint. A session that has
+// not taken the last message yet gets this one in its place.
+func (h *configWatchHub) reloadThemeFiles() {
+	msg := ThemeFilesReloadedMsg{Problems: theme.ReloadThemeFiles()}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, ch := range h.subs {
+		select {
+		case <-ch:
+		default:
+		}
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
 // unsubscribe drops one session. The watcher is stopped outside the lock:
 // its goroutine takes the lock to deliver, and a Stop that waited for it
 // under the lock would wait for ever.
 func (h *configWatchHub) unsubscribe(ch chan tea.Msg) {
 	h.mu.Lock()
+	themes := h.subs[ch]
 	delete(h.subs, ch)
 	// Closed so the listener the session armed returns instead of waiting on
 	// a channel nothing will ever send on again.
 	close(ch)
+	close(themes)
 	var w *config.Watcher
 	if len(h.subs) == 0 {
 		w, h.watcher = h.watcher, nil
@@ -143,8 +179,28 @@ func (m *OS) startConfigWatch() tea.Cmd {
 	if !m.watchesConfig() || m.configReloads != nil {
 		return nil
 	}
-	m.configReloads, m.stopConfigWatch = configWatch.subscribe()
-	return listenForConfigReload(m.configReloads)
+	m.configReloads, m.themeReloads, m.stopConfigWatch = configWatch.subscribe()
+	return tea.Batch(listenForConfigReload(m.configReloads), listenForThemeReload(m.themeReloads))
+}
+
+// themeWatchMsg is a theme reload the watcher delivered. The wrapper is what
+// lets Update re-arm the listener.
+type themeWatchMsg struct {
+	msg ThemeFilesReloadedMsg
+}
+
+// listenForThemeReload waits for one theme reload from the watcher.
+func listenForThemeReload(ch <-chan ThemeFilesReloadedMsg) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return themeWatchMsg{msg: msg}
+	}
 }
 
 // listenForConfigReload waits for one delivery from the watcher.
@@ -168,5 +224,5 @@ func (m *OS) endConfigWatch() {
 		m.stopConfigWatch()
 		m.stopConfigWatch = nil
 	}
-	m.configReloads = nil
+	m.configReloads, m.themeReloads = nil, nil
 }

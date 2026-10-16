@@ -2533,6 +2533,24 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		_, cmd := m.Update(msg.msg)
 		return m, tea.Batch(cmd, listenForConfigReload(m.configReloads))
 
+	case themeWatchMsg:
+		_, cmd := m.Update(msg.msg)
+		return m, tea.Batch(cmd, listenForThemeReload(m.themeReloads))
+
+	case ThemeFilesReloadedMsg:
+		// The files were read and put in force on the watcher goroutine, once
+		// for the process. This session repaints with them: the panes take the
+		// edited sixteen, and the chrome rebuilds from the new generation.
+		m.UpdateAllWindowThemes()
+		m.MarkAllDirty()
+		if len(msg.Problems) > 0 {
+			for _, p := range msg.Problems {
+				m.LogWarn("Theme: %s", p)
+			}
+			m.ShowNotification(msg.Problems[0], "warning", m.Settings.NotificationWarningDuration)
+		}
+		return m, nil
+
 	case displayRateMsg:
 		m.handleDisplayRate(msg)
 		return m, nil

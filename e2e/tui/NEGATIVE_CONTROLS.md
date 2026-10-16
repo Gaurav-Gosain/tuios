@@ -6361,3 +6361,13 @@ only `#rrggbb`.
 `TestDockCellBadColoursKeepTheDocksGround` and `TestDockTabsConfigWarnings/bad`
 wrote `fg = "red"` and `active_bg = "green"` as their bad colours. Both are
 slot names now, so they write `rouge` and `lime`.
+
+## Theme files reload on save
+
+`TestAnEditedThemeFileRepaints` selects a theme file, saves it again with a
+different red the way an editor saves, and prints a new SGR 31 probe until the
+host is given the new red.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A saved theme file needed a restart | the themes watch | a build of the parent commit (theme base, no watch) | `TestAnEditedThemeFileRepaints` ("the theme's red reached the host as {Kind:2 … R:255 G:0 B:0}, want #00ff00") | **caught** |

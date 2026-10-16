@@ -1994,6 +1994,30 @@ straight away without a restart.`,
 	importThemeCmd.Flags().StringVar(&importThemeName, "name", "", "Theme id to write it under (default: the file's name)")
 	importThemeCmd.Flags().BoolVar(&importThemeJSON, "json", false, "Output as JSON")
 
+	themeCmd := &cobra.Command{
+		Use:   "theme",
+		Short: "Work with theme files",
+	}
+	var themeReloadJSON bool
+	themeReloadCmd := &cobra.Command{
+		Use:   "reload",
+		Short: "Read the theme and glyph files again in every client",
+		Long: `Read the theme and glyph files again in every tuios client on this machine,
+and repaint. A client also does this by itself when a file in the themes or
+glyphs directory changes.
+
+Run it from a wallpaper tool that writes a theme file: pywal with wal -o, or
+matugen with a post_hook.`,
+		Example: `  tuios theme reload
+  wal -i ~/wall.png -o "tuios theme reload"`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runThemeReload(themeReloadJSON)
+		},
+	}
+	themeReloadCmd.Flags().BoolVar(&themeReloadJSON, "json", false, "Output as JSON")
+	themeCmd.AddCommand(themeReloadCmd)
+
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
@@ -2988,7 +3012,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(renameSessionCmd, setSessionNameCmd, setSessionAccentCmd, setSessionSpaceCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd, newPiPCommand(), newCallCommand(), newPaneViewCommand())
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd, themeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd, newGUIBridgeCommand())
 	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand())
