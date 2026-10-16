@@ -88,6 +88,9 @@ type inboxReplyState struct {
 	// bound.
 	drafts     map[string]*composer.Model
 	draftOrder []string
+	// bulkDraft is the draft of a bulk reply that esc or ctrl+] closed, so
+	// the next bulk reply opens it again. nil when there is none.
+	bulkDraft *composer.Model
 	// sending are the drafts of replies out to the daemon, by send, so a
 	// reply the daemon refuses keeps its draft. Two replies to one pane can
 	// be out at once, so the key is the send and not the pane.
@@ -411,9 +414,13 @@ func (m *OS) InboxReplyCancel() {
 	if ed == nil {
 		return
 	}
-	if !ed.comp.Empty() && !ed.comp.Automated() && len(ed.targets) == 0 {
+	if !ed.comp.Empty() && !ed.comp.Automated() {
 		ed.comp.SetNotice("")
-		m.keepInboxDraft(ed.session, ed.window, ed.comp)
+		if len(ed.targets) > 0 {
+			m.Inbox.reply.bulkDraft = ed.comp
+		} else {
+			m.keepInboxDraft(ed.session, ed.window, ed.comp)
+		}
 	}
 	if ed.closeAfter {
 		m.CloseInbox()

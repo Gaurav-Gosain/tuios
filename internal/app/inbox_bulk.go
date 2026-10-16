@@ -168,7 +168,12 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 		m.openInboxReply(t.session, t.window, t.who, "", false)
 		return nil
 	}
-	comp := composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type the reply to send to each.", Images: true})
+	// The bulk draft esc or ctrl+] kept opens again.
+	comp := m.Inbox.reply.bulkDraft
+	m.Inbox.reply.bulkDraft = nil
+	if comp == nil {
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type the reply to send to each.", Images: true})
+	}
 	m.replyPreviewAttach(comp)
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		session: targets[0].session,

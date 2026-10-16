@@ -2282,7 +2282,8 @@ With marks:
 
 - `r` opens one reply editor, and `enter` queues the same message to each
   marked agent, at most 32. An agent that waits on a prompt, or runs on
-  another machine, is left out, and the dock says which.
+  another machine, is left out, and the dock says which. `esc` and `ctrl+]`
+  keep the draft, and the next `r` with marks opens it again.
 - `3` denies every approval the marked agents wait on.
 - `1` lists each approval it would allow, whole, and `enter` allows them once
   the list has been on screen for a moment. A risky approval, a plan, and one
