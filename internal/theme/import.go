@@ -61,6 +61,11 @@ func Import(path, id string) (*tint.Tint, ImportFormat, error) {
 // WriteTheme writes a theme into the custom themes directory and registers it,
 // returning the file it wrote.
 func WriteTheme(t *tint.Tint) (string, error) {
+	// The id becomes a file name in the themes directory. A shared theme
+	// names its own id, so one with a path in it could write elsewhere.
+	if t.ID == "" || t.ID != filepath.Base(t.ID) || strings.HasPrefix(t.ID, ".") || strings.ContainsAny(t.ID, `/\`) {
+		return "", fmt.Errorf("theme name %q cannot be a file name. Use a name with no / or \\ that does not start with a dot", t.ID)
+	}
 	dir, err := GetThemesDir()
 	if err != nil {
 		return "", err
