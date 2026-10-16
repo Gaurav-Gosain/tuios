@@ -19,8 +19,9 @@ import (
 //
 // Files are read with file-list on this machine, the person's own verb, from
 // the pane's folder as its shell last reported it. Each folder is read once
-// per list and kept while the list is open. A pane with no known folder, or
-// one whose shell is on another machine, offers no files. Panes and agents
+// per list and kept while the list is open. A pane with no known folder, one
+// whose shell is on another machine, and a served client (tuios-web, the SSH
+// server) offer no files. Panes and agents
 // are read from the session tree the rail draws, built once per change of
 // the rail's signature.
 
@@ -68,6 +69,13 @@ type mentionFolderMsg struct {
 // newReplyMentions is the completer for a reply to a pane.
 func (m *OS) newReplyMentions(sessionID, windowID string) *replyMentions {
 	c := &replyMentions{m: m, folders: map[string][]mentionFile{}, asked: map[string]bool{}}
+	// A client served to someone elsewhere (tuios-web, the SSH server) runs
+	// on the daemon's machine, and its file-list call reads that machine's
+	// folders. The person is not at that machine, so the list offers no
+	// files there, as the Copies dialog does not.
+	if m.BrowserClient || (m.RemoteClient && !m.SSHIsLoopback) {
+		return c
+	}
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
 			if w != nil && w.ID == windowID && w.CwdHost == "" && m.paneIsLocal(w) {

@@ -4062,6 +4062,8 @@ in as its path from the pane's folder, such as `api/client.go`. A folder goes
 in with a slash and keeps the list open, so you can walk into it. Nothing is
 copied: the agent reads the file with its own tools. A pane whose folder
 tuios does not know, or whose shell runs on another machine, offers no files.
+A client in a browser or over the SSH server offers no files: they are on the
+machine that serves it, and you are not.
 
 #### Images
 
