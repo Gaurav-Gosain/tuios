@@ -6760,3 +6760,14 @@ Run on 2026-10-17.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The header ignored its style | yes | the style switch in `sidebarHeaderRowRuled` never matches | `.../sidebar.header_style=pill` and `=icon` ("the frame does not show ...") | **caught** |
+
+## The rail's section spacing
+
+`TestLiveAppearanceKeepsTheScreen` gains `sidebar.density=roomy`, which must
+change the frame, keep the panes and restore on set back.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| roomy did nothing | yes | `RailRoomy` never set | `.../sidebar.density=roomy` ("changed nothing on screen") | **caught** |

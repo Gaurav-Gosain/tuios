@@ -570,6 +570,17 @@ const (
 	RailHeaderIcon  = "icon"
 )
 
+// The rail's densities, appearance.sidebar.density. normal stacks the
+// sections as the rail always has, roomy puts a blank row in front of each
+// section header after the first.
+const (
+	RailDensityNormal = "normal"
+	RailDensityRoomy  = "roomy"
+)
+
+// RailDensities lists the valid values for appearance.sidebar.density.
+var RailDensities = []string{RailDensityNormal, RailDensityRoomy}
+
 // RailHeaderStyles lists the valid values for appearance.sidebar.header_style.
 var RailHeaderStyles = []string{RailHeaderAuto, RailHeaderPlain, RailHeaderRule, RailHeaderPill, RailHeaderIcon}
 

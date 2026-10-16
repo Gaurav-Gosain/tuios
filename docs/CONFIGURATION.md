@@ -1496,6 +1496,20 @@ icons. The `unicode` glyph set has its own. With no icon, the header is plain.
 `header_case` still sets the case of the label. On a narrow rail, a pill or
 an icon can leave no room for a header's `+`.
 
+## The rail's section spacing
+
+`appearance.sidebar.density` sets the space between the rail's sections.
+`normal` (the default) stacks them as the rail always has. `roomy` puts a
+blank row in front of each section header after the first. The block pinned
+to the bottom keeps its own line, which holds the divider.
+
+```toml
+[appearance.sidebar]
+density = "roomy"
+```
+
+The panes do not move. Only the rail's rows change.
+
 ## A rail section that overflows
 
 A section with more rows than the lines it is given shows as many as fit. It ends in `… +N` for the rest. The wheel over a section scrolls it. The keyboard cursor scrolls it to keep itself in view.

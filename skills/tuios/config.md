@@ -184,7 +184,8 @@ A pane title's shape and place: `window_title_style` (`pill`, `tab`, `plain`)
 and `window_title_align` (`auto`, `left`, `center`, `right`). The rail's
 current row: `appearance.sidebar.row_style` (`bar`, `marker`, `underline`,
 `pill`). Its section headers: `appearance.sidebar.header_style` (`auto`,
-`plain`, `rule`, `pill`, `icon`).
+`plain`, `rule`, `pill`, `icon`). The space between its sections:
+`appearance.sidebar.density` (`normal`, `roomy`).
 
 The dock's workspace tabs take two composition knobs of their own:
 `dock_workspace_tab_format` is the format string each tab prints, and

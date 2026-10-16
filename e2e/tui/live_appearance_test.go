@@ -44,6 +44,7 @@ var liveAppearanceCases = []liveAppearanceCase{
 	// The sessions header in the pill caps, and behind its icon.
 	{path: "appearance.sidebar.header_style", value: "pill", restore: "auto", changesFrame: true, shows: "\ue0b6sessions\ue0b4"},
 	{path: "appearance.sidebar.header_style", value: "icon", restore: "auto", changesFrame: true, shows: "\ueea8 sessions"},
+	{path: "appearance.sidebar.density", value: "roomy", restore: "normal", changesFrame: true},
 	{path: "appearance.shared_borders", value: "true", restore: "false", changesFrame: true},
 	{path: "appearance.motion", value: "none", restore: "full"},
 	{path: "appearance.glyphs", value: "unicode", restore: "default", changesFrame: true},

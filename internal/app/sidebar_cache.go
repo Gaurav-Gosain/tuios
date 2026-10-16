@@ -263,6 +263,7 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.Settings.RailRowStyle)
 	mixS(m.Settings.RailHeaderStyle)
 	mixS(m.Settings.RailHeaderCase)
+	mixB(m.Settings.RailRoomy)
 
 	// Which terminal rows carry a workspace tag turns on which workspace is
 	// current; the per-window workspaces themselves are folded in below. The

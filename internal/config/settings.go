@@ -219,6 +219,9 @@ type Settings struct {
 	// RailHeaderStyle is how a rail section header is drawn. Set via
 	// appearance.sidebar.header_style; read it through GetRailHeaderStyle.
 	RailHeaderStyle string
+	// RailRoomy puts a blank row in front of each rail section header after
+	// the first. Set via appearance.sidebar.density = "roomy".
+	RailRoomy bool
 	// SidebarEditor is the terminal editor command; empty uses the environment.
 	SidebarEditor string
 

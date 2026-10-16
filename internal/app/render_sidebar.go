@@ -1668,6 +1668,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		chrome++
 		if p.Section == pinned {
 			chrome++
+		} else if m.Settings.RailRoomy && drawn > 1 {
+			// density = roomy: a blank row in front of the header.
+			chrome++
 		}
 	}
 	avail := height - footerH - chrome
@@ -1747,6 +1750,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		place[s] = sectionPlace{header: -1}
 	}
 	line := 0
+	placed := 0
 	// The last section placed above the current entry, so a spacer's lines can
 	// be given to its band. Empty space draws nothing and so has no band of its
 	// own, and a gap that belonged to no section would be a gap the wheel does
@@ -1768,6 +1772,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			continue
 		}
 		y0 := line
+		placed++
 		if p.Section == pinned {
 			// The slack belongs to the band of the section above, so a wheel over
 			// the empty middle of the rail scrolls that one. The single blank
@@ -1775,6 +1780,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// keeps the gap between the two bands from belonging to neither.
 			line += slack
 			y0 = line
+			line++
+		} else if m.Settings.RailRoomy && placed > 1 {
+			// The roomy blank belongs to this section's band, as the pinned
+			// block's floating line does.
 			line++
 		}
 		place[p.Section] = sectionPlace{header: line, top: line + 1, lines: budget[i], y0: y0, y1: line + 1 + budget[i]}
@@ -2281,6 +2290,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionGit:       drawGit,
 		sidebarSectionCustom:    drawCustom,
 	}
+	drawnAt := 0
 	for i, p := range plans {
 		if p.Spacer {
 			for range budget[i] {
@@ -2290,6 +2300,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 		if planRows[i] == 0 {
 			continue
+		}
+		drawnAt++
+		if p.Section != pinned && m.Settings.RailRoomy && drawnAt > 1 {
+			lines = append(lines, blank)
 		}
 		if p.Section == pinned {
 			for range slack {

@@ -924,6 +924,11 @@ var optionSpecs = []Option{
 		Accepted:    RailHeaderStyles, Default: RailHeaderAuto,
 	},
 	{
+		Path: "appearance.sidebar.density", Type: OptionString, Section: "sidebar",
+		Description: "Space between the rail's sections: normal, or roomy for a blank row in front of each section after the first",
+		Accepted:    RailDensities, Default: RailDensityNormal,
+	},
+	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
 		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
 		Default:     "",

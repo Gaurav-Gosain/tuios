@@ -820,6 +820,9 @@ type SidebarConfig struct {
 	// HeaderStyle is how a section header is drawn: auto, plain, rule, pill
 	// or icon (default: auto). See RailHeaderStyles.
 	HeaderStyle string `toml:"header_style"`
+	// Density is the space between the rail's sections: normal or roomy
+	// (default: normal). See RailDensities.
+	Density string `toml:"density"`
 	// Editor is the terminal editor command for files (default: $EDITOR,
 	// $VISUAL or vi).
 	Editor string `toml:"editor"`
@@ -1069,6 +1072,7 @@ func DefaultConfig() *UserConfig {
 				HeaderCase:    RailHeaderLowercase,
 				RowStyle:      RailRowBar,
 				HeaderStyle:   RailHeaderAuto,
+				Density:       RailDensityNormal,
 				FileDelete:    SidebarFileDeleteTrash,
 				AgentRestFold: "1h",
 				SubagentRows:  SidebarSubagentRowsRows,
@@ -2494,6 +2498,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if slices.Contains(RailHeaderStyles, sb.HeaderStyle) {
 		s.RailHeaderStyle = sb.HeaderStyle
 	}
+	s.RailRoomy = sb.Density == RailDensityRoomy
 	s.SidebarEditor = sb.Editor
 	if sb.FileActions != nil {
 		s.SidebarFileActions = *sb.FileActions
