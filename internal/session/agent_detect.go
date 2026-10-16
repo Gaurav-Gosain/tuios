@@ -2,12 +2,14 @@ package session
 
 import (
 	"log"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // defaultAgentBinaries is the built-in set of AI-agent CLI binary names the
@@ -513,6 +515,20 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	return info, true
 }
 
+// harnessExited reports whether the harness process a hook named is gone. A
+// pid of 0 or 1 names no harness, and a platform that cannot read processes at
+// all cannot say that one has exited.
+func harnessExited(pid int) bool {
+	if pid <= 1 {
+		return false
+	}
+	if _, ok := procinfo.StartTime(pid); ok {
+		return false
+	}
+	_, readable := procinfo.StartTime(os.Getpid())
+	return readable
+}
+
 // agentDetectMissLimit is how many consecutive detection ticks may find no agent
 // in a pane the detector holds before the claim clears, while something other
 // than the pane's shell is in the foreground. An agent that opens an editor or a
@@ -813,6 +829,13 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			// leave a note. Everything else here was inferred, and an
 			// inference about an agent that is not there is wrong.
 			//
+			// A hook's report is the exception: it names the harness process
+			// it ran under (harness_pid), so it is the harness speaking, and
+			// once that process has exited nothing is left to retract what it
+			// said. Claude Code does not always get its SessionEnd hook out
+			// on /exit, and a crashed or killed one sends none, so without
+			// this the pane kept its last state, and its row, until it closed.
+			//
 			// And only where a real agent process was seen. Without that
 			// this swept away any state on any pane sitting at a shell,
 			// including a screen rule's reading of a pane that has never
@@ -828,8 +851,11 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 			// "shell", so the foreground must also be a shell by name.
 			// A blocker the screen took over a herdr report follows the same
 			// reporter, so it lapses the same way.
-			herdrHeld := claim.source == AgentSourceReport || (claim.blocker && claim.prior.source == AgentSourceReport)
-			if herdrHeld && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
+			reportHeld := claim.source == AgentSourceReport || (claim.blocker && claim.prior.source == AgentSourceReport)
+			if reportHeld && claim.herdrClaimLapsed(now) && foregroundCommand(info, running, shell) == "" {
+				lapsed = true
+			}
+			if reportHeld && harnessExited(s.agentHarnessPIDs[w.ID]) {
 				lapsed = true
 			}
 			if running && info.atShell() && lapsed {

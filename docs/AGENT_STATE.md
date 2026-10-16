@@ -1241,6 +1241,8 @@ editor or a pager the agent opened, is counted, and the claim clears after six
 consecutive ticks of it (twelve seconds at the default interval). One missed
 read is not an exit.
 
+A state a hook reported is cleared the same way once the harness has gone. The hook names the harness process it ran under (`harness_pid`), so when that process has exited and the pane is back at its shell, the pane goes to `none` and its row leaves the agents section. This is what clears a Claude Code that quit without its `SessionEnd` hook landing, crashed, or was killed. A state set with `tuios set-agent-state` names no harness process and stays until it is changed, so a note left on a pane at its prompt is kept. `none` forgets the harness process, so a note left after an agent's `SessionEnd` is kept as well.
+
 ### argv is read only for an interpreter, and only one token of it
 
 `argv_path` is the one predicate that reads the command line, so it is the one

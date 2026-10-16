@@ -501,9 +501,13 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			}
 		}
 		// A pane cleared to none has no agent to describe, and metadata left
-		// behind would be drawn for whatever agent starts in it next.
+		// behind would be drawn for whatever agent starts in it next. Nor a
+		// harness process: one recorded past its SessionEnd would read as
+		// exited later and clear a note a person leaves on the pane at its
+		// shell (see the detector's lapse of a hook's claim).
 		if r.State == AgentStateNone {
 			w.AgentMeta = nil
+			delete(s.agentHarnessPIDs, w.ID)
 		}
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
