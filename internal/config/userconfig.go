@@ -867,7 +867,10 @@ type HooksConfig map[string]any
 
 // KeybindingsConfig holds all keybinding configurations
 type KeybindingsConfig struct {
-	LeaderKey string `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b)
+	// Preset is the keys of another multiplexer, applied over the tuios
+	// defaults: "tuios" (or empty), "tmux". See preset.go.
+	Preset    string `toml:"preset,omitempty"`
+	LeaderKey string `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b, or the preset's)
 	// KeyboardLayout is the layout tuios assumes for a key the terminal does
 	// not describe: "us" (the default when empty) or "other". With "us" a
 	// binding on opt+shift+7 also matches opt+&, because & is Shift+7 on a US
@@ -905,7 +908,11 @@ type KeybindingsConfig struct {
 	DebugPrefix      map[string][]string `toml:"debug_prefix"`
 	TapePrefix       map[string][]string `toml:"tape_prefix"`
 	LayoutPrefix     map[string][]string `toml:"layout_prefix"`
-	TerminalMode     map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
+	// TuiosPrefix is the tuios menu, the leader then prefix_tuios's key. A
+	// preset puts the tuios features whose keys it takes here. Empty without
+	// a preset.
+	TuiosPrefix  map[string][]string `toml:"tuios_prefix,omitempty"`
+	TerminalMode map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
 	// Global binds are consulted in window mode and in terminal mode alike, so
 	// the palette and the launcher answer to one key wherever the user is. They
 	// are a section of their own rather than entries in terminal_mode because
@@ -3118,6 +3125,21 @@ func migrateCornerSnapDigits(cfg *UserConfig) {
 
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
+	// A preset is applied to the defaults first, so everything below fills
+	// from it. The user's keys after the leader and in terminal mode win over
+	// the preset's: there the fill yields.
+	fillPrefix := fillMapDefaults
+	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
+		kb := defaultCfg.Keybindings
+		if applyPreset(&kb, p) == nil {
+			defaultCfg = &UserConfig{Keybindings: kb}
+			fillPrefix = fillMapDefaultsYielding
+			if cfg.Keybindings.Repeat == nil {
+				cfg.Keybindings.Repeat = slices.Clone(kb.Repeat)
+			}
+		}
+	}
+
 	// Initialize nil maps
 	if cfg.Keybindings.WindowManagement == nil {
 		cfg.Keybindings.WindowManagement = make(map[string][]string)
@@ -3160,6 +3182,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 	if cfg.Keybindings.LayoutPrefix == nil {
 		cfg.Keybindings.LayoutPrefix = make(map[string][]string)
+	}
+	if cfg.Keybindings.TuiosPrefix == nil {
+		cfg.Keybindings.TuiosPrefix = make(map[string][]string)
 	}
 	if cfg.Keybindings.TerminalMode == nil {
 		cfg.Keybindings.TerminalMode = make(map[string][]string)
@@ -3227,7 +3252,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.RestoreMinimized, defaultCfg.Keybindings.RestoreMinimized)
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults[:0],
 		yieldTakenDefaults("prefix_mode", cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)...)
-	fillMapDefaults(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
+	fillPrefix(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode)
 	for _, y := range cfg.YieldedDefaults {
 		delete(cfg.Keybindings.PrefixMode, y.Action)
 	}
@@ -3238,7 +3263,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
 	fillMapDefaultsYielding(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
-	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
+	fillMapDefaultsYielding(cfg.Keybindings.TuiosPrefix, defaultCfg.Keybindings.TuiosPrefix)
+	fillPrefix(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
 	// A config written before the global and script sections existed has neither,
 	// so without this the palette and the launcher would come back unbound for
 	// every existing user rather than keeping the keys they already had.
@@ -3439,6 +3465,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.DebugPrefix, d.DebugPrefix},
 		{c.TapePrefix, d.TapePrefix},
 		{c.LayoutPrefix, d.LayoutPrefix},
+		{c.TuiosPrefix, d.TuiosPrefix},
 		{c.TerminalMode, d.TerminalMode},
 		{c.Sidebar, d.Sidebar},
 		{c.SidebarFiles, d.SidebarFiles},

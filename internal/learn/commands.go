@@ -149,6 +149,7 @@ func (m *Model) reset() {
 	o.LayoutPrefixActive = false
 	o.DebugPrefixActive = false
 	o.TapePrefixActive = false
+	o.TuiosPrefixActive = false
 	_ = o.SwitchWorkspace(1)
 	if o.LayoutModeName() != config.LayoutModeBSP {
 		m.RunCommand("layout", config.LayoutModeBSP)

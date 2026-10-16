@@ -463,6 +463,8 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 		return "Tape", menu("tape")
 	case m.LayoutPrefixActive:
 		return "Layout", menu("layout")
+	case m.TuiosPrefixActive:
+		return "tuios", menu("tuios")
 	}
 	return "Prefix", m.prefixMenuGroups()
 }

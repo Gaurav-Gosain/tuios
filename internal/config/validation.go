@@ -89,6 +89,14 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
+	if p := cfg.Keybindings.Preset; p != "" && !slices.Contains(Presets(), p) {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "keybindings",
+			Key:   "preset",
+			Message: fmt.Sprintf("%q is not a keybind preset. Use one of: %s. tuios uses its own keys",
+				p, strings.Join(Presets(), ", ")),
+		})
+	}
 	warnEnum(result, "keybindings", "keyboard_layout", cfg.Keybindings.KeyboardLayout, KeyboardLayouts, KeyboardLayoutUS)
 	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsAuto)
 	validatePrefixRepeat(cfg, result)
@@ -736,6 +744,7 @@ func keySections(kb *KeybindingsConfig) []keySection {
 		{"debug_prefix", kb.DebugPrefix},
 		{"tape_prefix", kb.TapePrefix},
 		{"layout_prefix", kb.LayoutPrefix},
+		{"tuios_prefix", kb.TuiosPrefix},
 		{"terminal_mode", kb.TerminalMode},
 		{"sidebar", kb.Sidebar},
 		{"sidebar_files", kb.SidebarFiles},

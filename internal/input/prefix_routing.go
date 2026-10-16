@@ -135,6 +135,15 @@ func HandleTapePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return runPrefix(msg, o, (*config.KeybindRegistry).GetTapePrefixAction)
 }
 
+// HandleTuiosPrefixCommand handles the key in the tuios menu. A key there may
+// open another menu (leader ctrl+t m is the minimize menu under the tmux
+// preset): the action sets that menu's flag as it does from the leader.
+func HandleTuiosPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.TuiosPrefixActive = false
+	o.PrefixActive = false
+	return runPrefix(msg, o, (*config.KeybindRegistry).GetTuiosPrefixAction)
+}
+
 // handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
 // [keybindings.terminal_mode] section, plus the handful of main-section actions
 // that must keep working while typing into a shell. It reports whether the key

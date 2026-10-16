@@ -29,6 +29,9 @@ func listKeybindings(asJSON bool) error {
 	if leader == "" {
 		leader = config.DefaultLeaderKey
 	}
+	if p := userConfig.Keybindings.Preset; p != "" && p != config.PresetTuios {
+		fmt.Printf("Preset: %s. Run `tuios keybinds cheatsheet` to see what it changed.\n\n", p)
+	}
 	printKeybindingsTable(rows, leader)
 	return nil
 }

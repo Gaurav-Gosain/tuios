@@ -481,6 +481,18 @@ action set to `[]` stays empty, while an action left out is filled from the
 defaults. `free` cannot take the leader key or the keys the input path reads
 directly.
 
+### Keys of tmux
+
+```sh
+tuios keybinds preset tmux        # c n p l 0-9 on workspaces, % " o ; z on panes
+tuios keybinds cheatsheet tmux    # same keys, moved keys, keys tuios does not have
+```
+
+A tmux window is a tuios workspace. A tmux pane is a tuios window. The preset
+changes only the leader, the keys after the leader and terminal-mode keys. The
+tuios keys it moved are under `ctrl+b ctrl+t`, on the key they had. Bindings in
+config.toml win over the preset.
+
 ### Repeat after the leader
 
 tmux `bind -r` is built in. After the resize, focus, scroll and workspace-step

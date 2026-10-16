@@ -20,6 +20,37 @@ sets the action. See
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## Keys of another multiplexer
+
+`keybindings.preset` gives the keys of tmux after the leader:
+
+```toml
+[keybindings]
+preset = "tmux"
+```
+
+Or run `tuios keybinds preset tmux`. `tuios keybinds preset` shows the preset
+in use, and `tuios keybinds preset list` shows them all.
+
+- A tmux window is a workspace here. A tmux pane is a window here. So `c`,
+  `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
+- A preset changes the leader, the keys after the leader and the
+  terminal-mode keys. Window mode, the sidebar, copy mode and the Inbox keep
+  the tuios keys.
+- A tuios feature whose key the preset uses moves to the tuios menu. Press the
+  leader, then `ctrl+t`, then the key it had. For example, `ctrl+b ctrl+t m`
+  opens the minimize menu.
+- Your own bindings win. An action you bind keeps your keys. A key you bind
+  keeps your action, and the preset's action for that key loses it.
+- Only the arrow keys and the resize keys repeat after the leader, as tmux
+  `bind -r` does. A letter you type right after `ctrl+b p` goes to the shell.
+- `tuios keybinds preset tmux` removes `keybindings.leader_key`, so the
+  leader is the preset's.
+
+`tuios keybinds cheatsheet tmux` shows the keys in three groups: the keys that
+work as in tmux, the tuios keys that moved, and what tmux has that tuios does
+not. `tuios keybinds preset show tmux` prints the preset file.
+
 ## The full list
 
 `tuios keybinds list` shows every action and the keys that run it, as your

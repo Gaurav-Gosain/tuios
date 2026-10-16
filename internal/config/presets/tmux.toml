@@ -1,0 +1,137 @@
+# The tmux preset: tmux 3.8's default keys after the leader, on the tuios
+# actions that do the same thing. A tmux window is a tuios workspace and a
+# tmux pane is a tuios window.
+#
+# This file is a delta over the tuios defaults, in the config's own syntax. An
+# action listed here takes these keys in place of its default ones. An empty
+# list takes its keys away. A tuios feature whose key tmux uses moves to the
+# tuios menu, ctrl+b ctrl+t, under the key it had.
+#
+# [about] is read by the cheat sheet and the preset picker. It is not config.
+
+leader_key = "ctrl+b"
+
+# tmux marks only the arrows, C-arrows and M-arrows with -r. n and p run once,
+# so a word typed right after them reaches the shell.
+repeat = [
+  "terminal_focus_left", "terminal_focus_right", "terminal_focus_up", "terminal_focus_down",
+  "resize_pane_left_5", "resize_pane_right_5", "resize_pane_up_5", "resize_pane_down_5",
+]
+
+[about]
+name = "tmux"
+summary = "for tmux users"
+samples = ["c", "%", "z"]
+model = "A tmux window is a workspace here. A tmux pane is a window here."
+# The tuios actions on the same key as in tmux that this file leaves alone.
+same = [
+  "prefix_close_window", "prefix_fullscreen", "prefix_detach", "prefix_selection", "paste_buffer",
+  "prefix_help", "next_session", "prev_session", "terminal_focus_left", "terminal_focus_right",
+  "terminal_focus_up", "terminal_focus_down", "prefix_debug",
+]
+missing = [
+  "C-o, M-o: rotate the panes. No action yet",
+  "@, *: floating panes. tuios floats a whole workspace with tiling off",
+  "{, }: swap a pane by its number. swap_left and swap_right swap by side",
+  "/: describe a key. Run tuios keybinds explain KEY",
+  "C-z: suspend the client",
+  "t: the clock",
+  "PgUp: copy mode then page up. Press [ then PgUp",
+]
+notes = [
+  "Press the leader twice to send ctrl+b to a tmux on a remote host.",
+  "Copy mode uses vi keys. [[keybindings.copy_pipe]] does what tmux copy-pipe does.",
+]
+
+[prefix_mode]
+# Workspaces, the tmux windows.
+new_workspace = ["c"]
+next_workspace = ["n"]
+prev_workspace = ["p"]
+last_workspace = ["l"]
+rename_workspace = [","]
+close_workspace = ["&"]
+prefix_workspace_switcher = ["w"]
+switch_workspace_1 = ["1"]
+switch_workspace_2 = ["2"]
+switch_workspace_3 = ["3"]
+switch_workspace_4 = ["4"]
+switch_workspace_5 = ["5"]
+switch_workspace_6 = ["6"]
+switch_workspace_7 = ["7"]
+switch_workspace_8 = ["8"]
+switch_workspace_9 = ["9"]
+break_pane = ["!"]
+# Panes, the tmux panes.
+prefix_split_horizontal = ["\"", "-"]
+prefix_split_vertical = ["%", "|", "\\"]
+prefix_next_window = ["o"]
+prefix_prev_window = []
+last_pane = [";"]
+display_panes = ["q"]
+mark_pane = ["m"]
+prefix_rename_window = ["T"]
+prefix_equalize_splits = ["E"]
+cycle_layout = ["space"]
+resize_pane_left_5 = ["alt+left", "ctrl+left", "shift+left"]
+resize_pane_right_5 = ["alt+right", "ctrl+right", "shift+right"]
+resize_pane_up_5 = ["alt+up", "ctrl+up", "shift+up"]
+resize_pane_down_5 = ["alt+down", "ctrl+down", "shift+down"]
+# Sessions, buffers, tools.
+prefix_session_switcher = ["s"]
+last_session = ["L"]
+rename_session = ["$"]
+choose_buffer = ["=", "#"]
+choose_tree = ["f", "/"]
+prefix_settings = ["C"]
+prefix_command_palette = [":", "P"]
+reload_config = ["r"]
+# The tuios features tmux takes the keys of, in the tuios menu below.
+prefix_tuios = ["ctrl+t"]
+prefix_new_window = []
+prefix_select_0 = []
+prefix_select_1 = []
+prefix_select_2 = []
+prefix_select_3 = []
+prefix_select_4 = []
+prefix_select_5 = []
+prefix_select_6 = []
+prefix_select_7 = []
+prefix_select_8 = []
+prefix_select_9 = []
+prefix_toggle_tiling = []
+prefix_workspace = []
+prefix_minimize = []
+prefix_layout = []
+prefix_tape = []
+prefix_quit = []
+prefix_scrollback = []
+prefix_screenshot = []
+prefix_file_search = []
+prefix_next_attention = []
+
+[tuios_prefix]
+prefix_new_window = ["c"]
+prefix_select_0 = ["0"]
+prefix_select_1 = ["1"]
+prefix_select_2 = ["2"]
+prefix_select_3 = ["3"]
+prefix_select_4 = ["4"]
+prefix_select_5 = ["5"]
+prefix_select_6 = ["6"]
+prefix_select_7 = ["7"]
+prefix_select_8 = ["8"]
+prefix_select_9 = ["9"]
+prefix_toggle_tiling = ["space"]
+prefix_workspace = ["w"]
+prefix_minimize = ["m"]
+prefix_layout = ["L"]
+prefix_tape = ["T"]
+prefix_quit = ["q"]
+prefix_scrollback = ["s"]
+prefix_screenshot = ["C"]
+prefix_file_search = ["f"]
+prefix_next_attention = ["o"]
+prefix_settings = [","]
+prefix_rename_window = ["r"]
+prefix_prev_window = ["p"]

@@ -667,6 +667,11 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTerminalLayoutPrefix(msg, o)
 	}
 
+	// The tuios menu: the tuios keys a preset moved.
+	if o.TuiosPrefixActive {
+		return HandleTuiosPrefixCommand(msg, o)
+	}
+
 	// Handle tape prefix commands (Ctrl+B, T, ...)
 	if o.TapePrefixActive {
 		return HandleTapePrefixCommand(msg, o)
@@ -793,7 +798,7 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
 	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && !o.WorkspacePrefixActive &&
 		!o.MinimizePrefixActive && !o.TilingPrefixActive && !o.DebugPrefixActive &&
-		!o.TapePrefixActive && !o.LayoutPrefixActive
+		!o.TapePrefixActive && !o.LayoutPrefixActive && !o.TuiosPrefixActive
 }
 
 // handleMessageViewKey handles a key while the message view is open. Every key

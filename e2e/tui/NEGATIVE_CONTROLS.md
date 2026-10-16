@@ -6384,3 +6384,15 @@ and reads `^B`, then switches sessions and presses `last_session`.
 | send_prefix ran nothing | the actions | a build of main | `TestSendPrefixAndLastSession` ("send_prefix did not reach the pane as ^B") | **caught** |
 | break_pane ran nothing | its `d.Register` | renamed the registration | `TestTmuxStyleActionsRunWhenBound` ("break_pane moves the pane off workspace 1: … Workspace:1") | **caught** |
 | last_session ran nothing | its `d.Register` | renamed the registration | `TestSendPrefixAndLastSession` ("no client shows session first") | **caught** |
+
+## The tmux keybind preset
+
+`TestTmuxPresetDrivesWorkspaces` sets `keybindings.preset = "tmux"` and drives
+`ctrl+b c c p n 1 l` on a real daemon, reading the session's workspace after
+each. It then presses `ctrl+b p p` in terminal mode and expects one switch,
+and opens the tuios menu with `ctrl+b ctrl+t m`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The preset was not applied | the preset mechanism | a build of the parent commit (#795) | `TestTmuxPresetDrivesWorkspaces` ("tmuxkeys is on workspace 1, want 2" after `ctrl+b c`) | **caught** |
+| A typed p after ctrl+b p switched again | the preset's `repeat` list | removed it from `presets/tmux.toml` | `TestTmuxPresetDrivesWorkspaces` ("tmuxkeys is on workspace 1, want 2" after `ctrl+b p p`) | **caught** |

@@ -120,6 +120,8 @@ func take(o *app.OS) Snapshot {
 		s.Prefix = "debug"
 	case o.TapePrefixActive:
 		s.Prefix = "tape"
+	case o.TuiosPrefixActive:
+		s.Prefix = "tuios"
 	case o.PrefixActive:
 		s.Prefix = "prefix"
 	}

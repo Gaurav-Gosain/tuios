@@ -1055,6 +1055,7 @@ type OS struct {
 	TapeRecorder       *tape.Recorder    // Tape recorder for recording sessions
 	TapeRecordingName  string            // Name of current recording
 	TapePrefixActive   bool              // True when Ctrl+B, T was pressed (tape sub-prefix)
+	TuiosPrefixActive  bool              // True when the tuios menu is open (leader, then prefix_tuios's key)
 	LayoutPrefixActive bool              // True when Ctrl+B, L was pressed (layout sub-prefix)
 	// MouseOff is set by toggle_mouse: the client stops asking the host for
 	// mouse reports, so the host terminal selects text itself, as tmux's

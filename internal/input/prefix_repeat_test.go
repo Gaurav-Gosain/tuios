@@ -1,6 +1,7 @@
 package input
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -193,5 +194,46 @@ func TestARepeatListReplacesTheDefault(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEveryPresetActionIsRegistered: each action a preset binds, and each it
+// marks to repeat, is one the dispatcher runs. A preset that names an action
+// by a wrong name binds a key that does nothing, with no error anywhere.
+//
+// Negative control: renaming last_workspace to last_workspaces in the tmux
+// preset fails it.
+func TestEveryPresetActionIsRegistered(t *testing.T) {
+	d := GetDispatcher()
+	known := func(a string) bool { return d.HasAction(a) || app.PrefixWorkActions[a] }
+	def := config.DefaultConfig().Keybindings
+	defaults := map[string]map[string][]string{
+		"prefix_mode": def.PrefixMode, "terminal_mode": def.TerminalMode, "tuios_prefix": def.TuiosPrefix,
+	}
+	for _, name := range config.Presets()[1:] {
+		cfg, err := config.ParseUserConfig([]byte("[keybindings]\npreset = \"" + name + "\"\n"))
+		if err != nil {
+			t.Fatalf("preset %s: %v", name, err)
+		}
+		kb := cfg.Keybindings
+		for section, m := range map[string]map[string][]string{
+			"prefix_mode": kb.PrefixMode, "terminal_mode": kb.TerminalMode, "tuios_prefix": kb.TuiosPrefix,
+		} {
+			for action, keys := range m {
+				// Only what the preset changed: a few tuios terminal-mode
+				// keys are read by the input path, not the dispatcher.
+				if slices.Equal(keys, defaults[section][action]) {
+					continue
+				}
+				if len(keys) > 0 && !known(action) {
+					t.Errorf("preset %s binds %v to %s [%s], which no handler runs", name, keys, action, section)
+				}
+			}
+		}
+		for _, action := range kb.Repeat {
+			if !known(action) {
+				t.Errorf("preset %s repeats %s, which no handler runs", name, action)
+			}
+		}
 	}
 }

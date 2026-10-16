@@ -84,6 +84,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_debug", makeSubPrefixHandler(func(o *app.OS) { o.DebugPrefixActive = true }))
 	d.Register("prefix_tape", makeSubPrefixHandler(func(o *app.OS) { o.TapePrefixActive = true }))
 	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.LayoutPrefixActive = true }))
+	d.Register("prefix_tuios", makeSubPrefixHandler(func(o *app.OS) { o.TuiosPrefixActive = true }))
 
 	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_new", handleNewWindow)

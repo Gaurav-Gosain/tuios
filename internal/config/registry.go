@@ -52,7 +52,7 @@ type KeybindRegistry struct {
 // own. One field per section, so a lookup is a field read and a map access.
 type sectionMaps struct {
 	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
-	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
+	debugPrefix, tapePrefix, layoutPrefix, tuiosPrefix    map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
 	sidebarAgents, inbox, inboxPeek, mail, copyMode       map[string]string
 	transfers, lists                                      map[string]string
@@ -111,6 +111,7 @@ func (r *KeybindRegistry) buildMappings() {
 		debugPrefix:     r.sectionKeyMap(kb.DebugPrefix),
 		tapePrefix:      r.sectionKeyMap(kb.TapePrefix),
 		layoutPrefix:    r.sectionKeyMap(kb.LayoutPrefix),
+		tuiosPrefix:     r.sectionKeyMap(kb.TuiosPrefix),
 		terminalMode:    r.sectionKeyMap(kb.TerminalMode),
 		global:          r.withCommands(r.sectionKeyMap(kb.Global), SectionGlobal),
 		script:          r.sectionKeyMap(kb.Script),
@@ -275,6 +276,12 @@ func (r *KeybindRegistry) GetGlobalAction(key string) string {
 // playing back.
 func (r *KeybindRegistry) GetScriptAction(key string) string {
 	return r.lookupKey(key, r.sections.script)
+}
+
+// GetTuiosPrefixAction returns the action name for a given key in the tuios
+// menu (the leader, then prefix_tuios's key).
+func (r *KeybindRegistry) GetTuiosPrefixAction(key string) string {
+	return r.lookupKey(key, r.sections.tuiosPrefix)
 }
 
 // GetLayoutPrefixAction returns the action name for a given key in layout prefix
@@ -450,6 +457,7 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 		r.config.Keybindings.DebugPrefix,
 		r.config.Keybindings.TapePrefix,
 		r.config.Keybindings.LayoutPrefix,
+		r.config.Keybindings.TuiosPrefix,
 		r.config.Keybindings.TerminalMode,
 		r.config.Keybindings.Global,
 		r.config.Keybindings.Script,
@@ -961,4 +969,5 @@ var ActionDescriptions = map[string]string{
 	"layout_prefix_load":   "Open the layout picker",
 	"layout_prefix_save":   "Save the current layout",
 	"layout_prefix_cancel": "Cancel layout prefix",
+	"prefix_tuios":         "Open the tuios menu: the tuios keys a preset moved",
 }

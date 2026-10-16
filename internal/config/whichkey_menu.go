@@ -154,6 +154,18 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	// The leader's menu, in the sections the panel flows into columns. Each
 	// section is a few lines, so a column holds a section or two whole and the
 	// panel stays short enough to read without scrolling the eye down a list.
+	// The workspace rows are bound by a preset (tmux's c n p l 0-9 , & !). A
+	// row whose action has no key after the leader is left out, so the tuios
+	// menu does not show the section.
+	workspaces := menuSection{title: "Workspaces", rows: []menuRow{
+		row("new_workspace", "New workspace"),
+		pair("Next/prev workspace", part("next_workspace", "Next workspace"), part("prev_workspace", "Previous workspace")),
+		row("last_workspace", "Last workspace"),
+		numbered("Go to workspace", actionRun("switch_workspace_", 1, 9, 1)...),
+		row("rename_workspace", "Rename workspace"),
+		row("close_workspace", "Close workspace"),
+		row("break_pane", "Pane to a new workspace"),
+	}}
 	windows := menuSection{title: "Windows", rows: []menuRow{
 		row("prefix_new_window", "Create window"),
 		row("prefix_close_window", "Close window"),
@@ -183,6 +195,14 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// The pane labels share the hints row: one row more made the
 		// panel reach the pane's top border at 80x24.
 		pair("Hints, labels", part("hints", "Hints"), part("display_panes", "Pane labels")),
+		row("last_pane", "Last pane"),
+		row("mark_pane", "Mark pane"),
+		pair("Resize pane",
+			part("resize_pane_left_5", "Resize pane left"),
+			part("resize_pane_up_5", "Resize pane up"),
+			part("resize_pane_down_5", "Resize pane down"),
+			part("resize_pane_right_5", "Resize pane right")),
+		row("cycle_layout", "Next layout"),
 	}}
 	sessions := menuSection{title: "Sessions", rows: []menuRow{
 		pair("Prev/next session", part("prev_session", "Previous session"), part("next_session", "Next session")),
@@ -191,6 +211,8 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		row("choose_tree", "Find a pane"),
 		row("prefix_close_session", "Close session"),
 		row("toggle_scratch", "Scratch session"),
+		row("last_session", "Last session"),
+		row("rename_session", "Rename session"),
 	}}
 	modes := menuSection{title: "Modes"}
 	// In daemon mode d detaches and Esc leaves for window mode; in local mode
@@ -229,6 +251,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		row("prefix_file_search", "Search files"),
 	)
 	menus := menuSection{title: "Menus", rows: []menuRow{
+		subRow("prefix_tuios", "tuios"),
 		subRow("prefix_workspace", "Workspace"),
 		subRow("prefix_minimize", "Minimize"),
 		subRow("prefix_window", "Window"),
@@ -238,6 +261,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	}}
 	tools := menuSection{title: "Tools", rows: []menuRow{
 		row("prefix_command_palette", "Command palette"),
+		row("reload_config", "Reload config"),
 		row("launcher", "Launcher"),
 		row("prefix_settings", "Settings"),
 		row("prefix_keybinds", "Keybindings"),
@@ -255,7 +279,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		row("prefix_review", "Review changes"),
 		row("prefix_agents_settings", "Agents settings"),
 	}}
-	return []menuSection{windows, panes, sessions, modes, menus, tools, agents}
+	return []menuSection{workspaces, windows, panes, sessions, modes, menus, tools, agents}
 }
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
@@ -303,6 +327,7 @@ var prefixMenuScopes = map[string]string{
 	"debug":     ScopePrefixDebug,
 	"tape":      ScopePrefixTape,
 	"layout":    ScopePrefixLayout,
+	"tuios":     ScopePrefixTuios,
 }
 
 // PrefixMenuGroups returns a which-key menu's lines, in the sections the panel

@@ -65,6 +65,7 @@ const (
 	SectionDebugPrefix      = "debug_prefix"
 	SectionTapePrefix       = "tape_prefix"
 	SectionLayoutPrefix     = "layout_prefix"
+	SectionTuiosPrefix      = "tuios_prefix"
 	SectionTerminalMode     = "terminal_mode"
 	SectionSidebar          = "sidebar"
 	SectionSidebarFiles     = "sidebar_files"
@@ -100,6 +101,7 @@ const (
 	ScopePrefixDebug    = "prefix.debug"
 	ScopePrefixTape     = "prefix.tape"
 	ScopePrefixLayout   = "prefix.layout"
+	ScopePrefixTuios    = "prefix.tuios"
 	ScopeGlobal         = "global"
 	ScopeScript         = "script"
 	ScopeLists          = "lists"
@@ -234,6 +236,11 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachChorded,
 		},
 		{
+			ID: ScopePrefixTuios, Name: "tuios menu", Chord: leader + " ctrl+t",
+			Sections: []string{SectionTuiosPrefix},
+			Reaches:  ReachChorded,
+		},
+		{
 			// Read by every list overlay while it is open, so a key here moves
 			// the cursor in the palette, the pickers and the settings page.
 			ID: ScopeLists, Name: "Lists",
@@ -290,6 +297,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.TapePrefix
 	case SectionLayoutPrefix:
 		return k.LayoutPrefix
+	case SectionTuiosPrefix:
+		return k.TuiosPrefix
 	case SectionGlobal:
 		return k.Global
 	case SectionScript:

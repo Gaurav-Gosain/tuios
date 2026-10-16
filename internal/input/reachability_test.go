@@ -129,6 +129,8 @@ func reachSections(t *testing.T) []bindingSection {
 		sub("debug_prefix", "prefix_debug", k.DebugPrefix),
 		sub("tape_prefix", "prefix_tape", k.TapePrefix),
 		sub("layout_prefix", "prefix_layout", k.LayoutPrefix),
+		// Empty under the tuios keys; a preset fills it.
+		sub("tuios_prefix", "prefix_tuios", k.TuiosPrefix),
 
 		// The terminal-mode section is the binds that answer while typing into a
 		// shell. The two scroll pairs and the host paste are answered
@@ -493,6 +495,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"resize_pane_down_20":  "user binding",
 	"new_workspace":        "user binding",
 	"last_workspace":       "user binding",
+	"prefix_tuios":         "keybind preset",
 	"break_pane":           "user binding",
 	"last_session":         "user binding",
 	"send_prefix":          "user binding",

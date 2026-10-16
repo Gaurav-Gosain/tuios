@@ -252,8 +252,62 @@ says so instead of reporting a success.`,
 		},
 	}
 
+	keybindsPresetCmd := &cobra.Command{
+		Use:   "preset [name]",
+		Short: "Show or set the keybind preset: tuios, or the keys of tmux",
+		Long: `With no name, print the preset in use and its leader. With a name, use that
+preset and write it to config.toml.
+
+A preset changes the leader, the keys after the leader and the terminal-mode
+keys. Window mode, the sidebar, copy mode and the Inbox keep the tuios keys.
+A tuios feature whose key the preset uses moves to the tuios menu: press the
+leader, then ctrl+t, then the key it had.
+
+Your own bindings in config.toml win over the preset. Setting a preset
+removes keybindings.leader_key, so the leader is the preset's.`,
+		Example: `  tuios keybinds preset
+  tuios keybinds preset tmux
+  tuios keybinds preset list
+  tuios keybinds preset show tmux`,
+		Args: cobra.MaximumNArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			switch {
+			case len(args) == 0:
+				return keybindsPreset("")
+			case args[0] == "list":
+				return keybindsPresetList()
+			case args[0] == "show" && len(args) == 2:
+				return keybindsPresetShow(args[1])
+			case len(args) == 1:
+				return keybindsPreset(args[0])
+			}
+			return fmt.Errorf("use: tuios keybinds preset [name | list | show NAME]")
+		},
+	}
+
+	var cheatSheetJSON bool
+	keybindsCheatSheetCmd := &cobra.Command{
+		Use:   "cheatsheet [preset]",
+		Short: "Show what a keybind preset keeps, moves and does not have",
+		Long: `Print a preset's keys in three groups: the keys that do what they do in the
+other multiplexer, the tuios keys the preset moved and where they are now, and
+what the other multiplexer has that tuios does not. With no name, the preset in
+use.`,
+		Example: `  tuios keybinds cheatsheet tmux
+  tuios keybinds cheatsheet --json`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) == 1 {
+				name = args[0]
+			}
+			return keybindsCheatSheet(name, cheatSheetJSON)
+		},
+	}
+	keybindsCheatSheetCmd.Flags().BoolVar(&cheatSheetJSON, "json", false, "Output as JSON")
+
 	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd,
-		keybindsExplainCmd, keybindsUnbindCmd, keybindsFreeCmd)
+		keybindsExplainCmd, keybindsUnbindCmd, keybindsFreeCmd, keybindsPresetCmd, keybindsCheatSheetCmd)
 
 	tapeCmd := &cobra.Command{
 		Use:   "tape",

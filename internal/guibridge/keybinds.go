@@ -84,10 +84,11 @@ var prefixScopes = map[string]string{
 	"prefix_debug":     config.ScopePrefixDebug,
 	"prefix_tape":      config.ScopePrefixTape,
 	"prefix_layout":    config.ScopePrefixLayout,
+	"prefix_tuios":     config.ScopePrefixTuios,
 }
 
 // menuNames are the which-key menus, by the name PrefixMenuGroups takes.
-var menuNames = []string{"", "window", "minimize", "workspace", "debug", "tape", "layout"}
+var menuNames = []string{"", "window", "minimize", "workspace", "debug", "tape", "layout", "tuios"}
 
 // exportKeybinds builds the keybinds event from the model's registry and
 // config, so it shows what this session's keys do now.
