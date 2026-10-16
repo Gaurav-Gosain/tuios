@@ -630,6 +630,10 @@ type OS struct {
 	IsDaemonSession bool               // True when running as part of a persistent daemon session
 	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName     string             // Name of the daemon session (if attached)
+	// lastWorkspace and lastSession are where this client was before the
+	// current workspace and session, for last_workspace and last_session.
+	lastWorkspace int
+	lastSession   lastSession
 	// AttachedHost is the host DaemonClient reaches its daemon through, or ""
 	// for the daemon on this machine. See SwitchToHostSession.
 	AttachedHost string

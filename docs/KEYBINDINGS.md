@@ -772,6 +772,10 @@ section where you want them.
 | `join_marked_left`, `join_marked_right`, `join_marked_up`, `join_marked_down` | Moves the marked pane next to the focused one, on that side, from this workspace or another. Needs BSP tiling. |
 | `resize_pane_left_5`, `resize_pane_right_5`, `resize_pane_up_5`, `resize_pane_down_5` | Moves the focused pane's edge by 5 cells. The `_20` actions move it by 20. Under the leader, the key repeats without a second leader press, as tmux `bind -r` does. |
 | `new_workspace` | Goes to the first workspace with no pane, the one the dock's `+` button opens, and opens a pane there. |
+| `last_workspace` | Goes back to the workspace you were on before this one, as tmux `last-window` does. Press it again to go back and forth. |
+| `break_pane` | Moves the focused pane to the first workspace with no pane and goes with it, as tmux `break-pane` does. |
+| `last_session` | Goes back to the session you were on before this one, as tmux `switch-client -l` does. |
+| `send_prefix` | Sends the leader key to the program in the focused pane, as pressing the leader two times in terminal mode does. Use it for screen's `C-a a`, or for a tmux in the pane. |
 | `move_workspace_left`, `move_workspace_right` | Swaps this workspace with the one before or after it, and follows it. |
 | `send_to_workspace_1` to `send_to_workspace_9` | Sends the focused pane to that workspace. |
 | `cycle_layout` | Cycles BSP, master-stack and scrolling. |

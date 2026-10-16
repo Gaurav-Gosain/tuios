@@ -414,6 +414,22 @@ func (m *OS) switchSession(host, name string) error {
 	if host != "" && !m.hostIsUp(host) {
 		return &hostUnavailableError{host: host}
 	}
+	// Both ends by the machine's own name, so a switch to the same session
+	// is not recorded and a session on another machine is found again.
+	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
+	to := host
+	if to == "" {
+		to = m.attachedMachine()
+	}
+	err := m.switchSessionTo(host, name)
+	if err == nil && from.name != "" && (from.host != to || from.name != name) {
+		m.lastSession = from
+	}
+	return err
+}
+
+// switchSessionTo is switchSession past the checks.
+func (m *OS) switchSessionTo(host, name string) error {
 	if m.sessionSwitchHook != nil {
 		return m.sessionSwitchHook(host, name)
 	}
@@ -424,6 +440,21 @@ func (m *OS) switchSession(host, name string) error {
 		return &hostSwitchError{msg: hostAttachRefusal(host, err)}
 	}
 	return nil
+}
+
+// lastSession is the session this client left on its last switch.
+type lastSession struct {
+	host, name string
+}
+
+// LastSession goes back to the session this client was on before the current
+// one, as tmux's switch-client -l does.
+func (m *OS) LastSession() {
+	if m.lastSession.name == "" {
+		m.ShowNotification("No last session", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.openSession(m.lastSession.host, m.lastSession.name)
 }
 
 // openSession is switchSession for a surface: it reports a failure itself and

@@ -6371,3 +6371,16 @@ host is given the new red.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A saved theme file needed a restart | the themes watch | a build of the parent commit (theme base, no watch) | `TestAnEditedThemeFileRepaints` ("the theme's red reached the host as {Kind:2 … R:255 G:0 B:0}, want #00ff00") | **caught** |
+## last_workspace, break_pane, last_session, send_prefix
+
+`TestTmuxStyleActionsRunWhenBound` gains `last_workspace` (back and forth) and
+`break_pane` (the pane leaves workspace 1 for an empty workspace, and the view
+follows). `TestSendPrefixAndLastSession` presses `send_prefix` into `cat -v`
+and reads `^B`, then switches sessions and presses `last_session`.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| last_workspace ran nothing | the actions | a build of main | `TestTmuxStyleActionsRunWhenBound` ("tmuxish is on workspace 2, want 1") | **caught** |
+| send_prefix ran nothing | the actions | a build of main | `TestSendPrefixAndLastSession` ("send_prefix did not reach the pane as ^B") | **caught** |
+| break_pane ran nothing | its `d.Register` | renamed the registration | `TestTmuxStyleActionsRunWhenBound` ("break_pane moves the pane off workspace 1: … Workspace:1") | **caught** |
+| last_session ran nothing | its `d.Register` | renamed the registration | `TestSendPrefixAndLastSession` ("no client shows session first") | **caught** |
