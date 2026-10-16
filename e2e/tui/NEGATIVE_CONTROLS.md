@@ -8571,3 +8571,26 @@ it fails with "git started by childproc ran the repository's core.fsmonitor".
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
 -run '^(TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt|TestADaemonChildCannotMarkAnotherPane)$' -v .`
 from `e2e/tui`.
+## Live handoff
+
+`e2e/tui/live_handoff_test.go` drives the daemon live upgrade of `docs/design/live-handoff.md` against real daemons. The daemon runs with `TUIOS_TEST_HANDOFF=1`, which registers the test-only verbs `test-quiesce` and `test-handoff`. Each test writes what it measured to `handoff.json` under `artifactDir`.
+
+### PR 2: quiesce, gated exit wait, adopted pane
+
+- `TestQuiesceLosesNoBytes`: a pane prints a numbered counter as fast as `sh` can. It is quiesced and resumed 100 times, 5 ms each. The stream must not move while the pane is quiesced (`read_while_quiesced` is 0), and the counter in the daemon's scrollback must be contiguous. The positive half: the counter moved between the first and the last capture, so the pane was producing the whole time.
+- `TestExitDuringQuiesceKeepsStatus`: a kept-open pane prints `ready`, then sleeps and exits 7 during a 3.5 s hold between the manifest write and the exec, with no output unread. The new image must report 7. The positive half: a pane that exited 5 before the handoff, reaped by the old image and written down as exited, reads 5 after it.
+- `TestSelfExecAdoptsPanes`: two command panes print `pid-$$`. After a handoff to the same binary the daemon's pid is unchanged, its image id (hello's `instance`) is new, every pane's pid is unchanged, and a pane told to exit 9 after the handoff reads 9. Its subtest lets a child fork while the descriptors are exposed, then runs `kill-server` and `start-server`.
+
+Each control is a build that cuts one line, run on 2026-10-17 on macOS arm64 (Darwin 27, Go 1.26.9) against the branch feat/live-handoff-impl.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The reader ignores the gate | drop the `if p.quiesced { ... }` block from `readOutput` | `TestQuiesceLosesNoBytes`: "the pane's reader took 1070643 bytes while it was quiesced" | **caught** |
+| `monitorExit` is a plain wait | drop the `peekExit` call and `p.reap.enter()`/`leave()` from `monitorExit` | `TestExitDuringQuiesceKeepsStatus`: "the pane that exited during the handoff reads -1, want 7" | **caught** |
+| Close-on-exec left on the masters | drop `r.fds = append(r.fds, rec.FD)` in `writeManifest` | `TestSelfExecAdoptsPanes`: "the daemon never answered from a new image within 20s: ... a stale socket is left over" (the new image found no master to adopt) | **caught** |
+| No `syscall.ForkLock` around the exposed span | drop `syscall.ForkLock.Lock()` and its unlock from `execHandoff` | `TestSelfExecAdoptsPanes/fork_in_the_exposed_window`: "start-server after kill-server failed, so something kept the start lock" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestQuiesceLosesNoBytes|TestExitDuringQuiesceKeepsStatus|TestSelfExecAdoptsPanes)$' .
+```
