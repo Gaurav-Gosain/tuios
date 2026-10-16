@@ -42,7 +42,7 @@ func (m *OS) OpenThemePicker() {
 	theme.EnsureRegistry()
 	m.ShowThemePicker = true
 	m.ThemePickerQuery = ""
-	m.ThemePickerShade, m.ThemePickerDelete = themeShadeAll, ""
+	m.ThemePickerShade, m.ThemePickerDelete, m.ThemePickerPair = themeShadeAll, "", ""
 	m.ThemePickerScroll = 0
 	current := theme.CurrentThemeID()
 	if current == "" {
@@ -132,9 +132,46 @@ func (m *OS) ThemePickerApplySelection() tea.Cmd {
 		return nil
 	}
 	sel := items[m.ThemePickerSelected]
+	// With a light and dark pair set, the pick is for one of the two, or
+	// both. The picker asks before it writes. See ThemePickerAnswerPair.
+	if m.UserConfig != nil && m.UserConfig.Appearance.ThemeLight != "" {
+		m.ThemePickerPair = sel
+		return nil
+	}
 	m.applyTheme(sel)
 	save := m.persistThemeSelection(sel)
 	m.CloseThemePicker()
+	return save
+}
+
+// ThemePickerAnswerPair answers the question a pick with a pair set asks:
+// d writes appearance.theme, l writes appearance.theme_light, b writes both.
+// Any other key goes back to the list. The theme that fits the terminal is
+// then put in force.
+func (m *OS) ThemePickerAnswerPair(key string) tea.Cmd {
+	sel := m.ThemePickerPair
+	m.ThemePickerPair = ""
+	dark, light := key == "d" || key == "b", key == "l" || key == "b"
+	if sel == "" || (!dark && !light) {
+		return nil
+	}
+	if dark {
+		m.setThemeSelection(sel)
+	}
+	if light {
+		m.setAppearance(func(a *config.AppearanceConfig) {
+			// Empty would end the pair, so no theme is written as none.
+			if sel == themeNone {
+				a.ThemeLight = theme.NoneID
+			} else {
+				a.ThemeLight = sel
+			}
+		})
+	}
+	save := m.persistSettings()
+	m.CloseThemePicker()
+	m.schemeApplied = ""
+	m.followSchemeTheme()
 	return save
 }
 

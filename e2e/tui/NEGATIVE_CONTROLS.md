@@ -6653,3 +6653,18 @@ Run on 2026-10-16.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | The local client did not tell the chrome its ground | yes | `&& false` on the `theme.SetHostGround` call in `setHostBg` | `TestThemeNoneMatchesTheTerminal/none` ("the palette's ground is {... R:58 G:57 B:67}, want green true") | **caught** |
+
+## A light and a dark theme
+
+`TestThemePairFollowsTheTerminal` sets `theme = "nord"` and
+`theme_light = "catppuccin_latte"` under hostterm, which starts light and
+switches to dark on SIGUSR1. A pane's red must be latte's, then nord's after
+the switch. A pick in the theme picker must ask d, l or b, and `l` must write
+only `theme_light`.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The client did not follow the terminal's scheme | yes | `followSchemeTheme` returns at once | `TestThemePairFollowsTheTerminal` ("light: a pane's red reached the host as #bf6169, want #d20f38") | **caught** |
+| The picker wrote theme without asking | yes | `ThemePickerApplySelection` skips the pair question | `TestThemePairFollowsTheTerminal` ("the picker never asked which theme") | **caught** |

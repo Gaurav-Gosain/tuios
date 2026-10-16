@@ -393,6 +393,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// multiplexer looks for it. See agents_off.go.
 			opt("agents.enabled"),
 			custom("appearance.theme", m.themeItem()),
+			opt("appearance.theme_light"),
 			custom("appearance.glyphs", m.glyphItem()),
 			opt("appearance.border_style"),
 			opt("appearance.window_title_position"),

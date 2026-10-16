@@ -242,6 +242,9 @@ The running clients read a theme file again when it is saved. `tuios theme
 reload` asks every client on the machine to read the files now, and to ask
 its terminal for its colours again.
 
+`appearance.theme_light` names the theme for a light terminal, and `theme` is
+then the dark one. The local client switches when the terminal does.
+
 `theme = "none"` keeps the terminal's own colours and builds the dialogs'
 greys from the terminal's background, for a terminal themed elsewhere.
 

@@ -67,3 +67,17 @@ func hostDarkChrome(ground color.Color) Chrome {
 	c.deriveRamp()
 	return c
 }
+
+// schemeLight is the local terminal's verdict on its background: light or
+// dark. It picks appearance.theme_light or appearance.theme when both are set.
+var schemeLight atomic.Bool
+
+// SetSchemeLight records whether the local terminal is light, and reports
+// whether that changed. Only the local client calls it, for the reason
+// SetHostGround gives.
+func SetSchemeLight(light bool) bool {
+	return schemeLight.Swap(light) != light
+}
+
+// SchemeLight reports whether the local terminal said it is light.
+func SchemeLight() bool { return schemeLight.Load() }

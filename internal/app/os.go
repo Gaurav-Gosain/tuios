@@ -1404,6 +1404,12 @@ type OS struct {
 	ThemePickerShade int
 	// ThemePickerDelete is the theme a ctrl+d asked to delete, waiting for y.
 	ThemePickerDelete string
+	// ThemePickerPair is the theme a pick waits on while the picker asks
+	// whether it is for the dark theme, the light one or both. Empty when
+	// it asks nothing. See appearance.theme_light.
+	ThemePickerPair string
+	// schemeApplied is the theme followSchemeTheme last put in force.
+	schemeApplied string
 
 	// Glyph picker overlay state, the theme picker's opposite number.
 	ShowGlyphPicker     bool

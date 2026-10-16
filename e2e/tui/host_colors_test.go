@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"os"
@@ -803,5 +804,110 @@ func TestThemeNoneMatchesTheTerminal(t *testing.T) {
 					tc.theme, hostBg, surface, tc.wantGreen, term.SnapshotStyled())
 			}
 		})
+	}
+}
+
+// TestThemePairFollowsTheTerminal: with appearance.theme_light set, a light
+// terminal gets that theme and a dark one gets appearance.theme, and a switch
+// of the terminal's scheme switches the theme. A pick in the theme picker then
+// asks whether it is for the dark theme, the light one or both, and writes
+// only the key asked for.
+//
+// How this could pass wrongly: the two reds are read off the host terminal
+// for a probe printed after each switch, and each is checked against the red
+// tuios theme export reports for that theme, so a red from the wrong theme,
+// or the terminal's own, fails.
+func TestThemePairFollowsTheTerminal(t *testing.T) {
+	base := t.TempDir()
+	host := buildHostTerm(t)
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\ntheme_light = \"catppuccin_latte\"\n")
+	redOf := func(id string) string {
+		t.Helper()
+		out, err := tuiosCLI(t, base, "theme", "export", id)
+		if err != nil {
+			t.Fatalf("export %s: %v\n%s", id, err, out)
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(out), &m); err != nil {
+			t.Fatalf("export %s is not JSON: %v\n%s", id, err, out)
+		}
+		red, _ := m["red"].(string)
+		return strings.ToLower(red)
+	}
+	lightRed, darkRed := redOf("catppuccin_latte"), redOf("nord")
+	if lightRed == "" || lightRed == darkRed {
+		t.Fatalf("the two themes' reds %q and %q cannot tell them apart", lightRed, darkRed)
+	}
+
+	term := startIn(t, base, startOpts{
+		cols: 120, rows: 40,
+		env: []string{"COLORTERM=truecolor"},
+		wrap: []string{host, "run", "-bg", "#fdf6e3", "-fg", "#2a2a2a",
+			"-alt-bg", "#1e1e2e", "-alt-fg", "#e0e0e0", "-ansi", hostANSISpec(), "--"},
+	})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+
+	hexOf := func(c tuitest.Color) string {
+		if c.Kind != tuitest.ColorRGB {
+			return fmt.Sprintf("%+v", c)
+		}
+		return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+	}
+	// waitRed prints the probe until its red is want, within the usual wait.
+	waitRed := func(when, want string) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for i := 0; ; i++ {
+			marker := fmt.Sprintf("INK%s%d", strings.ToUpper(when[:1]), i)
+			runInShell(t, term, probeCmd(marker[3:]), marker, shellTimeout)
+			got := hexOf(probeInk(t, term, marker))
+			if got == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: a pane's red reached the host as %s, want %s\n%s", when, got, want, term.Snapshot())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	waitRed("light", lightRed)
+	saveArtifact(t, term, artifactDir(t), "light")
+
+	if err := syscall.Kill(term.Pid(), syscall.SIGUSR1); err != nil {
+		t.Fatalf("signal hostterm: %v", err)
+	}
+	waitRed("dark", darkRed)
+	saveArtifact(t, term, artifactDir(t), "dark")
+
+	// A pick with the pair set asks before it writes.
+	windowManagementMode(t, term)
+	sendKeys(t, term, tuitest.Ctrl('p'))
+	waitScreen(t, term, "the palette never opened", paletteTitle)
+	sendKeys(t, term, "Theme picker")
+	waitScreen(t, term, "the palette never filtered", "Theme picker")
+	sendKeys(t, term, tuitest.Enter)
+	waitScreen(t, term, "the theme picker never opened", "themes")
+	sendKeys(t, term, "dracula")
+	waitScreen(t, term, "the picker never filtered", "dracula")
+	sendKeys(t, term, tuitest.Enter)
+	waitScreen(t, term, "the picker never asked which theme", "Use dracula as: d dark, l light, b both")
+	saveArtifact(t, term, artifactDir(t), "pair-question")
+	sendKeys(t, term, "l")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "themes") }, uiTimeout); err != nil {
+		t.Fatalf("the picker did not close after l: %v\n%s", err, term.Snapshot())
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		cfg, _ := os.ReadFile(configPathIn(base))
+		text := string(cfg)
+		if strings.Contains(text, `theme_light = "dracula"`) && strings.Contains(text, `theme = "nord"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after l, config.toml does not hold theme_light = dracula and theme = nord:\n%s", text)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

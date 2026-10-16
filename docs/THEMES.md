@@ -8,6 +8,7 @@ overlays, the dockbar) from them.
 ## Table of Contents
 
 - [Selecting a Theme](#selecting-a-theme)
+- [A Light and a Dark Theme](#a-light-and-a-dark-theme)
 - [Match Your Terminal](#match-your-terminal)
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
@@ -73,6 +74,28 @@ chrome uses the Charple accent. See
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.
+
+## A Light and a Dark Theme
+
+`theme_light` sets a second theme for when your terminal is light. `theme` is
+then the dark theme:
+
+```toml
+[appearance]
+theme = "catppuccin_mocha"
+theme_light = "catppuccin_latte"
+```
+
+- tuios asks the terminal for its background when it starts, and uses
+  `theme_light` on a light background.
+- A terminal that follows the system's light and dark switch (ghostty, kitty
+  and others) tells tuios when the switch happens. tuios then changes the
+  theme.
+- With `theme_light` set, the theme picker asks what a pick is for. Press `d`
+  for the dark theme, `l` for the light theme or `b` for both. Any other key
+  goes back to the list.
+- Only the local client follows the switch. A client of `tuios ssh` or
+  `tuios-web` uses `theme`.
 
 ## Match Your Terminal
 

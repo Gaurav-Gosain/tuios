@@ -46,6 +46,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_mode_icon_tiling":    "Tiling mode icon",
 	"appearance.dockbar_position":         "Dock position",
 	"appearance.glyphs":                   "Glyph set",
+	"appearance.theme_light":              "Light theme",
 	"appearance.hide_clock":               "Clock in the badge",
 	"appearance.hide_scrollbar":           "Scrollbar",
 	"appearance.hide_window_buttons":      "Window buttons",

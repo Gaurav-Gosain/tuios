@@ -90,6 +90,10 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 				}
 				count = overlay.Style(bg).Foreground(pal.Warning).Render("  " + overlay.Truncate(q, max(width-2, 1)))
 			}
+			if id := m.ThemePickerPair; id != "" {
+				q := "Use " + id + " as: d dark, l light, b both"
+				count = overlay.Style(bg).Foreground(pal.Accent).Render("  " + overlay.Truncate(q, max(width-2, 1)))
+			}
 			commands := themePickerCommands
 			if !m.previewsLive() || m.ConfigReadOnly {
 				// No file can be deleted from here.

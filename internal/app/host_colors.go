@@ -101,6 +101,37 @@ func (m *OS) seedHostColors(caps *HostCapabilities) {
 			m.setHostSlot(i, unpackColor(caps.ANSI[i]))
 		}
 	}
+	m.followSchemeTheme()
+}
+
+// schemeTheme is the theme the config asks for on this terminal: theme_light
+// while the local terminal is light and a pair is set, else theme.
+func (m *OS) schemeTheme() string {
+	if m.UserConfig == nil {
+		return ""
+	}
+	a := m.UserConfig.Appearance
+	if a.ThemeLight != "" && theme.SchemeLight() {
+		return a.ThemeLight
+	}
+	return a.Theme
+}
+
+// followSchemeTheme puts the theme of the pair that fits the terminal in
+// force, when the config sets theme_light. It runs when the local terminal
+// reports its background, and after a light and dark switch (mode 2031). The
+// picker's preview is left alone while it is open.
+func (m *OS) followSchemeTheme() {
+	if m.UserConfig == nil || m.UserConfig.Appearance.ThemeLight == "" ||
+		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker {
+		return
+	}
+	name := m.schemeTheme()
+	if name == m.schemeApplied {
+		return
+	}
+	m.schemeApplied = name
+	m.applyTheme(name)
 }
 
 // unpackColor turns a 0xRRGGBB word into a colour.
@@ -137,6 +168,7 @@ func (m *OS) setHostBg(c color.Color) bool {
 	// of several, and the process-wide chrome is not its to move.
 	if m.Client == ClientLocal && !m.LearnMode {
 		theme.SetHostGround(c, h.light)
+		theme.SetSchemeLight(h.light)
 	}
 	return true
 }
@@ -303,6 +335,7 @@ func parseHostSlotReply(s string) (int, color.Color, bool) {
 // hostColorsChanged lands a change of the host's colours: the chrome is
 // rebuilt on the new ground, and panes and the daemon are told.
 func (m *OS) hostColorsChanged() {
+	m.followSchemeTheme()
 	m.MarkAllDirty()
 	m.syncReportColors()
 	m.SyncStateToDaemon()

@@ -354,6 +354,7 @@ type AppearanceConfig struct {
 	ShowCPU                  bool                    `toml:"show_cpu"`                     // Show CPU graph in dock (default: false)
 	ShowRAM                  bool                    `toml:"show_ram"`                     // Show RAM usage in dock (default: false)
 	Theme                    string                  `toml:"theme"`                        // Color theme name (e.g., dracula, nord, my-custom-theme)
+	ThemeLight               string                  `toml:"theme_light"`                  // Theme while the terminal is light; theme is then the dark one (default: empty, theme for both)
 	SharedBorders            *bool                   `toml:"shared_borders"`               // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
@@ -2847,6 +2848,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	name := cfg.Appearance.Theme
 	if name == "" {
 		name = flagTheme()
+	}
+	// A light and dark pair: theme_light while the local terminal is light.
+	if cfg.Appearance.ThemeLight != "" && theme.SchemeLight() {
+		name = cfg.Appearance.ThemeLight
 	}
 	if name != "" || theme.OmarchyInstalled() {
 		if err := theme.Initialize(name); err != nil {

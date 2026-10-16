@@ -8,6 +8,11 @@ import (
 // handleThemePickerInput handles keyboard input for the theme picker. Selection
 // live-previews the theme; Enter commits, Esc restores the original.
 func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// A pick with a light and dark pair set waits for d, l or b. Any other
+	// key goes back to the list, and is used up.
+	if o.ThemePickerPair != "" {
+		return o, o.ThemePickerAnswerPair(msg.String())
+	}
 	// A delete waits for y. Any other key keeps the theme, and is used up.
 	if o.ThemePickerDelete != "" {
 		return o, o.ThemePickerConfirmDelete(msg.String() == "y")

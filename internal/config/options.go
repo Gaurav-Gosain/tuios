@@ -333,6 +333,11 @@ var optionSpecs = []Option{
 		Default:     "", Theme: true,
 	},
 	{
+		Path: "appearance.theme_light", Type: OptionString, Section: "appearance",
+		Description: "Theme to use while the terminal is light. Empty uses theme for both. theme is then the dark theme",
+		Default:     "", Theme: true,
+	},
+	{
 		Path: "appearance.shared_borders", Type: OptionBool, Section: "appearance",
 		Description: "Draw one border between neighbouring tiled panes, in every layout",
 		Default:     "false",

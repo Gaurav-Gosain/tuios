@@ -601,6 +601,10 @@ On a machine without Omarchy, tuios watches nothing.
 theme = "omarchy"   # use the Omarchy theme, and warn where Omarchy is missing
 ```
 
+`appearance.theme_light` names a second theme for a light terminal. `theme` is
+then the dark theme. See
+[THEMES.md](THEMES.md#a-light-and-a-dark-theme).
+
 tuios reads `~/.local/state/omarchy/current/theme/colors.toml` (Omarchy 4),
 then `~/.config/omarchy/current/theme/colors.toml` (Omarchy 3). The pane
 colours are the ones Omarchy gives kitty, ghostty and foot. The chrome takes:
