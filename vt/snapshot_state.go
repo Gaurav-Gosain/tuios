@@ -173,6 +173,44 @@ func withoutExecutedControls(p []byte) []byte {
 	return out
 }
 
+// OpenCluster is a character cluster drawn at the end of the last Write that
+// the next Write may still extend: a base whose skin tone, joiner or
+// combining mark has not arrived yet. Text is the cluster as drawn, X and Y
+// the cell it was drawn in, Width the columns it took, and Left and Right the
+// margins it was drawn under.
+type OpenCluster struct {
+	Text        string
+	X, Y        int
+	Width       int
+	Left, Right int
+}
+
+// OpenCluster returns the cluster left open across the last Write, and false
+// when there is none. A snapshot taken between the parts of one cluster
+// carries it, or the receiver draws the rest as a cluster of its own.
+func (e *Emulator) OpenCluster() (OpenCluster, bool) {
+	o := &e.openGrapheme
+	if !o.active {
+		return OpenCluster{}, false
+	}
+	return OpenCluster{Text: o.baseCluster(), X: o.x, Y: o.y, Width: o.width, Left: o.left, Right: o.right}, true
+}
+
+// RestoreOpenCluster opens c as if this emulator had just drawn it, so the
+// next Write can extend it. Call it after RestorePendingInput, which closes
+// any open cluster. A cluster outside the screen is ignored.
+func (e *Emulator) RestoreOpenCluster(c OpenCluster) {
+	if c.Text == "" || c.X < 0 || c.Y < 0 || c.X >= e.Width() || c.Y >= e.Height() || c.Width < 1 {
+		return
+	}
+	var ascii byte
+	base := c.Text
+	if len(c.Text) == 1 && c.Text[0] < utf8.RuneSelf {
+		ascii, base = c.Text[0], ""
+	}
+	e.openGrapheme.arm(c.X, c.Y, c.Width, c.Left, c.Right, ascii, base)
+}
+
 // RestorePendingInput drops the sequence the parser is in, and any character
 // cluster left open across the last Write, and then reads p.
 func (e *Emulator) RestorePendingInput(p []byte) {

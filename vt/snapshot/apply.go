@@ -280,6 +280,12 @@ func Apply(t vt.Terminal, state *State) error {
 		pending = nil
 	}
 	t.RestorePendingInput(pending)
+	// After the pending input, which closes any open cluster.
+	if c := state.OpenCluster; c != nil {
+		if oc, ok := t.(openClusters); ok {
+			oc.RestoreOpenCluster(vt.OpenCluster{Text: c.Text, X: c.X, Y: c.Y, Width: c.Width, Left: c.Left, Right: c.Right})
+		}
+	}
 	return errors.Join(dropped...)
 }
 

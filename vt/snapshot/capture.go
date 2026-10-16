@@ -115,6 +115,11 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 	// on the stream, and a client that had not seen its start would print
 	// that end as text.
 	state.PendingInput = t.PendingInput()
+	if oc, ok := t.(openClusters); ok {
+		if c, open := oc.OpenCluster(); open {
+			state.OpenCluster = &OpenClusterState{Text: c.Text, X: c.X, Y: c.Y, Width: c.Width, Left: c.Left, Right: c.Right}
+		}
+	}
 
 	// Colours are encoded through one cache for the whole snapshot: a
 	// truecolor cell's hex string was one allocation per cell, eleven

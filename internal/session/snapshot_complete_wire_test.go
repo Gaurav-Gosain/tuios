@@ -297,13 +297,12 @@ func runClientsOwnInsertMode(t *testing.T, newDaemon, newClient func() vt.Termin
 
 // TestWireCarriesAnOpenCluster is a snapshot taken between the parts of one
 // character cluster: a thumbs up, and the skin tone that joins it. The
-// daemon draws one cluster in two columns. The snapshot does not carry the
-// open cluster, so the client draws the tone as a cluster of its own. This
-// is a known gap, on main too; the handoff of the live upgrade (PR 3 of the
-// plan) carries the emulator's open cluster and closes it. The test fails
-// when the gap is closed, so it cannot stay listed after that.
+// daemon draws one cluster in two columns. The snapshot carries the open
+// cluster, so the client joins the tone to the thumb as the daemon does. The
+// live upgrade's handoff (PR 3 of the plan) needs it: a quiesce can split a
+// cluster between two reads, and the new daemon image rebuilds its emulator
+// from the snapshot.
 func TestWireCarriesAnOpenCluster(t *testing.T) {
-	const knownBug = "the snapshot does not carry an open character cluster"
 	daemon := vt.NewEmulator(fidelityCols, fidelityRows)
 	defer closeEmulator(daemon)
 	client := vt.NewEmulator(fidelityCols, fidelityRows)
@@ -311,16 +310,16 @@ func TestWireCarriesAnOpenCluster(t *testing.T) {
 
 	mustFeed(t, daemon, "a\U0001f44d")
 	state := TerminalStateOf(daemon, daemon.Width(), daemon.Height(), 100, 0)
+	if state.OpenCluster == nil {
+		t.Fatal("the snapshot carries no open cluster after a thumbs up")
+	}
 	ApplyTerminalState(client, throughWire(t, state, true))
 	mustFeed(t, daemon, "\U0001f3fdb")
 	mustFeed(t, client, "\U0001f3fdb")
-	d, c := daemon.CursorPosition(), client.CursorPosition()
-	if d == c {
-		t.Errorf("marked as a known bug (%s) but the client matches the daemon; "+
-			"delete this test's knownBug and keep it as a plain check", knownBug)
-		return
+	if d, c := daemon.CursorPosition(), client.CursorPosition(); d != c {
+		t.Errorf("after the skin tone the client's cursor is at %v and the daemon's at %v", c, d)
 	}
-	t.Logf("known bug: %s (cursor: client %v, daemon %v)", knownBug, c, d)
+	compareEmulators(t, daemon, client)
 }
 
 // TestWireCutsAnOversizedSequence is a sequence longer than the emulator

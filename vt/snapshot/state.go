@@ -191,6 +191,31 @@ type State struct {
 	// arrives on the stream after Seq, and a client at the ground state
 	// would print that rest as text. See vt.Terminal.PendingInput.
 	PendingInput []byte `json:"pending_input,omitempty"`
+
+	// OpenCluster is the character cluster the daemon drew last and may
+	// still extend: a snapshot taken between a base and its skin tone or
+	// joiner has the rest arrive after Seq, and a client without the open
+	// cluster draws the rest as a cluster of its own. Nil when none is open,
+	// and from an emulator that does not report one.
+	OpenCluster *OpenClusterState `json:"open_cluster,omitempty"`
+}
+
+// OpenClusterState is an open character cluster on the wire
+// (vt.OpenCluster).
+type OpenClusterState struct {
+	Text  string `json:"text"`
+	X     int    `json:"x"`
+	Y     int    `json:"y"`
+	Width int    `json:"width"`
+	Left  int    `json:"left"`
+	Right int    `json:"right"`
+}
+
+// openClusters is an emulator that reports and restores its open cluster.
+// The pure Go emulator is one; libghostty-vt keeps its own.
+type openClusters interface {
+	OpenCluster() (vt.OpenCluster, bool)
+	RestoreOpenCluster(vt.OpenCluster)
 }
 
 // TitleEntryState is one entry of the title stack on the wire
