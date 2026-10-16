@@ -6308,3 +6308,22 @@ on the audit binary's longer path, and the two idle budgets the audit's own
 and passes on the branch binary. The run also found that the stats line had
 grown a field after `motion=`, which `TestFullMotionWithoutAgentsStaysIdle`
 read as a suffix. The test now parses the line by name.
+
+#### A frame that wakes the frame ticker after the tick was armed
+
+View wakes the frame ticker (`noteFrame`) after Update has asked `nextWake`.
+A message that found the ticker stopped and composed a frame left it running
+at the frame rate with no tick armed to stop it, until some later message
+armed one. With the git section on, its reading every 2 s woke the ticker
+again as the tick for the next reading stopped it, so it ran all the time:
+about 320 context switches a second on a throwaway daemon, more than before
+the branch. The flush after such a frame now arms the idle switch
+(`frameIdleTickCmd`). The subtest `one late output` of `TestIdleCostStaysLow`
+has a pane write once inside the window. On the fixed build it saw 1 tick, 1
+ticker wake and 312 to 333 context switches (budget 800). Run on 2026-10-16
+on Linux.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No tick armed after View wakes the ticker | `Update`, `case flushMsg`: return nil in place of `m.frameIdleTickCmd()` (the branch before the fix) | `TestIdleCostStaysLow/one_late_output`: "made 2708 context switches (budget 800)", with 0 ticks: the ticker ran from the output to the end of the window | **caught** |
+| The positive half | the fixed branch | none | **guard** |

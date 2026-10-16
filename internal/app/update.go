@@ -830,7 +830,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(flushMsg); ok {
 		m.handleFlush()
 		m.renderSkipped = true
-		return m, nil
+		return m, m.frameIdleTickCmd()
 	}
 	// A test's request for the counters changes nothing either.
 	if _, ok := msg.(tickStatsDumpMsg); ok {

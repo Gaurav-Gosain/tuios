@@ -97,7 +97,7 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ticks: 2, work: 1,
 			tickerWakes: 1,
 			ctxsw:       400,
-		}, clipboardAtIdle)
+		}, nil, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
 		runIdleWindow(t, "[appearance]\nshow_clock = true\n", idleBudget{
@@ -107,14 +107,70 @@ func TestIdleCostStaysLow(t *testing.T) {
 			// Was 10, one per clock frame.
 			tickerWakes: 1,
 			ctxsw:       400,
-		}, nil)
+		}, nil, nil)
+	})
+	t.Run("one late output", func(t *testing.T) {
+		// A pane writes once, inside the window, while the client is idle.
+		// The frame for it wakes the frame ticker in View, after Update has
+		// armed the next tick, so the tick that stops the ticker again is
+		// armed for the flush that follows. Without it the ticker ran at the
+		// frame rate until the next message, which here never comes.
+		runIdleWindow(t, "", idleBudget{
+			wire: idleWireBudget,
+			// The idle switch after the output's frame.
+			ticks: 2, work: 1,
+			// The output's frame.
+			tickerWakes: 1,
+			// About 300 with the ticker stopped again after the frame, and
+			// about 2700 with it left running.
+			ctxsw: 800,
+		}, writeLate, sawLateOutput)
 	})
 }
 
+// lateOutputAfter is how long after writeLate returns its pane writes: past
+// the settle and the second runIdleWindow waits, so inside the idle window.
+const lateOutputAfter = 4 * time.Second
+
+// writeLate has the focused pane write one word lateOutputAfter from now, and
+// nothing after it: the shell keeps sleeping, so no prompt follows. The pane
+// waits for a file rather than for a time, so the mode switches and the
+// message they show have run out before the window starts.
+func writeLate(t *testing.T, term *tuitest.Terminal, base string) {
+	t.Helper()
+	gate := filepath.Join(base, "late-output")
+	enterTerminalMode(t, term)
+	typeLine(t, term, fmt.Sprintf(`while [ ! -e %s ]; do sleep 0.1; done; printf LATE""OUT; sleep 600`, gate))
+	leaveTerminalMode(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Window management mode")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the mode message never went: %v\n%s", err, term.Snapshot())
+	}
+	timer := time.AfterFunc(lateOutputAfter, func() { _ = os.WriteFile(gate, nil, 0o600) })
+	t.Cleanup(func() { timer.Stop() })
+}
+
+// sawLateOutput checks that writeLate's word reached the screen, then ends
+// the pane's sleep so the client quits without asking.
+func sawLateOutput(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
+	t.Helper()
+	if err := term.WaitForText("LATEOUT", uiTimeout); err != nil {
+		t.Fatalf("the pane's late output never reached the screen: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+		t.Fatalf("send ctrl+c: %v", err)
+	}
+	runInShell(t, term, `echo back""again`, "backagain", uiTimeout)
+	leaveTerminalMode(t, term)
+}
+
 // runIdleWindow starts a client with config (none when empty), opens three
-// idle shells, and holds one idle window to budget. after, when set, runs on
-// the idle client once the window is over.
-func runIdleWindow(t *testing.T, config string, budget idleBudget, after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
+// idle shells, and holds one idle window to budget. setup, when set, runs
+// once the shells are open, with the client's base directory. after, when set,
+// runs on the idle client once the window is over.
+func runIdleWindow(t *testing.T, config string, budget idleBudget, setup func(*testing.T, *tuitest.Terminal, string), after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
 	base := t.TempDir()
 	if config != "" {
 		writeConfig(t, base, config)
@@ -131,6 +187,9 @@ func runIdleWindow(t *testing.T, config string, budget idleBudget, after func(*t
 	newWindow(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 3, "opening three idle shells")
+	if setup != nil {
+		setup(t, term, base)
+	}
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("screen never settled before idle: %v\n%s", err, term.Snapshot())
 	}

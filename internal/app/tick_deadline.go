@@ -75,6 +75,29 @@ func (m *OS) tickWakeCmd() tea.Cmd {
 	return m.armTick(due.Sub(now))
 }
 
+// frameIdleTickCmd arms the tick for the frame ticker's idle switch, unless
+// one armed at or before then is already on its way. Update calls it for
+// flushMsg.
+//
+// View wakes the frame ticker (noteFrame) after Update has asked nextWake,
+// so a message that finds the ticker stopped and composes a frame leaves it
+// running at the frame rate with no tick armed to stop it. Before this, it ran
+// until some later message armed one: up to the 30 s listing poll with the
+// rail hidden, and all the time with the git section, whose reading every 2 s
+// woke it again as the tick for the next one stopped it. The flushMsg Update
+// asks for after such a frame comes once View has run.
+func (m *OS) frameIdleTickCmd() tea.Cmd {
+	fr := &m.frameRate
+	if fr.program == nil || fr.idle {
+		return nil
+	}
+	due := fr.lastFrame.Add(idleTickerAfter)
+	if !m.tick.due.IsZero() && !due.Before(m.tick.due) {
+		return nil
+	}
+	return m.armTick(time.Until(due))
+}
+
 // nextWake is when the maintenance tick has to run next, and false when
 // nothing is due and the client may sleep until a message arrives.
 func (m *OS) nextWake(now time.Time) (time.Time, bool) {
