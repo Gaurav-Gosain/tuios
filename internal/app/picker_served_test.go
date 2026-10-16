@@ -14,7 +14,8 @@ import (
 // positive half: the same moves there do preview.
 //
 // Negative control: with previewsLive returning true for every client, the
-// ssh and web rows fail with the theme and the glyph set changed.
+// ssh and web rows fail with the theme and the glyph set changed. Without the
+// LearnMode term, the learn row fails with nothing changed.
 func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 	theme.EnsureRegistry()
 	_ = theme.Initialize("dracula")
@@ -25,17 +26,21 @@ func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
+		name    string
 		kind    ClientKind
+		learn   bool
 		changes bool
 	}{
-		{ClientLocal, true},
-		{ClientSSH, false},
-		{ClientBrowser, false},
+		{"local", ClientLocal, false, true},
+		{"ssh", ClientSSH, false, false},
+		{"web", ClientBrowser, false, false},
+		// The Learn tour is a browser client alone in its process.
+		{"learn", ClientBrowser, true, true},
 	} {
-		t.Run(tc.kind.String(), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			_ = theme.Initialize("dracula")
 			theme.SetActiveGlyphs(glyphs)
-			m := &OS{Settings: config.Global, Width: 120, Height: 40, Client: tc.kind}
+			m := &OS{Settings: config.Global, Width: 120, Height: 40, Client: tc.kind, LearnMode: tc.learn}
 			m.UserConfig = config.DefaultConfig()
 
 			m.OpenThemePicker()
