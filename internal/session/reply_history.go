@@ -22,15 +22,19 @@ import (
 // A target is the key the client gives, such as the harness and the folder of
 // the pane, so a pane that closes and opens again on the same folder keeps its
 // history. Each target keeps replyHistoryEntries messages, at most
-// replyHistoryTargets targets are kept, the least used going first, and one
-// message keeps at most replyHistoryEntryBytes of pastes and images: past
-// that the largest are dropped, and the entry names what was dropped.
+// replyHistoryTargets targets are kept, the least used going first, one
+// message keeps at most replyHistoryEntryBytes of pastes and images (past
+// that the largest are dropped, and the entry names what was dropped), and
+// the whole history holds at most replyHistoryBytes.
 
 const (
 	replyHistoryEntries    = 100
 	replyHistoryTargets    = 64
 	replyHistoryEntryBytes = 256 << 10
 	replyHistoryTargetMax  = 512
+	// replyHistoryBytes bounds the whole history. Past it the oldest
+	// messages of the least used targets go first.
+	replyHistoryBytes = 32 << 20
 )
 
 // replyHistoryEntry is one sent message.
@@ -47,6 +51,17 @@ type replyHistory struct {
 	mu      sync.Mutex
 	targets map[string][]replyHistoryEntry
 	order   []string
+	// bytes is what every entry holds, for replyHistoryBytes.
+	bytes int
+}
+
+// entryBytes is what an entry holds.
+func entryBytes(e replyHistoryEntry) int {
+	n := 0
+	for _, p := range e.Parts {
+		n += len(p.Text) + len(p.Data)
+	}
+	return n
 }
 
 // add keeps a message for target, newest last.
@@ -58,13 +73,37 @@ func (h *replyHistory) add(target string, e replyHistoryEntry) {
 	}
 	list := h.targets[target]
 	// The same message again moves to the end, so up brings it back first.
-	list = slices.DeleteFunc(list, func(o replyHistoryEntry) bool { return sameParts(o.Parts, e.Parts) })
+	list = slices.DeleteFunc(list, func(o replyHistoryEntry) bool {
+		if sameParts(o.Parts, e.Parts) {
+			h.bytes -= entryBytes(o)
+			return true
+		}
+		return false
+	})
 	list = append(list, e)
-	if len(list) > replyHistoryEntries {
-		list = slices.Delete(list, 0, len(list)-replyHistoryEntries)
+	h.bytes += entryBytes(e)
+	for len(list) > replyHistoryEntries {
+		h.bytes -= entryBytes(list[0])
+		list = slices.Delete(list, 0, 1)
 	}
 	h.targets[target] = list
 	h.touchLocked(target)
+	// Past the whole bound, the oldest messages of the least used targets
+	// go, never the one just added.
+	for i := 0; h.bytes > replyHistoryBytes && i < len(h.order); {
+		t := h.order[i]
+		l := h.targets[t]
+		if t == target && len(l) <= 1 {
+			i++
+			continue
+		}
+		if len(l) == 0 {
+			i++
+			continue
+		}
+		h.bytes -= entryBytes(l[0])
+		h.targets[t] = slices.Delete(l, 0, 1)
+	}
 }
 
 // touchLocked marks target the most recently used and drops the least used
@@ -73,6 +112,9 @@ func (h *replyHistory) touchLocked(target string) {
 	h.order = slices.DeleteFunc(h.order, func(o string) bool { return o == target })
 	h.order = append(h.order, target)
 	for len(h.order) > replyHistoryTargets {
+		for _, e := range h.targets[h.order[0]] {
+			h.bytes -= entryBytes(e)
+		}
 		delete(h.targets, h.order[0])
 		h.order = h.order[1:]
 	}

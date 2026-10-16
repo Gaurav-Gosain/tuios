@@ -56,3 +56,26 @@ func TestReplyHistoryBounds(t *testing.T) {
 		t.Error("the least used target was kept past the bound")
 	}
 }
+
+// TestReplyHistoryWholeBound: the whole history stays under its bytes, the
+// least used target losing its oldest messages first.
+func TestReplyHistoryWholeBound(t *testing.T) {
+	var h replyHistory
+	block := strings.Repeat("z", replyHistoryEntryBytes-16)
+	for i := range 3 * replyHistoryBytes / replyHistoryEntryBytes {
+		target := "t" + string(rune('a'+i%8))
+		h.add(target, replyHistoryEntry{Parts: []queuePart{{Kind: queuePartPaste, Text: block + strings.Repeat("y", i%7), N: 1}, {Kind: queuePartText, Text: string(rune('a' + i%26))}}})
+		if h.bytes > replyHistoryBytes {
+			t.Fatalf("after %d adds the history holds %d bytes, over %d", i+1, h.bytes, replyHistoryBytes)
+		}
+	}
+	total := 0
+	for _, l := range h.targets {
+		for _, e := range l {
+			total += entryBytes(e)
+		}
+	}
+	if total != h.bytes {
+		t.Fatalf("counted %d bytes, holds %d", h.bytes, total)
+	}
+}

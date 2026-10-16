@@ -6489,7 +6489,8 @@ under, at most 512 bytes), `parts` (as `queue-prompt` takes them),
 `human_nonce`. A target keeps 100 messages, and 64 targets are kept, the
 least used going first. The same message again moves to the end. A message
 keeps at most 256 KiB of pastes and images: past that the largest are
-dropped, and `dropped` names them.
+dropped, and `dropped` names them. The whole history holds at most 32 MiB;
+past that the oldest messages of the least used targets go first.
 
 `reply-history` params: `target`, `human_nonce`. It answers `entries`, oldest
 first, each with `parts`, `at` (Unix ms) and `dropped`.
