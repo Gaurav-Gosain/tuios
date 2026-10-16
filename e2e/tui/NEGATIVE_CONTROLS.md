@@ -8997,6 +8997,29 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_HANDOFF_MEASURE=1 \
   go test -count=1 -run '^TestDaemonUpgradeMeasuresABusyDaemon$' .
 ```
 
+### PR 5: `tuios daemon upgrade` and the client notice
+
+- `TestDaemonUpgradeCommandKeepsPanes`: `tuios daemon upgrade --binary <copy>` reports the preflight, the panes it paused, the pid it kept and the time it took; the daemon keeps its pid, runs the copy and keeps every pane's process. A second run with `--json` reports two panes and no fallback. A `wait-for` that was waiting in the daemon when it was upgraded ends with `daemon_upgrading`, not with a dropped connection.
+- `TestDaemonUpgradeKeepsPaneProcesses` (PR 4) is driven by the command from this PR on.
+- `TestAttachedClientIsToldToReattach`: a real attached client exits with status 0 and prints "The daemon was upgraded to dev. Your programs are still running. Run 'tuios attach e2e-reattach' to continue."; the command reports "1 attached client was told to attach again".
+- `TestFederationLinkRedialsAfterUpgrade`: a daemon linked to a host through the ssh stand-in of `hosts_manage_test.go` has the link up after the upgrade, with one live link child, a new one, and none defunct.
+
+Run on 2026-10-17 on macOS arm64, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| No `MsgDaemonUpgrading` | the send in `closeClientsForHandoff` cut | `TestAttachedClientIsToldToReattach`: "the client said \"The connection to the TUIOS daemon was lost.\" as it exited", "the client exited 1 after an upgrade" | **caught** |
+| A waiting call is not answered | the `cs.verbCall.take()` answer in `closeClientsForHandoff` cut | `TestDaemonUpgradeCommandKeepsPanes`: "a wait-for in flight during the upgrade ended with \"failed to read response: EOF\"" | **caught** |
+| The new image does not dial its links | `serve` skips `federation.Start` on an image made by a handoff | `TestFederationLinkRedialsAfterUpgrade`: "the link to the host did not come back up after the upgrade" | **caught** |
+| The old image does not stop its links | `d.federation.Stop()` cut from `prepare` | none | **not caught** |
+
+The last control is not caught by this rig. The stand-in's host is this daemon itself, so the link's relay is a client of the daemon, and the upgrade closing every client ends the relay before the exec, which the old image then reaps. A link to a real machine does not end that way; with the stop cut, its ssh child would stay this pid's child across the exec, unread and never waited for. The stop is kept on the strength of that reasoning, not of a test.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestDaemonUpgradeCommandKeepsPanes|TestAttachedClientIsToldToReattach|TestFederationLinkRedialsAfterUpgrade)$' .
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on

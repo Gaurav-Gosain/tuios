@@ -95,9 +95,9 @@ func saveUpgradeArtifact(t *testing.T, v any) {
 	}
 }
 
-// TestDaemonUpgradeKeepsPaneProcesses upgrades the daemon to a second copy of
-// the binary with three kinds of pane running (docs/design/live-handoff.md,
-// section 1.4):
+// TestDaemonUpgradeKeepsPaneProcesses upgrades the daemon with `tuios daemon
+// upgrade` to a second copy of the binary, with three kinds of pane running
+// (docs/design/live-handoff.md, section 1.4):
 //
 //   - a contiguous counter, whose output must have no gap and no repeat
 //     across the upgrade;
@@ -142,12 +142,15 @@ func TestDaemonUpgradeKeepsPaneProcesses(t *testing.T) {
 	img := helloImage(t, base)
 	exeBefore := executableOf(t, img.PID)
 	started := time.Now()
-	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": second})
-	after := awaitNewImage(t, base, img, 30*time.Second)
+	outcome, out, err := daemonUpgrade(t, base, second)
+	if err != nil {
+		t.Fatalf("ASSERTION: tuios daemon upgrade failed: %v\n%s", err, out)
+	}
 	endToEnd := time.Since(started)
+	after := helloImage(t, base)
 	exeAfter := executableOf(t, after.PID)
 	afterPIDs := panePIDs(t, base, sess)
-	stats := handoffStats(t, base)
+	stats, _ := outcome["handoff"].(map[string]any)
 
 	time.Sleep(300 * time.Millisecond)
 	ticks := counterLines(mustScrollback(t, base, sess, a), "tick-")
