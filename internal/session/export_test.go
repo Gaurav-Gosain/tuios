@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -27,9 +28,11 @@ func (s *Session) applyAgentDetection(
 }
 
 // StartPeriodicSave is startPeriodicSaveWith writing through
-// SaveSessionForResurrection.
-func StartPeriodicSave(getState func() *SessionState, takeDirty func() bool) func() {
-	return startPeriodicSaveWith(getState, takeDirty, SaveSessionForResurrection)
+// SaveSessionForResurrection. It makes the channels of the latches it is given.
+func StartPeriodicSave(getState func() *SessionState, dirty, stale *wakeLatch, wakes *atomic.Int64) func() {
+	dirty.init()
+	stale.init()
+	return startPeriodicSaveWith(getState, dirty, stale, wakes, SaveSessionForResurrection)
 }
 
 // setResurrectionDirOverride redirects resurrection state, and returns the value

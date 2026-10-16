@@ -10,7 +10,7 @@ import "time"
 func (s *Session) noteStateChangeLocked() {
 	s.changeSeq++
 	s.noteWorkspaceLocked()
-	s.stateDirty.Store(true)
+	s.stateDirty.Set()
 	s.wakeStateWaiters()
 }
 

@@ -2,6 +2,7 @@ package session
 
 import (
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -28,11 +29,9 @@ func TestAStructuralChangeReachesDiskWithoutWaitingForTheBlindTick(t *testing.T)
 	defer useResurrectionDir(tmpDir)()
 
 	state := &SessionState{Name: "young", Windows: []WindowState{{ID: "w1"}}}
-	dirty := true
-	stop := StartPeriodicSave(
-		func() *SessionState { return state },
-		func() bool { d := dirty; dirty = false; return d },
-	)
+	var dirty, stale wakeLatch
+	dirty.Set()
+	stop := StartPeriodicSave(func() *SessionState { return state }, &dirty, &stale, nil)
 	defer stop()
 
 	if !waitForSavedState("young", resurrectionDirtyInterval*3) {
@@ -45,22 +44,36 @@ func TestAStructuralChangeReachesDiskWithoutWaitingForTheBlindTick(t *testing.T)
 	}
 }
 
-// TestAnIdleSessionDoesNotWriteEveryTick is the other half of the bargain: the
-// faster ticker must not turn into write amplification. A session nothing has
-// changed writes on the blind interval and not on the poll.
-func TestAnIdleSessionDoesNotWriteEveryTick(t *testing.T) {
+// TestAnIdleSessionDoesNotWakeTheSaver is the other half of the bargain: an
+// idle session costs nothing. Nothing raised a latch, so after its first look
+// the saver writes nothing and arms no timer. The saver used to poll the dirty
+// flag every resurrectionDirtyInterval for ever, which this counts as 3 wakes
+// in the window, and write the same state every resurrectionInterval.
+//
+// A raised latch still reaches disk: the second half raises dirty after the
+// idle window and waits for the write.
+func TestAnIdleSessionDoesNotWakeTheSaver(t *testing.T) {
 	tmpDir := t.TempDir()
 	defer useResurrectionDir(tmpDir)()
 
 	state := &SessionState{Name: "idle", Windows: []WindowState{{ID: "w1"}}}
-	stop := StartPeriodicSave(
-		func() *SessionState { return state },
-		func() bool { return false }, // nothing ever changes
-	)
+	var dirty, stale wakeLatch
+	var wakes atomic.Int64
+	stop := StartPeriodicSave(func() *SessionState { return state }, &dirty, &stale, &wakes)
 	defer stop()
 
-	if waitForSavedState("idle", resurrectionDirtyInterval*3) {
-		t.Error("an unchanged session was written by the dirty poll; the poll is meant to cost nothing")
+	// The first look, then three more intervals of nothing.
+	time.Sleep(resurrectionDirtyInterval*4 + resurrectionDirtyInterval/2)
+	if waitForSavedState("idle", 0) {
+		t.Error("an unchanged session was written; an idle session is meant to cost nothing")
+	}
+	if n := wakes.Load(); n > 1 {
+		t.Errorf("the saver woke %d times over an idle session, want at most the first look", n)
+	}
+
+	dirty.Set()
+	if !waitForSavedState("idle", resurrectionDirtyInterval*3) {
+		t.Fatal("a structural change after an idle spell did not reach disk")
 	}
 }
 
@@ -72,7 +85,7 @@ func TestSessionMutationsMarkTheStateDirty(t *testing.T) {
 
 	sess := newTestSession(t)
 
-	take := func() bool { return sess.stateDirty.Swap(false) }
+	take := func() bool { return sess.stateDirty.Take() }
 	take() // clear whatever creation left
 
 	if err := sess.SetDisplayName("labelled"); err != nil {

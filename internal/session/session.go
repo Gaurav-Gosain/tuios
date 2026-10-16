@@ -1309,12 +1309,17 @@ type Session struct {
 	// window_move_session.go.
 	movingWindow string
 
-	// stateDirty is set by every change to the session's structure and consumed
+	// stateDirty is raised by every change to the session's structure and taken
 	// by the resurrection saver, which is how a new window reaches disk in a
-	// couple of seconds instead of at the next blind tick. It is an atomic rather
-	// than a field of state because the saver goroutine reads it and holds no
-	// lock of this session.
-	stateDirty atomic.Bool
+	// couple of seconds. It is a latch rather than a field of state because the
+	// saver goroutine sleeps on it and holds no lock of this session.
+	stateDirty wakeLatch
+	// saveStale is raised when a pane prints or the person uses the session:
+	// what a save reads may have moved, though the structure did not. The
+	// saver writes it within resurrectionInterval. See startPeriodicSaveWith.
+	saveStale wakeLatch
+	// saverWakes counts the resurrection saver's timer fires.
+	saverWakes atomic.Int64
 	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
 	// by stateWakeMu, which is never held with another lock taken after it.
 	stateWake   chan struct{}
@@ -1825,9 +1830,11 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 	session.setName(name)
 
 	// Start periodic resurrection saving
+	session.stateDirty.init()
+	session.saveStale.init()
 	session.stopResurrection = startPeriodicSaveWith(
 		func() *SessionState { return session.ResurrectionState() },
-		func() bool { return session.stateDirty.Swap(false) },
+		&session.stateDirty, &session.saveStale, &session.saverWakes,
 		session.persist,
 	)
 
@@ -1876,6 +1883,9 @@ func (s *Session) SetEventSink(fn func(SessionEvent)) {
 
 // emit forwards a control-plane event to the installed sink, if any.
 func (s *Session) emit(ev SessionEvent) {
+	if ev.Type == EventOutput {
+		s.saveStale.Set()
+	}
 	s.eventSinkMu.RLock()
 	fn := s.eventSink
 	s.eventSinkMu.RUnlock()
@@ -2511,9 +2521,10 @@ func (s *Session) LastActive() time.Time {
 // (see session_used.go). A window spawn, a routed command, a tape and a
 // restore do not. It bumps LastActive too.
 //
-// The saver writes every session every 30 seconds anyway. A use marks the
-// session dirty at most once per usedSaveGap, so the first use after an idle
-// spell reaches disk within about two seconds. See usedSaveGap.
+// A use marks the session dirty at most once per usedSaveGap, so the first use
+// after an idle spell reaches disk within about two seconds. A later use marks
+// it stale, and the saver writes it within resurrectionInterval. See
+// usedSaveGap.
 func (s *Session) TouchUsed() {
 	now := time.Now()
 	s.activeMu.Lock()
@@ -2524,7 +2535,9 @@ func (s *Session) TouchUsed() {
 	}
 	s.activeMu.Unlock()
 	if save {
-		s.stateDirty.Store(true)
+		s.stateDirty.Set()
+	} else {
+		s.saveStale.Set()
 	}
 }
 

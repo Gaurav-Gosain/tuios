@@ -18,13 +18,12 @@ import (
 
 const (
 	resurrectionDir = "tuios/sessions"
-	// resurrectionInterval is how often a session is saved regardless of whether
-	// anything changed, which is what keeps each window's captured working
+	// resurrectionInterval is the longest a session whose panes printed waits
+	// to be saved, which is what keeps each window's captured working
 	// directory current: a user typing cd changes no session structure.
 	resurrectionInterval = 30 * time.Second
-	// resurrectionDirtyInterval is how often the saver looks for a structural
-	// change, and so the most a SIGKILL can cost. It is a poll of a flag, not a
-	// write: a tick that finds nothing changed does nothing at all.
+	// resurrectionDirtyInterval is the longest a structural change waits to be
+	// saved, and so the most a SIGKILL can cost.
 	resurrectionDirtyInterval = 2 * time.Second
 
 	// ResurrectionVersion is the current on-disk resurrection schema version.
@@ -328,32 +327,85 @@ func RemoveResurrectionState(sessionName string) {
 // passes its own write, which drops a snapshot taken under a name the session
 // has since been renamed from (see Session.persist).
 //
-// takeDirty reports whether the session's structure changed since the last save
-// and clears the mark; nil means every tick is a full save. It is what makes the
-// SIGKILL window small without making the saves frequent: the ticker runs at the
-// short interval but a tick that finds nothing changed does no work, so an idle
-// session still writes only once per resurrectionInterval (which is what keeps
-// each shell's working directory current) and a changed one reaches disk within
-// a couple of seconds. Before this, a session created less than a full interval
-// before a SIGKILL was lost entirely, which is the worst case there is: it is the
-// session the user just made.
-func startPeriodicSaveWith(getState func() *SessionState, takeDirty func() bool, save func(*SessionState) error) func() {
+// The saver sleeps until one of two latches wakes it, and arms no timer at all
+// while a session sits idle:
+//
+//   - dirty: the session's structure changed. The state reaches disk within
+//     resurrectionDirtyInterval, which is the most a SIGKILL can cost. Before
+//     this, a session created less than a full interval before a SIGKILL was
+//     lost entirely, and that is the session the user just made.
+//   - stale: a pane printed, or the person used the session. That can move what
+//     a save reads without changing the structure: a shell's working directory
+//     after a cd, a pane's history, the last-used time. The state reaches disk
+//     at most resurrectionInterval after the save before it.
+//
+// An idle session used to wake the saver every resurrectionDirtyInterval to
+// read the dirty flag, and write the same state every resurrectionInterval.
+// Nothing an idle session holds changes without one of the latches going up,
+// so both are gone: a pane that prints nothing costs the saver nothing.
+//
+// wakes, when not nil, counts the timer's fires, for the idle budget test.
+//
+// The first look comes resurrectionDirtyInterval after the start, as the old
+// ticker's did, so a session made dirty before its saver ran is written.
+func startPeriodicSaveWith(getState func() *SessionState, dirty, stale *wakeLatch, wakes *atomic.Int64, save func(*SessionState) error) func() {
 	stopCh := make(chan struct{})
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(resurrectionDirtyInterval)
-		defer ticker.Stop()
-		lastSave := time.Now()
+		start := time.Now()
+		lastSave := start
+		due := start.Add(resurrectionDirtyInterval)
+		timer := time.NewTimer(resurrectionDirtyInterval)
+		armed := true
+		defer timer.Stop()
+		// arm sets the timer for at, unless it is already set for earlier.
+		arm := func(at time.Time) {
+			if armed && !at.Before(due) {
+				return
+			}
+			due, armed = at, true
+			timer.Reset(time.Until(at))
+		}
+		// staleDue is when a stale session is next written.
+		staleDue := func(now time.Time) time.Time {
+			at := lastSave.Add(resurrectionInterval)
+			if soon := now.Add(resurrectionDirtyInterval); at.Before(soon) {
+				return soon
+			}
+			return at
+		}
 
 		for {
 			select {
-			case now := <-ticker.C:
-				dirty := takeDirty == nil || takeDirty()
-				if !dirty && now.Sub(lastSave) < resurrectionInterval {
+			case <-dirty.C():
+				// The token can outlive the flag: the save that took the
+				// flag ran before this token was read.
+				if dirty.Up() {
+					arm(time.Now().Add(resurrectionDirtyInterval))
+				}
+			case <-stale.C():
+				// The flag stays up until a save takes it, so a pane that keeps
+				// printing costs one atomic load per chunk and no wakeup.
+				if stale.Up() {
+					arm(staleDue(time.Now()))
+				}
+			case now := <-timer.C:
+				armed = false
+				if wakes != nil {
+					wakes.Add(1)
+				}
+				isDirty := dirty.Take()
+				if !isDirty && !(stale.Up() && now.Sub(lastSave) >= resurrectionInterval) {
+					if stale.Up() {
+						arm(staleDue(now))
+					}
 					continue
 				}
+				// Lowered before the snapshot, so a change made while it is
+				// taken raises the flag again and is written next time.
+				stale.Take()
 				lastSave = now
 				state := getState()
 				if state == nil {

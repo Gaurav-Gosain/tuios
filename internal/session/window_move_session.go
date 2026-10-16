@@ -240,7 +240,7 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 	delete(s.transcripts.nextTry, id)
 	s.transcripts.mu.Unlock()
 
-	s.stateDirty.Store(true)
+	s.stateDirty.Set()
 	return t, nil
 }
 
@@ -375,7 +375,7 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	if t.transcript != nil {
 		_ = s.JoinAgentTranscript(id, t.transcript.harness, t.transcript.path, t.transcript.exact)
 	}
-	s.stateDirty.Store(true)
+	s.stateDirty.Set()
 	return win, nil
 }
 
