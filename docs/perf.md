@@ -2713,6 +2713,24 @@ it follows:
 #772 replaces one CharmTone module with another and adds no bytes. The new
 budgets leave 29,566 and 27,350 bytes of room.
 
+The budgets went to 36,900,000 (linux/amd64) and 34,740,000 (darwin/arm64)
+for the batch of #800, #801, #806, #802 and #805. Main after the batch of #772
+to #795 measured 36,790,434 and 34,637,650 bytes (Go 1.26.9), 29,566 and
+27,350 bytes under the budgets. The batch brings it to 36,868,258 and
+34,707,810, 77,824 and 70,160 bytes more. By pull request, linux/amd64 then
+darwin/arm64:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #800 keybind presets, with the tmux preset | 53,248 | 50,176 |
+| #801 the screen and zellij presets, and leader_twice | 16,384 | 16,688 |
+| #806 the preset keys a user binding takes | 8,192 | 16,512 |
+| #802 the keybind preset picker and a welcome offer | 36,864 | 17,216 |
+| #805 the which-key menus as tables | -36,864 | -30,432 |
+
+#805 gives back most of what #802 adds. No dependency was added. The new
+budgets leave 31,742 and 32,190 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
