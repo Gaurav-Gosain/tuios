@@ -28,7 +28,7 @@ type frameRate struct {
 	// detecting is set while a detection is running, and detected once one
 	// has returned. Only the Update goroutine reads or writes them.
 	detecting, detected bool
-	// idle is set while the ticker runs at IdleFPS because no frame has been
+	// idle is set while the ticker is stopped because no frame has been
 	// composed for idleTickerAfter, and lastFrame is when one last was. See
 	// idleFrameTicker.
 	idle      bool
@@ -79,7 +79,7 @@ func (m *OS) noteAnsweredInput(msg tea.Msg) {
 type frameDueMsg struct{}
 
 // idleTickerAfter is how long the client goes without composing a frame
-// before the program's frame ticker drops to IdleFPS.
+// before the program's frame ticker stops.
 const idleTickerAfter = 500 * time.Millisecond
 
 // wakeTick and wakeBurst shape the ticker's first few ticks when it wakes: a
@@ -124,37 +124,80 @@ func (m *OS) applyFrameRate() {
 	}
 }
 
-// idleFrameTicker drops the program's frame ticker to IdleFPS once the client
-// has gone idleTickerAfter without composing a frame. The maintenance tick
-// calls it, so it runs at least IdleFPS times a second while the client is idle.
+// idleFrameTicker stops the program's frame ticker once the client has gone
+// idleTickerAfter without composing a frame. The maintenance tick calls it.
 //
 // Bubble Tea flushes frames from a ticker that runs at the frame rate for the
 // life of the program, frame or no frame. At idle each of those ticks finds
-// nothing to write, but waking for it was most of an idle client's CPU: about
-// 1.1% at 60 Hz, with nothing on the screen moving. At IdleFPS a change the
-// client did not compose a frame for, such as the cursor alone, still reaches
-// the terminal within a tenth of a second.
+// nothing to write. It used to drop to IdleFPS here, which still woke the
+// client ten times a second for nothing. Stopped, it wakes only when told to:
+// noteFrame restarts it for a frame, kickFlush sends it one tick for a frame
+// that does not wake it, and while it is stopped Update asks for a flush after
+// every message (see flushWhileIdle), so a cursor move or a write Bubble Tea
+// queued outside the view, such as a clipboard copy, still goes out at once.
+//
+// The fps field keeps the frame rate. A renderer that restarts while the
+// ticker is stopped (after a suspend or an exec) starts at the frame rate, and
+// rendererRestarted counts it as awake.
 func (m *OS) idleFrameTicker(now time.Time) {
 	fr := &m.frameRate
-	if fr.idle || fr.program == nil || fr.applied <= config.IdleFPS ||
-		now.Sub(fr.lastFrame) < idleTickerAfter {
+	if fr.idle || fr.program == nil || now.Sub(fr.lastFrame) < idleTickerAfter {
+		return
+	}
+	ticker := programTicker(fr.program)
+	if ticker == nil {
+		// No ticker to stop: the program runs without a renderer (the GUI
+		// bridge), or Run has not started it yet. A ticker Run starts later
+		// runs at the fps field's rate until the next frame and idle switch.
+		fr.idle = true
 		return
 	}
 	if fr.burst != nil {
 		fr.burst.Store(true)
 		fr.burst = nil
 	}
-	// The fps field moves with the ticker, so a renderer that restarts while
-	// idle (after a suspend or an exec) starts slow too, and wakes with the
-	// next frame like this one.
-	if setProgramFPS(fr.program, config.IdleFPS) {
-		fr.idle = true
-		m.tickStats.TickerSleeps++
-	}
+	ticker.Stop()
+	// Since Go 1.23, Stop also empties the ticker's channel, so a kick that
+	// kickFlush sent just before it and the renderer has not taken yet would be
+	// lost with nothing left to send another. One tick after the Stop writes
+	// whatever is stored, and costs one wakeup per idle period.
+	sendTick(ticker)
+	fr.idle = true
+	m.tickStats.TickerSleeps++
 	// The end of a burst of frames is also when a flood of pane output has
 	// ended. memtrim gives the heap it left behind back, at most twice a
 	// minute and only when there is enough of it.
 	memtrim.Request()
+}
+
+// rendererRestarted notes that Bubble Tea restarted its renderer, which it
+// does after a suspend and after an exec: the ticker runs at the fps field's
+// rate again, which is the frame rate, so the client is not idle any more.
+func (m *OS) rendererRestarted(msg tea.Msg) {
+	switch msg.(type) {
+	case tea.ResumeMsg, hostTerminalBackMsg:
+		m.frameRate.idle = false
+		m.frameRate.lastFrame = time.Now()
+	}
+}
+
+// flushWhileIdle reports whether Update must ask for a flush after msg
+// because the frame ticker is stopped. Bubble Tea writes the view and its own
+// queued writes (a clipboard set, a colour query, a raw write) only from the
+// ticker, so with the ticker stopped any message may leave something that
+// nothing would write. One flushMsg per message is the cost, and messages are
+// rare at idle. A maintenance tick that slept changes nothing and is left out,
+// so the idle tick does not wake the renderer.
+func (m *OS) flushWhileIdle(msg tea.Msg) bool {
+	if !m.frameRate.idle {
+		return false
+	}
+	if _, tick := msg.(TickerMsg); tick && m.renderSkipped {
+		// A View before this one may still have asked for a flush with no
+		// flushMsg on its way. Do not strand it.
+		return m.frameRate.kickWanted
+	}
+	return true
 }
 
 // noteFrame records that the client composed a frame, or took input that is
@@ -182,6 +225,10 @@ func (m *OS) noteFrame() {
 	m.tickStats.TickerWakes++
 	ticker := programTicker(fr.program)
 	if ticker == nil {
+		// No ticker to stop: the program runs without a renderer (the GUI
+		// bridge), or Run has not started it yet. A ticker Run starts later
+		// runs at the fps field's rate until the next frame and idle switch.
+		fr.idle = true
 		return
 	}
 	ticker.Reset(wakeTick)
@@ -335,9 +382,10 @@ type flushMsg struct{}
 // time flushMsg is handled the frame is in place.
 func flushCmd() tea.Msg { return flushMsg{} }
 
-// handleFlush writes the frame kickFlush asked for, if it asked.
+// handleFlush writes the frame kickFlush asked for, if it asked, and anything
+// Bubble Tea queued while the ticker is stopped.
 func (m *OS) handleFlush() {
-	if !m.frameRate.kickWanted {
+	if !m.frameRate.kickWanted && !m.frameRate.idle {
 		return
 	}
 	m.frameRate.kickWanted = false

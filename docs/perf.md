@@ -3468,3 +3468,57 @@ switches halve.
 wakes to 1 in 10 s, the maintenance ticks to 110, the full scans to 1 and the
 client's voluntary context switches to 2500. With `quietFrame` not set for
 the dock, the clock-on window woke the ticker 10 times and failed.
+
+## 2026-10 the frame ticker stops at idle
+
+Bubble Tea writes frames from a ticker that runs for the life of the program.
+tuios dropped it to `IdleFPS` 500 ms after the last frame, so an idle client
+still woke ten times a second for a ticker that found nothing to write.
+
+### What changed
+
+- `idleFrameTicker` stops the ticker. The `fps` field keeps the frame rate,
+  so a renderer that restarts after a suspend or an exec runs at the frame
+  rate, and `rendererRestarted` counts the client as awake again.
+- `noteFrame` restarts a stopped ticker with `Reset`, as it woke a slow one.
+- `kickFlush` sends one value on the stopped ticker's channel, and the
+  renderer still receives it. `TestKickFlushWritesTheFrame` now checks that a
+  stopped ticker writes nothing on its own and that one kick writes the frame.
+- While the ticker is stopped, Update asks for a flush after every message
+  but a maintenance tick that slept (`flushWhileIdle`). Bubble Tea writes a
+  clipboard set, a colour query or a raw write only from the ticker, and a
+  message that composes no frame would otherwise leave it queued.
+- Since Go 1.23, `Ticker.Stop` empties the channel, which would drop a kick
+  sent just before the stop. One tick is sent after the stop.
+
+### Numbers
+
+Same harness as the section above, 3 runs each, 50 s, counts over 40 s.
+
+| Setup | | client CPU | client ctxsw/s | frame ticker fires/s |
+|---|---|---|---|---|
+| clock off | before | 0.20 to 0.22% | 124 to 135 | 10.0 |
+| | after | 0.12 to 0.14% | 84 to 87 | 0.33 |
+| clock on | before | 0.38 to 0.50% | 142 to 145 | 11.0 |
+| | after | 0.28 to 0.32% | 94 to 101 | 1.32 |
+
+The ticker fires that are left are kicks: one per listing poll (the flush
+after a message), and one per clock frame. The maintenance tick still runs
+at `IdleFPS`.
+
+`TestIdleCostStaysLow`, standalone, voluntary context switches over 10 s:
+816 to 895 with the clock off and 928 to 989 with it on. With the ticker
+dropped to `IdleFPS` instead (the build before), 1049 to 1160 and 1298 to
+1362.
+
+First pane output after 20 s idle, 20 runs: a pane program sleeps, takes the
+time and writes a marker in the same process, and the latency is the time
+until the marker reaches the terminal (tmux `pipe-pane`). 1.4 to 7.4 ms,
+median 1.6 ms. The planning build that stopped the ticker the same way
+measured 1.4 to 1.5 ms over 10 runs of this probe.
+
+The plan's first probe took the time in one Python process and wrote the
+marker from the shell after Python exited. One of its 7 runs took 184 ms. That
+run was the only one in which the daemon used real CPU: 0.26 s over 25 s,
+against 0.00 to 0.01 s in every other run. The delay was outside the client's
+wake path, and 30 runs here did not repeat it.

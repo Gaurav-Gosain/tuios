@@ -856,7 +856,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// The View after this message may compose a frame, or move the cursor
 	// for input; flushCmd brings the write back once that frame is stored.
-	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg)) {
+	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg) || m.flushWhileIdle(msg)) {
 		cmd = tea.Batch(cmd, flushCmd)
 	}
 	return model, cmd
@@ -876,6 +876,7 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.msgClock = time.Now()
 	m.quietFrame = false
 	m.reportActivity(msg)
+	m.rendererRestarted(msg)
 	// Input wakes the frame ticker before it is handled, so the frame it
 	// makes does not wait on a slow tick. So does a raw write, which Bubble
 	// Tea flushes on the same ticker.

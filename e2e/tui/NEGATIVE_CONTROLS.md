@@ -6259,3 +6259,23 @@ binary, with the file restored after the build.
 | --- | --- | --- | --- |
 | A clock frame wakes the frame ticker | `handleMsg`, `case dockComponentMsg`: `m.quietFrame = changed` cut | `TestIdleCostStaysLow/clock_on`: "woke the frame ticker 10 times (budget 1)". It also made 2706 context switches against 1441 with the line | **caught** |
 | The positive half | this branch | none: clock off 0 B, 100 ticks, 0 wakes. Clock on 435 B, 100 ticks, 0 wakes | **guard** |
+
+### The frame ticker stops at idle
+
+The branch perf/stop-frame-ticker stops Bubble Tea's frame ticker where it
+dropped it to `IdleFPS`. The clock-off window now also has a pane on a hidden
+workspace set the clipboard (`osc52_write = "on"`) while the client is idle,
+and the OSC 52 write must reach the terminal within 1 s of the pane making it.
+That is the positive half: a write Bubble Tea queues outside the view still
+goes out with the ticker stopped. Run on 2026-10-16 on Linux.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The idle switch never runs | `handleMsg`, `case TickerMsg`: `m.idleFrameTicker(time.Time(msg))` cut | `TestIdleCostStaysLow`: "made 3606 context switches (budget 1500)" with the clock off, 3919 with it on | **caught** |
+| The ticker drops to `IdleFPS` instead of stopping | `idleFrameTicker`: `setProgramFPS(fr.program, config.IdleFPS)` in place of `ticker.Stop()` | none. Over 3 runs it made 1049 to 1160 context switches with the clock off and 1298 to 1362 with it on, against 816 to 895 and 928 to 989. A budget between the two would fail on a slower machine. The deadline tick (next section) lowers the floor enough to catch it | **not caught** |
+| No flush while the ticker is stopped | `Update`: `\|\| m.flushWhileIdle(msg)` cut | none. The hidden pane's output drew a frame anyway (the counters showed 4 renders and a ticker wake around the write), and the running ticker carried the clipboard write at 3.06 s | **not caught** |
+| The positive half | this branch | none: the clipboard write reached the terminal 3.05 s after the command `sleep 3; printf ...` was typed | **guard** |
+
+`TestKickFlushWritesTheFrame` (`internal/app`) is the in-process check of the
+mechanism: with the ticker stopped at 100 frames a second, nothing is written
+in 200 ms, and one value on the channel writes the frame.

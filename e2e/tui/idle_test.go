@@ -1,11 +1,13 @@
 package tuie2e
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -21,6 +23,33 @@ type byteCounter struct{ n atomic.Int64 }
 func (b *byteCounter) Write(p []byte) (int, error) {
 	b.n.Add(int64(len(p)))
 	return len(p), nil
+}
+
+// wireRecorder counts the bytes written to it and keeps the first
+// wireRecorderKeep of them, for a test that looks for one sequence.
+type wireRecorder struct {
+	byteCounter
+	mu  sync.Mutex
+	buf []byte
+}
+
+// wireRecorderKeep is how much of the stream a wireRecorder keeps.
+const wireRecorderKeep = 4 << 20
+
+func (w *wireRecorder) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	if room := wireRecorderKeep - len(w.buf); room > 0 {
+		w.buf = append(w.buf, p[:min(room, len(p))]...)
+	}
+	w.mu.Unlock()
+	return w.byteCounter.Write(p)
+}
+
+// contains reports whether the kept stream holds s.
+func (w *wireRecorder) contains(s string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return bytes.Contains(w.buf, []byte(s))
 }
 
 // idleWireBudget bounds the bytes tuios may write during a 10s idle window. A
@@ -62,13 +91,13 @@ type idleBudget struct {
 // is guarded by BenchmarkIdleTick and TestIdleTickSkipsScans. See docs/perf.md.
 func TestIdleCostStaysLow(t *testing.T) {
 	t.Run("clock off", func(t *testing.T) {
-		runIdleWindow(t, "", idleBudget{
+		runIdleWindow(t, "[appearance.selection]\nosc52_write = \"on\"\n", idleBudget{
 			wire: idleWireBudget,
 			// IdleFPS is 10 a second, plus slack for a slow machine.
 			ticks: 110, work: 1,
 			tickerWakes: 1,
-			ctxsw:       2500,
-		})
+			ctxsw:       1500,
+		}, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
 		runIdleWindow(t, "[appearance]\nshow_clock = true\n", idleBudget{
@@ -77,22 +106,23 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ticks: 110, work: 1,
 			// Was 10, one per clock frame.
 			tickerWakes: 1,
-			ctxsw:       2500,
-		})
+			ctxsw:       1500,
+		}, nil)
 	})
 }
 
 // runIdleWindow starts a client with config (none when empty), opens three
-// idle shells, and holds one idle window to budget.
-func runIdleWindow(t *testing.T, config string, budget idleBudget) {
+// idle shells, and holds one idle window to budget. after, when set, runs on
+// the idle client once the window is over.
+func runIdleWindow(t *testing.T, config string, budget idleBudget, after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
 	base := t.TempDir()
 	if config != "" {
 		writeConfig(t, base, config)
 	}
-	var wire byteCounter
+	wire := &wireRecorder{}
 	statsPath := filepath.Join(base, "tickstats")
 	term := startIn(t, base, startOpts{
-		out: &wire,
+		out: wire,
 		env: []string{"TUIOS_STATS_FILE=" + statsPath},
 	})
 	waitBoot(t, term)
@@ -152,12 +182,58 @@ func runIdleWindow(t *testing.T, config string, budget idleBudget) {
 	if len(over) > 0 {
 		t.Fatalf("idle window over budget:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
 	}
+	if after != nil {
+		after(t, term, wire)
+	}
 
 	// Standalone with only idle shells quits at once on leader-q.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
 	waitExit(t, term, "idle test quit")
+}
+
+// clipboardAtIdle has a pane on a hidden workspace set the clipboard while
+// the client is idle, and the OSC 52 write must reach the terminal at once.
+//
+// Bubble Tea writes a clipboard set from the frame ticker, and an idle client
+// stops that ticker. A hidden pane's output composes no frame and so wakes
+// nothing, which leaves the write to the flush Update asks for after every
+// message while the ticker is stopped (flushWhileIdle). Without it the write
+// waits for the next key.
+func clipboardAtIdle(t *testing.T, term *tuitest.Terminal, wire *wireRecorder) {
+	t.Helper()
+	const (
+		delay = 3 * time.Second
+		// "idle-clip" in base64.
+		payload = "aWRsZS1jbGlw"
+	)
+	enterTerminalMode(t, term)
+	typeLine(t, term, fmt.Sprintf(`sleep %d; printf '\033]52;c;%s\007'`, int(delay.Seconds()), payload))
+	typed := time.Now()
+	// Workspace 2 has no panes: the one that writes is hidden, and its
+	// output draws nothing.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
+		t.Fatalf("switch to workspace 2: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 0 }, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 never showed: %v\n%s", err, term.Snapshot())
+	}
+	if wire.contains(payload) {
+		t.Fatal("the clipboard write went out before the pane made it")
+	}
+	// The write is due delay after the command was typed. A ticker at
+	// IdleFPS would carry it within 100 ms. Nothing else happens on screen,
+	// so a stopped ticker with no flush carries it never.
+	deadline := typed.Add(delay + time.Second)
+	for !wire.contains(payload) {
+		if time.Now().After(deadline) {
+			t.Fatalf("a hidden pane's clipboard write did not reach the terminal within 1s of the pane making it, "+
+				"with the client idle\n%s", term.Snapshot())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Logf("the clipboard write reached the terminal %v after the command was typed", time.Since(typed).Round(time.Millisecond))
 }
 
 // idleSample is a client's counters at one moment.

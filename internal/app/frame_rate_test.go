@@ -73,7 +73,7 @@ func (s *syncBuffer) String() string {
 
 // TestKickFlushWritesTheFrame pins what kickFlush assumes about Bubble Tea:
 // that one value sent on the frame ticker's channel makes the renderer write
-// the current view at once. A release that renders some other way would leave
+// the current view at once, with the ticker running and with it stopped. A release that renders some other way would leave
 // every frame waiting for the next tick again, with nothing else failing.
 func TestKickFlushWritesTheFrame(t *testing.T) {
 	in, inW := io.Pipe()
@@ -120,6 +120,27 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 		if time.Since(start) > 300*time.Millisecond {
 			t.Fatalf("one value on the ticker's channel did not write the frame within %v; output so far %q",
 				time.Since(start), out.String())
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// A stopped ticker, which is how an idle client leaves it (see
+	// idleFrameTicker). At 100 frames a second, 200 ms with no write shows
+	// the ticker is stopped; one value on its channel must still write.
+	if !setProgramFPS(p, 100) {
+		t.Fatal("setProgramFPS did not reach the fps field")
+	}
+	ticker.Stop()
+	p.Send("stopped-frame")
+	time.Sleep(200 * time.Millisecond)
+	if strings.Contains(out.String(), "stopped-frame") {
+		t.Fatal("the frame went out with the ticker stopped and nothing sent; the test cannot tell a kick from a tick")
+	}
+	start = time.Now()
+	sendTick(ticker)
+	for !strings.Contains(out.String(), "stopped-frame") {
+		if time.Since(start) > 300*time.Millisecond {
+			t.Fatalf("one value on a stopped ticker's channel did not write the frame within %v", time.Since(start))
 		}
 		time.Sleep(time.Millisecond)
 	}
