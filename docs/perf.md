@@ -2731,6 +2731,36 @@ darwin/arm64:
 #805 gives back most of what #802 adds. No dependency was added. The new
 budgets leave 31,742 and 32,190 bytes of room.
 
+The budgets went to 37,517,000 (linux/amd64) and 35,280,000 (darwin/arm64)
+for the reply composer and the Inbox cockpit, #769 to #835. Main after #840
+measured 36,884,642 and 34,708,434 bytes (Go 1.26.9), 15,358 and 31,566 bytes
+under the budgets. The stack brings it to 37,486,754 and 35,249,474, 602,112
+and 541,040 bytes more. By pull request, linux/amd64 then darwin/arm64, with
+the regenerated skill archive counted in the pull request it follows:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #769 a multiline editor for agent replies | 0 | 0 |
+| #770 write the reply with the composer | 77,824 | 67,280 |
+| #771 open, expand and remove a paste block | 16,384 | 16,608 |
+| #812 queue a reply with parts | 40,960 | 50,768 |
+| #814 attach a clipboard image to a reply | 36,864 | 33,728 |
+| #817 preview attached images | 81,920 | 68,320 |
+| #819 the agents view | 61,440 | 67,616 |
+| #822 the agent thread | 86,016 | 68,032 |
+| #823 view an agent's pane and come back | 8,192 | 16 |
+| #825 act on many agents | 53,248 | 50,016 |
+| #826 name a pane, an agent or a file with @ | 36,864 | 50,976 |
+| #828 the Inbox's one-line editors use the composer | 12,288 | 0 |
+| #830 write mail with the composer | 8,192 | 16,544 |
+| #832 history of what you sent, and $EDITOR | 73,728 | 51,088 |
+| #833 measure image paste per harness | 0 | 0 |
+| #835 reply to an agent on a host | 8,192 | 48 |
+
+#769 adds a package that nothing links until #770. #833 adds only an e2e
+test. No dependency was added. The new budgets leave 30,246 and 30,526 bytes
+of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
