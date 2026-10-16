@@ -157,7 +157,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			{Key: "N", Label: "new session"},
 			{Key: "?", Label: "help"},
 			{Key: ",", Label: "settings"},
+			m.welcomePresetChip(),
 		} {
+			if h.Key == "" {
+				continue
+			}
 			hints = append(hints, overlay.KeyBadge(h.Key, ui)+
 				lipgloss.NewStyle().Foreground(ui.FgDim).Render(" "+h.Label))
 		}
@@ -265,6 +269,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowThemePicker {
 		content, geo, rows := m.renderThemePicker()
 		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)
+	}
+
+	if m.presetPicker.open {
+		content, geo, rows := m.renderPresetPicker()
+		layers = m.placeOverlayPanel(layers, "presetpicker", content, geo, rows)
 	}
 
 	if m.ShowDockEditor {

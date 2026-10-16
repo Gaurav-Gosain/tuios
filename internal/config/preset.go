@@ -71,6 +71,15 @@ func Presets() []string {
 	for _, e := range entries {
 		names = append(names, strings.TrimSuffix(e.Name(), ".toml"))
 	}
+	// The multiplexers by how many people come from them, then any other.
+	rank := func(n string) int {
+		if i := slices.Index([]string{PresetTuios, "tmux", "screen", "zellij"}, n); i >= 0 {
+			return i
+		}
+		return 99
+	}
+	rest := names[1:]
+	sort.SliceStable(rest, func(i, j int) bool { return rank(rest[i]) < rank(rest[j]) })
 	return names
 }
 

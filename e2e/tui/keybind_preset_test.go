@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"encoding/json"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -179,5 +181,53 @@ func TestZellijPresetOpensModes(t *testing.T) {
 		}) {
 			t.Errorf("ASSERTION: keybinds list does not show %s on %s", action, want)
 		}
+	}
+}
+
+// TestWelcomeSuggestsThePresetAndWaits: a tmux.conf in the home folder that
+// sets the prefix to C-a makes the welcome screen offer "use tmux keys with
+// ctrl+a". The offer changes nothing by itself: config.toml has no preset
+// until the person opens the picker and presses Enter. Then it holds the
+// tmux preset and the sniffed leader, and the screen says so.
+//
+// Negative control: a build without the picker shows no offer, and the
+// first wait fails.
+func TestWelcomeSuggestsThePresetAndWaits(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "HOME")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".tmux.conf"), []byte("set -g prefix C-a\nbind | split-window -h\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, base, "")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	if err := term.WaitForText("use tmux keys with ctrl+a", bootTimeout); err != nil {
+		t.Fatalf("the welcome screen did not offer the tmux keys: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(time.Second)
+	if data, _ := os.ReadFile(configPathIn(base)); strings.Contains(string(data), "preset") {
+		t.Fatalf("the offer wrote a preset before anyone chose it:\n%s", data)
+	}
+
+	if err := term.SendKeys("U"); err != nil {
+		t.Fatalf("press U: %v", err)
+	}
+	if err := term.WaitForText("Keybind preset", uiTimeout); err != nil {
+		t.Fatalf("U did not open the picker: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("press enter: %v", err)
+	}
+	if err := term.WaitForText("The tmux keys are in use", uiTimeout); err != nil {
+		t.Fatalf("the picker did not say the keys changed: %v\n%s", err, term.Snapshot())
+	}
+	data, err := os.ReadFile(configPathIn(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `preset = "tmux"`) || !strings.Contains(string(data), `leader_key = "ctrl+a"`) {
+		t.Errorf("config.toml after Enter does not hold the tmux preset with ctrl+a:\n%s", data)
 	}
 }

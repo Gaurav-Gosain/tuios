@@ -915,6 +915,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "Keybind preset",
+			Bind:     "open_keybind_presets",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenKeybindPresets()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Theme picker",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {

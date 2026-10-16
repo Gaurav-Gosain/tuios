@@ -983,4 +983,5 @@ var ActionDescriptions = map[string]string{
 	"window_prefix_prev":   "Focus the previous window",
 	"window_prefix_tiling": "Turn tiling on or off",
 	"prefix_tuios":         "Open the tuios menu: the tuios keys a preset moved",
+	"open_keybind_presets": "Choose the keys: tuios, tmux, screen or zellij",
 }

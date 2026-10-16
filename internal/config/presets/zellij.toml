@@ -13,7 +13,7 @@ repeat = [
 
 [about]
 name = "zellij"
-summary = "ctrl+g, then a mode key"
+summary = "for zellij users"
 samples = ["p", "t", "s"]
 model = "A zellij tab is a workspace here. A zellij pane is a window here. A mode is a menu: press its key after ctrl+g, then one key."
 same = ["prefix_detach", "prefix_quit"]

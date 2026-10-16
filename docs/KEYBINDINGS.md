@@ -30,8 +30,16 @@ leader:
 preset = "tmux"
 ```
 
-Or run `tuios keybinds preset tmux`. `tuios keybinds preset` shows the preset
-in use, and `tuios keybinds preset list` shows them all.
+Or press `U` in window mode, or pick "Keybind preset" in the command palette.
+The picker shows each preset with three of its keys, and the keys the program
+in your pane would lose to it. Press Enter to use the preset. Or run
+`tuios keybinds preset tmux`. `tuios keybinds preset` shows the preset in use,
+and `tuios keybinds preset list` shows them all.
+
+The welcome screen offers a preset when it finds a `~/.tmux.conf` (or
+`~/.config/tmux/tmux.conf`), a `~/.screenrc` or a `~/.config/zellij` folder.
+When your tmux.conf sets another prefix, such as `set -g prefix C-a`, the offer
+uses that leader. The offer changes nothing until you press `U` and Enter.
 
 | Preset | Leader | What it does |
 |---|---|---|

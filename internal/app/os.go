@@ -1382,7 +1382,11 @@ type OS struct {
 	keybinds           keybindManager
 
 	// Theme picker overlay state.
-	ShowThemePicker     bool
+	ShowThemePicker bool
+	// presetPicker is the keybind preset picker, and presetHint the welcome
+	// row's suggestion, read from the home folder once.
+	presetPicker        presetPickerState
+	presetHint          *presetSuggestion
 	ThemePickerQuery    string
 	ThemePickerSelected int
 	ThemePickerScroll   int

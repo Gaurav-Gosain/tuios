@@ -202,6 +202,10 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("enter_window_mode", handleEnterWindowMode)
 	d.Register("toggle_help", handleToggleHelp)
 	d.Register("open_settings", handleOpenSettings)
+	d.Register("open_keybind_presets", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.OpenKeybindPresets()
+		return o, nil
+	})
 	d.Register("quit", handleQuit)
 
 	// Enter the sidebar rail's keyboard scope (window mode "s"). The exit and the

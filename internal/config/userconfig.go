@@ -1143,6 +1143,9 @@ func DefaultConfig() *UserConfig {
 				// the resize bind as dead, which is the honest description of what
 				// the input path was already doing behind a literal.
 				"open_settings": {","},
+				// U opens the keybind preset picker. The welcome screen shows
+				// it, so a tmux or screen user finds their keys on day one.
+				"open_keybind_presets": {"U"},
 				// hold_window_mode is deliberately absent rather than present and
 				// empty. An empty list is how a user says they took a key away
 				// (see keybind_unbind.go), and a default must not say that on
@@ -3354,6 +3357,8 @@ var yieldingDefaults = map[string]bool{
 	"toggle_scratch": true,
 	// Q after the prefix, new in the release after v0.8.5.
 	"display_panes": true,
+	// U in window mode, new with the keybind presets.
+	"open_keybind_presets": true,
 	// / after the prefix, new in the release after v0.8.5.
 	"choose_tree": true,
 	// p in window mode, new in the release after v0.8.2.

@@ -81,6 +81,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: "settings", open: func(m *OS) bool { return m.ShowSettings }, scrim: true},
 	{id: "keybinds", open: func(m *OS) bool { return m.ShowKeybindManager }, scrim: true},
 	{id: "themepicker", open: func(m *OS) bool { return m.ShowThemePicker }},
+	{id: "presetpicker", open: func(m *OS) bool { return m.presetPicker.open }, scrim: true},
 	{id: "dockeditor", open: func(m *OS) bool { return m.ShowDockEditor }},
 	{id: "sectioneditor", open: func(m *OS) bool { return m.ShowSectionEditor }},
 	{id: "glyphpicker", open: func(m *OS) bool { return m.ShowGlyphPicker }},

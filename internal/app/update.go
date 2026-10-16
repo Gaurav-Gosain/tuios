@@ -2527,6 +2527,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyOmarchyPalette(msg.palette)
 		return m, listenForOmarchy(m.omarchyChanges)
 
+	case keybindPresetSavedMsg:
+		return m, m.handleKeybindPresetSaved(msg)
+
 	case configWatchMsg:
 		// A delivery from the file watcher: re-arm the listener, then apply it
 		// like a reload from anywhere else.

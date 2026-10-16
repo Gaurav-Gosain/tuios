@@ -6405,3 +6405,14 @@ and opens the tuios menu with `ctrl+b ctrl+t m`.
 | The zellij mode keys did nothing | the preset mechanism | a build of the parent commit (#800 without screen and zellij) | `TestZellijPresetOpensModes` ("ctrl+g t did not open the menu") | **caught** |
 | zellij p r renamed the window instead of splitting right | the preset's `[window_prefix]` | removed it from `presets/zellij.toml` | `TestZellijPresetOpensModes` ("daemon never reported 2 windows with settled geometry") | **caught** |
 | keybinds list said ctrl+g t r for the zellij split, which opens the workspace menu | `ScopesFor` | a build of 18f5625c0, before it | `TestZellijPresetOpensModes` ("keybinds list does not show split_vertical on ctrl+g p r") | **caught** |
+
+## The keybind preset picker and the welcome offer
+
+`TestWelcomeSuggestsThePresetAndWaits` puts a tmux.conf with `set -g prefix
+C-a` in the test's HOME, reads the welcome offer, checks config.toml has no
+preset, then presses `U` and Enter and reads the preset and the leader back
+from config.toml.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| No offer on the welcome screen | the picker and the offer | a build of the parent commit (#801) | `TestWelcomeSuggestsThePresetAndWaits` ("the welcome screen did not offer the tmux keys") | **caught** |
