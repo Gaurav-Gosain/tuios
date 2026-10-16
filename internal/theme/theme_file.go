@@ -3,6 +3,7 @@ package theme
 import (
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,9 +26,11 @@ import (
 // own so an unset one can be told from false, and inherit the base's.
 type themeFile struct {
 	tint.Tint
-	Base   string            `json:"base,omitempty"`
-	Dark   *bool             `json:"dark,omitempty"`
-	Chrome map[string]string `json:"chrome,omitempty"`
+	Base string `json:"base,omitempty"`
+	Dark *bool  `json:"dark,omitempty"`
+	// Chrome holds any JSON value so a field that is not a string costs that
+	// field, as an unparseable colour does, and not the whole theme.
+	Chrome map[string]any `json:"chrome,omitempty"`
 }
 
 // readThemeFile parses a theme file's bytes. The id comes from the file name
@@ -52,9 +55,28 @@ func readThemeFile(path string, data []byte) (*themeFile, error) {
 }
 
 // chromeOf reads a chrome object's fields by role.
-func chromeOf(m map[string]string) (raw chromeRaw) {
+func chromeOf(m map[string]any) (raw chromeRaw) {
 	for r := RoleAccent; r <= RoleCard; r++ {
-		raw[r] = m[r.String()]
+		raw[r], _ = m[r.String()].(string)
+	}
+	return raw
+}
+
+// chromeRawOf is a registered chrome as the fields a file would write: the
+// colours the theme named, each as hex, and none of the steps it derived.
+func chromeRawOf(c *Chrome) (raw chromeRaw) {
+	if c == nil {
+		return raw
+	}
+	named := [...]color.Color{
+		RoleAccent: c.Accent, RoleAccentBright: c.AccentBright, RoleSuccess: c.Success,
+		RoleWarning: c.Warning, RoleError: c.Error, RoleInfo: c.Info,
+		RoleSurface: c.Surface, RoleCanvas: c.Canvas, RolePanel: c.Panel, RoleCard: c.Card,
+	}
+	for r := RoleAccent; r <= RoleCard; r++ {
+		if named[r] != nil && !c.derived[r] {
+			raw[r] = ColorToString(named[r])
+		}
 	}
 	return raw
 }
@@ -73,17 +95,18 @@ type resolvedTheme struct {
 // from the directory, resolved.
 var themeBases struct {
 	sync.RWMutex
-	builtins map[string]*tint.Tint
+	builtins map[string]resolvedTheme
 	customs  map[string]resolvedTheme
 }
 
 // rememberBuiltins records the registry as it stands before the themes
-// directory is read.
+// directory is read, with each theme's chrome: a CharmTone or Omarchy base
+// passes on its accents and grounds, not only its sixteen.
 func rememberBuiltins() {
-	m := make(map[string]*tint.Tint)
+	m := make(map[string]resolvedTheme)
 	for _, id := range tint.TintIDs() {
 		if t, ok := tint.GetTint(id); ok {
-			m[id] = t
+			m[id] = builtinTheme(id, t)
 		}
 	}
 	themeBases.Lock()
@@ -100,11 +123,20 @@ func baseTheme(id, self string) (resolvedTheme, bool) {
 	if r, ok := themeBases.customs[id]; ok && id != self {
 		return r, true
 	}
-	t, ok := themeBases.builtins[id]
 	if themeBases.builtins == nil {
-		t, ok = tint.GetTint(id)
+		t, ok := tint.GetTint(id)
+		return builtinTheme(id, t), ok
 	}
-	return resolvedTheme{tint: t}, ok
+	r, ok := themeBases.builtins[id]
+	return r, ok
+}
+
+// builtinTheme is a registered theme and its chrome as a base.
+func builtinTheme(id string, t *tint.Tint) resolvedTheme {
+	chromeRegistry.RLock()
+	c := chromeRegistry.byID[id]
+	chromeRegistry.RUnlock()
+	return resolvedTheme{tint: t, chrome: chromeRawOf(c)}
 }
 
 // mergeBase merges f over its base.
@@ -170,6 +202,10 @@ func loadThemeFiles(files map[string]*themeFile) (map[string]resolvedTheme, map[
 			}
 			delete(files, id)
 			progress = true
+			if berr, bad := failed[f.Base]; bad && f.Base != id {
+				failed[id] = fmt.Errorf("base %q does not load: %w", f.Base, berr)
+				continue
+			}
 			r, err := mergeBase(f)
 			if err == nil {
 				err = registerResolved(r)
