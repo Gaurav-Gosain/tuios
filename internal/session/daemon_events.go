@@ -58,8 +58,14 @@ const (
 	EventNotification   = "notification"
 	EventModeChanged    = "mode-changed"    // a terminal mode toggled (e.g. alt-screen)
 	EventSessionCreated = "session-created" // a session was created
-	EventSessionClosed  = "session-closed"  // a session was terminated
-	EventGap            = "gap"             // slow-subscriber marker: N events were dropped
+	// EventDaemonUpgraded is the daemon's image replaced by a live upgrade,
+	// with every pane still running. Title is the build the panes came from
+	// and Body the build that has them now; State is fallback when the new
+	// binary could not take them and the previous one did. Raised once, by
+	// the image that took the panes over.
+	EventDaemonUpgraded = "daemon-upgraded"
+	EventSessionClosed  = "session-closed" // a session was terminated
+	EventGap            = "gap"            // slow-subscriber marker: N events were dropped
 	// EventClientSessionChanged reports a client attaching, detaching or switching.
 	EventClientSessionChanged = "client-session-changed"
 	// EventAttention is a change to the Inbox, the daemon's attention queue:

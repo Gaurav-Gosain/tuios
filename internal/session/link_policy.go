@@ -89,6 +89,9 @@ var verbCapabilities = map[string]linkCaps{
 	"set-pane-grants": {capRelay},
 	// apply-config is refused over a link by its handler as well.
 	"apply-config": {capRelay},
+	// daemon-upgrade replaces the daemon's image. Its handler refuses it over
+	// a link too: an upgrade is run on the machine whose daemon it is.
+	"daemon-upgrade": {capRelay},
 
 	"list-hooks":           {config.LinkAllowList},
 	"list-dock-components": {config.LinkAllowList},

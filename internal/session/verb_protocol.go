@@ -62,6 +62,16 @@ const (
 	ErrVerbTimeout         = "timeout"           // a wait-for condition did not match before its timeout
 	ErrVerbInternal        = "internal"          // unexpected server-side failure
 
+	// ErrVerbUpgradeRefused reports a daemon-upgrade that did not start:
+	// the binary failed the preflight, the daemon holds something that
+	// cannot be handed over, or this platform cannot hand off. Nothing was
+	// changed. The message says which.
+	ErrVerbUpgradeRefused = "upgrade_refused"
+	// ErrVerbDaemonUpgrading ends a call the daemon was still working on, or
+	// waiting in, when a live upgrade replaced its image. The connection
+	// closes after it. The new image answers the same call made again.
+	ErrVerbDaemonUpgrading = "daemon_upgrading"
+
 	// ErrVerbNotReady reports that a cross-agent verb declined to act because
 	// the target agent was mid-turn. It is distinct from timeout: nothing was
 	// waited for in vain, the daemon refused to type over a working agent.
@@ -294,6 +304,26 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			examples: []string{`{"id":1,"verb":"hello","params":{"client":"tuios","version":"1.2.3","protocol":1}}`},
 			handler:  (*Daemon).verbHello,
+		},
+		"daemon-upgrade": {
+			description: "Upgrade the daemon live to another tuios binary. Every pane's process keeps running, with the same pid, terminal and screen, and the daemon keeps its pid. The binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The call answers once every pane is stopped and written down. Then every client is told and dropped, and the daemon execs the binary in place. Call hello until instance changes: its upgrade field says what the handoff measured, and has fallback set when the new binary could not take the panes and the binary that was running took them back. Refused on Windows, while a pane runs on another machine or here for another machine, and while a fan check or a capturing popup runs.",
+			params: []verbParam{
+				{Name: "binary", Type: "string", Required: true, Description: "Absolute path of the tuios binary to run the daemon as."},
+			},
+			returns: []verbParam{
+				{Name: "pid", Type: "int", Description: "The daemon's pid, which the upgrade keeps."},
+				{Name: "instance", Type: "string", Description: "The running image's id. hello reports another one once the new image runs."},
+				{Name: "from", Type: "string", Description: "The version running now."},
+				{Name: "to", Type: "string", Description: "The version the binary reports."},
+				{Name: "binary", Type: "string", Description: "The binary, as an absolute path."},
+				{Name: "handoff", Type: "int", Description: "The version of the state handed over."},
+				{Name: "panes", Type: "int", Description: "How many panes are handed over."},
+				{Name: "manifest_bytes", Type: "int", Description: "The size of the state handed over."},
+				{Name: "clients", Type: "int", Description: "The attached TUI clients, which are told to attach again."},
+				{Name: "preflight_ms", Type: "int", Description: "How long the binary took to answer the preflight."},
+			},
+			examples: []string{`{"id":1,"verb":"daemon-upgrade","params":{"binary":"/usr/local/bin/tuios"}}`},
+			handler:  (*Daemon).verbDaemonUpgrade,
 		},
 		"restrict-connection": {
 			description: "Give up authority on this connection for as long as it is open. scope own reaches only the caller's own session, its fan group and the sessions a fan from it started; read_only refuses every verb that types into a pane. The caller's pane is found from the kernel's record of its pid, and only when that finds none from pane_id and pane_token. A later call may narrow further and never widen. Every verb a restricted connection may not call answers forbidden.",
@@ -2883,7 +2913,13 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result})
 	}
 
+	cs.verbCall.begin(req.ID, req.Verb)
 	result, verr := entry.handler(d, cs, req.Params)
+	if !cs.verbCall.end() {
+		// A live upgrade answered the call while it ran, and is closing the
+		// connection.
+		return errVerbAnswered
+	}
 	replyFailed := cs.replyFailed
 	cs.replyFailed = nil
 	if verr != nil {
@@ -3224,7 +3260,7 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 	}
 
 	infos := d.manager.ListSessions()
-	return map[string]any{
+	res := map[string]any{
 		"type":           "hello",
 		"protocol":       VerbProtocolVersion,
 		"min_protocol":   MinVerbProtocolVersion,
@@ -3246,7 +3282,13 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// os is the daemon's GOOS. A client attached from another machine
 		// builds a command line for this one: sh -c here, cmd /C on Windows.
 		"os": runtime.GOOS,
-	}, nil
+	}
+	// upgrade says this image took its panes over in a live upgrade, and
+	// what that measured. daemon upgrade waits for it.
+	if st := d.lastHandoff.Load(); st != nil {
+		res["upgrade"] = st
+	}
+	return res, nil
 }
 
 // maxHelloTermLen bounds a TERM or COLORTERM a hello names. Real names are a

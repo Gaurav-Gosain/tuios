@@ -659,6 +659,11 @@ type connState struct {
 	// It does not size the session, but may write to its subscribed PTY. Guarded by mu.
 	passive bool
 
+	// verbCall is the JSON verb this connection is running, so a live
+	// upgrade can answer it before closing the connection. See
+	// handoff_clients.go.
+	verbCall inflightVerb
+
 	// takeover, when a verb sets it, runs after that verb's reply line has been
 	// written and owns the connection from then on; the JSON loop returns
 	// when it does. open-host-connection sets it to relay the connection to

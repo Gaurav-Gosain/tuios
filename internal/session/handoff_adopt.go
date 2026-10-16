@@ -185,6 +185,11 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback) error {
 	d.outbox.load(outboxPath())
 	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 	d.serve()
+	state := "upgraded"
+	if stats.Fallback {
+		state = "fallback"
+	}
+	d.events.publish(streamEvent{Type: EventDaemonUpgraded, Title: stats.From, Body: d.version, State: state})
 	_ = mf.Close()
 	for _, f := range inherited {
 		_ = f.Close()

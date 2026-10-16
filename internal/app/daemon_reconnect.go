@@ -81,6 +81,11 @@ func (m *OS) beginDaemonReconnect() tea.Cmd {
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeStop {
 		return nil
 	}
+	// A live upgrade dropped this client on purpose: the programs keep
+	// running, and the client exits to say how to attach again.
+	if _, upgraded := m.DaemonClient.UpgradedTo(); upgraded {
+		return nil
+	}
 	since, budget := time.Now(), daemonDropBudget
 	if bye := m.DaemonClient.Goodbye(); bye != nil && bye.Reason == session.GoodbyeRestart {
 		since, budget = bye.At, daemonRestartBudget

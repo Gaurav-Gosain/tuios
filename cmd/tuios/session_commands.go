@@ -662,6 +662,17 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		return nil
 	}
 
+	// A live upgrade replaced the daemon's image. The session and every
+	// program in it run on, and nothing failed here.
+	if reason == app.ExitDaemonUpgraded {
+		to, _ := exitClient.UpgradedTo()
+		if to == "" {
+			to = "a new version"
+		}
+		fmt.Printf("The daemon was upgraded to %s. Your programs are still running. Run 'tuios attach %s' to continue.\n", to, exitSession)
+		return nil
+	}
+
 	return reportSessionExit(exitSession, exitHost, reason, killed)
 }
 
