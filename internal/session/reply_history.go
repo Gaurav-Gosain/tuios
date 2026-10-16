@@ -178,6 +178,20 @@ func replyHistoryRefusal(verb string) *verbError {
 	})
 }
 
+// replyHistoryHuman reports whether the caller is the person for the reply
+// history. A target is the client's own key and belongs to no one session,
+// so it takes a nonce that proves the person for an act in no one session:
+// an attach nonce, or a presence made with no session. A presence made for
+// one session reads nothing, since the history holds what was sent to the
+// agents of every session.
+func (d *Daemon) replyHistoryHuman(cs *connState, nonce string) bool {
+	if cs != nil && cs.paneOnly {
+		return false
+	}
+	_, ok := d.humanNonceFor(nonce, "", cs)
+	return ok
+}
+
 // replyHistoryTarget checks a target key.
 func replyHistoryTarget(target string) *verbError {
 	if strings.TrimSpace(target) == "" {
@@ -199,7 +213,7 @@ func (d *Daemon) verbAddReplyHistory(cs *connState, params json.RawMessage) (any
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if cs != nil && cs.paneOnly || !d.humanNonceHeld(p.HumanNonce, cs) {
+	if !d.replyHistoryHuman(cs, p.HumanNonce) {
 		return nil, replyHistoryRefusal("add-reply-history")
 	}
 	if verr := replyHistoryTarget(p.Target); verr != nil {
@@ -222,7 +236,7 @@ func (d *Daemon) verbReplyHistory(cs *connState, params json.RawMessage) (any, *
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if cs != nil && cs.paneOnly || !d.humanNonceHeld(p.HumanNonce, cs) {
+	if !d.replyHistoryHuman(cs, p.HumanNonce) {
 		return nil, replyHistoryRefusal("reply-history")
 	}
 	if verr := replyHistoryTarget(p.Target); verr != nil {

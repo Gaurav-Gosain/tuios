@@ -23,6 +23,29 @@ func TestReplyHistoryIsThePersonsAlone(t *testing.T) {
 	}
 }
 
+// TestReplyHistoryNeedsANonceForEverySession: a presence made for one session
+// proves the person for that session alone, and the history holds what was
+// sent to the agents of every session, so it neither reads nor adds. An
+// attach nonce does both.
+func TestReplyHistoryNeedsANonceForEverySession(t *testing.T) {
+	d := &Daemon{clients: map[string]*connState{
+		"phone":  {clientID: "phone", presenceNonce: "for-one", presenceSession: "s1"},
+		"laptop": {clientID: "laptop", attached: true, isTUIClient: true, humanNonce: "attached"},
+	}}
+	if _, verr := d.verbReplyHistory(nil, []byte(`{"target":"t","human_nonce":"for-one"}`)); verr == nil || verr.Code != ErrVerbNotHuman {
+		t.Errorf("reply-history with a one-session presence: %v, want not_human", verr)
+	}
+	if _, verr := d.verbAddReplyHistory(nil, []byte(`{"target":"t","parts":[{"kind":"text","text":"x"}],"human_nonce":"for-one"}`)); verr == nil || verr.Code != ErrVerbNotHuman {
+		t.Errorf("add-reply-history with a one-session presence: %v, want not_human", verr)
+	}
+	if _, verr := d.verbAddReplyHistory(nil, []byte(`{"target":"t","parts":[{"kind":"text","text":"x"}],"human_nonce":"attached"}`)); verr != nil {
+		t.Fatalf("add-reply-history with an attach nonce: %v", verr)
+	}
+	if _, verr := d.verbReplyHistory(nil, []byte(`{"target":"t","human_nonce":"attached"}`)); verr != nil {
+		t.Fatalf("reply-history with an attach nonce: %v", verr)
+	}
+}
+
 // TestReplyHistoryBounds: each target keeps its newest messages, the same
 // message moves to the end, a message's blocks are bounded, and the least
 // used target goes first.

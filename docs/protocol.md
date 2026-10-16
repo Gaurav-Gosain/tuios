@@ -6482,7 +6482,10 @@ both verbs answer `forbidden`.
 agent, for the reply editor's `up` and `ctrl+r`. The history is in the
 daemon's memory only and ends with it: replies hold pasted logs and secrets.
 Both verbs take a live `human_nonce`, so no pane and no caller without it
-reads or adds to it. Over a link they need `respond`.
+reads or adds to it. The history holds what was sent to the agents of every
+session, so the nonce must prove the person for every session: an attach
+nonce, or a presence made with no session. A presence made for one session is
+refused. Over a link they need `respond`.
 
 `add-reply-history` params: `target` (the key the client keeps the history
 under, at most 512 bytes), `parts` (as `queue-prompt` takes them),
