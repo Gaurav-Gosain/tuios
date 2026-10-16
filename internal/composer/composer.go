@@ -96,6 +96,9 @@ type Model struct {
 	// notice is a line under the editor that says what just happened. The
 	// next edit clears it.
 	notice string
+
+	// pager is the open block, nil when none is.
+	pager *pager
 }
 
 // New returns an empty draft.
@@ -357,12 +360,43 @@ func (m *Model) selectedBlock() *block {
 	return nil
 }
 
+// Expand puts the selected block's text into the draft in its place, as text
+// that can be edited. It is one undo step. It reports whether there was a
+// block to expand.
+func (m *Model) Expand() bool {
+	b := m.selectedBlock()
+	if b == nil {
+		return false
+	}
+	m.edited()
+	ins := segment(nil, b.text)
+	pos := m.cur - 1
+	m.change(pos, 1, ins, pos+len(ins))
+	m.pager = nil
+	return true
+}
+
+// Remove deletes the selected block. It is one undo step. It reports whether
+// there was a block to remove.
+func (m *Model) Remove() bool {
+	if m.selectedBlock() == nil {
+		return false
+	}
+	m.edited()
+	m.change(m.cur-1, 1, nil, m.cur-1)
+	m.pager = nil
+	return true
+}
+
 // Update handles one key. remote says the key did not come from the keyboard
 // (send-keys, a tape): the draft is then marked, and the host must not send
 // it as the person.
 func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	if remote {
 		m.automated = true
+	}
+	if m.pager != nil {
+		return m.pagerKey(msg)
 	}
 	key := msg.String()
 	if key != "up" && key != "down" {
@@ -400,7 +434,9 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	case "end":
 		m.move(m.lineEnd())
 	case "ctrl+e":
-		m.move(m.lineEnd())
+		if !m.Expand() {
+			m.move(m.lineEnd())
+		}
 	case "ctrl+home":
 		m.move(0)
 	case "ctrl+end":
@@ -409,6 +445,8 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		m.vertical(-1)
 	case "down":
 		m.vertical(1)
+	case "ctrl+o":
+		m.Open()
 	case "backspace", "ctrl+h":
 		m.deleteTo(m.cur - 1)
 	case "delete", "ctrl+d":

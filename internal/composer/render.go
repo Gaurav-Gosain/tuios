@@ -51,10 +51,14 @@ func newInks(pal overlay.Palette, surface color.Color) inks {
 
 // Render draws the editor at width cells, on surface, the ground of the panel
 // it sits in. Every line it returns is width cells wide and carries its own
-// colours. It is the editor's rows, then the notice when there is one.
+// colours. It is the editor's rows, then the notice when there is one; while
+// a block is open it is the block instead.
 func (m *Model) Render(width int, pal overlay.Palette, surface color.Color) []string {
 	width = max(width, gutter+4)
 	in := newInks(pal, surface)
+	if m.pager != nil {
+		return m.renderPager(width, in)
+	}
 	textW := width - gutter - 1
 	m.width = textW
 	rows := m.rows(textW)
@@ -227,8 +231,24 @@ func wrapWords(s string, width int) []string {
 	return out
 }
 
-// Hints are the keys the editor offers, for the host's footer.
+// Hints are the keys the editor offers now, for the host's footer.
 func (m *Model) Hints() []overlay.Hint {
+	switch {
+	case m.pager != nil:
+		return []overlay.Hint{
+			{Key: arrow("↑↓", "up/down"), Label: "scroll"},
+			{Key: "ctrl+e", Label: "expand"},
+			{Key: "backspace", Label: "remove"},
+			{Key: "esc", Label: "back"},
+		}
+	case m.selectedBlock() != nil:
+		return []overlay.Hint{
+			{Key: "ctrl+o", Label: "open"},
+			{Key: "ctrl+e", Label: "expand"},
+			{Key: "backspace", Label: "remove"},
+			{Key: "esc", Label: "close"},
+		}
+	}
 	return []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "send"},
 		{Key: "ctrl+j", Label: "new line"},

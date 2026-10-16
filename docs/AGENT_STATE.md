@@ -3934,7 +3934,11 @@ and `alt+z` to redo all work as in a shell. `ctrl+c` clears the draft, and
 
 A paste of more than 800 characters or 3 lines shows as one block, such as
 `[Pasted text #1 · 42 lines]`. The cursor steps over a block in one move, and
-`backspace` deletes all of it. The block's text is sent in its place. The
+`backspace` deletes all of it. With the cursor right after a block, the block
+is drawn selected and the footer shows its keys: `ctrl+o` opens its text to
+read (the arrows and page keys scroll, `esc` goes back), `ctrl+e` puts its
+text into the draft to edit, and `backspace` removes it. Undo brings back a
+removed or expanded block. The block's text is sent in its place. The
 whole message, blocks included, must fit in 16 KB: a larger one stays open
 and says `The message is larger than 16 KB. Remove a paste to send.` A
 message with no paste block says `Make it shorter to send.` in place of the

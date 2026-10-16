@@ -91,7 +91,7 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.Paste(replyPaste); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the paste as one block", "echo r9c1e [Pasted text #1 · 42 lines]")
+	waitText(t, term, "the paste as one block", "echo r9c1e [Pasted text #1 · 42 lines]", "ctrl+o open")
 	if strings.Contains(term.Screen().Text(), "paste line 01") {
 		t.Fatalf("the paste is drawn as text, not as a block\n%s", term.Snapshot())
 	}
