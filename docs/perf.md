@@ -2690,6 +2690,29 @@ bytes more. By pull request, linux/amd64 then darwin/arm64:
 No dependency was added. The new budgets leave 31,966 and 28,566 bytes of
 room.
 
+The budgets went to 36,820,000 (linux/amd64) and 34,665,000 (darwin/arm64)
+for the batch of #772, #780, #789, #791, #788, #792, #773, #796 and #795.
+Main at f125f62d measured 36,704,418 and 34,536,674 bytes (Go 1.26.9), 15,582
+and 28,326 bytes under the budgets. The batch brings it to 36,790,434 and
+34,637,650, 86,016 and 100,976 bytes more. By pull request, linux/amd64 then
+darwin/arm64, with the regenerated skill archive counted in the pull request
+it follows:
+
+| pull request | linux/amd64 | darwin/arm64 |
+|---|---|---|
+| #772 CharmTone from charm.land/tone | 0 | 0 |
+| #780 one parser for every colour key | 24,576 | 17,232 |
+| #789 a theme inherits from a base | 16,384 | 16,848 |
+| #791 theme and glyph files reload on change | 16,384 | 33,264 |
+| #788 a theme preview only for the client that asked | 8,192 | 96 |
+| #792 theme picker keys for shade, shuffle, copy and delete | 12,288 | 16,640 |
+| #773 the prefix repeats the real resize and scroll actions | 0 | 208 |
+| #796 a list of the actions that repeat after the leader | 0 | 16,512 |
+| #795 last_workspace, break_pane, last_session and send_prefix | 8,192 | 176 |
+
+#772 replaces one CharmTone module with another and adds no bytes. The new
+budgets leave 29,566 and 27,350 bytes of room.
+
 To raise a budget, do it on purpose in its own commit: run
 `scripts/binary-size.sh` on the Go version in go.mod, set the new budget a
 little above the printed size in the `budget` function of that script, and say
