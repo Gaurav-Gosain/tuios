@@ -171,6 +171,10 @@ var (
 	// DockModeIconTiling is the icon for tiling mode (Nerd Font: nf-fa-th, a 3x3 grid)
 	DockModeIconTiling string
 
+	// DockModeIconPrefix is the mode pill's label while the leader is armed
+	// (Nerd Font: nf-fa-keyboard)
+	DockModeIconPrefix string
+
 	// DockIconTerminalCount is the icon for terminal count (Nerd Font: nf-fa-terminal)
 	DockIconTerminalCount string
 
@@ -208,6 +212,7 @@ func init() {
 	DockModeIconWindow = " " + fa.WindowRestore.String() + " "
 	DockModeIconTerminal = " " + fa.Terminal.String() + " "
 	DockModeIconTiling = " " + fa.Th.String() + " "
+	DockModeIconPrefix = " " + fa.Keyboard.String() + " "
 	DockIconTerminalCount = fa.Terminal.String()
 	DockIconWorkspaceCount = fa.ThLarge.String()
 	DockIconLeaveRunning = fa.SignOut.String()
@@ -241,6 +246,9 @@ const (
 
 	// DockModeIconTilingASCII is the ASCII fallback for tiling mode
 	DockModeIconTilingASCII = " # "
+
+	// DockModeIconPrefixASCII is the ASCII fallback for the armed leader
+	DockModeIconPrefixASCII = " P "
 
 	// DockIconTerminalCountASCII is the ASCII fallback for terminal count
 	DockIconTerminalCountASCII = "win"
@@ -876,6 +884,15 @@ func (s *Settings) GetDockModeIconTerminal() string {
 // when set, and otherwise the built-in for the glyph set.
 func (s *Settings) GetDockModeIconTiling() string {
 	return s.dockModeIcon(s.DockModeIconTiling, DockModeIconTiling, DockModeIconTilingASCII)
+}
+
+// GetDockModeIconPrefix returns the mode pill's label while the leader is
+// armed, for the current glyph set.
+func (s *Settings) GetDockModeIconPrefix() string {
+	if s.NerdFontsOff() {
+		return DockModeIconPrefixASCII
+	}
+	return DockModeIconPrefix
 }
 
 // GetDockIconLeaveRunning returns the leave-running icon for the current glyph set.

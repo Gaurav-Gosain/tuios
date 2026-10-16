@@ -267,7 +267,7 @@ func (m *OS) renderDockString() (string, int) {
 	// the dock's only filled element, so it is the only one that has to earn its
 	// contrast: the foreground is picked against whatever colour the mode is,
 	// and bold buys the last of the legibility a saturated fill costs.
-	modeColor := lipgloss.Color(layout.ModeInfo.Color)
+	modeColor := layout.ModeInfo.Color
 	styledModeText := ""
 	if layout.ModeLabel != "" {
 		fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)

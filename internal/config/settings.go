@@ -332,6 +332,11 @@ type Settings struct {
 	// flat filled cell, for anyone who reads a row of caps as a row of beads.
 	DockPillCaps bool
 
+	// DockPrefixIndicator is where an armed leader shows: "pill" colours the
+	// dock's mode pill, "badge" draws the floating PREFIX badge. The badge is
+	// drawn either way when the dock is hidden or has no mode pill.
+	DockPrefixIndicator string
+
 	// DockModeIconWindow, DockModeIconTerminal and DockModeIconTiling are the
 	// mode pill's icons from appearance.dock_mode_icon_*. Nil is unset, which
 	// draws the built-in for the glyph set. An empty string draws no icon.
@@ -842,6 +847,7 @@ func DefaultSettings() Settings {
 		DockWorkspaceTooltip:        true,
 		DockWorkspaceLabelMax:       12,
 		DockPillCaps:                true,
+		DockPrefixIndicator:         DefaultDockPrefixIndicator,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,
 		WindowButtonPosition:        WindowButtonPositionLeft,

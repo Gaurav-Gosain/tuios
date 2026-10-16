@@ -9,7 +9,11 @@ import (
 
 // defaultWindowModeIcon is config.DockModeIconWindow, nf-fa-window_restore,
 // spelled out because this module does not import the one under test.
-const defaultWindowModeIcon = ""
+const defaultWindowModeIcon = "\uf2d2"
+
+// prefixPillIcon is config.DockModeIconPrefix, nf-fa-keyboard: the mode
+// pill's icon while the leader is armed.
+const prefixPillIcon = "\uf11c"
 
 // dockStatusRow is the row that carries the dock's "1:" readout, or -1.
 func dockStatusRow(s tuitest.Screen) int {
@@ -191,6 +195,61 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 			t.Fatalf("the workspace readout is at column %d, want left of %d where the pill used to end\n%s", got, baseStatus, line)
 		}
 		saveArtifact(t, term, artifactDir(t), "hidden")
+	})
+
+	// An armed leader shows on the mode pill: the keyboard icon on a ground
+	// other than window mode's, and no floating PREFIX badge. With
+	// dock_prefix_indicator = "badge" the pill keeps its icon and the badge
+	// comes back.
+	//
+	// Negative control, recorded in NEGATIVE_CONTROLS.md: dropping the
+	// prefixOnPill case in buildDockLeftText fails pill.
+	t.Run("prefix", func(t *testing.T) {
+		for _, tc := range []struct{ name, cfg string }{
+			{"pill", ""},
+			{"badge", "dock_prefix_indicator = \"badge\"\n"},
+		} {
+			term := startDockModeIcons(t, tc.cfg)
+			idle := term.Screen()
+			idleRow := dockStatusRow(idle)
+			idleBg := idle.Cell(cellColumnOf(idle, idleRow, defaultWindowModeIcon), idleRow).Bg
+			if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
+				t.Fatalf("%s: press the leader: %v", tc.name, err)
+			}
+			pill := tc.name == "pill"
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				r := dockStatusRow(s)
+				if r < 0 {
+					return false
+				}
+				onPill := strings.Contains(s.Line(r), prefixPillIcon)
+				badge := strings.Contains(s.Text(), "PREFIX")
+				return onPill == pill && badge == !pill
+			}, uiTimeout); err != nil {
+				t.Fatalf("%s: the armed leader never showed where asked: %v\n%s", tc.name, err, term.Snapshot())
+			}
+			s := term.Screen()
+			row := dockStatusRow(s)
+			if pill {
+				col := cellColumnOf(s, row, prefixPillIcon)
+				if got := pillFill(s, row, col); got != 3 {
+					t.Fatalf("pill: the armed pill fill is %d cells, want 3\n%s", got, s.Line(row))
+				}
+				if bg := s.Cell(col, row).Bg; bg == idleBg {
+					t.Fatalf("pill: the armed pill keeps the window mode ground %+v\n%s", bg, term.SnapshotStyled())
+				}
+			}
+			saveArtifact(t, term, artifactDir(t), "prefix-"+tc.name)
+			if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
+				t.Fatalf("%s: cancel the leader: %v", tc.name, err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				r := dockStatusRow(s)
+				return r >= 0 && strings.Contains(s.Line(r), defaultWindowModeIcon) && !strings.Contains(s.Text(), "PREFIX")
+			}, uiTimeout); err != nil {
+				t.Fatalf("%s: the pill never went back to window mode: %v\n%s", tc.name, err, term.Snapshot())
+			}
+		}
 	})
 
 	t.Run("too-wide", func(t *testing.T) {

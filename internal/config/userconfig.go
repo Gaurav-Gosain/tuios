@@ -371,6 +371,7 @@ type AppearanceConfig struct {
 	DockWorkspaceTabFormat string   `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
 	DockWorkspaceTooltip   *bool    `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
 	DockWorkspaceLabelMax  *int     `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
+	DockPrefixIndicator    string   `toml:"dock_prefix_indicator"`     // Where an armed leader shows: pill (default) or badge
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
 	DockModeIconWindow     *string  `toml:"dock_mode_icon_window"`     // Mode pill icon in window mode; "" draws none (default: the glyph set's)
 	DockModeIconTerminal   *string  `toml:"dock_mode_icon_terminal"`   // Mode pill icon in terminal mode; "" draws none (default: the glyph set's)
@@ -1003,6 +1004,7 @@ func DefaultConfig() *UserConfig {
 			ScrollbackLines:          10000,
 			ScrollLines:              3,
 			DockbarPosition:          DefaultDockbarPosition,
+			DockPrefixIndicator:      DefaultDockPrefixIndicator,
 			WindowTitlePosition:      DefaultWindowTitlePosition,
 			PreferredShell:           "",
 			ClickToType:              ClickToTypeDouble,
@@ -2496,6 +2498,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.DockPillCaps != nil {
 		s.DockPillCaps = *cfg.Appearance.DockPillCaps
+	}
+	// A typo or an empty value lands on the default, and a key removed from
+	// the file goes back to it on reload.
+	if slices.Contains(DockPrefixIndicators, cfg.Appearance.DockPrefixIndicator) {
+		s.DockPrefixIndicator = cfg.Appearance.DockPrefixIndicator
+	} else {
+		s.DockPrefixIndicator = DefaultDockPrefixIndicator
 	}
 	s.DockCompact = cfg.Appearance.DockCompact
 	// The mode icons are pointers so an empty string can hide the icon, which is

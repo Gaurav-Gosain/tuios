@@ -6595,3 +6595,19 @@ open (`m.AnyOverlayOpen() && !m.ShowGlyphPicker`). That also hid Settings under
 the glyph picker and the editors, and those subtests failed early on "\"Settings\"
 is not on screen" rather than on the assertion. The controls above skip only the
 one kind.
+
+## The armed leader on the mode pill
+
+`TestDockModeIconsFollowTheConfig/prefix` presses the leader and reads the dock:
+by default the mode pill shows the keyboard icon on a new ground and no PREFIX
+badge is drawn. With `dock_prefix_indicator = "badge"` the pill keeps its icon
+and the badge comes back. `TestOverlayLayouts/*-16` now requires the pill, not
+the badge, on a slot ground, and still sweeps the screen for light ink on a
+light slot.
+
+Run on 2026-10-16.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The pill did not show the armed leader | yes | `case false && m.prefixOnPill():` in `buildDockLeftText` | `TestDockModeIconsFollowTheConfig/prefix` ("pill: the armed leader never showed where asked") | **caught** |
+| The pill took light ink on slot 3 at 16 colours | yes | `ModeInfo.Color` back to a hex string, read with `lipgloss.Color` | `TestOverlayLayouts/dark-120x40-16`, `TestOverlayLayouts/light-120x40-16` ("\"\\uf11c\" at (2,0) is slot 15 on slot 3: light ink on a light ground") | **caught** |

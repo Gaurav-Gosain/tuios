@@ -1016,6 +1016,24 @@ You can also set the icons on the settings page, in the Dock section, or with
 back to the icon of the glyph set, in the settings, with set-config and in
 `config.toml`. The change applies at once.
 
+## Prefix indicator
+
+When you press the leader key, the mode pill shows a keyboard icon on the
+warning colour until you press the next key. With `use_ascii_only`, the icon is
+`P`. `appearance.dock_prefix_indicator` sets where the armed leader shows:
+
+| Value | What it does |
+| --- | --- |
+| `pill` | The mode pill shows the armed leader. This is the default |
+| `badge` | A `PREFIX` badge shows in the corner across from the dock. The mode pill does not change |
+
+```toml
+[appearance]
+dock_prefix_indicator = "badge"
+```
+
+The badge shows for each value when the dock is hidden or has no mode pill.
+The option is on the settings page, in the Dock section.
 ## Workspace label cap
 
 `appearance.dock_workspace_label_max` caps a workspace tab's label in cells,

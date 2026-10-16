@@ -353,21 +353,22 @@ var lightSlots = map[uint8]bool{2: true, 3: true, 6: true, 7: true, 10: true, 11
 
 // checkSlotInk fails on text in a light slot drawn on a light slot's ground at
 // 16 colours. Neither colour is known to tuios there, so a chip on a light slot
-// has to take the dark ink: the PREFIX badge on slot 3 took slot 15, which a
-// light theme paints close to its own ground.
+// has to take the dark ink: the armed-leader chip on slot 3 took slot 15, which
+// a light theme paints close to its own ground. The chip is the dock's mode
+// pill with the keyboard icon (appearance.dock_prefix_indicator = "pill").
 //
-// How this could pass wrongly: the badge could be missing from the frame, so
-// the check first requires a cell of "PREFIX" on a slot ground.
+// How this could pass wrongly: the chip could be missing from the frame, so
+// the check first requires the pill's icon on a slot ground.
 func checkSlotInk(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	s := term.Screen()
-	row := rowWith(s, "PREFIX")
+	row := rowWith(s, prefixPillIcon)
 	if row < 0 {
-		t.Fatalf("no PREFIX badge on screen\n%s", term.Snapshot())
+		t.Fatalf("no armed-leader pill on screen\n%s", term.Snapshot())
 	}
-	col := runeCol(s.Line(row), "PREFIX")
+	col := cellColumnOf(s, row, prefixPillIcon)
 	if c := s.Cell(col, row); c.Bg.Kind != tuitest.ColorIndexed || c.Bg.Index >= 16 {
-		t.Fatalf("the PREFIX badge's ground is %+v, want a slot at 16 colours\n%s", c.Bg, term.SnapshotStyled())
+		t.Fatalf("the armed-leader pill's ground is %+v, want a slot at 16 colours\n%s", c.Bg, term.SnapshotStyled())
 	}
 	cols, rows := s.Size()
 	for y := range rows {

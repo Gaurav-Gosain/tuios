@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"sort"
 	"strconv"
 	"strings"
@@ -652,11 +653,34 @@ func (m *OS) CalculateDockLayout() DockLayout {
 
 // ModeInfo contains mode display information
 type ModeInfo struct {
-	Block     string // The character to display (e.g., "█")
-	Color     string // Hex color for the block
-	CursorPos string // Cursor position for copy mode (empty otherwise)
-	IsTiling  bool   // Whether tiling mode is active
-	NextSplit string // Next split direction when tiling ("V" or "H")
+	Block     string      // The character to display (e.g., "█")
+	Color     color.Color // The pill's fill: a slot at 16 colours, so its ink is picked by slot
+	CursorPos string      // Cursor position for copy mode (empty otherwise)
+	IsTiling  bool        // Whether tiling mode is active
+	NextSplit string      // Next split direction when tiling ("V" or "H")
+}
+
+// prefixArmed reports whether the leader, or one of its menus, waits for a key.
+func (m *OS) prefixArmed() bool {
+	return m.PrefixActive || m.WorkspacePrefixActive || m.MinimizePrefixActive ||
+		m.TilingPrefixActive || m.DebugPrefixActive || m.TapePrefixActive ||
+		m.LayoutPrefixActive || m.TuiosPrefixActive
+}
+
+// prefixOnPill reports whether the dock's mode pill shows the armed leader.
+// The floating badge takes over when the dock is hidden, when the plan has
+// no mode pill, or when appearance.dock_prefix_indicator is "badge".
+func (m *OS) prefixOnPill() bool {
+	return m.prefixArmed() && m.prefixPillShown()
+}
+
+// prefixPillShown reports whether an armed leader would go on the pill.
+func (m *OS) prefixPillShown() bool {
+	if m.Settings.DockPrefixIndicator == "badge" || m.Settings.DockbarPosition == "hidden" {
+		return false
+	}
+	m.ensureDockPlan()
+	return m.dockPlan.Has(config.DockComponentMode)
 }
 
 // buildDockLeftText builds the dock's left region: the mode pill's label, the
@@ -678,37 +702,44 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	}
 
 	switch {
+	case m.prefixOnPill():
+		// The leader is armed and waits for a key. The pill says so in the
+		// warning colour, where the eye already looks for the mode, in place
+		// of the floating badge. It comes first: the leader works from the rail
+		// too. See renderOverlays.
+		modeInfo.Color = theme.UI().Warning
+		modeLabel = m.Settings.GetDockModeIconPrefix()
 	case m.SidebarFocused:
 		// The rail owns the keyboard: the mode pill is the authoritative "who has
 		// input" indicator, so it says so in accent, outranking the pane mode.
-		modeInfo.Color = theme.ColorToString(theme.UI().Accent)
+		modeInfo.Color = theme.UI().Accent
 		modeLabel = "SIDEBAR"
 	case m.HoldModeActive():
 		// A momentary mode has to read differently from the mode it borrows.
 		// Window mode entered by holding a key ends the moment the key is let
 		// go, and the pill is the only place that says so.
-		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
+		modeInfo.Color = theme.DockColorWindow()
 		modeLabel = m.Settings.GetDockModeIconWindow() + " HOLD"
 	case m.hints != nil:
 		// Hints mode owns the keyboard, so the pill names it. The legend at
 		// the dock's other end says what its keys do.
-		modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
+		modeInfo.Color = theme.DockColorCopy()
 		modeLabel = "HINTS"
 	case focusedWindow != nil && m.MultiCopy.Has(focusedWindow.ID):
 		// Multi copy mode is held from either mode, so it names itself in
 		// both: how many panes it drives, and after a search how many matched.
-		modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
+		modeInfo.Color = theme.DockColorCopy()
 		modeLabel, _ = m.multiCopyPill()
 	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {
 			// Copy mode
-			modeInfo.Color = theme.ColorToString(theme.DockColorCopy())
+			modeInfo.Color = theme.DockColorCopy()
 			modeInfo.CursorPos = fmt.Sprintf("%d:%d", focusedWindow.CopyMode.CursorY, focusedWindow.CopyMode.CursorX)
 			modeLabel = " " + modeInfo.CursorPos + " "
 
 		} else {
 			// Terminal mode
-			modeInfo.Color = theme.ColorToString(theme.DockColorTerminal())
+			modeInfo.Color = theme.DockColorTerminal()
 			// Add tiling indicator for terminal mode (with split direction)
 			if m.AutoTiling {
 				modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
@@ -718,7 +749,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		}
 	default:
 		// Window mode
-		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
+		modeInfo.Color = theme.DockColorWindow()
 		// Add tiling indicator for window mode (with split direction)
 		if m.AutoTiling {
 			modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit

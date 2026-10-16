@@ -116,6 +116,9 @@ var (
 	SidebarPositions     = []string{"left", "right", "hidden"}
 	WhichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
 	WindowTitlePositions = []string{"bottom", "top", "hidden"}
+	// DockPrefixIndicators are where an armed leader shows: on the dock's
+	// mode pill, or on the floating badge it had before the pill could.
+	DockPrefixIndicators = []string{"pill", "badge"}
 	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
 )
 
@@ -127,6 +130,7 @@ const (
 	DefaultDockbarPosition     = "top"
 	DefaultSidebarPosition     = "right"
 	DefaultWindowTitlePosition = "top"
+	DefaultDockPrefixIndicator = "pill"
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -626,6 +630,11 @@ var optionSpecs = []Option{
 		Path: "appearance.dock_pill_caps", Type: OptionBool, Section: "dock",
 		Description: "Draw rounded caps on every dock pill: the mode chip, the workspace tabs and the minimized windows. Off draws flat pills",
 		Default:     "true",
+	},
+	{
+		Path: "appearance.dock_prefix_indicator", Type: OptionString, Section: "dock",
+		Description: "Where the dock shows an armed leader key: pill colours the mode pill, badge draws a separate badge",
+		Accepted:    DockPrefixIndicators, Default: DefaultDockPrefixIndicator,
 	},
 	{
 		Path: "appearance.dock_mode_icon_window", Type: OptionString, Section: "dock",

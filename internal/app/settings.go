@@ -574,6 +574,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.dock_workspace_tooltip"),
 			opt("appearance.dock_workspace_label_max"),
 			opt("appearance.dock_pill_caps"),
+			opt("appearance.dock_prefix_indicator"),
 			opt("appearance.dock_mode_icon_window"),
 			opt("appearance.dock_mode_icon_terminal"),
 			opt("appearance.dock_mode_icon_tiling"),

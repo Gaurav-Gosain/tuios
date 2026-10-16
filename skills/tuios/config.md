@@ -81,6 +81,10 @@ shows no icon, and `default` puts back the icon of the glyph set. An icon can
 be at most 8 cells wide, with no control characters. To remove the whole pill,
 remove `"mode"` from `[dock] left`.
 
+`appearance.dock_prefix_indicator` sets where an armed leader shows: `pill`
+(the default) puts a keyboard icon on the mode pill in the warning colour,
+`badge` draws a `PREFIX` badge. The badge also shows when the dock is hidden.
+
 `daemon.window_size` sets the size of a session with more than one client:
 `latest` (the default), the client that last had input, `smallest`, or
 `largest`. `tuios set-config daemon.window_size latest` applies it to the session

@@ -44,7 +44,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	// the clock as well, which is why show_clock appeared to do nothing to the
 	// dock: the option drew this instead. The clock is a dock component now,
 	// placed beside the meters it behaves like, so the two cannot double up.
-	if isRecording || m.PrefixActive {
+	// An armed leader shows on the dock's mode pill when the dock has one.
+	// The badge stays the way to see it with the dock hidden.
+	prefixBadge := m.PrefixActive && !m.prefixPillShown()
+	if isRecording || prefixBadge {
 		// The reading comes from the clock component, so the badge and a clock
 		// cell on the dock can never disagree, and so the format is the one
 		// [dock.clock] asked for rather than the one that used to be spelled
@@ -54,7 +57,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		if isRecording {
 			statusText = config.TapeRecordingIndicator + " | " + currentTime
-		} else if m.PrefixActive {
+		} else if prefixBadge {
 			statusText = "PREFIX | " + currentTime
 		} else {
 			statusText = currentTime
@@ -73,7 +76,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		switch {
 		case isRecording:
 			timeStyle = timeStyle.Background(pal.Warn).Foreground(theme.ContrastText(pal.Warn))
-		case m.PrefixActive:
+		case prefixBadge:
 			timeStyle = timeStyle.Background(pal.Warning).Foreground(theme.ContrastText(pal.Warning))
 		}
 
