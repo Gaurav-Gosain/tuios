@@ -176,3 +176,29 @@ func TestTrimCaptureDropsTheBlankRowsBelow(t *testing.T) {
 		}
 	}
 }
+
+// TestUnwrapStopsAtTheAlternateScreen opens the alternate screen over a line
+// that wraps from the history onto the main screen. The history's newest row
+// carries on to the main screen, so a capture of the alternate screen must not
+// join it to the alternate screen's first row. last-command-output reads the
+// main screen, so it must not join rows by the alternate screen's flags. The
+// emulator has no wrap flags for the main screen while the alternate one is
+// up, so those rows come back as the pane shows them.
+func TestUnwrapStopsAtTheAlternateScreen(t *testing.T) {
+	const alt = "\x1b[?1049h\x1b[H"
+	term := vt.NewWithScrollback(10, 3, 100)
+	_, _ = fmt.Fprint(term, "l0\r\nl1\r\n0123456789ABCDEFGHIJabcdefghij-END"+alt+strings.Repeat("q", 15))
+	p := &PTY{terminal: term}
+	got, _ := p.CaptureContentMeta(true, false, true)
+	if want := "l0\nl1\n0123456789\n" + strings.Repeat("q", 15) + "\n"; got != want {
+		t.Fatalf("unwrapped capture of the alternate screen:\n got %q\nwant %q", got, want)
+	}
+
+	term = vt.NewWithScrollback(10, 4, 100)
+	_, _ = fmt.Fprint(term, "\x1b]133;A\x07$ \x1b]133;B\x07x\r\n\x1b]133;C\x07"+
+		"AAAAAAAAAABBBBB\r\nshort\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ "+alt+strings.Repeat("q", 30))
+	p = &PTY{terminal: term}
+	if out, _, ok := p.LastCommandOutput(true); !ok || out != "AAAAAAAAAA\nBBBBB\nshort" {
+		t.Fatalf("last command output = %q, want %q", out, "AAAAAAAAAA\nBBBBB\nshort")
+	}
+}

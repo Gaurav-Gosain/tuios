@@ -27,15 +27,30 @@ import (
 // capture trimmed from its end are put back before the next row is joined:
 // they were text. A row that wrapped a column early, because a wide character
 // did not fit in the last column, gets one space less.
-func unwrapRows(term vt.Terminal, lines []string, first int) []string {
+//
+// main says the screen rows of lines were read from the main screen, as
+// last-command-output reads them, rather than from the active screen. The
+// history always belongs to the main screen, and its newest row carries on to
+// the main screen's first row. So while the alternate screen is up, a capture
+// of the active screen must not join that row to the alternate screen's first
+// row, and a read of the main screen cannot use the screen's wrap flags, which
+// describe the alternate screen. Both read as rows that end.
+func unwrapRows(term vt.Terminal, lines []string, first int, main bool) []string {
 	if term == nil || len(lines) < 2 {
 		return lines
 	}
 	sbLen, width := term.ScrollbackLen(), term.Width()
+	alt := term.ActiveScreenIsAlt()
 	wrapped := func(abs int) (bool, bool) {
 		if abs < sbLen {
+			if alt && !main && abs == sbLen-1 {
+				return false, false
+			}
 			w, known := term.ScrollbackSoftWrapped(abs)
 			return known && w, term.ScrollbackPadded(abs)
+		}
+		if alt && main {
+			return false, false
 		}
 		w, known := term.RowSoftWrapped(abs - sbLen)
 		return known && w, term.RowPadded(abs - sbLen)
@@ -78,7 +93,7 @@ func unwrapCapture(term vt.Terminal, content string, history bool) string {
 	if len(lines) != term.ScrollbackLen()-first+term.Height() {
 		return content
 	}
-	return strings.Join(unwrapRows(term, lines, first), "\n")
+	return strings.Join(unwrapRows(term, lines, first, false), "\n")
 }
 
 // trimCapture drops the blank lines at the end of a capture. A line is blank

@@ -389,7 +389,7 @@ func (p *PTY) LastCommandOutput(unwrap bool) (output string, truncated, ok bool)
 	if unwrap {
 		// The lines start at the C mark's row, or at the oldest row the
 		// history still holds when the start has rolled off.
-		lines = unwrapRows(p.terminal, lines, max(c.AbsLine, 0))
+		lines = unwrapRows(p.terminal, lines, max(c.AbsLine, 0), true)
 	}
 	out := strings.Join(lines, "\n")
 	if len(out) > shellCommandOutputMax {
