@@ -1,0 +1,47 @@
+# The zellij preset, in zellij's unlock-first shape: ctrl+g is the leader, a
+# letter after it opens one of zellij's modes as a tuios menu, and the next
+# key runs one action and goes back to typing into the pane. Window mode and
+# the terminal-mode keys keep the tuios keys, so ctrl+p, ctrl+n, ctrl+o and
+# ctrl+t still reach the shell and vim.
+#
+# A delta over the tuios defaults, as presets/tmux.toml is.
+
+leader_key = "ctrl+g"
+repeat = [
+  "terminal_focus_left", "terminal_focus_right", "terminal_focus_up", "terminal_focus_down",
+]
+
+[about]
+name = "zellij"
+summary = "ctrl+g, then a mode key"
+samples = ["p", "t", "s"]
+model = "A zellij tab is a workspace here. A zellij pane is a window here. A mode is a menu: press its key after ctrl+g, then one key."
+same = ["prefix_detach", "prefix_quit"]
+missing = [
+  "n: resize mode. Use the resize_pane actions, or the mouse",
+  "h: move mode. Use swap_left, swap_right, swap_up and swap_down",
+  "A mode that stays open. A menu here runs one key and closes",
+  "Floating and stacked panes, and pane frames on or off",
+  "e in scroll mode: open the scrollback in $EDITOR",
+]
+notes = [
+  "Press ctrl+g two times to send ctrl+g to the program in the pane.",
+]
+
+[prefix_mode]
+prefix_window = ["p"]
+prefix_workspace = ["t"]
+prefix_selection = ["s", "["]
+prefix_session_switcher = ["o"]
+prefix_quit = ["q"]
+prefix_detach = ["d"]
+prefix_tuios = ["ctrl+t"]
+# The tuios features zellij takes the keys of, in the tuios menu below.
+prefix_prev_window = ["shift+tab"]
+prefix_scrollback = []
+prefix_next_attention = []
+
+[tuios_prefix]
+prefix_prev_window = ["p"]
+prefix_scrollback = ["s"]
+prefix_next_attention = ["o"]

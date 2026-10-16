@@ -135,3 +135,42 @@ func TestAnUnknownPresetKeepsTheTuiosKeys(t *testing.T) {
 		t.Error("an unknown preset raised no warning")
 	}
 }
+
+// TestEveryPresetLeaderReachesTheGuestReport: the leader a preset sets is the
+// one the report of swallowed keys names, and the export the GUI reads. Under
+// screen ctrl+a is withheld from the pane and ctrl+b reaches it.
+//
+// Negative control: leaving leader_key empty after the fill (no preset
+// leader written) makes the screen row report ctrl+b.
+func TestEveryPresetLeaderReachesTheGuestReport(t *testing.T) {
+	for _, name := range Presets() {
+		cfg := presetConfig(t, name, "")
+		want := DefaultKeybindingsFor(name).LeaderKey
+		var leader string
+		for _, s := range NewKeybindRegistry(cfg).TerminalModeSwallowed() {
+			if s.Action == "leader" {
+				leader = s.Key
+			}
+		}
+		if leader != want {
+			t.Errorf("preset %s: the swallowed-keys report names leader %q, want %q", name, leader, want)
+		}
+	}
+	if DefaultKeybindingsFor("screen").LeaderKey != "ctrl+a" {
+		t.Error("ASSERTION: the screen preset's leader is not ctrl+a, so this proves nothing about a preset leader")
+	}
+}
+
+// TestScreenLeaderTwiceGoesBack: screen's C-a C-a is last_workspace, and a
+// leader_twice the user writes wins over it.
+func TestScreenLeaderTwiceGoesBack(t *testing.T) {
+	if !NewKeybindRegistry(presetConfig(t, "screen", "")).LeaderTwiceGoesBack() {
+		t.Error("under screen, the leader twice does not go back to the last workspace")
+	}
+	if NewKeybindRegistry(presetConfig(t, "screen", "leader_twice = \"send\"\n")).LeaderTwiceGoesBack() {
+		t.Error("leader_twice = send in config.toml lost to the screen preset")
+	}
+	if NewKeybindRegistry(presetConfig(t, "tmux", "")).LeaderTwiceGoesBack() {
+		t.Error("under tmux, the leader twice goes back instead of sending ctrl+b")
+	}
+}

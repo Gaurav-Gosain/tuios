@@ -481,10 +481,12 @@ action set to `[]` stays empty, while an action left out is filled from the
 defaults. `free` cannot take the leader key or the keys the input path reads
 directly.
 
-### Keys of tmux
+### Keys of tmux, screen or zellij
 
 ```sh
 tuios keybinds preset tmux        # c n p l 0-9 on workspaces, % " o ; z on panes
+tuios keybinds preset screen      # leader ctrl+a; ctrl+a ctrl+a is the last workspace
+tuios keybinds preset zellij      # leader ctrl+g, then p t s o for the modes
 tuios keybinds cheatsheet tmux    # same keys, moved keys, keys tuios does not have
 ```
 

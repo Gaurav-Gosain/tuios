@@ -3658,7 +3658,7 @@ there.
 | `tuios list-themes [theme]` | List the themes, and describe one. `--filter TEXT` lists only the ids that contain it, such as `gruvbox` |
 | `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
 | `tuios theme reload` | Read the theme and glyph files again in every tuios client on this machine. Clients also do this when a file in the themes or glyphs directory changes |
-| `tuios keybinds preset [name]` | Show or set the keybind preset (`tuios`, `tmux`). `list` shows every preset, `show NAME` prints its file |
+| `tuios keybinds preset [name]` | Show or set the keybind preset (`tuios`, `tmux`, `screen`, `zellij`). `list` shows every preset, `show NAME` prints its file |
 | `tuios keybinds cheatsheet [preset]` | Show the keys a preset keeps, the tuios keys it moved, and what it does not have. `--json` |
 | `tuios list-glyphs [set]` | List the glyph sets, and describe one |
 | `tuios logs` | View daemon logs |

@@ -6396,3 +6396,10 @@ and opens the tuios menu with `ctrl+b ctrl+t m`.
 |---|---|---|---|---|
 | The preset was not applied | the preset mechanism | a build of the parent commit (#795) | `TestTmuxPresetDrivesWorkspaces` ("tmuxkeys is on workspace 1, want 2" after `ctrl+b c`) | **caught** |
 | A typed p after ctrl+b p switched again | the preset's `repeat` list | removed it from `presets/tmux.toml` | `TestTmuxPresetDrivesWorkspaces` ("tmuxkeys is on workspace 1, want 2" after `ctrl+b p p`) | **caught** |
+
+## The screen and zellij presets
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| ctrl+a ctrl+a sent ^A under screen | the screen preset's `leader_twice` | set `leader_twice = "send"` in the test config | `TestScreenPresetLeaderTwiceAndSend` ("screenkeys is on workspace 2, want 1") | **caught** |
+| The zellij mode keys did nothing | the preset mechanism | a build of the parent commit (#800 without screen and zellij) | `TestZellijPresetOpensModes` ("ctrl+g t did not open the menu") | **caught** |

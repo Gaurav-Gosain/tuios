@@ -52,6 +52,7 @@ type PresetAbout struct {
 // keybindPreset is one preset file.
 type keybindPreset struct {
 	LeaderKey    string              `toml:"leader_key"`
+	LeaderTwice  string              `toml:"leader_twice"`
 	Repeat       []string            `toml:"repeat"`
 	About        PresetAbout         `toml:"about"`
 	PrefixMode   map[string][]string `toml:"prefix_mode"`
@@ -124,6 +125,9 @@ func applyPreset(kb *KeybindingsConfig, name string) error {
 	}
 	if p.Repeat != nil {
 		kb.Repeat = slices.Clone(p.Repeat)
+	}
+	if p.LeaderTwice != "" {
+		kb.LeaderTwice = p.LeaderTwice
 	}
 	kb.PrefixMode = overlayPresetSection(kb.PrefixMode, p.PrefixMode)
 	kb.TerminalMode = overlayPresetSection(kb.TerminalMode, p.TerminalMode)
@@ -259,3 +263,12 @@ func collapseNumbered(lines []CheatSheetLine) []CheatSheetLine {
 	}
 	return out
 }
+
+// The values of keybindings.leader_twice.
+const (
+	LeaderTwiceSend          = "send"
+	LeaderTwiceLastWorkspace = "last_workspace"
+)
+
+// LeaderTwiceModes lists the values of keybindings.leader_twice.
+var LeaderTwiceModes = []string{LeaderTwiceSend, LeaderTwiceLastWorkspace}

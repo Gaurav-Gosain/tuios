@@ -228,6 +228,13 @@ func (r *KeybindRegistry) GetAction(key string) string {
 	return r.lookupKey(key, r.keyToAction)
 }
 
+// LeaderTwiceGoesBack reports whether the leader pressed two times goes back
+// to the last workspace rather than sending the leader. See
+// KeybindingsConfig.LeaderTwice.
+func (r *KeybindRegistry) LeaderTwiceGoesBack() bool {
+	return r.config.Keybindings.LeaderTwice == LeaderTwiceLastWorkspace
+}
+
 // PrefixRepeats reports whether action stays armed after the leader. See
 // KeybindingsConfig.Repeat.
 func (r *KeybindRegistry) PrefixRepeats(action string) bool {

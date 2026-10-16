@@ -35,13 +35,14 @@ func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 	presetBound := map[string]bool{}
 	for _, name := range Presets()[1:] {
 		kb := DefaultKeybindingsFor(name)
+		bound := map[string]bool{}
 		for action, keys := range kb.PrefixMode {
 			if len(keys) > 0 {
-				presetBound[action] = true
+				bound[action], presetBound[action] = true, true
 			}
 		}
 		rows := PrefixMenuActions("", MenuState{})
-		for action := range presetBound {
+		for action := range bound {
 			if !slices.Contains(rows, action) {
 				t.Errorf("preset %s binds %q after the leader, and the which-key layout has no row for it", name, action)
 			}

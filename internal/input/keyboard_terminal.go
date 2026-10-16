@@ -148,6 +148,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// is dropped rather than replaced with some other key.
 		if o.PrefixActive {
 			o.PrefixActive = false
+			if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
+				// screen's C-a C-a. send_prefix still sends the leader.
+				o.LastWorkspace()
+				return o, nil
+			}
 			forwardKeyToFocusedWindow(msg, o)
 			return o, nil
 		}

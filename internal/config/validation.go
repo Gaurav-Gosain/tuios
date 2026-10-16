@@ -97,6 +97,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 				p, strings.Join(Presets(), ", ")),
 		})
 	}
+	warnEnum(result, "keybindings", "leader_twice", cfg.Keybindings.LeaderTwice, LeaderTwiceModes, LeaderTwiceSend)
 	warnEnum(result, "keybindings", "keyboard_layout", cfg.Keybindings.KeyboardLayout, KeyboardLayouts, KeyboardLayoutUS)
 	warnEnum(result, "keybindings", "option_glyphs", cfg.Keybindings.OptionGlyphs, OptionGlyphModes, OptionGlyphsAuto)
 	validatePrefixRepeat(cfg, result)

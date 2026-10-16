@@ -749,9 +749,13 @@ func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 
 // handlePrefixKey handles Ctrl+B prefix key activation
 func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// If prefix is already active, deactivate it (double leader key cancels)
+	// If prefix is already active, deactivate it (double leader key cancels),
+	// or go back to the last workspace when leader_twice says so.
 	if o.PrefixActive {
 		o.PrefixActive = false
+		if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
+			o.LastWorkspace()
+		}
 		return o, nil
 	}
 	// Activate prefix mode

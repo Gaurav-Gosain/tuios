@@ -1,0 +1,112 @@
+# The screen preset: GNU screen's default keys after the leader, ctrl+a, on the
+# tuios actions that do the same thing. A screen window is a tuios workspace,
+# and a screen region is a tuios window.
+#
+# A delta over the tuios defaults, as presets/tmux.toml is. screen binds each
+# command letter on its control variant too (C-a c and C-a C-c), and so does
+# this file, except ctrl+c: it cancels the leader everywhere in tuios.
+
+leader_key = "ctrl+a"
+# C-a C-a goes to the last window in screen. a sends a literal C-a.
+leader_twice = "last_workspace"
+repeat = [
+  "terminal_focus_left", "terminal_focus_right", "terminal_focus_up", "terminal_focus_down",
+]
+
+[about]
+name = "screen"
+summary = "for GNU screen users"
+samples = ["c", "S", "a"]
+model = "A screen window is a workspace here. A screen region is a window here."
+same = ["prefix_help", "prefix_selection", "paste_buffer", "prefix_detach"]
+missing = [
+  "H: log the window to a file",
+  "M, _: monitor activity or silence. The Inbox covers agents only",
+  "x: lock the screen",
+  "z: suspend",
+  "C-a c fills the current region with a new window. Here a new window is a new workspace",
+]
+notes = [
+  "Press ctrl+c to cancel the leader.",
+  "Press ctrl+a a to send ctrl+a to the program in the pane.",
+  "Copy mode uses vi keys. [[keybindings.copy_pipe]] pipes a copy through a command.",
+]
+
+[prefix_mode]
+send_prefix = ["a"]
+new_workspace = ["c"]
+next_workspace = ["n", "ctrl+n", "space"]
+prev_workspace = ["p", "ctrl+p", "ctrl+h", "backspace"]
+prefix_workspace_switcher = ["w", "\"", "'"]
+switch_workspace_1 = ["1"]
+switch_workspace_2 = ["2"]
+switch_workspace_3 = ["3"]
+switch_workspace_4 = ["4"]
+switch_workspace_5 = ["5"]
+switch_workspace_6 = ["6"]
+switch_workspace_7 = ["7"]
+switch_workspace_8 = ["8"]
+switch_workspace_9 = ["9"]
+rename_workspace = ["A"]
+prefix_detach = ["d", "ctrl+d"]
+prefix_close_window = ["k", "ctrl+k"]
+prefix_next_window = ["tab"]
+prefix_prev_window = []
+prefix_last_message = ["m"]
+prefix_fullscreen = ["Q", "z"]
+prefix_split_horizontal = ["S", "-"]
+prefix_split_vertical = ["|"]
+minimize_window = ["X"]
+prefix_screenshot = ["h"]
+prefix_help = ["?"]
+prefix_quit = ["\\"]
+prefix_command_palette = [":", "P"]
+prefix_selection = ["[", "esc"]
+paste_buffer = ["]"]
+prefix_tuios = ["ctrl+t"]
+# The tuios features screen takes the keys of, in the tuios menu below.
+prefix_new_window = []
+prefix_keybinds = []
+prefix_minimize = []
+prefix_workspace = []
+prefix_agents_settings = []
+prefix_close_session = []
+prefix_session_switcher = []
+display_panes = []
+prefix_toggle_tiling = []
+prefix_exit_mode = []
+launcher = []
+prefix_select_0 = []
+prefix_select_1 = []
+prefix_select_2 = []
+prefix_select_3 = []
+prefix_select_4 = []
+prefix_select_5 = []
+prefix_select_6 = []
+prefix_select_7 = []
+prefix_select_8 = []
+prefix_select_9 = []
+
+[tuios_prefix]
+prefix_new_window = ["c"]
+prefix_keybinds = ["k"]
+prefix_minimize = ["m"]
+prefix_workspace = ["w"]
+prefix_agents_settings = ["A"]
+prefix_close_session = ["X"]
+prefix_session_switcher = ["S"]
+display_panes = ["Q"]
+prefix_toggle_tiling = ["space"]
+prefix_exit_mode = ["esc"]
+launcher = ["a"]
+prefix_prev_window = ["p"]
+prefix_select_0 = ["0"]
+prefix_select_1 = ["1"]
+prefix_select_2 = ["2"]
+prefix_select_3 = ["3"]
+prefix_select_4 = ["4"]
+prefix_select_5 = ["5"]
+prefix_select_6 = ["6"]
+prefix_select_7 = ["7"]
+prefix_select_8 = ["8"]
+prefix_select_9 = ["9"]

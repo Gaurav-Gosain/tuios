@@ -871,6 +871,11 @@ type KeybindingsConfig struct {
 	// defaults: "tuios" (or empty), "tmux". See preset.go.
 	Preset    string `toml:"preset,omitempty"`
 	LeaderKey string `toml:"leader_key"` // Leader key for prefix commands (default: ctrl+b, or the preset's)
+	// LeaderTwice is what the leader pressed two times does: "send" (the
+	// default) sends the leader to the pane in terminal mode and cancels in
+	// window mode; "last_workspace" goes back to the last workspace, as
+	// screen's C-a C-a does. send_prefix sends the leader either way.
+	LeaderTwice string `toml:"leader_twice,omitempty"`
 	// KeyboardLayout is the layout tuios assumes for a key the terminal does
 	// not describe: "us" (the default when empty) or "other". With "us" a
 	// binding on opt+shift+7 also matches opt+&, because & is Shift+7 on a US
@@ -3138,6 +3143,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 			fillPrefix = fillMapDefaultsYielding
 			if cfg.Keybindings.Repeat == nil {
 				cfg.Keybindings.Repeat = slices.Clone(kb.Repeat)
+			}
+			if cfg.Keybindings.LeaderTwice == "" {
+				cfg.Keybindings.LeaderTwice = kb.LeaderTwice
 			}
 		}
 	}

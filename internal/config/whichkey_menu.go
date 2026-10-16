@@ -173,6 +173,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		pair("Next/prev window", part("prefix_next_window", "Next window"), part("prefix_prev_window", "Previous window")),
 		numbered("Jump to window", actionRun("prefix_select_", 0, 9, 1)...),
 		row("prefix_fullscreen", "Toggle zoom"),
+		row("minimize_window", "Minimize window"),
 	}}
 	panes := menuSection{title: "Panes", rows: []menuRow{
 		// The arrows walk panes, and the prefix stays armed for a moment
@@ -262,6 +263,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 	tools := menuSection{title: "Tools", rows: []menuRow{
 		row("prefix_command_palette", "Command palette"),
 		row("reload_config", "Reload config"),
+		row("send_prefix", "Send the leader"),
 		row("launcher", "Launcher"),
 		row("prefix_settings", "Settings"),
 		row("prefix_keybinds", "Keybindings"),

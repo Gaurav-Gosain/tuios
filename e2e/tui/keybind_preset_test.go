@@ -75,3 +75,56 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 		t.Fatalf("ctrl+b ctrl+t m did not open the minimize menu: %v\n%s", err, term.Snapshot())
 	}
 }
+
+// TestScreenPresetLeaderTwiceAndSend: under the screen preset ctrl+a c opens
+// a workspace, ctrl+a ctrl+a goes back to the last one, and ctrl+a a sends a
+// literal ctrl+a to the pane, which cat -v prints as ^A.
+//
+// Negative control: with leader_twice = "send" in the config, ctrl+a ctrl+a
+// sends ^A instead and the session stays on workspace 2.
+func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
+	term, base := panesSession(t, "screenkeys", "\n[keybindings]\npreset = \"screen\"\n")
+	waitForSettledGeometryIn(t, base, "screenkeys", 1)
+	if err := term.SendKeys(tuitest.Ctrl('a'), "c"); err != nil {
+		t.Fatalf("press ctrl+a c: %v", err)
+	}
+	waitWorkspace(t, base, "screenkeys", 2)
+	if err := term.SendKeys(tuitest.Ctrl('a'), tuitest.Ctrl('a')); err != nil {
+		t.Fatalf("press ctrl+a ctrl+a: %v", err)
+	}
+	waitWorkspace(t, base, "screenkeys", 1)
+
+	enterTerminalMode(t, term)
+	if err := term.SendKeys("cat -v", tuitest.Enter); err != nil {
+		t.Fatalf("start cat -v: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := term.SendKeys(tuitest.Ctrl('a'), "a", tuitest.Enter); err != nil {
+		t.Fatalf("press ctrl+a a: %v", err)
+	}
+	if err := term.WaitForText("^A", uiTimeout); err != nil {
+		t.Fatalf("ctrl+a a did not reach the pane as ^A: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestZellijPresetOpensModes: under the zellij preset ctrl+g t opens the
+// workspace menu (a zellij tab is a workspace) and ctrl+g p the window menu
+// (a zellij pane is a window).
+func TestZellijPresetOpensModes(t *testing.T) {
+	term, base := panesSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
+	waitForSettledGeometryIn(t, base, "zellijkeys", 1)
+	for _, tc := range []struct{ key, title string }{{"t", "Switch to workspace"}, {"p", "Toggle tiling mode"}} {
+		if err := term.SendKeys(tuitest.Ctrl('g'), tc.key); err != nil {
+			t.Fatalf("press ctrl+g %s: %v", tc.key, err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return strings.Contains(s.Text(), tc.title)
+		}, uiTimeout); err != nil {
+			t.Fatalf("ctrl+g %s did not open the menu with %q: %v\n%s", tc.key, tc.title, err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Esc); err != nil {
+			t.Fatalf("press esc: %v", err)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+}

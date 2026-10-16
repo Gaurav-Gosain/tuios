@@ -22,7 +22,8 @@ To inspect your own effective bindings, use the binary rather than any document:
 
 ## Keys of another multiplexer
 
-`keybindings.preset` gives the keys of tmux after the leader:
+`keybindings.preset` gives the keys of tmux, GNU screen or zellij after the
+leader:
 
 ```toml
 [keybindings]
@@ -31,6 +32,13 @@ preset = "tmux"
 
 Or run `tuios keybinds preset tmux`. `tuios keybinds preset` shows the preset
 in use, and `tuios keybinds preset list` shows them all.
+
+| Preset | Leader | What it does |
+|---|---|---|
+| `tuios` | `ctrl+b` | The tuios keys. This is the default |
+| `tmux` | `ctrl+b` | tmux 3.8's keys after the leader |
+| `screen` | `ctrl+a` | GNU screen's keys after the leader, also on the control variant (`ctrl+a ctrl+n`). `ctrl+a ctrl+a` goes to the last workspace. `ctrl+a a` sends `ctrl+a` to the pane |
+| `zellij` | `ctrl+g` | zellij's unlock-first keys. After `ctrl+g`, `p` opens the window menu, `t` the workspace menu, `s` copy mode and `o` the session switcher. The next key runs one action |
 
 - A tmux window is a workspace here. A tmux pane is a window here. So `c`,
   `n`, `p`, `l`, `0` to `9`, `,` and `&` act on workspaces.
@@ -46,6 +54,10 @@ in use, and `tuios keybinds preset list` shows them all.
   `bind -r` does. A letter you type right after `ctrl+b p` goes to the shell.
 - `tuios keybinds preset tmux` removes `keybindings.leader_key`, so the
   leader is the preset's.
+- `keybindings.leader_twice` is what the leader pressed two times does:
+  `send` sends it to the pane (the default) and `last_workspace` goes back to
+  the last workspace. The screen preset sets `last_workspace`. `ctrl+c` still
+  cancels the leader under every preset.
 
 `tuios keybinds cheatsheet tmux` shows the keys in three groups: the keys that
 work as in tmux, the tuios keys that moved, and what tmux has that tuios does
