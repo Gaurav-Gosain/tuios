@@ -3132,6 +3132,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
 		kb := defaultCfg.Keybindings
 		if applyPreset(&kb, p) == nil {
+			dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode)
+			dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode)
 			defaultCfg = &UserConfig{Keybindings: kb}
 			fillPrefix = fillMapDefaultsYielding
 			if cfg.Keybindings.Repeat == nil {
@@ -3441,6 +3443,20 @@ func fillMapDefaultsYielding(target, defaults map[string][]string) {
 		}
 		if len(free) > 0 {
 			target[k] = free
+		}
+	}
+}
+
+// dropPresetShadows removes the user's entries that hold the tuios default
+// keys of an action the preset changes. A config.toml that an older tuios
+// wrote on its first start sets every key to its default, so without this the
+// preset would yield every key it changes to those entries and do almost
+// nothing. An entry
+// the user changed from the default stays, and wins over the preset.
+func dropPresetShadows(user, tuios, preset map[string][]string) {
+	for action, keys := range user {
+		if def, ok := tuios[action]; ok && slices.Equal(keys, def) && !slices.Equal(preset[action], def) {
+			delete(user, action)
 		}
 	}
 }

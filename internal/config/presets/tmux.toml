@@ -27,13 +27,14 @@ model = "A tmux window is a workspace here. A tmux pane is a window here."
 same = [
   "prefix_close_window", "prefix_fullscreen", "prefix_detach", "prefix_selection", "paste_buffer",
   "prefix_help", "next_session", "prev_session", "terminal_focus_left", "terminal_focus_right",
-  "terminal_focus_up", "terminal_focus_down", "prefix_debug",
+  "terminal_focus_up", "terminal_focus_down",
 ]
 missing = [
   "C-o, M-o: rotate the panes. No action yet",
   "@, *: floating panes. tuios floats a whole workspace with tiling off",
   "{, }: swap a pane by its number. swap_left and swap_right swap by side",
-  "/: describe a key. Run tuios keybinds explain KEY",
+  "/: describe a key. Here / finds a pane. Run tuios keybinds explain KEY",
+  "0: the first window. Workspaces start at 1, so press 1",
   "C-z: suspend the client",
   "t: the clock",
   "PgUp: copy mode then page up. Press [ then PgUp",

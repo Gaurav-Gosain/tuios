@@ -85,6 +85,18 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 	if cfg.Keybindings.LeaderKey != "ctrl+b" {
 		t.Errorf("leader is %q, want the preset's ctrl+b", cfg.Keybindings.LeaderKey)
 	}
+
+	// A config.toml an older tuios wrote on its first start holds every
+	// default. Those entries are not the user's choice and must not hide the
+	// preset. Negative control: without dropPresetShadows, c and n keep the
+	// tuios actions.
+	old := presetConfig(t, "tmux", "[keybindings.prefix_mode]\nprefix_new_window = [\"c\"]\nprefix_next_window = [\"n\", \"tab\"]\n")
+	r = NewKeybindRegistry(old)
+	for key, want := range map[string]string{"c": "new_workspace", "n": "next_workspace", "o": "prefix_next_window"} {
+		if got := r.GetPrefixAction(key); got != want {
+			t.Errorf("full old config: %s runs %q, want %q", key, got, want)
+		}
+	}
 }
 
 // TestEveryDisplacedFeatureMoves: a tuios action a preset takes the key of is

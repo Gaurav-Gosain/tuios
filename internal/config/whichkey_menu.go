@@ -421,12 +421,16 @@ func (mr menuRow) build(live *liveScope) []Keybinding {
 		}
 	}
 	if len(firsts) == len(mr.parts) {
-		sep := "/"
-		if allArrows(firsts) {
-			// The four arrows read as one group: ←↑↓→.
-			sep = ""
+		key := strings.Join(firsts, "/")
+		if mod, ok := arrowGroup(firsts); ok {
+			// The four arrows read as one group: ←↑↓→, or Alt+←↑↓→ with
+			// one modifier, which keeps the key column narrow.
+			key = mod
+			for _, l := range firsts {
+				key += l[len(mod):]
+			}
 		}
-		return []Keybinding{{Key: strings.Join(firsts, sep), Description: mr.desc, Submenu: mr.submenu, Action: first}}
+		return []Keybinding{{Key: key, Description: mr.desc, Submenu: mr.submenu, Action: first}}
 	}
 	// A part is unbound, so the shared line would name a key that does not
 	// do what it says. Each bound part gets its own line instead.
@@ -439,15 +443,28 @@ func (mr menuRow) build(live *liveScope) []Keybinding {
 	return out
 }
 
-func allArrows(labels []string) bool {
-	for _, l := range labels {
-		switch l {
-		case "←", "↑", "↓", "→":
-		default:
-			return false
+// arrowGroup reports whether every label is an arrow with the same modifier
+// before it, and returns that modifier ("" for bare arrows).
+func arrowGroup(labels []string) (string, bool) {
+	mod := ""
+	for i, l := range labels {
+		var arrow string
+		for _, a := range []string{"←", "↑", "↓", "→"} {
+			if strings.HasSuffix(l, a) {
+				arrow = a
+			}
+		}
+		if arrow == "" {
+			return "", false
+		}
+		m := strings.TrimSuffix(l, arrow)
+		if i == 0 {
+			mod = m
+		} else if m != mod {
+			return "", false
 		}
 	}
-	return true
+	return mod, true
 }
 
 // joinKeyLabels shows every key of one action, as "|/\".

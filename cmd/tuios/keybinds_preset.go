@@ -113,6 +113,12 @@ func keybindsCheatSheet(name string, asJSON bool) error {
 			fmt.Println(title)
 		}
 		for _, l := range lines {
+			if len(l.Keys) > 26 {
+				// A long chord list gets a line of its own, so the
+				// descriptions stay in one column.
+				fmt.Printf("  %s\n  %-26s %s\n", l.Keys, "", l.Does)
+				continue
+			}
 			fmt.Printf("  %-26s %s\n", l.Keys, l.Does)
 		}
 		fmt.Println()
