@@ -116,7 +116,7 @@ type inboxReplyEditor struct {
 	// host is the linked machine the pane is on, empty for this one. The
 	// reply then goes with host, and this machine's daemon passes it on.
 	host string
-	who     string
+	who  string
 	// context says where the agent is, as the editor's label shows it:
 	// "done 4m", "working".
 	context string
