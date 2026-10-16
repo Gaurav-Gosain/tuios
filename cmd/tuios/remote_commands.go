@@ -306,10 +306,13 @@ func runNewWindow(o newWindowOptions) error {
 	}
 	raw, err := call("new-window", params)
 	if err != nil {
-		if stale := staleNewWindowParam(err); stale != nil {
-			return reportVerbError(stale, o.jsonOut)
+		if staleNewWindowParam(err) {
+			err = errStaleNewWindow
 		}
-		return reportVerbError(explainVerbError("new-window", err), o.jsonOut)
+		if err != errStaleNewWindow {
+			err = explainVerbError("new-window", err)
+		}
+		return reportVerbError(err, o.jsonOut)
 	}
 	var res struct {
 		Type     string `json:"type"`
@@ -323,14 +326,14 @@ func runNewWindow(o newWindowOptions) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	// A daemon from before unknown parameters were refused ignores keep_open
-	// and wait, and opens an ordinary window. Say so, because the window
-	// closes on exit and the call did not wait.
+	// A daemon older than v0.8.0 ignores keep_open and wait, and opens an
+	// ordinary window. Say so, because the window closes on exit and the
+	// call did not wait.
 	if (o.keepOpen && !res.KeepOpen) || (o.wait && res.ExitCode == nil) {
-		fmt.Fprintln(os.Stderr, "warning: the daemon does not support --keep-open or --wait. Run 'tuios kill-server' and start tuios again to update it.")
 		if o.wait {
-			return &statusError{code: 1}
+			return reportVerbError(errStaleNewWindow, o.jsonOut)
 		}
+		fmt.Fprintln(os.Stderr, "warning: "+errStaleNewWindow.Error()+".")
 	}
 	if o.jsonOut {
 		if err := printVerbResult(raw, true); err != nil {
@@ -356,25 +359,18 @@ func runNewWindow(o newWindowOptions) error {
 	return nil
 }
 
-// staleNewWindowParam explains the refusal a daemon older than keep_open and
-// wait gives: it refuses a parameter it does not know, and its own wording
-// ("fix the name") points at the caller instead of at the daemon.
-func staleNewWindowParam(err error) error {
-	var call *session.VerbCallError
-	if !errors.As(err, &call) || call.Code != session.ErrVerbInvalidParams || call.Hint == nil ||
-		!strings.Contains(call.Message, "has no parameter") {
-		return nil
-	}
-	flag := map[string]string{"keep_open": "--keep-open", "wait": "--wait", "timeout": "--timeout"}[call.Hint.Param]
-	if flag == "" {
-		return nil
-	}
-	return &diagnosticError{
-		What:  fmt.Sprintf("The running daemon does not know %s.", flag),
-		Cause: "the daemon is older than this tuios.",
-		Fix:   "run 'tuios kill-server' and start tuios again. Saved sessions come back with new shells.",
-		Err:   err,
-	}
+// errStaleNewWindow is what new-window says when the daemon does not know
+// keep_open or wait. Since v0.8.0 a daemon refuses a parameter it does not
+// know, and its own wording ("fix the name") points at the caller instead of
+// at the daemon. An older one ignores the parameter and answers without the
+// fields that say it was used.
+var errStaleNewWindow = errors.New("the running daemon is older than this tuios and does not know --keep-open or --wait. Run 'tuios kill-server' and start tuios again to update it")
+
+// staleNewWindowParam reports whether err is that refusal.
+func staleNewWindowParam(err error) bool {
+	call, ok := errors.AsType[*session.VerbCallError](err)
+	return ok && call.Code == session.ErrVerbInvalidParams && call.Hint != nil &&
+		(call.Hint.Param == "keep_open" || call.Hint.Param == "wait" || call.Hint.Param == "timeout")
 }
 
 // newWindowExitStatus is how new-window --wait exits: with the program's own
