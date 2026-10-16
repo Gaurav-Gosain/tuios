@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -229,9 +230,11 @@ func printThemePalette(w io.Writer, p themePalette) {
 
 // runThemeReload reads the theme and glyph files again in every tuios client
 // on this machine. Each client's config watcher follows the stamp file in the
-// config directory, so writing and removing it reaches clients of every kind,
-// the ssh and web servers' included, with no protocol of its own. The files
-// are read here too, so the command can say which ones fail.
+// config directory, so writing it reaches clients of every kind, the ssh and
+// web servers' included, with no protocol of its own. The stamp is left in
+// place and written with the time: kqueue (macOS, the BSDs) sees a new file
+// only by listing the directory, and one removed at once is gone before the
+// listing. The files are read here too, so the command can say which ones fail.
 func runThemeReload(jsonOutput bool) error {
 	loaded, problems := theme.ReloadCustomThemes()
 	path, err := config.GetConfigPath()
@@ -239,10 +242,9 @@ func runThemeReload(jsonOutput bool) error {
 		return err
 	}
 	stamp := filepath.Join(filepath.Dir(path), config.ThemeReloadStamp)
-	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
+	if err := os.WriteFile(stamp, []byte(time.Now().Format(time.RFC3339Nano)), 0o600); err != nil {
 		return fmt.Errorf("ask the clients to reload: %w", err)
 	}
-	_ = os.Remove(stamp)
 
 	if jsonOutput {
 		out, err := json.MarshalIndent(map[string]any{"themes": loaded, "problems": problems}, "", "  ")

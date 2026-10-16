@@ -289,6 +289,9 @@ func TestReloadRefusesAFileThatDoesNotValidate(t *testing.T) {
 // nothing; without the watch dropped on Remove, the save in the directory made
 // again delivers nothing; without the watch renewed on a Create of a directory
 // already watched, the save behind the new symlink target delivers nothing.
+// Where kqueue watches (macOS): without the link read every relinkPoll, the
+// save behind the new symlink target delivers nothing; with the stamp removed
+// as soon as it is written, the stamp delivers nothing.
 func TestWatcherFollowsThemeFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -367,16 +370,25 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 	if err := os.Rename(themes+".new", themes); err != nil {
 		t.Fatal(err)
 	}
+	if relinkUnseen {
+		// The relink is seen by reading the link, so the read is waited for
+		// and drained with the rest, and only the save can satisfy the wait.
+		time.Sleep(relinkPoll)
+	}
 	settle()
 	saveLikeVim(t, filepath.Join(gen2, "mine.json"), `{"red": "#0000ff"}`)
 	waitAssets("a theme file was saved behind a symlink pointed at a new directory")
 
+	// The stamp as tuios theme reload writes it, made and then written again.
+	settle()
 	stamp := filepath.Join(dir, ThemeReloadStamp)
-	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
-		t.Fatal(err)
+	for _, why := range []string{"tuios theme reload made its stamp", "tuios theme reload wrote its stamp again"} {
+		if err := os.WriteFile(stamp, []byte(why), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		waitAssets(why)
+		settle()
 	}
-	_ = os.Remove(stamp)
-	waitAssets("tuios theme reload wrote its stamp")
 	noReport(t, reports, "theme files are not the config")
 
 	saveLikeVim(t, path, "[appearance]\ntheme = \"nord\"\n")
