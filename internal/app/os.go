@@ -1198,6 +1198,9 @@ type OS struct {
 	// launcherIcons holds the decoded app icons and what is currently drawn on
 	// the host. Nil until the launcher first needs one.
 	launcherIcons *launcherIcons
+	// replyPreview draws the images of a reply's draft, nil until one does.
+	// See inbox_reply_preview.go.
+	replyPreview *replyPreview
 	// launcherIconCells is where the last frame put each row's icon, in
 	// panel-relative cells, for the flush that follows the frame.
 	launcherIconCells []launcherIconPlacement
@@ -2181,6 +2184,8 @@ func (m *OS) Cleanup() {
 	}
 
 	m.stopSidebarSessions()
+	// The copy of an image the desktop viewer was given.
+	m.replyPreview.removeOpened()
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	m.endOmarchyFollow()

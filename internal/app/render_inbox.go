@@ -118,6 +118,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			// A reply from the rail to a pane with nothing in the Inbox.
 			width := m.panelWidth(inboxWidth)
 			content, geo := overlay.Panel{Title: title, Width: width, Body: strings.Join(replyDetail(width), "\n"), Hints: replyHints}.Render(theme.UI())
+			if at := m.inboxReplyDetailAt(true); at != nil {
+				at(geo.BodyX, geo.BodyY)
+			}
 			return content, geo, nil
 		}
 		// The one key offered in the middle is the mailbox, the place to
@@ -141,8 +144,10 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
-		// The reply editor draws its own colours.
+		// The reply editor draws its own colours, and its pictures go
+		// where its lines were drawn.
 		DetailStyled: replying,
+		DetailAt:     m.inboxReplyDetailAt(replying),
 		// Typing a reply takes the keyboard, so the row it answers goes quiet.
 		Unfocused: replying,
 		Position: func() (int, int) {

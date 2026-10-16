@@ -63,6 +63,9 @@ const (
 	// EventPaste: the person asked to paste from the clipboard. The host
 	// reads it and calls Paste.
 	EventPaste
+	// EventOpenImage: the person asked to open the image the view shows in
+	// the desktop's image viewer (OpenedImage).
+	EventOpenImage
 )
 
 // Model is one draft and its editor.
@@ -107,6 +110,11 @@ type Model struct {
 	frame   []string
 	frameAt frameKey
 	drawn   uint64
+
+	// preview draws pictures of the images, nil for words only. places is
+	// where the last frame put them.
+	preview Previewer
+	places  []Placement
 }
 
 // New returns an empty draft.

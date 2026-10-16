@@ -71,6 +71,10 @@ func (m *Model) Drawn() uint64 { return m.drawn }
 // render draws a frame the cache does not hold.
 func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []string {
 	in := newInks(pal, surface)
+	m.places = m.places[:0]
+	if m.pager != nil && m.pager.block.img != nil {
+		return m.renderImageView(width, in)
+	}
 	if m.pager != nil {
 		return m.renderPager(width, in)
 	}
@@ -82,7 +86,7 @@ func (m *Model) render(width int, pal overlay.Palette, surface color.Color) []st
 	m.top = min(max(m.top, cr-shown+1), cr)
 	m.top = min(max(m.top, 0), len(rows)-shown)
 
-	out := make([]string, 0, shown+2)
+	out := m.renderStrip(width, in)
 	sel := m.selectedBlock()
 	in.blank = overlay.Style(in.field).Render("  ")
 	for r := m.top; r < m.top+shown; r++ {
@@ -252,15 +256,25 @@ func wrapWords(s string, width int) []string {
 // Hints are the keys the editor offers now, for the host's footer.
 func (m *Model) Hints() []overlay.Hint {
 	switch {
-	case m.pager != nil:
+	case m.pager != nil && m.pager.block.img == nil:
 		return []overlay.Hint{
 			{Key: arrow("↑↓", "up/down"), Label: "scroll"},
 			{Key: "ctrl+e", Label: "expand"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "back"},
 		}
+	case m.pager != nil && m.pager.block.img != nil:
+		hints := []overlay.Hint{}
+		if m.preview != nil && m.preview.CanOpen() {
+			hints = append(hints, overlay.Hint{Key: "o", Label: "open in viewer"})
+		}
+		return append(hints,
+			overlay.Hint{Key: "backspace", Label: "remove"},
+			overlay.Hint{Key: "esc", Label: "back"},
+		)
 	case m.selectedBlock() != nil && m.selectedPaste() == nil:
 		return []overlay.Hint{
+			{Key: "ctrl+o", Label: "view"},
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "close"},
 		}

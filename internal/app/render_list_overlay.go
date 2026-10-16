@@ -42,6 +42,9 @@ type listOverlay struct {
 	// most the fitted width: more about the selected row than the row holds.
 	// DetailFor builds them for the fitted width.
 	DetailFor func(width int) []string
+	// DetailAt, when set, is told where the detail's first line was drawn,
+	// relative to the panel, for a detail that puts pictures on the host.
+	DetailAt func(x, y int)
 	// DetailStyled says the detail lines carry their own colours and fill
 	// the width, as the reply editor's do, so they are drawn as they are.
 	DetailStyled bool
@@ -143,9 +146,11 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	} else {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
+	detailRow := -1
 	if cfg.DetailFor != nil {
 		if detail := cfg.DetailFor(cfg.Width); len(detail) > 0 {
 			lines = append(lines, overlay.Rule(cfg.Width, bg, pal))
+			detailRow = len(lines)
 			for _, l := range detail {
 				if cfg.DetailStyled {
 					lines = append(lines, l)
@@ -163,6 +168,9 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		Hints: cfg.Hints,
 	}
 	content, geo := panel.Render(pal)
+	if cfg.DetailAt != nil && detailRow >= 0 {
+		cfg.DetailAt(geo.BodyX, geo.BodyY+detailRow)
+	}
 
 	rows := make([]overlayRowHit, 0, max(end-start, 0))
 	for i := start; i < end; i++ {

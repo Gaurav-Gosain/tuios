@@ -1088,6 +1088,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case replyImageMsg:
 		m.applyReplyImage(msg)
+		return m, m.replyPreviewCmd()
+
+	case replyPreviewMsg:
+		m.applyReplyPreview(msg)
 		return m, nil
 
 	case PasteTimeoutMsg:

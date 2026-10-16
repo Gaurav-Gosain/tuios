@@ -18,6 +18,8 @@ type frameKey struct {
 	pager    *pager
 	pagerTop int
 	ascii    bool
+	preview  PreviewMode
+	previewV uint64
 	depth    overlay.Depth
 	colours  [10][4]uint32
 }
@@ -30,6 +32,9 @@ func (m *Model) frameKey(width int, pal overlay.Palette, surface color.Color) fr
 	}
 	if m.pager != nil {
 		k.pagerTop = m.pager.top
+	}
+	if m.preview != nil {
+		k.preview, k.previewV = m.preview.Mode(), m.preview.Version()
 	}
 	// Colours are compared by value: a palette's fields are interfaces, and
 	// comparing them with == can panic on a type that is not comparable.

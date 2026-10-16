@@ -3973,6 +3973,14 @@ An image attached to the reply shows as one block, such as
 - A paste that is only the path of an image file on this machine. A terminal
   pastes a file you drop on it this way.
 
+While the draft holds an image, a strip above it shows each image 3 rows
+high, at most 4, then `+N more`. tuios draws them with kitty graphics when
+your terminal has them, and with block glyphs otherwise. At 16 colours each
+image is a line of words instead: `Image #1 · 1280×720 png · 412 KB`.
+`ctrl+o` on a selected image shows it larger in place of the draft. There, `o`
+opens it in your desktop's image viewer, from a private copy that tuios
+removes when you close the view. `esc` goes back to the draft.
+
 A message takes 8 images of at most 8 MB each, and 8 MB in all. The same
 image twice is refused: `Image #1 is already in the message.` `backspace`
 removes the selected image, and undo brings it back. The bytes stay in the

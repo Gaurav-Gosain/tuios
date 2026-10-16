@@ -136,7 +136,7 @@ func (m *OS) applyReplyImageProbe(msg imageProbeMsg) tea.Cmd {
 	}
 	img, err := composer.NewImage(msg.data)
 	m.applyReplyImage(replyImageMsg{comp: msg.reply, img: img, err: err})
-	return nil
+	return m.replyPreviewCmd()
 }
 
 // applyReplyImage puts a read image in the draft it was read for.

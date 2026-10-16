@@ -1271,6 +1271,9 @@ func (m *OS) flushGraphicsForView() {
 	} else {
 		m.clearLauncherIcons()
 	}
+	// The reply's image previews belong to the Inbox, the same way. A nil
+	// check when no reply has shown a picture.
+	m.flushReplyPreviewForFrame()
 	// The preview's picture belongs to the panel that is doing the hiding, the
 	// same as the launcher's icons, so it runs past hideImages rather than
 	// through it.

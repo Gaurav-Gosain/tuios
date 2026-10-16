@@ -124,6 +124,14 @@ type inboxReplyEditor struct {
 	// drawn from.
 	frame   []string
 	frameAt inboxReplyFrame
+	// head is how many lines the label takes above the draft, and at is
+	// where the draft's first line was drawn, relative to the Inbox panel,
+	// for its pictures.
+	head int
+	at   struct {
+		x, y int
+		ok   bool
+	}
 }
 
 // inboxSentReply is a reply this client queued, kept so a drop of it can be
@@ -235,6 +243,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	if m.ProcessingRemoteKeys {
 		comp.MarkAutomated()
 	}
+	m.replyPreviewAttach(comp)
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		session:    sessionID,
 		window:     windowID,
@@ -373,15 +382,21 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
+	var cmd tea.Cmd
 	switch ed.comp.Update(msg, m.ProcessingRemoteKeys) {
 	case composer.EventSend:
-		return m.InboxReplySend()
+		cmd = m.InboxReplySend()
 	case composer.EventClose:
 		m.InboxReplyCancel()
 	case composer.EventPaste:
-		return m.inboxReplyClipboard(ed)
+		cmd = m.inboxReplyClipboard(ed)
+	case composer.EventOpenImage:
+		cmd = m.replyOpenImage(ed.comp.OpenedImage())
 	}
-	return nil
+	// A view that closed takes its copy for the desktop viewer with it,
+	// and one that opened, or a strip that changed, may need pictures.
+	m.replyPreviewClosed()
+	return tea.Batch(cmd, m.replyPreviewCmd())
 }
 
 // InboxReplyCancel closes the editor. A draft with text in it is kept for
@@ -853,6 +868,34 @@ func (ed *inboxReplyEditor) lines(width int) []string {
 	return ed.frame
 }
 
+// inboxReplyDetailAt is the callback that records where the editor was drawn,
+// nil when no editor is open.
+func (m *OS) inboxReplyDetailAt(replying bool) func(x, y int) {
+	ed := m.Inbox.reply.editor
+	if !replying || ed == nil {
+		return nil
+	}
+	return func(x, y int) {
+		// The draft's lines are padded by two cells.
+		ed.at.x, ed.at.y, ed.at.ok = x+2, y+ed.head, true
+	}
+}
+
+// inboxOnTop reports whether no panel is drawn over the Inbox, so its
+// pictures may go on the host.
+func (m *OS) inboxOnTop() bool {
+	h, ok := m.overlayHitByKind("inbox")
+	if !ok {
+		return false
+	}
+	for _, o := range m.OverlayHits {
+		if o.Z > h.Z {
+			return false
+		}
+	}
+	return true
+}
+
 // inboxReplyFrame is what the editor's lines were drawn from.
 type inboxReplyFrame struct {
 	width int
@@ -878,6 +921,7 @@ func inboxReplyLines(ed *inboxReplyEditor, width int, body []string) []string {
 		wait := overlay.Style(bg).Foreground(pal.FgDim).Render("It is typed when " + ed.who + " is at rest.")
 		out = append(out, overlay.Fill(pad+ansi.Truncate(wait, inner, "…"), width, bg))
 	}
+	ed.head = len(out)
 	for _, l := range body {
 		out = append(out, pad+l)
 	}

@@ -14,10 +14,13 @@ import (
 // grows to.
 const pagerExtraRows = 4
 
-// pager is an open block: its text, read only, with a scroll.
+// pager is an open block: a paste's text, read only, with a scroll, or an
+// image's view.
 type pager struct {
 	block *block
-	top   int
+	// viewCols and viewRows are an image view's picture box as last drawn.
+	viewCols, viewRows int
+	top                int
 	// lines is the text broken for width, kept until the width changes.
 	lines []string
 	width int
@@ -26,11 +29,16 @@ type pager struct {
 // Open shows the selected block's text in place of the editor. It reports
 // whether there was a block to open.
 func (m *Model) Open() bool {
-	b := m.selectedPaste()
+	b := m.selectedBlock()
 	if b == nil {
 		return false
 	}
 	m.pager = &pager{block: b}
+	if b.img != nil {
+		// The view's box as the next frame draws it, so the host can
+		// prepare the picture before that frame.
+		m.pager.viewCols, m.pager.viewRows = fitBox(b.img, m.cellAspect(), m.width+1, m.pagerRows(), false)
+	}
 	return true
 }
 
@@ -45,6 +53,19 @@ func (m *Model) pagerRows() int { return m.opt.MaxRows + pagerExtraRows }
 // ctrl+o go back to the draft.
 func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 	p := m.pager
+	if p.block.img != nil {
+		switch msg.String() {
+		case "esc", "q", "ctrl+o", "enter":
+			m.pager = nil
+		case "o":
+			if m.preview != nil && m.preview.CanOpen() {
+				return EventOpenImage
+			}
+		case "backspace", "delete":
+			m.Remove()
+		}
+		return EventNone
+	}
 	page := m.pagerRows()
 	switch msg.String() {
 	case "esc", "q", "ctrl+o", "enter":
