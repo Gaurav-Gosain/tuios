@@ -1250,7 +1250,8 @@ a pane that set its own `XDG_RUNTIME_DIR`), the command runs against the daemon
   none is running, and the daemon keeps that command's environment. When an
   agent ran it, every pane used to get the agent's session and tool-call
   variables, such as Codex's `CODEX_THREAD_ID` and `CODEX_CI` or Claude Code's
-  `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, along with the `NO_COLOR` the
+  `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, the `AI_AGENT` marker and Codex's
+  `CODEX_SANDBOX` variables, along with the `NO_COLOR` the
   tool call sets for its own output. Programs in every pane then drew without
   colour, and a Codex started in a pane was taken for a nested session, so the
   pane never reported its state. These are removed, together with `CLICOLOR`,

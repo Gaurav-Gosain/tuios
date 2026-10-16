@@ -152,10 +152,12 @@ func KittyAnimationVar(supported bool) string {
 // pane got the call's variables. Codex's CODEX_THREAD_ID made a Codex started
 // in a pane look nested, so tuios's Codex hook dropped its events; the other
 // CODEX_ and CLAUDE_ ones name the outer session, process or tool call, and
-// CLAUDE_CODE_MESSAGING_TOKEN is that session's credential. Tool calls also
-// set NO_COLOR and its kin for their own captured output, which turned colour
-// off in every pane, though tuios describes the pane through TERM and
-// COLORTERM. CODEX_HOME, CODEX_API_KEY and CLAUDE_CONFIG_DIR stay: they name
+// CLAUDE_CODE_MESSAGING_TOKEN is that session's credential. CODEX_SANDBOX and
+// CODEX_SANDBOX_NETWORK_DISABLED describe the call's sandbox, and AI_AGENT
+// tells a program an agent is driving it, which a person's pane is not. Tool
+// calls also set NO_COLOR and its kin for their own captured output, which
+// turned colour off in every pane, though tuios describes the pane through
+// TERM and COLORTERM. CODEX_HOME, CODEX_API_KEY and CLAUDE_CONFIG_DIR stay: they name
 // the user's folders and keys, not a session.
 var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
@@ -166,10 +168,10 @@ var hostMultiplexerVars = []string{
 	"TERN_IDENTITY", "TERN_LENSES", "TERN_COMPLETE", "TERN_ACP",
 	"KITTY_WINDOW_ID", "KITTY_PID",
 	"CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "CODEX_SHELL", "CODEX_CI",
-	"CODEX_APP_TOOLS_PIPE_PATH",
+	"CODEX_APP_TOOLS_PIPE_PATH", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED",
 	"CLAUDECODE", "CLAUDE_PID", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID",
 	"CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_MESSAGING_SOCKET",
-	"CLAUDE_CODE_MESSAGING_TOKEN",
+	"CLAUDE_CODE_MESSAGING_TOKEN", "AI_AGENT",
 	"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR",
 }
 
