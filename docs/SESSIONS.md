@@ -1245,6 +1245,20 @@ a pane that set its own `XDG_RUNTIME_DIR`), the command runs against the daemon
   passthrough, which tuios drops, and an agent that opens panes through tmux
   reached the outer tmux. Running tmux inside a tuios pane still works, and no
   longer warns about nesting.
+- **Panes never inherit an agent tool call's session variables or its
+  `NO_COLOR`.** A command such as `tuios new --detach` starts a daemon when
+  none is running, and the daemon keeps that command's environment. When an
+  agent ran it, every pane used to get the agent's session and tool-call
+  variables, such as Codex's `CODEX_THREAD_ID` and `CODEX_CI` or Claude Code's
+  `CLAUDECODE` and `CLAUDE_CODE_SESSION_ID`, along with the `NO_COLOR` the
+  tool call sets for its own output. Programs in every pane then drew without
+  colour, and a Codex started in a pane was taken for a nested session, so the
+  pane never reported its state. These are removed, together with `CLICOLOR`,
+  `CLICOLOR_FORCE` and `FORCE_COLOR`; `CODEX_HOME`, `CODEX_API_KEY` and
+  `CLAUDE_CONFIG_DIR` stay. Other variables, such as `GIT_PAGER`, still come
+  from the daemon's environment. To have `NO_COLOR` in every pane, set it in
+  your shell's startup file, or pass it with `--env` to `start-agent` and
+  `fan`.
 - **Resurrection restores structure, not work.** It is a way to get your layout
   and directories back, not a way to survive a crash without losing anything.
 

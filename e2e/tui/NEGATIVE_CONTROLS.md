@@ -6425,3 +6425,35 @@ The control was run on 2026-10-16 on the branch fix/start-server-pprof.
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | The flag not handed on | a build of main at 8a69099b, where `startDaemonBackground` runs `daemon` with no flags | `TestStartServerPassesPprofToTheDaemon`: "the daemon start-server started never served /debug/pprof on 127.0.0.1:59545: … connect: connection refused" | **caught** |
+## Panes do not inherit the agent tool call that started the daemon
+
+`TestPanesDoNotInheritTheAgentThatStartedTheDaemon` starts the daemon with
+`tuios new --detach` from the environment of an agent's tool call: `TERM=dumb`,
+`NO_COLOR=1`, `CLICOLOR=0`, `FORCE_COLOR=0`, Codex's `CODEX_THREAD_ID`,
+`CODEX_CI` and `CODEX_SHELL`, and Claude Code's `CLAUDECODE` and
+`CLAUDE_CODE_SESSION_ID`. The pane's shell prints each of them, and each must
+be unset. A Codex hook is then run in the pane by the binary's absolute path:
+its `SessionStart` must be sent, and the pane's agent state must read `idle`.
+The pane's text and both hook decisions are saved under `artifactDir`.
+
+Run on macOS arm64 against upstream `main` at `b676cc47`, with real PTYs. The
+new names are entries in `hostMultiplexerVars`, so the wiring is the daemon's
+call to the filter; the mutant cuts that call and leaves the list and the test
+alone.
+
+| Control | Failure | Fixed build |
+| --- | --- | --- |
+| Unmodified main | `the pane inherited NO_COLOR=[1] CLICOLOR=[0] FORCE_COLOR=[0] CODEX_THREAD_ID=[outer-thread] CODEX_CI=[1] CODEX_SHELL=[1] CLAUDECODE=[1] CLAUDE_CODE_SESSION_ID=[outer-session]`; the hook skipped the pane's Codex as `nested Codex session`, and the agent state stayed `none` | every variable reads unset, and the state reads `idle` |
+| Cut the filter at the daemon's call site, `env := guestenv.WithoutHostMultiplexer(os.Environ())` in `buildEnvFor` replaced by `os.Environ()` | the same three failures | as above |
+
+The positive halves are in the same fixture. The command that starts the
+daemon also passes `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and an ordinary variable,
+and the pane must have the test's value of each, so the removed ones do not
+read unset because the pane lost its environment. The same hook run with
+`CODEX_THREAD_ID` set in the pane, a Codex really nested in another, must still
+be skipped as a nested session; it is, in every control and in the fixed build.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -run '^TestPanesDoNotInheritTheAgentThatStartedTheDaemon$' -count=1 .
+```
