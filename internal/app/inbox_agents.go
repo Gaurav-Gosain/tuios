@@ -80,7 +80,10 @@ type inboxAgentsState struct {
 	sort    int
 	query   string
 	tickGen uint64
-	ticking bool
+	// tickStop ends the armed minute tick, nil when none is armed. Closing
+	// it makes the tick's command return at once, so a view that closed
+	// does not wake the client once more a minute later.
+	tickStop chan struct{}
 
 	// list is the filtered, sorted rows, and listAt what they were built
 	// from.
@@ -156,6 +159,7 @@ func (m *OS) InboxAgentsOn() bool { return m.Inbox.agents.on }
 // InboxToggleAgents switches between the attention list and the agents view.
 func (m *OS) InboxToggleAgents() tea.Cmd {
 	a := &m.Inbox.agents
+	m.stopInboxAgentsTick()
 	a.on = !a.on
 	m.Inbox.reply.editor = nil
 	return m.InboxAgentsTick()
@@ -166,13 +170,36 @@ func (m *OS) InboxToggleAgents() tea.Cmd {
 // which is how a view opened again gets its tick back; it is nil otherwise.
 func (m *OS) InboxAgentsTick() tea.Cmd {
 	a := &m.Inbox.agents
-	if !m.ShowInbox || !a.on || a.ticking {
+	if !m.ShowInbox || !a.on || a.tickStop != nil {
 		return nil
 	}
-	a.ticking = true
 	a.tickGen++
 	gen := a.tickGen
-	return tea.Tick(inboxAgentsTick, func(time.Time) tea.Msg { return inboxAgentsTickMsg{gen: gen} })
+	stop := make(chan struct{})
+	a.tickStop = stop
+	return func() tea.Msg {
+		t := time.NewTimer(inboxAgentsTick)
+		defer t.Stop()
+		select {
+		case <-t.C:
+			return inboxAgentsTickMsg{gen: gen}
+		case <-stop:
+			return nil
+		}
+	}
+}
+
+// stopInboxAgentsTick ends the armed minute tick, if one is armed. The view
+// calls it when it closes or the Inbox does.
+func (m *OS) stopInboxAgentsTick() {
+	a := &m.Inbox.agents
+	if a.tickStop == nil {
+		return
+	}
+	close(a.tickStop)
+	a.tickStop = nil
+	// A tick whose timer fired as it was stopped is dropped.
+	a.tickGen++
 }
 
 // applyInboxAgentsTick takes a tick: the next frame draws the new minute, and
@@ -182,7 +209,7 @@ func (m *OS) applyInboxAgentsTick(msg inboxAgentsTickMsg) tea.Cmd {
 	if msg.gen != a.tickGen {
 		return nil
 	}
-	a.ticking = false
+	a.tickStop = nil
 	return m.InboxAgentsTick()
 }
 

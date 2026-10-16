@@ -1136,6 +1136,7 @@ func (m *OS) OpenInboxOn(id string) {
 // CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
+	m.stopInboxAgentsTick()
 	m.Inbox.Peek = nil
 	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
 	m.Inbox.reply.editor = nil
