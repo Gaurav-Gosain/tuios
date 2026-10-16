@@ -1414,6 +1414,9 @@ type OS struct {
 	gradient borderGradient
 	// themeEditor is the theme editor side sheet. See theme_editor.go.
 	themeEditor themeEditorState
+	// workspaceMarkSet holds the bell and activity marks of the workspaces
+	// not in view, as bits. See workspace_marks.go.
+	workspaceMarkSet map[int]uint8
 
 	// Glyph picker overlay state, the theme picker's opposite number.
 	ShowGlyphPicker     bool

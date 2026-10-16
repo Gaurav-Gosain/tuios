@@ -179,6 +179,16 @@ type DockTabsConfig struct {
 	// ShowAdd keeps the trailing "+" tab in the flat style, which drops it by
 	// default. The pill style always draws it.
 	ShowAdd bool `toml:"show_add,omitempty"`
+
+	// AttentionFg is the ink of a workspace's tab while a pane on it waits
+	// for a person: an agent that asks for input or stopped on an error. A
+	// colour value; empty leaves the tab's ink alone.
+	AttentionFg string `toml:"attention_fg,omitempty"`
+	// BellMarker is put after the label of a workspace whose pane rang the
+	// bell since you last looked at it, and ActivityMarker after one whose
+	// pane printed. Empty draws none, and tuios then keeps no record of it.
+	BellMarker     string `toml:"bell_marker,omitempty"`
+	ActivityMarker string `toml:"activity_marker,omitempty"`
 }
 
 // Flat reports whether the strip draws flat tabs.
@@ -521,6 +531,7 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 	validateDockColors(result, "dock.tabs", map[string]string{
 		"separator_fg": t.SeparatorFg, "active_fg": t.ActiveFg, "active_bg": t.ActiveBg,
 		"inactive_fg": t.InactiveFg, "inactive_bg": t.InactiveBg,
+		"attention_fg": t.AttentionFg,
 	})
 	validateDockColors(result, "dock.session", map[string]string{
 		"fg": cfg.Dock.Session.Fg, "bg": cfg.Dock.Session.Bg,

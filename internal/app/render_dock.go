@@ -53,7 +53,7 @@ func dockStripArrowFg(pal overlay.Palette) color.Color {
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *config.Settings) string {
+func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *config.Settings, ink color.Color) string {
 	// A picked-up pill comes up onto Surface, the same step the rail lifts a
 	// dragged row onto, so the gesture reads the same wherever it is made. It is
 	// a ground change and not an ink one, which leaves the accent free to go on
@@ -62,7 +62,11 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *c
 	if dragged {
 		ground = pal.Surface
 	}
-	body := sidebarStyle(ground, workspacePillFg(active, pal))
+	fg := workspacePillFg(active, pal)
+	if ink != nil {
+		fg = ink
+	}
+	body := sidebarStyle(ground, fg)
 	if active {
 		body = body.Bold(true).Underline(true)
 	}
@@ -103,8 +107,11 @@ func tabColor(s string, pal *overlay.Palette) color.Color {
 // accent ground is the slot drawn in reverse video, the same thing overlay.Chip
 // does there. A picked-up tab comes up onto Surface, the same lift a dragged
 // pill gets.
-func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette) string {
+func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, ink color.Color) string {
 	fg, bg, bold := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal), t.InactiveBold
+	if ink != nil {
+		fg = ink
+	}
 	if active {
 		fg, bg, bold = tabColor(t.ActiveFg, &pal), tabColor(t.ActiveBg, &pal), t.ActiveBold
 	}
@@ -163,11 +170,18 @@ func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 }
 
 // dockTab renders one tab in whichever style [dock.tabs] asks for.
-func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged bool, pal overlay.Palette) string {
-	if t.Flat() {
-		return flatWorkspaceTab(label, active, dragged, t, pal)
+func (m *OS) dockTab(t *config.DockTabsConfig, label string, active, dragged, attention bool, pal overlay.Palette) string {
+	// A workspace that wants a person takes [dock.tabs] attention_fg as its
+	// ink. Only a tab that is not current is marked: the current one is on
+	// screen already.
+	var ink color.Color
+	if attention && !active {
+		ink = tabColor(t.AttentionFg, &pal)
 	}
-	return workspacePill(label, active, dragged, pal, &m.Settings)
+	if t.Flat() {
+		return flatWorkspaceTab(label, active, dragged, t, pal, ink)
+	}
+	return workspacePill(label, active, dragged, pal, &m.Settings, ink)
 }
 
 // renderDockWorkspaceStrip draws the strip starting at column startX and records
@@ -218,7 +232,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			b.WriteString(gapText)
 			x, drawn = x+t.Gap, drawn+t.Gap
 		}
-		b.WriteString(m.dockTab(&style, t.Label, t.Active, t.Dragged, pal))
+		b.WriteString(m.dockTab(&style, t.Label, t.Active, t.Dragged, t.Attention, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
@@ -238,7 +252,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			b.WriteString(gapText)
 			x += s.Add.Gap
 		}
-		b.WriteString(m.dockTab(&style, s.Add.Label, false, false, pal))
+		b.WriteString(m.dockTab(&style, s.Add.Label, false, false, false, pal))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
 		})

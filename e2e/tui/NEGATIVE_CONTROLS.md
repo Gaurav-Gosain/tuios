@@ -6771,3 +6771,18 @@ Run on 2026-10-17.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | roomy did nothing | yes | `RailRoomy` never set | `.../sidebar.density=roomy` ("changed nothing on screen") | **caught** |
+
+## Workspace tab marks
+
+`TestDockTabsFlatStripTwoWorkspaces` now also rings the bell and prints on
+workspace 1 while workspace 2 is in view, and requires `1~A!#` on the strip,
+then no marks after a click back to workspace 1. `TestDockTabAttentionInk`
+sets `needs_input` on a pane of workspace 1 and requires tab 1 in
+`attention_fg`.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| No mark was kept | yes | `noteWorkspaceMark` always returns false | `TestDockTabsFlatStripTwoWorkspaces` ("a bell and output on workspace 1 never marked its tab") | **caught** |
+| The tab ignored attention | yes | `dockTab` never takes the attention ink | `TestDockTabAttentionInk` ("tab 1 never took attention_fg while its pane waited") | **caught** |

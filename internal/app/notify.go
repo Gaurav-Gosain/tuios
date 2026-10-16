@@ -29,6 +29,9 @@ type NotificationMsg struct {
 	// runs on a PTY goroutine, and reading m.SessionName from it would race the
 	// Update loop that rewrites it on a session switch.
 	WindowID string
+	// Bell is set for the terminal bell, which also marks the pane's
+	// workspace tab. See workspace_marks.go.
+	Bell bool
 }
 
 // ListenForNotification creates a command that waits for the next guest
@@ -142,7 +145,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		mu.Unlock()
 
 		select {
-		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID}:
+		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID, Bell: true}:
 		default:
 			// Channel full, drop (non-blocking).
 		}

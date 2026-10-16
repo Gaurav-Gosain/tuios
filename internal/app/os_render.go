@@ -59,6 +59,7 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 	activeTerminals := 0
 	// A pane made since the last pass takes this client's frame rate.
 	m.setPaneFrameInterval()
+	m.clearViewedWorkspaceMarks()
 
 	for i := range m.Windows {
 		window := m.Windows[i]
@@ -89,7 +90,12 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			// picture-in-picture view, and it is paced like an unfocused
 			// pane below: every third pass, with the flag kept between so
 			// the last output is still drawn once the pane goes quiet.
-			if window.HasNewOutput.Swap(false) && window.ID == m.pip.windowID {
+			out := window.HasNewOutput.Swap(false)
+			// Output on a workspace out of view marks its dock tab, once.
+			if out && !window.Minimized && m.noteWorkspaceMark(window.Workspace, workspaceMarkActivity) {
+				hasChanges = true
+			}
+			if out && window.ID == m.pip.windowID {
 				window.UpdateCounter++
 				if window.UpdateCounter%3 == 0 {
 					m.pip.dirty = true

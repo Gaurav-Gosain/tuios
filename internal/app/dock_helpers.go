@@ -78,6 +78,9 @@ type dockWorkspaceTab struct {
 	// Add marks the trailing "+" tab, which opens the next free workspace rather
 	// than switching to an existing one.
 	Add bool
+	// Attention is a workspace with a pane that waits for a person, drawn in
+	// [dock.tabs] attention_fg when it is set.
+	Attention bool
 }
 
 // dockWorkspaceHit is where a tab was drawn on the last frame. Recorded by the
@@ -207,6 +210,10 @@ func (m *OS) workspacePillLabelWith(tabs *config.DockTabsConfig, n int) string {
 	if limit := m.Settings.DockWorkspaceLabelMax; limit > 0 {
 		label = overlay.Truncate(label, limit)
 	}
+	// The marks ride after the cap, so a long name never cuts them.
+	if mark := m.workspaceMarks(tabs, n); mark != "" {
+		label += mark
+	}
 	return label
 }
 
@@ -263,6 +270,7 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 			Dragged:   m.dockWorkspaceDrag.Dragging && n == m.dockWorkspaceDrag.Workspace,
 			Width:     m.dockTabWidth(&style, label),
 			Gap:       gap,
+			Attention: style.AttentionFg != "" && n != m.dockWorkspace() && m.workspaceWantsAttention(n),
 		})
 	}
 	// A trailing "+" opens the next empty workspace, so making one is a click

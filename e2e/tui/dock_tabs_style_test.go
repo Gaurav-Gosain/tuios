@@ -111,6 +111,8 @@ separator = " | "
 active_bg = "#a7c080"
 zoom_marker = "ZM"
 number_glyphs = ["A"]
+bell_marker = "!"
+activity_marker = "#"
 `)
 	term := startIn(t, base, startOpts{cols: 120, rows: 30})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -172,6 +174,33 @@ number_glyphs = ["A"]
 		return strings.Contains(r, "2:1") && activeBg(s, pillColumn(r, "|  2~2")+3)
 	}, uiTimeout); err != nil {
 		t.Fatalf("a click on the second flat tab did not switch to workspace 2: %v\n%s", err, term.Snapshot())
+	}
+
+	// A bell and output on workspace 1 while workspace 2 is in view put
+	// bell_marker and activity_marker on tab 1. Looking at it clears them.
+	row = dockRow(term.Screen())
+	leftClick(t, term, pillColumn(row, "1~A")+1, dockRowIndex(term.Screen()))
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), "1:1") }, uiTimeout); err != nil {
+		t.Fatalf("a click on the first tab did not switch back to workspace 1: %v\n%s", err, term.Snapshot())
+	}
+	enterTerminalMode(t, term)
+	sendKeys(t, term, "sleep 2; printf '\\a'; echo MARKED", tuitest.Enter)
+	row = dockRow(term.Screen())
+	leftClick(t, term, pillColumn(row, "2~2")+1, dockRowIndex(term.Screen()))
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := dockRow(s)
+		return strings.Contains(r, "2:1") && strings.Contains(r, "1~A!#")
+	}, uiTimeout); err != nil {
+		t.Fatalf("a bell and output on workspace 1 never marked its tab: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "marked")
+	row = dockRow(term.Screen())
+	leftClick(t, term, pillColumn(row, "1~A")+1, dockRowIndex(term.Screen()))
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := dockRow(s)
+		return strings.Contains(r, "1:1") && !strings.Contains(r, "!#")
+	}, uiTimeout); err != nil {
+		t.Fatalf("looking at workspace 1 did not clear its marks: %v\n%s", err, term.Snapshot())
 	}
 }
 
@@ -256,4 +285,45 @@ func TestDockTabsConfigWarnings(t *testing.T) {
 			t.Fatalf("a valid [dock.tabs] was reported as a config problem\n%s", term.Snapshot())
 		}
 	})
+}
+
+// TestDockTabAttentionInk: [dock.tabs] attention_fg draws the tab of a
+// workspace out of view in that ink while a pane on it waits for a person.
+// The state is set the way a pane's shim sets it, through set-agent-state.
+//
+// How this could pass wrongly: the ink is one no default draws, read off the
+// tab's own cells, and it must be absent before the state is set.
+func TestDockTabAttentionInk(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[dock.tabs]\nstyle = \"flat\"\nattention_fg = \"#ff00ff\"\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 30, args: []string{"new", "e2e"}, env: []string{"COLORTERM=truecolor"}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	newWindow(t, term)
+	renameWindow(t, term, "AGENTPANE")
+	sendKeys(t, term, tuitest.Ctrl('b'), "w", "2")
+	newWindow(t, term)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), "2:1") }, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 never got its window: %v\n%s", err, term.Snapshot())
+	}
+	magenta := func(s tuitest.Screen) bool {
+		row := dockRow(s)
+		y := dockRowIndex(s)
+		col := pillColumn(row, " 1 ")
+		if col < 0 {
+			return false
+		}
+		c := s.Cell(col+1, y)
+		return c.Fg.Kind == tuitest.ColorRGB && c.Fg.R == 0xff && c.Fg.G == 0 && c.Fg.B == 0xff
+	}
+	if magenta(term.Screen()) {
+		t.Fatalf("tab 1 wore attention_fg before any pane waited\n%s", term.SnapshotStyled())
+	}
+	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "e2e", "-w", "AGENTPANE"); err != nil {
+		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(magenta, uiTimeout); err != nil {
+		t.Fatalf("tab 1 never took attention_fg while its pane waited: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "attention")
 }

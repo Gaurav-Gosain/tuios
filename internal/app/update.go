@@ -1559,6 +1559,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Guest desktop notification or bell delivered off the PTY goroutine;
 		// apply it here on the Bubble Tea goroutine where notification state is
 		// owned, and where the pane it came from can be named safely.
+		if msg.Bell && msg.WindowID != "" {
+			m.noteWindowBell(msg.WindowID)
+		}
 		if msg.WindowID != "" {
 			m.ShowNotificationFrom(msg.Message, msg.Type, msg.Duration,
 				NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: msg.WindowID})

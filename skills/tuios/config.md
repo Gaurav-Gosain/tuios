@@ -251,6 +251,9 @@ The running clients read a theme file again when it is saved. `tuios theme
 reload` asks every client on the machine to read the files now, and to ask
 its terminal for its colours again.
 
+`[dock.tabs]` `attention_fg`, `bell_marker` and `activity_marker` mark a
+workspace out of view whose pane waits for a person, rang the bell or printed.
+
 `appearance.border_focused_gradient = "#33ccff #00ff99"` draws the focused
 border as a static gradient, in the direction `border_gradient_angle` gives
 (degrees, default 45).

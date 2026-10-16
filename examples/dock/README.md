@@ -98,8 +98,10 @@ zoom_marker   = " [ ]"
 `style = "flat"` draws the `workspaces` component as a tmux-like window list
 instead of pills. `number_glyphs` and `zoom_marker` feed the `{icon}` and
 `{zoom}` placeholders of `appearance.dock_workspace_tab_format`. With no
-colours set, the current tab sits on the theme's accent. The full key list is
-in `docs/CONFIGURATION.md`.
+colours set, the current tab sits on the theme's accent. `attention_fg`,
+`bell_marker` and `activity_marker` mark a workspace out of view whose pane
+waits for you, rang the bell or printed. The full key list is in
+`docs/CONFIGURATION.md`.
 
 ## Writing a component
 

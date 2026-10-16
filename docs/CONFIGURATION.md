@@ -1338,6 +1338,26 @@ Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
 The flat style shows even a lone workspace and drops the `+` tab unless
 `show_add` is on. With no `[dock.tabs]` table the strip is unchanged.
 
+#### Tab marks
+
+Three more keys mark a workspace you are not looking at, in the pill style and
+the flat style:
+
+```toml
+[dock.tabs]
+attention_fg    = "warning"   # the tab's ink while a pane on it waits for you
+bell_marker     = "!"         # after the label when a pane on it rang the bell
+activity_marker = "#"         # after the label when a pane on it printed
+```
+
+- `attention_fg` is the ink of the tab while an agent on that workspace asks
+  for input or stopped on an error. It takes any [colour value](#colour-values).
+- `bell_marker` and `activity_marker` go after the label, after the label
+  cap. The bell marker comes first.
+- A mark stays until you look at the workspace.
+- The current workspace's tab never carries them.
+- With a key empty, tuios draws nothing for it and keeps no record.
+
 `examples/dock/README.md` is the full contract and five working recipes.
 
 ## Two sidebar edges
