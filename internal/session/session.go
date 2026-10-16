@@ -5096,6 +5096,16 @@ func (p *PTY) vtWriter() {
 // outputRingMax is the most the catch-up ring holds.
 const outputRingMax = 64 * 1024
 
+// outputRingSize is the size the catch-up ring grows to for n bytes: a power
+// of two from 1 KiB that holds them, up to outputRingMax.
+func outputRingSize(n int) int {
+	size := 1024
+	for size < n && size < outputRingMax {
+		size *= 2
+	}
+	return min(size, outputRingMax)
+}
+
 // appendToBuffer records a chunk in the catch-up buffer and returns the stream
 // position it ends at. Callers hold streamMu, so the ring may be reassigned
 // here while broadcast reads its length.
@@ -5114,11 +5124,7 @@ func (p *PTY) appendToBuffer(data []byte) int64 {
 	// Grow before anything shifts: a ring below its bound gets room for this
 	// chunk, so it never drops a byte the full ring would still hold.
 	if len(p.outputBuffer)-p.outputPos < len(data) && len(p.outputBuffer) < outputRingMax {
-		size := 1024
-		for size < p.outputPos+len(data) && size < outputRingMax {
-			size *= 2
-		}
-		grown := make([]byte, min(size, outputRingMax))
+		grown := make([]byte, outputRingSize(p.outputPos+len(data)))
 		copy(grown, p.outputBuffer[:p.outputPos])
 		p.outputBuffer = grown
 	}

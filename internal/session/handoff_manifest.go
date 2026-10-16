@@ -76,14 +76,25 @@ type handoffPane struct {
 	ExitCode   int
 	ExitSignal int
 	KeepOpen   bool
+	// State is the pane's emulator, packed, with handoffHistoryRows of its
+	// history and the character cluster it left open.
+	State *TerminalState
+	// Live is what the snapshot does not hold.
+	Live handoffLive
 }
 
 // handoffDaemon is the daemon's own record.
 type handoffDaemon struct {
-	SocketPath string
+	SocketPath string `json:"socket_path"`
 	// Listeners is the descriptor of each listening socket, by name.
-	Listeners map[string]int
-	LockFD    int
+	Listeners map[string]int `json:"listeners"`
+	LockFD    int            `json:"lock_fd"`
+	// PaneTokenKey signs every pane's TUIOS_PANE_TOKEN. Without it a token
+	// stops verifying at the handoff, and a process outside its pane's tree
+	// can no longer prove which pane it is.
+	PaneTokenKey []byte        `json:"pane_token_key,omitempty"`
+	Events       handoffEvents `json:"events"`
+	Mail         handoffMail   `json:"mail"`
 }
 
 // handoffManifest is a manifest as read.
@@ -199,7 +210,7 @@ func readHandoffManifest(r io.Reader) (*handoffManifest, error) {
 				m.Panes = append(m.Panes, p)
 			}
 		case handoffRecDaemon:
-			err = gob.NewDecoder(bytes.NewReader(payload)).Decode(&m.Daemon)
+			err = json.Unmarshal(payload, &m.Daemon)
 		case handoffRecEnd:
 			return m, nil
 		default:

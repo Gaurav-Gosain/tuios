@@ -55,6 +55,13 @@ func (d *Daemon) adopt(fd int) error {
 
 	socketPath := m.Daemon.SocketPath
 	d.manager.SetSocketPath(socketPath)
+	// Before any pane is entered: a pane's token is checked against the key,
+	// and its events go on from the carried numbering.
+	if len(m.Daemon.PaneTokenKey) > 0 {
+		d.manager.paneTokenKey = m.Daemon.PaneTokenKey
+	}
+	d.events.restore(m.Daemon.Events)
+	d.agents.restore(m.Daemon.Mail)
 	listeners := map[string]net.Listener{}
 	// FileListener works on a copy of each descriptor. The inherited ones are
 	// closed only once the adoption has gone through.
@@ -218,10 +225,16 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string)) 
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// The snapshot goes in before the emulator has callbacks, so nothing it
+	// sets is raised as an event: none of it is new.
 	terminal := vt.NewWithScrollback(rec.Width, rec.Height, s.scrollbackLines())
+	if rec.State != nil {
+		ApplyTerminalState(terminal, rec.State)
+	}
 	sp := ptySpawn{windowID: w.ID, onExit: onExit, workspace: w.Workspace, keepOpen: rec.KeepOpen && !rec.Exited}
 	pty := s.installPTY(ctx, cancel, rec.ID, master, nil, rec.Width, rec.Height, sp, terminal)
 	pty.spawnW, pty.spawnH = rec.SpawnW, rec.SpawnH
+	pty.restoreLive(rec.State, rec.Live)
 	if rec.Exited {
 		pty.exitedMu.Lock()
 		pty.exited, pty.exitCode = true, rec.ExitCode

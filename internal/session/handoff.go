@@ -241,13 +241,21 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		if !ok {
 			return fmt.Errorf("pane %s has no terminal device here", shortID(ref.window))
 		}
+		rec.State, rec.Live = ref.pty.handoffCapture()
 		if err := mw.gob(handoffRecPane, rec); err != nil {
 			return err
 		}
 		r.fds = append(r.fds, rec.FD)
 	}
 
-	dr := handoffDaemon{SocketPath: d.manager.SocketPath(), Listeners: map[string]int{}, LockFD: -1}
+	dr := handoffDaemon{
+		SocketPath:   d.manager.SocketPath(),
+		Listeners:    map[string]int{},
+		LockFD:       -1,
+		PaneTokenKey: d.manager.paneTokenKey,
+		Events:       d.events.handoffState(),
+		Mail:         d.agents.handoffState(),
+	}
 	for name, l := range d.namedListeners() {
 		var fd int
 		if !listenerFD(l, func(n int) { fd = n }) {
@@ -260,7 +268,7 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		dr.LockFD = int(d.startLock.Fd()) //nolint:gosec // a descriptor number
 		r.fds = append(r.fds, dr.LockFD)
 	}
-	if err := mw.gob(handoffRecDaemon, dr); err != nil {
+	if err := mw.json(handoffRecDaemon, dr); err != nil {
 		return err
 	}
 	n, err := mw.finish()
