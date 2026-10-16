@@ -1228,7 +1228,9 @@ These keys are in three sections of their own, rebindable like any other:
 The footers name whatever key the config binds. The digits `1` to `9` are not
 bindings: they pick an answer by the number the prompt shows. The selector
 line and the reply, message and answer lines take text, so every key there is
-typed.
+typed. The selector line, the deny reason and the answer to a prompt are
+edited as the reply is: the arrows and the word keys move the cursor, `ctrl+z`
+undoes, and a paste keeps to one line.
 
 ```toml
 [keybindings.inbox]
