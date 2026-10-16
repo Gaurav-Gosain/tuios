@@ -1086,6 +1086,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyImagePasted(msg)
 		return m, nil
 
+	case replyImageMsg:
+		m.applyReplyImage(msg)
+		return m, nil
+
 	case PasteTimeoutMsg:
 		// The terminal never answered the clipboard query. Say so, because the
 		// alternative is a paste key that looks broken. See clipboard_paste.go.

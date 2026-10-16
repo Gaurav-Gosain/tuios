@@ -176,6 +176,10 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**queue-prompt takes images.** A part may be `{"kind":"image","data":…}`. A
+daemon from before this answers `invalid_params` for the kind. See
+[The delivery queue](#the-delivery-queue).
+
 **queue-prompt takes a message in parts.** `text` is no longer required when
 `parts` is given, and the result gains `parts`, the count read. A message
 with a long paste can now put a file in the paste folder when it is typed. The
@@ -6395,9 +6399,11 @@ required without `parts`), `parts`, `human_nonce`, `from`.
 ```
 
 `parts` is the message as ordered parts, the form the reply composer sends:
-`{"kind":"text","text":…}` for typed text and `{"kind":"paste","text":…,"n":1}`
-for a pasted block, where `n` is the block's number as the person saw it. A
-message takes at most 64 parts and 8 MiB. With `parts`, `text` is ignored, so
+`{"kind":"text","text":…}` for typed text, `{"kind":"paste","text":…,"n":1}`
+for a pasted block, and `{"kind":"image","data":…,"n":1}` for an image, `data`
+being the file in base64, where `n` is the block's number as the person saw
+it. A message takes at most 64 parts, 8 images of 8 MiB each, and 8 MiB in
+all. With `parts`, `text` is ignored, so
 a client can send both and a daemon older than `parts` types the text. Such a
 daemon answers without the `parts` count in the result.
 
@@ -6416,6 +6422,12 @@ the message, not when it queues it:
   `[Pasted text #1: PATH, 42 lines]`. The file is mode 0600 in a 0700 folder,
   written through an `os.Root` at the folder and never through a link. It is
   kept for 24 hours and removed when the daemon stops.
+- Each image is written there too, named by the type its bytes show. The
+  harness's `[input] images` places its path: in a paste of its own between
+  the text before and after it (`path_paste`, when the pane takes a bracketed
+  paste), as `[Image #1] PATH` in the text (`path_text`), or nowhere:
+  `images = "none"` refuses the message at `queue-prompt` with
+  `invalid_params`.
 
 The text parts with each block's label must fit 16 KiB. A pane's queue holds
 at most 32 MiB and every queue together 128 MiB; past either, `queue_full`.

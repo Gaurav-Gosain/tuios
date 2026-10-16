@@ -259,6 +259,11 @@ func (m *Model) Hints() []overlay.Hint {
 			{Key: "backspace", Label: "remove"},
 			{Key: "esc", Label: "back"},
 		}
+	case m.selectedBlock() != nil && m.selectedPaste() == nil:
+		return []overlay.Hint{
+			{Key: "backspace", Label: "remove"},
+			{Key: "esc", Label: "close"},
+		}
 	case m.selectedBlock() != nil:
 		return []overlay.Hint{
 			{Key: "ctrl+o", Label: "open"},
@@ -267,10 +272,15 @@ func (m *Model) Hints() []overlay.Hint {
 			{Key: "esc", Label: "close"},
 		}
 	}
-	return []overlay.Hint{
+	hints := []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "send"},
 		{Key: "ctrl+j", Label: "new line"},
-		{Key: "ctrl+z", Label: "undo", Priority: overlay.HintOptional},
-		{Key: "esc", Label: "close"},
 	}
+	if m.opt.Images {
+		hints = append(hints, overlay.Hint{Key: "ctrl+v", Label: "paste image"})
+	}
+	return append(hints,
+		overlay.Hint{Key: "ctrl+z", Label: "undo", Priority: overlay.HintOptional},
+		overlay.Hint{Key: "esc", Label: "close"},
+	)
 }

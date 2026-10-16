@@ -10,6 +10,8 @@ const (
 	PartText PartKind = iota
 	// PartPaste is the text of a paste block.
 	PartPaste
+	// PartImage is an image block.
+	PartImage
 )
 
 // Part is one piece of a message, in the order the draft holds it. A host
@@ -24,6 +26,8 @@ type Part struct {
 	N int
 	// Lines is how many lines a paste block holds.
 	Lines int
+	// Image is an image block's image.
+	Image *Image
 }
 
 // Parts is the draft as ordered parts. Text between two blocks is one part.
@@ -37,6 +41,11 @@ func (m *Model) Parts() []Part {
 		}
 	}
 	for _, c := range m.cells {
+		if c.block != nil && c.block.img != nil {
+			flush()
+			out = append(out, Part{Kind: PartImage, N: c.block.n, Image: c.block.img})
+			continue
+		}
 		if c.block != nil {
 			flush()
 			out = append(out, Part{Kind: PartPaste, Text: c.block.text, N: c.block.n, Lines: c.block.lines})
@@ -57,8 +66,8 @@ func (m *Model) SubmitParts() ([]Part, bool) {
 	return m.Parts(), true
 }
 
-// JoinParts is the message the parts make as one text, every block's text in
-// its place.
+// JoinParts is the message the parts make as one text, every paste block's
+// text in its place. An image has no text and adds nothing.
 func JoinParts(parts []Part) string {
 	n := 0
 	for _, p := range parts {

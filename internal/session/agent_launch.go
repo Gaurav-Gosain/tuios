@@ -376,6 +376,12 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 // prompt status (PromptSent, PromptStalled or PromptNotSent), a note for any
 // but sent, and when the prompt was typed.
 func (d *Daemon) typeFirstPrompt(sess *Session, windowID, text string) (string, string, int64) {
+	return d.typePromptPastes(sess, windowID, []string{text})
+}
+
+// typePromptPastes is typeFirstPrompt for a prompt typed as several pastes
+// and submitted once. See submitPastes.
+func (d *Daemon) typePromptPastes(sess *Session, windowID string, pastes []string) (string, string, int64) {
 	pty, err := d.resolvePTYForTarget(sess, windowID)
 	if err != nil {
 		return PromptNotSent, "The agent's pane is gone.", 0
@@ -383,7 +389,7 @@ func (d *Daemon) typeFirstPrompt(sess *Session, windowID, text string) (string, 
 	// Pasted and submitted with a carriage return, the way ask-agent types its
 	// question. See prompt_submit.go.
 	gate := d.newPromptGate(sess, windowID)
-	at, err := submitPrompt(d.ctx, pty, text, d.inputProfileFor(sess, windowID))
+	at, err := submitPastes(d.ctx, pty, pastes, d.inputProfileFor(sess, windowID))
 	if err != nil {
 		return PromptNotSent, "Could not write to the agent's pane: " + err.Error(), 0
 	}

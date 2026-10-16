@@ -46,6 +46,8 @@ type Options struct {
 	MaxBytes int
 	// Placeholder is drawn in an empty draft.
 	Placeholder string
+	// Images says the draft takes images (AddImage).
+	Images bool
 }
 
 // Event is what a key asks the host to do.
@@ -148,7 +150,7 @@ func (m *Model) Notice() string { return m.notice }
 // SetNotice puts a line under the editor until the next edit.
 func (m *Model) SetNotice(s string) { m.notice = s }
 
-// Blocks is how many paste blocks the draft holds.
+// Blocks is how many blocks the draft holds, pastes and images.
 func (m *Model) Blocks() int {
 	n := 0
 	for _, c := range m.cells {
@@ -159,12 +161,17 @@ func (m *Model) Blocks() int {
 	return n
 }
 
-// Text is the message: the draft with every block's text in its place.
+// Text is the message: the draft with every paste block's text in its
+// place. An image has no text, and its label stands in for it.
 func (m *Model) Text() string {
 	var b strings.Builder
 	b.Grow(m.size)
 	for _, c := range m.cells {
 		if c.block != nil {
+			if c.block.img != nil {
+				b.WriteString(c.block.label)
+				continue
+			}
 			b.WriteString(c.block.text)
 			continue
 		}
@@ -207,6 +214,10 @@ func (m *Model) stripInvisible() int {
 	out := make([]cell, 0, len(m.cells))
 	cur := m.cur
 	for i, c := range m.cells {
+		if c.block != nil && c.block.img != nil {
+			out = append(out, c)
+			continue
+		}
 		if c.block != nil {
 			text, n := stripInvisible(c.block.text)
 			if n > 0 {
@@ -285,7 +296,7 @@ func (m *Model) Paste(text string, remote bool) {
 		return
 	}
 	m.edited()
-	b := newBlock(m.nextBlock(), text)
+	b := newBlock(m.nextNumber(false), text)
 	m.change(m.cur, 0, []cell{blockCell(b)}, m.cur+1)
 }
 
@@ -296,12 +307,12 @@ func measure(text string) (lines, chars int) {
 	return strings.Count(body, "\n") + 1, utf8.RuneCountInString(text)
 }
 
-// nextBlock is the number a new block takes: the highest in the draft plus
-// one.
-func (m *Model) nextBlock() int {
+// nextNumber is the number a new block of a kind takes, image or paste: the
+// highest of that kind in the draft plus one.
+func (m *Model) nextNumber(image bool) int {
 	n := 0
 	for _, c := range m.cells {
-		if c.block != nil {
+		if c.block != nil && (c.block.img != nil) == image {
 			n = max(n, c.block.n)
 		}
 	}
@@ -357,6 +368,14 @@ func (m *Model) edited() {
 	m.goal = -1
 }
 
+// selectedPaste is the selected block when it is a paste, nil otherwise.
+func (m *Model) selectedPaste() *block {
+	if b := m.selectedBlock(); b != nil && b.img == nil {
+		return b
+	}
+	return nil
+}
+
 // selectedBlock is the block just before the cursor, the one its keys act
 // on, or nil.
 func (m *Model) selectedBlock() *block {
@@ -370,7 +389,7 @@ func (m *Model) selectedBlock() *block {
 // that can be edited. It is one undo step. It reports whether there was a
 // block to expand.
 func (m *Model) Expand() bool {
-	b := m.selectedBlock()
+	b := m.selectedPaste()
 	if b == nil {
 		return false
 	}
@@ -634,18 +653,26 @@ func (m *Model) PutBack(old *Model) {
 	if old == nil || len(old.cells) == 0 {
 		return
 	}
-	used := make(map[int]bool)
+	type key struct {
+		image bool
+		n     int
+	}
+	used := make(map[key]bool)
 	for _, c := range m.cells {
 		if c.block != nil {
-			used[c.block.n] = true
+			used[key{c.block.img != nil, c.block.n}] = true
 		}
 	}
-	next := max(m.nextBlock(), old.nextBlock())
+	next := [2]int{max(m.nextNumber(false), old.nextNumber(false)), max(m.nextNumber(true), old.nextNumber(true))}
 	ins := make([]cell, 0, len(old.cells)+2)
 	for _, c := range old.cells {
-		if c.block != nil && used[c.block.n] {
-			c = blockCell(newBlock(next, c.block.text))
-			next++
+		if c.block != nil && used[key{c.block.img != nil, c.block.n}] {
+			k := 0
+			if c.block.img != nil {
+				k = 1
+			}
+			c = blockCell(renumbered(c.block, next[k]))
+			next[k]++
 		}
 		ins = append(ins, c)
 	}

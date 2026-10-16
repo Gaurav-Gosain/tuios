@@ -1,7 +1,10 @@
 package tuie2e
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -344,4 +347,114 @@ func largeReplyPaste() string {
 		fmt.Fprintf(&b, "big paste line %04d of the failing run, at main.go:%d\n", i, i)
 	}
 	return b.String()
+}
+
+// TestReplyWithAnImageGoesAsAFile: a path to an image file pasted into the
+// reply, as a terminal pastes a dropped file, attaches the image as a block.
+// The agent is Claude Code, whose manifest takes an image as a path in a
+// paste of its own. The recorder pane reads the typed words in one paste,
+// the image's path alone in the next, and one Enter. The file at that path
+// holds the image's bytes.
+//
+// Negative control: with the path pasted as text (no image read in
+// inboxReplyPasteCmd), the block never shows and the wait for it times out.
+func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
+	killDaemon(t, base)
+	if out, err := tuiosCLI(t, base, "new", "e2e-img", "--detach"); err != nil {
+		t.Fatalf("create the agent's session: %v\n%s", err, out)
+	}
+	recorded := startRecorder(t, base, "e2e-img")
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-img"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "window management mode", "Window management mode")
+	time.Sleep(insertGuard)
+	hook := func(payload string) {
+		t.Helper()
+		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-img", "--window", "0", "--timeout", "10s")
+		cmd.Dir = workDirIn(t, base)
+		cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+		for _, key := range xdgKeys {
+			cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+		}
+		cmd.Stdin = strings.NewReader(payload)
+		if out, err := cmd.CombinedOutput(); err != nil || len(out) != 0 {
+			t.Fatalf("the hook for %s failed or printed: %v\n%s", payload, err, out)
+		}
+	}
+	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"e2e-img","prompt":"fix the layout"}`)
+	hook(`{"hook_event_name":"PreToolUse","session_id":"e2e-img","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`)
+	waitText(t, term, "the working row", "Bash: go test")
+
+	shot := filepath.Join(t.TempDir(), "screen shot.png")
+	pngBytes := tinyPNG(t, 64, 48)
+	if err := os.WriteFile(shot, pngBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(insertGuard)
+	if err := term.SendKeys("G", "k", "k", "r"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the reply editor", "Reply to", "Type your reply.", "ctrl+v paste image")
+	if err := term.SendKeys("echo i9m6 "); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the typed reply", "echo i9m6")
+	// A dropped file arrives as its path, with the space escaped.
+	if err := term.Paste(strings.ReplaceAll(shot, " ", `\ `)); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the image as one block", "echo i9m6 [Image #1 · 64×48 png]")
+	saveFrame(t, term, "inbox-reply-image")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the queued figure on the row", "1 queued")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+
+	hook(`{"hook_event_name":"Stop","session_id":"e2e-img","last_assistant_message":"Done."}`)
+	got := waitRecorded(t, recorded, "\x1b[201~\r")
+	words := "\x1b[200~echo i9m6 \x1b[201~"
+	at := strings.LastIndex(got, words)
+	if at < 0 {
+		t.Fatalf("the pane read %q, want the words in a paste of their own", got)
+	}
+	rest := got[at+len(words):]
+	if !strings.HasPrefix(rest, "\x1b[200~") || !strings.HasSuffix(rest, ".png\x1b[201~\r") {
+		t.Fatalf("after the words the pane read %q, want the image's path alone in a paste, then Enter", rest)
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(rest, "\x1b[200~"), "\x1b[201~\r")
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != string(pngBytes) {
+		t.Fatalf("the file %s holds %d bytes (%v), want the image's %d", path, len(data), err, len(pngBytes))
+	}
+	if filepath.Base(filepath.Dir(path)) != "paste" {
+		t.Fatalf("the image went to %s, want the paste folder", path)
+	}
+	alive(t, term, "after the reply with an image")
+}
+
+// tinyPNG is a w by h PNG.
+func tinyPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for i := range img.Pix {
+		img.Pix[i] = byte(i)
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }

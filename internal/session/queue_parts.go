@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // A queued message in parts.
@@ -37,7 +38,11 @@ import (
 const (
 	queuePartText  = "text"
 	queuePartPaste = "paste"
+	queuePartImage = "image"
 )
+
+// queueMaxImages bounds the images of one message.
+const queueMaxImages = 8
 
 const (
 	// queueMaxParts bounds the parts of one message.
@@ -60,15 +65,17 @@ type queuePart struct {
 	// Text is the part's text.
 	Text string `json:"text"`
 	// N is a block's number, as the person's label showed it. Zero numbers
-	// the block by its place among the blocks.
+	// the block by its place among the blocks of its kind.
 	N int `json:"n,omitempty"`
+	// Data is an image's file, base64 on the wire.
+	Data []byte `json:"data,omitempty"`
 }
 
 // queuePartsError is the refusal of a message whose parts are not valid.
 func queuePartsError(msg string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, msg, &VerbHint{
 		Param:  "parts",
-		Detail: "Nothing was queued. parts is a list of {kind, text}: kind text for typed text and paste for a pasted block.",
+		Detail: "Nothing was queued. parts is a list of {kind, text}: kind text for typed text, paste for a pasted block, and image with data, the image file in base64.",
 	})
 }
 
@@ -80,13 +87,16 @@ func checkQueueParts(parts []queuePart) (string, int, *verbError) {
 		return "", 0, queuePartsError("parts holds " + strconv.Itoa(len(parts)) + " parts, and a message takes at most " + strconv.Itoa(queueMaxParts))
 	}
 	var shown strings.Builder
-	size, blocks, typed := 0, 0, 0
+	size, blocks, images, typed := 0, 0, 0, 0
 	blank := true
 	for i := range parts {
 		p := &parts[i]
-		size += len(p.Text)
-		if strings.TrimSpace(p.Text) != "" {
+		size += len(p.Text) + len(p.Data)
+		if strings.TrimSpace(p.Text) != "" || p.Kind == queuePartImage {
 			blank = false
+		}
+		if p.Kind != queuePartImage && p.Data != nil {
+			return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is " + p.Kind + " and carries data: only an image does")
 		}
 		switch p.Kind {
 		case queuePartText:
@@ -105,8 +115,28 @@ func checkQueueParts(parts []queuePart) (string, int, *verbError) {
 			// The label with a path in it, the longest form a block takes
 			// when it is typed.
 			typed += len(label) + 256
+		case queuePartImage:
+			if p.Text != "" {
+				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is an image and carries text: an image carries data")
+			}
+			if len(p.Data) > pasteImageMaxBytes {
+				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " is an image larger than " + strconv.Itoa(pasteImageMaxBytes>>20) + " MiB")
+			}
+			if sniffImage(p.Data) == "" {
+				return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + ": " + errPasteNotImage.Error())
+			}
+			images++
+			if images > queueMaxImages {
+				return "", 0, queuePartsError("the message holds more than " + strconv.Itoa(queueMaxImages) + " images")
+			}
+			if p.N <= 0 || p.N > queueMaxParts*16 {
+				p.N = images
+			}
+			label := "[Image #" + strconv.Itoa(p.N) + " · " + strings.TrimPrefix(sniffImage(p.Data), ".") + "]"
+			shown.WriteString(label)
+			typed += len(label) + 256
 		default:
-			return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " has kind " + echoName(p.Kind) + ": a part is text or paste")
+			return "", 0, queuePartsError("part " + strconv.Itoa(i+1) + " has kind " + echoName(p.Kind) + ": a part is text, paste or image")
 		}
 	}
 	if blank {
@@ -134,6 +164,25 @@ func pasteLabel(p *queuePart, path string) string {
 		return "[Pasted text #" + strconv.Itoa(p.N) + " · " + measure + "]"
 	}
 	return "[Pasted text #" + strconv.Itoa(p.N) + ": " + path + ", " + measure + "]"
+}
+
+// hasImageParts reports whether a message carries an image.
+func hasImageParts(parts []queuePart) bool {
+	for _, p := range parts {
+		if p.Kind == queuePartImage {
+			return true
+		}
+	}
+	return false
+}
+
+// noImagesError refuses an image for a harness whose manifest says it takes
+// none.
+func noImagesError(target WindowState) *verbError {
+	return hintedVerbError(ErrVerbInvalidParams, "the agent in window "+shortWindowID(target.ID)+" cannot take images: its harness manifest says images = \"none\"", &VerbHint{
+		Param:  "parts",
+		Detail: "Nothing was queued. Remove the image, or attach the file's path as text.",
+	})
 }
 
 // hasFileParts reports whether a message may put a file on this machine.
@@ -168,41 +217,68 @@ func (d *Daemon) linkAllowsFiles(peer string) bool {
 	return config.LinkPolicyFor(hosts, peer).Allows(config.LinkAllowFiles)
 }
 
-// composeQueued is the text an entry in parts is typed as: its blocks in
-// their place when the message is small and the pane takes a bracketed paste,
-// and as files otherwise. It writes the files once and keeps the text on the
-// entry. An entry without parts is typed as its text.
-func (d *Daemon) composeQueued(sess *Session, target WindowState, e *queueEntry) (string, error) {
+// composeQueued is how an entry in parts is typed, as one paste or several:
+// its blocks in their place when the message is small and the pane takes a
+// bracketed paste, and as files otherwise; its images as files, each path in
+// a paste of its own or in the text, as the harness takes them. It writes the
+// files once and keeps the pastes on the entry. An entry without parts is
+// typed as its text.
+func (d *Daemon) composeQueued(sess *Session, target WindowState, e *queueEntry) ([]string, error) {
 	if len(e.parts) == 0 {
-		return e.text, nil
+		return []string{e.text}, nil
 	}
-	if e.typed != "" {
+	if e.typed != nil {
 		return e.typed, nil
 	}
-	inline := e.size <= queueInlineMax && d.inputProfileFor(sess, target.ID).BracketedPaste
-	if inline {
+	profile := d.inputProfileFor(sess, target.ID)
+	bracketed := profile.BracketedPaste
+	if bracketed {
 		if pty, err := d.resolvePTYForTarget(sess, target.ID); err != nil || !pty.BracketedPasteOn() {
-			inline = false
+			bracketed = false
 		}
 	}
+	text := 0
+	for _, p := range e.parts {
+		text += len(p.Text)
+	}
+	inline := text <= queueInlineMax && bracketed
+	// A path in a paste of its own only reads as an image to a harness that
+	// can tell a paste from typing.
+	ownPaste := profile.Images == harness.ImagesPathPaste && bracketed
+	var pastes []string
 	var b strings.Builder
 	held := map[string]bool{}
 	for i := range e.parts {
 		p := &e.parts[i]
-		if p.Kind == queuePartText || inline {
+		switch {
+		case p.Kind == queuePartText, p.Kind == queuePartPaste && inline:
 			b.WriteString(p.Text)
-			continue
+		case p.Kind == queuePartPaste:
+			path, err := d.pastes.saveReply([]byte(p.Text), ".txt", held)
+			if err != nil {
+				return nil, err
+			}
+			b.WriteString(pasteLabel(p, path))
+		case p.Kind == queuePartImage:
+			path, err := d.pastes.saveReply(p.Data, sniffImage(p.Data), held)
+			if err != nil {
+				return nil, err
+			}
+			if ownPaste {
+				pastes = append(pastes, b.String(), path)
+				b.Reset()
+				continue
+			}
+			// The path is set off by spaces, so an agent that looks for
+			// paths in the text finds it whole.
+			b.WriteString("[Image #" + strconv.Itoa(p.N) + "] " + path + " ")
 		}
-		path, err := d.pastes.saveReply([]byte(p.Text), ".txt", held)
-		if err != nil {
-			return "", err
-		}
-		b.WriteString(pasteLabel(p, path))
 	}
-	e.typed = b.String()
-	// The parts are typed now. Only the text is kept, for a second try.
+	pastes = append(pastes, b.String())
+	e.typed = pastes
+	// The parts are typed now. Only the pastes are kept, for a second try.
 	e.parts = []queuePart{{Kind: queuePartText}}
-	return e.typed, nil
+	return pastes, nil
 }
 
 // queueFailedSummary is the Inbox question for an entry whose files could not

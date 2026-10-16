@@ -56,6 +56,8 @@ all      = ["esc interrupt"]
 submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; shares opencode's TUI; not measured"
+images          = "path_paste"
+images_source   = "shares opencode's TUI, where a pasted image path becomes an attachment; not measured"
 
 [resume]
 argv   = ["kilo", "--session", "{session_id}"]

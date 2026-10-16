@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // The delivery queue's verbs: queue-prompt, list-queued and cancel-queued. The
@@ -96,6 +97,9 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 	target, verr := queueTarget(sess, state, p.Window)
 	if verr != nil {
 		return nil, verr
+	}
+	if hasImageParts(p.Parts) && d.inputProfileFor(sess, target.ID).Images == harness.ImagesNone {
+		return nil, noImagesError(target)
 	}
 	e, verr := d.newQueueEntry(cs, sess, state, text, p.From, p.HumanNonce)
 	if verr != nil {

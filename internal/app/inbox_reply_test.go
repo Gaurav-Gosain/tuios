@@ -244,3 +244,34 @@ func TestFailedReplyKeepsBothDrafts(t *testing.T) {
 		}
 	}
 }
+
+// TestReplyClipboardImageLandsInItsOwnDraft: ctrl+v in the reply attaches the
+// clipboard's image. The read is slow, and a read for a draft that was sent
+// meanwhile must not land in the next draft.
+func TestReplyClipboardImageLandsInItsOwnDraft(t *testing.T) {
+	done := item("1", session.AttentionFinished, "here", "w-2", "done", 1)
+	m, _ := replyOS(t, done)
+	f := &fakeClipboard{types: []string{"image/png"}, image: fakePNG}
+	env := f.env("linux", wayland, "wl-paste")
+	m.SetImagePasteSeams(&env, nil, nil)
+	m.OpenInbox("")
+	m.InboxReply()
+	m.InboxReplyType("first")
+	stale := m.InboxReplyKey(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+	if stale == nil {
+		t.Fatal("ctrl+v read nothing")
+	}
+	m.InboxReplySend()
+	m.InboxReply()
+	runMsg(t, m, stale)
+	if n, _ := m.Inbox.reply.editor.comp.Images(); n != 0 {
+		t.Fatal("an image read for a sent draft landed in the next one")
+	}
+	runMsg(t, m, m.InboxReplyKey(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl}))
+	if n, _ := m.Inbox.reply.editor.comp.Images(); n != 1 {
+		t.Fatalf("ctrl+v attached %d images, want 1: %q", n, m.Inbox.reply.editor.comp.Notice())
+	}
+	if got := m.Inbox.reply.editor.comp.Text(); got != "[Image #1 · png]" {
+		t.Errorf("the draft reads %q", got)
+	}
+}

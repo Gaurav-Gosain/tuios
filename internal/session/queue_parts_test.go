@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // These tests pin the queue's parts: the wire form the client sends, and the
@@ -38,7 +41,11 @@ func TestQueuePartsWire(t *testing.T) {
 		many[i] = queuePart{Kind: queuePartText, Text: "x"}
 	}
 	for name, bad := range map[string][]queuePart{
-		"an unknown kind":         {{Kind: "image", Text: "x"}},
+		"an unknown kind":         {{Kind: "video", Text: "x"}},
+		"an image with text":      {{Kind: queuePartImage, Text: "x", Data: testPNG("a")}},
+		"an image that is not":    {{Kind: queuePartImage, Data: []byte("#!/bin/sh\n")}},
+		"text with data":          {{Kind: queuePartText, Text: "x", Data: testPNG("a")}},
+		"nine images":             nineImages(),
 		"an empty paste":          {{Kind: queuePartText, Text: "see"}, {Kind: queuePartPaste}},
 		"no text":                 {{Kind: queuePartText, Text: "  \n"}},
 		"too many parts":          many,
@@ -193,5 +200,89 @@ func TestPasteFilesOfTheSameSecondGoInTheOrderTheyWereWritten(t *testing.T) {
 		if kept := err == nil; kept != (i >= len(paths)-3) {
 			t.Errorf("file %d of 10: kept = %v, want only the last 3 kept", i+1, kept)
 		}
+	}
+}
+
+// nineImages is one image more than a message takes.
+func nineImages() []queuePart {
+	out := make([]queuePart, queueMaxImages+1)
+	for i := range out {
+		out[i] = queuePart{Kind: queuePartImage, Data: testPNG(strings.Repeat("x", i))}
+	}
+	return out
+}
+
+// TestQueueImagePartWire: an image part as the client sends it, its bytes in
+// base64, decodes to the bytes, and a message of only an image is valid.
+func TestQueueImagePartWire(t *testing.T) {
+	png := testPNG("pixels")
+	wire, err := json.Marshal(map[string]any{"parts": []map[string]any{{"kind": "image", "data": png, "n": 2}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wire), `"data":"iVBORw0KGgo`) {
+		t.Fatalf("the image is not base64 on the wire: %s", wire)
+	}
+	var p queuePromptParams
+	if err := json.Unmarshal(wire, &p); err != nil {
+		t.Fatal(err)
+	}
+	shown, size, verr := checkQueueParts(p.Parts)
+	if verr != nil {
+		t.Fatalf("checkQueueParts: %v", verr)
+	}
+	if string(p.Parts[0].Data) != string(png) || size != len(png) || shown != "[Image #2 · png]" {
+		t.Errorf("decoded %d bytes, size %d, shown %q", len(p.Parts[0].Data), size, shown)
+	}
+}
+
+// TestSubmitPastesTypesEachPasteAlone: a reply with an image is typed as the
+// text before it, the path alone, and the text after it, each its own
+// bracketed paste, and submitted once. An empty side sends no empty paste,
+// which a harness could read as a clipboard image.
+func TestSubmitPastesTypesEachPasteAlone(t *testing.T) {
+	pane := &recordingPane{bracketed: true}
+	if _, err := submitPastesStamped(context.Background(), pane, []string{"look at ", "/run/p/x.png", " and fix it"}, harness.DefaultInputProfile(), 5*time.Millisecond, 20*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := pane.recorded()
+	want := []string{"\x1b[200~look at \x1b[201~", "\x1b[200~/run/p/x.png\x1b[201~", "\x1b[200~ and fix it\x1b[201~", "\r"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("writes = %q, want %q", got, want)
+	}
+	pane = &recordingPane{bracketed: true}
+	if _, err := submitPastesStamped(context.Background(), pane, []string{"", "/run/p/x.png", ""}, harness.DefaultInputProfile(), 5*time.Millisecond, 20*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := pane.recorded(); strings.Join(got, "|") != "\x1b[200~/run/p/x.png\x1b[201~|\r" {
+		t.Fatalf("an image alone wrote %q", got)
+	}
+}
+
+// TestAQueuedImageIsWrittenWhenTyped: the image is written to the paste
+// folder when the reply is typed, named by the type its bytes show, and the
+// pane, whose harness takes a path in the text, reads its path there.
+func TestAQueuedImageIsWrittenWhenTyped(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	setAgentState(t, c, "work", b, "working", "", "")
+	png := testPNG("screenshot")
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "parts": []map[string]any{
+		{"kind": "text", "text": "echo see "},
+		{"kind": "image", "data": png, "n": 1},
+	}}))
+	dir, err := d.pastes.dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	setAgentState(t, c, "work", b, "idle", "", "")
+	eventually(t, "the reply is typed with the image's path", 5*time.Second, func() bool {
+		return paneShows(t, d, sess, b, "[Image #1] ")
+	})
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), pasteReplyPrefix) || filepath.Ext(entries[0].Name()) != ".png" {
+		t.Fatalf("the paste folder holds %v, want one .png reply file", entries)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, entries[0].Name())); string(got) != string(png) {
+		t.Fatalf("the file holds %d bytes, want the image's %d", len(got), len(png))
 	}
 }

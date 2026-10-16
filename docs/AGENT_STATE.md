@@ -3783,7 +3783,24 @@ submit              = "cr"    # or "lf"; the key that submits
 bracketed_paste     = true    # false: never bracket, even with DECSET 2004 on
 focus_before_submit = false   # true: send a focus-in report (CSI I) first
 source              = "measured on ... / documented in ... / not measured"
+images              = "path_paste"  # or "path_text" or "none"
+images_source       = "not measured"
 ```
+
+`images` says how the harness takes an image you attach to a reply from the
+Inbox. The daemon writes the image to a file on the pane's machine when it
+types the reply, then:
+
+- `path_paste`: pastes the text before the image, then the file's path in a
+  paste of its own, then the text after it, and submits once. The harness
+  reads a pasted image path as an attached image, so the image sits where you
+  put it. A pane without bracketed paste gets the path in the text instead.
+- `path_text`, the default: puts the path in the text, for the agent to open
+  with its own tools.
+- `none`: refuses a reply with an image.
+
+Claude Code, Codex, OpenCode, Kilo and Crush say `path_paste`, and pi says
+`path_text`. None of these is measured yet: `images_source` says so.
 
 A manifest without the block, and a pane no harness claimed, get the defaults:
 carriage return, and a bracketed paste when the pane asks for one. That is what
@@ -3932,7 +3949,8 @@ The editor keeps line breaks and grows to 8 rows, then scrolls. `ctrl+j`,
 (or `ctrl+a`/`ctrl+e`), `ctrl+w` and `alt+backspace` to delete a word,
 `ctrl+u` and `ctrl+k` to delete to the line start or end, `ctrl+z` to undo
 and `alt+z` to redo all work as in a shell. `ctrl+c` clears the draft, and
-`ctrl+v` pastes from the clipboard.
+`ctrl+v` pastes from the clipboard: its text, or its image when it holds an
+image and no text.
 
 A paste of more than 800 characters or 3 lines shows as one block, such as
 `[Pasted text #1 · 42 lines]`. The cursor steps over a block in one move, and
@@ -3941,6 +3959,36 @@ is drawn selected and the footer shows its keys: `ctrl+o` opens its text to
 read (the arrows and page keys scroll, `esc` goes back), `ctrl+e` puts its
 text into the draft to edit, and `backspace` removes it. Undo brings back a
 removed or expanded block.
+
+#### Images
+
+An image attached to the reply shows as one block, such as
+`[Image #1 · 1280×720 png]`, at the cursor. Three things attach one:
+
+- `ctrl+v`, when the clipboard holds an image and no text. tuios reads it
+  with `wl-paste`, `xclip`, `osascript` or PowerShell, as the pane image paste
+  does.
+- An empty paste from your terminal. Some terminals send one when the
+  clipboard holds only an image.
+- A paste that is only the path of an image file on this machine. A terminal
+  pastes a file you drop on it this way.
+
+A message takes 8 images of at most 8 MB each, and 8 MB in all. The same
+image twice is refused: `Image #1 is already in the message.` `backspace`
+removes the selected image, and undo brings it back. The bytes stay in the
+client's memory until the reply is sent. A client that runs on another
+machine (`tuios ssh`, the browser) cannot read your clipboard image, and
+`ctrl+v` pastes the text.
+
+When the reply is typed, the daemon writes each image to a file in the paste
+folder on the pane's machine. The harness's `[input] images` says where the
+path goes (see [Typing a prompt](#typing-a-prompt)). For Claude Code, Codex,
+OpenCode and Crush the path goes in a paste of its own, where the image was,
+so the agent attaches it as an image. An agent whose manifest says
+`images = "none"` refuses the reply: `This agent cannot take images. Remove
+the image to send.`
+
+#### Large pastes
 
 When the reply is typed, the daemon on the pane's machine decides how each
 block reaches the agent. A message of 12 KB or less goes in one paste, with

@@ -210,7 +210,7 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	m.Inbox.approvals.armed = inboxArmed{}
 	comp := m.takeInboxDraft(sessionID, windowID)
 	if comp == nil {
-		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply."})
+		comp = composer.New(composer.Options{MaxRows: inboxReplyRows, Placeholder: "Type your reply.", Images: true})
 	}
 	if m.ProcessingRemoteKeys {
 		comp.MarkAutomated()
@@ -256,6 +256,16 @@ func (m *OS) keepInboxDraft(sessionID, windowID string, comp *composer.Model) {
 		delete(st.drafts, st.draftOrder[0])
 		st.draftOrder = st.draftOrder[1:]
 	}
+}
+
+// restoreNotice puts a line under the draft of a reply the daemon refused, in
+// the open editor when it is that pane's, and in the dock otherwise.
+func (m *OS) restoreNotice(msg InboxRepliedMsg, notice string) {
+	if ed := m.Inbox.reply.editor; ed != nil && ed.session == msg.Session && ed.window == msg.Window {
+		ed.comp.SetNotice(notice)
+		return
+	}
+	m.ShowNotification(notice+" Press r on "+msg.Who+" to open the draft.", "error", m.Settings.NotificationDuration*2)
 }
 
 // restoreInboxDraft gives a pane back the draft of a reply the daemon did not
@@ -326,11 +336,15 @@ func (m *OS) InboxReplyType(text string) {
 }
 
 // InboxReplyPaste puts a paste into the reply: as text when it is short, as
-// one block when it is long. Line breaks are kept.
-func (m *OS) InboxReplyPaste(text string) {
-	if ed := m.Inbox.reply.editor; ed != nil {
-		ed.comp.Paste(text, m.ProcessingRemoteKeys)
+// one block when it is long. Line breaks are kept. An empty paste looks for a
+// clipboard image, and a paste that is the path of an image file attaches the
+// image (inbox_reply_image.go): the command does that work.
+func (m *OS) InboxReplyPaste(text string) tea.Cmd {
+	ed := m.Inbox.reply.editor
+	if ed == nil {
+		return nil
 	}
+	return m.inboxReplyPasteCmd(ed, text)
 }
 
 // InboxReplyKey gives a key to the reply editor and does what it asks.
@@ -345,7 +359,7 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	case composer.EventClose:
 		m.InboxReplyCancel()
 	case composer.EventPaste:
-		return m.RequestHostPaste()
+		return m.inboxReplyClipboard(ed)
 	}
 	return nil
 }
@@ -407,8 +421,9 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		}
 		// The daemon decides how each block travels. text goes too, for a
 		// daemon older than parts, but only when it holds the whole message:
-		// one that cannot gets no text, refuses, and says to update.
-		if len(text) > inboxReplyMax {
+		// one that cannot gets no text, refuses, and says to update. An
+		// image has no text, so a message with one never goes as text.
+		if n, _ := ed.comp.Images(); n > 0 || len(text) > inboxReplyMax {
 			text = ""
 		}
 	}
@@ -469,6 +484,9 @@ func replyPartsRefusal(parts []composer.Part) string {
 	size, typed := 0, 0
 	for _, p := range parts {
 		size += len(p.Text)
+		if p.Image != nil {
+			size += len(p.Image.Data)
+		}
 		if p.Kind == composer.PartText {
 			typed += len(p.Text)
 		} else {
@@ -477,7 +495,7 @@ func replyPartsRefusal(parts []composer.Part) string {
 		}
 	}
 	if size > inboxReplyBytesMax {
-		return "The message is larger than 8 MB. Remove a paste to send."
+		return "The message is larger than 8 MB. Remove a paste or an image to send."
 	}
 	if typed > inboxReplyMax {
 		return "The typed text is larger than 16 KB. Make it shorter to send."
@@ -517,8 +535,10 @@ func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue
 // replyPart is one part of a reply on the wire, as queue-prompt takes it.
 type replyPart struct {
 	Kind string `json:"kind"`
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
 	N    int    `json:"n,omitempty"`
+	// Data is an image's file. JSON carries it in base64.
+	Data []byte `json:"data,omitempty"`
 }
 
 // wireReplyParts is a reply's parts as queue-prompt takes them.
@@ -526,8 +546,11 @@ func wireReplyParts(parts []composer.Part) []replyPart {
 	out := make([]replyPart, len(parts))
 	for i, p := range parts {
 		out[i] = replyPart{Kind: "text", Text: p.Text}
-		if p.Kind == composer.PartPaste {
+		switch p.Kind {
+		case composer.PartPaste:
 			out[i] = replyPart{Kind: "paste", Text: p.Text, N: p.N}
+		case composer.PartImage:
+			out[i] = replyPart{Kind: "image", N: p.N, Data: p.Image.Data}
 		}
 	}
 	return out
@@ -554,8 +577,16 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 			case session.ErrVerbInvalidParams:
 				if msg.Parts != nil && msg.Text == "" && strings.Contains(callErr.Message, "text is required") {
 					// A daemon older than parts read no message: the reply
-					// was too large to send as text too.
-					m.ShowNotification("This daemon cannot take a reply with a large paste. Restart it with a newer tuios: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					// was too large to send as text too, or held an image.
+					m.ShowNotification("This daemon cannot take this reply. Update the daemon to send images and large pastes: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					return
+				}
+				if strings.Contains(callErr.Message, "a part is text or paste") {
+					m.ShowNotification("Update the daemon to send images: tuios kill-server. Your draft is kept", "error", m.Settings.NotificationDuration*2)
+					return
+				}
+				if strings.Contains(callErr.Message, "cannot take images") {
+					m.restoreNotice(msg, "This agent cannot take images. Remove the image to send.")
 					return
 				}
 			case session.ErrVerbQueueFull:

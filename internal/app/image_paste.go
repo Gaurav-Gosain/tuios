@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"strings"
 	"time"
 
@@ -113,6 +114,8 @@ type imageProbeMsg struct {
 	// keyProbeOff says the type ask was too slow or cannot work here, so the
 	// paste key stops making it.
 	keyProbeOff bool
+	// reply is the reply draft the image is for, nil for a pane.
+	reply *composer.Model
 }
 
 // ImagePastedMsg is the daemon's answer: the path to paste into window.
@@ -220,6 +223,9 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 
 // applyImageProbe acts on what the clipboard held.
 func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
+	if msg.reply != nil {
+		return m.applyReplyImageProbe(msg)
+	}
 	if msg.keyProbeOff {
 		m.imagePaste.keyProbeOff = true
 	}

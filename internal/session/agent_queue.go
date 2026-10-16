@@ -128,9 +128,9 @@ type queueEntry struct {
 	parts []queuePart
 	// size is the bytes the entry holds, for the queues' byte bounds.
 	size int
-	// typed is the text an entry in parts was typed as, once its files are
+	// typed is the pastes an entry in parts is typed as, once its files are
 	// written. See composeQueued.
-	typed string
+	typed []string
 }
 
 // paneQueue is one pane's queue.
@@ -706,14 +706,14 @@ func (d *Daemon) typeQueued(sess *Session, target WindowState, e *queueEntry) (s
 	if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
 		return PromptNotSent, verr.Message, 0
 	}
-	text, err := d.composeQueued(sess, target, e)
+	pastes, err := d.composeQueued(sess, target, e)
 	if err != nil {
 		// Typing it without its blocks would send a message the person did
 		// not write. It is dropped, and the Inbox says so.
 		d.attention.openQueueFailed(sess.Name(), target, err.Error())
 		return queueRefused, "a pasted block could not be saved: " + err.Error(), 0
 	}
-	return d.typeFirstPrompt(sess, target.ID, text)
+	return d.typePromptPastes(sess, target.ID, pastes)
 }
 
 // queueOriginRefusal says why the entry's origin may no longer type into

@@ -69,6 +69,9 @@ While that machine's link is down it ends in `[unreachable, seen 5m ago]`.
   then holds a label in the paste's place, such as
   `[Pasted text #1: /run/user/1000/tuios/paste/tuios-paste-reply-….txt, 2,048 lines]`.
   Read the file with your own tools. It is kept for 24 hours.
+- An image the person attaches to a reply reaches you as a file path too: in
+  a paste of its own, which your harness attaches as an image, or in the
+  text as `[Image #1] PATH`. Open the file with your own tools.
 - Keep your prompt on screen with its options numbered. The person can then
   answer it from the Inbox (`space` on the row shows it; a digit or `a`, `A`,
   `d` presses the answer your harness's manifest declares). Crush's permission

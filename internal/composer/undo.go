@@ -25,10 +25,10 @@ type edit struct {
 func editSize(del, ins []cell) int {
 	n := 0
 	for _, c := range del {
-		n += c.bytes()
+		n += c.weight()
 	}
 	for _, c := range ins {
-		n += c.bytes()
+		n += c.weight()
 	}
 	return n
 }

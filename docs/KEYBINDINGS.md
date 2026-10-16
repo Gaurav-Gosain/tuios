@@ -1306,7 +1306,7 @@ row. It works on the agent row and on the subagent heading, and only when
 The reply editor takes every key: `enter` queues the reply, `ctrl+j`,
 `shift+enter` or `\` then `enter` adds a new line, and `esc` closes it and
 keeps the draft. A paste keeps its line breaks, and a long one shows as one
-block. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
+block. `ctrl+v` attaches the clipboard's image when it holds one and no text. The editing keys are in docs/AGENT_STATE.md, "Replying to an agent".
 They are not bindings yet. Attached to a daemon without `queue-prompt` (an older one), the
 first reply says to restart it, and after that `r` does what it did before:
 it says `r` replies to mail in the Inbox, and renames on the rail.

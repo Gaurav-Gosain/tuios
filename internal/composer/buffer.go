@@ -32,7 +32,8 @@ type cell struct {
 // isSpace reports whether c separates words.
 func (c *cell) isSpace() bool { return c.space }
 
-// bytes is what c holds, for the bounds on the draft and the undo stack.
+// bytes is the text c holds, for the bound on the draft. An image is
+// bounded on its own (MaxImageBytes, MaxImages).
 func (c cell) bytes() int {
 	if c.block != nil {
 		return len(c.block.text)
@@ -40,13 +41,24 @@ func (c cell) bytes() int {
 	return len(c.s)
 }
 
-// block is one long paste, held whole and shown as a label.
+// weight is the memory c holds, an image's bytes included, for the bound on
+// the undo stack.
+func (c cell) weight() int {
+	if c.block != nil && c.block.img != nil {
+		return len(c.block.img.Data)
+	}
+	return c.bytes()
+}
+
+// block is one long paste or one image, held whole and shown as a label.
 type block struct {
-	// n is the number the label shows: the highest number in the draft plus
-	// one when the paste came in.
+	// n is the number the label shows: the highest number of its kind in
+	// the draft plus one when it came in.
 	n int
-	// text is the paste as it is sent.
+	// text is the paste as it is sent, empty for an image.
 	text string
+	// img is the image, nil for a paste.
+	img *Image
 	// lines and chars are the measures the label shows.
 	lines, chars int
 	// label is the label as drawn, kept so a frame does not build it again.

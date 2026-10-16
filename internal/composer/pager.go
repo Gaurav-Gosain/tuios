@@ -26,7 +26,7 @@ type pager struct {
 // Open shows the selected block's text in place of the editor. It reports
 // whether there was a block to open.
 func (m *Model) Open() bool {
-	b := m.selectedBlock()
+	b := m.selectedPaste()
 	if b == nil {
 		return false
 	}

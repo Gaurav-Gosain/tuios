@@ -65,6 +65,8 @@ not      = ["interrupt"]
 submit          = "cr"
 bracketed_paste = true
 source          = "measured on opencode 1.18.30 (DECSET 2004 on, no kitty keyboard flags)"
+images          = "path_paste"
+images_source   = "a pasted image path becomes an attachment (local-attachment.ts); not measured"
 
 [resume]
 argv   = ["opencode", "--session", "{session_id}"]

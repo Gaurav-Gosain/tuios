@@ -146,6 +146,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
+		// The reply editor takes it first: an empty paste or a path can
+		// attach an image, which is read off the update loop.
+		if o.InboxReplyOpen() {
+			return o, o.InboxReplyPaste(msg.Content)
+		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
 		}
@@ -184,7 +189,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			return o, nil
 		}
 		// An overlay takes the paste the same way it takes a terminal paste.
-		// Only handle paste in terminal mode.
+		// Only handle paste in terminal mode. The reply editor's ctrl+v
+		// answer may be the path of an image file, read off the loop; an
+		// empty answer is nothing, since the clipboard was asked already.
+		if o.InboxReplyOpen() {
+			if msg.Content == "" {
+				return o, nil
+			}
+			return o, o.InboxReplyPaste(msg.Content)
+		}
 		if pasteTakenByOverlay(o, msg.Content) {
 			return o, nil
 		}
@@ -224,8 +237,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 func pasteTakenByOverlay(o *app.OS, content string) bool {
 	// While the Inbox's reply editor is open the paste is the reply's text,
 	// line breaks and all. A long paste is held as one block.
+	// The reply editor is handled by the two callers, before this.
 	if o.InboxReplyOpen() {
-		o.InboxReplyPaste(content)
 		return true
 	}
 	// Hints mode takes labels one key at a time. A paste, or an input

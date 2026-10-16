@@ -31,9 +31,24 @@ type Input struct {
 	// when the pane has focus reporting (DECSET 1004) on. A harness that
 	// ignores a submit while it believes it is unfocused needs it.
 	FocusBeforeSubmit bool `toml:"focus_before_submit"`
+	// Images is how the harness takes an image the person attached to a
+	// queued reply: "path_paste" (the file's path in a paste of its own,
+	// which the harness reads as an attached image), "path_text" (the path
+	// in the text, for the agent to open), or "none" (refused). Empty is
+	// path_text.
+	Images string `toml:"images"`
+	// ImagesSource is where the images value came from: measured, or not.
+	ImagesSource string `toml:"images_source"`
 	// Source is where the values above came from.
 	Source string `toml:"source"`
 }
+
+// Ways a harness takes an image, Input.Images.
+const (
+	ImagesPathPaste = "path_paste"
+	ImagesPathText  = "path_text"
+	ImagesNone      = "none"
+)
 
 // Submit keys.
 const (
@@ -50,6 +65,13 @@ func (in *Input) normalize() error {
 	default:
 		return fmt.Errorf("submit %q (cr or lf)", in.Submit)
 	}
+	switch in.Images = strings.ToLower(strings.TrimSpace(in.Images)); in.Images {
+	case "":
+		in.Images = ImagesPathText
+	case ImagesPathPaste, ImagesPathText, ImagesNone:
+	default:
+		return fmt.Errorf("images %q (path_paste, path_text or none)", in.Images)
+	}
 	return nil
 }
 
@@ -63,13 +85,15 @@ type InputProfile struct {
 	BracketedPaste bool
 	// FocusBeforeSubmit asks for a focus-in report before the prompt.
 	FocusBeforeSubmit bool
+	// Images is Input.Images, path_text when the manifest says nothing.
+	Images string
 }
 
 // DefaultInputProfile is the profile for a pane with no harness, or one whose
 // manifest has no [input] block: carriage return, and bracketed paste when the
 // pane asks for it.
 func DefaultInputProfile() InputProfile {
-	return InputProfile{SubmitKey: "\r", BracketedPaste: true}
+	return InputProfile{SubmitKey: "\r", BracketedPaste: true, Images: ImagesPathText}
 }
 
 // InputProfile returns the harness's input profile, or the default for an
@@ -87,5 +111,8 @@ func (r *Registry) InputProfile(id string) InputProfile {
 		p.BracketedPaste = *m.Input.BracketedPaste
 	}
 	p.FocusBeforeSubmit = m.Input.FocusBeforeSubmit
+	if m.Input.Images != "" {
+		p.Images = m.Input.Images
+	}
 	return p
 }

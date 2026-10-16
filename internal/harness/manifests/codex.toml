@@ -154,6 +154,8 @@ regex    = ['\S']
 submit          = "cr"
 bracketed_paste = true
 source          = "crossterm reads CR as Enter and LF as Ctrl+J in raw mode; paste-burst handling per herdr src/app/api/agents.rs; not measured"
+images          = "path_paste"
+images_source   = "a paste that is one image path attaches it (chat_composer.rs); not measured"
 
 [resume]
 argv   = ["codex", "resume", "{session_id}"]

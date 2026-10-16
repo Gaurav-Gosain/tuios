@@ -6524,3 +6524,15 @@ branch.
 | Bug | Fix removed | How | Tests that fail | Verdict |
 |---|---|---|---|---|
 | A large paste was typed into the pane | the file path of `composeQueued` | every part typed in its place (`if true`) | `TestReplyWithALargePasteGoesAsAFile` ("the pane never read \"lines]\x1b[201~\r\"; it read \"\x1b[200~echo b1g9 big paste line 0001 …") | **caught** |
+## An image in a reply goes as a file
+
+`TestReplyWithAnImageGoesAsAFile` pastes the path of a PNG into the Inbox
+reply, as a terminal pastes a dropped file, with its space escaped. The draft
+must show `[Image #1 · 64×48 png]`. The agent is Claude Code, which takes an
+image as a path in a paste of its own. The recorder must read the words in
+one paste, the path alone in the next, then one Enter, and the file must hold
+the image's bytes in the paste folder. It passes on the branch.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pasted image path stayed text | the image read in `inboxReplyPasteCmd` | every paste taken as text (`if ok \|\| !ok`) | `TestReplyWithAnImageGoesAsAFile` ("waiting for the image as one block: … timed out") | **caught** |
