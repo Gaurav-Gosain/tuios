@@ -3195,3 +3195,59 @@ maintenance tick and Bubble Tea's frame ticker both run at `IdleFPS`. Neither
 writes a byte. Removing them needs every event the idle gate polls (a process
 exit, a title change, a moved daemon listing, a cursor-only change) to arrive
 as a message first.
+
+## 2026-10 the daemon at idle
+
+A daemon whose panes sit at a prompt did 7 to 9 context switches a second
+with no client, and 22 to 27 with one client attached. Every one came from a
+timer. Each background loop polled on a ticker of its own, whatever the panes
+were doing:
+
+| Loop | Interval | Wakeups a second |
+|---|---|---|
+| Resurrection saver, per session | 2 s | 0.5 per session |
+| Agent monitor | 2 s | 0.5 |
+| Stall monitor | 7.5 s at the default timeout | 0.13 |
+| Cleanup loop | 30 s | 0.03 |
+| Session listing, asked by a client with the rail open | 3 s | 0.33 per client |
+
+The Go runtime turns each timer wakeup into 10 to 40 context switches: the
+netpoller thread wakes, a goroutine runs, and sysmon spins in 20 µs sleeps
+before it parks again.
+
+Each loop now sleeps on a latch (`internal/session/wake_latch.go`). The side
+that notices a change raises the latch, which costs one atomic load while it
+is already up. Only the raise wakes the loop. A loop with work keeps its own
+cadence. A loop without work stops its timer.
+
+### Measurement conditions
+
+A throwaway daemon with scratch XDG folders under
+`nice -n 19 taskset -c 0-7 GOMAXPROCS=4`, one session with two `/bin/bash`
+panes, the client in a detached tmux at 120x36 when attached. Context
+switches are the sum of every thread's voluntary and involuntary switches
+from `/proc`, over 30 s. Runs of different builds were interleaved, three
+runs each. `runtime/trace` grouped the goroutine wakeups by the stack each
+goroutine was blocked in.
+
+### What changed
+
+- The resurrection saver sleeps until a session changes. A structural
+  change raises `stateDirty` and reaches disk within 2 s, as before. Output in
+  a pane, or a use of the session, raises `saveStale` and reaches disk within
+  30 s of the last save. That keeps a shell's directory and a pane's history
+  current. A session that prints nothing writes nothing and arms no timer.
+
+### Numbers
+
+Client attached, 5 s after the panes opened, 30 s window:
+
+| Build | daemon ctxsw/s |
+|---|---|
+| main | 25.3, 26.4, 26.4 |
+| saver sleeps | 20.7, 19.3, 21.5 |
+
+`TestAnIdleSessionDoesNotWakeTheSaver` holds the budget: no write and at most
+the first look over four intervals of an idle session, then a structural
+change still reaches disk. With the 2 s poll back the saver wakes 4 times
+and the test fails.
