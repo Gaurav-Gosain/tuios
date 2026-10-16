@@ -3420,7 +3420,8 @@ You run in tuios pane 3a42ab8f in session work.
 Run `tuios --skill` to learn how to drive tuios.
 ```
 
-Outside tuios, and when the report fails, the hook prints nothing.
+Outside tuios, when the report fails, and with `--window`, the hook prints
+nothing.
 
 | Claude Code event | Reports |
 | ----------------- | ------- |

@@ -125,8 +125,8 @@ pane, so the turn's last context and cost reach the rail.
 
 For claude-code and codex, a SessionStart prints two lines that these
 harnesses add to the agent's context: the pane and the session the agent runs
-in, and "Run tuios --skill to learn how to drive tuios". Outside tuios it
-prints nothing.
+in, and "Run tuios --skill to learn how to drive tuios". Outside tuios, and
+with --window, it prints nothing.
 
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
@@ -268,10 +268,12 @@ func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 // startHint reports whether a hook run tells the agent where it runs: a
 // SessionStart for a harness that reads the hook's output as context, reported
 // for a pane the hook found. Outside tuios, or when the report failed, it
-// prints nothing.
+// prints nothing. A pane named with --window is a run by hand or by a script,
+// and the name it was given is not the pane's id, so that prints nothing too.
 func startHint(out agentHookOutcome) bool {
 	return out.Event == "SessionStart" && integration.StartsWithContext(out.Harness) &&
-		out.Error == "" && out.Report != nil && out.Window != "" && out.Session != ""
+		out.Error == "" && out.Report != nil && out.Window != "" && out.Session != "" &&
+		out.PaneBy != "flag"
 }
 
 // holdable reports whether a hook run may wait for an answer from the Inbox:

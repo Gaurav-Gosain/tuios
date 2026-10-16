@@ -367,6 +367,12 @@ func TestAgentHookTellsTheAgentWhereItRuns(t *testing.T) {
 		t.Fatalf("a Stop printed %q", h.stdout.String())
 	}
 
+	h = &hookRun{env: map[string]string{"TUIOS_SESSION": "work"}}
+	h.run(t, agentHookOptions{window: "0"}, start, "claude-code")
+	if h.stdout.Len() != 0 {
+		t.Fatalf("a run with --window printed %q", h.stdout.String())
+	}
+
 	h = &hookRun{env: map[string]string{}}
 	h.run(t, agentHookOptions{}, start, "claude-code")
 	if h.stdout.Len() != 0 {
