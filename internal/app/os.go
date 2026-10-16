@@ -2038,8 +2038,10 @@ func (m *OS) SwitchToSession(targetSession string) error {
 		// on its own session with every pane streaming.
 		return fmt.Errorf("switch to %q failed: %w; still on %q", targetSession, err, m.SessionName)
 	}
+	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
 	m.SessionName = m.DaemonClient.SessionName()
 	m.rebuildForSession(state, savedWidth, savedHeight)
+	m.leftSession(from)
 	// The components tell their commands which session they are drawing for,
 	// and that answer just changed.
 	m.SyncDockContext()

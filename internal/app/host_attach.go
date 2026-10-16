@@ -214,7 +214,9 @@ func (m *OS) finishHostSwitch(msg SessionCreatedMsg) {
 // the connection open made.
 func (m *OS) adoptHostClient(client *session.TUIClient, state *session.SessionState, host string) {
 	previousHost, previousSession := m.AttachedHost, m.SessionName
+	from := lastSession{host: m.attachedMachine(), name: previousSession}
 	m.adoptClient(client, state, host)
+	m.leftSession(from)
 	if host != federation.LocalHostName && previousHost == "" {
 		// Remember where to come back to if the link drops.
 		m.hostReturn = previousSession
@@ -414,22 +416,6 @@ func (m *OS) switchSession(host, name string) error {
 	if host != "" && !m.hostIsUp(host) {
 		return &hostUnavailableError{host: host}
 	}
-	// Both ends by the machine's own name, so a switch to the same session
-	// is not recorded and a session on another machine is found again.
-	from := lastSession{host: m.attachedMachine(), name: m.SessionName}
-	to := host
-	if to == "" {
-		to = m.attachedMachine()
-	}
-	err := m.switchSessionTo(host, name)
-	if err == nil && from.name != "" && (from.host != to || from.name != name) {
-		m.lastSession = from
-	}
-	return err
-}
-
-// switchSessionTo is switchSession past the checks.
-func (m *OS) switchSessionTo(host, name string) error {
 	if m.sessionSwitchHook != nil {
 		return m.sessionSwitchHook(host, name)
 	}
@@ -445,6 +431,20 @@ func (m *OS) switchSessionTo(host, name string) error {
 // lastSession is the session this client left on its last switch.
 type lastSession struct {
 	host, name string
+}
+
+// leftSession records the session this client was on before a switch that
+// landed, for last_session. It is called from SwitchToSession and
+// adoptHostClient, the two places every switch ends in, so a switch from the
+// Inbox or into a session just made counts as well as one from the rail.
+// Both ends are named by machine, so a session on another machine is found
+// again. The workspace history belongs to the session left, so it goes.
+func (m *OS) leftSession(from lastSession) {
+	m.lastWorkspace = 0
+	if from.name == "" || (from.host == m.attachedMachine() && from.name == m.SessionName) {
+		return
+	}
+	m.lastSession = from
 }
 
 // LastSession goes back to the session this client was on before the current
