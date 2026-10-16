@@ -145,7 +145,7 @@ type InboxRepliedMsg struct {
 	Send uint64
 	// Parts is the reply in parts, nil for one sent as text.
 	Parts []composer.Part
-	Err  error
+	Err   error
 }
 
 // InboxQueueDroppedMsg is the answer to the x on a rail row.
