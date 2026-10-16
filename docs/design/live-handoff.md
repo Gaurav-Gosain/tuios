@@ -1,29 +1,29 @@
 # Live handoff: upgrading the daemon without killing pane processes
 
-Status: draft spec, not implemented. Local issue draft for discussion with the maintainer. Every architectural claim cites `path:line` at commit `b676cc47`.
+Status: draft spec, not implemented. Local issue draft for discussion with the maintainer. Every architectural claim cites `path:line` at commit `b676cc47`. Every number marked measured comes from a probe in `docs/design/live-handoff-probes/` (Appendix A).
 
 ## TL;DR
 
 - **Goal.** `tuios daemon upgrade` replaces the running daemon with a new binary. Every pane process (shells, editors, agents) keeps running, with the same PID (process identifier), the same TTY (teletype, the pane's terminal device) and the same screen. Today every upgrade path is `kill-server` plus restore from disk, and running programs die (`cmd/tuios/update.go:456-460`, `docs/SESSIONS.md:448-462`).
 - **This is already the maintainer's plan.** PR (pull request) #628 is "PR 1 of the daemon live upgrade plan". It made the snapshot carry everything a program can see. It names "the handoff, the fd adoption and the `tuios daemon upgrade` command" as later PRs, and "PR 3 (the handoff format)" as the one that closes the open-cluster gap (commit `b228b387`, `docs/REHYDRATION.md:497-503`, `internal/session/snapshot_complete_wire_test.go:298-304`). This spec fills in PR 2 onward and stays inside that plan.
-- **Recommended mechanism: exec in place.** The daemon quiesces, writes a handoff manifest to an inherited, unlinked file, clears close-on-exec on the PTY (pseudo-terminal) masters, the listening sockets and the start lock, then calls `execve` on the new binary. herdr instead spawns a second process and passes the fds (file descriptors) over SCM_RIGHTS (socket control message that carries fds). Exec in place keeps the daemon's PID, so:
+- **Mechanism: exec in place (settled, section 2.1).** The daemon quiesces, writes a handoff manifest to an inherited, unlinked file, clears close-on-exec on the PTY (pseudo-terminal) masters, the listening sockets and the start lock, then calls `execve` on the new binary. herdr instead spawns a second process and passes the fds (file descriptors) over SCM_RIGHTS (socket control message that carries fds). Exec in place keeps the daemon's PID, so:
   - it stays the **parent** of every pane, and exit detection keeps working through `wait4` with real exit codes;
   - the listening socket never closes, so CLI (command-line interface) and MCP (Model Context Protocol) calls made during the swap wait in the backlog instead of failing;
-  - peak memory is roughly one daemon's heap plus one pane's snapshot, not two daemons.
-  The cost: there is no old process to roll back to after the exec. A preflight check and a re-exec of the preserved old binary are the mitigation. See section 2.1.
-- **Exit detection today** is `exec.Cmd.Wait` in a `monitorExit` goroutine per pane (`internal/session/session.go:4859-4875`). It only works for the process's own children. Exec in place preserves the parent relationship, so the adopted pane waits on `os.FindProcess(pid).Wait()`. A probe for this spec verified this on macOS with Go 1.26: same pid after `execve`, a pre-exec zombie reaped with status 7, a later exit with status 9 (Appendix A). One change is still required in the **old** image: a `Wait` that is already blocked reaps a child that exits mid-handoff and loses its status at exec. So `monitorExit` becomes a two-step wait, a non-reaping peek followed by a reap behind a per-pane gate, and the handoff can close that gate (section 2.2). In a spawn-a-second-daemon design the new daemon is **not** the parent:
-  - exit codes would be lost;
-  - liveness would come from kqueue `EVFILT_PROC`/`NOTE_EXIT` (macOS) or a pidfd (Linux process file descriptor), plus master EOF (end of file)/EIO (I/O error);
-  - orphaned children would be reaped by launchd/init.
-- **Peak memory (estimate).** Exec in place: one heap plus a streamed manifest, about 1.5–2.5 MB on disk for 60 panes with visible screens only, about 25–35 MB with 1000 history rows each. Spawn-second-daemon: about 2× heap. A 25-pane mixed load is about 30 MB live heap (PR #735 and #736 bodies). The user reports 50–65 panes at about 26–31 MB heap, a figure not found in the repo.
-- **Pause and blackout (estimate).**
-  - Pane output is paused for about 0.1–0.4 s with screens only. With 1000 rows per pane on 60 panes it is about 1.8 s serially (0.84 s capture plus an assumed equal apply plus exec), or about 0.5–1.2 s with capture and apply run in parallel.
-  - A chatty pane blocks in `write()` once the kernel buffer fills. That buffer is about 1 KB on macOS, measured on this machine (Darwin 27). The pane loses nothing.
+  - the old heap is freed at the exec, so two daemon heaps never coexist.
+  The cost: there is no old process to roll back to after the exec. A preflight that runs the exact binary file, a hardlinked copy of the old binary to re-exec, and a watchdog are the mitigation. Section 2.1 settles exec in place over a second process, with measured evidence.
+- **Exit detection today** is `exec.Cmd.Wait` in a `monitorExit` goroutine per pane (`internal/session/session.go:4859-4875`). It only works for the process's own children. Exec in place preserves the parent relationship, so the adopted pane waits on `os.FindProcess(pid).Wait()`. Measured on macOS (Darwin 27) and Linux 6.8 with Go 1.26.9: same pid after `execve`, a pre-exec zombie reaped with status 7, a later exit with status 9 (Appendix A). One change is still required in the **old** image: a `Wait` that is already blocked reaps a child that exits mid-handoff, and its status is lost at exec (reproduced). So `monitorExit` becomes a two-step wait, a non-reaping peek followed by a reap behind a per-pane gate, and the handoff closes that gate (section 2.2). In a spawn-a-second-daemon design the new daemon is **not** the parent:
+  - on Linux a non-child cannot get an exit status at all; only a subreaper that is an ancestor of every pane from daemon start can;
+  - on macOS kqueue `EVFILT_PROC` with `NOTE_EXITSTATUS` delivers a non-child's real status, but registration fails with ESRCH on a pane that is already a zombie;
+  - liveness alone comes from kqueue or a pidfd (Linux process file descriptor), plus master EOF (end of file)/EIO (I/O error).
+- **Peak memory (measured, section 3).** A busy 60-pane daemon (full 198x48 screens, 1000 history rows each) holds about 100 MB live heap, an idle one about 17 MB. The manifest for 60 panes is 1.3–2.2 MB with screens only, 25–34 MB with 1000 rows. Exec in place frees the old heap at exec, and the new image peaks at about 2× its rebuilt heap while it applies history: +60–88 MB screens only, +195–342 MB with 1000 rows. So adoption bounds its workers and tunes the GC (garbage collector). A second process adds the old heap on top: about 300–450 MB transient for the busy case.
+- **Pause and blackout (measured parts).**
+  - 60 panes, screens only: capture 0.02–0.04 s, exec plus Go init 11–31 ms, apply about 0.02 s, so roughly 0.05–0.1 s serially. With 1000 rows: about 0.7–1.0 s serially, or about 0.13–0.17 s plus exec with capture and apply on 18 workers. ⚠️ A real end-to-end pause needs the implementation (PR 4 artifact).
+  - A chatty pane blocks in `write()` once the kernel buffer fills: about 1 KB on macOS, 12–20 KB on Linux. The pane loses nothing.
   - Clients see a disconnect. PR 5 asks them to reattach. The clients-follow step reattaches them automatically, with a full repaint from the snapshot.
 - **Recommended first phase.** Follow the maintainer's PR numbering. The first shippable slice is **PR 2**: a quiesce primitive, a gated two-step exit wait and an adopted-pane constructor. It changes no user-visible behaviour, and an E2E (end-to-end) test drives it through a test-only re-exec. The user-visible feature is PR 2 to PR 5 together:
   - Unix only, opt-in `tuios daemon upgrade`, exec in place, exact manifest version match, local panes only.
   - A fixed history depth of 1000 rows.
-  - Refused when hosted panes or an in-process daemon are present.
+  - Refused when hosted panes, an in-process daemon, a running verify-fan or a capturing popup are present.
   - Plugins and federation links stopped and restarted. Clients told to reattach.
   - Pane tokens, pane pids and stream positions carried, so agents keep talking to the daemon.
   - E2E tests prove the same PIDs, an agent that still answers, a real exit status and contiguous output, each with a negative control. Section 5 has the split.
@@ -163,25 +163,34 @@ Negative controls, each cutting a call site:
 
 ### 2.1 Mechanism: exec in place vs a second process
 
-| | Exec in place (recommended) | Second process plus SCM_RIGHTS (herdr) |
+| | Exec in place (chosen) | Second process plus SCM_RIGHTS (herdr) |
 |---|---|---|
 | Parent of pane processes | Unchanged, because the PID is kept | Old daemon. After it exits, the panes reparent to launchd/init, or to a Linux subreaper ancestor |
-| Exit code after handoff | Real, via `wait4` | Lost. Only liveness is available |
+| Exit code after handoff | Real, via `wait4`, on both OSes with no extra machinery (measured) | macOS: kqueue `NOTE_EXITSTATUS`, which misses a pane already a zombie at registration. Linux: none without a permanent subreaper ancestor (measured, section 2.2) |
 | Listening sockets | Inherited and never closed. Callers queue in the backlog | Passed or rebound. There is a window where dials fail |
 | Start lock, pid file | Inherited flock, same pid | Must pass the flock fd, rewrite the pid file, and keep both locks consistent |
-| Peak memory | About 1× heap plus one pane's snapshot buffer | About 2× heap plus the manifest in flight |
+| Peak memory | Old heap freed at exec. The new image peaks at about 2× its rebuilt heap during apply: about 200–340 MB for a busy 60-pane daemon with 1000 rows (section 3.2) | Old live heap (about 100 MB busy) plus the same new-image peak: about 300–450 MB |
 | Exactly one reader per PTY | Trivial after exec. Before exec, the quiesce must not lose an in-flight chunk | Needs pause, ack and handover. Two processes hold the master until commit |
 | Rollback | Before exec: free (nothing changed). After exec: re-exec the preserved old binary with the same manifest. If both fail, panes hang up as in a crash | Old process alive until commit. True rollback |
 | Embedded daemon (in-process in `tuios-web`/SSH, `internal/session/autostart.go:38-66`) | Must refuse: exec would replace the web or SSH server | Possible in principle, still messy |
-| Go specifics | Go opens every fd CLOEXEC. Clear it per fd with `unix.FcntlInt(fd, F_SETFD, 0)` before `syscall.Exec`, under `syscall.ForkLock` (below). `syscall.Exec` is supported from a multithreaded Go process. Verified by the Appendix A probe | `unix.UnixRights`/`ParseUnixRights`, none in the repo today |
+| Go specifics | Go opens every fd CLOEXEC. Clear it per fd with `unix.FcntlInt(fd, F_SETFD, 0)` before `syscall.Exec`, under `syscall.ForkLock` (below). `syscall.Exec` is supported from a multithreaded Go process, including with threads blocked in `waitid` or `kevent`. Verified on macOS and Linux (Appendix A) | `unix.UnixRights`/`ParseUnixRights`, none in the repo today |
 
-Recommendation: exec in place. The maintainer's own wording in PR #628, "restores each pane's emulator from its snapshot in a new daemon image", fits it. The rollback weakness is bounded, but not removed, by these:
-- **Preflight.** Run `<new> daemon handoff-accepts`, which prints its accepted manifest version range, protocol versions and backend (pure or ghostty), and exits. Do this before any pause. A binary that cannot run, or does not accept the version, is refused with nothing changed. It also proves the new binary starts at all: package init and flag parsing run here, the same code that would run first after `execve`.
+**Decision: exec in place.** This settles what review left open (a two-process design plus a small exit-status reaper). The maintainer may still prefer otherwise; the evidence is:
+
+| Concern | Exec in place | Second process | Evidence |
+|---|---|---|---|
+| Exit codes | Kept on both OSes. Parenthood is unchanged | Two platform-specific paths. macOS: kqueue `NOTE_EXITSTATUS` on a non-child, and the old daemon must keep reaping and forwarding until every watch is registered, because registering on a zombie fails with ESRCH. Linux: a non-child gets ECHILD. Only a subreaper that is an ancestor of every pane from daemon start sees the status, which means a permanent extra process (the reaper shim) whose own upgrade is the next problem | `docs/design/live-handoff-probes/macos/p1_kqueue_proc.c`, `docs/design/live-handoff-probes/linux/nonchild.go` |
+| Memory | About 200–340 MB transient (busy, 1000 rows), with the GC tuning of section 3.2 | About 300–450 MB: both heaps plus the apply peak | `docs/design/live-handoff-probes/measure/` |
+| Pause | Exec plus Go init: 11–31 ms once warm | Spawn plus init, about the same | `docs/design/live-handoff-probes/macos/p3/main.go` |
+| Rollback | Re-exec of a hardlinked old binary. A post-exec hard crash ends every pane, as a crash does today | True rollback until commit | |
+
+What the second process buys is true rollback until commit. Exec in place bounds, but does not remove, that weakness with these:
+- **Preflight on the same inode.** Run `<new> daemon handoff-accepts`, which prints its accepted manifest version range, protocol versions and backend (pure or ghostty), and exits. Do this before any pause. A binary that cannot run, or does not accept the version, is refused with nothing changed. It also proves the new binary starts at all: package init and flag parsing run here, the same code that would run first after `execve`. Record the device and inode the preflight ran, and check them again just before `execve`. The first exec of a newly written binary on macOS costs 0.3–0.5 s (tuios: p50 318 ms, max 531 ms; probably the code-signature or first-launch assessment, cause not confirmed), against 11–17 ms warm. The preflight pays it outside the pause, but only for that inode: an installer that replaces the file between preflight and exec re-pays it, so a changed inode means preflight again.
 - **Keep the old binary from daemon start, not at upgrade time.** By the time someone runs `daemon upgrade`, the installer has already put the new binary in the old one's place:
   - `scripts/install.sh` renames over the path (`scripts/install.sh:171-180`);
   - Homebrew re-points its symlink, and `brew cleanup` may delete the old Cellar copy.
 
-  An inode with no name left cannot be hardlinked, and macOS has neither `/proc/self/exe` nor `fexecve`. So at daemon **start**, record the executable's device and inode and hardlink it, or copy it when the hardlink crosses filesystems, to `<state>/handoff/tuios.prev`. That costs about 35–40 MB of disk only when it falls back to a copy (binary-size ceiling, `docs/perf.md:2503`). At upgrade time, check that `tuios.prev` still matches the recorded inode or content hash, and refuse otherwise. On Linux `/proc/self/exe` is a further source.
+  An inode with no name left cannot be hardlinked, and macOS has neither `/proc/self/exe` nor `fexecve`. So at daemon **start**, record the executable's device and inode and hardlink it to `<state>/handoff/tuios.prev`. A hardlink keeps the inode the daemon already ran, so the fallback re-exec pays no first-exec cost. When the hardlink would cross filesystems, copy it (about 35–40 MB of disk, binary-size ceiling, `docs/perf.md:2503`) and run `tuios.prev daemon handoff-accepts` once at start, so the copy's first exec is paid then and not inside a fallback. At upgrade time, check that `tuios.prev` still matches the recorded inode or content hash, and refuse otherwise. On Linux `/proc/self/exe` is a further source.
 - **Fallback.** The new image runs adoption inside a recover boundary. On an adoption error it seeks the manifest fd back to 0 and re-execs `tuios.prev` with the original argv and env. The old image validates its own manifest version, so this path is the same code it ran before. A recover boundary covers only its own goroutine, so adoption must not start other goroutines until it has validated and applied everything.
 - **Watchdog.** The CLI that issued the upgrade holds no fds, so it cannot rescue the panes. The new image arms a timer before adoption, and re-execs `tuios.prev` if adoption has not reached "accepting" within N seconds, which covers a hang or deadlock.
 - **No fork while fds are exposed.** The daemon forks concurrently: hooks, plugin commands, federation ssh, git and agent probes. A fork between clearing CLOEXEC and `execve` would leak the masters into a long-lived child, so the pane never hangs up, and would leak the start-lock fd, so `LOCK_EX` stays held after the daemon dies and every later `start-server` fails with `ErrDaemonStarting` (`internal/session/daemon_startlock_unix.go:14-21`). So:
@@ -200,7 +209,7 @@ Recommendation: exec in place. The maintainer's own wording in PR #628, "restore
   The adopt path must skip or guard each one, in the new image and in the fallback alike, or a pane's ssh agent link vanishes under a running agent.
 - **Same argv and env.** The new image is exec'd with the daemon's original flags (socket, server name, debug, config) and its original environment. For example `startSSHAgent` reads `SSH_AUTH_SOCK` from the env (`internal/session/ssh_agent_follow.go:204`).
 
-The residual risk is a new image that dies hard before its fallback: a runtime fatal error such as a concurrent map write or out of memory, or `SIGKILL`. Every pane then hangs up, as in today's daemon crash. Section 6 lists it, and the two-process alternative is open question 1.
+The residual risk is a new image that dies hard before its fallback: a runtime fatal error such as a concurrent map write or out of memory, or `SIGKILL`. Every pane then hangs up, as in today's daemon crash. Section 6 lists it.
 
 ### 2.2 Exit detection today and after adoption
 
@@ -216,18 +225,23 @@ The residual risk is a new image that dies hard before its fallback: a runtime f
   - agent resume (`internal/session/agent_resume.go:211`, `:282`).
 
   A lost exit code changes user-visible results: `popup` waits and fan compares.
-- **After adoption with exec in place.** The adopted `PTY` has `cmd == nil` but carries `pid`. A new `monitorAdoptedExit` calls `os.FindProcess(pid)` then `Process.Wait()`. On Unix `FindProcess` always succeeds, and `Wait` uses `wait4`/`waitid`, which works because the process is still our child. Exit code and signal are identical to today. Idle cost is zero: one blocked goroutine per pane, the same as now.
-- **A child that exits during the handoff window: `monitorExit` must change first.** A `Wait` that is already blocked cannot be told to stop waiting. Go parks it in `waitid(WEXITED|WNOWAIT)`, or in `waitid(P_PIDFD)` with pidfds on Linux, and then reaps. So a child that exits after its record is written but before `execve` would be reaped by the old image. That would also run `noteExit`, `onExit` (grants removed) and `MsgPTYClosed`, and the status would vanish at exec. The new image's `Wait` would then see ECHILD, or, after pid reuse, wait on an unrelated process. Fix:
-  1. `monitorExit` waits in two steps: a non-reaping peek (`waitid(..., WEXITED|WNOWAIT)` on the pid, or poll on a pidfd);
+- **After adoption with exec in place.** The adopted `PTY` has `cmd == nil` but carries `pid`. A new `monitorAdoptedExit` calls `os.FindProcess(pid)` then `Process.Wait()`. On Unix `FindProcess` always succeeds, and `Wait` works because the process is still our child. On Linux `os.StartProcess` opens a CLOEXEC pidfd per child; none survives exec, and after exec `FindProcess` opens a fresh one (measured). SIGCHLD is not left ignored after exec. Exit code and signal are identical to today. Idle cost is zero: one blocked goroutine per pane, the same as now.
+- **A child that exits during the handoff window: `monitorExit` must change first.** A `Wait` that is already blocked cannot be told to stop waiting, and it reaps as soon as the child exits. On darwin `Process.Wait` is a plain blocking `wait4` (the build tags of `os/wait_unimp.go` include darwin); on Linux it waits on the pidfd. So a child that exits after its record is written but before `execve` is reaped by the old image. That also runs `noteExit`, `onExit` (grants removed) and `MsgPTYClosed`, and the status vanishes at exec. The new image's `Wait` then sees ECHILD (reproduced on macOS), or, after pid reuse, waits on an unrelated process. Fix:
+  1. `monitorExit` waits in two steps: a non-reaping peek;
   2. then a reap taken under a per-pane `reapGate`.
 
-  The quiesce closes every `reapGate` before writing records. A child that the peek saw exit, but that was not reaped, stays a zombie of our pid, and the new image reaps it with its real status (verified, Appendix A). A child already reaped before the gate closed is written as `exited, status N` and adopted as exited. The new image treats ECHILD as "exited, status unknown", never as a live pane. Because the gate lives in the **old** image, it must ship one release before any upgrade can rely on it: PR 2 below.
-- **If the second-process design is chosen instead.**
-  - Liveness: macOS `EVFILT_PROC` with `NOTE_EXIT` works on any process the user may signal. Linux `pidfd_open` plus poll does the same.
-  - Exit status: `waitid(P_PIDFD)` works only for children. ⚠️ Whether macOS `NOTE_EXITSTATUS` reports status for a non-child is unverified.
-  - Master EOF/EIO also signals the end once no process holds the slave. This requires the new daemon not to hold a slave copy. xpty keeps the slave open in the parent (`$GOMODCACHE/github.com/charmbracelet/x/xpty@v0.1.4/pty.go:11-13`, `:39-50`, `:90-104`), and `releaseSlave` closes it only for hosted panes (`internal/session/hosted_pane.go:221-247`).
-  - Zombies: an exited pane stays a zombie of the old daemon until that daemon exits. Then launchd/init (or a Linux `PR_SET_CHILD_SUBREAPER` ancestor such as `systemd --user`) reaps it.
-  - Result: the exit code would be reported as unknown, which is a visible regression.
+  Peeks that work in a pure-Go build (release builds are `CGO_ENABLED=0`, and `x/sys/unix` has no `Waitid` on darwin), measured on macOS:
+  - raw `syscall.Syscall6(SYS_WAITID=173, P_PID=1, pid, &siginfo, WEXITED|WNOWAIT)`, reading `si_code` at offset 8 and `si_status` at offset 20;
+  - or kqueue `EVFILT_PROC` with `NOTE_EXIT|NOTE_EXITSTATUS` on our own child. Registration fails with ESRCH when the child has already exited; treat that as "exited, go to the gate".
+
+  On Linux, `unix.Waitid(P_PID, pid, ..., WEXITED|WNOWAIT)` or poll on a pidfd.
+
+  The quiesce closes every `reapGate` before writing records. A child that the peek saw exit, but that was not reaped, stays a zombie of our pid, and the new image reaps it with its real status (measured with the two-step wait, Appendix A). A child already reaped before the gate closed is written as `exited, status N` and adopted as exited. The new image treats ECHILD as "exited, status unknown", never as a live pane. Because the gate lives in the **old** image, it must ship one release before any upgrade can rely on it: PR 2 below.
+- **Pending output delays the exit (macOS, measured).** A child that wrote output and then exited is not reapable while that output sits unread in the master (observed for 1 s and more); it becomes reapable right after the master is read. So during a quiesce, a pane that prints and then exits does not become a zombie until reading resumes, and the reap hazard narrows to exits with no pending output. `TestExitDuringQuiesceKeepsStatus` must exit with no unread output, or it passes without exercising the gate. ⚠️ Not checked on Linux.
+- **Exit status for a non-child (measured, the input to the section 2.1 decision).**
+  - macOS: kqueue `EVFILT_PROC` with `NOTE_EXIT|NOTE_EXITSTATUS` on a non-child delivers the real wait status (`data=0x900` for exit 9), also after the target reparents to launchd, whether the watch was registered before or after the reparent. `NOTE_EXIT` alone gives `data=0`. Registering on a process that is already a zombie, or reaped, fails with ESRCH and no event.
+  - Linux: `pidfd_open` plus poll gives liveness only. `waitid` (`P_PIDFD` or `P_PID`) from a non-child returns ECHILD. A `PR_SET_CHILD_SUBREAPER` process above the old daemon gets a pane's real status (11) after the daemon exits; without it the pane goes to pid 1 and the would-be reaper gets ECHILD. `/proc/<pid>/stat` field 52 shows a zombie's status to a non-child, but only while it is unreaped, so it is not reliable.
+  - Master EOF/EIO also signals the end once no process holds the slave. This requires the reader not to hold a slave copy. xpty keeps the slave open in the parent (`$GOMODCACHE/github.com/charmbracelet/x/xpty@v0.1.4/pty.go:11-13`, `:39-50`, `:90-104`), and `releaseSlave` closes it only for hosted panes (`internal/session/hosted_pane.go:221-247`).
 
 ### 2.3 What the daemon owns, and what happens to each
 
@@ -238,7 +252,8 @@ Per pane (the `PTY` struct, `internal/session/session.go:824-1102`):
 | PTY master fd | `pty paneIO`, narrowed to `io.ReadWriteCloser` plus `Resize` with no `Fd()` (`internal/session/session.go:818-821`, `:845`); concrete `*xpty.UnixPty` with `master, slave *os.File` (`xpty@v0.1.4/pty.go:11-13`, `Fd()` at `:53-55`) | Type-assert to reach the master. Clear CLOEXEC. Record the fd number in the manifest. The new image wraps it with `os.NewFile` in an adopted `paneIO` |
 | PTY slave fd (daemon's copy) | Kept open by xpty for local panes (`internal/ptyspawn/spawn.go:84-121`, `xpty@v0.1.4/pty.go:90-104`) | **Close it before exec. Do not carry it.** Holding it prevents master EOF and is not needed for I/O or resize. Resize goes through the master (`internal/ptyspawn/winsize.go:28`) |
 | Process | `cmd *exec.Cmd` (`internal/session/session.go:846`) | Carry the pid and pgid. Adopt as in section 2.2 |
-| Extra fds passed to the child | `sp.extraFiles` (`internal/session/session.go:2141`, `:2163`, `:2262-2264`) | The daemon's copies close at exec. The child keeps its own. ⚠️ Callers not traced. Check that none needs the daemon's copy after spawn |
+| Extra fds passed to the child | `sp.extraFiles` (`internal/session/session.go:2141`, `:2163`, `:2262-2264`). One caller: verify-fan (`internal/session/verb_fan_compare.go:453-469`, through `internal/session/session_ops.go:244-247`, `:401`), which closes its write copy right after spawn (`internal/session/verb_fan_compare.go:472-476`) | Nothing to carry for the write end: the child keeps its own. The read end is the next row. `internal/session/verb_preview.go:195` is a short-lived `cmd.Run` and irrelevant |
+| Pipe read ends the daemon keeps | verify-fan reads the verify script's status from `r` (`readVerifyStatus`, `internal/session/verb_fan_compare.go:491-516`). `capture_stdout` popups read the popup's stdout (`internal/session/verb_handlers.go:565-581`, `popupCapture.read` in `internal/session/popup_wait.go:44-70`) | Both read ends are CLOEXEC and close at exec. The verify script's `printf ... >&3` (`internal/session/verb_fan_compare.go:418-427`), or the popup's next write, then hits a pipe with no reader: SIGPIPE, which nothing in the repo ignores, likely kills the verify window's shell, and the `fanVerifies` record is lost. PR 4 and PR 5: the preflight refuses while a verify-fan or a capturing popup is running. Completeness step: carry the read ends as further inherited fds, with the verify and popup records |
 | Reader pipeline | One `readOutput` goroutine with a 16 KB buffer, then the ring, then broadcast, then `vtWriteChan` (256, blocking) to `vtWriter` and the emulator (`internal/session/session.go:4610-4717`, `:4622`, `:2325`, `:4734-4769`) | Quiesce: stop reading, then drain `vtWriter` to idle, then capture. See section 2.4 |
 | Terminal responses | `forwardTerminalResponses` copies the emulator's replies (DA, CPR, OSC 10/11 queries, kitty key queries) from a pipe into the master with a 4 KB buffer (`internal/session/session.go:4921-4942`, started at `:2469`) | Drain to empty after `vtWriter` is idle and before capture. Otherwise a shell or editor waiting for a CPR (Cursor Position Report) hangs forever |
 | Emulator state | `terminal` | `snapshot.Capture` into the manifest. `Apply` in the new image. Scrollback depth per section 3.3 |
@@ -256,7 +271,7 @@ Per daemon:
 
 | State | Where | Handoff action |
 |---|---|---|
-| Main, link and herdr sockets | `internal/session/daemon.go:1288`, `:1315`, `:1319`, `:1323`; accept goroutines at `:1415-1428`; main socket already `SetUnlinkOnClose(false)` (`:1300-1302`) | Stop accepting with `SetDeadline` on the listener to unblock `Accept`. Never `Close` it. Clear CLOEXEC, carry the fd numbers. The new image wraps them with `net.FileListener`. Check that the link and herdr listeners also do not unlink on close. Queued connections survive (verified, Appendix A). The backlog is `somaxconn`: 128 on macOS, 4096 on recent Linux |
+| Main, link and herdr sockets | `internal/session/daemon.go:1288`, `:1315`, `:1319`, `:1323`; accept goroutines at `:1415-1428`; main socket already `SetUnlinkOnClose(false)` (`:1300-1302`) | Stop accepting with `SetDeadline` on the listener to unblock `Accept`. Never `Close` it. Clear CLOEXEC, carry the fd numbers. The new image wraps them with `net.FileListener`. Check that the link and herdr listeners also do not unlink on close. Queued connections survive (measured on macOS and Linux, Appendix A). The backlog is `somaxconn`: 128 on macOS, 4096 on Linux 6.8 (measured) |
 | Accepted client connections | | Send `MsgDaemonUpgrading` (new message), then close. Section 2.6 |
 | Start lock, pid file | `internal/session/daemon_startlock.go:22-48`; `internal/session/daemon.go:2348-2351` | Inherit the lock fd. The pid file is unchanged, since the pid is the same |
 | Pane-token HMAC (hash-based message authentication code) key | Random per start, never written (`internal/session/pane_token.go:18-42`) | **Must carry.** Otherwise every agent's `TUIOS_PANE_TOKEN` stops verifying, and on platforms without peer pid that is the only identity (`internal/session/pane_token.go:12-22`). Secret: manifest file mode 0600, unlinked before exec |
@@ -284,9 +299,14 @@ Per daemon:
 
   `vtSeq == outputSeq` alone is not enough. `vtWriter` sets `vtSeq` and then, outside `terminalMu`, runs `noteFocusReporting` and `flushProgramStatus` (`internal/session/session.go:4760-4768`). A capture could then see equal seqs with progstatus and focus state not yet updated.
   4. the terminal-response pipe is drained (section 2.3).
-- Candidate mechanisms:
-  1. **Read deadline: Linux only.** creack/pty opens `/dev/ptmx` with `os.OpenFile` on Linux, so the master is in Go's poller there. On darwin it uses `syscall.Open(..., O_CLOEXEC)` plus `os.NewFile` (`$GOMODCACHE/github.com/creack/pty@v1.1.24/pty_darwin.go:13-18`). That fd is blocking, so `SetReadDeadline` fails with `ErrNoDeadline`. Separately, `UnixPty.Fd()` (`xpty@v0.1.4/pty.go:53-55`) calls `os.File.Fd()`, which switches the fd to blocking mode and disables deadlines everywhere. Reach the fd through `UnixPty.Control` (SyscallConn) instead.
-  2. **Read gate: portable, recommended.** The reader takes a per-pane `readMu` around "check the quiesce flag, then read, then process", and blocks in a readiness wait outside the lock. The quiesce takes `readMu`, sets the flag and wakes the waiter through a self-pipe. ⚠️ macOS `poll()` has historically not supported character devices; `select()` does. Verify in the PR 2 E2E.
+- **The mechanism: a read gate.** The reader waits for readiness on {master, self-pipe} outside the lock. Under a per-pane `readMu` it checks the quiesce flag, then reads and appends to the ring. The quiesce takes `readMu`, sets the flag and writes the self-pipe.
+  - Measured on macOS with a prototype (`docs/design/live-handoff-probes/macos/p2/main.go`): 0 reads during quiesce, and byte-exact output after resume (sha256) over 200 quiesce cycles of a 199–344 MB stream, with each of poll, select and kqueue. Lock acquire p50/p99/max about 2/14–17/22–30 µs. Reader parked p50/p99/max about 10/31–41/47–149 µs.
+  - poll, select and kqueue all work on a darwin PTY master (a blocking fd from creack/pty v1.1.24 `pty.Open`), with no POLLNVAL.
+  - Linux master readiness, measured: POLLIN on data.
+  - Keep the locked section to read plus ring append. Quiesce latency is bounded by what runs inside `readMu`: if it includes the blocking send to `vtWriteChan` (capacity 256, `internal/session/session.go:4695`), the quiesce waits for the `vtWriter` backlog. So the send happens after unlock, and the quiesce asks for the `vtWriter` idle ack (condition 3) only once the reader has parked in its readiness wait, which it reaches only after that send. Otherwise the ack could overtake the last chunk.
+- **End of the slave side differs by OS.** After every slave fd closes, a darwin master read returns `n=0, err=nil` (EOF), poll reports POLLIN|POLLHUP and kqueue `EV_EOF` with `data=0`. On Linux poll reports POLLHUP without POLLIN and read returns EIO. The reader treats both as the end.
+- **FIONREAD reads 0 on a darwin master**, always. kqueue `EVFILT_READ` `data` gives the real count (1024 with the writer blocked). Anything that sizes pending output on macOS uses kqueue.
+- **A read deadline is not available.** On darwin creack/pty opens the master blocking with `syscall.Open` plus `os.NewFile` (`$GOMODCACHE/github.com/creack/pty@v1.1.24/pty_darwin.go:13-18`), so `SetReadDeadline` fails with `ErrNoDeadline`. On Linux `pty.Open` calls `ptsname` and `unlockpt` through `ioctl(f.Fd())`, and `os.File.Fd()` switches the fd to blocking mode, so the master xpty receives is born blocking: `SetReadDeadline` returns nil and `Read` blocks in the kernel, a silent hang (measured). Opening `/dev/ptmx` with `os.OpenFile` and running the ioctls through `SyscallConn().Control` keeps deadlines (an i/o timeout at 100 ms), and one later `Fd()` call silently breaks them. That would need a tuios-owned open path; the read gate needs none. `UnixPty.Fd()` (`xpty@v0.1.4/pty.go:53-55`) has the same effect, so adopted panes reach the fd through `UnixPty.Control` and never `Fd()`.
 - Bytes in the kernel buffer at exec are not lost. They are read by the new image.
 
 ### 2.5 The handoff protocol
@@ -329,10 +349,10 @@ sequenceDiagram
 
   Framed records allow a streamed write and read: no whole-manifest buffer and no 16 MiB frame cap (`internal/session/wire_bounds.go:98`).
 - **Versioning.** `HandoffVersion` is an integer. The reader accepts `[MinHandoffVersion, HandoffVersion]`. `TerminalState` itself has no version field; its fields are only ever added (`vt/snapshot/doc.go:13-15`). Gob tolerates added fields, so a minor build difference reads fine and the integer only moves for breaking changes. PR 3 to PR 5 require an exact match.
-- **Where the manifest lives.** A file created 0600 under `<state>/handoff/` and unlinked immediately after open, so only the inherited fd names it. On Linux, `memfd_create` keeps it off disk. A pipe is not enough: the writer and reader are the same process across an exec, so the pipe buffer would deadlock.
+- **Where the manifest lives.** A file created 0600 under `<state>/handoff/` and unlinked immediately after open, so only the inherited fd names it. On Linux, `memfd_create` keeps it off disk: a sealed (`WRITE|GROW|SHRINK|SEAL`) 2 MiB memfd with CLOEXEC cleared survives exec intact (sha256), seals kept (measured). The file offset is inherited with the shared open file description, so the new image reads with `pread` or seeks to 0 first, on both OSes. A pipe is not enough: the writer and reader are the same process across an exec, so the pipe buffer would deadlock.
 - **Commit point.** The `execve` itself.
   - Every fallible step (preflight, quiesce, manifest write and fsync) comes **before** clients are told and closed. A failure there resumes the readers, reopens the gates and accepting, restarts plugins and links, and returns an error with clients still attached.
-  - Between closing clients and `execve`, only infallible steps remain, apart from `execve` itself. `ETXTBSY` and `ENOEXEC` are ruled out by the preflight having executed the same path. A failing `execve` returns, and the daemon re-sets CLOEXEC and resumes. Clients are dropped and must reattach.
+  - Between closing clients and `execve`, only infallible steps remain, apart from `execve` itself. `ETXTBSY` (text file busy) and `ENOEXEC` (exec format error) are ruled out by the preflight having executed the same inode, checked again just before `execve`. A failing `execve` returns, and the daemon re-sets CLOEXEC and resumes. Clients are dropped and must reattach.
   - `--force` closes hosted panes before the commit point. That change is not undone by a refusal, which the command says.
   - After `execve`, the fallback is the re-exec of section 2.1.
 
@@ -348,8 +368,9 @@ sequenceDiagram
 
 - **Windows/ConPTY.** Unsupported. ConPTY is a pseudoconsole handle plus pipe handles, not fds (`conpty@v0.2.0/conpty_windows.go:19-26`), and kill-server uses a named stop event (`cmd/tuios/session_commands_windows.go:37-60`). `daemon upgrade` answers "live upgrade is not supported on Windows; `tuios kill-server` restarts and ends running programs". A future port would need `DuplicateHandle` of the HPCON (pseudoconsole handle) and pipes into a spawned process. There is no code for it.
 - **ghostty backend (`-tags ghostty`).** Capture and apply work, and the in-process tests cover pure to ghostty, ghostty to pure and ghostty to ghostty (`internal/session/ghostty_wire_test.go:250-341`). A release binary carries one backend (`docs/ghostty-vt.md:15-20`). The preflight reports the new backend, and a backend change is allowed but logged.
-  - Caveat: ghostty history capture is slow, more than 250 ms per 5000 rows at 200 columns (`internal/session/scrollback_persist.go:52-57`), so cap the history depth on ghostty.
+  - Caveat: ghostty history capture is slow, more than 250 ms per 5000 rows at 200 columns by a code comment (`internal/session/scrollback_persist.go:52-57`), so cap the history depth on ghostty.
   - Caveat: `SetScrollbackMaxLines` after construction is a no-op on ghostty (`docs/ghostty-vt.md:158-159`), so the new image must build each emulator with the carried limit.
+  - ⚠️ Ghostty capture and apply cost at depth is unmeasured: the library was not built on the measuring machine, and the numbers in sections 3 and 4 are for the pure Go emulator only.
   - ⚠️ A binary-to-binary pure to ghostty handoff is untested.
 - **Remote hosts.** `hosts sync --restart` restarts only daemons whose version differs (`cmd/tuios/host_sync.go:32-41`, `:715-759`). The versions-span step adds `--live`, which runs `tuios daemon upgrade --binary <new>` remotely. A remote that refuses falls back to the current restart only with `--restart`.
 
@@ -357,29 +378,52 @@ sequenceDiagram
 
 ### 3.1 Baseline numbers
 
+Measured on macOS, 18 cores, Go 1.26.9, pure Go emulator (Appendix A). Daemon readings are from a throwaway daemon through pprof (`/debug/pprof/heap?gc=1`) 35 s after the panes were made, so after the 30 s release loop.
+
 | Measure | Value | Source |
 |---|---|---|
+| Daemon, no panes | 4.8 MB HeapAlloc, 34 MB RSS (resident set size) | Measured |
+| 60 idle `sh` panes | 16.1 MB HeapAlloc, 58 MB RSS at 80x24. 17.0 MB, 67 MB RSS at 198x48 | Measured |
+| 60 panes, each printed 1000 coloured 190-character lines | 100.1 MB HeapAlloc, 106 MB HeapInuse, 163–198 MB RSS at 198x48. 48.5 MB HeapAlloc at 78x22 | Measured |
+| Where that heap is | 71.7 MB `vt.newBlankLine` (about 1.2 MB per full 198x48 screen), 14 MB `Scrollback.push`, 9.4 MB `createPTY` | Measured, pprof |
 | 25-pane mixed load, live heap | 42.3 MB, then **29.6 MB** after #735 and #736 | PR #735 and #736 bodies |
-| User-reported 50–65 panes | ~26–31 MB heap | User report. ⚠️ Not in the repo |
-| Daemon RSS (resident set size) after 49 of 50 panes close | 41–49 MB after memtrim | `docs/perf.md:2894` |
-| Packed snapshot, 207x55 screen | 22.7 KB (palette), 42.1 KB (truecolor), 170.9 KB (worst case) | `docs/perf.md:680-690` |
-| Packed snapshot, screen plus 1000 rows | 417 KB (palette), 588 KB (truecolor) | `docs/perf.md:680-690` |
-| Capture, 1000 rows | 14 ms, 3.2 MB allocated, lock held 0.9 ms | `docs/perf.md:2832-2833` |
+| Daemon RSS after 49 of 50 panes close | 41–49 MB after memtrim | `docs/perf.md:2894` |
 | Scrollback ring default | 10,000 lines, stored encoded (a plain line costs its length in bytes) | `vt/scrollback.go:17`, `:31-39` |
 | Full 10k x 207 ring, decoded | 251 MB of cells. Never decode it whole | `docs/perf.md:2791-2793` |
 
+- Heap tracks screen fullness, not pane count. A user report of 26–31 MB at 50–65 panes fits mostly idle panes. Full screens put the same count near 100 MB.
+
+Snapshot capture and apply per 200x50 pane, through the real path `PTY.GetTerminalStatePacked` (`internal/session/session.go:4336-4348`, used by `handleGetTerminalState`, `internal/session/daemon_handlers.go:1174`). Apply is `decodePayload`, `CheckPacked`, `vt.NewEmulator` and `ApplyTerminalState`. Medians of 9.
+
+| Fill, history rows | Packed size | Capture | Capture alloc | Apply | Apply alloc | 60-pane manifest |
+|---|---|---|---|---|---|---|
+| palette, 0 | 21.4 KB | 0.29–0.31 ms | 0.19 MB | 0.30 ms | 1.4 MB | 1.28 MB |
+| truecolor, 0 | 37.3 KB | 0.61 ms | 1.14 MB | 0.35 ms | 1.7 MB | 2.24 MB |
+| palette, 1000 | 416 KB | 6.4 ms | 3.24 MB | 5.7 ms | 29 MB | 24.95 MB |
+| truecolor, 1000 | 566 KB | 11.2 ms | 9.59 MB | 6.6 ms | 31 MB | 33.94 MB |
+| palette, 10000 | 3.96 MB | 62 ms | 33.3 MB | 45 ms | 274 MB | 237 MB |
+| truecolor, 10000 | 4.85 MB | 94 ms | 43.5 MB | 55 ms | 285 MB | 291 MB |
+
+- `terminalMu` is held under 1 ms per capture, even at 10,000 rows.
+- An idle prompt pane packs to 2.0 KB. 60 of them capture serially in 14 ms and apply in 11 ms.
+- Apply allocates about 29–31 MB of garbage per 1000-row pane, from 112-byte `uv.Cell` rows.
+
 ### 3.2 Peak during handoff
 
-- **Exec in place.**
-  - Before exec, the peak is the live heap plus the capture buffers in flight, because records stream to the manifest fd. A 1000-row capture allocates 3.2 MB transiently (`docs/perf.md:2832-2833`). Captured serially, that is one buffer. In parallel it is up to GOMAXPROCS × 3.2 MB, about 26 MB on 8 cores. That trade between pause and memory is set by a worker count.
-  - At exec the old image's memory is released wholesale.
-  - After exec, the new image rebuilds emulators from the manifest. It reads one record at a time, so it peaks at about the steady-state heap plus one record.
-  - The manifest itself sits in the page cache (macOS, an unlinked file) or in a memfd (Linux). **A memfd is RAM** (random-access memory) until the new image closes it, so on Linux the true peak is the heap plus the whole manifest. Close or truncate it as soon as adoption has read it. Estimated size for 60 panes:
-    - screens only: 60 × 23–42 KB ≈ **1.4–2.5 MB**;
-    - with 1000 rows: 60 × 0.42–0.59 MB ≈ **25–35 MB**;
-    - with full 10k rings, scaled from the measured 1000-row figures: 60 × 4.2–5.9 MB ≈ **250–350 MB** worst case. Hence section 3.3.
-- **Second process.** Two full daemons, about 2 × 30 MB live heap (more RSS), plus the manifest in flight on the socket.
-- **After the handoff.** The new image has no alternate-screen or reflow scratch until it is used again, which is better than steady state. #735 and #736 release those every 30 s (`vt/reflow.go:65`, `vt/emulator.go:874`, `internal/session/daemon.go:2079-2120`). #762 (client side) is still open. Call `memtrim.Request()` once adoption completes; it only trims when the heap holds at least 32 MB beyond live data (`internal/memtrim/memtrim.go:23-84`).
+- **Exec in place, before exec.** The peak is the live heap plus the capture buffers in flight, because records stream to the manifest fd. Capture allocates 3.2 MB (palette) to 9.6 MB (truecolor) per 1000-row pane, so W workers hold up to W × 9.6 MB: about 170 MB on 18 workers, about 40 MB on 4. The worker count sets the trade between pause and memory.
+- **At exec** the old image's memory is released wholesale.
+- **After exec, the apply peak.** The new image reads one record at a time, but apply garbage accumulates faster than the GC returns it. HeapInuse sampled every 2 ms while 60 panes were applied:
+
+| 60 panes | Live heap added | Peak, 1 worker | Peak, 4 workers | Peak, 18 workers |
+|---|---|---|---|---|
+| Screens only | +77–80 MB | +75–80 MB | +60–72 MB | +72–88 MB |
+| 1000 rows, palette | +92–93 MB | +197 MB | +195 MB | +254 MB |
+| 1000 rows, truecolor | +106–108 MB | +223 MB | +245 MB | +342 MB |
+
+  - With history the new image peaks at about 2× its rebuilt live heap, and a single worker does not avoid that. So adoption lowers the GC target for its duration (`debug.SetGCPercent` or a `GOMEMLIMIT` through `debug.SetMemoryLimit`), bounds its workers, restores both, and then calls `memtrim.Request()`. It only trims when the heap holds at least 32 MB beyond live data (`internal/memtrim/memtrim.go:23-84`). ⚠️ The peak with that tuning is unmeasured; the PR 4 artifact records it.
+- **The manifest** sits in the page cache (macOS, an unlinked file) or in a memfd (Linux). **A memfd is RAM** (random-access memory) until the new image closes it, so on Linux the true peak adds the whole manifest. Close or truncate it as soon as adoption has read it. Sizes for 60 panes, from the table above: 1.3–2.2 MB screens only, 25–34 MB with 1000 rows, 237–291 MB with 10,000 rows. Hence section 3.3.
+- **Second process.** The old live heap (about 100 MB for the busy case) stays resident while the new image hits the same apply peak: about 300–450 MB transient, against about 200–340 MB for exec in place. Plus the manifest in flight on the socket.
+- **After the handoff.** The new image has no alternate-screen or reflow scratch until it is used again, which is better than steady state. #735 and #736 release those every 30 s (`vt/reflow.go:65`, `vt/emulator.go:874`, `internal/session/daemon.go:2079-2120`). #762 (client side) is still open.
 
 ### 3.3 Scrollback: transfer it or not
 
@@ -389,9 +433,9 @@ sequenceDiagram
 
 | Value | Carries | Cost for 60 panes | When |
 |---|---|---|---|
-| `"ring"` | The whole encoded ring via `CopyScrollback`, a byte or so per cell, no decode (`docs/perf.md:2797-2810`) | Up to ~100+ MB of manifest when every ring is full. Capture time grows | Fidelity first |
-| `"snapshot"` (**proposed default**) | 1000 rows, the same depth a client gets on attach (`vt/snapshot/capture.go:9-11`) | ~25–35 MB, ~0.84 s capture serially | Matches what a client can already scroll without a round trip |
-| `"none"` | The screen (and the main screen under the alternate one) | ~2.5 MB, ~0.1 s | Smallest pause. For users who want no history, like this user |
+| `"ring"` | The whole encoded ring via `CopyScrollback`, a byte or so per cell, no decode (`docs/perf.md:2797-2810`) | ⚠️ Not measured through `CopyScrollback`. The packed 10,000-row figure is 237–291 MB of manifest, with 3.7–5.7 s capture serially | Fidelity first |
+| `"snapshot"` (**proposed default**) | 1000 rows, the same depth a client gets on attach (`vt/snapshot/capture.go:9-11`) | 25–34 MB. Capture 0.39–0.65 s serially, 0.04–0.07 s on 18 workers | Matches what a client can already scroll without a round trip |
+| `"none"` | The screen (and the main screen under the alternate one) | 1.3–2.2 MB. Capture 0.02–0.04 s serially | Smallest pause. For users who want no history, like this user |
 
 - Open question: should `persist_scrollback = false` imply `handoff_scrollback = "none"` when the knob is unset? This spec proposes **no**: they answer different questions.
 
@@ -399,18 +443,27 @@ sequenceDiagram
 
 ### 4.1 Pause and what a chatty process experiences
 
-- **Kernel buffer.** On macOS (Darwin 27, measured here with a Python `pty.openpty` and non-blocking writes), the slave-to-master direction buffers about **1,024 bytes** before `EAGAIN`, in raw and cooked mode. A blocking writer of 200,000 bytes held for 1 s completed with no loss once the master was read. So a chatty pane **blocks in `write()`**: it does not lose data and does not error.
-  - ⚠️ Linux is not measured here. n_tty and the flip buffer are expected to hold several KB to tens of KB. The PR 4 E2E artifact records the number.
-- **Effect on agents.** An agent streaming tokens blocks on stdout for the pause. Its network sockets are unaffected. A pause under one second is invisible to an LLM (large language model) API stream. An agent's own `tuios` CLI calls during the pause queue in the inherited listener's backlog. That backlog is bounded by `somaxconn`, 128 by default on macOS. ⚠️ Not verified under load.
-- **Pause estimate.** Quiesce, capture, write, exec, Go runtime init, config load and apply:
-  - Capture is about 1–2 ms per pane screen-only, by extrapolation, and 14 ms with 1000 rows (`docs/perf.md:2832-2833`). Run it in parallel across panes, up to GOMAXPROCS.
-  - Apply is assumed similar to capture.
-  - Exec and init are unmeasured; estimated 50–150 ms.
-  - Total, 60 panes:
-    - `"none"`: **~0.1–0.4 s**;
-    - `"snapshot"`: **~1.8 s** serially (0.84 s capture + ~0.84 s apply + exec), or **~0.5–1.2 s** with capture and apply both parallel.
+- **Kernel buffer, slave to master (measured).** A chatty pane **blocks in `write()`** once it fills: it does not lose data and does not error. On both OSes a blocking writer of 200,000 bytes with the master unread for 1 s completed with every byte intact once the master was read.
 
-    The PR 4 E2E artifact records the real figure.
+| OS | Buffered before the writer blocks | How measured |
+|---|---|---|
+| macOS (Darwin 27) | about 1,024 bytes, raw and cooked | Non-blocking writes until `EAGAIN`; kqueue `EVFILT_READ` `data` reads 1024 with the writer blocked |
+| Linux 6.8 | cooked: 19,457 B with 1-byte writes, 12,288 B with 4 KB writes. raw: 20,480 B with 1-byte writes, 11,776–15,360 B with 4 KB writes | Same. The blocked writer sits in state S, wchan `wait_woken` |
+
+- **Effect on agents.** An agent streaming tokens blocks on stdout for the pause. Its network sockets are unaffected. A pause under one second is invisible to an LLM (large language model) API stream. An agent's own `tuios` CLI calls during the pause queue in the inherited listener's backlog. That backlog is bounded by `somaxconn`: 128 by default on macOS, 4096 on Linux 6.8. ⚠️ Not verified under load.
+- **Pause, from measured parts (60 panes, pure Go emulator).**
+
+| Part | Screens only | 1000 rows | Source |
+|---|---|---|---|
+| Capture | 0.02–0.04 s serially, 0.002–0.004 s on 18 workers | 0.39–0.65 s serially, 0.035–0.07 s on 18 workers | `docs/design/live-handoff-probes/measure/capture_apply.txt` |
+| Exec plus Go init (tuios, 34 MB binary, warm) | 11.4 ms with an empty heap, 16.7 ms with 200 MB, 31.3 ms with 1 GB | same | `docs/design/live-handoff-probes/macos/p3/main.go` |
+| Apply | 0.021–0.023 s serially, 0.006 s on 18 workers | 0.29–0.35 s serially, 0.09–0.10 s on 18 workers | `docs/design/live-handoff-probes/measure/capture_apply.txt` |
+| Sum | about 0.05–0.1 s | about 0.7–1.0 s serially, about 0.13–0.17 s plus exec in parallel | |
+
+  - For comparison, fork plus exec of tuios to its first byte: p50 11.7 ms, p95 15.8 ms.
+  - The first exec of a newly written binary on macOS costs 0.3–0.5 s more. The preflight on the same inode keeps it out of the pause (section 2.1).
+  - At 10,000 rows: capture 3.7–5.7 s serially or 0.31–0.58 s on 18 workers, apply 2.6–3.1 s or 0.6–0.77 s.
+  - ⚠️ Not measured: the quiesce drain, the manifest write and fsync, config load, and a real end-to-end handoff. The PR 4 E2E artifact records the end-to-end figure.
 
 ### 4.2 Client-visible blackout and redraw
 
@@ -445,15 +498,15 @@ This follows the maintainer's numbering: PR #628 is PR 1, and it names the hando
 ### PR 2: quiesce, gated exit wait, adopted pane (no user-visible change)
 
 Scope:
-- `PTY.Quiesce`/`Resume`: a read gate, `vtWriter` idle ack, response-pipe drain.
-- `monitorExit` as a peek-then-reap behind `reapGate`.
+- `PTY.Quiesce`/`Resume`: a read gate, `vtWriter` idle ack, response-pipe drain. The gate's design is prototyped and measured on macOS (section 2.4).
+- `monitorExit` as a peek-then-reap behind `reapGate`, with a pure-Go peek per OS (section 2.2).
 - An adopted `paneIO` built from a raw fd plus a pid, reached through `UnixPty.Control` and never `Fd()`.
 - The `--adopt` daemon start path that skips the restore-time sweeps (section 2.1).
 - A test-only, env-gated self-exec that hands panes to the same binary. It is not a user command.
 
 E2E tests:
 - `TestQuiesceLosesNoBytes`: a fast numbered counter, quiesce and resume in a loop, contiguous output. Control: read outside the gate.
-- `TestExitDuringQuiesceKeepsStatus`: a pane exits with status 7 while quiesced, then resume. The exit event carries 7. Control: plain `cmd.Wait`.
+- `TestExitDuringQuiesceKeepsStatus`: a pane exits with status 7 while quiesced, with no unread output (section 2.2: on macOS pending output holds the exit until reading resumes), then resume. The exit event carries 7. Control: plain `cmd.Wait`.
 - `TestSelfExecAdoptsPanes`, test-only hook: same pids, same daemon pid, `exit 9` after adoption reported as 9. Control: CLOEXEC not cleared. A second control lets a fork happen during the exposed window (a forced hook), and the `start-server` after `kill-server` must still succeed.
 
 ### PR 3: the handoff format
@@ -473,18 +526,20 @@ E2E tests:
 ### PR 4: fd adoption by a different binary, preflight, fallback
 
 Scope:
-- `daemon handoff-accepts` preflight.
-- `tuios.prev` kept from daemon start.
+- `daemon handoff-accepts` preflight, with the device and inode checked again before `execve`.
+- `tuios.prev` hardlinked at daemon start.
 - Fallback re-exec and watchdog.
 - Original argv and env, listener inheritance without close.
-- Refusal for Windows, an embedded daemon and hosted panes.
+- Adoption under a lowered GC target and bounded workers (section 3.2).
+- Refusal for Windows, an embedded daemon, hosted panes, and a running verify-fan or capturing popup (section 2.3).
 
 E2E tests:
 - `TestDaemonUpgradeKeepsPaneProcesses` (section 1.4), with the binary copied to a second path. Controls are listed in section 1.4.
 - `TestDaemonUpgradeRefusesAndChangesNothing`: `--binary /bin/false`, and an older baseline via `TUIOS_E2E_BASELINE_BIN` (`e2e/tui/verb_hello_term_test.go:282-300`). Same build, same pids, client still attached. Control: skip the preflight.
 - `TestDaemonUpgradeFallsBackToPreviousBinary`: a test-only env var fails adoption in the new image. The daemon comes back on the old build with the same pids. Controls: remove the fallback exec; a hang in adoption must be caught by the watchdog.
 - `TestDaemonUpgradeQueuesCLICallsDuringSwap`: `tuios ls` in a loop never errors. Control: close and rebind the listener.
-- Artifact: JSON with pids, pause ms, manifest bytes, kernel buffer size (Linux and macOS), tick contiguity.
+- `TestDaemonUpgradeRefusesWhileVerifyFanRuns`: refused, and the verify result still arrives. Control: skip the refusal, and the `fanVerifies` record is lost.
+- Artifact: JSON with pids, end-to-end pause ms, apply peak HeapInuse, manifest bytes, kernel buffer size and tick contiguity. The kernel buffer and capture, apply and exec costs are already measured outside tuios (Appendix A); the artifact confirms them in the real path. The macOS buffer is read from kqueue `EVFILT_READ` `data`, because FIONREAD reads 0 on a darwin master.
 
 ### PR 5: the `tuios daemon upgrade` command and client notice
 
@@ -511,62 +566,85 @@ E2E tests:
 Risks:
 - **Post-exec hard crash.** A new image that dies before its fallback ends every pane, as a crash does today. Causes: a runtime fatal error, out of memory, or `SIGKILL`. Mitigations: the preflight runs init and flag parsing, the watchdog, the fallback re-exec, and the cross-version E2E. Is this residual risk acceptable for an opt-in feature?
 - **Fork during the exposed-fd window.** Mitigated by stopping forkers plus `syscall.ForkLock`. One missed fork site can leak a PTY master, so the pane never hangs up, or leak the start lock, so the daemon can never start again. PR 2's fork control guards it.
-- **Quiesce on darwin.** `SetReadDeadline` cannot work on darwin PTY masters, because creack/pty opens them blocking (`$GOMODCACHE/github.com/creack/pty@v1.1.24/pty_darwin.go:13-18`). `poll()` on character devices is historically broken on macOS. So the read gate needs `select()` or kqueue, and that is unverified.
+- **Apply memory peak.** The new image peaks at about 2× its rebuilt heap while it applies history, up to +342 MB for 60 busy truecolor panes on 18 workers (section 3.2). The GC tuning that bounds it is unmeasured until PR 4.
+- **Pipe read ends.** verify-fan and `capture_stdout` popups hold pipe read ends that close at exec, and the child's next write dies of SIGPIPE (section 2.3). The preflight refuses while either runs. A new feature that keeps a pipe read end is the same hazard, so the refusal check lists them in one place.
+- **First exec of a new binary.** 0.3–0.5 s on macOS, cause not confirmed. Paid by the preflight on the same inode and by the hardlinked `tuios.prev`. An installer that swaps the file between preflight and exec forces a second preflight.
 - **Silent semantic drift.** A changed meaning in a carried field passes gob decoding. The layout-hash test forces a version bump on struct change, but not on a change of meaning. Review discipline is the remaining guard.
 - **Secrets in the manifest.** The pane-token key and screen contents. The file is 0600 and unlinked at open, and on Linux a memfd. It is still readable by the same user while it exists, which matches the token's stated threat model (`internal/session/pane_token.go:24-29`).
 - **Embedded daemons.** `tuios-web` and the SSH server can host the daemon in-process (`internal/session/autostart.go:38-66`). They must be refused.
 
-Open questions:
-1. **Exec in place or a second process?** This spec recommends exec in place: real exit codes, an unbroken socket, one heap. **Unresolved disagreement from review:** the reviewer's counter-hypothesis is herdr's two-process design plus a narrow exit-status shim, such as the old image staying alive as a tiny reaper that forwards exit codes. That keeps true rollback until commit, and avoids the fork-race and hard-crash exposure. This spec keeps exec in place, for these reasons:
-   - a reaper would still need the old image's goroutines stopped and its fds closed;
-   - it would keep two daemon binaries resident;
-   - the reaper's own upgrade becomes the next problem.
+Settled:
+- **Exec in place, not a second process** (section 2.1). Review proposed herdr's two-process design plus a small reaper that forwards exit codes, for true rollback until commit. The measurements decide against it: a second process needs two platform-specific exit-status paths (kqueue `NOTE_EXITSTATUS` that misses existing zombies on macOS, a permanent subreaper ancestor on Linux), holds about 100 MB more at peak, and saves nothing on pause (exec plus init is 11–31 ms). The maintainer may still prefer the stronger rollback. PR #628's "new daemon image" fits exec.
 
-   It is a judgment call for the maintainer. Does "new daemon image" in PR #628 already mean exec?
-2. **PR split.** Is the PR 2 to PR 5 split above the plan's intended order?
-3. **Default history depth.** Should the later `handoff_scrollback` default to `snapshot` (1000 rows) or `none`? Should `persist_scrollback = false` imply `none`? This spec says no: they answer different questions.
-4. **Clients across a protocol bump.** Re-exec the client into the new binary (one version per box), or keep a compatible old client attached?
-5. **Hosted panes before the completeness step:** refuse, or `--force` closing them?
-6. **Leases and in-flight verbs** (`wait-for`, `popup` waits): fail them with a retryable error, or carry them?
-7. **Hooks:** add an `after-daemon-upgrade` hook, or only an event?
-8. **install.sh default:** when does "upgrade live" become the default answer?
+Open questions:
+1. **PR split.** Is the PR 2 to PR 5 split above the plan's intended order?
+2. **Default history depth.** Should the later `handoff_scrollback` default to `snapshot` (1000 rows) or `none`? Should `persist_scrollback = false` imply `none`? This spec says no: they answer different questions.
+3. **Clients across a protocol bump.** Re-exec the client into the new binary (one version per box), or keep a compatible old client attached?
+4. **Hosted panes before the completeness step:** refuse, or `--force` closing them?
+5. **Leases and in-flight verbs** (`wait-for`, `popup` waits): fail them with a retryable error, or carry them?
+6. **Hooks:** add an `after-daemon-upgrade` hook, or only an event?
+7. **install.sh default:** when does "upgrade live" become the default answer?
 
 ## Appendix A: measurements made for this spec
 
-Run on the author's machine: macOS (Darwin 27), Go 1.26. Scratch programs only, no tuios daemon touched.
+The probes are short scratch programs, kept with their raw outputs under `docs/design/live-handoff-probes/`. None touches a running tuios daemon; the heap measurement starts its own throwaway one. Each finding was rerun independently, and each mechanism claim has a negative control.
 
-- **PTY buffer.** Python `pty.openpty`, slave set non-blocking, written one byte at a time until `EAGAIN`:
-  - 1,024 bytes buffered slave to master, in raw and in cooked mode;
-  - a blocking child writing 200,000 bytes, with the master unread for 1 s, completed with all 200,000 bytes read and none lost.
-- **Exec in place.** A Go program:
-  1. starts `sh -c 'exit 7'`, which becomes a zombie before the exec, and `sh -c 'sleep 1; exit 9'`;
-  2. listens on a unix socket and `LOCK_EX`-flocks a lock file;
-  3. queues a client connection that writes "hello-before-exec";
-  4. clears CLOEXEC on the listener and lock fds;
-  5. calls `syscall.Exec` on itself.
+**macOS** (Darwin 27 arm64, Go 1.26.9, creack/pty v1.1.24). Directory `docs/design/live-handoff-probes/macos/`. Rerun from that directory: `clang -O2 -o p1 p1_kqueue_proc.c && ./p1`, and for N in 2, 3, 4: `GOWORK=off GOFLAGS=-mod=mod go build -o pNbin ./pN && ./pNbin`.
 
-  Output:
-  - same pid before and after;
-  - the lock still held, as seen from another process;
-  - `net.FileListener` on the inherited fd accepted the queued connection and read "hello-before-exec";
-  - `os.FindProcess(pid).Wait()` returned exit code 7 for the pre-exec zombie and 9 for the later exit.
-- **Not measured.** Linux PTY buffering, pause time on a real daemon, and exec plus Go init time. PR 4's E2E artifact records them.
+| Probe | What it does | Result |
+|---|---|---|
+| `p1_kqueue_proc.c` | A separate watcher process registers kqueue `EVFILT_PROC` on a non-child, before and after it reparents to launchd, and on a zombie | `NOTE_EXIT\|NOTE_EXITSTATUS` delivers the real wait status (`data=0x900` for exit 9) in every case that registers. `NOTE_EXIT` alone gives `data=0`. A zombie or reaped target fails with ESRCH and no event |
+| `p2/main.go` | Opens a PTY master with `pty.Open`, tests poll, select and kqueue readiness, end of the slave side, FIONREAD, and a child that writes then exits; runs a read-gate prototype for 200 quiesce cycles of a 199–344 MB stream | All three readiness calls work, no POLLNVAL. EOF is `n=0, err=nil`, POLLIN\|POLLHUP, `EV_EOF data=0`. FIONREAD reads 0; kqueue `data` reads 1024 with the writer blocked. The exiting child is not reapable while its output is unread. The gate: 0 reads during quiesce, sha256-exact after resume; lock acquire p50/p99/max about 2/14–17/22–30 µs |
+| `p3/main.go` | Times tuios `--version` and a minimal Go program: fork plus exec to first byte (50 runs), `syscall.Exec` in place from a process holding 0, 200 MB and 1 GB of touched heap, and the first exec of 5 freshly copied binaries | Fork plus exec p50 11.7 ms, p95 15.8 ms. In place: 11.4, 16.7, 31.3 ms. First exec of a new inode: tuios p50 318 ms, max 531 ms |
+| `p4/main.go` | Exec in place as in section 2.1: two children (`exit 7` before exec, `sleep 1; exit 9` after), a unix listener with a queued connection, a flocked lock file, CLOEXEC cleared, `syscall.Exec` on itself. Then the reap hazard: a goroutine in `cmd.Wait` across the exec, and the two-step wait with a cgo `waitid`, a raw `SYS_WAITID` and a kqueue peek | Same pid. Lock still held from another process. `net.FileListener` accepts the queued connection. `Wait` returns 7 and 9. A blocked `cmd.Wait` reaps a child that exits before exec, and the new image gets ECHILD. Every two-step variant keeps the status. Control, CLOEXEC not cleared: the other process gets the lock, and `FileListener` fails with EBADF |
+
+**Linux** (kernel 6.8.0-100-generic, Ubuntu 24.04 aarch64 VM under colima, `golang:1.26` image, Go 1.26.9, creack/pty v1.1.24). Directory `docs/design/live-handoff-probes/linux/`, output in `out.txt` and `rerun.txt`. Rerun from that directory: `tar c . | docker run --rm -i --init golang:1.26 sh -c 'mkdir /src && tar x -C /src && cd /src && sh run.sh'`.
+
+| Probe | What it does | Result |
+|---|---|---|
+| `ptybuf.go` | Fills the slave side until `EAGAIN` with 1-byte and 4 KB writes, cooked and raw; holds a blocking 200,000-byte writer for 1 s | Cooked 19,457 / 12,288 B, raw 20,480 / 11,776–15,360 B. The writer blocks (state S, wchan `wait_woken`); every byte arrives |
+| `execinplace.go` | The macOS exec-in-place probe, plus a pidfd and fd census across the exec | All results reproduce. Each child's CLOEXEC pidfd is gone after exec, `FindProcess` opens a fresh one, `Wait` works. SIGCHLD is not ignored. No stray fds. `somaxconn` is 4096 |
+| `nonchild.go` | `pidfd_open` plus poll and `waitid` from a non-child; a `PR_SET_CHILD_SUBREAPER` process above a daemon stand-in, with and without the flag; `/proc/<pid>/stat` field 52 | Liveness only. `waitid` gives ECHILD. The subreaper gets the real status (11); without it the pane goes to pid 1. Field 52 shows the status only while unreaped |
+| `ptypoll.go` | Master readiness, end of the slave side, and `SetReadDeadline` on a `pty.Open` master and on a master opened with `os.OpenFile` plus ioctls through `SyscallConn().Control` | POLLIN on data; last slave close gives POLLHUP and EIO. The `pty.Open` master is blocking: the deadline returns nil and `Read` hangs. The positive control times out at 100 ms, until one `Fd()` call breaks it |
+| `memfd.go` | A sealed 2 MiB memfd with CLOEXEC cleared, across `execve` | Contents intact (sha256), seals kept, offset inherited |
+
+**tuios** (macOS, 18 cores, Go 1.26.9, pure Go emulator). Directory `docs/design/live-handoff-probes/measure/`.
+
+| Probe | What it does | Result |
+|---|---|---|
+| `zz_handoff_measure_test.go.txt` | Fills 200x50 emulators with the `wirePTY` (256-colour) and `wirePTYTruecolor` fillers at 0, 1000 and 10,000 history rows; captures through `PTY.GetTerminalStatePacked` and applies as a daemon would, per pane, serially and on 18 workers; samples HeapInuse every 2 ms while 60 panes apply on 1, 4 and 18 workers. Rerun: copy it to `internal/session/zz_handoff_measure_test.go`, then `HANDOFF_MEASURE=1 go test -count=1 -v -run TestHandoffMeasure ./internal/session/`, then delete it | `capture_apply.txt`, `apply_peak.txt`: the tables of sections 3.1, 3.2 and 4.1 |
+| `daemon_heap.sh`, `hmprobe_main.go.txt` | Starts a throwaway daemon in scratch XDG directories with `--pprof`, makes 60 sessions at a chosen size (the helper exists because the CLI creates 80x24), optionally prints 1000 coloured 190-character lines in each, and reads `/debug/pprof/heap?gc=1` and RSS at t+3 s and t+35 s. Rerun: build tuios and the helper (its header says how) next to the script, then `W=200 H=50 ./daemon_heap.sh print1000 <port>` | `daemon_heap.txt`: the daemon rows of section 3.1 |
+
+⚠️ Still unmeasured: a real end-to-end handoff pause, the apply peak under GC tuning, ghostty capture and apply at depth, a binary-to-binary pure to ghostty handoff, the listener backlog under load, and pending output holding an exit on Linux.
 
 ## Glossary
 
 - **CLOEXEC**: close-on-exec flag. An fd with it set is closed by `execve`.
 - **ConPTY**: Windows pseudoconsole API.
+- **CPR / DA**: Cursor Position Report / Device Attributes, terminal replies to queries.
 - **E2E**: end-to-end test.
+- **EAGAIN / EBADF / ECHILD / ESRCH**: errno values: try again (would block) / bad file descriptor / no child processes, from a wait call / no such process.
 - **EIO / EOF**: I/O error / end of file returned by a read.
+- **ETXTBSY / ENOEXEC**: text file busy / exec format error, from `execve`.
+- **EVFILT_PROC / EVFILT_READ / EV_EOF**: kqueue filters for process events and readable data, and the flag marking end of file.
 - **fd**: file descriptor.
+- **FIONREAD**: ioctl that returns the number of bytes ready to read.
 - **flock**: BSD (Berkeley Software Distribution) advisory file lock, held by an open file description.
+- **GC**: garbage collector. `GOMAXPROCS` is the number of OS threads running Go code at once; `GOMEMLIMIT` is the Go runtime's soft memory limit.
+- **HeapAlloc / HeapInuse**: Go runtime heap statistics: bytes in live and not-yet-swept objects / bytes in in-use heap spans.
 - **HMAC**: hash-based message authentication code.
+- **inode**: a file's identity on its filesystem. A hardlink shares it; a copy gets a new one.
+- **kqueue**: BSD and macOS kernel event notification API.
 - **memfd**: Linux anonymous memory-backed file (`memfd_create`).
+- **NOTE_EXIT / NOTE_EXITSTATUS**: `EVFILT_PROC` flags: report a process exit / include its wait status.
 - **OSC 7 / 133 / 7501**: escape sequences for cwd, shell prompt marks and tuios program status.
 - **pgid**: process group id.
 - **pidfd**: Linux file descriptor referring to a process.
+- **POLLIN / POLLHUP / POLLNVAL**: poll results: data to read / hang-up / invalid fd.
+- **pprof**: Go's profiler, served over HTTP (hypertext transfer protocol) by the daemon's `--pprof` flag.
 - **RSS**: resident set size.
-- **ECHILD**: "no child processes" error from a wait call.
-- **CPR / DA**: Cursor Position Report / Device Attributes, terminal replies to queries.
 - **SCM_RIGHTS**: socket control message that passes fds between processes.
+- **SIGCHLD / SIGPIPE**: signals for a child's state change / a write to a pipe with no reader, which kills by default.
+- **somaxconn**: kernel cap on a listening socket's backlog of unaccepted connections.
 - **subreaper**: Linux process (`PR_SET_CHILD_SUBREAPER`) that adopts orphaned descendants instead of init.
+- **WNOWAIT**: wait flag that reports an exited child without reaping it.
