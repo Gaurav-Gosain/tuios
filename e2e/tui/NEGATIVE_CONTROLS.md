@@ -6668,3 +6668,4 @@ Run on 2026-10-16.
 |---|---|---|---|---|
 | The client did not follow the terminal's scheme | yes | `followSchemeTheme` returns at once | `TestThemePairFollowsTheTerminal` ("light: a pane's red reached the host as #bf6169, want #d20f38") | **caught** |
 | The picker wrote theme without asking | yes | `ThemePickerApplySelection` skips the pair question | `TestThemePairFollowsTheTerminal` ("the picker never asked which theme") | **caught** |
+| A --theme flag lost to theme_light on a light terminal | yes | the `FlagTheme` check removed from `followSchemeTheme` | `TestThemePairFollowsTheTerminal` (the flag run: a pane's red reached the host as dracula's #ff5555), run on 2026-10-17 | **caught** |

@@ -69,6 +69,10 @@ type Overrides struct {
 // ApplyAppearanceConfig uses it for a config file that sets no theme.
 var themeFlag atomic.Pointer[string]
 
+// FlagTheme is the theme the --theme flag named, or "". An explicit flag wins
+// over appearance.theme_light.
+func FlagTheme() string { return flagTheme() }
+
 func flagTheme() string {
 	if p := themeFlag.Load(); p != nil {
 		return *p

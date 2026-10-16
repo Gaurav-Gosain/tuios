@@ -2850,7 +2850,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		name = flagTheme()
 	}
 	// A light and dark pair: theme_light while the local terminal is light.
-	if cfg.Appearance.ThemeLight != "" && theme.SchemeLight() {
+	// A --theme flag is an explicit choice and wins over the pair.
+	if cfg.Appearance.ThemeLight != "" && theme.SchemeLight() && flagTheme() == "" {
 		name = cfg.Appearance.ThemeLight
 	}
 	if name != "" || theme.OmarchyInstalled() {

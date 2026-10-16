@@ -11,6 +11,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -120,10 +121,11 @@ func (m *OS) schemeTheme() string {
 // followSchemeTheme puts the theme of the pair that fits the terminal in
 // force, when the config sets theme_light. It runs when the local terminal
 // reports its background, and after a light and dark switch (mode 2031). The
-// picker's preview is left alone while it is open.
+// picker's preview is left alone while it is open. A --theme flag is an
+// explicit choice, so with one the pair is not followed.
 func (m *OS) followSchemeTheme() {
 	if m.UserConfig == nil || m.UserConfig.Appearance.ThemeLight == "" ||
-		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker {
+		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker || config.FlagTheme() != "" {
 		return
 	}
 	name := m.schemeTheme()

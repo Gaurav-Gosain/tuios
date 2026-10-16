@@ -94,6 +94,8 @@ theme_light = "catppuccin_latte"
 - With `theme_light` set, the theme picker asks what a pick is for. Press `d`
   for the dark theme, `l` for the light theme or `b` for both. Any other key
   goes back to the list.
+- A `--theme` flag wins over `theme_light`. tuios then uses the theme of
+  the flag on a light and on a dark terminal.
 - Only the local client follows the switch. A client of `tuios ssh` or
   `tuios-web` uses `theme`.
 

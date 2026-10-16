@@ -910,4 +910,29 @@ func TestThemePairFollowsTheTerminal(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	// An explicit --theme wins over the pair on a light terminal. The config
+	// above now holds theme_light = dracula, so the flag names a third theme.
+	//
+	// Negative control, recorded in NEGATIVE_CONTROLS.md: dropping the
+	// FlagTheme check in followSchemeTheme fails this with dracula's red.
+	flagRed := redOf("gruvbox_dark")
+	if flagRed == "" || flagRed == redOf("dracula") {
+		t.Fatalf("the flag theme's red %q cannot be told from dracula's", flagRed)
+	}
+	term = startIn(t, base, startOpts{
+		cols: 120, rows: 40,
+		args: []string{"--theme", "gruvbox_dark"},
+		env:  []string{"COLORTERM=truecolor"},
+		wrap: []string{host, "run", "-bg", "#fdf6e3", "-fg", "#2a2a2a",
+			"-alt-bg", "#1e1e2e", "-alt-fg", "#e0e0e0", "-ansi", hostANSISpec(), "--"},
+	})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	waitRed("flag", flagRed)
+	// The pair must not take over once the host's colours have all landed.
+	time.Sleep(500 * time.Millisecond)
+	waitRed("flag-later", flagRed)
+	saveArtifact(t, term, artifactDir(t), "flag")
 }

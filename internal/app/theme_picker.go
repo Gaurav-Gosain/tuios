@@ -134,7 +134,9 @@ func (m *OS) ThemePickerApplySelection() tea.Cmd {
 	sel := items[m.ThemePickerSelected]
 	// With a light and dark pair set, the pick is for one of the two, or
 	// both. The picker asks before it writes. See ThemePickerAnswerPair.
-	if m.UserConfig != nil && m.UserConfig.Appearance.ThemeLight != "" {
+	// A client that cannot write the config has nothing to ask: the pick
+	// applies as it does with no pair.
+	if m.UserConfig != nil && m.UserConfig.Appearance.ThemeLight != "" && !m.ConfigReadOnly {
 		m.ThemePickerPair = sel
 		return nil
 	}
@@ -170,8 +172,16 @@ func (m *OS) ThemePickerAnswerPair(key string) tea.Cmd {
 	}
 	save := m.persistSettings()
 	m.CloseThemePicker()
-	m.schemeApplied = ""
-	m.followSchemeTheme()
+	// The pick goes in force when it is for the scheme the terminal shows.
+	// Else the theme from before the picker opened comes back. This does not
+	// go through followSchemeTheme, which a --theme flag turns off: a pick in
+	// the picker is the latest explicit choice.
+	if (light && theme.SchemeLight()) || (dark && !theme.SchemeLight()) {
+		m.applyTheme(sel)
+	} else if m.previewsLive() {
+		m.applyTheme(m.ThemePickerOriginal)
+	}
+	m.schemeApplied = m.schemeTheme()
 	return save
 }
 
