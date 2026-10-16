@@ -26,6 +26,15 @@ var themePickerHints = []overlay.Hint{
 	{Key: "esc", Label: "cancel"},
 }
 
+// themePickerCommands are the ctrl chords, on a strip of their own above the
+// footer: one footer row holds only four hints at this width.
+var themePickerCommands = []overlay.Hint{
+	{Key: "^f", Label: "dark/light"},
+	{Key: "^r", Label: "shuffle"},
+	{Key: "^y", Label: "copy id"},
+	{Key: "^d", Label: "delete"},
+}
+
 var themePickerServedHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
 	{Key: "↑↓", Label: "move"},
@@ -37,11 +46,12 @@ var themePickerServedHints = []overlay.Hint{
 func (m *OS) themePickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(themePickerInnerWidth)
 	// Body lines that are not theme rows: the search input, its rule, and the
-	// count line, and on a served client the specimen line.
+	// count line, the commands strip, and on a served client the specimen
+	// line.
 	if m.previewsLive() {
-		rows, hints = m.panelBody(themePickerVisibleRows, 3, width, nil, themePickerHints)
+		rows, hints = m.panelBody(themePickerVisibleRows, 4, width, nil, themePickerHints)
 	} else {
-		rows, hints = m.panelBody(themePickerVisibleRows, 4, width, nil, themePickerServedHints)
+		rows, hints = m.panelBody(themePickerVisibleRows, 5, width, nil, themePickerServedHints)
 	}
 	return width, rows, hints
 }
@@ -51,8 +61,12 @@ func (m *OS) themePickerLayout() (width, rows int, hints []overlay.Hint) {
 func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.themePickerItems()
 	width, visible, hints := m.themePickerLayout()
+	title := "Theme"
+	if m.ThemePickerShade != themeShadeAll {
+		title += " · " + themeShadeNames[m.ThemePickerShade]
+	}
 	return renderLivePicker(livePickerPanel{
-		Title:    "Theme",
+		Title:    title,
 		Query:    m.ThemePickerQuery,
 		Items:    items,
 		Selected: &m.ThemePickerSelected,
@@ -69,10 +83,24 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 				info := lipgloss.Sprintf("%d of %d themes", m.ThemePickerSelected+1, len(items))
 				count = overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  " + info)
 			}
-			if m.previewsLive() || m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
-				return []string{count}
+			if id := m.ThemePickerDelete; id != "" {
+				q := "Delete " + id + "? Press y to delete."
+				if _, edited := theme.ThemeFileOf(id); edited {
+					q = "Remove your edit of " + id + "? Press y to remove."
+				}
+				count = overlay.Style(bg).Foreground(pal.Warning).Render("  " + overlay.Truncate(q, max(width-2, 1)))
 			}
-			return []string{themeSpecimen(items[m.ThemePickerSelected], width, pal), count}
+			commands := themePickerCommands
+			if !m.previewsLive() || m.ConfigReadOnly {
+				// No file can be deleted from here.
+				commands = commands[:3]
+			}
+			strip, _ := overlay.FitHintStrip(commands, width, bg, pal)
+			lines := []string{count, strip}
+			if m.previewsLive() || m.ThemePickerSelected < 0 || m.ThemePickerSelected >= len(items) {
+				return lines
+			}
+			return append([]string{themeSpecimen(items[m.ThemePickerSelected], width, pal)}, lines...)
 		},
 	})
 }
@@ -97,7 +125,14 @@ func (m *OS) themeRow(id string, selected bool, pal overlay.Palette, width int) 
 		swatch, swatchW = "", 0
 	}
 
-	name := overlay.Truncate(id, max(width-2-swatchW-2, 1))
+	label := id
+	switch yours, edited := theme.ThemeFileOf(id); {
+	case edited:
+		label += " (edited)"
+	case yours:
+		label += " (yours)"
+	}
+	name := overlay.Truncate(label, max(width-2-swatchW-2, 1))
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
 		overlay.Style(bg).Foreground(nameColor).Bold(selected).Render(name)
 

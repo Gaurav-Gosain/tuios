@@ -1382,6 +1382,10 @@ type OS struct {
 	ThemePickerSelected int
 	ThemePickerScroll   int
 	ThemePickerOriginal string // theme active when the picker opened, for cancel
+	// ThemePickerShade lists all themes, only dark ones or only light ones.
+	ThemePickerShade int
+	// ThemePickerDelete is the theme a ctrl+d asked to delete, waiting for y.
+	ThemePickerDelete string
 
 	// Glyph picker overlay state, the theme picker's opposite number.
 	ShowGlyphPicker     bool

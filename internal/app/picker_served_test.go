@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -61,6 +63,49 @@ func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 			if changed := theme.ActiveGlyphSetID() != glyphs; changed != tc.changes {
 				t.Errorf("glyph set after moving the picker is %q; changed = %v, want %v",
 					theme.ActiveGlyphSetID(), changed, tc.changes)
+			}
+		})
+	}
+}
+
+// TestServedPickerCannotDeleteThemeFiles is the same boundary for a writer:
+// ctrl+d in the picker deletes a file in the operator's themes directory, so a
+// served client must not reach it. The local row is the positive half.
+//
+// Negative control: with the ConfigReadOnly check removed from
+// ThemePickerAskDelete, the ssh row deletes the file.
+func TestServedPickerCannotDeleteThemeFiles(t *testing.T) {
+	dir, err := theme.GetThemesDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		kind    ClientKind
+		deletes bool
+	}{
+		{ClientSSH, false},
+		{ClientLocal, true},
+	} {
+		t.Run(tc.kind.String(), func(t *testing.T) {
+			path := filepath.Join(dir, "doomed.json")
+			if err := os.WriteFile(path, []byte(`{"id": "doomed", "base": "nord"}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Remove(path) })
+			theme.ReloadCustomThemes()
+
+			m := &OS{Settings: config.Global, Width: 120, Height: 40, Client: tc.kind,
+				ConfigReadOnly: tc.kind.Remote()}
+			m.UserConfig = config.DefaultConfig()
+			m.OpenThemePicker()
+			m.ThemePickerQuery = "doomed"
+			m.ThemePickerRefilter()
+			m.ThemePickerAskDelete()
+			m.ThemePickerConfirmDelete(true)
+
+			_, err := os.Stat(path)
+			if deleted := os.IsNotExist(err); deleted != tc.deletes {
+				t.Errorf("after ctrl+d then y, the theme file deleted = %v, want %v", deleted, tc.deletes)
 			}
 		})
 	}

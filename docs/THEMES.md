@@ -46,6 +46,19 @@ and the settings page (`Ctrl+B` `,`) has a Theme row that opens the same picker.
 The picker is searchable and shows a color swatch for each theme; cancelling
 restores the theme that was active when you opened it.
 
+Type to filter the list. The picker also takes these keys:
+
+| Key | What it does |
+|---|---|
+| `ctrl+f` | Show all themes, then only dark ones, then only light ones |
+| `ctrl+r` | Go to a random theme in the list |
+| `ctrl+y` | Copy the id of the highlighted theme |
+| `ctrl+d` | Delete the highlighted theme file. For an edited built-in theme, remove your edit. Press `y` to confirm |
+
+A theme from a file in your themes directory shows `(yours)`. A file that
+uses the id of a built-in theme shows `(edited)`. You cannot delete the theme
+that is in use.
+
 The arrow keys preview the highlighted theme on the whole screen. In a client
 of `tuios ssh` or `tuios-web` they do not: the theme applies to every client of
 that server, so the picker shows a sample line in the highlighted theme
