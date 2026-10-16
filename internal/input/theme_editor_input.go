@@ -33,7 +33,7 @@ func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if listKey(o, key, true, listPage, o.ThemeEditorMove) {
-		return o, nil
+		return o, o.ThemeEditorFlash()
 	}
 	switch key {
 	case "esc", "q":
@@ -44,6 +44,8 @@ func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ThemeEditorStartTyping()
 	case "x":
 		o.ThemeEditorReset()
+	case "f":
+		o.ThemeEditorFix()
 	case "u":
 		o.ThemeEditorUndo()
 	case "ctrl+s":

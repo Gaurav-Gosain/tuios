@@ -6722,3 +6722,16 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | The editor did not preview | yes | `themeEditorChanged` skips `Draft.Preview` | `TestThemeEditorEditsAndSaves` ("the typed border colour never showed on the pane without focus") | **caught** |
 | A served client could save | yes | the `ConfigReadOnly` check cut from `ThemeEditorSave` | `TestThemeFileWritersHonourConfigReadOnly` ("ThemeEditorSave ... never reads ConfigReadOnly") | **caught** |
+
+## The theme editor's Quick tab and contrast fix
+
+`TestThemeEditorQuickAndFix` starts a new theme from nord with `ctrl+o` in the
+picker. The editor must open on the Quick tab. An accent of `#330000` must
+show `!` and "Press f to fix contrast.", `f` must clear both, and the saved
+accent must still be red.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| f did not change the colour | yes | `ThemeEditorFix` sets the colour it already had | `TestThemeEditorQuickAndFix` ("f did not fix the accent's contrast") | **caught** |

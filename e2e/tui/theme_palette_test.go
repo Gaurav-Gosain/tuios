@@ -488,3 +488,72 @@ func TestThemeEditorEditsAndSaves(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "closed")
 }
+
+// TestThemeEditorQuickAndFix: ctrl+o in the theme picker starts a new theme
+// on the highlighted one and opens the editor on the Quick tab. An accent too
+// dark for its ground shows ! and the fix line, f lifts it in lightness only
+// until it reads, and ctrl+s writes the new file with the base and the fixed
+// accent.
+//
+// How this could pass wrongly: a fix that greys the colour also reads, so the
+// fixed accent must still be red: its red channel above the other two.
+func TestThemeEditorQuickAndFix(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\n")
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+
+	sendKeys(t, term, legacyCtrlP)
+	waitScreen(t, term, "the palette never opened", paletteTitle)
+	sendKeys(t, term, "Theme picker")
+	waitScreen(t, term, "the palette never filtered", "Theme picker")
+	sendKeys(t, term, tuitest.Enter)
+	waitScreen(t, term, "the theme picker never opened", "themes")
+	sendKeys(t, term, "nord")
+	waitScreen(t, term, "the picker never filtered", "nord")
+	sendKeys(t, term, tuitest.Ctrl('o'))
+	waitScreen(t, term, "ctrl+o never opened the editor on a new theme", "Edit theme: nord-custom", "Seeds", "Dark theme")
+
+	sendKeys(t, term, "e", "#330000", tuitest.Enter)
+	waitScreen(t, term, "a dark accent never asked for a fix", "#330000", "Press f to fix contrast.")
+	saveArtifact(t, term, artifactDir(t), "too-dark")
+
+	sendKeys(t, term, "f")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return !strings.Contains(text, "#330000") && !strings.Contains(text, "Press f to fix contrast.")
+	}, uiTimeout); err != nil {
+		t.Fatalf("f did not fix the accent's contrast: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "fixed")
+
+	sendKeys(t, term, tuitest.Ctrl('s'))
+	file := filepath.Join(configDirIn(base), "themes", "nord-custom.json")
+	var got struct {
+		ID     string `json:"id"`
+		Base   string `json:"base"`
+		Chrome struct {
+			Accent string `json:"accent"`
+		} `json:"chrome"`
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if data, err := os.ReadFile(file); err == nil && json.Unmarshal(data, &got) == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ctrl+s wrote no theme file at %s\n%s", file, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if got.ID != "nord-custom" || got.Base != "nord" {
+		t.Fatalf("the new theme saved as id %q base %q, want nord-custom on nord", got.ID, got.Base)
+	}
+	var r, g, b uint8
+	if _, err := fmt.Sscanf(got.Chrome.Accent, "#%02x%02x%02x", &r, &g, &b); err != nil {
+		t.Fatalf("the saved accent %q is not hex: %v", got.Chrome.Accent, err)
+	}
+	if r <= g || r <= b || r <= 0x33 {
+		t.Fatalf("the fixed accent %s is not a lighter red", got.Chrome.Accent)
+	}
+}

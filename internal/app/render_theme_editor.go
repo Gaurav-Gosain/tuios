@@ -30,6 +30,7 @@ var themeEditorHints = []overlay.Hint{
 	{Key: overlay.EnterGlyph, Label: "pick"},
 	{Key: "e", Label: "type"},
 	{Key: "x", Label: "reset"},
+	{Key: "f", Label: "fix contrast", Priority: overlay.HintOptional},
 	{Key: "u", Label: "undo"},
 	{Key: "^s", Label: "save"},
 	{Key: "tab", Label: "next tab", Priority: overlay.HintOptional},
@@ -191,8 +192,24 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 	if st.err != nil {
 		note("! "+st.err.Error(), pal.Warn)
 	}
-	if st.tab == themeEditorTabPane {
+	switch st.tab {
+	case themeEditorTabPane:
 		note("Programs in panes use these colours.", pal.FgMute)
+	case themeEditorTabQuick:
+		note("The rest of the chrome follows these colours.", pal.FgMute)
+	}
+	if clash := m.themeEditorClash256(); clash != "" {
+		note("! "+clash, pal.Warn)
+	}
+	if row, ok := m.themeEditorRowAt(); ok {
+		if floor, ground := m.themeEditorFloor(row); floor > 0 && ground != nil {
+			if c := m.themeEditorColour(row); c != nil && overlay.ContrastRatio(c, ground) < floor {
+				note("! Press f to fix contrast.", pal.Warn)
+			}
+		}
+		if line := m.themeEditorSpecimen(row, width, pal); line != "" {
+			out = append(out, line)
+		}
 	}
 	if !st.live {
 		note("This client shows the colours here only.", pal.FgMute)
@@ -216,7 +233,13 @@ func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal 
 	}
 	c := m.themeEditorColour(row)
 	swatchBg, hex := ground, "none"
-	if c != nil && !overlay.IsNoColor(c) {
+	switch {
+	case row.dark:
+		hex = "no"
+		if st := &m.themeEditor; st.resolved != nil && st.resolved.Dark {
+			hex = "yes"
+		}
+	case c != nil && !overlay.IsNoColor(c):
 		swatchBg, hex = c, overlay.Hex(toRGBA(c))
 	}
 	label := overlay.Truncate(row.label, themeEditorLabelW-1)
@@ -259,4 +282,57 @@ func themeEditorInk(ground, ink color.Color, s string, bold bool) string {
 		st = st.Bold(true)
 	}
 	return st.Render(s)
+}
+
+// themeEditorSpecimen is a sample of the selected role for a piece that may
+// not be on the screen: a pill in the role's colour, as a notification, the
+// copy-mode pill or an attention mark draws it. Empty for a ground or a pane
+// colour.
+func (m *OS) themeEditorSpecimen(row themeEditorRow, width int, pal overlay.Palette) string {
+	if row.fixed || row.dark || row.pane >= 0 {
+		return ""
+	}
+	switch row.role {
+	case theme.RoleSurface, theme.RoleCanvas, theme.RolePanel, theme.RoleCard,
+		theme.RoleDockGround, theme.RoleRailGround, theme.RoleRule:
+		return ""
+	}
+	c := m.themeEditorColour(row)
+	if c == nil || overlay.IsNoColor(c) {
+		return ""
+	}
+	chip := overlay.Chip(" "+strings.ToLower(row.label)+" ", c, theme.ContrastText(c))
+	return themeEditorInk(pal.Surface, pal.FgMute, "Sample ", false) + chip
+}
+
+// themeEditorClash256 names two status colours that step down to the same
+// palette entry at 256 colours, where they would look the same, or "".
+func (m *OS) themeEditorClash256() string {
+	if theme.Depth() != overlay.Depth256 || m.themeEditor.resolved == nil {
+		return ""
+	}
+	type seenAt struct {
+		label string
+		rgb   color.RGBA
+	}
+	seen := map[color.RGBA]seenAt{}
+	for _, r := range themeEditorRoleRows {
+		switch r.role {
+		case theme.RoleSuccess, theme.RoleWarning, theme.RoleError, theme.RoleInfo:
+		default:
+			continue
+		}
+		c := m.themeEditorColour(r)
+		if c == nil {
+			continue
+		}
+		rgb, key := toRGBA(c), toRGBA(overlay.To256(c))
+		// Two roles in one colour are the theme's choice. Two colours that
+		// fall on one entry are the depth's, and the theme cannot see it.
+		if other, ok := seen[key]; ok && other.rgb != rgb {
+			return other.label + " and " + r.label + " look the same at 256 colours."
+		}
+		seen[key] = seenAt{r.label, rgb}
+	}
+	return ""
 }

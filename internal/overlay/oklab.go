@@ -133,3 +133,29 @@ func toRGBA8(c color.Color) color.RGBA {
 	r, g, b, _ := c.RGBA()
 	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xFF}
 }
+
+// FixLightness moves c's OKLab lightness, and only its lightness, away from
+// bg until c clears floor against bg. Hue and chroma stay, so a fixed red is
+// a lighter or darker red, not a pink. A colour that already clears the floor
+// comes back as it is. When no lightness clears it, the end of the range is
+// returned.
+func FixLightness(c, bg color.Color, floor float64) color.Color {
+	if ContrastRatio(c, bg) >= floor {
+		return c
+	}
+	l := toLab(c)
+	// Away from the ground: up on a ground that wants light ink.
+	step := -0.01
+	if lr, _, _, _ := ContrastText(bg).RGBA(); lr > 0x7fff {
+		step = 0.01
+	}
+	out := l.rgba()
+	for range 100 {
+		l.l = math.Max(0, math.Min(1, l.l+step))
+		out = l.rgba()
+		if ContrastRatio(out, bg) >= floor || l.l == 0 || l.l == 1 {
+			break
+		}
+	}
+	return out
+}

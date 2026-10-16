@@ -90,8 +90,12 @@ To open it:
 - Theme picker: `ctrl+e` edits the highlighted theme. `ctrl+o` makes a new
   theme from it, named `<theme>-custom`.
 
-The sheet has two tabs:
+The sheet has three tabs:
 
+- **Quick**: two seeds, the accent and the surface, and whether the theme is
+  dark. The rest of the chrome follows them: the dialog greys and the text
+  inks from the surface, the pills and marks from the accent and the sixteen.
+  A new theme opens here.
 - **Roles**: the chrome roles, in groups: Accents, Frame, Dock and rail,
   Dialogs and Status. `Text`, `Dim text` and `Quiet text` show their measured
   colour. You cannot set them.
@@ -111,14 +115,20 @@ decides those colours.
 |---|---|
 | `↑` `↓` | Move between rows |
 | `tab`, `shift+tab` | Go to the next or the previous tab |
-| `enter` | Open the colour picker on the row. A slot chip stores the slot's name, so the colour follows the theme |
+| `enter` | Open the colour picker on the row. A slot chip stores the slot's name, so the colour follows the theme. On **Dark theme**, switch between dark and light |
 | `e` | Type a value: hex, a slot, a role or a CharmTone name. `tab` completes the name |
 | `x` | Give the row back to the base |
+| `f` | Fix the row's contrast: move its lightness, and only its lightness, until it reads on its ground |
 | `u` | Undo the last change |
 | `ctrl+s` | Save the theme file |
 | `space` | Hide the sheet to see the whole screen. Press `space` again to show it |
 | `esc` | Close the editor. With changes that are not saved, press `esc` two times |
 
+- When the cursor lands on a role, every piece of the screen in that role
+  shows in its inverse colour for a moment, so you can see where the role is
+  used. A role that may not be on the screen, such as a notification or the
+  copy-mode pill, shows a sample under the list.
+- At 256 colours, the sheet says when two status colours look the same.
 - Each change shows on the whole screen at once. In a client of `tuios ssh`
   or `tuios-web` the theme is the server's, so only the sheet shows the
   change.
