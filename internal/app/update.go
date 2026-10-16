@@ -1175,6 +1175,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Does NOT trigger rendering unless animations/interactions are active.
 		m.tickStats.Ticks++
 		m.idleFrameTicker(time.Time(msg))
+		m.releaseEmulatorScratch(time.Time(msg))
 
 		// Idle diet: when nothing periodic needs attention the per-tick scans have
 		// no work, so skip them, hold the frame, and re-arm the slow tick. Process

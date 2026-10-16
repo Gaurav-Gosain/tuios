@@ -2076,9 +2076,10 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 	}
 }
 
-// cleanupEvery is how often cleanupLoop runs: TUIOS_CLEANUP_SECONDS when
-// set, for tests, else 30 seconds.
-func cleanupEvery() time.Duration {
+// CleanupEvery is how often cleanupLoop runs: TUIOS_CLEANUP_SECONDS when
+// set, for tests, else 30 seconds. A client releases its own emulators'
+// buffers at the same interval.
+func CleanupEvery() time.Duration {
 	if s := os.Getenv("TUIOS_CLEANUP_SECONDS"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			return time.Duration(n) * time.Second
@@ -2088,7 +2089,7 @@ func cleanupEvery() time.Duration {
 }
 
 func (d *Daemon) cleanupLoop() {
-	ticker := time.NewTicker(cleanupEvery())
+	ticker := time.NewTicker(CleanupEvery())
 	defer ticker.Stop()
 
 	const pendingRequestTTL = 2 * time.Minute

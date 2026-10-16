@@ -460,6 +460,9 @@ type OS struct {
 	// tickStats records how the maintenance tick spent itself so the idle
 	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
 	tickStats tickStats
+	// emulatorReleasedAt is when the maintenance tick last dropped the panes'
+	// spare emulator buffers. See emulator_release.go.
+	emulatorReleasedAt time.Time
 	// screensaver is the idle animation. It deliberately adds nothing to the
 	// maintenance tick: arming is one deferred timer and the running animation
 	// drives its own frames. See screensaver.go.

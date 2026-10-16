@@ -3176,6 +3176,23 @@ The controls were run on 2026-10-15 on the branch perf/release-reflow-scratch.
 | A release that drops the screen too | `ReleaseReflowScratch`: also sets the main screen's grid to a new empty one | `TestReflowScratchReleasedBySweep`: "after the sweep, a resize to 150 columns laid pane 0 out differently from a daemon that kept its buffers": the swept pane shows numbers from 18167, the kept one from 18567 | **caught** |
 | A release outside the terminal lock | `releaseReflowScratch`: the `terminalMu` lock and unlock cut, binary built with `-race`, `GORACE=log_path=...` | the test passes, and the race detector reports a data race between the sweep and `Screen.reflow` (`reflow.go:468`). With the lock it reports none in the same run | **caught** (by the race detector, not by the test) |
 
+## Client emulator buffers released by the maintenance tick
+
+`TestClientReleasesEmulatorScratch` starts two daemons with `--pprof` and `TUIOS_CLEANUP_SECONDS=3600`, and attaches one client to each with `--pprof`: one client with `TUIOS_CLEANUP_SECONDS=1`, the other with 3600. Each client opens four tiled panes in a 240x72 terminal, every pane prints one 108 KB line, and the terminal is resized 220, 240, 220 columns wide. After three seconds the client that releases must hold less heap than the other by at least half a 120x36 pane of cells per pane (945 KiB in all). It released 15568 KiB, 3892 KiB a pane. Every pane then runs a full-screen program and exits, and after three more seconds the gap must grow by the same amount again. It grew by 1440 KiB, 360 KiB a pane: one alternate screen grid. A resize back to 240 columns must then draw byte for byte, styles included, as the client that kept its buffers. So must a program that draws CORNER at the bottom right, waits two seconds on the alternate screen while a release runs, and draws AGAIN at the top left, and the shell's screen once it exits.
+
+The controls were run on 2026-10-16 on macOS on the branch perf/client-release-scratch. Each control is a text replacement on the branch, built to its own binary, with the file restored after the build.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| No release on the tick | `handleMsg`: the `m.releaseEmulatorScratch(time.Time(msg))` call cut from the `TickerMsg` case | `TestClientReleasesEmulatorScratch`: "the client released -416 KiB of reflow scratch across 4 panes, want at least 945 KiB". The build before the change (`upstream/main` at `ce82a422`) fails the same way, with 208 KiB | **caught** |
+| No alternate screen release | `TryReleaseEmulatorScratch`: the `ReleaseAltScreen` call cut | `TestClientReleasesEmulatorScratch`: "the client released 16 KiB of alternate screen across 4 panes, want at least 945 KiB" | **caught** |
+| A release while the alternate screen is shown | `ReleaseAltScreen` (`vt/emulator.go`): the check for the alternate screen being shown cut | `TestClientReleasesEmulatorScratch`: "with a full-screen program on the alternate screen, the client that released drew row 14 differently from a client that kept its buffers": the release blanked CORNER, and AGAIN drew over a blank screen | **caught** |
+| A release that drops the screen too | `ReleaseReflowScratch` (`vt/reflow.go`): also clears the main screen's rows | `TestClientReleasesEmulatorScratch`: "the releasing client never showed ALT2DONE in every pane". The client's output writer panics on the next line ("slice bounds out of range [:53] with capacity 0" in `rotateWholeScreenUp`) | **caught** |
+| A release outside the I/O lock | `TryReleaseEmulatorScratch`: the `ioMu.TryLock` and `Unlock` cut, binary built with `-race`, `GORACE=log_path=...` | the test passes, and the race detector reports a data race between `ReleaseAltScreen` on the UI goroutine and `setAltScreenMode` in the window's output writer. With the lock, the same run on a `-race` binary reports none | **caught** (by the race detector, not by the test) |
+| The positive half | this branch | none | **guard** |
+
+The first version of the test drew CORNER and then waited. With the alternate screen check cut it passed: the client draws a pane again only when the pane changes, so the screen kept the frame drawn before the release. The second write, AGAIN, is what makes the client draw the pane from the emulator after the release.
+
 ## A Mac config.toml on Linux, and keys tuios cannot read (issue #556)
 
 `TestMacConfigWorksOnLinux` loads the 25 `opt+` keys and the leader of the
