@@ -494,7 +494,8 @@ A tmux window is a tuios workspace. A tmux pane is a tuios window. The preset
 changes only the leader, the keys after the leader and terminal-mode keys. The
 tuios keys it moved are under `ctrl+b ctrl+t`, on the key they had. Bindings in
 config.toml win over the preset. A binding that still holds the tuios default
-gives way, and so does `leader_key = "ctrl+b"`. `tuios keybinds doctor` lists
+gives way. `leader_key = "ctrl+b"` gives way only in a file that also holds
+such a default. `tuios keybinds doctor` lists
 each preset key that a binding in config.toml takes.
 
 ### Repeat after the leader

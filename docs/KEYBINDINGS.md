@@ -53,8 +53,9 @@ in use, and `tuios keybinds preset list` shows them all.
   `tuios keybinds doctor` lists each preset key that your bindings take.
 - A binding that has the tuios default key of an action the preset changes
   gives way to the preset. A config.toml from an older tuios holds every
-  default, so the preset still applies. The same rule applies to
-  `leader_key = "ctrl+b"`: under screen and zellij, the leader is the preset's.
+  default, so the preset still applies. In such a file,
+  `leader_key = "ctrl+b"` gives way too: under screen and zellij, the leader
+  is the preset's. In a file without those default keys, `ctrl+b` stays.
 - Only the arrow keys and the resize keys repeat after the leader, as tmux
   `bind -r` does. A letter you type right after `ctrl+b p` goes to the shell.
 - `tuios keybinds preset tmux` removes `keybindings.leader_key`, so the

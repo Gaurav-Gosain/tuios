@@ -107,11 +107,20 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 
 	// The same file holds leader_key = 'ctrl+b', the tuios default. Under a
 	// preset with another leader it gives way. A leader the user changed
-	// stays. Negative control: without the leader check in
-	// fillMissingKeybinds, screen keeps ctrl+b.
-	for leader, want := range map[string]string{"ctrl+b": "ctrl+a", "ctrl+x": "ctrl+x"} {
-		if got := presetConfig(t, "screen", "leader_key = \""+leader+"\"\n").Keybindings.LeaderKey; got != want {
-			t.Errorf("screen with leader_key = %q: leader is %q, want %q", leader, got, want)
+	// stays, and so does ctrl+b in a file that holds no other default: a
+	// person chose it. Negative controls: without the leader check in
+	// fillMissingKeybinds, screen keeps ctrl+b in the old file. Without the
+	// shadows > 0 condition, the chosen ctrl+b becomes ctrl+a.
+	oldFile := "[keybindings.prefix_mode]\nprefix_new_window = [\"c\"]\n"
+	for _, tc := range []struct{ leader, body, want string }{
+		{"ctrl+b", oldFile, "ctrl+a"},
+		{"ctrl+x", oldFile, "ctrl+x"},
+		{"ctrl+b", "", "ctrl+b"},
+		{"ctrl+x", "", "ctrl+x"},
+	} {
+		body := "leader_key = \"" + tc.leader + "\"\n" + tc.body
+		if got := presetConfig(t, "screen", body).Keybindings.LeaderKey; got != tc.want {
+			t.Errorf("screen with leader_key = %q (old file %v): leader is %q, want %q", tc.leader, tc.body != "", got, tc.want)
 		}
 	}
 }

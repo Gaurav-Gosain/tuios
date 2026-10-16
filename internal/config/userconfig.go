@@ -3140,18 +3140,21 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if p := cfg.Keybindings.Preset; p != "" && p != PresetTuios {
 		kb := defaultCfg.Keybindings
 		if applyPreset(&kb, p) == nil {
+			shadows := dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode) +
+				dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode) +
+				dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix) +
+				dropPresetShadows(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix, kb.WorkspacePrefix)
 			// A config.toml an older tuios wrote on its first start sets
-			// leader_key to the tuios default. That is the same shadow
-			// dropPresetShadows removes for keys: the preset's leader wins.
-			// A leader the user changed stays.
-			if l := cfg.Keybindings.LeaderKey; l != "" && sameKeyPress(l, defaultCfg.Keybindings.LeaderKey) &&
+			// leader_key to the tuios default, and every key beside it. The
+			// value alone cannot tell that file from a person who chose
+			// ctrl+b under screen, so the leader gives way to the preset's
+			// only where the file also held a default key the preset
+			// changes: the mark of the old full file. A leader the user
+			// changed stays, and so does ctrl+b in a file without the mark.
+			if l := cfg.Keybindings.LeaderKey; shadows > 0 && l != "" && sameKeyPress(l, defaultCfg.Keybindings.LeaderKey) &&
 				!sameKeyPress(kb.LeaderKey, defaultCfg.Keybindings.LeaderKey) {
 				cfg.Keybindings.LeaderKey = ""
 			}
-			dropPresetShadows(cfg.Keybindings.PrefixMode, defaultCfg.Keybindings.PrefixMode, kb.PrefixMode)
-			dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode)
-			dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix)
-			dropPresetShadows(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix, kb.WorkspacePrefix)
 			defaultCfg = &UserConfig{Keybindings: kb}
 			fillPrefix = func(section string, target, defaults map[string][]string) []YieldedDefault {
 				out := fillMapDefaultsYielding(target, defaults)
@@ -3497,13 +3500,17 @@ func fillMapDefaultsYielding(target, defaults map[string][]string) []YieldedDefa
 // wrote on its first start sets every key to its default, so without this the
 // preset would yield every key it changes to those entries and do almost
 // nothing. An entry
-// the user changed from the default stays, and wins over the preset.
-func dropPresetShadows(user, tuios, preset map[string][]string) {
+// the user changed from the default stays, and wins over the preset. It
+// returns how many entries it removed.
+func dropPresetShadows(user, tuios, preset map[string][]string) int {
+	n := 0
 	for action, keys := range user {
 		if def, ok := tuios[action]; ok && slices.Equal(keys, def) && !slices.Equal(preset[action], def) {
 			delete(user, action)
+			n++
 		}
 	}
+	return n
 }
 
 // keybindSection pairs a config section with the defaults for that section.
