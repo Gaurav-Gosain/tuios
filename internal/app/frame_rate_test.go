@@ -73,8 +73,9 @@ func (s *syncBuffer) String() string {
 
 // TestKickFlushWritesTheFrame pins what kickFlush assumes about Bubble Tea:
 // that one value sent on the frame ticker's channel makes the renderer write
-// the current view at once, with the ticker running and with it stopped. A release that renders some other way would leave
-// every frame waiting for the next tick again, with nothing else failing.
+// the current view at once, with the ticker running and with it stopped. A
+// release that renders some other way would leave every frame waiting for the
+// next tick again, with nothing else failing.
 func TestKickFlushWritesTheFrame(t *testing.T) {
 	in, inW := io.Pipe()
 	defer func() { _ = inW.Close() }()
@@ -131,6 +132,9 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 		t.Fatal("setProgramFPS did not reach the fps field")
 	}
 	ticker.Stop()
+	// A tick the renderer took just before the Stop may still be flushing.
+	// Let it finish, or it could write the frame sent next.
+	time.Sleep(50 * time.Millisecond)
 	p.Send("stopped-frame")
 	time.Sleep(200 * time.Millisecond)
 	if strings.Contains(out.String(), "stopped-frame") {
