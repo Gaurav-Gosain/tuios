@@ -110,7 +110,8 @@ func (m *OS) openOverlayKinds() map[string]bool {
 
 // AnyOverlayOpen reports whether any overlay is logically open, independent of
 // whether its hit geometry has been recorded yet this frame. The hover and
-// focus-follows-mouse routing use it so an overlay guards its first frame too.
+// focus-follows-mouse routing use it so an overlay guards its first frame too,
+// and the fullscreen fast path uses it to stand down for any panel.
 func (m *OS) AnyOverlayOpen() bool {
 	found := false
 	m.eachOverlayGate(func(_ string, on bool) bool {

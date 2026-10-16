@@ -824,7 +824,7 @@ func (m *OS) composeFrameOnce() string {
 // visible windows, any overlay, separators, graphics, or active manipulation or
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
-	if len(m.Animations) > 0 || m.Renaming() || m.FilePromptOpen() {
+	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
 	// The screen saver is a compositor overlay, and the fast path skips
@@ -833,11 +833,12 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.screensaver.active {
 		return nil, false
 	}
-	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowAgentMail || m.ShowInbox || m.ShowWorkspaceSwitcher || m.buffers.open || m.navigator.open || m.ShowLayoutPicker || m.ShowHostPicker ||
-		m.ShowQuitMenu || m.ShowSessionClose || m.ShowScrollbackBrowser || m.ShowLogs || m.msgView.open || m.ShowCacheStats ||
-		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker || m.ShowEffectPicker || m.presetPicker.open ||
-		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil ||
-		m.Capture.Active || m.ShotPreview.Open || m.review.open {
+	// Every panel is drawn by renderOverlays, which the fast path skips. The
+	// panels are asked through eachOverlayGate, the list mouse routing reads,
+	// so a panel added there cannot open over a lone pane unseen while it
+	// takes every key. The rest are the surfaces that list does not carry.
+	if m.AnyOverlayOpen() || m.ShowScrollbackBrowser || m.ShowCacheStats || m.ShowTapeManager || m.ShowTapeReview ||
+		m.PrefixActive || m.ContextMenu != nil || m.Capture.Active || m.review.open {
 		return nil, false
 	}
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
