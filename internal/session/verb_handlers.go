@@ -401,6 +401,9 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		pty := sess.GetPTY(win.PTYID)
 		code, exited := d.waitPopupExit(sess, win, time.Duration(p.Timeout)*time.Millisecond, exitStatus)
 		if !exited {
+			if d.ctx.Err() != nil {
+				return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+			}
 			return nil, hintedVerbError(ErrVerbTimeout, "the window's program still runs after the wait ended", &VerbHint{
 				Command: "tuios wait-for window-exit -w " + win.ID,
 				Detail:  "The program still runs in the window. Wait for it with the command shown, or raise timeout.",

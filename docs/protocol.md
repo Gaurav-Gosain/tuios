@@ -2346,8 +2346,10 @@ line that shows the exit status under the last output; not with
 another machine), and `timeout` (with `wait`, milliseconds before the
 `timeout` error; 0 waits with no limit).
 
-A daemon that does not know `keep_open` and `wait` ignores them: the result
-has no `keep_open` and no `exit_code`. A caller checks for those fields.
+A daemon that does not know `keep_open` and `wait` refuses them with
+`invalid_params`, as it refuses any parameter it does not know. A daemon from
+before that refusal ignores them: the result has no `keep_open` and no
+`exit_code`. A caller checks for those fields.
 
 Request:
 
