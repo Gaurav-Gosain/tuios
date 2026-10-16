@@ -4044,6 +4044,25 @@ read (the arrows and page keys scroll, `esc` goes back), `ctrl+e` puts its
 text into the draft to edit, and `backspace` removes it. Undo brings back a
 removed or expanded block.
 
+#### Naming a pane, an agent or a file
+
+Type `@` at the start of the reply or after a space, and a list opens under
+the editor: the agents and panes of every session on this machine, and the
+files in the folder of the pane the reply is for. What you type after the `@`
+narrows it. `tab` puts the selected entry in place of the `@` and what
+followed it, the arrows choose, and `esc` or a space closes the list.
+
+```
+› compare with @rev
+  agent work/review  working
+```
+
+An agent or a pane goes in as its address, such as `work/review`. A file goes
+in as its path from the pane's folder, such as `api/client.go`. A folder goes
+in with a slash and keeps the list open, so you can walk into it. Nothing is
+copied: the agent reads the file with its own tools. A pane whose folder
+tuios does not know, or whose shell runs on another machine, offers no files.
+
 #### Images
 
 An image attached to the reply shows as one block, such as

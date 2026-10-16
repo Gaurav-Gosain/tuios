@@ -126,6 +126,8 @@ type inboxReplyEditor struct {
 	// targets are the agents a bulk reply goes to, nil for one agent. See
 	// inbox_bulk.go.
 	targets []replyTarget
+	// mentions is the @ list's completer. See inbox_reply_mention.go.
+	mentions *replyMentions
 	// frame is the editor's lines as last drawn, and frameAt what they were
 	// drawn from.
 	frame   []string
@@ -250,7 +252,10 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 		comp.MarkAutomated()
 	}
 	m.replyPreviewAttach(comp)
+	mentions := m.newReplyMentions(sessionID, windowID)
+	comp.SetCompleter(mentions)
 	m.Inbox.reply.editor = &inboxReplyEditor{
+		mentions:   mentions,
 		session:    sessionID,
 		window:     windowID,
 		who:        who,
@@ -402,7 +407,7 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A view that closed takes its copy for the desktop viewer with it,
 	// and one that opened, or a strip that changed, may need pictures.
 	m.replyPreviewClosed()
-	return tea.Batch(cmd, m.replyPreviewCmd())
+	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd())
 }
 
 // InboxReplyCancel closes the editor. A draft with text in it is kept for

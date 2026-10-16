@@ -115,6 +115,14 @@ type Model struct {
 	// where the last frame put them.
 	preview Previewer
 	places  []Placement
+
+	// completer gives the @ list's entries, nil for no @ completion.
+	// mention is the open list, nil when it is closed, and dismissedAt the
+	// @ that esc closed the list of, so it stays closed while the cursor is
+	// in that word. See mention.go.
+	completer   Completer
+	mention     *mention
+	dismissedAt int
 }
 
 // New returns an empty draft.
@@ -131,7 +139,7 @@ func New(o Options) *Model {
 	if o.MaxBytes <= 0 {
 		o.MaxBytes = DefaultMaxBytes
 	}
-	return &Model{opt: o, goal: -1, width: 80}
+	return &Model{opt: o, goal: -1, width: 80, dismissedAt: -1}
 }
 
 // Automated reports whether a key that did not come from the keyboard
@@ -279,6 +287,7 @@ func (m *Model) Insert(text string, remote bool) {
 	m.edited()
 	ins := segment(nil, text)
 	m.change(m.cur, 0, ins, m.cur+len(ins))
+	m.syncMention()
 }
 
 // Paste puts pasted text at the cursor: as text when it is short, and as one
@@ -432,6 +441,10 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		return m.pagerKey(msg)
 	}
 	key := msg.String()
+	if m.mention != nil && m.mentionKey(key) {
+		return EventNone
+	}
+	defer m.syncMention()
 	if key != "up" && key != "down" {
 		m.goal = -1
 	}

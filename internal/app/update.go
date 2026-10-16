@@ -1107,6 +1107,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyThreadWatchEnded(msg)
 		return m, m.InboxThreadFetch()
 
+	case mentionFolderMsg:
+		m.applyMentionFolder(msg)
+		return m, nil
+
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
 		return m, nil

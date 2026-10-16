@@ -20,8 +20,11 @@ type frameKey struct {
 	ascii    bool
 	preview  PreviewMode
 	previewV uint64
-	depth    overlay.Depth
-	colours  [10][4]uint32
+	// The @ list: open, its selection, and the completer's version.
+	mentionAt, mentionSel int
+	mentionV              uint64
+	depth                 overlay.Depth
+	colours               [10][4]uint32
 }
 
 // frameKey is the key of a frame drawn now at width.
@@ -35,6 +38,11 @@ func (m *Model) frameKey(width int, pal overlay.Palette, surface color.Color) fr
 	}
 	if m.preview != nil {
 		k.preview, k.previewV = m.preview.Mode(), m.preview.Version()
+	}
+	k.mentionAt = -1
+	if m.mention != nil {
+		k.mentionAt, k.mentionSel = m.mention.at, m.mention.sel
+		k.mentionV = m.completer.Version()
 	}
 	// Colours are compared by value: a palette's fields are interfaces, and
 	// comparing them with == can panic on a type that is not comparable.
