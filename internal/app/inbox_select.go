@@ -25,6 +25,9 @@ func (m *OS) InboxStartSelect() {
 	st := &m.Inbox
 	st.selectEditing = true
 	st.selectDraft = st.Select
+	if st.agents.on && st.agents.query != "" {
+		st.selectDraft = strings.TrimSpace(st.Select + " " + st.agents.query)
+	}
 	st.selectErr = ""
 }
 
@@ -56,6 +59,10 @@ func (m *OS) InboxSelectCancel() {
 // line is empty. A selector that does not parse keeps the line open with the
 // reason under it.
 func (m *OS) InboxSelectApply() {
+	if m.Inbox.agents.on {
+		m.inboxAgentsSelectApply()
+		return
+	}
 	st := &m.Inbox
 	text := strings.TrimSpace(st.selectDraft)
 	if text == "" {

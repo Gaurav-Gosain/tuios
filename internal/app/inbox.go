@@ -141,6 +141,9 @@ type InboxState struct {
 	// recap is the away recap shown for the selected finished turn. See
 	// inbox_recap.go.
 	recap inboxRecapView
+	// agents is the agents view, which tab switches to. See
+	// inbox_agents.go.
+	agents inboxAgentsState
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -1140,6 +1143,10 @@ func (m *OS) CloseInbox() {
 
 // InboxMove moves the cursor by delta items, stepping over group headings.
 func (m *OS) InboxMove(delta int) {
+	if m.Inbox.agents.on {
+		m.inboxAgentsMove(delta)
+		return
+	}
 	rows := m.inboxRows()
 	st := &m.Inbox
 	if len(rows) == 0 || delta == 0 {
@@ -1153,6 +1160,10 @@ func (m *OS) InboxMove(delta int) {
 
 // InboxSelect puts the cursor on row idx, when it is an item.
 func (m *OS) InboxSelect(idx int) {
+	if m.Inbox.agents.on {
+		m.inboxAgentsSelect(idx)
+		return
+	}
 	rows := m.inboxRows()
 	if idx >= 0 && idx < len(rows) && rows[idx].item != nil {
 		m.Inbox.Selected = idx

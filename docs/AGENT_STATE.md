@@ -2226,6 +2226,39 @@ when an item opens and closes. In short, an item closes by itself when what
 opened it stops being true: the agent leaves `needs_input` or `errored`, the
 mail is read, or a client focuses the pane that finished.
 
+### The agents view
+
+`tab` in the Inbox shows every agent tuios knows of, in one list: the agents
+of this session, of the other sessions, and of linked machines. `tab` again
+goes back to the attention list. The view stays when the Inbox closes, so the
+Inbox opens on it again.
+
+```
+Agents · 2 need you · 2 working · 1 done
+  ▲ api          work        needs you    3m
+  ● review       work        working     12m  1 queued
+  ■ docs         web         done         1h
+  × build        web         error       20m
+```
+
+Each row has the agent's state mark, its name, its session (with the machine
+in front for another machine), what it is doing, how long it has done it,
+and what waits for it: queued replies, unread mail in its inbox, and
+subagents. The rows come from the rail's agents section, so the two always
+agree. The title counts every agent, and says what narrows or orders the
+list when it is not the default.
+
+`f` steps the group shown: all, needs you, working, done, error. `s` steps the
+order: needs you first and then the longest wait, name, most recent change,
+session. `/` searches: a `key:value` term is a selector, as in the attention
+list, and other words match the name, the session and the agent's last
+message. `enter` goes to the agent's pane, and `r` opens the reply editor for
+it.
+
+Nothing polls. The list changes when an agent's state changes, and the times
+move on once a minute while the view is on screen. With the view closed,
+nothing runs.
+
 A row follows the pane's latest report. A pane that stays on `needs_input` and
 reports again with a new kind or message moves between Questions and Approvals
 and shows the new message, so a harness hook that says `approval` after the

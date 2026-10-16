@@ -56,7 +56,13 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	var detailFor func(int) []string
 	if st.selectEditing {
+		if st.agents.on {
+			title = m.agentsTitle()
+		}
 		return m.renderInboxSelecting(title)
+	}
+	if st.agents.on {
+		return m.renderInboxAgents()
 	}
 	selected, ok := m.inboxSelected()
 	hints := m.inboxRowHints(selected, ok)

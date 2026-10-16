@@ -441,6 +441,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.AgentMailSelect(row.Idx)
 		return m.AgentMailOpenSelected()
 	case "inbox":
+		if m.Inbox.agents.on {
+			m.InboxSelect(row.Idx)
+			return m.InboxAgentsGo()
+		}
 		// A click goes, exactly like enter on the selected row. A click on a
 		// group heading selects nothing and so does nothing.
 		if rows := m.inboxRows(); row.Idx < 0 || row.Idx >= len(rows) || rows[row.Idx].item == nil {

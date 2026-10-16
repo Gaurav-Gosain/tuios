@@ -1090,6 +1090,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyReplyImage(msg)
 		return m, m.replyPreviewCmd()
 
+	case inboxAgentsTickMsg:
+		return m, m.applyInboxAgentsTick(msg)
+
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
 		return m, nil

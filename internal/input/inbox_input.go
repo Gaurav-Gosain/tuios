@@ -46,6 +46,9 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxSnoozePicking() {
 		return o, o.InboxSnoozeKey(msg.String())
 	}
+	if o.InboxAgentsOn() {
+		return handleInboxAgentsInput(msg, o)
+	}
 	// A digit answers by its number, which is the number the prompt shows, so
 	// it is not a binding.
 	if key := msg.String(); len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
@@ -67,6 +70,8 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.NoteAction(action)
 	switch action {
+	case config.ActionInboxAgents:
+		return o, o.InboxToggleAgents()
 	case config.ActionInboxSelect:
 		o.InboxStartSelect()
 	case config.ActionInboxClose:
@@ -213,6 +218,49 @@ func handleInboxPeekInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxPeekStartText()
 	case config.ActionPeekReadAgain:
 		return o, o.InboxPeekRefresh()
+	}
+	return o, nil
+}
+
+// handleInboxAgentsInput handles a key in the Inbox's agents view: the moves,
+// enter to go to the agent's pane, r to reply, f to step the group shown, s
+// to step the sort, / to search, tab back to the attention list, m for the
+// mailbox, and esc or q to close.
+func handleInboxAgentsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	action := lookupAction(o, msg, overlayKeys(o).GetInboxAction)
+	if action == "" {
+		return o, nil
+	}
+	o.NoteAction(action)
+	switch action {
+	case config.ActionInboxAgents:
+		return o, o.InboxToggleAgents()
+	case config.ActionInboxClose:
+		o.CloseInbox()
+	case config.ActionInboxGo:
+		return o, o.InboxAgentsGo()
+	case config.ActionInboxReply:
+		return o, o.InboxAgentsReply()
+	case config.ActionInboxFilter:
+		o.InboxAgentsCycleFilter()
+	case config.ActionInboxSort:
+		o.InboxAgentsCycleSort()
+	case config.ActionInboxSelect:
+		o.InboxStartSelect()
+	case config.ActionInboxMailbox:
+		return o, o.InboxOpenMailbox()
+	case config.ActionInboxUp:
+		o.InboxMove(-1)
+	case config.ActionInboxDown:
+		o.InboxMove(1)
+	case config.ActionInboxPageUp:
+		o.InboxMove(-10)
+	case config.ActionInboxPageDown:
+		o.InboxMove(10)
+	case config.ActionInboxFirst:
+		o.InboxMove(-1 << 20)
+	case config.ActionInboxLast:
+		o.InboxMove(1 << 20)
 	}
 	return o, nil
 }

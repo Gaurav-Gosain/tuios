@@ -1179,8 +1179,15 @@ approval's or a question's prompt so you can answer it there, `r` replies to
 mail, or to the agent of a finished or errored item, `y` resumes a conversation a restart left, `p` passes held mail on, `d`
 dismisses, `f` steps through the kinds, `/` types a selector that narrows the
 list (such as `harness:codex needs:you`; `enter` applies it, an empty line
-clears it), `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o` because
-`ctrl+b a` is the launcher's.
+clears it), `m` opens the mailbox, `tab` shows the agents view, `esc` closes.
+`ctrl+b o` is `o` because `ctrl+b a` is the launcher's.
+
+In the agents view: `j` and `k` move, `enter` goes to the agent's pane, `r`
+replies to it, `f` steps the group shown (all, needs you, working, done,
+error), `s` steps the sort (needs you, name, recent, session), `/` searches,
+`tab` goes back to the attention list, `esc` closes. On the search line a
+`key:value` term is a selector, such as `harness:codex`, and other words
+search the name, the session and the agent's last message.
 
 The footer offers the keys that act on the row under the cursor, the one that
 answers it first: `space answer` on an approval or a question, `r reply` on
@@ -1204,7 +1211,8 @@ These keys are in three sections of their own, rebindable like any other:
 `[keybindings.inbox]` (the list: `inbox_down`, `inbox_up`, `inbox_page_down`,
 `inbox_page_up`, `inbox_first`, `inbox_last`, `inbox_go`, `inbox_peek`,
 `inbox_dismiss`, `inbox_reply`, `inbox_resume`, `inbox_pass_on`,
-`inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`),
+`inbox_filter`, `inbox_select`, `inbox_mailbox`, `inbox_close`,
+`inbox_agents`, `inbox_sort`),
 `[keybindings.inbox_peek]` (the prompt: `peek_approve`, `peek_approve_always`,
 `peek_deny`, `peek_type`, `peek_read_again`, `peek_go`, `peek_back`) and
 `[keybindings.mail]` (the mailbox: `mail_down`, `mail_up`, `mail_page_down`,

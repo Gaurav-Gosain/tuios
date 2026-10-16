@@ -1535,6 +1535,9 @@ const (
 	ActionInboxSelect   = "inbox_select"
 	ActionInboxMailbox  = "inbox_mailbox"
 	ActionInboxClose    = "inbox_close"
+	// The agents view: tab switches to it and back, and s steps its sort.
+	ActionInboxAgents = "inbox_agents"
+	ActionInboxSort   = "inbox_sort"
 
 	// The Inbox's review, triage and approval keys.
 	ActionInboxReview       = "inbox_review"
@@ -1597,6 +1600,8 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
 		ActionInboxClose:    {"esc", "q"},
+		ActionInboxAgents:   {"tab"},
+		ActionInboxSort:     {"s"},
 		// Review, triage and approvals. z snoozes and waits for a digit; u
 		// undoes a dismiss or snooze made a moment ago; S shows what is
 		// snoozed; n denies with a reason, where 3 stays the plain deny; J
