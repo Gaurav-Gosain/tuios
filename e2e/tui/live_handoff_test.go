@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The live handoff: the daemon execs a new image in place, and every pane's
@@ -605,5 +607,270 @@ func TestHandoffRefusedByPaneNotReadingInput(t *testing.T) {
 	}
 	if still["instance"] != img.Instance {
 		t.Errorf("ASSERTION: the refused handoff changed the daemon's image from %s to %v", img.Instance, still["instance"])
+	}
+}
+
+// paneSnapshot opens a stream-pane on window and returns the stream's reply
+// and the bytes of its snapshot frame that paint the pane.
+func paneSnapshot(t *testing.T, base, sess, window string, params map[string]any) (session.PaneStreamReply, []byte) {
+	t.Helper()
+	client, err := session.DialVerbClientAt(frameSocket(base), "e2e")
+	if err != nil {
+		t.Fatalf("dial the daemon: %v", err)
+	}
+	p := map[string]any{"session": sess, "window": window}
+	for k, v := range params {
+		p[k] = v
+	}
+	stream, reply, err := client.OpenPaneStream(p)
+	if err != nil {
+		_ = client.Close()
+		t.Fatalf("stream-pane: %v", err)
+	}
+	t.Cleanup(func() { _ = stream.Close() })
+	if reply.Mode != "snapshot" {
+		return reply, nil
+	}
+	kind, payload, err := stream.ReadFrame()
+	if err != nil || kind != session.PaneFrameSnapshot || len(payload) < 12 {
+		t.Fatalf("stream-pane: want a snapshot frame, got %q (%d bytes): %v", kind, len(payload), err)
+	}
+	_ = stream.Close()
+	return reply, payload[12:]
+}
+
+// paneFacts is what the daemon says about a pane beyond its screen: where its
+// shell is, its title, its OSC 7501 records and the commands its OSC 133 marks
+// delimit.
+type paneFacts struct {
+	Cwd      string
+	Title    string
+	Program  string
+	Commands string
+}
+
+func readPaneFacts(t *testing.T, base, sess, window string) paneFacts {
+	t.Helper()
+	var f paneFacts
+	out, err := tuiosOut(base, "list-windows", "-s", sess, "--json")
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	var list struct {
+		Windows []struct {
+			ID    string `json:"window_id"`
+			Cwd   string `json:"cwd"`
+			Title string `json:"title"`
+		} `json:"windows"`
+	}
+	_ = json.Unmarshal([]byte(out), &list)
+	for _, w := range list.Windows {
+		if w.ID == window {
+			f.Cwd, f.Title = w.Cwd, w.Title
+		}
+	}
+	f.Program = readPSState(t, base, sess, window).records()
+	hist := mustCall(t, base, "command-history", map[string]any{"session": sess, "window": window})
+	raw, _ := json.Marshal(hist["commands"])
+	f.Commands = string(raw)
+	return f
+}
+
+// TestSelfExecCarriesPaneState hands over a pane whose program left every
+// kind of state the snapshot and the live section carry, and checks the new
+// image holds the same: the stream-pane snapshot of the pane is byte for byte
+// what it was (the alternate screen with the main one under it, bracketed
+// paste and SGR mouse on, the kitty keyboard flags, the title stack), and so
+// are the folder its shell reported over OSC 7, its OSC 7501 record and the
+// command its OSC 133 marks delimit. A paste after the handoff arrives in the
+// bracketed paste delimiters.
+//
+// How it could pass wrongly: an image that carried nothing would show an
+// empty pane, which differs from the snapshot before. The folder is one the
+// pane only reported, not one it started in, so a pane that lost its place
+// falls back to another folder. The paste checks the mode in the daemon's
+// emulator, which is what a paste reads.
+func TestSelfExecCarriesPaneState(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-carry"
+	reported := filepath.Join(base, "reported-dir")
+	if err := os.MkdirAll(reported, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Join([]string{
+		`printf 'MAIN-UNDER\n'`,
+		`printf '\033]7;file://%s%s\a' "$(hostname)" "$1"`,
+		`printf '\033]133;A\a$ \033]133;B\amake build\033]133;C\a\r\nbuilding\r\n\033]133;D;3\a'`,
+		`printf '\033]133;A\a$ \033]133;B\a'`,
+		`printf '\033]7501;state=working:id=job\033\\'`,
+		`printf '\033]2;first-title\a\033[22;0t\033]2;second-title\a'`,
+		`printf '\033[?2004h\033[?1000h\033[?1006h\033[>1u'`,
+		`printf '\033[?1049h\033[2J\033[HALT-SCREEN-UP\r\n'`,
+		`stty -icanon -echo 2>/dev/null`,
+		`exec cat -v`,
+	}, "; ")
+	newCommandWindow(t, base, sess, "anchor", false, "sh", "-c", "exec sleep 600")
+	win := newCommandWindow(t, base, sess, "carry", false, "sh", "-c", script, "carry", reported)
+	waitHandoffPane(t, base, sess, win, regexp.MustCompile(`ALT-SCREEN-UP`), 10*time.Second)
+	time.Sleep(300 * time.Millisecond)
+
+	_, before := paneSnapshot(t, base, sess, win, nil)
+	factsBefore := readPaneFacts(t, base, sess, win)
+	img := helloImage(t, base)
+	_ = mustCall(t, base, "test-handoff", map[string]any{})
+	awaitNewImage(t, base, img, 20*time.Second)
+	_, after := paneSnapshot(t, base, sess, win, nil)
+	factsAfter := readPaneFacts(t, base, sess, win)
+
+	paste := mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win, "text": "PASTED", "paste": true})
+	_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win, "text": "\r"})
+	pasted := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`(\^\[\[200~)?PASTED(\^\[\[201~)?`), 10*time.Second)[0]
+
+	writeHandoffArtifact(t, map[string]any{
+		"snapshot_bytes_before": len(before), "snapshot_bytes_after": len(after),
+		"snapshot_equal": string(before) == string(after),
+		"facts_before":   factsBefore, "facts_after": factsAfter,
+		"paste": paste, "pasted_line": pasted,
+	})
+	if string(before) != string(after) {
+		t.Errorf("ASSERTION: the pane's snapshot differs after the handoff.\nbefore %q\nafter  %q", before, after)
+	}
+	if factsBefore != factsAfter {
+		t.Errorf("ASSERTION: the pane's facts differ after the handoff.\nbefore %+v\nafter  %+v", factsBefore, factsAfter)
+	}
+	if !strings.HasSuffix(factsAfter.Cwd, "reported-dir") {
+		t.Errorf("ASSERTION: the pane's folder is %q after the handoff, want the reported-dir it reported", factsAfter.Cwd)
+	}
+	if !strings.Contains(factsAfter.Commands, "make build") || !strings.Contains(factsAfter.Program, "job=working") {
+		t.Errorf("ASSERTION: the command history %s or the program status %q lost what the pane reported", factsAfter.Commands, factsAfter.Program)
+	}
+	if pasted != `^[[200~PASTED^[[201~` {
+		t.Errorf("ASSERTION: a paste after the handoff reached the program as %q, want it in the bracketed paste delimiters", pasted)
+	}
+}
+
+// TestTokenOnlyCallerSurvivesSelfExec presents a pane's TUIOS_PANE_TOKEN from
+// a process outside every pane's process tree, the test itself, before and
+// after a handoff. The kernel places such a caller in no pane, so the token
+// is all it has, and it must still prove the pane after the handoff.
+//
+// Its positive half is a call from inside the pane with TUIOS_PANE_ID and
+// TUIOS_PANE_TOKEN removed from its environment, which the kernel's pid alone
+// must place in the pane, after the handoff too: the new image has to know
+// each adopted pane's shell before it answers the first call.
+func TestTokenOnlyCallerSurvivesSelfExec(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-token"
+	inTree := `while read l; do env -u TUIOS_PANE_ID -u TUIOS_PANE_TOKEN "$1" call restrict-connection '{"scope":"own"}' | tr -d '\n'; echo; done`
+	newCommandWindow(t, base, sess, "anchor", false, "sh", "-c", "exec sleep 600")
+	win := newCommandWindow(t, base, sess, "agent", false, "sh", "-c",
+		`printf 'token=%s\n' "$TUIOS_PANE_TOKEN"; `+inTree, "agent", tuiosBin)
+	token := waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^token=([0-9a-f]+)`), 10*time.Second)[1]
+
+	byToken := func() (map[string]any, error) {
+		return callVerb(t, base, "restrict-connection", map[string]any{"scope": "own", "pane_id": win, "pane_token": token})
+	}
+	byPid := func(n int) string {
+		_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": win, "text": "go\n"})
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			var hits []string
+			out, _ := tuiosOut(base, "capture-pane", "-s", sess, "-w", win, "--scrollback", "--unwrap", "--lines", "2000")
+			for _, l := range strings.Split(out, "\n") {
+				var res struct {
+					Type   string `json:"type"`
+					Via    string `json:"via"`
+					Window string `json:"window"`
+				}
+				if json.Unmarshal([]byte(strings.TrimSpace(l)), &res) == nil && res.Type == "connection_restricted" {
+					hits = append(hits, res.Via+":"+res.Window)
+				}
+			}
+			if len(hits) >= n {
+				return hits[n-1]
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("the in-pane call %d printed no result", n)
+		return ""
+	}
+	tokBefore, err := byToken()
+	if err != nil {
+		t.Fatalf("before the handoff the token did not prove the pane: %v", err)
+	}
+	pidBefore := byPid(1)
+
+	img := helloImage(t, base)
+	_ = mustCall(t, base, "test-handoff", map[string]any{})
+	awaitNewImage(t, base, img, 20*time.Second)
+	tokAfter, tokErr := byToken()
+	pidAfter := byPid(2)
+
+	writeHandoffArtifact(t, map[string]any{
+		"token_before": tokBefore, "token_after": tokAfter, "token_error": fmt.Sprint(tokErr),
+		"pid_before": pidBefore, "pid_after": pidAfter,
+	})
+	if pidBefore != "pid:"+win {
+		t.Fatalf("before the handoff the in-pane call was placed as %q, want pid:%s", pidBefore, win)
+	}
+	if tokErr != nil || tokAfter["via"] != "token" || tokAfter["window"] != win {
+		t.Errorf("ASSERTION: after the handoff the token no longer proves the pane: %v %v", tokAfter, tokErr)
+	}
+	if pidAfter != "pid:"+win {
+		t.Errorf("ASSERTION: after the handoff the in-pane call was placed as %q, want pid:%s", pidAfter, win)
+	}
+}
+
+// TestPaneViewResumesAcrossSelfExec resumes a pane stream across a handoff
+// from the position and boot id the stream had before it, as pane-view does
+// when its connection drops. The new image must resume it rather than start
+// over with a snapshot, and the output frames must continue from exactly that
+// position.
+func TestPaneViewResumesAcrossSelfExec(t *testing.T) {
+	base := t.TempDir()
+	startHandoffDaemon(t, base)
+	const sess = "e2e-resume"
+	win := newCommandWindow(t, base, sess, "counter", false,
+		"sh", "-c", `i=0; while :; do i=$((i+1)); echo r-$i; sleep 0.02; done`)
+	waitHandoffPane(t, base, sess, win, regexp.MustCompile(`^r-\d+`), 10*time.Second)
+	first, _ := paneSnapshot(t, base, sess, win, nil)
+
+	img := helloImage(t, base)
+	_ = mustCall(t, base, "test-handoff", map[string]any{})
+	after := awaitNewImage(t, base, img, 20*time.Second)
+
+	client, err := session.DialVerbClientAt(frameSocket(base), "e2e")
+	if err != nil {
+		t.Fatalf("dial the daemon: %v", err)
+	}
+	stream, reply, err := client.OpenPaneStream(map[string]any{
+		"session": sess, "window": win, "from_seq": first.Seq, "boot_id": first.BootID,
+	})
+	if err != nil {
+		t.Fatalf("stream-pane after the handoff: %v", err)
+	}
+	defer stream.Close()
+	var outputAt uint64
+	if reply.Mode == "resume" {
+		kind, payload, err := stream.ReadFrame()
+		if err == nil && kind == session.PaneFrameOutput && len(payload) >= 8 {
+			end, _ := session.PaneFrameSeq(payload)
+			outputAt = end - uint64(len(payload)-8)
+		}
+	}
+	writeHandoffArtifact(t, map[string]any{
+		"boot_before": first.BootID, "boot_after": reply.BootID, "mode": reply.Mode,
+		"from_seq": first.Seq, "resumed_at": reply.Seq, "first_output_at": outputAt, "pid": after.PID,
+	})
+	if reply.BootID != first.BootID {
+		t.Errorf("ASSERTION: the boot id changed from %s to %s", first.BootID, reply.BootID)
+	}
+	if reply.Mode != "resume" || reply.Seq != first.Seq {
+		t.Fatalf("ASSERTION: the stream came back as %q at %d, want a resume at %d", reply.Mode, reply.Seq, first.Seq)
+	}
+	if outputAt != first.Seq {
+		t.Errorf("ASSERTION: the first output frame after the resume starts at %d, want %d", outputAt, first.Seq)
 	}
 }

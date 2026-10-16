@@ -8808,6 +8808,32 @@ Each control cuts one change from the fix, rebuilds, runs the test twice, and re
 ```sh
 go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedWait$' ./internal/session/
 ```
+
+### PR 3: the handoff format
+
+- `TestSelfExecCarriesPaneState`: one pane's program prints a line on the main screen, reports a folder over OSC 7, marks a prompt and a command (`make build`, exit 3) with OSC 133, reports an OSC 7501 record, pushes a title onto the title stack and sets another, turns on bracketed paste, X10 and SGR mouse and the kitty keyboard flags, and draws on the alternate screen before it runs `cat -v`. After a self-exec the stream-pane snapshot of the pane is byte for byte the one before (626 bytes in the recorded run), and list-windows, get-agent-state and command-history say the same folder, title, record and command. A paste then reaches `cat -v` as `^[[200~PASTED^[[201~`.
+- `TestWireCarriesAnOpenCluster` (internal/session) flips from a known bug to a plain check: a snapshot taken between a thumbs up and its skin tone carries the open cluster, and the client's cursor matches the daemon's after the tone arrives.
+- `TestTokenOnlyCallerSurvivesSelfExec`: the test process, which runs in no pane, proves a pane with its `TUIOS_PANE_TOKEN` before and after a self-exec. The positive half is a call from inside the pane with `TUIOS_PANE_ID` and `TUIOS_PANE_TOKEN` removed from its environment, which only the kernel's pid can place: it is placed in the pane before and after.
+- `TestPaneViewResumesAcrossSelfExec`: a stream-pane opened before a self-exec is resumed after it with its `from_seq` and `boot_id`, as pane-view does. The reply must be a resume at that position under the same boot id, and the first output frame must start exactly there.
+
+Run on 2026-10-17 on macOS arm64, one build per control.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Drop `Modes` | `rec.State.Modes = nil` before `ApplyTerminalState` in `adoptPTY` | `TestSelfExecCarriesPaneState`: "the pane's snapshot differs after the handoff" and "a paste after the handoff reached the program as \"PASTED\"" | **caught** |
+| Drop `place` | drop `p.place.restore(live.Place)` from `restoreLive` | `TestSelfExecCarriesPaneState`: "the pane's facts differ after the handoff", "the pane's folder is \".../e2e/tui\" after the handoff" | **caught** |
+| Do not carry the open cluster | drop the `OpenCluster` capture from `vt/snapshot/capture.go` | `TestWireCarriesAnOpenCluster`: "the snapshot carries no open cluster after a thumbs up" | **caught** |
+| A fresh pane-token key | drop `d.manager.paneTokenKey = m.Daemon.PaneTokenKey` from `adopt` | `TestTokenOnlyCallerSurvivesSelfExec`: "after the handoff the token no longer proves the pane: ... pane_token does not prove pane_id" | **caught** |
+| No pid-to-pane map from the carried pids | `ShellPID` reads `p.cmd.Process.Pid`, which an adopted pane does not have | `TestTokenOnlyCallerSurvivesSelfExec`: "after the handoff the in-pane call was placed as \":\", want pid:<window>" | **caught** |
+| A new boot id | drop `h.bootID = ev.BootID` from `eventHub.restore` | `TestPaneViewResumesAcrossSelfExec`: "the boot id changed", "the stream came back as \"snapshot\" at 15, want a resume at 5" | **caught** |
+| No room for the carried ring | `restoreLive` copies `live.Ring` into the adopted pane's ring without sizing it first, and that ring starts empty (run on 2026-10-27) | `TestPaneViewResumesAcrossSelfExec`: "the stream came back as \"snapshot\" at 25, want a resume at 10" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^(TestSelfExecCarriesPaneState|TestTokenOnlyCallerSurvivesSelfExec|TestPaneViewResumesAcrossSelfExec)$' .
+go test -count=1 -run '^TestWireCarriesAnOpenCluster$' ./internal/session/
+```
+
 ## Deleting a worktree from the close-confirmation dialog
 
 `TestSidebarCloseDeletesWorktree` takes the third row of the close dialog on
