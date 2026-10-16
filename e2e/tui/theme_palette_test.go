@@ -417,3 +417,74 @@ func TestBorderGradientSteps(t *testing.T) {
 	sendKeys(t, term, "t")
 	check("tiled")
 }
+
+// TestThemeEditorEditsAndSaves drives the theme editor the way a person does:
+// the palette opens it on the theme in use, a value typed for the unfocused
+// border shows at once on the pane without focus, ctrl+s writes a sparse
+// file, and esc closes the editor with the saved theme in force.
+//
+// How this could pass wrongly: the colour is one nord does not draw, read off
+// the frame, and the file is read back and must hold only the base and the
+// one field.
+func TestThemeEditorEditsAndSaves(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\ntheme = \"nord\"\n")
+	term := startIn(t, base, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	newWindow(t, term)
+
+	sendKeys(t, term, legacyCtrlP)
+	waitScreen(t, term, "the palette never opened", paletteTitle)
+	sendKeys(t, term, "Edit theme")
+	waitScreen(t, term, "the palette never filtered", "Edit theme")
+	sendKeys(t, term, tuitest.Enter)
+	waitScreen(t, term, "the theme editor never opened", "Edit theme: nord", "Unfocused border")
+	saveArtifact(t, term, artifactDir(t), "opened")
+
+	sendKeys(t, term, tuitest.Down, tuitest.Down, "e", "#ff0000", tuitest.Enter)
+	red := func(c tuitest.Cell) bool {
+		return c.Fg.Kind == tuitest.ColorRGB && c.Fg.R == 0xff && c.Fg.G == 0 && c.Fg.B == 0 &&
+			strings.ContainsAny(c.Content, "─│╭╮╰╯")
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		n := 0
+		cols, rows := s.Size()
+		for y := range rows {
+			for x := range cols {
+				if red(s.Cell(x, y)) {
+					n++
+				}
+			}
+		}
+		return n >= 10 && strings.Contains(s.Text(), "#ff0000")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the typed border colour never showed on the pane without focus: %v\n%s", err, term.SnapshotStyled())
+	}
+	saveArtifact(t, term, artifactDir(t), "edited")
+
+	sendKeys(t, term, tuitest.Ctrl('s'))
+	file := filepath.Join(configDirIn(base), "themes", "nord.json")
+	var got map[string]any
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		if data, err := os.ReadFile(file); err == nil && json.Unmarshal(data, &got) == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ctrl+s wrote no theme file at %s\n%s", file, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	want := map[string]any{"id": "nord", "base": "nord",
+		"chrome": map[string]any{"border": map[string]any{"unfocused": "#ff0000"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("the saved file holds %v, want only the base and the one field %v", got, want)
+	}
+
+	sendKeys(t, term, tuitest.Esc)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Edit theme: nord") }, uiTimeout); err != nil {
+		t.Fatalf("esc did not close the theme editor: %v\n%s", err, term.Snapshot())
+	}
+	saveArtifact(t, term, artifactDir(t), "closed")
+}

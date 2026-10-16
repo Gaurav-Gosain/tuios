@@ -24,6 +24,8 @@ func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 	var out *app.OS
 	var cmd tea.Cmd
 	switch {
+	case o.ThemeEditorOpen():
+		out, cmd = handleThemeEditorInput(msg, o)
 	case o.ShowThemePicker:
 		out, cmd = handleThemePickerInput(msg, o)
 	case o.PresetPickerOpen():

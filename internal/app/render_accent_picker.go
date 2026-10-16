@@ -199,6 +199,10 @@ func (m *OS) renderAccentPicker() (string, overlay.Geometry, []overlayRowHit) {
 		if cs, ok := lookupColorSetting(m.AccentPickerTargetID); ok {
 			title = strings.ToLower(cs.Label)
 		}
+	case AccentTargetThemeRole:
+		if row, ok := m.themeEditorRowByID(m.AccentPickerTargetID); ok {
+			title = strings.ToLower(row.label)
+		}
 	}
 	content, geo := overlay.Dialog{
 		Title: title,

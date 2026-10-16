@@ -274,6 +274,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)
 	}
 
+	if m.themeEditor.open {
+		layers = append(layers, m.renderThemeEditor())
+	}
+
 	if m.presetPicker.open {
 		content, geo, rows := m.renderPresetPicker()
 		layers = m.placeOverlayPanel(layers, "presetpicker", content, geo, rows)

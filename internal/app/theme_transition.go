@@ -122,7 +122,9 @@ func (m *OS) noticeThemeChange() {
 	if style == config.ThemeTransitionFade && !soft {
 		style = config.ThemeTransitionNone
 	}
-	if style == config.ThemeTransitionNone || m.screensaver.active {
+	// The theme editor changes the theme on every edit. A transition per
+	// keypress would hide the change being made.
+	if style == config.ThemeTransitionNone || m.screensaver.active || m.themeEditor.open {
 		t.end()
 		return
 	}

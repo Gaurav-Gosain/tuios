@@ -34,6 +34,12 @@ func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "ctrl+d":
 		o.ThemePickerAskDelete()
 		return o, nil
+	case "ctrl+e":
+		o.ThemePickerEdit(false)
+		return o, nil
+	case "ctrl+o":
+		o.ThemePickerEdit(true)
+		return o, nil
 	}
 	switch msg.String() {
 	case "esc":

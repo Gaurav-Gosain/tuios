@@ -29,9 +29,11 @@ var themePickerHints = []overlay.Hint{
 // themePickerCommands are the ctrl chords, on a strip of their own above the
 // footer: one footer row holds only four hints at this width.
 var themePickerCommands = []overlay.Hint{
+	{Key: "^e", Label: "edit"},
+	{Key: "^o", Label: "new"},
 	{Key: "^f", Label: "dark/light"},
-	{Key: "^r", Label: "shuffle"},
-	{Key: "^y", Label: "copy id"},
+	{Key: "^r", Label: "shuffle", Priority: overlay.HintOptional},
+	{Key: "^y", Label: "copy id", Priority: overlay.HintOptional},
 	{Key: "^d", Label: "delete"},
 }
 
@@ -97,7 +99,7 @@ func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 			commands := themePickerCommands
 			if !m.previewsLive() || m.ConfigReadOnly {
 				// No file can be deleted from here.
-				commands = commands[:3]
+				commands = commands[:len(commands)-1]
 			}
 			strip, _ := overlay.FitHintStrip(commands, width, bg, pal)
 			lines := []string{count, strip}

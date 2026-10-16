@@ -182,6 +182,13 @@ var uiMemo struct {
 
 // buildUI builds the palette for depth d.
 func buildUI(d overlay.Depth) overlay.Palette {
+	return buildUIWith(d, Current(), CurrentChrome())
+}
+
+// buildUIWith builds the palette for depth d from the theme t and its chrome
+// ch, either of which may be nil. The theme editor builds one for a draft that
+// is not in force.
+func buildUIWith(d overlay.Depth, cur *tint.Tint, ch *Chrome) overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
 		Panel:    tone.BBQ,
@@ -209,7 +216,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 	}
 	customRamp := false
 
-	if t := Current(); t != nil {
+	if t := cur; t != nil {
 		p.Accent = t.BrightBlue
 		p.AccentBright = t.BrightCyan
 		p.Selected = t.BrightBlue
@@ -221,7 +228,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		// A theme that names its own chrome colours overrides the slots above,
 		// one role at a time. See Chrome: the point is a palette whose accent
 		// is not its bright blue.
-		if c := CurrentChrome(); c != nil {
+		if c := ch; c != nil {
 			if c.Accent != nil {
 				p.Accent, p.Selected, p.Info = c.Accent, c.Accent, c.Accent
 			}
@@ -271,7 +278,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 	light := false
 	var ground color.Color
 	groundLight := false
-	if t := Current(); t != nil {
+	if t := cur; t != nil {
 		ground, groundLight = AsColor(t.Bg), GroundIsLight(t.Bg)
 	} else if h := hostInForce(); h != nil {
 		ground, groundLight = h.bg, h.light
@@ -281,7 +288,7 @@ func buildUI(d overlay.Depth) overlay.Palette {
 		if groundLight {
 			light = true
 			c = lightDialogChrome(ground)
-		} else if Current() == nil {
+		} else if cur == nil {
 			customRamp = true
 			c = hostDarkChrome(ground)
 		}

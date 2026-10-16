@@ -594,6 +594,9 @@ const (
 	// registry path. The picker spares the user from knowing a hex, and from
 	// knowing that empty means the theme's.
 	AccentTargetSetting
+	// AccentTargetThemeRole is a row of the theme editor: a chrome role by its
+	// name, or a pane colour as pane: and its key. See theme_editor.go.
+	AccentTargetThemeRole
 )
 
 // OpenAccentPicker opens the colour picker for a window, landing on the colour
@@ -708,6 +711,10 @@ func (m *OS) AccentPickerApply() tea.Cmd {
 	if target == AccentTargetSetting {
 		return m.applySettingColor(id, s.settingSelection())
 	}
+	if target == AccentTargetThemeRole {
+		m.applyThemeRoleColor(id, sel)
+		return nil
+	}
 	if target == AccentTargetSession {
 		return m.setSessionAccentCmd(id, accentPayload(sel))
 	}
@@ -730,6 +737,12 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 	switch target {
 	case AccentTargetSession:
 		return m.setSessionAccentCmd(id, "")
+	case AccentTargetThemeRole:
+		// Back to the base's colour.
+		if row, ok := m.themeEditorRowByID(id); ok {
+			m.themeEditorSet(row, "")
+		}
+		return nil
 	case AccentTargetSetting:
 		// Unset, which for a border colour is back to the theme's and for the
 		// tint back to its default. A text field expresses this state by being

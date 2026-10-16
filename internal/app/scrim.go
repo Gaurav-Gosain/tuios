@@ -81,6 +81,8 @@ var modalOverlays = [...]modalOverlay{
 	{id: "settings", open: func(m *OS) bool { return m.ShowSettings }, scrim: true},
 	{id: "keybinds", open: func(m *OS) bool { return m.ShowKeybindManager }, scrim: true},
 	{id: "themepicker", open: func(m *OS) bool { return m.ShowThemePicker }},
+	// The theme editor's preview is the whole screen, the sheet sits beside it.
+	{id: "themeeditor", open: func(m *OS) bool { return m.themeEditor.open }},
 	{id: "presetpicker", open: func(m *OS) bool { return m.presetPicker.open }, scrim: true},
 	{id: "dockeditor", open: func(m *OS) bool { return m.ShowDockEditor }},
 	{id: "sectioneditor", open: func(m *OS) bool { return m.ShowSectionEditor }},

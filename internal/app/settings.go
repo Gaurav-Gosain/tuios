@@ -393,6 +393,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// multiplexer looks for it. See agents_off.go.
 			opt("agents.enabled"),
 			custom("appearance.theme", m.themeItem()),
+			custom("", m.themeEditItem()),
 			opt("appearance.theme_light"),
 			custom("appearance.glyphs", m.glyphItem()),
 			opt("appearance.border_style"),
@@ -843,6 +844,26 @@ func (m *OS) screensaverEffectItem() settingItem {
 // dockComponentsItem opens the dock layout editor. It reaches no single
 // registry path: the dock's three lists are lists rather than scalars, so the
 // registry does not carry them and no derived row could express one.
+// themeEditItem opens the theme editor on the theme in use.
+func (m *OS) themeEditItem() settingItem {
+	return settingItem{
+		Label:   "Edit theme",
+		Desc:    "Change the colours of the theme in use, and see them on the whole screen. Press enter to open the editor.",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			if id := theme.CurrentThemeID(); id != "" {
+				return id
+			}
+			return themeNone
+		},
+		activate: func(m *OS) tea.Cmd {
+			m.CloseSettings()
+			m.OpenThemeEditor(theme.CurrentThemeID(), false, "")
+			return nil
+		},
+	}
+}
+
 func (m *OS) dockComponentsItem() settingItem {
 	return settingItem{
 		Label:   "Components",

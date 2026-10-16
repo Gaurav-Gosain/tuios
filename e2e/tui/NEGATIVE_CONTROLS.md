@@ -6705,3 +6705,20 @@ Run on 2026-10-17.
 |---|---|---|---|---|
 | plain drew the pill | yes | the `plain` case in `windowTitleBadge` never matches | `TestLiveAppearanceKeepsTheScreen/window_title_style=plain` ("changed nothing on screen") | **caught** |
 | The title ignored its place | yes | `layoutBorderRow` never calls `alignedBorderRow` | `TestLiveAppearanceKeepsTheScreen/window_title_align=center` ("changed nothing on screen") | **caught** |
+
+## The theme editor
+
+`TestThemeEditorEditsAndSaves` opens the editor from the palette on nord,
+types `#ff0000` for the unfocused border, and requires the colour on the pane
+without focus at once. `ctrl+s` must write `themes/nord.json` with only the
+base and that field, and esc must close the editor.
+
+`TestThemeFileWritersHonourConfigReadOnly` (internal/server) holds every theme
+file writer to a read of `ConfigReadOnly`.
+
+Run on 2026-10-17.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The editor did not preview | yes | `themeEditorChanged` skips `Draft.Preview` | `TestThemeEditorEditsAndSaves` ("the typed border colour never showed on the pane without focus") | **caught** |
+| A served client could save | yes | the `ConfigReadOnly` check cut from `ThemeEditorSave` | `TestThemeFileWritersHonourConfigReadOnly` ("ThemeEditorSave ... never reads ConfigReadOnly") | **caught** |

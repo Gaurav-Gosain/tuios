@@ -8,6 +8,7 @@ overlays, the dockbar) from them.
 ## Table of Contents
 
 - [Selecting a Theme](#selecting-a-theme)
+- [Edit a Theme](#edit-a-theme)
 - [A Light and a Dark Theme](#a-light-and-a-dark-theme)
 - [Match Your Terminal](#match-your-terminal)
 - [Custom Themes](#custom-themes)
@@ -53,6 +54,8 @@ Type to filter the list. The picker also takes these keys:
 
 | Key | What it does |
 |---|---|
+| `ctrl+e` | Edit the highlighted theme in the theme editor |
+| `ctrl+o` | Make a new theme from the highlighted one, and open it in the theme editor |
 | `ctrl+f` | Show all themes, then only dark ones, then only light ones |
 | `ctrl+r` | Go to a random theme in the list |
 | `ctrl+y` | Copy the id of the highlighted theme |
@@ -74,6 +77,55 @@ chrome uses the Charple accent. See
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.
+
+## Edit a Theme
+
+The theme editor changes a theme's colours while you look at the whole screen.
+It opens as a sheet on the side with no rail. The panes do not move.
+
+To open it:
+
+- Command palette (`Ctrl+P`): **Edit theme**, for the theme in use.
+- Settings > Appearance: **Edit theme**.
+- Theme picker: `ctrl+e` edits the highlighted theme. `ctrl+o` makes a new
+  theme from it, named `<theme>-custom`.
+
+The sheet has two tabs:
+
+- **Roles**: the chrome roles, in groups: Accents, Frame, Dock and rail,
+  Dialogs and Status. `Text`, `Dim text` and `Quiet text` show their measured
+  colour. You cannot set them.
+- **Pane colours**: the foreground, the background, the selection, the cursor
+  and the sixteen. Programs in panes use these colours.
+
+Each row shows the role, a swatch, where the colour comes from, its hex and,
+for a colour with text or a mark on it, its contrast. Where the colour comes
+from is one of `custom` (a hex in this theme), `slot` or `role` (a name in
+this theme), `from base`, or `set in config.toml` (a key in the config wins).
+A contrast under its floor shows `!`: 4.5:1 for text, 3:1 for a mark, a pill
+or a border.
+
+| Key | What it does |
+|---|---|
+| `↑` `↓` | Move between rows |
+| `tab`, `shift+tab` | Go to the next or the previous tab |
+| `enter` | Open the colour picker on the row. A slot chip stores the slot's name, so the colour follows the theme |
+| `e` | Type a value: hex, a slot, a role or a CharmTone name. `tab` completes the name |
+| `x` | Give the row back to the base |
+| `u` | Undo the last change |
+| `ctrl+s` | Save the theme file |
+| `space` | Hide the sheet to see the whole screen. Press `space` again to show it |
+| `esc` | Close the editor. With changes that are not saved, press `esc` two times |
+
+- Each change shows on the whole screen at once. In a client of `tuios ssh`
+  or `tuios-web` the theme is the server's, so only the sheet shows the
+  change.
+- `ctrl+s` writes `<id>.json` in the themes directory with only what differs
+  from the base. A built-in theme saves as an edited copy under its own id.
+  Every client on the machine reads the file again.
+- A client of `tuios ssh` or `tuios-web` cannot save.
+- When the editor closes, the theme that was in use comes back. If you saved
+  the theme in use, it comes back with your changes.
 
 ## A Light and a Dark Theme
 

@@ -931,6 +931,14 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
+		{
+			Name:     "Edit theme",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenThemeEditor(theme.CurrentThemeID(), false, "")
+				return m, nil
+			},
+		},
 		// Keybinds. Three rows onto one overlay, because "change a key" and
 		// "stop tuios taking a key" are the two things people come here for and
 		// neither of them is spelled "keybind manager". Two of the three spend

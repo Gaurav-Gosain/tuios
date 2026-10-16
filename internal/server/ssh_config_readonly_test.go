@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -99,4 +100,58 @@ func setsSelector(lit *ast.CompositeLit, field, pkg, name string) bool {
 		return ok && x.Name == pkg
 	}
 	return false
+}
+
+// themeFileWriters are the functions in internal/app that write or remove a
+// file in the themes directory, or open the way to one. Each must read
+// ConfigReadOnly: an SSH or web client must not change the host's theme
+// files any more than its config.toml. A new writer is added here.
+var themeFileWriters = []string{
+	"ThemeEditorSave",      // the theme editor's ctrl+s
+	"ThemePickerAskDelete", // the theme picker's ctrl+d, which the delete waits on
+}
+
+// TestThemeFileWritersHonourConfigReadOnly holds each named writer to a read
+// of ConfigReadOnly in its own body. Checked over the syntax tree for the
+// reason TestSSHSessionsDoNotWriteTheHostConfig gives: what has to hold is
+// that every writer checks, including one written later.
+func TestThemeFileWritersHonourConfigReadOnly(t *testing.T) {
+	names, err := filepath.Glob(filepath.Join("..", "app", "*.go"))
+	if err != nil {
+		t.Fatalf("listing internal/app: %v", err)
+	}
+	fset := token.NewFileSet()
+	found := map[string]bool{}
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || !slices.Contains(themeFileWriters, fn.Name.Name) {
+				continue
+			}
+			found[fn.Name.Name] = true
+			reads := false
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "ConfigReadOnly" {
+					reads = true
+				}
+				return !reads
+			})
+			if !reads {
+				t.Errorf("%s in %s writes a theme file and never reads ConfigReadOnly; a served client would change the host's files",
+					fn.Name.Name, filepath.Base(name))
+			}
+		}
+	}
+	for _, w := range themeFileWriters {
+		if !found[w] {
+			t.Errorf("%s is named as a theme file writer but internal/app has no such function; this guard is looking at nothing", w)
+		}
+	}
 }

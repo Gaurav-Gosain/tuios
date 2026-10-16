@@ -180,6 +180,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		if idx != m.ThemePickerSelected {
 			m.ThemePickerMove(idx - m.ThemePickerSelected)
 		}
+	case "themeeditor":
+		m.themeEditor.cursor[m.themeEditor.tab] = idx
 	case "glyphpicker":
 		if idx != m.GlyphPickerSelected {
 			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
@@ -346,6 +348,8 @@ func (m *OS) setOverlayTab(kind string, i int) {
 		m.SettingsScroll = 0
 	case "keybinds":
 		m.KeybindSetTab(i)
+	case "themeeditor":
+		m.ThemeEditorTab(i - m.themeEditor.tab)
 	}
 }
 
@@ -360,6 +364,8 @@ func (m *OS) stepOverlayTab(kind string, delta int) {
 		m.setOverlayTab(kind, m.SettingsCategory+delta)
 	case "keybinds":
 		m.setOverlayTab(kind, m.KeybindTab+delta)
+	case "themeeditor":
+		m.ThemeEditorTab(delta)
 	}
 }
 
@@ -415,6 +421,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "themepicker":
 		m.ThemePickerSelected = row.Idx
 		return m.ThemePickerApplySelection()
+	case "themeeditor":
+		m.themeEditor.cursor[m.themeEditor.tab] = row.Idx
+		m.ThemeEditorPick()
 	case "glyphpicker":
 		m.GlyphPickerSelected = row.Idx
 		return m.GlyphPickerApplySelection()

@@ -208,6 +208,19 @@ func (m *OS) setThemeSelection(sel string) {
 	})
 }
 
+// ThemePickerEdit closes the picker and opens the theme editor on the
+// highlighted theme, or with fresh set on a new theme based on it. Closing
+// the editor goes back to the theme the picker opened on.
+func (m *OS) ThemePickerEdit(fresh bool) {
+	id, ok := m.themePickerHighlighted()
+	if !ok {
+		return
+	}
+	original := m.ThemePickerOriginal
+	m.CloseThemePicker()
+	m.OpenThemeEditor(id, fresh, original)
+}
+
 // The shades the picker can list: ctrl+f steps through them.
 const (
 	themeShadeAll = iota

@@ -257,6 +257,10 @@ then the dark one. The local client switches when the terminal does.
 `theme = "none"` keeps the terminal's own colours and builds the dialogs'
 greys from the terminal's background, for a terminal themed elsewhere.
 
+The theme editor (palette: Edit theme, or `ctrl+e` in the theme picker) edits
+a theme on a side sheet with a live preview, and `ctrl+s` saves the sparse
+file. It is for a person: an agent writes the file.
+
 `tuios theme export ID` prints a theme as a file with only what differs from
 its built-in base (`--full` for every colour, `--format base16` for a base16
 scheme). `tuios theme share ID` prints the same file as one
