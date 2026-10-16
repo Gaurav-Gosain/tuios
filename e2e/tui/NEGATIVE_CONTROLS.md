@@ -6227,3 +6227,17 @@ Run on 2026-10-16 on macOS on branch `feat/ls-space-groups`, from upstream `main
 | The positive half | this branch | none: the grouped listings are saved as `ls-saved-grouped.txt` and `ls-all-hosts-grouped.txt`, and the four spaceless listings beside them | **guard** |
 
 Each mutant is a text replacement on a `git archive` of the branch, so the checkout under test is never edited. The far host's rows carry a space only when its daemon sends one in its `list-sessions` answer; a daemon from before spaces sends none, and this suite has no such build on the far side, so that case is held by the field being `omitempty` and not by a test.
+## Pause focus follows mouse while a key is held (#750)
+
+`appearance.focus_follows_mouse_pause` is one condition on the hover focus in
+`internal/input/mouse_motion.go`. It is covered by table rows in
+`TestFocusFollowsMouse` (`internal/input/mouse_native_test.go`), not by a new
+end-to-end test. Each row sends motion reports over the other pane. The rows
+where the key is released, or where another key or no key is set, are the
+positive half: focus moves.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| The held key never paused hover focus | n/a, injected, cuts the gate | drop `!focusFollowsMousePaused(...)` from the hover focus condition | `pause: ctrl held keeps focus, release resumes`, `pause: ctrl held in terminal mode keeps focus`, `pause: alt held keeps focus, release resumes` ("step 0 (mod 4): focus = 1, want 0") | **caught** |
+| The config key never reached the settings | n/a, injected | `ApplyAppearanceConfig` sets `FocusFollowsMousePause = ""` for ctrl and alt | the same three rows, same message | **caught** |
+| `alt` read the Ctrl bit | n/a, injected | `focusFollowsMousePaused` tests `tea.ModCtrl` for `alt` | `pause: alt held keeps focus, release resumes` ("step 0 (mod 2): focus = 1, want 0"), `pause: alt key ignores ctrl` ("step 0 (mod 4): focus = 0, want 1") | **caught** |

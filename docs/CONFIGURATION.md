@@ -287,6 +287,29 @@ tuios writes. In Ghostty, a program can ask for `Shift+click` with
 `XTSHIFTESCAPE`, or you can set `mouse-shift-capture = true`. tuios does not
 ask, because that takes `Shift` selection away from you.
 
+## Pause focus follows mouse
+
+`appearance.focus_follows_mouse = true` focuses the pane under the pointer as
+the mouse moves. Set `appearance.focus_follows_mouse_pause` to hold a key that
+pauses it:
+
+```toml
+[appearance]
+focus_follows_mouse = true
+focus_follows_mouse_pause = "ctrl"   # ctrl, alt, or off (the default)
+```
+
+- Hold the key and move the mouse. The focus stays on the current pane.
+- Release the key. The next mouse move focuses the pane under the pointer.
+- The key still goes to the pane. A program that reads the mouse gets the
+  motion with the key on it. `Ctrl`+drag and `Alt`+drag work as before.
+
+tuios reads the key from the mouse reports that your terminal sends. Most
+terminals send `Ctrl` and `Alt`. `Shift` is not a choice, because most terminals
+keep `Shift` with the mouse for their own selection. On macOS, some terminals
+use `Option` with the mouse for their own actions. If `alt` does not work in
+your terminal, use `ctrl`.
+
 ## Neovim pane navigation
 
 `appearance.nvim_navigation` is `false` by default. Set it to `true` to enable

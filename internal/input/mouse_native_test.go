@@ -186,4 +186,52 @@ func TestFocusFollowsMouse(t *testing.T) {
 		}
 		_, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
 	})
+
+	// appearance.focus_follows_mouse_pause: each step is one motion report
+	// over pane b, and want is the focus after it. A release is only seen on
+	// the next motion, so the step after a held one is what proves it resumes.
+	type step struct {
+		mod  tea.KeyMod
+		want int
+	}
+	pauseRows := []struct {
+		name  string
+		key   string
+		mode  app.Mode
+		steps []step
+	}{
+		{"ctrl held keeps focus, release resumes", "ctrl", app.WindowManagementMode,
+			[]step{{tea.ModCtrl, 0}, {tea.ModCtrl | tea.ModShift, 0}, {0, 1}}},
+		{"ctrl held in terminal mode keeps focus", "ctrl", app.TerminalMode,
+			[]step{{tea.ModCtrl, 0}, {0, 1}}},
+		{"alt held keeps focus, release resumes", "alt", app.WindowManagementMode,
+			[]step{{tea.ModAlt, 0}, {0, 1}}},
+		{"ctrl key ignores alt", "ctrl", app.WindowManagementMode,
+			[]step{{tea.ModAlt, 1}}},
+		{"alt key ignores ctrl", "alt", app.WindowManagementMode,
+			[]step{{tea.ModCtrl, 1}}},
+		{"off never pauses", "off", app.WindowManagementMode,
+			[]step{{tea.ModCtrl, 1}}},
+		{"empty never pauses", "", app.WindowManagementMode,
+			[]step{{tea.ModCtrl | tea.ModAlt, 1}}},
+		{"shift is not a pause key", "shift", app.WindowManagementMode,
+			[]step{{tea.ModShift, 1}}},
+	}
+	for _, row := range pauseRows {
+		t.Run("pause: "+row.name, func(t *testing.T) {
+			setFFM(t, true)
+			o := twoPaneOS(t)
+			// Through the config, the way the file and the settings page set it.
+			o.UserConfig.Appearance.FocusFollowsMousePause = row.key
+			config.ApplyAppearanceConfig(o.UserConfig, &o.Settings)
+			o.Settings.FocusFollowsMouse = true
+			o.Mode = row.mode
+			for i, st := range row.steps {
+				o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60 + i, Y: 10, Mod: st.mod}, o)
+				if o.FocusedWindow != st.want {
+					t.Fatalf("step %d (mod %v): focus = %d, want %d", i, st.mod, o.FocusedWindow, st.want)
+				}
+			}
+		})
+	}
 }

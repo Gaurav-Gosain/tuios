@@ -459,6 +459,13 @@ type Settings struct {
 	// Set via appearance.focus_follows_mouse config.
 	FocusFollowsMouse bool
 
+	// FocusFollowsMousePause is the modifier, "ctrl" or "alt", that pauses
+	// FocusFollowsMouse while it is held. Empty never pauses. tuios learns the
+	// modifier from the motion report itself, and does not consume it: a pane
+	// program that tracks the mouse still gets the motion with the modifier.
+	// Set via appearance.focus_follows_mouse_pause config.
+	FocusFollowsMousePause string
+
 	// AltDrag makes alt + left-drag move a pane, the gesture nearly every desktop
 	// window manager binds. It is on by default because the hands that know it
 	// already outnumber the ones that do not. Turning it off hands alt-drag back to

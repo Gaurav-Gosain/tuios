@@ -329,6 +329,7 @@ type AppearanceConfig struct {
 	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
 	NvimNavigation           *bool                   `toml:"nvim_navigation"`              // Let the Neovim navigator plugin hand terminal focus keys back to TUIOS (default: false)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
+	FocusFollowsMousePause   string                  `toml:"focus_follows_mouse_pause"`    // The key that pauses focus_follows_mouse while held: ctrl, alt, off (default: off)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
@@ -466,6 +467,23 @@ const (
 
 // ClickToTypeModes lists the valid values for appearance.click_to_type.
 var ClickToTypeModes = []string{ClickToTypeSingle, ClickToTypeDouble, ClickToTypeOff}
+
+// Focus-follows-mouse pause keys. See AppearanceConfig.FocusFollowsMousePause.
+const (
+	// FocusFollowsMousePauseOff never pauses: hover always moves focus. The
+	// empty string means the same.
+	FocusFollowsMousePauseOff = "off"
+	// FocusFollowsMousePauseCtrl pauses hover focus while Ctrl is held.
+	FocusFollowsMousePauseCtrl = "ctrl"
+	// FocusFollowsMousePauseAlt pauses hover focus while Alt is held.
+	FocusFollowsMousePauseAlt = "alt"
+)
+
+// FocusFollowsMousePauseKeys lists the valid values for
+// appearance.focus_follows_mouse_pause. Shift is left out on purpose: most
+// terminals keep Shift plus the mouse for their own selection and never
+// report it.
+var FocusFollowsMousePauseKeys = []string{FocusFollowsMousePauseOff, FocusFollowsMousePauseCtrl, FocusFollowsMousePauseAlt}
 
 // AutoEnterTerminalPolicy is appearance.auto_enter_terminal_on_focus.
 // A leftover true/false from the unreleased bool shape unmarshals here
@@ -970,6 +988,7 @@ func DefaultConfig() *UserConfig {
 			WindowTitlePosition:      DefaultWindowTitlePosition,
 			PreferredShell:           "",
 			ClickToType:              ClickToTypeDouble,
+			FocusFollowsMousePause:   FocusFollowsMousePauseOff,
 			KittyPlaceholders:        KittyPlaceholdersAuto,
 			ImageSymbols:             ImageSymbolsAuto,
 			AutoEnterTerminalOnFocus: AutoEnterTerminalOff,
@@ -2708,6 +2727,14 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
 		s.FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
+	}
+	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
+	// hover focus unpaused, which is what the validator warns a typo becomes.
+	switch cfg.Appearance.FocusFollowsMousePause {
+	case FocusFollowsMousePauseCtrl, FocusFollowsMousePauseAlt:
+		s.FocusFollowsMousePause = cfg.Appearance.FocusFollowsMousePause
+	default:
+		s.FocusFollowsMousePause = ""
 	}
 
 	// AltDrag defaults to true; a pointer so an explicit false in the config

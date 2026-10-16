@@ -227,6 +227,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.focus_follows_mouse_pause", Type: OptionString, Section: "appearance",
+		Description: "Hold this key to keep the focus on the current pane as the mouse moves: off, ctrl, alt",
+		Accepted:    FocusFollowsMousePauseKeys, Default: FocusFollowsMousePauseOff,
+	},
+	{
 		Path: "appearance.alt_drag", Type: OptionBool, Section: "appearance",
 		Description: "Alt plus left-drag moves a pane",
 		Default:     "true",

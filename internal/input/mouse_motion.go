@@ -201,7 +201,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// since the rail owns the keyboard and a click is the way back to a pane.
 	// Inside a scratch group the hover finds only the group's panes: the
 	// backdrop is not the current workspace.
-	if o.Settings.FocusFollowsMouse && !o.SidebarFocused &&
+	// The pause key (appearance.focus_follows_mouse_pause) holds focus where it
+	// is for as long as the report carries it. It is only read here: the guest
+	// forwarding below still sends the motion with the modifier on it.
+	if o.Settings.FocusFollowsMouse && !focusFollowsMousePaused(o.Settings.FocusFollowsMousePause, mouse.Mod) &&
+		!o.SidebarFocused &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
@@ -553,4 +557,17 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	return o, nil
+}
+
+// focusFollowsMousePaused reports whether the configured pause key is held on
+// a motion report. The report is the only place the modifier state comes
+// from, so a release is seen on the first motion after it.
+func focusFollowsMousePaused(key string, mod tea.KeyMod) bool {
+	switch key {
+	case config.FocusFollowsMousePauseCtrl:
+		return mod&tea.ModCtrl != 0
+	case config.FocusFollowsMousePauseAlt:
+		return mod&tea.ModAlt != 0
+	}
+	return false
 }

@@ -143,6 +143,9 @@ question about the screen. Do not change them unless the person asks.
 - A dock message that is too long ends with `more`. A click on it, or
   `Ctrl+B N` for the last message, opens the message view with the whole text.
   A notice you post with `send-agent-message` to the session can show there.
+- With `appearance.focus_follows_mouse` on, the pane under the pointer takes
+  focus. While the person holds the `appearance.focus_follows_mouse_pause` key
+  (`ctrl` or `alt`), the focus stays where it is. The pane still gets the key.
 - `Ctrl+click` on a link opens it. `appearance.links`,
   `appearance.link_click` and `appearance.link_opener` set which links,
   which click and which opener.
